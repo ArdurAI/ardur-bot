@@ -493,6 +493,193 @@ postgres("request ledger on disposable PostgreSQL", () => {
     ).rejects.toThrow("root task allowance exhausted");
     expect(await f.rows()).toHaveLength(0);
   });
+
+  async function admittedWorker(parent: Awaited<ReturnType<typeof fixture>>) {
+    await db.prisma.run.update({
+      where: { id: parent.id },
+      data: { leaseOwner: "worker", leaseFence: 2 },
+    });
+    await db.prisma.delegationRoot.update({
+      where: { rootTaskId: parent.id },
+      data: {
+        tokenLimit: 120_000,
+        usedTokens: 200_000,
+        reservedTokens: 30_000,
+        activeDescendants: 1,
+      },
+    });
+    const snapshot = {
+      pin: parent.pin,
+      computer: { id: null, mode: "team" as const, kind: null },
+      destination: { host: null, local: true },
+    };
+    const authority = { scopes: [], connectors: [] };
+    const reservedTokens = 30_000;
+    const childTask = await db.prisma.task.create({
+      data: {
+        spaceId: parent.id,
+        userId: parent.run.userId,
+        botId: parent.id,
+        threadId: parent.id,
+        prompt: "Answer in the room",
+        status: "running",
+      },
+    });
+    const workerRun = await db.prisma.run.create({
+      data: {
+        spaceId: parent.id,
+        userId: parent.run.userId,
+        botId: parent.id,
+        threadId: parent.id,
+        taskId: childTask.id,
+        delegationRootTaskId: parent.id,
+        status: "running",
+        trigger: "bot_message",
+        runtimePin: parent.pin,
+        leaseOwner: "worker",
+        leaseFence: 2,
+      },
+    });
+    const delegation = await db.prisma.delegation.create({
+      data: {
+        rootTaskId: parent.id,
+        parentRunId: parent.id,
+        runId: workerRun.id,
+        spaceId: parent.id,
+        userId: parent.run.userId,
+        requesterBotId: parent.id,
+        actingBotId: parent.id,
+        requesterName: "Fixture",
+        actingName: "Fixture",
+        kind: "helper",
+        depth: 1,
+        hop: 1,
+        status: "running",
+        snapshot,
+        authority,
+        ancestorBotIds: [],
+        reservedTokens,
+        deadlineAt: new Date("2030-01-01"),
+        admissionKey: `${parent.id}-member`,
+        fingerprint: "fixture",
+        card: TaskCardSchema.parse({
+          goal: "Introduce yourself",
+          requesterBotId: parent.id,
+          workerBotId: parent.id,
+          approvalBoundaries: authority,
+          snapshot,
+          budget: { tokens: reservedTokens, deadlineAt: "2030-01-01T00:00:00.000Z" },
+          artifacts: [],
+          timeline: [],
+        }),
+      },
+    });
+    const run = await db.prisma.run.update({
+      where: { id: workerRun.id },
+      data: { delegationId: delegation.id },
+    });
+    return { fixture: parent, run };
+  }
+
+  it("admits a non-goal coordinator and an admitted member when ask reservations fill the task", async () => {
+    const admit = (reservedTokens: number, maxRequests = 1, maxReservedTokens = reservedTokens) =>
+      new RequestUsageCollector({
+        provider: "fixture",
+        model: "fixture",
+        purpose: "unknown",
+        mappingVersion: "broker-chat-completions-v1",
+        inputSemantics: "total-with-cache-subsets",
+        admission: {
+          kind: "worker-provider-broker",
+          reservedTokens,
+          maxRequests,
+          maxReservedTokens,
+        },
+      });
+    const start = (
+      f: Awaited<ReturnType<typeof fixture>>,
+      run: {
+        id: string;
+        spaceId: string;
+        userId: string;
+        botId: string;
+        threadId: string;
+        taskId: string;
+        delegationId?: string | null;
+      },
+      collector: RequestUsageCollector,
+    ) =>
+      recordBrokerRunUsage({ prisma: db.prisma, events: f.events }, run, collector.start(), {
+        leaseOwner: "worker",
+        leaseFence: 2,
+        runtimePin: f.pin,
+      });
+
+    const coordinator = await fixture();
+    await db.prisma.run.update({
+      where: { id: coordinator.run.id },
+      data: { leaseOwner: "worker", leaseFence: 2 },
+    });
+    await db.prisma.delegationRoot.update({
+      where: { rootTaskId: coordinator.id },
+      data: { tokenLimit: 140_000, usedTokens: 20_000, reservedTokens: 120_000 },
+    });
+    await start(coordinator, coordinator.run, admit(8_000));
+    expect(await coordinator.rows()).toHaveLength(1);
+    expect(await coordinator.root()).toMatchObject({
+      usedTokens: 20_000,
+      reservedTokens: 128_000,
+    });
+
+    const member = await admittedWorker(await fixture());
+    await start(member.fixture, member.run, admit(1_000));
+    expect(await member.fixture.rows()).toHaveLength(1);
+    expect(await member.fixture.root()).toMatchObject({
+      usedTokens: 200_000,
+      reservedTokens: 30_000,
+    });
+
+    const over = await admittedWorker(await fixture());
+    await expect(start(over.fixture, over.run, admit(40_000))).rejects.toThrow(
+      "delegation allowance exhausted",
+    );
+    expect(await over.fixture.rows()).toHaveLength(0);
+
+    const goal = await fixture();
+    await db.prisma.run.update({
+      where: { id: goal.id },
+      data: { leaseOwner: "worker", leaseFence: 2 },
+    });
+    const group = await db.prisma.chatGroup.create({
+      data: { spaceId: goal.id, userId: goal.run.userId, name: "Room" },
+    });
+    const created = await db.prisma.teamGoal.create({
+      data: {
+        spaceId: goal.id,
+        userId: goal.run.userId,
+        groupId: group.id,
+        threadId: goal.id,
+        coordinatorBotId: goal.id,
+        rootTaskId: goal.id,
+        objective: "Finish the room",
+        tokenLimit: 140_000,
+        perWorkerTokens: 30_000,
+        maxConcurrent: 4,
+        maxDescendants: 12,
+        untilAt: new Date("2030-01-01"),
+      },
+    });
+    await db.prisma.run.update({ where: { id: goal.id }, data: { goalId: created.id } });
+    await db.prisma.delegationRoot.update({
+      where: { rootTaskId: goal.id },
+      data: { tokenLimit: 140_000, usedTokens: 20_000, reservedTokens: 120_000 },
+    });
+    await expect(start(goal, goal.run, admit(8_000))).rejects.toThrow(
+      "root task allowance exhausted",
+    );
+    expect(await goal.rows()).toHaveLength(0);
+  });
+
   it("shares a coordinator broker reservation with delegation admission and settlement", async () => {
     const f = await fixture();
     await db.prisma.run.update({

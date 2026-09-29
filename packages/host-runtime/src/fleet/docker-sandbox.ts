@@ -7,7 +7,8 @@ import type {
   ComputerConnectionSettings,
   SshSettings,
 } from "@ardurbot/contracts";
-import { ComputerConnectionSettingsSchema, computerImage } from "@ardurbot/contracts";
+import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
+import { COMPUTER_IMAGE_PINS } from "@ardurbot/contracts/computer-image";
 import { SshSettingsSchema } from "@ardurbot/contracts/fleet";
 import {
   cachedCapacity,
@@ -17,6 +18,7 @@ import {
   normalizeEngineInfo,
   parseLinuxCapacity,
 } from "./capacity.js";
+import { connectionComputerImage } from "./computer-image.js";
 import { FLEET_LINUX_CAPABILITIES, fleetComputerKey, LinuxFleetSandbox } from "./linux-sandbox.js";
 import { engineFailureReason } from "./probe.js";
 import type { FleetProcess } from "./process.js";
@@ -219,17 +221,30 @@ export class FleetDockerSandboxProvider extends LinuxFleetSandbox {
     context: AdapterContext,
   ): Promise<ComputerRef> {
     const name = `ardurbot-${fleetComputerKey(context.spaceId, request.botId).slice(0, 40)}`;
-    const image = computerImage(request.imageProfile ?? "base");
+    const profile = request.imageProfile ?? "base";
+    const image = connectionComputerImage(profile, this.settings);
     // Never pull, build, or substitute an image during placement.
-    await this.engine(["image", "inspect", image], context);
-    const existing = await this.owned(name, context);
+    await this.engine(["image", "inspect", image], context).catch((error: unknown) => {
+      if (error instanceof Error && error.message === "Engine command failed.")
+        throw new Error(`Pull ${image} into this engine, then try again.`);
+      throw error;
+    });
+    let existing = await this.owned(name, context);
     const networkEgress = request.networkEgress ?? true;
     if (existing && (existing.HostConfig?.NetworkMode !== "none") !== networkEgress)
       throw new Error("The computer network differs from its saved setting; confirm an update.");
-    if (existing && existing.Config.Image !== image)
-      throw new Error(
-        "The computer image differs from its saved profile; confirm an update in Computers.",
-      );
+    if (existing && existing.Config.Image !== image) {
+      const legacyTag = COMPUTER_IMAGE_PINS[profile].tag;
+      const defaultImage = connectionComputerImage(profile, {});
+      if (existing.Config.Image === legacyTag && image === defaultImage) {
+        await this.engine(["rm", "-f", name], context);
+        existing = null;
+      } else {
+        throw new Error(
+          "The computer image differs from its saved profile; confirm an update in Computers.",
+        );
+      }
+    }
     if (!existing) {
       if (!(await this.ownedVolume(name, context)))
         await this.engine(

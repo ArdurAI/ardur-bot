@@ -40,8 +40,8 @@ describeVoice("voice credentials and speech HTTP", () => {
   });
 
   it("connects a scripted key, speaks, and transcribes without leaking the secret", async () => {
-    const cookie = await signup(app, `voice-${stamp}@ardurbot.test`, "Voice User");
-    const other = await signup(app, `voice-other-${stamp}@ardurbot.test`, "Other Voice");
+    const cookie = await signup(app, `voice-${stamp}@example.test`, "Voice User");
+    const other = await signup(app, `voice-other-${stamp}@example.test`, "Other Voice");
 
     const before = await rpc<{ ready: boolean; utterances: string[] }>(
       app,
@@ -134,10 +134,10 @@ describeVoice("voice credentials and speech HTTP", () => {
   });
 
   it("disconnects the actor credential and leaves another user's key in place", async () => {
-    const cookie = await signup(app, `voice-disconnect-${stamp}@ardurbot.test`, "Voice Disconnect");
+    const cookie = await signup(app, `voice-disconnect-${stamp}@example.test`, "Voice Disconnect");
     const other = await signup(
       app,
-      `voice-disconnect-other-${stamp}@ardurbot.test`,
+      `voice-disconnect-other-${stamp}@example.test`,
       "Other Voice Disconnect",
     );
     const me = await rpc<{ userId: string }>(app, cookie, "me");

@@ -77,3 +77,40 @@ it("refuses kubeconfig credential plugins before starting any host process", asy
   );
   expect(run).not.toHaveBeenCalled();
 });
+it("creates pods only with a published image or the connection's own image", async () => {
+  const own = ComputerConnectionSettingsSchema.parse({
+    ...settings,
+    standardImage: "registry.example/private/computer:1",
+    imagePullSecret: "registry-login",
+  });
+  const run = vi.fn(async (_name: string, _argv: string[]) => ({
+    code: 0,
+    stdout: Buffer.alloc(0),
+    stderr: Buffer.alloc(0),
+  }));
+  const host = new HostKubernetesConnection(own, async () => configuration, {
+    run,
+    start: vi.fn(),
+  } as FleetProcess);
+  const create = (body: unknown) =>
+    host.call(
+      "home",
+      { type: "kube.create", resource: "pods", body: body as Record<string, unknown> },
+      context,
+      vi.fn(),
+    );
+  const creates = () => run.mock.calls.filter(([, argv]) => argv.includes("create")).length;
+  await create(kubernetesComputerSpec(name, "base", own));
+  // A server that resolved a release tag or digest is accepted; this host would pick :dev.
+  await create(
+    kubernetesComputerSpec(name, "base", own, "ghcr.io/ardurai/ardur-bot/computer:1.2.3"),
+  );
+  expect(creates()).toBe(2);
+  await expect(
+    create(kubernetesComputerSpec(name, "base", own, "attacker.example/computer:1")),
+  ).rejects.toThrow("not one this host starts");
+  const swapped = structuredClone(kubernetesComputerSpec(name, "base", own));
+  (swapped.spec as { imagePullSecrets: { name: string }[] }).imagePullSecrets = [{ name: "other" }];
+  await expect(create(swapped)).rejects.toThrow("Invalid computer resource");
+  expect(creates()).toBe(2);
+});

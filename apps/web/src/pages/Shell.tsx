@@ -247,6 +247,14 @@ import {
   McpApprovalCard,
 } from "./shell/message-cards";
 import { ProviderErrorMessage } from "./shell/provider-error-message";
+import {
+  BotSettingsTitle,
+  hasSharedPanelHeader,
+  isSettingsPanel,
+  PanelHeaderTitle,
+  SettingsPanelToggle,
+  ThreadSettingsButton,
+} from "./shell/settings-chrome";
 import { TakeControlButton } from "./shell/take-control-button";
 import { useComputerTerminalOpen } from "./shell/use-computer-terminal-open";
 import { useTakeControl } from "./shell/use-take-control";
@@ -3481,6 +3489,16 @@ export function ShellPage({
             <RunContext run={activeSnapshot?.contextRun ?? activeSnapshot?.run} />
           </div>
           <div className="flex items-center gap-1">
+            {(inGroup ? activeGroup : active) ? (
+              <ThreadSettingsButton
+                group={inGroup}
+                panel={panel}
+                onPanel={(next) => {
+                  setModelFocusRequest(0);
+                  setPanel(next);
+                }}
+              />
+            ) : null}
             {!inGroup && active ? (
               <button
                 type="button"
@@ -3664,36 +3682,29 @@ export function ShellPage({
       <SlidingPanel
         open={Boolean(panel && (active || activeGroup || panel === "create"))}
         panel={panel ?? "closed"}
+        size={isSettingsPanel(panel) ? "wide" : "narrow"}
         workspace={panel === "computer"}
         expanded={panel === "computer" && workspaceExpanded}
+        resizeLabel={t`Resize pane`}
       >
         {panel && (active || activeGroup || panel === "create") ? (
           <div
             className={
               panel === "computer"
                 ? "flex h-full min-h-0 w-full flex-col overflow-hidden px-3 py-3"
-                : "rk-scroll h-full w-full overflow-y-auto px-5 py-[17px] md:w-[384px]"
+                : "rk-scroll h-full w-full overflow-y-auto px-5 py-[17px]"
             }
           >
-            {panel !== "routine" &&
-            panel !== "create" &&
-            panel !== "create-group" &&
-            panel !== "group-settings" ? (
+            {hasSharedPanelHeader(panel) ? (
               <div
                 data-workspace-chrome={panel === "computer" ? "" : undefined}
-                className="mb-4 flex shrink-0 items-center justify-between"
+                className="mb-4 flex shrink-0 items-center justify-between gap-2"
               >
-                <span className="text-[13.5px] text-muted-foreground">
-                  {panel === "settings" ? (
-                    <Trans>Settings</Trans>
-                  ) : panel === "computer" ? (
-                    <Trans>Workspace</Trans>
-                  ) : active ? (
-                    (computer?.state ?? active.status)
-                  ) : (
-                    <Trans>Group</Trans>
-                  )}
-                </span>
+                <PanelHeaderTitle
+                  panel={panel}
+                  activeBot={active}
+                  computerState={computer?.state}
+                />
                 <div className="flex gap-1">
                   {panel === "computer" ? (
                     <Button
@@ -3724,15 +3735,10 @@ export function ShellPage({
                     />
                   ) : null}
                   {active ? (
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={panel === "settings" ? t`Show computer` : t`Show settings`}
-                      onClick={() => setPanel(panel === "settings" ? "computer" : "settings")}
-                      className={panel === "settings" ? "text-foreground" : "text-muted-foreground"}
-                    >
-                      <Settings size={16} strokeWidth={1.7} />
-                    </Button>
+                    <SettingsPanelToggle
+                      open={panel === "settings"}
+                      onToggle={() => setPanel(panel === "settings" ? "computer" : "settings")}
+                    />
                   ) : null}
                   <Button
                     variant="ghost"
@@ -3828,7 +3834,7 @@ export function ShellPage({
                 group={activeGroup}
                 bots={bots}
                 modelSettings={modelSettings}
-                onModelPin={async (member, pin) => {
+                onModelPin={async (member, pin, expectedBotModelPinRevision) => {
                   if (!member.memberId) return;
                   const target = {
                     groupId: activeGroup.id,
@@ -3840,7 +3846,9 @@ export function ShellPage({
                     ? await rpc.groups.setMemberModelPin({
                         ...target,
                         expectedBotModelPinRevision:
-                          bots.find((b) => b.id === member.botId)?.modelPinRevision ?? 0,
+                          expectedBotModelPinRevision ??
+                          bots.find((b) => b.id === member.botId)?.modelPinRevision ??
+                          0,
                         pin,
                       })
                     : await rpc.groups.clearMemberModelPin(target);
@@ -3916,8 +3924,9 @@ export function ShellPage({
                         mode: computerMode,
                       });
                     }
-                    await rpc.bots.update({ botId: active.id, ...patch });
+                    const updated = await rpc.bots.update({ botId: active.id, ...patch });
                     await refreshBots();
+                    return updated;
                   }}
                   onExport={async () => {
                     const { path } = await rpc.export.bot({ botId: active.id });
@@ -5391,11 +5400,16 @@ export const Composer = memo(function Composer({
   const mentionListboxId = useId();
   const dragDepth = useRef(0);
   const [draggingFiles, setDraggingFiles] = useState(false);
+  const [comparing, setComparing] = useState(false);
+  const [compareLoaded, setCompareLoaded] = useState(false);
   const canSend =
     draft.trim().length > 0 ||
     selectedSkill !== null ||
     selectedMentions.length > 0 ||
     pendingAttachments.length > 0;
+  const comparePrompt = comparisonBotId
+    ? serializeComposerPrompt(draft, selectedSkill, selectedMentions)
+    : "";
 
   useEffect(() => {
     if (!runError || !runErrorId) return;
@@ -5773,19 +5787,14 @@ export const Composer = memo(function Composer({
           />
         </Suspense>
       ) : null}
-      {comparisonBotId ? (
-        <Suspense
-          fallback={
-            <Button type="button" variant="ghost" size="sm" disabled>
-              <Trans>Compare with…</Trans>
-            </Button>
-          }
-        >
+      {comparisonBotId && compareLoaded ? (
+        <Suspense fallback={null}>
           <CompareStart
             botId={comparisonBotId}
-            text={serializeComposerPrompt(draft, selectedSkill, selectedMentions)}
+            text={comparePrompt}
             files={pendingAttachments.map((item) => item.file)}
-            disabled={disabled || sending}
+            open={comparing}
+            onOpenChange={setComparing}
             onCreated={() => {
               setDraft("");
               setSelectedSkill(null);
@@ -5795,56 +5804,58 @@ export const Composer = memo(function Composer({
           />
         </Suspense>
       ) : null}
-      <div className="relative h-8">
-        <div className="absolute bottom-1 start-12 flex max-w-[calc(100%-3rem)] gap-1.5 overflow-x-auto whitespace-nowrap">
-          {selectedSkill ? (
-            <span
-              data-testid="skill-chip"
-              className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-accent px-2.5 py-1 text-[13px] text-foreground"
-            >
-              <Box size={13} strokeWidth={1.7} className="shrink-0 text-muted-foreground/70" />
-              <span dir="auto" className="truncate">
-                {selectedSkill.name}
-              </span>
-              <button
-                type="button"
-                aria-label={t`Remove skill ${selectedSkill.name}`}
-                onClick={() => setSelectedSkill(null)}
-                className="text-muted-foreground hover:text-foreground"
+      {selectedSkill || selectedMentions.length ? (
+        <div data-testid="composer-chips" className="relative h-8">
+          <div className="absolute bottom-1 start-12 flex max-w-[calc(100%-3rem)] gap-1.5 overflow-x-auto whitespace-nowrap">
+            {selectedSkill ? (
+              <span
+                data-testid="skill-chip"
+                className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-accent px-2.5 py-1 text-[13px] text-foreground"
               >
-                <X size={12} strokeWidth={2} />
-              </button>
-            </span>
-          ) : null}
-          {selectedMentions.map((mention) => (
-            <span
-              key={mentionChipKey(mention)}
-              data-testid="mention-chip"
-              data-mention-kind={mention.kind}
-              className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-accent px-2.5 py-1 text-[13px] text-foreground"
-            >
-              <MentionChipIcon mention={mention} />
-              <span dir="auto" className="truncate">
-                {mention.name}
+                <Box size={13} strokeWidth={1.7} className="shrink-0 text-muted-foreground/70" />
+                <span dir="auto" className="truncate">
+                  {selectedSkill.name}
+                </span>
+                <button
+                  type="button"
+                  aria-label={t`Remove skill ${selectedSkill.name}`}
+                  onClick={() => setSelectedSkill(null)}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <X size={12} strokeWidth={2} />
+                </button>
               </span>
-              <button
-                type="button"
-                aria-label={t`Remove mention ${mention.name}`}
-                onClick={() =>
-                  setSelectedMentions((current) =>
-                    current.filter(
-                      (selected) => mentionChipKey(selected) !== mentionChipKey(mention),
-                    ),
-                  )
-                }
-                className="text-muted-foreground hover:text-foreground"
+            ) : null}
+            {selectedMentions.map((mention) => (
+              <span
+                key={mentionChipKey(mention)}
+                data-testid="mention-chip"
+                data-mention-kind={mention.kind}
+                className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-accent px-2.5 py-1 text-[13px] text-foreground"
               >
-                <X size={12} strokeWidth={2} />
-              </button>
-            </span>
-          ))}
+                <MentionChipIcon mention={mention} />
+                <span dir="auto" className="truncate">
+                  {mention.name}
+                </span>
+                <button
+                  type="button"
+                  aria-label={t`Remove mention ${mention.name}`}
+                  onClick={() =>
+                    setSelectedMentions((current) =>
+                      current.filter(
+                        (selected) => mentionChipKey(selected) !== mentionChipKey(mention),
+                      ),
+                    )
+                  }
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <X size={12} strokeWidth={2} />
+                </button>
+              </span>
+            ))}
+          </div>
         </div>
-      </div>
+      ) : null}
       <div
         data-testid="composer-bar"
         className="flex items-center gap-3.5 rounded-full border border-border bg-background py-[9px] pe-2.5 ps-3 transition-colors focus-within:border-ring"
@@ -5870,6 +5881,14 @@ export const Composer = memo(function Composer({
           onManage={onManage}
           onError={onComposerError}
           onOpen={onSlashOpen}
+          onCompare={
+            comparePrompt.trim() && !sending
+              ? () => {
+                  setCompareLoaded(true);
+                  setComparing(true);
+                }
+              : undefined
+          }
         />
         <div className="relative flex min-w-0 flex-1 items-end gap-1.5">
           <textarea

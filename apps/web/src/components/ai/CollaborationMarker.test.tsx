@@ -20,7 +20,7 @@ describe("collaboration transcript markers", () => {
     expect(html).toContain('class="flex justify-start"');
     expect(html).toContain('class="inline-flex max-w-full');
     expect(html).toContain('class="truncate"');
-    expect(html).toContain("ardurbot-bot-avatar");
+    expect(html).toContain("ardur-bot-avatar");
     expect(html).toContain("Message from Research");
     expect(html).not.toContain("{peer}");
   });
@@ -37,7 +37,7 @@ describe("collaboration transcript markers", () => {
       />,
     );
 
-    expect(html.match(/class="ardurbot-bot-avatar[^"]*"[^>]*>([^<]*)</)?.[1]).toBe("R");
+    expect(html.match(/class="ardur-bot-avatar[^"]*"[^>]*>([^<]*)</)?.[1]).toBe("R");
   });
 
   it("animates the active bot glyph from its run status", () => {

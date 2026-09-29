@@ -1,7 +1,8 @@
 name: publish-server-image
 
 # Release tags publish the source-addressed image used by in-app updates plus the human-readable
-# semver tags. Dev pushes publish only the computer image for first-use Docker pulls.
+# semver tags. Dev pushes publish only the computer images for first-use pulls. The Developer profile
+# is the computer package's same tags with a -developer suffix, so no new package needs to be public.
 on:
   push:
     branches: [dev]
@@ -93,7 +94,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        name: ${{ fromJSON(github.ref == 'refs/heads/dev' && '["computer"]' || '["app","updater","computer"]') }}
+        name: ${{ fromJSON(github.ref == 'refs/heads/dev' && '["computer","computer-developer"]' || '["app","updater","computer","computer-developer"]') }}
         arch: [amd64, arm64]
         include:
           - arch: amd64
@@ -108,7 +109,8 @@ jobs:
       - id: image
         env:
           REPOSITORY: ${{ github.repository }}
-        run: echo "name=ghcr.io/${REPOSITORY,,}/${{ matrix.name }}" >> "$GITHUB_OUTPUT"
+          PACKAGE: ${{ matrix.name == 'computer-developer' && 'computer' || matrix.name }}
+        run: echo "name=ghcr.io/${REPOSITORY,,}/${PACKAGE}" >> "$GITHUB_OUTPUT"
       - name: Log in to GHCR
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
@@ -124,14 +126,14 @@ jobs:
       - id: build
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
-          context: ${{ matrix.name == 'computer' && 'infra/sandboxes/computer' || '.' }}
+          context: ${{ startsWith(matrix.name, 'computer') && 'infra/sandboxes/computer' || '.' }}
           file: ${{ matrix.name == 'app' && 'infra/compose/Dockerfile' || matrix.name == 'updater' && 'infra/updater/Dockerfile' || 'infra/sandboxes/computer/Dockerfile' }}
           platforms: linux/${{ matrix.arch }}
           labels: ${{ steps.meta.outputs.labels }}
           # A fork can publish only to its own namespace; no credential can redirect this value.
           outputs: type=image,name=${{ steps.image.outputs.name }},push-by-digest=true,name-canonical=true,push=true
           # GET /health can report the exact source commit without a deployment-supplied override.
-          build-args: ${{ matrix.name == 'app' && format('GIT_SHA={0}', github.sha) || '' }}
+          build-args: ${{ matrix.name == 'app' && format('GIT_SHA={0}', github.sha) || matrix.name == 'computer-developer' && 'IMAGE_PROFILE=developer' || '' }}
           cache-from: type=gha,scope=${{ matrix.name }}-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}-${{ matrix.arch }}
           provenance: mode=max
@@ -145,7 +147,8 @@ jobs:
           touch "/tmp/digests/${DIGEST#sha256:}"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: digest-${{ matrix.name }}-${{ matrix.arch }}
+          # Name last, so one image's download pattern never matches another's (computer-developer).
+          name: digest-${{ matrix.arch }}-${{ matrix.name }}
           path: /tmp/digests/*
           if-no-files-found: error
           retention-days: 1
@@ -164,18 +167,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        name: ${{ fromJSON(github.ref == 'refs/heads/dev' && '["computer"]' || '["app","updater","computer"]') }}
+        name: ${{ fromJSON(github.ref == 'refs/heads/dev' && '["computer","computer-developer"]' || '["app","updater","computer","computer-developer"]') }}
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          pattern: digest-${{ matrix.name }}-*
+          pattern: digest-*-${{ matrix.name }}
           path: /tmp/digests
           merge-multiple: true
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
       - id: image
         env:
           REPOSITORY: ${{ github.repository }}
-        run: echo "name=ghcr.io/${REPOSITORY,,}/${{ matrix.name }}" >> "$GITHUB_OUTPUT"
+          PACKAGE: ${{ matrix.name == 'computer-developer' && 'computer' || matrix.name }}
+        run: echo "name=ghcr.io/${REPOSITORY,,}/${PACKAGE}" >> "$GITHUB_OUTPUT"
       - name: Log in to GHCR
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
@@ -190,7 +194,7 @@ jobs:
           tags: |
             type=semver,pattern=v{{version}}
             type=semver,pattern=v{{major}}.{{minor}}
-            type=semver,pattern={{version}},enable=${{ matrix.name == 'computer' }}
+            type=semver,pattern={{version}},enable=${{ startsWith(matrix.name, 'computer') }}
             type=sha,prefix=sha-
             type=raw,value=dev,enable=${{ github.ref == 'refs/heads/dev' }}
             type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
@@ -202,11 +206,13 @@ jobs:
         env:
           IMAGE: ${{ steps.image.outputs.name }}
           TAGS: ${{ steps.meta.outputs.tags }}
+          # Every Developer tag, latest included, carries the suffix; the plain tags stay Standard.
+          SUFFIX: ${{ matrix.name == 'computer-developer' && '-developer' || '' }}
         run: |
           set -euo pipefail
           tag_args=()
           while IFS= read -r tag; do
-            [[ -n "$tag" ]] && tag_args+=(-t "$tag")
+            [[ -n "$tag" ]] && tag_args+=(-t "${tag}${SUFFIX}")
           done <<< "$TAGS"
           sources=()
           for digest in *; do
@@ -218,7 +224,7 @@ jobs:
           fi
           docker buildx imagetools create "${tag_args[@]}" "${sources[@]}"
 
-          first_tag="$(head -n 1 <<< "$TAGS")"
+          first_tag="$(head -n 1 <<< "$TAGS")${SUFFIX}"
           platforms="$(docker buildx imagetools inspect "$first_tag" \
             --format '{{range .Manifest.Manifests}}{{.Platform.OS}}/{{.Platform.Architecture}}{{"\n"}}{{end}}')"
           for want in linux/amd64 linux/arm64; do

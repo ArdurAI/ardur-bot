@@ -140,7 +140,7 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-const onSave = vi.fn(async () => undefined);
+const onSave = vi.fn(async (): Promise<{ modelPinRevision?: number } | undefined> => undefined);
 function settings(
   overrides: Partial<Bot> = {},
   modelFocusRequest = 0,
@@ -350,6 +350,39 @@ describe("bot model settings", () => {
     await act(async () => root.render(settings({}, 2)));
     expect(document.activeElement).toBe(modelSelect());
   });
+});
+
+it("groups bot settings into cards and keeps memory and computer under Advanced", async () => {
+  await act(async () => root.render(settings()));
+  const cards = [...container.querySelectorAll("section[data-settings-group]")];
+  const title = (card: Element) => card.querySelector("h3")?.textContent;
+  expect(cards.map(title)).toEqual(["Profile", "Model", "Notifications", "Memory", "Computer"]);
+  const card = (label: string) => cards.find((item) => title(item) === label)!;
+  const profileFields = card("Profile").querySelector('input[id$="-name"]')?.closest(".grid");
+  const defaultPaneWidth = 560;
+  const border = 1;
+  const padding = 40; // px-5 padding on scroll container
+  const classicScrollbar = 16;
+  const defaultContainerWidth = defaultPaneWidth - border - padding - classicScrollbar; // ~503 px
+  const minContainerWidth = 384 - border - padding; // ~343 px
+  const breakpointMatch = profileFields?.className.match(/@min-\[(\d+)px\]:grid-cols-2/);
+  expect(breakpointMatch).not.toBeNull();
+  const breakpoint = Number(breakpointMatch![1]);
+  expect(breakpoint).toBeLessThanOrEqual(defaultContainerWidth);
+  expect(breakpoint).toBeGreaterThan(minContainerWidth);
+  expect(container.querySelector('[data-testid="bot-settings"]')?.className).toContain(
+    "@container",
+  );
+  expect(card("Model").contains(modelSelect())).toBe(true);
+  expect(card("Notifications").textContent).toContain(
+    "Get notified when this Bot finishes or needs input",
+  );
+  expect(card("Notifications").textContent).toContain("Read replies aloud");
+  const advanced = container.querySelector('[data-testid="bot-settings-advanced"]');
+  expect(advanced?.contains(card("Memory"))).toBe(true);
+  expect(advanced?.contains(card("Computer"))).toBe(true);
+  expect(advanced?.contains(card("Notifications"))).toBe(false);
+  expect(card("Computer").textContent).toBe("ComputerTeamPrivate");
 });
 
 describe("effective bot model", () => {
@@ -1207,7 +1240,7 @@ it("blocks saving and shows a validation error for fractional Hermes limits", as
   });
   expect(calls.value).toBe("1.5");
   expect(time.value).toBe("1.5");
-  expect(container.textContent).toContain("Enter a whole number");
+  expect(container.textContent).toContain("Use a whole number");
 
   const button = [...container.querySelectorAll("button")].find(
     (element) => element.textContent === "Save",
@@ -1216,6 +1249,68 @@ it("blocks saving and shows a validation error for fractional Hermes limits", as
 
   await act(async () => button.click());
   expect(onSave).not.toHaveBeenCalled();
+});
+
+it("retains the validation error when editing another valid limit", async () => {
+  api.availability.mockResolvedValue({ runtimeKind: "hermes", available: true, models: [] });
+  await act(async () =>
+    root.render(settings({ runtimeKind: "hermes", runtimeExperimental: true })),
+  );
+  await vi.waitFor(() =>
+    expect(
+      container.querySelector<HTMLInputElement>('input[type="number"][max="64"]'),
+    ).not.toBeNull(),
+  );
+  const calls = container.querySelector<HTMLInputElement>('input[type="number"][max="64"]')!;
+  const time = container.querySelector<HTMLInputElement>('input[type="number"][max="600"]')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(calls, "1.5");
+    calls.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  expect(container.textContent).toContain("Use a whole number from 1 to 64.");
+  const button = [...container.querySelectorAll("button")].find(
+    (element) => element.textContent === "Save",
+  ) as HTMLButtonElement;
+  expect(button.disabled).toBe(true);
+
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(time, "60");
+    time.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  expect(container.textContent).toContain("Use a whole number from 1 to 64.");
+  expect(button.disabled).toBe(true);
+});
+
+it("does not block saving another runtime when Hermes limits had an error", async () => {
+  api.availability.mockResolvedValue({ runtimeKind: "hermes", available: true, models: [] });
+  await act(async () =>
+    root.render(settings({ runtimeKind: "hermes", runtimeExperimental: true })),
+  );
+  await vi.waitFor(() =>
+    expect(
+      container.querySelector<HTMLInputElement>('input[type="number"][max="64"]'),
+    ).not.toBeNull(),
+  );
+  const calls = container.querySelector<HTMLInputElement>('input[type="number"][max="64"]')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(calls, "1.5");
+    calls.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const button = [...container.querySelectorAll("button")].find(
+    (element) => element.textContent === "Save",
+  ) as HTMLButtonElement;
+  expect(button.disabled).toBe(true);
+
+  // Switch runtime to "pi"
+  const runtimeSelect = container.querySelector<HTMLSelectElement>('select[id$="-runtime"]')!;
+  await act(async () => {
+    runtimeSelect.value = "pi";
+    runtimeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  expect(button.disabled).toBe(false);
+  await act(async () => button.click());
+  expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ runtimeKind: "pi" }));
 });
 
 it("shows the incompatible Hermes connection only while it is selected", async () => {
@@ -1467,5 +1562,44 @@ it("saving after re-seed uses the new revision", async () => {
   // It should send rev 5, having based its edit on the refreshed draft
   expect(onSave).toHaveBeenCalledWith(
     expect.objectContaining({ expectedModelPinRevision: 5, title: "changed 2" }),
+  );
+});
+
+it("advances draft revision from the save response", async () => {
+  onSave.mockResolvedValueOnce({ modelPinRevision: 5 });
+  await act(async () =>
+    root.render(
+      settings({
+        modelPinRevision: 4,
+        runtimeKind: "pi",
+        modelId: "gpt-5.3-codex-spark",
+        modelProvider: "openai-codex",
+      }),
+    ),
+  );
+
+  const titleInput = container.querySelector<HTMLInputElement>('input[id$="-title"]')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+      titleInput,
+      "first edit",
+    );
+    titleInput.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await save();
+  expect(onSave).toHaveBeenLastCalledWith(
+    expect.objectContaining({ expectedModelPinRevision: 4, title: "first edit" }),
+  );
+
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+      titleInput,
+      "second edit",
+    );
+    titleInput.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await save();
+  expect(onSave).toHaveBeenLastCalledWith(
+    expect.objectContaining({ expectedModelPinRevision: 5, title: "second edit" }),
   );
 });

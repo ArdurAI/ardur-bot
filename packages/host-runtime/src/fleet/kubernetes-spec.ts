@@ -1,5 +1,6 @@
 import type { ComputerConnectionSettings, ComputerProfileId } from "@ardurbot/contracts";
-import { computerImage } from "@ardurbot/contracts";
+import { connectionComputerImage } from "./computer-image.js";
+
 export type KubernetesObject = {
   apiVersion?: string;
   kind?: string;
@@ -17,6 +18,7 @@ export function kubernetesComputerSpec(
   name: string,
   profile: ComputerProfileId | undefined,
   settings: ComputerConnectionSettings,
+  image = connectionComputerImage(profile ?? "base", settings),
 ): KubernetesObject {
   return {
     apiVersion: "v1",
@@ -25,6 +27,9 @@ export function kubernetesComputerSpec(
     spec: {
       restartPolicy: "Always",
       automountServiceAccountToken: false,
+      ...(settings.imagePullSecret
+        ? { imagePullSecrets: [{ name: settings.imagePullSecret }] }
+        : {}),
       securityContext: {
         runAsNonRoot: true,
         runAsUser: 1000,
@@ -36,7 +41,7 @@ export function kubernetesComputerSpec(
       containers: [
         {
           name: "computer",
-          image: computerImage(profile),
+          image,
           imagePullPolicy: "IfNotPresent",
           command: ["/bin/sleep", "infinity"],
           workingDir: HOME,
