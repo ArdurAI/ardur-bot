@@ -13,7 +13,7 @@ export const COMPUTER_IMAGE_PINS = {
 // The distribution reference grammar: an optional registry host, a lowercase repository path, then
 // an optional tag and digest. Only the name is length-bounded by the grammar; bound the whole too.
 const DOMAIN = String.raw`(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?)*|\[[a-fA-F0-9:]+\])(?::[0-9]+)?`;
-const PATH = String.raw`[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*`;
+const PATH = "[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*";
 const IMAGE_REFERENCE = new RegExp(
   String.raw`^((?:${DOMAIN}/)?${PATH}(?:/${PATH})*)(?::\w[\w.-]{0,127})?(?:@[A-Za-z][A-Za-z0-9]*(?:[-_+.][A-Za-z][A-Za-z0-9]*)*:[0-9a-fA-F]{32,})?$`,
 );
