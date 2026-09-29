@@ -237,7 +237,6 @@ import {
   testFleetTarget,
 } from "./fleet.js";
 import { updateGroupMemberModelPin } from "./group-model-pin.js";
-import { validateModelPinSelection } from "./model-pin-validation.js";
 import { guidedSetupStatus } from "./guided-setup.js";
 import { hermesAvailabilityConnectionSupported } from "./hermes-availability.js";
 import type { HostBridge } from "./host-bridge.js";
@@ -267,6 +266,7 @@ import {
 } from "./memory-provider-config.js";
 import { memoryContext, memoryRpc } from "./memory-routes.js";
 import { createChannelPairing } from "./messaging-dispatch.js";
+import { validateModelPinSelection } from "./model-pin-validation.js";
 import { notificationActivity } from "./notification-activity.js";
 import { ollamaConnection, ollamaStatus } from "./ollama.js";
 import {
@@ -3515,7 +3515,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       settings: authed.learning.settings.handler(({ context }) => learning.settings(context.actor)),
       configure: authed.learning.configure.handler(({ context, input }) =>
         learning.configure(context.actor, input, (pin) =>
-          validateModelPinSelection(deps, context.actor, pin)
+          validateModelPinSelection(deps, context.actor, pin),
         ),
       ),
       setReviewer: authed.learning.setReviewer.handler(async ({ context, input }) =>

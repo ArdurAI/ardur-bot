@@ -166,7 +166,13 @@ export function ModelEffortSelect({
   if (!options.length && !value) return null;
   return (
     <label htmlFor={id} className="mt-4 block text-[14px] text-muted-foreground">
-      {!hideLabel ? <Trans>Thinking</Trans> : <span className="sr-only"><Trans>Thinking</Trans></span>}
+      {!hideLabel ? (
+        <Trans>Thinking</Trans>
+      ) : (
+        <span className="sr-only">
+          <Trans>Thinking</Trans>
+        </span>
+      )}
       <NativeSelect
         id={id}
         className="mt-2 w-full"
