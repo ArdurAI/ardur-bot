@@ -48,3 +48,207 @@ it("shows Insights beside Inbox only when there are insights", async () => {
   expect(openLearning).toHaveBeenCalledOnce();
   act(() => root.unmount());
 });
+
+it("shows each item's own text and keeps the shared review reason secondary", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const shared = "Imported memory. Review before saving.";
+  const memory = (id: string, proposedContent: string) => ({
+    id,
+    type: "memory" as const,
+    operation: "memory-import" as const,
+    scope: { spaceId: "space" },
+    target: {},
+    proposedContent,
+    rationale: shared,
+    evidenceIds: ["evidence"],
+    confidence: { label: "model estimate" as const, value: 0.5 },
+    diff: "",
+    status: "pending" as const,
+    expiresAt: "2099-01-01T00:00:00.000Z",
+  });
+  await act(async () =>
+    root.render(
+      <LearningPanel
+        data={{
+          reviews: [],
+          proposals: [
+            memory("one", "Helm chart release mechanics and gotchas"),
+            memory("two", "Daily notes stay on this computer."),
+          ],
+          botNames: {},
+          pendingCount: 2,
+          appliedThisWeek: 0,
+          insightCount: 0,
+        }}
+        openLearning={vi.fn()}
+        openSettings={vi.fn()}
+        refresh={vi.fn(async () => undefined)}
+      />,
+    ),
+  );
+  const rows = [...container.querySelectorAll("button")]
+    .map((button) => button.textContent ?? "")
+    .filter((text) => text.includes(shared));
+  expect(rows).toHaveLength(2);
+  expect(rows[0]).toContain("Helm chart release mechanics and gotchas");
+  expect(rows[1]).toContain("Daily notes stay on this computer.");
+  expect(rows[0]).not.toBe(rows[1]);
+  act(() => root.unmount());
+});
+
+it("counts and lists only items still waiting for a decision", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const memory = (id: string, proposedContent: string, status: "pending" | "rejected") => ({
+    id,
+    type: "memory" as const,
+    operation: "memory-import" as const,
+    scope: { spaceId: "space" },
+    target: {},
+    proposedContent,
+    rationale: "Imported memory. Review before saving.",
+    evidenceIds: ["evidence"],
+    confidence: { label: "model estimate" as const, value: 0.5 },
+    diff: "",
+    status,
+    expiresAt: "2099-01-01T00:00:00.000Z",
+  });
+  await act(async () =>
+    root.render(
+      <LearningPanel
+        data={{
+          reviews: [],
+          proposals: [
+            memory("decided", "Already rejected item", "rejected"),
+            memory("waiting", "Still waiting item", "pending"),
+          ],
+          botNames: {},
+          pendingCount: 1,
+          appliedThisWeek: 0,
+          insightCount: 0,
+        }}
+        openLearning={vi.fn()}
+        openSettings={vi.fn()}
+        refresh={vi.fn(async () => undefined)}
+      />,
+    ),
+  );
+  const text = container.textContent ?? "";
+  expect(text).toContain("Inbox (1)");
+  expect(text).toContain("Still waiting item");
+  expect(text).not.toContain("Already rejected item");
+  expect(text).not.toContain("No proposals");
+  await act(async () =>
+    root.render(
+      <LearningPanel
+        data={{
+          reviews: [],
+          proposals: [memory("decided", "Already rejected item", "rejected")],
+          botNames: {},
+          pendingCount: 0,
+          appliedThisWeek: 0,
+          insightCount: 0,
+        }}
+        openLearning={vi.fn()}
+        openSettings={vi.fn()}
+        refresh={vi.fn(async () => undefined)}
+      />,
+    ),
+  );
+  const empty = container.textContent ?? "";
+  expect(empty).toContain("Inbox (0)");
+  expect(empty).toContain("No proposals");
+  expect(empty).not.toContain("Already rejected item");
+  act(() => root.unmount());
+});
+
+it("stacks each suggestion title above its reason", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const shared = "Imported memory. Review before saving.";
+  await act(async () =>
+    root.render(
+      <LearningPanel
+        data={{
+          reviews: [],
+          proposals: [
+            {
+              id: "one",
+              type: "memory",
+              operation: "memory-import",
+              scope: { spaceId: "space" },
+              target: {},
+              proposedContent: "Helm chart release mechanics and gotchas",
+              rationale: shared,
+              evidenceIds: ["evidence"],
+              confidence: { label: "model estimate", value: 0.5 },
+              diff: "",
+              status: "pending",
+              expiresAt: "2099-01-01T00:00:00.000Z",
+            },
+          ],
+          botNames: {},
+          pendingCount: 1,
+          appliedThisWeek: 0,
+          insightCount: 0,
+        }}
+        openLearning={vi.fn()}
+        openSettings={vi.fn()}
+        refresh={vi.fn(async () => undefined)}
+      />,
+    ),
+  );
+  const button = [...container.querySelectorAll("button")].find((node) =>
+    node.textContent?.includes("Helm chart release mechanics and gotchas"),
+  );
+  expect(button?.className.split(/\s+/)).toContain("flex-col");
+  const lines = [...(button?.querySelectorAll("span") ?? [])].map((node) => node.textContent);
+  expect(lines).toEqual(["Helm chart release mechanics and gotchas", shared]);
+  act(() => root.unmount());
+});
+
+it("does not call the card empty while a suggestion is still waiting", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  await act(async () =>
+    root.render(
+      <LearningPanel
+        data={{
+          reviews: [],
+          proposals: [
+            {
+              id: "decided",
+              type: "memory",
+              scope: { spaceId: "space" },
+              target: {},
+              proposedContent: "Already decided item",
+              rationale: "Imported memory. Review before saving.",
+              evidenceIds: ["evidence"],
+              confidence: { label: "model estimate", value: 0.5 },
+              diff: "",
+              status: "rejected",
+              expiresAt: "2099-01-01T00:00:00.000Z",
+            },
+          ],
+          botNames: {},
+          pendingCount: 1,
+          appliedThisWeek: 0,
+          insightCount: 0,
+        }}
+        openLearning={vi.fn()}
+        openSettings={vi.fn()}
+        refresh={vi.fn(async () => undefined)}
+      />,
+    ),
+  );
+  const text = container.textContent ?? "";
+  expect(text).toContain("Inbox (1)");
+  expect(text).not.toContain("No proposals");
+  expect(text).not.toContain("Already decided item");
+  act(() => root.unmount());
+});

@@ -150,53 +150,55 @@ function InsightDetails({ evidence }: { evidence: InsightEvidence }) {
     const priced = evidence.rows.some((row) => row.costUsd !== null);
     return (
       <div className="space-y-2 py-2">
-        <p>{t`Based on ${runs} runs in the last ${days} days.`}</p>
-        <table className="w-full text-start tabular-nums">
-          <thead className="text-muted-foreground">
-            <tr>
-              <th className="pe-2 text-start font-normal">
-                <Trans>Model</Trans>
-              </th>
-              <th className="pe-2 text-start font-normal">
-                <Trans>Finished</Trans>
-              </th>
-              <th className="pe-2 text-start font-normal">
-                <Trans>Thumbs</Trans>
-              </th>
-              <th className="pe-2 text-start font-normal">
-                <Trans>Median time</Trans>
-              </th>
-              <th className="pe-2 text-start font-normal">
-                <Trans>Median tokens</Trans>
-              </th>
-              {priced ? (
-                <th className="text-start font-normal">
-                  <Trans>Cost</Trans>
+        <p className="break-words">{t`Based on ${runs} runs in the last ${days} days.`}</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-start tabular-nums">
+            <thead className="text-muted-foreground">
+              <tr>
+                <th className="pe-2 text-start font-normal">
+                  <Trans>Model</Trans>
                 </th>
-              ) : null}
-            </tr>
-          </thead>
-          <tbody>
-            {evidence.rows.map((row) => (
-              <tr key={row.model.key}>
-                <td className="pe-2">{row.model.label}</td>
-                <td className="pe-2">
-                  {row.completed}/{row.total}
-                </td>
-                <td className="pe-2">
-                  +{row.thumbsUp} / −{row.thumbsDown}
-                </td>
-                <td className="pe-2">{duration(row.medianMs)}</td>
-                <td className="pe-2">
-                  {row.medianTokens === null ? "—" : number(row.medianTokens)}
-                </td>
+                <th className="pe-2 text-start font-normal">
+                  <Trans>Finished</Trans>
+                </th>
+                <th className="pe-2 text-start font-normal">
+                  <Trans>Thumbs</Trans>
+                </th>
+                <th className="pe-2 text-start font-normal">
+                  <Trans>Median time</Trans>
+                </th>
+                <th className="pe-2 text-start font-normal">
+                  <Trans>Median tokens</Trans>
+                </th>
                 {priced ? (
-                  <td>{row.costUsd === null ? "—" : `$${row.costUsd.toFixed(2)}`}</td>
+                  <th className="text-start font-normal">
+                    <Trans>Cost</Trans>
+                  </th>
                 ) : null}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {evidence.rows.map((row) => (
+                <tr key={row.model.key}>
+                  <td className="pe-2">{row.model.label}</td>
+                  <td className="pe-2">
+                    {row.completed}/{row.total}
+                  </td>
+                  <td className="pe-2">
+                    +{row.thumbsUp} / −{row.thumbsDown}
+                  </td>
+                  <td className="pe-2">{duration(row.medianMs)}</td>
+                  <td className="pe-2">
+                    {row.medianTokens === null ? "—" : number(row.medianTokens)}
+                  </td>
+                  {priced ? (
+                    <td>{row.costUsd === null ? "—" : `$${row.costUsd.toFixed(2)}`}</td>
+                  ) : null}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     );
   }
@@ -269,11 +271,11 @@ function InsightCard({
     });
   return (
     <article
-      className="rounded-lg border p-3 text-sm"
+      className="min-w-0 max-w-full break-words rounded-lg border p-3 text-sm"
       data-testid="learning-insight"
       data-kind={evidence.kind}
     >
-      <p>{insightSentence(evidence, i18n)}</p>
+      <p className="break-words">{insightSentence(evidence, i18n)}</p>
       {confirming && insight.action.kind === "approval-rule" && evidence.kind === "approval" ? (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <span>{allowQuestion(evidence.tool, evidence.botName, i18n)}</span>

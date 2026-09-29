@@ -154,11 +154,6 @@ msgstr "{0} 次运行 · {1} tokens"
 msgid "{0} runs at these pins; hosted providers may bill per run"
 msgstr ""
 
-#. placeholder {0}: counts.pendingCount
-#: src/pages/LearningInbox.tsx
-msgid "{0} suggestions to review"
-msgstr ""
-
 #. placeholder {0}: bot.name
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} will still respond to direct mentions."
@@ -253,6 +248,10 @@ msgstr ""
 msgid "{hours}h ago"
 msgstr "{hours} 小时前"
 
+#: src/pages/LearningInbox.tsx
+msgid "{learned, plural, one {learned # thing this week} other {learned # things this week}}"
+msgstr "{learned, plural, other {本周学习了 # 件事}}"
+
 #: src/pages/storage/StorageSettings.tsx
 msgid "{location} · Docker not running"
 msgstr "{location} · Docker 未运行"
@@ -276,13 +275,17 @@ msgstr "{name} 已完成"
 msgid "{name} needs your input"
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
+msgid "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
+msgstr "{pending, plural, other {# 条建议待审}}"
+
 #: src/components/composer/ComposerMenu.tsx
 msgid "{reconnectCount} need reconnection"
 msgstr ""
 
 #: src/pages/dashboard/UsagePanel.tsx
-msgid "{records} usage records"
-msgstr "{records} 条用量记录"
+msgid "{records, plural, one {# usage record} other {# usage records}}"
+msgstr "{records, plural, other {# 条用量记录}}"
 
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "{remaining} left · bot is watching, not acting"
@@ -309,8 +312,8 @@ msgid "{title}, {label}"
 msgstr "{title}，{label}"
 
 #: src/pages/dashboard/UsagePanel.tsx
-msgid "{tokens} tokens"
-msgstr ""
+msgid "{tokens, plural, one {# token} other {# tokens}}"
+msgstr "{tokens, plural, other {# 个令牌}}"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "{toolCount, plural, one {# tool} other {# tools}}"
@@ -788,6 +791,7 @@ msgstr "已回答：{0}"
 msgid "Answered: {answer}"
 msgstr "已回答：{answer}"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Antigravity"
 msgstr "Antigravity"
@@ -965,6 +969,7 @@ msgstr "已归档"
 msgid "Archived. Chat, memory, and files kept."
 msgstr "已归档。对话、记忆和文件保留。"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Ardur (built-in)"
 msgstr "Ardur（内置）"
@@ -1608,6 +1613,10 @@ msgstr ""
 msgid "Checked {0}"
 msgstr "检查于 {0}"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Checking the download"
+msgstr "正在检查下载"
+
 #: src/components/DesktopUpdates.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/SoftwareUpdateSection.tsx
@@ -1650,8 +1659,10 @@ msgstr ""
 msgid "Choose a folder inside your home folder."
 msgstr "选择主文件夹内的一个文件夹。"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/group-model-control.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose a model"
 msgstr ""
@@ -1701,6 +1712,7 @@ msgstr ""
 msgid "Claim"
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Claude Code (your claude sign-in)"
 msgstr ""
@@ -1843,6 +1855,7 @@ msgstr "代码"
 msgid "Code execution on computers"
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Codex (your ChatGPT sign-in)"
 msgstr ""
@@ -2081,6 +2094,7 @@ msgstr ""
 msgid "Connect a desktop app to approve new devices."
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/GuidedOnboarding.tsx
 #: src/pages/Onboarding.tsx
 msgid "Connect a model"
@@ -3048,6 +3062,10 @@ msgstr ""
 msgid "Could not update uploaded files."
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Couldn't install Hermes. Try again."
+msgstr "无法安装 Hermes。请重试。"
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't load messaging settings"
 msgstr "无法加载消息设置"
@@ -3626,9 +3644,17 @@ msgstr "下载为 Markdown"
 msgid "Download Executor"
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Downloading"
+msgstr "正在下载"
+
 #: src/components/DesktopUpdates.tsx
 msgid "Downloading…"
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Downloads Hermes 0.21.0 from GitHub and about 200 MB of Python packages."
+msgstr "从 GitHub 下载 Hermes 0.21.0 以及大约 200 MB 的 Python 软件包。"
 
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Draft skill"
@@ -3702,7 +3728,6 @@ msgstr ""
 msgid "Email"
 msgstr "邮箱"
 
-#: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/McpDefaults.tsx
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/LearningInsights.tsx
@@ -4040,6 +4065,10 @@ msgstr "已完成"
 msgid "Finished"
 msgstr "完成"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Finishing"
+msgstr "正在完成"
+
 #: src/pages/McpOAuthCallback.tsx
 msgid "Finishing MCP connection…"
 msgstr "正在完成 MCP 连接…"
@@ -4258,6 +4287,7 @@ msgstr "请求头值"
 msgid "Hear a sample"
 msgstr "试听"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes"
 msgstr "Hermes"
@@ -4524,6 +4554,10 @@ msgstr ""
 msgid "Install Beads"
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Install Hermes"
+msgstr "安装 Hermes"
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Installed"
 msgstr ""
@@ -4543,6 +4577,10 @@ msgstr "已安装，未运行"
 #: src/pages/customize/PluginsPage.tsx
 msgid "Installing"
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Installing packages"
+msgstr "正在安装软件包"
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Instance API key"
@@ -4780,11 +4818,6 @@ msgstr "了解更多"
 msgid "Learn more about {title}"
 msgstr "了解有关{title}的更多信息"
 
-#. placeholder {0}: counts.appliedThisWeek
-#: src/pages/LearningInbox.tsx
-msgid "learned {0} things this week"
-msgstr ""
-
 #: src/pages/customize/SkillsPage.tsx
 msgid "Learned skills"
 msgstr ""
@@ -4792,7 +4825,6 @@ msgstr ""
 #: src/pages/dashboard/LearningDialog.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/KnowledgeSection.tsx
-#: src/pages/LearningInbox.tsx
 #: src/pages/settings-sections.ts
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Learning"
@@ -4802,6 +4834,10 @@ msgstr ""
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Learning consent"
 msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Learning for this space"
+msgstr "此空间的学习"
 
 #: src/pages/MemoryHistory.tsx
 msgid "Learning grant"
@@ -4821,12 +4857,9 @@ msgid "Learning review"
 msgstr "学习复查"
 
 #: src/pages/board/BoardsSettings.tsx
-msgid "Learning review is off"
-msgstr "学习复查已关闭"
-
-#: src/pages/board/BoardsSettings.tsx
-msgid "Learning review is on"
-msgstr "学习复查已开启"
+#: src/pages/settings-sections.ts
+msgid "Learning reviewer"
+msgstr "学习复查模型"
 
 #: src/pages/LearningInbox.tsx
 msgid "Learning views"
@@ -5321,6 +5354,7 @@ msgstr "分钟"
 msgid "minutes"
 msgstr "分钟"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/LearningInsights.tsx
 #: src/pages/MemoryHistory.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -6043,9 +6077,9 @@ msgstr ""
 
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/ide/IdePage.tsx
-#: src/pages/ide/terminal.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Open"
 msgstr "打开"
 
@@ -6170,6 +6204,7 @@ msgstr "正在打开聊天…"
 
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
+#: src/pages/workspace/WorkspaceTerminal.tsx
 msgid "Opening terminal"
 msgstr ""
 
@@ -6390,6 +6425,7 @@ msgstr ""
 msgid "Port"
 msgstr ""
 
+#: src/pages/dashboard/LearningPanel.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Possible regression — review undo"
 msgstr ""
@@ -6522,6 +6558,7 @@ msgstr ""
 msgid "Propose on a branch"
 msgstr ""
 
+#: src/pages/dashboard/LearningPanel.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Proposed consolidation"
 msgstr ""
@@ -6646,6 +6683,10 @@ msgstr ""
 #: src/pages/dashboard/WorkPanel.tsx
 msgid "Ready"
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Ready. The bot can use Hermes."
+msgstr "已就绪。此机器人可以使用 Hermes。"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -6788,6 +6829,7 @@ msgstr ""
 
 #: src/pages/ide/terminal.tsx
 #: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspaceTerminal.tsx
 msgid "Release"
 msgstr "释放"
 
@@ -7227,9 +7269,6 @@ msgid "Reviewer"
 msgstr ""
 
 #: src/pages/board/BoardsSettings.tsx
-msgid "Reviewer: {reviewer}"
-msgstr "复查模型：{reviewer}"
-
 #: src/pages/LearningInbox.tsx
 msgid "Reviews use this connection and may incur model charges."
 msgstr ""
@@ -7350,6 +7389,7 @@ msgid "Runs are active on this computer. Saving this connection change may inter
 msgstr "此计算机上有正在进行的运行。更改连接可能中断它们。仍要保存吗？"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Runs on"
 msgstr ""
@@ -7447,6 +7487,7 @@ msgstr "保存模型"
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/account/AccountProfile.tsx
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/ide/IdePage.tsx
@@ -7761,6 +7802,10 @@ msgstr "设置记忆搜索"
 #: src/pages/import/LocalImportPage.tsx
 msgid "Set up servers"
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Setting up Python"
+msgstr "正在设置 Python"
 
 #: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -8093,6 +8138,14 @@ msgstr "初始化看板？"
 msgid "Start comparison"
 msgstr ""
 
+#: src/pages/workspace/terminal-controller.ts
+msgid "Start computer"
+msgstr "启动计算机"
+
+#: src/pages/workspace/terminal-controller.ts
+msgid "Start computer to open a terminal"
+msgstr "启动计算机以打开终端"
+
 #: src/pages/GoalForm.tsx
 msgid "Start goal"
 msgstr "开始目标"
@@ -8155,8 +8208,8 @@ msgstr "步骤"
 #: src/pages/DelegationLines.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/Shell.tsx
-#: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Stop"
 msgstr "停止"
 
@@ -8267,14 +8320,12 @@ msgstr ""
 msgid "System"
 msgstr "系统"
 
-#: src/pages/ide/terminal.tsx
-#: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/take-control-button.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Take control"
 msgstr "接管控制"
 
-#: src/pages/ide/terminal.tsx
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Take control to open a terminal"
 msgstr ""
 
@@ -8341,8 +8392,10 @@ msgid "Tell your bot what to change or remove"
 msgstr ""
 
 #: src/pages/ide/IdePage.tsx
+#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Terminal"
 msgstr ""
 
@@ -8350,8 +8403,7 @@ msgstr ""
 msgid "Terminal could not open; try again"
 msgstr ""
 
-#: src/pages/ide/terminal.tsx
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Terminal is not available on this computer"
 msgstr ""
 
@@ -8391,7 +8443,7 @@ msgstr "该令牌未被接受。请检查后再试。"
 msgid "The API did not come back. Refresh this page."
 msgstr "API 未恢复。请刷新此页面。"
 
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "The bot is working — wait or stop it"
 msgstr ""
 
@@ -8415,6 +8467,10 @@ msgstr "此计算机上的 Hermes 安装未通过安全检查。"
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
+msgid "The reviewer was changed in another window."
+msgstr "复查模型已在另一个窗口中被更改。"
+
 #: src/lib/mcp-sign-in.ts
 msgid "The saved sign-in expired. Sign in again."
 msgstr "已保存的登录已过期。请重新登录。"
@@ -8432,6 +8488,7 @@ msgstr ""
 msgid "Theme"
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Thinking"
@@ -8441,6 +8498,7 @@ msgstr "思考"
 #: src/pages/ide/dialogs.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/ide/terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "This action could not finish; try again."
 msgstr ""
 
@@ -8791,6 +8849,7 @@ msgstr ""
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/computer-screen-error.tsx
 #: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-settings.tsx
 msgid "Try again"
 msgstr "重试"
 

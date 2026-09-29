@@ -153,6 +153,8 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     text: z.string(),
     approvalEffectId: Id.optional(),
     peerHold: z.boolean().optional(),
+    /** A held desk request whose approval binds one exact effect, not preparation. */
+    peerEffectBound: z.boolean().optional(),
     detail: z.string().optional(),
     /** Exact approval text: render verbatim, with expandable full contents. */
     preformatted: z.boolean().optional(),

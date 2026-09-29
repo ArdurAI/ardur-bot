@@ -243,6 +243,8 @@ describe("stable group memberships", () => {
       },
       chatGroupMember: { deleteMany, createMany },
       run: { findMany: vi.fn().mockResolvedValue([]) },
+      botCommunicationPolicy: { upsert: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
+      botMessageDelivery: { findMany: vi.fn().mockResolvedValue([]) },
     };
     const prisma = {
       bot: {

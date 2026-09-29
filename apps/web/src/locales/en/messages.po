@@ -154,11 +154,6 @@ msgstr "{0} runs · {1} tokens"
 msgid "{0} runs at these pins; hosted providers may bill per run"
 msgstr "{0} runs at these pins; hosted providers may bill per run"
 
-#. placeholder {0}: counts.pendingCount
-#: src/pages/LearningInbox.tsx
-msgid "{0} suggestions to review"
-msgstr "{0} suggestions to review"
-
 #. placeholder {0}: bot.name
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} will still respond to direct mentions."
@@ -253,6 +248,10 @@ msgstr "{failed} failed"
 msgid "{hours}h ago"
 msgstr "{hours}h ago"
 
+#: src/pages/LearningInbox.tsx
+msgid "{learned, plural, one {learned # thing this week} other {learned # things this week}}"
+msgstr "{learned, plural, one {learned # thing this week} other {learned # things this week}}"
+
 #: src/pages/storage/StorageSettings.tsx
 msgid "{location} · Docker not running"
 msgstr "{location} · Docker not running"
@@ -276,13 +275,17 @@ msgstr "{name} finished"
 msgid "{name} needs your input"
 msgstr "{name} needs your input"
 
+#: src/pages/LearningInbox.tsx
+msgid "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
+msgstr "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
+
 #: src/components/composer/ComposerMenu.tsx
 msgid "{reconnectCount} need reconnection"
 msgstr "{reconnectCount} need reconnection"
 
 #: src/pages/dashboard/UsagePanel.tsx
-msgid "{records} usage records"
-msgstr "{records} usage records"
+msgid "{records, plural, one {# usage record} other {# usage records}}"
+msgstr "{records, plural, one {# usage record} other {# usage records}}"
 
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "{remaining} left · bot is watching, not acting"
@@ -309,8 +312,8 @@ msgid "{title}, {label}"
 msgstr "{title}, {label}"
 
 #: src/pages/dashboard/UsagePanel.tsx
-msgid "{tokens} tokens"
-msgstr "{tokens} tokens"
+msgid "{tokens, plural, one {# token} other {# tokens}}"
+msgstr "{tokens, plural, one {# token} other {# tokens}}"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "{toolCount, plural, one {# tool} other {# tools}}"
@@ -788,6 +791,7 @@ msgstr "Answered: {0}"
 msgid "Answered: {answer}"
 msgstr "Answered: {answer}"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Antigravity"
 msgstr "Antigravity"
@@ -965,6 +969,7 @@ msgstr "Archived"
 msgid "Archived. Chat, memory, and files kept."
 msgstr "Archived. Chat, memory, and files kept."
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Ardur (built-in)"
 msgstr "Ardur (built-in)"
@@ -1608,6 +1613,10 @@ msgstr "Checked"
 msgid "Checked {0}"
 msgstr "Checked {0}"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Checking the download"
+msgstr "Checking the download"
+
 #: src/components/DesktopUpdates.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/SoftwareUpdateSection.tsx
@@ -1650,8 +1659,10 @@ msgstr "Choose a file."
 msgid "Choose a folder inside your home folder."
 msgstr "Choose a folder inside your home folder."
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/group-model-control.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose a model"
 msgstr "Choose a model"
@@ -1701,6 +1712,7 @@ msgstr "Chromium — {0}"
 msgid "Claim"
 msgstr "Claim"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Claude Code (your claude sign-in)"
 msgstr "Claude Code (your claude sign-in)"
@@ -1843,6 +1855,7 @@ msgstr "Code"
 msgid "Code execution on computers"
 msgstr "Code execution on computers"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Codex (your ChatGPT sign-in)"
 msgstr "Codex (your ChatGPT sign-in)"
@@ -2081,6 +2094,7 @@ msgstr "Connect a chat bot"
 msgid "Connect a desktop app to approve new devices."
 msgstr "Connect a desktop app to approve new devices."
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/GuidedOnboarding.tsx
 #: src/pages/Onboarding.tsx
 msgid "Connect a model"
@@ -3048,6 +3062,10 @@ msgstr "Could not update this task; try again."
 msgid "Could not update uploaded files."
 msgstr "Could not update uploaded files."
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Couldn't install Hermes. Try again."
+msgstr "Couldn't install Hermes. Try again."
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't load messaging settings"
 msgstr "Couldn't load messaging settings"
@@ -3626,9 +3644,17 @@ msgstr "Download as markdown"
 msgid "Download Executor"
 msgstr "Download Executor"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Downloading"
+msgstr "Downloading"
+
 #: src/components/DesktopUpdates.tsx
 msgid "Downloading…"
 msgstr "Downloading…"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Downloads Hermes 0.21.0 from GitHub and about 200 MB of Python packages."
+msgstr "Downloads Hermes 0.21.0 from GitHub and about 200 MB of Python packages."
 
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Draft skill"
@@ -3702,7 +3728,6 @@ msgstr "Effort: not applicable"
 msgid "Email"
 msgstr "Email"
 
-#: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/McpDefaults.tsx
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/LearningInsights.tsx
@@ -4040,6 +4065,10 @@ msgstr "finished"
 msgid "Finished"
 msgstr "Finished"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Finishing"
+msgstr "Finishing"
+
 #: src/pages/McpOAuthCallback.tsx
 msgid "Finishing MCP connection…"
 msgstr "Finishing MCP connection…"
@@ -4258,6 +4287,7 @@ msgstr "Header value"
 msgid "Hear a sample"
 msgstr "Hear a sample"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes"
 msgstr "Hermes"
@@ -4524,6 +4554,10 @@ msgstr "Install {name}"
 msgid "Install Beads"
 msgstr "Install Beads"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Install Hermes"
+msgstr "Install Hermes"
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Installed"
 msgstr "Installed"
@@ -4543,6 +4577,10 @@ msgstr "Installed, not running"
 #: src/pages/customize/PluginsPage.tsx
 msgid "Installing"
 msgstr "Installing"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Installing packages"
+msgstr "Installing packages"
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Instance API key"
@@ -4780,11 +4818,6 @@ msgstr "Learn more"
 msgid "Learn more about {title}"
 msgstr "Learn more about {title}"
 
-#. placeholder {0}: counts.appliedThisWeek
-#: src/pages/LearningInbox.tsx
-msgid "learned {0} things this week"
-msgstr "learned {0} things this week"
-
 #: src/pages/customize/SkillsPage.tsx
 msgid "Learned skills"
 msgstr "Learned skills"
@@ -4792,7 +4825,6 @@ msgstr "Learned skills"
 #: src/pages/dashboard/LearningDialog.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/KnowledgeSection.tsx
-#: src/pages/LearningInbox.tsx
 #: src/pages/settings-sections.ts
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Learning"
@@ -4802,6 +4834,10 @@ msgstr "Learning"
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Learning consent"
 msgstr "Learning consent"
+
+#: src/pages/LearningInbox.tsx
+msgid "Learning for this space"
+msgstr "Learning for this space"
 
 #: src/pages/MemoryHistory.tsx
 msgid "Learning grant"
@@ -4821,12 +4857,9 @@ msgid "Learning review"
 msgstr "Learning review"
 
 #: src/pages/board/BoardsSettings.tsx
-msgid "Learning review is off"
-msgstr "Learning review is off"
-
-#: src/pages/board/BoardsSettings.tsx
-msgid "Learning review is on"
-msgstr "Learning review is on"
+#: src/pages/settings-sections.ts
+msgid "Learning reviewer"
+msgstr "Learning reviewer"
 
 #: src/pages/LearningInbox.tsx
 msgid "Learning views"
@@ -5321,6 +5354,7 @@ msgstr "minute"
 msgid "minutes"
 msgstr "minutes"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/LearningInsights.tsx
 #: src/pages/MemoryHistory.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -6043,9 +6077,9 @@ msgstr "Only space-shared documents go to this repository."
 
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/ide/IdePage.tsx
-#: src/pages/ide/terminal.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Open"
 msgstr "Open"
 
@@ -6170,6 +6204,7 @@ msgstr "Opening chat…"
 
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
+#: src/pages/workspace/WorkspaceTerminal.tsx
 msgid "Opening terminal"
 msgstr "Opening terminal"
 
@@ -6390,6 +6425,7 @@ msgstr "Policy version"
 msgid "Port"
 msgstr "Port"
 
+#: src/pages/dashboard/LearningPanel.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Possible regression — review undo"
 msgstr "Possible regression — review undo"
@@ -6522,6 +6558,7 @@ msgstr "Propose consolidation"
 msgid "Propose on a branch"
 msgstr "Propose on a branch"
 
+#: src/pages/dashboard/LearningPanel.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Proposed consolidation"
 msgstr "Proposed consolidation"
@@ -6646,6 +6683,10 @@ msgstr "Reads can run without asking once you allow them. Writes always ask."
 #: src/pages/dashboard/WorkPanel.tsx
 msgid "Ready"
 msgstr "Ready"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Ready. The bot can use Hermes."
+msgstr "Ready. The bot can use Hermes."
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -6788,6 +6829,7 @@ msgstr "Rejected"
 
 #: src/pages/ide/terminal.tsx
 #: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspaceTerminal.tsx
 msgid "Release"
 msgstr "Release"
 
@@ -7227,9 +7269,6 @@ msgid "Reviewer"
 msgstr "Reviewer"
 
 #: src/pages/board/BoardsSettings.tsx
-msgid "Reviewer: {reviewer}"
-msgstr "Reviewer: {reviewer}"
-
 #: src/pages/LearningInbox.tsx
 msgid "Reviews use this connection and may incur model charges."
 msgstr "Reviews use this connection and may incur model charges."
@@ -7350,6 +7389,7 @@ msgid "Runs are active on this computer. Saving this connection change may inter
 msgstr "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Runs on"
 msgstr "Runs on"
@@ -7447,6 +7487,7 @@ msgstr "Save model"
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/account/AccountProfile.tsx
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/ide/IdePage.tsx
@@ -7761,6 +7802,10 @@ msgstr "Set up memory search"
 #: src/pages/import/LocalImportPage.tsx
 msgid "Set up servers"
 msgstr "Set up servers"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Setting up Python"
+msgstr "Setting up Python"
 
 #: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -8093,6 +8138,14 @@ msgstr "Start board?"
 msgid "Start comparison"
 msgstr "Start comparison"
 
+#: src/pages/workspace/terminal-controller.ts
+msgid "Start computer"
+msgstr "Start computer"
+
+#: src/pages/workspace/terminal-controller.ts
+msgid "Start computer to open a terminal"
+msgstr "Start computer to open a terminal"
+
 #: src/pages/GoalForm.tsx
 msgid "Start goal"
 msgstr "Start goal"
@@ -8155,8 +8208,8 @@ msgstr "Steps"
 #: src/pages/DelegationLines.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/Shell.tsx
-#: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Stop"
 msgstr "Stop"
 
@@ -8267,14 +8320,12 @@ msgstr "Syncs to {0}"
 msgid "System"
 msgstr "System"
 
-#: src/pages/ide/terminal.tsx
-#: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/take-control-button.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Take control"
 msgstr "Take control"
 
-#: src/pages/ide/terminal.tsx
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Take control to open a terminal"
 msgstr "Take control to open a terminal"
 
@@ -8341,8 +8392,10 @@ msgid "Tell your bot what to change or remove"
 msgstr "Tell your bot what to change or remove"
 
 #: src/pages/ide/IdePage.tsx
+#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Terminal"
 msgstr "Terminal"
 
@@ -8350,8 +8403,7 @@ msgstr "Terminal"
 msgid "Terminal could not open; try again"
 msgstr "Terminal could not open; try again"
 
-#: src/pages/ide/terminal.tsx
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Terminal is not available on this computer"
 msgstr "Terminal is not available on this computer"
 
@@ -8391,7 +8443,7 @@ msgstr "That token was not accepted. Check it and try again."
 msgid "The API did not come back. Refresh this page."
 msgstr "The API did not come back. Refresh this page."
 
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "The bot is working — wait or stop it"
 msgstr "The bot is working — wait or stop it"
 
@@ -8415,6 +8467,10 @@ msgstr "The Hermes install on this computer failed its safety check."
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr "The memory changed since this suggestion. Open History before trying again."
 
+#: src/pages/board/BoardsSettings.tsx
+msgid "The reviewer was changed in another window."
+msgstr "The reviewer was changed in another window."
+
 #: src/lib/mcp-sign-in.ts
 msgid "The saved sign-in expired. Sign in again."
 msgstr "The saved sign-in expired. Sign in again."
@@ -8432,6 +8488,7 @@ msgstr "The service may use its own embedding providers. Check its settings befo
 msgid "Theme"
 msgstr "Theme"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Thinking"
@@ -8441,6 +8498,7 @@ msgstr "Thinking"
 #: src/pages/ide/dialogs.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/ide/terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "This action could not finish; try again."
 msgstr "This action could not finish; try again."
 
@@ -8791,6 +8849,7 @@ msgstr "Trusted folders"
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/computer-screen-error.tsx
 #: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-settings.tsx
 msgid "Try again"
 msgstr "Try again"
 
