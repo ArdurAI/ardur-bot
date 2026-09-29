@@ -594,6 +594,7 @@ msgstr "Ekleniyor…"
 #: src/pages/RoutineSchedule.tsx
 #: src/pages/settings-sections.ts
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-config-panel.tsx
 msgid "Advanced"
 msgstr "Gelişmiş"
 
@@ -842,6 +843,10 @@ msgstr "Antigravity güncel model listesi kontrol edilemedi. Tekrar kontrol edin
 msgid "Any"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "API attempts"
+msgstr "API denemeleri"
+
 #: src/components/SoftwareUpdateSection.tsx
 msgid "API is back, but the update did not finish. Check the host logs."
 msgstr ""
@@ -964,9 +969,21 @@ msgstr "Arşivlendi. Sohbet, hafıza ve dosyalar korundu."
 msgid "Ardur (built-in)"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Ardur manages"
+msgstr "Ardur yönetiminde"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Ardur manages paths, hooks, permissions, and network access."
+msgstr "Ardur; yolları, kancaları, izinleri ve ağ erişimini yönetir."
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Ardur reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Ardur sets the model and thinking level. Change them in bot settings."
+msgstr "Modeli ve düşünme düzeyini Ardur belirler. Bunları bot ayarlarından değiştirin."
 
 #: src/lib/board-close-copy.ts
 msgid "Ardur tried five times. Close it on the Board, or check that this computer is connected."
@@ -1475,6 +1492,10 @@ msgstr "İptal edildi"
 msgid "Capabilities"
 msgstr ""
 
+#: src/pages/group-model-control.tsx
+msgid "Captured for this group."
+msgstr "Bu grup için yakalandı."
+
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Catalog"
 msgstr ""
@@ -1600,6 +1621,10 @@ msgstr ""
 msgid "Checkpoints"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Child agents"
+msgstr "Alt ajanlar"
+
 #: src/pages/customize/ConfigureExtension.tsx
 msgid "Choose"
 msgstr ""
@@ -1657,6 +1682,10 @@ msgstr ""
 #: src/pages/McpServersOverlay.tsx
 msgid "Choose one credential: a token or a header."
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Choose Trim older context or Stop the run."
+msgstr "«Eski bağlamı kırp» veya «Çalışmayı durdur» seçeneğini belirleyin."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Choose which connected model Ardur uses."
@@ -1973,6 +2002,14 @@ msgstr ""
 msgid "Concurrent runs"
 msgstr "Eşzamanlı çalıştırmalar"
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Configuration (JSON)"
+msgstr "Yapılandırma (JSON)"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Configuration must be 16 KiB or smaller."
+msgstr "Yapılandırma 16 KiB veya daha küçük olmalıdır."
+
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Configure"
 msgstr ""
@@ -2172,6 +2209,12 @@ msgstr "Bağlam"
 #: src/pages/Onboarding.tsx
 msgid "Context limit"
 msgstr "Bağlam sınırı"
+
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Context limit (KiB)"
+msgstr "Bağlam sınırı (KiB)"
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/capabilities/CapabilitiesPage.tsx
@@ -2680,6 +2723,10 @@ msgstr "Deneme sesi çalınamadı"
 #: src/pages/memory/MemoryImport.tsx
 msgid "Could not prepare the import. Try again."
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Could not preview the configuration. Try again."
+msgstr "Yapılandırma önizlenemedi. Tekrar deneyin."
 
 #: src/pages/LocalSettings.tsx
 msgid "Could not reach the local server. Start it and try again."
@@ -3629,6 +3676,10 @@ msgstr "Önce düzenle"
 msgid "Education"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Effective configuration"
+msgstr "Geçerli yapılandırma"
+
 #: src/pages/TeamBoard.tsx
 msgid "Effort"
 msgstr ""
@@ -3689,14 +3740,6 @@ msgstr ""
 msgid "Enter a valid token."
 msgstr ""
 
-#: src/pages/shell/hermes-limits.tsx
-msgid "Enter a whole number between 1 and 600 for the time limit."
-msgstr ""
-
-#: src/pages/shell/hermes-limits.tsx
-msgid "Enter a whole number between 1 and 64 for model calls per turn."
-msgstr ""
-
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Enter a whole number from 1 to {MAX_MODEL_CONTEXT_WINDOW} for the context limit."
@@ -3717,6 +3760,10 @@ msgstr "Görüntü sınırı için 1 ile 1000 arasında bir tam sayı girin."
 #: src/pages/Onboarding.tsx
 msgid "Enter this code at <0>{0}</0>"
 msgstr "Bu kodu <0>{0}</0> adresinde gir"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Enter valid JSON."
+msgstr "Geçerli bir JSON girin."
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Environment values are requested when you connect this server."
@@ -3985,6 +4032,10 @@ msgstr "MCP bağlantısı tamamlanıyor…"
 #: src/pages/GuidedOnboarding.tsx
 msgid "First bot not created"
 msgstr "İlk bot oluşturulmadı"
+
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Fix the configuration JSON to edit these settings."
+msgstr "Bu ayarları düzenlemek için yapılandırma JSON'unu düzeltin."
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Flag unexpected actions"
@@ -4708,6 +4759,7 @@ msgstr ""
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/settings-sections.ts
+#: src/pages/shell/runtime-config-panel.tsx
 msgid "Learning"
 msgstr ""
 
@@ -4902,6 +4954,7 @@ msgstr ""
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/SharedCommand.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
 msgid "Loading…"
 msgstr "Yükleniyor…"
 
@@ -5242,7 +5295,9 @@ msgstr "Model"
 msgid "Model & effort"
 msgstr ""
 
-#: src/pages/shell/hermes-limits.tsx
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
 msgid "Model calls per turn"
 msgstr "Tur başına model çağrısı"
 
@@ -5290,6 +5345,10 @@ msgstr "Model güncellendi."
 #: src/pages/ComparePanel.tsx
 msgid "Model version"
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Model, thinking, connections, tools, and permissions come from Ardur."
+msgstr "Model, düşünme, bağlantılar, araçlar ve izinler Ardur'dan gelir."
 
 #: src/pages/LocalSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -5406,6 +5465,18 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Namespace"
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Native child agents are not available with Hermes."
+msgstr "Hermes ile yerel alt ajanlar kullanılamaz."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Native compression"
+msgstr "Yerel sıkıştırma"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Native compression is not available with Hermes."
+msgstr "Hermes ile yerel sıkıştırma kullanılamaz."
 
 #: src/pages/shell/TopNav.tsx
 msgid "Navigation"
@@ -5883,6 +5954,7 @@ msgid "Obsidian vault"
 msgstr ""
 
 #: src/pages/shell/model-pin-select.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Off"
 msgstr ""
@@ -6761,6 +6833,10 @@ msgstr ""
 msgid "Remove skill {0}"
 msgstr "{0} becerisini kaldır"
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Remove the duplicate field."
+msgstr "Yinelenen alanı kaldırın."
+
 #: src/pages/RoutineEditor.tsx
 msgid "Remove webhook"
 msgstr ""
@@ -6935,6 +7011,10 @@ msgstr ""
 #: src/pages/Auth.tsx
 msgid "Reset password"
 msgstr "Parolayı sıfırla"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Reset to defaults"
+msgstr "Varsayılanlara sıfırla"
 
 #: src/pages/Auth.tsx
 msgid "Reset your password"
@@ -7240,6 +7320,14 @@ msgstr ""
 #: src/pages/shell/runtime-settings.tsx
 msgid "Runtime availability could not be checked."
 msgstr ""
+
+#: src/pages/group-model-control.tsx
+msgid "Runtime settings"
+msgstr "Çalışma zamanı ayarları"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Runtime settings cannot install or load code."
+msgstr "Çalışma zamanı ayarları kod yükleyemez veya çalıştıramaz."
 
 #: src/pages/LearningObservation.tsx
 msgid "safety"
@@ -8038,6 +8126,10 @@ msgstr "Öğretmeyi durdur"
 msgid "Stop the current run"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Stop the run"
+msgstr "Çalışmayı durdur"
+
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Stop work in this conversation"
 msgstr ""
@@ -8384,6 +8476,18 @@ msgstr "bu bilgisayar"
 msgid "This computer"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "This configuration is too complex."
+msgstr "Bu yapılandırma çok karmaşık."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "This configuration version is not supported."
+msgstr "Bu yapılandırma sürümü desteklenmiyor."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "This field is not supported."
+msgstr "Bu alan desteklenmiyor."
+
 #: src/components/ArtifactFileCard.tsx
 msgid "This file is not valid UTF-8 Markdown."
 msgstr "Bu dosya geçerli bir UTF-8 Markdown değil."
@@ -8501,9 +8605,11 @@ msgstr ""
 msgid "Thumbs"
 msgstr ""
 
-#: src/pages/shell/hermes-limits.tsx
-msgid "Time limit"
-msgstr "Zaman sınırı"
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Time limit (seconds)"
+msgstr "Süre sınırı (saniye)"
 
 #: src/pages/RoutineSchedule.tsx
 msgid "Time of day"
@@ -8611,6 +8717,10 @@ msgstr ""
 msgid "Treg token"
 msgstr "Treg token'ı"
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Trim older context"
+msgstr "Eski bağlamı kırp"
+
 #: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Trusted folders"
@@ -8624,6 +8734,7 @@ msgstr ""
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/computer-screen-error.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
 msgid "Try again"
 msgstr "Tekrar dene"
 
@@ -8649,6 +8760,10 @@ msgstr "Atanmamış"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Unavailable"
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Unavailable with Hermes."
+msgstr "Hermes ile kullanılamaz."
 
 #: src/pages/LearningObservation.tsx
 msgid "unclassified"
@@ -8820,6 +8935,23 @@ msgstr "Bulunan bir modeli kullan"
 msgid "Use a token"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Use a whole number from 1 to 3."
+msgstr "1 ile 3 arasında bir tam sayı kullanın."
+
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use a whole number from 1 to 600."
+msgstr "1 ile 600 arasında bir tam sayı kullanın."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use a whole number from 1 to 64."
+msgstr "1 ile 64 arasında bir tam sayı kullanın."
+
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use a whole number from 4 to 64."
+msgstr "4 ile 64 arasında bir tam sayı kullanın."
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Use all selected tools"
@@ -8828,6 +8960,22 @@ msgstr "Seçili tüm araçları kullan"
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Use all selected tools, or choose a subset for this bot."
 msgstr "Seçili tüm araçları kullanın veya bu bot için bir alt küme seçin."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Use Ardur Connections for provider settings."
+msgstr "Sağlayıcı ayarları için Ardur Bağlantılarını kullanın."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Use Ardur Learning settings."
+msgstr "Ardur Öğrenme ayarlarını kullanın."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Use Ardur settings for tools, integrations, MCP servers, skills, and plugins."
+msgstr "Araçlar, entegrasyonlar, MCP sunucuları, beceriler ve eklentiler için Ardur ayarlarını kullanın."
+
+#: src/pages/group-model-control.tsx
+msgid "Use bot runtime settings"
+msgstr "Botun çalışma zamanı ayarlarını kullan"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Use default guidance"
@@ -8854,6 +9002,16 @@ msgstr ""
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Use this model"
 msgstr "Bu modeli kullan"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use whole KiB."
+msgstr "Tam KiB değerleri kullanın."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use whole seconds."
+msgstr "Tam saniyeler kullanın."
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "User"
@@ -9021,6 +9179,10 @@ msgstr ""
 msgid "When a webhook fires"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "When context is full"
+msgstr "Bağlam dolduğunda"
+
 #: src/pages/settings/GeneralSettings.tsx
 msgid "When routines finish, cannot run, or need your input."
 msgstr ""
@@ -9156,6 +9318,10 @@ msgstr "Adın"
 #: src/pages/DevicesSettings.tsx
 msgid "Your phone can reach this Mac on your network."
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Your settings"
+msgstr "Ayarlarınız"
 
 #: src/pages/Welcome.tsx
 msgid "Your team of always-on agents<0/>that you can give real work to."

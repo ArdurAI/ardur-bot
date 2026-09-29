@@ -594,6 +594,7 @@ msgstr "Добавление…"
 #: src/pages/RoutineSchedule.tsx
 #: src/pages/settings-sections.ts
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-config-panel.tsx
 msgid "Advanced"
 msgstr "Расширенные"
 
@@ -842,6 +843,10 @@ msgstr "Не удалось проверить актуальный список
 msgid "Any"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "API attempts"
+msgstr "Попытки API"
+
 #: src/components/SoftwareUpdateSection.tsx
 msgid "API is back, but the update did not finish. Check the host logs."
 msgstr "API вернулся, но обновление не завершилось. Проверьте журналы хоста."
@@ -964,9 +969,21 @@ msgstr "В архиве. Чат, память и файлы сохраняютс
 msgid "Ardur (built-in)"
 msgstr "Ardur (встроенный)"
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Ardur manages"
+msgstr "Управляется Ardur"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Ardur manages paths, hooks, permissions, and network access."
+msgstr "Ardur управляет путями, хуками, разрешениями и доступом к сети."
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Ardur reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
 msgstr "Ardur читает инструкции, память, навыки и списки серверов этих инструментов на этом компьютере, но не данные входа, токены или историю чатов."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Ardur sets the model and thinking level. Change them in bot settings."
+msgstr "Ardur задаёт модель и уровень рассуждений. Измените их в настройках бота."
 
 #: src/lib/board-close-copy.ts
 msgid "Ardur tried five times. Close it on the Board, or check that this computer is connected."
@@ -1475,6 +1492,10 @@ msgstr "Отменено"
 msgid "Capabilities"
 msgstr ""
 
+#: src/pages/group-model-control.tsx
+msgid "Captured for this group."
+msgstr "Захвачено для этой группы."
+
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Catalog"
 msgstr ""
@@ -1600,6 +1621,10 @@ msgstr "В checkout есть локальные изменения. Очисти
 msgid "Checkpoints"
 msgstr "Контрольные точки"
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Child agents"
+msgstr "Дочерние агенты"
+
 #: src/pages/customize/ConfigureExtension.tsx
 msgid "Choose"
 msgstr ""
@@ -1657,6 +1682,10 @@ msgstr ""
 #: src/pages/McpServersOverlay.tsx
 msgid "Choose one credential: a token or a header."
 msgstr "Выберите один способ: токен или заголовок."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Choose Trim older context or Stop the run."
+msgstr "Выберите «Обрезать старый контекст» или «Остановить запуск»."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Choose which connected model Ardur uses."
@@ -1973,6 +2002,14 @@ msgstr ""
 msgid "Concurrent runs"
 msgstr "Одновременные запуски"
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Configuration (JSON)"
+msgstr "Конфигурация (JSON)"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Configuration must be 16 KiB or smaller."
+msgstr "Конфигурация должна быть не больше 16 КиБ."
+
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Configure"
 msgstr ""
@@ -2172,6 +2209,12 @@ msgstr "Контекст"
 #: src/pages/Onboarding.tsx
 msgid "Context limit"
 msgstr ""
+
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Context limit (KiB)"
+msgstr "Лимит контекста (КиБ)"
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/capabilities/CapabilitiesPage.tsx
@@ -2680,6 +2723,10 @@ msgstr "Не удалось воспроизвести тестовый клип
 #: src/pages/memory/MemoryImport.tsx
 msgid "Could not prepare the import. Try again."
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Could not preview the configuration. Try again."
+msgstr "Не удалось показать предпросмотр конфигурации. Попробуйте ещё раз."
 
 #: src/pages/LocalSettings.tsx
 msgid "Could not reach the local server. Start it and try again."
@@ -3629,6 +3676,10 @@ msgstr "Сначала отредактируйте"
 msgid "Education"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Effective configuration"
+msgstr "Действующая конфигурация"
+
 #: src/pages/TeamBoard.tsx
 msgid "Effort"
 msgstr ""
@@ -3689,14 +3740,6 @@ msgstr ""
 msgid "Enter a valid token."
 msgstr "Введите действительный токен."
 
-#: src/pages/shell/hermes-limits.tsx
-msgid "Enter a whole number between 1 and 600 for the time limit."
-msgstr ""
-
-#: src/pages/shell/hermes-limits.tsx
-msgid "Enter a whole number between 1 and 64 for model calls per turn."
-msgstr ""
-
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Enter a whole number from 1 to {MAX_MODEL_CONTEXT_WINDOW} for the context limit."
@@ -3717,6 +3760,10 @@ msgstr ""
 #: src/pages/Onboarding.tsx
 msgid "Enter this code at <0>{0}</0>"
 msgstr "Введите этот код по адресу <0>{0}</0>."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Enter valid JSON."
+msgstr "Введите корректный JSON."
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Environment values are requested when you connect this server."
@@ -3985,6 +4032,10 @@ msgstr "Завершение подключения MCP…"
 #: src/pages/GuidedOnboarding.tsx
 msgid "First bot not created"
 msgstr "Первый бот ещё не создан"
+
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Fix the configuration JSON to edit these settings."
+msgstr "Исправьте JSON конфигурации, чтобы редактировать эти настройки."
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Flag unexpected actions"
@@ -4708,6 +4759,7 @@ msgstr ""
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/settings-sections.ts
+#: src/pages/shell/runtime-config-panel.tsx
 msgid "Learning"
 msgstr ""
 
@@ -4902,6 +4954,7 @@ msgstr ""
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/SharedCommand.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
 msgid "Loading…"
 msgstr "Загрузка…"
 
@@ -5242,7 +5295,9 @@ msgstr "Модель"
 msgid "Model & effort"
 msgstr ""
 
-#: src/pages/shell/hermes-limits.tsx
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
 msgid "Model calls per turn"
 msgstr "Вызовы модели за ход"
 
@@ -5290,6 +5345,10 @@ msgstr "Модель обновлена."
 #: src/pages/ComparePanel.tsx
 msgid "Model version"
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Model, thinking, connections, tools, and permissions come from Ardur."
+msgstr "Модель, рассуждения, подключения, инструменты и разрешения предоставляет Ardur."
 
 #: src/pages/LocalSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -5406,6 +5465,18 @@ msgstr "Назовите эту задачу"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Namespace"
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Native child agents are not available with Hermes."
+msgstr "Нативные дочерние агенты недоступны с Hermes."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Native compression"
+msgstr "Нативное сжатие"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Native compression is not available with Hermes."
+msgstr "Нативное сжатие недоступно с Hermes."
 
 #: src/pages/shell/TopNav.tsx
 msgid "Navigation"
@@ -5883,6 +5954,7 @@ msgid "Obsidian vault"
 msgstr ""
 
 #: src/pages/shell/model-pin-select.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Off"
 msgstr ""
@@ -6761,6 +6833,10 @@ msgstr "Удалить расписание"
 msgid "Remove skill {0}"
 msgstr "Удалить навык {0}"
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Remove the duplicate field."
+msgstr "Удалите повторяющееся поле."
+
 #: src/pages/RoutineEditor.tsx
 msgid "Remove webhook"
 msgstr "Удалить вебхук"
@@ -6935,6 +7011,10 @@ msgstr ""
 #: src/pages/Auth.tsx
 msgid "Reset password"
 msgstr "Сбросить пароль"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Reset to defaults"
+msgstr "Сбросить к значениям по умолчанию"
 
 #: src/pages/Auth.tsx
 msgid "Reset your password"
@@ -7240,6 +7320,14 @@ msgstr ""
 #: src/pages/shell/runtime-settings.tsx
 msgid "Runtime availability could not be checked."
 msgstr ""
+
+#: src/pages/group-model-control.tsx
+msgid "Runtime settings"
+msgstr "Настройки среды выполнения"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Runtime settings cannot install or load code."
+msgstr "Настройки среды выполнения не могут устанавливать или загружать код."
 
 #: src/pages/LearningObservation.tsx
 msgid "safety"
@@ -8038,6 +8126,10 @@ msgstr "Остановить обучение"
 msgid "Stop the current run"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Stop the run"
+msgstr "Остановить запуск"
+
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Stop work in this conversation"
 msgstr ""
@@ -8384,6 +8476,18 @@ msgstr "этот компьютер"
 msgid "This computer"
 msgstr "Этот компьютер"
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "This configuration is too complex."
+msgstr "Эта конфигурация слишком сложная."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "This configuration version is not supported."
+msgstr "Эта версия конфигурации не поддерживается."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "This field is not supported."
+msgstr "Это поле не поддерживается."
+
 #: src/components/ArtifactFileCard.tsx
 msgid "This file is not valid UTF-8 Markdown."
 msgstr "Этот файл недействителен в формате UTF-8 Markdown."
@@ -8501,9 +8605,11 @@ msgstr ""
 msgid "Thumbs"
 msgstr "Оценки"
 
-#: src/pages/shell/hermes-limits.tsx
-msgid "Time limit"
-msgstr "Ограничение времени"
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Time limit (seconds)"
+msgstr "Ограничение времени (секунды)"
 
 #: src/pages/RoutineSchedule.tsx
 msgid "Time of day"
@@ -8611,6 +8717,10 @@ msgstr "Считать человеком"
 msgid "Treg token"
 msgstr "Токен Treg"
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Trim older context"
+msgstr "Обрезать старый контекст"
+
 #: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Trusted folders"
@@ -8624,6 +8734,7 @@ msgstr ""
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/computer-screen-error.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
 msgid "Try again"
 msgstr ""
 
@@ -8649,6 +8760,10 @@ msgstr "Без раздела"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Unavailable"
 msgstr "Недоступно"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Unavailable with Hermes."
+msgstr "Недоступно с Hermes."
 
 #: src/pages/LearningObservation.tsx
 msgid "unclassified"
@@ -8820,6 +8935,23 @@ msgstr "Использовать найденную модель"
 msgid "Use a token"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Use a whole number from 1 to 3."
+msgstr "Введите целое число от 1 до 3."
+
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use a whole number from 1 to 600."
+msgstr "Введите целое число от 1 до 600."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use a whole number from 1 to 64."
+msgstr "Введите целое число от 1 до 64."
+
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use a whole number from 4 to 64."
+msgstr "Введите целое число от 4 до 64."
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Use all selected tools"
@@ -8828,6 +8960,22 @@ msgstr "Использовать все выбранные инструмент�
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Use all selected tools, or choose a subset for this bot."
 msgstr "Используйте все выбранные инструменты или выберите часть из них для этого бота."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Use Ardur Connections for provider settings."
+msgstr "Используйте подключения Ardur для настроек провайдера."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Use Ardur Learning settings."
+msgstr "Используйте настройки обучения Ardur."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Use Ardur settings for tools, integrations, MCP servers, skills, and plugins."
+msgstr "Используйте настройки Ardur для инструментов, интеграций, MCP-серверов, навыков и плагинов."
+
+#: src/pages/group-model-control.tsx
+msgid "Use bot runtime settings"
+msgstr "Использовать настройки среды выполнения бота"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Use default guidance"
@@ -8854,6 +9002,16 @@ msgstr ""
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Use this model"
 msgstr "Используйте эту модель"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use whole KiB."
+msgstr "Используйте целые КиБ."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use whole seconds."
+msgstr "Используйте целые секунды."
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "User"
@@ -9021,6 +9179,10 @@ msgstr ""
 msgid "When a webhook fires"
 msgstr "Когда срабатывает вебхук"
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "When context is full"
+msgstr "Когда контекст заполнен"
+
 #: src/pages/settings/GeneralSettings.tsx
 msgid "When routines finish, cannot run, or need your input."
 msgstr ""
@@ -9156,6 +9318,10 @@ msgstr "Ваше имя"
 #: src/pages/DevicesSettings.tsx
 msgid "Your phone can reach this Mac on your network."
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Your settings"
+msgstr "Ваши настройки"
 
 #: src/pages/Welcome.tsx
 msgid "Your team of always-on agents<0/>that you can give real work to."
