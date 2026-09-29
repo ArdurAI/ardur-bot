@@ -18,28 +18,43 @@ Chromium, git, gh, glab, jq, Node.js 24.13.1 LTS, npm, ripgrep and curl. It adds
 Both profiles use `infra/sandboxes/computer/Dockerfile`; `IMAGE_PROFILE` selects the final stage.
 Developer adds a dated Debian package snapshot (including Bookworm backports for the pinned
 `glab` package) and the versioned Node image. These inputs are
-versioned but are not content-addressed until real image digests are recorded in the registry.
-The registry's null digests mean no verified digest has been recorded; they do not establish
-publication status. After publishing, record each manifest SHA-256 there; providers prefer that
-digest over its tag.
+versioned but are not content-addressed until real image digests are recorded.
+The null digests in `packages/contracts/src/computer-image.js` mean no verified digest has been
+recorded; they do not establish publication status. After publishing, record each manifest
+SHA-256 there; every computer then prefers that digest over its tag.
 
 `pnpm build:computers` (also `pnpm sandbox:build`) builds both profile tags and a `:local` alias for Standard.
-`pnpm sandbox:build --podman` uses Podman. CI builds both profiles in an advisory job. Provisioning
-uses the locally built Standard alias when present; otherwise Docker pulls the published Standard
-image on first use. The published name is `ghcr.io/ardurai/ardur-bot/computer`: prerelease app
-versions use `:dev`, and release versions use their exact version tag. `ARDURBOT_COMPUTER_IMAGE`
-overrides Standard; `ARDURBOT_COMPUTER_CHANNEL=dev|release` overrides the version channel. The
-organization owner must make the GHCR `computer` package public after its first publish for
-anonymous pulls. Developer still uses its explicit profile tag and must be built or loaded into
-the selected engine. A locally built image is never silently replaced.
-Kubernetes uses the registry pin and `IfNotPresent`, allowing images loaded into kind to work
-offline and a registry pull of that same pin on other clusters.
+`pnpm sandbox:build --podman` uses Podman. CI builds both profiles in an advisory job. The publish
+workflow pushes both to `ghcr.io/ardurai/ardur-bot/computer`: Standard as `:dev` for prerelease app
+versions and the exact version tag for releases, and Developer as the same tags with a
+`-developer` suffix (`:dev-developer`, `:1.2.3-developer`). The organization owner must make the
+GHCR `computer` package public after its first publish for anonymous pulls; Developer shares it.
+
+Every computer resolves its image in one order (`resolveComputerImage` in
+`packages/contracts/src/computer-image.js`): the image set on its connection, then
+`ARDURBOT_COMPUTER_IMAGE` for Standard (with the legacy `ARDURBOT_COMPUTER_IMAGE_TAG` appended as
+Compose does), then, on local Docker only, a local build, then a recorded digest, then the
+published channel tag. `ARDURBOT_COMPUTER_CHANNEL=dev|release` overrides the channel. Local Docker
+downloads a missing published image, Standard or Developer, once for concurrent bots, and never
+silently replaces a locally built image. Kubernetes pods use `imagePullPolicy: IfNotPresent`, so
+nodes pull the resolved name once and an image loaded into kind or minikube under that name works
+offline. Docker and Podman engines added in Computers never pull during placement: pull the
+resolved image into the engine first, or a computer stops with **Pull {image} into this engine,
+then try again.**
+
+When the desktop's host service reaches a cluster or engine for a server or Compose stack, it
+cannot see the server's environment. It resolves the channel from its own app version and starts
+only a published image or the connection's own image. Set a mirror or private image on the
+connection rather than in `ARDURBOT_COMPUTER_IMAGE`. A Kubernetes computer whose server image the
+host would refuse stops with **Set this cluster's image under Advanced on its connection:
+ARDURBOT_COMPUTER_IMAGE does not reach the machine that runs kubectl.**
 
 Computer connections use the existing `connections` table with `connectorId=computer` and the
 existing encrypted secret store. Only the deployment owner can add a connection or replace a
-computer's configuration. Connections are immutable: create a new connection to change its
-endpoint. Web and Electron share Settings → Computers. Mobile displays the image profile and
-unavailable capabilities without editing the binding.
+computer's configuration. **Edit** in Computers renames a connection or replaces its settings and
+credentials, and asks first when runs are active on it. Web and Electron share Settings →
+Computers. Mobile displays the image profile and unavailable capabilities without editing the
+binding.
 
 Kubeconfig accepts either a path on the server or inline contents. The server snapshots the
 configuration, including certificate file references, into the encrypted secret store. Context
@@ -101,16 +116,71 @@ Docker socket, a running macOS Podman machine socket, or Linux's rootless socket
 machine. Use a host-run supervisor and bind-mounted data with Podman; Docker volume-subpath
 mounts are explicitly refused on Podman. The computer lifecycle needs no Compose command.
 Readiness uses the existing computer control transport rather than Docker healthcheck JSON.
-Docker inspects the selected image before create and downloads a missing published Standard image
-once for concurrent bots. Podman still requires an image already in its own store. The resolved
-name can be pre-pulled into Docker or Podman. Kubernetes keeps its profile tag, so load or retag
-the same image under that tag in each node store.
+Docker inspects the selected image before create and downloads a missing published image once for
+concurrent bots. Podman still requires an image already in its own store. The resolved name can be
+pre-pulled into Docker or Podman. Kubernetes nodes pull the resolved name themselves.
 A selected engine that disagrees with the socket's detected engine fails instead of falling back.
 The deployment default preserves existing Dockerode `DOCKER_HOST`/TLS handling and its precedence
 over socket discovery. Each saved connection is limited to a local Unix socket.
 
 The namespace and PVC are local storage on kind. On hosted Kubernetes, requested resources and
 retained PVC storage may incur charges even while a computer sleeps. No hosted service is needed.
+
+## Hosted clusters (EKS, AKS, GKE)
+
+Any cluster whose nodes pull images from a registry works the same way, managed or your own.
+
+**Sign-in.** Hosted clusters' kubeconfigs usually sign in through a credential plugin (`aws eks
+get-token`, `kubelogin`, `gke-gcloud-auth-plugin`). Ardur refuses those: a kubeconfig is data, and
+honouring a plugin would let a pasted file run any program on the machine that reads it. Instead,
+run `infra/sandboxes/kubernetes/make-kubeconfig.sh` once with your own admin context. It creates a
+least-privilege account and writes a kubeconfig that signs in with that account's token:
+
+```bash
+infra/sandboxes/kubernetes/make-kubeconfig.sh --context <admin-context> --create-namespace
+```
+
+Before changing anything it checks that the server runs Kubernetes 1.31 or newer and uses HTTPS
+with embedded CA data and verified TLS. It then creates the `ardurbot` namespace (only with
+`--create-namespace`, enforcing the restricted Pod Security level), applies `serviceaccount.yaml`,
+`role.yaml` and `rolebinding.yaml`, and writes `ardurbot-ardurbot.kubeconfig` with mode 600. It never
+prints the token and never overwrites a file. By default the token comes from a
+`kubernetes.io/service-account-token` Secret and does not expire; delete the
+`ardurbot-computers-token` Secret to revoke it. `--duration 720h` issues a bound token with
+`kubectl create token` instead; the cluster may shorten it, so rerun the script and replace the
+connection's kubeconfig with **Edit** before it expires. The script ends with `kubectl auth can-i`
+checks as the new account. `--namespace`, `--output`, `--with-capacity` and `--dry-run` (print the
+manifests and commands, change nothing) are optional. Then, in **Settings → Computers → Add
+computer**, choose **Kubernetes context**, enter the context `ardurbot` and your namespace, and
+paste the file under **Kubeconfig**.
+
+**Permissions.** `role.yaml` grants only what computers use: get, create and delete on pods and
+persistent volume claims, and get and create on `pods/exec`. Free capacity needs cluster-wide reads
+of nodes and pods, so it is not in the Role; apply the optional `capacity-clusterrole.yaml`, or pass
+`--with-capacity`, to show it. Without it, capacity is unknown and computers still work. Turning a
+computer's network off on Kubernetes needs Cilium and more permissions than the example grants.
+`packages/host-runtime/src/fleet/kubernetes-access.ts` lists every permission each transport uses.
+
+**Images.** Nodes pull `ghcr.io/ardurai/ardur-bot/computer` from public GHCR by default. For a
+private or air-gapped registry, mirror both profiles' tags, set **Standard image** and **Developer
+image** under **Advanced** on the connection, and create an image pull Secret in the namespace
+yourself (for example with `kubectl create secret docker-registry`); enter its name as **Image pull
+secret**. Ardur never creates Secrets.
+
+**Storage.** A computer's home is a persistent volume claim that names no storage class unless you
+enter one under **Resources**, so the cluster needs a default StorageClass (`kubectl get
+storageclass` marks it `(default)`). On EKS, install the Amazon EBS CSI driver add-on, which needs
+an IAM role through EKS Pod Identity or IAM roles for service accounts, and make an EBS StorageClass
+the default. EKS Auto Mode provisions EBS volumes without the add-on but creates no StorageClass:
+create one with the `ebs.csi.eks.amazonaws.com` provisioner. Fargate pods cannot mount EBS volumes.
+
+**Network.** Whatever talks to the cluster must reach its API endpoint: the computer running the
+Ardur desktop app when it connects the cluster for a server or Compose stack, otherwise the
+server's API and worker. A private endpoint needs a VPN, peering or an allowlist that covers it.
+Nodes must reach the image registry.
+
+**Costs.** Pods and volumes bill while they exist. Sleep deletes the pod but keeps its volume, so a
+sleeping computer still costs its storage. Removing the computer deletes both.
 
 ## Manual verification on macOS
 
@@ -143,8 +213,13 @@ as part of this implementation.
    credential directory. Docker and Podman image stores are separate. Preserve the checkpoint
    before changing back to Docker; verify that the selected engine never falls back silently.
 3. **Run kind.** With the Docker daemon running, run `kind create cluster --name ardurbot`.
-   Run `kind load docker-image ardurbot/computer:0.1.0 ardurbot/computer:0.1.0-developer --name ardurbot`
-   and `kubectl --context kind-ardurbot create namespace ardurbot`. Confirm the cluster offers a
+   kind nodes pull the published images on first use. To work offline or test local builds, load
+   the resolved names, for a prerelease app
+   `kind load docker-image ghcr.io/ardurai/ardur-bot/computer:dev ghcr.io/ardurai/ardur-bot/computer:dev-developer --name ardurbot`
+   (`docker tag` a local build with those names first). With minikube, run
+   `minikube image load <resolved name>` once per image, and give Ardur a kubeconfig with its
+   certificate files embedded: `kubectl config view --minify --flatten --context minikube`.
+   Run `kubectl --context kind-ardurbot create namespace ardurbot`. Confirm the cluster offers a
    default StorageClass. In Settings → Computers, add a **Kubernetes / kind** connection using
    a kubeconfig path accessible to the server (or paste a flattened kubeconfig into its encrypted
    field), List contexts, select **kind-ardurbot**, namespace **ardurbot**, and 10Gi storage.
@@ -157,10 +232,11 @@ as part of this implementation.
    service-account token, kubeconfig, vendor credentials, host paths, or elevated privileges.
 
 For the local kind check, keep the API and worker on the host: kind's loopback API endpoint in
-its generated kubeconfig is not reachable from an unrelated service container. Use the namespace
-RBAC example in `infra/sandboxes/kubernetes/role.yaml` with a separately issued credential for a
-shared cluster; it grants only pod/PVC lifecycle and exec. The application never creates clusters,
-namespaces, roles, or credentials. Do not use customer or production contexts for this check.
+its generated kubeconfig is not reachable from an unrelated service container. For a shared
+cluster, issue a separate credential with `make-kubeconfig.sh` (see
+[Hosted clusters](#hosted-clusters-eks-aks-gke)); its Role grants only pod/PVC lifecycle and exec.
+The application never creates clusters, namespaces, roles, Secrets or credentials; the owner runs
+the script. Do not use customer or production contexts for this check.
 
 ## Manual verification on Linux
 
@@ -192,6 +268,28 @@ data directory; do not relabel home-wide credential directories or disable host 
   stdout/stderr/status and v5 stdin half-close.
 - [kind quick start](https://kind.sigs.k8s.io/docs/user/quick-start/): cluster creation and loading
   images into the cluster's separate image store.
+- [minikube image](https://minikube.sigs.k8s.io/docs/commands/image/): `minikube image load` takes
+  one image per call.
+- [ServiceAccounts](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/)
+  and [ServiceAccount administration](https://kubernetes.io/docs/reference/access-authn-authz/service-accounts-admin/):
+  long-lived `kubernetes.io/service-account-token` Secrets, which the control plane fills with
+  `token`, `ca.crt` and `namespace` and which deleting revokes; unused-token cleanup applies only
+  to auto-generated tokens, which a ServiceAccount lists in its `secrets` field.
+- [`kubectl create token`](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_create/kubectl_create_token/):
+  `--duration`, which the server may lengthen or shorten.
+- [`kubectl auth can-i`](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_auth/kubectl_auth_can-i/):
+  `--subresource`, `--quiet` and its exit codes; [`kubectl config view`](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_config/kubectl_config_view/):
+  `--minify`, `--flatten` and `--raw`; [`kubectl version`](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_version/)
+  JSON output.
+- [Pod Security Standards](https://kubernetes.io/docs/concepts/security/pod-security-standards/) and
+  [Pod Security Admission](https://kubernetes.io/docs/concepts/security/pod-security-admission/):
+  the restricted controls and the `pod-security.kubernetes.io/enforce` namespace label.
+- [`AuthorizePodWebsocketUpgradeCreatePermission`](https://kubernetes.io/docs/reference/command-line-tools-reference/feature-gates/):
+  from 1.35 WebSocket exec also needs `create` on `pods/exec`, which the Role grants with `get`.
+- [Amazon EBS CSI driver](https://docs.aws.amazon.com/eks/latest/userguide/ebs-csi.html) and
+  [EKS Auto Mode storage classes](https://docs.aws.amazon.com/eks/latest/userguide/create-storage-class.html):
+  the add-on and its IAM role, Auto Mode needing no add-on but creating no StorageClass, and EBS
+  volumes being unavailable to Fargate pods.
 - [Node.js 24.13.1](https://nodejs.org/en/blog/release/v24.13.1): the selected LTS version.
 - [Debian glab](https://packages.debian.org/bookworm-backports/vcs/glab): Bookworm backports
   supplies version `1.33.0-1~bpo12+1` for both amd64 and arm64.
@@ -209,7 +307,10 @@ The profile labels and **Image profile** identify the saved choice. **Developer 
 download and uses more disk space.** appears at that choice because size is its direct trade-off.
 **This replaces the computer's files. Continue?** appears only in the confirmation dialog.
 **Not available on this computer** appears only for unsupported capabilities. Connection details
-and resources are progressively disclosed under Add computer connection and Resources. The kind
+and resources are progressively disclosed under Add computer connection and Resources. **Standard
+image** and **Developer image** (and, for Kubernetes, **Image pull secret**) sit under a collapsed
+**Advanced** because only owners of private or air-gapped registries need them. **Pull {image} into
+this engine, then try again.** and the cluster image sentence appear only after that failure. The kind
 creation hint appears only while configuring Kubernetes. These sentences are necessary at the
 point where the owner makes the corresponding choice; persistent explanations elsewhere are
 not added. CI's `computer-profiles.spec.ts` captures the choice and confirmation screens; link its
