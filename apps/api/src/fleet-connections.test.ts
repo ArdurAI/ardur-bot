@@ -1,4 +1,5 @@
 import type { AdapterContext } from "@ardurbot/adapter-kit";
+import type * as Adapters from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
 import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
 import { unknownCapacity } from "@ardurbot/contracts/fleet";
@@ -15,6 +16,23 @@ import {
 } from "./fleet.js";
 import type { RouterDeps } from "./router.js";
 import { createRouter } from "./router.js";
+
+// The official Kubernetes client is a multi-megabyte generated module whose
+// first load dominated this file's runtime. The adapter functions under test
+// only parse the kubeconfig, so stand in that parsing at the adapter boundary.
+vi.mock("@ardurbot/adapters", async (importOriginal) => ({
+  ...(await importOriginal<typeof Adapters>()),
+  snapshotKubeconfig: vi.fn(async (source: { inline?: string; path?: string }) => source),
+  kubernetesContexts: vi.fn(async (source: { inline?: string }) => {
+    const parsed = JSON.parse(source.inline ?? "{}") as {
+      contexts?: { name: string; context: { cluster: string } }[];
+    };
+    return (parsed.contexts ?? []).map((entry) => ({
+      name: entry.name,
+      local: entry.context.cluster.startsWith("kind-"),
+    }));
+  }),
+}));
 
 const context: AdapterContext = {
   spaceId: "space",
