@@ -711,6 +711,8 @@ export interface BackgroundJobPayloads {
   "messaging.deliver": { runId?: string };
   /** Reconcile durable remote-agent intent; scope is loaded from the database. */
   "cloud_agent.poll": { agentId: string };
+  /** Install the pinned Hermes runtime on this computer. No path, URL, or version. */
+  "hermes.install": Record<string, never>;
 }
 
 export type BackgroundJobName = keyof BackgroundJobPayloads;

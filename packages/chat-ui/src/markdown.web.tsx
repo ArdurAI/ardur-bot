@@ -2,7 +2,8 @@ import { memo, useCallback, useRef, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import "./markdown.web.css";
-import { type ChatMarkdownProps, closeUnterminatedFence, sanitizeMarkdownUrl } from "./markdown";
+import type { ChatMarkdownProps } from "./markdown";
+import { closeUnterminatedFence, sanitizeMarkdownUrl, showsCursor } from "./markdown";
 
 function CopyIcon() {
   return (
@@ -90,8 +91,10 @@ const components: Components = {
 export const ChatMarkdown = memo(function ChatMarkdown({
   children,
   streaming = false,
+  cursor,
 }: ChatMarkdownProps) {
   const source = streaming ? closeUnterminatedFence(children) : children;
+  const showCursor = showsCursor({ streaming, cursor });
 
   return (
     <div className={streaming ? "rk-chat-markdown rk-chat-markdown-streaming" : "rk-chat-markdown"}>
@@ -103,7 +106,7 @@ export const ChatMarkdown = memo(function ChatMarkdown({
       >
         {source}
       </ReactMarkdown>
-      {streaming ? <span aria-hidden="true" className="rk-chat-markdown-cursor" /> : null}
+      {showCursor ? <span aria-hidden="true" className="rk-chat-markdown-cursor" /> : null}
     </div>
   );
 });

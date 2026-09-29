@@ -123,6 +123,7 @@ import { presentMessageActionSheet } from "../lib/message-action-sheet";
 import {
   hasVisibleMessagePresentation,
   isCenteredAgentEvent,
+  liveReplyTextStreaming,
   messagePresentationSegments,
 } from "../lib/message-presentation";
 import { native, useMobileTokens, useResolvedAppearance } from "../lib/native";
@@ -156,6 +157,7 @@ function formatApprovalAnswer(
   actions: AskAction[] | undefined,
   approval: boolean,
   peerHold?: boolean,
+  peerEffectBound?: boolean,
 ): string {
   if (!answer) return t("Answered");
   const selectedAction = actions?.find((action) => action.id === answer);
@@ -163,7 +165,7 @@ function formatApprovalAnswer(
   if (approval && outcome === "created") return t("Created");
   if (approval && outcome === "cancelled") return t("Cancelled");
   if (peerHold && answer === "expired") return t("Request expired");
-  if (peerHold && answer === "allow") return t("Preparation allowed");
+  if (peerHold && !peerEffectBound && answer === "allow") return t("Preparation allowed");
   if (approval && answer === "allow") return t("Allowed once");
   if (approval && answer === "always") return t("Always allowed");
   if (approval && answer === "deny") return t("Denied");
@@ -2794,12 +2796,14 @@ const MessageBubble = memo(function MessageBubble({
                 askBlock.actions,
                 isApprovalAskBlock(askBlock),
                 askBlock.peerHold,
+                askBlock.peerEffectBound,
               )}
             </Text>
           ) : canAnswer && onAnswer ? (
             <AskActions
               actions={askBlock.actions}
               peerHold={askBlock.peerHold}
+              peerEffectBound={askBlock.peerEffectBound}
               accessibilityActions={actionProps.accessibilityActions}
               onAccessibilityAction={actionProps.onAccessibilityAction}
               onAnswer={(answer) => onAnswer(message, answer)}
@@ -3068,6 +3072,7 @@ function MessageTextCard({
           palette={tokens}
           colorScheme={colorScheme}
           streaming={message.id.startsWith("progress:")}
+          cursor={liveReplyTextStreaming(message.blocks)}
         >
           {contentText}
         </ChatMarkdown>

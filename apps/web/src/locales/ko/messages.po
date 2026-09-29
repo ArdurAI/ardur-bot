@@ -154,11 +154,6 @@ msgstr "{0}회 실행 · 토큰 {1}개"
 msgid "{0} runs at these pins; hosted providers may bill per run"
 msgstr ""
 
-#. placeholder {0}: counts.pendingCount
-#: src/pages/LearningInbox.tsx
-msgid "{0} suggestions to review"
-msgstr ""
-
 #. placeholder {0}: bot.name
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} will still respond to direct mentions."
@@ -253,6 +248,10 @@ msgstr ""
 msgid "{hours}h ago"
 msgstr "{hours}시간 전"
 
+#: src/pages/LearningInbox.tsx
+msgid "{learned, plural, one {learned # thing this week} other {learned # things this week}}"
+msgstr "{learned, plural, other {이번 주에 #가지를 학습함}}"
+
 #: src/pages/storage/StorageSettings.tsx
 msgid "{location} · Docker not running"
 msgstr ""
@@ -276,13 +275,17 @@ msgstr "{name} 완료"
 msgid "{name} needs your input"
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
+msgid "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
+msgstr "{pending, plural, other {검토할 제안 #개}}"
+
 #: src/components/composer/ComposerMenu.tsx
 msgid "{reconnectCount} need reconnection"
 msgstr ""
 
 #: src/pages/dashboard/UsagePanel.tsx
-msgid "{records} usage records"
-msgstr "사용 기록 {records}개"
+msgid "{records, plural, one {# usage record} other {# usage records}}"
+msgstr "{records, plural, other {사용 기록 #개}}"
 
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "{remaining} left · bot is watching, not acting"
@@ -309,8 +312,8 @@ msgid "{title}, {label}"
 msgstr "{title}, {label}"
 
 #: src/pages/dashboard/UsagePanel.tsx
-msgid "{tokens} tokens"
-msgstr ""
+msgid "{tokens, plural, one {# token} other {# tokens}}"
+msgstr "{tokens, plural, other {토큰 #개}}"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "{toolCount, plural, one {# tool} other {# tools}}"
@@ -788,6 +791,7 @@ msgstr "응답: {0}"
 msgid "Answered: {answer}"
 msgstr "응답: {answer}"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Antigravity"
 msgstr "Antigravity"
@@ -965,6 +969,7 @@ msgstr "보관됨"
 msgid "Archived. Chat, memory, and files kept."
 msgstr "보관되었습니다. 대화, 기억, 파일은 유지됩니다."
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Ardur (built-in)"
 msgstr ""
@@ -1608,6 +1613,10 @@ msgstr ""
 msgid "Checked {0}"
 msgstr "확인 시간 {0}"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Checking the download"
+msgstr "다운로드 확인 중"
+
 #: src/components/DesktopUpdates.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/SoftwareUpdateSection.tsx
@@ -1650,8 +1659,10 @@ msgstr ""
 msgid "Choose a folder inside your home folder."
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/group-model-control.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose a model"
 msgstr ""
@@ -1701,6 +1712,7 @@ msgstr ""
 msgid "Claim"
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Claude Code (your claude sign-in)"
 msgstr ""
@@ -1843,6 +1855,7 @@ msgstr "코드"
 msgid "Code execution on computers"
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Codex (your ChatGPT sign-in)"
 msgstr ""
@@ -2081,6 +2094,7 @@ msgstr ""
 msgid "Connect a desktop app to approve new devices."
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/GuidedOnboarding.tsx
 #: src/pages/Onboarding.tsx
 msgid "Connect a model"
@@ -3048,6 +3062,10 @@ msgstr ""
 msgid "Could not update uploaded files."
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Couldn't install Hermes. Try again."
+msgstr "Hermes를 설치하지 못했습니다. 다시 시도하세요."
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't load messaging settings"
 msgstr "메시징 설정을 불러올 수 없습니다"
@@ -3621,9 +3639,17 @@ msgstr "마크다운으로 다운로드"
 msgid "Download Executor"
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Downloading"
+msgstr "다운로드 중"
+
 #: src/components/DesktopUpdates.tsx
 msgid "Downloading…"
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Downloads Hermes 0.21.0 from GitHub and about 200 MB of Python packages."
+msgstr "GitHub에서 Hermes 0.21.0과 약 200MB의 Python 패키지를 받습니다."
 
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Draft skill"
@@ -3697,7 +3723,6 @@ msgstr ""
 msgid "Email"
 msgstr "이메일"
 
-#: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/McpDefaults.tsx
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/LearningInsights.tsx
@@ -4030,6 +4055,10 @@ msgstr "완료"
 msgid "Finished"
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Finishing"
+msgstr "마무리 중"
+
 #: src/pages/McpOAuthCallback.tsx
 msgid "Finishing MCP connection…"
 msgstr "MCP 연결을 마무리하는 중…"
@@ -4248,6 +4277,7 @@ msgstr "헤더 값"
 msgid "Hear a sample"
 msgstr "샘플 듣기"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes"
 msgstr "Hermes"
@@ -4514,6 +4544,10 @@ msgstr ""
 msgid "Install Beads"
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Install Hermes"
+msgstr "Hermes 설치"
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Installed"
 msgstr ""
@@ -4533,6 +4567,10 @@ msgstr "설치됨, 실행 중이 아님"
 #: src/pages/customize/PluginsPage.tsx
 msgid "Installing"
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Installing packages"
+msgstr "패키지 설치 중"
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Instance API key"
@@ -4762,11 +4800,6 @@ msgstr "자세히 알아보기"
 msgid "Learn more about {title}"
 msgstr "{title}에 대해 자세히 알아보기"
 
-#. placeholder {0}: counts.appliedThisWeek
-#: src/pages/LearningInbox.tsx
-msgid "learned {0} things this week"
-msgstr ""
-
 #: src/pages/customize/SkillsPage.tsx
 msgid "Learned skills"
 msgstr ""
@@ -4774,7 +4807,6 @@ msgstr ""
 #: src/pages/dashboard/LearningDialog.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/KnowledgeSection.tsx
-#: src/pages/LearningInbox.tsx
 #: src/pages/settings-sections.ts
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Learning"
@@ -4784,6 +4816,10 @@ msgstr ""
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Learning consent"
 msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Learning for this space"
+msgstr "이 스페이스의 학습"
 
 #: src/pages/MemoryHistory.tsx
 msgid "Learning grant"
@@ -4803,12 +4839,9 @@ msgid "Learning review"
 msgstr ""
 
 #: src/pages/board/BoardsSettings.tsx
-msgid "Learning review is off"
-msgstr ""
-
-#: src/pages/board/BoardsSettings.tsx
-msgid "Learning review is on"
-msgstr ""
+#: src/pages/settings-sections.ts
+msgid "Learning reviewer"
+msgstr "학습 검토자"
 
 #: src/pages/LearningInbox.tsx
 msgid "Learning views"
@@ -5303,6 +5336,7 @@ msgstr "분"
 msgid "minutes"
 msgstr "분"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/LearningInsights.tsx
 #: src/pages/MemoryHistory.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -6025,9 +6059,9 @@ msgstr ""
 
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/ide/IdePage.tsx
-#: src/pages/ide/terminal.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Open"
 msgstr "열기"
 
@@ -6152,6 +6186,7 @@ msgstr "채팅 여는 중…"
 
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
+#: src/pages/workspace/WorkspaceTerminal.tsx
 msgid "Opening terminal"
 msgstr ""
 
@@ -6372,6 +6407,7 @@ msgstr ""
 msgid "Port"
 msgstr ""
 
+#: src/pages/dashboard/LearningPanel.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Possible regression — review undo"
 msgstr ""
@@ -6504,6 +6540,7 @@ msgstr ""
 msgid "Propose on a branch"
 msgstr ""
 
+#: src/pages/dashboard/LearningPanel.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Proposed consolidation"
 msgstr ""
@@ -6628,6 +6665,10 @@ msgstr ""
 #: src/pages/dashboard/WorkPanel.tsx
 msgid "Ready"
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Ready. The bot can use Hermes."
+msgstr "준비되었습니다. 봇이 Hermes를 사용할 수 있습니다."
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -6770,6 +6811,7 @@ msgstr ""
 
 #: src/pages/ide/terminal.tsx
 #: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspaceTerminal.tsx
 msgid "Release"
 msgstr "제어권 돌려주기"
 
@@ -7209,9 +7251,6 @@ msgid "Reviewer"
 msgstr ""
 
 #: src/pages/board/BoardsSettings.tsx
-msgid "Reviewer: {reviewer}"
-msgstr ""
-
 #: src/pages/LearningInbox.tsx
 msgid "Reviews use this connection and may incur model charges."
 msgstr ""
@@ -7331,6 +7370,7 @@ msgid "Runs are active on this computer. Saving this connection change may inter
 msgstr "이 컴퓨터에서 실행 중인 작업이 있습니다. 연결을 바꾸면 중단될 수 있습니다. 그래도 저장할까요?"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Runs on"
 msgstr ""
@@ -7428,6 +7468,7 @@ msgstr "모델 저장"
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/account/AccountProfile.tsx
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/ide/IdePage.tsx
@@ -7742,6 +7783,10 @@ msgstr ""
 #: src/pages/import/LocalImportPage.tsx
 msgid "Set up servers"
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Setting up Python"
+msgstr "Python 준비 중"
 
 #: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -8074,6 +8119,14 @@ msgstr "보드를 시작할까요?"
 msgid "Start comparison"
 msgstr ""
 
+#: src/pages/workspace/terminal-controller.ts
+msgid "Start computer"
+msgstr "컴퓨터 시작"
+
+#: src/pages/workspace/terminal-controller.ts
+msgid "Start computer to open a terminal"
+msgstr "터미널을 열려면 컴퓨터를 시작하세요"
+
 #: src/pages/GoalForm.tsx
 msgid "Start goal"
 msgstr "목표 시작"
@@ -8136,8 +8189,8 @@ msgstr "실행 단계"
 #: src/pages/DelegationLines.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/Shell.tsx
-#: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Stop"
 msgstr "중지"
 
@@ -8248,14 +8301,12 @@ msgstr ""
 msgid "System"
 msgstr "시스템"
 
-#: src/pages/ide/terminal.tsx
-#: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/take-control-button.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Take control"
 msgstr "제어 가져오기"
 
-#: src/pages/ide/terminal.tsx
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Take control to open a terminal"
 msgstr ""
 
@@ -8322,8 +8373,10 @@ msgid "Tell your bot what to change or remove"
 msgstr ""
 
 #: src/pages/ide/IdePage.tsx
+#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Terminal"
 msgstr ""
 
@@ -8331,8 +8384,7 @@ msgstr ""
 msgid "Terminal could not open; try again"
 msgstr ""
 
-#: src/pages/ide/terminal.tsx
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Terminal is not available on this computer"
 msgstr ""
 
@@ -8372,7 +8424,7 @@ msgstr ""
 msgid "The API did not come back. Refresh this page."
 msgstr "API가 다시 작동하지 않습니다. 이 페이지를 새로 고침하세요."
 
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "The bot is working — wait or stop it"
 msgstr ""
 
@@ -8396,6 +8448,10 @@ msgstr "이 컴퓨터의 Hermes 설치가 안전 검사를 통과하지 못했�
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
+msgid "The reviewer was changed in another window."
+msgstr "다른 창에서 검토자가 변경되었습니다."
+
 #: src/lib/mcp-sign-in.ts
 msgid "The saved sign-in expired. Sign in again."
 msgstr ""
@@ -8413,6 +8469,7 @@ msgstr ""
 msgid "Theme"
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Thinking"
@@ -8422,6 +8479,7 @@ msgstr "생각 깊이"
 #: src/pages/ide/dialogs.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/ide/terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "This action could not finish; try again."
 msgstr ""
 
@@ -8772,6 +8830,7 @@ msgstr ""
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/computer-screen-error.tsx
 #: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-settings.tsx
 msgid "Try again"
 msgstr "다시 시도"
 

@@ -154,11 +154,6 @@ msgstr "{0} रन · {1} टोकन"
 msgid "{0} runs at these pins; hosted providers may bill per run"
 msgstr ""
 
-#. placeholder {0}: counts.pendingCount
-#: src/pages/LearningInbox.tsx
-msgid "{0} suggestions to review"
-msgstr ""
-
 #. placeholder {0}: bot.name
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} will still respond to direct mentions."
@@ -253,6 +248,10 @@ msgstr ""
 msgid "{hours}h ago"
 msgstr "{hours} घंटे पहले"
 
+#: src/pages/LearningInbox.tsx
+msgid "{learned, plural, one {learned # thing this week} other {learned # things this week}}"
+msgstr "{learned, plural, one {इस सप्ताह # बात सीखी} other {इस सप्ताह # बातें सीखीं}}"
+
 #: src/pages/storage/StorageSettings.tsx
 msgid "{location} · Docker not running"
 msgstr ""
@@ -276,13 +275,17 @@ msgstr "{name} पूरा हुआ"
 msgid "{name} needs your input"
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
+msgid "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
+msgstr "{pending, plural, one {समीक्षा के लिए # सुझाव} other {समीक्षा के लिए # सुझाव}}"
+
 #: src/components/composer/ComposerMenu.tsx
 msgid "{reconnectCount} need reconnection"
 msgstr ""
 
 #: src/pages/dashboard/UsagePanel.tsx
-msgid "{records} usage records"
-msgstr "{records} उपयोग रिकॉर्ड"
+msgid "{records, plural, one {# usage record} other {# usage records}}"
+msgstr "{records, plural, one {# उपयोग रिकॉर्ड} other {# उपयोग रिकॉर्ड}}"
 
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "{remaining} left · bot is watching, not acting"
@@ -309,8 +312,8 @@ msgid "{title}, {label}"
 msgstr "{title}, {label}"
 
 #: src/pages/dashboard/UsagePanel.tsx
-msgid "{tokens} tokens"
-msgstr ""
+msgid "{tokens, plural, one {# token} other {# tokens}}"
+msgstr "{tokens, plural, one {# टोकन} other {# टोकन}}"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "{toolCount, plural, one {# tool} other {# tools}}"
@@ -788,6 +791,7 @@ msgstr "उत्तर दिया: {0}"
 msgid "Answered: {answer}"
 msgstr "उत्तर: {answer}"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Antigravity"
 msgstr "Antigravity"
@@ -965,6 +969,7 @@ msgstr "आर्काइव किया गया"
 msgid "Archived. Chat, memory, and files kept."
 msgstr "आर्काइव किया गया। चैट, मेमोरी और फ़ाइलें सुरक्षित रखी गईं।"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Ardur (built-in)"
 msgstr ""
@@ -1608,6 +1613,10 @@ msgstr ""
 msgid "Checked {0}"
 msgstr "जाँच की गई {0}"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Checking the download"
+msgstr "डाउनलोड की जाँच हो रही है"
+
 #: src/components/DesktopUpdates.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/SoftwareUpdateSection.tsx
@@ -1650,8 +1659,10 @@ msgstr ""
 msgid "Choose a folder inside your home folder."
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/group-model-control.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose a model"
 msgstr ""
@@ -1701,6 +1712,7 @@ msgstr ""
 msgid "Claim"
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Claude Code (your claude sign-in)"
 msgstr ""
@@ -1843,6 +1855,7 @@ msgstr "कोड"
 msgid "Code execution on computers"
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Codex (your ChatGPT sign-in)"
 msgstr ""
@@ -2081,6 +2094,7 @@ msgstr ""
 msgid "Connect a desktop app to approve new devices."
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/GuidedOnboarding.tsx
 #: src/pages/Onboarding.tsx
 msgid "Connect a model"
@@ -3048,6 +3062,10 @@ msgstr ""
 msgid "Could not update uploaded files."
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Couldn't install Hermes. Try again."
+msgstr "Hermes इंस्टॉल नहीं हो सका. फिर से कोशिश करें।"
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't load messaging settings"
 msgstr ""
@@ -3621,9 +3639,17 @@ msgstr "मार्कडाउन के रूप में डाउनल�
 msgid "Download Executor"
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Downloading"
+msgstr "डाउनलोड हो रहा है"
+
 #: src/components/DesktopUpdates.tsx
 msgid "Downloading…"
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Downloads Hermes 0.21.0 from GitHub and about 200 MB of Python packages."
+msgstr "GitHub से Hermes 0.21.0 और लगभग 200 MB के Python पैकेज डाउनलोड करता है।"
 
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Draft skill"
@@ -3697,7 +3723,6 @@ msgstr ""
 msgid "Email"
 msgstr "ईमेल"
 
-#: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/McpDefaults.tsx
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/LearningInsights.tsx
@@ -4030,6 +4055,10 @@ msgstr "पूर्ण"
 msgid "Finished"
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Finishing"
+msgstr "समाप्त हो रहा है"
+
 #: src/pages/McpOAuthCallback.tsx
 msgid "Finishing MCP connection…"
 msgstr "MCP कनेक्शन पूरा हो रहा है…"
@@ -4248,6 +4277,7 @@ msgstr "हेडर मान"
 msgid "Hear a sample"
 msgstr "एक नमूना सुनें"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes"
 msgstr "Hermes"
@@ -4514,6 +4544,10 @@ msgstr ""
 msgid "Install Beads"
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Install Hermes"
+msgstr "Hermes इंस्टॉल करें"
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Installed"
 msgstr ""
@@ -4533,6 +4567,10 @@ msgstr "इंस्टॉल है, चल नहीं रहा"
 #: src/pages/customize/PluginsPage.tsx
 msgid "Installing"
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Installing packages"
+msgstr "पैकेज इंस्टॉल हो रहे हैं"
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Instance API key"
@@ -4762,11 +4800,6 @@ msgstr "और जानें"
 msgid "Learn more about {title}"
 msgstr "{title} के बारे में और जानें"
 
-#. placeholder {0}: counts.appliedThisWeek
-#: src/pages/LearningInbox.tsx
-msgid "learned {0} things this week"
-msgstr ""
-
 #: src/pages/customize/SkillsPage.tsx
 msgid "Learned skills"
 msgstr ""
@@ -4774,7 +4807,6 @@ msgstr ""
 #: src/pages/dashboard/LearningDialog.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/KnowledgeSection.tsx
-#: src/pages/LearningInbox.tsx
 #: src/pages/settings-sections.ts
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Learning"
@@ -4784,6 +4816,10 @@ msgstr ""
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Learning consent"
 msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Learning for this space"
+msgstr "इस स्पेस के लिए सीखना"
 
 #: src/pages/MemoryHistory.tsx
 msgid "Learning grant"
@@ -4803,12 +4839,9 @@ msgid "Learning review"
 msgstr ""
 
 #: src/pages/board/BoardsSettings.tsx
-msgid "Learning review is off"
-msgstr ""
-
-#: src/pages/board/BoardsSettings.tsx
-msgid "Learning review is on"
-msgstr ""
+#: src/pages/settings-sections.ts
+msgid "Learning reviewer"
+msgstr "लर्निंग समीक्षक"
 
 #: src/pages/LearningInbox.tsx
 msgid "Learning views"
@@ -5303,6 +5336,7 @@ msgstr "मिनट"
 msgid "minutes"
 msgstr "मिनट"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/LearningInsights.tsx
 #: src/pages/MemoryHistory.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -6025,9 +6059,9 @@ msgstr ""
 
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/ide/IdePage.tsx
-#: src/pages/ide/terminal.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Open"
 msgstr "खोलें"
 
@@ -6152,6 +6186,7 @@ msgstr "चैट खुल रही है…"
 
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
+#: src/pages/workspace/WorkspaceTerminal.tsx
 msgid "Opening terminal"
 msgstr ""
 
@@ -6372,6 +6407,7 @@ msgstr ""
 msgid "Port"
 msgstr ""
 
+#: src/pages/dashboard/LearningPanel.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Possible regression — review undo"
 msgstr ""
@@ -6504,6 +6540,7 @@ msgstr ""
 msgid "Propose on a branch"
 msgstr ""
 
+#: src/pages/dashboard/LearningPanel.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Proposed consolidation"
 msgstr ""
@@ -6628,6 +6665,10 @@ msgstr ""
 #: src/pages/dashboard/WorkPanel.tsx
 msgid "Ready"
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Ready. The bot can use Hermes."
+msgstr "तैयार. यह बॉट Hermes इस्तेमाल कर सकता है।"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -6770,6 +6811,7 @@ msgstr ""
 
 #: src/pages/ide/terminal.tsx
 #: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspaceTerminal.tsx
 msgid "Release"
 msgstr "नियंत्रण छोड़ें"
 
@@ -7209,9 +7251,6 @@ msgid "Reviewer"
 msgstr ""
 
 #: src/pages/board/BoardsSettings.tsx
-msgid "Reviewer: {reviewer}"
-msgstr ""
-
 #: src/pages/LearningInbox.tsx
 msgid "Reviews use this connection and may incur model charges."
 msgstr ""
@@ -7331,6 +7370,7 @@ msgid "Runs are active on this computer. Saving this connection change may inter
 msgstr "इस कंप्यूटर पर रन सक्रिय हैं। कनेक्शन बदलने से वे रुक सकते हैं। फिर भी सहेजें?"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Runs on"
 msgstr ""
@@ -7428,6 +7468,7 @@ msgstr "मॉडल सहेजें"
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/account/AccountProfile.tsx
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/ide/IdePage.tsx
@@ -7742,6 +7783,10 @@ msgstr ""
 #: src/pages/import/LocalImportPage.tsx
 msgid "Set up servers"
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Setting up Python"
+msgstr "Python सेट हो रहा है"
 
 #: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -8074,6 +8119,14 @@ msgstr "बोर्ड शुरू करें?"
 msgid "Start comparison"
 msgstr ""
 
+#: src/pages/workspace/terminal-controller.ts
+msgid "Start computer"
+msgstr "कंप्यूटर शुरू करें"
+
+#: src/pages/workspace/terminal-controller.ts
+msgid "Start computer to open a terminal"
+msgstr "टर्मिनल खोलने के लिए कंप्यूटर शुरू करें"
+
 #: src/pages/GoalForm.tsx
 msgid "Start goal"
 msgstr "लक्ष्य शुरू करें"
@@ -8136,8 +8189,8 @@ msgstr "चरण"
 #: src/pages/DelegationLines.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/Shell.tsx
-#: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Stop"
 msgstr "रोकें"
 
@@ -8248,14 +8301,12 @@ msgstr ""
 msgid "System"
 msgstr "सिस्टम"
 
-#: src/pages/ide/terminal.tsx
-#: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/take-control-button.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Take control"
 msgstr "नियंत्रण लें"
 
-#: src/pages/ide/terminal.tsx
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Take control to open a terminal"
 msgstr ""
 
@@ -8322,8 +8373,10 @@ msgid "Tell your bot what to change or remove"
 msgstr ""
 
 #: src/pages/ide/IdePage.tsx
+#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Terminal"
 msgstr ""
 
@@ -8331,8 +8384,7 @@ msgstr ""
 msgid "Terminal could not open; try again"
 msgstr ""
 
-#: src/pages/ide/terminal.tsx
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Terminal is not available on this computer"
 msgstr ""
 
@@ -8372,7 +8424,7 @@ msgstr ""
 msgid "The API did not come back. Refresh this page."
 msgstr ""
 
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "The bot is working — wait or stop it"
 msgstr ""
 
@@ -8396,6 +8448,10 @@ msgstr "इस कंप्यूटर पर Hermes की स्थापन�
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
+msgid "The reviewer was changed in another window."
+msgstr "समीक्षक को किसी अन्य विंडो में बदल दिया गया था।"
+
 #: src/lib/mcp-sign-in.ts
 msgid "The saved sign-in expired. Sign in again."
 msgstr ""
@@ -8413,6 +8469,7 @@ msgstr ""
 msgid "Theme"
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Thinking"
@@ -8422,6 +8479,7 @@ msgstr "सोच रहा है"
 #: src/pages/ide/dialogs.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/ide/terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "This action could not finish; try again."
 msgstr ""
 
@@ -8772,6 +8830,7 @@ msgstr ""
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/computer-screen-error.tsx
 #: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-settings.tsx
 msgid "Try again"
 msgstr "फिर से कोशिश करें"
 

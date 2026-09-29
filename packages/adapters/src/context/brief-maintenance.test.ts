@@ -164,6 +164,36 @@ it("marks a changed group pending and rewrites after the turn with the selected 
   expect(f.requests).toHaveLength(attempts + 1);
   expect(f.state.lastMessageSeq).toBe(2);
 });
+it("does not mark a place another running reply still holds as covered", async () => {
+  const f = fixture();
+  f.run.thread.nextMessageSeq = 3;
+  f.tx.run.findMany.mockImplementation(async (args?: { select?: { replySeq?: boolean } }) => {
+    if (args?.select?.replySeq) return [{ replySeq: 1 }] as never;
+    return [f.run];
+  });
+  await refreshRunBrief(f.deps, "run");
+  expect(f.state.lastMessageSeq).toBe(0);
+
+  f.tx.run.findMany.mockImplementation(async (args?: { select?: { replySeq?: boolean } }) => {
+    if (args?.select?.replySeq) return [] as never;
+    return [f.run];
+  });
+  const reads: Array<{ gt?: number; lte?: number }> = [];
+  f.tx.message.findMany.mockImplementation(
+    async (args?: { where?: { seq?: { gt?: number; lte?: number } } }) => {
+      if (args?.where?.seq) reads.push(args.where.seq);
+      return [
+        {
+          role: "assistant",
+          blocks: [{ kind: "text", text: "The other bot answered." }],
+        },
+      ];
+    },
+  );
+  await refreshRunBrief(f.deps, "run");
+  expect(reads.some((seq) => (seq.gt ?? -1) < 1 && (seq.lte ?? 0) >= 1)).toBe(true);
+  expect(f.state.lastMessageSeq).toBe(2);
+});
 it("carries the shared desktop home in the maintenance request", async () => {
   const f = fixture();
   f.tx.bot.findUniqueOrThrow.mockResolvedValue({

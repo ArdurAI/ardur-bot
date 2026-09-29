@@ -687,6 +687,10 @@ model Run {
   leaseExpiresAt       DateTime?
   checkpoint           String?
   clientNonce          String?
+  /// Thread position held for this run's reply from its first visible text, so a
+  /// message the owner sends while the run is active lands below the saved reply.
+  /// Only a running run holds one: a trigger clears it when the run leaves `running`.
+  replySeq             Int?
   sourceMessageId      String?
   sourceMessage        Message?         @relation("RunSourceMessage", fields: [sourceMessageId], references: [id], onDelete: SetNull)
   routineId            String?

@@ -7,6 +7,7 @@ import {
   PEER_PAIR_PER_MINUTE,
   PEER_SPACE_SENDS_PER_HOUR,
   PEER_SPACE_WAKES_PER_HOUR,
+  parsePeerHoldRequest,
   peerLimitWindowKey,
   peerPairKey,
 } from "@ardurbot/core";
@@ -357,8 +358,28 @@ export async function setBotCommunicationPaused(
               : {}),
             delegationId: { not: null },
           },
-          select: { id: true, delegationId: true, inboundMessageId: true },
+          select: { id: true, delegationId: true, inboundMessageId: true, approvalEffectId: true },
         });
+        // Pausing traffic voids every unclaimed exact-write approval in scope. The
+        // owner granted one execution against the current context; after a pause that
+        // context is gone, so the approval fails closed instead of surviving resume.
+        const holdEffectIds = deliveries.flatMap((delivery) =>
+          delivery.approvalEffectId ? [delivery.approvalEffectId] : [],
+        );
+        if (holdEffectIds.length) {
+          const approvedHolds = await tx.externalEffect.findMany({
+            where: { id: { in: holdEffectIds }, kind: "peer_hold", status: "approved" },
+            select: { id: true, request: true },
+          });
+          const voidable = approvedHolds
+            .filter((hold) => parsePeerHoldRequest(hold.request)?.preparationOnly === false)
+            .map((hold) => hold.id);
+          if (voidable.length)
+            await tx.externalEffect.updateMany({
+              where: { id: { in: voidable }, status: "approved" },
+              data: { status: "failed", result: { reason: "peer-traffic-paused" } },
+            });
+        }
         const wakes = goalIds.length
           ? await tx.botMessageWake.findMany({
               where: {

@@ -5,7 +5,7 @@ import {
   BOT_MESSAGE_PENDING_MAX,
   canAppendBotMessageToBatch,
 } from "@ardurbot/contracts";
-import { buildBotMessageWakePrompt } from "@ardurbot/core";
+import { buildBotMessageWakePrompt, parsePeerHoldRequest } from "@ardurbot/core";
 import {
   checkPeerWakeLimits,
   lockPeerTrafficPolicy,
@@ -1090,6 +1090,17 @@ export async function drainParkedPeerRuns(
         const delivery = await tx.botMessageDelivery.findFirst({
           where: { delegationId: run.delegationId! },
         });
+        // An exact-write approval only releases while it is still approved and
+        // unclaimed. A consumed, paused-out or otherwise settled hold voids the run.
+        const holdEffect = delivery?.approvalEffectId
+          ? await tx.externalEffect.findUnique({
+              where: { id: delivery.approvalEffectId },
+              select: { status: true, request: true },
+            })
+          : null;
+        const effectBound = Boolean(
+          holdEffect && parsePeerHoldRequest(holdEffect.request)?.preparationOnly === false,
+        );
         const goal = delivery?.goalId
           ? await tx.teamGoal.findFirst({
               where: {
@@ -1145,7 +1156,8 @@ export async function drainParkedPeerRuns(
             root.activeDescendants <= Math.min(root.maxConcurrent, goal.maxConcurrent) &&
             delegation.reservedTokens <= goal.perWorkerTokens &&
             delegation.usedTokens < delegation.reservedTokens &&
-            !run.cancelRequestedAt,
+            !run.cancelRequestedAt &&
+            (!effectBound || holdEffect?.status === "approved"),
         );
         const fingerprint = valid
           ? await goalBotAuthorityFingerprint(tx, {
@@ -1175,6 +1187,19 @@ export async function drainParkedPeerRuns(
               data: { state: "cancelled", outcome: "cancelled" },
             });
             await projectDeliveryState(tx, delivery.id, "cancelled");
+          }
+          // Settle the exact-write reservation with the run: open holds fail, and an
+          // execution the pause interrupted is recorded as uncertain rather than
+          // left claimed forever.
+          if (effectBound && delivery?.approvalEffectId) {
+            await tx.externalEffect.updateMany({
+              where: { id: delivery.approvalEffectId, status: { in: ["intended", "approved"] } },
+              data: { status: "failed", result: { reason: "peer-delivery-cancelled" } },
+            });
+            await tx.externalEffect.updateMany({
+              where: { id: delivery.approvalEffectId, status: "executing" },
+              data: { status: "uncertain", result: { reason: "peer-delivery-cancelled" } },
+            });
           }
           return null;
         }
@@ -1309,6 +1334,59 @@ export async function expireHeldBotMessages(prisma: PrismaClient, now = new Date
           }
         }
       }
+      expired++;
+    });
+
+  // An approved exact write that was never claimed expires with the delivery TTL.
+  // The atomic approved-to-failed update loses to a live claim, so a run that is
+  // mid-execution keeps its one execution; a parked run is cancelled and settled.
+  const unclaimed = await prisma.botMessageDelivery.findMany({
+    where: { state: "delivered", expiresAt: { lte: now }, approvalEffectId: { not: null } },
+    orderBy: [{ expiresAt: "asc" }, { id: "asc" }],
+    take: limit,
+    select: { id: true, senderThreadId: true, recipientThreadId: true },
+  });
+  for (const row of unclaimed)
+    await prisma.$transaction(async (tx) => {
+      for (const threadId of [
+        row.senderThreadId,
+        ...[row.recipientThreadId].filter((id) => id !== row.senderThreadId),
+      ])
+        await tx.$queryRaw`SELECT id FROM threads WHERE id = ${threadId} FOR UPDATE`;
+      const delivery = await tx.botMessageDelivery.findUnique({ where: { id: row.id } });
+      if (delivery?.state !== "delivered" || delivery.expiresAt > now) return;
+      if (!delivery.approvalEffectId || !delivery.delegationId) return;
+      const hold = await tx.externalEffect.findUnique({
+        where: { id: delivery.approvalEffectId },
+        select: { status: true, request: true },
+      });
+      if (parsePeerHoldRequest(hold?.request)?.preparationOnly !== false) return;
+      const failed = await tx.externalEffect.updateMany({
+        where: { id: delivery.approvalEffectId, status: "approved" },
+        data: { status: "failed", result: { reason: "peer-delivery-expired" } },
+      });
+      if (failed.count !== 1) return;
+      const run = await tx.run.findFirst({
+        where: {
+          delegationId: delivery.delegationId,
+          status: { in: ["queued", "peer_ready", "peer_paused"] },
+        },
+        select: { id: true, taskId: true },
+      });
+      if (run) {
+        await finishDelegation(tx, delivery.delegationId, "cancelled", "Peer request expired.");
+        await tx.run.update({
+          where: { id: run.id },
+          data: { status: "cancelled", completedAt: now },
+        });
+        await tx.task.update({ where: { id: run.taskId }, data: { status: "cancelled" } });
+      }
+      await tx.botMessageDelivery.update({
+        where: { id: delivery.id },
+        data: { state: "expired", outcome: "expired" },
+      });
+      await appendBotMessageAuditInTransaction(tx, delivery, "expired");
+      await projectDeliveryState(tx, delivery.id, "expired");
       expired++;
     });
   return expired;
