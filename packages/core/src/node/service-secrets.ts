@@ -32,7 +32,6 @@ const secretsFileMemo = new Map<string, Record<string, string>>();
 export function resetServiceSecretsMemo(): void {
   secretsFileMemo.clear();
 }
-export const resetServiceSecretsCache = resetServiceSecretsMemo;
 
 export function loadServiceSecrets(
   env: NodeJS.ProcessEnv = process.env,

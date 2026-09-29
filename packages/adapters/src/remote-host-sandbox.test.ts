@@ -10,9 +10,7 @@ const KEY = `fake-encryption-marker-${"b".repeat(12)}`;
 
 const roots: string[] = [];
 afterEach(async () => {
-  if (typeof resetServiceSecretsMemo === "function") {
-    resetServiceSecretsMemo();
-  }
+  resetServiceSecretsMemo();
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
@@ -26,9 +24,7 @@ describe("createHostClient", () => {
     const prevEnv = process.env.ARDURBOT_SECRETS_FILE;
     try {
       process.env.ARDURBOT_SECRETS_FILE = file;
-      if (typeof resetServiceSecretsMemo === "function") {
-        resetServiceSecretsMemo();
-      }
+      resetServiceSecretsMemo();
       const readSpy = vi.spyOn(fs, "readFileSync");
       createHostClient();
       createHostClient();
