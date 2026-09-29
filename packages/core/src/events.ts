@@ -199,6 +199,14 @@ function progressCategory(block: { activity?: true; reasoning?: true }): LiveBlo
   return "narration";
 }
 
+/** The sealed tail's held names moved to the new block; drop the stale queue. */
+function dropPendingToolNames(
+  block: Extract<MessageBlock, { kind: "progress" }>,
+): Extract<MessageBlock, { kind: "progress" }> {
+  const { pendingToolNames: _moved, ...rest } = block;
+  return rest;
+}
+
 export function reduceLiveMessageBlocks(
   blocks: readonly MessageBlock[],
   update: LiveMessageUpdate,
@@ -218,26 +226,43 @@ export function reduceLiveMessageBlocks(
     tailProgress !== null &&
     updateCategory !== null &&
     progressCategory(tailProgress) !== updateCategory;
-  const segments = tailProgress && !sealed ? blocks.slice(0, -1) : blocks;
+  // Held tool names ride across the seal onto the new block, so the sealed
+  // tail gives the queue up: its text is final and the names materialize as
+  // steps at the new block's first sentence end, exactly once, never dropped.
+  const sealedTail =
+    sealed && (tailProgress?.pendingToolNames?.length ?? 0) > 0 ? tailProgress : null;
+  const segments = sealedTail
+    ? [...blocks.slice(0, -1), dropPendingToolNames(sealedTail)]
+    : tailProgress && !sealed
+      ? blocks.slice(0, -1)
+      : blocks;
   const priorText = liveMessageText(blocks);
-  // A replacement `text` payload that changes category carries only the new
-  // block's text, so the accumulated offset would slice its title away. The
-  // offset applies solely to deltas that continue the same category.
+  // A replacement `text` payload for activity or reasoning carries only the new
+  // block's title, so it always slices at offset 0 — whether or not the
+  // category changed. Only a `delta` continues from the accumulated offset,
+  // and for an activity or reasoning tail that offset chains onto the tail's
+  // own text (narration deltas count narration text only).
   const replacementStartsBlock =
-    sealed && update.type === "progress" && typeof update.payload?.delta !== "string";
+    update.type === "progress" &&
+    typeof update.payload?.delta !== "string" &&
+    (sealed || updateCategory === "activity" || updateCategory === "reasoning");
+  const deltaBase =
+    tailProgress && !sealed && progressCategory(tailProgress) !== "narration"
+      ? priorText + tailProgress.text
+      : priorText;
   const flushedLength = replacementStartsBlock
     ? 0
-    : tailProgress && !sealed && progressCategory(tailProgress) === "narration"
-      ? Math.max(0, priorText.length - tailProgress.text.length)
+    : tailProgress && !sealed
+      ? Math.max(0, deltaBase.length - tailProgress.text.length)
       : priorText.length;
   const tailText =
     update.type === "progress"
-      ? progressMessageText(update.payload, priorText).slice(flushedLength)
+      ? progressMessageText(update.payload, deltaBase).slice(flushedLength)
       : tailProgress
         ? tailProgress.text
         : "";
   const pendingToolNames = [
-    ...(tailProgress && !sealed ? (tailProgress.pendingToolNames ?? []) : []),
+    ...(tailProgress ? (tailProgress.pendingToolNames ?? []) : []),
     ...(update.type === "tool" ? [update.name] : []),
   ];
   const category = updateCategory ?? (tailProgress ? progressCategory(tailProgress) : "narration");

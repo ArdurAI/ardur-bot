@@ -179,7 +179,11 @@ import { desktopBridge } from "../lib/desktop";
 import { scheduleFocusPrompt } from "../lib/focus-prompt";
 import { INSIGHT_ACTION_EVENT } from "../lib/insight-actions";
 import { localTimezone } from "../lib/local-timezone";
-import { copyableMessageText, narrationBubbleBlocks } from "../lib/message-text";
+import {
+  copyableMessageText,
+  liveMessageHasVisibleActivity,
+  narrationBubbleBlocks,
+} from "../lib/message-text";
 import { messageProviderLabel } from "../lib/messaging";
 import {
   isFileDrag,
@@ -213,6 +217,7 @@ import {
   transcriptCanSnapAfterFrame,
   transcriptIsNearEnd,
   transcriptMovedDown,
+  transcriptSnapFollows,
 } from "../lib/transcript-scroll";
 import { whenSpeakerReady, withSpeaker } from "../lib/tts-lazy";
 import { useModelSettings } from "../lib/use-model-settings";
@@ -4993,8 +4998,8 @@ const Transcript = memo(function Transcript({
   }, [scrollRef]);
 
   useLayoutEffect(() => {
-    if (following.current) snapToEnd();
-  }, [messages, running, snapToEnd]);
+    if (transcriptSnapFollows(following.current, quoteDraft !== null)) snapToEnd();
+  }, [messages, running, quoteDraft, snapToEnd]);
 
   useLayoutEffect(() => {
     const button = jumpButtonRef.current;
@@ -5199,15 +5204,7 @@ const Transcript = memo(function Transcript({
             </div>
           );
         })}
-        {running &&
-        !messages.some(
-          (message) =>
-            message.id.startsWith("progress:") &&
-            message.blocks.some(
-              (block) =>
-                block.kind === "progress" && !isToolActivityBlock(block) && Boolean(block.text),
-            ),
-        ) ? (
+        {running && !messages.some((message) => liveMessageHasVisibleActivity(message)) ? (
           <ActiveBotGlyph bots={workingBots} label={workingLabel} />
         ) : null}
       </div>

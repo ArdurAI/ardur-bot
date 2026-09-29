@@ -1,5 +1,10 @@
 import type { MessageBlock, ThreadMessage } from "@ardurbot/contracts";
-import { isInterimNarrationAt, isReasoningSummaryBlock, isToolActivityBlock } from "@ardurbot/core";
+import {
+  isInterimNarrationAt,
+  isReasoningSummaryBlock,
+  isToolActivityBlock,
+  workRecordEntries,
+} from "@ardurbot/core";
 import { messageProviderLabel } from "./messaging";
 
 /**
@@ -14,6 +19,20 @@ export function narrationBubbleBlocks(blocks: readonly MessageBlock[]): MessageB
       !isToolActivityBlock(block) &&
       !isReasoningSummaryBlock(block) &&
       !isInterimNarrationAt(blocks, index),
+  );
+}
+
+/**
+ * True while an in-flight message already shows the run's activity — reply
+ * text streaming in the bubble or a visible compact work record — so the
+ * transcript does not need the fallback working glyph as a second indicator.
+ */
+export function liveMessageHasVisibleActivity(message: ThreadMessage): boolean {
+  if (!message.id.startsWith("progress:")) return false;
+  return (
+    message.blocks.some(
+      (block) => block.kind === "progress" && !isToolActivityBlock(block) && Boolean(block.text),
+    ) || workRecordEntries(message.blocks).length > 0
   );
 }
 

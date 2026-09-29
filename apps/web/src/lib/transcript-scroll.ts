@@ -15,3 +15,11 @@ export function transcriptCanSnapAfterFrame(
 export function transcriptMovedDown(previousScrollTop: number | null, scrollTop: number): boolean {
   return previousScrollTop !== null && scrollTop >= previousScrollTop;
 }
+
+/**
+ * Follow-to-end yields while a quote selection is open: snapping would drag
+ * the selected text (and the floating Quote action) away from the reader.
+ */
+export function transcriptSnapFollows(following: boolean, quoteSelectionOpen: boolean): boolean {
+  return following && !quoteSelectionOpen;
+}

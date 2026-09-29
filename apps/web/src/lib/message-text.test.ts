@@ -1,6 +1,10 @@
 import type { MessageBlock, ThreadMessage } from "@ardurbot/contracts";
 import { describe, expect, it } from "vitest";
-import { copyableMessageText, narrationBubbleBlocks } from "./message-text.js";
+import {
+  copyableMessageText,
+  liveMessageHasVisibleActivity,
+  narrationBubbleBlocks,
+} from "./message-text.js";
 
 function message(blocks: ThreadMessage["blocks"]): ThreadMessage {
   return { id: "m_1", threadId: "t_1", seq: 1, role: "bot", blocks, createdAt: "2026-08-29" };
@@ -108,5 +112,48 @@ describe("narrationBubbleBlocks", () => {
       { kind: "text", text: "Here is the answer." },
     ];
     expect(narrationBubbleBlocks(blocks)).toEqual([{ kind: "text", text: "Here is the answer." }]);
+  });
+});
+
+describe("liveMessageHasVisibleActivity", () => {
+  const live = (blocks: ThreadMessage["blocks"]): ThreadMessage => ({
+    id: "progress:run-1",
+    threadId: "t_1",
+    seq: 1,
+    role: "bot",
+    blocks,
+    createdAt: "2026-08-29",
+  });
+
+  it("treats a tool-only live message as visible activity via its work record", () => {
+    expect(
+      liveMessageHasVisibleActivity(
+        live([
+          { kind: "progress", text: "Hermes is working.", activity: true },
+          { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+        ]),
+      ),
+    ).toBe(true);
+  });
+
+  it("treats a reasoning-only live message as visible activity", () => {
+    expect(
+      liveMessageHasVisibleActivity(
+        live([{ kind: "progress", text: "Weighing options.", reasoning: true }]),
+      ),
+    ).toBe(true);
+  });
+
+  it("treats streaming reply text as visible activity", () => {
+    expect(liveMessageHasVisibleActivity(live([{ kind: "progress", text: "On it" }]))).toBe(true);
+  });
+
+  it("ignores durable messages and empty live messages", () => {
+    expect(
+      liveMessageHasVisibleActivity(
+        message([{ kind: "steps", steps: [{ label: "Shell", count: 1 }] }]),
+      ),
+    ).toBe(false);
+    expect(liveMessageHasVisibleActivity(live([]))).toBe(false);
   });
 });
