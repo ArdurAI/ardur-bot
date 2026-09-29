@@ -8776,7 +8776,7 @@ msgstr "Nicht zugewiesen"
 #: src/components/SoftwareUpdateSection.tsx
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Unavailable"
-msgstr ""
+msgstr "Nicht verfügbar"
 
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "Unavailable with Hermes."
