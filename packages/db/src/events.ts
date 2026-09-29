@@ -48,6 +48,7 @@ import { expireComputerExecutionLeases } from "./computers.js";
 import { finishDelegation, lockDelegationRoot } from "./delegation.js";
 import { delegationAnswerThread, delegationApprovalTarget } from "./delegation-approval.js";
 import { inheritedRemoteOrigin, persistDispatchSummary } from "./dispatch.js";
+import { recordGroupAskOutcomeInTransaction } from "./group-asks.js";
 import {
   assertRunCanWriteHistory,
   createThreadMessageInTransaction,
@@ -1215,8 +1216,25 @@ async function pauseRunForInputOnce(prisma: PrismaClient, input: PauseRunForInpu
       runId: input.runId,
       payload: {},
     });
+    // A room member that pauses to ask the person marks its coordination round
+    // "waiting for you" instead of leaving the line pending.
+    const memberDelegation = waitingRun?.delegationId
+      ? await tx.delegation.findUnique({
+          where: { id: waitingRun.delegationId },
+          select: { actingBotId: true, actingName: true, admissionKey: true },
+        })
+      : null;
+    const coordination = memberDelegation
+      ? await recordGroupAskOutcomeInTransaction(tx, {
+          spaceId: input.spaceId,
+          threadId: input.threadId,
+          delegation: memberDelegation,
+          delegationStatus: "running",
+          runStatus: "waiting_input",
+        })
+      : null;
     await tx.event.deleteMany({ where: { runId: input.runId, type: "thread.progress" } });
-    return { threadId: waitingEvent.threadId, seq: waitingEvent.seq };
+    return { threadId: waitingEvent.threadId, seq: coordination?.seq ?? waitingEvent.seq };
   });
 }
 
@@ -1474,7 +1492,11 @@ export async function finalizeRun(
 /** Reply text for readers that must not treat a reasoning summary as something the bot said. */
 export function replyTextFromBlocks(blocks: readonly MessageBlock[]): string {
   return blocks
-    .flatMap((block) => ("text" in block && !isReasoningSummaryBlock(block) ? [block.text] : []))
+    .flatMap((block) =>
+      "text" in block && !isReasoningSummaryBlock(block) && block.kind !== "coordination"
+        ? [block.text]
+        : [],
+    )
     .join("\n");
 }
 
@@ -1643,7 +1665,13 @@ async function finalizeRunOnce(
       writableRun?.delegationId && writableRun.delegationRootTaskId
         ? await tx.delegation.findFirst({
             where: { id: writableRun.delegationId, rootTaskId: writableRun.delegationRootTaskId },
-            select: { kind: true, admissionKey: true },
+            select: {
+              id: true,
+              kind: true,
+              admissionKey: true,
+              actingBotId: true,
+              actingName: true,
+            },
           })
         : null;
     const goalRoomAssignment =
@@ -1664,6 +1692,22 @@ async function finalizeRunOnce(
         delegation.admissionKey.startsWith("message:"));
     // A member asked by its room coordinator answers in the room under its own name.
     const groupAskAnswer = Boolean(delegation && parseGroupAskKey(delegation.admissionKey));
+    const coordinationUpdates: { threadId: string; seq: number }[] = [];
+    if (groupAskAnswer && delegation) {
+      // The round's coordination line carries this member's outcome, so a member
+      // that could not answer shows as one plain line instead of a raw error.
+      const coordination = await recordGroupAskOutcomeInTransaction(tx, {
+        spaceId: input.spaceId,
+        threadId: input.threadId,
+        delegation,
+        delegationStatus: input.outcome,
+        runStatus: input.outcome,
+        error: input.outcome === "failed" ? input.error : undefined,
+        providerErrorKind: input.outcome === "failed" ? input.providerErrorKind : undefined,
+        now,
+      });
+      if (coordination) coordinationUpdates.push(coordination);
+    }
     if (
       input.outcome === "completed" &&
       (!writableRun?.delegationId || goalRoomAssignment || peerMessageAssignment || groupAskAnswer)
@@ -1937,12 +1981,13 @@ async function finalizeRunOnce(
         : await createSteeringContinuation(tx, input);
     const continuationRunId = peerSettlement.continuationRunId ?? steeringContinuationRunId;
     await tx.bot.update({ where: { id: input.botId }, data: { updatedAt: now } });
+    coordinationUpdates.push(...peerSettlement.updatedThreads, ...quietUpdates);
     return {
       threadId: lastEvent.threadId,
       seq: lastEvent.seq,
       continuationRunId,
       summary,
-      updatedThreads: [...peerSettlement.updatedThreads, ...quietUpdates],
+      updatedThreads: coordinationUpdates,
     };
   });
 }

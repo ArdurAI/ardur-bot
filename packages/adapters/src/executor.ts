@@ -79,6 +79,8 @@ import {
   expandSkillReferencesInPrompt,
   formatSkillRunPrompt,
   formatSkillsCatalogInstruction,
+  groupAskMessageNonce,
+  groupAskPrefix,
   humanizeToolName,
   inferAttachmentMimeType,
   isMessagingChannelRun,
@@ -286,7 +288,12 @@ import { resolveDeploymentModel } from "./deployment-model.js";
 import { startExecutionHeartbeat } from "./execution-heartbeat.js";
 import { beforeFileChange, fileChangeText, recordFileChange } from "./file-changes.js";
 import { wakeGoalAfterDelegation } from "./goal-wake.js";
-import { askGroupMembers, loadAskWakeContext, wakeCoordinatorAfterAsk } from "./group-ask.js";
+import {
+  askGroupMembers,
+  loadAskWakeContext,
+  recordGroupAskProgress,
+  wakeCoordinatorAfterAsk,
+} from "./group-ask.js";
 import { handoffToGroupBot, loadGroupContext } from "./group-handoff.js";
 import { captureRunModelPin, selectRunPinSource } from "./group-model-pin.js";
 import {
@@ -2846,6 +2853,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
         let handedOff = false;
         // Asked members answer after this turn; an empty coordinator reply adds nothing then.
         let askedMembers = false;
+        // The coordination round this turn opened; its progress notes fold into
+        // the round's line instead of posting chat bubbles.
+        let openCoordinationNonce: string | undefined;
         let progressRedactor = createStreamingRedactor(runSecrets);
         const scripted = runtime.describe().capabilities.scripted;
         const script =
@@ -4981,6 +4991,25 @@ export function createRunExecutor(deps: ExecutorDeps) {
             const text = clampUserProgressMessage(rawMessage);
             if (!text) return finish({ error: "message is required" });
             const truncated = isProgressMessageTruncated(rawMessage);
+            // During a coordination round a progress note folds into the round's
+            // collapsed line instead of a chat bubble: this turn's own ask, or
+            // the round whose wake this turn is answering.
+            const wake = parseAskWakeNonce(run.clientNonce);
+            const coordinationNonce =
+              openCoordinationNonce ?? (wake ? groupAskPrefix(wake) : undefined);
+            if (coordinationNonce && thread.groupId) {
+              const folded = await recordGroupAskProgress(deps, run, {
+                nonce: coordinationNonce,
+                note: text,
+              });
+              if (folded) {
+                publishedMidTurnUserMessage = true;
+                return finish({
+                  ok: true,
+                  note: "Progress noted on the open ask; the room shows it on the ask's line, not as a separate message.",
+                });
+              }
+            }
             await flushProgress();
             await publishMidTurnNarration();
             await publishMessage(
@@ -5134,7 +5163,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 callId: executionId,
               },
             );
-            if ("ok" in result) askedMembers = true;
+            if ("ok" in result) {
+              askedMembers = true;
+              openCoordinationNonce = groupAskMessageNonce(
+                { round: askRoundForRun(run.clientNonce), askRunId: run.id },
+                executionId,
+              );
+            }
             return finish(result);
           }
           if (name === "archive_bot" || name === "delete_bot") {

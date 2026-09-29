@@ -39,6 +39,7 @@ export * from "./composer-slash.js";
 export * from "./computer-host.js";
 export * from "./computer-updates.js";
 export * from "./connector-rows.js";
+export * from "./coordination.js";
 export * from "./cron.js";
 export * from "./dashboard.js";
 export * from "./delegation-policy.js";

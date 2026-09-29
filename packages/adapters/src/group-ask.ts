@@ -3,7 +3,6 @@ import { GOAL_DEFAULT_PER_WORKER_TOKENS, type MessageBlock } from "@ardurbot/con
 import {
   ASK_REQUEST_MAX_LENGTH,
   askMemberPrompt,
-  askMessageText,
   askRoundForRun,
   groupAskKey,
   groupAskMessageNonce,
@@ -22,6 +21,7 @@ import {
   loadGroupAskResults,
   lockOwnedGroup,
   peerTrafficPaused,
+  recordGroupAskUpdateInTransaction,
   sizeDelegationRootForAsk,
   touchGroupUpdatedAt,
   wakeCoordinatorForGroupAsk,
@@ -218,11 +218,16 @@ export async function askGroupMembers(
 
       const blocks: MessageBlock[] = [
         {
-          kind: "text",
-          text: askMessageText(
-            admitted.map(({ member }) => member),
-            request,
-          ),
+          kind: "coordination",
+          nonce: messageNonce,
+          round,
+          text: request,
+          updates: [],
+          members: admitted.map(({ member }) => ({
+            botId: member.id,
+            name: member.name,
+            outcome: "pending" as const,
+          })),
         },
       ];
       const message = await createThreadMessageInTransaction(tx, {
@@ -321,6 +326,31 @@ export async function askGroupMembers(
     note: askedNote(committed.asked),
     ...(committed.replayed ? { replayed: true as const } : {}),
   };
+}
+
+/**
+ * Fold one coordinator progress note into its open coordination round instead
+ * of a chat bubble: mid-round narration shows on the round's collapsed line.
+ * Returns false when the round's message is gone, so the caller posts normally.
+ */
+export async function recordGroupAskProgress(
+  deps: Pick<ExecutorDeps, "prisma" | "events">,
+  run: AskRun,
+  input: { nonce: string; note: string },
+): Promise<boolean> {
+  const recorded = await deps.prisma.$transaction((tx) =>
+    recordGroupAskUpdateInTransaction(tx, {
+      spaceId: run.spaceId,
+      threadId: run.threadId,
+      nonce: input.nonce,
+      note: input.note,
+    }),
+  );
+  if (!recorded) return false;
+  await deps.events.notify(recorded.threadId, recorded.seq).catch((error) => {
+    getLogger().error("group ask progress notification", error);
+  });
+  return true;
 }
 
 /** After an asked member's run settles, queue the coordinator's follow-up if it was the last. */

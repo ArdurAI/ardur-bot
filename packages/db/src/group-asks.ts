@@ -6,11 +6,16 @@ import {
   askMemberOutcome,
   askWakeNonce,
   blocksToAgentHistoryText,
+  type CoordinationOutcome,
+  coordinationBlock,
+  coordinationFailureReason,
   GROUP_ASK_KEY_PREFIX,
   type GroupAsk,
   groupAskPrefix,
   parseGroupAskKey,
   taskCardGoal,
+  withCoordinationOutcome,
+  withCoordinationUpdate,
 } from "@ardurbot/core";
 import { peerTrafficPaused } from "./bot-comms-policy.js";
 import type { Prisma, PrismaClient } from "./client.js";
@@ -19,6 +24,7 @@ import {
   ensureDelegationRootBudget,
   lockDelegationRootForRun,
 } from "./delegation.js";
+import { appendEventInTransaction } from "./events.js";
 import { withTransactionRetry } from "./transaction-retry.js";
 
 const TERMINAL_RUN = ["completed", "failed", "cancelled"];
@@ -219,6 +225,139 @@ export type GroupAskResult = {
   text: string | null;
   posted: boolean;
 };
+
+/**
+ * Record one asked member's outcome on the coordination message its round
+ * stored, so every surface can render the round as one line with outcomes.
+ * Returns the update event when the message changed.
+ */
+export async function recordGroupAskOutcomeInTransaction(
+  tx: Prisma.TransactionClient,
+  input: {
+    spaceId: string;
+    threadId: string;
+    /** The member's delegation row. */
+    delegation: { actingBotId: string; actingName: string; admissionKey: string };
+    /** The member delegation's status after settling, or its current status. */
+    delegationStatus: string;
+    runStatus?: string | null;
+    error?: string;
+    providerErrorKind?: string;
+    now?: Date;
+  },
+): Promise<{ threadId: string; seq: number } | null> {
+  const nonce = delegationCoordinationNonce(input.delegation.admissionKey);
+  if (!nonce) return null;
+  const message = await tx.message.findUnique({
+    where: { threadId_clientNonce: { threadId: input.threadId, clientNonce: nonce } },
+    select: { id: true, blocks: true, botId: true },
+  });
+  const block = message ? coordinationBlock(message.blocks as MessageBlock[]) : null;
+  if (!message || !block) return null;
+  const now = (input.now ?? new Date()).toISOString();
+  const outcome = askMemberOutcome({
+    delegationStatus: input.delegationStatus,
+    runStatus: input.runStatus,
+  });
+  const mapped: CoordinationOutcome =
+    outcome === "answered"
+      ? "answered"
+      : outcome === "failed"
+        ? "failed"
+        : outcome === "stopped"
+          ? "stopped"
+          : outcome === "waiting"
+            ? "waiting"
+            : "pending";
+  const reason =
+    mapped === "failed"
+      ? coordinationFailureReason({
+          botName: input.delegation.actingName,
+          providerErrorKind: input.providerErrorKind,
+          error: input.error,
+        })
+      : undefined;
+  const next = withCoordinationOutcome(
+    block,
+    { botId: input.delegation.actingBotId, name: input.delegation.actingName },
+    mapped,
+    reason,
+    now,
+  );
+  if (next === block) return null;
+  const blocks = (message.blocks as MessageBlock[]).map((candidate) =>
+    candidate.kind === "coordination" ? next : candidate,
+  );
+  await tx.message.update({ where: { id: message.id }, data: { blocks } });
+  const event = await appendEventInTransaction(tx, {
+    spaceId: input.spaceId,
+    threadId: input.threadId,
+    botId: message.botId ?? input.delegation.actingBotId,
+    type: "thread.message.updated",
+    payload: { messageId: message.id, role: "bot", blocks },
+  });
+  return { threadId: input.threadId, seq: event.seq };
+}
+
+/** The coordination message nonce for an ask member's admission key. */
+export function delegationCoordinationNonce(admissionKey: string): string | null {
+  const ask = parseGroupAskKey(admissionKey);
+  return ask ? groupAskMessageNonceFromPrefix(admissionKey) : null;
+}
+
+/**
+ * Append one coordinator progress note to a round's coordination message, so
+ * mid-round narration folds into the round's collapsed line instead of posting
+ * a chat bubble. `nonce` is the round message's exact client nonce, or the
+ * `group-ask:<round>:<askRunId>:` prefix that finds its latest message.
+ * Returns the update event when the message changed.
+ */
+export async function recordGroupAskUpdateInTransaction(
+  tx: Prisma.TransactionClient,
+  input: {
+    spaceId: string;
+    threadId: string;
+    nonce: string;
+    note: string;
+    now?: Date;
+  },
+): Promise<{ threadId: string; seq: number } | null> {
+  const select = { id: true, blocks: true, botId: true } as const;
+  const message =
+    (await tx.message.findUnique({
+      where: { threadId_clientNonce: { threadId: input.threadId, clientNonce: input.nonce } },
+      select,
+    })) ??
+    (await tx.message.findFirst({
+      where: { threadId: input.threadId, clientNonce: { startsWith: input.nonce } },
+      orderBy: { createdAt: "desc" },
+      select,
+    }));
+  const block = message ? coordinationBlock(message.blocks as MessageBlock[]) : null;
+  // A coordination message is always the coordinator's own; without an author
+  // there is no event to attribute the update to.
+  if (!message || !block || !message.botId) return null;
+  const next = withCoordinationUpdate(block, input.note, (input.now ?? new Date()).toISOString());
+  if (next === block) return null;
+  const blocks = (message.blocks as MessageBlock[]).map((candidate) =>
+    candidate.kind === "coordination" ? next : candidate,
+  );
+  await tx.message.update({ where: { id: message.id }, data: { blocks } });
+  const event = await appendEventInTransaction(tx, {
+    spaceId: input.spaceId,
+    threadId: input.threadId,
+    botId: message.botId,
+    type: "thread.message.updated",
+    payload: { messageId: message.id, role: "bot", blocks },
+  });
+  return { threadId: input.threadId, seq: event.seq };
+}
+
+function groupAskMessageNonceFromPrefix(admissionKey: string): string | null {
+  // group-ask:<round>:<askRunId>:<callId>:<memberId> → group-ask:<round>:<askRunId>:<callId>
+  const parts = admissionKey.split(":");
+  return parts.length === 5 ? parts.slice(0, 4).join(":") : null;
+}
 
 export type GroupAskResults = {
   /** The person's message that started the ask, when it is still on record. */

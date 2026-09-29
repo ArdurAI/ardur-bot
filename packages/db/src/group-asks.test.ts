@@ -6,6 +6,8 @@ import { fixture } from "./delegation-test-fixture.js";
 import {
   GROUP_ASK_EXPIRY_GRACE_MS,
   loadGroupAskResults,
+  recordGroupAskOutcomeInTransaction,
+  recordGroupAskUpdateInTransaction,
   sizeDelegationRootForAsk,
   wakeCoordinatorForGroupAsk,
 } from "./group-asks.js";
@@ -452,5 +454,199 @@ describe("group ask budget", () => {
     expect(f.state().rows[0]).toMatchObject({ status: "completed", result: "I am Worker." });
     expect(f.state().messages).toEqual([]);
     expect(f.state().root).toMatchObject({ activeDescendants: 0 });
+  });
+});
+
+describe("coordination round recording", () => {
+  const coordinationMessage = {
+    id: "ask-message",
+    botId: "chief",
+    blocks: [
+      {
+        kind: "coordination",
+        nonce: "group-ask:1:ask-run:call-1",
+        round: 1,
+        text: "Say hello.",
+        updates: [],
+        members: [
+          { botId: "ada", name: "Ada", outcome: "pending" },
+          { botId: "ben", name: "Ben", outcome: "pending" },
+        ],
+      },
+    ],
+  };
+
+  type RecordedBlocks = Array<{
+    kind: string;
+    updates?: string[];
+    updatedAt?: string;
+    members?: Array<Record<string, unknown>>;
+  }>;
+
+  function messageHarness(options: { message?: Record<string, unknown> | null } = {}) {
+    const stored =
+      options.message === undefined
+        ? structuredClone(coordinationMessage)
+        : options.message
+          ? structuredClone(options.message)
+          : null;
+    const messageUpdate = vi.fn(async (_args: { data: { blocks: RecordedBlocks } }) => ({}));
+    const eventCreate = vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+      id: "event",
+      ...data,
+    }));
+    const tx = {
+      message: {
+        findUnique: vi.fn(async () => stored),
+        findFirst: vi.fn(async () => stored),
+        update: messageUpdate,
+      },
+      thread: { update: vi.fn(async () => ({ nextEventSeq: 7 })) },
+      event: { create: eventCreate },
+    };
+    return { tx, messageUpdate, eventCreate, stored };
+  }
+
+  const delegation = (patch: Record<string, unknown> = {}) => ({
+    actingBotId: "ada",
+    actingName: "Ada",
+    admissionKey: groupAskKey(ask, "call-1", "ada"),
+    ...patch,
+  });
+
+  it("marks a failed member with one plain reason, never the raw error", async () => {
+    const h = messageHarness();
+    const recorded = await recordGroupAskOutcomeInTransaction(h.tx as never, {
+      ...scope,
+      threadId: "room",
+      delegation: delegation(),
+      delegationStatus: "failed",
+      runStatus: "failed",
+      error: "xai API error (403): You have run out of credits",
+      providerErrorKind: "auth",
+      now,
+    });
+
+    expect(recorded).toEqual({ threadId: "room", seq: 6 });
+    const blocks = h.messageUpdate.mock.calls[0]?.[0].data.blocks;
+    const ada = blocks?.[0]?.members?.find((row) => row.botId === "ada");
+    expect(ada).toMatchObject({
+      outcome: "failed",
+      reason: "Ada couldn't answer: its model account needs attention",
+    });
+    expect(JSON.stringify(blocks)).not.toContain("403");
+    expect(h.eventCreate.mock.calls[0]?.[0].data).toMatchObject({
+      type: "thread.message.updated",
+      botId: "chief",
+      threadId: "room",
+    });
+  });
+
+  it("marks answered, stopped and waiting members from their records", async () => {
+    const cases = [
+      { delegationStatus: "completed", runStatus: "completed", outcome: "answered" },
+      { delegationStatus: "cancelled", runStatus: "cancelled", outcome: "stopped" },
+      { delegationStatus: "running", runStatus: "waiting_input", outcome: "waiting" },
+    ] as const;
+    for (const entry of cases) {
+      const h = messageHarness();
+      await recordGroupAskOutcomeInTransaction(h.tx as never, {
+        ...scope,
+        threadId: "room",
+        delegation: delegation(),
+        delegationStatus: entry.delegationStatus,
+        runStatus: entry.runStatus,
+        now,
+      });
+      const blocks = h.messageUpdate.mock.calls[0]?.[0].data.blocks;
+      expect(blocks?.[0]?.members?.find((row) => row.botId === "ada")?.outcome).toBe(entry.outcome);
+    }
+  });
+
+  it("keeps the first terminal outcome and ignores delegations that are not asks", async () => {
+    const settled = messageHarness({
+      message: {
+        ...coordinationMessage,
+        blocks: [
+          {
+            ...coordinationMessage.blocks[0],
+            members: [{ botId: "ada", name: "Ada", outcome: "answered" }],
+          },
+        ],
+      },
+    });
+    await expect(
+      recordGroupAskOutcomeInTransaction(settled.tx as never, {
+        ...scope,
+        threadId: "room",
+        delegation: delegation(),
+        delegationStatus: "failed",
+        runStatus: "failed",
+        now,
+      }),
+    ).resolves.toBeNull();
+    expect(settled.messageUpdate).not.toHaveBeenCalled();
+
+    const other = messageHarness();
+    await expect(
+      recordGroupAskOutcomeInTransaction(other.tx as never, {
+        ...scope,
+        threadId: "room",
+        delegation: delegation({ admissionKey: "bot-message:1:ada" }),
+        delegationStatus: "completed",
+        runStatus: "completed",
+        now,
+      }),
+    ).resolves.toBeNull();
+    expect(other.messageUpdate).not.toHaveBeenCalled();
+  });
+
+  it("appends a progress note to the round, by exact nonce or by round prefix", async () => {
+    const exact = messageHarness();
+    const recorded = await recordGroupAskUpdateInTransaction(exact.tx as never, {
+      ...scope,
+      threadId: "room",
+      nonce: "group-ask:1:ask-run:call-1",
+      note: "Asked Ada and Ben.",
+      now,
+    });
+    expect(recorded).toEqual({ threadId: "room", seq: 6 });
+    expect(exact.stored && exact.messageUpdate).toBeTruthy();
+    const blocks = exact.messageUpdate.mock.calls[0]?.[0].data.blocks;
+    expect(blocks?.[0]?.updates).toEqual(["Asked Ada and Ben."]);
+    expect(blocks?.[0]?.updatedAt).toBe(now.toISOString());
+
+    // The wake turn knows only the round prefix; the latest matching message wins.
+    const prefix = messageHarness();
+    (prefix.tx.message.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    await recordGroupAskUpdateInTransaction(prefix.tx as never, {
+      ...scope,
+      threadId: "room",
+      nonce: "group-ask:1:ask-run:",
+      note: "Two of three said hello.",
+      now,
+    });
+    expect(prefix.tx.message.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { threadId: "room", clientNonce: { startsWith: "group-ask:1:ask-run:" } },
+      }),
+    );
+    const prefixBlocks = prefix.messageUpdate.mock.calls[0]?.[0].data.blocks;
+    expect(prefixBlocks?.[0]?.updates).toEqual(["Two of three said hello."]);
+  });
+
+  it("records nothing when the round's message is gone", async () => {
+    const h = messageHarness({ message: null });
+    await expect(
+      recordGroupAskUpdateInTransaction(h.tx as never, {
+        ...scope,
+        threadId: "room",
+        nonce: "group-ask:1:ask-run:call-1",
+        note: "note",
+        now,
+      }),
+    ).resolves.toBeNull();
+    expect(h.messageUpdate).not.toHaveBeenCalled();
+    expect(h.eventCreate).not.toHaveBeenCalled();
   });
 });
