@@ -196,6 +196,7 @@ async function handle(value) {
         parentSecretAbsent: process.env.ARDUR_PARENT_SECRET === undefined,
         configHasKey: JSON.stringify(config).includes(process.env.ARDUR_HERMES_PROVIDER_KEY),
         config,
+        env: process.env,
         context,
         prompt: value.params.prompt,
       }),
