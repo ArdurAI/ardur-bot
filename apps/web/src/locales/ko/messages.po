@@ -8496,6 +8496,7 @@ msgstr "이 채팅은 읽기 전용입니다"
 msgid "This command is not available to this account."
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "이 컴퓨터"
@@ -8543,6 +8544,7 @@ msgstr ""
 msgid "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model."
 msgstr "봇 또는 공간 설정에서 이 그룹의 모델을 차단했습니다. 대상 정책을 변경하거나 다른 그룹 모델을 선택하세요."
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "이 Mac"

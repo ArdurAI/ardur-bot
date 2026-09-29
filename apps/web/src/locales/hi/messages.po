@@ -8496,6 +8496,7 @@ msgstr "यह चैट केवल देखने के लिए है"
 msgid "This command is not available to this account."
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "यह कंप्यूटर"
@@ -8543,6 +8544,7 @@ msgstr ""
 msgid "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model."
 msgstr "बॉट या स्पेस की सेटिंग इस समूह के मॉडल को रोक रही है। गंतव्य नीति बदलें या समूह के लिए दूसरा मॉडल चुनें।"
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "यह Mac"

@@ -8496,6 +8496,7 @@ msgstr "Bu sohbet yalnızca görüntülenebilir"
 msgid "This command is not available to this account."
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "bu bilgisayar"
@@ -8543,6 +8544,7 @@ msgstr ""
 msgid "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model."
 msgstr "Grup modeli bot veya alan ayarları tarafından engelleniyor. Hedef ilkesini değiştirin veya başka bir grup modeli seçin."
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "bu Mac"

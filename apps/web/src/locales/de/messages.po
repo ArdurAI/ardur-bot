@@ -8496,6 +8496,7 @@ msgstr "Dieser Chat ist schreibgeschützt"
 msgid "This command is not available to this account."
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "dieser Computer"
@@ -8543,6 +8544,7 @@ msgstr ""
 msgid "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model."
 msgstr "Das Gruppenmodell wird durch die Bot- oder Bereichseinstellungen blockiert. Ändere die Zielrichtlinie oder wähle ein anderes Gruppenmodell."
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "dieser Mac"
