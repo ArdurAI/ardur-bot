@@ -60,9 +60,15 @@ export async function checkDelegationExecution(
   }
   const rootTaskId = run.delegationRootTaskId ?? run.taskId;
   const root = await prisma.delegationRoot.findUnique({ where: { rootTaskId } });
+  // Outside a goal, spending past the task's token budget refuses new workers at admission but
+  // never takes back reservations already admitted. A native coordinator reports its whole
+  // turn's usage as the turn ends, just before its room workers can start. A goal's budget
+  // stays the owner's cap for the whole tree.
   if (
     root &&
-    (root.cancelRequestedAt || root.deadlineAt <= new Date() || root.usedTokens >= root.tokenLimit)
+    (root.cancelRequestedAt ||
+      root.deadlineAt <= new Date() ||
+      (run.goalId && root.usedTokens >= root.tokenLimit))
   ) {
     if (!root.cancelRequestedAt)
       await requestCancel(prisma, { spaceId: run.spaceId, userId: run.userId }, rootTaskId);

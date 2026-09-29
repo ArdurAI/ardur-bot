@@ -1,6 +1,6 @@
 import type * as Database from "@ardurbot/db";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
-import { admitDelegation, updateWorkerTask } from "@ardurbot/db";
+import { admitDelegation, requestCancel, updateWorkerTask } from "@ardurbot/db";
 import { expect, it, vi } from "vitest";
 import { prepareDelegation } from "./delegation.js";
 import { checkDelegationExecution } from "./delegation-execution.js";
@@ -14,6 +14,8 @@ vi.mock("@ardurbot/db", async (importOriginal) => ({
     differences: [],
   })),
   updateWorkerTask: vi.fn(async () => ({ ok: true })),
+  requestCancel: vi.fn(async () => ({ cancelRequested: true })),
+  reconcileGoalExhaustion: vi.fn(async () => undefined),
 }));
 it("inherits the exact resolved snapshot including connection and runtime without calling a resolver", async () => {
   const pin = {
@@ -309,4 +311,67 @@ it("stops a member asked by its room coordinator once the owner pauses team mess
   });
   paused.mockResolvedValue([]);
   expect(await checkDelegationExecution(prisma, "run")).toBeUndefined();
+});
+
+it("keeps workers admitted before their coordinator's turn pushed the task over its token budget", async () => {
+  vi.mocked(requestCancel).mockClear();
+  // A native coordinator reports its whole turn's usage as the turn ends; its room workers can
+  // only start after that, and must not be stopped by it.
+  const overspent = {
+    rootTaskId: "root",
+    usedTokens: 200_000,
+    tokenLimit: 120_000,
+    cancelRequestedAt: null,
+    deadlineAt: new Date(Date.now() + 60_000),
+  };
+  const updateMany = vi.fn(async () => ({ count: 1 }));
+  const prisma = (run: Record<string, unknown>) =>
+    ({
+      run: {
+        findUniqueOrThrow: vi.fn(async () => ({
+          id: "run",
+          taskId: "task",
+          threadId: "room",
+          spaceId: "space",
+          userId: "owner",
+          goalId: null,
+          delegationRootTaskId: "root",
+          ...run,
+        })),
+        updateMany,
+      },
+      delegationRoot: { findUnique: vi.fn(async () => overspent) },
+      botMessageWake: { findFirst: vi.fn(async () => null) },
+      delegation: {
+        findFirst: vi.fn(async () => null),
+        findUniqueOrThrow: vi.fn(async () => ({
+          admissionKey: "group-handoff:coordinator-run",
+          status: "queued",
+          deadlineAt: new Date(Date.now() + 60_000),
+          usedTokens: 0,
+          reservedTokens: 10_000,
+        })),
+      },
+    }) as unknown as PrismaClient;
+  expect(
+    await checkDelegationExecution(prisma({ delegationId: "handoff" }), "run"),
+  ).toBeUndefined();
+  // The coordinator's own turn is not stopped either; admission refuses anything new.
+  expect(
+    await checkDelegationExecution(prisma({ delegationRootTaskId: null, taskId: "root" }), "run"),
+  ).toBeUndefined();
+  expect(requestCancel).not.toHaveBeenCalled();
+  expect(updateMany).not.toHaveBeenCalled();
+  // A goal's budget is the owner's cap for the whole tree.
+  expect(
+    await checkDelegationExecution(prisma({ delegationId: "handoff", goalId: "goal" }), "run"),
+  ).toBe("This task is stopping; start a new task to continue.");
+  expect(requestCancel).toHaveBeenCalledOnce();
+  // A stopped task or a passed deadline still stops every worker.
+  vi.mocked(requestCancel).mockClear();
+  overspent.deadlineAt = new Date(Date.now() - 1);
+  expect(await checkDelegationExecution(prisma({ delegationId: "handoff" }), "run")).toBe(
+    "This task is stopping; start a new task to continue.",
+  );
+  expect(requestCancel).toHaveBeenCalledOnce();
 });
