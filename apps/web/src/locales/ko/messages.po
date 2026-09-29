@@ -525,7 +525,7 @@ msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Add from board"
-msgstr "Add from board"
+msgstr "보드에서 추가"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Add GraphQL"
@@ -534,6 +534,10 @@ msgstr "GraphQL 추가"
 #: src/pages/PluginsOverlay.tsx
 msgid "Add GraphQL endpoint"
 msgstr "GraphQL 엔드포인트 추가"
+
+#: src/pages/ScratchpadSection.tsx
+msgid "Add item"
+msgstr "항목 추가"
 
 #: src/pages/customize/PluginsPage.tsx
 msgid "Add marketplace"
@@ -1270,7 +1274,7 @@ msgstr ""
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/shell/TopNav.tsx
 msgid "Board"
-msgstr "Board"
+msgstr ""
 
 #: src/pages/LearningInsights.tsx
 msgid "board and routine work"
@@ -1931,6 +1935,10 @@ msgstr ""
 msgid "Compare with…"
 msgstr "비교하기…"
 
+#: src/pages/ScratchpadSection.tsx
+msgid "Complete"
+msgstr "완료"
+
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
@@ -2313,6 +2321,10 @@ msgstr ""
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Cost unavailable"
 msgstr "비용 정보 없음"
+
+#: src/pages/ScratchpadSection.tsx
+msgid "Could not add"
+msgstr "추가하지 못했습니다."
 
 #: src/pages/Shell.tsx
 msgid "Could not add folder. Try again."
@@ -2771,6 +2783,10 @@ msgstr ""
 msgid "Could not refresh tasks"
 msgstr ""
 
+#: src/pages/ScratchpadSection.tsx
+msgid "Could not remove"
+msgstr "삭제하지 못했습니다."
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not remove connector"
 msgstr "도구 연결을 삭제하지 못했습니다."
@@ -2980,6 +2996,10 @@ msgstr "직접 조작으로 전환하지 못했습니다."
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Could not test this integration."
 msgstr ""
+
+#: src/pages/ScratchpadSection.tsx
+msgid "Could not update"
+msgstr "업데이트하지 못했습니다."
 
 #: src/pages/account/AccountSettings.tsx
 msgid "Could not update account settings. Try again."
@@ -5588,6 +5608,10 @@ msgstr "새 그룹 만들기"
 msgid "New item"
 msgstr ""
 
+#: src/pages/ScratchpadSection.tsx
+msgid "New open-work item"
+msgstr "새 진행 작업"
+
 #: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
 msgid "New password"
@@ -5612,7 +5636,7 @@ msgstr "새 스페이스"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "New work item"
-msgstr "New work item"
+msgstr "새 작업 항목"
 
 #: src/pages/account/AccountTables.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
@@ -6087,6 +6111,10 @@ msgstr ""
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Open files"
 msgstr ""
+
+#: src/pages/ScratchpadSection.tsx
+msgid "Open in board"
+msgstr "보드에서 열기"
 
 #: src/pages/workspace/WorkspaceScreen.tsx
 msgid "Open in full window"
@@ -6832,6 +6860,7 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/ScratchpadSection.tsx
 msgid "Remove"
 msgstr "삭제"
 
@@ -6909,6 +6938,10 @@ msgstr ""
 msgid "Removed with chat, computer, and memory."
 msgstr "대화, 컴퓨터, 기억과 함께 삭제되었습니다."
 
+#: src/pages/ScratchpadSection.tsx
+msgid "Removed, but list refresh failed"
+msgstr "삭제했지만 목록을 새로고침하지 못했습니다."
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Removing"
 msgstr ""
@@ -6926,6 +6959,10 @@ msgstr ""
 #: src/pages/shell/dialogs.tsx
 msgid "Rename section"
 msgstr "섹션 이름 바꾸기"
+
+#: src/pages/ScratchpadSection.tsx
+msgid "Reopen"
+msgstr "다시 열기"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Replace API key"
@@ -7477,6 +7514,10 @@ msgstr ""
 msgid "Saved locally. Sync pending."
 msgstr ""
 
+#: src/pages/ScratchpadSection.tsx
+msgid "Saved, but list refresh failed"
+msgstr "저장했지만 목록을 새로고침하지 못했습니다."
+
 #: src/pages/account/AccountProfile.tsx
 msgid "Saved, but not applied everywhere."
 msgstr "저장했지만 모든 곳에 적용되지 않았습니다."
@@ -7538,6 +7579,7 @@ msgstr ""
 #: src/pages/board/Board.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-picker.tsx
 #: src/pages/shell/command-palette.tsx

@@ -525,7 +525,7 @@ msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Add from board"
-msgstr "Add from board"
+msgstr "Añadir desde el tablero"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Add GraphQL"
@@ -534,6 +534,10 @@ msgstr "Añadir GraphQL"
 #: src/pages/PluginsOverlay.tsx
 msgid "Add GraphQL endpoint"
 msgstr "Añadir endpoint de GraphQL"
+
+#: src/pages/ScratchpadSection.tsx
+msgid "Add item"
+msgstr "Agregar elemento"
 
 #: src/pages/customize/PluginsPage.tsx
 msgid "Add marketplace"
@@ -1270,7 +1274,7 @@ msgstr ""
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/shell/TopNav.tsx
 msgid "Board"
-msgstr "Board"
+msgstr ""
 
 #: src/pages/LearningInsights.tsx
 msgid "board and routine work"
@@ -1931,6 +1935,10 @@ msgstr ""
 msgid "Compare with…"
 msgstr "Comparar con…"
 
+#: src/pages/ScratchpadSection.tsx
+msgid "Complete"
+msgstr "Completado"
+
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
@@ -2313,6 +2321,10 @@ msgstr ""
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Cost unavailable"
 msgstr "Costo no disponible"
+
+#: src/pages/ScratchpadSection.tsx
+msgid "Could not add"
+msgstr "No se pudo agregar"
 
 #: src/pages/Shell.tsx
 msgid "Could not add folder. Try again."
@@ -2771,6 +2783,10 @@ msgstr ""
 msgid "Could not refresh tasks"
 msgstr ""
 
+#: src/pages/ScratchpadSection.tsx
+msgid "Could not remove"
+msgstr "No se pudo quitar"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not remove connector"
 msgstr "No se pudo quitar el conector"
@@ -2980,6 +2996,10 @@ msgstr "No se pudo tomar el control"
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Could not test this integration."
 msgstr ""
+
+#: src/pages/ScratchpadSection.tsx
+msgid "Could not update"
+msgstr "No se pudo actualizar"
 
 #: src/pages/account/AccountSettings.tsx
 msgid "Could not update account settings. Try again."
@@ -5588,6 +5608,10 @@ msgstr "Nuevo grupo"
 msgid "New item"
 msgstr ""
 
+#: src/pages/ScratchpadSection.tsx
+msgid "New open-work item"
+msgstr "Nuevo elemento de trabajo abierto"
+
 #: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
 msgid "New password"
@@ -5612,7 +5636,7 @@ msgstr "Nuevo space"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "New work item"
-msgstr "New work item"
+msgstr "Nuevo elemento de trabajo"
 
 #: src/pages/account/AccountTables.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
@@ -6087,6 +6111,10 @@ msgstr ""
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Open files"
 msgstr ""
+
+#: src/pages/ScratchpadSection.tsx
+msgid "Open in board"
+msgstr "Abrir en el tablero"
 
 #: src/pages/workspace/WorkspaceScreen.tsx
 msgid "Open in full window"
@@ -6832,6 +6860,7 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/ScratchpadSection.tsx
 msgid "Remove"
 msgstr "Quitar"
 
@@ -6909,6 +6938,10 @@ msgstr ""
 msgid "Removed with chat, computer, and memory."
 msgstr "Eliminado junto con el chat, la computadora y la memoria."
 
+#: src/pages/ScratchpadSection.tsx
+msgid "Removed, but list refresh failed"
+msgstr "Eliminado, pero falló la actualización de la lista"
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Removing"
 msgstr ""
@@ -6926,6 +6959,10 @@ msgstr ""
 #: src/pages/shell/dialogs.tsx
 msgid "Rename section"
 msgstr "Renombrar sección"
+
+#: src/pages/ScratchpadSection.tsx
+msgid "Reopen"
+msgstr "Reabrir"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Replace API key"
@@ -7477,6 +7514,10 @@ msgstr ""
 msgid "Saved locally. Sync pending."
 msgstr ""
 
+#: src/pages/ScratchpadSection.tsx
+msgid "Saved, but list refresh failed"
+msgstr "Guardado, pero falló la actualización de la lista"
+
 #: src/pages/account/AccountProfile.tsx
 msgid "Saved, but not applied everywhere."
 msgstr "Guardado, pero no se aplicó en todas partes."
@@ -7538,6 +7579,7 @@ msgstr ""
 #: src/pages/board/Board.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-picker.tsx
 #: src/pages/shell/command-palette.tsx

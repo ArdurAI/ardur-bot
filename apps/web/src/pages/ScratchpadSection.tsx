@@ -9,8 +9,7 @@ import {
   Input,
   NativeSelect,
 } from "@ardurbot/ui-web";
-import { Trans } from "@lingui/react/macro";
-import { t } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { ExternalLink, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -104,6 +103,7 @@ function AddFromBoardDialog({
   workspaces: BoardWorkspace[];
   onAdded: () => void;
 }) {
+  const { t } = useLingui();
   const [workspaceId, setWorkspaceId] = useState(
     workspaces.find((w) => w.isDefault)?.id ?? workspaces[0]?.id,
   );
@@ -121,15 +121,18 @@ function AddFromBoardDialog({
           setSnapshotItems(s.items.filter((i) => i.status !== "closed" && i.status !== "done")),
         )
         .catch(() => setSnapshotItems([]));
-      void rpc.scratchpad.list({ botId }).then((items) => {
-        setExistingLinkedIds(
-          new Set(
-            items
-              .filter((i) => i.boardWorkspaceId === workspaceId && i.boardItemId)
-              .map((i) => i.boardItemId!),
-          ),
-        );
-      }).catch(console.error);
+      void rpc.scratchpad
+        .list({ botId })
+        .then((items) => {
+          setExistingLinkedIds(
+            new Set(
+              items
+                .filter((i) => i.boardWorkspaceId === workspaceId && i.boardItemId)
+                .map((i) => i.boardItemId!),
+            ),
+          );
+        })
+        .catch(console.error);
     }
   }, [workspaceId, search, open, botId]);
 
@@ -225,6 +228,7 @@ function AddFromBoardDialog({
 }
 
 export function ScratchpadSection({ botId }: { botId: string }) {
+  const { t } = useLingui();
   const [items, setItems] = useState<ScratchpadItem[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
