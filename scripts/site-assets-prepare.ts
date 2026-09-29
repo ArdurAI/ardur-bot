@@ -1,4 +1,3 @@
-// biome-ignore lint/suspicious/noUndeclaredEnvVars: used in CI script
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { appendFile, mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";

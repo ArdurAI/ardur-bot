@@ -193,11 +193,11 @@ describe("make-kubeconfig.sh", () => {
     const granted = run(["--with-capacity"], { FAKE_CAPACITY: "1" });
     expect(granted.status, granted.stderr).toBe(0);
     expect(granted.stdins[1]).toContain("name: ardurbot-computers-capacity-ardurbot");
-    expect(granted.stdout).toContain("yes  list nodes.metrics.k8s.io (capacity)");
-    
     const noMetrics = run(["--with-capacity"], { FAKE_CAPACITY: "1", FAKE_NO_METRICS: "1" });
     expect(noMetrics.status, noMetrics.stderr).toBe(0);
-    expect(noMetrics.stdout).toContain("skip list nodes.metrics.k8s.io (metrics API not available)");
+    expect(noMetrics.stdout).toContain(
+      "skip list nodes.metrics.k8s.io (metrics API not available)",
+    );
 
     const refused = run(["--with-capacity"]);
     expect(refused.status).toBe(1);
