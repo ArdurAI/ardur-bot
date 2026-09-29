@@ -1029,10 +1029,13 @@ it("keeps a resumed helper command in the helper workspace, checks and approval"
   expect(approval.pauses).toHaveLength(1);
   const pause = approval.pauses[0] as {
     helperDelegationId?: string;
-    blocks: { actions?: { id: string }[] }[];
+    blocks: { kind: string; actions?: { id: string }[] }[];
   };
   expect(pause.helperDelegationId).toBe(HELPER);
-  expect(pause.blocks[0]!.actions?.map((action) => action.id)).not.toContain("always");
+  // Retained work-record blocks come first; the approval is the ask block.
+  const ask = pause.blocks.find((block) => block.kind === "ask");
+  expect(ask).toBeDefined();
+  expect(ask?.actions?.map((action) => action.id)).not.toContain("always");
 
   const ran = harness("production");
   await ran.kill([helperCall(A)], "interrupted-worker", 1_700_000_000_000);

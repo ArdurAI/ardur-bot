@@ -1079,6 +1079,11 @@ msgstr "at {0}"
 msgid "at {timeSelect}"
 msgstr "at {timeSelect}"
 
+#. placeholder {0}: row.usage.tokens
+#: src/pages/TeamBoard.tsx
+msgid "at least {0}"
+msgstr "at least {0}"
+
 #: src/pages/storage/StorageSettings.tsx
 msgid "at least {size}"
 msgstr "at least {size}"
@@ -1913,6 +1918,7 @@ msgstr "Color {color}"
 msgid "Coming soon"
 msgstr "Coming soon"
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Command"
@@ -3613,6 +3619,7 @@ msgstr "Documents stay in the local journal."
 msgid "Don’t have an account?"
 msgstr "Don’t have an account?"
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/lib/run-status-label.ts
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardColumns.tsx
@@ -3627,6 +3634,10 @@ msgstr "Done — waiting for your OK"
 #: src/pages/GoalForm.tsx
 msgid "Done when (one per line)"
 msgstr "Done when (one per line)"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Done: {title}"
+msgstr "Done: {title}"
 
 #. placeholder {0}: props.name
 #: src/components/ArtifactFileCard.tsx
@@ -3958,6 +3969,7 @@ msgstr "External conversation"
 msgid "failed"
 msgstr "failed"
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/run-status-label.ts
 #: src/lib/team-delivery-text.ts
@@ -3982,6 +3994,10 @@ msgstr "Failed to send message"
 #: src/pages/Shell.tsx
 msgid "Failed to stop"
 msgstr "Failed to stop"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Failed: {title}"
+msgstr "Failed: {title}"
 
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Failure handling"
@@ -4631,6 +4647,14 @@ msgstr "Interactive visualizations, charts, and diagrams directly in the convers
 #: src/pages/CallView.tsx
 msgid "Interrupt"
 msgstr "Interrupt"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Interrupted"
+msgstr "Interrupted"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Interrupted: {title}"
+msgstr "Interrupted: {title}"
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineSchedule.tsx
@@ -7357,6 +7381,7 @@ msgstr "Run setup again"
 msgid "Run time must be in the future."
 msgstr "Run time must be in the future."
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/components/CloudAgentCard.tsx
 msgid "running"
 msgstr "running"
@@ -8869,6 +8894,7 @@ msgstr "Unassigned"
 
 #: src/components/SoftwareUpdateSection.tsx
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Unavailable"
 msgstr "Unavailable"
 
@@ -8901,6 +8927,7 @@ msgstr "Unfollow"
 msgid "Uninstall"
 msgstr "Uninstall"
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/pages/LearningCurator.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Unknown"
@@ -8909,6 +8936,10 @@ msgstr "Unknown"
 #: src/pages/account/AccountTables.tsx
 msgid "Unknown device"
 msgstr "Unknown device"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Unknown: {title}"
+msgstr "Unknown: {title}"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Unlink"
@@ -9326,6 +9357,7 @@ msgstr "Work"
 msgid "Work items"
 msgstr "Work items"
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/TeamBoard.tsx
@@ -9344,6 +9376,10 @@ msgstr "Working on {task}"
 #: src/pages/TeamBoard.tsx
 msgid "Working on {task} for {0}"
 msgstr "Working on {task} for {0}"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Working: {title}"
+msgstr "Working: {title}"
 
 #: src/pages/Auth.tsx
 #: src/pages/CallView.tsx
