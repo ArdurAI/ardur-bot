@@ -6,6 +6,7 @@ import {
   CommandEventPayloadSchema,
   type MessageBlock,
   MessageBlock as MessageBlockSchema,
+  PeerEffectDescriptorsSchema,
   type ProductEvent,
   RuntimePinSourceSchema,
 } from "@ardurbot/contracts";
@@ -18,12 +19,14 @@ import {
   LEGACY_RESTART_SUMMARY,
   messagingChannelId,
   parseGroupAskKey,
+  peerHoldBoundEffect,
   peerPairKey,
   RECEIPT_FILTERED_SUMMARY_MARKER,
   redactTaskValue,
   resolveAskChoice,
   sanitizeJsonValue,
 } from "@ardurbot/core";
+import { classifyPeerEffectBinding } from "@ardurbot/core/node/peer-effect-digest";
 import { getLogger } from "@ardurbot/logging";
 import {
   appendBotMessageAuditInTransaction,
@@ -928,6 +931,25 @@ async function commitAnswerRunInput(
         })) !== peerHold.authorityFingerprint
       )
         return null;
+      // An effect-bound hold approves only the exact digest-bound descriptor captured
+      // when the hold was created. If the stored request or the delivery's descriptor
+      // list no longer proves that binding, refuse the answer like any other stale
+      // approval: the card stays pending and nothing is released.
+      const boundHold = peerHoldBoundEffect(approvalEffect!.request);
+      if (boundHold.kind === "invalid") return null;
+      if (boundHold.kind === "bound") {
+        const storedEffects = PeerEffectDescriptorsSchema.safeParse(peerHold.requestedEffects);
+        const binding = storedEffects.success
+          ? classifyPeerEffectBinding(storedEffects.data)
+          : { kind: "preparation-only" as const };
+        if (
+          binding.kind !== "effect-bound" ||
+          binding.effect.toolName !== boundHold.effect.toolName ||
+          binding.effect.resourceRef !== boundHold.effect.resourceRef ||
+          binding.effect.argsDigest !== boundHold.effect.argsDigest
+        )
+          return null;
+      }
     }
   }
 

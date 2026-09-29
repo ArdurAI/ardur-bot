@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { rpc } from "../../lib/rpc";
 import { getEffectiveWorkspaceTab } from "../shell/computer-visibility";
+import { terminalSupported } from "./terminal-controller";
 import { WorkspaceTasks } from "./WorkspaceTasks";
 
 const WorkspaceFiles = lazy(() =>
@@ -13,12 +14,16 @@ const WorkspaceFiles = lazy(() =>
 const WorkspaceScreen = lazy(() =>
   import("./WorkspaceScreen").then((module) => ({ default: module.WorkspaceScreen })),
 );
+const WorkspaceTerminal = lazy(() =>
+  import("./WorkspaceTerminal").then((module) => ({ default: module.WorkspaceTerminal })),
+);
 
 export function WorkspacePane({
   bot,
   computer,
   routines,
   screen,
+  terminal,
   onOpenRun,
   tab,
   onTabChange,
@@ -34,6 +39,13 @@ export function WorkspacePane({
     status?: ReactNode;
     onOpen(): void;
   };
+  terminal: {
+    working: boolean;
+    onTakeControl(): Promise<unknown>;
+    onStop(): Promise<unknown>;
+    onStart(): Promise<unknown>;
+    onReleased(): void;
+  } | null;
   onOpenRun(run: RunActivityRow): void;
   tab: string;
   onTabChange(tab: string): void;
@@ -58,10 +70,12 @@ export function WorkspacePane({
       ? context
       : null;
   const filesAvailable = currentContext?.files !== "unavailable" && currentContext?.computerId;
+  const terminalAvailable = terminal !== null && terminalSupported(computer);
   const selected = getEffectiveWorkspaceTab(
     tab,
     computer?.capabilities?.graphical,
     !!filesAvailable,
+    terminalAvailable,
   );
   const tabs = [
     {
@@ -84,6 +98,29 @@ export function WorkspacePane({
             content: (
               <Suspense fallback={null}>
                 <WorkspaceFiles bot={bot} context={currentContext} />
+              </Suspense>
+            ),
+          },
+        ]
+      : []),
+    ...(terminal && terminalAvailable
+      ? [
+          {
+            id: "terminal",
+            label: t`Terminal`,
+            content: (
+              <Suspense fallback={null}>
+                <WorkspaceTerminal
+                  key={bot.id}
+                  bot={bot}
+                  computer={computer}
+                  visible={selected === "terminal"}
+                  working={terminal.working}
+                  onTakeControl={terminal.onTakeControl}
+                  onStop={terminal.onStop}
+                  onStart={terminal.onStart}
+                  onReleased={terminal.onReleased}
+                />
               </Suspense>
             ),
           },

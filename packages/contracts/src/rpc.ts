@@ -149,6 +149,7 @@ import {
   LearningObservationSchema,
   LearningProposalSchema,
   ProposalEvidenceSchema,
+  SetLearningReviewerInput,
   SpaceLearningConfigInput,
   SpaceLearningConfigSchema,
 } from "./learning.js";
@@ -1082,6 +1083,7 @@ export const appContract = {
     summary: oc.input(z.object({ botId: Id.optional() })).output(LearningCountsSchema),
     settings: oc.output(SpaceLearningConfigSchema),
     configure: oc.input(SpaceLearningConfigInput).output(SpaceLearningConfigSchema),
+    setReviewer: oc.input(SetLearningReviewerInput).output(SpaceLearningConfigSchema),
     list: oc.input(z.object({ botId: Id.optional() })).output(LearningInboxSchema),
     approve: oc
       .input(z.object({ proposalId: Id, edits: LearningEditSchema.optional() }))

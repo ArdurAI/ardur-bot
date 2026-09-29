@@ -1120,6 +1120,12 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Learning review is off": "学习复查已关闭",
   "Learning review is on": "学习复查已开启",
   "Reviewer: {model}": "复查模型：{model}",
+  "Learning review": "学习复查",
+  "Learning reviewer": "学习复查模型",
+  "Thinking: {level}": "思考：{level}",
+  "Connect a model": "连接模型",
+  "Reviews use this connection and may incur model charges.":
+    "复查使用此连接，可能会产生模型调用费用。",
   Enable: "启用",
   "Filed by {name}": "由机器人 {name} 记录",
   "No reviewer model yet.": "尚未选择复查模型。",

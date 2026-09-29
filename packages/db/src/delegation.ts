@@ -179,7 +179,7 @@ export async function admitDelegation(
     deadlineAt?: Date;
     newChild?: boolean;
     card?: unknown;
-    peerMode?: "read-only";
+    peerMode?: "read-only" | "effect-bound";
   },
 ) {
   const { run: parent, rootTaskId } = await lockDelegationRootForRun(tx, input.parentRunId);

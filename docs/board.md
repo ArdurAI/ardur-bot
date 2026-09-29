@@ -157,8 +157,7 @@ read-only, the instruction says so in one sentence and only tools that can run a
 offered. If the default board does not admit the bot but another initialized board
 does, the tools stay and the instruction adds `Pass workspaceId <id>.` Turning the
 setting off removes that instruction, the filing caps, the duplicate-title check
-and the `bot-filed` label. The same row shows whether learning review is on, the
-reviewer model, and Enable. Enable uses the existing learning configure call. Learning review stays
+and the `bot-filed` label. The Learning review row shows whether learning review is on, and allows the owner to choose the reviewer model and its thinking level. Learning review stays
 off until someone turns it on.
 
 Bot-created items keep the actor `bot:<name>`, the label `bot-filed`, and the run

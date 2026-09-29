@@ -82,22 +82,7 @@ revision actually delivered.
    `pnpm db:generate` and `pnpm --filter @ardurbot/db exec prisma migrate deploy`.
 2. Start the local application and worker with `pnpm dev`. Use a model runtime and configure a
    connection in Settings. Sign in as the owner of the space and select that space.
-3. In the web development app's browser console, use its authenticated client:
-
-   ```js
-   const { rpc } = await import('/src/lib/rpc.ts');
-   const settings = await rpc.learning.settings();
-   const enabled = await rpc.learning.configure({
-     enabled: true,
-     reviewerPin: settings.destination,
-     budgets: settings.budgets,
-   });
-   ```
-
-   `configure` accepts `enabled`, `consolidationEnabled`, `reviewerPin`, and `budgets`. Inspect `enabled.destination` before running a review. When initially
-   unset, the reviewer captures the space default connection at medium effort. Later changes to
-   the default do not replace that saved pin. An unavailable model, unsupported effort or revoked
-   connection pauses the review with a sentence instead of selecting another model.
+3. Open Settings → Customize → Boards in the web app, connect a model if needed, and turn Learning review on. You can choose the reviewer model and its thinking level directly in the Settings UI. The learning reviewer is saved as a snapshot pin using `setReviewer`. It never follows later changes to your default model. An unavailable model, unsupported effort or revoked connection pauses the review with a sentence instead of selecting another model.
 4. Finish a bot run with a reusable instruction, such as a requested procedure format. Add a
    thumbs reason on its reply. Wait for the debounced `learning.review` worker job, then inspect:
 
@@ -141,8 +126,8 @@ spend and review audits. The local-first user can keep the review on a compatibl
 ## Review, apply, and undo
 
 Open Settings → Memory & Skills → Learning on web or desktop. Settings → Customize →
-Boards also shows whether learning review is on, the reviewer model, and Enable.
-Enable uses the same configure call. The default stays off. In a bot's panel, open
+Boards also shows the learning review switch, and allows you to choose the reviewer model and thinking level.
+The default stays off. In a bot's panel, open
 Learning for that bot's suggestions. Mobile has Learning in account settings and in the bot
 settings. A space member can review their own proposals; only the space owner sees the space
 learning switch. The collapsed cards show content and scope. Details reveals the server diff,
