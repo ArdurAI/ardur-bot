@@ -485,6 +485,7 @@ describe("ask progress notes", () => {
       ...data,
     }));
     const tx = {
+      $queryRaw: vi.fn(async () => []),
       message: {
         findUnique: vi.fn(async () => stored),
         findFirst: vi.fn(async () => stored),

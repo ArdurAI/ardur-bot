@@ -371,6 +371,10 @@ export async function recordGroupAskUpdateInTransaction(
     now?: Date;
   },
 ): Promise<{ threadId: string; seq: number } | null> {
+  // Every other writer of a round's message locks the thread row first; the
+  // fold must serialize with them or it can overwrite a just-recorded member
+  // outcome with blocks read before it.
+  await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
   const select = { id: true, blocks: true, botId: true } as const;
   const message =
     (await tx.message.findUnique({

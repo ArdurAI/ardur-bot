@@ -753,6 +753,55 @@ describe("coordination round recording", () => {
     expect(delegationUpdateMany).not.toHaveBeenCalled();
   });
 
+  it("keeps both changes when a fold and an outcome write the same round", async () => {
+    // The fold locks the thread row before reading, the same lock the outcome
+    // writers take, so the two writes serialize instead of last-writer-wins.
+    const stored = structuredClone(coordinationMessage);
+    const messageUpdate = vi.fn(async ({ data }: { data: { blocks: RecordedBlocks } }) => {
+      stored.blocks = data.blocks as never;
+    });
+    const lock = vi.fn(async () => []);
+    const findUnique = vi.fn(async () => stored);
+    const tx = {
+      $queryRaw: lock,
+      message: {
+        findUnique,
+        findFirst: vi.fn(async () => stored),
+        update: messageUpdate,
+      },
+      thread: { update: vi.fn(async () => ({ nextEventSeq: 7 })) },
+      event: {
+        create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+          id: "event",
+          ...data,
+        })),
+      },
+    };
+
+    await recordGroupAskUpdateInTransaction(tx as never, {
+      ...scope,
+      threadId: "room",
+      nonce: "group-ask:1:ask-run:call-1",
+      note: "Asked Ada and Ben.",
+      now,
+    });
+    await recordGroupAskOutcomeInTransaction(tx as never, {
+      ...scope,
+      threadId: "room",
+      delegation: delegation(),
+      delegationStatus: "completed",
+      runStatus: "completed",
+      now,
+    });
+
+    const block = stored.blocks[0] as RecordedBlocks[number];
+    expect(block.updates).toEqual(["Asked Ada and Ben."]);
+    expect(block.members?.find((row) => row.botId === "ada")?.outcome).toBe("answered");
+    expect(lock.mock.invocationCallOrder[0]).toBeLessThan(
+      findUnique.mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
   it("records nothing when the round's message is gone", async () => {
     const h = messageHarness({ message: null });
     await expect(
