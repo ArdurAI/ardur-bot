@@ -13,6 +13,7 @@ import {
   runtimeConfigV2Hash,
 } from "@ardurbot/core/node/runtime-config-hash";
 import { effectiveHermesRuntimeConfigV2 } from "@ardurbot/core/runtime-config";
+import { piKeyBasedCatalogModel } from "./pi-models.js";
 
 export function effectiveHermesConfig(value: unknown) {
   return effectiveHermesRuntimeConfigV2(value);
@@ -59,12 +60,35 @@ export function hermesCompatibility(
     pin.modelId !== model.id
   )
     return runtimePinProblem(pin, "pin-incomplete", "Choose a connected model for Hermes.");
-  if (!["openai-compatible", "ollama"].includes(model.provider) || model.oauth || !model.baseUrl)
+  // Sign-in (OAuth/subscription) connections never back Hermes: vendors reserve
+  // them for their own apps. API-key connections go through the broker.
+  if (model.oauth || model.provider === "openai-codex")
     return runtimePinProblem(
       pin,
       "runtime-unsupported-protocol",
-      "Hermes needs a Chat Completions connection with a direct endpoint.",
+      model.provider === "anthropic"
+        ? "Claude subscriptions only work in Anthropic's own apps; add an Anthropic API key to use Claude with Hermes."
+        : model.provider === "openai-codex"
+          ? "ChatGPT sign-ins only work inside Codex; add an OpenAI API key to use GPT models with Hermes."
+          : "Add an API key connection to use this provider with Hermes.",
     );
+  // Custom endpoints pass Chat Completions through to their direct URL; every
+  // other key-based connection is translated through Ardur's provider layer,
+  // which needs a registry model served by an API-key provider.
+  if (model.provider === "openai-compatible" || model.provider === "ollama") {
+    if (!model.baseUrl)
+      return runtimePinProblem(
+        pin,
+        "runtime-unsupported-protocol",
+        "This connection cannot run Hermes.",
+      );
+  } else if (!piKeyBasedCatalogModel(model.provider, model.id)) {
+    return runtimePinProblem(
+      pin,
+      "runtime-unsupported-protocol",
+      "This connection cannot run Hermes.",
+    );
+  }
   if (
     !Number.isSafeInteger(model.contextWindow ?? DEFAULT_MODEL_CONTEXT_WINDOW) ||
     !Number.isSafeInteger(model.maxTokens ?? DEFAULT_MODEL_MAX_TOKENS) ||

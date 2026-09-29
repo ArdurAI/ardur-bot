@@ -234,7 +234,7 @@ describe("bot pin editing", () => {
     expect(deps.prisma.spaceModelPreference.findFirst).not.toHaveBeenCalled();
   });
 
-  it("rejects an unsupported API route for Hermes even with a real credential", async () => {
+  it("accepts a key-based catalog connection for Hermes", async () => {
     const { deps } = fixture();
     await expect(
       botModelPinUpdate(deps, actor, existing, {
@@ -245,7 +245,75 @@ describe("bot pin editing", () => {
         modelCredentialId: "selected",
         thinkingLevel: "medium",
       }),
-    ).rejects.toThrow("Chat Completions");
+    ).resolves.toMatchObject({ runtimeKind: "hermes", thinkingLevel: "medium" });
+  });
+  it("rejects a ChatGPT sign-in for Hermes with the vendor reason", async () => {
+    const { deps, findFirst } = fixture();
+    findFirst.mockResolvedValue({
+      id: "selected",
+      userId: "user",
+      provider: "openai-codex",
+      label: "chatgpt",
+      secretId: "secret",
+      defaultModel: "gpt-6-astra",
+      isDefault: false,
+    });
+    vi.spyOn(deps.secrets, "load").mockReturnValue(
+      JSON.stringify({ type: "oauth", access: "access", refresh: "refresh", expires: 1 }),
+    );
+    await expect(
+      botModelPinUpdate(deps, actor, existing, {
+        botId: "bot",
+        runtimeKind: "hermes",
+        modelProvider: "openai-codex",
+        modelId: "gpt-6-astra",
+        modelCredentialId: "selected",
+        thinkingLevel: "high",
+      }),
+    ).rejects.toThrow(
+      "ChatGPT sign-ins only work inside Codex; add an OpenAI API key to use GPT models with Hermes.",
+    );
+  });
+  it("rejects a Claude subscription for Hermes with the vendor reason", async () => {
+    const { deps, findFirst } = fixture();
+    findFirst.mockResolvedValue({
+      id: "selected",
+      userId: "user",
+      provider: "anthropic",
+      label: "claude",
+      secretId: "secret",
+      defaultModel: "claude-opus-5",
+      isDefault: false,
+    });
+    vi.spyOn(deps.secrets, "load").mockReturnValue("sk-ant-oat01-fixture-token");
+    await expect(
+      botModelPinUpdate(deps, actor, existing, {
+        botId: "bot",
+        runtimeKind: "hermes",
+        modelProvider: "anthropic",
+        modelId: "claude-opus-5",
+        modelCredentialId: "selected",
+        thinkingLevel: "high",
+      }),
+    ).rejects.toThrow(
+      "Claude subscriptions only work in Anthropic's own apps; add an Anthropic API key to use Claude with Hermes.",
+    );
+  });
+  it("rejects any other sign-in connection for Hermes with the generic reason", async () => {
+    const { deps } = fixture();
+    vi.spyOn(deps.secrets, "load").mockReturnValue(
+      JSON.stringify({ type: "oauth", access: "access", refresh: "refresh", expires: 1 }),
+    );
+    await expect(
+      botModelPinUpdate(deps, actor, existing, {
+        botId: "bot",
+        runtimeKind: "hermes",
+        modelProvider: "xai",
+        modelId: "grok-4.6",
+        modelCredentialId: "selected",
+        thinkingLevel: "medium",
+      }),
+    ).rejects.toThrow("Add an API key connection to use this provider with Hermes.");
   });
   it("saves a no-effort Antigravity model with explicit null", async () => {
     const { deps, findFirst } = fixture();
