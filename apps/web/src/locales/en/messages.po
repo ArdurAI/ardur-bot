@@ -6567,10 +6567,6 @@ msgstr "Read"
 msgid "Read by {recipient}"
 msgstr "Read by {recipient}"
 
-#: src/pages/workspace/WorkspaceFiles.tsx
-msgid "Read only in this pane. Open IDE to edit."
-msgstr "Read only in this pane. Open IDE to edit."
-
 #: src/pages/ide/IdePage.tsx
 msgid "Read only: file is larger than 2 MB"
 msgstr "Read only: file is larger than 2 MB"

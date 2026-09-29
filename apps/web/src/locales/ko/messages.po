@@ -6567,10 +6567,6 @@ msgstr "읽음"
 msgid "Read by {recipient}"
 msgstr "{recipient}님이 읽음"
 
-#: src/pages/workspace/WorkspaceFiles.tsx
-msgid "Read only in this pane. Open IDE to edit."
-msgstr ""
-
 #: src/pages/ide/IdePage.tsx
 msgid "Read only: file is larger than 2 MB"
 msgstr ""

@@ -28,7 +28,7 @@ it("keeps optional screens, Board, Fleet, Dashboard widgets and runtime contract
   const users = [...sources]
     .filter(([, source]) => imports(source).some((name) => name.startsWith("@codemirror/")))
     .map(([file]) => path.relative(root, file));
-  expect(users).toEqual(["pages/ide/editor.tsx"]);
+  expect(users).toEqual(["pages/workspace/editor.tsx"]);
   const seen = new Set<string>();
   function walk(file: string) {
     if (seen.has(file)) return;
@@ -75,6 +75,7 @@ it("keeps optional screens, Board, Fleet, Dashboard widgets and runtime contract
     "pages/ide/IdePage.tsx",
     "pages/ide/editor.tsx",
     "pages/ide/unsaved.ts",
+    "pages/workspace/editor.tsx",
     "pages/ide/diff.tsx",
     "pages/ide/terminal.tsx",
     "pages/shell/terminal-session.tsx",

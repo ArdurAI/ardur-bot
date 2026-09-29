@@ -83,11 +83,7 @@ export function WorkspacePane({
             label: t`Files`,
             content: (
               <Suspense fallback={null}>
-                <WorkspaceFiles
-                  key={`${bot.id}:${currentContext.computerId}:${currentContext.generation}:${currentContext.files}:${computer?.homeRevision}`}
-                  bot={bot}
-                  context={currentContext}
-                />
+                <WorkspaceFiles bot={bot} context={currentContext} />
               </Suspense>
             ),
           },

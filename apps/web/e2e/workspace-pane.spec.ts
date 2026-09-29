@@ -1,12 +1,11 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import { captureScreenshot } from "./helpers";
 import { bots, installPerformanceFixture } from "./performance-fixture";
 
-test("workspace pane opens Tasks and bot files without starting the computer", async ({
-  page,
-}, testInfo) => {
-  const botId = bots[0]!.id;
-  const computer = {
+const version = "a".repeat(64);
+
+function computerFor(botId: string) {
+  return {
     botId,
     computerId: "fixture-computer",
     mode: "team",
@@ -23,14 +22,30 @@ test("workspace pane opens Tasks and bot files without starting the computer", a
     busyBotName: null,
     canUpdate: false,
   };
+}
+
+function fileBody(context: { files: string }, content: string) {
+  return {
+    context,
+    path: "notes.md",
+    content,
+    size: content.length,
+    binary: false,
+    readOnly: false,
+    version,
+  };
+}
+
+async function installWorkspace(page: Page, files: "live" | "saved", saveReason?: string) {
+  const botId = bots[0]!.id;
   const context = {
     botId,
     computerId: "fixture-computer",
     generation: 1,
-    files: "live",
+    files,
     observedAt: "2026-09-28T00:00:00.000Z",
   };
-  await installPerformanceFixture(page, false, false, {}, computer);
+  await installPerformanceFixture(page, false, false, {}, computerFor(botId));
   const run = {
     runId: "fixture-run",
     botId,
@@ -62,11 +77,34 @@ test("workspace pane opens Tasks and bot files without starting the computer", a
           : name === "workspace/list"
             ? { context, entries: [{ path: "notes.md", kind: "file", size: 17 }] }
             : name === "workspace/read"
-              ? { context, path: "notes.md", content: "Workspace notes\n" }
-              : undefined;
+              ? fileBody(context, "Workspace notes\n")
+              : name === "workspace/save"
+                ? {
+                    saved: false,
+                    approvalRequired: false,
+                    reason: saveReason ?? "The file changed. Open it again before saving.",
+                  }
+                : undefined;
     if (result !== undefined) await route.fulfill({ json: { json: result } });
     else await route.fallback();
   });
+  return { botId, unexpected };
+}
+
+async function openFiles(page: Page) {
+  await page.getByRole("button", { name: "Agent computer" }).click();
+  const pane = page.getByTestId("side-panel");
+  await expect(pane).toHaveAttribute("data-panel", "computer");
+  await pane.getByRole("tab", { name: "Files" }).click();
+  await pane.getByRole("button", { name: "notes.md", exact: true }).click();
+  await expect(pane).toContainText("Workspace notes");
+  return pane;
+}
+
+test("workspace pane opens Tasks and bot files without starting the computer", async ({
+  page,
+}, testInfo) => {
+  const { botId, unexpected } = await installWorkspace(page, "live");
   await page.goto(`/app/${botId}`);
   await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
   await page.getByRole("button", { name: "Agent computer" }).click();
@@ -80,7 +118,31 @@ test("workspace pane opens Tasks and bot files without starting the computer", a
   await pane.getByRole("button", { name: "notes.md", exact: true }).click();
   await expect(pane).toContainText("Workspace notes");
   await captureScreenshot(page, testInfo, "workspace-files-light");
+  await page.evaluate(() => {
+    document.documentElement.dataset.theme = "dark";
+  });
+  await captureScreenshot(page, testInfo, "workspace-files-dark");
+  await page.evaluate(() => {
+    document.documentElement.dataset.theme = "light";
+  });
+  const editor = pane.locator("[data-ide-editor]");
+  await editor.fill("Workspace notes changed");
+  await pane.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(pane.getByRole("alert")).toHaveText(
+    "The file changed. Open it again before saving.",
+  );
+  await expect(editor).toContainText("changed");
+  await captureScreenshot(page, testInfo, "workspace-files-conflict");
   expect(unexpected).toEqual([]);
   await page.keyboard.press("ControlOrMeta+Shift+E");
   await expect(pane).toHaveAttribute("aria-hidden", "true");
+});
+
+test("workspace pane shows saved files that can be edited", async ({ page }, testInfo) => {
+  const { botId } = await installWorkspace(page, "saved");
+  await page.goto(`/app/${botId}`);
+  await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
+  const pane = await openFiles(page);
+  await expect(pane).toContainText("Saved files");
+  await captureScreenshot(page, testInfo, "workspace-files-saved");
 });

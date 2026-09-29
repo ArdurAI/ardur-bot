@@ -3,83 +3,196 @@ import { ideHandoffText } from "@ardurbot/contracts";
 import { Button } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { X } from "lucide-react";
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { createElement, lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { rpc } from "../../lib/rpc";
-import { AskBot, QuickOpen } from "../ide/dialogs";
-import type { EditorHandle, EditorSelection } from "../ide/editor";
-import { FileTree } from "../ide/file-tree";
-import { basename } from "../ide/model";
+import { AskBot, QuickOpen } from "./dialogs";
+import type { EditorHandle, EditorSelection } from "./editor";
+import {
+  readWorkspaceFileSession,
+  setWorkspaceFileSaving,
+  type WorkspaceFileSession,
+  type WorkspaceOpenFile,
+  workspaceFileSessionId,
+  writeWorkspaceFileSession,
+} from "./file-sessions";
+import { FileTree } from "./file-tree";
+import { basename } from "./files-model";
 
-const Editor = lazy(() => import("../ide/editor"));
-type OpenFile = { path: string; content: string; source: "live" | "saved" };
+const Editor = lazy(() => import("./editor"));
+const emptySession: WorkspaceFileSession = { tabs: [], active: "" };
+
+/** The message is the only text node. Formatting would otherwise wrap space around it. */
+function exactNotice(role: "alert" | "status", className: string, text: string) {
+  return createElement("p", { role, className }, text);
+}
 
 export function WorkspaceFiles({ bot, context }: { bot: Bot; context: WorkspaceContext }) {
   const { t } = useLingui();
-  const [tabs, setTabs] = useState<OpenFile[]>([]);
-  const [active, setActive] = useState("");
+  const computerId = context.computerId;
+  const generation = context.generation;
+  const valid = Boolean(computerId) && generation !== null && context.files !== "unavailable";
+  const sessionId = valid ? workspaceFileSessionId(bot.id, computerId!, generation!) : null;
+  const [boundId, setBoundId] = useState<string | null>(sessionId);
+  const [session, setSession] = useState<WorkspaceFileSession>(() =>
+    sessionId ? readWorkspaceFileSession(sessionId) : emptySession,
+  );
   const [quick, setQuick] = useState(false);
   const [ask, setAsk] = useState<{ selection: EditorSelection; path: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
+  const [saving, setSaving] = useState(false);
   const editor = useRef<EditorHandle>(null);
-  const current = tabs.find((file) => file.path === active);
-  const valid =
-    context.computerId && context.generation !== null && context.files !== "unavailable";
+  const savingRef = useRef(false);
+  const alive = useRef(true);
+  if (sessionId !== boundId) {
+    if (boundId) writeWorkspaceFileSession(boundId, session, false);
+    setBoundId(sessionId);
+    setSession(sessionId ? readWorkspaceFileSession(sessionId) : emptySession);
+  }
+  const showing =
+    sessionId === boundId
+      ? session
+      : sessionId
+        ? readWorkspaceFileSession(sessionId)
+        : emptySession;
+  const sessionRef = useRef(showing);
+  const boundRef = useRef(sessionId);
+  sessionRef.current = showing;
+  boundRef.current = sessionId;
   useEffect(() => {
-    setTabs([]);
-    setActive("");
-    setError(null);
-    setNotice(null);
-  }, [bot.id, context.computerId, context.generation, context.files]);
-  const onError = useCallback(() => setError(t`Could not load files. Try again.`), [t]);
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      if (boundRef.current) writeWorkspaceFileSession(boundRef.current, sessionRef.current);
+    };
+  }, []);
+  const commit = (next: WorkspaceFileSession) => {
+    sessionRef.current = next;
+    setSession(next);
+    if (sessionId) writeWorkspaceFileSession(sessionId, next);
+  };
   const list = useCallback(
     async (path: string): Promise<IdeEntry[]> => {
-      if (!context.computerId || context.generation === null) return [];
+      if (!computerId || generation === null) return [];
       const result = await rpc.workspace.list({
         botId: bot.id,
-        computerId: context.computerId,
-        generation: context.generation,
+        computerId,
+        generation,
         path,
       });
       return result.entries;
     },
-    [bot.id, context.computerId, context.generation, revision],
+    [bot.id, computerId, generation, revision],
   );
-  const open = useCallback(
-    (path: string) => {
-      if (!context.computerId || context.generation === null) return;
-      if (tabs.some((file) => file.path === path)) {
-        setActive(path);
+  const open = (path: string) => {
+    const target = sessionId;
+    if (!target || !computerId || generation === null) return;
+    const id = `${target}/${path}`;
+    const existing = sessionRef.current.tabs.find((tab) => tab.path === path);
+    if (existing) {
+      commit({ ...sessionRef.current, active: existing.id });
+      setError(null);
+      return;
+    }
+    setError(null);
+    setStatus(null);
+    void rpc.workspace
+      .read({ botId: bot.id, computerId, generation, path })
+      .then((file) => {
+        if (file.binary) {
+          if (alive.current && boundRef.current === target) {
+            setError(t`Binary file`);
+            setStatus(null);
+          }
+          return;
+        }
+        const stored = readWorkspaceFileSession(target);
+        if (stored.tabs.some((tab) => tab.path === path)) {
+          const next = { ...stored, active: id };
+          writeWorkspaceFileSession(target, next);
+          if (alive.current && boundRef.current === target) setSession(next);
+          return;
+        }
+        const tab: WorkspaceOpenFile = {
+          ...file,
+          id,
+          savedContent: file.content,
+          readOnly: file.readOnly === true,
+          source: file.context.files === "live" ? "live" : "saved",
+        };
+        const next = { tabs: [...stored.tabs, tab], active: id };
+        writeWorkspaceFileSession(target, next);
+        if (alive.current && boundRef.current === target) {
+          setSession(next);
+          setError(null);
+        }
+      })
+      .catch(() => {
+        if (alive.current && boundRef.current === target)
+          setError(t`Could not load files. Try again.`);
+      });
+  };
+  const save = async () => {
+    const target = sessionId;
+    const tab = sessionRef.current.tabs.find((item) => item.id === sessionRef.current.active);
+    if (
+      !target ||
+      !computerId ||
+      generation === null ||
+      !tab ||
+      tab.readOnly ||
+      savingRef.current ||
+      tab.content === tab.savedContent
+    )
+      return;
+    savingRef.current = true;
+    setSaving(true);
+    setWorkspaceFileSaving(true);
+    setStatus(null);
+    setError(null);
+    try {
+      const input = {
+        botId: bot.id,
+        computerId,
+        generation,
+        path: tab.path,
+        content: tab.content,
+        version: tab.version,
+        approved: false,
+      };
+      let result = await rpc.workspace.save(input);
+      if (result.approvalRequired && window.confirm(t`Save`))
+        result = await rpc.workspace.save({ ...input, approved: true });
+      if (!result.saved) {
+        if (result.reason && alive.current && boundRef.current === target) setError(result.reason);
         return;
       }
-      void rpc.workspace
-        .read({
-          botId: bot.id,
-          computerId: context.computerId,
-          generation: context.generation,
-          path,
-        })
-        .then((result) => {
-          setTabs((files) =>
-            files.some((file) => file.path === path)
-              ? files
-              : [
-                  ...files,
-                  {
-                    path,
-                    content: result.content,
-                    source: result.context.files === "live" ? "live" : "saved",
-                  },
-                ],
-          );
-          setActive(path);
-          setError(null);
-        })
-        .catch(onError);
-    },
-    [bot.id, context.computerId, context.generation, tabs, onError],
-  );
+      const stored = readWorkspaceFileSession(target);
+      const next = {
+        ...stored,
+        tabs: stored.tabs.map((item) =>
+          item.id === tab.id
+            ? { ...item, savedContent: input.content, version: result.version ?? item.version }
+            : item,
+        ),
+      };
+      writeWorkspaceFileSession(target, next);
+      if (alive.current && boundRef.current === target) {
+        setSession(next);
+        setStatus(t`Saved`);
+      }
+    } catch {
+      if (alive.current && boundRef.current === target)
+        setError(t`Could not load files. Try again.`);
+    } finally {
+      savingRef.current = false;
+      setWorkspaceFileSaving(false);
+      if (alive.current) setSaving(false);
+    }
+  };
+  const saveRef = useRef(save);
+  saveRef.current = save;
   useEffect(() => {
     const hotkey = (event: KeyboardEvent) => {
       if (
@@ -94,19 +207,30 @@ export function WorkspaceFiles({ bot, context }: { bot: Bot; context: WorkspaceC
         event.preventDefault();
         setQuick(true);
       } else if (event.key.toLowerCase() === "f") {
-        if (current) {
-          event.preventDefault();
-          editor.current?.find();
-        }
-      } else if (event.key.toLowerCase() === "s" && current) {
         event.preventDefault();
-        setNotice(t`Read only in this pane. Open IDE to edit.`);
+        editor.current?.find();
+      } else if (event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        void saveRef.current();
       }
     };
     window.addEventListener("keydown", hotkey, true);
     return () => window.removeEventListener("keydown", hotkey, true);
-  }, [current, t]);
-  if (!valid)
+  }, []);
+  const current = showing.tabs.find((tab) => tab.id === showing.active);
+  const close = (tab: WorkspaceOpenFile) => {
+    if (savingRef.current) return;
+    if (tab.content !== tab.savedContent && !window.confirm(t`Unsaved changes`)) return;
+    const remaining = sessionRef.current.tabs.filter((item) => item.id !== tab.id);
+    commit({
+      tabs: remaining,
+      active:
+        tab.id === sessionRef.current.active
+          ? (remaining.at(-1)?.id ?? "")
+          : sessionRef.current.active,
+    });
+  };
+  if (!valid || !computerId || generation === null)
     return (
       <p className="p-4 text-sm text-muted-foreground">{t`Files are unavailable on this computer.`}</p>
     );
@@ -116,32 +240,25 @@ export function WorkspaceFiles({ bot, context }: { bot: Bot; context: WorkspaceC
         <span>{context.files === "live" ? t`Live files` : t`Saved files`}</span>
         <div className="flex gap-1">
           <Button variant="ghost" size="xs" onClick={() => setQuick(true)}>{t`Quick open`}</Button>
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={() => setRevision((value) => value + 1)}
-          >{t`Refresh`}</Button>
+          <Button variant="ghost" size="xs" onClick={() => setRevision((value) => value + 1)}>
+            {t`Refresh`}
+          </Button>
         </div>
       </div>
-      {error ? (
-        <p role="alert" className="px-2 py-1 text-xs text-destructive">
-          {error}
-        </p>
-      ) : null}
-      {notice ? (
-        <p role="status" className="px-2 py-1 text-xs text-muted-foreground">
-          {notice}
-        </p>
-      ) : null}
+      {error
+        ? exactNotice("alert", "px-2 py-1 text-xs text-destructive", error)
+        : status
+          ? exactNotice("status", "px-2 py-1 text-xs text-muted-foreground", status)
+          : null}
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="h-40 shrink-0 border-b border-border overflow-auto">
+        <div className="h-40 shrink-0 overflow-auto border-b border-border">
           <FileTree
-            key={`${context.computerId}:${revision}`}
+            key={`${computerId}:${revision}`}
             label={t`Files`}
             list={list}
             onOpen={open}
-            onError={onError}
-            selected={active}
+            onError={() => setError(t`Could not load files. Try again.`)}
+            selected={current?.path}
           />
         </div>
         <div
@@ -149,27 +266,29 @@ export function WorkspaceFiles({ bot, context }: { bot: Bot; context: WorkspaceC
           aria-label={t`Open files`}
           className="flex shrink-0 overflow-x-auto border-b border-border"
         >
-          {tabs.map((file) => (
-            <div key={file.path} className="flex shrink-0 items-center border-r border-border">
+          {showing.tabs.map((file) => (
+            <div key={file.id} className="flex shrink-0 items-center border-r border-border">
               <button
                 type="button"
                 role="tab"
-                aria-selected={active === file.path}
+                aria-selected={showing.active === file.id}
                 title={file.path}
                 className="px-2 py-1 text-xs"
-                onClick={() => setActive(file.path)}
+                onClick={() => commit({ ...sessionRef.current, active: file.id })}
               >
                 {basename(file.path)}
+                {file.content !== file.savedContent ? (
+                  <span role="img" aria-label={t`Unsaved changes`}>
+                    {" "}
+                    ●
+                  </span>
+                ) : null}
               </button>
               <Button
                 variant="ghost"
                 size="icon-xs"
                 aria-label={t`Close ${basename(file.path)}`}
-                onClick={() => {
-                  const remaining = tabs.filter((item) => item.path !== file.path);
-                  setTabs(remaining);
-                  if (active === file.path) setActive(remaining.at(-1)?.path ?? "");
-                }}
+                onClick={() => close(file)}
               >
                 <X size={12} />
               </Button>
@@ -180,31 +299,55 @@ export function WorkspaceFiles({ bot, context }: { bot: Bot; context: WorkspaceC
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="flex shrink-0 items-center justify-between border-b border-border px-2 py-1 text-xs text-muted-foreground">
               <span>{current.source === "live" ? t`Live` : t`Saved files`}</span>
-              <Button
-                variant="ghost"
-                size="xs"
-                onClick={() => {
-                  const selection = editor.current?.selection();
-                  if (selection) setAsk({ selection, path: current.path });
-                }}
-              >{t`Ask a bot`}</Button>
+              <div className="flex gap-1">
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  disabled={current.readOnly || saving || current.content === current.savedContent}
+                  onClick={() => void save()}
+                >{t`Save`}</Button>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => {
+                    const selection = editor.current?.selection();
+                    if (selection) setAsk({ selection, path: current.path });
+                  }}
+                >{t`Ask a bot`}</Button>
+              </div>
             </div>
+            {current.readOnly ? (
+              <p
+                role="status"
+                className="border-b border-border px-3 py-1 text-xs text-muted-foreground"
+              >
+                {t`Read only: file is larger than 2 MB`}
+              </p>
+            ) : null}
             <div className="min-h-0 flex-1 overflow-hidden">
               <Suspense fallback={null}>
                 <Editor
                   ref={editor}
                   document={{
-                    id: current.path,
+                    id: current.id,
                     path: current.path,
                     content: current.content,
-                    readOnly: true,
+                    readOnly: current.readOnly === true,
                   }}
-                  openIds={tabs.map((file) => file.path)}
-                  onChange={() => {}}
-                  onSave={() => setNotice(t`Read only in this pane. Open IDE to edit.`)}
+                  openIds={showing.tabs.map((tab) => tab.id)}
+                  onChange={(id, content) => {
+                    commit({
+                      ...sessionRef.current,
+                      tabs: sessionRef.current.tabs.map((tab) =>
+                        tab.id === id ? { ...tab, content } : tab,
+                      ),
+                    });
+                    setStatus(null);
+                  }}
+                  onSave={() => void save()}
                   onAsk={() => {
                     const selection = editor.current?.selection();
-                    if (selection) setAsk({ selection, path: current.path });
+                    if (selection && current) setAsk({ selection, path: current.path });
                   }}
                 />
               </Suspense>
@@ -215,7 +358,12 @@ export function WorkspaceFiles({ bot, context }: { bot: Bot; context: WorkspaceC
         )}
       </div>
       {quick ? (
-        <QuickOpen list={list} onOpen={open} onClose={() => setQuick(false)} onError={onError} />
+        <QuickOpen
+          list={list}
+          onOpen={open}
+          onClose={() => setQuick(false)}
+          onError={() => setError(t`Could not load files. Try again.`)}
+        />
       ) : null}
       {ask ? (
         <AskBot

@@ -16,7 +16,7 @@
       "id": "team",
       "eyebrow": "TEAM",
       "title": "Named bots, together",
-      "body": "Give each bot its own conversation and history, bring bots together in group chats, and see current tasks and availability in Team. Inspect tasks and read-only workspace files beside a conversation on web and desktop, or in native screens on mobile.",
+      "body": "Give each bot its own conversation and history, bring bots together in group chats, and see current tasks and availability in Team. On web and desktop, inspect tasks and edit workspace files beside a conversation. Mobile reads those files in its own screens.",
       "source": "README.md#What you get today"
     },
     {

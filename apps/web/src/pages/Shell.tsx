@@ -252,6 +252,7 @@ import { useTakeControl } from "./shell/use-take-control";
 import { handleWorkspaceOpenRun } from "./shell/workspace-run";
 import { SystemDictation } from "./system/SystemDictation";
 import { WindowChrome } from "./WindowChrome";
+import { WorkspaceFileGuard } from "./workspace/WorkspaceFileGuard";
 
 const BotSettings = lazy(() =>
   import("./shell/bot-panel").then((module) => ({ default: module.BotSettings })),
@@ -2768,6 +2769,7 @@ export function ShellPage({
         mobileSidebarSwipeRef.current = null;
       }}
     >
+      <WorkspaceFileGuard />
       <ComputerUpdateProgress
         onCompleted={() => {
           if (active) void refreshThread(active.id);
