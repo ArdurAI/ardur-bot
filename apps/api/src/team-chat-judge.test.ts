@@ -1,4 +1,4 @@
-import type { AgentRuntime, AgentUsage } from "@ardurbot/adapter-kit";
+import type { AgentRunRequest, AgentRuntime, AgentUsage } from "@ardurbot/adapter-kit";
 import { RequestUsageCollector, usageEvent } from "@ardurbot/adapter-kit";
 import type { EncryptedSecretStore } from "@ardurbot/adapters";
 import type { PrismaClient } from "@ardurbot/db";
@@ -13,9 +13,11 @@ async function judgeUsage(usage: AgentUsage[], failed = false) {
   const create = vi.fn(async (_args: { data: { inputTokens: number; outputTokens: number } }) => ({
     id: "usage",
   }));
+  const requests: AgentRunRequest[] = [];
   const judge = new ModelTeamChatEngagementJudge({
     runtime: {
-      async *run() {
+      async *run(request: AgentRunRequest) {
+        requests.push(request);
         for (const event of usage) yield usageEvent(event);
         if (failed) throw new Error("Synthetic transport failure");
         yield { type: "done", text: '{"act":true}' };
@@ -40,7 +42,7 @@ async function judgeUsage(usage: AgentUsage[], failed = false) {
     rules: "",
     messages: [],
   });
-  return { create, decision };
+  return { create, decision, requests };
 }
 
 const usageRequest = (attemptId = "first") =>
@@ -83,6 +85,13 @@ describe("team chat engagement judge", () => {
       { data: expect.objectContaining({ inputTokens: 40, outputTokens: 10 }) },
       { data: expect.objectContaining({ inputTokens: 60, outputTokens: 20 }) },
       { data: expect.objectContaining({ inputTokens: 20, outputTokens: 8 }) },
+    ]);
+  });
+
+  it("asks for one JSON answer without tools or a prompt-cache write", async () => {
+    const { requests } = await judgeUsage([]);
+    expect(requests).toEqual([
+      expect.objectContaining({ tools: "none", singleRequest: true, history: [] }),
     ]);
   });
 

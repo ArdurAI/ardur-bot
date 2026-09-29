@@ -96,6 +96,17 @@ describe("pi prompt cache options", () => {
     provider.options.length = 0;
   });
 
+  it("sends one-shot requests without a prompt-cache write on every provider", async () => {
+    for (const model of [
+      { provider: "anthropic", id: "fixture-model", apiKey: "fixture-key" },
+      { provider: "openai", id: "fixture-model", apiKey: "fixture-key" },
+    ]) {
+      const options = await providerOptions({ ...turn, model, singleRequest: true });
+      expect(options.cacheRetention).toBe("none");
+      expect(options.onPayload).toBeUndefined();
+    }
+  });
+
   it("keeps the default cache for conversation turns and marks what repeats", async () => {
     const openai = await providerOptions({
       ...turn,

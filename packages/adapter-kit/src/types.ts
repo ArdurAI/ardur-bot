@@ -528,6 +528,8 @@ export interface AgentRunRequest {
   history: Array<{ id?: string; role: "user" | "assistant" | "system"; content: string }>;
   /** Leading history entries expected to repeat unchanged next turn; a prompt cache may end there. */
   stableHistory?: number;
+  /** Sent once and never repeated, so runtimes should not pay to write it to a prompt cache. */
+  singleRequest?: boolean;
   currentTurnImages?: AgentInputImage[];
   /** Explicit model-only mode; an empty array retains legacy built-in tools. */
   tools: ConnectorTool[] | "none";

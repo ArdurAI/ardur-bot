@@ -836,13 +836,17 @@ function stableToolNameHash(name: string): string {
   return (hash >>> 0).toString(36);
 }
 
-/** Anthropic turns mark the system prompt and the end of the history that repeats next turn. */
+/**
+ * One-shot requests skip the cache-write premium; nothing ever reads them back. Conversational
+ * Anthropic turns mark the system prompt and the end of the history that repeats next turn.
+ */
 export function promptCacheOptions(
   model: Pick<Model<Api>, "api">,
   options: SimpleStreamOptions | undefined,
-  request: Pick<AgentRunRequest, "stablePrefix">,
+  request: Pick<AgentRunRequest, "singleRequest" | "stablePrefix">,
   historyEnd?: { index: number; text: string },
 ): SimpleStreamOptions {
+  if (request.singleRequest) return { cacheRetention: "none" };
   if (model.api !== "anthropic-messages" || (!request.stablePrefix && !historyEnd)) return {};
   return {
     onPayload: async (payload, payloadModel) =>
