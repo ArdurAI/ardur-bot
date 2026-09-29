@@ -3,6 +3,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { AgentRuntime } from "@ardurbot/adapter-kit";
 import type { RuntimePin } from "@ardurbot/contracts";
+import {
+  HERMES_SOURCE_PIN,
+  HERMES_SOURCE_TREE,
+} from "@ardurbot/host-runtime/runtimes/hermes-install";
 import { describe, expect, it, vi } from "vitest";
 import { nativeRuntimeAvailability, RuntimeRegistry } from "./runtime-registry.js";
 
@@ -81,6 +85,10 @@ describe("local Hermes availability", () => {
         const managed = path.join(path.resolve(data), "hermes", "runtimes", "hermes-agent");
         await mkdir(path.join(managed, ".venv", "bin"), { recursive: true });
         await writeFile(path.join(managed, ".venv", "bin", "python"), "fixture");
+        await writeFile(
+          path.join(managed, ".ardur-install.json"),
+          JSON.stringify({ pin: HERMES_SOURCE_PIN, tree: HERMES_SOURCE_TREE }),
+        );
         const availability = await nativeRuntimeAvailability("hermes");
         expect(availability).toMatchObject({ runtimeKind: "hermes", available: true });
       } finally {

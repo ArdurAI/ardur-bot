@@ -1,6 +1,6 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { mkdir, realpath } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,6 +11,8 @@ import { type HermesLaunch, type HermesLaunchSpec, HermesRuntime } from "./herme
 import { stopNative } from "./native-process.js";
 
 export const HERMES_SOURCE_PIN = "29112bef099274229cadff79cdff7bf7b99c4b77";
+/** Git tree of HERMES_SOURCE_PIN. A managed archive has no commit, so the marker records this. */
+export const HERMES_SOURCE_TREE = "daaffc303ae437041b7f76be17c5f61b14f2ce99";
 
 export function localHermesRoot(): string {
   return path.join(path.resolve(process.env.DATA_DIR ?? "./data"), "hermes");
@@ -35,15 +37,31 @@ export function hermesInstallCandidate(
 }
 /** Only the trusted explicit or managed install can qualify. Never probe a personal home or PATH. */
 export function probeHermesInstall(root: string): { python: string; root: string } {
+  return qualifyHermesInstall(root);
+}
+
+/**
+ * Accept a git checkout whose HEAD is the pin, or a managed archive with no `.git`
+ * whose marker records that pin and tree. File hashes stay mandatory either way.
+ * `git` runs only when this directory itself has `.git`, so a parent repo cannot qualify it.
+ */
+export function qualifyHermesInstall(
+  root: string,
+  options?: { pin?: string; tree?: string; sources?: Record<string, string> },
+): { python: string; root: string } {
   if (process.platform === "win32" || !path.isAbsolute(root))
     throw new Error("Pinned Hermes is unavailable on this host.");
   const install = existsSync(root) ? realpathSync(root) : path.resolve(root);
   const python = path.join(install, ".venv", "bin", "python");
   if (existsSync(path.join(install, ".env")) || !existsSync(python))
     throw new Error("Pinned Hermes install failed its safety check.");
+  const pin = options?.pin ?? HERMES_SOURCE_PIN;
+  const tree = options?.tree ?? HERMES_SOURCE_TREE;
+  const sources = options?.sources ?? sourceHashes;
   try {
     if (!statSync(python).isFile()) throw new Error("Interpreter is unavailable.");
-    for (const [relative, expected] of Object.entries(sourceHashes)) {
+    assertHermesIdentity(install, pin, tree);
+    for (const [relative, expected] of Object.entries(sources)) {
       const actual = createHash("sha256")
         .update(readFileSync(path.join(install, relative)))
         .digest("hex");
@@ -53,6 +71,35 @@ export function probeHermesInstall(root: string): { python: string; root: string
     throw new Error("Pinned Hermes install failed its provenance check.");
   }
   return { python, root: install };
+}
+
+function hasGitMetadata(install: string): boolean {
+  try {
+    lstatSync(path.join(install, ".git"));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function assertHermesIdentity(install: string, pin: string, tree: string): void {
+  if (hasGitMetadata(install)) {
+    const result = spawnSync("git", ["-C", install, "rev-parse", "HEAD"], {
+      encoding: "utf8",
+      timeout: 5_000,
+      windowsHide: true,
+    });
+    const revision =
+      result.status === 0 && typeof result.stdout === "string" ? result.stdout.trim() : "";
+    if (revision !== pin) throw new Error("Install revision changed.");
+    return;
+  }
+  const marker = JSON.parse(readFileSync(path.join(install, ".ardur-install.json"), "utf8")) as {
+    pin?: unknown;
+    tree?: unknown;
+  };
+  if (!marker || typeof marker !== "object" || marker.pin !== pin || marker.tree !== tree)
+    throw new Error("Install marker mismatch.");
 }
 
 export function hermesLauncherAsset(bundleFile: string): string {

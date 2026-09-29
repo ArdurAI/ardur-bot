@@ -3,7 +3,11 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AdapterContext, AgentRunRequest } from "@ardurbot/adapter-kit";
-import { buildHermesRuntime } from "@ardurbot/host-runtime/runtimes/hermes-install";
+import {
+  buildHermesRuntime,
+  HERMES_SOURCE_PIN,
+  HERMES_SOURCE_TREE,
+} from "@ardurbot/host-runtime/runtimes/hermes-install";
 import type { HermesRuntime } from "@ardurbot/host-runtime/runtimes/hermes-runtime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import profileFixture from "../../../host-runtime/python/tests/valid_profile.json" with {
@@ -37,6 +41,10 @@ describe("LocalHermesRuntime", () => {
     vi.stubEnv("DATA_DIR", join(root, "data"));
     vi.stubEnv("ARDUR_HERMES_PROVIDER_KEY", "fixture-provider-key-123");
     await mkdir(join(installDir, ".venv", "bin"), { recursive: true });
+    await writeFile(
+      join(installDir, ".ardur-install.json"),
+      JSON.stringify({ pin: HERMES_SOURCE_PIN, tree: HERMES_SOURCE_TREE }),
+    );
     await writeFile(join(installDir, "pyproject.toml"), "hermes-agent");
     await writeFile(join(installDir, "uv.lock"), "hermes-agent");
     const fakeAcp = fileURLToPath(
