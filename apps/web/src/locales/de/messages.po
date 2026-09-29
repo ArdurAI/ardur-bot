@@ -8238,8 +8238,8 @@ msgid "System"
 msgstr "System"
 
 #: src/pages/ide/terminal.tsx
-#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/take-control-button.tsx
 msgid "Take control"
 msgstr "Steuerung übernehmen"
 

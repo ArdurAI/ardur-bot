@@ -156,6 +156,7 @@ describe("warm reopen", () => {
       warmWindowTimer: undefined,
       setTimeout: scheduled,
       desktopTray: null as unknown,
+      dockBadge: null,
       systemTray: (_current: unknown, _enabled: boolean, show: () => void) => {
         context.desktopTray = { show };
         return context.desktopTray;

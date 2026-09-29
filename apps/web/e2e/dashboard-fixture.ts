@@ -251,6 +251,14 @@ export function dashboardFixture(botCount = 1) {
         },
         "host/status": { configured: false, connected: false, roots: [], health: null },
         "routines/overview": { next: [], recent: [] },
+        "workspace/tasks": { runs: [], delegations: [], routines: [], observedAt: now },
+        "workspace/describe": {
+          botId: (input as { botId?: string } | undefined)?.botId ?? bot.id,
+          computerId: null,
+          generation: null,
+          files: "unavailable",
+          observedAt: now,
+        },
         "usage/summary": {
           inputTokens: 120,
           outputTokens: 1,

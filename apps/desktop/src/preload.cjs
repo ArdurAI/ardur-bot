@@ -42,6 +42,9 @@ contextBridge.exposeInMainWorld("ardurbotDesktop", {
     supported: () => ipcRenderer.invoke("desktop.notifications.supported"),
     show: (message) => ipcRenderer.invoke("desktop.notifications.show", message),
   },
+  dock: {
+    setWaitingCount: (count) => ipcRenderer.invoke("desktop.dock.waiting", count),
+  },
   system: {
     ...(process.argv?.includes("--ardurbot-guided-setup")
       ? { runSetupAgain: () => ipcRenderer.invoke("desktop.guidedSetup.openAgain") }
