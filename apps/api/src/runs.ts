@@ -72,7 +72,9 @@ export function activityRunFailure(row: {
   if (row.providerErrorKind === "model-unavailable")
     return { failureCategory: "model-unavailable", failureRuntime: pinRuntime };
   // Older records hold the English sentence; map it back so the row translates it too.
-  const legacy = row.error ? failureCategoryFromText(row.error) : undefined;
+  const legacy = row.error
+    ? failureCategoryFromText(row.error, { runtimes: Object.values(runtimeNames) })
+    : undefined;
   if (legacy)
     return { failureCategory: legacy.id, failureRuntime: legacy.params.runtime ?? pinRuntime };
   return {};

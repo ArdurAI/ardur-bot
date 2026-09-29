@@ -98,6 +98,34 @@ describe("failure categories table", () => {
     expect(failureCategoryFromText(text)).toBeUndefined();
   });
 
+  it.each([
+    "Retrying after: Claude Code's usage limit is reached. Try again after it resets.",
+    "Provider request failed: Claude Code's usage limit is reached. Try again after it resets.",
+    "It broke. Codex reached this run's turn limit. Narrow the task and try again.",
+    "First line\nCodex stopped before finishing this run.",
+  ])("keeps the words of a reason that only ends with a category sentence: %j", (text) => {
+    expect(failureCategoryFromText(text)).toBeUndefined();
+  });
+
+  it("maps a sentence only for a runtime the caller knows, when it names them", () => {
+    const text = "Codex's usage limit is reached. Try again after it resets.";
+    expect(failureCategoryFromText(text, { runtimes: ["Codex", "Hermes"] })).toEqual({
+      id: "usage-limit",
+      params: { runtime: "Codex" },
+    });
+    expect(failureCategoryFromText(text, { runtimes: ["Hermes"] })).toBeUndefined();
+    expect(
+      failureCategoryFromText(`Again ${text}`, { runtimes: ["Codex", "Hermes"] }),
+    ).toBeUndefined();
+    // A group sentence names a bot, which no list of runtimes can vouch for.
+    expect(
+      failureCategoryFromText(
+        "Bot v1.2 (test) hit the group model's usage limit. Try again after it resets, or change the group model.",
+        { runtimes: ["Codex"] },
+      ),
+    ).toEqual({ id: "usage-limit", params: { bot: "Bot v1.2 (test)" } });
+  });
+
   it("recognises a handoff line only for the member it was written for", () => {
     expect(failureCategoryFromMemberLine("Reviewer failed.", "Reviewer")).toBe("other");
     expect(failureCategoryFromMemberLine(" Reviewer stopped. ", "Reviewer")).toBe("stopped");

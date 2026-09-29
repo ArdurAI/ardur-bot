@@ -1,5 +1,5 @@
-import type { FailureCategoryId, FailureCategoryParams } from "@ardurbot/contracts";
-import { failureCategory } from "@ardurbot/contracts";
+import type { FailureCategoryId, FailureCategoryParams, RuntimeProblem } from "@ardurbot/contracts";
+import { FailureCategoryIdSchema, failureCategory, runtimeNames } from "@ardurbot/contracts";
 import { t } from "./i18n";
 
 /**
@@ -16,4 +16,15 @@ export function failureCategoryText(
     ...params,
     runtime: params.runtime ?? t("This runtime"),
   });
+}
+
+/**
+ * What a failed run's notice says: the category's sentence in the active locale when the
+ * failure was classified, else the reason as it was recorded.
+ */
+export function runtimeProblemText(problem: RuntimeProblem): string {
+  const category = FailureCategoryIdSchema.safeParse(problem.reasonId);
+  return category.success
+    ? failureCategoryText(category.data, { runtime: runtimeNames[problem.pin.runtimeKind] })
+    : problem.reason;
 }

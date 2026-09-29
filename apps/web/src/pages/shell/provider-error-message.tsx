@@ -105,7 +105,9 @@ export function ProviderErrorMessage({
       const byId = FailureCategoryIdSchema.safeParse(runtimeProblem.reasonId);
       if (byId.success)
         return i18n._({ ...failureCategoryMessages[byId.data], values: { runtime } });
-      const legacy = failureCategoryFromText(runtimeProblem.reason);
+      const legacy = failureCategoryFromText(runtimeProblem.reason, {
+        runtimes: Object.values(runtimeNames),
+      });
       if (legacy)
         return i18n._({
           ...failureCategoryMessages[legacy.id],

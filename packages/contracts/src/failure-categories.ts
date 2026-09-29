@@ -152,6 +152,15 @@ export function failureCategoryMemberMessage(
   return fillFailureCategoryMessage(entry.memberMessage ?? entry.message, params);
 }
 
+/**
+ * A captured name is a name: short, on one line, and with no sentence or clause ending
+ * inside it. Text in front of a category sentence ("Retrying after: Claude Code's usage
+ * limit…") is a different reason, which keeps its own words.
+ */
+function plausibleName(value: string): boolean {
+  return value.length <= 80 && !/[\n\r]|[:;.!?]\s/.test(value);
+}
+
 function templateToPattern(template: string): RegExp {
   const escaped = template.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const source = escaped.replace(
@@ -176,6 +185,7 @@ function templateToPattern(template: string): RegExp {
  */
 export function failureCategoryFromText(
   text: string,
+  known: { runtimes?: readonly string[] } = {},
 ): ({ id: FailureCategoryId } & { params: FailureCategoryParams }) | undefined {
   const trimmed = text.trim();
   if (!trimmed) return undefined;
@@ -189,6 +199,10 @@ export function failureCategoryFromText(
       const match = templateToPattern(template).exec(trimmed);
       if (!match) continue;
       const groups = match.groups ?? {};
+      if (!Object.values(groups).every((value) => value === undefined || plausibleName(value)))
+        continue;
+      // Where the caller knows the runtimes' names, the sentence must name one of them.
+      if (groups.runtime && known.runtimes && !known.runtimes.includes(groups.runtime)) continue;
       return {
         id: entry.id,
         params: {

@@ -1,9 +1,9 @@
-import { FAILURE_CATEGORIES } from "@ardurbot/contracts";
+import { FAILURE_CATEGORIES, runtimePinProblem } from "@ardurbot/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import { activateUiLocale } from "../lib/i18n";
 import { RU_MESSAGES } from "../lib/locales/ru";
 import { ZH_MESSAGES } from "../lib/locales/zh";
-import { failureCategoryText } from "./failure-categories";
+import { failureCategoryText, runtimeProblemText } from "./failure-categories";
 
 afterEach(() => {
   activateUiLocale("en");
@@ -22,6 +22,39 @@ describe("failure-category mobile completeness", () => {
         expect(ZH_MESSAGES[groupKey], `zh group: ${entry.id}`).toBeTruthy();
       }
     }
+  });
+
+  it("writes a failed run's notice in the reader's language, or as it was recorded", () => {
+    const pin = {
+      runtimeKind: "codex-app-server" as const,
+      provider: "openai-codex",
+      modelId: "gpt-6-sol",
+      effort: "medium",
+      credentialId: "native:codex-app-server",
+      revision: 1,
+    };
+    const classified = runtimePinProblem(
+      pin,
+      "runtime-unavailable",
+      "Codex's usage limit is reached. Try again after it resets.",
+      "usage-limit",
+    );
+    const recorded = runtimePinProblem(
+      pin,
+      "runtime-unavailable",
+      "Codex can't start: Ardur can't safely read AGENTS.md for this bot. Replace it with a plain file.",
+    );
+    activateUiLocale("ru");
+    const notice = runtimeProblemText(classified);
+    expect(notice).toBe(
+      RU_MESSAGES["{runtime}'s usage limit is reached. Try again after it resets."]?.replace(
+        "{runtime}",
+        "Codex",
+      ),
+    );
+    expect(notice).not.toBe(classified.reason);
+    // No category: the reason keeps its own words.
+    expect(runtimeProblemText(recorded)).toBe(recorded.reason);
   });
 
   it("names an unknown runtime in the reader's language", () => {
