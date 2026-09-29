@@ -25,4 +25,20 @@ describe("previewFromBlocks", () => {
     expect(previewFromBlocks([{ kind: "steps", steps: [] }])).toBe("");
     expect(previewFromBlocks(undefined)).toBe("");
   });
+
+  it("skips a reasoning summary and previews the reply", () => {
+    expect(
+      previewFromBlocks([
+        { kind: "progress", text: "**Planning the fix**", reasoning: true },
+        { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+        { kind: "text", text: "The config is **stale**." },
+      ]),
+    ).toBe("The config is stale.");
+  });
+
+  it("returns empty when the only text is a reasoning summary", () => {
+    expect(
+      previewFromBlocks([{ kind: "progress", text: "Weighing options.", reasoning: true }]),
+    ).toBe("");
+  });
 });

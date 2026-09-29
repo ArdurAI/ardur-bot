@@ -341,6 +341,7 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
   const resolveCommandCwd = vi.fn(async () => "/workspace");
   const sandboxDescription = { capabilities: { graphical: false } };
   const events = { append: vi.fn(async () => undefined), pauseRunForInput, finalizeRun };
+  const secrets: string[] = [];
   const memoryRead = vi.fn(async () => ({ documents: [] }));
   const memorySearch = vi.fn(async () => []);
   const executor = createRunExecutor({
@@ -370,11 +371,12 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
     memoryDocuments,
     events,
     jobs: { enqueue: vi.fn(async () => undefined) },
-    secrets: [],
+    secrets,
   } as unknown as Parameters<typeof createRunExecutor>[0]);
 
   return {
     executor,
+    secrets,
     prisma,
     sandboxExecute,
     sandboxObserve,
@@ -1474,5 +1476,150 @@ it("returns a host command start failure to the runtime as a failed tool result"
     stderr: expect.stringContaining("Command did not run"),
     code: 127,
     error: expect.stringContaining("Command did not run"),
+  });
+});
+
+it("keeps a redacted reasoning summary in the finished record, ahead of the step it led to", async () => {
+  const f = fixture("reasoning-record");
+  f.secrets.push("token-123");
+  f.runtimeRun.mockImplementation(async function* () {
+    yield {
+      type: "progress" as const,
+      text: "Checking the calendar with token-123.",
+      reasoning: true as const,
+    };
+    yield {
+      type: "tool" as const,
+      name: "read_file",
+      args: { path: "calendar.md" },
+      executionId: "read-calendar",
+    };
+    yield { type: "text" as const, text: "No conflicts." };
+    yield { type: "done" as const, text: "No conflicts." };
+  });
+  await f.run();
+
+  const summary = {
+    kind: "progress",
+    text: "Checking the calendar with [redacted].",
+    reasoning: true,
+  };
+  // The live beat carries the same redacted text the record keeps.
+  expect(f.events.append).toHaveBeenCalledWith(
+    expect.objectContaining({
+      type: "thread.progress",
+      payload: { text: summary.text, reasoning: true },
+    }),
+  );
+  expect(f.finalizeRun).toHaveBeenCalledWith(
+    expect.objectContaining({
+      outcome: "completed",
+      blocks: [
+        summary,
+        { kind: "steps", steps: [{ label: "Read file", count: 1 }] },
+        { kind: "text", text: "No conflicts." },
+      ],
+    }),
+  );
+});
+
+it("keeps the reply one block when a reasoning summary lands while it streams", async () => {
+  const f = fixture("reasoning-mid-reply");
+  f.runtimeRun.mockImplementation(async function* () {
+    yield { type: "text" as const, text: "Let me think." };
+    yield { type: "progress" as const, text: "Comparing both plans.", reasoning: true as const };
+    yield { type: "text" as const, text: " The first one wins." };
+    yield { type: "done" as const, text: "Let me think. The first one wins." };
+  });
+  await f.run();
+
+  // The record renders apart from the bubble, so the reply is not split around it.
+  expect(f.finalizeRun).toHaveBeenCalledWith(
+    expect.objectContaining({
+      outcome: "completed",
+      blocks: [
+        { kind: "progress", text: "Comparing both plans.", reasoning: true },
+        { kind: "text", text: "Let me think. The first one wins." },
+      ],
+    }),
+  );
+});
+
+it("keeps one reasoning block when the runtime refines the summary", async () => {
+  const f = fixture("reasoning-refine");
+  f.runtimeRun.mockImplementation(async function* () {
+    yield { type: "progress" as const, text: "Weighing options.", reasoning: true as const };
+    yield {
+      type: "progress" as const,
+      text: "Weighing options, still.",
+      reasoning: true as const,
+    };
+    yield { type: "text" as const, text: "The second plan." };
+    yield { type: "done" as const, text: "The second plan." };
+  });
+  await f.run();
+
+  expect(f.finalizeRun).toHaveBeenCalledWith(
+    expect.objectContaining({
+      outcome: "completed",
+      blocks: [
+        { kind: "progress", text: "Weighing options, still.", reasoning: true },
+        { kind: "text", text: "The second plan." },
+      ],
+    }),
+  );
+});
+
+it("flushes held reply text and tool names before a reasoning summary", async () => {
+  const f = fixture("reasoning-after-held-tool");
+  f.runtimeRun.mockImplementation(async function* () {
+    yield { type: "text" as const, text: "I'll update you" };
+    yield {
+      type: "tool" as const,
+      name: "message_user",
+      args: { message: "On it." },
+      executionId: "progress-note",
+    };
+    yield { type: "progress" as const, text: "Planning the note.", reasoning: true as const };
+    yield { type: "text" as const, text: " All set." };
+    yield { type: "done" as const, text: "I'll update you All set." };
+  });
+  await f.run();
+
+  expect(f.finalizeRun).toHaveBeenCalledWith(
+    expect.objectContaining({
+      outcome: "completed",
+      blocks: [
+        { kind: "text", text: "I'll update you" },
+        { kind: "steps", steps: [{ label: "Message user", count: 1 }] },
+        { kind: "progress", text: "Planning the note.", reasoning: true },
+        { kind: "text", text: " All set." },
+      ],
+    }),
+  );
+});
+
+describe("reasoning survival across pauses", () => {
+  it("includes the retained work-record blocks in the durable pause message", async () => {
+    const f = fixture("run-ask");
+    f.runtimeRun.mockImplementation(async function* (): AsyncGenerator<AgentRuntimeEvent> {
+      yield { type: "progress", text: "Thinking about the user's request.", reasoning: true };
+      yield { type: "ask", text: "Need clarification" };
+    });
+
+    await f.executor.continueRun(f.runRecord.id, "worker-1");
+    expect(f.events.pauseRunForInput).toHaveBeenCalledOnce();
+    expect(f.events.pauseRunForInput).toHaveBeenCalledWith(
+      expect.objectContaining({
+        blocks: expect.arrayContaining([
+          expect.objectContaining({
+            kind: "progress",
+            text: "Thinking about the user's request.",
+            reasoning: true,
+          }),
+          expect.objectContaining({ kind: "ask", text: "Need clarification" }),
+        ]),
+      }),
+    );
   });
 });

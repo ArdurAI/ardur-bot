@@ -603,6 +603,8 @@ export type AgentRuntimeEvent =
       text: string;
       /** Provider-generated tool status rather than assistant-authored narration. */
       activity?: true;
+      /** Supplied reasoning summary; collapses into the work record. */
+      reasoning?: true;
     }
   | {
       type: "tool";

@@ -84,6 +84,15 @@ describe("speakable", () => {
       ]),
     ).toContain("Ship it?");
   });
+
+  it("reads the reply, not a reasoning summary kept in the work record", () => {
+    const spoken = speechFromBlocks([
+      { kind: "progress", text: "Weighing options.", reasoning: true },
+      { kind: "text", text: "The answer is four." },
+    ]);
+    expect(spoken).toContain("The answer is four.");
+    expect(spoken).not.toContain("Weighing");
+  });
 });
 
 describe("toUtterances", () => {

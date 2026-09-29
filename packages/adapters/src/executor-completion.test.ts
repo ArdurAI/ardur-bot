@@ -61,6 +61,24 @@ describe("completionMessageSegments", () => {
     ).toEqual(steps);
   });
 
+  it("treats a reasoning summary alone as an empty turn, keeping it beside the fallback", () => {
+    const summary = {
+      kind: "progress" as const,
+      text: "Weighing options.",
+      reasoning: true as const,
+    };
+    expect(completionMessageSegments([summary])).toEqual([
+      summary,
+      { kind: "text", text: "done." },
+    ]);
+    // Silent wakes and turns that already posted progress stay silent.
+    expect(completionMessageSegments([summary], { allowSilentEmpty: true })).toEqual([]);
+    expect(completionMessageSegments([summary], { skipEmptyFallback: true })).toEqual([]);
+    // Beside tool activity it is part of the work, with no generic completion claim.
+    const steps = { kind: "steps" as const, steps: [{ label: "Read file", count: 1 }] };
+    expect(completionMessageSegments([summary, steps])).toEqual([summary, steps]);
+  });
+
   it("normalizes a blank fallback", () => {
     expect(completionMessageSegments([], { emptyResponseText: "   " })).toEqual([
       { kind: "text", text: "done." },
@@ -222,6 +240,24 @@ describe("stripNoResponseReply", () => {
     );
     expect(blocks).toEqual([]);
     expect(completionMarksUnread("routine", completionNotificationBody("", blocks))).toBe(false);
+  });
+
+  it("leaves no chat bubble for a silent routine that kept only a reasoning summary", () => {
+    const summary = { kind: "progress" as const, text: "Nothing new.", reasoning: true as const };
+    const steps = { kind: "steps" as const, steps: [{ label: "List items", count: 1 }] };
+    for (const kept of [[summary], [summary, steps]]) {
+      const stripped = stripNoResponseReply(NO_RESPONSE, [
+        ...kept,
+        { kind: "text", text: NO_RESPONSE },
+      ]);
+      expect(stripped).toEqual({ assembled: "", blocks: kept });
+      const segments = completionMessageSegments(stripped.blocks, {
+        allowSilentEmpty: runAllowsSilentEmpty("routine"),
+      });
+      const blocks = finalBlocksAfterMidTurnProgress(segments, runAllowsSilentEmpty("routine"));
+      expect(blocks).toEqual([]);
+      expect(completionMarksUnread("routine", completionNotificationBody("", blocks))).toBe(false);
+    }
   });
 });
 
