@@ -1,6 +1,6 @@
 import type * as Database from "@ardurbot/db";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
-import { admitDelegation, updateWorkerTask } from "@ardurbot/db";
+import { admitDelegation, requestCancel, updateWorkerTask } from "@ardurbot/db";
 import { expect, it, vi } from "vitest";
 import { prepareDelegation } from "./delegation.js";
 import { checkDelegationExecution } from "./delegation-execution.js";
@@ -14,6 +14,7 @@ vi.mock("@ardurbot/db", async (importOriginal) => ({
     snapshot: input.snapshot,
     differences: [],
   })),
+  requestCancel: vi.fn(async () => ({ cancelRequested: true })),
   updateWorkerTask: vi.fn(async () => ({ ok: true })),
 }));
 vi.mock("./pi-models.js", async (importOriginal) => ({
@@ -438,6 +439,8 @@ function stoppingPrisma(row: {
   reservedTokens: number;
 }) {
   const updateMany = vi.fn(async () => ({ count: 1 }));
+  const delegationUpdateMany = vi.fn(async () => ({ count: 1 }));
+  const delegation = { id: "handoff", ...row };
   const prisma = {
     run: {
       findUniqueOrThrow: vi.fn(async () => ({
@@ -450,13 +453,16 @@ function stoppingPrisma(row: {
       updateMany,
     },
     delegationRoot: { findUnique: vi.fn(async () => null) },
-    delegation: { findUniqueOrThrow: vi.fn(async () => row) },
+    delegation: {
+      findUniqueOrThrow: vi.fn(async () => delegation),
+      updateMany: delegationUpdateMany,
+    },
   } as unknown as PrismaClient;
-  return { prisma, updateMany };
+  return { prisma, updateMany, delegationUpdateMany };
 }
 it("names the token budget when a worker is stopped for overspending it", async () => {
   // The evidence row: a 10000 reservation against a first request that used 16734.
-  const { prisma, updateMany } = stoppingPrisma({
+  const { prisma, updateMany, delegationUpdateMany } = stoppingPrisma({
     status: "running",
     deadlineAt: new Date(Date.now() + 60_000),
     usedTokens: 16_734,
@@ -470,22 +476,76 @@ it("names the token budget when a worker is stopped for overspending it", async 
       data: expect.objectContaining({ cancelRequestedAt: expect.any(Date) }),
     }),
   );
+  // The gate records why it stopped the worker while the cause is still known.
+  expect(delegationUpdateMany).toHaveBeenCalledWith({
+    where: { id: "handoff", cancelReason: null },
+    data: { cancelReason: "budget" },
+  });
 });
 it("names the deadline when a worker is stopped past its deadline", async () => {
-  const { prisma } = stoppingPrisma({
+  const { prisma, delegationUpdateMany } = stoppingPrisma({
     status: "running",
     deadlineAt: new Date(Date.now() - 1_000),
     usedTokens: 0,
     reservedTokens: 36_864,
   });
   expect(await checkDelegationExecution(prisma, "run", "shell")).toContain("deadline");
+  expect(delegationUpdateMany).toHaveBeenCalledWith({
+    where: { id: "handoff", cancelReason: null },
+    data: { cancelReason: "deadline" },
+  });
+});
+it("records deadline or budget when the task itself is stopping", async () => {
+  const run = {
+    id: "run",
+    taskId: "task",
+    delegationRootTaskId: "root",
+    delegationId: "handoff",
+    spaceId: "space",
+    userId: "owner",
+  };
+  const root = {
+    cancelRequestedAt: null as Date | null,
+    deadlineAt: new Date(Date.now() - 1_000),
+    usedTokens: 0,
+    tokenLimit: 120_000,
+  };
+  const prisma = {
+    run: { findUniqueOrThrow: vi.fn(async () => run) },
+    delegationRoot: { findUnique: vi.fn(async () => root) },
+  } as unknown as PrismaClient;
+  expect(await checkDelegationExecution(prisma, "run")).toContain("stopping");
+  expect(requestCancel).toHaveBeenCalledWith(
+    prisma,
+    { spaceId: "space", userId: "owner" },
+    "root",
+    expect.any(Date),
+    "deadline",
+  );
+  vi.mocked(requestCancel).mockClear();
+  root.deadlineAt = new Date(Date.now() + 60_000);
+  root.usedTokens = 120_000;
+  expect(await checkDelegationExecution(prisma, "run")).toContain("stopping");
+  expect(requestCancel).toHaveBeenCalledWith(
+    prisma,
+    { spaceId: "space", userId: "owner" },
+    "root",
+    expect.any(Date),
+    "budget",
+  );
+  vi.mocked(requestCancel).mockClear();
+  root.cancelRequestedAt = new Date();
+  expect(await checkDelegationExecution(prisma, "run")).toContain("stopping");
+  expect(requestCancel).not.toHaveBeenCalled();
 });
 it("names the stop when a worker is already stopping", async () => {
-  const { prisma } = stoppingPrisma({
+  const { prisma, delegationUpdateMany } = stoppingPrisma({
     status: "cancel-requested",
     deadlineAt: new Date(Date.now() + 60_000),
     usedTokens: 0,
     reservedTokens: 36_864,
   });
   expect(await checkDelegationExecution(prisma, "run", "shell")).toContain("stopping");
+  // An already-stopping worker keeps the cause recorded when the stop was requested.
+  expect(delegationUpdateMany).not.toHaveBeenCalled();
 });

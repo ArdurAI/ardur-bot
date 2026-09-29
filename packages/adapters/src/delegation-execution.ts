@@ -66,8 +66,23 @@ export async function checkDelegationExecution(
     root &&
     (root.cancelRequestedAt || root.deadlineAt <= new Date() || root.usedTokens >= root.tokenLimit)
   ) {
-    if (!root.cancelRequestedAt)
-      await requestCancel(prisma, { spaceId: run.spaceId, userId: run.userId }, rootTaskId);
+    if (!root.cancelRequestedAt) {
+      // The task itself is stopping. Record deadline or budget now; a later flush of
+      // usage must not replace that cause with a different inference.
+      const reason: DelegationStopReason =
+        root.deadlineAt <= new Date()
+          ? "deadline"
+          : root.usedTokens >= root.tokenLimit
+            ? "budget"
+            : "stopped";
+      await requestCancel(
+        prisma,
+        { spaceId: run.spaceId, userId: run.userId },
+        rootTaskId,
+        new Date(),
+        reason,
+      );
+    }
     if (run.goalId) await reconcileGoalExhaustion(prisma, run.goalId);
     return "This task is stopping; start a new task to continue.";
   }
@@ -109,6 +124,13 @@ export async function checkDelegationExecution(
       ? delegationStopReason(row)
       : null;
   if (stopReason) {
+    if (stopReason !== "stopped")
+      // The gate initiated this stop: record the cause now. Confirmation must not
+      // re-infer it from whatever usage or deadline the row shows after unwinding.
+      await prisma.delegation.updateMany({
+        where: { id: row.id, cancelReason: null },
+        data: { cancelReason: stopReason },
+      });
     if (!helperDelegationId)
       await prisma.run.updateMany({
         where: { id: run.id, cancelRequestedAt: null },

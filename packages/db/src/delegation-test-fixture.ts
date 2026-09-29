@@ -203,16 +203,21 @@ export function fixture() {
       ),
       updateMany: vi.fn(async ({ where, data }) => {
         let count = 0;
-        for (const row of state.rows)
-          if (
-            (!where.id || row.id === where.id) &&
-            (typeof where.status === "string"
-              ? row.status === where.status
-              : where.status.in.includes(row.status))
-          ) {
-            apply(row, data);
-            count++;
+        for (const row of state.rows) {
+          if (where.id && row.id !== where.id) continue;
+          if ("cancelReason" in where) {
+            if (where.cancelReason === null) {
+              if (row.cancelReason != null) continue;
+            } else if (row.cancelReason !== where.cancelReason) continue;
           }
+          const statusOk =
+            typeof where.status === "string"
+              ? row.status === where.status
+              : where.status.in.includes(row.status);
+          if (!statusOk) continue;
+          apply(row, data);
+          count++;
+        }
         return { count };
       }),
     },

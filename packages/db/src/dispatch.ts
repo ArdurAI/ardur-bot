@@ -10,7 +10,11 @@ import type { RemoteAuthority } from "@ardurbot/core";
 import { checkRemoteTool, effectiveRemoteAuthority } from "@ardurbot/core";
 import { settleBotMessageWakesInTransaction } from "./bot-comms.js";
 import type { DeviceGrant, Prisma, PrismaClient } from "./client.js";
-import { delegationStopReason, finishDelegation } from "./delegation.js";
+import {
+  ACTIVE_DELEGATIONS,
+  delegationEffectiveStopReason,
+  finishDelegation,
+} from "./delegation.js";
 import {
   assertDeviceTrusted,
   auditDevice,
@@ -441,6 +445,18 @@ export async function requestDispatchStop(
       },
       data: { status: "cancel-requested", cancelRequestedAt: now },
     });
+    // A device stop is an explicit owner action; record it so later usage flushed at
+    // shutdown cannot make the stop look like a budget or deadline stop.
+    await tx.delegation.updateMany({
+      where: {
+        rootTaskId: taskId,
+        spaceId: grant.spaceId,
+        userId: grant.userId,
+        status: { in: ACTIVE_DELEGATIONS },
+        cancelReason: null,
+      },
+      data: { cancelReason: "stopped" },
+    });
     await tx.run.updateMany({
       where: {
         OR: [{ taskId }, { remoteRootTaskId: taskId }, { delegationRootTaskId: taskId }],
@@ -490,7 +506,10 @@ export async function confirmDispatchStop(
         run.delegationId,
         "cancelled",
         delegation
-          ? delegationStopLine(delegationStopReason(delegation, now), delegation.actingName)
+          ? delegationStopLine(
+              delegationEffectiveStopReason(delegation, now),
+              delegation.actingName,
+            )
           : delegationStopLine("stopped", "Worker"),
       );
     }
@@ -523,7 +542,7 @@ export async function confirmDispatchStop(
         tx,
         helper.id,
         "cancelled",
-        delegationStopLine(delegationStopReason(helper, now), helper.actingName),
+        delegationStopLine(delegationEffectiveStopReason(helper, now), helper.actingName),
       );
     await persistDispatchSummary(tx, run, "stopped", null);
     return true;

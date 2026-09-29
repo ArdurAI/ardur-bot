@@ -11,6 +11,7 @@ import {
   acceptDelegation,
   admitDelegation,
   DelegationAdmissionError,
+  delegationEffectiveStopReason,
   delegationStopReason,
   finishDelegation,
   requestCancel,
@@ -679,4 +680,54 @@ it("annotates a reworked attempt that completes over its new allowance", async (
   expect(f.state().rows[0].result).toContain("Overspent its token budget by 25 tokens.");
   expect(f.state().root.reservedTokens).toBe(0);
   expect(f.state().root.reservedTokens).toBeGreaterThanOrEqual(0);
+});
+it("records why cancellation was requested and keeps the first cause", async () => {
+  const f = fixture();
+  await f.admit();
+  const db = f.worker();
+  await requestCancel(db, { spaceId: "space", userId: "owner" }, "root");
+  expect(f.state().rows[0].cancelReason).toBe("stopped");
+  // A later pass must not overwrite the recorded owner stop.
+  await requestCancel(db, { spaceId: "space", userId: "owner" }, "root", new Date(), "budget");
+  expect(f.state().rows[0].cancelReason).toBe("stopped");
+});
+it.each([
+  [
+    "stopped",
+    {
+      cancelReason: "stopped",
+      deadlineAt: new Date(Date.now() + 60_000),
+      usedTokens: 99_999,
+      reservedTokens: 36_864,
+    },
+  ],
+  [
+    "budget",
+    {
+      cancelReason: "budget",
+      deadlineAt: new Date(Date.now() - 1_000),
+      usedTokens: 0,
+      reservedTokens: 36_864,
+    },
+  ],
+  [
+    "budget",
+    {
+      cancelReason: null,
+      deadlineAt: new Date(Date.now() + 60_000),
+      usedTokens: 36_864,
+      reservedTokens: 36_864,
+    },
+  ],
+  [
+    "deadline",
+    {
+      cancelReason: "unrecorded",
+      deadlineAt: new Date(Date.now() - 1_000),
+      usedTokens: 0,
+      reservedTokens: 36_864,
+    },
+  ],
+] as const)("reads the recorded stop reason first: %s", (reason, row) => {
+  expect(delegationEffectiveStopReason(row)).toBe(reason);
 });

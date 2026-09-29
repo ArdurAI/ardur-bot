@@ -458,9 +458,10 @@ export async function requestCancel(
   scope: Scope,
   rootTaskId: string,
   now = new Date(),
+  reason: DelegationStopReason = "stopped",
 ) {
   return withTransactionRetry(() =>
-    prisma.$transaction((tx) => requestCancelInTransaction(tx, scope, rootTaskId, now)),
+    prisma.$transaction((tx) => requestCancelInTransaction(tx, scope, rootTaskId, now, reason)),
   );
 }
 
@@ -470,6 +471,7 @@ export async function requestCancelInTransaction(
   scope: Scope,
   rootTaskId: string,
   now = new Date(),
+  reason: DelegationStopReason = "stopped",
 ) {
   await lockDelegationRoot(tx, rootTaskId);
   const root = await tx.delegationRoot.findFirstOrThrow({ where: { rootTaskId, ...scope } });
@@ -484,6 +486,12 @@ export async function requestCancelInTransaction(
   await tx.delegation.updateMany({
     where: { rootTaskId, status: { in: ACTIVE_DELEGATIONS } },
     data: { status: "cancel-requested", cancelRequestedAt: now },
+  });
+  // Record why the stop was requested while it is known; the first cause wins, and
+  // confirmation never re-infers it from usage or the deadline after the fact.
+  await tx.delegation.updateMany({
+    where: { rootTaskId, status: "cancel-requested", cancelReason: null },
+    data: { cancelReason: reason },
   });
   await tx.run.updateMany({
     where: {
@@ -529,6 +537,25 @@ export function delegationAttemptReservation(row: {
     row.attemptReservedTokens ??
     (row.hop > 1 ? DELEGATION_LIMITS.legacyReservationTokens : row.reservedTokens)
   );
+}
+/**
+ * Why the worker stopped: the reason recorded when cancellation was requested, or the
+ * deadline/budget inference for rows stopped before reasons were recorded.
+ */
+export function delegationEffectiveStopReason(
+  row: {
+    cancelReason?: string | null;
+    deadlineAt: Date;
+    usedTokens: number;
+    reservedTokens: number;
+  },
+  now = new Date(),
+): DelegationStopReason {
+  return row.cancelReason === "budget" ||
+    row.cancelReason === "deadline" ||
+    row.cancelReason === "stopped"
+    ? row.cancelReason
+    : delegationStopReason(row, now);
 }
 /** Called only after the executor finishes or confirms its abort. The unique summary is durable. */
 export async function finishDelegation(
