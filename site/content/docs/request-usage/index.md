@@ -134,9 +134,14 @@ unsettled started receipt; recovery of that uncertainty requires separate crash 
 the installed Pi SDK through its fetch hook. It preserves retry, transport and timeout options.
 Each HTTP retry gets its own attempt ID under the logical request; helpers retain their admitted
 delegation and the parent request ID. A bounded pass-through reads usage fields from HTTP JSON/SSE
-without retaining payloads. Oversized or unavailable transport detail remains explicit. Other
-transports retain a runtime-call receipt and only positive SDK-normalized lower bounds: the SDK's
-initialized zeros cannot establish measured zero. Request-level coverage on those routes is unknown.
+without retaining payloads. Oversized or unavailable transport detail remains explicit. A failed,
+cancelled, timed-out or otherwise unsettled finish before the provider's final usage keeps the
+last snapshot as a lower bound (`usage-not-final`), including input counts from that snapshot.
+Anthropic `message_start` is that snapshot: its `output_tokens` is a starting count, not the
+`message_delta` bill. A later final usage object, including one in an error body, can still
+complete the categories. Other transports retain a runtime-call receipt and only positive
+SDK-normalized lower bounds: the SDK's initialized zeros cannot establish measured zero.
+Request-level coverage on those routes is unknown.
 
 Anthropic's uncached input, cache reads and cache creation are additive. OpenAI input includes cache
 subsets; reported reasoning is a subset of output. Missing fields remain null, including omitted
@@ -237,17 +242,23 @@ collection metadata uses W0-2's immutable JSON receipt column.
 ## Run-less requests
 
 The team-chat engagement judge decides whether a bot should answer and owns no persisted run.
-It passes every usage event to `recordStandaloneUsage` in `packages/adapters/src/run-usage.ts`
-with purpose `helper`, the judged bot, the judge's resolved runtime pin, and a fresh
-`team-chat-judge:` ID per judgement in the thread column. A request observation is keyed by
-space, user, that thread ID, `requestId`, `attemptId` and `epochId`, and is stored with the same
-categories, coverage, semantics, cost rules and immutable receipts as a run's request; its receipt
-and normalized totals commit in one transaction. Replaying a sequence with the same payload is a
-no-op; a conflicting payload, an attribution change within the attempt, or an out-of-order
-cumulative observation fails. An event without a request observation becomes one
-`coverage: partial` delta row without request identity; such an event marked unreported writes
-no row. These rows have no run, root task or delegation: they increment no budget, release no
-reservation, emit no `usage.recorded` or thread event, and leave run context metrics unchanged.
+It passes every usage event to `recordStandaloneUsage` in `packages/adapters/src/run-usage.ts`,
+with the judged bot, the judge's resolved runtime pin, and a fresh `team-chat-judge:` ID per
+judgement in the thread column. An event that carries a request observation is stored with the
+caller's purpose (`helper` for the judge). It is keyed by space, user, that thread ID,
+`requestId`, `attemptId` and `epochId`, and keeps the same categories, coverage, semantics, cost
+rules and immutable receipts as a run's request; its receipt and normalized totals commit in one
+transaction. Replaying a sequence with the same payload is a no-op; a conflicting payload, an
+attribution change within the attempt, or an out-of-order cumulative observation fails. A broker
+admission is refused: a run-less call has no reservation to settle.
+
+An event without a request observation is identity-free. `legacyUsageFields` stores it with
+purpose `legacy` and `coverage: partial`, not the caller's purpose, and leaves request identities
+unknown. It cannot be deduplicated. An unreported one (`reported: false`) is still written: the
+schema requires zero totals, and `categoryCoverage` marks every category `unknown`, so the row is
+not a measured zero. That unknown marker makes a dashboard period "Partially reported". These rows
+have no run, root task or delegation: they increment no budget, release no reservation, emit no
+`usage.recorded` or thread event, and leave run context metrics unchanged.
 
 ## Runtime and trace handoff
 

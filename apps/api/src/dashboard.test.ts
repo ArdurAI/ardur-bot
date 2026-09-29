@@ -1,6 +1,9 @@
+import { RequestUsageCollector } from "@ardurbot/adapter-kit";
 import type { Actor } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
+import { piWireUsage } from "../../../packages/adapters/src/pi-request-usage.js";
+import { accumulateRequestUsage } from "../../../packages/adapters/src/request-usage.js";
 import { providerUsage, routineOverview, usageSummary, usageWindows } from "./dashboard.js";
 
 const now = new Date("2026-09-24T12:00:00Z");
@@ -127,6 +130,52 @@ describe("dashboard usage", () => {
       now,
     );
     expect(usage!.today.incomplete).toBe(false);
+    expect(usage!.week.incomplete).toBe(true);
+  });
+  it("marks Partially reported when an Anthropic stream fails after message_start", () => {
+    const counts = piWireUsage("anthropic-messages", {
+      type: "message_start",
+      message: {
+        usage: {
+          input_tokens: 25,
+          output_tokens: 1,
+          cache_read_input_tokens: 80,
+          cache_creation_input_tokens: 15,
+        },
+      },
+    });
+    const collector = new RequestUsageCollector({
+      provider: "anthropic",
+      model: "claude-fixture",
+      mappingVersion: "pi-anthropic-messages-wire-v1",
+      inputSemantics: "additive-cache-categories",
+    });
+    collector.start();
+    collector.snapshot(counts!);
+    const finished = collector.finish("cancelled");
+    const totals = accumulateRequestUsage(null, finished.request!);
+    const [usage] = providerUsage(
+      [
+        {
+          provider: "anthropic",
+          createdAt: now,
+          cost: null,
+          pricingProvenance: null,
+          inputTokens: finished.inputTokens,
+          outputTokens: finished.outputTokens,
+          categoryCoverage: totals.categoryCoverage,
+          reasoningSemantics: finished.request!.reasoningSemantics,
+        },
+      ],
+      now,
+    );
+    expect(totals.categoryCoverage.output).toBe("partial");
+    expect(usage!.today).toMatchObject({
+      records: 1,
+      inputTokens: 120,
+      outputTokens: 1,
+      incomplete: true,
+    });
     expect(usage!.week.incomplete).toBe(true);
   });
   it("retains the existing lifetime summary fields and bounds the provider query to the actor", async () => {
