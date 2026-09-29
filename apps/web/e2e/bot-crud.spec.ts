@@ -34,6 +34,7 @@ test("bot creation, editing, and deletion persist", async ({ page }, testInfo) =
   // Failed create keeps the form open on the current bot chat.
   await expect(page.getByPlaceholder("Message Chief")).toBeVisible();
   await expect(page.getByTestId("side-panel")).toHaveAttribute("data-panel", "create");
+  await expect(page.getByTestId("side-panel")).toHaveCSS("width", "384px");
   await expect(page.getByTestId("create-bot-error")).toBeVisible();
   expect(createFailed).toBe(true);
   await page.unroute("**/rpc/bots/create");
@@ -63,6 +64,7 @@ test("bot creation, editing, and deletion persist", async ({ page }, testInfo) =
 
   await page.locator("main").getByRole("button", { name: "New Bot", exact: true }).click();
   await expect(page.getByTestId("side-panel")).toHaveAttribute("data-panel", "settings");
+  await expect(page.getByTestId("side-panel")).toHaveCSS("width", "560px");
   const botSettingsButton = page
     .locator("main")
     .getByRole("button", { name: "Bot settings", exact: true });
