@@ -22,6 +22,8 @@ import {
   groupModelFailureNotice,
   pauseRunForInput,
   pauseRunForTakeover,
+  peerRunMessageBlocks,
+  replyTextFromBlocks,
   sendUserMessage,
 } from "./events.js";
 import { RunHistoryWriteError } from "./messages.js";
@@ -96,6 +98,39 @@ describe("finalizeRun", () => {
       ),
     ).toEqual([blocks[0], blocks[1], { ...blocks[2], durationMs: 103_000 }]);
     expect(completedRunBlocks(blocks, null, new Date())).toBe(blocks);
+  });
+
+  it("keeps a peer reasoning summary in the record and out of the reply", () => {
+    expect(
+      peerRunMessageBlocks([
+        { kind: "progress", text: "Weighing options.", reasoning: true },
+        { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+        { kind: "progress", text: "On it.", activity: true },
+        { kind: "text", text: "The config is stale." },
+      ]),
+    ).toEqual([
+      { kind: "progress", text: "Weighing options.", reasoning: true },
+      { kind: "text", text: "On it.\nThe config is stale." },
+    ]);
+  });
+
+  it("keeps a reasoning-only peer run as a record entry", () => {
+    expect(
+      peerRunMessageBlocks([{ kind: "progress", text: "Weighing options.", reasoning: true }]),
+    ).toEqual([{ kind: "progress", text: "Weighing options.", reasoning: true }]);
+  });
+
+  it("leaves reasoning out of the reply text used for delegation results and goal replies", () => {
+    expect(
+      replyTextFromBlocks([
+        { kind: "progress", text: "Weighing options.", reasoning: true },
+        { kind: "text", text: "The config is stale." },
+        { kind: "progress", text: "On it.", activity: true },
+      ]),
+    ).toBe("The config is stale.\nOn it.");
+    expect(
+      replyTextFromBlocks([{ kind: "progress", text: "Weighing options.", reasoning: true }]),
+    ).toBe("");
   });
 
   it("retries a transaction conflict without duplicating the terminal event or notification", async () => {

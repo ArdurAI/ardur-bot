@@ -1389,3 +1389,57 @@ it("keeps the reply one block when a reasoning summary lands while it streams", 
     }),
   );
 });
+
+it("keeps one reasoning block when the runtime refines the summary", async () => {
+  const f = fixture("reasoning-refine");
+  f.runtimeRun.mockImplementation(async function* () {
+    yield { type: "progress" as const, text: "Weighing options.", reasoning: true as const };
+    yield {
+      type: "progress" as const,
+      text: "Weighing options, still.",
+      reasoning: true as const,
+    };
+    yield { type: "text" as const, text: "The second plan." };
+    yield { type: "done" as const, text: "The second plan." };
+  });
+  await f.run();
+
+  expect(f.finalizeRun).toHaveBeenCalledWith(
+    expect.objectContaining({
+      outcome: "completed",
+      blocks: [
+        { kind: "progress", text: "Weighing options, still.", reasoning: true },
+        { kind: "text", text: "The second plan." },
+      ],
+    }),
+  );
+});
+
+it("flushes held reply text and tool names before a reasoning summary", async () => {
+  const f = fixture("reasoning-after-held-tool");
+  f.runtimeRun.mockImplementation(async function* () {
+    yield { type: "text" as const, text: "I'll update you" };
+    yield {
+      type: "tool" as const,
+      name: "message_user",
+      args: { message: "On it." },
+      executionId: "progress-note",
+    };
+    yield { type: "progress" as const, text: "Planning the note.", reasoning: true as const };
+    yield { type: "text" as const, text: " All set." };
+    yield { type: "done" as const, text: "I'll update you All set." };
+  });
+  await f.run();
+
+  expect(f.finalizeRun).toHaveBeenCalledWith(
+    expect.objectContaining({
+      outcome: "completed",
+      blocks: [
+        { kind: "text", text: "I'll update you" },
+        { kind: "steps", steps: [{ label: "Message user", count: 1 }] },
+        { kind: "progress", text: "Planning the note.", reasoning: true },
+        { kind: "text", text: " All set." },
+      ],
+    }),
+  );
+});

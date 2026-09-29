@@ -40,6 +40,7 @@ export function liveMessageHasVisibleActivity(message: ThreadMessage): boolean {
 export function copyableMessageText(message: ThreadMessage): string {
   return message.blocks
     .map((block) => {
+      if (isReasoningSummaryBlock(block)) return "";
       if (block.kind === "channel_message") {
         return `${messageProviderLabel(block.provider, block.transport)} · ${block.fromLabel}: ${block.text}`;
       }
@@ -51,4 +52,17 @@ export function copyableMessageText(message: ThreadMessage): string {
     .filter(Boolean)
     .join("\n")
     .trim();
+}
+
+/** Working bots whose live message does not already show this turn's activity. */
+export function workingBotsWithoutVisibleActivity<Bot extends { botId?: string }>(
+  workingBots: readonly Bot[],
+  messages: readonly ThreadMessage[],
+): Bot[] {
+  const covered = new Set(
+    messages.flatMap((message) =>
+      message.botId && liveMessageHasVisibleActivity(message) ? [message.botId] : [],
+    ),
+  );
+  return workingBots.filter((bot) => bot.botId == null || !covered.has(bot.botId));
 }

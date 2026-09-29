@@ -4,6 +4,7 @@ import {
   copyableMessageText,
   liveMessageHasVisibleActivity,
   narrationBubbleBlocks,
+  workingBotsWithoutVisibleActivity,
 } from "./message-text.js";
 
 function message(blocks: ThreadMessage["blocks"]): ThreadMessage {
@@ -40,6 +41,18 @@ describe("copyableMessageText", () => {
         ]),
       ),
     ).toBe("RCS · Alice: dinner at 7?");
+  });
+
+  it("leaves a reasoning summary out of copied text", () => {
+    expect(
+      copyableMessageText(
+        message([
+          { kind: "progress", text: "Weighing options.", reasoning: true },
+          { kind: "progress", text: "On it." },
+          { kind: "text", text: "Here is the answer." },
+        ]),
+      ),
+    ).toBe("On it.\nHere is the answer.");
   });
 
   it("falls back to the provider label for unknown transport values", () => {
@@ -155,5 +168,32 @@ describe("liveMessageHasVisibleActivity", () => {
       ),
     ).toBe(false);
     expect(liveMessageHasVisibleActivity(live([]))).toBe(false);
+  });
+});
+
+describe("workingBotsWithoutVisibleActivity", () => {
+  const live = (botId: string, blocks: ThreadMessage["blocks"]): ThreadMessage => ({
+    id: "progress:run-1",
+    threadId: "t_1",
+    seq: 1,
+    role: "bot",
+    botId,
+    blocks,
+    createdAt: "2026-08-29",
+  });
+
+  it("hides only the bots whose own live message already shows activity", () => {
+    const bots = [{ botId: "bot-a", name: "Ada" }, { botId: "bot-b", name: "Bea" }, { name: "Cy" }];
+    expect(
+      workingBotsWithoutVisibleActivity(bots, [
+        live("bot-a", [{ kind: "steps", steps: [{ label: "Shell", count: 1 }] }]),
+        live("bot-b", []),
+      ]),
+    ).toEqual([{ botId: "bot-b", name: "Bea" }, { name: "Cy" }]);
+    expect(
+      workingBotsWithoutVisibleActivity(bots, [
+        message([{ kind: "steps", steps: [{ label: "Shell", count: 1 }] }]),
+      ]),
+    ).toEqual(bots);
   });
 });

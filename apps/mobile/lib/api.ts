@@ -25,6 +25,7 @@ import {
   cancelResponseBody,
   ensureAiDataConsent,
   isCommandCardEvent,
+  isReasoningSummaryBlock,
   isRunTerminalEvent,
   mergeCommandLinks,
   mergeThreadHistory,
@@ -919,6 +920,7 @@ export function messagingProviderLabel(provider: string, transport?: string): st
 export function copyableMobileMessageText(message: MobileMessage): string {
   return message.blocks
     .map((block) => {
+      if (isReasoningSummaryBlock(block)) return "";
       if (block.kind === "channel_message") {
         return `${messagingProviderLabel(block.provider, block.transport)} · ${block.fromLabel}: ${block.text}`;
       }
@@ -946,6 +948,7 @@ export function blockText(
 ) {
   return message.blocks
     .map((block) => {
+      if (isReasoningSummaryBlock(block)) return "";
       if (block.kind === "text" && block.notice && translateNotice)
         return translateNotice(block.notice);
       if (block.kind === "channel_message") {

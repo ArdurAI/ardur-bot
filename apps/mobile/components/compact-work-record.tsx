@@ -6,7 +6,7 @@ import { Animated, Pressable, Text, View } from "react-native";
 import { mobileTokens } from "../lib/appearance";
 import { useI18n } from "../lib/i18n";
 import { useResolvedAppearance } from "../lib/native";
-import { watchMotionAllowed, workRecordLabel } from "../lib/work-record";
+import { watchMotionAllowed, workRecordLabel, workRecordShouldPulse } from "../lib/work-record";
 import { NativeCommandBlock } from "./command-block";
 import { NativeSymbol } from "./native-symbol";
 
@@ -36,7 +36,7 @@ export function CompactWorkRecord({
     return watchMotionAllowed(setMotionAllowed);
   }, [isDone]);
   useEffect(() => {
-    if (isDone || !motionAllowed) return;
+    if (!workRecordShouldPulse(!isDone, motionAllowed)) return;
     const pulse = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {

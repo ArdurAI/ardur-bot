@@ -14,6 +14,7 @@ import {
   buildBotMessageWakePrompt,
   isApprovalAskBlock,
   isCommandEvent,
+  isReasoningSummaryBlock,
   isSecretAskBlock,
   LEGACY_RESTART_SUMMARY,
   messagingChannelId,
@@ -1467,6 +1468,24 @@ export async function finalizeRun(
   return { continuationRunId };
 }
 
+/** Reply text for readers that must not treat a reasoning summary as something the bot said. */
+export function replyTextFromBlocks(blocks: readonly MessageBlock[]): string {
+  return blocks
+    .flatMap((block) => ("text" in block && !isReasoningSummaryBlock(block) ? [block.text] : []))
+    .join("\n");
+}
+
+/**
+ * A peer-message run keeps each reasoning summary as its own record entry.
+ * The reply bubble is everything else that has text, with the same redaction
+ * the bubble had before summaries were stored.
+ */
+export function peerRunMessageBlocks(blocks: readonly MessageBlock[]): MessageBlock[] {
+  const reasoning = blocks.filter((block) => isReasoningSummaryBlock(block));
+  const reply = redactTaskValue(replyTextFromBlocks(blocks));
+  return [...reasoning, ...(reply.trim() ? [{ kind: "text" as const, text: reply }] : [])];
+}
+
 /** Stamps one turn-level wall-clock duration on the final tool block. */
 export function completedRunBlocks(
   blocks: MessageBlock[],
@@ -1639,15 +1658,8 @@ async function finalizeRunOnce(
       input.outcome === "completed" &&
       (!writableRun?.delegationId || goalRoomAssignment || peerMessageAssignment)
     ) {
-      const peerReply = peerMessageAssignment
-        ? redactTaskValue(
-            input.blocks.flatMap((block) => ("text" in block ? [block.text] : [])).join("\n"),
-          )
-        : null;
       const completedBlocks = peerMessageAssignment
-        ? peerReply?.trim()
-          ? [{ kind: "text" as const, text: peerReply }]
-          : []
+        ? peerRunMessageBlocks(input.blocks)
         : completedRunBlocks(input.blocks, writableRun?.startedAt ?? null, now);
       if (completedBlocks.length > 0) {
         const message = await createThreadMessageInTransaction(tx, {
@@ -1674,9 +1686,7 @@ async function finalizeRunOnce(
           tx,
           writableRun.delegationId,
           input.outcome,
-          input.outcome === "completed"
-            ? input.blocks.flatMap((block) => ("text" in block ? [block.text] : [])).join("\n")
-            : input.error,
+          input.outcome === "completed" ? replyTextFromBlocks(input.blocks) : input.error,
           input.runId,
         )
       : undefined;
@@ -1705,9 +1715,7 @@ async function finalizeRunOnce(
             select: { id: true, groupId: true, untilAt: true },
           });
           if (goal) {
-            const text = redactTaskValue(
-              input.blocks.flatMap((block) => ("text" in block ? [block.text] : [])).join("\n"),
-            );
+            const text = redactTaskValue(replyTextFromBlocks(input.blocks));
             const recipientAvailable = await tx.bot.findFirst({
               where: {
                 id: parent.senderBotId,

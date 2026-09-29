@@ -181,8 +181,8 @@ import { INSIGHT_ACTION_EVENT } from "../lib/insight-actions";
 import { localTimezone } from "../lib/local-timezone";
 import {
   copyableMessageText,
-  liveMessageHasVisibleActivity,
   narrationBubbleBlocks,
+  workingBotsWithoutVisibleActivity,
 } from "../lib/message-text";
 import { messageProviderLabel } from "../lib/messaging";
 import {
@@ -217,7 +217,7 @@ import {
   transcriptCanSnapAfterFrame,
   transcriptIsNearEnd,
   transcriptMovedDown,
-  transcriptSnapFollows,
+  useTranscriptFollowSnap,
 } from "../lib/transcript-scroll";
 import { whenSpeakerReady, withSpeaker } from "../lib/tts-lazy";
 import { useModelSettings } from "../lib/use-model-settings";
@@ -4903,7 +4903,8 @@ const Transcript = memo(function Transcript({
     [messages],
   );
   const reactionView = useMemo(() => projectMessageReactions(messages), [messages]);
-  const workingBotName = workingBots.length === 1 ? workingBots[0]?.name : undefined;
+  const indicatorBots = workingBotsWithoutVisibleActivity(workingBots, messages);
+  const workingBotName = indicatorBots.length === 1 ? indicatorBots[0]?.name : undefined;
   const workingLabel =
     workingBotName != null && workingBotName !== ""
       ? t`${workingBotName} is working`
@@ -4997,9 +4998,13 @@ const Transcript = memo(function Transcript({
     );
   }, [scrollRef]);
 
-  useLayoutEffect(() => {
-    if (transcriptSnapFollows(following.current, quoteDraft !== null)) snapToEnd();
-  }, [messages, running, quoteDraft, snapToEnd]);
+  useTranscriptFollowSnap({
+    messages,
+    running,
+    quoteOpen: quoteDraft !== null,
+    following,
+    snapToEnd,
+  });
 
   useLayoutEffect(() => {
     const button = jumpButtonRef.current;
@@ -5204,8 +5209,8 @@ const Transcript = memo(function Transcript({
             </div>
           );
         })}
-        {running && !messages.some((message) => liveMessageHasVisibleActivity(message)) ? (
-          <ActiveBotGlyph bots={workingBots} label={workingLabel} />
+        {running && indicatorBots.length > 0 ? (
+          <ActiveBotGlyph bots={indicatorBots} label={workingLabel} />
         ) : null}
       </div>
       {quoteDraft ? (

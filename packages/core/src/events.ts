@@ -226,60 +226,68 @@ export function reduceLiveMessageBlocks(
     tailProgress !== null &&
     updateCategory !== null &&
     progressCategory(tailProgress) !== updateCategory;
+  const textPayload =
+    update.type === "progress" && typeof update.payload?.delta !== "string"
+      ? String(update.payload?.text ?? "")
+      : null;
+  // An empty title must not take held names off a sentence that is still open.
+  if (
+    textPayload !== null &&
+    !textPayload.trim() &&
+    (tailProgress?.pendingToolNames?.length ?? 0) > 0
+  ) {
+    return [...blocks];
+  }
   // Held tool names ride across the seal onto the new block, so the sealed
   // tail gives the queue up: its text is final and the names materialize as
   // steps at the new block's first sentence end, exactly once, never dropped.
-  const sealedTail =
-    sealed && (tailProgress?.pendingToolNames?.length ?? 0) > 0 ? tailProgress : null;
+  const carriedNames = sealed ? (tailProgress?.pendingToolNames ?? []) : [];
+  const sealedTail = carriedNames.length > 0 ? tailProgress : null;
   const segments = sealedTail
     ? [...blocks.slice(0, -1), dropPendingToolNames(sealedTail)]
     : tailProgress && !sealed
       ? blocks.slice(0, -1)
-      : blocks;
-  const priorText = liveMessageText(blocks);
-  // A replacement `text` payload for activity or reasoning carries only the new
-  // block's title, so it always slices at offset 0 — whether or not the
-  // category changed. Only a `delta` continues from the accumulated offset,
-  // and for an activity or reasoning tail that offset chains onto the tail's
-  // own text (narration deltas count narration text only).
-  const replacementStartsBlock =
-    update.type === "progress" &&
-    typeof update.payload?.delta !== "string" &&
-    (sealed || updateCategory === "activity" || updateCategory === "reasoning");
-  const deltaBase =
-    tailProgress && !sealed && progressCategory(tailProgress) !== "narration"
-      ? priorText + tailProgress.text
-      : priorText;
-  const flushedLength = replacementStartsBlock
-    ? 0
-    : tailProgress && !sealed
-      ? Math.max(0, deltaBase.length - tailProgress.text.length)
-      : priorText.length;
-  const tailText =
-    update.type === "progress"
-      ? progressMessageText(update.payload, deltaBase).slice(flushedLength)
-      : tailProgress
-        ? tailProgress.text
-        : "";
+      : [...blocks];
+  const openTail = tailProgress && !sealed ? tailProgress : null;
+  const category = updateCategory ?? (openTail ? progressCategory(openTail) : "narration");
+  // Narration `text` is the new chunk. Activity and reasoning `text` replace
+  // the title. A delta continues the open tail, and across a seal it is only
+  // the new block's text.
+  let tailText: string;
+  if (update.type === "tool") {
+    tailText = openTail?.text ?? "";
+  } else if (typeof update.payload?.delta === "string") {
+    const delta = update.payload.delta;
+    tailText = openTail ? openTail.text + delta : delta;
+  } else if (category === "narration" && openTail) {
+    tailText = openTail.text + (textPayload ?? "");
+  } else {
+    tailText = textPayload ?? "";
+  }
   const pendingToolNames = [
-    ...(tailProgress ? (tailProgress.pendingToolNames ?? []) : []),
+    ...(openTail?.pendingToolNames ?? []),
+    ...carriedNames,
     ...(update.type === "tool" ? [update.name] : []),
   ];
-  const category = updateCategory ?? (tailProgress ? progressCategory(tailProgress) : "narration");
+  // A reasoning title is a finished summary even with no sentence ending, so a
+  // tool landing on it shows its step. Names carried in from the previous block
+  // do not belong to a new activity title, so that title stays and the steps follow.
+  const reasoningClosed =
+    update.type === "tool" && category === "reasoning" && tailText.trim() !== "";
+  const namesAreCarried = carriedNames.length > 0;
 
-  if (pendingToolNames.length > 0 && endsSentence(tailText)) {
-    // Activity and reasoning tails never flush into durable reply text. A
-    // generated activity title is redundant once its step lands, so the step
-    // replaces it; a reasoning summary stays whole ahead of the step.
+  if (pendingToolNames.length > 0 && (endsSentence(tailText) || reasoningClosed)) {
     let next: MessageBlock[];
     if (category === "narration") next = appendTextSegment(segments, tailText);
     else if (category === "reasoning" && tailText.trim())
       next = [...segments, { kind: "progress", text: tailText, reasoning: true }];
+    else if (category === "activity" && namesAreCarried && tailText.trim())
+      next = [...segments, { kind: "progress", text: tailText, activity: true }];
     else next = [...segments];
     for (const name of pendingToolNames) next = appendToolCallSegment(next, name);
     return next;
   }
-  if (!tailText) return [...segments];
+  if (!tailText) return segments;
   return [
     ...segments,
     {
@@ -290,17 +298,6 @@ export function reduceLiveMessageBlocks(
       ...(pendingToolNames.length > 0 ? { pendingToolNames } : {}),
     },
   ];
-}
-
-/** Only narration participates in delta chaining; activity and reasoning text stay out. */
-function liveMessageText(blocks: readonly MessageBlock[]): string {
-  let text = "";
-  for (const block of blocks) {
-    if (block.kind === "text") text += block.text;
-    else if (block.kind === "progress" && progressCategory(block) === "narration")
-      text += block.text;
-  }
-  return text;
 }
 
 export type ToolStep = { label: string; count: number };

@@ -293,6 +293,109 @@ describe("reduceLiveMessageBlocks", () => {
       { kind: "steps", steps: [{ label: "Vitest", count: 1 }] },
     ]);
   });
+
+  it("keeps a punctuated activity title when the tool name came from the previous block", () => {
+    const narration = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Let me check" },
+    });
+    const held = reduceLiveMessageBlocks(narration, { type: "tool", name: "shell" });
+    expect(
+      reduceLiveMessageBlocks(held, {
+        type: "progress",
+        payload: { text: "Hermes requested a native permission.", activity: true },
+      }),
+    ).toEqual([
+      { kind: "progress", text: "Let me check" },
+      { kind: "progress", text: "Hermes requested a native permission.", activity: true },
+      { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+    ]);
+  });
+
+  it("keeps a punctuated reasoning summary when the tool name came from the previous block", () => {
+    const narration = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Let me check" },
+    });
+    const held = reduceLiveMessageBlocks(narration, { type: "tool", name: "shell" });
+    expect(
+      reduceLiveMessageBlocks(held, {
+        type: "progress",
+        payload: { text: "The config looks stale.", reasoning: true },
+      }),
+    ).toEqual([
+      { kind: "progress", text: "Let me check" },
+      { kind: "progress", text: "The config looks stale.", reasoning: true },
+      { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+    ]);
+  });
+
+  it("leaves an empty activity title alone so the held sentence can finish", () => {
+    const narration = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Let me look" },
+    });
+    const held = reduceLiveMessageBlocks(narration, { type: "tool", name: "ls" });
+    const cleared = reduceLiveMessageBlocks(held, {
+      type: "progress",
+      payload: { text: "", activity: true },
+    });
+    expect(
+      reduceLiveMessageBlocks(cleared, {
+        type: "progress",
+        payload: { delta: " at it." },
+      }),
+    ).toEqual([
+      { kind: "text", text: "Let me look at it." },
+      { kind: "steps", steps: [{ label: "Ls", count: 1 }] },
+    ]);
+  });
+
+  it("keeps a narration text chunk that arrives after a tool call", () => {
+    const narration = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Let me look." },
+    });
+    const called = reduceLiveMessageBlocks(narration, { type: "tool", name: "ls" });
+    expect(
+      reduceLiveMessageBlocks(called, {
+        type: "progress",
+        payload: { text: "Found it." },
+      }),
+    ).toEqual([
+      { kind: "text", text: "Let me look." },
+      { kind: "steps", steps: [{ label: "Ls", count: 1 }] },
+      { kind: "progress", text: "Found it." },
+    ]);
+  });
+
+  it("appends a narration text chunk onto the held sentence", () => {
+    const narration = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Let me look" },
+    });
+    const held = reduceLiveMessageBlocks(narration, { type: "tool", name: "ls" });
+    expect(
+      reduceLiveMessageBlocks(held, {
+        type: "progress",
+        payload: { text: " at it." },
+      }),
+    ).toEqual([
+      { kind: "text", text: "Let me look at it." },
+      { kind: "steps", steps: [{ label: "Ls", count: 1 }] },
+    ]);
+  });
+
+  it("shows the step after a reasoning title with no sentence ending", () => {
+    const reasoning = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "**Planning the fix**", reasoning: true },
+    });
+    expect(reduceLiveMessageBlocks(reasoning, { type: "tool", name: "shell" })).toEqual([
+      { kind: "progress", text: "**Planning the fix**", reasoning: true },
+      { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+    ]);
+  });
 });
 
 type LiveCategory = "narration" | "activity" | "reasoning";
@@ -330,17 +433,12 @@ describe("reduceLiveMessageBlocks transition matrix", () => {
     for (const to of categories) {
       for (const delta of [false, true]) {
         const same = from === to;
-        // Narration `text` payloads carry the full reply so far; activity and
-        // reasoning `text` payloads carry only the block's title. Deltas
-        // append to the current block, whatever its category.
-        const updateText = delta
-          ? " beta"
-          : to === "narration"
-            ? same
-              ? "Alpha beta"
-              : "Omega"
-            : "Omega";
-        const expectedText = delta ? (same ? "Alpha beta" : " beta") : updateText;
+        // Narration `text` is the new chunk only. Activity and reasoning
+        // `text` replace the title. A delta appends on the same block, and
+        // across a seal it is only the new block's text.
+        const freshChunk = delta || (to === "narration" && same);
+        const updateText = freshChunk ? " beta" : "Omega";
+        const expectedText = freshChunk ? (same ? "Alpha beta" : " beta") : updateText;
         const expected = same
           ? [progressBlock(to, expectedText)]
           : [progressBlock(from, "Alpha"), progressBlock(to, expectedText)];
@@ -396,7 +494,33 @@ describe("reduceLiveMessageBlocks transition matrix", () => {
         payload: categoryPayload(entry.from, "Alpha", false),
       });
       const held = reduceLiveMessageBlocks(start, { type: "tool", name: "shell" });
-      // Mid-sentence text holds the name on the tail block.
+      if (entry.from === "reasoning") {
+        // A reasoning summary releases its step even when the title has no
+        // sentence ending, so the later sentence must not emit that step again.
+        expect(held).toEqual([
+          progressBlock("reasoning", "Alpha"),
+          { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+        ]);
+        const moved = reduceLiveMessageBlocks(held, {
+          type: "progress",
+          payload: categoryPayload(entry.to, entry.updateText, entry.delta),
+        });
+        const closed = reduceLiveMessageBlocks(moved, {
+          type: "progress",
+          payload: { delta: " Done.", streaming: true },
+        });
+        const shells = closed
+          .flatMap((block) => (block.kind === "steps" ? block.steps : []))
+          .filter((step) => step.label === "Shell")
+          .reduce((total, step) => total + step.count, 0);
+        expect(shells).toBe(1);
+        expect(
+          closed.some((block) => "pendingToolNames" in block && block.pendingToolNames?.length),
+        ).toBe(false);
+        expect(closed[0]).toEqual(progressBlock("reasoning", "Alpha"));
+        return;
+      }
+      // Mid-sentence narration and activity hold the name on the tail block.
       expect(held).toEqual([progressBlock(entry.from, "Alpha", ["shell"])]);
 
       const moved = reduceLiveMessageBlocks(held, {
@@ -421,23 +545,37 @@ describe("reduceLiveMessageBlocks transition matrix", () => {
     },
   );
 
-  // A punctuated tail, then a tool call. Narration flushes into reply text and
-  // a reasoning summary stays whole, both ahead of the step; only a generated
-  // activity title is redundant once its step lands, so the step replaces it.
-  // Held names sit on the tail until a same-category delta ends its sentence
-  // ("held"), or ride across a category seal onto the punctuated tail
-  // ("carried").
+  // A punctuated tail, then a tool call. Narration flushes into reply text
+  // and a reasoning summary stays whole, both ahead of the step. An activity
+  // title is dropped only when the tool name belongs to that same title. A
+  // name carried from the previous block leaves the new title in place.
+  // Held names sit on a narration or activity tail until a same-category
+  // delta ends its sentence ("held"), or ride across a category seal onto the
+  // punctuated tail ("carried"). A reasoning summary releases the name at
+  // once, so the later delta is a second summary.
   const pendingKinds = ["none", "held", "carried"] as const;
   const sealedBy = (category: LiveCategory): LiveCategory =>
     category === "narration" ? "activity" : "narration";
   const toolCases = categories.flatMap((tail) =>
     pendingKinds.map((pending) => {
+      if (tail === "reasoning" && pending === "held") {
+        return {
+          tail,
+          pending,
+          expected: [
+            progressBlock("reasoning" as const, "Alpha"),
+            { kind: "steps" as const, steps: [{ label: "Read file", count: 1 }] },
+            progressBlock("reasoning" as const, " beta."),
+            { kind: "steps" as const, steps: [{ label: "Shell", count: 1 }] },
+          ],
+        };
+      }
       const tailText = pending === "held" ? "Alpha beta." : "Alpha.";
       const kept =
         tail === "narration"
           ? [{ kind: "text" as const, text: tailText }]
-          : tail === "reasoning"
-            ? [progressBlock("reasoning", tailText)]
+          : tail === "reasoning" || (tail === "activity" && pending === "carried")
+            ? [progressBlock(tail, tailText)]
             : [];
       const head = pending === "carried" ? [progressBlock(sealedBy(tail), "Intro")] : [];
       const steps =
@@ -479,7 +617,7 @@ describe("reduceLiveMessageBlocks transition matrix", () => {
       // The summary survives with its marker, every name became a step exactly
       // once, and nothing still holds a name.
       expect(closed.filter(isReasoningSummaryBlock)).toHaveLength(
-        entry.tail === "reasoning" ? 1 : 0,
+        entry.tail === "reasoning" ? (entry.pending === "held" ? 2 : 1) : 0,
       );
       const counts: Record<string, number> = {};
       for (const block of closed) {

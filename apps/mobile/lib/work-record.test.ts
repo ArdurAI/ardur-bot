@@ -1,7 +1,7 @@
 import { AccessibilityInfo } from "react-native";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetI18nForTests } from "./i18n";
-import { watchMotionAllowed, workRecordLabel } from "./work-record";
+import { watchMotionAllowed, workRecordLabel, workRecordShouldPulse } from "./work-record";
 
 vi.mock("react-native", () => ({
   AccessibilityInfo: { isReduceMotionEnabled: vi.fn(), addEventListener: vi.fn() },
@@ -67,10 +67,11 @@ describe("work record motion", () => {
 
     stop();
     expect(setting.remove).toHaveBeenCalledOnce();
+    expect(allowed).toEqual([false]);
     answer(false);
     await settle();
     setting.change(false);
-    expect(allowed).toEqual([]);
+    expect(allowed).toEqual([false]);
   });
 
   it("lets a change that arrives first win over a stale first answer", async () => {
@@ -90,6 +91,25 @@ describe("work record motion", () => {
     stop();
   });
 
+  it("clears the last answer when the subscription is removed", async () => {
+    const setting = reduceMotionSetting(Promise.resolve(false));
+    const allowed: boolean[] = [];
+    const stop = watchMotionAllowed((value) => allowed.push(value));
+    await settle();
+
+    expect(allowed).toEqual([true]);
+    stop();
+    expect(setting.remove).toHaveBeenCalledOnce();
+    expect(allowed).toEqual([true, false]);
+  });
+
+  it("does not throw when the platform returns no subscription", () => {
+    vi.mocked(AccessibilityInfo.addEventListener).mockReturnValue(undefined as never);
+    vi.mocked(AccessibilityInfo.isReduceMotionEnabled).mockReturnValue(Promise.resolve(false));
+    const stop = watchMotionAllowed(() => {});
+    expect(() => stop()).not.toThrow();
+  });
+
   it("stays still when the setting cannot be read", async () => {
     reduceMotionSetting(Promise.reject(new Error("unavailable")));
     const allowed: boolean[] = [];
@@ -98,6 +118,15 @@ describe("work record motion", () => {
 
     expect(allowed).toEqual([]);
     stop();
+  });
+});
+
+describe("work record pulse", () => {
+  it("starts only while the record is active and motion is allowed", () => {
+    expect(workRecordShouldPulse(true, true)).toBe(true);
+    expect(workRecordShouldPulse(true, false)).toBe(false);
+    expect(workRecordShouldPulse(false, true)).toBe(false);
+    expect(workRecordShouldPulse(false, false)).toBe(false);
   });
 });
 

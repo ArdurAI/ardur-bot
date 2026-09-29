@@ -8,11 +8,14 @@
   <body>
     <div id="root"></div>
     <script type="module">
+      import { setupI18n } from "@lingui/core";
+      import { I18nProvider } from "@lingui/react";
       import { createElement as h } from "react";
       import { createRoot } from "react-dom/client";
       import { CompactWorkRecord } from "../../src/components/ai/CompactWorkRecord";
       import "../../src/styles.css";
 
+      const i18n = setupI18n({ locale: "en", messages: { en: {} } });
       const live = new URLSearchParams(location.search).get("live") === "1";
       // Live: an in-flight activity beat. Complete: only the finished step
       // summary remains — a real completed run carries no pending progress.
@@ -61,12 +64,16 @@
 
       createRoot(document.getElementById("root")).render(
         h(
-          "main",
-          {
-            className:
-              "flex min-h-screen items-end bg-background px-4 py-6 md:px-8 md:py-8",
-          },
-          h("div", { className: "relative flex w-full justify-start" }, frame),
+          I18nProvider,
+          { i18n },
+          h(
+            "main",
+            {
+              className:
+                "flex min-h-screen items-end bg-background px-4 py-6 md:px-8 md:py-8",
+            },
+            h("div", { className: "relative flex w-full justify-start" }, frame),
+          ),
         ),
       );
     </script>

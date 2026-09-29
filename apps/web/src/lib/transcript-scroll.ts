@@ -1,3 +1,5 @@
+import { useLayoutEffect } from "react";
+
 export function transcriptIsNearEnd(
   element: Pick<HTMLElement, "scrollHeight" | "scrollTop" | "clientHeight">,
 ): boolean {
@@ -22,4 +24,27 @@ export function transcriptMovedDown(previousScrollTop: number | null, scrollTop:
  */
 export function transcriptSnapFollows(following: boolean, quoteSelectionOpen: boolean): boolean {
   return following && !quoteSelectionOpen;
+}
+
+/**
+ * Follow-to-end while the reader is at the latest message, except while a
+ * quote selection is open. `quoteOpen` is a dependency so closing the quote
+ * snaps again even when the messages have not changed.
+ */
+export function useTranscriptFollowSnap({
+  messages,
+  running,
+  quoteOpen,
+  following,
+  snapToEnd,
+}: {
+  messages: unknown;
+  running: boolean;
+  quoteOpen: boolean;
+  following: { readonly current: boolean };
+  snapToEnd: () => void;
+}): void {
+  useLayoutEffect(() => {
+    if (transcriptSnapFollows(following.current, quoteOpen)) snapToEnd();
+  }, [messages, running, quoteOpen, following, snapToEnd]);
 }

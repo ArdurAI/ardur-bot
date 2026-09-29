@@ -1987,6 +1987,18 @@ describe("mobile thread event reduction", () => {
     );
   });
 
+  it("does not speak a reasoning summary", () => {
+    expect(
+      blockText(
+        mobileMessage("spoken", [
+          { kind: "progress", text: "Weighing options.", reasoning: true },
+          { kind: "text", text: "Here is the answer." },
+          { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+        ]),
+      ),
+    ).toBe("Here is the answer.\nShell");
+  });
+
   it("deduplicates durable messages and replaces matching transient subagent state", () => {
     const initial = snapshot([
       mobileMessage("message-1", [{ kind: "text", text: "old" }]),
@@ -2387,6 +2399,19 @@ describe("mobile clipboard text", () => {
         ],
       }),
     ).toBe(answer);
+  });
+  it("leaves a reasoning summary out of copied text", async () => {
+    const { copyableMobileMessageText } = await import("./api");
+    expect(
+      copyableMobileMessageText({
+        id: "message",
+        role: "bot",
+        blocks: [
+          { kind: "progress", text: "Weighing options.", reasoning: true },
+          { kind: "text", text: "Here is the answer." },
+        ],
+      }),
+    ).toBe("Here is the answer.");
   });
   it("includes the shortened reply marker when copying a bounded receipt", async () => {
     const { copyableMobileMessageText } = await import("./api");

@@ -5984,13 +5984,21 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 },
               });
               // The live beat clears when the run finishes, so the finished work record
-              // keeps the summary itself. The record renders apart from the bubble, so
-              // reply text streaming around it stays one block.
+              // keeps the summary itself. Consecutive summaries replace that tail, matching
+              // the live reducer. Reply text still streaming stays one block. A note held
+              // for message_user is flushed first so the summary cannot land ahead of it.
               if (event.reasoning && !event.activity && safeText.trim()) {
-                messageSegments = [
-                  ...messageSegments,
-                  { kind: "progress", text: safeText, reasoning: true },
-                ];
+                if (pendingToolNames.length > 0) flushPendingTools();
+                const summary = {
+                  kind: "progress" as const,
+                  text: safeText,
+                  reasoning: true as const,
+                };
+                const tail = messageSegments.at(-1);
+                messageSegments =
+                  tail && isReasoningSummaryBlock(tail)
+                    ? [...messageSegments.slice(0, -1), summary]
+                    : [...messageSegments, summary];
               }
             } else if (event.type === "ask") {
               if (!(await renewRunLease(deps, runId, workerId, fence))) return;

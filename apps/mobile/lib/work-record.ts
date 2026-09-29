@@ -14,10 +14,17 @@ export function workRecordLabel(status: WorkRecordStatus, title: string): string
   return shown ? t("Done: {title}", { title: shown }) : t("Done");
 }
 
+/** An active record pulses only while Reduce Motion is known to be off. */
+export function workRecordShouldPulse(recordActive: boolean, motionAllowed: boolean): boolean {
+  return recordActive && motionAllowed;
+}
+
 /**
  * Reports whether an active record may pulse, now and whenever Reduce Motion
  * changes. Until the setting is known, or when it cannot be read, nothing is
- * reported and the record stays still. Returns the unsubscribe.
+ * reported and the record stays still. Removing the subscription clears the
+ * last answer so a stale "motion allowed" cannot start the next pulse.
+ * Returns the unsubscribe.
  */
 export function watchMotionAllowed(onChange: (allowed: boolean) => void): () => void {
   let subscribed = true;
@@ -38,6 +45,7 @@ export function watchMotionAllowed(onChange: (allowed: boolean) => void): () => 
   );
   return () => {
     subscribed = false;
-    subscription.remove();
+    subscription?.remove();
+    onChange(false);
   };
 }
