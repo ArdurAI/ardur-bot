@@ -1951,6 +1951,10 @@ msgstr ""
 msgid "Computer change pending."
 msgstr ""
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Computer changed. Refresh files."
+msgstr "कंप्यूटर बदल गया। फ़ाइलें रीफ़्रेश करें।"
+
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Computer engine is unavailable."
 msgstr ""
@@ -1970,6 +1974,10 @@ msgstr "कंप्यूटर निष्क्रिय है"
 #: src/pages/Shell.tsx
 msgid "Computer is asleep. Open it to wake."
 msgstr "कंप्यूटर स्लीप मोड में है। जगाने के लिए इसे खोलें।"
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Computer is busy"
+msgstr "कंप्यूटर व्यस्त है"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -2898,6 +2906,10 @@ msgstr "यह विकल्प सहेजा नहीं जा सका"
 #: src/pages/customize/McpCredentialFix.tsx
 msgid "Could not save this credential. Check it and try again."
 msgstr ""
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Could not save this file. Try again."
+msgstr "यह फ़ाइल सहेजी नहीं जा सकी। पुनः प्रयास करें।"
 
 #: src/pages/customize/McpCredentialFix.tsx
 msgid "Could not save. Try again."
@@ -6567,6 +6579,10 @@ msgstr "पढ़ा गया"
 msgid "Read by {recipient}"
 msgstr "{recipient} ने पढ़ा"
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Read only"
+msgstr "केवल पढ़ने के लिए"
+
 #: src/pages/ide/IdePage.tsx
 msgid "Read only: file is larger than 2 MB"
 msgstr ""
@@ -8339,6 +8355,10 @@ msgstr ""
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr ""
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "The file changed. Open it again before saving."
+msgstr "फ़ाइल बदल गई। सहेजने से पहले इसे फिर से खोलें।"
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "The first bot could not be created. Try again."

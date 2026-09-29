@@ -1951,6 +1951,10 @@ msgstr ""
 msgid "Computer change pending."
 msgstr ""
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Computer changed. Refresh files."
+msgstr "컴퓨터가 변경되었습니다. 파일을 새로고침하세요."
+
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Computer engine is unavailable."
 msgstr ""
@@ -1970,6 +1974,10 @@ msgstr "컴퓨터가 절전 상태입니다"
 #: src/pages/Shell.tsx
 msgid "Computer is asleep. Open it to wake."
 msgstr "컴퓨터가 절전 모드입니다. 깨우려면 여세요."
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Computer is busy"
+msgstr "컴퓨터가 사용 중입니다"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -2898,6 +2906,10 @@ msgstr "선택 내용을 저장하지 못했습니다."
 #: src/pages/customize/McpCredentialFix.tsx
 msgid "Could not save this credential. Check it and try again."
 msgstr ""
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Could not save this file. Try again."
+msgstr "이 파일을 저장하지 못했습니다. 다시 시도하세요."
 
 #: src/pages/customize/McpCredentialFix.tsx
 msgid "Could not save. Try again."
@@ -6567,6 +6579,10 @@ msgstr "읽음"
 msgid "Read by {recipient}"
 msgstr "{recipient}님이 읽음"
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Read only"
+msgstr "읽기 전용"
+
 #: src/pages/ide/IdePage.tsx
 msgid "Read only: file is larger than 2 MB"
 msgstr ""
@@ -8339,6 +8355,10 @@ msgstr ""
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr ""
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "The file changed. Open it again before saving."
+msgstr "파일이 변경되었습니다. 저장하기 전에 다시 여세요."
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "The first bot could not be created. Try again."

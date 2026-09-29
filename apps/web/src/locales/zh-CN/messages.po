@@ -1951,6 +1951,10 @@ msgstr ""
 msgid "Computer change pending."
 msgstr ""
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Computer changed. Refresh files."
+msgstr "电脑已更改。请刷新文件。"
+
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Computer engine is unavailable."
 msgstr ""
@@ -1970,6 +1974,10 @@ msgstr "电脑已休眠"
 #: src/pages/Shell.tsx
 msgid "Computer is asleep. Open it to wake."
 msgstr "计算机处于睡眠状态。打开以唤醒。"
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Computer is busy"
+msgstr "电脑正忙"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -2898,6 +2906,10 @@ msgstr "无法保存此选择"
 #: src/pages/customize/McpCredentialFix.tsx
 msgid "Could not save this credential. Check it and try again."
 msgstr "无法保存此凭据。请检查后重试。"
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Could not save this file. Try again."
+msgstr "无法保存此文件。请重试。"
 
 #: src/pages/customize/McpCredentialFix.tsx
 msgid "Could not save. Try again."
@@ -6567,6 +6579,10 @@ msgstr "已读"
 msgid "Read by {recipient}"
 msgstr "已由 {recipient} 阅读"
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Read only"
+msgstr "只读"
+
 #: src/pages/ide/IdePage.tsx
 msgid "Read only: file is larger than 2 MB"
 msgstr ""
@@ -8339,6 +8355,10 @@ msgstr ""
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr ""
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "The file changed. Open it again before saving."
+msgstr "文件已更改。保存前请重新打开。"
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "The first bot could not be created. Try again."

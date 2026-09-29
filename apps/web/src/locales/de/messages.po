@@ -1951,6 +1951,10 @@ msgstr ""
 msgid "Computer change pending."
 msgstr ""
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Computer changed. Refresh files."
+msgstr "Der Computer hat sich geändert. Aktualisiere die Dateien."
+
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Computer engine is unavailable."
 msgstr ""
@@ -1970,6 +1974,10 @@ msgstr "Computer ist im Ruhezustand"
 #: src/pages/Shell.tsx
 msgid "Computer is asleep. Open it to wake."
 msgstr "Computer ist im Ruhezustand. Zum Aufwecken öffnen."
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Computer is busy"
+msgstr "Computer ist beschäftigt"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -2898,6 +2906,10 @@ msgstr "Diese Auswahl konnte nicht gespeichert werden"
 #: src/pages/customize/McpCredentialFix.tsx
 msgid "Could not save this credential. Check it and try again."
 msgstr ""
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Could not save this file. Try again."
+msgstr "Diese Datei konnte nicht gespeichert werden. Versuche es erneut."
 
 #: src/pages/customize/McpCredentialFix.tsx
 msgid "Could not save. Try again."
@@ -6567,6 +6579,10 @@ msgstr "Gelesen"
 msgid "Read by {recipient}"
 msgstr "Gelesen von {recipient}"
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Read only"
+msgstr "Nur lesen"
+
 #: src/pages/ide/IdePage.tsx
 msgid "Read only: file is larger than 2 MB"
 msgstr ""
@@ -8339,6 +8355,10 @@ msgstr ""
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr ""
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "The file changed. Open it again before saving."
+msgstr "Die Datei hat sich geändert. Öffne sie erneut, bevor du speicherst."
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "The first bot could not be created. Try again."

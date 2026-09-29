@@ -1951,6 +1951,10 @@ msgstr ""
 msgid "Computer change pending."
 msgstr ""
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Computer changed. Refresh files."
+msgstr "Bilgisayar değişti. Dosyaları yenileyin."
+
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Computer engine is unavailable."
 msgstr ""
@@ -1970,6 +1974,10 @@ msgstr "Bilgisayar uykuda"
 #: src/pages/Shell.tsx
 msgid "Computer is asleep. Open it to wake."
 msgstr "Bilgisayar uyku modunda. Uyandırmak için açın."
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Computer is busy"
+msgstr "Bilgisayar meşgul"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -2898,6 +2906,10 @@ msgstr "Bu seçim kaydedilemedi"
 #: src/pages/customize/McpCredentialFix.tsx
 msgid "Could not save this credential. Check it and try again."
 msgstr ""
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Could not save this file. Try again."
+msgstr "Bu dosya kaydedilemedi. Yeniden deneyin."
 
 #: src/pages/customize/McpCredentialFix.tsx
 msgid "Could not save. Try again."
@@ -6567,6 +6579,10 @@ msgstr "Okundu"
 msgid "Read by {recipient}"
 msgstr "{recipient} tarafından okundu"
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Read only"
+msgstr "Salt okunur"
+
 #: src/pages/ide/IdePage.tsx
 msgid "Read only: file is larger than 2 MB"
 msgstr ""
@@ -8339,6 +8355,10 @@ msgstr ""
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr ""
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "The file changed. Open it again before saving."
+msgstr "Dosya değişti. Kaydetmeden önce yeniden açın."
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "The first bot could not be created. Try again."

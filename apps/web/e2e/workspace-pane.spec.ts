@@ -62,6 +62,7 @@ async function installWorkspace(page: Page, files: "live" | "saved", saveReason?
     startedAt: "2026-09-28T00:00:00.000Z",
   };
   const unexpected: string[] = [];
+  let reads = 0;
   await page.route("**/rpc/**", async (route) => {
     const url = new URL(route.request().url());
     const name = url.pathname.slice(5);
@@ -77,7 +78,10 @@ async function installWorkspace(page: Page, files: "live" | "saved", saveReason?
           : name === "workspace/list"
             ? { context, entries: [{ path: "notes.md", kind: "file", size: 17 }] }
             : name === "workspace/read"
-              ? fileBody(context, "Workspace notes\n")
+              ? fileBody(
+                  context,
+                  ++reads === 1 ? "Workspace notes\n" : "Workspace notes from disk\n",
+                )
               : name === "workspace/save"
                 ? {
                     saved: false,
@@ -133,6 +137,11 @@ test("workspace pane opens Tasks and bot files without starting the computer", a
   );
   await expect(editor).toContainText("changed");
   await captureScreenshot(page, testInfo, "workspace-files-conflict");
+  await pane.getByRole("treeitem", { name: "notes.md" }).getByRole("button").click();
+  await expect(pane.getByRole("alert")).toHaveCount(0);
+  await expect(editor).toContainText("Workspace notes from disk");
+  await expect(editor).not.toContainText("changed");
+  await captureScreenshot(page, testInfo, "workspace-files-reopened");
   expect(unexpected).toEqual([]);
   await page.keyboard.press("ControlOrMeta+Shift+E");
   await expect(pane).toHaveAttribute("aria-hidden", "true");

@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import type { Bot, WorkspaceContext } from "@ardurbot/contracts";
 import type { MessageDescriptor } from "@lingui/core";
+import { ORPCError } from "@orpc/client";
 import type { ComponentProps, ReactNode, Ref } from "react";
-import { act, useImperativeHandle, useRef } from "react";
+import { act, useImperativeHandle, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -59,6 +60,13 @@ vi.mock("./editor", () => ({
     ref: Ref<unknown>;
   }) => {
     const area = useRef<HTMLTextAreaElement>(null);
+    // The real editor keeps a tab's text until its id changes.
+    const [seenId, setSeenId] = useState(document.id);
+    const [text, setText] = useState(document.content);
+    if (document.id !== seenId) {
+      setSeenId(document.id);
+      setText(document.content);
+    }
     useImperativeHandle(ref, () => ({
       find: vi.fn(),
       selection: () => (area.current ? { text: "hello", startLine: 1, endLine: 1 } : null),
@@ -67,10 +75,14 @@ vi.mock("./editor", () => ({
       <textarea
         ref={area}
         data-editor
+        data-document-id={seenId}
         aria-label={document.path}
         readOnly={document.readOnly}
-        value={document.content}
-        onChange={(event) => onChange(document.id, event.target.value)}
+        value={text}
+        onChange={(event) => {
+          setText(event.target.value);
+          onChange(document.id, event.target.value);
+        }}
       />
     );
   },
@@ -228,6 +240,31 @@ describe("workspace files", () => {
       "The file changed. Open it again before saving.",
     );
     expect(host.querySelector("textarea")?.value).toBe("conflicted");
+
+    const serverVersion = "d".repeat(64);
+    const previousId = host.querySelector("textarea")?.getAttribute("data-document-id");
+    api.read.mockResolvedValueOnce({
+      context,
+      path: "notes.md",
+      content: "from disk",
+      size: 9,
+      binary: false,
+      readOnly: false,
+      version: serverVersion,
+    });
+    await click("notes.md");
+    expect(api.read).toHaveBeenCalledTimes(2);
+    expect(host.querySelector("textarea")?.value).toBe("from disk");
+    expect(host.querySelector("[role='alert']")).toBeNull();
+    const nextId = host.querySelector("textarea")?.getAttribute("data-document-id");
+    expect(nextId).toBeTruthy();
+    expect(nextId).not.toBe(previousId);
+    expect(nextId).toContain(serverVersion);
+    await type("from disk!");
+    await click("Save");
+    expect(api.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({ content: "from disk!", version: serverVersion }),
+    );
   });
 
   it("keeps an unsaved buffer across tabs, bots, refresh, and closing the pane", async () => {
@@ -259,6 +296,59 @@ describe("workspace files", () => {
     expect(host.textContent).toContain("Files are unavailable on this computer.");
     await show("bot");
     expect(host.querySelector("textarea")?.value).toBe("dirty notes");
+  });
+
+  it("keeps unsaved edits visible when the computer stops and its generation changes", async () => {
+    await click("notes.md");
+    await type("dirty notes");
+    await show("bot", { generation: 3, files: "saved" });
+    expect(host.querySelector("textarea")?.value).toBe("dirty notes");
+
+    await act(async () => renderer.unmount());
+    renderer = createRoot(host);
+    await show("bot", { generation: 4, files: "saved" });
+    expect(host.querySelector("textarea")?.value).toBe("dirty notes");
+    await click("Leave");
+    expect(host.textContent).not.toContain("Left the conversation");
+
+    vi.mocked(window.confirm).mockReturnValueOnce(true);
+    await click("Close notes.md");
+    expect(host.querySelector("textarea")).toBeNull();
+    await click("Leave");
+    expect(host.textContent).toContain("Left the conversation");
+  });
+
+  it("describes a failed save with the server reason, not a load error", async () => {
+    await click("notes.md");
+    await type("hello!");
+    api.save.mockRejectedValueOnce(new ORPCError("CONFLICT", { message: "Computer is busy" }));
+    await click("Save");
+    expect(host.querySelector("[role='alert']")?.textContent).toBe("Computer is busy");
+    expect(host.textContent).not.toContain("Could not load files. Try again.");
+
+    api.save.mockRejectedValueOnce(
+      new ORPCError("CONFLICT", { message: "Computer changed. Refresh files." }),
+    );
+    await click("Save");
+    expect(host.querySelector("[role='alert']")?.textContent).toBe(
+      "Computer changed. Refresh files.",
+    );
+
+    api.save.mockRejectedValueOnce(new Error("socket hang up"));
+    await click("Save");
+    expect(host.querySelector("[role='alert']")?.textContent).toBe(
+      "Could not save this file. Try again.",
+    );
+
+    api.save.mockResolvedValueOnce({
+      saved: false,
+      approvalRequired: false,
+      reason: "The file changed. Open it again before saving.",
+    });
+    await click("Save");
+    expect(host.querySelector("[role='alert']")?.textContent).toBe(
+      "The file changed. Open it again before saving.",
+    );
   });
 
   it("shows binary and oversized files without opening an editable buffer", async () => {

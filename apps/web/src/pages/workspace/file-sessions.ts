@@ -4,6 +4,8 @@ export type WorkspaceOpenFile = IdeFile & {
   id: string;
   savedContent: string;
   source: "live" | "saved";
+  /** Set when the file on disk changed and the tab must be read again. */
+  conflict?: boolean;
 };
 
 export type WorkspaceFileSession = {
@@ -16,8 +18,12 @@ const listeners = new Set<() => void>();
 let savingCount = 0;
 let snapshot = { dirty: false, saving: false };
 
-export function workspaceFileSessionId(botId: string, computerId: string, generation: number) {
-  return `${botId}:${computerId}:${generation}`;
+/**
+ * Generation changes when a computer stops. The buffer stays with the bot and computer,
+ * so that stop does not hide the edits or leave a warning with no tab to close.
+ */
+export function workspaceFileSessionId(botId: string, computerId: string) {
+  return `${botId}:${computerId}`;
 }
 
 export function readWorkspaceFileSession(id: string): WorkspaceFileSession {

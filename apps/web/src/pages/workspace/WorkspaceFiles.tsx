@@ -4,6 +4,7 @@ import { Button } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { X } from "lucide-react";
 import { createElement, lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { actionMessage } from "../../lib/orpc-action-message";
 import { rpc } from "../../lib/rpc";
 import { AskBot, QuickOpen } from "./dialogs";
 import type { EditorHandle, EditorSelection } from "./editor";
@@ -20,6 +21,7 @@ import { basename } from "./files-model";
 
 const Editor = lazy(() => import("./editor"));
 const emptySession: WorkspaceFileSession = { tabs: [], active: "" };
+const fileChangedReason = "The file changed. Open it again before saving.";
 
 /** The message is the only text node. Formatting would otherwise wrap space around it. */
 function exactNotice(role: "alert" | "status", className: string, text: string) {
@@ -31,7 +33,27 @@ export function WorkspaceFiles({ bot, context }: { bot: Bot; context: WorkspaceC
   const computerId = context.computerId;
   const generation = context.generation;
   const valid = Boolean(computerId) && generation !== null && context.files !== "unavailable";
-  const sessionId = valid ? workspaceFileSessionId(bot.id, computerId!, generation!) : null;
+  const sessionId = valid ? workspaceFileSessionId(bot.id, computerId!) : null;
+  const describeSaveError = (reason: string) => {
+    switch (reason) {
+      case fileChangedReason:
+        return t`The file changed. Open it again before saving.`;
+      case "Computer is busy":
+        return t`Computer is busy`;
+      case "Computer changed. Refresh files.":
+        return t`Computer changed. Refresh files.`;
+      case "Files are unavailable on this computer.":
+        return t`Files are unavailable on this computer.`;
+      case "Binary file":
+        return t`Binary file`;
+      case "Read only":
+        return t`Read only`;
+      case "Read only: file is larger than 2 MB":
+        return t`Read only: file is larger than 2 MB`;
+      default:
+        return t`Could not save this file. Try again.`;
+    }
+  };
   const [boundId, setBoundId] = useState<string | null>(sessionId);
   const [session, setSession] = useState<WorkspaceFileSession>(() =>
     sessionId ? readWorkspaceFileSession(sessionId) : emptySession,
@@ -88,9 +110,8 @@ export function WorkspaceFiles({ bot, context }: { bot: Bot; context: WorkspaceC
   const open = (path: string) => {
     const target = sessionId;
     if (!target || !computerId || generation === null) return;
-    const id = `${target}/${path}`;
     const existing = sessionRef.current.tabs.find((tab) => tab.path === path);
-    if (existing) {
+    if (existing && !existing.conflict) {
       commit({ ...sessionRef.current, active: existing.id });
       setError(null);
       return;
@@ -108,12 +129,15 @@ export function WorkspaceFiles({ bot, context }: { bot: Bot; context: WorkspaceC
           return;
         }
         const stored = readWorkspaceFileSession(target);
-        if (stored.tabs.some((tab) => tab.path === path)) {
-          const next = { ...stored, active: id };
+        const previous = stored.tabs.find((tab) => tab.path === path);
+        if (previous && !previous.conflict) {
+          const next = { ...stored, active: previous.id };
           writeWorkspaceFileSession(target, next);
           if (alive.current && boundRef.current === target) setSession(next);
           return;
         }
+        // A new id is what makes the editor show the reloaded text.
+        const id = previous ? `${target}/${path}#${file.version}` : `${target}/${path}`;
         const tab: WorkspaceOpenFile = {
           ...file,
           id,
@@ -121,7 +145,12 @@ export function WorkspaceFiles({ bot, context }: { bot: Bot; context: WorkspaceC
           readOnly: file.readOnly === true,
           source: file.context.files === "live" ? "live" : "saved",
         };
-        const next = { tabs: [...stored.tabs, tab], active: id };
+        const next = previous
+          ? {
+              tabs: stored.tabs.map((item) => (item.path === path ? tab : item)),
+              active: id,
+            }
+          : { tabs: [...stored.tabs, tab], active: id };
         writeWorkspaceFileSession(target, next);
         if (alive.current && boundRef.current === target) {
           setSession(next);
@@ -165,7 +194,24 @@ export function WorkspaceFiles({ bot, context }: { bot: Bot; context: WorkspaceC
       if (result.approvalRequired && window.confirm(t`Save`))
         result = await rpc.workspace.save({ ...input, approved: true });
       if (!result.saved) {
-        if (result.reason && alive.current && boundRef.current === target) setError(result.reason);
+        if (result.reason && alive.current && boundRef.current === target) {
+          const current = sessionRef.current;
+          const next =
+            result.reason === fileChangedReason
+              ? {
+                  ...current,
+                  tabs: current.tabs.map((item) =>
+                    item.id === tab.id ? { ...item, conflict: true } : item,
+                  ),
+                }
+              : current;
+          if (next !== current) {
+            sessionRef.current = next;
+            writeWorkspaceFileSession(target, next);
+            setSession(next);
+          }
+          setError(describeSaveError(result.reason));
+        }
         return;
       }
       const stored = readWorkspaceFileSession(target);
@@ -182,9 +228,9 @@ export function WorkspaceFiles({ bot, context }: { bot: Bot; context: WorkspaceC
         setSession(next);
         setStatus(t`Saved`);
       }
-    } catch {
+    } catch (error) {
       if (alive.current && boundRef.current === target)
-        setError(t`Could not load files. Try again.`);
+        setError(describeSaveError(actionMessage(error, "")));
     } finally {
       savingRef.current = false;
       setWorkspaceFileSaving(false);

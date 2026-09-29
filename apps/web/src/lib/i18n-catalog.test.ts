@@ -528,6 +528,29 @@ describe("lingui catalogs", () => {
     }
   });
 
+  it("translates workspace file save errors in every shipped catalog", async () => {
+    const sentences = [
+      "Could not save this file. Try again.",
+      "Computer is busy",
+      "Computer changed. Refresh files.",
+      "The file changed. Open it again before saving.",
+      "Read only",
+    ];
+    for (const locale of ["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"]) {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const parsed = await formatter().parse(readFileSync(filename, "utf8"), {
+        locale,
+        sourceLocale: "en",
+        filename,
+      });
+      for (const sentence of sentences) {
+        const entry = Object.values(parsed).find((value) => value.message === sentence);
+        expect(entry, `${locale}: ${sentence} missing from catalog`).toBeTruthy();
+        expect(entry?.translation?.trim(), `${locale}: ${sentence} must not be empty`).toBeTruthy();
+      }
+    }
+  });
+
   it("translates new computer placeholders in every shipped catalog", () => {
     const sentences = [
       "Booting live desktop…",
