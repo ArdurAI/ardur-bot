@@ -1,5 +1,5 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
-import { access } from "node:fs/promises";
+import { access, lstat, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import type {
   AdapterContext,
@@ -15,6 +15,7 @@ import {
   guardrailConfigFromEnv,
   isGuardedPath,
   resolveGuardrailPathsSync,
+  resolveRealPathSync,
 } from "../host-guardrails.js";
 import { startArdurMcpServer } from "./ardur-mcp-server.js";
 import { createArdurToolBridge } from "./claude-mcp-bridge.js";
@@ -154,23 +155,38 @@ function plainNames(value: unknown, fallback: string[]): string[] {
   return names.length ? names : fallback;
 }
 
+/** An instruction file that would hand Codex a file from outside the bot's folder. */
+export class UnsafeInstructionFileError extends Error {
+  constructor(readonly filename: string) {
+    super(`Unsafe instruction file: ${filename}`);
+    this.name = "UnsafeInstructionFileError";
+  }
+}
+
 /**
  * Instruction files Codex loads for a folder: AGENTS.md, its override and any configured
  * fallback names, from the folder's project root (the nearest ancestor holding a configured root
  * marker) down to the folder itself, or only the folder's own when no root is found. The read
  * profile confines the run to its folder, so these files are granted explicitly; otherwise
  * Codex refuses to create the session when an ancestor holds instructions it cannot read.
+ *
+ * Codex resolves links in what it is granted and loads these files into the prompt, so a grant
+ * names the file as the disk spells it and is given only for a real file: not a link that
+ * leaves the folder, not a second name for a file elsewhere, and not protected data. One
+ * that fails is refused outright, because Codex would read it all the same.
  */
 export async function instructionFileReads(
   cwd: string,
   discovery: InstructionDiscovery = {},
+  guarded: string[] = [],
 ): Promise<Record<string, "read">> {
   const markers = plainNames(discovery.rootMarkers, DEFAULT_ROOT_MARKERS);
   const filenames = [
     ...new Set([...INSTRUCTION_FILENAMES, ...plainNames(discovery.fallbackFilenames, [])]),
   ];
+  const folder = resolveRealPathSync(path.resolve(cwd));
   const chain: string[] = [];
-  let directory = path.resolve(cwd);
+  let directory = folder;
   let root: string | undefined;
   for (let depth = 0; depth < 64 && !root; depth++) {
     chain.push(directory);
@@ -190,11 +206,31 @@ export async function instructionFileReads(
     directory = parent;
   }
   const directories = root ? chain : chain.slice(0, 1);
-  return Object.fromEntries(
-    directories.flatMap((entry) =>
-      filenames.map((name) => [path.join(entry, name), "read" as const]),
-    ),
-  );
+  const reads: Record<string, "read"> = {};
+  for (const entry of directories) {
+    for (const name of filenames) {
+      const file = path.join(entry, name);
+      const link = await lstat(file).catch(() => undefined);
+      // Nothing there: nothing for Codex to load, and nothing to grant.
+      if (!link) continue;
+      const real = await realpath(file).catch(() => undefined);
+      const target = real ? await stat(real).catch(() => undefined) : undefined;
+      // A real file is spelled as it was asked for, give or take the case of its name on a
+      // disk that ignores case; anything else reached it through a link.
+      const plain = !link.isSymbolicLink() && real !== undefined && isGuardedPath([file], real);
+      const insideFolder = real !== undefined && isGuardedPath([folder], real);
+      if (
+        !real ||
+        !target?.isFile() ||
+        target.nlink > 1 ||
+        !(plain || insideFolder) ||
+        isGuardedPath(guarded, real)
+      )
+        throw new UnsafeInstructionFileError(name);
+      reads[real] = "read";
+    }
+  }
+  return reads;
 }
 
 export async function openCodex(start: NativeSpawn = spawnNative) {
@@ -323,19 +359,22 @@ export class CodexAppServerRuntime implements AgentRuntime {
       );
     // Codex runs under its own sandbox, so Ardur's protected paths are enforced on its
     // profile here: the bot's folder may not sit inside them or contain them, and no
-    // instruction file from them is granted.
+    // instruction file from them is granted. Codex follows links in its folder and in what
+    // it is granted, so the folder is checked, granted and handed to Codex as the disk
+    // spells it. (Codex's own sandbox cannot even enter a folder reached through a link.)
     const guarded = resolveGuardrailPathsSync(this.guard.paths);
-    if (request.nativeCwd) {
-      const folder = path.resolve(request.nativeCwd);
-      if (isGuardedPath(guarded, folder) || guarded.some((entry) => isGuardedPath([folder], entry)))
-        throw problem(
-          "runtime-unavailable",
-          "Codex could not start a session in this bot's folder — change the bot's computer or the pin.",
-        );
-    }
-    const rpc = await openCodex((binary, args) =>
-      this.start(binary, args, request.nativeCwd),
-    ).catch(() => {
+    const folder = request.nativeCwd
+      ? resolveRealPathSync(path.resolve(request.nativeCwd))
+      : undefined;
+    if (
+      folder &&
+      (isGuardedPath(guarded, folder) || guarded.some((entry) => isGuardedPath([folder], entry)))
+    )
+      throw problem(
+        "runtime-unavailable",
+        "Codex could not start a session in this bot's folder — change the bot's computer or the pin.",
+      );
+    const rpc = await openCodex((binary, args) => this.start(binary, args, folder)).catch(() => {
       throw problem("runtime-unavailable", "Codex app-server unavailable");
     });
     const queue = new RuntimeQueue<AgentRuntimeEvent>();
@@ -423,7 +462,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
           project_root_markers?: unknown;
           project_doc_fallback_filenames?: unknown;
         };
-      }>("config/read", { includeLayers: false, cwd: request.nativeCwd });
+      }>("config/read", { includeLayers: false, cwd: folder });
       if (Object.hasOwn(config.mcp_servers ?? {}, "ardur"))
         throw problem(
           "runtime-unavailable",
@@ -464,7 +503,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
           })
           .safeParse(
             await rpc.request("skills/list", {
-              ...(request.nativeCwd ? { cwds: [request.nativeCwd] } : {}),
+              ...(folder ? { cwds: [folder] } : {}),
               forceReload: true,
             }),
           );
@@ -476,10 +515,27 @@ export class CodexAppServerRuntime implements AgentRuntime {
         for (const entry of inventory.data.data)
           for (const { path } of entry.skills) comparisonSkills.push({ path, enabled: false });
       }
+      const instructionReads = folder
+        ? await instructionFileReads(
+            folder,
+            {
+              rootMarkers: config.project_root_markers,
+              fallbackFilenames: config.project_doc_fallback_filenames,
+            },
+            guarded,
+          ).catch((error: unknown) => {
+            if (error instanceof UnsafeInstructionFileError)
+              throw problem(
+                "runtime-unavailable",
+                `Codex can't start: ${error.filename} is a link to a file outside this bot's folder. Replace it with a real file.`,
+              );
+            throw error;
+          })
+        : {};
       const options = {
         model: pin.modelId,
         modelProvider: "openai",
-        cwd: request.nativeCwd,
+        cwd: folder,
         approvalPolicy: "on-request",
         baseInstructions: request.instructions,
         config: {
@@ -503,19 +559,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
             "ardur-read": {
               filesystem: {
                 ":minimal": "read",
-                ...(request.nativeCwd
-                  ? {
-                      [request.nativeCwd]: "read",
-                      ...Object.fromEntries(
-                        Object.entries(
-                          await instructionFileReads(request.nativeCwd, {
-                            rootMarkers: config.project_root_markers,
-                            fallbackFilenames: config.project_doc_fallback_filenames,
-                          }),
-                        ).filter(([file]) => !isGuardedPath(guarded, file)),
-                      ),
-                    }
-                  : {}),
+                ...(folder ? { [folder]: "read", ...instructionReads } : {}),
               },
               network: { enabled: false },
             },

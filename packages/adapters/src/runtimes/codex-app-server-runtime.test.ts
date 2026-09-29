@@ -1,6 +1,6 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough, Writable } from "node:stream";
@@ -837,14 +837,30 @@ describe("instruction file grants", () => {
   afterEach(async () => {
     if (root) await rm(root, { recursive: true, force: true });
   });
+  /** A scratch folder, spelled as the disk spells it (the system temp folder is itself a link). */
+  const scratch = async () => {
+    root = await realpath(await mkdtemp(path.join(tmpdir(), "codex-grants-")));
+    return root;
+  };
+  const refused = (f: ReturnType<typeof fixture>, runtime: CodexAppServerRuntime) =>
+    (async () => {
+      for await (const _event of runtime.run(f.request)) {
+        // drain
+      }
+    })();
   it.each(["thread/start", "thread/resume"] as const)(
-    "grants exactly the ancestor instruction files for %s",
+    "grants exactly the ancestor instruction files that exist for %s",
     async (method) => {
-      root = await mkdtemp(path.join(tmpdir(), "codex-grants-"));
-      const repo = path.join(root, "repo");
+      const repo = path.join(await scratch(), "repo");
       const folder = path.join(repo, "a", "b");
       await mkdir(path.join(repo, ".git"), { recursive: true });
       await mkdir(folder, { recursive: true });
+      const files = [
+        path.join(repo, "AGENTS.md"),
+        path.join(repo, "a", "AGENTS.override.md"),
+        path.join(folder, "AGENTS.md"),
+      ];
+      for (const file of files) await writeFile(file, "instructions");
       const f = fixture();
       f.request.nativeCwd = folder;
       if (method === "thread/resume")
@@ -854,10 +870,6 @@ describe("instruction file grants", () => {
       const config = start?.params?.config as {
         permissions?: { "ardur-read": { filesystem: Record<string, string> } };
       };
-      const files = [repo, path.join(repo, "a"), folder].flatMap((dir) => [
-        path.join(dir, "AGENTS.md"),
-        path.join(dir, "AGENTS.override.md"),
-      ]);
       expect(config.permissions?.["ardur-read"].filesystem).toEqual({
         ":minimal": "read",
         [folder]: "read",
@@ -865,6 +877,73 @@ describe("instruction file grants", () => {
       });
     },
   );
+  it.each(["thread/start", "thread/resume"] as const)(
+    "refuses an instruction file that links outside the bot's folder for %s",
+    async (method) => {
+      // Codex resolves links in what it is granted and loads the file into the prompt.
+      const folder = path.join(await scratch(), "bot");
+      const vault = path.join(root, "vault");
+      await mkdir(folder, { recursive: true });
+      await mkdir(vault, { recursive: true });
+      await writeFile(path.join(vault, "secret.txt"), "protected");
+      await symlink(path.join(vault, "secret.txt"), path.join(folder, "AGENTS.md"));
+      const f = fixture();
+      f.request.nativeCwd = folder;
+      if (method === "thread/resume")
+        f.request.nativeSession = { runtimeKind: "codex-app-server", sessionId: "thread-native" };
+      await expect(f.collect()).rejects.toMatchObject({
+        problem: {
+          code: "runtime-unavailable",
+          reason:
+            "Codex can't start: AGENTS.md is a link to a file outside this bot's folder. Replace it with a real file.",
+        },
+      });
+      expect(f.messages.some((event) => event.method === method)).toBe(false);
+      expect(f.messages.some((event) => event.method === "turn/start")).toBe(false);
+    },
+  );
+  it("grants the folder as the disk spells it, and refuses one that links into protected data", async () => {
+    const data = path.join(await scratch(), "data");
+    const home = path.join(data, "desktop-computers", "team-a");
+    const secrets = path.join(data, "homes");
+    await mkdir(home, { recursive: true });
+    await mkdir(secrets, { recursive: true });
+    const guard = { paths: [secrets], ports: [], sockets: [] };
+
+    const alias = path.join(root, "alias");
+    await symlink(home, alias);
+    const open = fixture();
+    open.request.nativeCwd = alias;
+    for await (const _event of new CodexAppServerRuntime(open.spawn, guard).run(open.request)) {
+      // drain
+    }
+    const start = open.messages.find((event) => event.method === "thread/start");
+    const config = start?.params?.config as {
+      permissions: { "ardur-read": { filesystem: Record<string, string> } };
+    };
+    expect(config.permissions["ardur-read"].filesystem).toEqual({
+      ":minimal": "read",
+      [home]: "read",
+    });
+    // Codex's own sandbox cannot enter a folder reached through a link, so it gets the real one.
+    expect(start?.params?.cwd).toBe(home);
+    expect((open.spawn.mock.calls[0] as unknown[])[2]).toBe(home);
+
+    const planted = path.join(data, "desktop-computers", "team-b");
+    await symlink(secrets, planted);
+    const closed = fixture();
+    closed.request.nativeCwd = planted;
+    await expect(
+      refused(closed, new CodexAppServerRuntime(closed.spawn, guard)),
+    ).rejects.toMatchObject({
+      problem: {
+        code: "runtime-unavailable",
+        reason:
+          "Codex could not start a session in this bot's folder \u2014 change the bot's computer or the pin.",
+      },
+    });
+    expect(closed.spawn).not.toHaveBeenCalled();
+  });
   it("refuses a bot folder that overlaps Ardur's protected data, before Codex starts", async () => {
     // Codex runs under its own sandbox, so the protected paths are enforced on its profile.
     const guard = { paths: ["/fixture/ardur/data/homes"], ports: [], sockets: [] };
@@ -872,12 +951,7 @@ describe("instruction file grants", () => {
       const f = fixture();
       const runtime = new CodexAppServerRuntime(f.spawn, guard);
       f.request.nativeCwd = folder;
-      const run = (async () => {
-        for await (const _event of runtime.run(f.request)) {
-          // drain
-        }
-      })();
-      await expect(run).rejects.toMatchObject({
+      await expect(refused(f, runtime)).rejects.toMatchObject({
         problem: {
           code: "runtime-unavailable",
           reason:
