@@ -1,6 +1,16 @@
-import type { WorkRecordStatus } from "@ardurbot/core";
+import type { WorkRecordEntry, WorkRecordStatus } from "@ardurbot/core";
 import { AccessibilityInfo } from "react-native";
 import { t } from "./i18n";
+
+/**
+ * Title shown for a record entry. A historical shell event may carry no
+ * command text; the core leaves its title unset and the record names the row
+ * here, in the app's language.
+ */
+export function workRecordEntryTitle(entry: WorkRecordEntry | undefined): string | undefined {
+  if (!entry) return undefined;
+  return entry.evidence.title ?? (entry.block.kind === "command" ? t("Command") : undefined);
+}
 
 /**
  * Spoken name for the record's disclosure. Its status symbols are visual only,

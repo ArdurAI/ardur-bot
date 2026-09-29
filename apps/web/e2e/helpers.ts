@@ -152,6 +152,12 @@ export async function openNewBot(page: Page) {
   await expect(page.getByTestId("create-bot-form")).toBeVisible();
 }
 
+export async function openBotSettings(page: Page) {
+  const button = page.locator("main").getByRole("button", { name: "Bot settings", exact: true });
+  if ((await button.getAttribute("aria-pressed")) !== "true") await button.click();
+  await expect(page.getByTestId("side-panel")).toHaveAttribute("data-panel", "settings");
+}
+
 export async function openNewGroup(page: Page) {
   await page.getByTestId("create-menu-trigger").click();
   await page.getByTestId("create-new-group").click();

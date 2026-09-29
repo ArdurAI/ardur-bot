@@ -523,6 +523,10 @@ msgstr ""
 msgid "Add folder"
 msgstr ""
 
+#: src/pages/ScratchpadSection.tsx
+msgid "Add from board"
+msgstr "从看板添加"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Add GraphQL"
 msgstr "添加 GraphQL"
@@ -1075,6 +1079,11 @@ msgstr "{0}"
 msgid "at {timeSelect}"
 msgstr "{timeSelect}"
 
+#. placeholder {0}: row.usage.tokens
+#: src/pages/TeamBoard.tsx
+msgid "at least {0}"
+msgstr "至少 {0}"
+
 #: src/pages/storage/StorageSettings.tsx
 msgid "at least {size}"
 msgstr "至少 {size}"
@@ -1267,6 +1276,7 @@ msgstr ""
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/DashboardPage.tsx
+#: src/pages/ScratchpadSection.tsx
 #: src/pages/shell/TopNav.tsx
 msgid "Board"
 msgstr ""
@@ -1450,6 +1460,7 @@ msgstr "无法连接服务器。"
 #: src/pages/memory/MemoryImport.tsx
 #: src/pages/MemoryImportExport.tsx
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/ScratchpadSection.tsx
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
@@ -1907,6 +1918,7 @@ msgstr "颜色 {color}"
 msgid "Coming soon"
 msgstr "即将推出"
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Command"
@@ -5654,6 +5666,10 @@ msgstr "新建技能"
 msgid "New space"
 msgstr "新建工作区"
 
+#: src/pages/ScratchpadSection.tsx
+msgid "New work item"
+msgstr "新工作项"
+
 #: src/pages/account/AccountTables.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/shell/terminal-session.tsx
@@ -6127,6 +6143,10 @@ msgstr ""
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Open files"
 msgstr ""
+
+#: src/pages/ScratchpadSection.tsx
+msgid "Open in board"
+msgstr "在看板中打开"
 
 #: src/pages/workspace/WorkspaceScreen.tsx
 msgid "Open in full window"
@@ -7590,6 +7610,7 @@ msgstr ""
 #: src/pages/board/Board.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-picker.tsx
 #: src/pages/shell/command-palette.tsx
@@ -8903,6 +8924,7 @@ msgstr "未分配"
 
 #: src/components/SoftwareUpdateSection.tsx
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Unavailable"
 msgstr "不可用"
 

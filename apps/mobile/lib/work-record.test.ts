@@ -1,7 +1,14 @@
+import type { MessageBlock } from "@ardurbot/contracts";
+import { workingBotsWithoutVisibleActivity, workRecordEntries } from "@ardurbot/core";
 import { AccessibilityInfo } from "react-native";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetI18nForTests } from "./i18n";
-import { watchMotionAllowed, workRecordLabel, workRecordShouldPulse } from "./work-record";
+import {
+  watchMotionAllowed,
+  workRecordEntryTitle,
+  workRecordLabel,
+  workRecordShouldPulse,
+} from "./work-record";
 
 vi.mock("react-native", () => ({
   AccessibilityInfo: { isReduceMotionEnabled: vi.fn(), addEventListener: vi.fn() },
@@ -146,5 +153,66 @@ describe("work record label", () => {
     expect(workRecordLabel("done", "ls")).toBe("完成：ls");
     expect(workRecordLabel("failed", "")).toBe("失败");
     resetI18nForTests("en");
+  });
+});
+
+function historyCommandBlock(command: string | null): MessageBlock {
+  return {
+    kind: "command",
+    command: {
+      commandId: "c1",
+      runId: "r1",
+      attemptId: "a1",
+      executionId: "e1",
+      command,
+      cwd: "/",
+      computerId: "m1",
+      computer: "local",
+      startedAt: "2026-09-28T00:00:00Z",
+      durationMs: 1200,
+      exitCode: 0,
+      outcome: "completed",
+      stdout: "",
+      stderr: "",
+      error: null,
+      redacted: false,
+      truncated: false,
+      replayOf: null,
+      rerunDisabledReason: null,
+    },
+  };
+}
+
+describe("work record entry title", () => {
+  it("names a historical shell event with no command text in the active language", () => {
+    const entry = () => workRecordEntries([historyCommandBlock(null)])[0];
+    resetI18nForTests("en");
+    expect(workRecordEntryTitle(entry())).toBe("Command");
+    resetI18nForTests("ru");
+    expect(workRecordEntryTitle(entry())).toBe("Команда");
+    resetI18nForTests("zh-CN");
+    expect(workRecordEntryTitle(entry())).toBe("命令");
+    resetI18nForTests("en");
+  });
+
+  it("keeps the recorded command text when there is one", () => {
+    const entry = workRecordEntries([historyCommandBlock("pnpm build")])[0];
+    expect(workRecordEntryTitle(entry)).toBe("pnpm build");
+    expect(workRecordEntryTitle(undefined)).toBeUndefined();
+  });
+});
+
+describe("workingBotsWithoutVisibleActivity", () => {
+  it("filters out bots that already have visible activity in the message stream", () => {
+    const bots = [{ botId: "bot1" }, { botId: "bot2" }];
+    const messages = [
+      {
+        id: "progress:run1",
+        botId: "bot1",
+        blocks: [{ kind: "progress" as const, text: "Some text" }],
+      },
+    ];
+    const working = workingBotsWithoutVisibleActivity(bots, messages);
+    expect(working).toEqual([{ botId: "bot2" }]);
   });
 });

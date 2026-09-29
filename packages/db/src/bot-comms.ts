@@ -1726,7 +1726,7 @@ export async function settleBotMessageWakesInTransaction(
         updatedThreads.push(...(await projectDeliveryState(tx, id, null)));
       continue;
     }
-    if (wake.steeringMessageId)
+    if (wake.steeringMessageId) {
       await tx.steeringMessage.deleteMany({
         where: {
           messageId: {
@@ -1740,6 +1740,14 @@ export async function settleBotMessageWakesInTransaction(
           runId,
         },
       });
+      const survived = await tx.steeringMessage.findUnique({
+        where: { id: wake.steeringMessageId },
+      });
+      // The wake's steering row outlived this run (released for a later run to
+      // answer), so keep the wake bound: the claiming run re-points it and
+      // acknowledges its deliveries. Retrying here would deliver it twice.
+      if (survived) continue;
+    }
     if (runtimeProblemCode) {
       updatedThreads.push(...(await finishWake(tx, wake, "failed", runtimeProblemCode, true)));
       continue;

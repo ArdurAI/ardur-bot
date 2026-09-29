@@ -523,6 +523,10 @@ msgstr ""
 msgid "Add folder"
 msgstr ""
 
+#: src/pages/ScratchpadSection.tsx
+msgid "Add from board"
+msgstr "बोर्ड से जोड़ें"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Add GraphQL"
 msgstr "GraphQL जोड़ें"
@@ -1075,6 +1079,11 @@ msgstr "{0} बजे"
 msgid "at {timeSelect}"
 msgstr "{timeSelect} बजे"
 
+#. placeholder {0}: row.usage.tokens
+#: src/pages/TeamBoard.tsx
+msgid "at least {0}"
+msgstr "कम से कम {0}"
+
 #: src/pages/storage/StorageSettings.tsx
 msgid "at least {size}"
 msgstr ""
@@ -1267,6 +1276,7 @@ msgstr ""
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/DashboardPage.tsx
+#: src/pages/ScratchpadSection.tsx
 #: src/pages/shell/TopNav.tsx
 msgid "Board"
 msgstr ""
@@ -1450,6 +1460,7 @@ msgstr "सर्वर तक नहीं पहुंचा जा सका�
 #: src/pages/memory/MemoryImport.tsx
 #: src/pages/MemoryImportExport.tsx
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/ScratchpadSection.tsx
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
@@ -1907,6 +1918,7 @@ msgstr "रंग {color}"
 msgid "Coming soon"
 msgstr ""
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Command"
@@ -5654,6 +5666,10 @@ msgstr "नई स्किल"
 msgid "New space"
 msgstr ""
 
+#: src/pages/ScratchpadSection.tsx
+msgid "New work item"
+msgstr "नया कार्य आइटम"
+
 #: src/pages/account/AccountTables.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/shell/terminal-session.tsx
@@ -6127,6 +6143,10 @@ msgstr ""
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Open files"
 msgstr ""
+
+#: src/pages/ScratchpadSection.tsx
+msgid "Open in board"
+msgstr "बोर्ड में खोलें"
 
 #: src/pages/workspace/WorkspaceScreen.tsx
 msgid "Open in full window"
@@ -7590,6 +7610,7 @@ msgstr ""
 #: src/pages/board/Board.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-picker.tsx
 #: src/pages/shell/command-palette.tsx
@@ -8903,8 +8924,9 @@ msgstr "असाइन नहीं किया गया"
 
 #: src/components/SoftwareUpdateSection.tsx
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Unavailable"
-msgstr ""
+msgstr "उपलब्ध नहीं"
 
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "Unavailable with Hermes."

@@ -17,7 +17,7 @@ vi.mock("../ThreadCommandBlock", () => ({
   ThreadCommandBlock: () => <div data-testid="command-card" />,
 }));
 
-function commandBlock(command: string, exitCode: number): MessageBlock {
+function commandBlock(command: string | null, exitCode: number): MessageBlock {
   return {
     kind: "command",
     command: {
@@ -198,6 +198,17 @@ describe("CompactWorkRecord", () => {
       root.render(<CompactWorkRecord blocks={[commandBlock("pnpm test", 1)]} />);
     });
     expect(button().getAttribute("aria-label")).toBe("Failed: pnpm test");
+  });
+
+  it("names a historical shell event with no command text from the catalog", () => {
+    act(() => {
+      root.render(<CompactWorkRecord blocks={[commandBlock(null, 0)]} />);
+    });
+    const button = container.querySelector("button")!;
+    // The core returns no title for a null command; the record falls back to
+    // the translated "Command" string instead of a hardcoded English one.
+    expect(button.textContent).toContain("Command");
+    expect(button.getAttribute("aria-label")).toBe("Done: Command");
   });
 
   it("labels an expanded failed record as failed, not done", () => {

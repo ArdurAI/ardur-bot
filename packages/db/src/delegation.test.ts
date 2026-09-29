@@ -1,11 +1,18 @@
 import type { MessageBlock } from "@ardurbot/contracts";
-import { ALL_DEVICE_SCOPES, DELEGATION_LIMITS, TaskCardSchema } from "@ardurbot/contracts";
+import {
+  ALL_DEVICE_SCOPES,
+  DELEGATION_LIMITS,
+  delegationStopLine,
+  TaskCardSchema,
+} from "@ardurbot/contracts";
 import { userVisibleMessages } from "@ardurbot/core";
 import { describe, expect, it } from "vitest";
 import {
   acceptDelegation,
   admitDelegation,
   DelegationAdmissionError,
+  delegationEffectiveStopReason,
+  delegationStopReason,
   finishDelegation,
   requestCancel,
 } from "./delegation.js";
@@ -36,6 +43,14 @@ describe("transactional delegation admission", () => {
     const f = fixture(),
       a = f.worker(),
       b = f.worker();
+    // This test exercises the concurrency cap, so its room explicitly fits that many default
+    // reservations; a default root is smaller (covered by the default-root budget test below).
+    await f.tx.delegationRoot.upsert({
+      create: {
+        tokenLimit: DELEGATION_LIMITS.concurrent * DELEGATION_LIMITS.reservationTokens,
+        deadlineAt: new Date(Date.now() + 3_600_000),
+      },
+    });
     const outcomes = await Promise.allSettled(
       Array.from({ length: 8 }, (_, i) => f.admit({ admissionKey: `key-${i}` }, i % 2 ? a : b)),
     );
@@ -43,7 +58,7 @@ describe("transactional delegation admission", () => {
     expect(f.state().root).toMatchObject({
       activeDescendants: 4,
       totalDescendants: 4,
-      reservedTokens: 40000,
+      reservedTokens: 4 * DELEGATION_LIMITS.reservationTokens,
     });
     expect(f.state().runs).toHaveLength(5);
     expect(f.tx.$queryRaw).toHaveBeenCalled();
@@ -52,6 +67,23 @@ describe("transactional delegation admission", () => {
     );
     expect(row.id).toBe("delegation-0");
     expect(f.state().root.totalDescendants).toBe(4);
+  });
+  it("fits three default reservations in a default root and refuses the fourth for budget", async () => {
+    // Today's defaults: DELEGATION_LIMITS.tokens roots hold three reservationTokens
+    // reservations, one short of the concurrent cap. Raising the default is the owner's call.
+    const f = fixture();
+    for (const key of ["one", "two", "three"]) await f.admit({ admissionKey: key });
+    expect(f.state().root).toMatchObject({
+      tokenLimit: DELEGATION_LIMITS.tokens,
+      activeDescendants: 3,
+      reservedTokens: 3 * DELEGATION_LIMITS.reservationTokens,
+    });
+    expect(3 * DELEGATION_LIMITS.reservationTokens).toBeLessThanOrEqual(DELEGATION_LIMITS.tokens);
+    const before = structuredClone(f.state());
+    await expect(f.admit({ admissionKey: "four" })).rejects.toMatchObject({
+      problem: { code: "budget-exhausted" },
+    });
+    expect(f.state()).toEqual(before);
   });
   it.each([
     ["depth-exceeded", { maxDepth: 0 }],
@@ -171,6 +203,19 @@ describe("transactional delegation admission", () => {
   });
 });
 
+it.each([
+  ["deadline", { deadlineAt: new Date(Date.now() - 1_000), usedTokens: 0, reservedTokens: 36_864 }],
+  [
+    "budget",
+    { deadlineAt: new Date(Date.now() + 60_000), usedTokens: 36_864, reservedTokens: 36_864 },
+  ],
+  [
+    "stopped",
+    { deadlineAt: new Date(Date.now() + 60_000), usedTokens: 100, reservedTokens: 36_864 },
+  ],
+] as const)("names the %s stop reason from the worker row", (reason, row) => {
+  expect(delegationStopReason(row)).toBe(reason);
+});
 it("writes one completion summary and changes it on explicit acceptance", async () => {
   const f = fixture();
   const row = await f.admit();
@@ -280,7 +325,7 @@ it("keeps a status summary when a peer finishes without a written answer", async
 it("counts coordinator usage before the first handoff and rolls back an exhausted root", async () => {
   const f = fixture();
   f.tx.usageRecord.aggregate.mockResolvedValue({
-    _sum: { inputTokens: 119000, outputTokens: 1000 },
+    _sum: { inputTokens: 199000, outputTokens: 1000 },
   });
   await expect(f.admit()).rejects.toMatchObject({ problem: { code: "budget-exhausted" } });
   expect(f.tx.usageRecord.aggregate).toHaveBeenCalledWith({
@@ -289,6 +334,42 @@ it("counts coordinator usage before the first handoff and rolls back an exhauste
   });
   expect(f.state().root).toBeNull();
   expect(f.state().rows).toHaveLength(0);
+});
+it("reserves one realistic request by default instead of the old 10000 floor", async () => {
+  const f = fixture();
+  const row = await f.admit();
+  expect(row.reservedTokens).toBe(DELEGATION_LIMITS.reservationTokens);
+  expect(row.reservedTokens).toBeGreaterThanOrEqual(36_864);
+  expect(f.state().root).toMatchObject({ reservedTokens: row.reservedTokens });
+});
+it("refuses an explicit worker budget below one realistic request without starting", async () => {
+  const f = fixture();
+  const before = structuredClone(f.state());
+  await expect(f.admit({ tokens: 10_000, minimumTokens: 36_864 })).rejects.toMatchObject({
+    problem: { code: "budget-too-small" },
+  });
+  expect(f.state()).toEqual(before);
+});
+it("honours an explicit worker budget that covers one realistic request", async () => {
+  const f = fixture();
+  const row = await f.admit({ tokens: 12_288, minimumTokens: 12_288 });
+  expect(row.reservedTokens).toBe(12_288);
+});
+it("refuses before starting when the remaining task budget cannot cover one request", async () => {
+  const f = fixture();
+  // The evidence root: tokenLimit 120000 with 102721 already spent before the handoff.
+  await f.tx.delegationRoot.upsert({
+    create: {
+      tokenLimit: 120_000,
+      usedTokens: 102_721,
+      deadlineAt: new Date(Date.now() + 3_600_000),
+    },
+  });
+  const before = structuredClone(f.state());
+  await expect(f.admit()).rejects.toMatchObject({
+    problem: { code: "budget-exhausted" },
+  });
+  expect(f.state()).toEqual(before);
 });
 it("does not let an inherited worker change the parent's computer", async () => {
   const f = fixture();
@@ -413,7 +494,7 @@ it("returns a completed card for rework with one more hop and a fresh bounded re
   expect(f.state().root).toMatchObject({
     activeDescendants: 1,
     totalDescendants: 2,
-    reservedTokens: 10000,
+    reservedTokens: DELEGATION_LIMITS.reservationTokens,
   });
   expect(f.state().rows[0].card.timeline.at(-1).text).toBe("Check the missing citation");
   await db.$transaction((tx) => finishDelegation(tx, row.id, "completed", "Second pass"));
@@ -492,4 +573,186 @@ it("ignores a late completion from an attempt superseded by rework", async () =>
   );
   expect(f.state().rows[0].status).toBe("queued");
   expect(f.state().rows[0].result).toBeNull();
+});
+it("records overspend on the card when a worker finishes over its reservation", async () => {
+  const f = fixture();
+  const row = await f.admit();
+  f.state().rows[0].usedTokens = row.reservedTokens + 100;
+  await f.worker().$transaction((tx) => finishDelegation(tx, row.id, "completed", "Done"));
+  expect(f.state().rows[0].result).toContain("Overspent its token budget by 100 tokens.");
+  expect(f.tx.message.create.mock.calls[0]![0].data.blocks).toEqual([
+    expect.objectContaining({
+      kind: "text",
+      text: expect.stringContaining("Overspent its token budget by 100 tokens."),
+    }),
+  ]);
+});
+it("keeps the card clean when a worker finishes within its reservation", async () => {
+  const f = fixture();
+  const row = await f.admit();
+  f.state().rows[0].usedTokens = row.reservedTokens - 1;
+  await f.worker().$transaction((tx) => finishDelegation(tx, row.id, "completed", "Done"));
+  expect(f.state().rows[0].result).toBe("Done");
+});
+it("grows the default reservation to the worker's one-request floor", async () => {
+  const f = fixture();
+  const row = await f.admit({ minimumTokens: 65_536 });
+  expect(row.reservedTokens).toBe(65_536);
+  expect(row.attemptReservedTokens).toBe(65_536);
+  expect(f.state().root).toMatchObject({ reservedTokens: 65_536 });
+});
+it("refuses budgeted delegation to a runtime that cannot enforce it", async () => {
+  const f = fixture();
+  const before = structuredClone(f.state());
+  await expect(
+    f.admit({ snapshot: { ...snapshot, pin: { ...snapshot.pin, runtimeKind: "antigravity" } } }),
+  ).rejects.toMatchObject({ problem: { code: "runtime-unbudgeted" } });
+  expect(f.state()).toEqual(before);
+});
+it("settles a legacy rework attempt against its old 10000 reservation, never the new size", async () => {
+  const f = fixture();
+  const row = await f.admit();
+  const db = f.worker();
+  await db.$transaction((tx) => finishDelegation(tx, row.id, "completed", "First pass"));
+  // A row written before per-attempt amounts were stored: hop advanced, no stored amount,
+  // and the root still holds the 10,000 the old code reserved for this attempt.
+  const stored = f.state().rows[0];
+  stored.status = "running";
+  stored.hop = 2;
+  delete stored.attemptReservedTokens;
+  stored.usedTokens = 0;
+  f.state().root.reservedTokens = 10_000;
+  f.state().root.activeDescendants = 1;
+  await db.$transaction((tx) => finishDelegation(tx, row.id, "completed", "Legacy finish"));
+  // 36,864 would have driven the reservation to -26,864; the stored fallback releases 10,000.
+  expect(f.state().root.reservedTokens).toBe(0);
+  expect(f.state().root.reservedTokens).toBeGreaterThanOrEqual(0);
+});
+it("settles each attempt against the amount it actually reserved", async () => {
+  const f = fixture();
+  const row = await f.admit({ tokens: 50_000, minimumTokens: 50_000 });
+  expect(f.state().rows[0].attemptReservedTokens).toBe(50_000);
+  const db = f.worker();
+  await db.$transaction((tx) => finishDelegation(tx, row.id, "completed", "First pass"));
+  expect(f.state().root.reservedTokens).toBe(0);
+  f.state().runs.find((run) => run.id === row.runId).status = "completed";
+  await db.$transaction((tx) =>
+    rejectDelegation(tx, { spaceId: "space", userId: "owner" }, row.id, "coordinator", "Revise"),
+  );
+  // Rework reserves what the previous attempt reserved, not the bare default.
+  expect(f.state().rows[0].attemptReservedTokens).toBe(50_000);
+  expect(f.state().root.reservedTokens).toBe(50_000);
+  // The second attempt measures 20,000; the incremental usage settlement converted that
+  // much of the hold, so finishing releases exactly the remaining 30,000.
+  f.tx.usageRecord.aggregate.mockResolvedValue({
+    _sum: { inputTokens: 20_000, outputTokens: 0 },
+  });
+  f.state().root.reservedTokens = 30_000;
+  await db.$transaction((tx) => finishDelegation(tx, row.id, "completed", "Second pass"));
+  expect(f.state().root.reservedTokens).toBe(0);
+});
+it("writes the overspend annotation into the card's completion event", async () => {
+  const f = fixture();
+  const row = await f.admit();
+  f.state().rows[0].usedTokens = row.reservedTokens + 100;
+  await f.worker().$transaction((tx) => finishDelegation(tx, row.id, "completed", "Done"));
+  const card = TaskCardSchema.parse(f.state().rows[0].card);
+  const event = card.timeline.findLast((entry) => entry.kind === "completed");
+  expect(event?.text).toContain("Overspent its token budget by 100 tokens.");
+});
+it("keeps overspend evidence on cancelled and failed attempts", async () => {
+  const f = fixture();
+  const row = await f.admit();
+  f.state().rows[0].usedTokens = row.reservedTokens + 40;
+  const db = f.worker();
+  await requestCancel(db, { spaceId: "space", userId: "owner" }, "root");
+  await db.$transaction((tx) =>
+    finishDelegation(tx, row.id, "cancelled", delegationStopLine("budget", "Worker")),
+  );
+  const stored = f.state().rows[0];
+  expect(stored.result).toContain("Overspent its token budget by 40 tokens.");
+  let card = TaskCardSchema.parse(stored.card);
+  expect(card.timeline.findLast((entry) => entry.kind === "cancelled")?.text).toContain(
+    "Overspent its token budget by 40 tokens.",
+  );
+  const f2 = fixture();
+  const second = await f2.admit();
+  f2.state().rows[0].usedTokens = second.reservedTokens + 60;
+  await f2.worker().$transaction((tx) => finishDelegation(tx, second.id, "failed", "Runtime died"));
+  expect(f2.state().rows[0].result).toContain("Overspent its token budget by 60 tokens.");
+  card = TaskCardSchema.parse(f2.state().rows[0].card);
+  expect(card.timeline.findLast((entry) => entry.kind === "failed")?.text).toContain(
+    "Overspent its token budget by 60 tokens.",
+  );
+});
+it("annotates a reworked attempt that completes over its new allowance", async () => {
+  const f = fixture();
+  const row = await f.admit();
+  const db = f.worker();
+  await db.$transaction((tx) => finishDelegation(tx, row.id, "completed", "First pass"));
+  f.state().runs.find((run) => run.id === row.runId).status = "completed";
+  await db.$transaction((tx) =>
+    rejectDelegation(tx, { spaceId: "space", userId: "owner" }, row.id, "coordinator", "Revise"),
+  );
+  // The reworked attempt measured 25 over its stored reservation; its hold was fully
+  // converted by incremental usage settlement, so nothing remains to release.
+  f.tx.usageRecord.aggregate.mockResolvedValue({
+    _sum: { inputTokens: DELEGATION_LIMITS.reservationTokens + 25, outputTokens: 0 },
+  });
+  f.state().root.reservedTokens = 0;
+  await db.$transaction((tx) => finishDelegation(tx, row.id, "completed", "Second pass"));
+  expect(f.state().rows[0].attemptReservedTokens).toBe(DELEGATION_LIMITS.reservationTokens);
+  expect(f.state().rows[0].result).toContain("Overspent its token budget by 25 tokens.");
+  expect(f.state().root.reservedTokens).toBe(0);
+  expect(f.state().root.reservedTokens).toBeGreaterThanOrEqual(0);
+});
+it("records why cancellation was requested and keeps the first cause", async () => {
+  const f = fixture();
+  await f.admit();
+  const db = f.worker();
+  await requestCancel(db, { spaceId: "space", userId: "owner" }, "root");
+  expect(f.state().rows[0].cancelReason).toBe("stopped");
+  // A later pass must not overwrite the recorded owner stop.
+  await requestCancel(db, { spaceId: "space", userId: "owner" }, "root", new Date(), "budget");
+  expect(f.state().rows[0].cancelReason).toBe("stopped");
+});
+it.each([
+  [
+    "stopped",
+    {
+      cancelReason: "stopped",
+      deadlineAt: new Date(Date.now() + 60_000),
+      usedTokens: 99_999,
+      reservedTokens: 36_864,
+    },
+  ],
+  [
+    "budget",
+    {
+      cancelReason: "budget",
+      deadlineAt: new Date(Date.now() - 1_000),
+      usedTokens: 0,
+      reservedTokens: 36_864,
+    },
+  ],
+  [
+    "budget",
+    {
+      cancelReason: null,
+      deadlineAt: new Date(Date.now() + 60_000),
+      usedTokens: 36_864,
+      reservedTokens: 36_864,
+    },
+  ],
+  [
+    "deadline",
+    {
+      cancelReason: "unrecorded",
+      deadlineAt: new Date(Date.now() - 1_000),
+      usedTokens: 0,
+      reservedTokens: 36_864,
+    },
+  ],
+] as const)("reads the recorded stop reason first: %s", (reason, row) => {
+  expect(delegationEffectiveStopReason(row)).toBe(reason);
 });

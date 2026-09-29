@@ -25,12 +25,17 @@ export function CompactWorkRecord({
   const active = entries.filter((m) => m.evidence.outcome === "pending");
   const isDone = status !== "working";
   const currentState = active.length > 0 ? active[active.length - 1] : entries[entries.length - 1];
+  // A historical shell event may carry no command text; the core leaves its
+  // title unset and the record names the row here, in the app's language.
+  const currentTitle =
+    currentState?.evidence.title ??
+    (currentState?.block.kind === "command" ? t`Command` : undefined);
   // Collapsed, the status line previews the current activity. Expanded, it
   // steps back to the generic label so the full row below is the single copy
   // of that text.
-  const headerTitle = expanded ? undefined : currentState?.evidence.title;
+  const headerTitle = expanded ? undefined : currentTitle;
   // The status icons are visual only, so the name carries the outcome too.
-  const title = currentState?.evidence.title.trim() ?? "";
+  const title = currentTitle?.trim() ?? "";
   const accessibleName =
     status === "working"
       ? title
