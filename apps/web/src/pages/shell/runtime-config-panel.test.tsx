@@ -377,4 +377,71 @@ describe("RuntimeConfigPanel", () => {
     expect(contextInput.getAttribute("aria-invalid")).toBe("true");
     expect(describedByText(contextInput)).toBe("Use a whole number from 4 to 64.");
   });
+
+  // A non-null onError keeps the bot-settings Save button disabled.
+  describe("short-panel bounds", () => {
+    const fieldErrorText = (input: HTMLInputElement) => {
+      const descId = input.getAttribute("aria-describedby");
+      return descId ? document.getElementById(descId)?.textContent : null;
+    };
+
+    it("model calls per turn rejects non-integer and out-of-range values and recovers", async () => {
+      const { onError } = await render();
+      const callsInput = container.querySelectorAll("input")[0]!;
+
+      await changeInput(callsInput, "2.5");
+      expect(onError).toHaveBeenLastCalledWith("Use a whole number from 1 to 64.");
+      expect(fieldErrorText(callsInput)).toBe("Use a whole number from 1 to 64.");
+
+      await changeInput(callsInput, "0");
+      expect(onError).toHaveBeenLastCalledWith("Use a whole number from 1 to 64.");
+      await changeInput(callsInput, "65");
+      expect(onError).toHaveBeenLastCalledWith("Use a whole number from 1 to 64.");
+
+      await changeInput(callsInput, "8");
+      expect(onError).toHaveBeenLastCalledWith(null);
+      expect(callsInput.getAttribute("aria-invalid")).toBeNull();
+      expect(callsInput.getAttribute("aria-describedby")).toBeNull();
+    });
+
+    it("time limit rejects non-integer and out-of-range values and recovers", async () => {
+      const { onError } = await render();
+      const timeInput = container.querySelectorAll("input")[1]!;
+
+      await changeInput(timeInput, "1.5");
+      expect(onError).toHaveBeenLastCalledWith("Use whole seconds.");
+      expect(fieldErrorText(timeInput)).toBe("Use whole seconds.");
+
+      await changeInput(timeInput, "0");
+      expect(onError).toHaveBeenLastCalledWith("Use a whole number from 1 to 600.");
+      expect(fieldErrorText(timeInput)).toBe("Use a whole number from 1 to 600.");
+      await changeInput(timeInput, "601");
+      expect(onError).toHaveBeenLastCalledWith("Use a whole number from 1 to 600.");
+
+      await changeInput(timeInput, "60");
+      expect(onError).toHaveBeenLastCalledWith(null);
+      expect(timeInput.getAttribute("aria-invalid")).toBeNull();
+      expect(timeInput.getAttribute("aria-describedby")).toBeNull();
+    });
+
+    it("context limit rejects non-integer and out-of-range values and recovers", async () => {
+      const { onError } = await render();
+      const contextInput = container.querySelectorAll("input")[2]!;
+
+      await changeInput(contextInput, "5.5");
+      expect(onError).toHaveBeenLastCalledWith("Use whole KiB.");
+      expect(fieldErrorText(contextInput)).toBe("Use whole KiB.");
+
+      await changeInput(contextInput, "3");
+      expect(onError).toHaveBeenLastCalledWith("Use a whole number from 4 to 64.");
+      expect(fieldErrorText(contextInput)).toBe("Use a whole number from 4 to 64.");
+      await changeInput(contextInput, "65");
+      expect(onError).toHaveBeenLastCalledWith("Use a whole number from 4 to 64.");
+
+      await changeInput(contextInput, "32");
+      expect(onError).toHaveBeenLastCalledWith(null);
+      expect(contextInput.getAttribute("aria-invalid")).toBeNull();
+      expect(contextInput.getAttribute("aria-describedby")).toBeNull();
+    });
+  });
 });
