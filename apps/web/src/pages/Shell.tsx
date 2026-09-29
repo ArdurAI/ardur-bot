@@ -247,6 +247,7 @@ import {
   McpApprovalCard,
 } from "./shell/message-cards";
 import { ProviderErrorMessage } from "./shell/provider-error-message";
+import { TakeControlButton } from "./shell/take-control-button";
 import { useComputerTerminalOpen } from "./shell/use-computer-terminal-open";
 import { useTakeControl } from "./shell/use-take-control";
 import { handleWorkspaceOpenRun } from "./shell/workspace-run";
@@ -4693,20 +4694,14 @@ export function ShellPage({
                     onRelease={releaseComputer}
                   />
                 ) : (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={takingControl}
-                    aria-label={t`Take control`}
-                    onClick={async () => {
-                      if (computerBotIdRef.current) {
-                        await takeControl(computerBotIdRef.current);
-                      }
+                  <TakeControlButton
+                    computer={computer}
+                    runStatus={snapshot?.run?.status}
+                    taking={takingControl}
+                    onTakeControl={() => {
+                      if (computerBotIdRef.current) void takeControl(computerBotIdRef.current);
                     }}
-                  >
-                    <Trans>Take control</Trans>
-                  </Button>
+                  />
                 )}
                 {computerBot && !recordingSkill ? (
                   <TeachComputerOverlayControl
