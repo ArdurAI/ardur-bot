@@ -10,6 +10,7 @@ describe("collaboration transcript markers", () => {
         color="#14B8A6"
         identity="research"
         label="Message from Research"
+        name="Research"
         onClick={() => undefined}
       />,
     );
@@ -22,6 +23,21 @@ describe("collaboration transcript markers", () => {
     expect(html).toContain("ardur-bot-avatar");
     expect(html).toContain("Message from Research");
     expect(html).not.toContain("{peer}");
+  });
+
+  it("draws the peer's initial on the avatar, not the receipt's", () => {
+    const html = renderToString(
+      <CollaborationMarker
+        ariaLabel="Sent to Research"
+        color="#14B8A6"
+        identity="research"
+        label="Sent"
+        name="Research"
+        onClick={() => undefined}
+      />,
+    );
+
+    expect(html.match(/class="ardur-bot-avatar[^"]*"[^>]*>([^<]*)</)?.[1]).toBe("R");
   });
 
   it("animates the active bot glyph from its run status", () => {

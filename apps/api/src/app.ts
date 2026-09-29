@@ -61,6 +61,7 @@ import {
   reconcileCloudAgents,
   reconcileComputerUpdates,
   reconcileMemoryDelivery,
+  recordStandaloneUsage,
   removePiUserSessions,
   ScriptedAgentRuntime,
   SmtpEmailProvider,
@@ -122,7 +123,7 @@ import { createRouter } from "./router.js";
 import { mountScreenTarget } from "./screen-proxy.js";
 import { mountSystemRoutines } from "./system/routines.js";
 import { isDeferredReservationLost, TeamChatBridge } from "./team-chat-bridge.js";
-import { ModelTeamChatEngagementJudge } from "./team-chat-judge.js";
+import { ModelTeamChatEngagementJudge, TEAM_CHAT_JUDGE_USAGE_PURPOSE } from "./team-chat-judge.js";
 import {
   PendingTeamChatInbound,
   prefersTeamChatSurface,
@@ -906,6 +907,12 @@ export async function createApp(
               deploymentModelKey: env.deploymentModelKey,
               providerOverride: env.teamChatJudgeProvider,
               modelOverride: env.teamChatJudgeModel,
+              recordUsage: (usage, scope) =>
+                recordStandaloneUsage(
+                  { prisma },
+                  { ...scope, purpose: TEAM_CHAT_JUDGE_USAGE_PURPOSE },
+                  usage,
+                ),
             })
           : new ModelTeamChatEngagementJudge({
               resolvePinnedModel: executor.resolveModel,
@@ -915,6 +922,12 @@ export async function createApp(
               deploymentProvider: env.defaultProvider,
               deploymentModel: env.defaultModel,
               deploymentModelKey: env.deploymentModelKey,
+              recordUsage: (usage, scope) =>
+                recordStandaloneUsage(
+                  { prisma },
+                  { ...scope, purpose: TEAM_CHAT_JUDGE_USAGE_PURPOSE },
+                  usage,
+                ),
             });
       const bridge = new TeamChatBridge({
         prisma,

@@ -29,6 +29,7 @@ import type {
   RunStatus,
   RuntimePin,
   RuntimePinSource,
+  RuntimeProblem,
 } from "@ardurbot/contracts";
 import {
   ATTACHMENT_MAX_BYTES,
@@ -386,8 +387,8 @@ import {
   tryCompleteConnectionWithCode,
 } from "./run-secret.js";
 import { brokerRunAllowance, recordRunUsage } from "./run-usage.js";
-import type { RuntimeRegistry } from "./runtime-registry.js";
-import { createRuntimeRegistry } from "./runtime-registry.js";
+import type { DetachedRuntime, RuntimeRegistry } from "./runtime-registry.js";
+import { createRuntimeRegistry, detachedRuntimeRequest } from "./runtime-registry.js";
 import { reportRuntimeWaits, withRuntimeCleanup } from "./runtime-stream.js";
 import { accountRuntimeUsage } from "./runtime-usage.js";
 import { NATIVE_HOST_OWNER_MESSAGE, nativeHostOwner } from "./runtimes/native-host.js";
@@ -1438,6 +1439,46 @@ export function createRunExecutor(deps: ExecutorDeps) {
         include: { bot: { include: { computer: true } } },
       });
       return run ? resolveBriefRuntime(run, run.bot, [...deps.secrets]) : null;
+    },
+    /**
+     * The runtime for a one-off call made for a source run outside the run itself, such
+     * as a learning review: the same registry, bot checks and single-user host rule as
+     * the run, with native calls isolated where the runtime can isolate them.
+     */
+    async resolveDetachedRuntime(
+      pin: RuntimePin,
+      sourceRunId: string,
+    ): Promise<DetachedRuntime | RuntimeProblem> {
+      const run = await deps.prisma.run.findUnique({
+        where: { id: sourceRunId },
+        select: {
+          userId: true,
+          bot: {
+            select: {
+              runtimeExperimental: true,
+              computer: { select: { kind: true, providerRef: true } },
+            },
+          },
+        },
+      });
+      if (!run)
+        return runtimePinProblem(
+          pin,
+          "runtime-unavailable",
+          "The pinned runtime is unavailable — change the pin.",
+        );
+      if (pin.runtimeKind !== "pi" && !(await nativeHostOwner(deps.prisma, run.userId)))
+        return runtimePinProblem(pin, "runtime-unavailable", NATIVE_HOST_OWNER_MESSAGE);
+      const selection = await runtimeRegistry.resolve(
+        pin,
+        run.bot.computer?.kind,
+        run.bot.runtimeExperimental,
+      );
+      if ("kind" in selection) return selection;
+      return {
+        runtime: selection.runtime,
+        request: detachedRuntimeRequest(pin, run.bot.computer),
+      };
     },
     resolveConnectedModel,
     async resolveModel(

@@ -72,6 +72,7 @@ export const ZH_MESSAGES: Record<string, string> = {
     "Antigravity 无法识别模型 {model}。请从其列表中选择模型。",
   "Antigravity could not run this turn: {reason}.": "Antigravity 无法完成本轮运行：{reason}。",
   "Cost unavailable": "费用不可用",
+  "Partially reported": "部分已报告",
   "Antigravity is installed (version {version})": "Antigravity 已安装（版本 {version}）",
   "Sign-in unknown until the first run": "首次运行前无法确定登录状态",
   "Antigravity is not installed on this computer. Install it and sign in there, then check again.":

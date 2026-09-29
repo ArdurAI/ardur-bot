@@ -11,6 +11,7 @@ import type {
   MemoryDocumentHead,
   ProposalEvidence,
   RuntimePin,
+  RuntimeProblem,
 } from "@ardurbot/contracts";
 import { LearningCandidateSchema, ProposalEvidenceSchema } from "@ardurbot/contracts";
 import { learningEligibility, parseSkillMd, redactLearningText } from "@ardurbot/core";
@@ -31,6 +32,7 @@ import {
 export { proposalDiff, proposalFingerprint } from "./learning-proposal.js";
 
 import { learningSecrets } from "./learning-redaction.js";
+import type { DetachedRuntime } from "./runtime-registry.js";
 import { accountRuntimeUsage, ObservedUsageTotals } from "./runtime-usage.js";
 import type { EncryptedSecretStore } from "./secrets.js";
 import { skillDocumentContext } from "./skill-documents.js";
@@ -52,9 +54,11 @@ Skill content must be SKILL.md with name and description frontmatter. Do not inc
 Do not propose changes to protected or imported documents. Return no other text.`;
 
 export interface LearningReviewDependencies {
-  recordUsage?: (sourceRunId: string, usage: AgentUsage) => Promise<void>;
+  recordUsage?: (sourceRunId: string, usage: AgentUsage, reviewerPin?: RuntimePin) => Promise<void>;
   prisma: PrismaClient;
   runtime: AgentRuntime;
+  /** Resolve the runtime that can run the reviewer pin; defaults to deps.runtime. */
+  resolveRuntime?: (pin: RuntimePin) => Promise<DetachedRuntime | RuntimeProblem>;
   memoryDocuments?: MemoryService;
   secretStore: EncryptedSecretStore;
   resolvePin?: typeof resolveReviewerPin;
@@ -360,10 +364,6 @@ export async function reviewLearning(
       await finish("no-change", `Review has no change: ${eligibility}.`, 0);
       return;
     }
-    if (deps.runtime.describe().capabilities.scripted) {
-      await finish("paused", "Learning review requires a model runtime.", 0);
-      return;
-    }
     const resolved = await (deps.resolvePin ?? resolveReviewerPin)(
       deps,
       { spaceId: run.spaceId, userId: config.configuredBy },
@@ -372,6 +372,20 @@ export async function reviewLearning(
     );
     if (resolved.kind === "problem") {
       await finish("paused", resolved.reason, 0);
+      return;
+    }
+    // The reviewer pin may name any runtime; a native pin on the default runtime
+    // would fail before any model call and record a zero-token fallback row.
+    const selection = deps.resolveRuntime
+      ? await deps.resolveRuntime(pin)
+      : { runtime: deps.runtime, request: {} };
+    if ("kind" in selection) {
+      await finish("paused", selection.reason, 0);
+      return;
+    }
+    const reviewRuntime = selection.runtime;
+    if (reviewRuntime.describe().capabilities.scripted) {
+      await finish("paused", "Learning review requires a model runtime.", 0);
       return;
     }
     knownSecrets.push(...(await learningSecrets(deps.prisma, deps.secretStore, run)));
@@ -432,6 +446,7 @@ export async function reviewLearning(
       prompt,
       history: [],
       tools: "none",
+      ...selection.request,
       singleRequest: true,
       model: {
         ...resolved,
@@ -453,7 +468,7 @@ export async function reviewLearning(
         timeout,
         (async () => {
           for await (const event of accountRuntimeUsage(
-            deps.runtime.run(request, {
+            reviewRuntime.run(request, {
               ...skillDocumentContext(scope),
               signal: controller.signal,
             }),
@@ -463,7 +478,7 @@ export async function reviewLearning(
               purpose: "detached-learning",
               signal: controller.signal,
               record: async (usage) => {
-                await deps.recordUsage?.(run.id, usage);
+                await deps.recordUsage?.(run.id, usage, pin);
                 usageTotals.observe(usage);
                 usageSeen = usageTotals.reported;
                 tokens = usageTotals.tokens;

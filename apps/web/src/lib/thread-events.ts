@@ -565,13 +565,15 @@ export function userHoldsComputerControl(
 /** True when a live bot run is blocking Take control (API would return 409). */
 export function computerTakeoverBlocked(
   computer: Pick<ComputerStatus, "busyBotName"> | null | undefined,
-  runStatus?: string | null,
+  runs: readonly Run[],
+  botId: string,
 ): boolean {
   if (!computer?.busyBotName) return false;
-  // waiting_takeover is the bot asking for control; terminal/idle clears the block even if
+  // Only the computer bot's own run counts: in a group the headline run can be another member's.
+  const run = activeMemberRun(runs, botId);
+  // waiting_takeover is the bot asking for control; no active run clears the block even if
   // busyBotName is briefly stale while the executor still holds the lease in finally.
-  if (!runStatus || runStatus === "waiting_takeover") return false;
-  return isActive(runStatus as RunStatus);
+  return Boolean(run && run.status !== "waiting_takeover");
 }
 
 export function computerPanelAutoBoot(
@@ -590,11 +592,13 @@ export function computerPanelAutoUsesBoot(
   return action === "boot" || action === "recover-screen";
 }
 
+/** A computer that was never started needs no maintenance; one whose boot failed does. */
 export function computerPanelNeedsMaintenance(
   state: ComputerStatus["state"] | undefined,
   booting: boolean,
+  bootFailed: boolean,
 ): boolean {
-  return !booting && (state === "error" || state === "stopped");
+  return !booting && (state === "error" || (state === "stopped" && bootFailed));
 }
 
 export function reduceComputerStatus(

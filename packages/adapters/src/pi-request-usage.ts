@@ -59,6 +59,31 @@ export function piWireUsage(
   };
 }
 
+/**
+ * Anthropic message_start is a starting snapshot: output_tokens there is not the bill.
+ * message_delta, a completed message, and other providers' usage objects are final.
+ */
+export function piWireUsageIsFinal(api: string, payload: unknown): boolean {
+  if (api !== "anthropic-messages") return true;
+  return object(payload).type !== "message_start";
+}
+
+/** Merge one wire payload into the attempt. Final objects close the bill; message_start does not. */
+export function applyPiWireSnapshot(
+  collector: RequestUsageCollector,
+  api: string,
+  payload: unknown,
+  merged: Partial<Record<keyof RawUsageCounts, unknown>>,
+): AgentUsage | null {
+  const counts = piWireUsage(api, payload);
+  if (!counts) return null;
+  for (const key of Object.keys(counts) as Array<keyof RawUsageCounts>) {
+    if (counts[key] !== undefined && counts[key] !== null) merged[key] = counts[key];
+  }
+  if (piWireUsageIsFinal(api, payload)) collector.acceptFinalUsage();
+  return collector.snapshot(merged);
+}
+
 /** A bounded pass-through observes bytes only as the SDK consumes them; it never tees the body. */
 function observeBody(
   response: Response,
@@ -207,13 +232,8 @@ export function observePiUsage(
             current.transport = true;
             traceCurrent("provider.transport", { requestId, operationId: current.operationId });
           }
-          const counts = piWireUsage(model.api, payload);
-          if (!counts) return;
-          for (const key of Object.keys(counts) as Array<keyof RawUsageCounts>) {
-            if (counts[key] !== undefined && counts[key] !== null)
-              current.counts[key] = counts[key];
-          }
-          emit(current.collector.snapshot(current.counts));
+          const usage = applyPiWireSnapshot(current.collector, model.api, payload, current.counts);
+          if (usage) emit(usage);
         },
         () => current.collector.limit("transport-detail-unavailable"),
       );

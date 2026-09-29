@@ -1,7 +1,14 @@
-import type { AgentRunRequest, AgentRuntime, BackgroundJobPayloads } from "@ardurbot/adapter-kit";
+import type {
+  AgentRunRequest,
+  AgentRuntime,
+  AgentUsage,
+  BackgroundJobPayloads,
+} from "@ardurbot/adapter-kit";
 import type { LearningCandidate, RuntimePin } from "@ardurbot/contracts";
 import { runtimePinProblem } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
+import { AntigravityStreamParser } from "@ardurbot/host-runtime/runtimes/antigravity-stream";
+import { CodexUsageCollector } from "@ardurbot/host-runtime/runtimes/codex-usage";
 import { memoryServiceFixture, serialMemoryLock } from "@ardurbot/testkit/memory-fakes";
 import { describe, expect, it, vi } from "vitest";
 import { LEARNING_POLICY_VERSION, loadLearningRecords } from "./learning-records.js";
@@ -248,6 +255,7 @@ describe("proposal-only learning review", () => {
         outputTokens: 30,
         request: expect.objectContaining({ purpose: "detached-learning" }),
       }),
+      pin,
     );
     expect(f.runtimeRun.mock.calls[0]?.[0]).toMatchObject({
       model: { provider: pin.provider, id: pin.modelId },
@@ -271,6 +279,7 @@ describe("proposal-only learning review", () => {
           collection: expect.objectContaining({ outcome: "failed", availability: "unavailable" }),
         }),
       }),
+      pin,
     );
     expect(f.records.proposals).toHaveLength(0);
   });
@@ -445,6 +454,219 @@ describe("proposal-only learning review", () => {
     await reviewLearning(f.deps, payload);
     expect(f.runtimeRun).not.toHaveBeenCalled();
     expect(f.records.reviews[0]?.status).toBe("no-change");
+  });
+});
+
+describe("reviewer runtime resolution", () => {
+  const codexPin: RuntimePin = {
+    runtimeKind: "codex-app-server",
+    provider: "openai-codex",
+    modelId: "gpt-6-astra",
+    effort: "high",
+    credentialId: "native:codex-app-server",
+    revision: 1,
+  };
+  function codexReviewFixture() {
+    const f = fixture();
+    f.config.reviewerPin = codexPin;
+    f.deps.resolvePin = vi.fn(async () => ({
+      kind: "resolved" as const,
+      pin: codexPin,
+      runtimePin: codexPin,
+      provider: codexPin.provider!,
+      id: codexPin.modelId!,
+      thinkingLevel: "high" as const,
+    }));
+    return f;
+  }
+  const totals = (inputTokens: number, outputTokens: number) => ({
+    inputTokens,
+    outputTokens,
+    cachedInputTokens: Math.floor(inputTokens / 2),
+    cacheWriteInputTokens: Math.floor(inputTokens / 10),
+    reasoningOutputTokens: Math.floor(outputTokens / 2),
+    totalTokens: inputTokens + outputTokens,
+  });
+  it("runs a native reviewer pin on its own runtime and records real tokens", async () => {
+    const f = codexReviewFixture();
+    const collector = new CodexUsageCollector("openai-codex", "gpt-6-astra", false);
+    const nativeRun = vi.fn(async function* (_request: AgentRunRequest) {
+      yield collector.start();
+      const first = collector.update(totals(3000, 200));
+      if (first) yield first;
+      const second = collector.update(totals(3400, 260));
+      if (second) yield second;
+      yield collector.finish("success");
+      yield { type: "done", text: JSON.stringify({ proposals: [] }) };
+    });
+    const nativeRuntime = {
+      run: nativeRun,
+      describe: () => ({ capabilities: { scripted: false } }),
+    } as unknown as AgentRuntime;
+    const resolveRuntime = vi.fn(async () => ({ runtime: nativeRuntime, request: {} }));
+    const recorded: AgentUsage[] = [];
+    const recordUsage = vi.fn(async (_sourceRunId: string, usage: AgentUsage) => {
+      recorded.push(usage);
+    });
+    await reviewLearning({ ...f.deps, resolveRuntime, recordUsage }, await f.payload());
+    expect(resolveRuntime).toHaveBeenCalledWith(codexPin);
+    expect(nativeRun).toHaveBeenCalledOnce();
+    expect(f.runtimeRun).not.toHaveBeenCalled();
+    const final = recorded.at(-1)!;
+    expect(final.request?.purpose).toBe("detached-learning");
+    expect(final.request?.categories).toMatchObject({
+      logicalInput: 3400,
+      output: 260,
+      cacheReadInput: 1700,
+      cacheWriteInput: 340,
+    });
+    expect(f.records.reviews[0]).toMatchObject({ status: "no-change", tokens: 3660 });
+  });
+  it("pauses without a model call or usage row when the reviewer runtime is unavailable", async () => {
+    const f = codexReviewFixture();
+    const resolveRuntime = vi.fn(async () =>
+      runtimePinProblem(codexPin, "runtime-unavailable", "Codex is not installed."),
+    );
+    const recordUsage = vi.fn(async () => undefined);
+    await reviewLearning({ ...f.deps, resolveRuntime, recordUsage }, await f.payload());
+    expect(f.records.reviews[0]).toMatchObject({
+      status: "paused",
+      reason: "Codex is not installed.",
+    });
+    expect(recordUsage).not.toHaveBeenCalled();
+    expect(f.records.usage).toEqual([]);
+  });
+  const agyPin: RuntimePin = {
+    runtimeKind: "antigravity",
+    provider: "antigravity",
+    modelId: "gemini-3.8-flash-low",
+    effort: "low",
+    credentialId: "native:antigravity",
+    revision: 1,
+  };
+  function agyReviewFixture(withUsage: boolean) {
+    const f = fixture();
+    f.config.reviewerPin = agyPin;
+    f.deps.resolvePin = vi.fn(async () => ({
+      kind: "resolved" as const,
+      pin: agyPin,
+      runtimePin: agyPin,
+      provider: agyPin.provider!,
+      id: agyPin.modelId!,
+      thinkingLevel: "low" as const,
+    }));
+    const nativeRun = vi.fn(async function* (_request: AgentRunRequest) {
+      const parser = new AntigravityStreamParser(agyPin);
+      yield parser.startUsage();
+      for (const event of parser.parse({ event: "init", init: { model: agyPin.modelId } }))
+        yield event;
+      for (const event of parser.parse({
+        event: "step_update",
+        step_update: { step_type: "agent_response", text_delta: '{"proposals":[]}' },
+      }))
+        yield event;
+      for (const event of parser.parse({
+        event: "result",
+        result: {
+          status: "SUCCESS",
+          response: '{"proposals":[]}',
+          ...(withUsage
+            ? {
+                usage: {
+                  input_tokens: 10,
+                  output_tokens: 2,
+                  thinking_tokens: 1,
+                  cache_read_tokens: 3,
+                },
+              }
+            : {}),
+        },
+      }))
+        yield event;
+      yield* parser.finishUsage("success");
+      yield { type: "done", text: '{"proposals":[]}' };
+    });
+    const nativeRuntime = {
+      run: nativeRun,
+      describe: () => ({ capabilities: { scripted: false } }),
+    } as unknown as AgentRuntime;
+    const resolveRuntime = vi.fn(async () => ({ runtime: nativeRuntime, request: {} }));
+    return { f, resolveRuntime, nativeRun };
+  }
+  it("records real tokens when an antigravity review reports usage", async () => {
+    const { f, resolveRuntime, nativeRun } = agyReviewFixture(true);
+    const recorded: AgentUsage[] = [];
+    const recordUsage = vi.fn(async (_sourceRunId: string, usage: AgentUsage) => {
+      recorded.push(usage);
+    });
+    await reviewLearning({ ...f.deps, resolveRuntime, recordUsage }, await f.payload());
+    expect(nativeRun).toHaveBeenCalledOnce();
+    expect(f.runtimeRun).not.toHaveBeenCalled();
+    const final = recorded.at(-1)!;
+    expect(final.request?.purpose).toBe("detached-learning");
+    expect(final.request?.categories).toMatchObject({
+      logicalInput: 10,
+      output: 2,
+      cacheReadInput: 3,
+      reasoning: 1,
+    });
+    expect(f.records.reviews[0]).toMatchObject({ status: "no-change", tokens: 12 });
+  });
+  it("records an explicit limitation, not zeros, when antigravity reports no usage", async () => {
+    const { f, resolveRuntime } = agyReviewFixture(false);
+    const recorded: AgentUsage[] = [];
+    const recordUsage = vi.fn(async (_sourceRunId: string, usage: AgentUsage) => {
+      recorded.push(usage);
+    });
+    await reviewLearning({ ...f.deps, resolveRuntime, recordUsage }, await f.payload());
+    const final = recorded.at(-1)!;
+    expect(final.request?.categories).toEqual({
+      logicalInput: null,
+      uncachedInput: null,
+      cacheReadInput: null,
+      cacheWriteInput: null,
+      output: null,
+      reasoning: null,
+    });
+    expect(final.request?.collection).toMatchObject({
+      availability: "unavailable",
+      limitations: expect.arrayContaining(["provider-omitted"]),
+    });
+    // The review budget treats "not reported" as unknown: no token total is written.
+    expect(f.records.reviews[0]?.status).toBe("no-change");
+    expect(f.records.reviews[0]).not.toHaveProperty("tokens");
+  });
+  it.each([
+    ["the bot's host folder", { nativeCwd: "/host/bot-1" }],
+    ["comparison isolation", { controlledComparison: true }],
+  ] as const)("runs the reviewer with %s from its runtime resolver", async (_name, fields) => {
+    const { f } = agyReviewFixture(true);
+    const requests: AgentRunRequest[] = [];
+    const nativeRun = vi.fn(async function* (request: AgentRunRequest) {
+      requests.push(request);
+      yield { type: "done", text: '{"proposals":[]}' };
+    });
+    const nativeRuntime = {
+      run: nativeRun,
+      describe: () => ({ capabilities: { scripted: false } }),
+    } as unknown as AgentRuntime;
+    const resolveRuntime = vi.fn(async () => ({ runtime: nativeRuntime, request: fields }));
+    await reviewLearning({ ...f.deps, resolveRuntime }, await f.payload());
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({ ...fields, tools: "none", history: [] });
+    if (!("nativeCwd" in fields)) expect(requests[0]?.nativeCwd).toBeUndefined();
+    // The run finished normally; a failed request check would leave a failed review.
+    expect(f.records.reviews[0]).toMatchObject({ status: "no-change" });
+  });
+  it("forwards the reviewer pin with recorded review usage", async () => {
+    const { f } = agyReviewFixture(true);
+    const recorded: Array<{ pin?: unknown }> = [];
+    const recordUsage = vi.fn(async (_sourceRunId: string, _usage: AgentUsage, pin?: unknown) => {
+      recorded.push({ pin });
+    });
+    await reviewLearning({ ...f.deps, recordUsage }, await f.payload());
+    expect(recordUsage).toHaveBeenCalled();
+    expect(recorded.at(-1)?.pin).toEqual(agyPin);
   });
 });
 

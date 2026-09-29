@@ -38,6 +38,7 @@ export const UsageCollectionSchema = z.strictObject({
         "stream-ended-without-usage",
         "consumer-stopped",
         "late-usage-unverified",
+        "usage-not-final",
       ]),
     )
     .max(9),
