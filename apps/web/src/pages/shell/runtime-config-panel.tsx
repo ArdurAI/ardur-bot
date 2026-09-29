@@ -122,10 +122,9 @@ export function RuntimeConfigPanel({
 
   // Advanced errors render in place inside the editor while it is open; when the
   // section is closed the panel's visible error area must still explain why Save
-  // is disabled.
-  const fieldError = callsError || timeError || contextError;
+  // is disabled. Short-panel errors render next to their own field and are linked
+  // to it with aria-invalid and aria-describedby.
   const hiddenAdvancedError = !advancedOpen ? advancedError : null;
-  const visibleError = fieldError || hiddenAdvancedError;
 
   return (
     <div className="mt-3 space-y-3" data-testid="runtime-config-panel">
@@ -140,8 +139,15 @@ export function RuntimeConfigPanel({
             step={1}
             value={calls}
             disabled={advancedInvalid}
+            aria-invalid={callsError ? true : undefined}
+            aria-describedby={callsError ? `${id}-calls-error` : undefined}
             onChange={(e) => handleCallsChange(e.target.value)}
           />
+          {callsError ? (
+            <p role="alert" id={`${id}-calls-error`} className="mt-1 text-xs text-destructive">
+              {callsError}
+            </p>
+          ) : null}
         </label>
         <label htmlFor={`${id}-time`} className="text-sm text-muted-foreground">
           <Trans>Time limit (seconds)</Trans>
@@ -153,8 +159,15 @@ export function RuntimeConfigPanel({
             step={1}
             value={time}
             disabled={advancedInvalid}
+            aria-invalid={timeError ? true : undefined}
+            aria-describedby={timeError ? `${id}-time-error` : undefined}
             onChange={(e) => handleTimeChange(e.target.value)}
           />
+          {timeError ? (
+            <p role="alert" id={`${id}-time-error`} className="mt-1 text-xs text-destructive">
+              {timeError}
+            </p>
+          ) : null}
         </label>
         <label htmlFor={`${id}-context`} className="text-sm text-muted-foreground">
           <Trans>Context limit (KiB)</Trans>
@@ -166,8 +179,15 @@ export function RuntimeConfigPanel({
             step={1}
             value={contextKib}
             disabled={advancedInvalid}
+            aria-invalid={contextError ? true : undefined}
+            aria-describedby={contextError ? `${id}-context-error` : undefined}
             onChange={(e) => handleContextChange(e.target.value)}
           />
+          {contextError ? (
+            <p role="alert" id={`${id}-context-error`} className="mt-1 text-xs text-destructive">
+              {contextError}
+            </p>
+          ) : null}
         </label>
       </div>
 
@@ -180,13 +200,13 @@ export function RuntimeConfigPanel({
         </p>
       ) : null}
 
-      {visibleError ? (
+      {hiddenAdvancedError ? (
         <p
           role="alert"
           data-testid="runtime-config-panel-error"
           className="text-xs text-destructive"
         >
-          {visibleError}
+          {hiddenAdvancedError}
         </p>
       ) : null}
 

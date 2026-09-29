@@ -339,4 +339,42 @@ describe("RuntimeConfigPanel", () => {
     expect(container.querySelector('[data-testid="runtime-config-panel-error"]')).toBeNull();
     expect(container.querySelector('[role="alert"]')).toBeNull();
   });
+
+  it("links each short-panel error to its input for assistive technology", async () => {
+    await render();
+    const [callsInput, timeInput, contextInput] = Array.from(
+      container.querySelectorAll("input"),
+    ) as [HTMLInputElement, HTMLInputElement, HTMLInputElement];
+
+    const describedByText = (input: HTMLInputElement) => {
+      const descId = input.getAttribute("aria-describedby");
+      return descId ? document.getElementById(descId)?.textContent : null;
+    };
+
+    // Valid fields carry no aria error attributes.
+    for (const input of [callsInput, timeInput, contextInput]) {
+      expect(input.getAttribute("aria-invalid")).toBeNull();
+      expect(input.getAttribute("aria-describedby")).toBeNull();
+    }
+
+    await changeInput(callsInput, "0");
+    expect(callsInput.getAttribute("aria-invalid")).toBe("true");
+    expect(describedByText(callsInput)).toBe("Use a whole number from 1 to 64.");
+    expect(timeInput.getAttribute("aria-invalid")).toBeNull();
+    expect(timeInput.getAttribute("aria-describedby")).toBeNull();
+
+    await changeInput(callsInput, "16");
+    expect(callsInput.getAttribute("aria-invalid")).toBeNull();
+    expect(callsInput.getAttribute("aria-describedby")).toBeNull();
+
+    await changeInput(timeInput, "1.5");
+    expect(timeInput.getAttribute("aria-invalid")).toBe("true");
+    expect(describedByText(timeInput)).toBe("Use whole seconds.");
+
+    await changeInput(timeInput, "180");
+    expect(timeInput.getAttribute("aria-invalid")).toBeNull();
+    await changeInput(contextInput, "65");
+    expect(contextInput.getAttribute("aria-invalid")).toBe("true");
+    expect(describedByText(contextInput)).toBe("Use a whole number from 4 to 64.");
+  });
 });

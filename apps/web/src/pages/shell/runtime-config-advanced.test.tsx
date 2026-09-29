@@ -159,6 +159,24 @@ describe("RuntimeConfigAdvanced", () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toBe("Enter valid JSON.");
   });
 
+  it("links the JSON error to the textarea for assistive technology", async () => {
+    await render();
+    const textarea = container.querySelector("textarea")!;
+
+    expect(textarea.getAttribute("aria-invalid")).toBeNull();
+    expect(textarea.getAttribute("aria-describedby")).toBeNull();
+
+    await changeTextarea(textarea, "{ not valid json");
+    expect(textarea.getAttribute("aria-invalid")).toBe("true");
+    const descId = textarea.getAttribute("aria-describedby");
+    expect(descId).toBeTruthy();
+    expect(document.getElementById(descId!)?.textContent).toBe("Enter valid JSON.");
+
+    await changeTextarea(textarea, JSON.stringify({ version: 2, runtimeKind: "hermes" }));
+    expect(textarea.getAttribute("aria-invalid")).toBeNull();
+    expect(textarea.getAttribute("aria-describedby")).toBeNull();
+  });
+
   it("detects duplicate keys", async () => {
     const { onError, onChange } = await render();
     const textarea = container.querySelector("textarea")!;

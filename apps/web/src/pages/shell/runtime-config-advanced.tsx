@@ -197,6 +197,8 @@ export function RuntimeConfigAdvanced({
         <Textarea
           id={`${id}-json`}
           aria-label={t`Configuration (JSON)`}
+          aria-invalid={localError ? true : undefined}
+          aria-describedby={localError ? `${id}-json-error` : undefined}
           value={text}
           onChange={(e) => handleTextChange(e.target.value)}
           className="mt-2 font-mono text-xs leading-relaxed"
@@ -206,6 +208,7 @@ export function RuntimeConfigAdvanced({
         {localError ? (
           <p
             role="alert"
+            id={`${id}-json-error`}
             data-testid="runtime-config-advanced-error"
             className="mt-2 text-xs text-destructive"
           >
