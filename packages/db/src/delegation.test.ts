@@ -68,6 +68,23 @@ describe("transactional delegation admission", () => {
     expect(row.id).toBe("delegation-0");
     expect(f.state().root.totalDescendants).toBe(4);
   });
+  it("fits three default reservations in a default root and refuses the fourth for budget", async () => {
+    // Today's defaults: DELEGATION_LIMITS.tokens roots hold three reservationTokens
+    // reservations, one short of the concurrent cap. Raising the default is the owner's call.
+    const f = fixture();
+    for (const key of ["one", "two", "three"]) await f.admit({ admissionKey: key });
+    expect(f.state().root).toMatchObject({
+      tokenLimit: DELEGATION_LIMITS.tokens,
+      activeDescendants: 3,
+      reservedTokens: 3 * DELEGATION_LIMITS.reservationTokens,
+    });
+    expect(3 * DELEGATION_LIMITS.reservationTokens).toBeLessThanOrEqual(DELEGATION_LIMITS.tokens);
+    const before = structuredClone(f.state());
+    await expect(f.admit({ admissionKey: "four" })).rejects.toMatchObject({
+      problem: { code: "budget-exhausted" },
+    });
+    expect(f.state()).toEqual(before);
+  });
   it.each([
     ["depth-exceeded", { maxDepth: 0 }],
     ["hops-exceeded", { maxHops: 0 }],
