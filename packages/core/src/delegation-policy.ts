@@ -4,20 +4,41 @@ import type {
   LocalityPolicy,
   ModelDestination,
 } from "@ardurbot/contracts";
-import { DEFAULT_MODEL_CONTEXT_WINDOW, DEFAULT_MODEL_MAX_TOKENS } from "@ardurbot/contracts";
+import { DEFAULT_MODEL_CONTEXT_WINDOW, resolveCompletionMaxTokens } from "@ardurbot/contracts";
 
 /**
  * The smallest reservation that lets a worker finish one realistic request for its
- * pinned model: one full context plus one output. Models with a smaller known context
- * need less; unknown or larger contexts use the standard window, which keeps the floor
- * inside what a goal or task budget can actually carry.
+ * pinned model: one full context plus one output at the worker's effective output cap.
+ * The cap comes from the same resolver the runtime uses (`resolveCompletionMaxTokens`),
+ * including limits configured on the connection, so a reasoning model's thinking budget
+ * is part of the floor. Models with a smaller known context need less; unknown or larger
+ * contexts use the standard window, which keeps the floor inside what a goal or task
+ * budget can actually carry.
  */
-export function minimumDelegationReservation(contextWindow?: number): number {
+export function minimumDelegationReservation(limits?: {
+  /** The model's context window, from the registry or the connection. */
+  contextWindow?: number;
+  /** The model card's own output ceiling, when the registry knows it. */
+  modelMaxTokens?: number;
+  /** The output cap configured on the worker's connection, when one is set. */
+  configuredMaxTokens?: number;
+  /** Whether the model bills thinking against its output ceiling. */
+  reasoning?: boolean;
+}): number {
+  const contextWindow = limits?.contextWindow;
   const context =
     contextWindow !== undefined && Number.isSafeInteger(contextWindow) && contextWindow > 0
       ? Math.min(contextWindow, DEFAULT_MODEL_CONTEXT_WINDOW)
       : DEFAULT_MODEL_CONTEXT_WINDOW;
-  return context + DEFAULT_MODEL_MAX_TOKENS;
+  return (
+    context +
+    resolveCompletionMaxTokens(
+      limits?.modelMaxTokens,
+      limits?.configuredMaxTokens,
+      undefined,
+      limits?.reasoning,
+    )
+  );
 }
 
 export function intersectDelegationAuthority(

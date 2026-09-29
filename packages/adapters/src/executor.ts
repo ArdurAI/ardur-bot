@@ -5731,6 +5731,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   name,
                   redactSecrets(task, runSecrets),
                   redactTaskValue(card, runSecrets),
+                  // Helpers run on this run's resolved connection; its configured
+                  // output cap and context window set the helper's admission floor.
+                  {
+                    contextWindow: selected.contextWindow,
+                    maxTokens: selected.maxTokens,
+                    reasoning: selected.reasoning,
+                  },
                 );
                 if ("error" in admitted) return admitted;
                 try {

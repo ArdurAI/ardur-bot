@@ -1,4 +1,8 @@
-import { DEFAULT_MODEL_MAX_TOKENS } from "@ardurbot/contracts";
+export {
+  DEFAULT_MODEL_MAX_TOKENS,
+  REASONING_MODEL_MAX_TOKENS,
+  resolveCompletionMaxTokens,
+} from "@ardurbot/contracts";
 
 /** Hung completions must fail before the typical 5-minute run lease. */
 export const MODEL_STREAM_TIMEOUT_MS = 120_000;
@@ -59,41 +63,6 @@ export function billedPromptTokens(usage: {
       nonNegativeCount(usage.cacheWrite),
     outputTokens: nonNegativeCount(usage.output),
   };
-}
-
-/**
- * A reasoning model spends this same budget on its thinking, so the modest default
- * can be consumed before the reply starts. Wide enough for thinking plus an answer,
- * still far below a model card's 128k ceiling.
- */
-export const REASONING_MODEL_MAX_TOKENS = 32_768;
-
-/**
- * Completions default to a modest output cap so OpenRouter-style providers do not
- * hold credit for a model card's 128k ceiling. A configured maxTokens is the escape.
- * Reasoning models get the wider default because their thinking is billed against
- * the same ceiling: at 4k a hard question can leave no room for the reply at all.
- */
-export function resolveCompletionMaxTokens(
-  modelMaxTokens?: number,
-  configuredMaxTokens?: number,
-  optionsMaxTokens?: number,
-  reasoning?: boolean,
-): number {
-  const userCap =
-    typeof configuredMaxTokens === "number" && configuredMaxTokens >= 1
-      ? configuredMaxTokens
-      : reasoning
-        ? REASONING_MODEL_MAX_TOKENS
-        : DEFAULT_MODEL_MAX_TOKENS;
-  const optionCap =
-    typeof optionsMaxTokens === "number" && optionsMaxTokens >= 1
-      ? Math.min(optionsMaxTokens, userCap)
-      : userCap;
-  if (typeof modelMaxTokens === "number" && modelMaxTokens >= 1) {
-    return Math.min(modelMaxTokens, optionCap);
-  }
-  return optionCap;
 }
 
 function nonNegativeCount(value: number | undefined): number {

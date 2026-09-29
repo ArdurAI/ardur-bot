@@ -563,3 +563,9 @@ it("keeps the card clean when a worker finishes within its reservation", async (
   await f.worker().$transaction((tx) => finishDelegation(tx, row.id, "completed", "Done"));
   expect(f.state().rows[0].result).toBe("Done");
 });
+it("grows the default reservation to the worker's one-request floor", async () => {
+  const f = fixture();
+  const row = await f.admit({ minimumTokens: 65_536 });
+  expect(row.reservedTokens).toBe(65_536);
+  expect(f.state().root).toMatchObject({ reservedTokens: 65_536 });
+});

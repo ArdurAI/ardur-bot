@@ -254,7 +254,10 @@ export async function admitDelegation(
   if (hop > root.maxHops) refuse("hops-exceeded");
   if (root.totalDescendants >= root.maxDescendants || root.activeDescendants >= root.maxConcurrent)
     refuse("descendants-exceeded");
-  const tokens = input.tokens ?? DELEGATION_LIMITS.reservationTokens;
+  // An explicit budget is never raised silently. The default reservation must still cover
+  // the admission floor for this worker's model, so it grows to the floor when higher.
+  const tokens =
+    input.tokens ?? Math.max(DELEGATION_LIMITS.reservationTokens, input.minimumTokens ?? 0);
   if (!Number.isSafeInteger(tokens) || tokens <= 0) refuse("budget-exhausted");
   // An explicit budget the owner or coordinator set is never raised silently; one that
   // cannot cover even one request for the worker's model refuses before the worker starts.

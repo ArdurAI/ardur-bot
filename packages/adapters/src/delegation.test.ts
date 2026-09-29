@@ -4,7 +4,7 @@ import { admitDelegation, updateWorkerTask } from "@ardurbot/db";
 import { expect, it, vi } from "vitest";
 import { prepareDelegation } from "./delegation.js";
 import { checkDelegationExecution } from "./delegation-execution.js";
-import { piModelContextWindow } from "./pi-models.js";
+import { piModelLimits } from "./pi-models.js";
 
 vi.mock("@ardurbot/db", async (importOriginal) => ({
   ...(await importOriginal<typeof Database>()),
@@ -18,7 +18,7 @@ vi.mock("@ardurbot/db", async (importOriginal) => ({
 }));
 vi.mock("./pi-models.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./pi-models.js")>()),
-  piModelContextWindow: vi.fn(() => undefined),
+  piModelLimits: vi.fn(() => ({})),
 }));
 it("passes a one-request floor derived from the worker's pinned model to admission", async () => {
   const pin = {
@@ -46,7 +46,7 @@ it("passes a one-request floor derived from the worker's pinned model to admissi
       })),
     },
   } as unknown as Prisma.TransactionClient;
-  vi.mocked(piModelContextWindow).mockReturnValue(8_192);
+  vi.mocked(piModelLimits).mockReturnValue({ contextWindow: 8_192 });
   await prepareDelegation(tx, {
     parentRunId: "parent",
     actingBotId: "bot",
@@ -62,7 +62,7 @@ it("passes a one-request floor derived from the worker's pinned model to admissi
     tx,
     expect.objectContaining({ minimumTokens: 12_288 }),
   );
-  vi.mocked(piModelContextWindow).mockReturnValue(undefined);
+  vi.mocked(piModelLimits).mockReturnValue({});
   await prepareDelegation(tx, {
     parentRunId: "parent",
     actingBotId: "bot",
@@ -77,6 +77,98 @@ it("passes a one-request floor derived from the worker's pinned model to admissi
   expect(admitDelegation).toHaveBeenLastCalledWith(
     tx,
     expect.objectContaining({ minimumTokens: 36_864 }),
+  );
+});
+it("derives the floor from the effective output cap, including reasoning and connection limits", async () => {
+  const pin = {
+    provider: "scripted",
+    modelId: "scripted",
+    effort: "off",
+    credentialId: "scripted",
+    revision: 4,
+    runtimeKind: "pi" as const,
+  };
+  const tx = {
+    run: {
+      findUniqueOrThrow: vi.fn(async () => ({
+        id: "parent",
+        botId: "bot",
+        runtimePin: pin,
+        runtimeDestination: { host: "localhost", local: true },
+      })),
+      findUnique: vi.fn(async () => ({ taskId: "root" })),
+    },
+    bot: {
+      findFirstOrThrow: vi.fn(async () => ({
+        computerId: "computer",
+        computer: { scope: "dedicated", kind: "test" },
+      })),
+    },
+  } as unknown as Prisma.TransactionClient;
+  // A reasoning model bills thinking against its output ceiling: 8192 + 32768.
+  vi.mocked(piModelLimits).mockReturnValue({ contextWindow: 8_192, reasoning: true });
+  await prepareDelegation(tx, {
+    parentRunId: "parent",
+    actingBotId: "bot",
+    actingName: "Helper",
+    spaceId: "space",
+    userId: "owner",
+    kind: "helper",
+    admissionKey: "helper-floor-reasoning",
+    prompt: "Review",
+  });
+  expect(admitDelegation).toHaveBeenLastCalledWith(
+    tx,
+    expect.objectContaining({ minimumTokens: 40_960 }),
+  );
+  // A connection-configured output cap on the parent run's resolved model raises the floor
+  // of inherited pins too: 8192 + 65536.
+  vi.mocked(piModelLimits).mockReturnValue({ contextWindow: 8_192 });
+  await prepareDelegation(tx, {
+    parentRunId: "parent",
+    actingBotId: "bot",
+    actingName: "Helper",
+    spaceId: "space",
+    userId: "owner",
+    kind: "helper",
+    admissionKey: "helper-floor-configured",
+    prompt: "Review",
+    workerLimits: { maxTokens: 65_536 },
+  });
+  expect(admitDelegation).toHaveBeenLastCalledWith(
+    tx,
+    expect.objectContaining({ minimumTokens: 73_728 }),
+  );
+  // A resolved worker's own connection limits apply to non-inherited admissions.
+  vi.mocked(piModelLimits).mockReturnValue({ contextWindow: 200_000, maxTokens: 128_000 });
+  const resolve = vi.fn(async () => ({
+    kind: "resolved" as const,
+    pin,
+    runtimePin: pin,
+    provider: "scripted",
+    id: "scripted",
+    thinkingLevel: "high" as const,
+    maxTokens: 16_384,
+    contextWindow: 100_000,
+  }));
+  await prepareDelegation(
+    tx,
+    {
+      parentRunId: "parent",
+      actingBotId: "bot",
+      actingName: "Worker",
+      spaceId: "space",
+      userId: "owner",
+      kind: "message",
+      admissionKey: "message-floor",
+      prompt: "Review",
+    },
+    resolve,
+  );
+  // The resolved connection's context window and output cap win: 32768 (capped) + 16384.
+  expect(admitDelegation).toHaveBeenLastCalledWith(
+    tx,
+    expect.objectContaining({ minimumTokens: 49_152 }),
   );
 });
 it("inherits the exact resolved snapshot including connection and runtime without calling a resolver", async () => {
