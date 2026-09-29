@@ -1912,6 +1912,7 @@ msgstr "颜色 {color}"
 msgid "Coming soon"
 msgstr "即将推出"
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Command"
