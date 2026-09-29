@@ -99,7 +99,7 @@ function SessionApp() {
     ) : (
       <div
         className="grid h-full place-items-center text-muted-foreground/80"
-        data-ardurbot-app-state="session-pending"
+        data-ardur-app-state="session-pending"
       >
         <Trans>Loading…</Trans>
       </div>
@@ -108,7 +108,7 @@ function SessionApp() {
 
   const user = session.data?.user;
   const content = (
-    <div className="h-full" data-ardurbot-app-state="ready">
+    <div className="h-full" data-ardur-app-state="ready">
       <Suspense fallback={<div className="h-full bg-background" />}>
         <Routes>
           <Route

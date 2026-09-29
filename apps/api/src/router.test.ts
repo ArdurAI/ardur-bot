@@ -13,7 +13,7 @@ describe("Hermes availability", () => {
   const actor = {
     spaceId: "workspace-1",
     userId: "user-1",
-    email: "user@ardurbot.test",
+    email: "user@example.test",
     isDeploymentOwner: true,
   } satisfies Actor;
 
@@ -81,7 +81,7 @@ describe("account preferences", () => {
       user: {
         update,
         findUniqueOrThrow: vi.fn().mockResolvedValue({
-          email: "user@ardurbot.test",
+          email: "user@example.test",
           name: "Test User",
           avatarStyle,
         }),
@@ -103,7 +103,7 @@ describe("account preferences", () => {
     const actor = {
       spaceId: "workspace-1",
       userId: "user-1",
-      email: "user@ardurbot.test",
+      email: "user@example.test",
       isDeploymentOwner: true,
     } satisfies Actor;
     return { update, deps, actor, handler: new RPCHandler(createRouter(deps)) };
@@ -200,7 +200,7 @@ describe("model setup gate", () => {
     const prisma = {
       user: {
         findUniqueOrThrow: vi.fn().mockResolvedValue({
-          email: "user@ardurbot.test",
+          email: "user@example.test",
           name: "Test User",
           avatarStyle: "robot",
         }),
@@ -232,7 +232,7 @@ describe("model setup gate", () => {
     const actor = {
       spaceId: "workspace-1",
       userId: "user-1",
-      email: "user@ardurbot.test",
+      email: "user@example.test",
       isDeploymentOwner: true,
     } satisfies Actor;
     return { actor, handler: new RPCHandler(createRouter(deps)) };
@@ -377,7 +377,7 @@ describe("thread answer delivery", () => {
     const actor = {
       spaceId: "workspace-1",
       userId: "user-1",
-      email: "user@ardurbot.test",
+      email: "user@example.test",
       isDeploymentOwner: true,
     } satisfies Actor;
     const handler = new RPCHandler(createRouter(deps));
@@ -440,7 +440,7 @@ describe("MCP server deletion", () => {
     const actor = {
       spaceId: "workspace-1",
       userId: "user-1",
-      email: "user@ardurbot.test",
+      email: "user@example.test",
       isDeploymentOwner: true,
     } satisfies Actor;
     const handler = new RPCHandler(createRouter(deps));
@@ -512,7 +512,7 @@ describe("connections.begin", () => {
     const actor = {
       spaceId: "workspace-1",
       userId: "user-1",
-      email: "user@ardurbot.test",
+      email: "user@example.test",
       isDeploymentOwner: true,
     } satisfies Actor;
     const handler = new RPCHandler(createRouter(deps));
@@ -619,7 +619,7 @@ describe("connections.complete", () => {
     const actor = {
       spaceId: "workspace-1",
       userId: "user-1",
-      email: "user@ardurbot.test",
+      email: "user@example.test",
       isDeploymentOwner: true,
     } satisfies Actor;
     const handler = new RPCHandler(createRouter(deps));
@@ -653,7 +653,7 @@ describe("updater owner gate", () => {
     const prisma = {
       user: {
         findUniqueOrThrow: vi.fn().mockResolvedValue({
-          email: "user@ardurbot.test",
+          email: "user@example.test",
           name: "Test User",
           avatarStyle: "robot",
         }),
@@ -683,7 +683,7 @@ describe("updater owner gate", () => {
     const actor = {
       spaceId: "workspace-1",
       userId: "user-2",
-      email: "member@ardurbot.test",
+      email: "member@example.test",
       isDeploymentOwner: false,
     } satisfies Actor;
 
@@ -704,7 +704,7 @@ describe("updater owner gate", () => {
     const actor = {
       spaceId: "workspace-1",
       userId: "user-1",
-      email: "owner@ardurbot.test",
+      email: "owner@example.test",
       isDeploymentOwner: true,
     } satisfies Actor;
 
@@ -729,7 +729,7 @@ describe("updater owner gate", () => {
     const actor = {
       spaceId: "workspace-1",
       userId: "user-1",
-      email: "owner@ardurbot.test",
+      email: "owner@example.test",
       isDeploymentOwner: true,
     } satisfies Actor;
 
@@ -754,7 +754,7 @@ describe("computer screen url", () => {
   const actor = {
     spaceId: "workspace-1",
     userId: "user-1",
-    email: "user@ardurbot.test",
+    email: "user@example.test",
     isDeploymentOwner: true,
   } satisfies Actor;
   const computerRow = {
@@ -906,7 +906,7 @@ describe("integration setup authorization", () => {
             actor: {
               userId: "user",
               spaceId: "space",
-              email: "user@ardurbot.test",
+              email: "user@example.test",
               isDeploymentOwner: owner,
             },
           },
@@ -941,7 +941,7 @@ describe("integration setup authorization", () => {
           actor: {
             userId: "member",
             spaceId: "space",
-            email: "member@ardurbot.test",
+            email: "member@example.test",
             isDeploymentOwner: false,
           },
         },
@@ -985,7 +985,7 @@ describe("interrupted computer reservation release", () => {
             actor: {
               spaceId: "space-1",
               userId: "user-1",
-              email: "user@ardurbot.test",
+              email: "user@example.test",
               isDeploymentOwner: owner,
             },
           },
@@ -1033,7 +1033,7 @@ describe("model credential persistence", () => {
   const actor = {
     spaceId: "workspace-1",
     userId: "user-1",
-    email: "user@ardurbot.test",
+    email: "user@example.test",
     isDeploymentOwner: true,
   } satisfies Actor;
 

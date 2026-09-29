@@ -49,7 +49,7 @@ describe.skipIf(!hasDatabase)("group model visible journey (PostgreSQL)", () => 
         method: "POST",
         headers: { "content-type": "application/json", origin },
         body: JSON.stringify({
-          email: `group-visible-${randomUUID()}@ardurbot.test`,
+          email: `group-visible-${randomUUID()}@example.test`,
           password: "password12",
           name: "Fixture",
         }),
@@ -160,7 +160,7 @@ describe.skipIf(!hasDatabase)("group model visible journey (PostgreSQL)", () => 
         method: "POST",
         headers: { "content-type": "application/json", origin },
         body: JSON.stringify({
-          email: `group-edit-${randomUUID()}@ardurbot.test`,
+          email: `group-edit-${randomUUID()}@example.test`,
           password: "password12",
           name: "Fixture",
         }),
@@ -343,7 +343,7 @@ describe.skipIf(!hasDatabase)("group model visible journey (PostgreSQL)", () => 
         method: "POST",
         headers: { "content-type": "application/json", origin },
         body: JSON.stringify({
-          email: `group-handoff-${randomUUID()}@ardurbot.test`,
+          email: `group-handoff-${randomUUID()}@example.test`,
           password: "password12",
           name: "Fixture",
         }),

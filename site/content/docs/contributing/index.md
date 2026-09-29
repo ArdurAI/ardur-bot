@@ -36,7 +36,7 @@ startup commands.
 Run `pnpm check` and `pnpm test` before opening a PR when you can. The rest are there when
 you touch that area.
 
-When running web E2E locally (`pnpm --filter @ardurbot/web e2e`), Playwright starts its own web server and fails fast if the web port is already in use, preventing test signups (`@ardurbot.test`) from polluting a running developer database. To opt in to reusing a running dev server, set `PLAYWRIGHT_REUSE_SERVER=1`.
+When running web E2E locally (`pnpm --filter @ardurbot/web e2e`), Playwright starts its own web server and fails fast if the web port is already in use, preventing test signups (`@example.test`) from polluting a running developer database. To opt in to reusing a running dev server, set `PLAYWRIGHT_REUSE_SERVER=1`.
 
 ## Changes from upstream
 

@@ -52,7 +52,7 @@ describeLive("live release-watch eval (GPT 5.6 Luna + GitHub emulator)", () => {
       method: "POST",
       headers: { "content-type": "application/json", origin: "http://127.0.0.1:5173" },
       body: JSON.stringify({
-        email: `release-watch-${stamp}@ardurbot.test`,
+        email: `release-watch-${stamp}@example.test`,
         password: "password12",
         name: "Release Watch",
       }),
