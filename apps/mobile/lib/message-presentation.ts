@@ -11,6 +11,7 @@ export function isCenteredAgentEvent(blocks: readonly MessageBlock[]): boolean {
   return blocks.some(
     (block) =>
       block.kind === "handoff" ||
+      block.kind === "coordination" ||
       block.kind === "bot_message_sent" ||
       block.kind === "bot_message_received" ||
       block.kind === "channel_message",
@@ -27,10 +28,12 @@ export function messagePresentationSegments(
 ): MessagePresentationSegment[] {
   // Tool activity, reasoning summaries, and interim narration live in the
   // compact work record, not the bubble. Plain narration (including old
-  // stored messages with no reasoning flag) stays in the bubble.
+  // stored messages with no reasoning flag) stays in the bubble. A
+  // coordination round renders as its own collapsed line, never bubble text.
   const content = blocks.filter(
     (block, index) =>
       block.kind !== "app_connect" &&
+      block.kind !== "coordination" &&
       !isToolActivityBlock(block) &&
       !isReasoningSummaryBlock(block) &&
       !isInterimNarrationAt(blocks, index),

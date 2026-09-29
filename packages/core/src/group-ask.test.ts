@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   askMemberOutcome,
   askMemberPrompt,
-  askMessageText,
   askRoundForRun,
   askWakeNonce,
   groupAskKey,
@@ -62,12 +61,6 @@ describe("ask keys", () => {
 });
 
 describe("ask text", () => {
-  it("shows the coordinator addressing the members it asked", () => {
-    expect(
-      askMessageText([{ name: "Ada" }, { name: "Chief of Staff" }], " Introduce yourself. "),
-    ).toBe("@Ada @Chief of Staff Introduce yourself.");
-  });
-
   it("frames the coordinator's request as untrusted peer content", () => {
     const prompt = askMemberPrompt({
       from: { id: "chief", name: "Chief" },

@@ -2070,6 +2070,23 @@ describe("mobile thread event reduction", () => {
     ).toBe("Shell\nThe actual answer is here.");
   });
 
+  it("does not speak the coordinator's request from a coordination line", () => {
+    expect(
+      blockText(
+        mobileMessage("coordination", [
+          {
+            kind: "coordination",
+            nonce: "group-ask:1:ask-run:call-1",
+            round: 1,
+            text: "Say hello to your teammates in one sentence.",
+            updates: [],
+            members: [{ botId: "ada", name: "Ada", outcome: "pending" }],
+          },
+        ]),
+      ),
+    ).toBe("");
+  });
+
   it("deduplicates durable messages, replaces matching subagent state and keeps the draft", () => {
     const initial = snapshot([
       mobileMessage("message-1", [{ kind: "text", text: "old" }]),

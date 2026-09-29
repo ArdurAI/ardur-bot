@@ -32,6 +32,20 @@ describe("mobile message presentation", () => {
     expect(isCenteredAgentEvent([{ kind: "text", text: "Hello" }])).toBe(false);
   });
 
+  it("keeps a coordination round out of the bubble: it renders as its own line", () => {
+    const round = {
+      kind: "coordination",
+      nonce: "group-ask:1:run:call-1",
+      round: 1,
+      text: "Say hello.",
+      updates: [],
+      members: [{ botId: "ada", name: "Ada", outcome: "answered" }],
+    } as MessageBlock;
+
+    expect(isCenteredAgentEvent([round])).toBe(true);
+    expect(messagePresentationSegments([round])).toEqual([]);
+  });
+
   it("hides completed tool activity", () => {
     const blocks = [
       {

@@ -17,6 +17,7 @@ import { lockPeerTrafficPolicy } from "./bot-comms-policy.js";
 import { cancelRunsInTransaction } from "./cancel-runs.js";
 import { Prisma, type PrismaClient } from "./client.js";
 import { expireComputerExecutionLeases } from "./computers.js";
+import { recordStoppedGroupAskOutcomesInTransaction } from "./group-asks.js";
 import { IsolationError } from "./scope.js";
 import { lockSpaceForContentCreation } from "./spaces.js";
 import { activeRunSelection, activeRunStatuses, previewFromBlocks } from "./thread-listing.js";
@@ -425,7 +426,13 @@ export function createGroupRepos(prisma: PrismaClient) {
           .map((member) => member.botId)
           .filter((botId) => !nextBotIds.has(botId));
 
-        const removedRunsToCancel: { id: string; taskId: string }[] = [];
+        const removedRunsToCancel: {
+          id: string;
+          taskId: string;
+          delegationId: string | null;
+          threadId: string;
+          spaceId: string;
+        }[] = [];
 
         if (removedBotIds.length) {
           const removedDeliveries = await tx.botMessageDelivery.findMany({
@@ -496,7 +503,14 @@ export function createGroupRepos(prisma: PrismaClient) {
                   delegationId: { in: delegationIds },
                   status: { in: ["queued", "peer_ready", "leased", "running"] },
                 },
-                select: { id: true, taskId: true, status: true },
+                select: {
+                  id: true,
+                  taskId: true,
+                  status: true,
+                  delegationId: true,
+                  threadId: true,
+                  spaceId: true,
+                },
               });
               const parked = directRuns.filter(
                 (run) => run.status === "queued" || run.status === "peer_ready",
@@ -517,7 +531,13 @@ export function createGroupRepos(prisma: PrismaClient) {
                   in: ["queued", "leased", "running", "waiting_input", "waiting_takeover"],
                 },
               },
-              select: { id: true, taskId: true },
+              select: {
+                id: true,
+                taskId: true,
+                delegationId: true,
+                threadId: true,
+                spaceId: true,
+              },
             })
           : [];
 
@@ -525,6 +545,9 @@ export function createGroupRepos(prisma: PrismaClient) {
         if (allRunsToCancel.length) {
           const now = new Date();
           await cancelRunsInTransaction(tx, allRunsToCancel, now);
+          // A removed member's ask run never finalizes, so mark its round
+          // stopped here or the coordination line would pulse pending forever.
+          await recordStoppedGroupAskOutcomesInTransaction(tx, allRunsToCancel, now);
         }
         if (input.name !== undefined) {
           await tx.chatGroup.update({
@@ -600,7 +623,7 @@ export function createGroupRepos(prisma: PrismaClient) {
             threadId: current.thread.id,
             status: { in: activeRunStatuses },
           },
-          select: { id: true, taskId: true },
+          select: { id: true, taskId: true, delegationId: true, threadId: true, spaceId: true },
         });
         const runIds = activeRuns.map((run) => run.id);
         const now = new Date();
@@ -631,6 +654,7 @@ export function createGroupRepos(prisma: PrismaClient) {
 
         if (runIds.length) {
           await cancelRunsInTransaction(tx, activeRuns, now);
+          await recordStoppedGroupAskOutcomesInTransaction(tx, activeRuns, now);
           await expireComputerExecutionLeases(tx, { runId: { in: runIds } });
           await tx.computer.updateMany({
             where: { executionRunId: { in: runIds } },

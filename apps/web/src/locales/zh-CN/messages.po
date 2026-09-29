@@ -260,6 +260,22 @@ msgstr "{location} · Docker 未运行"
 msgid "{minutes}m ago"
 msgstr "{minutes} 分钟前"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer"
+msgstr "{name} 无法回答"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model account hit a rate limit"
+msgstr "{name} 无法回答：其模型账户已达到速率限制"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model account needs attention"
+msgstr "{name} 无法回答：其模型账户需要处理"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model is unavailable"
+msgstr "{name} 无法回答：其模型不可用"
+
 #. js-lingui-explicit-id
 #: src/lib/use-notifications.ts
 msgid "{name} failed"
@@ -274,6 +290,10 @@ msgstr "{name} 已完成"
 #: src/lib/use-notifications.ts
 msgid "{name} needs your input"
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} stopped before answering"
+msgstr "{name} 在回答前已停止"
 
 #: src/pages/LearningInbox.tsx
 msgid "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
@@ -782,6 +802,10 @@ msgstr ""
 msgid "Answer"
 msgstr "回答"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "answered"
+msgstr "已回答"
+
 #: src/components/AskCard.tsx
 msgid "Answered"
 msgstr "已回答"
@@ -1056,6 +1080,10 @@ msgstr ""
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Ask the server owner to configure this provider."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Asked {asked, plural, one {# bot} other {# bots}} · {answered, plural, one {# answered} other {# answered}}"
+msgstr "已询问 {asked, plural, one {# 个机器人} other {# 个机器人}} · {answered, plural, one {# 个已回答} other {# 个已回答}}"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "asks first"
@@ -2283,6 +2311,10 @@ msgstr "对话"
 msgid "Conversation with {0}"
 msgstr "与 {0} 的对话"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Coordination round: {asked} asked, {answered} answered"
+msgstr "协调轮次：已询问 {asked} 个，{answered} 个已回答"
+
 #: src/pages/GroupPanel.tsx
 msgid "Coordinator"
 msgstr "协调者"
@@ -3085,6 +3117,10 @@ msgstr ""
 #: src/pages/settings/UploadedFiles.tsx
 msgid "Could not update uploaded files."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "couldn't answer"
+msgstr "无法回答"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Couldn't install Hermes. Try again."
@@ -4101,6 +4137,10 @@ msgstr "正在完成 MCP 连接…"
 msgid "First bot not created"
 msgstr "尚未创建第一个机器人"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Fix"
+msgstr "修复"
+
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Fix the configuration JSON to edit these settings."
 msgstr "请先修复配置 JSON，再编辑这些设置。"
@@ -4287,6 +4327,10 @@ msgstr "请先挂断，然后输入屏幕上的代码。"
 #: src/pages/CallView.tsx
 msgid "Hang up, then enter the code on screen."
 msgstr "请挂断，然后输入屏幕上的代码。"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "has not answered yet"
+msgstr "尚未回答"
 
 #: src/pages/RoutineEditor.tsx
 msgid "header"
@@ -4680,6 +4724,10 @@ msgstr "间隔数量"
 #: src/pages/RoutineSchedule.tsx
 msgid "Interval unit"
 msgstr "间隔单位"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "is waiting for you"
+msgstr "正在等你"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Isolated"
@@ -8273,6 +8321,10 @@ msgstr ""
 #: src/pages/GroupPanel.tsx
 msgid "Stopped"
 msgstr "已停止"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "stopped before answering"
+msgstr "回答前已停止"
 
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx

@@ -6,6 +6,9 @@ import { fixture } from "./delegation-test-fixture.js";
 import {
   GROUP_ASK_EXPIRY_GRACE_MS,
   loadGroupAskResults,
+  recordGroupAskOutcomeInTransaction,
+  recordGroupAskUpdateInTransaction,
+  recordStoppedGroupAskOutcomesInTransaction,
   sizeDelegationRootForAsk,
   wakeCoordinatorForGroupAsk,
 } from "./group-asks.js";
@@ -473,5 +476,390 @@ describe("group ask budget", () => {
     expect(f.state().rows[0]).toMatchObject({ status: "completed", result: "I am Worker." });
     expect(f.state().messages).toEqual([]);
     expect(f.state().root).toMatchObject({ activeDescendants: 0 });
+  });
+});
+
+describe("coordination round recording", () => {
+  // Tool call ids from runtimes can contain colons (the scripted runtime uses
+  // `<runId>:<tool>:<seq>`), so the round's message nonce is the admission key
+  // minus its final member segment, not a fixed part count.
+  const callId = "ask-run:ask_members:0";
+  const coordinationMessage = {
+    id: "ask-message",
+    botId: "chief",
+    blocks: [
+      {
+        kind: "coordination",
+        nonce: `group-ask:1:ask-run:${callId}`,
+        round: 1,
+        text: "Say hello.",
+        updates: [],
+        members: [
+          { botId: "ada", name: "Ada", outcome: "pending" },
+          { botId: "ben", name: "Ben", outcome: "pending" },
+        ],
+      },
+    ],
+  };
+
+  type RecordedBlocks = Array<{
+    kind: string;
+    updates?: string[];
+    updatedAt?: string;
+    members?: Array<Record<string, unknown>>;
+  }>;
+
+  function messageHarness(options: { message?: Record<string, unknown> | null } = {}) {
+    const stored =
+      options.message === undefined
+        ? structuredClone(coordinationMessage)
+        : options.message
+          ? structuredClone(options.message)
+          : null;
+    const messageUpdate = vi.fn(async (_args: { data: { blocks: RecordedBlocks } }) => ({}));
+    const eventCreate = vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+      id: "event",
+      ...data,
+    }));
+    const tx = {
+      $queryRaw: vi.fn(async () => []),
+      message: {
+        findUnique: vi.fn(async () => stored),
+        findFirst: vi.fn(async () => stored),
+        update: messageUpdate,
+      },
+      thread: { update: vi.fn(async () => ({ nextEventSeq: 7 })) },
+      event: { create: eventCreate },
+    };
+    return { tx, messageUpdate, eventCreate, stored };
+  }
+
+  const delegation = (patch: Record<string, unknown> = {}) => ({
+    actingBotId: "ada",
+    actingName: "Ada",
+    admissionKey: groupAskKey(ask, callId, "ada"),
+    ...patch,
+  });
+
+  it("marks a failed member with a reason code, never an English sentence or the raw error", async () => {
+    const h = messageHarness();
+    const recorded = await recordGroupAskOutcomeInTransaction(h.tx as never, {
+      ...scope,
+      threadId: "room",
+      delegation: delegation(),
+      delegationStatus: "failed",
+      runStatus: "failed",
+      error: "xai API error (403): You have run out of credits",
+      providerErrorKind: "auth",
+      now,
+    });
+
+    expect(recorded).toEqual({ threadId: "room", seq: 6 });
+    const blocks = h.messageUpdate.mock.calls[0]?.[0].data.blocks;
+    const ada = blocks?.[0]?.members?.find((row) => row.botId === "ada");
+    expect(ada).toMatchObject({ outcome: "failed", reasonCode: "auth" });
+    expect(ada?.reason).toBeUndefined();
+    expect(JSON.stringify(blocks)).not.toContain("403");
+    expect(JSON.stringify(blocks)).not.toContain("couldn't answer");
+    expect(h.eventCreate.mock.calls[0]?.[0].data).toMatchObject({
+      type: "thread.message.updated",
+      botId: "chief",
+      threadId: "room",
+    });
+  });
+
+  it("stores the reason code classified from each providerErrorKind", async () => {
+    const cases = [
+      { providerErrorKind: "auth", error: "403", reasonCode: "auth" },
+      { providerErrorKind: "rate-limit", error: "429", reasonCode: "rate-limit" },
+      {
+        providerErrorKind: "model-unavailable",
+        error: "no such model",
+        reasonCode: "model-unavailable",
+      },
+      { providerErrorKind: undefined, error: "boom", reasonCode: "other" },
+    ] as const;
+    for (const entry of cases) {
+      const h = messageHarness();
+      await recordGroupAskOutcomeInTransaction(h.tx as never, {
+        ...scope,
+        threadId: "room",
+        delegation: delegation(),
+        delegationStatus: "failed",
+        runStatus: "failed",
+        error: entry.error,
+        providerErrorKind: entry.providerErrorKind,
+        now,
+      });
+      const blocks = h.messageUpdate.mock.calls[0]?.[0].data.blocks;
+      const ada = blocks?.[0]?.members?.find((row) => row.botId === "ada");
+      expect(ada, entry.providerErrorKind ?? "no-kind").toMatchObject({
+        outcome: "failed",
+        reasonCode: entry.reasonCode,
+      });
+      expect(ada?.reason).toBeUndefined();
+    }
+  });
+
+  it("marks answered, stopped and waiting members from their records", async () => {
+    const cases = [
+      { delegationStatus: "completed", runStatus: "completed", outcome: "answered" },
+      { delegationStatus: "cancelled", runStatus: "cancelled", outcome: "stopped" },
+      { delegationStatus: "running", runStatus: "waiting_input", outcome: "waiting" },
+    ] as const;
+    for (const entry of cases) {
+      const h = messageHarness();
+      await recordGroupAskOutcomeInTransaction(h.tx as never, {
+        ...scope,
+        threadId: "room",
+        delegation: delegation(),
+        delegationStatus: entry.delegationStatus,
+        runStatus: entry.runStatus,
+        now,
+      });
+      const blocks = h.messageUpdate.mock.calls[0]?.[0].data.blocks;
+      expect(blocks?.[0]?.members?.find((row) => row.botId === "ada")?.outcome).toBe(entry.outcome);
+    }
+  });
+
+  it("refuses a member id that contains a colon instead of mis-parsing the key", async () => {
+    // Member ids are cuids, so this is a guard: a colon in the member segment
+    // would shift the derived nonce away from the round's message, and the
+    // lookup must miss cleanly rather than write to the wrong message.
+    const realNonce = `group-ask:1:ask-run:${callId}`;
+    const stored = structuredClone(coordinationMessage);
+    const messageUpdate = vi.fn(async () => ({}));
+    const tx = {
+      message: {
+        findUnique: vi.fn(
+          async ({
+            where,
+          }: {
+            where: { threadId_clientNonce: { threadId: string; clientNonce: string } };
+          }) => (where.threadId_clientNonce.clientNonce === realNonce ? stored : null),
+        ),
+        findFirst: vi.fn(async () => null),
+        update: messageUpdate,
+      },
+      thread: { update: vi.fn(async () => ({ nextEventSeq: 7 })) },
+      event: { create: vi.fn(async () => ({ id: "event" })) },
+    };
+    await expect(
+      recordGroupAskOutcomeInTransaction(tx as never, {
+        ...scope,
+        threadId: "room",
+        delegation: delegation({ admissionKey: groupAskKey(ask, callId, "ada:odd") }),
+        delegationStatus: "completed",
+        runStatus: "completed",
+        now,
+      }),
+    ).resolves.toBeNull();
+    expect(tx.message.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          threadId_clientNonce: {
+            threadId: "room",
+            clientNonce: `${realNonce}:ada`,
+          },
+        },
+      }),
+    );
+    expect(messageUpdate).not.toHaveBeenCalled();
+    expect(tx.event.create).not.toHaveBeenCalled();
+  });
+
+  it("keeps the first terminal outcome and ignores delegations that are not asks", async () => {
+    const settled = messageHarness({
+      message: {
+        ...coordinationMessage,
+        blocks: [
+          {
+            ...coordinationMessage.blocks[0],
+            members: [{ botId: "ada", name: "Ada", outcome: "answered" }],
+          },
+        ],
+      },
+    });
+    await expect(
+      recordGroupAskOutcomeInTransaction(settled.tx as never, {
+        ...scope,
+        threadId: "room",
+        delegation: delegation(),
+        delegationStatus: "failed",
+        runStatus: "failed",
+        now,
+      }),
+    ).resolves.toBeNull();
+    expect(settled.messageUpdate).not.toHaveBeenCalled();
+
+    const other = messageHarness();
+    await expect(
+      recordGroupAskOutcomeInTransaction(other.tx as never, {
+        ...scope,
+        threadId: "room",
+        delegation: delegation({ admissionKey: "bot-message:1:ada" }),
+        delegationStatus: "completed",
+        runStatus: "completed",
+        now,
+      }),
+    ).resolves.toBeNull();
+    expect(other.messageUpdate).not.toHaveBeenCalled();
+  });
+
+  it("appends a progress note to the round, by exact nonce or by round prefix", async () => {
+    const exact = messageHarness();
+    const recorded = await recordGroupAskUpdateInTransaction(exact.tx as never, {
+      ...scope,
+      threadId: "room",
+      nonce: "group-ask:1:ask-run:call-1",
+      note: "Asked Ada and Ben.",
+      now,
+    });
+    expect(recorded).toEqual({ threadId: "room", seq: 6 });
+    expect(exact.stored && exact.messageUpdate).toBeTruthy();
+    const blocks = exact.messageUpdate.mock.calls[0]?.[0].data.blocks;
+    expect(blocks?.[0]?.updates).toEqual(["Asked Ada and Ben."]);
+    expect(blocks?.[0]?.updatedAt).toBe(now.toISOString());
+
+    // The wake turn knows only the round prefix; the latest matching message wins.
+    const prefix = messageHarness();
+    (prefix.tx.message.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    await recordGroupAskUpdateInTransaction(prefix.tx as never, {
+      ...scope,
+      threadId: "room",
+      nonce: "group-ask:1:ask-run:",
+      note: "Two of three said hello.",
+      now,
+    });
+    expect(prefix.tx.message.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { threadId: "room", clientNonce: { startsWith: "group-ask:1:ask-run:" } },
+      }),
+    );
+    const prefixBlocks = prefix.messageUpdate.mock.calls[0]?.[0].data.blocks;
+    expect(prefixBlocks?.[0]?.updates).toEqual(["Two of three said hello."]);
+  });
+
+  it("settles a still-running member to stopped when the room's Stop cancels its run", async () => {
+    // Stop cancels runs directly: no finalize settles the delegation, so the
+    // round must learn the outcome here or the line pulses pending forever.
+    const stored = structuredClone(coordinationMessage);
+    const messageUpdate = vi.fn(
+      async (_args: {
+        data: { blocks: Array<{ members: Array<{ botId: string; outcome: string }> }> };
+      }) => ({}),
+    );
+    const delegationUpdateMany = vi.fn(async () => ({ count: 0 }));
+    const tx = {
+      $queryRaw: vi.fn(async () => []),
+      delegation: {
+        findMany: vi.fn(async () => [
+          {
+            id: "delegation-ada",
+            actingBotId: "ada",
+            actingName: "Ada",
+            admissionKey: groupAskKey(ask, callId, "ada"),
+          },
+        ]),
+        updateMany: delegationUpdateMany,
+      },
+      message: {
+        findUnique: vi.fn(async () => stored),
+        findFirst: vi.fn(async () => stored),
+        update: messageUpdate,
+      },
+      thread: { update: vi.fn(async () => ({ nextEventSeq: 7 })) },
+      event: {
+        create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+          id: "event",
+          ...data,
+        })),
+      },
+    };
+
+    await recordStoppedGroupAskOutcomesInTransaction(
+      tx as never,
+      [
+        {
+          delegationId: "delegation-ada",
+          threadId: "room",
+          spaceId: scope.spaceId,
+        },
+        // A coordinator run and a run with no delegation record nothing.
+        { delegationId: null, threadId: "room", spaceId: scope.spaceId },
+      ],
+      now,
+    );
+
+    const blocks = messageUpdate.mock.calls[0]?.[0].data.blocks;
+    expect(blocks?.[0]?.members?.find((row) => row.botId === "ada")?.outcome).toBe("stopped");
+    expect(blocks?.[0]?.members?.find((row) => row.botId === "ben")?.outcome).toBe("pending");
+    // The delegation row stays unsettled so the fan-in settles silently and
+    // never wakes the coordinator for an ask the person ended.
+    expect(delegationUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("keeps both changes when a fold and an outcome write the same round", async () => {
+    // The fold locks the thread row before reading, the same lock the outcome
+    // writers take, so the two writes serialize instead of last-writer-wins.
+    const stored = structuredClone(coordinationMessage);
+    const messageUpdate = vi.fn(async ({ data }: { data: { blocks: RecordedBlocks } }) => {
+      stored.blocks = data.blocks as never;
+    });
+    const lock = vi.fn(async () => []);
+    const findUnique = vi.fn(async () => stored);
+    const tx = {
+      $queryRaw: lock,
+      message: {
+        findUnique,
+        findFirst: vi.fn(async () => stored),
+        update: messageUpdate,
+      },
+      thread: { update: vi.fn(async () => ({ nextEventSeq: 7 })) },
+      event: {
+        create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+          id: "event",
+          ...data,
+        })),
+      },
+    };
+
+    await recordGroupAskUpdateInTransaction(tx as never, {
+      ...scope,
+      threadId: "room",
+      nonce: "group-ask:1:ask-run:call-1",
+      note: "Asked Ada and Ben.",
+      now,
+    });
+    await recordGroupAskOutcomeInTransaction(tx as never, {
+      ...scope,
+      threadId: "room",
+      delegation: delegation(),
+      delegationStatus: "completed",
+      runStatus: "completed",
+      now,
+    });
+
+    const block = stored.blocks[0] as RecordedBlocks[number];
+    expect(block.updates).toEqual(["Asked Ada and Ben."]);
+    expect(block.members?.find((row) => row.botId === "ada")?.outcome).toBe("answered");
+    expect(lock.mock.invocationCallOrder[0]).toBeLessThan(
+      findUnique.mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
+  it("records nothing when the round's message is gone", async () => {
+    const h = messageHarness({ message: null });
+    await expect(
+      recordGroupAskUpdateInTransaction(h.tx as never, {
+        ...scope,
+        threadId: "room",
+        nonce: "group-ask:1:ask-run:call-1",
+        note: "note",
+        now,
+      }),
+    ).resolves.toBeNull();
+    expect(h.messageUpdate).not.toHaveBeenCalled();
+    expect(h.eventCreate).not.toHaveBeenCalled();
   });
 });

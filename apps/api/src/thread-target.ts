@@ -48,6 +48,7 @@ import {
   mapGroupMembers,
   type Prisma,
   type PrismaClient,
+  recordStoppedGroupAskOutcomesInTransaction,
   type ThreadEvents,
   touchGroupUpdatedAt,
 } from "@ardurbot/db";
@@ -1322,7 +1323,7 @@ export async function stopThreadRuns(
           status: { in: [...ACTIVE_RUN_STATUSES] },
         },
         data: { status: "cancelled", completedAt: new Date() },
-        select: { id: true, botId: true },
+        select: { id: true, botId: true, delegationId: true },
       });
       for (const run of cancelled) {
         await appendEventInTransaction(
@@ -1337,6 +1338,16 @@ export async function stopThreadRuns(
           { cancelledRunId: run.id },
         );
       }
+      // A stopped ask member never finalizes, so mark its round stopped here or
+      // the coordination line would pulse pending forever.
+      await recordStoppedGroupAskOutcomesInTransaction(
+        tx,
+        cancelled.map((run) => ({
+          delegationId: run.delegationId,
+          threadId: target.threadId,
+          spaceId: actor.spaceId,
+        })),
+      );
       const ids = cancelled.map((run) => run.id);
       await tx.steeringMessage.deleteMany({
         where: {

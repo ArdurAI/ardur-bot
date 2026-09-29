@@ -260,6 +260,22 @@ msgstr ""
 msgid "{minutes}m ago"
 msgstr "{minutes} dk önce"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer"
+msgstr "{name} yanıtlayamadı"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model account hit a rate limit"
+msgstr "{name} yanıtlayamadı: model hesabı hız sınırına ulaştı"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model account needs attention"
+msgstr "{name} yanıtlayamadı: model hesabı ilgi gerektiriyor"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model is unavailable"
+msgstr "{name} yanıtlayamadı: modeli kullanılamıyor"
+
 #. js-lingui-explicit-id
 #: src/lib/use-notifications.ts
 msgid "{name} failed"
@@ -274,6 +290,10 @@ msgstr "{name} çalışmasını tamamladı"
 #: src/lib/use-notifications.ts
 msgid "{name} needs your input"
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} stopped before answering"
+msgstr "{name} yanıtlamadan önce durduruldu"
 
 #: src/pages/LearningInbox.tsx
 msgid "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
@@ -782,6 +802,10 @@ msgstr ""
 msgid "Answer"
 msgstr "Yanıtla"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "answered"
+msgstr "yanıtladı"
+
 #: src/components/AskCard.tsx
 msgid "Answered"
 msgstr "Yanıtlandı"
@@ -1056,6 +1080,10 @@ msgstr ""
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Ask the server owner to configure this provider."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Asked {asked, plural, one {# bot} other {# bots}} · {answered, plural, one {# answered} other {# answered}}"
+msgstr "{asked, plural, one {# bota} other {# bota}} soruldu · {answered, plural, one {# yanıtladı} other {# yanıtladı}}"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "asks first"
@@ -2283,6 +2311,10 @@ msgstr ""
 msgid "Conversation with {0}"
 msgstr "{0} ile konuşma"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Coordination round: {asked} asked, {answered} answered"
+msgstr "Koordinasyon turu: {asked} soruldu, {answered} yanıtladı"
+
 #: src/pages/GroupPanel.tsx
 msgid "Coordinator"
 msgstr "Koordinatör"
@@ -3085,6 +3117,10 @@ msgstr ""
 #: src/pages/settings/UploadedFiles.tsx
 msgid "Could not update uploaded files."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "couldn't answer"
+msgstr "yanıtlayamadı"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Couldn't install Hermes. Try again."
@@ -4101,6 +4137,10 @@ msgstr "MCP bağlantısı tamamlanıyor…"
 msgid "First bot not created"
 msgstr "İlk bot oluşturulmadı"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Fix"
+msgstr "Düzelt"
+
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Fix the configuration JSON to edit these settings."
 msgstr "Bu ayarları düzenlemek için yapılandırma JSON'unu düzeltin."
@@ -4287,6 +4327,10 @@ msgstr ""
 #: src/pages/CallView.tsx
 msgid "Hang up, then enter the code on screen."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "has not answered yet"
+msgstr "henüz yanıtlamadı"
 
 #: src/pages/RoutineEditor.tsx
 msgid "header"
@@ -4680,6 +4724,10 @@ msgstr "Aralık miktarı"
 #: src/pages/RoutineSchedule.tsx
 msgid "Interval unit"
 msgstr "Aralık birimi"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "is waiting for you"
+msgstr "sizi bekliyor"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Isolated"
@@ -8273,6 +8321,10 @@ msgstr ""
 #: src/pages/GroupPanel.tsx
 msgid "Stopped"
 msgstr "Durduruldu"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "stopped before answering"
+msgstr "yanıtlamadan durdu"
 
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx

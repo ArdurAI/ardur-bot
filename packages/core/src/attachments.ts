@@ -130,6 +130,11 @@ export function blocksToAgentHistoryText(
       if (block.kind === "handoff") {
         return `[handoff ${block.fromBotId} -> ${block.toBotId}] ${block.text}`;
       }
+      // A coordination round is room bookkeeping; the asked members' own replies
+      // carry the content, so the request text is attributed to nobody.
+      if (block.kind === "coordination") {
+        return `[asked ${block.members.map((member) => member.name).join(", ")}] ${block.text}`;
+      }
       if ("text" in block && typeof block.text === "string") return block.text;
       return "";
     })
