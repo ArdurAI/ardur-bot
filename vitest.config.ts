@@ -30,6 +30,7 @@ export default defineConfig({
       ".agents/skills/pr-watch/*.test.ts",
       "packages/*/src/**/*.test.{ts,tsx}",
       "infra/sandboxes/supervisor/src/**/*.test.ts",
+      "infra/sandboxes/kubernetes/*.test.ts",
       "infra/updater/src/**/*.test.ts",
       "apps/desktop/src/**/*.test.ts",
       "apps/host-service/src/**/*.test.ts",
