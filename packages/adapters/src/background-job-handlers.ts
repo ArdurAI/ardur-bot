@@ -173,7 +173,9 @@ export function createBackgroundJobHandlers(deps: {
             return {
               runtime: selection.runtime,
               nativeCwd:
-                bot?.computer?.kind === "desktop" ? (bot.computer.providerRef ?? undefined) : undefined,
+                bot?.computer?.kind === "desktop"
+                  ? (bot.computer.providerRef ?? undefined)
+                  : undefined,
             };
           },
           boardService: new BoardService({
