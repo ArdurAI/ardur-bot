@@ -569,3 +569,11 @@ it("grows the default reservation to the worker's one-request floor", async () =
   expect(row.reservedTokens).toBe(65_536);
   expect(f.state().root).toMatchObject({ reservedTokens: 65_536 });
 });
+it("refuses budgeted delegation to a runtime that cannot enforce it", async () => {
+  const f = fixture();
+  const before = structuredClone(f.state());
+  await expect(
+    f.admit({ snapshot: { ...snapshot, pin: { ...snapshot.pin, runtimeKind: "antigravity" } } }),
+  ).rejects.toMatchObject({ problem: { code: "runtime-unbudgeted" } });
+  expect(f.state()).toEqual(before);
+});

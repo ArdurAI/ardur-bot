@@ -179,6 +179,17 @@ export class ClaudeStreamParser {
   private readonly usage: RequestUsageCollector;
   private usageFinished = false;
   private pendingUsage: AgentRuntimeEvent[] = [];
+  /**
+   * Per-request usage keyed by message id. One API turn can emit several assistant
+   * messages sharing a message id, so per-id replacement — never naive addition —
+   * keeps the cumulative turn totals monotonic for the ledger's cumulative counter.
+   */
+  private readonly requestUsageByMessage = new Map<
+    string,
+    { input?: number; output?: number; cacheRead?: number; cacheWrite?: number }
+  >();
+  /** Last assistant message id, so a later stream delta can update that request. */
+  private lastMessageId?: string;
   constructor(private readonly pin: RuntimePin) {
     this.usage = new RequestUsageCollector({
       provider: "anthropic",
@@ -229,6 +240,57 @@ export class ClaudeStreamParser {
     this.effortAttested = true;
     this.effortAttestationReason = null;
   }
+  private recordMessageUsage(
+    message: { id?: unknown; usage?: unknown } | undefined,
+  ): AgentRuntimeEvent | undefined {
+    if (!this.initialized || this.usageFinished || !message || typeof message.id !== "string")
+      return undefined;
+    const usage = message.usage;
+    if (!usage || typeof usage !== "object" || Array.isArray(usage)) return undefined;
+    const counts = usage as Record<string, unknown>;
+    const present = (key: string) =>
+      typeof counts[key] === "number" &&
+      Number.isFinite(counts[key]) &&
+      Number.isInteger(counts[key])
+        ? (counts[key] as number)
+        : undefined;
+    const input = present("input_tokens");
+    const output = present("output_tokens");
+    // Missing cache fields count as zero once input is present. The additive mapping
+    // otherwise drops the input when either cache category is absent.
+    const next = {
+      input,
+      output,
+      cacheRead: present("cache_read_input_tokens") ?? (input === undefined ? undefined : 0),
+      cacheWrite: present("cache_creation_input_tokens") ?? (input === undefined ? undefined : 0),
+    };
+    if (Object.values(next).every((value) => value === undefined)) return undefined;
+    this.lastMessageId = message.id;
+    const prior = this.requestUsageByMessage.get(message.id);
+    const maxField = (a?: number, b?: number) =>
+      a === undefined ? b : b === undefined ? a : Math.max(a, b);
+    this.requestUsageByMessage.set(message.id, {
+      input: maxField(prior?.input, next.input),
+      output: maxField(prior?.output, next.output),
+      cacheRead: maxField(prior?.cacheRead, next.cacheRead),
+      cacheWrite: maxField(prior?.cacheWrite, next.cacheWrite),
+    });
+    const totals: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number } = {};
+    for (const entry of this.requestUsageByMessage.values())
+      for (const key of ["input", "output", "cacheRead", "cacheWrite"] as const)
+        if (entry[key] !== undefined) totals[key] = (totals[key] ?? 0) + entry[key];
+    return usageEvent(this.usage.snapshot(totals));
+  }
+  /** True when a final total would move a field below its recorded mid-run spend. */
+  private midRunExceeds(totals: Record<string, unknown>): boolean {
+    const recorded: Record<string, number | undefined> = {};
+    for (const entry of this.requestUsageByMessage.values())
+      for (const key of ["input", "output", "cacheRead", "cacheWrite"] as const)
+        if (entry[key] !== undefined) recorded[key] = (recorded[key] ?? 0) + entry[key];
+    return Object.entries(recorded).some(
+      ([key, value]) => typeof totals[key] === "number" && (totals[key] as number) < (value ?? 0),
+    );
+  }
   parse(value: Record<string, unknown>): AgentRuntimeEvent[] {
     if (value.type === "system" && value.subtype === "init") {
       this.model(value.model);
@@ -239,9 +301,22 @@ export class ClaudeStreamParser {
     }
     if (value.type === "stream_event") {
       const event = value.event as
-        | { type?: string; message?: { model?: string }; delta?: { type?: string; text?: string } }
+        | {
+            type?: string;
+            message?: { id?: unknown; model?: string; usage?: unknown };
+            delta?: { type?: string; text?: string };
+            usage?: unknown;
+          }
         | undefined;
-      if (event?.type === "message_start") this.model(event.message?.model);
+      if (event?.type === "message_start") {
+        this.model(event.message?.model);
+        const midRunUsage = this.recordMessageUsage(event.message);
+        if (midRunUsage) return [midRunUsage];
+      }
+      if (event?.type === "message_delta" && this.lastMessageId) {
+        const midRunUsage = this.recordMessageUsage({ id: this.lastMessageId, usage: event.usage });
+        if (midRunUsage) return [midRunUsage];
+      }
       if (
         event?.type === "content_block_delta" &&
         event.delta?.type === "text_delta" &&
@@ -249,8 +324,18 @@ export class ClaudeStreamParser {
       )
         return [{ type: "text", text: event.delta.text ?? "" }];
     }
-    if (value.type === "assistant")
-      this.model((value.message as { model?: string } | undefined)?.model);
+    if (value.type === "assistant") {
+      const message = value.message as
+        | { id?: unknown; model?: string; usage?: unknown }
+        | undefined;
+      this.model(message?.model);
+      // Assistant messages are Anthropic BetaMessage objects and carry that request's
+      // `usage` (input_tokens, output_tokens, cache_*_input_tokens) mid-run. Recording
+      // each one lets the delegation gate stop a worker at its reservation instead of
+      // only learning the spend from the terminal result event.
+      const midRunUsage = this.recordMessageUsage(message);
+      if (midRunUsage) return [midRunUsage];
+    }
     if (value.type === "result") {
       if (this.usageFinished) return [];
       this.effort(value);
@@ -258,13 +343,21 @@ export class ClaudeStreamParser {
       if (usage && typeof usage === "object" && this.initialized) {
         for (const model of Object.keys(usage)) this.model(model);
         const tokens = usage[this.pin.modelId!] as Record<string, unknown> | undefined;
-        if (tokens && typeof tokens === "object")
-          this.usage.snapshot({
+        if (tokens && typeof tokens === "object") {
+          const totals = {
             input: tokens.inputTokens,
             output: tokens.outputTokens,
             cacheRead: tokens.cacheReadInputTokens,
             cacheWrite: tokens.cacheCreationInputTokens,
-          });
+          };
+          if (this.midRunExceeds(totals)) {
+            // A final total below the recorded mid-run spend is a counter discontinuity;
+            // keep the mid-run measurements instead of forcing the ledger backwards.
+            this.usage.limit("counter-discontinuity");
+          } else {
+            this.usage.snapshot(totals);
+          }
+        }
       }
       if (value.is_error || value.subtype !== "success" || !this.initialized) {
         this.pendingUsage.push(...this.finishUsage("failed"));

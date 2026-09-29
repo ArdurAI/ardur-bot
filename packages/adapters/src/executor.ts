@@ -6213,6 +6213,21 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 recordContextUsage(turnContext.snapshot, recorded);
                 await saveContextSnapshot();
               }
+              // Stop as soon as persisted usage crosses the reservation. Waiting for the
+              // next heartbeat would let a native runtime start another request.
+              const watchedDelegation = event.delegationId ?? run.delegationId;
+              if (watchedDelegation) {
+                const stop = await checkDelegationExecution(
+                  deps.prisma,
+                  runId,
+                  undefined,
+                  undefined,
+                  event.delegationId && event.delegationId !== run.delegationId
+                    ? event.delegationId
+                    : undefined,
+                );
+                if (stop) runAbortController?.abort(new DispatchStopRequested());
+              }
             } else if (event.type === "done") {
               if (!assembled && event.text) {
                 if (publishedMidTurnUserMessage || discardedMidTurnNarration) {

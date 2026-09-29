@@ -16,6 +16,7 @@ import {
   IntegrationManifestSchema,
   LocalityPolicySchema,
   RequestUsageObservationSchema,
+  runtimeEnforcesDelegationBudget,
   TaskCardSchema,
 } from "@ardurbot/contracts";
 import {
@@ -272,6 +273,8 @@ export async function admitDelegation(
   );
   if (!Number.isFinite(deadlineAt.getTime()) || deadlineAt <= now) refuse("deadline-passed");
   const snapshot = DelegationSnapshotSchema.parse(input.snapshot);
+  // A runtime that cannot be stopped at its reservation must not look budgeted.
+  if (!runtimeEnforcesDelegationBudget(snapshot.pin.runtimeKind)) refuse("runtime-unbudgeted");
   for (const policy of [
     requester.allowedModelDestinations,
     recipient.allowedModelDestinations,

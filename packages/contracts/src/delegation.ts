@@ -190,6 +190,10 @@ const problemCopy = {
     "This worker's budget cannot cover one request for its model; raise the worker budget to continue.",
     "Raise budget",
   ],
+  "runtime-unbudgeted": [
+    "This runtime reports token usage only after the run ends, so a worker budget cannot stop it mid-run; pin a runtime that reports usage while it runs.",
+    "Change pin",
+  ],
   "deadline-passed": [
     "This task's deadline has passed or it is stopping; start a new task to continue.",
     "Start task",
@@ -220,6 +224,24 @@ export function delegationStopLine(reason: DelegationStopReason, worker: string)
     return `${worker} used its token budget. Raise the budget and try again.`;
   if (reason === "deadline") return `${worker} reached its deadline. Start a new task to continue.`;
   return "Worker stopped.";
+}
+/**
+ * A budgeted delegation is only honest when the runtime can be stopped at its reservation:
+ * - `pi` clamps every request's max_tokens to the remaining reservation and records usage
+ *   per request (packages/adapters/src/pi-runtime.ts, pi-request-usage.ts);
+ * - `claude-code` stream-json assistant messages carry the Anthropic BetaMessage `usage`
+ *   for each request, recorded mid-run by ClaudeStreamParser
+ *   (packages/host-runtime/src/runtimes/claude-code-runtime.ts);
+ * - `codex-app-server` reports `thread/tokenUsage/updated` during the turn
+ *   (packages/host-runtime/src/runtimes/codex-app-server-runtime.ts);
+ * - `hermes` provider calls pass through the broker's per-request admission
+ *   (packages/adapters/src/hermes-provider-broker.ts).
+ * Antigravity's steps carry no usage and its CLI has no token cap: its stream reports usage
+ * only in the terminal result event (packages/host-runtime/src/runtimes/antigravity-stream.ts),
+ * so admission refuses budgeted delegation to it instead of pretending to enforce one.
+ */
+export function runtimeEnforcesDelegationBudget(runtimeKind: string | null | undefined): boolean {
+  return runtimeKind !== "antigravity";
 }
 export const DELEGATION_LIMITS = {
   depth: 1,
