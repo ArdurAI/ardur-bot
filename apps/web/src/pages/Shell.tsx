@@ -1816,7 +1816,13 @@ export function ShellPage({
     setReplyQuote(null);
   }, []);
   const currentRuns = activeThreadRuns(activeSnapshot);
-  const threadSeals = useThreadSealPhases(activeSnapshot, completedRuns, dismissedRunErrorIds);
+  // On the dashboard, team and board views activeSnapshot can still be the group thread the
+  // reader left, whose runs are no longer followed; seals then speak from the bot list alone.
+  const threadSeals = useThreadSealPhases(
+    active || inGroup ? activeSnapshot : null,
+    completedRuns,
+    dismissedRunErrorIds,
+  );
   const sealPhaseOf = (botId: string, status?: string) =>
     botSealPhase(threadSeals.get(botId), status);
   const sealLabel = useSealPhaseLabel();
