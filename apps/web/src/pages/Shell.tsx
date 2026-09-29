@@ -2685,7 +2685,10 @@ export function ShellPage({
     ping();
     const timer = window.setInterval(ping, 60_000);
     return () => window.clearInterval(timer);
-  }, [panel, workspaceTab, computerOpen, computerBot?.id, active?.id, computer?.state]);
+    // The capability-driven tab resolution decides visibility: a computer that
+    // stops being graphical resolves a retained Screen tab to Tasks and must
+    // stop the heartbeat, and one that gains a capability must start it again.
+  }, [panel, effectiveWorkspaceTab, computerOpen, computerBot?.id, active?.id, computer?.state]);
 
   async function openComputer(botId?: string, viewOnly = false) {
     const id = botId ?? active?.id;
