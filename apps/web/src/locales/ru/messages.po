@@ -1606,6 +1606,10 @@ msgstr ""
 msgid "Checked {0}"
 msgstr "Проверено {0}"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Checking the download"
+msgstr "Проверка загрузки"
+
 #: src/components/DesktopUpdates.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/SoftwareUpdateSection.tsx
@@ -3046,6 +3050,10 @@ msgstr ""
 msgid "Could not update uploaded files."
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Couldn't install Hermes. Try again."
+msgstr "Не удалось установить Hermes. Попробуйте ещё раз."
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't load messaging settings"
 msgstr "Не удалось загрузить настройки обмена сообщениями."
@@ -3615,9 +3623,17 @@ msgstr "Скачать как Markdown"
 msgid "Download Executor"
 msgstr "Скачать Executor"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Downloading"
+msgstr "Скачивание"
+
 #: src/components/DesktopUpdates.tsx
 msgid "Downloading…"
 msgstr "Скачивание…"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Downloads Hermes 0.21.0 from GitHub and about 200 MB of Python packages."
+msgstr "Скачивает Hermes 0.21.0 с GitHub и около 200 МБ пакетов Python."
 
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Draft skill"
@@ -4023,6 +4039,10 @@ msgstr "завершено"
 #: src/pages/LearningInsights.tsx
 msgid "Finished"
 msgstr "Завершено"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Finishing"
+msgstr "Завершение"
 
 #: src/pages/McpOAuthCallback.tsx
 msgid "Finishing MCP connection…"
@@ -4495,6 +4515,10 @@ msgstr ""
 msgid "Install Beads"
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Install Hermes"
+msgstr "Установить Hermes"
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Installed"
 msgstr ""
@@ -4514,6 +4538,10 @@ msgstr "Установлен, но не запущен"
 #: src/pages/customize/PluginsPage.tsx
 msgid "Installing"
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Installing packages"
+msgstr "Установка пакетов"
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Instance API key"
@@ -6598,6 +6626,10 @@ msgstr ""
 msgid "Ready"
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Ready. The bot can use Hermes."
+msgstr "Готово. Бот может использовать Hermes."
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Reasoning effort"
@@ -7708,6 +7740,10 @@ msgstr "Настроить поиск по памяти"
 msgid "Set up servers"
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Setting up Python"
+msgstr "Настройка Python"
+
 #: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/settings-sections.ts
@@ -8726,8 +8762,9 @@ msgstr ""
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/computer-screen-error.tsx
 #: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-settings.tsx
 msgid "Try again"
-msgstr ""
+msgstr "Попробовать ещё раз"
 
 #: src/pages/LearningInbox.tsx
 msgid "Turn on"

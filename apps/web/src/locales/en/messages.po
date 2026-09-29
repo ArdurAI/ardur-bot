@@ -1606,6 +1606,10 @@ msgstr "Checked"
 msgid "Checked {0}"
 msgstr "Checked {0}"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Checking the download"
+msgstr "Checking the download"
+
 #: src/components/DesktopUpdates.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/SoftwareUpdateSection.tsx
@@ -3046,6 +3050,10 @@ msgstr "Could not update this task; try again."
 msgid "Could not update uploaded files."
 msgstr "Could not update uploaded files."
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Couldn't install Hermes. Try again."
+msgstr "Couldn't install Hermes. Try again."
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't load messaging settings"
 msgstr "Couldn't load messaging settings"
@@ -3615,9 +3623,17 @@ msgstr "Download as markdown"
 msgid "Download Executor"
 msgstr "Download Executor"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Downloading"
+msgstr "Downloading"
+
 #: src/components/DesktopUpdates.tsx
 msgid "Downloading…"
 msgstr "Downloading…"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Downloads Hermes 0.21.0 from GitHub and about 200 MB of Python packages."
+msgstr "Downloads Hermes 0.21.0 from GitHub and about 200 MB of Python packages."
 
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Draft skill"
@@ -4023,6 +4039,10 @@ msgstr "finished"
 #: src/pages/LearningInsights.tsx
 msgid "Finished"
 msgstr "Finished"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Finishing"
+msgstr "Finishing"
 
 #: src/pages/McpOAuthCallback.tsx
 msgid "Finishing MCP connection…"
@@ -4495,6 +4515,10 @@ msgstr "Install {name}"
 msgid "Install Beads"
 msgstr "Install Beads"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Install Hermes"
+msgstr "Install Hermes"
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Installed"
 msgstr "Installed"
@@ -4514,6 +4538,10 @@ msgstr "Installed, not running"
 #: src/pages/customize/PluginsPage.tsx
 msgid "Installing"
 msgstr "Installing"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Installing packages"
+msgstr "Installing packages"
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Instance API key"
@@ -6598,6 +6626,10 @@ msgstr "Reads can run without asking once you allow them. Writes always ask."
 msgid "Ready"
 msgstr "Ready"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Ready. The bot can use Hermes."
+msgstr "Ready. The bot can use Hermes."
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Reasoning effort"
@@ -7708,6 +7740,10 @@ msgstr "Set up memory search"
 msgid "Set up servers"
 msgstr "Set up servers"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Setting up Python"
+msgstr "Setting up Python"
+
 #: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/settings-sections.ts
@@ -8726,6 +8762,7 @@ msgstr "Trusted folders"
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/computer-screen-error.tsx
 #: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-settings.tsx
 msgid "Try again"
 msgstr "Try again"
 

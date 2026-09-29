@@ -1606,6 +1606,10 @@ msgstr ""
 msgid "Checked {0}"
 msgstr "检查于 {0}"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Checking the download"
+msgstr "正在检查下载"
+
 #: src/components/DesktopUpdates.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/SoftwareUpdateSection.tsx
@@ -3046,6 +3050,10 @@ msgstr ""
 msgid "Could not update uploaded files."
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Couldn't install Hermes. Try again."
+msgstr "无法安装 Hermes。请重试。"
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't load messaging settings"
 msgstr "无法加载消息设置"
@@ -3615,9 +3623,17 @@ msgstr "下载为 Markdown"
 msgid "Download Executor"
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Downloading"
+msgstr "正在下载"
+
 #: src/components/DesktopUpdates.tsx
 msgid "Downloading…"
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Downloads Hermes 0.21.0 from GitHub and about 200 MB of Python packages."
+msgstr "从 GitHub 下载 Hermes 0.21.0 以及大约 200 MB 的 Python 软件包。"
 
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Draft skill"
@@ -4023,6 +4039,10 @@ msgstr "已完成"
 #: src/pages/LearningInsights.tsx
 msgid "Finished"
 msgstr "完成"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Finishing"
+msgstr "正在完成"
 
 #: src/pages/McpOAuthCallback.tsx
 msgid "Finishing MCP connection…"
@@ -4495,6 +4515,10 @@ msgstr ""
 msgid "Install Beads"
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Install Hermes"
+msgstr "安装 Hermes"
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Installed"
 msgstr ""
@@ -4514,6 +4538,10 @@ msgstr "已安装，未运行"
 #: src/pages/customize/PluginsPage.tsx
 msgid "Installing"
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Installing packages"
+msgstr "正在安装软件包"
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Instance API key"
@@ -6598,6 +6626,10 @@ msgstr ""
 msgid "Ready"
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Ready. The bot can use Hermes."
+msgstr "已就绪。此机器人可以使用 Hermes。"
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Reasoning effort"
@@ -7708,6 +7740,10 @@ msgstr "设置记忆搜索"
 msgid "Set up servers"
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Setting up Python"
+msgstr "正在设置 Python"
+
 #: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/settings-sections.ts
@@ -8726,6 +8762,7 @@ msgstr ""
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/computer-screen-error.tsx
 #: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-settings.tsx
 msgid "Try again"
 msgstr "重试"
 

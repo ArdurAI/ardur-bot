@@ -3,7 +3,7 @@ import { nativeRuntimeProviders } from "@ardurbot/contracts";
 import { modelPinOptionKey, parseModelPinOptionKey } from "@ardurbot/core";
 import { Button, NativeSelect, NativeSelectOption, Switch } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { rpc } from "../../lib/rpc";
 
 export function RuntimeSettings({
@@ -35,6 +35,9 @@ export function RuntimeSettings({
   const [login, setLogin] = useState<ModelOAuthBegin | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
+  const [pendingInstall, setPendingInstall] = useState(false);
+  const [installFailed, setInstallFailed] = useState(false);
+  const installLock = useRef(false);
   useEffect(() => {
     setAvailability(null);
     setError(null);
@@ -52,6 +55,83 @@ export function RuntimeSettings({
       active = false;
     };
   }, [kind, botId, refresh]);
+  useEffect(() => {
+    setPendingInstall(false);
+    setInstallFailed(false);
+  }, [kind, botId]);
+  const hermesState = kind === "hermes" ? availability?.install?.state : undefined;
+  const showProgress =
+    kind === "hermes" &&
+    (hermesState === "installing" ||
+      (pendingInstall && hermesState !== "failed" && hermesState !== "ready"));
+  const hermesPhase =
+    hermesState === "installing" ? (availability?.install?.phase ?? "downloading") : "downloading";
+  const showInstallFailure =
+    kind === "hermes" && !showProgress && (hermesState === "failed" || installFailed);
+  const showInstallButton =
+    kind === "hermes" && hermesState === "absent" && !showProgress && !showInstallFailure;
+  const showHermesReady = kind === "hermes" && hermesState === "ready";
+  const installErrorId = `${id}-hermes-install`;
+  useEffect(() => {
+    if (!showProgress) return;
+    let active = true;
+    const timer = setInterval(() => {
+      void rpc.runtimes
+        .availability({ runtimeKind: "hermes", botId })
+        .then((value) => {
+          if (!active) return;
+          setAvailability(value);
+          const state = value.install?.state;
+          if (state === "failed") {
+            setPendingInstall(false);
+            setInstallFailed(true);
+          } else if (state === "ready" || state === "installing" || value.available) {
+            setPendingInstall(false);
+            setInstallFailed(false);
+          }
+        })
+        .catch(() => undefined);
+    }, 1_000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [showProgress, botId]);
+  async function startHermesInstall() {
+    if (installLock.current) return;
+    installLock.current = true;
+    setInstallFailed(false);
+    setPendingInstall(true);
+    let rejected = false;
+    try {
+      await rpc.runtimes.installHermes({});
+    } catch {
+      rejected = true;
+    }
+    try {
+      const value = await rpc.runtimes.availability({ runtimeKind: "hermes", botId });
+      setAvailability(value);
+      const state = value.install?.state;
+      if (state === "installing" || state === "ready" || value.available) {
+        setPendingInstall(false);
+        setInstallFailed(false);
+        return;
+      }
+      if (state === "failed" || rejected) {
+        setPendingInstall(false);
+        setInstallFailed(true);
+        return;
+      }
+      if (!rejected) return;
+      setPendingInstall(false);
+      setInstallFailed(true);
+    } catch {
+      setPendingInstall(false);
+      setInstallFailed(true);
+    } finally {
+      installLock.current = false;
+    }
+  }
   useEffect(() => {
     if (!login) return;
     const timer = setInterval(() => {
@@ -139,7 +219,7 @@ export function RuntimeSettings({
                 .join(" · ")}
             </p>
           ) : null}
-          {availability?.reason ? (
+          {availability?.reason && !showProgress && !showInstallFailure && !showHermesReady ? (
             <p role="status" className="text-sm text-muted-foreground">
               {kind === "antigravity" &&
               availability.reason.startsWith("Antigravity is not installed")
@@ -150,6 +230,45 @@ export function RuntimeSettings({
                     ? t`Sign in to Antigravity on this computer, then check again.`
                     : availability.reason}
             </p>
+          ) : null}
+          {showProgress ? (
+            <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
+              {hermesPhase === "checking"
+                ? t`Checking the download`
+                : hermesPhase === "python"
+                  ? t`Setting up Python`
+                  : hermesPhase === "packages"
+                    ? t`Installing packages`
+                    : hermesPhase === "finishing"
+                      ? t`Finishing`
+                      : t`Downloading`}
+            </p>
+          ) : null}
+          {showHermesReady ? (
+            <p role="status" className="text-sm text-muted-foreground">
+              {t`Ready. The bot can use Hermes.`}
+            </p>
+          ) : null}
+          {showInstallFailure ? (
+            <p id={installErrorId} role="alert" className="text-sm text-destructive">
+              {t`Couldn't install Hermes. Try again.`}
+            </p>
+          ) : null}
+          {showInstallButton ? (
+            <p className="text-sm text-muted-foreground">
+              {t`Downloads Hermes 0.21.0 from GitHub and about 200 MB of Python packages.`}
+            </p>
+          ) : null}
+          {showInstallButton || showInstallFailure ? (
+            <Button
+              type="button"
+              aria-invalid={showInstallFailure || undefined}
+              aria-errormessage={showInstallFailure ? installErrorId : undefined}
+              aria-describedby={showInstallFailure ? installErrorId : undefined}
+              onClick={() => void startHermesInstall()}
+            >
+              {showInstallFailure ? <Trans>Try again</Trans> : <Trans>Install Hermes</Trans>}
+            </Button>
           ) : null}
           {error ? (
             <p role="alert" className="text-sm text-destructive">
