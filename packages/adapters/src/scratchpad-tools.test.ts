@@ -24,7 +24,11 @@ describe("scratchpad tools store", () => {
     );
 
     expect(findMany).toHaveBeenCalledWith({
-      where: { spaceId: "ws", botId: "bot", status: { in: ["open", "parked", "in_progress", "blocked", "deferred", "ready"] } },
+      where: {
+        spaceId: "ws",
+        botId: "bot",
+        status: { in: ["open", "parked", "in_progress", "blocked", "deferred", "ready"] },
+      },
       orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
     });
     expect(items).toEqual([

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test } from "@playwright/test";
 import {
   activeBotId,
   captureScreenshot,
@@ -25,11 +25,13 @@ test("adds linked board items to bot open work", async ({ page }, testInfo) => {
     route.fulfill({
       json: {
         json: {
-          workspaces: [{ id: "ws-1", name: "Roadmap", enabled: true, allowAllBots: true, allowedBotIds: [] }],
-          bots: [{ id: botId, name: "Builder" }]
-        }
-      }
-    })
+          workspaces: [
+            { id: "ws-1", name: "Roadmap", enabled: true, allowAllBots: true, allowedBotIds: [] },
+          ],
+          bots: [{ id: botId, name: "Builder" }],
+        },
+      },
+    }),
   );
 
   await page.route("**/rpc/board/snapshot", (route) =>
@@ -39,10 +41,10 @@ test("adds linked board items to bot open work", async ({ page }, testInfo) => {
           items: [{ id: "item-1", title: "Build feature X", status: "open", type: "task" }],
           readyIds: [],
           blockedIds: [],
-          workspaces: []
-        }
-      }
-    })
+          workspaces: [],
+        },
+      },
+    }),
   );
 
   await openBotSettings(page);
@@ -53,7 +55,7 @@ test("adds linked board items to bot open work", async ({ page }, testInfo) => {
   await page.getByText("Build feature X").click();
 
   await page.route("**/rpc/scratchpad/linkBoardItems", (route) =>
-    route.fulfill({ json: { json: [] } })
+    route.fulfill({ json: { json: [] } }),
   );
 
   await page.getByRole("dialog").getByRole("button", { name: "Add" }).click();

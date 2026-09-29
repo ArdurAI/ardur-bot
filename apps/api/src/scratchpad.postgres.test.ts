@@ -125,7 +125,12 @@ describePostgres("scratchpad board linking (PostgreSQL)", () => {
           createdAt: new Date(),
           spaces: { create: { id: spaceId, name: "Test Space" } },
           members: {
-            create: { id: `${spaceId}-member`, userId: owner.userId, role: "owner", createdAt: new Date() },
+            create: {
+              id: `${spaceId}-member`,
+              userId: owner.userId,
+              role: "owner",
+              createdAt: new Date(),
+            },
           },
         },
       });
@@ -258,9 +263,9 @@ describePostgres("scratchpad board linking (PostgreSQL)", () => {
       await call("linkBoardItems", { botId, boardWorkspaceId, boardItemIds: ["item1", "item3"] }),
       "Item item3 not found on board",
     );
-    expect(
-      await db.prisma.scratchpadItem.count({ where: { spaceId: owner.spaceId, botId } }),
-    ).toBe(0);
+    expect(await db.prisma.scratchpadItem.count({ where: { spaceId: owner.spaceId, botId } })).toBe(
+      0,
+    );
 
     const response = await call("linkBoardItems", {
       botId,
@@ -268,11 +273,10 @@ describePostgres("scratchpad board linking (PostgreSQL)", () => {
       boardItemIds: ["item1", "item2"],
     });
     expect(response?.status).toBe(200);
-    const linked = (
-      (await response?.json()) as {
-        json: Array<{ id: string; boardItemId: string; title: string; status: string }>;
-      }
-    ).json;
+    const body = (await response?.json()) as
+      | { json: Array<{ id: string; boardItemId: string; title: string; status: string }> }
+      | undefined;
+    const linked = body?.json ?? [];
     // Both rows share one createdAt, so the database may return them in either order.
     expect([...linked.map((item) => item.boardItemId)].sort()).toEqual(["item1", "item2"]);
     expect(linked.find((item) => item.boardItemId === "item1")).toMatchObject({
@@ -288,9 +292,9 @@ describePostgres("scratchpad board linking (PostgreSQL)", () => {
       await call("linkBoardItems", { botId, boardWorkspaceId, boardItemIds: ["item1"] }),
       "Duplicate link refused",
     );
-    expect(
-      await db.prisma.scratchpadItem.count({ where: { spaceId: owner.spaceId, botId } }),
-    ).toBe(2);
+    expect(await db.prisma.scratchpadItem.count({ where: { spaceId: owner.spaceId, botId } })).toBe(
+      2,
+    );
   });
 
   it("removing a linked item never touches the board", async () => {
