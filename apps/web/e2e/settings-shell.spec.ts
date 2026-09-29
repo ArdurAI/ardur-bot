@@ -7,7 +7,7 @@ test("settings shell is two-pane and deep-links Models Memory Voice Usage", asyn
 }, testInfo) => {
   const stamp = Date.now();
   const userName = `Settings shell ${stamp}`;
-  await signup(page, `settings-shell-${stamp}@ardurbot.test`, "password12", userName);
+  await signup(page, `settings-shell-${stamp}@example.test`, "password12", userName);
   await completeOnboarding(page);
 
   const botPath = new URL(page.url()).pathname;

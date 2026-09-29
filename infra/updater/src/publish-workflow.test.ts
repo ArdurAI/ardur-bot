@@ -41,6 +41,42 @@ describe("server image publish workflow", () => {
     expect(workflowText).toContain("actions/attest-build-provenance@");
   });
 
+  it("publishes Developer as -developer tags on the computer package", () => {
+    const build = workflowText.split("\n  build:\n")[1]!.split("\n  publish:\n")[0]!;
+    const publish = workflowText.split("\n  publish:\n")[1]!;
+    for (const job of [build, publish])
+      expect(job).toContain(
+        "PACKAGE: ${{ matrix.name == 'computer-developer' && 'computer' || matrix.name }}",
+      );
+    expect(build).toContain("matrix.name == 'computer-developer' && 'IMAGE_PROFILE=developer'");
+    expect(build).toContain("startsWith(matrix.name, 'computer') && 'infra/sandboxes/computer'");
+    expect(publish).toContain("SUFFIX: ${{ matrix.name == 'computer-developer' && '-developer'");
+    expect(publish).toContain('tag_args+=(-t "${tag}${SUFFIX}")');
+    expect(publish).toContain(
+      "type=semver,pattern={{version}},enable=${{ startsWith(matrix.name, 'computer') }}",
+    );
+    // Each publish job downloads only its own image's digests.
+    const uploaded = build.match(
+      /name: (digest-\$\{\{ matrix\.arch \}\}-\$\{\{ matrix\.name \}\})/,
+    )?.[1];
+    const pattern = publish.match(/pattern: (digest-\*-\$\{\{ matrix\.name \}\})/)?.[1];
+    expect(uploaded && pattern).toBeTruthy();
+    const names = ["app", "updater", "computer", "computer-developer"];
+    for (const name of names) {
+      const glob = new RegExp(
+        `^${pattern!.replace("${{ matrix.name }}", name).replace("*", "[^/]*")}$`,
+      );
+      const matched = names.flatMap((other) =>
+        ["amd64", "arm64"]
+          .map((arch) =>
+            uploaded!.replace("${{ matrix.arch }}", arch).replace("${{ matrix.name }}", other),
+          )
+          .filter((artifact) => glob.test(artifact)),
+      );
+      expect(matched, name).toEqual([`digest-amd64-${name}`, `digest-arm64-${name}`]);
+    }
+  });
+
   it("keeps pull requests read-only and every action pinned to a commit", () => {
     const validate = workflow.jobs.validate;
     const build = workflow.jobs.build;

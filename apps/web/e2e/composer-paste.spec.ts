@@ -3,7 +3,7 @@ import { captureScreenshot, completeOnboarding, signup } from "./helpers";
 
 async function openComposer(page: Page) {
   const stamp = Date.now();
-  await signup(page, `composer-paste-${stamp}@ardurbot.test`, "password12", "Paste Test");
+  await signup(page, `composer-paste-${stamp}@example.test`, "password12", "Paste Test");
   await completeOnboarding(page);
   await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
   const composer = page.getByRole("combobox", { name: /Message/ });

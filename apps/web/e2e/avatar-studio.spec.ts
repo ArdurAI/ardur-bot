@@ -3,7 +3,7 @@ import { captureScreenshot, completeOnboarding, signup } from "./helpers";
 
 test("bot settings open Avatar Studio on the Bot tab", async ({ page }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `avatar-studio-${stamp}@ardurbot.test`, "password12", "Avatar Studio");
+  await signup(page, `avatar-studio-${stamp}@example.test`, "password12", "Avatar Studio");
   await completeOnboarding(page);
   await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 
@@ -21,7 +21,7 @@ test("bot settings open Avatar Studio on the Bot tab", async ({ page }, testInfo
   await expect(studio.getByTestId("avatar-studio-bot-tab")).toBeVisible();
   await expect(studio.getByText("Shape", { exact: true })).toBeVisible();
   await expect(studio.getByText("Color", { exact: true })).toBeVisible();
-  const preview = studio.locator(".ardurbot-bot-avatar").first();
+  const preview = studio.locator(".ardur-bot-avatar").first();
   await studio.getByRole("button", { name: "Seal" }).click();
   await expect(studio.getByRole("button", { name: "Seal" })).toHaveAttribute(
     "aria-pressed",

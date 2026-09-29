@@ -9,6 +9,9 @@ async function addHostRoot(path) {
 
 contextBridge.exposeInMainWorld("ardurbotDesktop", {
   platform: process.platform,
+  boot: {
+    save: (snapshot) => ipcRenderer.invoke("desktop.boot.save", snapshot),
+  },
   customization: {
     info: (...args) => ipcRenderer.invoke("desktop.customization.info", ...args),
     list: (...args) => ipcRenderer.invoke("desktop.customization.list", ...args),

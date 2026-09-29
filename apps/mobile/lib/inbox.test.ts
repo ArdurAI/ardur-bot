@@ -24,7 +24,7 @@ describe("formatThreadTime", () => {
 describe("filterBots", () => {
   const bots = [
     bot("seo", "SEO Bot", "Improves SEO", "tracking-pixel page"),
-    bot("inbox", "Inbox Triage", "Inbox Zero", "draft replies"),
+    bot("inbox", "Inbox Triage", "Clears the inbox", "draft replies"),
   ];
 
   it("returns the full list when the query is empty", () => {
@@ -33,7 +33,7 @@ describe("filterBots", () => {
 
   it("matches name, title, or preview", () => {
     expect(filterBots(bots, "seo").map((item) => item.id)).toEqual(["seo"]);
-    expect(filterBots(bots, "zero").map((item) => item.id)).toEqual(["inbox"]);
+    expect(filterBots(bots, "clears").map((item) => item.id)).toEqual(["inbox"]);
     expect(filterBots(bots, "PIXEL").map((item) => item.id)).toEqual(["seo"]);
   });
 });
@@ -53,7 +53,7 @@ describe("botTag", () => {
 
 describe("userInitials", () => {
   it("uses the first letter of each word", () => {
-    expect(userInitials("Elie Steinbock")).toBe("ES");
+    expect(userInitials("Test User")).toBe("TU");
     expect(userInitials("Ada")).toBe("A");
     expect(userInitials("")).toBe("?");
   });

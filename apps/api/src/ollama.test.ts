@@ -15,7 +15,7 @@ function fixture(owner = true, connected = true) {
   const actor: Actor = {
     userId: "user",
     spaceId: "space",
-    email: "test@ardurbot.test",
+    email: "test@example.test",
     isDeploymentOwner: owner,
   };
   const deps = {
