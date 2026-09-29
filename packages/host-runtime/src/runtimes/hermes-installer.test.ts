@@ -171,6 +171,7 @@ if (entry.argv[0] === "sync") {
   fs.mkdirSync(bin, { recursive: true });
   fs.writeFileSync(path.join(bin, "python"), "#!/bin/sh\\n");
   fs.chmodSync(path.join(bin, "python"), 0o755);
+  fs.writeFileSync(path.join(process.env.UV_PROJECT_ENVIRONMENT, "pyvenv.cfg"), "version_info = 3.13.2\\n");
   process.exit(0);
 }
 process.stderr.write("SECRET_OUTPUT\\n");
@@ -276,6 +277,10 @@ it("installs a verified archive, records the marker, and switches the managed li
   await mkdir(kept, { recursive: true });
   await writeFile(path.join(kept, ".ardur-install.json"), '{"pin":"kept"}');
   await writeFile(path.join(kept, "keep.txt"), "keep");
+  // Another Python patch already present must not confuse the marker.
+  await mkdir(path.join(root, "runtimes", "python", "cpython-3.13.9-other"), {
+    recursive: true,
+  });
   await writeLock(root, unusedPid());
   try {
     try {
@@ -559,6 +564,45 @@ it.each(unsafeArchives)("refuses an archive %s entry", async (_label, parts) => 
     await expect(
       readFile(path.join(root, "runtimes", hermesVersionDirName(), "hard")),
     ).rejects.toThrow();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("records the python version the environment reports when pyvenv.cfg is missing", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "hermes-python-version-"));
+  const expectedTree = await gitWriteTree();
+  const script = `#!${process.execPath}
+const fs = require("fs");
+const path = require("path");
+if (process.argv[2] === "sync") {
+  const bin = path.join(process.env.UV_PROJECT_ENVIRONMENT, "bin");
+  fs.mkdirSync(bin, { recursive: true });
+  fs.writeFileSync(path.join(bin, "python"), "#!/bin/sh\\necho 3.13.11\\n");
+  fs.chmodSync(path.join(bin, "python"), 0o755);
+}
+process.exit(0);
+`;
+  const uv = uvArchive(script);
+  try {
+    await installHermes({
+      root,
+      fetch: async (input) =>
+        new Response(input === HERMES_SOURCE_URL ? sourceArchive() : uv.gzip),
+      platform: "linux",
+      arch: "x64",
+      expectedTree,
+      sources: sourceMap(),
+      uvSha256: uv.sha256,
+    });
+    const marker = JSON.parse(
+      await readFile(
+        path.join(root, "runtimes", hermesVersionDirName(), ".ardur-install.json"),
+        "utf8",
+      ),
+    );
+    expect(marker.python).toBe("3.13.11");
+    expect(readHermesInstallStatus(root)?.state).toBe("ready");
   } finally {
     await rm(root, { recursive: true, force: true });
   }

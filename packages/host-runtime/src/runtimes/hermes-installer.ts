@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, lstatSync, readdirSync } from "node:fs";
+import { existsSync, lstatSync } from "node:fs";
 import {
   link,
   lstat,
@@ -265,7 +265,11 @@ export async function installHermes(deps: {
 
     phase = "finishing";
     await writeStatus(root, phaseStatus(phase, clock));
-    const python = readPythonPatch(path.join(root, "runtimes", "python"));
+    const python = await readPythonVersion(run, versionDir, {
+      env: commandEnv,
+      timeoutMs,
+      log: path.join(root, "runtimes", ".install.log"),
+    });
     const installedAt = clock().toISOString();
     await writeFile(
       path.join(versionDir, ".ardur-install.json"),
@@ -431,22 +435,39 @@ async function switchInstallLink(root: string, versionName: string): Promise<voi
   }
 }
 
-function readPythonPatch(directory: string): string {
-  let names: string[] = [];
+const PYTHON_VERSION = /^\d+\.\d+\.\d+$/;
+
+/**
+ * The exact Python comes from the created environment, never from scanning
+ * `runtimes/python`: other patch versions may be present there.
+ */
+async function readPythonVersion(
+  run: HermesCommand,
+  versionDir: string,
+  options: { env: NodeJS.ProcessEnv; timeoutMs: number; log: string },
+): Promise<string> {
   try {
-    names = readdirSync(directory);
+    const config = await readFile(path.join(versionDir, ".venv", "pyvenv.cfg"), "utf8");
+    for (const key of ["version_info", "version"]) {
+      const match = new RegExp(`^${key}\\s*=\\s*(\\S+)\\s*$`, "m").exec(config);
+      if (match?.[1] && PYTHON_VERSION.test(match[1])) return match[1];
+    }
   } catch {
-    throw new HermesInstallError(HERMES_INSTALL_FAILED);
+    // Fall through to asking the interpreter itself.
   }
-  const patches = new Set<number>();
-  for (const name of names) {
-    const match = /^cpython-3\.13\.(\d+)(?:\D.*)?$/.exec(name);
-    if (match?.[1]) patches.add(Number(match[1]));
-  }
-  const patch = [...patches][0];
-  if (patches.size !== 1 || patch === undefined)
+  const result = await run(
+    path.join(versionDir, ".venv", "bin", "python"),
+    ["-c", "import platform; print(platform.python_version())"],
+    { cwd: versionDir, env: options.env, timeoutMs: options.timeoutMs },
+  );
+  await appendLog(
+    options.log,
+    `$ python -c platform.python_version\n${result.stdout}\n${result.stderr}\n`,
+  );
+  const version = result.stdout.trim();
+  if (result.code !== 0 || !PYTHON_VERSION.test(version))
     throw new HermesInstallError(HERMES_INSTALL_FAILED);
-  return `3.13.${patch}`;
+  return version;
 }
 
 function uvEnvironment(
