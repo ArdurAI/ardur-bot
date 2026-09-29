@@ -50,6 +50,7 @@ type UsageRow = {
   cost: number | null;
   pricingProvenance: unknown;
   createdAt: Date;
+  coverage: string;
 };
 const DAY = 86_400_000;
 
@@ -70,6 +71,9 @@ function period(rows: UsageRow[]): UsagePeriod {
       rows.length && rows.every((row) => row.cost !== null && row.pricingProvenance)
         ? rows.reduce((sum, row) => sum + row.cost!, 0)
         : null,
+    // A single unreported or partially reported record makes the whole period a
+    // known-part lower bound instead of a complete total.
+    incomplete: rows.some((row) => row.coverage !== "complete"),
   };
 }
 
@@ -98,10 +102,14 @@ export async function usageSummary(
 ): Promise<UsageSummary> {
   const where = { spaceId: actor.spaceId, userId: actor.userId };
   const { day, week, from } = usageWindows(now);
-  const [total, recent] = await Promise.all([
+  const [total, incomplete, recent] = await Promise.all([
     prisma.usageRecord.aggregate({
       where,
       _sum: { inputTokens: true, outputTokens: true },
+      _count: { _all: true },
+    }),
+    prisma.usageRecord.aggregate({
+      where: { ...where, coverage: { not: "complete" } },
       _count: { _all: true },
     }),
     prisma.usageRecord.findMany({
@@ -113,12 +121,14 @@ export async function usageSummary(
         cost: true,
         pricingProvenance: true,
         createdAt: true,
+        coverage: true,
       },
     }),
   ]);
   return {
     inputTokens: total._sum.inputTokens ?? 0,
     outputTokens: total._sum.outputTokens ?? 0,
+    incomplete: incomplete._count._all > 0,
     runs: total._count._all,
     dayStart: day.toISOString(),
     weekStart: week.toISOString(),

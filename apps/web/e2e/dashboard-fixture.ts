@@ -254,6 +254,7 @@ export function dashboardFixture(botCount = 1) {
         "usage/summary": {
           inputTokens: 0,
           outputTokens: 0,
+          incomplete: false,
           runs: 0,
           dayStart: now,
           weekStart: "2026-09-21T00:00:00Z",

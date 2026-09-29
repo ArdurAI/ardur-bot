@@ -2250,6 +2250,10 @@ msgstr ""
 
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Cost unavailable"
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Partially reported"
+msgstr "Kısmen raporlandı"
 msgstr "Maliyet bilgisi yok"
 
 #: src/pages/ScratchpadSection.tsx

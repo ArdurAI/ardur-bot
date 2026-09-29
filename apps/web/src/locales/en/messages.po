@@ -2250,6 +2250,10 @@ msgstr "Cost"
 
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Cost unavailable"
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Partially reported"
+msgstr "Partially reported"
 msgstr "Cost unavailable"
 
 #: src/pages/ScratchpadSection.tsx

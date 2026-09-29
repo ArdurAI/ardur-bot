@@ -2250,6 +2250,10 @@ msgstr ""
 
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Cost unavailable"
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Partially reported"
+msgstr "आंशिक रूप से रिपोर्ट किया गया"
 msgstr "लागत उपलब्ध नहीं है"
 
 #: src/pages/ScratchpadSection.tsx

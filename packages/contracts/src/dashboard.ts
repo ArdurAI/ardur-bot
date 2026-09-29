@@ -11,11 +11,16 @@ export const UsagePeriodSchema = z.object({
   outputTokens: z.number().nonnegative(),
   // Null when any usage record lacks a reported cost with pricing provenance.
   cost: z.number().nullable(),
+  // True when any record in the period is unreported or only partially reported;
+  // the token sums then cover the known part only.
+  incomplete: z.boolean(),
 });
 export type UsagePeriod = z.infer<typeof UsagePeriodSchema>;
 export const UsageSummarySchema = z.object({
   inputTokens: z.number(),
   outputTokens: z.number(),
+  // True when any usage record, at any time, is unreported or only partially reported.
+  incomplete: z.boolean(),
   runs: z.number(),
   dayStart: z.string().datetime(),
   weekStart: z.string().datetime(),

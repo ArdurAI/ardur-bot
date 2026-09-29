@@ -2250,6 +2250,10 @@ msgstr ""
 
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Cost unavailable"
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Partially reported"
+msgstr "일부만 보고됨"
 msgstr "비용 정보 없음"
 
 #: src/pages/ScratchpadSection.tsx

@@ -9,6 +9,7 @@ const row = (
   createdAt: string,
   cost: number | null = null,
   pricingProvenance: unknown = null,
+  coverage = "complete",
 ) => ({
   provider,
   createdAt: new Date(createdAt),
@@ -16,6 +17,7 @@ const row = (
   pricingProvenance,
   inputTokens: 20,
   outputTokens: 5,
+  coverage,
 });
 describe("dashboard usage", () => {
   it("uses UTC day and Monday boundaries, independent of the server timezone", () => {
@@ -41,24 +43,57 @@ describe("dashboard usage", () => {
       now,
     );
     expect(result.map((provider) => provider.provider)).toEqual(["local", "paid"]);
-    expect(result[0]!.today).toEqual({ records: 1, inputTokens: 20, outputTokens: 5, cost: null });
+    expect(result[0]!.today).toEqual({
+      records: 1,
+      inputTokens: 20,
+      outputTokens: 5,
+      cost: null,
+      incomplete: false,
+    });
     expect(result[1]!.today.cost).toBe(0.2);
-    expect(result[1]!.week).toEqual({ records: 2, inputTokens: 40, outputTokens: 10, cost: null });
+    expect(result[1]!.week).toEqual({
+      records: 2,
+      inputTokens: 40,
+      outputTokens: 10,
+      cost: null,
+      incomplete: false,
+    });
     expect(result[1]!.daily.map((day) => day.tokens)).toEqual([0, 0, 25, 0, 0, 25, 25]);
+  });
+  it("marks a period incomplete when any record is unreported or partially reported", () => {
+    const result = providerUsage(
+      [
+        row("fixture", "2026-09-24T11:00:00Z"),
+        row("fixture", "2026-09-24T12:00:00Z", null, null, "partial"),
+      ],
+      now,
+    );
+    expect(result[0]!.today).toMatchObject({ records: 2, inputTokens: 40, incomplete: true });
+    const clean = providerUsage([row("fixture", "2026-09-24T11:00:00Z")], now);
+    expect(clean[0]!.today.incomplete).toBe(false);
   });
   it("retains the existing lifetime summary fields and bounds the provider query to the actor", async () => {
     const findMany = vi.fn(async () => []);
     const prisma = {
       usageRecord: {
         findMany,
-        aggregate: vi.fn(async () => ({
-          _sum: { inputTokens: 70, outputTokens: null },
-          _count: { _all: 9 },
-        })),
+        aggregate: vi
+          .fn()
+          .mockResolvedValueOnce({
+            _sum: { inputTokens: 70, outputTokens: null },
+            _count: { _all: 9 },
+          })
+          .mockResolvedValueOnce({ _count: { _all: 2 } }),
       },
     } as unknown as PrismaClient;
     const result = await usageSummary(prisma, { userId: "viewer", spaceId: "space" } as Actor, now);
-    expect(result).toMatchObject({ inputTokens: 70, outputTokens: 0, runs: 9, providers: [] });
+    expect(result).toMatchObject({
+      inputTokens: 70,
+      outputTokens: 0,
+      runs: 9,
+      incomplete: true,
+      providers: [],
+    });
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
