@@ -315,6 +315,78 @@ describe("bot workspace files", () => {
     expect(f.sandbox.writeFile).not.toHaveBeenCalled();
   });
 
+  it("describes a file deleted between the listing and the read as the same refusal", async () => {
+    const f = fixture();
+    // The folder listing still saw the file, then it vanished before the read.
+    f.sandbox.readFile.mockRejectedValueOnce(
+      Object.assign(new Error("ENOENT: no such file or directory, open 'bots/bot/notes.md'"), {
+        code: "ENOENT",
+      }),
+    );
+    await expect(
+      f.files.save(actor, {
+        ...f.input,
+        path: "notes.md",
+        content: "hello!",
+        version: digest("hello"),
+        approved: false,
+      }),
+    ).resolves.toEqual({
+      saved: false,
+      approvalRequired: false,
+      reason: "This file no longer exists. Save it as a new file or close it.",
+    });
+    expect(f.sandbox.writeFile).not.toHaveBeenCalled();
+  });
+
+  it("refuses when a saved file or its folder vanishes between the listing and the read", async () => {
+    const f = fixture();
+    f.computer.state = "stopped";
+    const root = await mkdtemp(path.join(tmpdir(), "workspace-files-vanish-"));
+    try {
+      let vanish: (target: string) => Promise<void> = async () => undefined;
+      class VanishingHomeStore extends LocalAgentHomeStore {
+        override async readFile(...args: Parameters<LocalAgentHomeStore["readFile"]>) {
+          await vanish(path.join(this.pathFor(args[0]), ...args[1].split("/")));
+          return super.readFile(...args);
+        }
+      }
+      const home = new VanishingHomeStore(root);
+      const notes = path.join(home.pathFor("home"), "bots", "bot", "notes.md");
+      await mkdir(path.dirname(notes), { recursive: true });
+      await writeFile(notes, "hello");
+      const files = createWorkspaceFiles({
+        sandbox: f.sandbox,
+        home,
+        prisma: f.db,
+      } as unknown as Parameters<typeof createWorkspaceFiles>[0]);
+      const attempt = () =>
+        files.save(actor, {
+          ...f.input,
+          path: "notes.md",
+          content: "hello!",
+          version: digest("hello"),
+          approved: false,
+        });
+      const refusal = {
+        saved: false,
+        approvalRequired: false,
+        reason: "This file no longer exists. Save it as a new file or close it.",
+      };
+
+      vanish = async (target) => rm(target);
+      await expect(attempt()).resolves.toEqual(refusal);
+      await expect(readFile(notes, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+
+      await writeFile(notes, "hello");
+      vanish = async (target) => rm(path.dirname(target), { recursive: true });
+      await expect(attempt()).resolves.toEqual(refusal);
+      await expect(readFile(notes, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("refuses a write when a commit swaps in a symlink between the check and the write", async () => {
     const f = fixture();
     f.computer.state = "stopped";

@@ -129,10 +129,16 @@ export function createWorkspaceFiles(deps: Deps) {
     if (!entry) throw new IsolationError();
     let bytes: Uint8Array;
     if (state.files === "live") {
-      bytes = await deps.sandbox.readFile(toComputerRef(computer), filePath, adapterContext, {
-        maxBytes: IDE_FILE_BYTES + 1,
-        preview: true,
-      });
+      bytes = await deps.sandbox
+        .readFile(toComputerRef(computer), filePath, adapterContext, {
+          maxBytes: IDE_FILE_BYTES + 1,
+          preview: true,
+        })
+        .catch((error: unknown) => {
+          // The file vanished after its folder listing; report it as missing.
+          if (isMissing(error)) throw new IsolationError();
+          throw error;
+        });
     } else {
       await assertSavedInsideBotFolder(deps.home, computer.homeKey, root, filePath);
       bytes = new TextEncoder().encode(
@@ -142,6 +148,8 @@ export function createWorkspaceFiles(deps: Deps) {
             preview: true,
           })
           .catch((error: unknown) => {
+            // The file or one of its folders vanished after the listing.
+            if (isMissing(error)) throw new IsolationError();
             if (error instanceof Error && error.message === "Binary file") return "\0";
             throw error;
           }),
