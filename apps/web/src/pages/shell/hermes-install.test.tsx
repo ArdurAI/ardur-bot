@@ -112,6 +112,32 @@ describe("Install Hermes", () => {
     expect(button("Try again")).toBeUndefined();
   });
 
+  it("offers Install Hermes when the managed install fails its safety check", async () => {
+    api.availability.mockResolvedValue(
+      hermes(
+        { state: "absent" },
+        "The Hermes install on this computer failed its safety check.",
+      ),
+    );
+    await renderHermes();
+    expect(container.textContent).toContain(
+      "The Hermes install on this computer failed its safety check.",
+    );
+    expect(button("Install Hermes")).toBeTruthy();
+  });
+
+  it("keeps the button off an operator's own install that fails its safety check", async () => {
+    api.availability.mockResolvedValue(
+      hermes(undefined, "The Hermes install on this computer failed its safety check."),
+    );
+    await renderHermes();
+    expect(container.textContent).toContain(
+      "The Hermes install on this computer failed its safety check.",
+    );
+    expect(button("Install Hermes")).toBeUndefined();
+    expect(button("Try again")).toBeUndefined();
+  });
+
   it("shows the install phase in plain words", async () => {
     api.availability.mockResolvedValue(hermes({ state: "installing", phase: "checking" }));
     await renderHermes();

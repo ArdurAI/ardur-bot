@@ -210,6 +210,36 @@ describe("Hermes install action", () => {
     });
   });
 
+  it("offers reinstall when the managed install fails its safety check", async () => {
+    const managed = path.join(hermesRoot(), "runtimes", "hermes-agent");
+    await mkdir(managed, { recursive: true });
+    await writeFile(path.join(managed, ".env"), "fixture");
+    const { rpc } = harness();
+    expect(await body(await rpc("availability", { runtimeKind: "hermes" }))).toEqual({
+      json: expect.objectContaining({
+        available: false,
+        reason: "The Hermes install on this computer failed its safety check.",
+        install: { state: "absent" },
+      }),
+    });
+  });
+
+  it("never offers install for an explicit install that fails its safety check", async () => {
+    const explicit = path.join(data, "elsewhere");
+    await mkdir(explicit, { recursive: true });
+    await writeFile(path.join(explicit, ".env"), "fixture");
+    vi.stubEnv("ARDUR_HERMES_INSTALL", explicit);
+    const { rpc } = harness();
+    const json = (await body(await rpc("availability", { runtimeKind: "hermes" }))).json;
+    expect(json).toEqual(
+      expect.objectContaining({
+        available: false,
+        reason: "The Hermes install on this computer failed its safety check.",
+      }),
+    );
+    expect(json.install).toBeUndefined();
+  });
+
   it("reports each install phase while the lock is held", async () => {
     const { rpc } = harness();
     for (const phase of HERMES_INSTALL_PHASES) {
