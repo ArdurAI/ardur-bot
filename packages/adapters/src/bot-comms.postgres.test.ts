@@ -12,6 +12,7 @@ import {
   claimSteering,
   confirmDispatchStop,
   createDb,
+  createGroupRepos,
   createThreadEvents,
   createThreadMessage,
   dispatchBotMessageWake,
@@ -3247,6 +3248,70 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     });
     // The exposure loader no longer offers the bound tool.
     await expect(loadPeerBoundEffect(prisma, child.id, { approvedOnly: true })).resolves.toBeNull();
+  });
+
+  it("S4b voids an approved exact effect when the worker is removed from the group", async () => {
+    const f = await fixture();
+    const { delivery, child, answer } = await sendExactEffectHold(f, "s4b-remove-void");
+    const effectId = delivery.approvalEffectId!;
+    expect(await answer("allow")).toBe(true);
+
+    const actor = { userId, spaceId, email: `${scopeId}@example.test`, isDeploymentOwner: true };
+    await createGroupRepos(prisma).updateGroup(actor, {
+      groupId: f.goal.groupId,
+      botIds: [], // Remove the worker
+    });
+
+    const voided = await prisma.externalEffect.findUniqueOrThrow({ where: { id: effectId } });
+    expect(voided).toMatchObject({ status: "failed", result: { reason: "peer-member-removed" } });
+
+    // Child run is cancelled
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: child.id } })).status).toBe(
+      "cancelled",
+    );
+
+    // Delivery is denied
+    expect(
+      await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: delivery.id } }),
+    ).toMatchObject({ state: "denied" });
+
+    // The voided approval cannot run
+    const bound = { effectId, effect: exactDescriptor };
+    await expect(claimPeerBoundEffect(prisma, bound, exactLiveCall)).resolves.toEqual({
+      ok: false,
+      kind: "replay",
+    });
+
+    // Drain or wake it, assert the write never runs
+    await drainParkedPeerRuns(prisma);
+  });
+
+  it("S4b leaves an executing hold alone when the worker is removed", async () => {
+    const f = await fixture();
+    const { delivery, answer } = await sendExactEffectHold(f, "s4b-remove-exec");
+    const effectId = delivery.approvalEffectId!;
+    expect(await answer("allow")).toBe(true);
+
+    // Make the hold executing
+    const bound = { effectId, effect: exactDescriptor };
+    const claimed = await claimPeerBoundEffect(prisma, bound, exactLiveCall);
+    expect(claimed.ok).toBe(true);
+
+    const actor = { userId, spaceId, email: `${scopeId}@example.test`, isDeploymentOwner: true };
+    await createGroupRepos(prisma).updateGroup(actor, {
+      groupId: f.goal.groupId,
+      botIds: [], // Remove the worker
+    });
+
+    // The effect should still be executing
+    const executing = await prisma.externalEffect.findUniqueOrThrow({ where: { id: effectId } });
+    expect(executing.status).toBe("executing");
+
+    // Delivery state shouldn't be overridden
+    const currentDelivery = await prisma.botMessageDelivery.findUniqueOrThrow({
+      where: { id: delivery.id },
+    });
+    expect(currentDelivery.state).not.toBe("denied");
   });
 
   it("S4b voids an approved exact effect when traffic pauses", async () => {

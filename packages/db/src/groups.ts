@@ -8,6 +8,9 @@ import {
   RuntimePinSchema,
   type SpaceGroup,
 } from "@ardurbot/contracts";
+import { parsePeerHoldRequest } from "@ardurbot/core";
+import { appendBotMessageAuditInTransaction } from "./bot-comms.js";
+import { lockPeerTrafficPolicy } from "./bot-comms-policy.js";
 import { cancelRunsInTransaction } from "./cancel-runs.js";
 import { Prisma, type PrismaClient } from "./client.js";
 import { expireComputerExecutionLeases } from "./computers.js";
@@ -411,6 +414,89 @@ export function createGroupRepos(prisma: PrismaClient) {
         const removedBotIds = current.members
           .map((member) => member.botId)
           .filter((botId) => !nextBotIds.has(botId));
+
+        const removedRunsToCancel: { id: string; taskId: string }[] = [];
+
+        if (removedBotIds.length) {
+          await lockPeerTrafficPolicy(tx, { spaceId: actor.spaceId, userId: actor.userId });
+
+          const removedDeliveries = await tx.botMessageDelivery.findMany({
+            where: {
+              targetGroupId: input.groupId,
+              recipientBotId: { in: removedBotIds },
+              delegationId: { not: null },
+            },
+            select: {
+              id: true,
+              delegationId: true,
+              approvalEffectId: true,
+              recipientBotId: true,
+              spaceId: true,
+              senderThreadId: true,
+              senderBotId: true,
+              goalId: true,
+              rootTaskId: true,
+              intent: true,
+              hop: true,
+            },
+          });
+
+          if (removedDeliveries.length) {
+            const holdEffectIds = removedDeliveries.flatMap((d) =>
+              d.approvalEffectId ? [d.approvalEffectId] : [],
+            );
+            if (holdEffectIds.length) {
+              const approvedHolds = await tx.externalEffect.findMany({
+                where: {
+                  id: { in: holdEffectIds },
+                  kind: "peer_hold",
+                  status: { in: ["intended", "approved"] },
+                },
+                select: { id: true, request: true },
+              });
+              const voidable = approvedHolds
+                .filter((hold) => parsePeerHoldRequest(hold.request)?.preparationOnly === false)
+                .map((hold) => hold.id);
+              if (voidable.length) {
+                await tx.externalEffect.updateMany({
+                  where: { id: { in: voidable }, status: { in: ["intended", "approved"] } },
+                  data: { status: "failed", result: { reason: "peer-member-removed" } },
+                });
+
+                const voidedDeliveries = removedDeliveries.filter(
+                  (d) => d.approvalEffectId && voidable.includes(d.approvalEffectId),
+                );
+                for (const d of voidedDeliveries) {
+                  await tx.botMessageDelivery.update({
+                    where: { id: d.id },
+                    data: { state: "denied", outcome: "denied" },
+                  });
+                  await appendBotMessageAuditInTransaction(tx, d, "denied");
+                }
+              }
+            }
+
+            const delegationIds = removedDeliveries.flatMap((d) =>
+              d.delegationId ? [d.delegationId] : [],
+            );
+            if (delegationIds.length) {
+              const directRuns = await tx.run.findMany({
+                where: {
+                  delegationId: { in: delegationIds },
+                  status: { in: ["queued", "peer_ready", "leased", "running"] },
+                },
+                select: { id: true, taskId: true, status: true },
+              });
+              const parked = directRuns.filter(
+                (run) => run.status === "queued" || run.status === "peer_ready",
+              );
+              for (const run of parked) {
+                removedRunsToCancel.push(run);
+              }
+            }
+          }
+        }
+
         const activeRuns = removedBotIds.length
           ? await tx.run.findMany({
               where: {
@@ -423,9 +509,11 @@ export function createGroupRepos(prisma: PrismaClient) {
               select: { id: true, taskId: true },
             })
           : [];
-        if (activeRuns.length) {
+
+        const allRunsToCancel = [...activeRuns, ...removedRunsToCancel];
+        if (allRunsToCancel.length) {
           const now = new Date();
-          await cancelRunsInTransaction(tx, activeRuns, now);
+          await cancelRunsInTransaction(tx, allRunsToCancel, now);
         }
         if (input.name !== undefined) {
           await tx.chatGroup.update({
