@@ -587,8 +587,7 @@ process.exit(0);
   try {
     await installHermes({
       root,
-      fetch: async (input) =>
-        new Response(input === HERMES_SOURCE_URL ? sourceArchive() : uv.gzip),
+      fetch: async (input) => new Response(input === HERMES_SOURCE_URL ? sourceArchive() : uv.gzip),
       platform: "linux",
       arch: "x64",
       expectedTree,

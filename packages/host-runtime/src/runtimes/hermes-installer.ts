@@ -305,7 +305,8 @@ export async function installHermes(deps: {
         message: publicFailure(message),
         updatedAt: clock().toISOString(),
       }).catch(() => undefined);
-      if (locked && !committed) await rm(versionDir, { recursive: true, force: true }).catch(() => undefined);
+      if (locked && !committed)
+        await rm(versionDir, { recursive: true, force: true }).catch(() => undefined);
     }
     if (error instanceof HermesInstallError) throw error;
     const failure = new HermesInstallError(HERMES_INSTALL_FAILED);
@@ -393,13 +394,11 @@ async function releaseLock(root: string, token: string): Promise<void> {
 
 /** The install writes only into real directories it owns; a planted symlink is refused. */
 async function assertRealDirectory(directory: string): Promise<void> {
-  let stat;
-  try {
-    stat = await lstat(directory);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+  const stat = await lstat(directory).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return undefined;
     throw new HermesInstallError(HERMES_INSTALL_FAILED);
-  }
+  });
+  if (stat === undefined) return;
   if (stat.isSymbolicLink() || !stat.isDirectory())
     throw new HermesInstallError(HERMES_INSTALL_FAILED);
 }
