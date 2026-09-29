@@ -19,7 +19,7 @@ export class FakeKubernetesApi implements KubernetesApi {
     signal.throwIfAborted();
     return Promise.resolve(this.objects.get(`${resource}/${name}`) ?? null);
   }
-  async version() { return {}; }
+  async version() { return ""; }
   async create(resource: string, body: KubernetesObject, signal: AbortSignal) {
     signal.throwIfAborted();
     const name = body.metadata!.name!;
