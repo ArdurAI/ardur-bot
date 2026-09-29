@@ -1,52 +1,270 @@
-import type { ScratchpadItem } from "@ardurbot/contracts";
-import { Button, Checkbox, Input } from "@ardurbot/ui-web";
-import { Trans, useLingui } from "@lingui/react/macro";
-import { X } from "lucide-react";
+import type { Bot, ScratchpadItem } from "@ardurbot/contracts";
+import type { BoardWorkspace, WorkItem } from "@ardurbot/contracts/board";
+import {
+  Button,
+  Checkbox,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  Input,
+  NativeSelect,
+} from "@ardurbot/ui-web";
+import { Trans } from "@lingui/react/macro";
+import { t } from "@lingui/core/macro";
+import { ExternalLink, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { rpc } from "../lib/rpc";
+import { ItemForm } from "./board/ItemForm";
+
+function NewWorkItemDialog({
+  botId,
+  open,
+  onOpenChange,
+  workspaces,
+  bots,
+  onAdded,
+}: {
+  botId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  workspaces: BoardWorkspace[];
+  bots: Pick<Bot, "id" | "name">[];
+  onAdded: () => void;
+}) {
+  const [workspaceId, setWorkspaceId] = useState(
+    workspaces.find((w) => w.isDefault)?.id ?? workspaces[0]?.id,
+  );
+  const [snapshotItems, setSnapshotItems] = useState<WorkItem[]>([]);
+
+  useEffect(() => {
+    if (open && workspaceId) {
+      void rpc.board
+        .snapshot({ workspaceId })
+        .then((s) => setSnapshotItems(s.items))
+        .catch(() => setSnapshotItems([]));
+    }
+  }, [workspaceId, open]);
+
+  const save = async (data: any) => {
+    if (!workspaceId) return;
+    const res = await rpc.board.create({
+      workspaceId,
+      ...data,
+    });
+    await rpc.scratchpad.linkBoardItems({
+      botId,
+      boardWorkspaceId: workspaceId,
+      boardItemIds: [res.id],
+    });
+    onAdded();
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogTitle className="flex items-center gap-2">
+          <Trans>New work item</Trans>
+        </DialogTitle>
+        <div className="space-y-4 pt-2">
+          <label className="block space-y-1" htmlFor="new-item-board-select">
+            <span>
+              <Trans>Board</Trans>
+            </span>
+            <NativeSelect
+              id="new-item-board-select"
+              value={workspaceId}
+              onChange={(e) => setWorkspaceId(e.target.value)}
+            >
+              {workspaces.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                </option>
+              ))}
+            </NativeSelect>
+          </label>
+          <ItemForm items={snapshotItems} bots={bots} save={save as any} />
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AddFromBoardDialog({
+  botId,
+  open,
+  onOpenChange,
+  workspaces,
+  onAdded,
+}: {
+  botId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  workspaces: BoardWorkspace[];
+  onAdded: () => void;
+}) {
+  const [workspaceId, setWorkspaceId] = useState(
+    workspaces.find((w) => w.isDefault)?.id ?? workspaces[0]?.id,
+  );
+  const [snapshotItems, setSnapshotItems] = useState<WorkItem[]>([]);
+  const [search, setSearch] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [existingLinkedIds, setExistingLinkedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (open && workspaceId) {
+      void rpc.board
+        .snapshot({ workspaceId, search })
+        .then((s) =>
+          setSnapshotItems(s.items.filter((i) => i.status !== "closed" && i.status !== "done")),
+        )
+        .catch(() => setSnapshotItems([]));
+      void rpc.scratchpad.list({ botId }).then((items) => {
+        setExistingLinkedIds(
+          new Set(
+            items
+              .filter((i) => i.boardWorkspaceId === workspaceId && i.boardItemId)
+              .map((i) => i.boardItemId!),
+          ),
+        );
+      }).catch(console.error);
+    }
+  }, [workspaceId, search, open, botId]);
+
+  const add = async () => {
+    if (!workspaceId || selectedIds.size === 0) return;
+    setBusy(true);
+    try {
+      await rpc.scratchpad.linkBoardItems({
+        botId,
+        boardWorkspaceId: workspaceId,
+        boardItemIds: Array.from(selectedIds),
+      });
+      onAdded();
+      onOpenChange(false);
+      setSelectedIds(new Set());
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[85vh] flex flex-col">
+        <DialogTitle>
+          <Trans>Add from board</Trans>
+        </DialogTitle>
+        <div className="flex gap-2 pt-2 shrink-0">
+          <NativeSelect
+            id="add-item-board-select"
+            value={workspaceId}
+            onChange={(e) => setWorkspaceId(e.target.value)}
+          >
+            {workspaces.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}
+              </option>
+            ))}
+          </NativeSelect>
+          <Input
+            placeholder={t`Search`}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="flex-1"
+          />
+        </div>
+        <div className="flex-1 overflow-auto min-h-0 py-2 space-y-1">
+          {snapshotItems.map((item) => {
+            const alreadyLinked = existingLinkedIds.has(item.id);
+            const isSelected = selectedIds.has(item.id);
+            return (
+              <label
+                key={item.id}
+                htmlFor={`board-item-${item.id}`}
+                className="flex items-center gap-3 p-2 hover:bg-accent rounded-lg cursor-pointer"
+              >
+                <Checkbox
+                  id={`board-item-${item.id}`}
+                  checked={alreadyLinked || isSelected}
+                  disabled={alreadyLinked || busy}
+                  onCheckedChange={(checked) => {
+                    if (alreadyLinked) return;
+                    const next = new Set(selectedIds);
+                    if (checked) next.add(item.id);
+                    else next.delete(item.id);
+                    setSelectedIds(next);
+                  }}
+                  className="mt-0.5"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="text-start text-[14.5px] text-foreground" dir="auto">
+                    {item.title}
+                  </div>
+                </div>
+                <span className="shrink-0 text-[12px] text-muted-foreground">{item.type}</span>
+                <span className="shrink-0 text-[12px] text-muted-foreground shrink-0">
+                  {item.status}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+        <div className="flex justify-end gap-2 shrink-0 pt-2">
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            <Trans>Cancel</Trans>
+          </Button>
+          <Button disabled={busy || selectedIds.size === 0} onClick={() => void add()}>
+            <Trans>Add</Trans>
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export function ScratchpadSection({ botId }: { botId: string }) {
-  const { t } = useLingui();
   const [items, setItems] = useState<ScratchpadItem[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const listGeneration = useRef(0);
 
-  async function refresh() {
-    const generation = ++listGeneration.current;
-    const list = await rpc.scratchpad.list({ botId });
-    if (generation !== listGeneration.current) return;
-    setItems(list);
-  }
+  const [workspaces, setWorkspaces] = useState<BoardWorkspace[]>([]);
+  const [bots, setBots] = useState<Pick<Bot, "id" | "name">[]>([]);
+  const [addFromBoardOpen, setAddFromBoardOpen] = useState(false);
+  const [newWorkItemOpen, setNewWorkItemOpen] = useState(false);
 
   useEffect(() => {
-    const generation = ++listGeneration.current;
-    void rpc.scratchpad
-      .list({ botId })
-      .then((list) => {
-        if (generation !== listGeneration.current) return;
-        setItems(list);
-      })
-      .catch(() => {
-        if (generation !== listGeneration.current) return;
-        setItems([]);
-      });
-    return () => {
-      listGeneration.current += 1;
-    };
+    void refresh();
+    void rpc.board.view({}).then((v) => {
+      setBots(v.bots);
+      setWorkspaces(
+        v.workspaces.filter(
+          (w) => w.enabled && (w.allowAllBots || w.allowedBotIds.includes(botId)),
+        ),
+      );
+    });
   }, [botId]);
 
+  async function refresh() {
+    const gen = ++listGeneration.current;
+    try {
+      const list = await rpc.scratchpad.list({ botId, includeDone: true });
+      if (listGeneration.current === gen) setItems(list);
+    } catch {
+      // ignore
+    }
+  }
+
   async function addItem() {
-    const title = draft.trim();
-    if (!title || busy) return;
+    if (!draft.trim()) return;
     setBusy(true);
     setError(null);
     try {
-      const created = await rpc.scratchpad.create({ botId, title });
+      await rpc.scratchpad.create({ botId, title: draft });
       setDraft("");
-      setItems((current) => [created, ...current.filter((item) => item.id !== created.id)]);
       try {
         await refresh();
       } catch {
@@ -59,16 +277,11 @@ export function ScratchpadSection({ botId }: { botId: string }) {
     }
   }
 
-  async function setStatus(item: ScratchpadItem, status: ScratchpadItem["status"]) {
-    if (busy) return;
+  async function setStatus(item: ScratchpadItem, status: "open" | "done" | "parked") {
     setBusy(true);
     setError(null);
     try {
-      const updated = await rpc.scratchpad.update({ itemId: item.id, status });
-      setItems((current) => {
-        const next = current.map((entry) => (entry.id === updated.id ? updated : entry));
-        return status === "done" ? next.filter((entry) => entry.status !== "done") : next;
-      });
+      await rpc.scratchpad.update({ itemId: item.id, status });
       try {
         await refresh();
       } catch {
@@ -82,12 +295,10 @@ export function ScratchpadSection({ botId }: { botId: string }) {
   }
 
   async function removeItem(item: ScratchpadItem) {
-    if (busy) return;
     setBusy(true);
     setError(null);
     try {
       await rpc.scratchpad.remove({ itemId: item.id });
-      setItems((current) => current.filter((entry) => entry.id !== item.id));
       try {
         await refresh();
       } catch {
@@ -136,6 +347,19 @@ export function ScratchpadSection({ botId }: { botId: string }) {
               ) : null}
             </div>
             <span className="shrink-0 text-[12px] text-muted-foreground/80">{item.status}</span>
+            {item.boardWorkspaceId && item.boardItemId ? (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label={t`Open in board`}
+                className="shrink-0 text-muted-foreground/70"
+                onClick={() =>
+                  window.open(`/board/${item.boardWorkspaceId}/${item.boardItemId}`, "_blank")
+                }
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+              </Button>
+            ) : null}
             {item.status === "open" ? (
               <Button
                 variant="ghost"
@@ -167,7 +391,7 @@ export function ScratchpadSection({ botId }: { botId: string }) {
               onClick={() => void removeItem(item)}
               className="shrink-0 text-muted-foreground/70"
             >
-              <X />
+              <X className="w-4 h-4" />
             </Button>
           </div>
         ))
@@ -191,10 +415,47 @@ export function ScratchpadSection({ botId }: { botId: string }) {
           variant="secondary"
           className="rounded-full"
           disabled={busy || !draft.trim()}
-          onClick={() => void addItem()}
+          type="submit"
         >
           <Trans>Add</Trans>
         </Button>
+        {workspaces.length > 0 && (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setAddFromBoardOpen(true)}
+              className="rounded-full"
+              type="button"
+            >
+              <Trans>Add from board</Trans>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setNewWorkItemOpen(true)}
+              className="rounded-full"
+              type="button"
+            >
+              <Trans>New work item</Trans>
+            </Button>
+            <AddFromBoardDialog
+              botId={botId}
+              open={addFromBoardOpen}
+              onOpenChange={setAddFromBoardOpen}
+              workspaces={workspaces}
+              onAdded={refresh}
+            />
+            <NewWorkItemDialog
+              botId={botId}
+              open={newWorkItemOpen}
+              onOpenChange={setNewWorkItemOpen}
+              workspaces={workspaces}
+              bots={bots}
+              onAdded={refresh}
+            />
+          </>
+        )}
       </form>
       {error ? <div className="mt-2 text-[13px] text-destructive">{error}</div> : null}
     </div>

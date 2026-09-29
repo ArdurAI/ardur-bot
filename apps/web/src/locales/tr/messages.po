@@ -523,6 +523,10 @@ msgstr ""
 msgid "Add folder"
 msgstr ""
 
+#: src/pages/ScratchpadSection.tsx
+msgid "Add from board"
+msgstr "Add from board"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Add GraphQL"
 msgstr "GraphQL ekle"
@@ -530,10 +534,6 @@ msgstr "GraphQL ekle"
 #: src/pages/PluginsOverlay.tsx
 msgid "Add GraphQL endpoint"
 msgstr "GraphQL uç noktası ekle"
-
-#: src/pages/ScratchpadSection.tsx
-msgid "Add item"
-msgstr "Öğe ekle"
 
 #: src/pages/customize/PluginsPage.tsx
 msgid "Add marketplace"
@@ -1267,9 +1267,10 @@ msgstr ""
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/DashboardPage.tsx
+#: src/pages/ScratchpadSection.tsx
 #: src/pages/shell/TopNav.tsx
 msgid "Board"
-msgstr ""
+msgstr "Board"
 
 #: src/pages/LearningInsights.tsx
 msgid "board and routine work"
@@ -1450,6 +1451,7 @@ msgstr "Sunucuya ulaşılamıyor."
 #: src/pages/memory/MemoryImport.tsx
 #: src/pages/MemoryImportExport.tsx
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/ScratchpadSection.tsx
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
@@ -1929,10 +1931,6 @@ msgstr ""
 msgid "Compare with…"
 msgstr "Karşılaştır…"
 
-#: src/pages/ScratchpadSection.tsx
-msgid "Complete"
-msgstr "Tamamlandı"
-
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
@@ -2315,10 +2313,6 @@ msgstr ""
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Cost unavailable"
 msgstr "Maliyet bilgisi yok"
-
-#: src/pages/ScratchpadSection.tsx
-msgid "Could not add"
-msgstr "Eklenemedi"
 
 #: src/pages/Shell.tsx
 msgid "Could not add folder. Try again."
@@ -2777,10 +2771,6 @@ msgstr ""
 msgid "Could not refresh tasks"
 msgstr ""
 
-#: src/pages/ScratchpadSection.tsx
-msgid "Could not remove"
-msgstr "Kaldırılamadı"
-
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not remove connector"
 msgstr "Bağlayıcı kaldırılamadı"
@@ -2990,10 +2980,6 @@ msgstr "Kontrol alınamadı"
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Could not test this integration."
 msgstr ""
-
-#: src/pages/ScratchpadSection.tsx
-msgid "Could not update"
-msgstr "Güncellenemedi"
 
 #: src/pages/account/AccountSettings.tsx
 msgid "Could not update account settings. Try again."
@@ -5602,10 +5588,6 @@ msgstr "Yeni grup"
 msgid "New item"
 msgstr ""
 
-#: src/pages/ScratchpadSection.tsx
-msgid "New open-work item"
-msgstr "Yeni açık iş öğesi"
-
 #: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
 msgid "New password"
@@ -5627,6 +5609,10 @@ msgstr "Yeni beceri"
 #: src/pages/shell/dialogs.tsx
 msgid "New space"
 msgstr ""
+
+#: src/pages/ScratchpadSection.tsx
+msgid "New work item"
+msgstr "New work item"
 
 #: src/pages/account/AccountTables.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
@@ -6846,7 +6832,6 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/PluginsOverlay.tsx
-#: src/pages/ScratchpadSection.tsx
 msgid "Remove"
 msgstr "Kaldır"
 
@@ -6924,10 +6909,6 @@ msgstr ""
 msgid "Removed with chat, computer, and memory."
 msgstr "Sohbeti, bilgisayarı ve hafızasıyla birlikte kaldırıldı."
 
-#: src/pages/ScratchpadSection.tsx
-msgid "Removed, but list refresh failed"
-msgstr "Kaldırıldı ama liste yenilenemedi"
-
 #: src/pages/customize/PluginsPage.tsx
 msgid "Removing"
 msgstr ""
@@ -6945,10 +6926,6 @@ msgstr ""
 #: src/pages/shell/dialogs.tsx
 msgid "Rename section"
 msgstr "Bölümü yeniden adlandır"
-
-#: src/pages/ScratchpadSection.tsx
-msgid "Reopen"
-msgstr "Yeniden aç"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Replace API key"
@@ -7499,10 +7476,6 @@ msgstr ""
 #: src/pages/MemoryHistory.tsx
 msgid "Saved locally. Sync pending."
 msgstr ""
-
-#: src/pages/ScratchpadSection.tsx
-msgid "Saved, but list refresh failed"
-msgstr "Kaydedildi ama liste yenilenemedi"
 
 #: src/pages/account/AccountProfile.tsx
 msgid "Saved, but not applied everywhere."

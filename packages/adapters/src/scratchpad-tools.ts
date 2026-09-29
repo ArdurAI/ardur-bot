@@ -1,9 +1,25 @@
 import type { PrismaClient } from "@ardurbot/db";
 
-export const SCRATCHPAD_STATUSES = ["open", "parked", "done"] as const;
+export const SCRATCHPAD_STATUSES = [
+  "open",
+  "parked",
+  "done",
+  "in_progress",
+  "blocked",
+  "deferred",
+  "ready",
+  "closed",
+] as const;
 export type ScratchpadStatus = (typeof SCRATCHPAD_STATUSES)[number];
 
-export const OPEN_SCRATCHPAD_STATUSES: ScratchpadStatus[] = ["open", "parked"];
+export const OPEN_SCRATCHPAD_STATUSES: ScratchpadStatus[] = [
+  "open",
+  "parked",
+  "in_progress",
+  "blocked",
+  "deferred",
+  "ready",
+];
 
 const TITLE_MAX = 200;
 const NOTES_MAX = 4_000;
@@ -15,6 +31,8 @@ export type ScratchpadToolDeps = {
 export type ScratchpadRow = {
   id: string;
   botId: string;
+  boardWorkspaceId?: string | null;
+  boardItemId?: string | null;
   title: string;
   status: string;
   notes: string;
@@ -26,6 +44,8 @@ export function mapScratchpadItem(row: ScratchpadRow) {
   return {
     id: row.id,
     botId: row.botId,
+    boardWorkspaceId: row.boardWorkspaceId,
+    boardItemId: row.boardItemId,
     title: row.title,
     status: coerceScratchpadStatus(row.status),
     notes: row.notes,

@@ -27,7 +27,8 @@ export async function loadAgentScratchpadContext(
   const visible = items.slice(0, MAX_OPEN_ITEMS);
   for (const item of visible) {
     const notes = item.notes.trim() ? ` — ${escapePromptData(item.notes.trim())}` : "";
-    const line = `${lines.length === 0 ? "" : "\n"}- [${item.status}] ${escapePromptData(item.title)}${notes} (id: ${escapePromptData(item.id)})`;
+    const boardMeta = item.boardWorkspaceId && item.boardItemId ? ` board: ${escapePromptData(item.boardWorkspaceId)} boardItem: ${escapePromptData(item.boardItemId)}` : "";
+    const line = `${lines.length === 0 ? "" : "\n"}- [${item.status}] ${escapePromptData(item.title)}${notes} (id: ${escapePromptData(item.id)}${boardMeta})`;
     const lineBytes = byteLength(line);
     if (lineBytes > remainingBytes) {
       const truncated = truncateUtf8(line, remainingBytes);

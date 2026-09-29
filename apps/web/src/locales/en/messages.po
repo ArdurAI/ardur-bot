@@ -523,6 +523,10 @@ msgstr "Add files or photos"
 msgid "Add folder"
 msgstr "Add folder"
 
+#: src/pages/ScratchpadSection.tsx
+msgid "Add from board"
+msgstr "Add from board"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Add GraphQL"
 msgstr "Add GraphQL"
@@ -530,10 +534,6 @@ msgstr "Add GraphQL"
 #: src/pages/PluginsOverlay.tsx
 msgid "Add GraphQL endpoint"
 msgstr "Add GraphQL endpoint"
-
-#: src/pages/ScratchpadSection.tsx
-msgid "Add item"
-msgstr "Add item"
 
 #: src/pages/customize/PluginsPage.tsx
 msgid "Add marketplace"
@@ -1267,6 +1267,7 @@ msgstr "Blocks"
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/DashboardPage.tsx
+#: src/pages/ScratchpadSection.tsx
 #: src/pages/shell/TopNav.tsx
 msgid "Board"
 msgstr "Board"
@@ -1450,6 +1451,7 @@ msgstr "Can't reach the server."
 #: src/pages/memory/MemoryImport.tsx
 #: src/pages/MemoryImportExport.tsx
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/ScratchpadSection.tsx
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
@@ -1929,10 +1931,6 @@ msgstr "Compare bots"
 msgid "Compare with…"
 msgstr "Compare with…"
 
-#: src/pages/ScratchpadSection.tsx
-msgid "Complete"
-msgstr "Complete"
-
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
@@ -2315,10 +2313,6 @@ msgstr "Cost"
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Cost unavailable"
 msgstr "Cost unavailable"
-
-#: src/pages/ScratchpadSection.tsx
-msgid "Could not add"
-msgstr "Could not add"
 
 #: src/pages/Shell.tsx
 msgid "Could not add folder. Try again."
@@ -2777,10 +2771,6 @@ msgstr "Could not read this memory bundle. Choose a valid export."
 msgid "Could not refresh tasks"
 msgstr "Could not refresh tasks"
 
-#: src/pages/ScratchpadSection.tsx
-msgid "Could not remove"
-msgstr "Could not remove"
-
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not remove connector"
 msgstr "Could not remove connector"
@@ -2990,10 +2980,6 @@ msgstr "Could not take control"
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Could not test this integration."
 msgstr "Could not test this integration."
-
-#: src/pages/ScratchpadSection.tsx
-msgid "Could not update"
-msgstr "Could not update"
 
 #: src/pages/account/AccountSettings.tsx
 msgid "Could not update account settings. Try again."
@@ -5602,10 +5588,6 @@ msgstr "New group"
 msgid "New item"
 msgstr "New item"
 
-#: src/pages/ScratchpadSection.tsx
-msgid "New open-work item"
-msgstr "New open-work item"
-
 #: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
 msgid "New password"
@@ -5627,6 +5609,10 @@ msgstr "New skill"
 #: src/pages/shell/dialogs.tsx
 msgid "New space"
 msgstr "New space"
+
+#: src/pages/ScratchpadSection.tsx
+msgid "New work item"
+msgstr "New work item"
 
 #: src/pages/account/AccountTables.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
@@ -6846,7 +6832,6 @@ msgstr "Remote setup"
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/PluginsOverlay.tsx
-#: src/pages/ScratchpadSection.tsx
 msgid "Remove"
 msgstr "Remove"
 
@@ -6924,10 +6909,6 @@ msgstr "Removed import from {0}"
 msgid "Removed with chat, computer, and memory."
 msgstr "Removed with chat, computer, and memory."
 
-#: src/pages/ScratchpadSection.tsx
-msgid "Removed, but list refresh failed"
-msgstr "Removed, but list refresh failed"
-
 #: src/pages/customize/PluginsPage.tsx
 msgid "Removing"
 msgstr "Removing"
@@ -6945,10 +6926,6 @@ msgstr "Rename"
 #: src/pages/shell/dialogs.tsx
 msgid "Rename section"
 msgstr "Rename section"
-
-#: src/pages/ScratchpadSection.tsx
-msgid "Reopen"
-msgstr "Reopen"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Replace API key"
@@ -7499,10 +7476,6 @@ msgstr "Saved locally. Indexing pending."
 #: src/pages/MemoryHistory.tsx
 msgid "Saved locally. Sync pending."
 msgstr "Saved locally. Sync pending."
-
-#: src/pages/ScratchpadSection.tsx
-msgid "Saved, but list refresh failed"
-msgstr "Saved, but list refresh failed"
 
 #: src/pages/account/AccountProfile.tsx
 msgid "Saved, but not applied everywhere."

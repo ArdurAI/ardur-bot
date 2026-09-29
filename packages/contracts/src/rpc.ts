@@ -1003,6 +1003,15 @@ export const appContract = {
       )
       .output(ScratchpadItemSchema),
     remove: oc.input(z.object({ itemId: Id })).output(z.object({ ok: z.literal(true) })),
+    linkBoardItems: oc
+      .input(
+        z.object({
+          botId: Id,
+          boardWorkspaceId: Id,
+          boardItemIds: z.array(Id).min(1),
+        }),
+      )
+      .output(z.array(ScratchpadItemSchema)),
   },
   skills: {
     list: oc.input(botId).output(z.array(TaughtSkillSchema)),
