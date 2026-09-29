@@ -4,7 +4,7 @@ import type {
   AgentRuntime,
   AgentRuntimeEvent,
 } from "@ardurbot/adapter-kit";
-import { abortableDelay, inferHandoffTargetName } from "@ardurbot/core";
+import { abortableDelay, inferHandoffTargetName, peerEffectArgsDigest } from "@ardurbot/core";
 
 const running = new Map<string, AbortController>();
 
@@ -189,6 +189,54 @@ export function inferScript(
     }
   }
   const lower = prompt.toLowerCase();
+  if (lower.includes("s4b exact effect fixture")) {
+    const effectArgs = { title: "Public fixture draft", version: 3 };
+    return [
+      {
+        assistant: "I asked Worker to publish the exact approved draft.",
+        toolCalls: [
+          {
+            name: "message_bot",
+            args: {
+              confirm_name: "Worker",
+              message: "Publish the public draft exactly as approved.",
+              intent: "request",
+              card: {
+                goal: "Publish the exact fixture draft",
+                inputs: [{ type: "text", text: "Public fixture draft" }],
+                doneWhen: ["Draft is published"],
+                deadlineAt: null,
+              },
+              requested_effects: [
+                {
+                  kind: "connector-write",
+                  toolName: "destination.write",
+                  resourceRef: "destination:drafts",
+                  argsDigest: peerEffectArgsDigest(effectArgs),
+                  args: effectArgs,
+                },
+              ],
+            },
+          },
+        ],
+        complete: true,
+      },
+    ];
+  }
+  if (lower.includes("publish the exact fixture draft")) {
+    return [
+      {
+        assistant: "Publishing the exact approved draft.",
+        toolCalls: [
+          {
+            name: "destination.write",
+            args: { title: "Public fixture draft", version: 3 },
+          },
+        ],
+        complete: true,
+      },
+    ];
+  }
   if (lower.includes("s4 held ask fixture")) {
     return [
       {
