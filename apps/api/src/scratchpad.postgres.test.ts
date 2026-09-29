@@ -16,11 +16,28 @@ describePostgres("scratchpad board linking (PostgreSQL)", () => {
   beforeAll(async () => {
     db = createDb(process.env.DATABASE_URL!);
     await db.prisma.user.create({
+      data: { id: owner.userId, name: "Test Owner", email: "scratchpad@fixture.invalid" },
+    });
+    await db.prisma.organization.create({
       data: {
-        id: owner.userId,
+        id: owner.spaceId,
+        name: "Test Space",
+        slug: owner.spaceId,
+        createdAt: new Date(),
+        spaces: { create: { id: owner.spaceId, name: "Test Space" } },
+        members: {
+          create: { id: owner.userId, userId: owner.userId, role: "owner", createdAt: new Date() },
+        },
+      },
+    });
+    await db.prisma.spaceMember.create({
+      data: {
+        id: "scratchpad-fixture-space-member",
+        userId: owner.userId,
         spaceId: owner.spaceId,
-        email: "scratchpad@fixture.invalid",
+        organizationId: owner.spaceId,
         role: "owner",
+        createdAt: new Date(),
       },
     });
     await db.prisma.bot.create({
@@ -29,22 +46,23 @@ describePostgres("scratchpad board linking (PostgreSQL)", () => {
         spaceId: owner.spaceId,
         userId: owner.userId,
         name: "Test bot",
-        model: "test-model"
+        modelId: "test-model",
+        color: "blue"
       }
     });
     await db.prisma.boardWorkspace.create({
       data: {
         id: boardWorkspaceId,
         spaceId: owner.spaceId,
-        userId: owner.userId,
+        ownerUserId: owner.userId,
+        kind: "test",
+        prefix: "TEST",
         path: "scratchpad-test-board",
         name: "Scratchpad Test Board",
         enabled: true,
         allowAllBots: true,
         allowedBotIds: [],
-        version: "1.0",
-        format: "beads"
-      }
+      },
     });
   });
 
