@@ -1,5 +1,5 @@
-import type { BrowserWindow, IpcMainInvokeEvent, WebContents } from "electron";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { BrowserWindow, IpcMainInvokeEvent, Tray, WebContents } from "electron";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const fake = vi.hoisted(() => ({
   handlers: new Map<string, (event: IpcMainInvokeEvent, value?: unknown) => unknown>(),
@@ -16,55 +16,102 @@ vi.mock("electron", () => ({
 
 import { installDockBadge, validBadgeCount } from "./dock-badge.js";
 
+const originalPlatform = process.platform;
+
+function usePlatform(platform: NodeJS.Platform) {
+  Object.defineProperty(process, "platform", { value: platform, configurable: true });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   fake.handlers.clear();
 });
 
-function install(platform: string, setBadgeCount = vi.fn()) {
-  const frame = { url: "https://app.example.test/app" };
-  let target = "https://app.example.test";
-  let navigation: (event: { isMainFrame: boolean; isSameDocument: boolean }) => void = () =>
-    undefined;
+afterEach(() => {
+  usePlatform(originalPlatform);
+});
+
+type Navigation = (event: { isMainFrame: boolean; isSameDocument: boolean }) => void;
+
+function page(url: string) {
+  const frame = { url: `${url}/app` };
+  let destroyed = false;
+  let navigation: Navigation = () => undefined;
   const contents = {
     mainFrame: frame,
-    on: (
-      event: string,
-      listener: (details: { isMainFrame: boolean; isSameDocument: boolean }) => void,
-    ) => {
-      if (event === "did-start-navigation") navigation = listener;
+    on: (_event: string, listener: Navigation) => {
+      navigation = listener;
     },
   };
   const window = {
-    isDestroyed: () => false,
+    isDestroyed: () => destroyed,
     webContents: contents,
   } as unknown as BrowserWindow;
-  installDockBadge({
-    window: () => window,
-    target: () => target,
-    platform,
-    setBadgeCount,
-  }).attach(contents as unknown as WebContents);
-  const handler = fake.handlers.get("desktop.dock.waiting")!;
   return {
     frame,
     contents,
-    setBadgeCount,
-    setTarget(value: string) {
-      target = value;
+    window,
+    destroy() {
+      destroyed = true;
     },
     emitNavigation(event: { isMainFrame: boolean; isSameDocument: boolean }) {
       navigation(event);
     },
+  };
+}
+
+function menuTray() {
+  return { isDestroyed: () => false, setTitle: vi.fn() };
+}
+
+function install(platform: NodeJS.Platform, options?: { url?: string; tray?: boolean }) {
+  usePlatform(platform);
+  const url = options?.url ?? "https://app.example.test";
+  const open = page(url);
+  const tray = menuTray();
+  let shown: BrowserWindow | null = open.window;
+  let menu: Tray | null = options?.tray === false ? null : (tray as unknown as Tray);
+  const badge = installDockBadge({
+    window: () => shown,
+    tray: () => menu,
+  });
+  badge.attach(open.contents as unknown as WebContents, url);
+  const handler = fake.handlers.get("desktop.dock.waiting")!;
+  const deliver = (
+    source: { contents: { mainFrame: { url: string } }; frame: { url: string } },
+    value: unknown,
+    event?: Partial<IpcMainInvokeEvent>,
+  ) =>
+    handler(
+      {
+        sender: source.contents,
+        senderFrame: source.frame,
+        ...event,
+      } as IpcMainInvokeEvent,
+      value,
+    );
+  return {
+    ...open,
+    tray,
+    url,
+    setBadgeCount: fake.setBadgeCount,
+    sync: badge.sync,
+    attach: badge.attach,
+    show(window: BrowserWindow | null) {
+      shown = window;
+    },
+    useTray(enabled: boolean) {
+      menu = enabled ? (tray as unknown as Tray) : null;
+    },
     send(value: unknown, event?: Partial<IpcMainInvokeEvent>) {
-      return handler(
-        {
-          sender: contents,
-          senderFrame: frame,
-          ...event,
-        } as IpcMainInvokeEvent,
-        value,
-      );
+      return deliver(open, value, event);
+    },
+    sendFrom(
+      source: { contents: { mainFrame: { url: string } }; frame: { url: string } },
+      value: unknown,
+      event?: Partial<IpcMainInvokeEvent>,
+    ) {
+      return deliver(source, value, event);
     },
   };
 }
@@ -82,15 +129,84 @@ describe("dock badge", () => {
     const dock = install("darwin");
     expect(dock.setBadgeCount).toHaveBeenCalledExactlyOnceWith(0);
     dock.setBadgeCount.mockClear();
+    dock.tray.setTitle.mockClear();
     await dock.send(2);
     await dock.send(0);
     expect(dock.setBadgeCount.mock.calls.map(([count]) => count)).toEqual([2, 0]);
+    expect(dock.tray.setTitle.mock.calls.map(([title]) => title)).toEqual(["2", ""]);
     dock.setBadgeCount.mockClear();
     dock.emitNavigation({ isMainFrame: true, isSameDocument: true });
     dock.emitNavigation({ isMainFrame: false, isSameDocument: false });
     expect(dock.setBadgeCount).not.toHaveBeenCalled();
     dock.emitNavigation({ isMainFrame: true, isSameDocument: false });
     expect(dock.setBadgeCount).toHaveBeenCalledExactlyOnceWith(0);
+    expect(dock.tray.setTitle).toHaveBeenLastCalledWith("");
+  });
+
+  it("shows a count that arrives before the window is attached", async () => {
+    usePlatform("darwin");
+    const open = page("https://app.example.test");
+    const tray = menuTray();
+    const badge = installDockBadge({
+      window: () => open.window,
+      tray: () => tray as unknown as Tray,
+    });
+    const handler = fake.handlers.get("desktop.dock.waiting")!;
+    await handler({ sender: open.contents, senderFrame: open.frame } as IpcMainInvokeEvent, 2);
+    expect(fake.setBadgeCount).not.toHaveBeenCalled();
+    badge.attach(open.contents as unknown as WebContents, "https://app.example.test");
+    expect(fake.setBadgeCount).toHaveBeenCalledExactlyOnceWith(2);
+    expect(tray.setTitle).toHaveBeenCalledExactlyOnceWith("2");
+  });
+
+  it("drops a queued count from a different server", async () => {
+    usePlatform("darwin");
+    const open = page("https://evil.example.test");
+    const badge = installDockBadge({
+      window: () => open.window,
+      tray: () => null,
+    });
+    const handler = fake.handlers.get("desktop.dock.waiting")!;
+    await handler({ sender: open.contents, senderFrame: open.frame } as IpcMainInvokeEvent, 2);
+    badge.attach(open.contents as unknown as WebContents, "https://app.example.test");
+    expect(fake.setBadgeCount).toHaveBeenCalledExactlyOnceWith(0);
+  });
+
+  it("shows the new server's count from that window's own address", async () => {
+    const dock = install("darwin", { url: "https://old.example.test" });
+    await dock.send(1);
+    const next = page("https://new.example.test");
+    dock.show(next.window);
+    dock.attach(next.contents as unknown as WebContents, "https://new.example.test");
+    dock.setBadgeCount.mockClear();
+    dock.tray.setTitle.mockClear();
+    await dock.sendFrom(next, 2);
+    expect(dock.setBadgeCount).toHaveBeenCalledExactlyOnceWith(2);
+    expect(dock.tray.setTitle).toHaveBeenCalledExactlyOnceWith("2");
+  });
+
+  it("puts the previous window's count back after a failed switch", async () => {
+    const dock = install("darwin");
+    await dock.send(2);
+    const next = page("https://new.example.test");
+    dock.show(next.window);
+    dock.attach(next.contents as unknown as WebContents, "https://new.example.test");
+    expect(dock.setBadgeCount).toHaveBeenLastCalledWith(0);
+    expect(dock.tray.setTitle).toHaveBeenLastCalledWith("");
+    dock.show(dock.window);
+    dock.sync();
+    expect(dock.setBadgeCount).toHaveBeenLastCalledWith(2);
+    expect(dock.tray.setTitle).toHaveBeenLastCalledWith("2");
+  });
+
+  it("shows the count when the menu bar icon appears later", async () => {
+    const dock = install("darwin", { tray: false });
+    await dock.send(4);
+    expect(dock.tray.setTitle).not.toHaveBeenCalled();
+    expect(dock.setBadgeCount).toHaveBeenLastCalledWith(4);
+    dock.useTray(true);
+    dock.sync();
+    expect(dock.tray.setTitle).toHaveBeenCalledExactlyOnceWith("4");
   });
 
   it("ignores invalid counts and untrusted senders", async () => {
@@ -106,38 +222,25 @@ describe("dock badge", () => {
     dock.frame.url = "https://evil.example.test/app";
     await dock.send(4);
     dock.frame.url = "https://app.example.test/app";
-    dock.setTarget("not a url");
-    expect(await dock.send(4)).toBeUndefined();
+    dock.destroy();
+    await dock.send(4);
     expect(dock.setBadgeCount).not.toHaveBeenCalled();
-    dock.setTarget("https://app.example.test");
+    dock.attach(dock.contents as unknown as WebContents, "not a url");
+    dock.setBadgeCount.mockClear();
+    await dock.send(4);
+    expect(dock.setBadgeCount).not.toHaveBeenCalled();
+    dock.attach(dock.contents as unknown as WebContents, "https://app.example.test");
+    dock.setBadgeCount.mockClear();
     await dock.send(999);
-    expect(dock.setBadgeCount).toHaveBeenCalledExactlyOnceWith(999);
+    expect(dock.setBadgeCount).not.toHaveBeenCalled();
   });
 
-  it.each(["linux", "win32"])("does nothing on %s", async (platform) => {
+  it.each(["linux", "win32"] as const)("does nothing on %s", async (platform) => {
     const dock = install(platform);
     await dock.send(3);
     await dock.send(0);
     dock.emitNavigation({ isMainFrame: true, isSameDocument: false });
     expect(dock.setBadgeCount).not.toHaveBeenCalled();
-  });
-
-  it("uses the macOS dock badge when the app provides it", async () => {
-    const frame = { url: "https://app.example.test/app" };
-    const contents = { mainFrame: frame };
-    const window = {
-      isDestroyed: () => false,
-      webContents: contents,
-    } as unknown as BrowserWindow;
-    installDockBadge({
-      window: () => window,
-      target: () => "https://app.example.test",
-      platform: "darwin",
-    });
-    await fake.handlers.get("desktop.dock.waiting")!(
-      { sender: contents, senderFrame: frame } as IpcMainInvokeEvent,
-      1,
-    );
-    expect(fake.setBadgeCount).toHaveBeenCalledExactlyOnceWith(1);
+    expect(dock.tray.setTitle).not.toHaveBeenCalled();
   });
 });

@@ -1,46 +1,35 @@
 // @vitest-environment jsdom
 import type { ArdurBotDesktop } from "@ardurbot/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  countOwnerWaiting,
-  createDockWaitingPublisher,
-  nextDockWaitingCount,
-  publishDockWaitingCount,
-} from "./dock-badge";
+import { countOwnerWaiting, openDockSnapshot, publishDockWaitingCount } from "./dock-badge";
 
 afterEach(() => {
   delete window.ardurbotDesktop;
 });
 
 describe("dock waiting count", () => {
-  it("sends a number only when it changes, including zero", () => {
-    expect(nextDockWaitingCount(null, 0)).toBe(0);
-    expect(nextDockWaitingCount(0, 0)).toBeNull();
-    const send = vi.fn();
-    const publish = createDockWaitingPublisher(send);
+  it("sends a number only when it changes, including zero", async () => {
+    vi.resetModules();
+    const { publishDockWaitingCount: publish } = await import("./dock-badge");
+    const send = vi.fn<(count: number) => Promise<void>>(async () => undefined);
+    for (const count of [1, 1]) publish(count);
+    expect(send).not.toHaveBeenCalled();
+    window.ardurbotDesktop = {
+      dock: { setWaitingCount: send },
+    } as unknown as ArdurBotDesktop;
     for (const count of [1, 1, 2, 2, 0, 0, 0]) publish(count);
     expect(send.mock.calls.map(([count]) => count)).toEqual([1, 2, 0]);
   });
 
-  it("retries a count the desktop bridge did not accept", async () => {
-    let rejectSend: (error: Error) => void = () => undefined;
-    const send = vi.fn(
-      () =>
-        new Promise<void>((_resolve, reject) => {
-          rejectSend = reject;
-        }),
-    );
-    const publish = createDockWaitingPublisher(send);
-    publish(2);
-    rejectSend(new Error("not ready"));
+  it("does not send the same count again when the desktop call fails", async () => {
+    const send = vi.fn(() => Promise.reject(new Error("not ready")));
+    window.ardurbotDesktop = {
+      dock: { setWaitingCount: send },
+    } as unknown as ArdurBotDesktop;
+    publishDockWaitingCount(2);
     await Promise.resolve();
-    publish(2);
-    expect(send).toHaveBeenCalledTimes(2);
-    const refused = vi.fn(() => false as const);
-    const retry = createDockWaitingPublisher(refused);
-    retry(3);
-    retry(3);
-    expect(refused).toHaveBeenCalledTimes(2);
+    publishDockWaitingCount(2);
+    expect(send).toHaveBeenCalledTimes(1);
   });
 
   it("sends a new count through the desktop bridge only when it changes", () => {
@@ -57,7 +46,29 @@ describe("dock waiting count", () => {
     expect(send.mock.calls.map(([count]) => count)).toEqual([4, 0]);
   });
 
-  it("counts each waiting thread once", () => {
+  it("uses a snapshot only while its thread is open", () => {
+    const snapshot = {
+      threadId: "ta",
+      runs: [{ botId: "a", status: "waiting_input" }],
+    };
+    expect(openDockSnapshot(false, snapshot)).toEqual({ snapshot: null, viewingThreadId: null });
+    expect(openDockSnapshot(true, null)).toEqual({ snapshot: null, viewingThreadId: null });
+    expect(openDockSnapshot(true, snapshot)).toEqual({ snapshot, viewingThreadId: "ta" });
+    expect(
+      countOwnerWaiting({
+        bots: [{ id: "a", status: "idle" }],
+        ...openDockSnapshot(false, snapshot),
+      }),
+    ).toBe(0);
+    expect(
+      countOwnerWaiting({
+        bots: [{ id: "a", status: "waiting_input" }],
+        ...openDockSnapshot(false, { threadId: "ta", runs: [] }),
+      }),
+    ).toBe(1);
+  });
+
+  it("counts each waiting bot once", () => {
     expect(
       countOwnerWaiting({
         bots: [
@@ -74,7 +85,7 @@ describe("dock waiting count", () => {
           { id: "b", threadId: "same", status: "waiting_takeover" },
         ],
       }),
-    ).toBe(1);
+    ).toBe(2);
     expect(
       countOwnerWaiting({
         bots: [],
@@ -86,7 +97,7 @@ describe("dock waiting count", () => {
           ],
         },
       }),
-    ).toBe(1);
+    ).toBe(2);
     expect(
       countOwnerWaiting({
         bots: [
@@ -122,13 +133,66 @@ describe("dock waiting count", () => {
           },
         ],
       }),
+    ).toBe(2);
+    expect(
+      countOwnerWaiting({
+        bots: [{ id: "a", threadId: "ta", status: "idle" }],
+        groups: [
+          {
+            id: "g1",
+            threadId: "t1",
+            members: [{ botId: "a", status: "waiting_input" }],
+          },
+          {
+            id: "g2",
+            threadId: "t2",
+            members: [{ botId: "a", status: "waiting_input" }],
+          },
+        ],
+      }),
     ).toBe(1);
     expect(
       countOwnerWaiting({
         bots: [{ id: "a", threadId: "ta", status: "waiting_input" }],
         snapshot: { threadId: "ta", runs: [{ botId: "a", status: "running" }] },
+        viewingThreadId: "ta",
+      }),
+    ).toBe(1);
+    expect(
+      countOwnerWaiting({
+        bots: [{ id: "a", threadId: "ta", status: "waiting_input" }],
+        groups: [
+          {
+            id: "g",
+            threadId: "tg",
+            members: [{ botId: "a", status: "waiting_input" }],
+          },
+        ],
+        snapshot: { threadId: "ta", runs: [{ botId: "a", status: "running" }] },
+        viewingThreadId: "ta",
+      }),
+    ).toBe(1);
+    expect(
+      countOwnerWaiting({
+        bots: [{ id: "a", threadId: "ta", status: "waiting_input" }],
+        snapshot: { threadId: "ta", runs: [] },
+        viewingThreadId: null,
+      }),
+    ).toBe(1);
+    expect(
+      countOwnerWaiting({
+        bots: [{ id: "a", threadId: "ta", status: "idle" }],
+        snapshot: { threadId: "ta", runs: [{ botId: "a", status: "waiting_input" }] },
+        viewingThreadId: null,
       }),
     ).toBe(0);
+    expect(
+      countOwnerWaiting({
+        bots: [{ id: "a", threadId: "ta", status: "idle" }],
+        snapshot: { threadId: "ta", runs: [{ botId: "a", status: "waiting_input" }] },
+        viewingThreadId: "ta",
+      }),
+    ).toBe(1);
     expect(
       countOwnerWaiting({
         bots: [{ id: "a", threadId: "ta", status: "waiting_input" }],

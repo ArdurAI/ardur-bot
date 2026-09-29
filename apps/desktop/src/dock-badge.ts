@@ -1,65 +1,91 @@
-import type { BrowserWindow, IpcMainInvokeEvent, WebContents } from "electron";
+import type { BrowserWindow, IpcMainInvokeEvent, Tray, WebContents } from "electron";
 import { app, ipcMain } from "electron";
+import { systemSenderAllowed } from "./system/sender.js";
 
 /** Whole numbers the Dock can show. Anything else is ignored. */
 export function validBadgeCount(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 999;
 }
 
-export function applyDockBadge(
-  platform: string,
-  count: number,
-  setBadgeCount: (count: number) => void,
-): void {
-  if (platform !== "darwin") return;
-  setBadgeCount(count);
-}
-
-function senderAllowed(
-  event: IpcMainInvokeEvent,
-  window: BrowserWindow | null,
-  target: string | null,
-): boolean {
-  const frame = event.senderFrame;
-  if (
-    !window ||
-    window.isDestroyed() ||
-    !target ||
-    event.sender !== window.webContents ||
-    !frame ||
-    frame !== window.webContents.mainFrame
-  )
-    return false;
+function sameOrigin(pageUrl: string, target: string): boolean {
   try {
-    return new URL(frame.url).origin === new URL(target).origin;
+    return new URL(pageUrl).origin === new URL(target).origin;
   } catch {
     return false;
   }
 }
 
-/** macOS Dock badge for bots waiting on the owner. Other platforms do nothing. */
+function paint(count: number, tray: Tray | null): void {
+  if (process.platform !== "darwin") return;
+  app.setBadgeCount(count);
+  if (!tray || tray.isDestroyed()) return;
+  tray.setTitle(count > 0 ? String(count) : "");
+}
+
+/**
+ * macOS Dock badge, and the same number beside the menu bar icon.
+ * Other platforms do nothing.
+ *
+ * Each page keeps its own count. A switch clears the badge for the new page,
+ * and coming back puts the previous page's count on screen again. A count that
+ * arrives before that page is attached waits until the server matches.
+ */
 export function installDockBadge(options: {
   window: () => BrowserWindow | null;
-  target: () => string | null;
-  platform?: string;
-  setBadgeCount?: (count: number) => void;
-}): { attach(contents: WebContents): void } {
-  const platform = options.platform ?? process.platform;
-  const setBadgeCount = options.setBadgeCount ?? ((count: number) => app.setBadgeCount(count));
-  const clear = () => applyDockBadge(platform, 0, setBadgeCount);
-  ipcMain.handle("desktop.dock.waiting", (event, value: unknown) => {
-    if (!senderAllowed(event, options.window(), options.target()) || !validBadgeCount(value))
+  tray: () => Tray | null;
+}): { attach(contents: WebContents, url: string): void; sync(): void } {
+  const pageUrls = new WeakMap<WebContents, string>();
+  const counts = new WeakMap<WebContents, number>();
+  const waiting = new WeakMap<WebContents, number>();
+
+  const current = () => {
+    const window = options.window();
+    return window && !window.isDestroyed() ? window : null;
+  };
+
+  const paintCurrent = () => {
+    const window = current();
+    const tray = options.tray();
+    paint(window ? (counts.get(window.webContents) ?? 0) : 0, tray);
+  };
+
+  ipcMain.handle("desktop.dock.waiting", (event: IpcMainInvokeEvent, value: unknown) => {
+    if (!validBadgeCount(value)) return;
+    const window = current();
+    if (
+      !window ||
+      event.sender !== window.webContents ||
+      event.senderFrame !== window.webContents.mainFrame
+    )
       return;
-    applyDockBadge(platform, value, setBadgeCount);
+    const url = pageUrls.get(window.webContents);
+    if (!url) {
+      waiting.set(window.webContents, value);
+      return;
+    }
+    if (!systemSenderAllowed(event, window, url)) return;
+    waiting.delete(window.webContents);
+    counts.set(window.webContents, value);
+    paint(value, options.tray());
   });
+
   return {
-    attach(contents) {
-      clear();
-      // A reload replaces the page, which sends the count again.
-      // Same-document navigations keep the current count.
+    attach(contents, url) {
+      pageUrls.set(contents, url);
+      const queued = waiting.get(contents);
+      const count = queued !== undefined && sameOrigin(contents.mainFrame.url, url) ? queued : 0;
+      waiting.delete(contents);
+      counts.set(contents, count);
       contents.on("did-start-navigation", (event) => {
-        if (event.isMainFrame && !event.isSameDocument) clear();
+        if (!event.isMainFrame || event.isSameDocument) return;
+        waiting.delete(contents);
+        counts.set(contents, 0);
+        if (current()?.webContents === contents) paint(0, options.tray());
       });
+      if (current()?.webContents === contents) paint(count, options.tray());
+    },
+    sync() {
+      paintCurrent();
     },
   };
 }

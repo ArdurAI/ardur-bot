@@ -459,6 +459,7 @@ function createWindow(url: string, partition: string | null) {
       clearTimeout(warmWindowTimer);
       mainWindow = null;
       hostService?.windowClosed();
+      dockBadge?.sync();
     }
   });
   markOnce("rk:main:window-created");
@@ -468,7 +469,7 @@ function createWindow(url: string, partition: string | null) {
   win.webContents.once("dom-ready", () => markOnce("rk:main:dom-ready"));
   win.webContents.once("did-finish-load", () => markOnce("rk:main:did-finish-load"));
   win.webContents.once("did-stop-loading", () => markOnce("rk:main:did-stop-loading"));
-  dockBadge?.attach(win.webContents);
+  dockBadge?.attach(win.webContents, url);
   markOnce("rk:main:load-url-start");
   const loaded = loadAppUrl(win, url).then(
     () => markOnce("rk:main:load-url-resolved"),
@@ -1150,6 +1151,7 @@ async function openAppOnce(targetUrl: string, resolved?: ResolvedSessionTarget) 
     pendingPreviousWindow = null;
     // Keep the previous app window so Cancel / close can restore it.
     if (previous !== null && !previous.isDestroyed()) mainWindow = previous;
+    dockBadge?.sync();
     // Show the setup window BEFORE destroying the failed one: on Windows/Linux,
     // destroying the last window fires "window-all-closed" -> app.quit() before
     // showSetupWindow() runs, so the app silently exits instead of showing this error.
@@ -1179,6 +1181,7 @@ async function abandonPendingAppSwitch(
   if (previous !== null && !previous.isDestroyed()) {
     const failed = mainWindow;
     mainWindow = previous;
+    dockBadge?.sync();
     if (failed !== null && !failed.isDestroyed() && failed !== previous) failed.destroy();
     currentSetup = previousSetup;
     currentTargetUrl = previousUrl;
@@ -1261,6 +1264,7 @@ async function recoverFromCrashedSave(
     mainWindow = null;
     currentSetup = previousSetup;
     currentTargetUrl = previousUrl;
+    dockBadge?.sync();
   }
   const message =
     previousSetup !== null
@@ -1404,7 +1408,7 @@ app.whenReady().then(async () => {
   if (initialLink) pendingIntegrationReturn = integrationReturnId(initialLink);
   installCustomizationIpc({ window: () => mainWindow, target: () => currentTargetUrl });
   installDesktopNotifications({ window: () => mainWindow, target: () => currentTargetUrl });
-  dockBadge = installDockBadge({ window: () => mainWindow, target: () => currentTargetUrl });
+  dockBadge = installDockBadge({ window: () => mainWindow, tray: () => desktopTray });
   const userDataDir = app.getPath("userData");
   hostService = installHostService({
     window: () => mainWindow,
@@ -1953,6 +1957,7 @@ app.whenReady().then(async () => {
     desktopTray = systemTray(desktopTray, enabled, () => {
       app.emit("activate");
     });
+    dockBadge?.sync();
   };
   desktopSystem = await installSystemRuntime({
     window: () => mainWindow,
