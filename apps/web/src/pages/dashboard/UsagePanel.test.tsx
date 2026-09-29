@@ -117,3 +117,13 @@ it("formats the usage catalogs for English, German, and Russian", () => {
   expect(i18n._(TOKENS, { tokens: 2 })).toBe(`${ru(2)} токена`);
   expect(i18n._(TOKENS, { tokens: 5 })).toBe(`${ru(5)} токенов`);
 });
+
+it("translates token counts for Spanish and Portuguese", () => {
+  i18n.setMessagesCompiler(compileMessage);
+  for (const locale of ["es", "pt-BR"] as const) {
+    i18n.load(locale, { [TOKENS]: catalogMessage(locale, TOKENS) });
+    i18n.activate(locale);
+    expect(i18n._(TOKENS, { tokens: 1 })).toBe("1 símbolo");
+    expect(i18n._(TOKENS, { tokens: 5 })).toBe("5 símbolos");
+  }
+});

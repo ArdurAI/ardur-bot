@@ -36,6 +36,8 @@ vi.mock("@lingui/core/macro", () => ({
   msg: (parts: TemplateStringsArray) => ({ id: parts.join(""), message: parts.join("") }),
 }));
 vi.mock("@lingui/react/macro", () => ({
+  Plural: ({ value, one, other }: { value: number; one: string; other: string }) =>
+    (value === 1 ? one : other).replaceAll("#", String(value)),
   Trans: ({ children }: { children: ReactNode }) => {
     if (typeof children !== "string" || i18n.locale === "en") return children;
     const text = children.replace(/\s+/g, " ").trim();
@@ -248,7 +250,7 @@ it("separates pending copy from applied copy, moves an approval to the timeline,
   expect(container.querySelector('[data-testid="learning-decided"]')?.textContent).toContain(
     "Applied",
   );
-  expect(container.textContent).toContain("learned 1 things this week");
+  expect(container.textContent).toContain("learned 1 thing this week");
   expect(container.textContent).toContain("Applied");
   await act(async () => {
     const details = container.querySelector("article details")! as HTMLDetailsElement;
@@ -796,6 +798,31 @@ it("disables display-only approval with a sentence and does not fetch evidence u
   });
   await click("Evidence source");
   expect(api.evidence).toHaveBeenCalledWith({ proposalId: "proposal", evidenceId: "source" });
+});
+it("uses the singular when one suggestion is waiting or one change was learned", async () => {
+  api.list.mockResolvedValue({
+    reviews: [],
+    proposals: [proposal],
+    pendingCount: 1,
+    appliedThisWeek: 1,
+  });
+  await act(async () => root.render(<LearningInbox />));
+  const text = container.textContent ?? "";
+  expect(text).toContain("1 suggestion to review");
+  expect(text).not.toContain("1 suggestions to review");
+  expect(text).toContain("learned 1 thing this week");
+  expect(text).not.toContain("learned 1 things this week");
+});
+it("does not call the inbox empty while a suggestion is still waiting", async () => {
+  api.list.mockResolvedValue({
+    reviews: [],
+    proposals: [{ ...proposal, status: "rejected", proposedContent: "Already decided." }],
+    pendingCount: 1,
+    appliedThisWeek: 0,
+  });
+  await act(async () => root.render(<LearningInbox />));
+  expect(container.textContent).toMatch(/1 suggestions? to review/);
+  expect(container.textContent).not.toContain("Nothing to review.");
 });
 it("shows the empty state and permits only the owner to enable learning", async () => {
   api.list.mockResolvedValue({ reviews: [], proposals: [], pendingCount: 0, appliedThisWeek: 0 });

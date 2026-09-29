@@ -154,11 +154,6 @@ msgstr "Запусков: {0} · токенов: {1}"
 msgid "{0} runs at these pins; hosted providers may bill per run"
 msgstr ""
 
-#. placeholder {0}: counts.pendingCount
-#: src/pages/LearningInbox.tsx
-msgid "{0} suggestions to review"
-msgstr ""
-
 #. placeholder {0}: bot.name
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} will still respond to direct mentions."
@@ -253,6 +248,10 @@ msgstr ""
 msgid "{hours}h ago"
 msgstr "{hours} ч назад"
 
+#: src/pages/LearningInbox.tsx
+msgid "{learned, plural, one {learned # thing this week} other {learned # things this week}}"
+msgstr "{learned, plural, one {на этой неделе изучена # вещь} few {на этой неделе изучены # вещи} many {на этой неделе изучено # вещей} other {на этой неделе изучено # вещей}}"
+
 #: src/pages/storage/StorageSettings.tsx
 msgid "{location} · Docker not running"
 msgstr "{location} · Docker не запущен"
@@ -275,6 +274,10 @@ msgstr "{name}: завершено"
 #: src/lib/use-notifications.ts
 msgid "{name} needs your input"
 msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
+msgstr "{pending, plural, one {# предложение на проверку} few {# предложения на проверку} many {# предложений на проверку} other {# предложения на проверку}}"
 
 #: src/components/composer/ComposerMenu.tsx
 msgid "{reconnectCount} need reconnection"
@@ -4742,11 +4745,6 @@ msgstr "Подробнее"
 #: src/components/FeatureDocsLink.tsx
 msgid "Learn more about {title}"
 msgstr "Подробнее: {title}"
-
-#. placeholder {0}: counts.appliedThisWeek
-#: src/pages/LearningInbox.tsx
-msgid "learned {0} things this week"
-msgstr ""
 
 #: src/pages/customize/SkillsPage.tsx
 msgid "Learned skills"

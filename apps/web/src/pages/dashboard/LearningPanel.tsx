@@ -31,7 +31,7 @@ export default function LearningPanel({
           >{t`Insights (${insights})`}</Button>
         ) : null}
       </div>
-      {!waiting.length ? (
+      {!waiting.length && count === 0 ? (
         <p className="text-muted-foreground">
           <Trans>No proposals</Trans>
         </p>
@@ -47,12 +47,14 @@ export default function LearningPanel({
           <Button
             key={proposal.id}
             variant="ghost"
-            className="h-auto w-full justify-start whitespace-normal text-start"
+            className="h-auto w-full min-w-0 flex-col items-stretch justify-start whitespace-normal text-start"
             onClick={openLearning}
           >
-            <span className="block font-medium">{title}</span>
+            <span className="block w-full min-w-0 break-words font-medium">{title}</span>
             {proposal.rationale !== title ? (
-              <span className="mt-1 block text-xs text-muted-foreground">{proposal.rationale}</span>
+              <span className="mt-1 block w-full min-w-0 break-words text-xs text-muted-foreground">
+                {proposal.rationale}
+              </span>
             ) : null}
           </Button>
         );

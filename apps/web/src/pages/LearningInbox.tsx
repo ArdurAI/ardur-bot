@@ -16,7 +16,7 @@ import {
   TabsTrigger,
   Textarea,
 } from "@ardurbot/ui-web";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { Plural, Trans, useLingui } from "@lingui/react/macro";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { boardCloseFailedTitle, boardCloseTriedBody } from "../lib/board-close-copy";
 import { actionMessage } from "../lib/orpc-action-message";
@@ -31,7 +31,6 @@ const LearningInsights = lazy(() => import("./LearningInsights"));
 type Inbox = Awaited<ReturnType<typeof rpc.learning.list>>;
 type Conflict = NonNullable<Awaited<ReturnType<typeof rpc.learning.revert>>["conflict"]>;
 export function LearningBadge({ botId }: { botId?: string }) {
-  const { t } = useLingui();
   const [counts, setCounts] = useState<Pick<Inbox, "pendingCount" | "appliedThisWeek"> | null>(
     null,
   );
@@ -56,11 +55,21 @@ export function LearningBadge({ botId }: { botId?: string }) {
     };
   }, [botId]);
   if (!counts) return null;
+  const pending = counts.pendingCount;
+  const learned = counts.appliedThisWeek;
   return (
     <span className="block min-w-0 break-words text-xs text-muted-foreground">
-      {counts.pendingCount > 0 ? t`${counts.pendingCount} suggestions to review` : null}
-      {counts.pendingCount > 0 && counts.appliedThisWeek > 0 ? " · " : null}
-      {counts.appliedThisWeek > 0 ? t`learned ${counts.appliedThisWeek} things this week` : null}
+      {pending > 0 ? (
+        <Plural value={pending} one="# suggestion to review" other="# suggestions to review" />
+      ) : null}
+      {pending > 0 && learned > 0 ? " · " : null}
+      {learned > 0 ? (
+        <Plural
+          value={learned}
+          one="learned # thing this week"
+          other="learned # things this week"
+        />
+      ) : null}
     </span>
   );
 }
@@ -79,6 +88,8 @@ export function LearningInbox({ botId }: { botId?: string }) {
   const busyRef = useRef(busy);
   busyRef.current = busy;
   const request = useRef(0);
+  // Set when a person opens a proposal, cleared once that open chooses the tab.
+  const openedProposalId = useRef<string | null>(null);
   const load = useCallback(async () => {
     const current = ++request.current;
     const [list, config, consent, proposal] = await Promise.all([
@@ -129,7 +140,8 @@ export function LearningInbox({ botId }: { botId?: string }) {
   const waiting = rows.filter((item) => item.status === "pending");
   const decided = rows.filter((item) => item.status !== "pending");
   useEffect(() => {
-    if (!selected || selected.id !== selectedId) return;
+    if (!selected || selected.id !== selectedId || openedProposalId.current !== selected.id) return;
+    openedProposalId.current = null;
     setTab(selected.status === "pending" ? "inbox" : "timeline");
   }, [selected, selectedId]);
   async function change(action: () => Promise<unknown>) {
@@ -267,7 +279,12 @@ export function LearningInbox({ botId }: { botId?: string }) {
             <LearningTimeline
               botId={botId}
               openProposal={(id) => {
+                openedProposalId.current = id;
                 setSelectedId(id);
+                if (selected?.id === id) {
+                  openedProposalId.current = null;
+                  setTab(selected.status === "pending" ? "inbox" : "timeline");
+                }
               }}
             />
           </div>
@@ -275,7 +292,12 @@ export function LearningInbox({ botId }: { botId?: string }) {
         <TabsContent value="inbox">
           <div data-testid="learning-waiting" className="space-y-3">
             <LearningBadge botId={botId} />
-            {inbox && waiting.length === 0 ? (
+            {decided.map((proposal) => {
+              const conflict = conflicts[proposal.id];
+              if (!conflict) return null;
+              return <LearningConflict key={proposal.id} proposal={proposal} conflict={conflict} />;
+            })}
+            {inbox && waiting.length === 0 && inbox.pendingCount === 0 ? (
               <p className="text-sm text-muted-foreground">
                 <Trans>Nothing to review.</Trans>
               </p>
@@ -350,6 +372,54 @@ export function LearningInbox({ botId }: { botId?: string }) {
           </div>
         ))}
     </section>
+  );
+}
+function LearningConflict({
+  proposal,
+  conflict,
+}: {
+  proposal: LearningProposal;
+  conflict: Conflict;
+}) {
+  return (
+    <div role="alert" className="mt-3 text-sm">
+      {proposal.type === "board-item" ? (
+        <p>
+          {conflict.code === "board-left-open" ? (
+            <Trans>
+              This board item changed after it was filed, so it was left open for review on the
+              Board.
+            </Trans>
+          ) : conflict.code === "board-already-closed" ? (
+            <Trans>This board item was already closed on the Board.</Trans>
+          ) : conflict.code === "board-changed" || !conflict.current ? (
+            <Trans>This board item changed after it was filed. Review it on the Board.</Trans>
+          ) : (
+            conflict.current
+          )}
+        </p>
+      ) : (
+        <p>
+          <Trans>Later edits overlap this change. Review both versions in History.</Trans>
+        </p>
+      )}
+      {proposal.type === "board-item" ? null : (
+        <>
+          <p>
+            <Trans>Before</Trans>
+          </p>
+          <pre className="break-words whitespace-pre-wrap">{conflict.before}</pre>
+          <p>
+            <Trans>Applied</Trans>
+          </p>
+          <pre className="break-words whitespace-pre-wrap">{conflict.applied}</pre>
+          <p>
+            <Trans>Current</Trans>
+          </p>
+          <pre className="break-words whitespace-pre-wrap">{conflict.current}</pre>
+        </>
+      )}
+    </div>
   );
 }
 function LearningCard({
@@ -647,46 +717,7 @@ function LearningCard({
           />
         ) : null}
       </details>
-      {conflict ? (
-        <div role="alert" className="mt-3 text-sm">
-          {proposal.type === "board-item" ? (
-            <p>
-              {conflict.code === "board-left-open" ? (
-                <Trans>
-                  This board item changed after it was filed, so it was left open for review on the
-                  Board.
-                </Trans>
-              ) : conflict.code === "board-already-closed" ? (
-                <Trans>This board item was already closed on the Board.</Trans>
-              ) : conflict.code === "board-changed" || !conflict.current ? (
-                <Trans>This board item changed after it was filed. Review it on the Board.</Trans>
-              ) : (
-                conflict.current
-              )}
-            </p>
-          ) : (
-            <p>
-              <Trans>Later edits overlap this change. Review both versions in History.</Trans>
-            </p>
-          )}
-          {proposal.type === "board-item" ? null : (
-            <>
-              <p>
-                <Trans>Before</Trans>
-              </p>
-              <pre className="break-words whitespace-pre-wrap">{conflict.before}</pre>
-              <p>
-                <Trans>Applied</Trans>
-              </p>
-              <pre className="break-words whitespace-pre-wrap">{conflict.applied}</pre>
-              <p>
-                <Trans>Current</Trans>
-              </p>
-              <pre className="break-words whitespace-pre-wrap">{conflict.current}</pre>
-            </>
-          )}
-        </div>
-      ) : null}
+      {conflict ? <LearningConflict proposal={proposal} conflict={conflict} /> : null}
     </article>
   );
 }

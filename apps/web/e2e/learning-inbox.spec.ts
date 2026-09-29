@@ -125,7 +125,7 @@ test("learning inbox separates suggestions from applied changes and shows Undo",
   await captureScreenshot(page, testInfo, "learning-inbox-pending");
   await inbox.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(inbox.getByText("Nothing to review.", { exact: true })).toBeVisible();
-  await expect(inbox.getByText("learned 1 things this week", { exact: true })).toBeVisible();
+  await expect(inbox.getByText("learned 1 thing this week", { exact: true })).toBeVisible();
   await inbox.getByRole("tab", { name: "Timeline", exact: true }).click();
   await expect(inbox.getByText("Applied", { exact: true })).toBeVisible();
   await inbox.locator("article").getByText("Details", { exact: true }).click();
@@ -235,7 +235,11 @@ test("learning inbox shows board-item suggestions, their outcome, and a close th
   await expect(page.locator('[data-panel="work"]')).toContainText(
     "Reviewer filed 3: 1 done, 1 open, 0 closed, 1 closed without being completed.",
   );
-  await page.locator('[data-panel="learning"]').getByRole("button", { name: "Inbox (1)" }).click();
+  const suggestion = page
+    .locator('[data-panel="learning"]')
+    .getByRole("button", { name: "Finish the import follow-up" });
+  await expect(suggestion).toHaveCSS("flex-direction", "column");
+  await suggestion.click();
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("switch", { name: "Learning for this space" })).toBeChecked();
   await expect(dialog.getByText("Finish the import follow-up", { exact: true })).toBeVisible();
@@ -267,4 +271,85 @@ test("learning inbox shows board-item suggestions, their outcome, and a close th
     ),
   ).toBeVisible();
   await captureScreenshot(page, testInfo, "learning-inbox-board-items");
+});
+
+test("a reject overlap warning stays on the inbox", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const fixture = dashboardFixture();
+  let status = "pending";
+  const proposal = () => ({
+    id: "proposal",
+    type: "memory",
+    scope: { spaceId: "space", userId: "fixture-user", botId: "bot" },
+    target: {},
+    expectedBaseRevision: 0,
+    proposedContent: "Use numbered steps for repeatable procedures.",
+    rationale: "The owner requested this format.",
+    evidenceIds: ["evidence"],
+    confidence: { label: "model estimate", value: 0.8 },
+    diff: "--- current\n+++ proposed\n-\n+Use numbered steps.",
+    status,
+    expiresAt: "2099-01-01T00:00:00.000Z",
+  });
+  const conflict = {
+    before: "Before the change.",
+    applied: "The saved change.",
+    current: "A later edit.",
+    expectedRevision: 1,
+  };
+  await page.route("**/api/auth/get-session*", (route) => route.fulfill({ json: fixture.session }));
+  await page.route("**/rpc/**", async (route) => {
+    const procedure = new URL(route.request().url()).pathname.slice("/rpc/".length);
+    if (procedure === "threads/subscribe") {
+      return route.fulfill({ contentType: "text/event-stream", body: "" });
+    }
+    const action = procedure.split("/").at(-1);
+    if (procedure.startsWith("learning/") && action === "reject") status = "rejected";
+    const listed = {
+      reviews: [],
+      proposals: [proposal()],
+      pendingCount: status === "pending" ? 1 : 0,
+      appliedThisWeek: 0,
+      botNames: { bot: "Reviewer" },
+    };
+    const json = procedure.startsWith("learning/")
+      ? action === "reject"
+        ? { proposal: proposal(), conflict }
+        : action === "list" || action === "summary"
+          ? listed
+          : action === "settings"
+            ? {
+                enabled: true,
+                canConfigure: false,
+                consolidationEnabled: false,
+                reviewerPin: null,
+                destination: null,
+                budgets: {},
+              }
+            : action === "grants"
+              ? { grants: [], offers: [] }
+              : action === "insights"
+                ? { insights: [] }
+                : action === "journey"
+                  ? []
+                  : action === "proposal"
+                    ? proposal()
+                    : { ok: true }
+      : fixture.rpc(procedure, route.request().postDataJSON()?.json);
+    await route.fulfill({ json: { json } });
+  });
+  await page.goto("/app");
+  await page.locator('[data-panel="learning"]').getByRole("button", { name: "Inbox (1)" }).click();
+  const dialog = page.getByRole("dialog");
+  const waiting = dialog.getByTestId("learning-waiting");
+  await waiting.getByRole("button", { name: "Reject", exact: true }).click();
+  await expect(waiting).toContainText(
+    "Later edits overlap this change. Review both versions in History.",
+  );
+  await expect(dialog.getByRole("tab", { name: "Inbox", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(dialog.getByTestId("learning-decided")).toHaveCount(0);
+  await captureScreenshot(page, testInfo, "learning-inbox-overlap");
 });

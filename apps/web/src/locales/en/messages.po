@@ -154,11 +154,6 @@ msgstr "{0} runs · {1} tokens"
 msgid "{0} runs at these pins; hosted providers may bill per run"
 msgstr "{0} runs at these pins; hosted providers may bill per run"
 
-#. placeholder {0}: counts.pendingCount
-#: src/pages/LearningInbox.tsx
-msgid "{0} suggestions to review"
-msgstr "{0} suggestions to review"
-
 #. placeholder {0}: bot.name
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} will still respond to direct mentions."
@@ -253,6 +248,10 @@ msgstr "{failed} failed"
 msgid "{hours}h ago"
 msgstr "{hours}h ago"
 
+#: src/pages/LearningInbox.tsx
+msgid "{learned, plural, one {learned # thing this week} other {learned # things this week}}"
+msgstr "{learned, plural, one {learned # thing this week} other {learned # things this week}}"
+
 #: src/pages/storage/StorageSettings.tsx
 msgid "{location} · Docker not running"
 msgstr "{location} · Docker not running"
@@ -275,6 +274,10 @@ msgstr "{name} finished"
 #: src/lib/use-notifications.ts
 msgid "{name} needs your input"
 msgstr "{name} needs your input"
+
+#: src/pages/LearningInbox.tsx
+msgid "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
+msgstr "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
 
 #: src/components/composer/ComposerMenu.tsx
 msgid "{reconnectCount} need reconnection"
@@ -4742,11 +4745,6 @@ msgstr "Learn more"
 #: src/components/FeatureDocsLink.tsx
 msgid "Learn more about {title}"
 msgstr "Learn more about {title}"
-
-#. placeholder {0}: counts.appliedThisWeek
-#: src/pages/LearningInbox.tsx
-msgid "learned {0} things this week"
-msgstr "learned {0} things this week"
 
 #: src/pages/customize/SkillsPage.tsx
 msgid "Learned skills"

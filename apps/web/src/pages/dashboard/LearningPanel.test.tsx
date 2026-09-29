@@ -164,3 +164,91 @@ it("counts and lists only items still waiting for a decision", async () => {
   expect(empty).not.toContain("Already rejected item");
   act(() => root.unmount());
 });
+
+it("stacks each suggestion title above its reason", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const shared = "Imported memory. Review before saving.";
+  await act(async () =>
+    root.render(
+      <LearningPanel
+        data={{
+          reviews: [],
+          proposals: [
+            {
+              id: "one",
+              type: "memory",
+              operation: "memory-import",
+              scope: { spaceId: "space" },
+              target: {},
+              proposedContent: "Helm chart release mechanics and gotchas",
+              rationale: shared,
+              evidenceIds: ["evidence"],
+              confidence: { label: "model estimate", value: 0.5 },
+              diff: "",
+              status: "pending",
+              expiresAt: "2099-01-01T00:00:00.000Z",
+            },
+          ],
+          botNames: {},
+          pendingCount: 1,
+          appliedThisWeek: 0,
+          insightCount: 0,
+        }}
+        openLearning={vi.fn()}
+        openSettings={vi.fn()}
+        refresh={vi.fn(async () => undefined)}
+      />,
+    ),
+  );
+  const button = [...container.querySelectorAll("button")].find((node) =>
+    node.textContent?.includes("Helm chart release mechanics and gotchas"),
+  );
+  expect(button?.className.split(/\s+/)).toContain("flex-col");
+  const lines = [...(button?.querySelectorAll("span") ?? [])].map((node) => node.textContent);
+  expect(lines).toEqual(["Helm chart release mechanics and gotchas", shared]);
+  act(() => root.unmount());
+});
+
+it("does not call the card empty while a suggestion is still waiting", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  await act(async () =>
+    root.render(
+      <LearningPanel
+        data={{
+          reviews: [],
+          proposals: [
+            {
+              id: "decided",
+              type: "memory",
+              scope: { spaceId: "space" },
+              target: {},
+              proposedContent: "Already decided item",
+              rationale: "Imported memory. Review before saving.",
+              evidenceIds: ["evidence"],
+              confidence: { label: "model estimate", value: 0.5 },
+              diff: "",
+              status: "rejected",
+              expiresAt: "2099-01-01T00:00:00.000Z",
+            },
+          ],
+          botNames: {},
+          pendingCount: 1,
+          appliedThisWeek: 0,
+          insightCount: 0,
+        }}
+        openLearning={vi.fn()}
+        openSettings={vi.fn()}
+        refresh={vi.fn(async () => undefined)}
+      />,
+    ),
+  );
+  const text = container.textContent ?? "";
+  expect(text).toContain("Inbox (1)");
+  expect(text).not.toContain("No proposals");
+  expect(text).not.toContain("Already decided item");
+  act(() => root.unmount());
+});

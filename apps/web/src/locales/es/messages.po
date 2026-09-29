@@ -154,11 +154,6 @@ msgstr "{0} ejecuciones · {1} tokens"
 msgid "{0} runs at these pins; hosted providers may bill per run"
 msgstr ""
 
-#. placeholder {0}: counts.pendingCount
-#: src/pages/LearningInbox.tsx
-msgid "{0} suggestions to review"
-msgstr ""
-
 #. placeholder {0}: bot.name
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} will still respond to direct mentions."
@@ -253,6 +248,10 @@ msgstr ""
 msgid "{hours}h ago"
 msgstr "hace {hours} h"
 
+#: src/pages/LearningInbox.tsx
+msgid "{learned, plural, one {learned # thing this week} other {learned # things this week}}"
+msgstr "{learned, plural, one {aprendió # cosa esta semana} other {aprendió # cosas esta semana}}"
+
 #: src/pages/storage/StorageSettings.tsx
 msgid "{location} · Docker not running"
 msgstr ""
@@ -275,6 +274,10 @@ msgstr "{name} terminó"
 #: src/lib/use-notifications.ts
 msgid "{name} needs your input"
 msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
+msgstr "{pending, plural, one {# sugerencia para revisar} other {# sugerencias para revisar}}"
 
 #: src/components/composer/ComposerMenu.tsx
 msgid "{reconnectCount} need reconnection"
@@ -310,7 +313,7 @@ msgstr "{title}, {label}"
 
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "{tokens, plural, one {# token} other {# tokens}}"
-msgstr "{tokens, plural, one {# token} other {# tokens}}"
+msgstr "{tokens, plural, one {# símbolo} other {# símbolos}}"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "{toolCount, plural, one {# tool} other {# tools}}"
@@ -4742,11 +4745,6 @@ msgstr "Más información"
 #: src/components/FeatureDocsLink.tsx
 msgid "Learn more about {title}"
 msgstr "Más información sobre {title}"
-
-#. placeholder {0}: counts.appliedThisWeek
-#: src/pages/LearningInbox.tsx
-msgid "learned {0} things this week"
-msgstr ""
 
 #: src/pages/customize/SkillsPage.tsx
 msgid "Learned skills"

@@ -124,6 +124,67 @@ it("lists scoped proposals with separate counts and opens only linked, surviving
   });
 });
 
+it("includes a pending proposal that is older than the newest page", async () => {
+  const actor = { spaceId: "space", userId: "user" } as Actor;
+  const body = (id: string, status: "pending" | "rejected", content: string) => ({
+    id,
+    type: "memory",
+    scope: { spaceId: "space", userId: "user" },
+    target: {},
+    proposedContent: content,
+    rationale: "Requested format",
+    evidenceIds: ["evidence"],
+    confidence: { label: "model estimate" as const, value: 0.8 },
+    diff: `+${content}`,
+    expiresAt: "2099-01-01T00:00:00.000Z",
+    status,
+  });
+  const row = (id: string, status: "pending" | "rejected", content: string) => ({
+    id,
+    status,
+    body: body(id, status, content),
+  });
+  const findMany = vi.fn(async (query: { where?: { status?: string }; take?: number }) => {
+    if (query.where?.status === "pending") {
+      return [row("older-pending", "pending", "Still waiting.")];
+    }
+    const take = query.take ?? 100;
+    return Array.from({ length: take }, (_, index) =>
+      row(`decided-${index}`, "rejected", `Decided ${index}`),
+    );
+  });
+  const prisma = {
+    spaceMember: { findUnique: vi.fn(async () => ({ role: "member" })) },
+    bot: { findMany: vi.fn(async () => []) },
+    learningProposal: {
+      findMany,
+      count: vi.fn().mockResolvedValueOnce(1).mockResolvedValueOnce(0),
+    },
+    reviewExecution: { findMany: vi.fn(async () => []) },
+    spaceLearningConfig: { findUnique: vi.fn(async () => null) },
+    learningInsight: { findMany: vi.fn(async () => []) },
+  };
+  const service = createLearningService({
+    prisma: prisma as unknown as PrismaClient,
+    jobs: {} as never,
+  });
+  const list = await service.list(actor);
+  expect({
+    pendingCount: list.pendingCount,
+    ids: list.proposals.map((item) => item.id),
+  }).toMatchObject({ pendingCount: 1, ids: expect.arrayContaining(["older-pending"]) });
+  expect(findMany).toHaveBeenCalledWith(
+    expect.objectContaining({
+      where: expect.objectContaining({
+        spaceId: "space",
+        userId: "user",
+        status: "pending",
+        expiresAt: { gt: expect.any(Date) },
+      }),
+    }),
+  );
+});
+
 function boardProposalRow(
   actor: Actor,
   id: string,
