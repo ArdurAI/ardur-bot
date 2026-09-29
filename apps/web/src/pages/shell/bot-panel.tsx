@@ -55,8 +55,8 @@ const KnowledgeSection = lazy(() =>
   import("../KnowledgeSection").then((module) => ({ default: module.KnowledgeSection })),
 );
 
-const HermesLimits = lazy(() =>
-  import("./hermes-limits").then((module) => ({ default: module.HermesLimits })),
+const RuntimeConfigPanel = lazy(() =>
+  import("./runtime-config-panel").then((module) => ({ default: module.RuntimeConfigPanel })),
 );
 
 const fieldLabelClass = "mt-4 block text-[14px] text-muted-foreground";
@@ -247,7 +247,7 @@ export function BotSettings({
     expectedModelPinRevision?: number;
     runtimeExperimental?: boolean;
     thinkingLevel?: ThinkingLevel | null;
-  }) => Promise<void>;
+  }) => Promise<{ modelPinRevision?: number } | Bot | undefined>;
   onExport: () => Promise<void>;
   onClear: () => void;
   overrideGroups?: Group[];
@@ -255,6 +255,9 @@ export function BotSettings({
 }) {
   const { t } = useLingui();
   const [advancedOpened, setAdvancedOpened] = useState(false);
+  const [knowledgeTab, setKnowledgeTab] = useState<"memory" | "skills" | "learning">("memory");
+  const knowledgeRef = useRef<HTMLDivElement>(null);
+  const advancedDetailsRef = useRef<HTMLDetailsElement>(null);
   const modelRef = useRef<HTMLSelectElement>(null);
   const runtimeRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -422,6 +425,8 @@ export function BotSettings({
     (modelMetaReady &&
       modelUnavailable({ catalog, credentials }, selectedModel?.provider, selectedModel?.modelId));
 
+  const activeValidationError = runtimeKind === "hermes" ? validationError : null;
+
   async function executeSave(patchOverrides?: {
     name?: string;
     title?: string;
@@ -429,7 +434,7 @@ export function BotSettings({
     color?: string;
     notifyOnFinish?: boolean;
   }) {
-    if (validationError) return;
+    if (activeValidationError) return;
     const selected = modelKey ? parseModelOptionKey(modelKey) : null;
     const nextName = (patchOverrides?.name !== undefined ? patchOverrides.name : name).trim();
     const nextTitle = (patchOverrides?.title !== undefined ? patchOverrides.title : title).trim();
@@ -447,7 +452,7 @@ export function BotSettings({
     try {
       setSaving(true);
       setError(null);
-      await onSave({
+      const saved = await onSave({
         name: nextName || bot.name,
         title: nextTitle,
         description: nextDescription,
@@ -476,6 +481,19 @@ export function BotSettings({
             }
           : {}),
       });
+      if (
+        saved &&
+        typeof saved === "object" &&
+        "modelPinRevision" in saved &&
+        typeof saved.modelPinRevision === "number"
+      ) {
+        setDraftPinRevision(saved.modelPinRevision);
+        setSeededBot((prev) => ({
+          ...prev,
+          ...(saved as Partial<Bot>),
+          modelPinRevision: saved.modelPinRevision,
+        }));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : t`Could not save`);
     } finally {
@@ -506,6 +524,7 @@ export function BotSettings({
         <AvatarStudioPopover
           value={color}
           identity={bot.id}
+          label={name}
           status={bot.status}
           size={76}
           onChange={(newColor) => {
@@ -652,10 +671,23 @@ export function BotSettings({
                 </p>
               ) : null}
               <Suspense fallback={null}>
-                <HermesLimits
+                <RuntimeConfigPanel
                   value={runtimeConfig}
+                  pin={{
+                    runtimeKind: "hermes",
+                    provider: selectedModel?.provider ?? null,
+                    modelId: selectedModel?.modelId ?? null,
+                    effort: thinkingLevel || null,
+                    credentialId: selectedModel?.credentialId ?? null,
+                  }}
                   onChange={setRuntimeConfig}
                   onError={setValidationError}
+                  onOpenLearning={() => {
+                    setAdvancedOpened(true);
+                    setKnowledgeTab("learning");
+                    if (advancedDetailsRef.current) advancedDetailsRef.current.open = true;
+                    knowledgeRef.current?.scrollIntoView({ block: "nearest" });
+                  }}
                 />
               </Suspense>
             </>
@@ -692,6 +724,7 @@ export function BotSettings({
         </details>
       ) : null}
       <details
+        ref={advancedDetailsRef}
         data-testid="bot-settings-advanced"
         className="group mt-5"
         onToggle={(event) => {
@@ -710,7 +743,13 @@ export function BotSettings({
         <Suspense fallback={null}>
           <ScratchpadSection botId={bot.id} />
           {advancedOpened ? (
-            <KnowledgeSection botId={bot.id} onSkillsChange={onSkillsChange} />
+            <div ref={knowledgeRef}>
+              <KnowledgeSection
+                botId={bot.id}
+                onSkillsChange={onSkillsChange}
+                defaultTab={knowledgeTab}
+              />
+            </div>
           ) : null}
         </Suspense>
         {memoryProviderConfigured ? (
@@ -770,11 +809,7 @@ export function BotSettings({
           </label>
         ) : null}
       </details>
-      {validationError ? (
-        <p className="mt-2 text-[13px] text-destructive">{validationError}</p>
-      ) : error ? (
-        <p className="mt-2 text-[13px] text-destructive">{error}</p>
-      ) : null}
+      {error ? <p className="mt-2 text-[13px] text-destructive">{error}</p> : null}
       {needsConnection ? (
         <p className="mt-2 text-[12px] text-muted-foreground">
           <Trans>This bot's connection needs to be chosen. Pick the connection to use.</Trans>
@@ -782,7 +817,7 @@ export function BotSettings({
       ) : null}
       <div className="mt-5 flex flex-col items-start gap-3">
         <Button
-          disabled={saving || !!validationError}
+          disabled={saving || Boolean(activeValidationError)}
           onClick={() => {
             void enqueueSave({
               name,

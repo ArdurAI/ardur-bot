@@ -2,6 +2,7 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import type { AgentRunRequest, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
+import { runtimeSupportsTools } from "@ardurbot/contracts";
 import { describe, expect, it } from "vitest";
 import {
   AntigravityRuntime,
@@ -203,23 +204,13 @@ describe("Antigravity fake process", () => {
       });
     },
   );
-  it("refuses secrets, images, tools and comparisons before spawning", async () => {
+  it("refuses secrets, images and comparisons before spawning", async () => {
     for (const mutation of [
       (r: AgentRunRequest) => {
         r.model.apiKey = "fake-secret";
       },
       (r: AgentRunRequest) => {
         r.currentTurnImages = [{ name: "test", mimeType: "image/png", data: Buffer.from("fake") }];
-      },
-      (r: AgentRunRequest) => {
-        r.tools = [
-          {
-            name: "fake",
-            description: "fake",
-            inputSchema: {},
-            route: { kind: "builtin" },
-          } as never,
-        ];
       },
       (r: AgentRunRequest) => {
         r.controlledComparison = true;
@@ -232,6 +223,27 @@ describe("Antigravity fake process", () => {
       });
       expect(f.calls).toEqual([]);
     }
+  });
+  it("answers in text when asked to do tool work, without spawning", async () => {
+    const f = fixture();
+    f.request.tools = [
+      {
+        name: "fake",
+        description: "fake",
+        inputSchema: {},
+        route: { kind: "builtin" },
+      } as never,
+    ];
+    const events = await f.collect();
+    expect(events).toEqual([
+      { type: "text", text: expect.stringContaining("can't use Ardur tools") },
+      { type: "done" },
+    ]);
+    expect(f.calls).toEqual([]);
+  });
+  it("declares no tool support, matching the shared runtime map", () => {
+    expect(new AntigravityRuntime().describe().capabilities.tools).toBe(false);
+    expect(runtimeSupportsTools("antigravity")).toBe(false);
   });
   it("derives suffix effort for an unset pin and omits it for no-effort models", () => {
     const f = fixture();

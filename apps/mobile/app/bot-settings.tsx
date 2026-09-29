@@ -380,7 +380,7 @@ export default function BotSettingsScreen() {
         {botId ? <ContextSection botId={botId} /> : null}
         {bot ? (
           <View style={{ alignItems: "center", marginBottom: 24 }}>
-            <BotAvatar color={color} identity={bot.id} size={64} status={bot.status} />
+            <BotAvatar color={color} identity={bot.id} label={name} size={64} status={bot.status} />
           </View>
         ) : null}
         <Text style={{ color: tokens.mutedForeground, fontSize: 14 }}>{t("Name")}</Text>

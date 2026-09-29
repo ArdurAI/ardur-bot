@@ -18,7 +18,8 @@ vi.mock("@lingui/react/macro", () => ({
 vi.mock("@lingui/core/macro", () => ({
   msg: (parts: TemplateStringsArray) => ({ id: parts.join(""), message: parts.join("") }),
 }));
-vi.mock("@ardurbot/ui-web", () => {
+vi.mock("@ardurbot/ui-web", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@ardurbot/ui-web")>();
   const Container = ({ children }: { children?: ReactNode }) => <div>{children}</div>;
   const Button = ({
     variant: _variant,
@@ -29,6 +30,9 @@ vi.mock("@ardurbot/ui-web", () => {
     <button {...props} />
   );
   return {
+    ...actual,
+    // Select stays real: the language picker test opens it, selects, dismisses
+    // and checks focus restoration through the portalled Base UI component.
     Button,
     Skeleton: (props: ComponentProps<"div">) => <div {...props} />,
     AlertDialog: ({ open, children }: { open: boolean; children: ReactNode }) =>

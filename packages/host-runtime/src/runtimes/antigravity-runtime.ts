@@ -224,12 +224,15 @@ export class AntigravityRuntime implements AgentRuntime {
         "Antigravity cannot use images yet.",
         "image-unsupported",
       );
-    if (request.tools !== "none" && request.tools.length)
-      throw problem(
-        "runtime-unavailable",
-        "Antigravity cannot use Ardur tools yet.",
-        "tools-unsupported",
-      );
+    if (request.tools !== "none" && request.tools.length) {
+      // A coordinator needs Ardur tools. Answer visibly instead of silently ending the turn.
+      yield {
+        type: "text",
+        text: "I can't use Ardur tools on the Antigravity runtime yet, so I can't do tool work here. Switch this bot's runtime to one that supports tools and try again.",
+      };
+      yield { type: "done" };
+      return;
+    }
     if (request.nativeSession)
       throw problem(
         "runtime-unavailable",

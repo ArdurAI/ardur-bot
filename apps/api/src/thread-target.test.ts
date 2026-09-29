@@ -2363,6 +2363,120 @@ describe("sendThreadMessage", () => {
   });
 });
 
+describe("group routing", () => {
+  const members = [
+    { bot: { id: "bot-a", name: "Chief", color: null } },
+    { bot: { id: "bot-b", name: "Beta", color: null } },
+    { bot: { id: "bot-c", name: "Gamma", color: null } },
+  ];
+
+  async function routedRuns(input: {
+    text: string;
+    replyToMessageId?: string;
+    mentions?: string[];
+  }) {
+    let messageSeq = 0;
+    let eventSeq = 0;
+    const runCreate = vi.fn(async ({ data }: { data: { botId: string } }) => ({
+      id: `run-${data.botId}`,
+      taskId: `task-${data.botId}`,
+      botId: data.botId,
+      status: "queued",
+    }));
+    const tx = {
+      thread: {
+        update: vi.fn(async ({ data }: { data: { nextMessageSeq?: unknown } }) =>
+          data.nextMessageSeq ? { nextMessageSeq: ++messageSeq } : { nextEventSeq: ++eventSeq },
+        ),
+      },
+      message: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: "gamma-note",
+          role: "bot",
+          botId: "bot-c",
+          blocks: [{ kind: "text", text: "Gamma's note" }],
+        }),
+        update: vi.fn(),
+        create: vi.fn().mockResolvedValue({ id: "msg-1", seq: 1 }),
+      },
+      run: {
+        // Beta ran last in this room.
+        findFirst: vi.fn().mockResolvedValue({ botId: "bot-b" }),
+        findMany: vi.fn().mockResolvedValue([]),
+        findUnique: vi.fn().mockResolvedValue({ status: "queued", startedAt: null }),
+        create: runCreate,
+      },
+      task: {
+        create: vi.fn(async ({ data }: { data: { botId: string } }) => ({
+          id: `task-${data.botId}`,
+        })),
+      },
+      event: {
+        create: vi.fn().mockResolvedValue({ id: "event-1", seq: 1, createdAt: new Date() }),
+      },
+      steeringMessage: { create: vi.fn() },
+      space: { findUnique: vi.fn().mockResolvedValue({ coordinatorBotId: "bot-c" }) },
+      chatGroup: {
+        findUnique: vi.fn().mockResolvedValue({ coordinatorBotId: "bot-a" }),
+        findFirst: vi.fn().mockResolvedValue({ id: "group-1", members }),
+        update: vi.fn().mockResolvedValue({ id: "group-1" }),
+      },
+      $queryRaw: vi.fn().mockResolvedValue([{ id: "group-1" }]),
+    };
+    const prisma = {
+      message: { findUnique: vi.fn().mockResolvedValue(null) },
+      $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
+    } as unknown as PrismaClient;
+    await sendThreadMessage(
+      {
+        prisma,
+        events: { notify: vi.fn().mockResolvedValue(undefined) } as never,
+        jobs: { enqueue: vi.fn().mockResolvedValue(undefined) } as never,
+      },
+      { spaceId: "workspace-1", userId: "user-1" } as Actor,
+      {
+        kind: "group",
+        groupId: "group-1",
+        groupName: "Room",
+        threadId: "thread-1",
+        members: [],
+        memberBotIds: members.map((member) => member.bot.id),
+      },
+      { ...input, clientNonce: "nonce-1" },
+    );
+    return runCreate.mock.calls.map(([call]) => [
+      call.data.botId,
+      (call.data as { routingRule?: string }).routingRule,
+    ]);
+  }
+
+  it("keeps explicit mentions and replies ahead of the coordinator", async () => {
+    await expect(routedRuns({ text: "@Beta tell everyone the plan" })).resolves.toEqual([
+      ["bot-b", "mention"],
+    ]);
+    await expect(routedRuns({ text: "Who is on it?", mentions: ["bot-c"] })).resolves.toEqual([
+      ["bot-c", "mention"],
+    ]);
+    await expect(routedRuns({ text: "@everyone introduce yourselves" })).resolves.toEqual([
+      ["bot-a", "mention"],
+      ["bot-b", "mention"],
+      ["bot-c", "mention"],
+    ]);
+    await expect(
+      routedRuns({ text: "Can you expand on this?", replyToMessageId: "gamma-note" }),
+    ).resolves.toEqual([["bot-c", "reply"]]);
+  });
+
+  it("sends an un-addressed request to the coordinator alone, without reading prose as mentions", async () => {
+    for (const text of [
+      "tell the bots to introduce each other, do not mention individually",
+      "what is the status",
+      "everyone introduce yourselves",
+    ])
+      await expect(routedRuns({ text })).resolves.toEqual([["bot-a", "group-coordinator"]]);
+  });
+});
+
 describe("stopThreadRuns", () => {
   it("snapshots every lease when group members share a team computer", async () => {
     const releaseScreen = vi.fn().mockResolvedValue(undefined);

@@ -88,3 +88,23 @@ it("does not treat a name used mid-sentence as a subject as addressing", () => {
   ).toMatchObject({ botId: "researcher", rule: "last-active-thread" });
   expect(routeIncoming({ bots, text: "ask chief why this happened" })?.rule).toBe("default");
 });
+it("reads only mentions and a leading name, never prose, before the coordinator", () => {
+  const input = { bots, groupCoordinatorId: "chief", lastActiveThread: bots[1] };
+  for (const text of ["tell everyone to introduce themselves", "ask the worker for its status"])
+    expect(routeIncoming({ ...input, text })).toMatchObject({
+      botId: "chief",
+      rule: "group-coordinator",
+    });
+  expect(routeIncoming({ ...input, text: "@researcher tell everyone" })).toMatchObject({
+    botId: "researcher",
+    rule: "mention",
+  });
+  expect(routeIncoming({ ...input, text: "ask everyone", replyTo: bots[2] })).toMatchObject({
+    botId: "researcher",
+    rule: "reply",
+  });
+  expect(routeIncoming({ ...input, text: "worker, status?" })).toMatchObject({
+    botId: "worker",
+    rule: "mention",
+  });
+});

@@ -40,7 +40,7 @@ test("command blocks fold, show inert output, search a run and export a log", as
   await page.goto("/e2e/fixtures/command-blocks.html");
   const block = page.getByTestId("command-block").first();
   const toggle = block.getByRole("button", { name: /Ran/ });
-  await expect(toggle).toContainText("Ran `pnpm test` in ~/work · 12 s · exit 0");
+  await expect(toggle).toContainText("Ran pnpm test in ~/work · 12 s · exit 0");
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
   await expect(page.getByText("Completion not recorded")).toBeVisible();
   await expect(block.getByText("Tests passed.", { exact: false })).not.toBeVisible();

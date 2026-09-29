@@ -76,7 +76,6 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-  resolvePersonaColorDef,
   SlidingPanel,
 } from "@ardurbot/ui-web";
 import { i18n } from "@lingui/core";
@@ -189,7 +188,6 @@ import { readSeenRunErrorIds, rememberSeenRunErrorId } from "../lib/run-error-st
 import type {} from "../lib/scoreboard-trace";
 import { sharedInflight } from "../lib/shared-inflight";
 import {
-  activeMemberRun,
   activeThreadRuns,
   applyThreadSendReceipt,
   clearActiveThreadRuns,
@@ -240,6 +238,7 @@ import {
 import { ComputerScreenError } from "./shell/computer-screen-error";
 import { useComputerTerminal } from "./shell/computer-terminal";
 import { getEffectiveWorkspaceTab, isComputerVisible } from "./shell/computer-visibility";
+import { GroupParticipantModels } from "./shell/group-participants";
 import {
   AppConnectCard,
   ArtifactImage,
@@ -3130,6 +3129,7 @@ export function ShellPage({
                             <BotAvatar
                               color={item.chat.color}
                               identity={item.chat.id}
+                              label={item.chat.name}
                               size={38}
                               status={item.chat.status}
                             />
@@ -3222,6 +3222,7 @@ export function ShellPage({
                       <BotAvatar
                         color={bot.color}
                         identity={bot.id}
+                        label={bot.name}
                         size={28}
                         status={bot.status}
                       />
@@ -3446,6 +3447,7 @@ export function ShellPage({
                 <BotAvatar
                   color={active.color}
                   identity={active.id}
+                  label={active.name}
                   size={26}
                   status={active.status}
                 />
@@ -3468,33 +3470,12 @@ export function ShellPage({
               />
             ) : null}
             {inGroup && activeGroup ? (
-              <div
-                data-testid="group-participant-models"
-                className="app-no-drag flex min-w-0 items-center gap-2 overflow-x-auto"
-              >
-                {activeGroup.members.map((member) => {
-                  const participant = bots.find((bot) => bot.id === member.botId);
-                  if (!participant) return null;
-                  const admitted = activeMemberRun(currentRuns, member.botId);
-                  return (
-                    <div
-                      key={member.botId}
-                      data-testid={`group-participant-${member.botId}`}
-                      className="flex shrink-0 items-center gap-1"
-                    >
-                      <span className="text-xs text-muted-foreground">{member.name}</span>
-                      <BotModelChip
-                        bot={participant}
-                        settings={modelSettings}
-                        pin={member.effectiveRuntimePin}
-                        nextPin={member.effectiveRuntimePin}
-                        run={admitted}
-                        display="using"
-                      />
-                    </div>
-                  );
-                })}
-              </div>
+              <GroupParticipantModels
+                activeGroup={activeGroup}
+                bots={bots}
+                currentRuns={currentRuns}
+                modelSettings={modelSettings}
+              />
             ) : null}
             <RunContext run={activeSnapshot?.contextRun ?? activeSnapshot?.run} />
           </div>
@@ -3842,7 +3823,7 @@ export function ShellPage({
                 group={activeGroup}
                 bots={bots}
                 modelSettings={modelSettings}
-                onModelPin={async (member, pin) => {
+                onModelPin={async (member, pin, expectedBotModelPinRevision) => {
                   if (!member.memberId) return;
                   const target = {
                     groupId: activeGroup.id,
@@ -3854,7 +3835,9 @@ export function ShellPage({
                     ? await rpc.groups.setMemberModelPin({
                         ...target,
                         expectedBotModelPinRevision:
-                          bots.find((b) => b.id === member.botId)?.modelPinRevision ?? 0,
+                          expectedBotModelPinRevision ??
+                          bots.find((b) => b.id === member.botId)?.modelPinRevision ??
+                          0,
                         pin,
                       })
                     : await rpc.groups.clearMemberModelPin(target);
@@ -3930,8 +3913,9 @@ export function ShellPage({
                         mode: computerMode,
                       });
                     }
-                    await rpc.bots.update({ botId: active.id, ...patch });
+                    const updated = await rpc.bots.update({ botId: active.id, ...patch });
                     await refreshBots();
+                    return updated;
                   }}
                   onExport={async () => {
                     const { path } = await rpc.export.bot({ botId: active.id });
@@ -4658,6 +4642,7 @@ export function ShellPage({
                 <BotAvatar
                   color={computerBot.color}
                   identity={computerBot.id}
+                  label={computerBot.name}
                   size={28}
                   status={computerBot.status}
                 />
@@ -6038,7 +6023,14 @@ function MentionOptionIcon({ mention }: { mention: ComposerMention }) {
       </span>
     );
   }
-  return <BotAvatar color={mention.color ?? FALLBACK_BOT_COLOR} identity={mention.id} size={16} />;
+  return (
+    <BotAvatar
+      color={mention.color ?? FALLBACK_BOT_COLOR}
+      identity={mention.id}
+      label={mention.name}
+      size={16}
+    />
+  );
 }
 
 function MentionChipIcon({ mention }: { mention: ComposerMention }) {
@@ -6055,7 +6047,14 @@ function MentionChipIcon({ mention }: { mention: ComposerMention }) {
       </span>
     );
   }
-  return <BotAvatar color={mention.color ?? FALLBACK_BOT_COLOR} identity={mention.id} size={16} />;
+  return (
+    <BotAvatar
+      color={mention.color ?? FALLBACK_BOT_COLOR}
+      identity={mention.id}
+      label={mention.name}
+      size={16}
+    />
+  );
 }
 
 function previewMessageText(message: ThreadMessage): string {
@@ -6319,21 +6318,17 @@ const MessageView = memo(function MessageView({
   const visibleNarrationBlocks = message.blocks.filter((block) => !isToolActivityBlock(block));
   const parentJumpId = replyPreview?.id ?? replyToMessageId;
   const speakerBot = message.botId ? peerBot?.(message.botId) : undefined;
-  const speakerColorDef = useMemo(
-    () => resolvePersonaColorDef(message.botId ?? "bot", speakerBot?.color),
-    [message.botId, speakerBot?.color],
-  );
   const messageContext = (
     <>
       {speakerName ? (
         <div
-          className="mb-1.5 flex items-center gap-2 text-[13px] font-semibold tracking-tight"
+          className="mb-1.5 flex items-center gap-2 text-[13px] font-semibold tracking-tight text-foreground"
           dir="auto"
-          style={{ color: speakerColorDef.light }}
         >
           <BotAvatar
             color={speakerBot?.color ?? FALLBACK_BOT_COLOR}
             identity={message.botId}
+            label={speakerName}
             size={22}
           />
           {speakerName}
