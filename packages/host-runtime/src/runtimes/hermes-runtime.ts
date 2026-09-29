@@ -185,20 +185,29 @@ export function hermesContextDocument(
       history.pop();
       break;
     }
-    const index = history.findIndex(
-      ({ content }) => !/^<(group_brief|thread_summary|recalled_memory)>/.test(content),
-    );
-    const lowest =
-      index >= 0
-        ? index
-        : history.findIndex(({ content }) => content.startsWith("<recalled_memory>"));
-    const next =
-      lowest >= 0
-        ? lowest
-        : history.findIndex(({ content }) => content.startsWith("<thread_summary>"));
-    history.splice(next >= 0 ? next : 0, 1);
+    history.splice(contextTrimIndex(history), 1);
   }
   return history.length ? document(trimmed) : instructions;
+}
+
+/**
+ * Which quoted entry to drop when the Hermes document is over its byte limit.
+ * Priority is a list, not position. Prompt-cache order puts conversation first, and the old
+ * position rule then deleted that conversation before the directory. The directory still goes
+ * first, then the oldest conversation, and only then a brief, summary, or recall.
+ */
+function contextTrimIndex(history: Array<{ content: string }>): number {
+  const directory = history.findIndex((entry) => entry.content.startsWith("<teammate_directory>"));
+  if (directory >= 0) return directory;
+  const conversation = history.findIndex(
+    (entry) => !/^<(group_brief|thread_summary|recalled_memory)>/.test(entry.content),
+  );
+  if (conversation >= 0) return conversation;
+  const recall = history.findIndex((entry) => entry.content.startsWith("<recalled_memory>"));
+  if (recall >= 0) return recall;
+  const summary = history.findIndex((entry) => entry.content.startsWith("<thread_summary>"));
+  if (summary >= 0) return summary;
+  return 0;
 }
 
 function textFromUpdate(update: Record<string, unknown>) {

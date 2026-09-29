@@ -1150,6 +1150,7 @@ msgstr ""
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
+#: src/pages/Shell.tsx
 msgid "Back"
 msgstr "返回"
 
@@ -4081,6 +4082,10 @@ msgstr "在你的{task}运行中，本机上的 {better} 表现与 {other} 一�
 msgid "Forgot password?"
 msgstr "忘记密码？"
 
+#: src/pages/Shell.tsx
+msgid "Forward"
+msgstr "前进"
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Found on this computer"
 msgstr ""
@@ -4275,7 +4280,7 @@ msgstr "你好，这是我朗读回复时的声音。"
 
 #: src/pages/Shell.tsx
 msgid "Hide bots"
-msgstr ""
+msgstr "隐藏 Bot"
 
 #: src/pages/customize/McpDiagnostics.tsx
 msgid "Hide logs"
@@ -5018,6 +5023,11 @@ msgstr "其中似乎包含凭据。请从文件中删除后重新扫描。"
 msgid "low — quick, with a little checking"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/HostComputerPrompt.tsx
+msgid "macOS will not ask for extra permission if you let bots run on this Mac. They run as you."
+msgstr "若让 Bot 在这台 Mac 上运行，它们会使用你的账户权限，macOS 不会再逐项询问。"
+
 #: src/pages/board/BoardsSettings.tsx
 msgid "Make default"
 msgstr "设为默认"
@@ -5543,6 +5553,7 @@ msgstr ""
 msgid "New access token"
 msgstr "新的访问令牌"
 
+#: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "New bot"
 msgstr "新建 Bot"
@@ -6242,6 +6253,10 @@ msgstr ""
 #: src/pages/ScratchpadSection.tsx
 msgid "Park"
 msgstr "搁置"
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Partially reported"
+msgstr "部分已报告"
 
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountSignIn.tsx
@@ -7779,7 +7794,7 @@ msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Show bots"
-msgstr ""
+msgstr "显示 Bot"
 
 #: src/pages/shell/settings-chrome.tsx
 msgid "Show computer"
@@ -8245,6 +8260,9 @@ msgstr "系统"
 
 #: src/pages/Shell.tsx
 #: src/pages/workspace/terminal-controller.ts
+#: src/pages/ide/terminal.tsx
+#: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/take-control-button.tsx
 msgid "Take control"
 msgstr "接管控制"
 
@@ -8491,6 +8509,7 @@ msgstr "此对话为只读"
 msgid "This command is not available to this account."
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "这台电脑"
@@ -8538,6 +8557,7 @@ msgstr ""
 msgid "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model."
 msgstr "群组模型被 Bot 或空间设置阻止。请更改目标位置策略，或选择其他群组模型。"
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "这台 Mac"
@@ -9344,6 +9364,11 @@ msgstr "你的邮箱"
 #: src/pages/Auth.tsx
 msgid "Your name"
 msgstr "你的名字"
+
+#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/HostComputerPrompt.tsx
+msgid "Your OS will not ask for extra permission if you let bots run on {hostLabel}. They run as you."
+msgstr "若让 Bot 在 {hostLabel} 上运行，它们会使用你的账户权限，系统不会再逐项询问。"
 
 #: src/pages/DevicesSettings.tsx
 msgid "Your phone can reach this Mac on your network."

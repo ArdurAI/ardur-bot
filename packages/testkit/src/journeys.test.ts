@@ -2336,12 +2336,15 @@ describeJourneys("required product journeys", () => {
   });
 
   it("54: a coordinator assigns two members and receives one wake per finished assignment", async () => {
-    const instructionsByRun = new Map<string, string>();
+    const inputsByRun = new Map<string, { instructions: string; prompt: string }>();
     const originalRun = ScriptedAgentRuntime.prototype.run;
     const runtimeSpy = vi
       .spyOn(ScriptedAgentRuntime.prototype, "run")
       .mockImplementation((request, context) => {
-        instructionsByRun.set(request.runId, request.instructions);
+        inputsByRun.set(request.runId, {
+          instructions: request.instructions,
+          prompt: request.prompt,
+        });
         return originalRun.call(new ScriptedAgentRuntime(), request, context);
       });
     onTestFinished(() => runtimeSpy.mockRestore());
@@ -2398,7 +2401,9 @@ describeJourneys("required product journeys", () => {
         (await prisma.run.findUnique({ where: { id: startRun.id }, select: { status: true } }))
           ?.status === "completed",
     );
-    expect(instructionsByRun.get(startRun.id)).toContain("Both reviews are posted");
+    // Goal state changes every turn, so it travels with the turn, not the cached instructions.
+    expect(inputsByRun.get(startRun.id)?.prompt).toContain("Both reviews are posted");
+    expect(inputsByRun.get(startRun.id)?.instructions).not.toContain("Both reviews are posted");
     expect(
       await prisma.message.count({
         where: { threadId: group.threadId, runId: startRun.id, role: "bot" },

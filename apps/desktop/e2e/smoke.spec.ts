@@ -46,6 +46,7 @@ test("launches with a narrow preload bridge and an isolated renderer", async () 
       "boot",
       "customization",
       "devices",
+      "dock",
       "host",
       "integrations",
       "localSettings",

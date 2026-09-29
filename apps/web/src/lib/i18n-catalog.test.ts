@@ -64,6 +64,31 @@ describe("lingui catalogs", () => {
     },
   );
 
+  it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+    "catalogs the command palette shortcut commands in %s",
+    async (locale) => {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const catalog = await formatter().parse(readFileSync(filename, "utf8"), {
+        locale,
+        sourceLocale: "en",
+        filename,
+      });
+      for (const message of [
+        "New bot",
+        "Message",
+        "Search",
+        "Hide bots",
+        "Show bots",
+        "Back",
+        "Forward",
+        "Settings",
+      ]) {
+        const entry = Object.values(catalog).find((value) => value.message === message);
+        expect(entry?.translation, `${locale}: ${message}`).toBeTruthy();
+      }
+    },
+  );
+
   it.each([
     ["en", "Line 2: - [redacted] Edit or reject this line."],
     ["de", "Zeile 2: - [redacted] Diese Zeile bearbeiten oder ablehnen."],
@@ -506,6 +531,27 @@ describe("lingui catalogs", () => {
       for (const sentence of sentences) {
         expect(catalog).toContain(`#: src/pages/Shell.tsx\nmsgid ${JSON.stringify(sentence)}`);
         expect(catalog).not.toContain(`msgid ${JSON.stringify(sentence)}\nmsgstr ""`);
+      }
+    }
+  });
+
+  it("translates the host-computer warning in every shipped catalog", () => {
+    const sentences = [
+      "macOS will not ask for extra permission if you let bots run on this Mac. They run as you.",
+      "Your OS will not ask for extra permission if you let bots run on {hostLabel}. They run as you.",
+    ];
+    for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      for (const sentence of sentences) {
+        expect(catalog, `${locale}: ${sentence}`).toContain(
+          `msgid ${JSON.stringify(sentence)}\nmsgstr "`,
+        );
+        expect(catalog, `${locale}: ${sentence}`).not.toContain(
+          `msgid ${JSON.stringify(sentence)}\nmsgstr ""`,
+        );
       }
     }
   });

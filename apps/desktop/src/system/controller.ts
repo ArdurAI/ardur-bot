@@ -23,7 +23,10 @@ export interface SystemDependencies {
   shortcuts: Pick<GlobalShortcut, "register" | "unregister">;
   power: Pick<PowerSaveBlocker, "start" | "stop">;
   permissions: Pick<NativePreferences, "isTrustedAccessibilityClient" | "getMediaAccessStatus">;
-  store: { read(): Promise<SystemPreferences>; write(value: SystemPreferences): Promise<void> };
+  store: {
+    read(): Promise<SystemPreferences>;
+    write(value: SystemPreferences, choice?: { menuBar: boolean }): Promise<void>;
+  };
   mode(): "new" | "existing";
   dataFolder(): string | null;
   routines(): Promise<number>;
@@ -110,7 +113,8 @@ export class SystemController {
       if (binding) this.shortcuts.apply(next);
       if (key === "menuBar") this.deps.menuBar(next.menuBar);
       try {
-        await this.deps.store.write(next);
+        if (key === "menuBar") await this.deps.store.write(next, { menuBar: next.menuBar });
+        else await this.deps.store.write(next);
       } catch {
         if (this.stopped) throw new Error("Could not save this setting; try again.");
         if (key === "runOnStartup")

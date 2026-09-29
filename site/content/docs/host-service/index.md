@@ -97,6 +97,74 @@ sequenceDiagram
   to registered folders; cwd validation is not an OS filesystem sandbox for shell
   commands. Confined `mkdir -p` preparation retains the existing directory helper.
   Native Claude/Codex operations keep their fixed adapter arguments.
+- On macOS, host commands additionally run under the host command guardrail
+  (`packages/host-runtime/src/host-guardrails.ts`). Every command, background launch,
+  native runtime turn (Claude Code, Codex, Antigravity), version and health probe
+  (`probeClaude`, `probeCodex`, `probeAntigravity`, and `hostProbe` for the login shell
+  and tool inventory), pinned Hermes launch and owner-registered local MCP server
+  process is executed through `/usr/bin/sandbox-exec` with a Seatbelt profile generated
+  per process from the running configuration — the mechanism the Codex CLI and Claude
+  Code sandboxes use on macOS, although `sandbox-exec` is marked DEPRECATED in its own
+  man page. A probe uses that same wrap. When the profile cannot be built, the probe
+  does not start the command. The profile is `(allow default)` plus targeted denies, so
+  ordinary work is untouched while the deny list blocks reads and writes of Ardur's
+  control plane: the env file the stack loaded (recorded as `ARDURBOT_ENV_FILE`), the
+  desktop `secrets.env`, the Postgres data directory (the desktop cluster, or every
+  database file in `DATA_DIR` on a source checkout, where the embedded cluster and the
+  dev `credentials.json` sit beside the app state), the compose stack's `.env` and stack
+  token, the encrypted host pairing store, the local-data reset backups under
+  `backups/`, and the app-managed state under `DATA_DIR` (everything except the bots'
+  own `desktop-computers` homes and the `board` databases that host board commands
+  write). It also denies outbound connections to the loopback ports of the database,
+  the API and the sandbox supervisor, taken from `DATABASE_URL`, `API_PORT`/`API_URL`
+  and `SANDBOX_SUPERVISOR_URL`; a database or API on another host is out of scope. A
+  paired host gets those database and supervisor ports through pairing (`guardPorts`)
+  and denies them along with its API port. A host that is already paired is not sent a
+  new port list: pairing again is rejected, and that host keeps the ports it stored
+  until it is disconnected and paired again. The embedded Postgres server is started
+  with an empty `unix_socket_directories`, and the profile also denies its unix socket
+  `.s.PGSQL.<port>`. The directory is an absolute `PGHOST` when that is set (libpq's
+  client socket directory), otherwise an absolute `ARDURBOT_PG_SOCKET_DIR`, otherwise
+  `/tmp`. A file deny does not cover a unix-socket connect. Finally it denies
+  connections to the local container-engine sockets, because an engine socket is
+  root-equivalent and reaches the stack's own containers and the secrets in their
+  environment. The documented sockets are `/var/run/docker.sock` (the launchd symlink,
+  which points at `~/.docker/run/docker.sock` — a different socket from Docker Desktop's
+  raw engine socket), `~/.docker/run/docker.sock`, `~/.docker/desktop/docker.sock`,
+  `~/Library/Containers/com.docker.docker/Data/docker.raw.sock`, Rancher Desktop's
+  `~/.rd/docker.sock`, OrbStack's `~/.orbstack/run/docker.sock`, Colima's
+  `~/.colima/default/docker.sock`, Lima's `~/.lima/default/sock/docker.sock`,
+  `~/.lima/docker/sock/docker.sock`, `~/.lima/docker-rootful/sock/docker.sock`,
+  `~/.lima/podman/sock/podman.sock` and `~/.lima/podman-rootful/sock/podman.sock`
+  (`LIMA_HOME` defaults to `~/.lima`), and Podman machine's
+  `~/.local/share/containers/podman/machine/podman.sock`. The public Docker Desktop
+  install docs do not name `docker.raw.sock`; it is denied because a same-user process
+  can reach the engine through it. Sockets for Colima profiles, Lima instances and
+  Podman machine providers that are present on disk are denied too, as is whatever
+  `DOCKER_HOST` or `CONTAINER_HOST` points at. A bot that needs containers belongs on a
+  Docker or VM computer, not on This Mac. The in-process file tools apply the same path
+  deny list on every platform, so a registered folder that contains a protected file
+  still cannot serve it. Desktop local mode does not put control-plane secrets
+  (`DATABASE_URL`'s password, `ENCRYPTION_KEY`, `BETTER_AUTH_SECRET`,
+  `SANDBOX_SUPERVISOR_TOKEN`, and the other keys in the guarded secrets file) into the
+  API or worker process environment. It passes `ARDURBOT_SECRETS_FILE`, and those
+  processes read the file at startup into a plain object. Assigning the values to
+  `process.env` after start would still be visible in the kernel environment block, and
+  deleting a key does not remove it. No scoped Seatbelt `process-info` or `sysctl-read`
+  rule hides another process's arguments and environment without also stopping ordinary
+  commands such as a shell, so the profile does not deny `process-info`. `pnpm dev`
+  does not set `ARDURBOT_SECRETS_FILE`, so a dev stack still loads secrets into
+  `process.env`. When the secrets file is set, loading a repo `.env` does not copy
+  those control-plane keys onto `process.env`; other keys in that file can still be
+  copied.
+- The guardrail is deliberately narrow. It is not a workspace sandbox: everything else on
+  the host remains reachable to commands, including the owner's other files, and it does
+  not stop a command from using the owner's signed-in CLI accounts or the network beyond
+  the denied ports. On Linux no wrapper is applied — Landlock's TCP rules need kernel 6.7
+  and a native helper this repo does not ship, and bubblewrap can mask files but not filter
+  ports — so only the file-tool deny list applies there. Windows host commands are
+  unwrapped. A misconfigured deny list fails the command closed instead of skipping the
+  sandbox.
 - Host workspaces persist under desktop application data. They are not copied into
   a container home store, and a host checkpoint does not overwrite that store with
   an empty export. Registered folders are not deleted by computer destruction.

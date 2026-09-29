@@ -323,6 +323,7 @@ export async function refreshRunBrief(deps: BriefMaintenanceDeps, runId: string)
                   ),
                   tools: "none",
                   history: [],
+                  singleRequest: true,
                   model: {
                     ...resolved.model,
                     maxTokens: Math.min(resolved.model.maxTokens ?? 2000, 2000),

@@ -125,7 +125,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArtifactFileCard } from "../components/ArtifactFileCard";
 import { AskCard } from "../components/AskCard";
 import { ActiveBotGlyph } from "../components/ai/CollaborationMarker";
@@ -157,6 +157,8 @@ import { TeachCaptureOverlay } from "../components/teach/TeachCaptureOverlay";
 import { TeachComputerOverlayControl } from "../components/teach/TeachComputerOverlay";
 import { TeachRecordingChrome, TeachStopButton } from "../components/teach/TeachRecordingChrome";
 import { readActivityMode, writeActivityMode } from "../lib/activity-mode";
+import type { AppShortcutHandlers } from "../lib/app-shortcuts";
+import { shortcutAria, useAppShortcuts } from "../lib/app-shortcuts";
 import type { ArtifactTarget } from "../lib/artifact-open";
 import { authClient } from "../lib/auth";
 import { takeInitialBootstrap } from "../lib/bootstrap";
@@ -171,6 +173,7 @@ import {
   screenIframeSandbox,
 } from "../lib/computer-screen";
 import { desktopBridge } from "../lib/desktop";
+import { countOwnerWaiting, openDockSnapshot, publishDockWaitingCount } from "../lib/dock-badge";
 import { scheduleFocusPrompt } from "../lib/focus-prompt";
 import { INSIGHT_ACTION_EVENT } from "../lib/insight-actions";
 import { localTimezone } from "../lib/local-timezone";
@@ -211,7 +214,6 @@ import {
 import { whenSpeakerReady, withSpeaker } from "../lib/tts-lazy";
 import { useModelSettings } from "../lib/use-model-settings";
 import { useNotifications } from "../lib/use-notifications";
-import { useSettingsShortcut } from "../lib/use-settings-shortcut";
 import type { ContextMenuPosition } from "./BotContextMenu";
 import { ConnectorSuggestion } from "./capabilities/ConnectorSuggestion";
 import { DashboardPage } from "./dashboard/DashboardPage";
@@ -229,7 +231,6 @@ import {
 import type { SettingsSection } from "./SettingsOverlay";
 import { SpaceSearchResults } from "./SpaceSearch";
 import { BotModelChip } from "./shell/bot-model-chip";
-import { isCommandPaletteHotkey } from "./shell/command-palette-hotkey";
 import {
   initialComputerErrorState,
   reduceComputerError,
@@ -255,6 +256,12 @@ import {
   SettingsPanelToggle,
   ThreadSettingsButton,
 } from "./shell/settings-chrome";
+import {
+  botsSidebarCollapsedForPage,
+  sidebarSearchFocusRequested,
+  useSidebarSearchFocus,
+} from "./shell/sidebar-search-focus";
+import { TakeControlButton } from "./shell/take-control-button";
 import { useComputerTerminalOpen } from "./shell/use-computer-terminal-open";
 import { useTakeControl } from "./shell/use-take-control";
 import { handleWorkspaceOpenRun } from "./shell/workspace-run";
@@ -410,6 +417,7 @@ export function ShellPage({
   teamView.current = team || board || dashboard;
   const { botId, groupId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   // Mirrors searchParams for effects that only need to read it once on run,
   // not re-run on every unrelated query-param change (e.g. the SSE subscribe
@@ -436,9 +444,16 @@ export function ShellPage({
   useEffect(() => {
     setCollapsedSidebarSections(readCollapsedSidebarSections(userId));
   }, [userId]);
+  const [sidebarPrefReady, setSidebarPrefReady] = useState(false);
+  // A search from the Board arrives on the next page. Open the list before focusing it,
+  // and save that, or the stored preference closes the list again once the request is cleared.
   useEffect(() => {
-    setBotsSidebarCollapsed(readBotsSidebarCollapsed(userId));
-  }, [userId]);
+    const stored = readBotsSidebarCollapsed(userId);
+    const requested = sidebarSearchFocusRequested(location.state);
+    setBotsSidebarCollapsed(botsSidebarCollapsedForPage(stored, requested, dashboard));
+    if (requested && !dashboard && stored) writeBotsSidebarCollapsed(userId, false);
+    setSidebarPrefReady(true);
+  }, [userId, dashboard, location.state]);
   const [query, setQuery] = useState("");
   const [searchHits, setSearchHits] = useState<SearchHit[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -606,7 +621,6 @@ export function ShellPage({
   }
   const [integrationFocus, setIntegrationFocus] = useState<string>();
   const [settingsOpen, setSettingsOpen] = useState(false);
-  useSettingsShortcut(() => openSettings("general"));
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
   const [messagingSettingsOpen, setMessagingSettingsOpen] = useState(false);
   const [messagingSurfaceEnabled, setMessagingSurfaceEnabled] = useState(false);
@@ -1808,6 +1822,26 @@ export function ShellPage({
     : snapshot?.botId === active?.id
       ? snapshot
       : null;
+  const dockWaitingCount = useMemo(() => {
+    const view = openDockSnapshot(
+      Boolean(active) || inGroup,
+      activeSnapshot
+        ? { threadId: activeSnapshot.threadId, runs: activeThreadRuns(activeSnapshot) }
+        : null,
+    );
+    return countOwnerWaiting({
+      bots,
+      groups,
+      spaces,
+      currentSpaceId: bootstrapMe?.spaceId,
+      snapshot: view.snapshot,
+      viewingThreadId: view.viewingThreadId,
+    });
+  }, [active, activeSnapshot, bots, bootstrapMe?.spaceId, groups, inGroup, spaces]);
+  useEffect(() => {
+    if (!initialBotsLoaded) return;
+    publishDockWaitingCount(dockWaitingCount);
+  }, [dockWaitingCount, initialBotsLoaded]);
   const activeReplyTarget =
     replyTarget && activeSnapshot?.messages.some((message) => message.id === replyTarget.id)
       ? replyTarget
@@ -2591,15 +2625,55 @@ export function ShellPage({
     return () => window.removeEventListener("keydown", onKey);
   }, [computerOpen]);
 
-  useEffect(() => {
-    function onKey(event: KeyboardEvent) {
-      if (!isCommandPaletteHotkey(event)) return;
-      event.preventDefault();
-      setCommandPaletteState(!commandPaletteOpenRef.current);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [setCommandPaletteState]);
+  const sidebarSearchRef = useRef<HTMLInputElement>(null);
+  const narrowLayout = () => window.matchMedia("(max-width: 767px)").matches;
+  const requestSidebarSearch = useSidebarSearchFocus({
+    dashboard,
+    hidden: botsSidebarCollapsed && !mobileSidebarOpen,
+    ready: sidebarPrefReady,
+    reveal: () => {
+      if (narrowLayout()) setMobileSidebarOpen(true);
+      else setBotsSidebarCollapsedPref(false);
+    },
+    inputRef: sidebarSearchRef,
+  });
+  const shortcutHandlers = {
+    commandPalette: () => setCommandPaletteState(!commandPaletteOpenRef.current),
+    newBot: () => {
+      setCreateMenuOpen(false);
+      setMobileSidebarOpen(false);
+      setPanel("create");
+    },
+    focusMessage:
+      team || dashboard
+        ? undefined
+        : () => {
+            setMobileSidebarOpen(false);
+            requestAnimationFrame(() =>
+              document.querySelector<HTMLTextAreaElement>('textarea[name="chat-message"]')?.focus(),
+            );
+          },
+    find: () => {
+      // The Board shell unmounts on the way to the bots list, so the request has to
+      // travel with the route. Remember the list open before that page reads the preference.
+      if (dashboard) writeBotsSidebarCollapsed(userId, false);
+      requestSidebarSearch();
+    },
+    toggleSidebar: dashboard
+      ? undefined
+      : () => {
+          if (narrowLayout()) setMobileSidebarOpen((open) => !open);
+          else setBotsSidebarCollapsedPref(!botsSidebarCollapsed);
+        },
+    // React Router numbers its entries; index 0 is where this tab entered the app.
+    back: () => {
+      const index = (window.history.state as { idx?: unknown } | null)?.idx;
+      if (typeof index === "number" && index > 0) navigate(-1);
+    },
+    forward: () => navigate(1),
+    settings: () => openSettings("general"),
+  } satisfies AppShortcutHandlers;
+  useAppShortcuts(shortcutHandlers);
 
   useEffect(() => {
     const heartbeatBotId = computerBot?.id ?? active?.id;
@@ -2634,7 +2708,7 @@ export function ShellPage({
     setWorkspaceExpanded(false);
     computerVisible.current = true;
     const needsTakeover = !userHoldsComputerControl(targetComputer, id);
-    const blocked = computerTakeoverBlocked(targetComputer, snapshot?.run?.status);
+    const blocked = computerTakeoverBlocked(targetComputer, currentRuns, id);
     try {
       await bootComputer({
         botId: id,
@@ -2856,6 +2930,7 @@ export function ShellPage({
               aria-label={t`Minimize bots`}
               title={t`Minimize bots`}
               data-testid="minimize-bots-sidebar"
+              aria-keyshortcuts={shortcutAria("toggleSidebar")}
               onClick={() => setBotsSidebarCollapsedPref(true)}
             >
               <PanelLeftClose size={15} strokeWidth={1.8} aria-hidden="true" />
@@ -2927,11 +3002,13 @@ export function ShellPage({
             <Search size={16} strokeWidth={1.8} aria-hidden="true" />
           </InputGroupAddon>
           <InputGroupInput
+            ref={sidebarSearchRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t`Search`}
             autoComplete="off"
             name="sidebar-search"
+            aria-keyshortcuts={shortcutAria("find")}
           />
         </InputGroup>
         <div className="rk-scroll flex flex-1 flex-col gap-0.5 overflow-y-auto px-2.5 pb-2.5">
@@ -3433,6 +3510,7 @@ export function ShellPage({
                 type="button"
                 data-testid="restore-bots-sidebar"
                 aria-label={t`Show bots`}
+                aria-keyshortcuts={shortcutAria("toggleSidebar")}
                 title={t`Show bots`}
                 onClick={() => setBotsSidebarCollapsedPref(false)}
                 className="app-no-drag hidden h-8 w-8 shrink-0 place-items-center rounded-lg text-foreground/75 hover:bg-accent md:grid"
@@ -3723,7 +3801,11 @@ export function ShellPage({
                   {active &&
                   panel === "computer" &&
                   !computerOpen &&
-                  computerPanelNeedsMaintenance(computer?.state, booting) ? (
+                  computerPanelNeedsMaintenance(
+                    computer?.state,
+                    booting,
+                    Boolean(computerErrorState.operation),
+                  ) ? (
                     <ComputerMaintenanceActions
                       botId={active.id}
                       computer={computer}
@@ -4477,6 +4559,25 @@ export function ShellPage({
                 setMobileSidebarOpen(false);
                 navigate(`/app/${id}`);
               }}
+              actions={(
+                [
+                  ["newBot", t`New bot`],
+                  ["focusMessage", t`Message`],
+                  ["find", t`Search`],
+                  [
+                    "toggleSidebar",
+                    (narrowLayout() ? mobileSidebarOpen : !botsSidebarCollapsed)
+                      ? t`Hide bots`
+                      : t`Show bots`,
+                  ],
+                  ["back", t`Back`],
+                  ["forward", t`Forward`],
+                  ["settings", t`Settings`],
+                ] as const
+              ).flatMap(([id, label]) => {
+                const run = shortcutHandlers[id];
+                return run ? [{ id, label, onSelect: run }] : [];
+              })}
             />
           </Suspense>
         ) : null}
@@ -4726,20 +4827,15 @@ export function ShellPage({
                     onRelease={releaseComputer}
                   />
                 ) : (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={takingControl}
-                    aria-label={t`Take control`}
-                    onClick={async () => {
-                      if (computerBotIdRef.current) {
-                        await takeControl(computerBotIdRef.current);
-                      }
+                  <TakeControlButton
+                    computer={computer}
+                    runs={currentRuns}
+                    botId={computerBot.id}
+                    taking={takingControl}
+                    onTakeControl={() => {
+                      if (computerBotIdRef.current) void takeControl(computerBotIdRef.current);
                     }}
-                  >
-                    <Trans>Take control</Trans>
-                  </Button>
+                  />
                 )}
                 {computerBot && !recordingSkill ? (
                   <TeachComputerOverlayControl
@@ -4836,6 +4932,7 @@ export function ShellPage({
             size="icon"
             className="app-no-drag"
             aria-label={t`Search`}
+            aria-keyshortcuts={shortcutAria("find")}
             onClick={() => setCommandPaletteState(true)}
           >
             <Search size={17} />
@@ -4845,6 +4942,7 @@ export function ShellPage({
             size="icon"
             className="app-no-drag ms-auto shrink-0"
             aria-label={t`Settings`}
+            aria-keyshortcuts={shortcutAria("settings")}
             onClick={() => openSettings("general")}
           >
             <Settings size={17} />
@@ -5782,7 +5880,10 @@ export const Composer = memo(function Composer({
                 aria-label={t`@${mention.name}`}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => insertMention(mention)}
-                onMouseEnter={() => setMentionHighlightIndex(index)}
+                // Only a pointer that actually moves may take the keyboard highlight: a
+                // layout shift can open the picker under a parked cursor, and mouseenter
+                // would otherwise steal the highlight and complete the wrong mention.
+                onMouseMove={() => setMentionHighlightIndex(index)}
                 className={`flex w-full items-start gap-3 px-4 py-2.5 text-start hover:bg-accent ${
                   highlighted ? "bg-accent" : ""
                 }`}
@@ -5974,6 +6075,7 @@ export const Composer = memo(function Composer({
                 : undefined
             }
             aria-label={activeName ? t`Message ${activeName}` : t`Message`}
+            aria-keyshortcuts={shortcutAria("focusMessage")}
             role="combobox"
             aria-autocomplete="list"
             aria-haspopup="listbox"
@@ -6375,7 +6477,7 @@ const MessageView = memo(function MessageView({
             label={speakerName}
             size={22}
           />
-          {speakerName}
+          <span>{speakerName}</span>
         </div>
       ) : null}
       {parentJumpId ? (
