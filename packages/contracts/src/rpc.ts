@@ -698,6 +698,26 @@ export const appContract = {
         }),
       )
       .output(WorkspaceFileSchema),
+    save: oc
+      .input(
+        z.object({
+          botId: Id,
+          computerId: Id,
+          generation: z.number().int().nonnegative(),
+          path: IdePathSchema.min(1),
+          content: z.string().max(IDE_FILE_BYTES),
+          version: z.string().regex(/^[a-f0-9]{64}$/),
+          approved: z.boolean().default(false),
+        }),
+      )
+      .output(
+        z.object({
+          saved: z.boolean(),
+          approvalRequired: z.boolean(),
+          version: z.string().optional(),
+          reason: z.string().optional(),
+        }),
+      ),
     tasks: oc.input(botId).output(WorkspaceTasksSchema),
   },
   terminal: {

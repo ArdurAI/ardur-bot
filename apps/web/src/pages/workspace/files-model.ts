@@ -3,13 +3,6 @@ import type { IdeEntry, IdeFile } from "@ardurbot/contracts";
 export type EditorTab = IdeFile & { id: string; savedContent: string };
 export const modified = (tab: EditorTab) => tab.content !== tab.savedContent;
 export const basename = (path: string) => path.split(/[/\\]/).at(-1) || path;
-export function todayRange(now = new Date()) {
-  const since = new Date(now);
-  since.setHours(0, 0, 0, 0);
-  const until = new Date(since);
-  until.setDate(until.getDate() + 1);
-  return { since: since.toISOString(), until: until.toISOString() };
-}
 
 /** Only quick-open opts into walking directories; ordinary tree expansion stays one level. */
 export async function scanFiles(
@@ -30,12 +23,22 @@ export async function scanFiles(
     for (const entry of entries) if (entry.kind === "dir") directories.push(entry.path);
   }
 }
+
 export function quickMatches(files: IdeEntry[], query: string) {
   const needle = query.trim().toLocaleLowerCase();
   return files
     .filter((file) => basename(file.path).toLocaleLowerCase().includes(needle))
     .slice(0, 100);
 }
+
+export function todayRange(now = new Date()) {
+  const since = new Date(now);
+  since.setHours(0, 0, 0, 0);
+  const until = new Date(since);
+  until.setDate(until.getDate() + 1);
+  return { since: since.toISOString(), until: until.toISOString() };
+}
+
 export function ideShortcut(
   event: Pick<KeyboardEvent, "key" | "code" | "ctrlKey" | "metaKey" | "shiftKey" | "altKey">,
 ) {

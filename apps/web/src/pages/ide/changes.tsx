@@ -3,7 +3,7 @@ import { Button } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { rpc } from "../../lib/rpc";
-import { todayRange } from "./model";
+import { todayRange } from "../workspace/files-model";
 
 type ChangeHistory = {
   items: IdeChange[];

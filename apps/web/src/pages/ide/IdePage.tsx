@@ -1,21 +1,27 @@
 import type { Bot, IdeChange, IdeEntry, IdeRoot } from "@ardurbot/contracts";
 import { ideHandoffText } from "@ardurbot/contracts";
-import { Button, NativeSelect, NativeSelectOption } from "@ardurbot/ui-web";
+import { Button, NativeSelect, NativeSelectOption, Splitter } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { X } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { rpc } from "../../lib/rpc";
 import { WindowChrome } from "../WindowChrome";
+import { AskBot, QuickOpen } from "../workspace/dialogs";
+import type { EditorHandle, EditorSelection } from "../workspace/editor";
+import Editor from "../workspace/editor";
+import { FileTree } from "../workspace/file-tree";
+import type { EditorTab } from "../workspace/files-model";
+import {
+  basename,
+  clamp,
+  ideShortcut,
+  modified,
+  readLayout,
+  saveLayout,
+} from "../workspace/files-model";
+import { useUnsavedChanges } from "../workspace/unsaved";
 import { Changes, useChanges } from "./changes";
-import { AskBot, QuickOpen } from "./dialogs";
-import type { EditorHandle, EditorSelection } from "./editor";
-import Editor from "./editor";
-import { FileTree } from "./file-tree";
-import type { EditorTab } from "./model";
-import { basename, clamp, ideShortcut, modified, readLayout, saveLayout } from "./model";
-import { Splitter } from "./splitter";
 import { IdeTerminal } from "./terminal";
-import { useUnsavedChanges } from "./unsaved";
 
 const SideBySideDiff = lazy(() => import("./diff"));
 

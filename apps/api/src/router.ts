@@ -749,10 +749,13 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         workspaceFiles.describe(context.actor, input.botId),
       ),
       list: authed.workspace.list.handler(({ context, input }) =>
-        workspaceFiles.list(context.actor, input),
+        workspaceFiles.list(context.actor, input, context.signal),
       ),
       read: authed.workspace.read.handler(({ context, input }) =>
-        workspaceFiles.read(context.actor, input),
+        workspaceFiles.read(context.actor, input, context.signal),
+      ),
+      save: authed.workspace.save.handler(({ context, input }) =>
+        workspaceFiles.save(context.actor, input, context.signal),
       ),
       tasks: authed.workspace.tasks.handler(({ context, input }) =>
         workspaceTasks(deps.prisma, context.actor, input.botId),
