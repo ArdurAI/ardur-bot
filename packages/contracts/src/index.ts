@@ -23,6 +23,7 @@ export * from "./desktop-setup.js";
 export * from "./dispatch.js";
 export * from "./domain.js";
 export * from "./events.js";
+export * from "./failure-categories.js";
 export type * from "./features.js";
 export type * from "./fleet.js";
 export type * from "./fleet-bridge.js";

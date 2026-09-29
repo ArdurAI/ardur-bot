@@ -1,0 +1,179 @@
+import * as z from "zod";
+
+/**
+ * The one typed table of run and handoff failure categories. A failure is stored as a
+ * category id plus its parameters (bot, runtime, member); the English sentence here is the
+ * default each app translates through its own catalogs. Adding a category is one entry here
+ * plus a translation in each catalog — see docs/failure-categories.md.
+ */
+export const FailureCategoryIdSchema = z.enum([
+  "usage-limit",
+  "signed-out",
+  "max-turns",
+  "model-unavailable",
+  "configuration-invalid",
+  "connection-missing",
+  "stopped",
+  "other",
+]);
+export type FailureCategoryId = z.infer<typeof FailureCategoryIdSchema>;
+
+/** What the failed run or handoff offers next. */
+export type FailureCategoryAction =
+  | { kind: "none" }
+  | { kind: "retry" }
+  | { kind: "connect" }
+  | { kind: "open-settings"; target: "model-pin" | "group-model" };
+
+/** Named placeholders a category sentence may use. */
+export type FailureCategoryParams = {
+  bot?: string;
+  runtime?: string;
+  member?: string;
+};
+
+export type FailureCategory = {
+  id: FailureCategoryId;
+  /** Default English sentence; {bot}, {runtime} and {member} are the named placeholders. */
+  message: string;
+  /** Group-model sentence, when a group pin can fail this way ({bot}). */
+  groupMessage?: string;
+  /** Handoff sentence, when a handoff can end this way ({member}). */
+  memberMessage?: string;
+  action: FailureCategoryAction;
+  /**
+   * Sentences older builds stored verbatim, as templates with the same named
+   * placeholders. Readers map stored English text back to this id through them.
+   */
+  legacy: readonly string[];
+};
+
+export const FAILURE_CATEGORIES: readonly FailureCategory[] = [
+  {
+    id: "usage-limit",
+    message: "{runtime}'s usage limit is reached. Try again after it resets.",
+    groupMessage:
+      "{bot} hit the group model's usage limit. Try again after it resets, or change the group model.",
+    action: { kind: "retry" },
+    legacy: [],
+  },
+  {
+    id: "signed-out",
+    message: "Sign in to {runtime} on this computer, then try again.",
+    groupMessage:
+      "{bot}'s sign-in for the group model expired. Reconnect it or change the group model.",
+    action: { kind: "connect" },
+    legacy: [],
+  },
+  {
+    id: "max-turns",
+    message: "{runtime} reached this run's turn limit. Narrow the task and try again.",
+    action: { kind: "retry" },
+    legacy: [],
+  },
+  {
+    id: "model-unavailable",
+    message: "{runtime}'s pinned model is unavailable. Change the pin and try again.",
+    action: { kind: "open-settings", target: "model-pin" },
+    legacy: [],
+  },
+  {
+    id: "configuration-invalid",
+    message: "{runtime}'s configuration is invalid. Check this bot's settings.",
+    groupMessage:
+      "{bot} couldn't use the model set for this group. Change the group model or check this bot's settings.",
+    action: { kind: "open-settings", target: "model-pin" },
+    legacy: [],
+  },
+  {
+    id: "connection-missing",
+    message: "{runtime}'s model connection is missing. Connect it or change the pin.",
+    groupMessage:
+      "{bot} couldn't use the model set for this group. Reconnect it or change the group model.",
+    action: { kind: "connect" },
+    legacy: [],
+  },
+  {
+    id: "stopped",
+    message: "{runtime} stopped before finishing this run.",
+    memberMessage: "{member} stopped.",
+    action: { kind: "none" },
+    legacy: ["Worker stopped."],
+  },
+  {
+    id: "other",
+    message: "{runtime} could not finish this run. Check the runtime or change the pin.",
+    memberMessage: "{member} failed.",
+    action: { kind: "none" },
+    legacy: ["{runtime} could not finish this run — connect it or change the pin."],
+  },
+];
+
+export function failureCategory(id: FailureCategoryId): FailureCategory {
+  const entry = FAILURE_CATEGORIES.find((category) => category.id === id);
+  if (!entry) throw new Error(`Unknown failure category: ${id}`);
+  return entry;
+}
+
+/** Fill a category template's named placeholders; unfilled placeholders stay readable. */
+export function fillFailureCategoryMessage(
+  template: string,
+  params: FailureCategoryParams,
+): string {
+  return template.replace(/\{(bot|runtime|member)\}/g, (match, key: string) => {
+    const value = params[key as keyof FailureCategoryParams];
+    return value ?? match;
+  });
+}
+
+/** A category's default English sentence with the parameters filled in. */
+export function failureCategoryMessage(
+  id: FailureCategoryId,
+  params: FailureCategoryParams = {},
+): string {
+  return fillFailureCategoryMessage(failureCategory(id).message, params);
+}
+
+function templateToPattern(template: string): RegExp {
+  const escaped = template.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const source = escaped.replace(/\\?\{(bot|runtime|member)\\?\}/g, (_, name: string) =>
+    // Each placeholder captures its value back for the reader. Greedy is safe: the
+    // surrounding literals anchor the match and names never contain sentence stops.
+    `(?<${name}>.+?)`,
+  );
+  return new RegExp(`^${source}$`);
+}
+
+/**
+ * Map a stored English sentence back to its category and captured parameters. Older
+ * records hold the sentence verbatim; anything unknown returns undefined so the caller
+ * shows its generic line.
+ */
+export function failureCategoryFromText(
+  text: string,
+): ({ id: FailureCategoryId } & { params: FailureCategoryParams }) | undefined {
+  const trimmed = text.trim();
+  if (!trimmed) return undefined;
+  for (const entry of FAILURE_CATEGORIES) {
+    const templates = [
+      entry.message,
+      ...(entry.groupMessage ? [entry.groupMessage] : []),
+      ...(entry.memberMessage ? [entry.memberMessage] : []),
+      ...entry.legacy,
+    ];
+    for (const template of templates) {
+      const match = templateToPattern(template).exec(trimmed);
+      if (!match) continue;
+      const groups = match.groups ?? {};
+      return {
+        id: entry.id,
+        params: {
+          ...(groups.bot ? { bot: groups.bot } : {}),
+          ...(groups.runtime ? { runtime: groups.runtime } : {}),
+          ...(groups.member ? { member: groups.member } : {}),
+        },
+      };
+    }
+  }
+  return undefined;
+}
