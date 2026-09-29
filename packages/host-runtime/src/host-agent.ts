@@ -58,14 +58,14 @@ import {
   validateCompiledHermesProfile,
 } from "./runtimes/hermes-config.js";
 import {
+  buildHermesRuntime,
   HERMES_SOURCE_PIN,
   hermesInstallCandidate,
-  pinnedHermesLaunch,
   probeHermesInstall,
   resolveHermesLauncherAsset,
 } from "./runtimes/hermes-install.js";
 import { startHermesProviderRelay } from "./runtimes/hermes-provider-relay.js";
-import { HermesRuntime } from "./runtimes/hermes-runtime.js";
+import type { HermesRuntime } from "./runtimes/hermes-runtime.js";
 import type { NativeSpawn } from "./runtimes/native-process.js";
 import { guardNativeSpawn, spawnNative } from "./runtimes/native-process.js";
 
@@ -680,29 +680,21 @@ export class HostAgent {
     try {
       let runtime = this.runtimes[kind];
       if (kind === "hermes") {
-        const install = hermesInstallCandidate(this.config.root, process.env.ARDUR_HERMES_INSTALL);
-        if (!install || !relay) throw new Error("Pinned Hermes install is unavailable.");
-        const qualified = probeHermesInstall(install);
-        const staging = await realpath(this.config.root);
-        const overlap = path.relative(qualified.root, staging);
-        if (
-          overlap === "" ||
-          (overlap !== ".." && !overlap.startsWith(`..${path.sep}`) && !path.isAbsolute(overlap))
-        )
-          throw new Error("Hermes staging cannot overlap its install.");
-        const launcher = resolveHermesLauncherAsset(process.argv[1] ?? "", import.meta.url);
-        hermes = new HermesRuntime({
-          command: qualified.python,
-          args: [launcher],
-          launch: pinnedHermesLaunch(qualified.root, launcher, this.guard),
-          pinned: true,
+        if (!relay) throw new Error("Pinned Hermes install is unavailable.");
+        const runtimeInstance = await buildHermesRuntime({
+          hostRoot: this.config.root,
+          explicitInstall: process.env.ARDUR_HERMES_INSTALL,
+          bundleFile: process.argv[1] ?? "",
+          moduleUrl: import.meta.url,
+          guard: this.guard,
           executionEnvelope: profile?.envelope,
           onProfileAcknowledged: () => {
             profileAcknowledged = true;
           },
-          stagingParent: this.config.root,
           onTurnFinished: () => relay.close(),
         });
+        if (!runtimeInstance) throw new Error("Pinned Hermes install is unavailable.");
+        hermes = runtimeInstance;
         runtime = hermes;
       }
       if (!runtime) throw new Error("Host runtime is unavailable.");

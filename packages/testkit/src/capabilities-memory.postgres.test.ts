@@ -81,7 +81,7 @@ describe.skipIf(!databaseAvailable)("capabilities and memory through persisted R
         method: "POST",
         headers: { "content-type": "application/json", origin },
         body: JSON.stringify({
-          email: `capmem-${randomUUID()}@ardurbot.test`,
+          email: `capmem-${randomUUID()}@example.test`,
           password: "password12",
           name: "Settings fixture",
         }),

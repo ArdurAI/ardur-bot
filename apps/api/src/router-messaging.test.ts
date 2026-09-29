@@ -270,7 +270,7 @@ function messagingDeps(
   const actor = {
     spaceId: "ws-1",
     userId: "user-1",
-    email: "user@ardurbot.test",
+    email: "user@example.test",
     isDeploymentOwner: false,
   } satisfies Actor;
   return {

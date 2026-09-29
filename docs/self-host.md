@@ -583,7 +583,7 @@ this repository that is:
 | Image | Contents |
 | --- | --- |
 | `ghcr.io/ardurai/ardur-bot/app` | api, worker, web, and sandbox supervisor — one image, multiple commands |
-| `ghcr.io/ardurai/ardur-bot/computer` | Linux desktop used as each bot computer |
+| `ghcr.io/ardurai/ardur-bot/computer` | Linux desktop used as each bot computer; Developer profile tags end in `-developer` |
 | `ghcr.io/ardurai/ardur-bot/updater` | the updater sidecar, plus the Docker CLI |
 
 `infra/compose/docker-compose.images.yml` is the no-checkout path for the app image plus Postgres;
@@ -605,11 +605,14 @@ supervisor prefers `ARDURBOT_COMPUTER_IMAGE` when set, then a locally built
 `ardurbot/computer:local`, then `ghcr.io/ardurai/ardur-bot/computer:<app version>` for a release
 or `:dev` for a prerelease. Set `ARDURBOT_COMPUTER_CHANNEL=dev|release` to select the channel
 explicitly. On a missing image, the first bot waits for one shared pull and shows download progress.
-You can pre-pull the resolved name into Docker or Podman. Kubernetes provisioning keeps its
-profile tag, so load or retag the same image under that tag in the node image store.
+You can pre-pull the resolved name into Docker or Podman. Developer computers use the same tag
+with `-developer`, and Kubernetes pods and added engines resolve names the same way; see
+[compute profiles](compute-profiles.md#decisions-and-boundaries).
 
 If you deploy from your own fork, set `ARDURBOT_IMAGE`, `ARDURBOT_UPDATER_IMAGE`, and
-`ARDURBOT_COMPUTER_IMAGE` to your namespace — your CI cannot publish into someone else's.
+`ARDURBOT_COMPUTER_IMAGE` to your namespace — your CI cannot publish into someone else's. The
+Developer computer profile ignores the image override by design; if bots use Developer, retag your
+fork's developer image to match upstream's so the local engine finds it without pulling.
 
 | Tag | Published on | Moves? |
 | --- | --- | --- |
@@ -620,6 +623,7 @@ If you deploy from your own fork, set `ARDURBOT_IMAGE`, `ARDURBOT_UPDATER_IMAGE`
 | `latest` | stable `vX.Y.Z` tags only (not prereleases) | yes, to the newest stable release |
 | `sha-<full-commit>` | release tags and manual runs for all images; dev pushes for computer only | source-addressed; used by the updater sidecar |
 | `dev` | pushes to dev, computer image only | yes, to the newest dev build |
+| `<tag>-developer` | wherever a computer tag above is, for the Developer profile | as its Standard tag |
 | `edge` | manual runs on main | yes, to the newest manual main build |
 
 Every publish is multi-arch (`amd64` + `arm64`): each

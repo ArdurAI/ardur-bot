@@ -10,7 +10,7 @@ import { createRouter } from "./router.js";
 const owner: Actor = {
   spaceId: "space-1",
   userId: "owner-1",
-  email: "owner@ardurbot.test",
+  email: "owner@example.test",
   isDeploymentOwner: true,
 };
 

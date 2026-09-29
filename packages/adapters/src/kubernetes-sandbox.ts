@@ -18,13 +18,14 @@ import type {
   SandboxProvider,
 } from "@ardurbot/adapter-kit";
 import type { ComputerConnectionSettings } from "@ardurbot/contracts";
-import { computerImage, profileCommandError } from "@ardurbot/contracts";
+import { profileCommandError } from "@ardurbot/contracts";
 import { unknownCapacity } from "@ardurbot/contracts/fleet";
 import { boundedSandboxCommandTimeoutMs } from "@ardurbot/core";
 import { cachedCapacity } from "@ardurbot/host-runtime/fleet/capacity";
+import { connectionComputerImage } from "@ardurbot/host-runtime/fleet/computer-image";
 import { normalizeWorkspacePath } from "./computer-support.js";
 import { kubernetesCapacity } from "./fleet/kubernetes-capacity.js";
-import type { KubernetesApi, KubernetesObject } from "./kubernetes-client.js";
+import type { KubernetesApi } from "./kubernetes-client.js";
 import { KUBERNETES_FILE_SCRIPT } from "./kubernetes-files.js";
 
 const HOME = "/home/ardurbot";
@@ -57,6 +58,16 @@ export class KubernetesSandboxProvider implements SandboxProvider {
   });
   async namespaces() {
     return this.api.namespaces?.() ?? [this.settings.namespace];
+  }
+  /** Reaching the API is the test; capacity stays unknown when the account cannot read nodes. */
+  async test(context: AdapterContext) {
+    const version =
+      (await this.api.version?.(context.signal).catch((error) => {
+        if (error instanceof Error && error.message.includes("check the connection"))
+          throw new Error("engine-not-running");
+        throw error;
+      })) ?? "Kubernetes";
+    return { capacity: await this.capacity(), os: "Linux", version };
   }
   describe() {
     return {
@@ -113,11 +124,12 @@ export class KubernetesSandboxProvider implements SandboxProvider {
       const containers = pod.spec?.containers as { name?: string; image?: string }[] | undefined;
       if (
         containers?.find((container) => container.name === "computer")?.image !==
-        computerImage(request.imageProfile ?? "base")
-      )
-        throw new Error(
-          "The computer image differs from its saved profile; confirm an update in Settings.",
-        );
+        connectionComputerImage(request.imageProfile ?? "base", this.settings)
+      ) {
+        await this.api.remove("pods", name, context.signal);
+        await this.waitAbsent(name, context);
+        pod = null;
+      }
     }
     if (!pod)
       await this.api.create(

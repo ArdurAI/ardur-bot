@@ -37,7 +37,7 @@ describe("native platform launch policy", () => {
     const source = readFileSync(new URL("./runtimes/ardur-mcp-server.ts", import.meta.url), "utf8");
     expect(source).toContain('env: { ELECTRON_RUN_AS_NODE: "1" }');
     expect(source).toContain("timingSafeEqual");
-    expect(source).toContain("ardur-tools-${randomUUID()}");
+    expect(source).toContain(`ardur-tools-\${randomUUID()}`);
   });
 });
 

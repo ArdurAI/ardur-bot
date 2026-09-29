@@ -7,7 +7,7 @@ import { captureScreenshot, completeOnboarding, openUserSettings, signup } from 
 test("Settings catalog gives every bot access by default and saves explicit removal", async ({
   page,
 }, testInfo) => {
-  await signup(page, `catalog-${Date.now()}@ardurbot.test`, "password12", "Catalog test");
+  await signup(page, `catalog-${Date.now()}@example.test`, "password12", "Catalog test");
   await completeOnboarding(page);
   const origin = new URL(page.url()).origin;
   let connections: IntegrationConnection[] = [];
@@ -183,7 +183,7 @@ test("Settings catalog gives every bot access by default and saves explicit remo
 test("Find apps connects a token app, waits for an OAuth app, and manages custom rows", async ({
   page,
 }, testInfo) => {
-  await signup(page, `find-apps-${Date.now()}@ardurbot.test`, "password12", "Find apps test");
+  await signup(page, `find-apps-${Date.now()}@example.test`, "password12", "Find apps test");
   await completeOnboarding(page);
   const origin = new URL(page.url()).origin;
 

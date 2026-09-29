@@ -71,9 +71,9 @@ body,
   background-image: none;
   -webkit-text-fill-color: currentColor;
 }
-[data-motion="reduced"] .ardurbot-organic-avatar[data-shape-family] .ardurbot-organic-avatar-body {
+[data-motion="reduced"] .ardur-organic-avatar[data-shape-family] .ardur-organic-avatar-body {
   animation: none;
-  d: var(--ardurbot-organic-path);
+  d: var(--ardur-organic-path);
 }
 
 .rk-scroll::-webkit-scrollbar {

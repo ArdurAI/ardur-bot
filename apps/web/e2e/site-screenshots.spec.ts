@@ -389,10 +389,18 @@ test("captures bot chat, group collaboration, and routines from seeded demo data
   await expect(page.getByTestId("command-block")).toContainText(
     "in /home/ardurbot/workspace · 2 s · exit 0",
   );
+  await expect(
+    page.locator("main").getByRole("button", { name: "Bot settings", exact: true }),
+  ).toBeVisible();
   await captureSiteScreenshot(page, "app-chat");
 
   await page.goto("/app/g/operations-group");
   await expect(page.getByTestId("group-participant-models")).toBeVisible();
+  // Three members: the capture must show the separator between each pair.
+  await expect(page.getByTestId("group-participant-separator")).toHaveCount(2);
+  await expect(
+    page.locator("main").getByRole("button", { name: "Group settings", exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByText("Checks are green and the release note matches the deployed version.", {
       exact: false,

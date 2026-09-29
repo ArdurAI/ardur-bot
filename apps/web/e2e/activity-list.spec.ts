@@ -39,7 +39,7 @@ async function captureActivitySidebar(
 
 test("sidebar Now and Recent surface active and terminal runs", async ({ page }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `activity-${stamp}@ardurbot.test`, "password12", "Activity");
+  await signup(page, `activity-${stamp}@example.test`, "password12", "Activity");
   await completeOnboarding(page);
 
   const aside = page.locator("aside").first();
@@ -101,7 +101,7 @@ test("sidebar Now and Recent surface active and terminal runs", async ({ page },
 test("Activity keeps owner decisions visible when presence is unavailable", async ({
   page,
 }, testInfo) => {
-  await signup(page, `activity-waiting-${Date.now()}@ardurbot.test`, "password12", "Activity");
+  await signup(page, `activity-waiting-${Date.now()}@example.test`, "password12", "Activity");
   await completeOnboarding(page);
   const runs = (["waiting_input", "waiting_takeover"] as const).map((status, index) => ({
     runId: `waiting-${index}`,
@@ -144,7 +144,7 @@ test("Activity keeps owner decisions visible when presence is unavailable", asyn
 });
 
 test("Activity shows delegation lineage and requests a tree stop", async ({ page }, testInfo) => {
-  await signup(page, `delegation-${Date.now()}@ardurbot.test`, "password12", "Delegation");
+  await signup(page, `delegation-${Date.now()}@example.test`, "password12", "Delegation");
   await completeOnboarding(page);
   let stopping = false;
   await page.route("**/rpc/runs/list", (route) =>

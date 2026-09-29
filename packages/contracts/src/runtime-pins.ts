@@ -44,6 +44,19 @@ export const nativeRuntimeHealthKeys = {
   hermes: "hermes",
 } as const;
 
+/**
+ * Mirrors each runtime's declared `capabilities.tools`. A runtime that cannot call
+ * Ardur tools cannot coordinate tool work; surfaces that pick a coordinator warn on these.
+ */
+export const runtimeToolSupport: Record<RuntimeKind, boolean> = {
+  pi: true,
+  "claude-code": true,
+  "codex-app-server": true,
+  antigravity: false,
+  hermes: true,
+};
+export const runtimeSupportsTools = (kind: RuntimeKind): boolean => runtimeToolSupport[kind];
+
 export const HermesRuntimeConfigSchema = HermesRuntimeConfigV1Schema;
 export type HermesRuntimeConfig = z.infer<typeof HermesRuntimeConfigSchema>;
 export const HERMES_RUNTIME_DEFAULTS: HermesRuntimeConfig = HERMES_RUNTIME_V1_DEFAULTS;

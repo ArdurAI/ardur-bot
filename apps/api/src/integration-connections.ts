@@ -384,7 +384,8 @@ export class IntegrationConnections {
         (input.host && server.endpoint !== descriptor.endpoint)
       )
         throw new IsolationError();
-      await this.revoke(actor, server.id);
+      // Re-sign-in drops credentials but keeps the tool choices capture compares.
+      await this.revoke(actor, server.id, "not-connected", undefined, { preserveGrants: true });
       server = await this.prisma.mcpServer.update({
         where: { id: server.id },
         data: {
@@ -529,7 +530,10 @@ export class IntegrationConnections {
       const manifest = await this.tools(actor, id);
       const previous = IntegrationManifestSchema.safeParse(server.manifest);
       // Optional profile scopes or a profile endpoint outage must not erase a known identity.
-      if (previous.success && server.connectionState === "connected") {
+      if (
+        previous.success &&
+        (server.connectionState === "connected" || server.connectionState === "awaiting-consent")
+      ) {
         manifest.account ??= previous.data.account;
         manifest.workspace ??= previous.data.workspace;
       }
@@ -540,6 +544,44 @@ export class IntegrationConnections {
         tools(previous.data) !== tools(manifest) ||
         previous.data.account !== manifest.account ||
         previous.data.workspace !== manifest.workspace;
+      // Same connection, signing in again: unchanged tool definitions keep the
+      // owner's allowlist. Tools the vendor added are not allowed until review.
+      const sameSignIn =
+        server.connectionState === "awaiting-consent" &&
+        previous.success &&
+        previous.data.account === manifest.account &&
+        previous.data.workspace === manifest.workspace &&
+        previous.data.tools.every((tool) => {
+          const next = manifest.tools.find((item) => item.id === tool.id);
+          return (
+            !next ||
+            (next.inputSchemaDigest === tool.inputSchemaDigest &&
+              next.description === tool.description)
+          );
+        });
+      const keptAllowed = (Array.isArray(server.spaceAllowedTools) ? server.spaceAllowedTools : [])
+        .filter((id): id is string => typeof id === "string")
+        .filter((id) => manifest.tools.some((tool) => tool.id === id));
+      const parsedPolicies = SpaceToolPoliciesSchema.safeParse(server.spaceToolPolicies);
+      const keptPolicies = Object.fromEntries(
+        Object.entries(parsedPolicies.success ? parsedPolicies.data : {}).filter(([id]) =>
+          keptAllowed.includes(id),
+        ),
+      );
+      const addedTools =
+        previous.success &&
+        manifest.tools.some((tool) => previous.data.tools.every((item) => item.id !== tool.id));
+      const grants = sameSignIn
+        ? {
+            spaceAllowedTools: keptAllowed,
+            spaceToolPolicies: keptPolicies,
+            needsReview: addedTools || Boolean(server.needsReview),
+          }
+        : {
+            spaceAllowedTools: previous.success ? [] : manifest.tools.map((tool) => tool.id),
+            spaceToolPolicies: {},
+            needsReview: previous.success,
+          };
       await this.prisma.$transaction(async (tx) => {
         await lockMcpServerRevision(tx, id, actor);
         const where = {
@@ -563,9 +605,7 @@ export class IntegrationConnections {
               actor,
               {
                 ...data,
-                spaceAllowedTools: previous.success ? [] : manifest.tools.map((tool) => tool.id),
-                spaceToolPolicies: {},
-                needsReview: previous.success,
+                ...grants,
               },
               where,
             )
@@ -899,6 +939,7 @@ export class IntegrationConnections {
     id: string,
     state: "not-connected" | "cancelled" = "not-connected",
     expired?: { revision: number; cutoff: Date },
+    options?: { preserveGrants?: boolean },
   ) {
     actor = { spaceId: actor.spaceId, userId: actor.userId };
     const server = await this.owned(actor, id);
@@ -923,10 +964,14 @@ export class IntegrationConnections {
           lastError: expired ? "Sign-in timed out." : null,
           secretId: null,
           resourceConstraints: {},
-          manifest: Prisma.DbNull,
-          spaceAllowedTools: [],
-          spaceToolPolicies: {},
           revision: { increment: 1 },
+          ...(options?.preserveGrants
+            ? {}
+            : {
+                manifest: Prisma.DbNull,
+                spaceAllowedTools: [],
+                spaceToolPolicies: {},
+              }),
         },
       });
       if (current.secretId)

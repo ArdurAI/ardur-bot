@@ -30,6 +30,7 @@ import {
   hasMentionToken,
   isActive,
   projectMessages,
+  resolveAddressedBotIds,
   runFailureError,
 } from "@ardurbot/core";
 import { deriveMessageQuote } from "@ardurbot/core/message-quote";
@@ -947,11 +948,16 @@ export async function sendThreadMessage(
         candidateGoal && root && !goalExhaustionReason(candidateGoal, root, new Date())
           ? candidateGoal
           : null;
+      const addressedBotIds = resolveAddressedBotIds({
+        text: input.text ?? "",
+        members: members.map((member) => ({ id: member.botId, name: member.name })),
+      });
       const explicit = members.filter(
         (member) =>
           mentionTargets.botMentionIds.includes(member.botId) ||
           hasMentionToken(input.text ?? "", member.name) ||
-          hasMentionToken(input.text ?? "", "everyone"),
+          hasMentionToken(input.text ?? "", "everyone") ||
+          addressedBotIds.includes(member.botId),
       );
       const routed = routeIncoming({
         text: input.text ?? "",
