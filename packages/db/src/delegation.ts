@@ -544,22 +544,6 @@ export async function finishDelegation(
   if (expectedRunId !== undefined && row.runId !== expectedRunId) return;
   if (row.status === "cancel-requested" && status !== "cancelled") return;
   const redactedText = redactTaskValue(text);
-  // A runtime that cannot be stopped mid-step still records overspend on the finished card.
-  const resultText =
-    status === "completed" && row.hop <= 1 && row.usedTokens > row.reservedTokens
-      ? `${redactedText ? `${redactedText}\n` : ""}Overspent its token budget by ${row.usedTokens - row.reservedTokens} tokens.`
-      : redactedText;
-  const changed = await tx.delegation.updateMany({
-    where: { id, status: { in: ACTIVE_DELEGATIONS } },
-    data: {
-      status,
-      result: resultText.slice(0, PEER_RECEIPT_MAX_LENGTH),
-      completedAt: new Date(),
-      ...(status === "cancelled" ? { cancelConfirmedAt: new Date() } : {}),
-    },
-  });
-  if (!changed.count) return;
-  await appendTaskEvent(tx, row, status, resultText);
   const brokerHeld = row.runId ? await unresolvedBrokerTokens(tx, row.id, row.runId) : 0;
   const attemptSpent =
     row.hop > 1 && row.runId
@@ -575,9 +559,26 @@ export async function finishDelegation(
   const usedInAttempt = attemptSpent
     ? (attemptSpent._sum.inputTokens ?? 0) + (attemptSpent._sum.outputTokens ?? 0)
     : row.usedTokens;
-  // Settlement uses the amount this attempt actually reserved, never the current
-  // global constant: an older attempt keeps its own reservation.
+  // Settlement and the card both use the amount this attempt actually reserved,
+  // never the current global constant: an older attempt keeps its own reservation.
   const attemptReserved = delegationAttemptReservation(row);
+  // Measured overspend stays on the card for every terminal status — completed,
+  // failed, cancelled and reworked attempts alike — so the evidence survives.
+  const overspentBy = Math.max(0, usedInAttempt - attemptReserved);
+  const resultText = overspentBy
+    ? `${redactedText ? `${redactedText}\n` : ""}Overspent its token budget by ${overspentBy} tokens.`
+    : redactedText;
+  const changed = await tx.delegation.updateMany({
+    where: { id, status: { in: ACTIVE_DELEGATIONS } },
+    data: {
+      status,
+      result: resultText.slice(0, PEER_RECEIPT_MAX_LENGTH),
+      completedAt: new Date(),
+      ...(status === "cancelled" ? { cancelConfirmedAt: new Date() } : {}),
+    },
+  });
+  if (!changed.count) return;
+  await appendTaskEvent(tx, row, status, resultText);
   await tx.delegationRoot.update({
     where: { rootTaskId: row.rootTaskId },
     data: {

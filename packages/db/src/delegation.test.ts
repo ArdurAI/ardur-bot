@@ -1,5 +1,10 @@
 import type { MessageBlock } from "@ardurbot/contracts";
-import { ALL_DEVICE_SCOPES, DELEGATION_LIMITS, TaskCardSchema } from "@ardurbot/contracts";
+import {
+  ALL_DEVICE_SCOPES,
+  DELEGATION_LIMITS,
+  delegationStopLine,
+  TaskCardSchema,
+} from "@ardurbot/contracts";
 import { userVisibleMessages } from "@ardurbot/core";
 import { describe, expect, it } from "vitest";
 import {
@@ -628,4 +633,50 @@ it("writes the overspend annotation into the card's completion event", async () 
   const card = TaskCardSchema.parse(f.state().rows[0].card);
   const event = card.timeline.findLast((entry) => entry.kind === "completed");
   expect(event?.text).toContain("Overspent its token budget by 100 tokens.");
+});
+it("keeps overspend evidence on cancelled and failed attempts", async () => {
+  const f = fixture();
+  const row = await f.admit();
+  f.state().rows[0].usedTokens = row.reservedTokens + 40;
+  const db = f.worker();
+  await requestCancel(db, { spaceId: "space", userId: "owner" }, "root");
+  await db.$transaction((tx) =>
+    finishDelegation(tx, row.id, "cancelled", delegationStopLine("budget", "Worker")),
+  );
+  const stored = f.state().rows[0];
+  expect(stored.result).toContain("Overspent its token budget by 40 tokens.");
+  let card = TaskCardSchema.parse(stored.card);
+  expect(card.timeline.findLast((entry) => entry.kind === "cancelled")?.text).toContain(
+    "Overspent its token budget by 40 tokens.",
+  );
+  const f2 = fixture();
+  const second = await f2.admit();
+  f2.state().rows[0].usedTokens = second.reservedTokens + 60;
+  await f2.worker().$transaction((tx) => finishDelegation(tx, second.id, "failed", "Runtime died"));
+  expect(f2.state().rows[0].result).toContain("Overspent its token budget by 60 tokens.");
+  card = TaskCardSchema.parse(f2.state().rows[0].card);
+  expect(card.timeline.findLast((entry) => entry.kind === "failed")?.text).toContain(
+    "Overspent its token budget by 60 tokens.",
+  );
+});
+it("annotates a reworked attempt that completes over its new allowance", async () => {
+  const f = fixture();
+  const row = await f.admit();
+  const db = f.worker();
+  await db.$transaction((tx) => finishDelegation(tx, row.id, "completed", "First pass"));
+  f.state().runs.find((run) => run.id === row.runId).status = "completed";
+  await db.$transaction((tx) =>
+    rejectDelegation(tx, { spaceId: "space", userId: "owner" }, row.id, "coordinator", "Revise"),
+  );
+  // The reworked attempt measured 25 over its stored reservation; its hold was fully
+  // converted by incremental usage settlement, so nothing remains to release.
+  f.tx.usageRecord.aggregate.mockResolvedValue({
+    _sum: { inputTokens: DELEGATION_LIMITS.reservationTokens + 25, outputTokens: 0 },
+  });
+  f.state().root.reservedTokens = 0;
+  await db.$transaction((tx) => finishDelegation(tx, row.id, "completed", "Second pass"));
+  expect(f.state().rows[0].attemptReservedTokens).toBe(DELEGATION_LIMITS.reservationTokens);
+  expect(f.state().rows[0].result).toContain("Overspent its token budget by 25 tokens.");
+  expect(f.state().root.reservedTokens).toBe(0);
+  expect(f.state().root.reservedTokens).toBeGreaterThanOrEqual(0);
 });
