@@ -560,7 +560,7 @@ export class McpConnector implements ConnectorProvider {
       if (!current) return false;
       if (current.connectionState === "needs-sign-in" && current.lastError === message)
         return false;
-      await this.prisma.mcpServer.updateMany({
+      const updated = await this.prisma.mcpServer.updateMany({
         where: { id: server.id, revision: current.revision },
         data: {
           connectionState: "needs-sign-in",
@@ -571,7 +571,10 @@ export class McpConnector implements ConnectorProvider {
           ].slice(-10),
         },
       });
-      return true;
+      // A reconnect or credential edit between the read and the write wins the race: the
+      // update matched nothing, the server is not in the sign-in state this call saw, and
+      // the caller must not log or audit a transition that never happened.
+      return updated.count > 0;
     } catch {
       return false;
     }

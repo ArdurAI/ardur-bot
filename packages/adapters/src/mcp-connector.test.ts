@@ -438,6 +438,55 @@ describe("MCP connector session cache", () => {
     await connector.close();
   });
 
+  it("writes no log line and no audit event when the sign-in transition loses a race", async () => {
+    // The owner reconnected between the read and the write: the revision-guarded update
+    // matches nothing, so the server stays connected and the run must not be told a
+    // healthy server needs sign-in.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("fake-private-response", { status: 401 })),
+    );
+    const append = vi.fn().mockResolvedValue(undefined);
+    const serverRow = {
+      ...SERVER,
+      catalogId: null,
+      secretId: "secret-1",
+      connectionState: "not-connected",
+      lastError: null as string | null,
+      recentErrors: [] as unknown[],
+    };
+    const assignment = { ...ASSIGNMENT, server: serverRow };
+    const prisma = {
+      bot: { findFirst: vi.fn(async () => ({ id: "bot-1", computer: { kind: "desktop" } })) },
+      mcpServer: {
+        findMany: vi.fn(async () => [{ ...serverRow, assignments: [assignment] }]),
+        findFirst: vi.fn(async () => serverRow),
+        updateMany: vi.fn(async () => ({ count: 0 })),
+      },
+      secret: { findFirst: vi.fn(async () => ({ id: "secret-1", ciphertext: "encrypted" })) },
+      run: { findUnique: vi.fn(async () => ({ threadId: "thread-1" })) },
+    };
+    const connector = fixtureConnector(
+      prisma as never,
+      { load: () => JSON.stringify({ headers: { Authorization: "Bearer fake-token" } }) } as never,
+      { network: TEST_NETWORK, events: { append } },
+    );
+
+    await expect(
+      connector.discoverTools({
+        spaceId: "w1",
+        userId: "u1",
+        botId: "bot-1",
+        runId: "run-1",
+        signal: new AbortController().signal,
+      } as never),
+    ).resolves.toEqual([]);
+
+    expect(prisma.mcpServer.updateMany).toHaveBeenCalledTimes(1);
+    expect(append).not.toHaveBeenCalled();
+    await connector.close();
+  });
+
   it("redacts credentials of a connect that failed before the session was cached", async () => {
     const localAssignment = {
       ...ASSIGNMENT,
