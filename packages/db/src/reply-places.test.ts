@@ -33,7 +33,8 @@ function threadStore(runs: StoredRun[]) {
         if (data.nextEventSeq) thread.nextEventSeq += data.nextEventSeq.increment;
         const out: Record<string, number> = {};
         for (const key of Object.keys(select ?? {})) {
-          if (select?.[key]) out[key] = key === "nextEventSeq" ? thread.nextEventSeq : thread.nextMessageSeq;
+          if (select?.[key])
+            out[key] = key === "nextEventSeq" ? thread.nextEventSeq : thread.nextMessageSeq;
         }
         return out;
       },

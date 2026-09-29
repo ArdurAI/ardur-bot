@@ -16,17 +16,21 @@ describe("room policy", () => {
 
   it("accepts the bounds and rejects values outside them", () => {
     expect(
-      RoomPolicyV1Schema.parse({ version: 1, maxConcurrentRuns: ROOM_POLICY_MAX_CONCURRENT_RUNS_MIN })
-        .maxConcurrentRuns,
+      RoomPolicyV1Schema.parse({
+        version: 1,
+        maxConcurrentRuns: ROOM_POLICY_MAX_CONCURRENT_RUNS_MIN,
+      }).maxConcurrentRuns,
     ).toBe(1);
     expect(
-      RoomPolicyV1Schema.parse({ version: 1, maxConcurrentRuns: ROOM_POLICY_MAX_CONCURRENT_RUNS_MAX })
-        .maxConcurrentRuns,
+      RoomPolicyV1Schema.parse({
+        version: 1,
+        maxConcurrentRuns: ROOM_POLICY_MAX_CONCURRENT_RUNS_MAX,
+      }).maxConcurrentRuns,
     ).toBe(8);
     for (const bad of [0, 9, 2.5, "4"]) {
-      expect(
-        RoomPolicyV1Schema.safeParse({ version: 1, maxConcurrentRuns: bad }).success,
-      ).toBe(false);
+      expect(RoomPolicyV1Schema.safeParse({ version: 1, maxConcurrentRuns: bad }).success).toBe(
+        false,
+      );
     }
   });
 

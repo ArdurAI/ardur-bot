@@ -1840,12 +1840,12 @@ describe("mobile thread event reduction", () => {
       room,
     );
     // Each draft accumulates only its own run's deltas.
-    expect(
-      streaming?.messages.find((message) => message.id === "progress:run-a")?.blocks,
-    ).toEqual([{ kind: "progress", text: "Ada says hello" }]);
-    expect(
-      streaming?.messages.find((message) => message.id === "progress:run-b")?.blocks,
-    ).toEqual([{ kind: "progress", text: "Beck says hi" }]);
+    expect(streaming?.messages.find((message) => message.id === "progress:run-a")?.blocks).toEqual([
+      { kind: "progress", text: "Ada says hello" },
+    ]);
+    expect(streaming?.messages.find((message) => message.id === "progress:run-b")?.blocks).toEqual([
+      { kind: "progress", text: "Beck says hi" },
+    ]);
 
     // One run finishing drops only its own draft; the other keeps streaming.
     const oneDone = applyMobileThreadEvent(streaming, {
