@@ -247,6 +247,12 @@ import {
   McpApprovalCard,
 } from "./shell/message-cards";
 import { ProviderErrorMessage } from "./shell/provider-error-message";
+import {
+  BotSettingsTitle,
+  isSettingsPanel,
+  SettingsPanelToggle,
+  ThreadSettingsButton,
+} from "./shell/settings-chrome";
 import { useComputerTerminalOpen } from "./shell/use-computer-terminal-open";
 import { useTakeControl } from "./shell/use-take-control";
 import { handleWorkspaceOpenRun } from "./shell/workspace-run";
@@ -3480,6 +3486,16 @@ export function ShellPage({
             <RunContext run={activeSnapshot?.contextRun ?? activeSnapshot?.run} />
           </div>
           <div className="flex items-center gap-1">
+            {(inGroup ? activeGroup : active) ? (
+              <ThreadSettingsButton
+                group={inGroup}
+                panel={panel}
+                onPanel={(next) => {
+                  setModelFocusRequest(0);
+                  setPanel(next);
+                }}
+              />
+            ) : null}
             {!inGroup && active ? (
               <button
                 type="button"
@@ -3663,6 +3679,7 @@ export function ShellPage({
       <SlidingPanel
         open={Boolean(panel && (active || activeGroup || panel === "create"))}
         panel={panel ?? "closed"}
+        size={isSettingsPanel(panel) ? "wide" : "narrow"}
         workspace={panel === "computer"}
         expanded={panel === "computer" && workspaceExpanded}
       >
@@ -3671,7 +3688,7 @@ export function ShellPage({
             className={
               panel === "computer"
                 ? "flex h-full min-h-0 w-full flex-col overflow-hidden px-3 py-3"
-                : "rk-scroll h-full w-full overflow-y-auto px-5 py-[17px] md:w-[384px]"
+                : "rk-scroll h-full w-full overflow-y-auto px-5 py-[17px]"
             }
           >
             {panel !== "routine" &&
@@ -3680,19 +3697,23 @@ export function ShellPage({
             panel !== "group-settings" ? (
               <div
                 data-workspace-chrome={panel === "computer" ? "" : undefined}
-                className="mb-4 flex shrink-0 items-center justify-between"
+                className="mb-4 flex shrink-0 items-center justify-between gap-2"
               >
-                <span className="text-[13.5px] text-muted-foreground">
-                  {panel === "settings" ? (
-                    <Trans>Settings</Trans>
-                  ) : panel === "computer" ? (
-                    <Trans>Workspace</Trans>
-                  ) : active ? (
-                    (computer?.state ?? active.status)
-                  ) : (
-                    <Trans>Group</Trans>
-                  )}
-                </span>
+                {panel === "settings" && active ? (
+                  <BotSettingsTitle bot={active} />
+                ) : (
+                  <span className="text-[13.5px] text-muted-foreground">
+                    {panel === "settings" ? (
+                      <Trans>Settings</Trans>
+                    ) : panel === "computer" ? (
+                      <Trans>Workspace</Trans>
+                    ) : active ? (
+                      (computer?.state ?? active.status)
+                    ) : (
+                      <Trans>Group</Trans>
+                    )}
+                  </span>
+                )}
                 <div className="flex gap-1">
                   {panel === "computer" ? (
                     <Button
@@ -3719,15 +3740,10 @@ export function ShellPage({
                     />
                   ) : null}
                   {active ? (
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={panel === "settings" ? t`Show computer` : t`Show settings`}
-                      onClick={() => setPanel(panel === "settings" ? "computer" : "settings")}
-                      className={panel === "settings" ? "text-foreground" : "text-muted-foreground"}
-                    >
-                      <Settings size={16} strokeWidth={1.7} />
-                    </Button>
+                    <SettingsPanelToggle
+                      open={panel === "settings"}
+                      onToggle={() => setPanel(panel === "settings" ? "computer" : "settings")}
+                    />
                   ) : null}
                   <Button
                     variant="ghost"

@@ -1300,8 +1300,9 @@ msgid "Bot screen preview"
 msgstr "Pré-visualização da tela"
 
 #: src/pages/BotContextMenu.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Bot settings"
-msgstr ""
+msgstr "Configurações do bot"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Bot to link"
@@ -4140,6 +4141,7 @@ msgid "Group brief"
 msgstr "Resumo do grupo"
 
 #: src/pages/GroupPanel.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group settings"
 msgstr "Configuração do grupo"
 
@@ -7670,9 +7672,9 @@ msgstr ""
 msgid "Show bots"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show computer"
-msgstr ""
+msgstr "Mostrar computador"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Show in the menu bar."
@@ -7690,7 +7692,7 @@ msgstr "Mostrar mais"
 msgid "Show password"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show settings"
 msgstr "Mostrar configurações"
 

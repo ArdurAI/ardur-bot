@@ -62,7 +62,11 @@ test("bot creation, editing, and deletion persist", async ({ page }, testInfo) =
   await captureScreenshot(page, testInfo, "27-created-bot");
 
   await page.locator("main").getByRole("button", { name: "New Bot", exact: true }).click();
-  await expect(page.getByTestId("side-panel").getByText("Settings", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("side-panel")).toHaveAttribute("data-panel", "settings");
+  const botSettingsButton = page
+    .locator("main")
+    .getByRole("button", { name: "Bot settings", exact: true });
+  await expect(botSettingsButton).toHaveAttribute("aria-pressed", "true");
   const nameInput = page.locator("label:has-text('Name') input");
   const titleInput = page.locator("label:has-text('Title') input");
   const descriptionInput = page.locator("label:has-text('Description') textarea");
@@ -129,7 +133,8 @@ test("bot creation, editing, and deletion persist", async ({ page }, testInfo) =
   await expect(sidePanel.getByRole("button", { name: "Take control" })).toHaveCount(0);
   await expect(sidePanel.getByTestId("computer-more-button")).toHaveCount(0);
   await captureScreenshot(page, testInfo, "27b-computer-panel");
-  await page.getByRole("button", { name: "Show settings" }).click();
+  await botSettingsButton.click();
+  await expect(sidePanel).toHaveAttribute("data-panel", "settings");
 
   await nameInput.fill("Atlas");
   await titleInput.fill("Research lead");
@@ -138,6 +143,9 @@ test("bot creation, editing, and deletion persist", async ({ page }, testInfo) =
   await expect(botList.getByRole("button", { name: /^Atlas/ })).toBeVisible();
   await expect(page.getByPlaceholder("Message Atlas")).toBeVisible();
   await captureScreenshot(page, testInfo, "28-edited-bot-profile");
+  await botSettingsButton.click();
+  await expect(sidePanel).toHaveAttribute("data-panel", "closed");
+  await expect(botSettingsButton).toHaveAttribute("aria-pressed", "false");
 
   await page.reload();
   await expect(botList.getByRole("button", { name: /^Atlas/ })).toBeVisible();

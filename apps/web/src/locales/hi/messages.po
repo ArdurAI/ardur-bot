@@ -1300,8 +1300,9 @@ msgid "Bot screen preview"
 msgstr "बॉट स्क्रीन प्रीव्यू"
 
 #: src/pages/BotContextMenu.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Bot settings"
-msgstr ""
+msgstr "बॉट सेटिंग्स"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Bot to link"
@@ -4140,6 +4141,7 @@ msgid "Group brief"
 msgstr "समूह का संक्षिप्त विवरण"
 
 #: src/pages/GroupPanel.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group settings"
 msgstr "समूह सेटिंग्स"
 
@@ -7670,9 +7672,9 @@ msgstr ""
 msgid "Show bots"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show computer"
-msgstr ""
+msgstr "कंप्यूटर दिखाएं"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Show in the menu bar."
@@ -7690,7 +7692,7 @@ msgstr "और दिखाएँ"
 msgid "Show password"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show settings"
 msgstr "सेटिंग्स दिखाएं"
 

@@ -1300,8 +1300,9 @@ msgid "Bot screen preview"
 msgstr "Bot 화면 미리보기"
 
 #: src/pages/BotContextMenu.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Bot settings"
-msgstr ""
+msgstr "봇 설정"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Bot to link"
@@ -4140,6 +4141,7 @@ msgid "Group brief"
 msgstr "그룹 브리핑"
 
 #: src/pages/GroupPanel.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group settings"
 msgstr "그룹 설정"
 
@@ -7670,9 +7672,9 @@ msgstr ""
 msgid "Show bots"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show computer"
-msgstr ""
+msgstr "컴퓨터 보기"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Show in the menu bar."
@@ -7690,7 +7692,7 @@ msgstr "더 보기"
 msgid "Show password"
 msgstr "비밀번호 표시"
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show settings"
 msgstr "설정 보기"
 
