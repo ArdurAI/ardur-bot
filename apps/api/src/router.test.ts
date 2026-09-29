@@ -5,11 +5,19 @@ import { openScreenCapability } from "@ardurbot/core/node/screen-capability";
 import type { PrismaClient } from "@ardurbot/db";
 import { createLogger, createTestSink, installLogger } from "@ardurbot/logging";
 import { RPCHandler } from "@orpc/server/fetch";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import type { RouterDeps } from "./router.js";
 import { createRouter } from "./router.js";
 
 describe("Hermes availability", () => {
+  beforeEach(() => {
+    vi.stubEnv("ARDURBOT_HOST_BRIDGE", "api");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   const actor = {
     spaceId: "workspace-1",
     userId: "user-1",
@@ -20,6 +28,9 @@ describe("Hermes availability", () => {
   async function availability(host: { connected: boolean; health: unknown } | null) {
     const prisma = {
       user: { findMany: vi.fn(async () => [{ id: actor.userId }]) },
+      hostRegistration: {
+        findUnique: vi.fn(async () => ({ id: "default", userId: actor.userId })),
+      },
       spaceModelPreference: { findMany: vi.fn(async () => []) },
     } as unknown as PrismaClient;
     const deps = {

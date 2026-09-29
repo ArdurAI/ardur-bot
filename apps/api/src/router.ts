@@ -1144,7 +1144,9 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
 
           if (isBridgeMode) {
             healthAvailable = Boolean(
-              health?.capabilities?.providerRelay === 1 && health.hermes?.available,
+              host?.connected &&
+                health?.capabilities?.providerRelay === 1 &&
+                health.hermes?.available,
             );
             healthReason =
               !host?.connected || !health
