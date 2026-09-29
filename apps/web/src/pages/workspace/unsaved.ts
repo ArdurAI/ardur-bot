@@ -61,11 +61,11 @@ export function useUnsavedChanges(dirty: boolean, label: string, saving = false)
   }, [dirty, label, navigator, saving]);
   useEffect(() => {
     void desktopBridge()
-      ?.window.setUnsavedChanges?.(dirty)
+      ?.window?.setUnsavedChanges?.(dirty)
       .catch(() => {});
     return () => {
       void desktopBridge()
-        ?.window.setUnsavedChanges?.(false)
+        ?.window?.setUnsavedChanges?.(false)
         .catch(() => {});
     };
   }, [dirty]);

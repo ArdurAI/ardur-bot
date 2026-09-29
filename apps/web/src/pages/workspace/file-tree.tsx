@@ -2,7 +2,7 @@ import type { IdeEntry } from "@ardurbot/contracts";
 import { Trans } from "@lingui/react/macro";
 import { ChevronDown, ChevronRight, File, Folder } from "lucide-react";
 import { useEffect, useState } from "react";
-import { basename } from "./model";
+import { basename } from "./files-model";
 
 export function FileTree({
   list,

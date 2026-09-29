@@ -116,7 +116,7 @@ const highlighting = HighlightStyle.define(
   })),
 );
 
-/** This module and every CodeMirror import live behind the IDE's editor lazy boundary. */
+/** This module and every CodeMirror import stay behind the IDE page and workspace pane lazy boundaries. */
 export default function Editor({
   document,
   openIds,
