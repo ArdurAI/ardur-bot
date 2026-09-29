@@ -121,7 +121,9 @@ export function createRuntimeRegistry(
   const antigravity = client
     ? new RemoteHostRuntime(client, "antigravity")
     : new AntigravityRuntime();
-  const hermes = client ? new RemoteHostRuntime(client, "hermes", brokerForTurn) : new LocalHermesRuntime(brokerForTurn);
+  const hermes = client
+    ? new RemoteHostRuntime(client, "hermes", brokerForTurn)
+    : new LocalHermesRuntime(brokerForTurn);
   return new RuntimeRegistry({
     pi: {
       factory: () => pi,
@@ -176,7 +178,9 @@ export async function nativeRuntimeAvailability(
         reason: "Pinned Hermes is unavailable on this host.",
       };
     }
-    const { localHermesInstallCandidate, probeHermesInstall } = await import("@ardurbot/host-runtime/runtimes/hermes-install");
+    const { localHermesInstallCandidate, probeHermesInstall } = await import(
+      "@ardurbot/host-runtime/runtimes/hermes-install"
+    );
     const install = localHermesInstallCandidate();
     let available = false;
     if (install) {

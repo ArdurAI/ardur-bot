@@ -58,9 +58,9 @@ describe("buildHostTurn", () => {
       { name: "write_file", description: "Write", inputSchema: { type: "object" } },
     ]);
     expect(JSON.stringify(turn.tools)).not.toContain("connectorId");
-    expect(
-      buildHostTurn({ kind: "hermes", request: request({ tools: "none" }) }).tools,
-    ).toBe("none");
+    expect(buildHostTurn({ kind: "hermes", request: request({ tools: "none" }) }).tools).toBe(
+      "none",
+    );
   });
 
   it("takes hermes model limits from the execution envelope", () => {

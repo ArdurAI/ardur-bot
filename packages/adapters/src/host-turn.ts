@@ -1,6 +1,6 @@
 import type { AgentRunRequest } from "@ardurbot/adapter-kit";
-import { HostTurnSchema } from "@ardurbot/contracts/host-bridge";
 import type { HostProviderGrant, HostTurn } from "@ardurbot/contracts/host-bridge";
+import { HostTurnSchema } from "@ardurbot/contracts/host-bridge";
 import type { HermesExecutionEnvelopeSchema } from "@ardurbot/contracts/runtime-config";
 import type * as z from "zod";
 

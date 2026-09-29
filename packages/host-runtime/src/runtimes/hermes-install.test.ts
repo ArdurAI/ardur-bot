@@ -115,7 +115,10 @@ it("resolves the desktop packaged launcher from the worker service bundle", asyn
 
 it("resolves the source launcher from the local hermes runtime module", () => {
   const bundle = path.join(tmpdir(), "unrelated-services", "worker.mjs");
-  const localModuleUrl = new URL("../../../adapters/src/runtimes/local-hermes-runtime.ts", import.meta.url).href;
+  const localModuleUrl = new URL(
+    "../../../adapters/src/runtimes/local-hermes-runtime.ts",
+    import.meta.url,
+  ).href;
   expect(resolveHermesLauncherAsset(bundle, localModuleUrl)).toBe(
     path.resolve(import.meta.dirname, "../../python/hermes_launcher.py"),
   );

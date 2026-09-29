@@ -4,11 +4,11 @@ import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { mkdir, realpath } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import sourceHashes from "../../python/hermes_sources.json" with { type: "json" };
-import { HermesRuntime, type HermesLaunch, type HermesLaunchSpec } from "./hermes-runtime.js";
-import { stopNative } from "./native-process.js";
 import type { HermesExecutionEnvelopeSchema } from "@ardurbot/contracts/runtime-config";
 import type * as z from "zod";
+import sourceHashes from "../../python/hermes_sources.json" with { type: "json" };
+import { type HermesLaunch, type HermesLaunchSpec, HermesRuntime } from "./hermes-runtime.js";
+import { stopNative } from "./native-process.js";
 
 export const HERMES_SOURCE_PIN = "29112bef099274229cadff79cdff7bf7b99c4b77";
 
@@ -69,7 +69,10 @@ export function resolveHermesLauncherAsset(
     );
   const bundled = hermesLauncherAsset(bundleFile);
   if (existsSync(bundled) && complete(bundled)) return bundled;
-  const desktopBundled = path.resolve(path.dirname(bundleFile), "../host-service/python/hermes_launcher.py");
+  const desktopBundled = path.resolve(
+    path.dirname(bundleFile),
+    "../host-service/python/hermes_launcher.py",
+  );
   if (existsSync(desktopBundled) && complete(desktopBundled)) return desktopBundled;
   try {
     if (moduleUrl) {

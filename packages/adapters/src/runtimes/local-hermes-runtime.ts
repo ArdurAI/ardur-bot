@@ -1,13 +1,24 @@
 import { randomUUID } from "node:crypto";
-import type { AdapterContext, AgentRunRequest, AgentRuntime, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
-import { buildHermesRuntime, localHermesStaging } from "@ardurbot/host-runtime/runtimes/hermes-install";
+import type {
+  AdapterContext,
+  AgentRunRequest,
+  AgentRuntime,
+  AgentRuntimeEvent,
+} from "@ardurbot/adapter-kit";
+import { validateHermesExecutionEnvelope } from "@ardurbot/core/node/runtime-config-hash";
+import {
+  buildHermesRuntime,
+  localHermesStaging,
+} from "@ardurbot/host-runtime/runtimes/hermes-install";
 import { startHermesProviderRelay } from "@ardurbot/host-runtime/runtimes/hermes-provider-relay";
 import type { HermesRuntime } from "@ardurbot/host-runtime/runtimes/hermes-runtime";
-import { HermesRelayDispatcher } from "../hermes-provider-broker.js";
 import type { BrokerScope, HermesProviderBroker } from "../hermes-provider-broker.js";
-import { summaryOperationHash, summaryOperationManifest } from "../hermes-provider-broker.js";
+import {
+  HermesRelayDispatcher,
+  summaryOperationHash,
+  summaryOperationManifest,
+} from "../hermes-provider-broker.js";
 import { buildHostTurn } from "../host-turn.js";
-import { validateHermesExecutionEnvelope } from "@ardurbot/core/node/runtime-config-hash";
 
 export class LocalHermesRuntime implements AgentRuntime {
   private running = new Map<string, HermesRuntime>();
@@ -25,7 +36,13 @@ export class LocalHermesRuntime implements AgentRuntime {
       id: "hermes",
       contractVersion: "1",
       adapterVersion: "0.1.0",
-      capabilities: { streaming: true, compaction: false, tools: true, scripted: false, usageAccounting: "external" as const },
+      capabilities: {
+        streaming: true,
+        compaction: false,
+        tools: true,
+        scripted: false,
+        usageAccounting: "external" as const,
+      },
     };
   }
 
@@ -37,7 +54,10 @@ export class LocalHermesRuntime implements AgentRuntime {
     await this.running.get(runId)?.fail(runId);
   }
 
-  async *run(request: AgentRunRequest, context?: Partial<AdapterContext>): AsyncIterable<AgentRuntimeEvent> {
+  async *run(
+    request: AgentRunRequest,
+    context?: Partial<AdapterContext>,
+  ): AsyncIterable<AgentRuntimeEvent> {
     const staging = localHermesStaging();
     const install = process.env.ARDUR_HERMES_INSTALL;
 
@@ -69,8 +89,12 @@ export class LocalHermesRuntime implements AgentRuntime {
           )
         : undefined;
     if (executionEnvelope && operationHash) {
-      const { compileHermesRuntimeConfig } = await import("@ardurbot/host-runtime/runtimes/hermes-config");
-      const { effectiveRuntimeConfigHash } = await import("@ardurbot/core/node/runtime-config-hash");
+      const { compileHermesRuntimeConfig } = await import(
+        "@ardurbot/host-runtime/runtimes/hermes-config"
+      );
+      const { effectiveRuntimeConfigHash } = await import(
+        "@ardurbot/core/node/runtime-config-hash"
+      );
       const compiled = compileHermesRuntimeConfig(executionEnvelope.runtimeConfig, {
         id: request.model.id,
         contextWindow: request.model.contextWindow ?? 32_768,
@@ -125,13 +149,12 @@ export class LocalHermesRuntime implements AgentRuntime {
       relay = await startHermesProviderRelay(
         { protocol: 1, ...brokerSession.broker.grant, hostGeneration: "local" },
         (method, args) => {
-          if (method === "provider.open" || method === "provider.read")
-            assertProfileAcknowledged();
+          if (method === "provider.open" || method === "provider.read") assertProfileAcknowledged();
           return relayDispatcher.dispatch(method, args);
         },
         () => {
           void this.fail(request.runId);
-        }
+        },
       );
 
       this.running.set(request.runId, runtime);

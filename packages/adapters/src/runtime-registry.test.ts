@@ -1,10 +1,10 @@
-import type { AgentRuntime } from "@ardurbot/adapter-kit";
-import type { RuntimePin } from "@ardurbot/contracts";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import type { AgentRuntime } from "@ardurbot/adapter-kit";
+import type { RuntimePin } from "@ardurbot/contracts";
 import { describe, expect, it, vi } from "vitest";
-import { RuntimeRegistry, nativeRuntimeAvailability } from "./runtime-registry.js";
+import { nativeRuntimeAvailability, RuntimeRegistry } from "./runtime-registry.js";
 
 vi.mock("../../host-runtime/python/hermes_sources.json", () => ({ default: {} }));
 
