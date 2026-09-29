@@ -335,23 +335,40 @@ describe("pairing port list", () => {
     expect(JSON.stringify(fake.start.mock.calls)).not.toContain("fake-db-marker");
   });
 
-  it("keeps an explicit empty port list from the pair response", async () => {
+  it("adds the known loopback ports to an empty pair list", async () => {
     stubLoopbackPorts();
     fake.read.mockResolvedValue(null);
     const f = fixture();
     f.fetch.mockResolvedValue(pairResponse({ token: PAIR_TOKEN, guardPorts: [] }));
     await f.handler("setup")(f.event);
-    expect(fake.write).toHaveBeenCalledWith({ ...stored, guardPorts: [] });
-    expect(fake.start).toHaveBeenCalledWith({ ...stored, guardPorts: [] });
+    const config = { ...stored, guardPorts: [23456, 17091] };
+    expect(fake.write).toHaveBeenCalledWith(config);
+    expect(fake.start).toHaveBeenCalledWith(config);
+    expect(JSON.stringify(fake.write.mock.calls)).not.toContain("fake-db-marker");
   });
 
-  it("keeps an explicit port list from the pair response", async () => {
+  it("adds the known loopback ports to the pair list", async () => {
     stubLoopbackPorts();
     fake.read.mockResolvedValue(null);
     const f = fixture();
     f.fetch.mockResolvedValue(pairResponse({ token: PAIR_TOKEN, guardPorts: [55433] }));
     await f.handler("setup")(f.event);
-    expect(fake.start).toHaveBeenCalledWith(expect.objectContaining({ guardPorts: [55433] }));
+    const guardPorts = [55433, 23456, 17091];
+    expect(fake.write).toHaveBeenCalledWith({ ...stored, guardPorts });
+    expect(fake.start).toHaveBeenCalledWith(expect.objectContaining({ guardPorts }));
+    expect(JSON.stringify(fake.start.mock.calls)).not.toContain("fake-db-marker");
+  });
+
+  it("adds a loopback realtime port as well as the database and supervisor", async () => {
+    stubLoopbackPorts();
+    vi.stubEnv("REALTIME_DATABASE_URL", "postgres://app@127.0.0.1:23457/ardurbot");
+    fake.read.mockResolvedValue(null);
+    const f = fixture();
+    f.fetch.mockResolvedValue(pairResponse({ token: PAIR_TOKEN, guardPorts: [55433] }));
+    await f.handler("setup")(f.event);
+    expect(fake.start).toHaveBeenCalledWith(
+      expect.objectContaining({ guardPorts: [55433, 23456, 23457, 17091] }),
+    );
   });
 
   it("starts a reconnect that has no stored port list with the known loopback ports", async () => {
@@ -364,7 +381,7 @@ describe("pairing port list", () => {
     expect(fake.start).toHaveBeenCalledWith({ ...stored, guardPorts: [23456, 17091] });
   });
 
-  it("keeps an explicit empty stored port list on reconnect", async () => {
+  it("adds the known loopback ports when a reconnect stored an empty list", async () => {
     stubLoopbackPorts();
     const empty = { ...stored, guardPorts: [] as number[] };
     fake.read.mockResolvedValue(empty);
@@ -372,7 +389,7 @@ describe("pairing port list", () => {
     f.fetch.mockResolvedValue(pairResponse({ error: "Disconnect the existing host" }, 409));
     await f.handler("setup")(f.event);
     expect(fake.write).not.toHaveBeenCalled();
-    expect(fake.start).toHaveBeenCalledWith(empty);
+    expect(fake.start).toHaveBeenCalledWith({ ...empty, guardPorts: [23456, 17091] });
   });
 
   it("restores an older pairing with the known loopback ports", async () => {

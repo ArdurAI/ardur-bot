@@ -1,4 +1,4 @@
-import { serviceProcessEnvironment } from "@ardurbot/core/node/service-secrets";
+import { secretEnvironment } from "@ardurbot/core/node/service-secrets";
 import { type AppEnv, loadEnv } from "./env.js";
 
 /**
@@ -7,5 +7,5 @@ import { type AppEnv, loadEnv } from "./env.js";
  * secrets file, this is the process environment, so `pnpm dev` is unchanged.
  */
 export function loadAppEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
-  return loadEnv(serviceProcessEnvironment(source));
+  return loadEnv(secretEnvironment(source));
 }

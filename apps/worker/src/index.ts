@@ -7,7 +7,7 @@ import {
   placeRunComputer,
 } from "@ardurbot/adapters";
 import { loadRootEnv } from "@ardurbot/core/node/load-root-env";
-import { serviceProcessEnvironment } from "@ardurbot/core/node/service-secrets";
+import { secretEnvironment } from "@ardurbot/core/node/service-secrets";
 import { createMessagingReceivers } from "./messaging-receivers.js";
 
 loadRootEnv();
@@ -73,7 +73,7 @@ import { createRootLogger } from "@ardurbot/logging/axiom";
 const logger = createRootLogger(SERVICE_NAMES.worker);
 
 async function main() {
-  const env = serviceProcessEnvironment();
+  const env = secretEnvironment();
   const databaseUrl = env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL is required");
   // Shared by Prisma, graphile-worker, and reconciliation — one pool instead of

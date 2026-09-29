@@ -60,6 +60,16 @@ export function serviceProcessEnvironment(env: NodeJS.ProcessEnv = process.env):
 }
 
 /**
+ * The one environment secret resolvers read. With `ARDURBOT_SECRETS_FILE` set,
+ * this is the secrets overlay: file values live on the returned object and are
+ * not copied onto `process.env`. With no secrets file, this is `env` itself, so
+ * `pnpm dev` is unchanged.
+ */
+export function secretEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  return serviceProcessEnvironment(env);
+}
+
+/**
  * Local mode's DATABASE_URL carries no password (it is not a secret-free channel); the
  * application role's password comes from the secrets file and is joined here. A URL that
  * already has a password, or names no user, is left alone.

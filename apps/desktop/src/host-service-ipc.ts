@@ -34,11 +34,15 @@ function secureHostTarget(target: string) {
 }
 
 /**
- * A list that was stored or returned is kept, including an explicit empty list.
- * No list means the loopback database and supervisor ports this process can see.
+ * Ports this Mac can already see are always denied, together with any list a pair
+ * response or a stored config named. A remote URL adds nothing.
  */
+function guardPortsFor(ports: number[] | undefined): number[] {
+  return [...new Set([...(ports ?? []), ...knownLoopbackGuardPorts(process.env)])];
+}
+
 function withGuardPorts<T extends { guardPorts?: number[] }>(config: T): T {
-  return { ...config, guardPorts: config.guardPorts ?? knownLoopbackGuardPorts(process.env) };
+  return { ...config, guardPorts: guardPortsFor(config.guardPorts) };
 }
 
 /** Registered folders that are not a folder right now; commands skip them until they return. */
@@ -165,21 +169,22 @@ export function installHostService(options: {
     if (!result || typeof result !== "object") throw new Error("Could not connect this computer.");
     const token = "token" in result && typeof result.token === "string" ? result.token : "";
     if (!/^[A-Za-z0-9_-]{43}$/.test(token)) throw new Error("Could not connect this computer.");
-    let guardPorts: number[];
+    let supplied: number[] | undefined;
     if (!("guardPorts" in result) || result.guardPorts === undefined) {
-      guardPorts = knownLoopbackGuardPorts(process.env);
+      supplied = undefined;
     } else if (Array.isArray(result.guardPorts)) {
       const rawPorts = result.guardPorts;
-      guardPorts = rawPorts.filter(
+      supplied = rawPorts.filter(
         (port): port is number =>
           typeof port === "number" && Number.isInteger(port) && port > 0 && port <= 65535,
       );
-      if (guardPorts.length !== rawPorts.length) {
+      if (supplied.length !== rawPorts.length) {
         throw new Error("Could not connect this computer.");
       }
     } else {
       throw new Error("Could not connect this computer.");
     }
+    const guardPorts = guardPortsFor(supplied);
     const config = {
       apiUrl: target,
       token,
