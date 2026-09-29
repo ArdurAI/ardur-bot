@@ -38,8 +38,15 @@ const ORDINARY_TOOLS = new Set([
   "message_bot",
   "spawn_bot",
   "handoff_to_bot",
+  "ask_members",
 ]);
-const DELEGATION_TOOLS = new Set(["run_subagent", "message_bot", "spawn_bot", "handoff_to_bot"]);
+const DELEGATION_TOOLS = new Set([
+  "run_subagent",
+  "message_bot",
+  "spawn_bot",
+  "handoff_to_bot",
+  "ask_members",
+]);
 const FORBIDDEN_TOOLS = new Set([
   "add_mcp_server",
   "cloud_agent_launch",
