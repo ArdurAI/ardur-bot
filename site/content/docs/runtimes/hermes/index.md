@@ -103,8 +103,9 @@ Anthropic's own apps; use an Anthropic API key instead
 sanctioned only inside Codex, which runs a stateful agent loop rather than the
 plain model turns Hermes needs; use an OpenAI API key instead. The settings
 picker keeps these connections visible but disabled with the reason, a run
-pinned to one is refused with the same reason, and any other sign-in
-connection is refused the same way. The chosen connection
+pinned to one is refused, and any other sign-in connection is refused the same
+way. A run on an Anthropic sign-in saved by an older version is refused with
+"Reconnect with an API key." The chosen connection
 must have a bounded context window and an output limit at most 65,536 tokens.
 Effort is a requested value; seeing the outbound field does not prove the provider
 applied it. The bot and run keep their exact credential, model, effort and revision.

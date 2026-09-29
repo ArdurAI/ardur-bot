@@ -139,6 +139,9 @@ export default function BotSettingsScreen() {
     const options: ModelOption[] = [];
     const seen = new Set<string>();
     for (const credential of credentials) {
+      // Sign-in connections stay off the Hermes choices; key-based ones are served.
+      if (runtimeKind === "hermes" && hermesConnectionRefusal(credential.provider, credential))
+        continue;
       const providerModels = catalog.filter(
         (entry) =>
           entry.provider === credential.provider &&
@@ -175,7 +178,7 @@ export default function BotSettingsScreen() {
         Number(a.provider === "ollama" || a.provider === "local") -
         Number(b.provider === "ollama" || b.provider === "local"),
     );
-  }, [catalog, credentials]);
+  }, [catalog, credentials, runtimeKind]);
 
   const effectiveProvider = modelKey
     ? parseModelOptionKey(modelKey)?.provider
@@ -674,7 +677,7 @@ export default function BotSettingsScreen() {
             !name.trim() ||
             pending ||
             !bot ||
-            (runtimeKind === "hermes" && Boolean(runtimeConfigError))
+            (runtimeKind === "hermes" && Boolean(runtimeConfigError || hermesRefusal))
           }
           style={{
             marginTop: 24,
