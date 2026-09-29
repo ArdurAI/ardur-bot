@@ -25,7 +25,7 @@ test("shows the first goal desk request, independent check, and coordinator answ
   test.setTimeout(360_000);
   await signup(
     page,
-    `desk-loop-${testInfo.workerIndex}-${Date.now()}@ardurbot.test`,
+    `desk-loop-${testInfo.workerIndex}-${Date.now()}@example.test`,
     "password12",
     "Desk loop",
   );

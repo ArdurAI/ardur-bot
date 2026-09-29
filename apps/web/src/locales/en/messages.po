@@ -1317,6 +1317,7 @@ msgid "Bot screen preview"
 msgstr "Bot screen preview"
 
 #: src/pages/BotContextMenu.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Bot settings"
 msgstr "Bot settings"
 
@@ -1909,8 +1910,8 @@ msgstr "Comment"
 msgid "Compare bots"
 msgstr "Compare bots"
 
+#: src/components/composer/ComposerMenu.tsx
 #: src/pages/CompareStart.tsx
-#: src/pages/Shell.tsx
 msgid "Compare with…"
 msgstr "Compare with…"
 
@@ -3422,6 +3423,10 @@ msgstr "Developer"
 msgid "Developer (git, GitHub and GitLab CLIs, node, jq)"
 msgstr "Developer (git, GitHub and GitLab CLIs, node, jq)"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Developer image"
+msgstr "Developer image"
+
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Developer is a larger download and uses more disk space."
 msgstr "Developer is a larger download and uses more disk space."
@@ -4183,6 +4188,7 @@ msgstr "Granted"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group"
 msgstr "Group"
 
@@ -4190,7 +4196,7 @@ msgstr "Group"
 msgid "Group brief"
 msgstr "Group brief"
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group settings"
 msgstr "Group settings"
 
@@ -4254,6 +4260,10 @@ msgstr "Hermes does not yet support this connection."
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes is not installed on this computer."
 msgstr "Hermes is not installed on this computer."
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Hermes isn't available on Windows yet."
+msgstr "Hermes isn't available on Windows yet."
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."
@@ -4354,6 +4364,10 @@ msgstr "Ignore"
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Image profile"
 msgstr "Image profile"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Image pull secret"
+msgstr "Image pull secret"
 
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Image upload area"
@@ -5129,6 +5143,7 @@ msgstr "Memories"
 #: src/pages/memory/MemoryProposals.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/settings-sections.ts
+#: src/pages/shell/bot-panel.tsx
 msgid "Memory"
 msgstr "Memory"
 
@@ -6446,6 +6461,7 @@ msgstr "Private workspace with its own bots and groups."
 #: src/pages/account/AccountProfile.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/memory/MemoryProposals.tsx
+#: src/pages/shell/bot-panel.tsx
 msgid "Profile"
 msgstr "Profile"
 
@@ -7019,6 +7035,10 @@ msgstr "Reset your password"
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Resetting…"
 msgstr "Resetting…"
+
+#: src/pages/Shell.tsx
+msgid "Resize pane"
+msgstr "Resize pane"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Resources"
@@ -7713,6 +7733,7 @@ msgstr "Set up servers"
 #: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Settings"
 msgstr "Settings"
 
@@ -7758,7 +7779,7 @@ msgstr "Show all models"
 msgid "Show bots"
 msgstr "Show bots"
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show computer"
 msgstr "Show computer"
 
@@ -7778,7 +7799,7 @@ msgstr "Show more"
 msgid "Show password"
 msgstr "Show password"
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show settings"
 msgstr "Show settings"
 
@@ -8017,6 +8038,10 @@ msgstr "Stale"
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Standard"
 msgstr "Standard"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Standard image"
+msgstr "Standard image"
 
 #: src/components/composer/command-description.ts
 msgid "Start a new chat"
@@ -8347,6 +8372,10 @@ msgstr "The first bot could not be created. Try again."
 #: src/pages/group-model-control.tsx
 msgid "The group model choice was reloaded. Pick again."
 msgstr "The group model choice was reloaded. Pick again."
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "The Hermes install on this computer failed its safety check."
+msgstr "The Hermes install on this computer failed its safety check."
 
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
@@ -9232,7 +9261,7 @@ msgid "Working…"
 msgstr "Working…"
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Workspace"
 msgstr "Workspace"
 

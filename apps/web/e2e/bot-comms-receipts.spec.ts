@@ -56,7 +56,7 @@ test("shows one delivery chip advance through Delivered, Read and Replied in bot
   test.setTimeout(360_000);
   await signup(
     page,
-    `receipt-loop-${testInfo.workerIndex}-${testInfo.repeatEachIndex}-${Date.now()}@ardurbot.test`,
+    `receipt-loop-${testInfo.workerIndex}-${testInfo.repeatEachIndex}-${Date.now()}@example.test`,
     "password12",
     "Receipt loop",
   );
@@ -145,7 +145,7 @@ test("shows Waiting for a turn while unrelated owner work occupies the recipient
   test.setTimeout(360_000);
   await signup(
     page,
-    `receipt-queued-${testInfo.workerIndex}-${testInfo.repeatEachIndex}-${Date.now()}@ardurbot.test`,
+    `receipt-queued-${testInfo.workerIndex}-${testInfo.repeatEachIndex}-${Date.now()}@example.test`,
     "password12",
     "Queued receipt",
   );

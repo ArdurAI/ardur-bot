@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import type { AdapterContext, AgentRunRequest, AgentRuntime } from "@ardurbot/adapter-kit";
 import type {
   RuntimeAvailability,
@@ -175,28 +176,32 @@ export async function nativeRuntimeAvailability(
         runtimeKind: "hermes",
         available: false,
         models: [],
-        reason: "Pinned Hermes is unavailable on this host.",
+        reason: "Hermes isn't available on Windows yet.",
       };
     }
     const { localHermesInstallCandidate, probeHermesInstall } = await import(
       "@ardurbot/host-runtime/runtimes/hermes-install"
     );
     const install = localHermesInstallCandidate();
-    let available = false;
-    if (install) {
-      try {
-        probeHermesInstall(install);
-        available = true;
-      } catch {
-        available = false;
-      }
+    if (!install || !existsSync(install)) {
+      return {
+        runtimeKind: "hermes",
+        available: false,
+        models: [],
+        reason: "Hermes is not installed on this computer.",
+      };
     }
-    return {
-      runtimeKind: "hermes",
-      available,
-      models: [],
-      ...(!available ? { reason: "Hermes is not installed on this computer." } : {}),
-    };
+    try {
+      probeHermesInstall(install);
+      return { runtimeKind: "hermes", available: true, models: [] };
+    } catch {
+      return {
+        runtimeKind: "hermes",
+        available: false,
+        models: [],
+        reason: "The Hermes install on this computer failed its safety check.",
+      };
+    }
   }
   return kind === "claude-code"
     ? probeClaude()

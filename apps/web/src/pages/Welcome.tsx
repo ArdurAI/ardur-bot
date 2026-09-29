@@ -5,7 +5,7 @@ import { WindowChrome } from "./WindowChrome";
 export function WelcomePage() {
   const navigate = useNavigate();
   return (
-    <div className="flex min-h-full flex-col bg-background" data-ardurbot-surface="welcome">
+    <div className="flex min-h-full flex-col bg-background" data-ardur-surface="welcome">
       <div className="app-drag flex gap-2 px-5 py-[18px]">
         <WindowChrome />
       </div>

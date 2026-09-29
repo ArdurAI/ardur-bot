@@ -13,7 +13,7 @@ import {
 test("the group header keeps long member models on one truncating line", async ({
   page,
 }, testInfo) => {
-  await signup(page, `group-layout-${Date.now()}@ardurbot.test`, "password12", "Group layout");
+  await signup(page, `group-layout-${Date.now()}@example.test`, "password12", "Group layout");
   await completeOnboarding(page);
   await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
   const catalog = listPiCatalog();

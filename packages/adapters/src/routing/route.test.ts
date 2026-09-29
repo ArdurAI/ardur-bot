@@ -59,7 +59,36 @@ it("rejects targets outside the authorized roster and handles multiword mentions
   ).toBe("mention");
   expect(routeIncoming({ bots: [], text: "Review" })).toBeNull();
 });
-it("reads only explicit @-mentions, never prose, before the coordinator", () => {
+it("routes a message that starts by addressing a bot by name, with or without @", () => {
+  expect(routeIncoming({ bots, text: "Chief, did rad do it?" })).toMatchObject({
+    botId: "chief",
+    rule: "mention",
+  });
+  expect(routeIncoming({ bots, text: "chief: status?" })?.rule).toBe("mention");
+  expect(routeIncoming({ bots, text: "hey Chief what happened" })?.rule).toBe("mention");
+  expect(routeIncoming({ bots, text: "@chief why" })?.rule).toBe("mention");
+  expect(routeIncoming({ bots, text: "so chief, did rad do it?" })?.rule).toBe("mention");
+  expect(routeIncoming({ bots, text: "Chief and worker, status?" })).toMatchObject({
+    botId: "chief",
+    rule: "mention",
+  });
+  expect(
+    routeIncoming({
+      bots: [{ botId: "rw", name: "Research Writer", threadId: "group" }],
+      text: "Research Writer, please compare",
+    }),
+  ).toMatchObject({ botId: "rw", rule: "mention" });
+});
+it("does not treat a name used mid-sentence as a subject as addressing", () => {
+  expect(
+    routeIncoming({ bots, text: "ask chief why this happened", lastActiveThread: bots[2] }),
+  ).toMatchObject({ botId: "researcher", rule: "last-active-thread" });
+  expect(
+    routeIncoming({ bots, text: "worker said chief was wrong", lastActiveThread: bots[2] }),
+  ).toMatchObject({ botId: "researcher", rule: "last-active-thread" });
+  expect(routeIncoming({ bots, text: "ask chief why this happened" })?.rule).toBe("default");
+});
+it("reads only mentions and a leading name, never prose, before the coordinator", () => {
   const input = { bots, groupCoordinatorId: "chief", lastActiveThread: bots[1] };
   for (const text of ["tell everyone to introduce themselves", "ask the worker for its status"])
     expect(routeIncoming({ ...input, text })).toMatchObject({
@@ -73,5 +102,9 @@ it("reads only explicit @-mentions, never prose, before the coordinator", () => 
   expect(routeIncoming({ ...input, text: "ask everyone", replyTo: bots[2] })).toMatchObject({
     botId: "researcher",
     rule: "reply",
+  });
+  expect(routeIncoming({ ...input, text: "worker, status?" })).toMatchObject({
+    botId: "worker",
+    rule: "mention",
   });
 });
