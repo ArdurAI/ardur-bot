@@ -18,6 +18,12 @@ import {
   session,
   shell,
 } from "electron";
+import {
+  applicationMenuTemplate,
+  applyAppShortcutMenu,
+  runAppShortcut,
+  watchAppShortcutMenu,
+} from "./app-menu.js";
 import type { ElectronAutoUpdater } from "./auto-update.js";
 import { DesktopUpdateController, LAUNCH_CHECK_DELAY_MS } from "./auto-update.js";
 import { BootSnapshotStore } from "./boot-snapshot.js";
@@ -380,6 +386,11 @@ function createWindow(url: string, partition: string | null) {
     },
   });
   mainWindow = win;
+  watchAppShortcutMenu(
+    win.webContents,
+    () => Menu.getApplicationMenu(),
+    () => mainWindow === win,
+  );
   appWindowTargets.set(win, url);
   desktopSystem?.attachWindow(win, url);
   const targetOrigin = safeOrigin(url);
@@ -962,12 +973,17 @@ async function showLocalSettings() {
   }
 }
 
+function syncAppShortcutMenu(win: BrowserWindow) {
+  if (win.isDestroyed()) return;
+  const menu = Menu.getApplicationMenu();
+  if (menu) applyAppShortcutMenu(menu, win.webContents.getURL());
+}
+
 function installApplicationMenu() {
   if (process.platform === "darwin") app.setAboutPanelOptions({ applicationName: "Ardur" });
   const localSettings: Electron.MenuItemConstructorOptions = {
     id: "local-server-settings",
     label: "Local Server Settings…",
-    accelerator: "CmdOrCtrl+,",
     click: () => {
       void showLocalSettings();
     },
@@ -988,42 +1004,11 @@ function installApplicationMenu() {
       else void localMode.stop();
     },
   };
-  const template: Electron.MenuItemConstructorOptions[] =
-    process.platform === "darwin"
-      ? [
-          {
-            label: "Ardur",
-            submenu: [
-              { role: "about", label: "About Ardur" },
-              { type: "separator" },
-              localSettings,
-              changeServer,
-              stopStack,
-              { type: "separator" },
-              { role: "hide", label: "Hide Ardur" },
-              { role: "hideOthers" },
-              { role: "unhide" },
-              { type: "separator" },
-              { role: "quit", label: "Quit Ardur" },
-            ],
-          },
-          { role: "editMenu" },
-          { role: "windowMenu" },
-        ]
-      : [
-          {
-            label: "File",
-            submenu: [
-              localSettings,
-              changeServer,
-              stopStack,
-              { type: "separator" },
-              { role: "quit" },
-            ],
-          },
-          { role: "editMenu" },
-          { role: "windowMenu" },
-        ];
+  const template = applicationMenuTemplate(
+    process.platform,
+    { localSettings, changeServer, stopStack },
+    (id) => runAppShortcut(mainWindow, id, BrowserWindow.getFocusedWindow()),
+  );
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
@@ -1172,7 +1157,10 @@ async function openAppOnce(targetUrl: string, resolved?: ResolvedSessionTarget) 
   } catch (error) {
     pendingPreviousWindow = null;
     // Keep the previous app window so Cancel / close can restore it.
-    if (previous !== null && !previous.isDestroyed()) mainWindow = previous;
+    if (previous !== null && !previous.isDestroyed()) {
+      mainWindow = previous;
+      syncAppShortcutMenu(previous);
+    }
     dockBadge?.sync();
     // Show the setup window BEFORE destroying the failed one: on Windows/Linux,
     // destroying the last window fires "window-all-closed" -> app.quit() before
@@ -1203,6 +1191,7 @@ async function abandonPendingAppSwitch(
   if (previous !== null && !previous.isDestroyed()) {
     const failed = mainWindow;
     mainWindow = previous;
+    syncAppShortcutMenu(previous);
     dockBadge?.sync();
     if (failed !== null && !failed.isDestroyed() && failed !== previous) failed.destroy();
     currentSetup = previousSetup;

@@ -64,6 +64,31 @@ describe("lingui catalogs", () => {
     },
   );
 
+  it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+    "catalogs the command palette shortcut commands in %s",
+    async (locale) => {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const catalog = await formatter().parse(readFileSync(filename, "utf8"), {
+        locale,
+        sourceLocale: "en",
+        filename,
+      });
+      for (const message of [
+        "New bot",
+        "Message",
+        "Search",
+        "Hide bots",
+        "Show bots",
+        "Back",
+        "Forward",
+        "Settings",
+      ]) {
+        const entry = Object.values(catalog).find((value) => value.message === message);
+        expect(entry?.translation, `${locale}: ${message}`).toBeTruthy();
+      }
+    },
+  );
+
   it.each([
     ["en", "Line 2: - [redacted] Edit or reject this line."],
     ["de", "Zeile 2: - [redacted] Diese Zeile bearbeiten oder ablehnen."],

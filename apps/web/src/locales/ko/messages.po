@@ -1150,6 +1150,7 @@ msgstr ""
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
+#: src/pages/Shell.tsx
 msgid "Back"
 msgstr "뒤로"
 
@@ -4081,6 +4082,10 @@ msgstr ""
 msgid "Forgot password?"
 msgstr "비밀번호를 잊으셨나요?"
 
+#: src/pages/Shell.tsx
+msgid "Forward"
+msgstr "앞으로"
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Found on this computer"
 msgstr ""
@@ -4275,7 +4280,7 @@ msgstr "안녕하세요. 답변을 소리 내어 읽을 때 이런 목소리로 
 
 #: src/pages/Shell.tsx
 msgid "Hide bots"
-msgstr ""
+msgstr "Bot 숨기기"
 
 #: src/pages/customize/McpDiagnostics.tsx
 msgid "Hide logs"
@@ -5543,6 +5548,7 @@ msgstr ""
 msgid "New access token"
 msgstr ""
 
+#: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "New bot"
 msgstr "새 Bot 만들기"
@@ -7781,7 +7787,7 @@ msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Show bots"
-msgstr ""
+msgstr "Bot 표시"
 
 #: src/pages/shell/settings-chrome.tsx
 msgid "Show computer"

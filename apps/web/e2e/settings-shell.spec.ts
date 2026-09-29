@@ -36,11 +36,7 @@ test("settings shell is two-pane and deep-links Models Memory Voice Usage", asyn
   }
   await page.getByRole("button", { name: "Close user settings" }).click();
   await expect(settings).not.toBeVisible();
-  await page.keyboard.press("Control+,");
-  await expect(settings).toBeVisible();
-  await page.getByRole("button", { name: "Close user settings" }).click();
-  await expect(settings).not.toBeVisible();
-  await page.keyboard.press("Meta+,");
+  await page.keyboard.press("ControlOrMeta+,");
   await expect(settings).toBeVisible();
   await expect(settings.getByTestId("settings-nav")).toBeVisible();
   await expect(settings.getByTestId("settings-nav-general")).toHaveAttribute(
