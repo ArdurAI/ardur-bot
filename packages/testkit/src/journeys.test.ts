@@ -5842,6 +5842,69 @@ describeJourneys("required product journeys", () => {
     expect(remainingBotIds).not.toContain(artifactOwnerId);
   });
 
+  it("55b: a room's four bots answer @everyone at the same time", async () => {
+    const para = await signup(app, `para-${stamp}@example.test`, "Para Rooms");
+    const makeBot = (name: string) =>
+      rpc<Bot>(app, para, "bots/create", {
+        name,
+        title: "",
+        description: "",
+        instructions: "",
+        notifyOnFinish: false,
+      });
+    const paraBots = await Promise.all([
+      makeBot("ParaA"),
+      makeBot("ParaB"),
+      makeBot("ParaC"),
+      makeBot("ParaD"),
+    ]);
+    const group = await rpc<{ id: string; threadId: string }>(app, para, "groups/create", {
+      name: "Parallel room",
+      botIds: paraBots.map((bot) => bot.id),
+    });
+
+    // The scripted slow turn keeps every run busy long enough that serial admission
+    // cannot fake overlap.
+    const snap = await sendGroupAndWait(
+      app,
+      para,
+      group.id,
+      "@everyone scripted slow review: say hello",
+    );
+
+    const runs = await prisma.run.findMany({
+      where: { threadId: group.threadId, trigger: "user" },
+      select: { id: true, botId: true, status: true, startedAt: true, completedAt: true },
+    });
+    expect(runs).toHaveLength(4);
+    expect(runs.every((run) => run.status === "completed")).toBe(true);
+    for (const run of runs) {
+      expect(run.startedAt).not.toBeNull();
+      expect(run.completedAt).not.toBeNull();
+    }
+    // All four intervals share a point: the last start precedes the first finish.
+    const lastStart = Math.max(...runs.map((run) => run.startedAt!.getTime()));
+    const firstFinish = Math.min(...runs.map((run) => run.completedAt!.getTime()));
+    expect(lastStart).toBeLessThan(firstFinish);
+
+    // All four replied under their own names, each reply in its reserved place.
+    const replies = snap.messages.filter((message) => message.role === "bot");
+    expect(new Set(replies.map((message) => message.botId))).toEqual(
+      new Set(paraBots.map((bot) => bot.id)),
+    );
+    const replySeqs = replies.map((message) => message.seq);
+    expect(new Set(replySeqs).size).toBe(4);
+
+    // A reload reads the same transcript in the same order.
+    const reloaded = await rpc<Snap>(app, para, "threads/get", { groupId: group.id });
+    expect(reloaded.messages.map((message) => message.id)).toEqual(
+      snap.messages.map((message) => message.id),
+    );
+    expect(reloaded.messages.map((message) => message.seq)).toEqual(
+      snap.messages.map((message) => message.seq),
+    );
+  });
+
   // A coordinator on a native runtime reports its whole turn's usage, cache reads included, as
   // the turn ends: well past the default task budget, just before its room workers can start.
   async function* heavyTurn(events: AsyncIterable<AgentRuntimeEvent>) {
@@ -6569,6 +6632,8 @@ type Snap = {
   messages: Array<{
     id: string;
     seq: number;
+    role?: string;
+    botId?: string | null;
     runId?: string | null;
     blocks: Array<{ kind?: string; status?: string; answer?: string; actions?: unknown[] }>;
   }>;
