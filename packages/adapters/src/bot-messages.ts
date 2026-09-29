@@ -12,6 +12,7 @@ import {
   botMessageHopExhausted,
   buildBotMessageWakePrompt,
   clampBotMessage,
+  classifyPeerEffectBinding,
   classifyPeerEffects,
   nextBotMessageHop,
   peerPairKey,
@@ -161,6 +162,8 @@ export async function messageBot(
   const groupId = sourceThread?.groupId;
   const goalRequest = Boolean(groupId);
   const held = classifyPeerEffects(effects.data).kind !== "read-only";
+  // Only a digest-bound exact descriptor can become one approved execution.
+  const binding = classifyPeerEffectBinding(effects.data);
   if (held && (!goalRequest || !["request", "question"].includes(input.intent ?? "request")))
     return { ok: false as const, error: "This peer request needs an active goal and a task card." };
   const goal = goalRequest
@@ -817,9 +820,9 @@ export async function messageBot(
             card: input.card,
             ...(goal
               ? {
-                  // A complete descriptor is still only an intent to prepare in S4.
-                  // Exact write authority needs its own effect-bound card and gate.
-                  peerMode: "read-only" as const,
+                  // One exact descriptor with owner-readable, digest-bound arguments
+                  // binds a single approved effect; everything else prepares only.
+                  peerMode: binding.kind === "effect-bound" ? ("effect-bound" as const) : ("read-only" as const),
                   tokens: goal.perWorkerTokens,
                   deadlineAt: new Date(
                     Math.min(
@@ -982,11 +985,13 @@ export async function messageBot(
           await appendBotMessageAuditInTransaction(tx, delivery, "queued");
           await appendBotMessageAuditInTransaction(tx, delivery, held ? "held" : "delivered");
           if (held) {
+            const bound = binding.kind === "effect-bound" ? binding.effect : undefined;
             const approvalRequest = {
               deliveryId,
               authorityFingerprint,
               requestedEffects: effects.data,
-              preparationOnly: true,
+              preparationOnly: !bound,
+              ...(bound ? { boundEffect: bound } : {}),
             };
             const approval = await tx.externalEffect.create({
               data: {
@@ -1028,11 +1033,18 @@ export async function messageBot(
               kind: "ask",
               peerHold: true,
               approvalEffectId: approval.id,
-              text: `${sender.name} wants ${target.name} to prepare a team request.`,
-              detail: `Requested by ${sender.name} · Acting as ${target.name}\n${effects.data.map((effect) => effect.kind).join(", ")}`,
+              text: bound
+                ? `${sender.name} wants ${target.name} to run ${bound.toolName}.`
+                : `${sender.name} wants ${target.name} to prepare a team request.`,
+              detail: bound
+                ? `Requested by ${sender.name} · Acting as ${target.name}\n${bound.toolName} · ${bound.resourceRef}\n${JSON.stringify(bound.args)}`
+                : `Requested by ${sender.name} · Acting as ${target.name}\n${effects.data.map((effect) => effect.kind).join(", ")}`,
               status: "pending",
               actions: [
-                { id: "allow", label: "Allow preparation" },
+                {
+                  id: "allow",
+                  label: bound ? "Allow once" : "Allow preparation",
+                },
                 { id: "deny", label: "Deny" },
               ],
             };
@@ -1132,7 +1144,9 @@ export async function messageBot(
     runId: committed.runId,
     differences: committed.differences,
     note: held
-      ? "Waiting for your approval. The recipient will only prepare this task after approval."
+      ? binding.kind === "effect-bound"
+        ? "Waiting for your approval. The recipient can run the exact approved action once after approval."
+        : "Waiting for your approval. The recipient will only prepare this task after approval."
       : `Sent to ${target.name}. Delivery is async. Continue independent work. Progress stays on the task card; completion produces one coordinator summary.`,
   };
 }
