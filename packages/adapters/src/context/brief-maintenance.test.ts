@@ -44,6 +44,12 @@ function fixture() {
         space: { concurrentRuns: 3 },
       })),
     },
+    thread: {
+      findUniqueOrThrow: vi.fn(async () => ({
+        groupId: "group",
+        group: { policy: null },
+      })),
+    },
     chatGroupMember: {
       findUnique: vi.fn(async () => ({ id: "membership" }) as { id: string } | null),
     },
