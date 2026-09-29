@@ -1,5 +1,5 @@
-import { PeerEffectDescriptorSchema } from "@ardurbot/contracts";
 import type { PeerEffectDescriptor } from "@ardurbot/contracts";
+import { PeerEffectDescriptorSchema } from "@ardurbot/contracts";
 
 /** The request envelope persisted on a peer_hold external effect. */
 export const PEER_HOLD_KIND = "peer_hold";
@@ -33,10 +33,7 @@ export function parsePeerHoldRequest(request: unknown): PeerHoldRequest | undefi
 /** The one exact bound effect, revalidated against the stored descriptor list. */
 export function peerHoldBoundEffect(
   request: unknown,
-):
-  | { kind: "bound"; effect: PeerEffectDescriptor }
-  | { kind: "preparation" }
-  | { kind: "invalid" } {
+): { kind: "bound"; effect: PeerEffectDescriptor } | { kind: "preparation" } | { kind: "invalid" } {
   const hold = parsePeerHoldRequest(request);
   if (!hold) return { kind: "invalid" };
   if (hold.preparationOnly) return { kind: "preparation" };
