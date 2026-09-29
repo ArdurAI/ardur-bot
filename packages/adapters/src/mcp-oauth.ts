@@ -1327,7 +1327,9 @@ export class McpOAuthBroker {
         throw new Error("MCP server is unavailable");
       }
       if (previousSecretId && previousSecretId !== stored?.id) {
-        await tx.secret.deleteMany({ where: { id: previousSecretId } });
+        await tx.secret.deleteMany({
+          where: { id: previousSecretId, spaceId: context.spaceId, userId: context.userId },
+        });
       }
       return stored?.id;
     });
