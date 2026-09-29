@@ -5,6 +5,9 @@ import { ContextBudgetsSchema } from "@ardurbot/contracts";
 type Message = AgentRunRequest["history"][number];
 const RESULT_TRUNCATED_MARKER =
   "[Result truncated to fit the history budget; open the thread for the full report.]";
+// Overflowing history starts on a grid of quarter-budget steps: it gives up less than a quarter
+// of its budget, and its first kept character moves every few turns instead of every message.
+const HISTORY_STEPS = 4;
 const STOP_WORDS = new Set(
   "the a an and or but is are was were be been do does did have has had i we you it this that these those what which who when where how why please about for from with can could would should tell me our your in on of to at as my any".split(
     " ",
@@ -32,17 +35,32 @@ function frame(name: string, text: string, budget: number) {
   const escaped = text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
   return prefix + escaped.slice(0, Math.max(0, budget - prefix.length - suffix.length)) + suffix;
 }
-export function boundMessages(messages: Message[], budget: number): Message[] {
+/**
+ * Keep the newest messages that fit the budget. The first kept character moves forward in whole
+ * steps, not with every new message, so the kept history repeats byte for byte until the next
+ * step and provider prompt caches can reuse it. A step of 1 keeps exactly the last `budget`.
+ */
+export function boundMessages(messages: Message[], budget: number, step = 1): Message[] {
+  const overflow = messages.reduce((size, message) => size + message.content.length, 0) - budget;
+  const start = overflow > 0 ? Math.ceil(overflow / step) * step : overflow;
   const result: Message[] = [];
-  let remaining = budget;
-  for (const message of [...messages].reverse()) {
-    if (remaining <= 0) break;
-    const content = message.content.slice(-remaining);
-    result.unshift({ ...message, content });
-    remaining -= content.length;
+  let offset = 0;
+  for (const message of messages) {
+    const end = offset + message.content.length;
+    if (end > start)
+      result.push(
+        offset >= start ? message : { ...message, content: message.content.slice(start - offset) },
+      );
+    offset = end;
   }
   return result;
 }
+/**
+ * Provider prompt caches reuse only the leading part of a request that repeats byte for byte,
+ * so the layout runs from most to least stable: instructions, the compacted summary, the
+ * bounded messages, then data observed fresh for this turn (teammates, brief, required result,
+ * recall) and finally the latest turn, which carries the goal state.
+ */
 export async function assembleTurnContext(run: {
   peerReadOnly?: boolean;
   instructions: string;
@@ -50,6 +68,7 @@ export async function assembleTurnContext(run: {
   brief?: string | null;
   summary?: string | null;
   teammates?: string;
+  goal?: string;
   history: Message[];
   requiredContext?: Message;
   message: string;
@@ -78,7 +97,9 @@ export async function assembleTurnContext(run: {
     throw new Error(
       "Bot instructions exceed the context budget including exposed tools. Increase the space budget or load tools when needed.",
     );
-  if (run.message.length > budgets.message)
+  // Goal state changes every turn (open assignments, token use), so it rides with the new turn.
+  const prompt = run.goal && !run.peerReadOnly ? `${run.goal}\n\n${run.message}` : run.message;
+  if (prompt.length > budgets.message)
     throw new Error("This message exceeds the context budget. Send a shorter message.");
   const brief = frame("group_brief", run.peerReadOnly ? "" : (run.brief ?? ""), budgets.brief);
   const summary = frame(
@@ -110,16 +131,21 @@ export async function assembleTurnContext(run: {
       (message) => !run.sourceMessageId || message.id !== run.sourceMessageId,
     ),
     budgets.messages - requiredAllowance - teammates.length,
+    Math.max(1, Math.floor(budgets.messages / HISTORY_STEPS)),
   );
   const recallRan = Boolean(
     !run.peerReadOnly && run.recall && needsRecall(run.query ?? run.message, run.brief ?? ""),
   );
   const recall = frame("recalled_memory", recallRan ? await run.recall!() : "", budgets.recall);
-  const history: Message[] = [
-    ...(teammates ? [{ role: "user" as const, content: teammates }] : []),
-    ...(brief ? [{ role: "user" as const, content: brief }] : []),
+  // The summary changes only when compaction also moves the start of the messages it precedes.
+  const stable: Message[] = [
     ...(summary ? [{ role: "user" as const, content: summary }] : []),
     ...messages,
+  ];
+  const history: Message[] = [
+    ...stable,
+    ...(teammates ? [{ role: "user" as const, content: teammates }] : []),
+    ...(brief ? [{ role: "user" as const, content: brief }] : []),
     ...(requiredMessage ? [requiredMessage] : []),
     ...(recall ? [{ role: "user" as const, content: recall }] : []),
   ];
@@ -133,7 +159,7 @@ export async function assembleTurnContext(run: {
         messages.reduce((size, message) => size + message.content.length, 0) +
         (requiredMessage?.content.length ?? 0),
       recall: recall.length,
-      message: run.message.length,
+      message: prompt.length,
     },
     recallRan,
     recallCalls: Number(recallRan),
@@ -147,7 +173,9 @@ export async function assembleTurnContext(run: {
     instructions: run.instructions,
     stablePrefix: run.instructions,
     history,
-    prompt: run.message,
+    /** Leading history entries expected to repeat unchanged on the next turn. */
+    stableHistory: stable.length,
+    prompt,
     snapshot,
   };
 }

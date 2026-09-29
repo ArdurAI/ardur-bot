@@ -526,6 +526,8 @@ export interface AgentRunRequest {
   instructions: string;
   stablePrefix?: string;
   history: Array<{ id?: string; role: "user" | "assistant" | "system"; content: string }>;
+  /** Leading history entries expected to repeat unchanged next turn; a prompt cache may end there. */
+  stableHistory?: number;
   currentTurnImages?: AgentInputImage[];
   /** Explicit model-only mode; an empty array retains legacy built-in tools. */
   tools: ConnectorTool[] | "none";

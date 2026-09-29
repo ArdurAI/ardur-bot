@@ -16,9 +16,12 @@ const average = (values: number[]) =>
 console.log("Ten-turn launch group thread: shared prefix with the previous request");
 for (const row of later)
   console.log(
-    `turn ${String(row.turn).padStart(2)}: request ${count(row.requestChars)}, shared ${count(row.sharedChars)}, sent again ${count(row.requestChars - row.sharedChars)}`,
+    `turn ${String(row.turn).padStart(2)}: request ${count(row.requestChars)}, shared ${count(row.sharedChars)}, sent again ${count(row.requestChars - row.sharedChars)}, conversation kept ${row.keptHistoryChars.toLocaleString("en-US")} chars`,
   );
 console.log(`average shared prefix: ${count(average(later.map((row) => row.sharedChars)))}`);
 console.log(
   `average sent again: ${count(average(later.map((row) => row.requestChars - row.sharedChars)))}`,
+);
+console.log(
+  `average conversation kept: ${average(rows.map((row) => row.keptHistoryChars)).toLocaleString("en-US")} chars`,
 );

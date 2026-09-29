@@ -12,6 +12,10 @@ export interface PrefixReuse {
   requestChars: number;
   /** Leading characters identical to the previous request; zero for the first turn. */
   sharedChars: number;
+  /** Tools, instructions and the history the assembler expects to repeat next turn. */
+  stableChars: number;
+  /** Conversation characters the model still sees after history bounding. */
+  keptHistoryChars: number;
 }
 
 /** A rough English-text estimate; provider usage reports the real token counts. */
@@ -27,10 +31,10 @@ export function sharedPrefixLength(left: string, right: string): number {
 }
 
 /** The request in the order providers cache it: tools, system text, then every message. */
-export function providerRequestText(
+function requestParts(
   turn: PrefixTurn,
   context: Awaited<ReturnType<typeof assembleTurnContext>>,
-): string {
+): string[] {
   const tools = Array.isArray(turn.tools) ? turn.tools : [];
   return [
     JSON.stringify(
@@ -39,18 +43,32 @@ export function providerRequestText(
     context.instructions,
     ...context.history.map(({ role, content }) => `${role}\n${content}`),
     `user\n${context.prompt}`,
-  ].join("\n\n");
+  ];
+}
+
+export function providerRequestText(
+  turn: PrefixTurn,
+  context: Awaited<ReturnType<typeof assembleTurnContext>>,
+): string {
+  return requestParts(turn, context).join("\n\n");
 }
 
 export async function measurePrefixReuse(turns: PrefixTurn[]): Promise<PrefixReuse[]> {
   const rows: PrefixReuse[] = [];
   let previous: string | undefined;
   for (const [index, turn] of turns.entries()) {
-    const request = providerRequestText(turn, await assembleTurnContext(turn));
+    const context = await assembleTurnContext(turn);
+    const parts = requestParts(turn, context);
+    const request = parts.join("\n\n");
+    const threadIds = new Set(turn.history.map((message) => message.id));
     rows.push({
       turn: index + 1,
       requestChars: request.length,
       sharedChars: previous === undefined ? 0 : sharedPrefixLength(previous, request),
+      stableChars: parts.slice(0, 2 + context.stableHistory).join("\n\n").length,
+      keptHistoryChars: context.history
+        .filter((message) => message.id && threadIds.has(message.id))
+        .reduce((size, message) => size + message.content.length, 0),
     });
     previous = request;
   }

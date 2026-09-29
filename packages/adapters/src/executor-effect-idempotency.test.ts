@@ -613,6 +613,41 @@ describe("mutating tool effect idempotency keys", () => {
       }),
     );
   });
+  it("reads prompt lists in one fixed order and tells the runtime which history repeats", async () => {
+    const f = fixture();
+    const message = (id: string, seq: number, role: "user" | "bot", text: string) => ({
+      id,
+      threadId: "thread-1",
+      seq,
+      role,
+      runId: role === "bot" ? "earlier-run" : null,
+      botId: role === "bot" ? "bot-1" : null,
+      blocks: [{ kind: "text", text }],
+      replyToMessageId: null,
+      replyQuote: null,
+      replyTo: null,
+    });
+    f.prisma.message.findMany.mockImplementation((async (query?: { orderBy?: { seq?: string } }) =>
+      query?.orderBy?.seq === "desc"
+        ? [
+            message("m2", 1, "bot", "Nine items are done."),
+            message("m1", 0, "user", "Where is the checklist?"),
+          ]
+        : []) as never);
+    await f.run();
+    const order = [{ createdAt: "asc" }, { id: "asc" }];
+    expect(f.prisma.connection.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: order }),
+    );
+    expect(f.prisma.taughtSkill.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: order }),
+    );
+    const request = f.runtimeRun.mock.calls[0]![0];
+    expect(request.history.slice(0, request.stableHistory)).toEqual([
+      expect.objectContaining({ role: "user", content: "Where is the checklist?" }),
+      expect.objectContaining({ role: "assistant", content: "Nine items are done." }),
+    ]);
+  });
   it("passes a human-authored account snapshot after the bot instructions and retains it on resume", async () => {
     const f = fixture();
     const bot = await f.prisma.bot.findUniqueOrThrow();
