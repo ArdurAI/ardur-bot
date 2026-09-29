@@ -1,6 +1,7 @@
-import type { AgentRunRequest } from "@ardurbot/adapter-kit";
+import type { AgentRunRequest, AgentSteeringMessage } from "@ardurbot/adapter-kit";
 import type { ContextBudgets, ContextSnapshot, RoutingRule } from "@ardurbot/contracts";
 import { ContextBudgetsSchema } from "@ardurbot/contracts";
+import { promptWithInitialSteering } from "../steering-input.js";
 
 type Message = AgentRunRequest["history"][number];
 const RESULT_TRUNCATED_MARKER =
@@ -53,6 +54,8 @@ export async function assembleTurnContext(run: {
   history: Message[];
   requiredContext?: Message;
   message: string;
+  /** Waiting messages the caller already fitted to the budget left after `message`. */
+  steering?: readonly Pick<AgentSteeringMessage, "text">[];
   query?: string;
   sourceMessageId?: string | null;
   budgets?: Partial<ContextBudgets>;
@@ -80,6 +83,7 @@ export async function assembleTurnContext(run: {
     );
   if (run.message.length > budgets.message)
     throw new Error("This message exceeds the context budget. Send a shorter message.");
+  const prompt = promptWithInitialSteering(run.message, run.steering ?? []);
   const brief = frame("group_brief", run.peerReadOnly ? "" : (run.brief ?? ""), budgets.brief);
   const summary = frame(
     "thread_summary",
@@ -133,7 +137,7 @@ export async function assembleTurnContext(run: {
         messages.reduce((size, message) => size + message.content.length, 0) +
         (requiredMessage?.content.length ?? 0),
       recall: recall.length,
-      message: run.message.length,
+      message: prompt.length,
     },
     recallRan,
     recallCalls: Number(recallRan),
@@ -147,7 +151,7 @@ export async function assembleTurnContext(run: {
     instructions: run.instructions,
     stablePrefix: run.instructions,
     history,
-    prompt: run.message,
+    prompt,
     snapshot,
   };
 }

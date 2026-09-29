@@ -97,6 +97,7 @@ export interface ThreadEvents {
   answerRunInput(input: AnswerRunInput): Promise<boolean>;
   append(input: AppendEventInput): Promise<ProductEvent>;
   claimSteering(input: ClaimSteeringInput): Promise<ClaimedSteeringMessage[]>;
+  releaseSteering(input: ReleaseSteeringInput): Promise<void>;
   clearThread(input: ClearThreadInput): Promise<ClearThreadResult>;
   finalizeComputerControlRelease(
     input: FinalizeComputerControlReleaseInput,
@@ -147,6 +148,15 @@ export interface ClaimSteeringInput {
   leaseFence: number;
   seenIds: string[];
   kind?: "correction" | "added-requirement" | "other";
+}
+
+export interface ReleaseSteeringInput {
+  threadId: string;
+  botId: string;
+  runId: string;
+  leaseOwner: string;
+  leaseFence: number;
+  ids: string[];
 }
 
 export interface ClaimedSteeringMessage {
@@ -299,6 +309,7 @@ export function createThreadEvents(
     answerRunInput: (input) => answerRunInput(prisma, input, realtime, options.runSecretWriter),
     append: (input) => appendEvent(prisma, input, realtime),
     claimSteering: (input) => claimSteering(prisma, input),
+    releaseSteering: (input) => releaseSteering(prisma, input),
     clearThread: (input) => clearThread(prisma, input, realtime),
     finalizeComputerControlRelease: (input) =>
       finalizeComputerControlRelease(prisma, input, realtime),
@@ -701,8 +712,13 @@ export async function claimSteering(
       orderBy: [{ message: { seq: "asc" } }, { id: "asc" }],
     });
     if (steering.length === 0) return [];
+    // A row another run let go may still carry that run's claim. Taking it over makes the run
+    // that delivers it the one that deletes it on completion, so it is not answered again.
     await tx.steeringMessage.updateMany({
-      where: { id: { in: steering.map((item) => item.id) }, claimedAt: null },
+      where: {
+        id: { in: steering.map((item) => item.id) },
+        OR: [{ claimedAt: null }, { runId: null }],
+      },
       data: { runId: input.runId, claimedAt: new Date() },
     });
     // The summary survives deletion of the consumed queue row. Text stays in its source message.
@@ -727,6 +743,43 @@ export async function claimSteering(
       text: blocksToAgentHistoryText(item.message.blocks as MessageBlock[]),
       blocks: item.message.blocks as MessageBlock[],
     }));
+  });
+}
+
+/**
+ * Unclaims steering the run took but cannot carry this turn. The rows stay on the run for its
+ * runtime's next claim; at completion they are released into a follow-up like any unclaimed row.
+ */
+export async function releaseSteering(
+  prisma: PrismaClient,
+  input: ReleaseSteeringInput,
+): Promise<void> {
+  if (input.ids.length === 0) return;
+  await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
+    const run = await tx.run.findFirst({
+      where: {
+        id: input.runId,
+        threadId: input.threadId,
+        botId: input.botId,
+        status: "running",
+        leaseOwner: input.leaseOwner,
+        leaseFence: input.leaseFence,
+      },
+      select: { id: true },
+    });
+    if (!run) return;
+    const released = await tx.steeringMessage.findMany({
+      where: { id: { in: input.ids }, runId: input.runId },
+      select: { messageId: true },
+    });
+    await tx.steeringMessage.updateMany({
+      where: { id: { in: input.ids }, runId: input.runId },
+      data: { claimedAt: null },
+    });
+    await tx.steeringSummary.deleteMany({
+      where: { runId: input.runId, messageId: { in: released.map((row) => row.messageId) } },
+    });
   });
 }
 
@@ -1910,7 +1963,7 @@ async function finalizeRunOnce(
           runId: input.runId,
           message: sourceMessage ? { seq: { gt: sourceMessage.seq } } : undefined,
         },
-        data: { runId: null },
+        data: { runId: null, claimedAt: null },
       });
     }
     const steeringContinuationRunId =

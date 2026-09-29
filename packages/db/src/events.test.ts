@@ -20,6 +20,7 @@ import {
   finalizeRun,
   followThreadEvents,
   groupModelFailureNotice,
+  isSteeringContinuationClientNonce,
   pauseRunForInput,
   pauseRunForTakeover,
   sendUserMessage,
@@ -184,6 +185,20 @@ describe("finalizeRun", () => {
       }),
     );
     expect(publish).toHaveBeenCalledOnce();
+    // A runtime failure releases steering without its old claim, so the next run owns it.
+    expect(tx.steeringMessage.updateMany).toHaveBeenCalledWith({
+      where: { runId: "run-1", message: undefined },
+      data: { runId: null, claimedAt: null },
+    });
+  });
+
+  it("marks only steering continuation nonces", () => {
+    expect(isSteeringContinuationClientNonce("steering-continuation:run-1")).toBe(true);
+    expect(isSteeringContinuationClientNonce("steering-continuation:")).toBe(true);
+    expect(isSteeringContinuationClientNonce("peer-wake:run-1")).toBe(false);
+    expect(isSteeringContinuationClientNonce("send:message-1")).toBe(false);
+    expect(isSteeringContinuationClientNonce(null)).toBe(false);
+    expect(isSteeringContinuationClientNonce(undefined)).toBe(false);
   });
 });
 
@@ -2093,8 +2108,12 @@ describe("claimSteering", () => {
         }),
       }),
     );
+    // Rows a failed run released may still carry its claim; the delivering run takes them over.
     expect(tx.steeringMessage.updateMany).toHaveBeenCalledWith({
-      where: { id: { in: ["steer-1", "steer-2"] }, claimedAt: null },
+      where: {
+        id: { in: ["steer-1", "steer-2"] },
+        OR: [{ claimedAt: null }, { runId: null }],
+      },
       data: { runId: "run-1", claimedAt: expect.any(Date) },
     });
   });

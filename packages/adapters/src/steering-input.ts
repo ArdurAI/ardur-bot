@@ -1,0 +1,101 @@
+import type { AgentRunRequest, AgentSteeringMessage } from "@ardurbot/adapter-kit";
+
+type InputReceipt = Parameters<NonNullable<AgentRunRequest["acknowledgeInput"]>>[0];
+
+const STEERING_HEADER = "Additional user context:";
+const STEERING_SHORTENED =
+  "[This message was shortened to fit the context budget; the full text is in the thread.]";
+
+/** Messages that waited behind a request follow it, in the order they were sent. */
+export function promptWithInitialSteering(
+  prompt: string,
+  steering: readonly Pick<AgentSteeringMessage, "text">[],
+): string {
+  return steering.length
+    ? `${prompt}\n\n${STEERING_HEADER}\n${steering.map((item) => item.text).join("\n")}`
+    : prompt;
+}
+
+/** The prompt carries the waiting messages, so their transcript copies leave the history. */
+export function withoutSteeringMessages(
+  history: AgentRunRequest["history"],
+  steering: readonly Pick<AgentSteeringMessage, "messageId" | "text" | "historyText">[],
+): AgentRunRequest["history"] {
+  if (steering.length === 0) return history;
+  const result = [...history];
+  let beforeIndex = result.length - 1;
+  for (let steeringIndex = steering.length - 1; steeringIndex >= 0; steeringIndex -= 1) {
+    const steeringMessage = steering[steeringIndex];
+    for (let index = beforeIndex; index >= 0; index -= 1) {
+      const message = result[index];
+      if (
+        message?.role !== "user" ||
+        (message.id
+          ? message.id !== steeringMessage?.messageId
+          : message.content !== (steeringMessage?.historyText ?? steeringMessage?.text))
+      ) {
+        continue;
+      }
+      result.splice(index, 1);
+      beforeIndex = index - 1;
+      break;
+    }
+  }
+  return result;
+}
+
+/**
+ * Takes whole waiting messages, oldest first, while they fit after a request that already
+ * used part of the message budget and the turn's image allowance. The rest stay queued for a
+ * later turn. A steering follow-up has no request of its own, so its first message is always
+ * taken, shortened when it alone is larger than the budget.
+ */
+export function fitInitialSteering<T extends AgentSteeringMessage>(
+  steering: readonly T[],
+  room: { characters: number; images: number },
+  keepFirst: boolean,
+): { included: T[]; deferred: T[] } {
+  const included: T[] = [];
+  let characters = room.characters - `\n\n${STEERING_HEADER}\n`.length;
+  let images = room.images;
+  for (const item of steering) {
+    const size = item.text.length + (included.length ? 1 : 0);
+    const imageCount = item.images?.length ?? 0;
+    if (size <= characters && imageCount <= images) {
+      included.push(item);
+      characters -= size;
+      images -= imageCount;
+      continue;
+    }
+    if (keepFirst && included.length === 0)
+      included.push({
+        ...item,
+        text:
+          item.text.length > characters
+            ? `${item.text.slice(0, Math.max(0, characters - STEERING_SHORTENED.length - 1))}\n${STEERING_SHORTENED}`
+            : item.text,
+        images: item.images?.slice(0, Math.max(0, images)),
+      });
+    break;
+  }
+  return { included, deferred: steering.slice(included.length) };
+}
+
+/**
+ * A runtime acknowledges everything in its first turn as initial input. Delivery ids of
+ * waiting messages carried in that turn keep their steering receipt scope.
+ */
+export function splitInitialReceipt(
+  input: InputReceipt,
+  steeringDeliveryIds: ReadonlySet<string>,
+): InputReceipt[] {
+  if (input.mode !== "initial" || steeringDeliveryIds.size === 0) return [input];
+  return [
+    { ...input, deliveryIds: input.deliveryIds.filter((id) => !steeringDeliveryIds.has(id)) },
+    {
+      ...input,
+      mode: "steering",
+      deliveryIds: input.deliveryIds.filter((id) => steeringDeliveryIds.has(id)),
+    },
+  ];
+}

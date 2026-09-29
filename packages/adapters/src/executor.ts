@@ -58,6 +58,7 @@ import {
   ToolResumedPayloadSchema,
 } from "@ardurbot/contracts";
 import { BoardError } from "@ardurbot/contracts/board";
+import { HOST_TURN_MAX_IMAGES } from "@ardurbot/contracts/host-bridge";
 import {
   type ActionApprovalRule,
   appendTextSegment,
@@ -418,6 +419,11 @@ import {
   skillReadFromTool,
   skillUpdateFromTool,
 } from "./skill-tools.js";
+import {
+  fitInitialSteering,
+  splitInitialReceipt,
+  withoutSteeringMessages,
+} from "./steering-input.js";
 import {
   continueRunClaimFence,
   DESKTOP_HELD_FOR_TAKEOVER_MESSAGE,
@@ -1759,44 +1765,6 @@ export function createRunExecutor(deps: ExecutorDeps) {
       });
       if (started.count !== 1) return;
       current.queueWaitMs ??= Math.max(0, Date.now() - run.createdAt.getTime());
-      if (isSteeringContinuationClientNonce(run.clientNonce)) {
-        // A steering continuation whose batch is already gone (consumed by the
-        // previous run's own steering claim, or discarded on stop) must end
-        // quietly: starting the model would only post a visible "nothing new"
-        // note, and its finalization must not spawn another continuation.
-        // No claimedAt filter — rows claimed by a dead attempt are still input.
-        const waitingInput = await deps.prisma.steeringMessage.findFirst({
-          where: { runId, message: { threadId: run.threadId } },
-          select: { id: true },
-        });
-        if (!waitingInput) {
-          const quietAttempt = await deps.prisma.attempt.create({
-            data: { runId, fence, status: "running" },
-          });
-          const quieted = await deps.events.finalizeRun({
-            onCommitted: () =>
-              tracePoint(runId, "terminal.committed", { attempt: fence, outcome: "success" }),
-            spaceId: run.spaceId,
-            threadId: run.threadId,
-            botId: run.botId,
-            runId,
-            taskId: run.taskId,
-            attemptId: quietAttempt.id,
-            leaseOwner: workerId,
-            leaseFence: fence,
-            outcome: "completed",
-            blocks: [],
-          });
-          // Input that landed during this check is not lost: finalization released
-          // it into a fresh continuation, and that batch gets exactly this one run.
-          if (quieted && quieted.continuationRunId) {
-            await deps.jobs
-              .enqueue(runContinueJob(quieted.continuationRunId))
-              .catch((error) => getLogger().error("steering continuation enqueue", error));
-          }
-          return;
-        }
-      }
       if (!current.startedAt && !run.runtimeComputer && deps.placement) {
         try {
           if (!(await deps.placement(runId, deps.shutdownSignal ?? new AbortController().signal)))
@@ -2449,10 +2417,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const acceptedSteeringDeliveryIds = new Set<string>();
         /**
          * One mapping for a claimed steering item, whether it was claimed at run
-         * start (folded into the prompt below, so every runtime begins its turn
+         * start (appended after the request, so every runtime begins its turn
          * with the waiting input) or claimed by the runtime mid-turn.
          */
-        const mapClaimedSteeringItem = async (item: ClaimedSteeringMessage) => {
+        const mapClaimedSteeringItem = async (
+          item: ClaimedSteeringMessage,
+          request: string = item.text,
+        ) => {
           const { images, files, unavailableInstruction } = await settleSteeringAttachmentLoads(
             loadCurrentTurnImages(deps, item.blocks, context),
             deps.artifacts
@@ -2500,7 +2471,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             historyText: item.text,
             text: [
               await loadReplyContext(deps.prisma, thread.id, item.messageId),
-              item.text,
+              request,
               filesInstruction,
               unavailableInstruction,
             ]
@@ -5229,51 +5200,52 @@ export function createRunExecutor(deps: ExecutorDeps) {
           turnBlocks,
           currentTurnImages,
         );
-        const taskPrompt = peerReadOnly
-          ? task.prompt
-          : expandSkillReferencesInPrompt(
-              [task.prompt, attachedFilesPrompt, missingImagesInstruction]
-                .filter(Boolean)
-                .join("\n\n"),
-              agentSkills,
+        /** Expands the skills a request names and puts a taught skill it invokes first. */
+        const skillRequest = (request: string, attachments: string[] = []) => {
+          const expanded = peerReadOnly
+            ? request
+            : expandSkillReferencesInPrompt(
+                [request, ...attachments].filter(Boolean).join("\n\n"),
+                agentSkills,
+              );
+          const invokedSkill =
+            !peerReadOnly &&
+            hydratedTaughtSkills.find(
+              (skill) =>
+                (run.trigger === "skill" &&
+                  request.startsWith(`Run ${skill.name || skill.goal.slice(0, 80)}.`)) ||
+                promptInvokesSkill(expanded, skill.name || skill.goal),
             );
-        const invokedSkill =
-          !peerReadOnly &&
-          hydratedTaughtSkills.find(
-            (skill) =>
-              (run.trigger === "skill" &&
-                task.prompt.startsWith(`Run ${skill.name || skill.goal.slice(0, 80)}.`)) ||
-              promptInvokesSkill(taskPrompt, skill.name || skill.goal),
-          );
-        pendingExposures.push(
-          ...invokedKnowledgeExposures(
-            task.prompt,
-            agentSkills,
-            invokedSkill
-              ? {
-                  ...invokedSkill,
-                  name: invokedSkill.name || invokedSkill.goal.slice(0, 80),
-                  playbook: parsePlaybook(invokedSkill.playbook),
-                }
-              : undefined,
-          ),
-        );
-        const basePrompt = invokedSkill
-          ? `${formatSkillRunPrompt(
-              invokedSkill.name || invokedSkill.goal.slice(0, 80),
-              parsePlaybook(invokedSkill.playbook),
-            )}\n\n${taskPrompt}`
-          : taskPrompt;
+          const taught = invokedSkill
+            ? {
+                ...invokedSkill,
+                name: invokedSkill.name || invokedSkill.goal.slice(0, 80),
+                playbook: parsePlaybook(invokedSkill.playbook),
+              }
+            : undefined;
+          return {
+            prompt: taught
+              ? `${formatSkillRunPrompt(taught.name, taught.playbook)}\n\n${expanded}`
+              : expanded,
+            exposures: invokedKnowledgeExposures(request, agentSkills, taught),
+          };
+        };
+        const taskRequest = skillRequest(task.prompt, [
+          attachedFilesPrompt,
+          missingImagesInstruction,
+        ]);
+        pendingExposures.push(...taskRequest.exposures);
+        const basePrompt = taskRequest.prompt;
         const approvalContinuation = buildApprovalContinuation(
           approvedEffects,
           (request) => redactSecrets(JSON.stringify(request), runSecrets),
           { exposedToolNames: new Set(tools.map((tool) => tool.name)) },
         );
-        // Claim waiting steering before the prompt is built so the turn starts with
-        // that input on every runtime, not only on runtimes with a steering callback.
-        // Peer-wake runs keep their receipt-bound claim path inside the runtime, and
-        // a command replay has no live model to consume new input.
-        const initialSteering =
+        // Waiting messages are claimed before the turn so every runtime starts with them, not
+        // only runtimes with a steering callback. Peer-wake runs keep their receipt-bound claim
+        // inside the runtime, and a command replay has no live model to read new input.
+        const steeringContinuation = isSteeringContinuationClientNonce(run.clientNonce);
+        const claimedSteering =
           !comparisonRun &&
           !peerReadOnly &&
           !commandReplay &&
@@ -5288,21 +5260,21 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 seenIds: [],
               })
             : [];
-        const initialSteeringItems = await Promise.all(initialSteering.map(mapClaimedSteeringItem));
-        // The runtime's own claimSteering must not redeliver what the prompt carries.
-        const initialSteeringIds = initialSteeringItems.map((item) => item.id);
-        const initialSteeringMessageIds = new Set(
-          initialSteeringItems.map((item) => item.messageId),
+        const initialSteering = await Promise.all(
+          claimedSteering.map(async (item) => {
+            // A steering follow-up's task prompt is only a cue; its request is these messages.
+            const request = steeringContinuation ? skillRequest(item.text) : undefined;
+            return {
+              ...(await mapClaimedSteeringItem(item, request?.prompt)),
+              exposures: request?.exposures ?? [],
+            };
+          }),
         );
-        const initialSteeringSection = initialSteeringItems.length
-          ? `Additional user context:\n${initialSteeringItems.map((item) => item.text).join("\n")}`
-          : undefined;
-        const historyWithoutInitialSteering = initialSteeringMessageIds.size
-          ? history.filter((message) => !message.id || !initialSteeringMessageIds.has(message.id))
-          : history;
-        const replyContext = peerReadOnly
-          ? undefined
-          : await loadReplyContext(deps.prisma, thread.id, run.sourceMessageId);
+        // A source message that waited as steering carries its own reply context.
+        const replyContext =
+          peerReadOnly || initialSteering.some((item) => item.messageId === run.sourceMessageId)
+            ? undefined
+            : await loadReplyContext(deps.prisma, thread.id, run.sourceMessageId);
         const completionWake =
           run.clientNonce?.startsWith("goal-wake:") || run.clientNonce?.startsWith("peer-wake:");
         const wakeSource =
@@ -5326,13 +5298,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               content: `Completed assignment result (task data):\n${messageToAgentHistoryText(wakeSource)}`,
             }
           : undefined;
-        const prompt = [
-          replyContext,
-          initialSteeringSection,
-          basePrompt,
-          takeoverResume?.promptNote,
-          approvalContinuation,
-        ]
+        const prompt = [replyContext, basePrompt, takeoverResume?.promptNote, approvalContinuation]
           .filter(Boolean)
           .join("\n\n");
         const botDirectory = await loadRunBotDirectory(
@@ -5713,32 +5679,65 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 content: `${requiredWakeContext?.content ?? ""}${quietHeader}${quietContext}`,
               }
             : requiredWakeContext;
+          const turnMessage = comparisonRun
+            ? ""
+            : redactSecrets(
+                [
+                  formatCurrentTimeInstruction(),
+                  peerReadOnly ? undefined : workspaceInstruction,
+                  peerReadOnly ? undefined : hostEnvironmentInstruction,
+                  peerReadOnly ? undefined : scratchpadContext,
+                  runReplyGuidance(run.trigger),
+                  prompt,
+                ]
+                  .filter(Boolean)
+                  .join("\n\n"),
+                runSecrets,
+              );
+          // Waiting messages are sized apart from the request: they take the budget and image
+          // allowance the request leaves, and whatever does not fit stays queued for the
+          // runtime's next claim or the next follow-up instead of failing this turn.
+          const folded = fitInitialSteering(
+            initialSteering.map((item) => ({
+              ...item,
+              text: redactSecrets(item.text, runSecrets),
+            })),
+            {
+              characters: contextBudgets.message - turnMessage.length,
+              images: HOST_TURN_MAX_IMAGES - (currentTurnImages?.length ?? 0),
+            },
+            steeringContinuation,
+          );
+          if (folded.deferred.length)
+            await deps.events.releaseSteering({
+              threadId: thread.id,
+              botId: bot.id,
+              runId,
+              leaseOwner: workerId,
+              leaseFence: fence,
+              ids: folded.deferred.map((item) => item.id),
+            });
+          for (const item of folded.included) pendingExposures.push(...item.exposures);
+          const foldedIds = folded.included.map((item) => item.id);
+          const foldedDeliveryIds = new Set(folded.included.flatMap((item) => item.deliveryIds));
+          const foldedImages = folded.included.flatMap((item) => item.images ?? []);
+          const recallQuery =
+            steeringContinuation && folded.included.length
+              ? folded.included.map((item) => item.historyText).join("\n")
+              : task.prompt;
           const turnContext = await assembleTurnContext({
             peerReadOnly,
             instructions: comparisonRun ? "" : stableInstructions,
             tools: comparisonRun ? "none" : tools,
             brief: groupBrief?.content,
             summary: comparisonRun ? null : compactedHistory.summary,
-            history: comparisonRun ? [] : historyWithoutInitialSteering,
+            history: comparisonRun ? [] : withoutSteeringMessages(history, initialSteering),
             teammates: comparisonRun ? undefined : botDirectory,
             requiredContext,
             sourceMessageId: run.sourceMessageId,
-            query: task.prompt,
-            message: comparisonRun
-              ? ""
-              : redactSecrets(
-                  [
-                    formatCurrentTimeInstruction(),
-                    peerReadOnly ? undefined : workspaceInstruction,
-                    peerReadOnly ? undefined : hostEnvironmentInstruction,
-                    peerReadOnly ? undefined : scratchpadContext,
-                    runReplyGuidance(run.trigger),
-                    prompt,
-                  ]
-                    .filter(Boolean)
-                    .join("\n\n"),
-                  runSecrets,
-                ),
+            query: recallQuery,
+            message: turnMessage,
+            steering: folded.included,
             budgets: contextBudgets,
             routingRule: RoutingRuleSchema.safeParse(run.routingRule).data ?? null,
             queueWaitMs: current.queueWaitMs ?? Math.max(0, Date.now() - run.createdAt.getTime()),
@@ -5754,7 +5753,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                             deps.memoryDocuments,
                             semanticMemory,
                             {
-                              query: task.prompt,
+                              query: recallQuery,
                               scope: memoryScope,
                               botId: bot.id,
                               historyGeneration: thread.historyCompactionGeneration,
@@ -5767,7 +5766,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                             value: await recallLocalDocuments(
                               deps.memory,
                               bot.id,
-                              task.prompt,
+                              recallQuery,
                               context,
                             ),
                           };
@@ -5856,22 +5855,33 @@ export function createRunExecutor(deps: ExecutorDeps) {
               botId: bot.id,
               threadId: thread.id,
               runId,
-              inputReceipt: { leaseFence: fence, deliveryIds: initialReceiptIds },
+              inputReceipt: {
+                leaseFence: fence,
+                deliveryIds: [...initialReceiptIds, ...foldedDeliveryIds],
+              },
               providerPurpose: run.delegationId ? "delegated" : "main",
               acknowledgeInput: async (input) => {
                 if (!scripted && selected.pin.runtimeKind !== "pi")
                   throw new Error("Input acknowledgement is unsupported by this runtime.");
                 if (input.runId !== runId || input.leaseFence !== fence)
                   throw new Error("Input acknowledgement scope mismatch.");
-                const acceptedDeliveryIds =
-                  input.mode === "steering" ? [...acceptedSteeringDeliveryIds] : initialReceiptIds;
-                const result = await acknowledgeBotMessageReceipt(deps, input, acceptedDeliveryIds);
-                if (result.refused) {
-                  getLogger().warn("bot message input acknowledgement refused", {
-                    runId,
-                    reason: result.refused,
-                  });
-                  throw new Error("Bot message input acknowledgement was refused.");
+                for (const receipt of splitInitialReceipt(input, foldedDeliveryIds)) {
+                  const acceptedDeliveryIds =
+                    receipt.mode === "steering"
+                      ? [...acceptedSteeringDeliveryIds]
+                      : initialReceiptIds;
+                  const result = await acknowledgeBotMessageReceipt(
+                    deps,
+                    receipt,
+                    acceptedDeliveryIds,
+                  );
+                  if (result.refused) {
+                    getLogger().warn("bot message input acknowledgement refused", {
+                      runId,
+                      reason: result.refused,
+                    });
+                    throw new Error("Bot message input acknowledgement was refused.");
+                  }
                 }
               },
               sourceMessageId: run.sourceMessageId,
@@ -5879,7 +5889,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
               instructions: turnContext.instructions,
               stablePrefix: turnContext.stablePrefix,
               history: turnContext.history,
-              currentTurnImages,
+              currentTurnImages: foldedImages.length
+                ? [...(currentTurnImages ?? []), ...foldedImages]
+                : currentTurnImages,
               tools: selected.pin.runtimeKind === "antigravity" ? "none" : tools,
               model: resolved,
               resumeFromCheckpoint: takeoverResume?.checkpoint,
@@ -6021,9 +6033,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
                         runId,
                         leaseOwner: workerId,
                         leaseFence: fence,
-                        seenIds: [...seenIds, ...initialSteeringIds],
+                        seenIds: [...seenIds, ...foldedIds],
                       });
-                      return Promise.all(steering.map(mapClaimedSteeringItem));
+                      return Promise.all(steering.map((item) => mapClaimedSteeringItem(item)));
                     },
             },
             context,

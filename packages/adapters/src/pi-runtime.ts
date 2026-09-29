@@ -4,7 +4,6 @@ import type {
   AgentRunRequest,
   AgentRuntime,
   AgentRuntimeEvent,
-  AgentSteeringMessage,
   AgentToolCompletion,
   AgentToolExecutionResult,
   ConnectorTool,
@@ -67,18 +66,10 @@ import {
 } from "./pi-session.js";
 import { classifyProviderError, ProviderError } from "./provider-error.js";
 import { ObservedUsageTotals } from "./runtime-usage.js";
+import { promptWithInitialSteering, withoutSteeringMessages } from "./steering-input.js";
 import { textContentArg } from "./tool-text.js";
 
 const running = new Map<string, { controller: AbortController; work: Promise<void> }>();
-
-export function promptWithInitialSteering(
-  prompt: string,
-  steering: AgentSteeringMessage[],
-): string {
-  return steering.length
-    ? `${prompt}\n\nAdditional user context:\n${steering.map((item) => item.text).join("\n")}`
-    : prompt;
-}
 
 interface ToolCallBudget {
   count: number;
@@ -873,33 +864,6 @@ export function toHistory(
         ? { role: "user" as const, content: `Assistant: ${m.content}`, timestamp: Date.now() }
         : { role: "user" as const, content: m.content, timestamp: Date.now() },
     );
-}
-
-function withoutSteeringMessages(
-  history: AgentRunRequest["history"],
-  steering: AgentSteeringMessage[],
-): AgentRunRequest["history"] {
-  if (steering.length === 0) return history;
-  const result = [...history];
-  let beforeIndex = result.length - 1;
-  for (let steeringIndex = steering.length - 1; steeringIndex >= 0; steeringIndex -= 1) {
-    const steeringMessage = steering[steeringIndex];
-    for (let index = beforeIndex; index >= 0; index -= 1) {
-      const message = result[index];
-      if (
-        message?.role !== "user" ||
-        (message.id
-          ? message.id !== steeringMessage?.messageId
-          : message.content !== (steeringMessage?.historyText ?? steeringMessage?.text))
-      ) {
-        continue;
-      }
-      result.splice(index, 1);
-      beforeIndex = index - 1;
-      break;
-    }
-  }
-  return result;
 }
 
 /**

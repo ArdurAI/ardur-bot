@@ -1,0 +1,131 @@
+import type { AgentInputImage } from "@ardurbot/adapter-kit";
+import { describe, expect, it } from "vitest";
+import {
+  fitInitialSteering,
+  promptWithInitialSteering,
+  splitInitialReceipt,
+  withoutSteeringMessages,
+} from "./steering-input.js";
+
+const image: AgentInputImage = { name: "shot.png", mimeType: "image/png", data: new Uint8Array() };
+
+function waiting(id: string, text: string, images?: AgentInputImage[]) {
+  return { id, messageId: `message-${id}`, text, historyText: text, images };
+}
+
+describe("promptWithInitialSteering", () => {
+  it("puts waiting messages after the request, in the order they were sent", () => {
+    const prompt = promptWithInitialSteering("Quote of X\n\nmove it to Monday", [
+      waiting("1", "also notify the team"),
+      waiting("2", "and the client"),
+    ]);
+
+    expect(prompt).toBe(
+      "Quote of X\n\nmove it to Monday\n\nAdditional user context:\nalso notify the team\nand the client",
+    );
+    expect(promptWithInitialSteering("request", [])).toBe("request");
+  });
+});
+
+describe("withoutSteeringMessages", () => {
+  it("drops the transcript copy of each waiting message and keeps the rest", () => {
+    const history = [
+      { id: "message-0", role: "user" as const, content: "earlier" },
+      { id: "message-1", role: "user" as const, content: "also notify the team" },
+      { role: "user" as const, content: "and the client" },
+      { id: "reply-1", role: "assistant" as const, content: "and the client" },
+    ];
+
+    expect(
+      withoutSteeringMessages(history, [
+        waiting("1", "also notify the team"),
+        waiting("2", "and the client"),
+      ]),
+    ).toEqual([history[0], history[3]]);
+  });
+});
+
+describe("fitInitialSteering", () => {
+  const header = "\n\nAdditional user context:\n".length;
+
+  it("takes whole messages in order and leaves the rest queued", () => {
+    const steering = [
+      waiting("1", "a".repeat(10)),
+      waiting("2", "b".repeat(20)),
+      waiting("3", "c"),
+    ];
+
+    const fitted = fitInitialSteering(steering, { characters: header + 25, images: 8 }, false);
+
+    // The short third message stays behind the second so the order is never reshuffled.
+    expect(fitted.included.map((item) => item.id)).toEqual(["1"]);
+    expect(fitted.deferred.map((item) => item.id)).toEqual(["2", "3"]);
+  });
+
+  it("never lets the carried messages outgrow the room they were given", () => {
+    const steering = [waiting("1", "a".repeat(10)), waiting("2", "b".repeat(10))];
+    const room = header + 21;
+
+    const fitted = fitInitialSteering(steering, { characters: room, images: 8 }, false);
+
+    expect(fitted.included).toHaveLength(2);
+    expect(promptWithInitialSteering("", fitted.included).length).toBe(room);
+  });
+
+  it("leaves a message queued when its images would pass the turn's allowance", () => {
+    const steering = [waiting("1", "first", [image, image]), waiting("2", "second", [image])];
+
+    const fitted = fitInitialSteering(steering, { characters: 10_000, images: 2 }, false);
+
+    expect(fitted.included.map((item) => item.id)).toEqual(["1"]);
+    expect(fitted.deferred.map((item) => item.id)).toEqual(["2"]);
+  });
+
+  it("queues an oversized first message behind a request of its own", () => {
+    const fitted = fitInitialSteering(
+      [waiting("1", "a".repeat(500))],
+      {
+        characters: 200,
+        images: 8,
+      },
+      false,
+    );
+
+    expect(fitted.included).toEqual([]);
+    expect(fitted.deferred.map((item) => item.id)).toEqual(["1"]);
+  });
+
+  it("shortens a follow-up's oversized first message instead of failing or requeueing it", () => {
+    const steering = [waiting("1", "a".repeat(500)), waiting("2", "later")];
+
+    const fitted = fitInitialSteering(steering, { characters: 200, images: 8 }, true);
+
+    expect(fitted.included).toHaveLength(1);
+    expect(fitted.included[0]?.text).toContain("shortened to fit the context budget");
+    expect(fitted.included[0]?.historyText).toBe("a".repeat(500));
+    expect(promptWithInitialSteering("", fitted.included).length).toBeLessThanOrEqual(200);
+    expect(fitted.deferred.map((item) => item.id)).toEqual(["2"]);
+  });
+});
+
+describe("splitInitialReceipt", () => {
+  const receipt = {
+    runId: "run-1",
+    leaseFence: 2,
+    deliveryIds: ["quiet-1", "steer-1"],
+    mode: "initial" as const,
+  };
+
+  it("keeps waiting messages carried in the first turn in the steering receipt scope", () => {
+    expect(splitInitialReceipt(receipt, new Set(["steer-1"]))).toEqual([
+      { ...receipt, deliveryIds: ["quiet-1"] },
+      { ...receipt, mode: "steering", deliveryIds: ["steer-1"] },
+    ]);
+  });
+
+  it("leaves other receipts unchanged", () => {
+    expect(splitInitialReceipt(receipt, new Set())).toEqual([receipt]);
+    const steering = { ...receipt, mode: "steering" as const };
+    expect(splitInitialReceipt(steering, new Set(["steer-1"]))).toEqual([steering]);
+  });
+});
