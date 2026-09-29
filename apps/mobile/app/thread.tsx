@@ -9,8 +9,10 @@ import type {
 } from "@ardurbot/contracts";
 import {
   canReactToThreadMessage,
+  FailureCategoryIdSchema,
   MESSAGE_REACTIONS,
   type MessageReaction,
+  runtimeNames,
   runtimePinMessage,
 } from "@ardurbot/contracts";
 import type { ComposerActionId, ComposerCommand, ComposerSkill } from "@ardurbot/core";
@@ -113,6 +115,7 @@ import { type MobileArtifactTarget, openMobileArtifact } from "../lib/artifact-o
 import { confirmDeleteBot } from "../lib/bot-lifecycle";
 import type { ComposerMenuOption } from "../lib/composer-menu";
 import { COMPOSER_MENU_OPTIONS } from "../lib/composer-menu";
+import { failureCategoryText } from "../lib/failure-categories";
 import { cancelFocusPrompt, focusPromptThreadActive } from "../lib/focus-prompt";
 import { groupModelNoticeText } from "../lib/group-model-notice";
 import { dateLocaleForUi, t, useI18n } from "../lib/i18n";
@@ -1421,7 +1424,18 @@ function Thread() {
               snap.run.runtimeProblem.code !== "pin-credential-missing"
             ? snap.run.runtimeProblem.pin.runtimeKind === "antigravity"
               ? antigravityProblemMessage(snap.run.runtimeProblem)
-              : snap.run.runtimeProblem.reason
+              : // A categorized failure renders the table's sentence in the active locale;
+                // anything else keeps the recorded reason.
+                (() => {
+                  const category = FailureCategoryIdSchema.safeParse(
+                    snap.run?.runtimeProblem?.reasonId,
+                  );
+                  if (category.success && snap.run?.runtimeProblem)
+                    return failureCategoryText(category.data, {
+                      runtime: runtimeNames[snap.run.runtimeProblem.pin.runtimeKind],
+                    });
+                  return snap.run?.runtimeProblem?.reason;
+                })()
             : runtimePinMessage(snap.run.runtimeProblem.pin)
         : (snap.run.error ?? null)
       : null;

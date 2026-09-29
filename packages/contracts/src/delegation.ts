@@ -1,5 +1,6 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
+import { failureCategoryMemberMessage } from "./failure-categories.js";
 import { RuntimePinSchema, RuntimePinSourceSchema } from "./runtime-pins.js";
 
 export const DelegationKindSchema = z.enum(["message", "group-handoff", "helper", "child"]);
@@ -223,8 +224,9 @@ export function delegationStopLine(reason: DelegationStopReason, worker: string)
   if (reason === "budget")
     return `${worker} used its token budget. Raise the budget and try again.`;
   if (reason === "deadline") return `${worker} reached its deadline. Start a new task to continue.`;
-  if (reason === "failed") return `${worker} failed.`;
-  return "Worker stopped.";
+  // The failure lines come from the failure-category table (failure-categories.ts).
+  if (reason === "failed") return failureCategoryMemberMessage("other", { member: worker });
+  return failureCategoryMemberMessage("stopped", { member: "Worker" });
 }
 /**
  * A budgeted delegation is only honest when the runtime can be stopped at its reservation:

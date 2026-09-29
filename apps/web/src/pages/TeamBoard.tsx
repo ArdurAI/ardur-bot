@@ -11,6 +11,7 @@ import type { ReactNode } from "react";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { decodeArtifactBase64, downloadArtifactBytes } from "../lib/artifact-open";
+import { failureCategoryMessages } from "../lib/failure-category-copy";
 import { rpc } from "../lib/rpc";
 import { localizedTeamDeliveryText } from "../lib/team-delivery-text";
 import { ComparisonList } from "./ComparePanel";
@@ -413,6 +414,7 @@ export function TeamBoardRow({
   );
 }
 function TeamStatus({ row, now }: { row: TeamRow; now: number }) {
+  const { t } = useLingui();
   if (
     row.state !== "blocked" &&
     row.state !== "waiting-approval" &&
@@ -443,7 +445,19 @@ function TeamStatus({ row, now }: { row: TeamRow; now: number }) {
     case "waiting-approval":
       return <Trans>Waiting for approval</Trans>;
     case "blocked":
-      return <Trans>Blocked — {row.reason}</Trans>;
+      // A categorized reason is the table's sentence, translated here; anything else is
+      // the recorded text. The ternary stays an expression so the catalog keeps the
+      // positional "Blocked — {0}" entry.
+      return (
+        <Trans>
+          Blocked —{" "}
+          {row.reasonCategory
+            ? t(failureCategoryMessages[row.reasonCategory], {
+                runtime: row.reasonRuntime ?? "This runtime",
+              })
+            : row.reason}
+        </Trans>
+      );
     case "completed":
       return <Trans>Done — waiting for your OK</Trans>;
     case "accepted":

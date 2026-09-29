@@ -4,6 +4,8 @@ import type { RunFailurePayload } from "@ardurbot/contracts";
 import {
   type BotSecretDestination,
   CommandEventPayloadSchema,
+  FailureCategoryIdSchema,
+  failureCategoryGroupMessage,
   type MessageBlock,
   MessageBlock as MessageBlockSchema,
   PeerEffectDescriptorsSchema,
@@ -77,31 +79,33 @@ export function groupModelFailureNotice(
       notice: { id: "group-model-locality-denied", botName },
     };
   }
-  if (code === "pin-credential-missing") {
+  // Every cause sentence comes from the failure-category table; the stored notice id is
+  // the category's id in this context, and apps translate from it.
+  const category = FailureCategoryIdSchema.safeParse(reasonId);
+  if (code === "pin-credential-missing" || category.data === "connection-missing") {
     return {
       kind: "text",
-      text: `${botName} couldn't use the model set for this group. Reconnect it or change the group model.`,
+      text: failureCategoryGroupMessage("connection-missing", { bot: botName }),
       notice: { id: "group-model-credential-missing", botName },
     };
   }
-  // Limit and sign-in causes are not settings problems; the notice says what happened.
-  if (reasonId === "usage-limit") {
+  if (category.data === "usage-limit") {
     return {
       kind: "text",
-      text: `${botName} hit the group model's usage limit. Try again after it resets, or change the group model.`,
+      text: failureCategoryGroupMessage("usage-limit", { bot: botName }),
       notice: { id: "group-model-usage-limit", botName },
     };
   }
-  if (reasonId === "signed-out") {
+  if (category.data === "signed-out") {
     return {
       kind: "text",
-      text: `${botName}'s sign-in for the group model expired. Reconnect it or change the group model.`,
+      text: failureCategoryGroupMessage("signed-out", { bot: botName }),
       notice: { id: "group-model-sign-in-expired", botName },
     };
   }
   return {
     kind: "text",
-    text: `${botName} couldn't use the model set for this group. Change the group model or check this bot's settings.`,
+    text: failureCategoryGroupMessage("configuration-invalid", { bot: botName }),
     notice: { id: "group-model-unavailable", botName },
   };
 }

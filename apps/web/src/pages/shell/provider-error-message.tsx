@@ -1,7 +1,12 @@
 import type { ModelCatalogEntry, ProviderErrorKind, RuntimeProblem } from "@ardurbot/contracts";
-import { runtimeNames } from "@ardurbot/contracts";
+import {
+  FailureCategoryIdSchema,
+  failureCategoryFromText,
+  runtimeNames,
+} from "@ardurbot/contracts";
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
+import { failureCategoryMessages } from "../../lib/failure-category-copy";
 import { parseProviderError } from "../../lib/provider-error";
 
 export function ProviderErrorMessage({
@@ -90,21 +95,21 @@ export function ProviderErrorMessage({
           return runtimeProblem.reason;
       }
     })();
-    // Claude Code and Codex failures carry a classified reasonId; name the cause category
-    // instead of the raw runtime text. Anything unclassified keeps the recorded reason.
+    // Native runtime failures carry a classified reason id; older records hold the
+    // category sentence, mapped back to its id. Either way the sentence comes from the
+    // failure-category table, translated here. Anything unclassified keeps the recorded
+    // reason — a missed variant degrades to the old behavior, never to a wrong category.
     const nativeReason = (() => {
-      if (pin.runtimeKind !== "claude-code" && pin.runtimeKind !== "codex-app-server") return null;
+      if (pin.runtimeKind === "antigravity" || pin.runtimeKind === "pi") return null;
       const runtime = runtimeNames[pin.runtimeKind];
-      switch (runtimeProblem.reasonId) {
-        case "usage-limit":
-          return t`${runtime}'s usage limit is reached. Try again after it resets.`;
-        case "signed-out":
-          return t`Sign in to ${runtime} on this computer, then try again.`;
-        case "max-turns":
-          return t`${runtime} reached this run's turn limit. Narrow the task and try again.`;
-        default:
-          return null;
-      }
+      const byId = FailureCategoryIdSchema.safeParse(runtimeProblem.reasonId);
+      if (byId.success) return t(failureCategoryMessages[byId.data], { runtime });
+      const legacy = failureCategoryFromText(runtimeProblem.reason);
+      if (legacy)
+        return t(failureCategoryMessages[legacy.id], {
+          runtime: legacy.params.runtime ?? runtime,
+        });
+      return null;
     })();
     return (
       <>

@@ -134,6 +134,24 @@ export function failureCategoryMessage(
   return fillFailureCategoryMessage(failureCategory(id).message, params);
 }
 
+/** A category's group-model sentence (falling back to its default) with parameters filled. */
+export function failureCategoryGroupMessage(
+  id: FailureCategoryId,
+  params: FailureCategoryParams = {},
+): string {
+  const entry = failureCategory(id);
+  return fillFailureCategoryMessage(entry.groupMessage ?? entry.message, params);
+}
+
+/** A category's handoff sentence (falling back to its default) with parameters filled. */
+export function failureCategoryMemberMessage(
+  id: FailureCategoryId,
+  params: FailureCategoryParams = {},
+): string {
+  const entry = failureCategory(id);
+  return fillFailureCategoryMessage(entry.memberMessage ?? entry.message, params);
+}
+
 function templateToPattern(template: string): RegExp {
   const escaped = template.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const source = escaped.replace(/\\?\{(bot|runtime|member)\\?\}/g, (_, name: string) =>
