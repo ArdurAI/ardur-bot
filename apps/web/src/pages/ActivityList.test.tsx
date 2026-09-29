@@ -24,6 +24,13 @@ vi.mock("@lingui/react/macro", () => ({
   useLingui: () => ({
     t: (parts: TemplateStringsArray | { id: string }) =>
       "id" in parts ? parts.id : parts.join(""),
+    i18n: {
+      _: (descriptor: { id: string }, values?: Record<string, string>) =>
+        Object.entries(values ?? {}).reduce(
+          (text, [key, value]) => text.replaceAll(`{${key}}`, value),
+          descriptor.id,
+        ),
+    },
   }),
 }));
 

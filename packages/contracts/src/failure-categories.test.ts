@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   FAILURE_CATEGORIES,
-  failureCategory,
   FailureCategoryIdSchema,
   failureCategoryFromText,
   failureCategoryMessage,

@@ -127,12 +127,13 @@ function ActivityRow({
   now: number;
   onOpen: () => void;
 }) {
-  const { t } = useLingui();
+  const { t, i18n } = useLingui();
   const title = run.groupName ? `${run.botName} · ${run.groupName}` : run.botName;
   const failureReason =
     run.status === "failed" && run.failureCategory
-      ? t(failureCategoryMessages[run.failureCategory], {
-          runtime: run.failureRuntime ?? "This runtime",
+      ? i18n._({
+          ...failureCategoryMessages[run.failureCategory],
+          values: { runtime: run.failureRuntime ?? "This runtime" },
         })
       : null;
   const presenceUnknown =

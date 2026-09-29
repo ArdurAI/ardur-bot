@@ -711,11 +711,7 @@ describe("HermesRuntime M0 ACP seam", () => {
         "usage-limit",
         "Hermes's usage limit is reached. Try again after it resets.",
       ],
-      [
-        "provider-signed-out",
-        "signed-out",
-        "Sign in to Hermes on this computer, then try again.",
-      ],
+      ["provider-signed-out", "signed-out", "Sign in to Hermes on this computer, then try again."],
       [
         "provider-model-missing",
         "model-unavailable",
@@ -736,9 +732,7 @@ describe("HermesRuntime M0 ACP seam", () => {
       },
     );
     it("keeps the generic line for an unclassified provider failure", async () => {
-      await expect(
-        collect(runtime("provider-unknown"), pinnedRequest()),
-      ).rejects.toMatchObject({
+      await expect(collect(runtime("provider-unknown"), pinnedRequest())).rejects.toMatchObject({
         message: "Hermes could not complete this turn.",
       });
     });

@@ -414,7 +414,7 @@ export function TeamBoardRow({
   );
 }
 function TeamStatus({ row, now }: { row: TeamRow; now: number }) {
-  const { t } = useLingui();
+  const { i18n } = useLingui();
   if (
     row.state !== "blocked" &&
     row.state !== "waiting-approval" &&
@@ -452,8 +452,9 @@ function TeamStatus({ row, now }: { row: TeamRow; now: number }) {
         <Trans>
           Blocked —{" "}
           {row.reasonCategory
-            ? t(failureCategoryMessages[row.reasonCategory], {
-                runtime: row.reasonRuntime ?? "This runtime",
+            ? i18n._({
+                ...failureCategoryMessages[row.reasonCategory],
+                values: { runtime: row.reasonRuntime ?? "This runtime" },
               })
             : row.reason}
         </Trans>

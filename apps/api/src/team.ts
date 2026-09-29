@@ -206,9 +206,7 @@ export async function teamBoard(
         ? selected.result?.trim()
         : undefined;
     const problemCategory = FailureCategoryIdSchema.safeParse(runtimeProblem?.reasonId);
-    const legacyCategory = recordedReason
-      ? failureCategoryFromText(recordedReason)
-      : undefined;
+    const legacyCategory = recordedReason ? failureCategoryFromText(recordedReason) : undefined;
     const state = teamState({
       runStatus: run?.status,
       delegationStatus: selected?.status,

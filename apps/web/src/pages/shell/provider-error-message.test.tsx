@@ -38,7 +38,7 @@ vi.mock("@lingui/react/macro", async () => {
     });
   };
   return {
-    useLingui: () => ({ t: translate }),
+    useLingui: () => ({ t: translate, i18n }),
     Trans: ({ children }: { children: ReactNode }) => children,
   };
 });
@@ -140,7 +140,12 @@ it.each([
   ] as const) {
     const element = document.createElement("div");
     const root = createRoot(element);
-    const problem = runtimePinProblem(nativePin(runtimeKind), "runtime-unavailable", text, reasonId);
+    const problem = runtimePinProblem(
+      nativePin(runtimeKind),
+      "runtime-unavailable",
+      text,
+      reasonId,
+    );
     await act(async () => {
       root.render(<ProviderErrorMessage text="" runtimeProblem={problem} />);
     });

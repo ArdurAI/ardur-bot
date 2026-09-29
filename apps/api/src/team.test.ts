@@ -223,9 +223,7 @@ describe("team.board", () => {
     f.delegation.result = "Claude Code's usage limit is reached. Try again after it resets.";
     const row = TeamBoardSchema.parse(await teamBoard(f.prisma, actor)).rows[0]!;
     expect(row.state).toBe("blocked");
-    expect(row.reason).toBe(
-      "Claude Code's usage limit is reached. Try again after it resets.",
-    );
+    expect(row.reason).toBe("Claude Code's usage limit is reached. Try again after it resets.");
     expect(row.reasonCategory).toBe("usage-limit");
     expect(row.reasonRuntime).toBe("Claude Code");
   });
@@ -264,9 +262,7 @@ describe("team.board", () => {
     });
     const row = TeamBoardSchema.parse(await teamBoard(f.prisma, actor)).rows[0]!;
     expect(row.state).toBe("blocked");
-    expect(row.reason).toBe(
-      "Claude Code's usage limit is reached. Try again after it resets.",
-    );
+    expect(row.reason).toBe("Claude Code's usage limit is reached. Try again after it resets.");
   });
 
   it("keeps unavailable usage off the card instead of showing zero", async () => {

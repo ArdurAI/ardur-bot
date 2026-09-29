@@ -154,10 +154,12 @@ export function failureCategoryMemberMessage(
 
 function templateToPattern(template: string): RegExp {
   const escaped = template.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const source = escaped.replace(/\\?\{(bot|runtime|member)\\?\}/g, (_, name: string) =>
-    // Each placeholder captures its value back for the reader. Greedy is safe: the
-    // surrounding literals anchor the match and names never contain sentence stops.
-    `(?<${name}>.+?)`,
+  const source = escaped.replace(
+    /\\?\{(bot|runtime|member)\\?\}/g,
+    (_, name: string) =>
+      // Each placeholder captures its value back for the reader. Greedy is safe: the
+      // surrounding literals anchor the match and names never contain sentence stops.
+      `(?<${name}>.+?)`,
   );
   return new RegExp(`^${source}$`);
 }

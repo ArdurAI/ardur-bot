@@ -24,7 +24,7 @@ export function ProviderErrorMessage({
   catalog?: ModelCatalogEntry[];
   onConnect?: () => void;
 }) {
-  const { t } = useLingui();
+  const { t, i18n } = useLingui();
   if (runtimeProblem) {
     if (runtimeProblem.code === "locality-denied")
       return (
@@ -103,11 +103,13 @@ export function ProviderErrorMessage({
       if (pin.runtimeKind === "antigravity" || pin.runtimeKind === "pi") return null;
       const runtime = runtimeNames[pin.runtimeKind];
       const byId = FailureCategoryIdSchema.safeParse(runtimeProblem.reasonId);
-      if (byId.success) return t(failureCategoryMessages[byId.data], { runtime });
+      if (byId.success)
+        return i18n._({ ...failureCategoryMessages[byId.data], values: { runtime } });
       const legacy = failureCategoryFromText(runtimeProblem.reason);
       if (legacy)
-        return t(failureCategoryMessages[legacy.id], {
-          runtime: legacy.params.runtime ?? runtime,
+        return i18n._({
+          ...failureCategoryMessages[legacy.id],
+          values: { runtime: legacy.params.runtime ?? runtime },
         });
       return null;
     })();

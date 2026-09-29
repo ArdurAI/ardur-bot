@@ -199,7 +199,6 @@ describe("run activity failure cause", () => {
   });
 });
 
-
 it.each([false, true])(
   "keeps one tree stop target when the coordinator is visible: %s",
   async (includeCoordinator) => {

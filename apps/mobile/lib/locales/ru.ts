@@ -55,8 +55,7 @@ export const RU_MESSAGES: Record<string, string> = {
     "Недействительная конфигурация {runtime}. Проверьте настройки этого бота.",
   "{runtime}'s model connection is missing. Connect it or change the pin.":
     "Подключение модели {runtime} отсутствует. Подключите его или измените закрепление.",
-  "{runtime} stopped before finishing this run.":
-    "{runtime} остановился, не завершив этот запуск.",
+  "{runtime} stopped before finishing this run.": "{runtime} остановился, не завершив этот запуск.",
   "{runtime} could not finish this run. Check the runtime or change the pin.":
     "{runtime} не смог завершить этот запуск. Проверьте среду выполнения или измените закрепление.",
   Antigravity: "Antigravity",

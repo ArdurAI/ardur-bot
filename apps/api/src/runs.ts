@@ -4,9 +4,9 @@ import {
   failureCategoryFromText,
   MessageBlock,
   RunTriggerSchema,
-  runtimeNames,
   RuntimePinSchema,
   RuntimeProblemSchema,
+  runtimeNames,
 } from "@ardurbot/contracts";
 import { ACTIVE_RUN_STATUSES, botMessageContext, runNotificationCategory } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
@@ -47,10 +47,10 @@ export function activityNotificationsEnabled(
 /** The classified cause a failed run carries, for the activity row's one short reason. */
 export function activityRunFailure(row: {
   status: string;
-  runtimeProblem: unknown;
-  providerErrorKind: string | null;
-  runtimePin: unknown;
-  error: string | null;
+  runtimeProblem?: unknown;
+  providerErrorKind?: string | null;
+  runtimePin?: unknown;
+  error?: string | null;
 }): { failureCategory: FailureCategoryId; failureRuntime: string | null } | Record<string, never> {
   if (row.status !== "failed") return {};
   const pin = RuntimePinSchema.safeParse(row.runtimePin);

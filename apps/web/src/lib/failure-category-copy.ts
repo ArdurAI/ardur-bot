@@ -1,5 +1,4 @@
 import type { FailureCategoryId } from "@ardurbot/contracts";
-import type { MessageDescriptor } from "@lingui/core";
 import { msg } from "@lingui/core/macro";
 
 /**
@@ -8,7 +7,7 @@ import { msg } from "@lingui/core/macro";
  * source message to the table's sentence, so a category added to the table fails the test
  * until its web message exists here.
  */
-export const failureCategoryMessages: Record<FailureCategoryId, MessageDescriptor> = {
+export const failureCategoryMessages: Record<FailureCategoryId, ReturnType<typeof msg>> = {
   "usage-limit": msg`{runtime}'s usage limit is reached. Try again after it resets.`,
   "signed-out": msg`Sign in to {runtime} on this computer, then try again.`,
   "max-turns": msg`{runtime} reached this run's turn limit. Narrow the task and try again.`,
@@ -21,7 +20,7 @@ export const failureCategoryMessages: Record<FailureCategoryId, MessageDescripto
 
 /** Handoff-context sentences for the entries the table gives a member line. */
 export const failureCategoryMemberMessages: Partial<
-  Record<FailureCategoryId, MessageDescriptor>
+  Record<FailureCategoryId, ReturnType<typeof msg>>
 > = {
   stopped: msg`{member} stopped.`,
   other: msg`{member} failed.`,

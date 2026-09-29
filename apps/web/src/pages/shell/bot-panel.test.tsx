@@ -33,6 +33,7 @@ vi.mock("../KnowledgeSection", () => ({ KnowledgeSection: () => null }));
 vi.mock("@lingui/core/macro", () => ({
   t: (parts: TemplateStringsArray, ...values: unknown[]) =>
     parts.reduce((text, part, index) => text + part + (values[index] ?? ""), ""),
+  msg: (parts: TemplateStringsArray) => ({ id: parts.join(""), message: parts.join("") }),
 }));
 vi.mock("@lingui/react/macro", () => ({
   useLingui: () => ({

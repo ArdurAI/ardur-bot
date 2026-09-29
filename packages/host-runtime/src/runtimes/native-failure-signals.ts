@@ -43,10 +43,7 @@ export function nativeFailureDetail(...values: unknown[]): string {
  * A category sentence for a native failure, from the failure-category table; never echoes
  * the runtime's raw text.
  */
-export function nativeFailureProblem(
-  pin: RuntimePin,
-  reasonId: FailureCategoryId,
-): RuntimeProblem {
+export function nativeFailureProblem(pin: RuntimePin, reasonId: FailureCategoryId): RuntimeProblem {
   const name = runtimeNames[pin.runtimeKind] ?? "This runtime";
   return runtimePinProblem(
     pin,

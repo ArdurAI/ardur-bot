@@ -22,12 +22,12 @@ import { AcpClient, AcpClientError } from "./acp-client.js";
 import { startArdurMcpServer } from "./ardur-mcp-server.js";
 import { createArdurToolBridge } from "./claude-mcp-bridge.js";
 import { validateCompiledHermesProfile } from "./hermes-config.js";
-import { RuntimeQueue, stopNative } from "./native-process.js";
 import {
   nativeFailureCategory,
   nativeFailureDetail,
   nativeFailureProblem,
 } from "./native-failure-signals.js";
+import { RuntimeQueue, stopNative } from "./native-process.js";
 
 export interface HermesLaunchSpec {
   command: string;
