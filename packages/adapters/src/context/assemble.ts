@@ -78,7 +78,7 @@ export function boundMessages(messages: Message[], budget: number, step = 1): Me
   const safeStep = Math.max(1, Math.floor(step));
   let start = Math.ceil(overflow / safeStep) * safeStep;
   // A step larger than the room left rounds past the end and drops the newest turn.
-  if (start - overflow > safeStep || start >= total) start = overflow;
+  if (start >= total) start = overflow;
   const newestStart = total - (messages.at(-1)?.content.length ?? 0);
   if (start > newestStart && overflow <= newestStart)
     start = newestStart - overflow <= safeStep ? newestStart : overflow;
@@ -88,7 +88,7 @@ export function boundMessages(messages: Message[], budget: number, step = 1): Me
     if (!enters && !passes) continue;
     start = overflow <= span.start && span.start - overflow <= safeStep ? span.start : overflow;
   }
-  if (start - overflow > safeStep || start >= total) start = overflow;
+  if (start >= total) start = overflow;
   return sliceFrom(messages, start);
 }
 /**
