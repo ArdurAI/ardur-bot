@@ -2,9 +2,10 @@ import {
   type BotCommunicationPolicy,
   GROUP_MEMBER_MAX,
   GROUP_MEMBER_MIN,
+  parseRoomPolicy,
   ROOM_POLICY_MAX_CONCURRENT_RUNS_MAX,
   ROOM_POLICY_MAX_CONCURRENT_RUNS_MIN,
-  ROOM_POLICY_V1_DEFAULTS,
+  type RoomPolicyPatch,
   runtimeNames,
   runtimeSupportsTools,
 } from "@ardurbot/contracts";
@@ -43,7 +44,7 @@ export default function GroupSettingsScreen() {
   const [coordinator, setCoordinator] = useState<string | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [maxConcurrentRuns, setMaxConcurrentRuns] = useState(
-    ROOM_POLICY_V1_DEFAULTS.maxConcurrentRuns,
+    parseRoomPolicy(undefined).maxConcurrentRuns,
   );
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -118,9 +119,7 @@ export default function GroupSettingsScreen() {
         setName(nextGroup.name);
         setCoordinator(nextGroup.coordinatorBotId ?? null);
         setSelected(nextGroup.members.map((member) => member.botId));
-        setMaxConcurrentRuns(
-          nextGroup.roomPolicy?.maxConcurrentRuns ?? ROOM_POLICY_V1_DEFAULTS.maxConcurrentRuns,
-        );
+        setMaxConcurrentRuns(parseRoomPolicy(nextGroup.roomPolicy).maxConcurrentRuns);
         setBots(nextBots.filter((bot) => !bot.archivedAt));
       })
       .catch((err) => setError(err instanceof Error ? err.message : t("Could not load group")));
@@ -158,10 +157,8 @@ export default function GroupSettingsScreen() {
       setCoordinator((current) =>
         current === baseCoordinator ? (refreshed.coordinatorBotId ?? null) : current,
       );
-      const baseConcurrency =
-        base.roomPolicy?.maxConcurrentRuns ?? ROOM_POLICY_V1_DEFAULTS.maxConcurrentRuns;
-      const refreshedConcurrency =
-        refreshed.roomPolicy?.maxConcurrentRuns ?? ROOM_POLICY_V1_DEFAULTS.maxConcurrentRuns;
+      const baseConcurrency = parseRoomPolicy(base.roomPolicy).maxConcurrentRuns;
+      const refreshedConcurrency = parseRoomPolicy(refreshed.roomPolicy).maxConcurrentRuns;
       setMaxConcurrentRuns((current) =>
         current === baseConcurrency ? refreshedConcurrency : current,
       );
@@ -179,7 +176,7 @@ export default function GroupSettingsScreen() {
         name?: string;
         botIds?: string[];
         coordinatorBotId?: string | null;
-        maxConcurrentRuns?: number;
+        roomPolicy?: RoomPolicyPatch;
       } = {
         groupId,
         coordinatorBotId: coordinator && selected.includes(coordinator) ? coordinator : null,
@@ -187,9 +184,9 @@ export default function GroupSettingsScreen() {
       if (name.trim() !== group.name) input.name = name.trim();
       const memberIds = group.members.map((member) => member.botId).join(",");
       if (selected.join(",") !== memberIds) input.botIds = selected;
-      const storedConcurrency =
-        group.roomPolicy?.maxConcurrentRuns ?? ROOM_POLICY_V1_DEFAULTS.maxConcurrentRuns;
-      if (maxConcurrentRuns !== storedConcurrency) input.maxConcurrentRuns = maxConcurrentRuns;
+      if (maxConcurrentRuns !== parseRoomPolicy(group.roomPolicy).maxConcurrentRuns) {
+        input.roomPolicy = { maxConcurrentRuns };
+      }
       await rpc("groups/update", input);
       router.back();
     } catch (err) {

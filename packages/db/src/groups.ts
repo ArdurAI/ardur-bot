@@ -1,12 +1,13 @@
 import type { RuntimePin } from "@ardurbot/contracts";
 import {
   type Actor,
+  applyRoomPolicyPatch,
   GROUP_MEMBER_MAX,
   GROUP_MEMBER_MIN,
   type Group,
   type GroupMember,
   parseRoomPolicy,
-  ROOM_POLICY_V1_DEFAULTS,
+  type RoomPolicyPatch,
   RuntimePinSchema,
   type SpaceGroup,
 } from "@ardurbot/contracts";
@@ -384,7 +385,7 @@ export function createGroupRepos(prisma: PrismaClient) {
         botIds?: string[];
         pinned?: boolean;
         sectionId?: string | null;
-        maxConcurrentRuns?: number;
+        roomPolicy?: RoomPolicyPatch;
       },
     ): Promise<{ group: Group; cancelledRunIds: string[] }> {
       const members = input.botIds ? await assertOwnedBots(prisma, actor, input.botIds) : undefined;
@@ -559,13 +560,10 @@ export function createGroupRepos(prisma: PrismaClient) {
                   : undefined,
             pinned: input.pinned,
             sectionId: input.sectionId,
-            ...(input.maxConcurrentRuns !== undefined
-              ? {
-                  policy: {
-                    ...ROOM_POLICY_V1_DEFAULTS,
-                    maxConcurrentRuns: input.maxConcurrentRuns,
-                  },
-                }
+            // Laid over what the room has stored, under the group lock, so a change to
+            // one setting never resets another.
+            ...(input.roomPolicy !== undefined
+              ? { policy: applyRoomPolicyPatch(current.policy, input.roomPolicy) }
               : {}),
           },
         });

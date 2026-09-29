@@ -5905,6 +5905,59 @@ describeJourneys("required product journeys", () => {
     );
   });
 
+  it("55c: a room narrowed to one bot at a time answers in turn and keeps the setting", async () => {
+    const turn = await signup(app, `turn-${stamp}@example.test`, "Turn Rooms");
+    const makeBot = (name: string) =>
+      rpc<Bot>(app, turn, "bots/create", {
+        name,
+        title: "",
+        description: "",
+        instructions: "",
+        notifyOnFinish: false,
+      });
+    const turnBots = await Promise.all([makeBot("TurnA"), makeBot("TurnB")]);
+    type Room = { id: string; threadId: string; roomPolicy?: unknown };
+    const group = await rpc<Room>(app, turn, "groups/create", {
+      name: "Turn room",
+      botIds: turnBots.map((bot) => bot.id),
+    });
+    expect(group.roomPolicy).toEqual({ version: 1, maxConcurrentRuns: 4 });
+
+    const narrowed = await rpc<Room>(app, turn, "groups/update", {
+      groupId: group.id,
+      roomPolicy: { maxConcurrentRuns: 1 },
+    });
+    expect(narrowed.roomPolicy).toEqual({ version: 1, maxConcurrentRuns: 1 });
+    // A change to something else, or a change that names no setting, keeps the room's setting.
+    const renamed = await rpc<Room>(app, turn, "groups/update", {
+      groupId: group.id,
+      name: "One at a time",
+      roomPolicy: {},
+    });
+    expect(renamed.roomPolicy).toEqual({ version: 1, maxConcurrentRuns: 1 });
+    for (const roomPolicy of [{ maxConcurrentRuns: 9 }, { maxConcurrentRuns: 0 }, { other: 1 }]) {
+      await expect(
+        rpc(app, turn, "groups/update", { groupId: group.id, roomPolicy }),
+      ).rejects.toThrow();
+    }
+    const reread = await rpc<Room>(app, turn, "groups/get", { groupId: group.id });
+    expect(reread.roomPolicy).toEqual({ version: 1, maxConcurrentRuns: 1 });
+
+    await sendGroupAndWait(app, turn, group.id, "@everyone scripted slow review: say hello");
+    const runs = await prisma.run.findMany({
+      where: { threadId: group.threadId, trigger: "user" },
+      select: { status: true, startedAt: true, completedAt: true },
+    });
+    expect(runs).toHaveLength(2);
+    expect(runs.every((run) => run.status === "completed")).toBe(true);
+    // The second bot starts when the first has finished. The slow turn holds each run for
+    // two seconds, so half a second of clock slack still tells in-turn from at-once.
+    const [first, second] = runs.sort(
+      (a, b) => a.startedAt!.getTime() - b.startedAt!.getTime(),
+    ) as [(typeof runs)[number], (typeof runs)[number]];
+    expect(second.startedAt!.getTime()).toBeGreaterThan(first.completedAt!.getTime() - 500);
+  });
+
   // A coordinator on a native runtime reports its whole turn's usage, cache reads included, as
   // the turn ends: well past the default task budget, just before its room workers can start.
   async function* heavyTurn(events: AsyncIterable<AgentRuntimeEvent>) {

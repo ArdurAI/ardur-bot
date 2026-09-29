@@ -18,11 +18,7 @@ import {
   mcpCredentialConflict,
 } from "./mcp.js";
 import { ProviderErrorKindSchema } from "./provider-errors.js";
-import {
-  ROOM_POLICY_MAX_CONCURRENT_RUNS_MAX,
-  ROOM_POLICY_MAX_CONCURRENT_RUNS_MIN,
-  RoomPolicyV1Schema,
-} from "./room-policy.js";
+import { RoomPolicyPatchSchema, RoomPolicyV1Schema } from "./room-policy.js";
 import {
   HermesRuntimeConfigV2DraftSchema,
   HistoricalHermesRuntimeConfigSchema,
@@ -184,12 +180,8 @@ export const UpdateGroupInput = z.object({
   botIds: GroupBotIds.optional(),
   pinned: z.boolean().optional(),
   sectionId: Id.nullable().optional(),
-  maxConcurrentRuns: z
-    .number()
-    .int()
-    .min(ROOM_POLICY_MAX_CONCURRENT_RUNS_MIN)
-    .max(ROOM_POLICY_MAX_CONCURRENT_RUNS_MAX)
-    .optional(),
+  /** The room settings to change; settings left out keep their value. */
+  roomPolicy: RoomPolicyPatchSchema.optional(),
 });
 export type UpdateGroupInput = z.infer<typeof UpdateGroupInput>;
 

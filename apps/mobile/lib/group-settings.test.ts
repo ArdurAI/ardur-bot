@@ -300,7 +300,7 @@ it("saves how many bots answer at once, defaulting to four", async () => {
   await act(async () => saveButton!.click());
   expect(rpc).toHaveBeenCalledWith(
     "groups/update",
-    expect.objectContaining({ groupId: "group-1", maxConcurrentRuns: 1 }),
+    expect.objectContaining({ groupId: "group-1", roomPolicy: { maxConcurrentRuns: 1 } }),
   );
 
   await act(async () => root.unmount());

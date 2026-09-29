@@ -79,7 +79,7 @@ it("adopts two refreshed groups before Save without removing a peer's new member
     name: undefined,
     botIds: undefined,
     coordinatorBotId: "c",
-    maxConcurrentRuns: undefined,
+    roomPolicy: undefined,
   });
 });
 
@@ -115,7 +115,7 @@ it("keeps an edited name while adopting an untouched refreshed member list", asy
     name: "My edit",
     botIds: undefined,
     coordinatorBotId: null,
-    maxConcurrentRuns: undefined,
+    roomPolicy: undefined,
   });
 });
 
@@ -147,7 +147,11 @@ it("saves how many bots answer at once, defaulting to four", async () => {
   });
   await act(async () => saveButton().click());
   expect(onSave).toHaveBeenCalledWith(
-    expect.objectContaining({ maxConcurrentRuns: 1, name: undefined, botIds: undefined }),
+    expect.objectContaining({
+      roomPolicy: { maxConcurrentRuns: 1 },
+      name: undefined,
+      botIds: undefined,
+    }),
   );
 });
 

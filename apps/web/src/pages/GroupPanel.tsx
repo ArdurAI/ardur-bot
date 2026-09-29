@@ -6,9 +6,10 @@ import {
   GROUP_MEMBER_MIN,
   type Group,
   type GroupMember,
+  parseRoomPolicy,
   ROOM_POLICY_MAX_CONCURRENT_RUNS_MAX,
   ROOM_POLICY_MAX_CONCURRENT_RUNS_MIN,
-  ROOM_POLICY_V1_DEFAULTS,
+  type RoomPolicyPatch,
   runtimeNames,
   runtimeSupportsTools,
   type SetGroupMemberModelPinInput,
@@ -210,7 +211,7 @@ export function GroupSettings({
     name?: string;
     botIds?: string[];
     coordinatorBotId?: string | null;
-    maxConcurrentRuns?: number;
+    roomPolicy?: RoomPolicyPatch;
   }) => Promise<void>;
   onModelPin: (
     member: GroupMember,
@@ -229,7 +230,7 @@ export function GroupSettings({
   const [coordinator, setCoordinator] = useState(group.coordinatorBotId ?? "");
   const [selected, setSelected] = useState(group.members.map((member) => member.botId));
   const [maxConcurrentRuns, setMaxConcurrentRuns] = useState(
-    group.roomPolicy?.maxConcurrentRuns ?? ROOM_POLICY_V1_DEFAULTS.maxConcurrentRuns,
+    parseRoomPolicy(group.roomPolicy).maxConcurrentRuns,
   );
   const baseline = useRef(group);
   const [pending, setPending] = useState<"save" | "remove" | null>(null);
@@ -285,7 +286,7 @@ export function GroupSettings({
     if (previous === group) return;
     baseline.current = group;
     const effectiveConcurrency = (value: Group) =>
-      value.roomPolicy?.maxConcurrentRuns ?? ROOM_POLICY_V1_DEFAULTS.maxConcurrentRuns;
+      parseRoomPolicy(value.roomPolicy).maxConcurrentRuns;
     if (previous.id !== group.id) {
       setName(group.name);
       setCoordinator(group.coordinatorBotId ?? "");
@@ -330,8 +331,7 @@ export function GroupSettings({
   }
 
   function save() {
-    const effectiveConcurrency =
-      group.roomPolicy?.maxConcurrentRuns ?? ROOM_POLICY_V1_DEFAULTS.maxConcurrentRuns;
+    const stored = parseRoomPolicy(group.roomPolicy);
     return onSave({
       coordinatorBotId: selected.includes(coordinator) ? coordinator : null,
       name: name.trim() !== group.name ? name.trim() : undefined,
@@ -341,7 +341,8 @@ export function GroupSettings({
       )
         ? undefined
         : selected,
-      maxConcurrentRuns: maxConcurrentRuns !== effectiveConcurrency ? maxConcurrentRuns : undefined,
+      roomPolicy:
+        maxConcurrentRuns !== stored.maxConcurrentRuns ? { maxConcurrentRuns } : undefined,
     });
   }
 
