@@ -1447,9 +1447,9 @@ it("flushes held reply text and tool names before a reasoning summary", async ()
 describe("reasoning survival across pauses", () => {
   it("includes the retained work-record blocks in the durable pause message", async () => {
     const f = fixture("run-ask");
-    f.runtimeRun.mockImplementation(async function* () {
+    f.runtimeRun.mockImplementation(async function* (): AsyncGenerator<AgentRuntimeEvent> {
       yield { type: "progress", text: "Thinking about the user's request.", reasoning: true };
-      yield { type: "ask", text: "Need clarification", detail: null, actions: [] };
+      yield { type: "ask", text: "Need clarification" };
     });
 
     await f.executor.continueRun(f.runRecord.id, "worker-1");

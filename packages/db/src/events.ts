@@ -238,7 +238,7 @@ export interface PauseRunForTakeover {
   leaseOwner: string;
   leaseFence: number;
   reason: string;
-  blocks?: import("@ardurbot/contracts").MessageBlock[];
+  blocks?: MessageBlock[];
   /** Computer that should expose the pending takeover to the UI via controlRunId. */
   computerId: string;
 }
