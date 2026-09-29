@@ -261,7 +261,11 @@ function validMessage(
     return false;
   if (
     !validContent(message.content, images) &&
-    !(message.role === "assistant" && message.content === null && Array.isArray(message.tool_calls)) &&
+    !(
+      message.role === "assistant" &&
+      message.content === null &&
+      Array.isArray(message.tool_calls)
+    ) &&
     !(message.role === "tool" && (message.content === null || message.content === undefined))
   )
     return false;

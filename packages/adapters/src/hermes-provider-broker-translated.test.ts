@@ -459,25 +459,33 @@ describe("worker provider broker translated route", () => {
       {
         type: "toolcall_start",
         contentIndex: 0,
-        partial: partial([{ type: "toolCall", id: "call_1", name: toolName, arguments: {} as PiJsonObject }]),
+        partial: partial([
+          { type: "toolCall", id: "call_1", name: toolName, arguments: {} as PiJsonObject },
+        ]),
       },
       {
         type: "toolcall_delta",
         contentIndex: 0,
         delta: '{"phrase":',
-        partial: partial([{ type: "toolCall", id: "call_1", name: toolName, arguments: {} as PiJsonObject }]),
+        partial: partial([
+          { type: "toolCall", id: "call_1", name: toolName, arguments: {} as PiJsonObject },
+        ]),
       },
       {
         type: "toolcall_delta",
         contentIndex: 0,
         delta: '"hi"}',
-        partial: partial([{ type: "toolCall", id: "call_1", name: toolName, arguments: {} as PiJsonObject }]),
+        partial: partial([
+          { type: "toolCall", id: "call_1", name: toolName, arguments: {} as PiJsonObject },
+        ]),
       },
       {
         type: "toolcall_end",
         contentIndex: 0,
         toolCall: { type: "toolCall", id: "call_1", name: toolName, arguments: { phrase: "hi" } },
-        partial: partial([{ type: "toolCall", id: "call_1", name: toolName, arguments: { phrase: "hi" } }]),
+        partial: partial([
+          { type: "toolCall", id: "call_1", name: toolName, arguments: { phrase: "hi" } },
+        ]),
       },
       doneEvent([], "toolUse"),
     ]);
@@ -499,7 +507,9 @@ describe("worker provider broker translated route", () => {
       .map((call) => call.function?.arguments ?? "")
       .join("");
     expect(fragmentArgs).toBe('{"phrase":"hi"}');
-    const fragmentFinish = fragmentFrames.find((chunk) => chunk.choices[0]?.finish_reason === "tool_calls");
+    const fragmentFinish = fragmentFrames.find(
+      (chunk) => chunk.choices[0]?.finish_reason === "tool_calls",
+    );
     expect(fragmentFinish).toBeDefined();
 
     // 2. End-only case: no delta events, arguments given only at toolcall_end
@@ -508,13 +518,22 @@ describe("worker provider broker translated route", () => {
       {
         type: "toolcall_start",
         contentIndex: 0,
-        partial: partial([{ type: "toolCall", id: "call_2", name: toolName, arguments: {} as PiJsonObject }]),
+        partial: partial([
+          { type: "toolCall", id: "call_2", name: toolName, arguments: {} as PiJsonObject },
+        ]),
       },
       {
         type: "toolcall_end",
         contentIndex: 0,
-        toolCall: { type: "toolCall", id: "call_2", name: toolName, arguments: { phrase: "end-only" } },
-        partial: partial([{ type: "toolCall", id: "call_2", name: toolName, arguments: { phrase: "end-only" } }]),
+        toolCall: {
+          type: "toolCall",
+          id: "call_2",
+          name: toolName,
+          arguments: { phrase: "end-only" },
+        },
+        partial: partial([
+          { type: "toolCall", id: "call_2", name: toolName, arguments: { phrase: "end-only" } },
+        ]),
       },
       doneEvent([], "toolUse"),
     ]);
@@ -536,7 +555,9 @@ describe("worker provider broker translated route", () => {
       .map((call) => call.function?.arguments ?? "")
       .join("");
     expect(endOnlyArgs).toBe('{"phrase":"end-only"}');
-    const endOnlyFinish = endOnlyFrames.find((chunk) => chunk.choices[0]?.finish_reason === "tool_calls");
+    const endOnlyFinish = endOnlyFrames.find(
+      (chunk) => chunk.choices[0]?.finish_reason === "tool_calls",
+    );
     expect(endOnlyFinish).toBeDefined();
   });
 
@@ -687,9 +708,7 @@ describe("worker provider broker translated route", () => {
         messages: [
           {
             role: "user",
-            content: [
-              { type: "image_url", image_url: { url: "https://example.com/remote.png" } },
-            ],
+            content: [{ type: "image_url", image_url: { url: "https://example.com/remote.png" } }],
           },
         ],
         allowedTools: new Map(),
