@@ -274,15 +274,49 @@ describe("group model control", () => {
   });
 
   it("explains an incompatible Hermes group connection and blocks saving it", async () => {
-    await render({ ...member, runtimePin: pin }, vi.fn(), { ...bot, runtimeExperimental: true });
+    const signInSettings = {
+      ...settings!,
+      credentials: [{ ...settings!.credentials[0]!, oauth: true }],
+    } as Parameters<typeof GroupModelControl>[0]["settings"];
+    await act(async () =>
+      root.render(
+        <GroupModelControl
+          member={{ ...member, runtimePin: pin }}
+          bot={{ ...bot, runtimeExperimental: true }}
+          settings={signInSettings}
+          onSave={vi.fn()}
+        />,
+      ),
+    );
     await change(container.querySelector('select[id$="-runtime"]')!, "hermes");
     expect(container.querySelector('[role="status"]')?.textContent).toContain(
-      "Hermes does not yet support this connection.",
+      "Add an API key connection to use this provider with Hermes.",
     );
+    // The sign-in connection stays listed but cannot be picked.
+    const signInOption = [
+      ...container.querySelectorAll('select[id$="-model"] option'),
+    ].find((item) => item.getAttribute("value")?.includes("test"));
+    expect(signInOption).toBeDefined();
+    expect((signInOption as HTMLOptionElement).disabled).toBe(true);
     const saveButton = [...container.querySelectorAll("button")].find(
       (item) => item.textContent === "Save model",
     )!;
     expect(saveButton.disabled).toBe(true);
+  });
+
+  it("lists a key-based catalog connection for Hermes without a warning", async () => {
+    await render({ ...member, runtimePin: pin }, vi.fn(), { ...bot, runtimeExperimental: true });
+    await change(container.querySelector('select[id$="-runtime"]')!, "hermes");
+    expect(container.querySelector('[role="status"]')).toBeNull();
+    const option = [...container.querySelectorAll('select[id$="-model"] option')].find((item) =>
+      item.getAttribute("value")?.includes("test"),
+    );
+    expect(option).toBeDefined();
+    expect((option as HTMLOptionElement).disabled).toBe(false);
+    const saveButton = [...container.querySelectorAll("button")].find(
+      (item) => item.textContent === "Save model",
+    )!;
+    expect(saveButton.disabled).toBe(false);
   });
 
   it("allows clearing a saved Hermes override when Experimental is disabled", async () => {

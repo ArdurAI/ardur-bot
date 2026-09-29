@@ -1313,7 +1313,7 @@ it("does not block saving another runtime when Hermes limits had an error", asyn
   expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ runtimeKind: "pi" }));
 });
 
-it("shows the incompatible Hermes connection only while it is selected", async () => {
+it("shows no refusal for a key-based Hermes connection and disables sign-ins in the picker", async () => {
   api.availability.mockResolvedValue({ runtimeKind: "hermes", available: true, models: [] });
   await act(async () =>
     root.render(
@@ -1327,8 +1327,36 @@ it("shows the incompatible Hermes connection only while it is selected", async (
       }),
     ),
   );
-  expect(container.textContent).toContain("Hermes does not yet support Anthropic connections.");
+  // A key-based Anthropic connection backs Hermes now: no refusal is shown.
+  expect(container.textContent).not.toContain("Claude subscriptions");
+  expect(container.textContent).not.toContain("ChatGPT sign-ins");
   expect(container.textContent).not.toContain("Connect Hermes");
+  // The ChatGPT sign-in stays listed but cannot be picked for Hermes.
+  const modelSelect = container.querySelector<HTMLSelectElement>('select[id$="-model"]')!;
+  const codexOptions = [...modelSelect.querySelectorAll("option")].filter((option) =>
+    option.value.includes("openai-codex"),
+  );
+  expect(codexOptions.length).toBeGreaterThan(0);
+  expect(codexOptions.every((option) => option.disabled)).toBe(true);
+});
+
+it("explains a sign-in Hermes connection with the vendor reason", async () => {
+  api.availability.mockResolvedValue({ runtimeKind: "hermes", available: true, models: [] });
+  await act(async () =>
+    root.render(
+      settings({
+        runtimeKind: "hermes",
+        runtimeExperimental: true,
+        modelProvider: "openai-codex",
+        modelId: "gpt-6-astra",
+        modelCredentialId: "credential-test",
+        thinkingLevel: "high",
+      }),
+    ),
+  );
+  expect(container.textContent).toContain(
+    "ChatGPT sign-ins only work inside Codex; add an OpenAI API key to use GPT models with Hermes.",
+  );
 });
 it.each([
   { available: false, reason: "Codex is not installed.", models: [] },

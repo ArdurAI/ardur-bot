@@ -20,6 +20,7 @@ import type {
 import {
   modelPinOptionKey as modelOptionKey,
   parseModelPinOptionKey as parseModelOptionKey,
+  hermesConnectionRefusal,
   spaceDefaultEffort,
 } from "@ardurbot/core";
 import {
@@ -38,6 +39,7 @@ import { BotContext } from "../../components/ContextEntry";
 import { FeatureDocsLink } from "../../components/FeatureDocsLink";
 import { SettingsGroup } from "../../components/SettingsRow";
 import { ShowAllModels } from "../../components/ShowAllModels";
+import { hermesRefusalMessage } from "../../lib/hermes-refusal";
 import { modelUnavailable, spaceDefaultUnavailable } from "../../lib/model-availability";
 import { unavailableSubscriptionModel } from "../../lib/model-options";
 import { rpc } from "../../lib/rpc";
@@ -425,6 +427,10 @@ export function BotSettings({
       modelUnavailable({ catalog, credentials }, selectedModel?.provider, selectedModel?.modelId));
 
   const activeValidationError = runtimeKind === "hermes" ? validationError : null;
+  const hermesRefusal =
+    runtimeKind === "hermes"
+      ? hermesConnectionRefusal(selectedModel?.provider, effectiveCredential)
+      : undefined;
 
   async function executeSave(patchOverrides?: {
     name?: string;
@@ -606,6 +612,12 @@ export function BotSettings({
                   unavailableSelection={unavailableSelection}
                   needsConnection={needsConnection}
                   value={modelKey}
+                  isCredentialDisabled={
+                    runtimeKind === "hermes"
+                      ? (credential) =>
+                          Boolean(hermesConnectionRefusal(credential.provider, credential))
+                      : undefined
+                  }
                   onChange={(value) => {
                     setModelKey(value);
                     setThinkingLevel("");
@@ -645,12 +657,9 @@ export function BotSettings({
               />
               {runtimeKind === "hermes" ? (
                 <>
-                  {selectedModel?.provider &&
-                  !["openai-compatible", "ollama"].includes(selectedModel.provider) ? (
+                  {hermesRefusal ? (
                     <p role="status" className="mt-2 text-sm text-muted-foreground">
-                      {selectedModel.provider === "anthropic"
-                        ? t`Hermes does not yet support Anthropic connections.`
-                        : t`Hermes does not yet support this connection.`}
+                      {hermesRefusalMessage(hermesRefusal)}
                     </p>
                   ) : null}
                   <Suspense fallback={null}>

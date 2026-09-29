@@ -1,6 +1,6 @@
 import type { GroupMember, RuntimeKind, SetGroupMemberModelPinInput } from "@ardurbot/contracts";
 import { runtimeLabels } from "@ardurbot/contracts";
-import { rpcErrorMessage, spaceDefaultEffort } from "@ardurbot/core";
+import { rpcErrorMessage, hermesConnectionRefusal, spaceDefaultEffort } from "@ardurbot/core";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, Text } from "react-native";
 import type { MobileBot, MobileGroup, MobileModel, MobileModelCredential } from "../lib/api";
@@ -78,10 +78,8 @@ export function GroupMemberModelControl({
     const currentPin = activeMember.runtimePin;
     const result: Choice[] = [];
     for (const credential of credentials) {
-      if (
-        connectionKind === "hermes" &&
-        !["openai-compatible", "ollama"].includes(credential.provider)
-      )
+      // Sign-in connections stay off the Hermes choices; key-based ones are served.
+      if (connectionKind === "hermes" && hermesConnectionRefusal(credential.provider, credential))
         continue;
       const hasSeveralConnections = credentials.some(
         (item) => item.id !== credential.id && item.provider === credential.provider,
@@ -275,6 +273,9 @@ export function GroupMemberModelControl({
   function changeRuntime(next: "pi" | "hermes") {
     setDraftKind(next);
     const pin = activeMember.runtimePin ?? inheritedPin;
+    const pinCredential = pin?.credentialId
+      ? credentials.find((item) => item.id === pin.credentialId)
+      : undefined;
     if (
       !pin ||
       pin.runtimeKind === next ||
@@ -282,7 +283,7 @@ export function GroupMemberModelControl({
       !pin.modelId ||
       !pin.credentialId ||
       pin.credentialId.startsWith("native:") ||
-      (next === "hermes" && !["openai-compatible", "ollama"].includes(pin.provider ?? ""))
+      (next === "hermes" && Boolean(hermesConnectionRefusal(pin.provider, pinCredential)))
     )
       return;
     void choose({
@@ -345,13 +346,13 @@ export function GroupMemberModelControl({
       )?.label ?? activePin.modelId)
     : t("Same as bot");
   const currentOrInheritedPin = activePin ?? inheritedPin;
-  const incompatibleHermes =
-    draftKind === "hermes" &&
-    currentOrInheritedPin != null &&
-    Boolean(
-      currentOrInheritedPin.provider &&
-        !["openai-compatible", "ollama"].includes(currentOrInheritedPin.provider),
-    );
+  const currentCredential = credentials.find(
+    (item) => item.id === currentOrInheritedPin?.credentialId,
+  );
+  const hermesRefusal =
+    draftKind === "hermes" && currentOrInheritedPin != null
+      ? hermesConnectionRefusal(currentOrInheritedPin.provider, currentCredential)
+      : undefined;
   return (
     <>
       {experimental ||
@@ -410,11 +411,17 @@ export function GroupMemberModelControl({
           {selectedEffortLabel ? ` · ${selectedEffortLabel}` : ""}
         </Text>
       </Pressable>
-      {incompatibleHermes ? (
+      {hermesRefusal ? (
         <Text style={{ color: tokens.mutedForeground }}>
-          {currentOrInheritedPin?.provider === "anthropic"
-            ? t("Hermes does not yet support Anthropic connections.")
-            : t("Hermes does not yet support this connection.")}
+          {hermesRefusal === "claude-subscription"
+            ? t(
+                "Claude subscriptions only work in Anthropic's own apps; add an Anthropic API key to use Claude with Hermes.",
+              )
+            : hermesRefusal === "chatgpt-sign-in"
+              ? t(
+                  "ChatGPT sign-ins only work inside Codex; add an OpenAI API key to use GPT models with Hermes.",
+                )
+              : t("Add an API key connection to use this provider with Hermes.")}
         </Text>
       ) : null}
       {pinnedChoice && effortChoices.length ? (

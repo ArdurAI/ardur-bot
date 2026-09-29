@@ -19,7 +19,7 @@ export function ModelPinSelect({
   inputRef,
   unavailableSelection = false,
   needsConnection = false,
-  allowedProviders,
+  isCredentialDisabled,
 }: {
   settings: ModelSettings | null;
   showAll: boolean;
@@ -31,15 +31,22 @@ export function ModelPinSelect({
   inputRef?: Ref<HTMLSelectElement>;
   unavailableSelection?: boolean;
   needsConnection?: boolean;
-  allowedProviders?: readonly string[];
+  /** Connections that stay visible but cannot be picked (e.g. sign-ins for Hermes). */
+  isCredentialDisabled?: (credential: ModelSettings["credentials"][number]) => boolean;
 }) {
   const { t } = useLingui();
   const catalog = settings?.catalog ?? [];
   const credentials = settings?.credentials ?? [];
-  const options: Array<{ key: string; provider: string; modelId: string; label: string }> = [];
+  const options: Array<{
+    key: string;
+    provider: string;
+    modelId: string;
+    label: string;
+    disabled?: boolean;
+  }> = [];
   const seen = new Set<string>();
   for (const credential of credentials) {
-    if (allowedProviders && !allowedProviders.includes(credential.provider)) continue;
+    const credentialDisabled = isCredentialDisabled?.(credential) ?? false;
     const providerModels = availableProviderModels(catalog, credential.provider, showAll).filter(
       (entry) =>
         !entry.placeholder && (!entry.credentialId || entry.credentialId === credential.id),
@@ -64,6 +71,7 @@ export function ModelPinSelect({
               provider: credential.provider,
               modelId: credential.modelId,
               label: `${credential.label} · ${credential.modelId}`,
+              disabled: credentialDisabled,
             },
           ]
         : providerModels.map((entry) => ({
@@ -75,6 +83,7 @@ export function ModelPinSelect({
                 ? credential.label
                 : (entry.providerName ?? entry.provider)
             } · ${entry.label}`,
+            disabled: credentialDisabled,
           }));
     for (const option of candidates) {
       if (seen.has(option.key)) continue;
@@ -116,7 +125,7 @@ export function ModelPinSelect({
               (option) => (option.provider === "ollama" || option.provider === "local") === local,
             )
             .map((option) => (
-              <NativeSelectOption key={option.key} value={option.key}>
+              <NativeSelectOption key={option.key} value={option.key} disabled={option.disabled}>
                 {option.label}
                 {unavailableSubscriptionModel(catalog, option.provider, option.modelId)
                   ? t` — May not be available on your plan`

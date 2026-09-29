@@ -5,7 +5,7 @@ import type {
   SetGroupMemberModelPinInput,
   ThinkingLevel,
 } from "@ardurbot/contracts";
-import { modelPinOptionKey, parseModelPinOptionKey, spaceDefaultEffort } from "@ardurbot/core";
+import { modelPinOptionKey, parseModelPinOptionKey, hermesConnectionRefusal, spaceDefaultEffort } from "@ardurbot/core";
 import {
   canonicalRuntimeJson,
   effectiveHermesRuntimeConfigV2,
@@ -14,6 +14,7 @@ import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useId, useMemo, useState } from "react";
 import { ShowAllModels } from "../components/ShowAllModels";
+import { hermesRefusalMessage } from "../lib/hermes-refusal";
 import { actionMessage } from "../lib/orpc-action-message";
 import type { ModelSettings } from "../lib/use-model-settings";
 import { ModelEffortSelect, ModelPinSelect } from "./shell/model-pin-select";
@@ -70,14 +71,14 @@ export function GroupModelControl({
     canonicalRuntimeJson(botConfig) !== canonicalRuntimeJson(groupConfig);
 
   const selectedModel = parseModelPinOptionKey(key);
-  const incompatibleHermes =
-    kind === "hermes" &&
-    Boolean(
-      selectedModel?.provider && !["openai-compatible", "ollama"].includes(selectedModel.provider),
-    );
   const selectedCredential = settings?.credentials.find(
     (item) => item.id === selectedModel?.credentialId,
   );
+  const hermesRefusal =
+    kind === "hermes"
+      ? hermesConnectionRefusal(selectedModel?.provider, selectedCredential)
+      : undefined;
+  const incompatibleHermes = Boolean(hermesRefusal);
   const selectedEntry = settings?.catalog.find(
     (item) => item.provider === selectedModel?.provider && item.id === selectedModel.modelId,
   );
@@ -218,7 +219,11 @@ export function GroupModelControl({
           value={inherit ? "" : key}
           disabled={!member?.memberId || saving}
           defaultLabel={kind === "hermes" && !inherit && !key ? t`Choose a model` : t`Same as bot`}
-          allowedProviders={kind === "hermes" ? ["openai-compatible", "ollama"] : undefined}
+          isCredentialDisabled={
+            kind === "hermes"
+              ? (credential) => Boolean(hermesConnectionRefusal(credential.provider, credential))
+              : undefined
+          }
           onChange={(value) => {
             const nextInherit = !value;
             setInherit(nextInherit);
@@ -260,11 +265,9 @@ export function GroupModelControl({
           />
         </>
       ) : null}
-      {incompatibleHermes ? (
+      {hermesRefusal ? (
         <p role="status" className="mt-2 text-sm text-muted-foreground">
-          {selectedModel?.provider === "anthropic"
-            ? t`Hermes does not yet support Anthropic connections.`
-            : t`Hermes does not yet support this connection.`}
+          {hermesRefusalMessage(hermesRefusal)}
         </p>
       ) : null}
       {activeMember?.memberId ? (

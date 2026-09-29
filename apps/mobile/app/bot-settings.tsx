@@ -10,6 +10,7 @@ import type { HermesRuntimeConfigV2 } from "@ardurbot/contracts/runtime-config";
 import {
   modelPinOptionKey as modelOptionKey,
   parseModelPinOptionKey as parseModelOptionKey,
+  hermesConnectionRefusal,
   spaceDefaultEffort,
 } from "@ardurbot/core";
 import { effectiveHermesRuntimeConfigV2 } from "@ardurbot/core/runtime-config";
@@ -194,6 +195,10 @@ export default function BotSettingsScreen() {
   );
   const supportedThinking =
     effectiveCredential?.thinkingLevels ?? effectiveEntry?.thinkingLevels ?? [];
+  const hermesRefusal =
+    runtimeKind === "hermes"
+      ? hermesConnectionRefusal(effectiveProvider, effectiveCredential)
+      : undefined;
   const isOllama = effectiveProvider === "ollama";
   const thinkingOptions: ThinkingLevel[] = supportedThinking.filter((level) =>
     isOllama ? level === "off" || level === "medium" : level !== "off",
@@ -581,13 +586,17 @@ export default function BotSettingsScreen() {
             >
               <Text style={{ color: tokens.foreground }}>{selectedModelLabel}</Text>
             </Pressable>
-            {runtimeKind === "hermes" &&
-            effectiveProvider &&
-            !["openai-compatible", "ollama"].includes(effectiveProvider) ? (
+            {hermesRefusal ? (
               <Text style={{ color: tokens.mutedForeground, marginTop: 8 }}>
-                {effectiveProvider === "anthropic"
-                  ? t("Hermes does not yet support Anthropic connections.")
-                  : t("Hermes does not yet support this connection.")}
+                {hermesRefusal === "claude-subscription"
+                  ? t(
+                      "Claude subscriptions only work in Anthropic's own apps; add an Anthropic API key to use Claude with Hermes.",
+                    )
+                  : hermesRefusal === "chatgpt-sign-in"
+                    ? t(
+                        "ChatGPT sign-ins only work inside Codex; add an OpenAI API key to use GPT models with Hermes.",
+                      )
+                    : t("Add an API key connection to use this provider with Hermes.")}
               </Text>
             ) : null}
             {isOllama && effectiveEntry?.reasoning === false ? (
