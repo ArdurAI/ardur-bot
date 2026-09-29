@@ -1,6 +1,7 @@
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { rpc } from "../../lib/rpc";
+import { learningItemTitle } from "../learning-item-text";
 import type { PanelActions, PanelContext } from "./panels";
 
 export async function load(context: PanelContext) {
@@ -34,16 +35,27 @@ export default function LearningPanel({
           <Trans>No proposals</Trans>
         </p>
       ) : null}
-      {data.proposals.slice(0, 3).map((proposal) => (
-        <Button
-          key={proposal.id}
-          variant="ghost"
-          className="h-auto w-full justify-start whitespace-normal text-start"
-          onClick={openLearning}
-        >
-          {proposal.rationale}
-        </Button>
-      ))}
+      {data.proposals.slice(0, 3).map((proposal) => {
+        const title =
+          proposal.operation === "revert-suggestion"
+            ? t`Possible regression — review undo`
+            : proposal.operation === "consolidation"
+              ? t`Proposed consolidation`
+              : learningItemTitle(proposal);
+        return (
+          <Button
+            key={proposal.id}
+            variant="ghost"
+            className="h-auto w-full justify-start whitespace-normal text-start"
+            onClick={openLearning}
+          >
+            <span className="block font-medium">{title}</span>
+            {proposal.rationale !== title ? (
+              <span className="mt-1 block text-xs text-muted-foreground">{proposal.rationale}</span>
+            ) : null}
+          </Button>
+        );
+      })}
     </div>
   );
 }

@@ -24,6 +24,7 @@ import { rpc } from "../lib/rpc";
 import { LearningCurator } from "./LearningCurator";
 import { LearningObservations, LearningObservationView } from "./LearningObservation";
 import { LearningTimeline } from "./LearningTimeline";
+import { learningItemTitle } from "./learning-item-text";
 
 const LearningInsights = lazy(() => import("./LearningInsights"));
 
@@ -368,15 +369,7 @@ function LearningCard({
           ? t`Possible regression — review undo`
           : proposal.operation === "consolidation"
             ? t`Proposed consolidation`
-            : proposal.type === "policy-suggestion"
-              ? proposal.rationale
-              : proposal.type === "board-item"
-                ? proposal.boardItem?.title
-                : (proposal.proposedContent
-                    ?.split("\n")
-                    .find((line) => line.trim() && line !== "---") ??
-                  proposal.typedDelta?.key ??
-                  proposal.type)}
+            : learningItemTitle(proposal)}
       </p>
       <p className="text-xs text-muted-foreground">
         {proposal.scope.botId
