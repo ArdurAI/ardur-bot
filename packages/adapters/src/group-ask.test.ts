@@ -12,9 +12,19 @@ vi.mock("@ardurbot/db", async (importOriginal) => ({
   ...(await importOriginal<typeof Database>()),
   sizeDelegationRootForAsk: vi.fn(async () => ({})),
   wakeCoordinatorForGroupAsk: vi.fn(async () => ({ runId: "wake-run", threadId: "room" })),
-  loadGroupAskResults: vi.fn(async () => [
-    { id: "ada", name: "Ada", request: "Introduce yourself", outcome: "answered", text: "Hi" },
-  ]),
+  loadGroupAskResults: vi.fn(async () => ({
+    userRequest: "tell the bots to introduce each other, do not mention individually",
+    results: [
+      {
+        id: "ada",
+        name: "Ada",
+        request: "Introduce yourself",
+        outcome: "answered",
+        text: "Hi",
+        posted: false,
+      },
+    ],
+  })),
 }));
 
 import type { PrismaClient } from "@ardurbot/db";
@@ -348,6 +358,8 @@ describe("ask_members fan-in", () => {
       { round: 1, askRunId: "chief-run" },
     );
     expect(context).toContain("<ask_results>");
+    expect(context).toContain("<user_request>");
+    expect(context).toContain("tell the bots to introduce each other, do not mention individually");
     expect(context).toContain('- Ada (id: ada), asked "Introduce yourself", answered: Hi');
     vi.mocked(loadGroupAskResults).mockClear();
     await expect(

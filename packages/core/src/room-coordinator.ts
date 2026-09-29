@@ -31,7 +31,7 @@ const TITLE_MAX = 80;
 const DESCRIPTION_MAX = 200;
 const SHORT_DESCRIPTION_MAX = 80;
 const SKILL_MAX = 40;
-const SKILLS_SHOWN = 4;
+export const SKILLS_SHOWN = 4;
 const TASK_MAX = 100;
 const ERROR_MAX = 100;
 

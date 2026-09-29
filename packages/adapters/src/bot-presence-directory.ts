@@ -4,12 +4,13 @@ import {
   memberActivity,
   renderBotPresenceDirectory,
   renderMemberDirectory,
+  SKILLS_SHOWN,
+  taskCardGoal,
 } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import { loadBotPresence } from "@ardurbot/db";
 
 const DESK_DIRECTORY_LIMIT = 40;
-const SKILLS_PER_MEMBER = 4;
 
 /** Select a whole room before bounding the broader desk directory. */
 export async function loadRunBotDirectory(
@@ -39,11 +40,6 @@ const runFields = {
   taskId: true,
   delegationId: true,
 } as const;
-
-const cardGoal = (card: unknown) =>
-  card && typeof card === "object" && "goal" in card && typeof card.goal === "string"
-    ? card.goal
-    : undefined;
 
 /**
  * The room coordinator's member list: who each member is and, from run records alone, what
@@ -131,7 +127,7 @@ export async function loadRoomMemberDirectory(
     ...run,
     task:
       run.threadId === roomThreadId
-        ? (cardGoal(cards.find((card) => card.id === run.delegationId)?.card) ??
+        ? (taskCardGoal(cards.find((card) => card.id === run.delegationId)?.card) ??
           tasks.find((task) => task.id === run.taskId)?.prompt)
         : undefined,
   });
@@ -146,7 +142,7 @@ export async function loadRoomMemberDirectory(
         description: bot.description,
         skills: skills
           .filter((skill) => skill.botId === bot.id)
-          .slice(0, SKILLS_PER_MEMBER)
+          .slice(0, SKILLS_SHOWN)
           .map((skill) => skill.name || skill.goal),
         activity: memberActivity({
           roomThreadId,

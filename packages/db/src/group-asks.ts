@@ -1,12 +1,16 @@
+import type { MessageBlock } from "@ardurbot/contracts";
 import {
+  ACTIVE_RUN_STATUSES,
   ASK_WAKE_PROMPT,
   type AskMemberOutcome,
   askMemberOutcome,
   askWakeNonce,
+  blocksToAgentHistoryText,
   GROUP_ASK_KEY_PREFIX,
   type GroupAsk,
   groupAskPrefix,
   parseGroupAskKey,
+  taskCardGoal,
 } from "@ardurbot/core";
 import { peerTrafficPaused } from "./bot-comms-policy.js";
 import type { Prisma, PrismaClient } from "./client.js";
@@ -19,15 +23,7 @@ import { withTransactionRetry } from "./transaction-retry.js";
 
 const TERMINAL_RUN = ["completed", "failed", "cancelled"];
 const SETTLED_DELEGATION = ["completed", "accepted", "failed", "cancelled"];
-const ACTIVE_RUN = [
-  "queued",
-  "leased",
-  "running",
-  "waiting_input",
-  "waiting_takeover",
-  "peer_paused",
-  "peer_ready",
-];
+const ACTIVE_RUN = [...ACTIVE_RUN_STATUSES, "peer_paused", "peer_ready"];
 /** An ask whose members never settle stops waiting this long after its latest deadline. */
 export const GROUP_ASK_EXPIRY_GRACE_MS = 15 * 60_000;
 
@@ -147,7 +143,7 @@ export async function wakeCoordinatorForGroupAsk(
       // The coordinator already took a turn after the last result and saw the answers here.
       if (
         await tx.run.findFirst({
-          where: { ...coordinatorRuns, createdAt: { gt: latestOutcomeAt } },
+          where: { ...coordinatorRuns, startedAt: { gt: latestOutcomeAt } },
           select: { id: true },
         })
       )
@@ -186,11 +182,6 @@ export async function wakeCoordinatorForGroupAsk(
   );
 }
 
-const cardGoal = (card: unknown) =>
-  card && typeof card === "object" && "goal" in card && typeof card.goal === "string"
-    ? card.goal
-    : "";
-
 /**
  * Recent asks that have neither woken their coordinator nor settled: one delegation per ask,
  * for reconciliation to replay after a missed wake or a coordinator that was busy.
@@ -226,20 +217,36 @@ export type GroupAskResult = {
   request: string;
   outcome: AskMemberOutcome;
   text: string | null;
+  posted: boolean;
 };
 
-/** What the coordinator's follow-up turn reads: each asked member's request and outcome. */
+export type GroupAskResults = {
+  /** The person's message that started the ask, when it is still on record. */
+  userRequest: string;
+  results: GroupAskResult[];
+};
+
+function sourceMessageText(blocks: unknown): string {
+  return Array.isArray(blocks) ? blocksToAgentHistoryText(blocks as MessageBlock[]).trim() : "";
+}
+
+/** What the coordinator's follow-up turn reads: the person's request and each member's outcome. */
 export async function loadGroupAskResults(
   prisma: PrismaClient,
   { spaceId, userId }: { spaceId: string; userId: string },
   ask: GroupAsk,
-): Promise<GroupAskResult[]> {
+): Promise<GroupAskResults> {
   const scope = { spaceId, userId };
   const asking = await prisma.run.findFirst({
     where: { ...scope, id: ask.askRunId },
-    select: { taskId: true, delegationRootTaskId: true },
+    select: {
+      taskId: true,
+      delegationRootTaskId: true,
+      sourceMessageId: true,
+      threadId: true,
+    },
   });
-  if (!asking) return [];
+  if (!asking) return { userRequest: "", results: [] };
   const rows = await prisma.delegation.findMany({
     where: {
       ...scope,
@@ -256,18 +263,43 @@ export async function loadGroupAskResults(
       runId: true,
     },
   });
-  const runs = await prisma.run.findMany({
-    where: { id: { in: rows.flatMap((row) => (row.runId ? [row.runId] : [])) } },
-    select: { id: true, status: true },
-  });
-  return rows.map((row) => ({
-    id: row.actingBotId,
-    name: row.actingName,
-    request: cardGoal(row.card),
-    outcome: askMemberOutcome({
-      delegationStatus: row.status,
-      runStatus: runs.find((run) => run.id === row.runId)?.status,
+  const memberRunIds = rows.flatMap((row) => (row.runId ? [row.runId] : []));
+  const [runs, postedMessages, source] = await Promise.all([
+    prisma.run.findMany({
+      where: { id: { in: memberRunIds } },
+      select: { id: true, status: true },
     }),
-    text: row.result,
-  }));
+    memberRunIds.length
+      ? prisma.message.findMany({
+          where: { runId: { in: memberRunIds }, role: "bot" },
+          select: { runId: true },
+        })
+      : Promise.resolve([]),
+    asking.sourceMessageId
+      ? prisma.message.findFirst({
+          where: { id: asking.sourceMessageId, threadId: asking.threadId },
+          select: { blocks: true },
+        })
+      : Promise.resolve(null),
+  ]);
+  const postedRunIds = new Set(
+    postedMessages.flatMap((message) => (message.runId ? [message.runId] : [])),
+  );
+  return {
+    userRequest: source ? sourceMessageText(source.blocks) : "",
+    results: rows.map((row) => {
+      const posted = Boolean(row.runId && postedRunIds.has(row.runId));
+      return {
+        id: row.actingBotId,
+        name: row.actingName,
+        request: taskCardGoal(row.card) ?? "",
+        outcome: askMemberOutcome({
+          delegationStatus: row.status,
+          runStatus: runs.find((run) => run.id === row.runId)?.status,
+        }),
+        posted,
+        text: posted ? null : row.result,
+      };
+    }),
+  };
 }

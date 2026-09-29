@@ -10,6 +10,7 @@ import {
   TaskCompletionSchema,
   TaskProgressSchema,
 } from "@ardurbot/contracts";
+import { ASK_REQUEST_MAX_LENGTH } from "@ardurbot/core";
 import { z } from "zod";
 import { boardTools } from "./board/tools.js";
 
@@ -1029,7 +1030,7 @@ export const builtinAgentTools: ConnectorTool[] = [
         request: {
           type: "string",
           minLength: 1,
-          maxLength: 2000,
+          maxLength: ASK_REQUEST_MAX_LENGTH,
           description: "What each asked member should answer or do, specifically.",
         },
       },

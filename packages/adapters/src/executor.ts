@@ -51,6 +51,7 @@ import {
   OPENAI_COMPATIBLE_PROVIDER_ID,
   ollamaThink,
   RoutingRuleSchema,
+  RuntimeKindSchema,
   RuntimePinError,
   runtimePinProblem,
   runtimeSupportsTools,
@@ -89,6 +90,7 @@ import {
   nextCronDateAcross,
   nextFence,
   notify,
+  parseAskWakeNonce,
   planActionGate,
   promptInvokesSkill,
   redactSecrets,
@@ -2599,10 +2601,16 @@ export function createRunExecutor(deps: ExecutorDeps) {
         );
         // A coordinator on a runtime that cannot call tools, or past its last ask round, still
         // leads the room from its member list but is never offered an ask it cannot make.
-        const roomCanAsk =
-          roomCoordinator &&
-          runtimeSupportsTools(selected.pin.runtimeKind) &&
-          askRoundForRun(run.clientNonce) <= MAX_ASK_ROUNDS;
+        const roomCanAsk = offerAskMembers({
+          groupCoordinator: roomCoordinator,
+          runtimeKind: selected.pin.runtimeKind,
+          clientNonce: run.clientNonce,
+          delegated: Boolean(run.delegationId),
+          goal: Boolean(goalRoom),
+          peerReadOnly,
+          comparison: Boolean(comparisonRun),
+          messaging: Boolean(messagingChannelRun),
+        });
         const builtins = [
           ...selectBuiltinToolsForRun({
             graphicalToolsAllowed,
@@ -5245,7 +5253,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
             : null;
         if (run.clientNonce?.startsWith("goal-wake:") && !wakeSource)
           throw new Error("The completed assignment result is unavailable.");
-        const askResults = peerReadOnly ? undefined : await loadAskWakeContext(deps.prisma, run);
+        const askResults = peerReadOnly
+          ? undefined
+          : await loadAskWakeContext(deps.prisma, {
+              spaceId: run.spaceId,
+              userId: run.userId,
+              clientNonce: run.clientNonce,
+            });
         const requiredWakeContext = wakeSource
           ? {
               // Pi omits sourceMessageId from history as a duplicate of the prompt.
@@ -6631,6 +6645,46 @@ export function createRunExecutor(deps: ExecutorDeps) {
             ),
           );
         }
+        // A follow-up that cannot start must leave the queue. A stuck queued run blocks
+        // later asks and goal wakes for this room.
+        if (!retryForever && parseAskWakeNonce(run.clientNonce)) {
+          const previousFailures = await deps.prisma.attempt.count({
+            where: { runId, status: "setup_failed" },
+          });
+          if (previousFailures + 1 >= ASK_WAKE_SETUP_ATTEMPTS) {
+            const message = "The follow-up could not start. It stopped so the room can continue.";
+            const finalized = await deps.events.finalizeRun({
+              onCommitted: () =>
+                tracePoint(runId, "terminal.committed", { attempt: fence, outcome: "failed" }),
+              spaceId: run.spaceId,
+              threadId: run.threadId,
+              botId: run.botId,
+              runId,
+              taskId: run.taskId,
+              attemptId: attempt.id,
+              leaseOwner: workerId,
+              leaseFence: fence,
+              outcome: "failed",
+              error: message,
+            });
+            if (finalized) {
+              if (!finalized.continuationRunId && deps.notifications) {
+                const bot = await deps.prisma.bot.findUnique({
+                  where: { id: run.botId },
+                  select: { name: true },
+                });
+                await notifyRun(deps, run, {
+                  kind: "failure",
+                  title: `${bot?.name ?? "Bot"} failed`,
+                  body: message.slice(0, 180),
+                  botId: run.botId,
+                  threadId: run.threadId,
+                });
+              }
+              return;
+            }
+          }
+        }
         const released = await writeComputerRunRequeue(
           deps,
           runId,
@@ -6864,6 +6918,38 @@ async function renewRunLease(
 
 function computerRetryDelay(fence: number): number {
   return Math.min(10_000, 250 * 2 ** Math.min(Math.max(fence - 1, 0), 5));
+}
+
+/** Setup failures of one ask follow-up. After this many, the run stops so the room can move on. */
+export const ASK_WAKE_SETUP_ATTEMPTS = 3;
+
+/**
+ * Whether this turn may call ask_members. Leading the room is separate: a coordinator that
+ * cannot call tools, or that has used its ask rounds, still sees the member list.
+ */
+export function offerAskMembers(input: {
+  groupCoordinator: boolean;
+  runtimeKind: string;
+  clientNonce?: string | null;
+  delegated?: boolean;
+  goal?: boolean;
+  peerReadOnly?: boolean;
+  comparison?: boolean;
+  messaging?: boolean;
+}): boolean {
+  const kind = RuntimeKindSchema.safeParse(input.runtimeKind);
+  if (
+    !input.groupCoordinator ||
+    !kind.success ||
+    !runtimeSupportsTools(kind.data) ||
+    input.delegated ||
+    input.goal ||
+    input.peerReadOnly ||
+    input.comparison ||
+    input.messaging
+  )
+    return false;
+  return askRoundForRun(input.clientNonce) <= MAX_ASK_ROUNDS;
 }
 
 export function selectBuiltinToolsForRun(options: {

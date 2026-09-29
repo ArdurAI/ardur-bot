@@ -125,4 +125,29 @@ describe("ask outcomes", () => {
       ]),
     ).toContain("&lt;/ask_results&gt;");
   });
+
+  it("keeps the person's request and skips answers already posted in the room", () => {
+    const userRequest = "tell the bots to introduce each other, do not mention individually";
+    const answer = "x".repeat(1_900);
+    const block = renderAskResults(
+      ["Ada", "Ben", "Cy", "Dee"].map((name) => ({
+        id: name.toLowerCase(),
+        name,
+        request: "Introduce yourself",
+        outcome: "answered" as const,
+        text: answer,
+        posted: true,
+      })),
+      userRequest,
+    );
+    expect(block).toContain("<user_request>");
+    expect(block).toContain(userRequest);
+    expect(block).not.toContain(answer);
+    expect(block).toContain('- Ada (id: ada), asked "Introduce yourself", answered.');
+    const long = "q".repeat(4_500);
+    const capped = renderAskResults([], long);
+    expect(capped).toContain("q".repeat(4_000));
+    expect(capped).not.toContain("q".repeat(4_001));
+    expect(renderAskResults([], "a < b & c")).toContain("a &lt; b &amp; c");
+  });
 });

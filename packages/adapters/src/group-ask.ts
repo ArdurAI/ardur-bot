@@ -344,10 +344,10 @@ export async function loadAskWakeContext(
 ): Promise<string | undefined> {
   const ask = parseAskWakeNonce(run.clientNonce);
   if (!ask) return undefined;
-  const results = await loadGroupAskResults(
+  const loaded = await loadGroupAskResults(
     prisma,
     { spaceId: run.spaceId, userId: run.userId },
     ask,
   );
-  return results.length ? renderAskResults(results) : undefined;
+  return loaded.results.length ? renderAskResults(loaded.results, loaded.userRequest) : undefined;
 }

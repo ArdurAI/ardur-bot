@@ -36,6 +36,9 @@ a prepaid billing guarantee.
 Outside a goal, spending past the task's token budget refuses new admissions but
 never takes back a reservation already admitted: each worker stays bounded by its
 own reservation, while a stopped task or a passed deadline still stops every worker.
+A provider broker follows the same rule. Outside a goal, an admitted worker is
+checked only against its own allowance, and reservations already handed to room
+members do not block the coordinator's own request.
 A coordinator on a native runtime reports its whole turn's usage as the turn ends,
 which is just before its room workers can start. A goal's budget remains the
 owner's cap for its whole tree.

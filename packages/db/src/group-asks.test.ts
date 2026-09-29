@@ -72,6 +72,8 @@ function harness(
     group?: boolean;
     coordinatorActive?: boolean;
     coordinatorLater?: boolean;
+    /** A turn created before the last answer, then started after it. */
+    coordinatorStartedAfter?: boolean;
   } = {},
 ) {
   const rows = members.map((entry) => entry.row);
@@ -93,7 +95,10 @@ function harness(
     ...data,
   }));
   const coordinatorFindFirst = vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
-    if ("createdAt" in where) return options.coordinatorLater ? { id: "later" } : null;
+    if ("startedAt" in where || "createdAt" in where) {
+      if ("startedAt" in where && options.coordinatorStartedAfter) return { id: "started-after" };
+      return options.coordinatorLater ? { id: "later" } : null;
+    }
     return options.coordinatorActive ? { id: "busy" } : null;
   });
   const tx = {
@@ -217,6 +222,15 @@ describe("group ask fan-in", () => {
     }
   });
 
+  it("does not wake again when a turn queued earlier starts after the last answer", async () => {
+    const h = harness([member("ada", "completed", "completed")], {
+      coordinatorStartedAfter: true,
+    });
+    await expect(wakeCoordinatorForGroupAsk(h.prisma, "delegation-ada", now)).resolves.toBeNull();
+    expect(h.runCreate).not.toHaveBeenCalled();
+    expect(h.rows.every((row) => row.coordinatorWokenAt === now)).toBe(true);
+  });
+
   it("leaves the ask open while the coordinator is busy, and expires an ask that never settles", async () => {
     const busy = harness([member("ada", "completed", "completed")], { coordinatorActive: true });
     await expect(
@@ -261,19 +275,31 @@ describe("group ask fan-in", () => {
         findMany: vi.fn(async () => members.map((entry) => entry.run)),
       },
       delegation: { findMany: vi.fn(async () => members.map((entry) => entry.row)) },
+      message: { findMany: vi.fn(async () => []), findFirst: vi.fn(async () => null) },
     } as unknown as PrismaClient;
     // Callers may hand over a whole run row; only its scope may reach the queries.
     const runRow = { ...scope, id: "wake-run", status: "running", runtimePin: { modelId: "m" } };
-    await expect(loadGroupAskResults(prisma, runRow, ask)).resolves.toEqual([
-      { id: "ada", name: "ADA", request: "Introduce yourself", outcome: "answered", text: null },
-      {
-        id: "ben",
-        name: "BEN",
-        request: "Introduce yourself",
-        outcome: "failed",
-        text: "Model missing",
-      },
-    ]);
+    await expect(loadGroupAskResults(prisma, runRow, ask)).resolves.toEqual({
+      userRequest: "",
+      results: [
+        {
+          id: "ada",
+          name: "ADA",
+          request: "Introduce yourself",
+          outcome: "answered",
+          text: null,
+          posted: false,
+        },
+        {
+          id: "ben",
+          name: "BEN",
+          request: "Introduce yourself",
+          outcome: "failed",
+          text: "Model missing",
+          posted: false,
+        },
+      ],
+    });
     expect(prisma.run.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({ where: { ...scope, id: "ask-run" } }),
     );
@@ -284,6 +310,70 @@ describe("group ask fan-in", () => {
           rootTaskId: "root",
           admissionKey: { startsWith: "group-ask:1:ask-run:" },
         },
+      }),
+    );
+  });
+
+  it("carries the person's request and marks answers already posted in the room", async () => {
+    const userRequest = "tell the bots to introduce each other, do not mention individually";
+    const card = { goal: "Introduce yourself" };
+    const members = [
+      member("ada", "accepted", "completed", { card, result: "I research languages." }),
+      member("ben", "failed", "failed", { card }),
+    ];
+    const prisma = {
+      run: {
+        findFirst: vi.fn(async () => ({
+          taskId: "root",
+          delegationRootTaskId: null,
+          sourceMessageId: "person-message",
+          threadId: "room",
+        })),
+        findMany: vi.fn(async () => members.map((entry) => entry.run)),
+      },
+      delegation: { findMany: vi.fn(async () => members.map((entry) => entry.row)) },
+      message: {
+        findFirst: vi.fn(async () => ({
+          blocks: [{ kind: "text", text: userRequest }],
+        })),
+        findMany: vi.fn(async () => [{ runId: "run-ada" }]),
+      },
+    } as unknown as PrismaClient;
+    const runRow = {
+      ...scope,
+      id: "wake-run",
+      status: "running",
+      clientNonce: "ask-wake:1:ask-run",
+      taskId: "wake-task",
+      runtimePin: { modelId: "m" },
+    };
+    await expect(loadGroupAskResults(prisma, runRow, ask)).resolves.toEqual({
+      userRequest,
+      results: [
+        {
+          id: "ada",
+          name: "ADA",
+          request: "Introduce yourself",
+          outcome: "answered",
+          text: null,
+          posted: true,
+        },
+        {
+          id: "ben",
+          name: "BEN",
+          request: "Introduce yourself",
+          outcome: "failed",
+          text: "Model missing",
+          posted: false,
+        },
+      ],
+    });
+    expect(prisma.run.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { ...scope, id: "ask-run" } }),
+    );
+    expect(prisma.message.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "person-message", threadId: "room" },
       }),
     );
   });

@@ -17,6 +17,7 @@ import {
   createRunWorkspaceCheckpoint,
   loadCurrentTurnImages,
   missingTurnImagesInstruction,
+  offerAskMembers,
   parseUpdateBotPatch,
   runNotificationsEnabled,
   selectBuiltinToolsForRun,
@@ -306,6 +307,37 @@ describe("run workspace checkpoint", () => {
     await expect(checkpoint.flush()).rejects.toThrow("checkpoint failed");
     await expect(checkpoint.flush()).resolves.toBe(true);
     expect(persist).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("offerAskMembers", () => {
+  const coordinator = {
+    groupCoordinator: true,
+    runtimeKind: "pi",
+    clientNonce: null,
+    delegated: false,
+    goal: false,
+    peerReadOnly: false,
+    comparison: false,
+    messaging: false,
+  };
+
+  it("offers an ask to a tool-capable room coordinator before the last round", () => {
+    expect(offerAskMembers(coordinator)).toBe(true);
+    expect(offerAskMembers({ ...coordinator, runtimeKind: "hermes" })).toBe(true);
+    expect(offerAskMembers({ ...coordinator, clientNonce: "ask-wake:1:ask-run" })).toBe(true);
+  });
+
+  it("withholds an ask from Antigravity, a third round, a delegated turn and a goal turn", () => {
+    expect(offerAskMembers({ ...coordinator, runtimeKind: "antigravity" })).toBe(false);
+    expect(offerAskMembers({ ...coordinator, clientNonce: "ask-wake:2:ask-run" })).toBe(false);
+    expect(offerAskMembers({ ...coordinator, delegated: true })).toBe(false);
+    expect(offerAskMembers({ ...coordinator, goal: true })).toBe(false);
+    expect(offerAskMembers({ ...coordinator, peerReadOnly: true })).toBe(false);
+    expect(offerAskMembers({ ...coordinator, comparison: true })).toBe(false);
+    expect(offerAskMembers({ ...coordinator, messaging: true })).toBe(false);
+    expect(offerAskMembers({ ...coordinator, groupCoordinator: false })).toBe(false);
+    expect(offerAskMembers({ ...coordinator, runtimeKind: "not-a-runtime" })).toBe(false);
   });
 });
 
