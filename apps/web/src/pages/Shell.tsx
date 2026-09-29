@@ -173,6 +173,7 @@ import {
   screenIframeSandbox,
 } from "../lib/computer-screen";
 import { desktopBridge } from "../lib/desktop";
+import { countOwnerWaiting, openDockSnapshot, publishDockWaitingCount } from "../lib/dock-badge";
 import { scheduleFocusPrompt } from "../lib/focus-prompt";
 import { INSIGHT_ACTION_EVENT } from "../lib/insight-actions";
 import { localTimezone } from "../lib/local-timezone";
@@ -260,6 +261,7 @@ import {
   sidebarSearchFocusRequested,
   useSidebarSearchFocus,
 } from "./shell/sidebar-search-focus";
+import { TakeControlButton } from "./shell/take-control-button";
 import { useComputerTerminalOpen } from "./shell/use-computer-terminal-open";
 import { useTakeControl } from "./shell/use-take-control";
 import { handleWorkspaceOpenRun } from "./shell/workspace-run";
@@ -1817,6 +1819,26 @@ export function ShellPage({
     : snapshot?.botId === active?.id
       ? snapshot
       : null;
+  const dockWaitingCount = useMemo(() => {
+    const view = openDockSnapshot(
+      Boolean(active) || inGroup,
+      activeSnapshot
+        ? { threadId: activeSnapshot.threadId, runs: activeThreadRuns(activeSnapshot) }
+        : null,
+    );
+    return countOwnerWaiting({
+      bots,
+      groups,
+      spaces,
+      currentSpaceId: bootstrapMe?.spaceId,
+      snapshot: view.snapshot,
+      viewingThreadId: view.viewingThreadId,
+    });
+  }, [active, activeSnapshot, bots, bootstrapMe?.spaceId, groups, inGroup, spaces]);
+  useEffect(() => {
+    if (!initialBotsLoaded) return;
+    publishDockWaitingCount(dockWaitingCount);
+  }, [dockWaitingCount, initialBotsLoaded]);
   const activeReplyTarget =
     replyTarget && activeSnapshot?.messages.some((message) => message.id === replyTarget.id)
       ? replyTarget
@@ -2683,7 +2705,7 @@ export function ShellPage({
     setWorkspaceExpanded(false);
     computerVisible.current = true;
     const needsTakeover = !userHoldsComputerControl(targetComputer, id);
-    const blocked = computerTakeoverBlocked(targetComputer, snapshot?.run?.status);
+    const blocked = computerTakeoverBlocked(targetComputer, currentRuns, id);
     try {
       await bootComputer({
         botId: id,
@@ -3776,7 +3798,11 @@ export function ShellPage({
                   {active &&
                   panel === "computer" &&
                   !computerOpen &&
-                  computerPanelNeedsMaintenance(computer?.state, booting) ? (
+                  computerPanelNeedsMaintenance(
+                    computer?.state,
+                    booting,
+                    Boolean(computerErrorState.operation),
+                  ) ? (
                     <ComputerMaintenanceActions
                       botId={active.id}
                       computer={computer}
@@ -4773,20 +4799,15 @@ export function ShellPage({
                     onRelease={releaseComputer}
                   />
                 ) : (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={takingControl}
-                    aria-label={t`Take control`}
-                    onClick={async () => {
-                      if (computerBotIdRef.current) {
-                        await takeControl(computerBotIdRef.current);
-                      }
+                  <TakeControlButton
+                    computer={computer}
+                    runs={currentRuns}
+                    botId={computerBot.id}
+                    taking={takingControl}
+                    onTakeControl={() => {
+                      if (computerBotIdRef.current) void takeControl(computerBotIdRef.current);
                     }}
-                  >
-                    <Trans>Take control</Trans>
-                  </Button>
+                  />
                 )}
                 {computerBot && !recordingSkill ? (
                   <TeachComputerOverlayControl
@@ -6425,7 +6446,7 @@ const MessageView = memo(function MessageView({
             label={speakerName}
             size={22}
           />
-          {speakerName}
+          <span>{speakerName}</span>
         </div>
       ) : null}
       {parentJumpId ? (

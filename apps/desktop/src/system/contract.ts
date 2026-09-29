@@ -19,6 +19,11 @@ export const DEFAULT_PREFERENCES: SystemPreferences = {
   keepAwake: false,
   openLinksInBrowser: false,
 };
+
+/** macOS shows the menu bar icon unless the owner turned it off. */
+export function defaultPreferences(platform: string): SystemPreferences {
+  return { ...DEFAULT_PREFERENCES, menuBar: platform === "darwin" };
+}
 export const SHORTCUT_OPTIONS: Record<ShortcutAction, readonly Shortcut[]> = {
   quickAccess: ["Off", "Alt+Space", "Control+Space"],
   voice: ["Off", "CommandOrControl+Shift+V", "Control+Space"],

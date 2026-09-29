@@ -1332,10 +1332,11 @@ describe("database lifecycle", () => {
       expect(state).toMatchObject({ phase: "failed", message: sentence });
       expect(state.offerReset).toBe(offerReset);
       expect(failed).toEqual([[sentence, offerReset === true]]);
-      await new Promise((resolve) => setTimeout(resolve, 20));
-      expect(await readFile(path.join(root, "logs", "local-mode.log"), "utf8")).toContain(
-        `Migration "20260101000000_init" (${reason})`,
-      );
+      await vi.waitFor(async () => {
+        expect(await readFile(path.join(root, "logs", "local-mode.log"), "utf8")).toContain(
+          `Migration "20260101000000_init" (${reason})`,
+        );
+      });
     },
   );
 

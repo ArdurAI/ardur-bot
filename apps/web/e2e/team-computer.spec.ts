@@ -96,6 +96,8 @@ test("user control leaves another Team bot's screen available", async ({ page },
   await page.getByTestId("computer-preview").hover();
   await page.getByTestId("computer-preview-open").click();
   await expect(page.getByRole("button", { name: "Close computer" })).toBeVisible();
+  // The workspace opens the screen to watch; taking control is its own step.
+  await page.getByTestId("computer-chrome").getByRole("button", { name: "Take control" }).click();
   await expect
     .poll(() => rpc(page, "computer/status", { botId: chiefId }))
     .toMatchObject({
@@ -140,6 +142,7 @@ test("a failed control release keeps the computer open for retry", async ({ page
   await page.getByTestId("computer-preview").hover();
   await page.getByTestId("computer-preview-open").click();
   const chrome = page.getByTestId("computer-chrome");
+  await chrome.getByRole("button", { name: "Take control" }).click();
   const release = chrome.getByRole("button", { name: "Release", exact: true });
   await expect(release).toBeVisible();
   await page.route("**/rpc/computer/release", (route) =>
@@ -226,10 +229,11 @@ test("an active Team bot must be stopped before user takeover", async ({ page },
     )
     .toBeNull();
 
-  // After stop, Open via hover is the takeover path (no Take control button).
+  // Once the bot has stopped, the open screen offers Take control.
   await page.getByTestId("computer-preview").hover();
   await page.getByTestId("computer-preview-open").click();
   await expect(page.getByRole("button", { name: "Close computer" })).toBeVisible();
+  await chrome.getByRole("button", { name: "Take control" }).click();
   await expect(chrome.getByText("You have control", { exact: true })).toBeVisible();
   await expect(chrome.getByRole("button", { name: /Take control/i })).toHaveCount(0);
   await expect(chrome.getByRole("button", { name: "Release", exact: true })).toBeVisible();

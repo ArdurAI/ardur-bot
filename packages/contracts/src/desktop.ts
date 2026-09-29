@@ -72,6 +72,10 @@ export interface ArdurBotDesktop {
     supported(): Promise<boolean>;
     show(message: { title: string; body: string; threadId: string }): Promise<boolean>;
   };
+  /** macOS Dock badge. Missing on older desktops and in the browser. */
+  dock?: {
+    setWaitingCount(count: number): Promise<void>;
+  };
   host?: {
     state(): Promise<{
       configured: boolean;

@@ -43,6 +43,7 @@ describe("desktop preload bridge", () => {
       "boot",
       "customization",
       "devices",
+      "dock",
       "host",
       "integrations",
       "localSettings",
@@ -101,6 +102,8 @@ describe("desktop preload bridge", () => {
       "desktop.memoryFolders.select",
     ]);
     expect(invoke).toHaveBeenCalledWith("desktop.memoryFolders.select", "space-fixture");
+    await bridge.dock?.setWaitingCount(2);
+    expect(invoke).toHaveBeenCalledWith("desktop.dock.waiting", 2);
   });
 
   it("keeps setup off the app bridge so a connected server cannot re-point the app", () => {
@@ -110,6 +113,7 @@ describe("desktop preload bridge", () => {
       "boot",
       "customization",
       "devices",
+      "dock",
       "host",
       "integrations",
       "localSettings",
