@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { gunzipSync } from "node:zlib";
-import type { AgentRunRequest, AgentRuntime } from "@ardurbot/adapter-kit";
+import type { AgentRunRequest, AgentRuntime, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
 import {
   archiveBot,
   ComposioEmulator,
@@ -5415,48 +5415,52 @@ describeJourneys("required product journeys", () => {
     expect(remainingBotIds).not.toContain(artifactOwnerId);
   });
 
-  it("56: a room coordinator answers status from records and asks every member once", async () => {
+  // A native coordinator (Claude Code) reports its whole turn's usage, cache reads included, as
+  // the turn ends: well past the default task budget, just before its room workers can start.
+  async function* heavyTurn(events: AsyncIterable<AgentRuntimeEvent>) {
+    for await (const event of events)
+      yield event.type === "usage" ? { ...event, inputTokens: 200_000 } : event;
+  }
+  function scriptCoordinator(
+    marker: string,
+    tool: string,
+    call: { name: string; args: Record<string, unknown> },
+  ) {
     const requests = new Map<string, AgentRunRequest>();
     const originalRun = ScriptedAgentRuntime.prototype.run;
     const runtimeSpy = vi
       .spyOn(ScriptedAgentRuntime.prototype, "run")
       .mockImplementation((request, context) => {
         requests.set(request.runId, request);
-        const introductions =
-          request.prompt.includes("introduce each other") &&
+        const coordinatorTurn =
+          request.prompt.includes(marker) &&
           Array.isArray(request.tools) &&
-          request.tools.some((tool) => tool.name === "ask_members");
-        return originalRun.call(
+          request.tools.some((candidate) => candidate.name === tool);
+        const events = originalRun.call(
           new ScriptedAgentRuntime(),
-          introductions
-            ? {
-                ...request,
-                script: [
-                  {
-                    toolCalls: [
-                      {
-                        name: "ask_members",
-                        args: {
-                          members: ["all"],
-                          request: "Introduce yourself to the room in one sentence.",
-                        },
-                      },
-                    ],
-                    complete: true,
-                  },
-                ],
-              }
+          coordinatorTurn
+            ? { ...request, script: [{ toolCalls: [call], complete: true }] }
             : request,
           context,
         );
+        return coordinatorTurn ? heavyTurn(events) : events;
       });
     onTestFinished(() => runtimeSpy.mockRestore());
+    return requests;
+  }
+
+  it("56: a room coordinator answers status from records and asks every member once", async () => {
+    const requests = scriptCoordinator("introduce each other", "ask_members", {
+      name: "ask_members",
+      args: { members: ["all"], request: "Introduce yourself to the room in one sentence." },
+    });
     const owner = await signup(app, `room-ask-${stamp}@ardurbot.test`, "Room ask owner");
     const bots: Bot[] = [];
     for (const [name, title] of [
       ["Chief", "Coordinator"],
       ["Ada", "Researcher"],
       ["Ben", "Writer"],
+      ["Cy", "Analyst"],
     ])
       bots.push(
         await rpc<Bot>(app, owner, "bots/create", {
@@ -5467,10 +5471,10 @@ describeJourneys("required product journeys", () => {
           notifyOnFinish: true,
         }),
       );
-    const [chief, ada, ben] = bots as [Bot, Bot, Bot];
+    const [chief, ada, ben, cy] = bots as [Bot, Bot, Bot, Bot];
     const group = await rpc<{ id: string; threadId: string }>(app, owner, "groups/create", {
       name: "Intro room",
-      botIds: [chief.id, ada.id, ben.id],
+      botIds: [chief.id, ada.id, ben.id, cy.id],
     });
     await rpc(app, owner, "groups/update", { groupId: group.id, coordinatorBotId: chief.id });
     const finished = (runId: string) =>
@@ -5496,7 +5500,7 @@ describeJourneys("required product journeys", () => {
     expect(await prisma.delegation.count({ where: { parentRunId: status.runId } })).toBe(0);
     expect(
       await prisma.run.count({
-        where: { threadId: group.threadId, botId: { in: [ada.id, ben.id] } },
+        where: { threadId: group.threadId, botId: { in: [ada.id, ben.id, cy.id] } },
       }),
     ).toBe(0);
 
@@ -5520,7 +5524,13 @@ describeJourneys("required product journeys", () => {
       where: { parentRunId: intro.runId },
       orderBy: { createdAt: "asc" },
     });
-    expect(asked.map((row) => row.actingBotId).sort()).toEqual([ada.id, ben.id].sort());
+    expect(asked.map((row) => row.actingBotId).sort()).toEqual([ada.id, ben.id, cy.id].sort());
+    // The coordinator's end-of-turn usage overspent the task; its admitted members still ran.
+    const askRoot = await prisma.delegationRoot.findUniqueOrThrow({
+      where: { rootTaskId: asked[0]!.rootTaskId },
+    });
+    expect(askRoot.usedTokens).toBeGreaterThan(askRoot.tokenLimit);
+    expect(askRoot.cancelRequestedAt).toBeNull();
     for (const row of asked)
       expect(row).toMatchObject({
         kind: "group-handoff",
@@ -5544,7 +5554,7 @@ describeJourneys("required product journeys", () => {
         {
           kind: "text",
           text: expect.stringMatching(
-            /^@(Ada @Ben|Ben @Ada) Introduce yourself to the room in one sentence\.$/,
+            /^(@(Ada|Ben|Cy) ){3}Introduce yourself to the room in one sentence\.$/,
           ),
         },
       ],
@@ -5573,12 +5583,73 @@ describeJourneys("required product journeys", () => {
     expect(results).toContain("<ask_results>");
     expect(results).toContain(`- Ada (id: ${ada.id}), asked "Introduce yourself`);
     expect(results).toContain(`- Ben (id: ${ben.id}), asked "Introduce yourself`);
+    expect(results).toContain(`- Cy (id: ${cy.id}), asked "Introduce yourself`);
 
     await createJobReconciler({ prisma, jobs }, { batchSize: 100 }).reconcileOnce();
     expect(await prisma.run.count({ where: { clientNonce: wakeNonce } })).toBe(1);
     expect(
       await prisma.run.count({ where: { delegationId: { in: asked.map((row) => row.id) } } }),
-    ).toBe(2);
+    ).toBe(3);
+  });
+
+  it("57: a room handoff outlives its coordinator's heavy turn and posts its result", async () => {
+    scriptCoordinator("pass the intro to Ben", "handoff_to_bot", {
+      name: "handoff_to_bot",
+      args: { confirm_name: "Ben", message: "Introduce yourself to the room." },
+    });
+    const owner = await signup(app, `room-handoff-${stamp}@ardurbot.test`, "Room handoff owner");
+    const bots: Bot[] = [];
+    for (const [name, title] of [
+      ["Chief", "Coordinator"],
+      ["Ada", "Researcher"],
+      ["Ben", "Writer"],
+    ])
+      bots.push(
+        await rpc<Bot>(app, owner, "bots/create", {
+          name,
+          title,
+          description: "",
+          instructions: "",
+          notifyOnFinish: true,
+        }),
+      );
+    const [chief, ada, ben] = bots as [Bot, Bot, Bot];
+    const group = await rpc<{ id: string; threadId: string }>(app, owner, "groups/create", {
+      name: "Handoff room",
+      botIds: [chief.id, ada.id, ben.id],
+    });
+    await rpc(app, owner, "groups/update", { groupId: group.id, coordinatorBotId: chief.id });
+    const sent = await rpc<{ runId: string }>(app, owner, "threads/send", {
+      groupId: group.id,
+      text: "pass the intro to Ben",
+    });
+    await waitForDatabase(
+      async () =>
+        (await prisma.run.findUnique({ where: { id: sent.runId }, select: { status: true } }))
+          ?.status === "completed",
+    );
+    const handoff = await prisma.delegation.findFirstOrThrow({
+      where: { parentRunId: sent.runId, actingBotId: ben.id },
+    });
+    const root = await prisma.delegationRoot.findUniqueOrThrow({
+      where: { rootTaskId: handoff.rootTaskId },
+    });
+    expect(root.usedTokens).toBeGreaterThan(root.tokenLimit);
+    await waitForDatabase(
+      async () =>
+        (await prisma.delegation.findUnique({ where: { id: handoff.id } }))?.status === "completed",
+    );
+    expect(await prisma.run.findUnique({ where: { id: handoff.runId! } })).toMatchObject({
+      status: "completed",
+      cancelRequestedAt: null,
+    });
+    const summary = await prisma.message.findFirstOrThrow({
+      where: { threadId: group.threadId, clientNonce: `delegation-summary:${handoff.id}` },
+    });
+    expect(JSON.stringify(summary.blocks)).toContain(
+      "Chief → Ben: completed, awaiting acceptance.",
+    );
+    expect(JSON.stringify(summary.blocks)).not.toContain("Worker stopped.");
   });
 
   it("17: teach a task end to end", async () => {
