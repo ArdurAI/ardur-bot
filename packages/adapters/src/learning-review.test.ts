@@ -502,7 +502,7 @@ describe("reviewer runtime resolution", () => {
       run: nativeRun,
       describe: () => ({ capabilities: { scripted: false } }),
     } as unknown as AgentRuntime;
-    const resolveRuntime = vi.fn(async () => ({ runtime: nativeRuntime }));
+    const resolveRuntime = vi.fn(async () => ({ runtime: nativeRuntime, request: {} }));
     const recorded: AgentUsage[] = [];
     const recordUsage = vi.fn(async (_sourceRunId: string, usage: AgentUsage) => {
       recorded.push(usage);
@@ -589,7 +589,7 @@ describe("reviewer runtime resolution", () => {
       run: nativeRun,
       describe: () => ({ capabilities: { scripted: false } }),
     } as unknown as AgentRuntime;
-    const resolveRuntime = vi.fn(async () => ({ runtime: nativeRuntime }));
+    const resolveRuntime = vi.fn(async () => ({ runtime: nativeRuntime, request: {} }));
     return { f, resolveRuntime, nativeRun };
   }
   it("records real tokens when an antigravity review reports usage", async () => {
@@ -635,29 +635,27 @@ describe("reviewer runtime resolution", () => {
     expect(f.records.reviews[0]?.status).toBe("no-change");
     expect(f.records.reviews[0]).not.toHaveProperty("tokens");
   });
-  it("passes the resolved working directory to a native reviewer runtime", async () => {
+  it.each([
+    ["the bot's host folder", { nativeCwd: "/host/bot-1" }],
+    ["comparison isolation", { controlledComparison: true }],
+  ] as const)("runs the reviewer with %s from its runtime resolver", async (_name, fields) => {
     const { f } = agyReviewFixture(true);
+    const requests: AgentRunRequest[] = [];
     const nativeRun = vi.fn(async function* (request: AgentRunRequest) {
-      expect(request.nativeCwd).toBe("/host/bot-1");
-      yield {
-        type: "usage" as const,
-        inputTokens: 20,
-        outputTokens: 30,
-        provider: "antigravity",
-        model: agyPin.modelId!,
-      };
+      requests.push(request);
       yield { type: "done", text: '{"proposals":[]}' };
     });
     const nativeRuntime = {
       run: nativeRun,
       describe: () => ({ capabilities: { scripted: false } }),
     } as unknown as AgentRuntime;
-    const resolveRuntime = vi.fn(async () => ({
-      runtime: nativeRuntime,
-      nativeCwd: "/host/bot-1",
-    }));
+    const resolveRuntime = vi.fn(async () => ({ runtime: nativeRuntime, request: fields }));
     await reviewLearning({ ...f.deps, resolveRuntime }, await f.payload());
-    expect(nativeRun).toHaveBeenCalledOnce();
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({ ...fields, tools: "none", history: [] });
+    if (!("nativeCwd" in fields)) expect(requests[0]?.nativeCwd).toBeUndefined();
+    // The run finished normally; a failed request check would leave a failed review.
+    expect(f.records.reviews[0]).toMatchObject({ status: "no-change" });
   });
   it("forwards the reviewer pin with recorded review usage", async () => {
     const { f } = agyReviewFixture(true);

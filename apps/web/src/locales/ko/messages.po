@@ -2250,10 +2250,6 @@ msgstr ""
 
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Cost unavailable"
-
-#: src/pages/dashboard/UsagePanel.tsx
-msgid "Partially reported"
-msgstr "일부만 보고됨"
 msgstr "비용 정보 없음"
 
 #: src/pages/ScratchpadSection.tsx
@@ -6153,6 +6149,10 @@ msgstr ""
 #: src/pages/ScratchpadSection.tsx
 msgid "Park"
 msgstr "보류"
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Partially reported"
+msgstr "일부만 보고됨"
 
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountSignIn.tsx

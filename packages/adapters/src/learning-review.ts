@@ -32,6 +32,7 @@ import {
 export { proposalDiff, proposalFingerprint } from "./learning-proposal.js";
 
 import { learningSecrets } from "./learning-redaction.js";
+import type { DetachedRuntime } from "./runtime-registry.js";
 import { accountRuntimeUsage, ObservedUsageTotals } from "./runtime-usage.js";
 import type { EncryptedSecretStore } from "./secrets.js";
 import { skillDocumentContext } from "./skill-documents.js";
@@ -57,9 +58,7 @@ export interface LearningReviewDependencies {
   prisma: PrismaClient;
   runtime: AgentRuntime;
   /** Resolve the runtime that can run the reviewer pin; defaults to deps.runtime. */
-  resolveRuntime?: (
-    pin: RuntimePin,
-  ) => Promise<{ runtime: AgentRuntime; nativeCwd?: string } | RuntimeProblem>;
+  resolveRuntime?: (pin: RuntimePin) => Promise<DetachedRuntime | RuntimeProblem>;
   memoryDocuments?: MemoryService;
   secretStore: EncryptedSecretStore;
   resolvePin?: typeof resolveReviewerPin;
@@ -379,7 +378,7 @@ export async function reviewLearning(
     // would fail before any model call and record a zero-token fallback row.
     const selection = deps.resolveRuntime
       ? await deps.resolveRuntime(pin)
-      : { runtime: deps.runtime };
+      : { runtime: deps.runtime, request: {} };
     if ("kind" in selection) {
       await finish("paused", selection.reason, 0);
       return;
@@ -447,7 +446,7 @@ export async function reviewLearning(
       prompt,
       history: [],
       tools: "none",
-      ...(selection.nativeCwd ? { nativeCwd: selection.nativeCwd } : {}),
+      ...selection.request,
       model: {
         ...resolved,
         maxTokens: Math.min(resolved.maxTokens ?? config.maxOutputTokens, config.maxOutputTokens),

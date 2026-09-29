@@ -9,8 +9,10 @@ does not select models, authorize tools, parse provider responses, or estimate s
 
 ## Identity and replay
 
-A request is scoped by space, user, persisted run, optional delegation, `requestId`, `attemptId`,
-and counter `epochId`. The ledger hashes that tuple into the unique `UsageRecord.requestKey`.
+A run's request is scoped by space, user, persisted run, optional delegation, `requestId`,
+`attemptId`, and counter `epochId`. The ledger hashes that tuple into the unique
+`UsageRecord.requestKey`. A request that owns no run hashes space, user, thread, `requestId`,
+`attemptId` and `epochId` instead; see "Run-less requests" below.
 Identifiers must be opaque, stable across delivery retries, and free of prompts or credentials.
 A real provider retry gets a different attempt ID and remains billed. A helper uses its admitted
 delegation ID so parallel helpers cannot collide inside their parent run.
@@ -76,14 +78,18 @@ With `request` present, its categories are authoritative. The outer `AgentUsage.
 are checked before writing. Without `request`, the legacy adapter preserves each call's totals,
 marks it `purpose: legacy` / `coverage: partial`, and leaves request identities, categories and
 prices unknown. It cannot safely deduplicate callers that supply no observation identity.
-Historical rows are not reinterpreted or retroactively deduplicated.
+A totals-only event marked unreported (`reported: false`) still stores the schema-required zero
+totals, but its `categoryCoverage` marks every category `unknown` (other legacy rows leave it
+null), so the row never reads as a measured zero. Historical rows are not reinterpreted or
+retroactively deduplicated.
 
 ## Attribution, cost, and retention
 
 The ledger derives `rootTaskId`, requester/acting bot, depth and delegation from persisted state.
 It snapshots the admitted run or helper pin while retaining the usage's observed provider/model.
 This is attribution, not pin attestation. The runtime remains responsible for honoring the pin.
-Pins are not reconstructed from mutable bot settings.
+Pins are not reconstructed from mutable bot settings. A detached learning review's request rows
+snapshot the reviewer pin the review ran on, not the reviewed run's pin.
 
 Purposes are `main`, `unknown`, `retry`, `helper`, `summary`, `delegated`, and `detached-learning`.
 `unknown` is synchronous spend whose internal role cannot be established. It counts toward task
@@ -132,6 +138,10 @@ cache-write or reasoning counts. `normalizeUsageCounts` rejects negative, fracti
 overflowing and contradictory counters. These mappings follow the documented
 [Anthropic categories](https://platform.claude.com/docs/en/build-with-claude/prompt-caching) and
 [OpenAI caching fields](https://developers.openai.com/api/docs/guides/prompt-caching).
+Some OpenAI-compatible Chat Completions endpoints leave cache hits out of `prompt_tokens` and report
+them in `prompt_cache_hit_tokens`. Only when a positive hit count comes with a
+`prompt_cache_miss_tokens` equal to `prompt_tokens` does the mapping add the hits back, so the
+cache subsets stay within logical input.
 
 `ClaudeStreamParser` records attested `modelUsage` even on an error result and ignores repeated
 results. Its scope is a native turn: internal retries, helpers and native compaction are not
@@ -201,22 +211,37 @@ Background handlers connect Ardur summaries and detached reviews to `recordRunUs
 `history.compact` jobs carry `sourceRunId`; older queued jobs select the latest run within the same
 thread, bot, space and user before spending. Without a scoped source, compaction leaves history
 intact. Summary spend survives a failed summary or a rejected generation update. Reviews keep the
-same model, reservations, prompts and tool prohibition. Detached review usage is excluded from
-`loadLearningRecords` so its own metering cannot invalidate the reviewed source watermark.
+same model, reservations, prompts and tool prohibition, and run on the runtime their reviewer pin
+names; a pin no available runtime can serve pauses the review before it reserves budget.
+Detached review usage is excluded from `loadLearningRecords` so its own metering cannot
+invalidate the reviewed source watermark.
 
 `ObservedUsageTotals` uses the same request arithmetic for memory-intent and consolidation
 reservations. Started and unavailable receipts do not settle an unknown bill as measured zero;
 cumulative snapshots, terminal receipts and delivery replays count each supplied token once.
-The team-chat engagement judge persists only newly measured input/output deltas returned by
-this accumulator. It has no persisted run, so its rows retain the legacy partial-coverage
-contract rather than claiming run-ledger attribution. Identity-free runtime events remain
-additive deltas. Distinct request attempts and verified counter epochs remain separate spend.
+Identity-free runtime events remain additive deltas. Distinct request attempts and verified
+counter epochs remain separate spend.
 
 Category completeness, request attribution and live-route coverage are different denominators.
 A complete turn aggregate cannot prove that every internal native request was observed. The live
 attribution target is at least 99%; replay results do not establish that target. No client UI or
 translation catalog is changed by these collectors, and no new database migration is needed:
 collection metadata uses W0-2's immutable JSON receipt column.
+
+## Run-less requests
+
+The team-chat engagement judge decides whether a bot should answer and owns no persisted run.
+It passes every usage event to `recordStandaloneUsage` in `packages/adapters/src/run-usage.ts`
+with purpose `helper`, the judged bot, the judge's resolved runtime pin, and a fresh
+`team-chat-judge:` ID per judgement in the thread column. A request observation is keyed by
+space, user, that thread ID, `requestId`, `attemptId` and `epochId`, and is stored with the same
+categories, coverage, semantics, cost rules and immutable receipts as a run's request; its receipt
+and normalized totals commit in one transaction. Replaying a sequence with the same payload is a
+no-op; a conflicting payload, an attribution change within the attempt, or an out-of-order
+cumulative observation fails. An event without a request observation becomes one
+`coverage: partial` delta row without request identity; such an event marked unreported writes
+no row. These rows have no run, root task or delegation: they increment no budget, release no
+reservation, emit no `usage.recorded` or thread event, and leave run context metrics unchanged.
 
 ## Runtime and trace handoff
 

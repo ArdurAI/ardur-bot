@@ -49,7 +49,6 @@ let root: ReturnType<typeof createRoot>;
 const usage = {
   inputTokens: 0,
   outputTokens: 0,
-  incomplete: false,
   runs: 0,
   dayStart: "2026-09-24T00:00:00Z",
   weekStart: "2026-09-21T00:00:00Z",

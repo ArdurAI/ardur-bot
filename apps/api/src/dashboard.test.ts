@@ -4,12 +4,15 @@ import { describe, expect, it, vi } from "vitest";
 import { providerUsage, routineOverview, usageSummary, usageWindows } from "./dashboard.js";
 
 const now = new Date("2026-09-24T12:00:00Z");
+type Reported = { categoryCoverage: Record<string, string> | null; reasoningSemantics: string };
+/** Totals-only records carry no categories. */
+const totalsOnly: Reported = { categoryCoverage: null, reasoningSemantics: "unknown" };
 const row = (
   provider: string,
   createdAt: string,
   cost: number | null = null,
   pricingProvenance: unknown = null,
-  coverage = "complete",
+  reported: Reported = totalsOnly,
 ) => ({
   provider,
   createdAt: new Date(createdAt),
@@ -17,8 +20,41 @@ const row = (
   pricingProvenance,
   inputTokens: 20,
   outputTokens: 5,
-  coverage,
+  ...reported,
 });
+const categories = (overrides: Record<string, string> = {}) => ({
+  logicalInput: "complete",
+  uncachedInput: "complete",
+  cacheReadInput: "complete",
+  cacheWriteInput: "complete",
+  output: "complete",
+  reasoning: "complete",
+  ...overrides,
+});
+// Stored coverage for fully reported calls whose providers omit some cache or reasoning splits.
+const openAiResponse: Reported = {
+  categoryCoverage: categories({ uncachedInput: "unknown", cacheWriteInput: "unknown" }),
+  reasoningSemantics: "subset-of-output",
+};
+const anthropicWithoutThinking: Reported = {
+  categoryCoverage: categories({ reasoning: "unknown" }),
+  reasoningSemantics: "unknown",
+};
+// Stored coverage whose input or output total is only a lower bound.
+const notReported: Reported = {
+  categoryCoverage: Object.fromEntries(
+    Object.keys(categories()).map((key) => [key, "unknown"]),
+  ) as Record<string, string>,
+  reasoningSemantics: "unknown",
+};
+const interrupted: Reported = {
+  categoryCoverage: categories({ logicalInput: "partial", output: "partial" }),
+  reasoningSemantics: "subset-of-output",
+};
+const separateReasoningMissing: Reported = {
+  categoryCoverage: categories({ reasoning: "unknown" }),
+  reasoningSemantics: "separate",
+};
 describe("dashboard usage", () => {
   it("uses UTC day and Monday boundaries, independent of the server timezone", () => {
     expect(usageWindows(now)).toEqual({
@@ -60,40 +96,51 @@ describe("dashboard usage", () => {
     });
     expect(result[1]!.daily.map((day) => day.tokens)).toEqual([0, 0, 25, 0, 0, 25, 25]);
   });
-  it("marks a period incomplete when any record is unreported or partially reported", () => {
-    const result = providerUsage(
+  it("keeps a period complete when every input and output total was reported", () => {
+    const [usage] = providerUsage(
       [
+        row("fixture", "2026-09-24T09:00:00Z", null, null, openAiResponse),
+        row("fixture", "2026-09-24T10:00:00Z", null, null, anthropicWithoutThinking),
         row("fixture", "2026-09-24T11:00:00Z"),
-        row("fixture", "2026-09-24T12:00:00Z", null, null, "partial"),
       ],
       now,
     );
-    expect(result[0]!.today).toMatchObject({ records: 2, inputTokens: 40, incomplete: true });
-    const clean = providerUsage([row("fixture", "2026-09-24T11:00:00Z")], now);
-    expect(clean[0]!.today.incomplete).toBe(false);
+    expect(usage!.today).toMatchObject({ records: 3, inputTokens: 60, incomplete: false });
+    expect(usage!.week.incomplete).toBe(false);
+  });
+  it("marks a period partially reported only when a record's total is a lower bound", () => {
+    for (const reported of [notReported, interrupted, separateReasoningMissing]) {
+      const [usage] = providerUsage(
+        [
+          row("fixture", "2026-09-24T09:00:00Z", null, null, openAiResponse),
+          row("fixture", "2026-09-24T10:00:00Z", null, null, reported),
+        ],
+        now,
+      );
+      expect(usage!.today).toMatchObject({ records: 2, inputTokens: 40, incomplete: true });
+    }
+    const [usage] = providerUsage(
+      [
+        row("fixture", "2026-09-22T10:00:00Z", null, null, notReported),
+        row("fixture", "2026-09-24T10:00:00Z", null, null, openAiResponse),
+      ],
+      now,
+    );
+    expect(usage!.today.incomplete).toBe(false);
+    expect(usage!.week.incomplete).toBe(true);
   });
   it("retains the existing lifetime summary fields and bounds the provider query to the actor", async () => {
     const findMany = vi.fn(async () => []);
-    const prisma = {
-      usageRecord: {
-        findMany,
-        aggregate: vi
-          .fn()
-          .mockResolvedValueOnce({
-            _sum: { inputTokens: 70, outputTokens: null },
-            _count: { _all: 9 },
-          })
-          .mockResolvedValueOnce({ _count: { _all: 2 } }),
-      },
-    } as unknown as PrismaClient;
+    const aggregate = vi.fn(async () => ({
+      _sum: { inputTokens: 70, outputTokens: null },
+      _count: { _all: 9 },
+    }));
+    const prisma = { usageRecord: { findMany, aggregate } } as unknown as PrismaClient;
     const result = await usageSummary(prisma, { userId: "viewer", spaceId: "space" } as Actor, now);
-    expect(result).toMatchObject({
-      inputTokens: 70,
-      outputTokens: 0,
-      runs: 9,
-      incomplete: true,
-      providers: [],
-    });
+    expect(result).toMatchObject({ inputTokens: 70, outputTokens: 0, runs: 9, providers: [] });
+    // Lifetime totals are one aggregate; nothing scans the whole history for coverage.
+    expect(aggregate).toHaveBeenCalledOnce();
+    expect(result).not.toHaveProperty("incomplete");
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
@@ -101,6 +148,7 @@ describe("dashboard usage", () => {
           spaceId: "space",
           createdAt: { gte: new Date("2026-09-18T00:00:00Z"), lte: now },
         },
+        select: expect.objectContaining({ categoryCoverage: true, reasoningSemantics: true }),
       }),
     );
   });

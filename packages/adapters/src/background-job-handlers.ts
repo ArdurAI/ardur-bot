@@ -33,7 +33,6 @@ import type { MemoryProviderResolver } from "./memory-provider-factory.js";
 import { deliverMessagingOutbound, mirrorMessagingOutbound } from "./messaging-delivery.js";
 import { usesHostBridge } from "./remote-host-sandbox.js";
 import { recordRunUsage } from "./run-usage.js";
-import { createRuntimeRegistry } from "./runtime-registry.js";
 import type { EncryptedSecretStore } from "./secrets.js";
 import { expireTaughtSkillTeaching } from "./teaching-session.js";
 
@@ -98,9 +97,6 @@ export function createBackgroundJobHandlers(deps: {
     const run = await deps.prisma.run.findUniqueOrThrow({ where: { id: sourceRunId } });
     await recordRunUsage(deps, run, usage, reviewerPin);
   };
-  // The reviewer pin may name a native runtime; resolve the same registry the
-  // executor uses so the review runs on the runtime the pin promises.
-  const runtimeRegistry = createRuntimeRegistry(deps.runtime);
   const deliverMessaging = async (runId?: string) => {
     if (!deps.messaging) return;
     await deliverMessagingOutbound(
@@ -139,45 +135,11 @@ export function createBackgroundJobHandlers(deps: {
           secretStore: deps.secretStore,
           memoryDocuments: deps.memoryDocuments,
           recordUsage,
-          resolveRuntime: async (pin) => {
-            const refused = reviewRuntimeGate({ pin, hostBridge: usesHostBridge() });
-            if (refused) return refused;
-            const source = await deps.prisma.run.findUnique({
-              where: { id: payload.runId },
-              select: {
-                bot: {
-                  select: {
-                    computer: { select: { kind: true, providerRef: true } },
-                    runtimeExperimental: true,
-                  },
-                },
-              },
-            });
-            const bot = source?.bot;
-            const selection = await runtimeRegistry.resolve(
-              pin,
-              bot?.computer?.kind,
-              bot?.runtimeExperimental,
-              pin.runtimeKind === "hermes"
-                ? {
-                    credentialId: pin.credentialId!,
-                    provider: pin.provider!,
-                    modelId: pin.modelId!,
-                    effort: pin.effort!,
-                  }
-                : undefined,
-            );
-            if ("kind" in selection) return selection;
-            // Native in-process runtimes run in the bot's host folder, like the
-            // executor's own runs; Antigravity refuses to start without it.
-            return {
-              runtime: selection.runtime,
-              nativeCwd:
-                bot?.computer?.kind === "desktop"
-                  ? (bot.computer.providerRef ?? undefined)
-                  : undefined,
-            };
-          },
+          // The reviewer pin may name a native runtime; the executor's registry
+          // resolves it with the same bot and host checks as the run itself.
+          resolveRuntime: async (pin) =>
+            reviewRuntimeGate({ pin, hostBridge: usesHostBridge() }) ??
+            deps.executor.resolveDetachedRuntime(pin, payload.runId),
           boardService: new BoardService({
             prisma: deps.prisma,
             dataDir: deps.dataDir ?? "./data",

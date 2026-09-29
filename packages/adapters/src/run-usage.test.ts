@@ -297,17 +297,71 @@ it("keeps unreported standalone usage explicit instead of writing measured zeros
   });
 });
 
-it("persists identity-free legacy deltas as standalone rows without a zero claim", async () => {
+it("stores identity-free standalone totals as legacy rows, marking unreported ones unknown", async () => {
   const { prisma, rows } = standalonePrisma();
   const usage = { provider: "fixture", model: "fixture", inputTokens: 100, outputTokens: 30 };
   await recordStandaloneUsage({ prisma }, standaloneScope, usage);
-  await recordStandaloneUsage({ prisma }, standaloneScope, { ...usage, reported: false });
-  expect(storedRow(rows)).toMatchObject({
-    purpose: "helper",
+  await recordStandaloneUsage({ prisma }, standaloneScope, {
+    ...usage,
+    inputTokens: 0,
+    outputTokens: 0,
+    reported: false,
+  });
+  const [measured, unreported] = [...rows.values()];
+  // The same fields the run path's legacy writer stores, plus the run-less scope.
+  expect(measured).toMatchObject({
+    purpose: "legacy",
+    coverage: "partial",
+    threadId: "judge-thread",
+    runId: null,
+    runtimePin: standaloneScope.runtimePin,
     inputTokens: 100,
     outputTokens: 30,
-    coverage: "partial",
   });
+  expect(measured).not.toHaveProperty("categoryCoverage");
+  expect(unreported).toMatchObject({
+    purpose: "legacy",
+    categoryCoverage: {
+      logicalInput: "unknown",
+      uncachedInput: "unknown",
+      cacheReadInput: "unknown",
+      cacheWriteInput: "unknown",
+      output: "unknown",
+      reasoning: "unknown",
+    },
+  });
+});
+
+it("refuses a broker admission on a run-less request", async () => {
+  const { prisma, rows } = standalonePrisma();
+  const event = collector().snapshot({ input: 100, output: 30 }) as AgentUsage;
+  event.request!.admission = {
+    kind: "worker-provider-broker",
+    reservedTokens: 10,
+    maxRequests: 1,
+    maxReservedTokens: 10,
+  };
+  await expect(recordStandaloneUsage({ prisma }, standaloneScope, event)).rejects.toThrow(
+    "Run-less usage cannot carry a broker admission",
+  );
+  expect(rows.size).toBe(0);
+});
+
+it("retries a standalone write that hit a serialization conflict", async () => {
+  const { prisma, rows } = standalonePrisma();
+  const run = prisma.$transaction.bind(prisma);
+  const transaction = vi
+    .fn()
+    .mockRejectedValueOnce(Object.assign(new Error("serialization failure"), { code: "P2034" }))
+    .mockImplementation(run);
+  const retrying = { ...prisma, $transaction: transaction } as unknown as PrismaClient;
+  await recordStandaloneUsage(
+    { prisma: retrying },
+    standaloneScope,
+    collector().snapshot({ input: 100, output: 30 }) as AgentUsage,
+  );
+  expect(transaction).toHaveBeenCalledTimes(2);
+  expect(storedRow(rows)).toMatchObject({ inputTokens: 100, outputTokens: 30 });
 });
 
 it("counts a replayed duplicate snapshot once in the stored row", async () => {
