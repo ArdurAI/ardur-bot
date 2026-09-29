@@ -73,17 +73,37 @@ param:
   ArdurComputer: "000000000000000000000000"
   ArdurDeployment: "0000000000000000"
 
+# No readiness probe: `limactl start` already waits until this boot's provisioning script has
+# finished, and the script records its own outcome in /run (see docs/vm-computers.md).
 provision:
   - mode: system
     script: |
       #!/bin/bash
-      # Runs as root at every boot. The slow part runs once per set of pinned versions.
+      # Runs as root at every boot, after Lima's boot scripts. The slow part runs once.
+      # Rule: root never writes to, changes or follows a path the bot can write, such as its home
+      # or /tmp. Root works only in /etc, /run, /var/lib/ardur and system directories.
       set -euo pipefail
       export DEBIAN_FRONTEND=noninteractive
+      # Commands resolve only from system directories.
+      export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+      # This boot's outcome. /run starts empty at every boot and only root can write to it, so the
+      # bot cannot fake either marker. Any non-zero exit, explicit or not, records its reason.
+      reason=""
+      fail() {
+        reason="$*"
+        echo >&2 "$reason"
+        exit 1
+      }
+      record_outcome() {
+        local status=$?
+        if [ "$status" -ne 0 ]; then
+          printf '%s\n' "${reason:-exit $status after: $BASH_COMMAND}" >/run/ardur-failed
+        fi
+      }
+      trap record_outcome EXIT
+      rm -f /run/ardur-ready /run/ardur-failed
       install -d -m 0755 /var/lib/ardur
-      # This boot's outcome lives in /run, which starts empty at every boot. A failed step is
-      # recorded so the readiness probe stops waiting at once.
-      trap 'echo "$BASH_COMMAND" >/run/ardur-failed' ERR
 
       BOT_USER=bot
       BOT_UID=2000
@@ -105,15 +125,24 @@ provision:
           KUBERNETES_CLIENT_SHA512="decde4d990d0fbf6451e65524dec42c549de3339f27005c45af8d3c61cca1de852524ebf2215c82be86d4ab2621c823f56f718b8d2c304b9100a903e696c0c32"
           ;;
         *)
-          echo "Unsupported architecture: $ARCH" >&2
-          exit 1
+          fail "Unsupported architecture: $ARCH"
           ;;
       esac
       PINS="docker=$DOCKER_VERSION containerd=$CONTAINERD_VERSION buildx=$BUILDX_VERSION compose=$COMPOSE_VERSION kind=$KIND_VERSION kubernetes=$KUBERNETES_VERSION"
+      BOT_KEYS=/etc/ssh/ardur/bot_authorized_keys
 
-      # 1. Guest firewall, owned by root and loaded early at every later boot. It blocks the
-      # host's loopback (192.168.5.2), private and link-local ranges, and Tailscale addresses,
-      # and allows DNS through Lima's resolver and the public internet.
+      # 0. Labels, and a stable SSH host key. Lima gives cloud-init a new instance id at every boot,
+      # and cloud-init deletes and regenerates the host keys for each new instance unless told not
+      # to (lima-vm/lima#678). Ardur pins the host key, so it must survive reboots.
+      printf 'computer=%s\ndeployment=%s\n' "$PARAM_ArdurComputer" "$PARAM_ArdurDeployment" \
+        >/etc/ardur-labels
+      install -d -m 0755 /etc/cloud/cloud.cfg.d
+      printf '%s\n' "ssh_deletekeys: false" >/etc/cloud/cloud.cfg.d/90-ardur-keep-host-keys.cfg
+
+      # 1. Guest firewall, owned by root and loaded early at every later boot. IPv4: it blocks the
+      # host's loopback (192.168.5.2), private and link-local ranges, and Tailscale addresses, and
+      # allows DNS through Lima's resolver and the public internet. IPv6 is allowed only on the
+      # guest's own loopback: QEMU's user network maps its IPv6 prefix to the host's ::1.
       if ! command -v nft >/dev/null 2>&1; then
         apt-get update
         apt-get install -y nftables
@@ -126,31 +155,55 @@ provision:
           type filter hook output priority filter; policy accept;
           oifname "lo" accept
           ct state established,related accept
+          meta nfproto ipv6 reject
           ip daddr 192.168.5.3 meta l4proto { tcp, udp } th dport 53 accept
           ip daddr { 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.0.0.0/24, 192.168.0.0/16, 198.18.0.0/15, 224.0.0.0/3 } reject
-          ip6 daddr { ::1, fc00::/7, fe80::/10, ff00::/8 } reject
         }
       }
       EOF
       systemctl enable nftables.service
       nft -f /etc/nftables.conf
 
-      # 2. Pinned software, installed once.
+      # 2. The bot account, and how it logs in, before anything can log in as the bot. sshd takes
+      # the bot's key from a root-owned file (Match User), so root never writes into the bot's
+      # home and the bot cannot add keys. The key is the one Lima installed for its admin user;
+      # the private half never enters the guest.
+      admin_home="$(getent passwd lima | cut -d: -f6)"
+      chmod 0750 "$admin_home"
+      install -d -m 0755 -o root -g root /etc/ssh/ardur
+      install -m 0644 -o root -g root "$admin_home/.ssh/authorized_keys" "$BOT_KEYS"
+      printf '%s\n' "Match User $BOT_USER" "    AuthorizedKeysFile $BOT_KEYS" \
+        >/etc/ssh/sshd_config.d/10-ardur-bot.conf
+      if ! id -u "$BOT_USER" >/dev/null 2>&1; then
+        useradd --create-home --uid "$BOT_UID" --user-group --shell /bin/bash "$BOT_USER"
+      fi
+      for group in sudo admin docker lxd; do
+        gpasswd -d "$BOT_USER" "$group" >/dev/null 2>&1 || true
+      done
+      # sshd's test mode needs the privilege separation directory that ssh.service creates.
+      install -d -m 0755 -o root -g root /run/sshd
+      effective="$(sshd -T -C "user=$BOT_USER,host=localhost,addr=127.0.0.1")"
+      grep -qx "authorizedkeysfile $BOT_KEYS" <<<"$effective" ||
+        fail "sshd does not read the bot's key from $BOT_KEYS"
+      systemctl try-reload-or-restart ssh.service
+
+      # 3. Pinned software, installed once, in a directory only root can write.
       if [ "$(cat /var/lib/ardur/provisioned 2>/dev/null || true)" != "$PINS" ]; then
         apt-get update
         apt-get install -y ca-certificates curl gnupg uidmap dbus-user-session slirp4netns
+        work=/var/lib/ardur/work
+        rm -rf "$work"
+        install -d -m 0700 "$work" "$work/gnupg"
 
-        # Docker's apt repository, trusted only after its key matches the pinned fingerprint.
-        key="$(mktemp)"
-        curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o "$key"
-        fingerprint="$(gpg --show-keys --with-colons "$key" | awk -F: '$1 == "fpr" { print $10; exit }')"
-        if [ "$fingerprint" != "$DOCKER_KEY_FINGERPRINT" ]; then
-          echo "Docker's signing key does not match the pinned fingerprint" >&2
-          exit 1
-        fi
+        # Docker's apt repository, trusted only when the key file holds exactly one primary key
+        # and that key has the pinned fingerprint: apt accepts a signature from any key in it.
+        curl -fsSLo "$work/docker.asc" https://download.docker.com/linux/ubuntu/gpg
+        primary_keys="$(gpg --homedir "$work/gnupg" --show-keys --with-colons "$work/docker.asc" |
+          awk -F: '$1 == "pub" { primary = 1; next } primary && $1 == "fpr" { print $10; primary = 0 }')"
+        [ "$primary_keys" = "$DOCKER_KEY_FINGERPRINT" ] ||
+          fail "Docker's key file does not hold exactly the pinned key"
         install -m 0755 -d /etc/apt/keyrings
-        install -m 0644 "$key" /etc/apt/keyrings/docker.asc
-        rm -f "$key"
+        install -m 0644 "$work/docker.asc" /etc/apt/keyrings/docker.asc
         printf '%s\n' "Types: deb" "URIs: https://download.docker.com/linux/ubuntu" "Suites: noble" \
           "Components: stable" "Architectures: $ARCH" "Signed-By: /etc/apt/keyrings/docker.asc" \
           >/etc/apt/sources.list.d/docker.sources
@@ -165,7 +218,6 @@ provision:
         systemctl mask docker.service docker.socket containerd.service
 
         # kind and kubectl, each checked against a pinned checksum before it is installed.
-        work="$(mktemp -d)"
         curl -fsSLo "$work/kind" \
           "https://github.com/kubernetes-sigs/kind/releases/download/$KIND_VERSION/kind-linux-$ARCH"
         echo "$KIND_SHA256  $work/kind" | sha256sum --check --strict
@@ -184,10 +236,7 @@ provision:
         printf '%s\n' ip6_tables ip6table_nat ip_tables iptable_nat >/etc/modules-load.d/ardur-kind.conf
         systemctl restart systemd-modules-load.service
 
-        # The unprivileged bot user: no sudo, no docker group, its own rootless Docker.
-        if ! id -u "$BOT_USER" >/dev/null 2>&1; then
-          useradd --create-home --uid "$BOT_UID" --user-group --shell /bin/bash "$BOT_USER"
-        fi
+        # The bot's own rootless Docker: no sudo, no docker group. The setup tool runs as the bot.
         grep -q "^$BOT_USER:" /etc/subuid || usermod --add-subuids 300000-365535 "$BOT_USER"
         grep -q "^$BOT_USER:" /etc/subgid || usermod --add-subgids 300000-365535 "$BOT_USER"
         loginctl enable-linger "$BOT_USER"
@@ -201,29 +250,9 @@ provision:
         printf '%s\n' "$PINS" >/var/lib/ardur/provisioned
       fi
 
-      # 3. Every boot: record the labels, keep the bot unprivileged, and let it log in with the
-      # host-held key that Lima installed for its admin user. The private key never enters the guest.
-      printf 'computer=%s\ndeployment=%s\n' "$PARAM_ArdurComputer" "$PARAM_ArdurDeployment" \
-        >/etc/ardur-labels
-      for group in sudo admin docker lxd; do
-        gpasswd -d "$BOT_USER" "$group" >/dev/null 2>&1 || true
-      done
-      admin_home="$(getent passwd lima | cut -d: -f6)"
-      chmod 0750 "$admin_home"
-      install -d -m 0700 -o "$BOT_USER" -g "$BOT_USER" "/home/$BOT_USER/.ssh"
-      install -m 0600 -o "$BOT_USER" -g "$BOT_USER" "$admin_home/.ssh/authorized_keys" \
-        "/home/$BOT_USER/.ssh/authorized_keys"
+      # 4. Every boot: ready once the bot's Docker answers. The command runs as the bot.
+      runuser -u "$BOT_USER" -- env HOME="/home/$BOT_USER" XDG_RUNTIME_DIR="/run/user/$BOT_UID" \
+        DOCKER_HOST="unix:///run/user/$BOT_UID/docker.sock" \
+        timeout 60 sh -c 'until docker version >/dev/null 2>&1; do sleep 2; done' ||
+        fail "The bot's Docker did not start"
       touch /run/ardur-ready
-
-probes:
-  - mode: readiness
-    description: Ardur provisioning to finish
-    script: |
-      #!/bin/bash
-      set -eu
-      finished='[ -f /run/ardur-ready ] || [ -f /run/ardur-failed ]'
-      if ! timeout 900 bash -c "until $finished; do sleep 5; done" || [ -f /run/ardur-failed ]; then
-        echo >&2 "Ardur provisioning did not finish"
-        exit 1
-      fi
-    hint: See /var/log/cloud-init-output.log in the guest.
