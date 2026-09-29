@@ -1,4 +1,5 @@
 import type { DelegationSnapshot } from "@ardurbot/contracts";
+import { DELEGATION_LIMITS } from "@ardurbot/contracts";
 import { vi } from "vitest";
 import type { Prisma, PrismaClient } from "./client.js";
 import { admitDelegation } from "./delegation.js";
@@ -164,7 +165,8 @@ export function fixture() {
             maxConcurrent: 4,
             maxHops: 6,
             maxDescendants: 12,
-            tokenLimit: 200000,
+            // The production default; a test that needs a bigger room sets tokenLimit itself.
+            tokenLimit: DELEGATION_LIMITS.tokens,
             ...create,
           }),
       ),

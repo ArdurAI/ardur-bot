@@ -43,6 +43,14 @@ describe("transactional delegation admission", () => {
     const f = fixture(),
       a = f.worker(),
       b = f.worker();
+    // This test exercises the concurrency cap, so its room explicitly fits that many default
+    // reservations; a default root is smaller (covered by the default-root budget test below).
+    await f.tx.delegationRoot.upsert({
+      create: {
+        tokenLimit: DELEGATION_LIMITS.concurrent * DELEGATION_LIMITS.reservationTokens,
+        deadlineAt: new Date(Date.now() + 3_600_000),
+      },
+    });
     const outcomes = await Promise.allSettled(
       Array.from({ length: 8 }, (_, i) => f.admit({ admissionKey: `key-${i}` }, i % 2 ? a : b)),
     );
