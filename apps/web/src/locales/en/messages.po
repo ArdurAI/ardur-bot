@@ -4262,10 +4262,6 @@ msgid "Hermes is not installed on this computer."
 msgstr "Hermes is not installed on this computer."
 
 #: src/pages/shell/runtime-settings.tsx
-msgid "The Hermes install on this computer failed its safety check."
-msgstr "The Hermes install on this computer failed its safety check."
-
-#: src/pages/shell/runtime-settings.tsx
 msgid "Hermes isn't available on Windows yet."
 msgstr "Hermes isn't available on Windows yet."
 
@@ -8376,6 +8372,10 @@ msgstr "The first bot could not be created. Try again."
 #: src/pages/group-model-control.tsx
 msgid "The group model choice was reloaded. Pick again."
 msgstr "The group model choice was reloaded. Pick again."
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "The Hermes install on this computer failed its safety check."
+msgstr "The Hermes install on this computer failed its safety check."
 
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
