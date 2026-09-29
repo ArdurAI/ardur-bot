@@ -225,11 +225,12 @@ function* readTar(tar: Buffer): Generator<TarEntry> {
       yield { kind: "refuse", path: entryPath, mode, data: Buffer.alloc(0) };
       continue;
     }
-    if (mode !== 0o644 && mode !== 0o755) throw new HermesArchiveError();
+    // git archive uses the umask (0664/0775), so normalize: any execute bit means 0o755,
+    // anything else 0o644, directories always 0o755, special bits never survive.
     yield {
       kind: flag === "5" ? "dir" : "file",
       path: entryPath,
-      mode,
+      mode: flag === "5" ? 0o755 : (mode & 0o111) !== 0 ? 0o755 : 0o644,
       data: flag === "5" ? Buffer.alloc(0) : Buffer.from(data),
     };
   }
