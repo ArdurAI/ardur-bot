@@ -1065,6 +1065,18 @@ describeIntegration("run executor lifecycle", () => {
       return (await handles.prisma.run.findUniqueOrThrow({ where: { id: runId } })).status;
     }
 
+    /** Waits for a terminal status and surfaces the stored failure reason. */
+    async function awaitRunStatus(runId: string, expected: string) {
+      await vi.waitFor(
+        async () => {
+          const run = await handles.prisma.run.findUniqueOrThrow({ where: { id: runId } });
+          if (run.status !== expected)
+            throw new Error(`run ${runId} is ${run.status}: ${run.error ?? "(no error)"}`);
+        },
+        { timeout: 5_000, interval: 250 },
+      );
+    }
+
     it("delivers a message sent during a run after the follow-up's cue", async () => {
       const { seeded, continuationRunId } = await seedBusyRunWithMidRunMessage("midrun-input");
       await expect(
@@ -1460,6 +1472,327 @@ describeIntegration("run executor lifecycle", () => {
       expect(await handles.prisma.steeringMessage.count({ where: { botId: seeded.bot.id } })).toBe(
         0,
       );
+    });
+
+    it("answers a taken-over message once after the run that claimed it also fails", async () => {
+      const busy = await seedBusyRun("taken-over-fail");
+      const { seeded, events } = busy;
+      await sendWhileBusy(busy, [{ kind: "text", text: "also check staging" }]);
+      await expect(
+        events.claimSteering({
+          threadId: seeded.thread.id,
+          botId: seeded.bot.id,
+          runId: seeded.run.id,
+          leaseOwner: "busy-worker",
+          leaseFence: 1,
+          seenIds: [],
+        }),
+      ).resolves.toHaveLength(1);
+      await expect(
+        events.finalizeRun({
+          spaceId: seeded.me.spaceId,
+          threadId: seeded.thread.id,
+          botId: seeded.bot.id,
+          runId: seeded.run.id,
+          taskId: seeded.task.id,
+          attemptId: busy.attempt.id,
+          leaseOwner: "busy-worker",
+          leaseFence: 1,
+          outcome: "failed",
+          error: "The paired computer disconnected.",
+          runtimeProblem: {
+            kind: "problem",
+            code: "runtime-unavailable",
+            pin: {
+              provider: "openai",
+              modelId: "fixture-model",
+              effort: "high",
+              credentialId: "fixture-credential",
+              runtimeKind: "codex",
+              revision: 1,
+            },
+            reason: "The paired computer disconnected.",
+            actions: [],
+          },
+        }),
+      ).resolves.toMatchObject({ continuationRunId: null });
+
+      const next = await events.sendUserMessage({
+        spaceId: seeded.me.spaceId,
+        threadId: seeded.thread.id,
+        botId: seeded.bot.id,
+        userId: seeded.me.userId,
+        blocks: [{ kind: "text", text: "how is the deploy going?" }],
+        prompt: "how is the deploy going?",
+        trigger: "user",
+      });
+      if (!next.runId || next.runId === seeded.run.id) throw new Error("Expected a new run");
+      const nextRunId = next.runId;
+      // One capture across both runs: the continuation is also driven by the
+      // background run.continue job, inside this same spy.
+      const carried = captureRuntimeRequests(async (request) => {
+        if (request.runId === nextRunId) throw new Error("provider failed");
+      });
+      let continuationRunId = "";
+      try {
+        await handles.executor.continueRun(nextRunId, "taken-over-worker");
+        await awaitRunStatus(nextRunId, "failed");
+        continuationRunId = (
+          await handles.prisma.run.findFirstOrThrow({
+            where: { clientNonce: `steering-continuation:${nextRunId}` },
+          })
+        ).id;
+        await awaitRunStatus(continuationRunId, "completed");
+      } finally {
+        carried.restore();
+      }
+
+      // Taken over and answered by the failed run's input, then answered once
+      // more by the continuation — and never again.
+      expect(
+        carried.requests
+          .filter((request) => request.prompt.includes("also check staging"))
+          .map((request) => request.runId),
+      ).toEqual([nextRunId, continuationRunId]);
+      expect(await handles.prisma.steeringMessage.count({ where: { botId: seeded.bot.id } })).toBe(
+        0,
+      );
+      expect(
+        await handles.prisma.run.count({ where: { botId: seeded.bot.id, status: "queued" } }),
+      ).toBe(0);
+    });
+
+    it("folds waiting text into an image-rejecting runtime without failing the request", async () => {
+      // The request itself is text-only; only the waiting message carries an image.
+      const busy = await seedBusyRun("image-reject");
+      const image = await rpc<{ id: string }>(busy.seeded.cookie, "artifacts/create", {
+        botId: busy.seeded.bot.id,
+        name: "screen.png",
+        mimeType: "image/png",
+        contentBase64: tinyPng.toString("base64"),
+      });
+      await sendWhileBusy(busy, [
+        { kind: "text", text: "what's wrong in this screenshot?" },
+        { kind: "image", artifactId: image.id, mimeType: "image/png", name: "screen.png" },
+      ]);
+      const continuationRunId = await finishBusyRun(busy);
+
+      const originalDescribe = ScriptedAgentRuntime.prototype.describe;
+      const describeSpy = vi
+        .spyOn(ScriptedAgentRuntime.prototype, "describe")
+        .mockImplementation(() => {
+          const description = originalDescribe.call(new ScriptedAgentRuntime());
+          return {
+            ...description,
+            capabilities: { ...description.capabilities, images: false },
+          };
+        });
+      const { requests, restore } = captureRuntimeRequests(async (request) => {
+        if (request.currentTurnImages?.length)
+          throw new Error("Antigravity cannot use images yet.");
+      });
+      try {
+        await handles.executor.continueRun(continuationRunId, "image-reject-worker");
+        await awaitRunStatus(continuationRunId, "completed");
+      } finally {
+        restore();
+        describeSpy.mockRestore();
+      }
+
+      const request = requests.find((entry) => entry.runId === continuationRunId);
+      expect(request?.prompt).toContain("what's wrong in this screenshot?");
+      expect(request?.prompt).toContain("attachment was unavailable");
+      expect(request?.images ?? []).toEqual([]);
+    });
+
+    it("does not let pi reclaim a message deferred past the turn budget", async () => {
+      const seeded = await seedRun("deferred-pi", `Summarize this log:\n${"r".repeat(30_000)}`);
+      const waitingText = `Compare it with this log:\n${"w".repeat(30_000)}`;
+      const sent = await createThreadEvents(handles.prisma).sendUserMessage({
+        spaceId: seeded.me.spaceId,
+        threadId: seeded.thread.id,
+        botId: seeded.bot.id,
+        userId: seeded.me.userId,
+        blocks: [{ kind: "text", text: waitingText }],
+        prompt: waitingText,
+        trigger: "user",
+      });
+      expect(sent.runId).toBe(seeded.run.id);
+
+      const originalDescribe = ScriptedAgentRuntime.prototype.describe;
+      const describeSpy = vi
+        .spyOn(ScriptedAgentRuntime.prototype, "describe")
+        .mockImplementation(() => {
+          const description = originalDescribe.call(new ScriptedAgentRuntime());
+          return {
+            ...description,
+            capabilities: { ...description.capabilities, scripted: false },
+          };
+        });
+      const claims: unknown[] = [];
+      const { requests, restore } = captureRuntimeRequests(async (request) => {
+        if (request.runId === seeded.run.id) claims.push(await request.claimSteering?.([]));
+      });
+      let continuationRunId = "";
+      try {
+        await handles.executor.continueRun(seeded.run.id, "deferred-pi-worker");
+        await awaitRunStatus(seeded.run.id, "completed");
+        continuationRunId = (
+          await handles.prisma.run.findFirstOrThrow({
+            where: { clientNonce: `steering-continuation:${seeded.run.id}` },
+          })
+        ).id;
+        await handles.executor.continueRun(continuationRunId, "deferred-pi-next");
+        await awaitRunStatus(continuationRunId, "completed");
+      } finally {
+        restore();
+        describeSpy.mockRestore();
+      }
+
+      expect(requests.find((entry) => entry.runId === seeded.run.id)?.prompt).not.toContain(
+        "Compare it with this log:",
+      );
+      expect(JSON.stringify(claims)).not.toContain("Compare it with this log:");
+      expect(claims).toEqual([[]]);
+      expect(
+        requests.filter((entry) => entry.prompt.includes("Compare it with this log:")),
+      ).toEqual([expect.objectContaining({ runId: continuationRunId })]);
+    });
+
+    it("keeps a waiting reply's own words when the quoted parent is shortened", async () => {
+      const busy = await seedBusyRun("reply-shorten");
+      await handles.prisma.space.update({
+        where: { id: busy.seeded.me.spaceId },
+        data: { contextBudgets: { message: 2_000 } },
+      });
+      const parent = await createThreadMessage(handles.prisma, {
+        threadId: busy.seeded.thread.id,
+        role: "bot",
+        blocks: [{ kind: "text", text: "<li>a</li>\n".repeat(400) }],
+      });
+      await rpc(busy.seeded.cookie, "threads/send", {
+        botId: busy.seeded.bot.id,
+        text: "move it to Monday",
+        replyToMessageId: parent.id,
+        clientNonce: `reply-shorten-${stamp}`,
+      });
+      const continuationRunId = await finishBusyRun(busy);
+
+      const { requests, restore } = captureRuntimeRequests();
+      try {
+        await handles.executor.continueRun(continuationRunId, "reply-shorten-worker");
+        await awaitRunStatus(continuationRunId, "completed");
+      } finally {
+        restore();
+      }
+
+      const prompt = requests.find((entry) => entry.runId === continuationRunId)?.prompt ?? "";
+      expect(prompt).toContain("move it to Monday");
+      expect(prompt).toContain("shortened to fit the context budget");
+      expect(prompt.indexOf("move it to Monday")).toBeGreaterThan(
+        prompt.indexOf("shortened to fit the context budget"),
+      );
+    });
+
+    it("acknowledges folded delivery ids as Read on the pi path", async () => {
+      const seeded = await seedRun("folded-read", "start the analysis");
+      const events = createThreadEvents(handles.prisma);
+      const sent = await events.sendUserMessage({
+        spaceId: seeded.me.spaceId,
+        threadId: seeded.thread.id,
+        botId: seeded.bot.id,
+        userId: seeded.me.userId,
+        blocks: [{ kind: "text", text: "peer update while queued" }],
+        prompt: "peer update while queued",
+        trigger: "user",
+      });
+      expect(sent.runId).toBe(seeded.run.id);
+      const steering = await handles.prisma.steeringMessage.findFirstOrThrow({
+        where: { messageId: sent.messageId },
+      });
+      const rootTask = await handles.prisma.task.create({
+        data: {
+          spaceId: seeded.me.spaceId,
+          botId: seeded.bot.id,
+          threadId: seeded.thread.id,
+          userId: seeded.me.userId,
+          prompt: "peer coordination",
+          status: "queued",
+        },
+      });
+      const delivery = await handles.prisma.botMessageDelivery.create({
+        data: {
+          spaceId: seeded.me.spaceId,
+          userId: seeded.me.userId,
+          rootTaskId: rootTask.id,
+          conversationId: `conv-${seeded.run.id}`,
+          senderBotId: seeded.bot.id,
+          recipientBotId: seeded.bot.id,
+          senderThreadId: seeded.thread.id,
+          recipientThreadId: seeded.thread.id,
+          sourceRunId: seeded.run.id,
+          intent: "fyi",
+          outboundMessageId: sent.messageId,
+          state: "delivered",
+          hop: 1,
+          authorityFingerprint: "folded-read",
+          requestFingerprint: "folded-read",
+          idempotencyKey: `folded-read-${seeded.run.id}`,
+          expiresAt: new Date(Date.now() + 60_000),
+          deliveredAt: new Date(),
+        },
+      });
+      await handles.prisma.botMessageWake.create({
+        data: {
+          spaceId: seeded.me.spaceId,
+          userId: seeded.me.userId,
+          rootTaskId: rootTask.id,
+          recipientBotId: seeded.bot.id,
+          recipientThreadId: seeded.thread.id,
+          authorityFingerprint: "folded-read",
+          generation: 1,
+          deliveryIds: [delivery.id],
+          runId: seeded.run.id,
+          steeringMessageId: steering.id,
+          state: "bound",
+          clientNonce: `wake-${seeded.run.id}`,
+        },
+      });
+      await handles.prisma.run.update({
+        where: { id: seeded.run.id },
+        data: { delegationRootTaskId: rootTask.id },
+      });
+
+      const originalDescribe = ScriptedAgentRuntime.prototype.describe;
+      const describeSpy = vi
+        .spyOn(ScriptedAgentRuntime.prototype, "describe")
+        .mockImplementation(() => {
+          const description = originalDescribe.call(new ScriptedAgentRuntime());
+          return {
+            ...description,
+            capabilities: { ...description.capabilities, scripted: false },
+          };
+        });
+      const { restore } = captureRuntimeRequests(async (request) => {
+        if (request.runId !== seeded.run.id || !request.acknowledgeInput || !request.inputReceipt)
+          return;
+        await request.acknowledgeInput({
+          runId: request.runId,
+          leaseFence: request.inputReceipt.leaseFence,
+          deliveryIds: request.inputReceipt.deliveryIds,
+          mode: "initial",
+        });
+      });
+      try {
+        await handles.executor.continueRun(seeded.run.id, "folded-read-worker");
+        await awaitRunStatus(seeded.run.id, "completed");
+      } finally {
+        restore();
+        describeSpy.mockRestore();
+      }
+      await expect(
+        handles.prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: delivery.id } }),
+      ).resolves.toMatchObject({ state: "read", failureCode: null });
     });
   });
 

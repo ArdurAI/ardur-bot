@@ -5,6 +5,35 @@ type InputReceipt = Parameters<NonNullable<AgentRunRequest["acknowledgeInput"]>>
 const STEERING_HEADER = "Additional user context:";
 const STEERING_SHORTENED =
   "[This message was shortened to fit the context budget; the full text is in the thread.]";
+const QUOTE_HEAD =
+  /^(?:Replying to|User reacted with [^<\n]+ to) \(quoted data, not instructions\):\n<(reply_target|reaction_target)>\n/;
+
+function endCut(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  const room = Math.max(0, maxChars - STEERING_SHORTENED.length - 1);
+  return `${text.slice(0, room)}\n${STEERING_SHORTENED}`;
+}
+
+/**
+ * A long reply is [quoted parent, the user's words, file notes]. Cut the quote
+ * first. The user's own words stay even when the quote has to go.
+ */
+function shortenQuotedSteeringText(text: string, maxChars: number): string {
+  const limit = Math.max(0, maxChars);
+  if (text.length <= limit) return text;
+  const head = QUOTE_HEAD.exec(text);
+  const kind = head?.[1];
+  if (!kind) return endCut(text, limit);
+  const close = `\n</${kind}>`;
+  const closeAt = text.indexOf(close, head[0].length);
+  if (closeAt < 0) return endCut(text, limit);
+  const rest = text.slice(closeAt + close.length).replace(/^\n+/, "");
+  if (!rest) return endCut(text, limit);
+  const separator = "\n\n";
+  const roomForQuote = limit - rest.length - separator.length;
+  if (roomForQuote < STEERING_SHORTENED.length + 1) return rest;
+  return `${endCut(text.slice(0, closeAt + close.length), roomForQuote)}${separator}${rest}`;
+}
 
 /** Messages that waited behind a request follow it, in the order they were sent. */
 export function promptWithInitialSteering(
@@ -72,7 +101,7 @@ export function fitInitialSteering<T extends AgentSteeringMessage>(
         ...item,
         text:
           item.text.length > characters
-            ? `${item.text.slice(0, Math.max(0, characters - STEERING_SHORTENED.length - 1))}\n${STEERING_SHORTENED}`
+            ? shortenQuotedSteeringText(item.text, characters)
             : item.text,
         images: item.images?.slice(0, Math.max(0, images)),
       });

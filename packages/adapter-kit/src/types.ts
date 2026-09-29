@@ -633,6 +633,8 @@ export interface AgentRuntimeCapabilities {
   compaction: boolean;
   tools: boolean;
   scripted: boolean;
+  /** False when this runtime rejects every image, whatever the model accepts. */
+  images?: boolean;
   /** Brokered provider calls persist their own receipts; runtime aggregates are informational. */
   usageAccounting?: "runtime" | "external";
 }

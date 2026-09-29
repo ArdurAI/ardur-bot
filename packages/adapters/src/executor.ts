@@ -5695,16 +5695,33 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 runSecrets,
               );
           // Waiting messages are sized apart from the request: they take the budget and image
-          // allowance the request leaves, and whatever does not fit stays queued for the
-          // runtime's next claim or the next follow-up instead of failing this turn.
-          const folded = fitInitialSteering(
-            initialSteering.map((item) => ({
+          // allowance the request leaves, and whatever does not fit stays queued for a
+          // later follow-up instead of failing this turn. A runtime that rejects images
+          // still gets the text; the image is noted as unavailable rather than attached.
+          const foldImages = runtimeAcceptsFoldedImages(
+            selected.pin.runtimeKind,
+            runtime.describe().capabilities,
+            acceptsImages,
+          );
+          const preparedSteering = initialSteering.map((item) => {
+            const dropped = !foldImages && (item.images?.length ?? 0) > 0;
+            const note =
+              dropped && !item.text.includes(TURN_ATTACHMENT_UNAVAILABLE)
+                ? TURN_ATTACHMENT_UNAVAILABLE
+                : "";
+            return {
               ...item,
-              text: redactSecrets(item.text, runSecrets),
-            })),
+              text: redactSecrets([item.text, note].filter(Boolean).join("\n\n"), runSecrets),
+              images: foldImages ? item.images : undefined,
+            };
+          });
+          const folded = fitInitialSteering(
+            preparedSteering,
             {
               characters: contextBudgets.message - turnMessage.length,
-              images: HOST_TURN_MAX_IMAGES - (currentTurnImages?.length ?? 0),
+              images: foldImages
+                ? HOST_TURN_MAX_IMAGES - (currentTurnImages?.length ?? 0)
+                : HOST_TURN_MAX_IMAGES,
             },
             steeringContinuation,
           );
@@ -5719,6 +5736,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             });
           for (const item of folded.included) pendingExposures.push(...item.exposures);
           const foldedIds = folded.included.map((item) => item.id);
+          const deferredIds = folded.deferred.map((item) => item.id);
           const foldedDeliveryIds = new Set(folded.included.flatMap((item) => item.deliveryIds));
           const foldedImages = folded.included.flatMap((item) => item.images ?? []);
           const recallQuery =
@@ -6033,7 +6051,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                         runId,
                         leaseOwner: workerId,
                         leaseFence: fence,
-                        seenIds: [...seenIds, ...foldedIds],
+                        seenIds: [...seenIds, ...foldedIds, ...deferredIds],
                       });
                       return Promise.all(steering.map((item) => mapClaimedSteeringItem(item)));
                     },
@@ -7016,6 +7034,16 @@ export function completionNotificationPreview(text: string): string {
 
 export function completionMarksUnread(trigger: string, text: string): boolean {
   return trigger !== "routine" || Boolean(text);
+}
+
+/** Antigravity, and any runtime that declares it, rejects every image. */
+export function runtimeAcceptsFoldedImages(
+  runtimeKind: string,
+  capabilities: { images?: boolean },
+  acceptsImages: boolean,
+): boolean {
+  if (runtimeKind === "antigravity" || capabilities.images === false) return false;
+  return acceptsImages;
 }
 
 export function missingTurnImagesInstruction(

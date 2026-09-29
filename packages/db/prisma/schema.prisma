@@ -734,6 +734,7 @@ model SteeringMessage {
   runId     String?
   run       Run?     @relation(fields: [runId], references: [id], onDelete: SetNull)
   claimedAt DateTime?
+  adopted   Boolean  @default(false)
   createdAt DateTime @default(now())
 
   @@unique([messageId, botId])

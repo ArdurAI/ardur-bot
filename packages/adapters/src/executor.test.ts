@@ -19,6 +19,7 @@ import {
   missingTurnImagesInstruction,
   parseUpdateBotPatch,
   runNotificationsEnabled,
+  runtimeAcceptsFoldedImages,
   selectBuiltinToolsForRun,
   settleSteeringAttachmentLoads,
   threadContextForRun,
@@ -53,6 +54,15 @@ it("labels a peer group reply as user data rather than the current bot's words",
   ).toEqual({
     role: "user",
     content: "I found a failure.",
+  });
+});
+
+describe("folded image delivery", () => {
+  it("keeps images off a runtime that rejects them, including Antigravity", () => {
+    expect(runtimeAcceptsFoldedImages("antigravity", { images: false }, true)).toBe(false);
+    expect(runtimeAcceptsFoldedImages("pi", { images: false }, true)).toBe(false);
+    expect(runtimeAcceptsFoldedImages("pi", {}, true)).toBe(true);
+    expect(runtimeAcceptsFoldedImages("codex-app-server", {}, false)).toBe(false);
   });
 });
 

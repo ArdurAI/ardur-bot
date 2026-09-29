@@ -721,6 +721,13 @@ export async function claimSteering(
       },
       data: { runId: input.runId, claimedAt: new Date() },
     });
+    const takenOver = steering.filter((item) => item.runId === null).map((item) => item.id);
+    if (takenOver.length) {
+      await tx.steeringMessage.updateMany({
+        where: { id: { in: takenOver }, runId: input.runId },
+        data: { adopted: true },
+      });
+    }
     // The summary survives deletion of the consumed queue row. Text stays in its source message.
     for (const item of steering) {
       await tx.steeringSummary.upsert({
@@ -747,8 +754,9 @@ export async function claimSteering(
 }
 
 /**
- * Unclaims steering the run took but cannot carry this turn. The rows stay on the run for its
- * runtime's next claim; at completion they are released into a follow-up like any unclaimed row.
+ * Unclaims steering the run took but cannot carry this turn. Clearing runId
+ * makes the row a later follow-up; this turn's claims also skip these ids so
+ * the runtime cannot take them straight back.
  */
 export async function releaseSteering(
   prisma: PrismaClient,
@@ -775,7 +783,7 @@ export async function releaseSteering(
     });
     await tx.steeringMessage.updateMany({
       where: { id: { in: input.ids }, runId: input.runId },
-      data: { claimedAt: null },
+      data: { claimedAt: null, runId: null, adopted: false },
     });
     await tx.steeringSummary.deleteMany({
       where: { runId: input.runId, messageId: { in: released.map((row) => row.messageId) } },
@@ -1952,18 +1960,30 @@ async function finalizeRunOnce(
         data: { runId: null },
       });
     } else {
-      const { sourceMessage } = await tx.run.findUniqueOrThrow({
+      const failing = await tx.run.findUniqueOrThrow({
         where: { id: input.runId },
-        select: { sourceMessage: { select: { seq: true } } },
+        select: {
+          clientNonce: true,
+          sourceMessage: { select: { seq: true } },
+        },
       });
-      // A continuation's source is the newest steering it was created for. Only newer
-      // messages justify another run after failure, even if setup failed before claiming.
+      const batchSeq =
+        isSteeringContinuationClientNonce(failing.clientNonce) && failing.sourceMessage
+          ? failing.sourceMessage.seq
+          : null;
+      // A follow-up keeps the batch it was created with. Every other waiting row it
+      // holds, including one it took over from a failed run, is released so a later
+      // run can answer it. A run that is not a follow-up releases every row.
       await tx.steeringMessage.updateMany({
         where: {
           runId: input.runId,
-          message: sourceMessage ? { seq: { gt: sourceMessage.seq } } : undefined,
+          ...(batchSeq == null
+            ? {}
+            : {
+                OR: [{ adopted: true }, { message: { seq: { gt: batchSeq } } }],
+              }),
         },
-        data: { runId: null, claimedAt: null },
+        data: { runId: null, claimedAt: null, adopted: false },
       });
     }
     const steeringContinuationRunId =
@@ -1983,10 +2003,10 @@ async function finalizeRunOnce(
 }
 
 /**
- * Runs created by createSteeringContinuation carry this clientNonce prefix so the
- * executor can tell "the batch of user messages waiting for a follow-up turn" from
- * an ordinary follow_up run — a continuation whose batch is gone must end quietly
- * instead of posting a visible "nothing new" reply.
+ * Runs created by createSteeringContinuation carry this clientNonce prefix so a
+ * failed follow-up can be told from an ordinary run. The follow-up keeps the
+ * batch it was created with; rows it took over, and messages that arrived
+ * later, are released for a later run.
  */
 export const STEERING_CONTINUATION_CLIENT_NONCE_PREFIX = "steering-continuation:";
 
@@ -2050,7 +2070,7 @@ async function createSteeringContinuation(
   });
   await tx.steeringMessage.updateMany({
     where: { id: { in: pending.map((item) => item.id) }, runId: null },
-    data: { runId: run.id, claimedAt: null },
+    data: { runId: run.id, claimedAt: null, adopted: false },
   });
   return run.id;
 }

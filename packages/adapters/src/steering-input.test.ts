@@ -1,5 +1,6 @@
 import type { AgentInputImage } from "@ardurbot/adapter-kit";
 import { describe, expect, it } from "vitest";
+import { messageToAgentHistoryText } from "./reply-context.js";
 import {
   fitInitialSteering,
   promptWithInitialSteering,
@@ -105,6 +106,35 @@ describe("fitInitialSteering", () => {
     expect(fitted.included[0]?.historyText).toBe("a".repeat(500));
     expect(promptWithInitialSteering("", fitted.included).length).toBeLessThanOrEqual(200);
     expect(fitted.deferred.map((item) => item.id)).toEqual(["2"]);
+  });
+
+  it("shortens the quoted parent and keeps the user's own reply", () => {
+    const parent = "<li>a</li>\n".repeat(4_000);
+    const reply = "move it to Monday";
+    const text = messageToAgentHistoryText({
+      id: "reply-1",
+      threadId: "thread-1",
+      role: "user",
+      blocks: [{ kind: "text", text: reply }],
+      replyTo: {
+        id: "parent-1",
+        threadId: "thread-1",
+        role: "assistant",
+        blocks: [{ kind: "text", text: parent }],
+      },
+    });
+    expect(text).toContain("<reply_target>");
+    expect(text).toContain(reply);
+    expect(text.length).toBeGreaterThan(8_000);
+
+    const fitted = fitInitialSteering([waiting("1", text)], { characters: 4_000, images: 8 }, true);
+
+    const kept = fitted.included[0]?.text ?? "";
+    expect(kept).toContain(reply);
+    expect(kept).toContain("shortened to fit the context budget");
+    expect(kept.indexOf(reply)).toBeGreaterThan(
+      kept.indexOf("shortened to fit the context budget"),
+    );
   });
 });
 
