@@ -251,29 +251,34 @@ export function RuntimeConfigPanel({
           {advancedOpen ? "⌃" : "⌄"}
         </Text>
       </Pressable>
-      {advancedMounted && advancedOpen ? (
-        <RuntimeConfigAdvanced
-          value={settings}
-          pin={pin}
-          onChange={(next) => {
-            onChange(next);
-            updateErrors(null, null, null, null);
-          }}
-          onError={(err) => {
-            setAdvancedError(err);
-            const active = callsError || timeError || contextError || err || null;
-            onError?.(active);
-          }}
-          onInvalidChange={setAdvancedInvalid}
-          onReset={() => {
-            const defaults = effectiveHermesRuntimeConfigV2(null);
-            setCalls(String(defaults.limits.maxProviderRequests));
-            setTime(String(defaults.limits.timeoutMs / 1_000));
-            setContextKib(String(defaults.context.maxInputBytes / 1_024));
-            onChange(defaults);
-            updateErrors(null, null, null, null);
-          }}
-        />
+      {advancedMounted ? (
+        <View
+          style={advancedOpen ? undefined : { display: "none" }}
+          importantForAccessibility={advancedOpen ? undefined : "no-hide-descendants"}
+        >
+          <RuntimeConfigAdvanced
+            value={settings}
+            pin={pin}
+            onChange={(next) => {
+              onChange(next);
+              updateErrors(null, null, null, null);
+            }}
+            onError={(err) => {
+              setAdvancedError(err);
+              const active = callsError || timeError || contextError || err || null;
+              onError?.(active);
+            }}
+            onInvalidChange={setAdvancedInvalid}
+            onReset={() => {
+              const defaults = effectiveHermesRuntimeConfigV2(null);
+              setCalls(String(defaults.limits.maxProviderRequests));
+              setTime(String(defaults.limits.timeoutMs / 1_000));
+              setContextKib(String(defaults.context.maxInputBytes / 1_024));
+              onChange(defaults);
+              updateErrors(null, null, null, null);
+            }}
+          />
+        </View>
       ) : null}
     </View>
   );
