@@ -4755,7 +4755,6 @@ msgstr ""
 #: src/pages/dashboard/LearningDialog.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/KnowledgeSection.tsx
-#: src/pages/LearningInbox.tsx
 #: src/pages/settings-sections.ts
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Learning"
@@ -4765,6 +4764,10 @@ msgstr ""
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Learning consent"
 msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Learning for this space"
+msgstr "इस स्पेस के लिए सीखना"
 
 #: src/pages/MemoryHistory.tsx
 msgid "Learning grant"

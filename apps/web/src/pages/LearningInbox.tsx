@@ -140,28 +140,33 @@ export function LearningInbox({ botId }: { botId?: string }) {
         <Trans>What I learned</Trans>
       </h3>
       {settings ? (
-        <div className="flex items-center gap-3">
+        <div className="space-y-2">
           {!settings.enabled ? (
             <p className="text-sm text-muted-foreground">
               <Trans>Learning is off for this space.</Trans>
             </p>
           ) : null}
           {settings.canConfigure ? (
-            <Switch
-              aria-label={t`Learning`}
-              checked={settings.enabled}
-              disabled={busy}
-              onCheckedChange={(enabled) =>
-                void change(() =>
-                  rpc.learning.configure({
-                    enabled,
-                    consolidationEnabled: settings.consolidationEnabled,
-                    reviewerPin: settings.reviewerPin ?? settings.destination,
-                    budgets: settings.budgets,
-                  }),
-                )
-              }
-            />
+            <div className="flex items-center gap-3 text-sm">
+              <Switch
+                aria-label={t`Learning for this space`}
+                checked={settings.enabled}
+                disabled={busy}
+                onCheckedChange={(enabled) =>
+                  void change(() =>
+                    rpc.learning.configure({
+                      enabled,
+                      consolidationEnabled: settings.consolidationEnabled,
+                      reviewerPin: settings.reviewerPin ?? settings.destination,
+                      budgets: settings.budgets,
+                    }),
+                  )
+                }
+              />
+              <span aria-hidden>
+                <Trans>Learning for this space</Trans>
+              </span>
+            </div>
           ) : null}
         </div>
       ) : null}

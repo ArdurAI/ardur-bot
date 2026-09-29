@@ -114,6 +114,7 @@ test("learning inbox separates suggestions from applied changes and shows Undo",
   });
   await openUserSettings(page, "learning");
   const inbox = page.getByTestId("learning-inbox");
+  await expect(inbox.getByRole("switch", { name: "Learning for this space" })).toBeChecked();
   await expect(inbox.getByText("3 suggestions to review", { exact: true })).toBeVisible();
   await captureScreenshot(page, testInfo, "learning-inbox-pending");
   await inbox.getByRole("button", { name: "Approve", exact: true }).click();
@@ -229,6 +230,7 @@ test("learning inbox shows board-item suggestions, their outcome, and a close th
   );
   await page.locator('[data-panel="learning"]').getByRole("button", { name: "Inbox (1)" }).click();
   const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("switch", { name: "Learning for this space" })).toBeChecked();
   await expect(dialog.getByText("Finish the import follow-up", { exact: true })).toBeVisible();
   await expect(dialog.getByText("A board item filed by a bot could not be closed.")).toBeVisible();
   await expect(

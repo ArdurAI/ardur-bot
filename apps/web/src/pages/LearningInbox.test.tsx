@@ -796,6 +796,25 @@ it("lets only the owner turn insights off, keeping the rest of the learning sett
   await act(async () => root.render(<LearningInbox botId="other" />));
   expect(container.textContent).not.toContain("Show insights");
 });
+it("names the learning switch for what it turns on", async () => {
+  api.settings.mockResolvedValue({
+    enabled: true,
+    consolidationEnabled: false,
+    insightsEnabled: true,
+    canConfigure: true,
+    reviewerPin: null,
+    destination: null,
+    budgets: { botDailyTokens: 1 },
+  });
+  await act(async () => root.render(<LearningInbox />));
+  const toggle = container.querySelector(
+    'input[aria-label="Learning for this space"]',
+  ) as HTMLInputElement;
+  expect(toggle).toBeTruthy();
+  expect(toggle.checked).toBe(true);
+  expect(container.textContent).toContain("Learning for this space");
+  expect(container.textContent).not.toContain("Learning is off for this space.");
+});
 it("sends edited content for a server diff before approval", async () => {
   await act(async () => root.render(<LearningInbox />));
   await click("Edit");
