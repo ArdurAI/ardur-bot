@@ -49,15 +49,14 @@ import {
   validateCompiledHermesProfile,
 } from "./runtimes/hermes-config.js";
 import {
-  HERMES_SOURCE_PIN,
   buildHermesRuntime,
+  HERMES_SOURCE_PIN,
   hermesInstallCandidate,
-  pinnedHermesLaunch,
   probeHermesInstall,
   resolveHermesLauncherAsset,
 } from "./runtimes/hermes-install.js";
 import { startHermesProviderRelay } from "./runtimes/hermes-provider-relay.js";
-import { HermesRuntime } from "./runtimes/hermes-runtime.js";
+import type { HermesRuntime } from "./runtimes/hermes-runtime.js";
 import type { NativeSpawn } from "./runtimes/native-process.js";
 import { spawnNative } from "./runtimes/native-process.js";
 
