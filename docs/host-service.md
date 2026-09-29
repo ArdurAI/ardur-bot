@@ -93,13 +93,18 @@ sequenceDiagram
   Native Claude/Codex operations keep their fixed adapter arguments.
 - On macOS, host commands additionally run under the host command guardrail
   (`packages/host-runtime/src/host-guardrails.ts`). Every command, background launch,
-  native runtime turn (Claude Code, Codex, Antigravity), version and health probe
+  native runtime turn (Claude Code, Antigravity), version and health probe
   (`probeClaude`, `probeCodex`, `probeAntigravity`, and `hostProbe` for the login shell
   and tool inventory), pinned Hermes launch and owner-registered local MCP server
   process is executed through `/usr/bin/sandbox-exec` with a Seatbelt profile generated
   per process from the running configuration — the mechanism the Codex CLI and Claude
   Code sandboxes use on macOS, although `sandbox-exec` is marked DEPRECATED in its own
-  man page. A probe uses that same wrap. When the profile cannot be built, the probe
+  man page. Codex turns are the exception: Codex starts its own sandbox when a session
+  begins, and macOS refuses a second sandbox once a profile with a deny rule is in force,
+  so a wrapped Codex cannot start a session. Its session process runs unwrapped
+  (`NATIVE_SESSION_GUARD` in `runtimes/native-process.ts`) under its own read-only
+  profile with the network off and shell tools disabled, and the runtime refuses a bot
+  folder that sits inside the protected paths or contains them. A probe uses that same wrap. When the profile cannot be built, the probe
   does not start the command. The profile is `(allow default)` plus targeted denies, so
   ordinary work is untouched while the deny list blocks reads and writes of Ardur's
   control plane: the env file the stack loaded (recorded as `ARDURBOT_ENV_FILE`), the
