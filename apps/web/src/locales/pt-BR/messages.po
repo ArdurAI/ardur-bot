@@ -4261,6 +4261,10 @@ msgstr "O Hermes ainda não oferece suporte a esta conexão."
 msgid "Hermes is not installed on this computer."
 msgstr "O Hermes não está instalado neste computador."
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Hermes isn't available on Windows yet."
+msgstr "O Hermes ainda não está disponível no Windows."
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."
 msgstr "O Hermes é executado com o acesso deste computador."
@@ -8368,6 +8372,10 @@ msgstr "Não foi possível criar o primeiro bot. Tente novamente."
 #: src/pages/group-model-control.tsx
 msgid "The group model choice was reloaded. Pick again."
 msgstr "A escolha de modelo do grupo foi recarregada. Escolha novamente."
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "The Hermes install on this computer failed its safety check."
+msgstr "A instalação do Hermes neste computador não passou na verificação de segurança."
 
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."

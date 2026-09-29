@@ -4261,6 +4261,10 @@ msgstr "Hermes अभी इस कनेक्शन का समर्थन 
 msgid "Hermes is not installed on this computer."
 msgstr "इस कंप्यूटर पर Hermes इंस्टॉल नहीं है।"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Hermes isn't available on Windows yet."
+msgstr "Hermes अभी Windows पर उपलब्ध नहीं है।"
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."
 msgstr "Hermes इस कंप्यूटर की पहुँच के साथ चलता है।"
@@ -8368,6 +8372,10 @@ msgstr "पहला बॉट नहीं बनाया जा सका। 
 #: src/pages/group-model-control.tsx
 msgid "The group model choice was reloaded. Pick again."
 msgstr "समूह का मॉडल चयन फिर से लोड हो गया है। दोबारा चुनें।"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "The Hermes install on this computer failed its safety check."
+msgstr "इस कंप्यूटर पर Hermes की स्थापना सुरक्षा जाँच में विफल रही।"
 
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."

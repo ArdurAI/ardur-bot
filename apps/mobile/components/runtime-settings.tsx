@@ -156,11 +156,18 @@ export function RuntimeSettings({
                 ? t(
                     "Antigravity is not installed on this computer. Install it and sign in there, then check again.",
                   )
-                : kind === "hermes" && availability.reason.includes("not installed")
-                  ? t("Hermes is not installed on this computer.")
-                  : kind === "antigravity" && availability.signInStatus === "signed-out"
-                    ? t("Sign in to Antigravity on this computer, then check again.")
-                    : availability.reason}
+                : kind === "hermes" &&
+                    availability.reason ===
+                      "The Hermes install on this computer failed its safety check."
+                  ? t("The Hermes install on this computer failed its safety check.")
+                  : kind === "hermes" &&
+                      availability.reason === "Hermes isn't available on Windows yet."
+                    ? t("Hermes isn't available on Windows yet.")
+                    : kind === "hermes" && availability.reason.includes("not installed")
+                      ? t("Hermes is not installed on this computer.")
+                      : kind === "antigravity" && availability.signInStatus === "signed-out"
+                        ? t("Sign in to Antigravity on this computer, then check again.")
+                        : availability.reason}
             </Text>
           ) : null}
           {error ? (

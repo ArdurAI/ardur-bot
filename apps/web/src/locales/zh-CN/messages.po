@@ -4261,6 +4261,10 @@ msgstr "Hermes 尚不支持此连接。"
 msgid "Hermes is not installed on this computer."
 msgstr "此计算机上未安装 Hermes。"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Hermes isn't available on Windows yet."
+msgstr "Hermes 暂不支持 Windows。"
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."
 msgstr "Hermes 使用此计算机的访问权限运行。"
@@ -8368,6 +8372,10 @@ msgstr "无法创建第一个机器人。请重试。"
 #: src/pages/group-model-control.tsx
 msgid "The group model choice was reloaded. Pick again."
 msgstr "已重新加载群组的模型选择。请重新选择。"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "The Hermes install on this computer failed its safety check."
+msgstr "此计算机上的 Hermes 安装未通过安全检查。"
 
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
