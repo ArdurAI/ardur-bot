@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { gunzipSync } from "node:zlib";
-import type { AgentRuntime } from "@ardurbot/adapter-kit";
+import type { AgentRunRequest, AgentRuntime } from "@ardurbot/adapter-kit";
 import {
   archiveBot,
   ComposioEmulator,
@@ -5413,6 +5413,172 @@ describeJourneys("required product journeys", () => {
       ]),
     );
     expect(remainingBotIds).not.toContain(artifactOwnerId);
+  });
+
+  it("56: a room coordinator answers status from records and asks every member once", async () => {
+    const requests = new Map<string, AgentRunRequest>();
+    const originalRun = ScriptedAgentRuntime.prototype.run;
+    const runtimeSpy = vi
+      .spyOn(ScriptedAgentRuntime.prototype, "run")
+      .mockImplementation((request, context) => {
+        requests.set(request.runId, request);
+        const introductions =
+          request.prompt.includes("introduce each other") &&
+          Array.isArray(request.tools) &&
+          request.tools.some((tool) => tool.name === "ask_members");
+        return originalRun.call(
+          new ScriptedAgentRuntime(),
+          introductions
+            ? {
+                ...request,
+                script: [
+                  {
+                    toolCalls: [
+                      {
+                        name: "ask_members",
+                        args: {
+                          members: ["all"],
+                          request: "Introduce yourself to the room in one sentence.",
+                        },
+                      },
+                    ],
+                    complete: true,
+                  },
+                ],
+              }
+            : request,
+          context,
+        );
+      });
+    onTestFinished(() => runtimeSpy.mockRestore());
+    const owner = await signup(app, `room-ask-${stamp}@ardurbot.test`, "Room ask owner");
+    const bots: Bot[] = [];
+    for (const [name, title] of [
+      ["Chief", "Coordinator"],
+      ["Ada", "Researcher"],
+      ["Ben", "Writer"],
+    ])
+      bots.push(
+        await rpc<Bot>(app, owner, "bots/create", {
+          name,
+          title,
+          description: "",
+          instructions: "",
+          notifyOnFinish: true,
+        }),
+      );
+    const [chief, ada, ben] = bots as [Bot, Bot, Bot];
+    const group = await rpc<{ id: string; threadId: string }>(app, owner, "groups/create", {
+      name: "Intro room",
+      botIds: [chief.id, ada.id, ben.id],
+    });
+    await rpc(app, owner, "groups/update", { groupId: group.id, coordinatorBotId: chief.id });
+    const finished = (runId: string) =>
+      waitForDatabase(
+        async () =>
+          (await prisma.run.findUnique({ where: { id: runId }, select: { status: true } }))
+            ?.status === "completed",
+      );
+
+    // A status question is answered from the member list; no member is started.
+    const status = await rpc<{ runId: string; runIds?: string[] }>(app, owner, "threads/send", {
+      groupId: group.id,
+      text: "what is the status",
+    });
+    expect(status.runIds ?? [status.runId]).toHaveLength(1);
+    await finished(status.runId);
+    const statusRequest = requests.get(status.runId)!;
+    expect(statusRequest.instructions).toContain("You coordinate this group chat");
+    const directory = statusRequest.history.map((message) => message.content).join("\n");
+    expect(directory).toContain("Room members and what their run records show");
+    expect(directory).toContain(`- Ada (id: ${ada.id}) — Researcher. Now: free.`);
+    expect(directory).toContain(`- Ben (id: ${ben.id}) — Writer. Now: free.`);
+    expect(await prisma.delegation.count({ where: { parentRunId: status.runId } })).toBe(0);
+    expect(
+      await prisma.run.count({
+        where: { threadId: group.threadId, botId: { in: [ada.id, ben.id] } },
+      }),
+    ).toBe(0);
+
+    // "Introduce each other" asks every other member exactly once and fans back in.
+    const intro = await rpc<{ runId: string; runIds?: string[] }>(app, owner, "threads/send", {
+      groupId: group.id,
+      text: "tell the bots to introduce each other, do not mention individually",
+    });
+    expect(intro.runIds ?? [intro.runId]).toHaveLength(1);
+    const wakeNonce = `ask-wake:1:${intro.runId}`;
+    await waitForDatabase(
+      async () =>
+        (
+          await prisma.run.findFirst({
+            where: { clientNonce: wakeNonce },
+            select: { status: true },
+          })
+        )?.status === "completed",
+    );
+    const asked = await prisma.delegation.findMany({
+      where: { parentRunId: intro.runId },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(asked.map((row) => row.actingBotId).sort()).toEqual([ada.id, ben.id].sort());
+    for (const row of asked)
+      expect(row).toMatchObject({
+        kind: "group-handoff",
+        status: "accepted",
+        admissionKey: expect.stringMatching(new RegExp(`^group-ask:1:${intro.runId}:`)),
+        coordinatorWokenAt: expect.any(Date),
+      });
+    const roomMessages = await prisma.message.findMany({
+      where: { threadId: group.threadId, role: "bot" },
+      orderBy: { seq: "asc" },
+      select: { botId: true, runId: true, blocks: true },
+    });
+    const askMessages = roomMessages.filter((message) =>
+      JSON.stringify(message.blocks).includes("Introduce yourself to the room"),
+    );
+    expect(askMessages).toHaveLength(1);
+    expect(askMessages[0]).toMatchObject({
+      botId: chief.id,
+      runId: intro.runId,
+      blocks: [
+        {
+          kind: "text",
+          text: expect.stringMatching(
+            /^@(Ada @Ben|Ben @Ada) Introduce yourself to the room in one sentence\.$/,
+          ),
+        },
+      ],
+    });
+    for (const row of asked)
+      expect(
+        roomMessages.some(
+          (message) => message.botId === row.actingBotId && message.runId === row.runId,
+        ),
+      ).toBe(true);
+    expect(
+      roomMessages.some((message) =>
+        JSON.stringify(message.blocks).includes("completed, awaiting acceptance"),
+      ),
+    ).toBe(false);
+    const wake = await prisma.run.findFirstOrThrow({ where: { clientNonce: wakeNonce } });
+    expect(wake).toMatchObject({
+      botId: chief.id,
+      threadId: group.threadId,
+      trigger: "follow_up",
+    });
+    const results = requests
+      .get(wake.id)!
+      .history.map((message) => message.content)
+      .join("\n");
+    expect(results).toContain("<ask_results>");
+    expect(results).toContain(`- Ada (id: ${ada.id}), asked "Introduce yourself`);
+    expect(results).toContain(`- Ben (id: ${ben.id}), asked "Introduce yourself`);
+
+    await createJobReconciler({ prisma, jobs }, { batchSize: 100 }).reconcileOnce();
+    expect(await prisma.run.count({ where: { clientNonce: wakeNonce } })).toBe(1);
+    expect(
+      await prisma.run.count({ where: { delegationId: { in: asked.map((row) => row.id) } } }),
+    ).toBe(2);
   });
 
   it("17: teach a task end to end", async () => {

@@ -96,7 +96,7 @@ export function askMemberPrompt(input: { from: BotAddress; request: string }): s
     "<coordinator_request>",
     escapePromptData(input.request.trim()),
     "</coordinator_request>",
-    `Answer in this chat, briefly and in your own words. The user sees your answer and ${name} gets it back. Do not hand this to another member.`,
+    `Answer in this chat, briefly and in your own words. The user sees your answer and ${name} gets it back. Answer it yourself rather than passing it to another member.`,
   ].join("\n");
 }
 
