@@ -1341,4 +1341,5 @@ export const RU_MESSAGES: Record<string, string> = {
   Interrupted: "Прервано",
   "Interrupted: {title}": "Прервано: {title}",
   "Unknown: {title}": "Неизвестно: {title}",
+  Command: "Команда",
 };

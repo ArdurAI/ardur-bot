@@ -1287,4 +1287,5 @@ export const ZH_MESSAGES: Record<string, string> = {
   Interrupted: "已中断",
   "Interrupted: {title}": "已中断: {title}",
   "Unknown: {title}": "未知: {title}",
+  Command: "命令",
 };

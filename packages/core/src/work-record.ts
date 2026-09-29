@@ -13,7 +13,12 @@ export type ActivityOutcome = "pending" | "success" | "failure" | "unknown" | "i
 
 export interface ActivityEvidence {
   label: ActivityLabel;
-  title: string;
+  /**
+   * Display title. Absent when the core cannot name the block without
+   * inventing copy — a historical shell event may have no command text, and
+   * each frontend names that row in its own language instead.
+   */
+  title?: string;
   timestamp?: string;
   durationMs?: number;
   outcome?: ActivityOutcome;
@@ -53,7 +58,7 @@ export function mapMessageBlockToActivity(block: MessageBlock, live = false): Ac
   if (block.kind === "command") {
     return {
       label: "tool-activity",
-      title: block.command.command ?? "Command",
+      title: block.command.command ?? undefined,
       timestamp: block.command.startedAt ?? undefined,
       durationMs: block.command.durationMs ?? undefined,
       outcome: mapCommandOutcome(block.command),

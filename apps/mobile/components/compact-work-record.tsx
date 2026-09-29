@@ -6,7 +6,12 @@ import { Animated, Pressable, Text, View } from "react-native";
 import { mobileTokens } from "../lib/appearance";
 import { useI18n } from "../lib/i18n";
 import { useResolvedAppearance } from "../lib/native";
-import { watchMotionAllowed, workRecordLabel, workRecordShouldPulse } from "../lib/work-record";
+import {
+  watchMotionAllowed,
+  workRecordEntryTitle,
+  workRecordLabel,
+  workRecordShouldPulse,
+} from "../lib/work-record";
 import { NativeCommandBlock } from "./command-block";
 import { NativeSymbol } from "./native-symbol";
 
@@ -62,10 +67,11 @@ export function CompactWorkRecord({
   if (entries.length === 0) return null;
 
   const currentState = active.length > 0 ? active[active.length - 1] : entries[entries.length - 1];
+  const currentTitle = workRecordEntryTitle(currentState);
   // Collapsed, the status line previews the current activity (a streaming
   // reasoning summary included). Expanded, it steps back to the generic label
   // so the full row below is the single copy of that text.
-  const headerTitle = expanded ? undefined : currentState?.evidence.title;
+  const headerTitle = expanded ? undefined : currentTitle;
 
   return (
     <View style={{ marginVertical: 8, width: "100%" }}>
@@ -78,7 +84,7 @@ export function CompactWorkRecord({
           minHeight: 44,
         }}
         accessibilityRole="button"
-        accessibilityLabel={workRecordLabel(status, currentState?.evidence.title ?? "")}
+        accessibilityLabel={workRecordLabel(status, currentTitle ?? "")}
         accessibilityState={{ expanded }}
       >
         <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8 }}>
