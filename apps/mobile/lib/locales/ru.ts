@@ -1285,4 +1285,16 @@ export const RU_MESSAGES: Record<string, string> = {
   Interrupted: "Прервано",
   "Interrupted: {title}": "Прервано: {title}",
   "Unknown: {title}": "Неизвестно: {title}",
+  // Coordination round (group ask) collapsed line
+  "1 bot": "1 бот",
+  "{count} bots": "{count} бота",
+  "{count} answered": "{count} ответили",
+  "Asked {asked} · {answered}": "Спрошено: {asked} · {answered}",
+  "{name} couldn't answer": "{name} не смог ответить",
+  Fix: "Исправить",
+  answered: "ответил",
+  "couldn't answer": "не смог ответить",
+  "stopped before answering": "остановился до ответа",
+  "is waiting for you": "ждёт вас",
+  "has not answered yet": "пока не ответил",
 };

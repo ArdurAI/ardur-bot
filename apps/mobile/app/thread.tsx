@@ -22,6 +22,7 @@ import {
   cloudAgentHttpsUrl,
   composerCommands,
   composerSkills,
+  coordinationBlock,
   isApprovalAskBlock,
   isRunTerminalEvent,
   isSecretAskBlock,
@@ -76,6 +77,7 @@ import { BotAvatar } from "../components/bot-avatar";
 import { BotRuntimeLabel } from "../components/bot-runtime-label";
 import { CompactWorkRecord } from "../components/compact-work-record";
 import { MobileRunContext } from "../components/context-section";
+import { CoordinationLine } from "../components/coordination-line";
 import { DispatchStatus } from "../components/DispatchStatus";
 import {
   MarkdownArtifactPreview,
@@ -1606,6 +1608,9 @@ function Thread() {
               }
               onAnswer={answerMessage}
               onOpenBot={openBot}
+              onOpenMemberModelSettings={(botId: string) =>
+                router.push({ pathname: "/bot-settings", params: { botId, focus: "model" } })
+              }
               onPreviewMarkdown={setMarkdownPreview}
               actionProps={actionProps}
             />
@@ -2433,6 +2438,7 @@ const MessageBubble = memo(function MessageBubble({
   canAnswer,
   onAnswer,
   onOpenBot,
+  onOpenMemberModelSettings,
   onPreviewMarkdown,
   actionProps,
 }: {
@@ -2446,6 +2452,7 @@ const MessageBubble = memo(function MessageBubble({
   canAnswer: boolean;
   onAnswer: (message: MobileMessage, answer: string) => Promise<void>;
   onOpenBot: (botId: string, name: string) => void;
+  onOpenMemberModelSettings: (botId: string) => void;
   onPreviewMarkdown: (target: MarkdownArtifactPreviewTarget) => void;
   actionProps: MessageActionProps;
 }) {
@@ -2497,6 +2504,16 @@ const MessageBubble = memo(function MessageBubble({
         detail={handoff.text}
         expanded={peerExpanded}
         onToggle={() => setPeerExpanded((expanded) => !expanded)}
+      />
+    );
+  }
+  const coordination = coordinationBlock(message.blocks);
+  if (coordination) {
+    return (
+      <CoordinationLine
+        block={coordination}
+        actionProps={actionProps}
+        onOpenMemberSettings={onOpenMemberModelSettings}
       />
     );
   }

@@ -1237,4 +1237,16 @@ export const ZH_MESSAGES: Record<string, string> = {
   Interrupted: "已中断",
   "Interrupted: {title}": "已中断: {title}",
   "Unknown: {title}": "未知: {title}",
+  // Coordination round (group ask) collapsed line
+  "1 bot": "1 个机器人",
+  "{count} bots": "{count} 个机器人",
+  "{count} answered": "{count} 已回答",
+  "Asked {asked} · {answered}": "询问了 {asked} · {answered}",
+  "{name} couldn't answer": "{name} 无法回答",
+  Fix: "修复",
+  answered: "已回答",
+  "couldn't answer": "无法回答",
+  "stopped before answering": "未回答就停止",
+  "is waiting for you": "正在等你",
+  "has not answered yet": "尚未回答",
 };
