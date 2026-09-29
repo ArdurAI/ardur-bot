@@ -446,6 +446,9 @@ describe("LocalHermesRuntime", () => {
           fail: async () => {},
           run: async function* (localReq: AgentRunRequest) {
             options.onProfileAcknowledged();
+            // The owner's key stays inside the worker: nothing handed to Hermes carries it.
+            expect(JSON.stringify(localReq)).not.toContain(ownerKey);
+            expect(JSON.stringify(options)).not.toContain(ownerKey);
             // Hermes speaks Chat Completions to the relay with the grant token.
             const response = await fetch(`${localReq.model.baseUrl}/chat/completions`, {
               method: "POST",
