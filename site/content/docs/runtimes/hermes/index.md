@@ -86,9 +86,25 @@ ARDUR_HERMES_INSTALL_LANE=1 ARDUR_HERMES_INSTALL=<install-root> \
   pnpm exec vitest run packages/adapters/src/hermes-install-lane.test.ts
 ```
 
-The current provider path accepts direct `openai-compatible` and Ollama connections
-that expose Chat Completions. Anthropic Messages, Responses-only endpoints, OAuth
-connections and other routes have no qualified translator. The chosen connection
+The provider path accepts two kinds of API-key connections. Custom endpoints
+(OpenAI-compatible servers and Ollama) expose Chat Completions directly, and
+Ardur passes requests through unchanged. Every other key-based connection —
+Anthropic, Google (AI Studio or a Vertex key), OpenAI, OpenRouter, Kimi for
+Coding, Z.AI and the remaining key-based catalog providers — is translated
+through Ardur's provider layer, so Hermes speaks the same Chat Completions
+protocol either way. The real key stays in the worker; a per-turn grant stands
+in for it, with the same request and token caps on both routes.
+
+Sign-in (subscription) connections cannot back Hermes. Anthropic does not
+permit third-party apps to offer Claude.ai login or to route requests through
+Free, Pro or Max plan credentials, so a Claude subscription only works in
+Anthropic's own apps; use an Anthropic API key instead
+(<https://code.claude.com/docs/en/legal-and-compliance>). A ChatGPT sign-in is
+sanctioned only inside Codex, which runs a stateful agent loop rather than the
+plain model turns Hermes needs; use an OpenAI API key instead. The settings
+picker keeps these connections visible but disabled with the reason, a run
+pinned to one is refused with the same reason, and any other sign-in
+connection is refused the same way. The chosen connection
 must have a bounded context window and an output limit at most 65,536 tokens.
 Effort is a requested value; seeing the outbound field does not prove the provider
 applied it. The bot and run keep their exact credential, model, effort and revision.
