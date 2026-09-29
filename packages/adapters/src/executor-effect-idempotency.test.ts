@@ -1192,7 +1192,7 @@ it("stops an ask follow-up after repeated setup failures so the room can continu
   expect(f.finalizeRun).toHaveBeenCalledWith(
     expect.objectContaining({
       outcome: "failed",
-      error: "The follow-up could not start. It stopped so the room can continue.",
+      error: "Could not sum up the answers. Ask again.",
     }),
   );
   expect(f.prisma.attempt.update).not.toHaveBeenCalledWith(
@@ -1215,7 +1215,7 @@ it("still retries an ask follow-up the first times setup fails", async () => {
   );
   expect(f.finalizeRun).not.toHaveBeenCalledWith(
     expect.objectContaining({
-      error: "The follow-up could not start. It stopped so the room can continue.",
+      error: "Could not sum up the answers. Ask again.",
     }),
   );
 });

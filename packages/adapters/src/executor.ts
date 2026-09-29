@@ -6652,7 +6652,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             where: { runId, status: "setup_failed" },
           });
           if (previousFailures + 1 >= ASK_WAKE_SETUP_ATTEMPTS) {
-            const message = "The follow-up could not start. It stopped so the room can continue.";
+            const message = "Could not sum up the answers. Ask again.";
             const finalized = await deps.events.finalizeRun({
               onCommitted: () =>
                 tracePoint(runId, "terminal.committed", { attempt: fence, outcome: "failed" }),
