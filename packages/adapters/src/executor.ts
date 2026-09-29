@@ -2509,7 +2509,6 @@ export function createRunExecutor(deps: ExecutorDeps) {
           const deliveryIds = (
             await deps.prisma.botMessageWake.findMany({
               where: {
-                runId,
                 state: "bound",
                 steeringMessageId: item.id,
               },
@@ -6029,6 +6028,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
                     getLogger().warn("bot message input acknowledgement refused", {
                       runId,
                       reason: result.refused,
+                      receiptDeliveryIds: receipt.deliveryIds,
+                      acceptedDeliveryIds,
                     });
                     throw new Error("Bot message input acknowledgement was refused.");
                   }

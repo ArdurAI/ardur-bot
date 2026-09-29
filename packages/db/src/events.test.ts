@@ -2164,6 +2164,7 @@ describe("claimSteering", () => {
       $queryRaw: vi.fn(),
       steeringSummary: { upsert: vi.fn() },
       run: { findFirst: vi.fn().mockResolvedValue({ id: "run-1" }) },
+      botMessageWake: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
       steeringMessage: {
         findMany: vi.fn().mockResolvedValue([
           {

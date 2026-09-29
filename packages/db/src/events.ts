@@ -729,6 +729,15 @@ export async function claimSteering(
         data: { adopted: true },
       });
     }
+    // The bound wake follows its steering row to the run now answering it. A
+    // continuation's batch is pre-assigned rather than taken over, and a released
+    // row's wake was cleared, so every claimed row re-points its wake, not just
+    // takeovers. Claiming never selects another live run's rows, so a bound wake
+    // can only move here from a finished run or a cleared one.
+    await tx.botMessageWake.updateMany({
+      where: { steeringMessageId: { in: steering.map((item) => item.id) }, state: "bound" },
+      data: { runId: input.runId },
+    });
     // The summary survives deletion of the consumed queue row. Text stays in its source message.
     for (const item of steering) {
       await tx.steeringSummary.upsert({
@@ -785,6 +794,10 @@ export async function releaseSteering(
     await tx.steeringMessage.updateMany({
       where: { id: { in: input.ids }, runId: input.runId },
       data: { claimedAt: null, runId: null, adopted: false },
+    });
+    await tx.botMessageWake.updateMany({
+      where: { steeringMessageId: { in: input.ids }, runId: input.runId, state: "bound" },
+      data: { runId: null },
     });
     await tx.steeringSummary.deleteMany({
       where: { runId: input.runId, messageId: { in: released.map((row) => row.messageId) } },
@@ -2044,6 +2057,13 @@ async function createSteeringContinuation(
   });
   if (pending.length === 0) return null;
   const last = pending.at(-1)!;
+  // The continuation answers on the finished run's behalf, so it carries the
+  // run's goal scope: peer deliveries it takes over acknowledge against the
+  // same recipient fence, and admission derives the same peer authority.
+  const source = await tx.run.findUniqueOrThrow({
+    where: { id: input.runId },
+    select: { goalId: true, delegationRootTaskId: true },
+  });
   const task = await tx.task.create({
     data: {
       spaceId: input.spaceId,
@@ -2057,6 +2077,10 @@ async function createSteeringContinuation(
   const run = await tx.run.create({
     data: {
       ...(await inheritedRemoteOrigin(tx, input.runId)),
+      ...(source.goalId ? { goalId: source.goalId } : {}),
+      ...(source.delegationRootTaskId
+        ? { delegationRootTaskId: source.delegationRootTaskId }
+        : {}),
 
       spaceId: input.spaceId,
       botId: input.botId,
