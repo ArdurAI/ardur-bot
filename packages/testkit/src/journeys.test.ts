@@ -917,6 +917,101 @@ describeJourneys("required product journeys", () => {
     expect(await prisma.message.count({ where: { threadId: thread.id } })).toBeGreaterThan(0);
   });
 
+  // The owner's 2026-09-28 group chat: the bot's summary was on screen while its run
+  // was still active, the owner sent a follow-up, and the reply saved only at run end —
+  // landing below the follow-up after a refresh. The reply's place is now held from its
+  // first visible text, so the saved reply stays above the follow-up.
+  it("keeps a streamed reply above the follow-up sent before the run ended", async () => {
+    const cookie = await signup(app, `reply-order-${stamp}@ardurbot.test`, "Reply Order");
+    const me = await rpc<Me>(app, cookie, "me");
+    const bot = await rpc<Bot>(app, cookie, "bots/create", {
+      name: "Chief",
+      title: "",
+      description: "",
+      instructions: "",
+      notifyOnFinish: true,
+    });
+    const thread = await prisma.thread.findUniqueOrThrow({ where: { botId: bot.id } });
+    const task = await prisma.task.create({
+      data: {
+        spaceId: me.spaceId,
+        userId: me.userId,
+        botId: bot.id,
+        threadId: thread.id,
+        prompt: "what did rad get right?",
+        status: "running",
+      },
+    });
+    const run = await prisma.run.create({
+      data: {
+        spaceId: me.spaceId,
+        userId: me.userId,
+        botId: bot.id,
+        threadId: thread.id,
+        taskId: task.id,
+        trigger: "user",
+        status: "running",
+        leaseOwner: "reply-order-fixture",
+        leaseFence: 1,
+        startedAt: new Date(),
+      },
+    });
+    const attempt = await prisma.attempt.create({
+      data: { runId: run.id, fence: 1, status: "running" },
+    });
+
+    // The reply's summary text becomes visible while the run is still working.
+    const summary = "Rad shipped the release and closed the blockers.";
+    await appendEvent(prisma, {
+      spaceId: me.spaceId,
+      threadId: thread.id,
+      botId: bot.id,
+      type: "thread.progress",
+      runId: run.id,
+      payload: { text: summary, streaming: true },
+    });
+    const streaming = await prisma.run.findUniqueOrThrow({ where: { id: run.id } });
+    expect(streaming.replySeq).toBe(0);
+
+    // The owner reads the summary and asks a follow-up before the run ends.
+    const followUpText = "does the 90.0 release have any pending PRs left?";
+    await rpc(app, cookie, "threads/send", { botId: bot.id, text: followUpText });
+    const followUp = await prisma.message.findFirstOrThrow({
+      where: { threadId: thread.id, role: "user" },
+    });
+    expect(followUp.seq).toBe(1);
+
+    // Only when the run finishes does the reply become a durable message.
+    const finished = await finalizeRun(prisma, {
+      spaceId: me.spaceId,
+      threadId: thread.id,
+      botId: bot.id,
+      runId: run.id,
+      taskId: task.id,
+      attemptId: attempt.id,
+      leaseOwner: "reply-order-fixture",
+      leaseFence: 1,
+      outcome: "completed",
+      blocks: [{ kind: "text", text: summary }],
+    });
+    expect(finished).not.toBe(false);
+
+    const reply = await prisma.message.findFirstOrThrow({
+      where: { threadId: thread.id, runId: run.id, role: "bot" },
+    });
+    expect(reply.seq).toBe(0);
+    expect(reply.seq).toBeLessThan(followUp.seq);
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: run.id } })).replySeq).toBeNull();
+
+    // A refreshed transcript keeps the order the owner saw: reply, then follow-up.
+    const snap = await rpc<Snap>(app, cookie, "threads/get", { botId: bot.id });
+    const ids = snap.messages.map((message) => message.id);
+    expect(ids.indexOf(reply.id)).toBeGreaterThanOrEqual(0);
+    expect(ids.indexOf(reply.id)).toBeLessThan(ids.indexOf(followUp.id));
+    expect(snap.messages.find((message) => message.id === reply.id)?.seq).toBe(0);
+    await settleFixtureWork([bot.id]);
+  });
+
   it("starts a new chat without sending retained history to the next turn", async () => {
     const cookie = await signup(app, `restart-j-${stamp}@ardurbot.test`, "Restart Journey");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {

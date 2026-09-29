@@ -28,6 +28,7 @@ import {
   subagentBlockFromPayload,
   takeLiveMessage,
   updateCloudAgentMessages,
+  upsertAtLivePlace,
   upsertMessageById,
 } from "@ardurbot/core";
 
@@ -536,9 +537,14 @@ export function reduceThreadSnapshot(
       blocks.filter((block) => block.kind === "subagent").map((block) => block.agentId),
     );
     const liveId = progressMessageId(event);
-    const { remaining } = takeLiveMessage(prev.messages, liveId);
-    const without = remaining.filter((message) => !replacedSubagent(message, replacedSubagentIds));
-    return { ...prev, cursor: event.seq, messages: upsertMessageById(without, next) };
+    const without = prev.messages.filter(
+      (message) => !replacedSubagent(message, replacedSubagentIds),
+    );
+    // The run's saved reply fills its live draft's slot, so it stays above anything the
+    // owner sent after the draft's text appeared. Other messages leave the draft be.
+    const messages =
+      role === "bot" ? upsertAtLivePlace(without, liveId, next) : upsertMessageById(without, next);
+    return { ...prev, cursor: event.seq, messages };
   }
   return prev;
 }

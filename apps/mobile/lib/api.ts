@@ -38,6 +38,7 @@ import {
   signupRequiresEmailVerification,
   takeLiveMessage,
   updateCloudAgentMessages,
+  upsertAtLivePlace,
   upsertMessageById,
 } from "@ardurbot/core";
 import * as SecureStore from "expo-secure-store";
@@ -1262,7 +1263,7 @@ export function applyMobileThreadEvent(
     };
   }
   if (event.type === "thread.message.created" || event.type === "thread.message.updated") {
-    const { remaining } = takeLiveMessage(prev.messages, progressMessageId(event));
+    const liveId = progressMessageId(event);
     const next: MobileMessage = {
       id: String(event.payload?.messageId ?? event.id ?? `msg:${event.seq ?? 0}`),
       runId: event.runId ? String(event.runId) : undefined,
@@ -1274,21 +1275,25 @@ export function applyMobileThreadEvent(
         : undefined,
       replyQuote: event.payload?.replyQuote ? String(event.payload.replyQuote) : undefined,
     };
+    const without = prev.messages.filter(
+      (message) =>
+        !(
+          message.id.startsWith("subagent:") &&
+          next.blocks.some(
+            (block) => block.kind === "subagent" && message.id === `subagent:${block.agentId}`,
+          )
+        ),
+    );
+    // The run's saved reply fills its live draft's slot, so it stays above anything the
+    // owner sent after the draft's text appeared. Other messages leave the draft be.
+    const messages =
+      next.role === "bot"
+        ? upsertAtLivePlace(without, liveId, next)
+        : upsertMessageById(without, next);
     return {
       ...prev,
       cursor: event.seq ?? prev.cursor,
-      messages: upsertMessageById(
-        remaining.filter(
-          (message) =>
-            !(
-              message.id.startsWith("subagent:") &&
-              next.blocks.some(
-                (block) => block.kind === "subagent" && message.id === `subagent:${block.agentId}`,
-              )
-            ),
-        ),
-        next,
-      ),
+      messages,
     };
   }
   return prev;

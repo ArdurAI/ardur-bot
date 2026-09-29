@@ -1392,6 +1392,52 @@ describe("thread event reduction", () => {
     expect(next?.messages.map((item) => item.id)).toEqual(["final"]);
   });
 
+  it("keeps a streamed reply above the follow-up the owner sent before the run ended", () => {
+    const initial = snapshot([message("m-0", [{ kind: "text", text: "earlier" }], 0)]);
+    const streamed = reduceThreadSnapshot(
+      initial,
+      event({
+        type: "thread.progress",
+        seq: 1,
+        runId: "run-1",
+        payload: { text: "Chief's summary", streaming: true },
+      }),
+    );
+    expect(streamed?.messages.map((item) => item.id)).toEqual(["m-0", "progress:run-1"]);
+
+    // The owner sends a follow-up while the run is still active; the draft keeps its place.
+    const withQuestion = reduceThreadSnapshot(
+      streamed!,
+      event({
+        type: "thread.message.created",
+        seq: 2,
+        runId: "run-1",
+        payload: {
+          messageId: "q-1",
+          role: "user",
+          blocks: [{ kind: "text", text: "any pending PRs left?" }],
+        },
+      }),
+    );
+    expect(withQuestion?.messages.map((item) => item.id)).toEqual(["m-0", "progress:run-1", "q-1"]);
+
+    // When the run ends, the saved reply fills the draft's slot, above the follow-up.
+    const finished = reduceThreadSnapshot(
+      withQuestion!,
+      event({
+        type: "thread.message.created",
+        seq: 3,
+        runId: "run-1",
+        payload: {
+          messageId: "reply-1",
+          role: "bot",
+          blocks: [{ kind: "text", text: "Chief's summary" }],
+        },
+      }),
+    );
+    expect(finished?.messages.map((item) => item.id)).toEqual(["m-0", "reply-1", "q-1"]);
+  });
+
   it("updates a waiting group run without replacing the newer active run", () => {
     const newerRun = {
       id: "run-newer",

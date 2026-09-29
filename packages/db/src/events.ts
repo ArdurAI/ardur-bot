@@ -49,7 +49,9 @@ import { inheritedRemoteOrigin, persistDispatchSummary } from "./dispatch.js";
 import {
   assertRunCanWriteHistory,
   createThreadMessageInTransaction,
+  discardRunReplySeqInTransaction,
   RunHistoryWriteError,
+  reserveRunReplySeqInTransaction,
 } from "./messages.js";
 import { appendTaskEvent } from "./task-cards.js";
 import { withTransactionRetry } from "./transaction-retry.js";
@@ -1213,6 +1215,9 @@ async function pauseRunForInputOnce(prisma: PrismaClient, input: PauseRunForInpu
       payload: {},
     });
     await tx.event.deleteMany({ where: { runId: input.runId, type: "thread.progress" } });
+    // The streamed draft leaves the transcript with its progress events, so its held
+    // place goes too; text streamed after the answer reserves its own place.
+    await discardRunReplySeqInTransaction(tx, input.runId);
     return { threadId: waitingEvent.threadId, seq: waitingEvent.seq };
   });
 }
@@ -1313,6 +1318,9 @@ export async function pauseRunForTakeover(
       },
     });
     await tx.event.deleteMany({ where: { runId: input.runId, type: "thread.progress" } });
+    // The streamed draft leaves the transcript with its progress events, so its held
+    // place goes too; text streamed after the takeover reserves its own place.
+    await discardRunReplySeqInTransaction(tx, input.runId);
     return { threadId: waitingEvent.threadId, seq: waitingEvent.seq };
   });
 
@@ -1657,6 +1665,7 @@ async function finalizeRunOnce(
           botId: input.botId,
           runId: input.runId,
           markUnread: input.markUnread,
+          consumeReservedReplySeq: true,
         });
         finalMessageId = message.id;
         await appendEventInTransaction(tx, {
@@ -1878,6 +1887,9 @@ async function finalizeRunOnce(
             },
     });
     await tx.event.deleteMany({ where: { runId: input.runId, type: "thread.progress" } });
+    // A completed reply already consumed its held place; a failed or empty run leaves
+    // no message to fill it, so the place is released here.
+    await discardRunReplySeqInTransaction(tx, input.runId);
     const peerSettlement = await settleBotMessageWakesInTransaction(
       tx,
       input.runId,
@@ -2040,6 +2052,14 @@ export async function appendEventInTransaction(
     if (existing) return existing;
   }
   if (!terminal || input.type !== "run.cancelled") await assertRunCanWriteHistory(tx, input.runId);
+  // The reply's place is held when its first visible text streams, not when the run
+  // ends, so anything the owner sends meanwhile lands below the saved reply.
+  if (input.type === "thread.progress" && input.runId && isStreamingReplyText(input.payload)) {
+    await reserveRunReplySeqInTransaction(tx, {
+      threadId: input.threadId,
+      runId: input.runId,
+    });
+  }
   // Unpaired UTF-16 surrogates (e.g. a split emoji high half) are invalid JSON for Postgres.
   const payload = sanitizeJsonValue(input.payload);
   const event = await tx.event.create({
@@ -2055,6 +2075,15 @@ export async function appendEventInTransaction(
   });
   await materializeCommandEvent(tx, event);
   return event;
+}
+
+/** Reply text the owner can already see, as opposed to tool activity lines. */
+function isStreamingReplyText(payload: Record<string, unknown>): boolean {
+  if (payload.streaming !== true) return false;
+  return (
+    (typeof payload.text === "string" && payload.text.length > 0) ||
+    (typeof payload.delta === "string" && payload.delta.length > 0)
+  );
 }
 
 async function notifyRealtime(
