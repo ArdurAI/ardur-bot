@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { dashboardFixture } from "./dashboard-fixture";
-import { captureScreenshot } from "./helpers";
+import { captureScreenshot, expectVisibleTextInside } from "./helpers";
 
 const sonnet = { key: "pi|anthropic|claude-sonnet|medium", label: "Claude Sonnet", local: false };
 const gpt = { key: "pi|openai|gpt-4.1|medium", label: "GPT-4.1", local: false };
@@ -134,7 +134,12 @@ test("learning shows insights with their evidence, and Dismiss hides one", async
     section.getByText("Based on 17 runs in the last 30 days.", { exact: true }),
   ).toBeVisible();
   await expect(section.getByRole("table")).toContainText("9/10");
+  const dialog = page.getByRole("dialog");
+  await expectVisibleTextInside(dialog);
   await captureScreenshot(page, testInfo, "learning-insights");
+  await page.setViewportSize({ width: 375, height: 800 });
+  await expectVisibleTextInside(dialog);
+  await captureScreenshot(page, testInfo, "learning-insights-narrow");
 
   await section
     .getByTestId("learning-insight")

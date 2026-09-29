@@ -14,6 +14,23 @@ import { hasNewBriefFacts } from "./novelty.js";
 
 type Run = Prisma.RunGetPayload<Record<string, never>>;
 type Bot = Prisma.BotGetPayload<{ include: { computer: true } }>;
+
+/**
+ * Highest seq a brief may mark covered. A running reply's place is still empty, so the
+ * watermark stays below the lowest one, the same bound history compaction uses.
+ */
+function coveredMessageSeq(
+  nextMessageSeq: number,
+  holds: ReadonlyArray<{ replySeq: number | null }>,
+): number {
+  let lowestHeld: number | null = null;
+  for (const hold of holds) {
+    if (typeof hold.replySeq !== "number") continue;
+    if (lowestHeld === null || hold.replySeq < lowestHeld) lowestHeld = hold.replySeq;
+  }
+  const through = nextMessageSeq - 1;
+  return lowestHeld === null ? through : Math.min(through, lowestHeld - 1);
+}
 async function sharedMessagingRun(prisma: PrismaClient, run: Run): Promise<boolean> {
   if (run.trigger !== "messaging") return false;
   // A removed source message cannot establish a private audience.
@@ -396,6 +413,16 @@ export async function refreshRunBrief(deps: BriefMaintenanceDeps, runId: string)
     where: { id: state.id, attemptedAt: now },
     data: { leaseExpiresAt: null },
   });
+  const coveredThrough =
+    rewritten || unchanged
+      ? coveredMessageSeq(
+          run.thread.nextMessageSeq,
+          await deps.prisma.run.findMany({
+            where: { threadId: run.threadId, status: "running", replySeq: { not: null } },
+            select: { replySeq: true },
+          }),
+        )
+      : run.thread.nextMessageSeq - 1;
   await deps.prisma.botBrief.updateMany({
     where: { id: state.id, pendingRunId: runId, historyGeneration: state.historyGeneration },
     data: {
@@ -403,7 +430,7 @@ export async function refreshRunBrief(deps: BriefMaintenanceDeps, runId: string)
       ...(rewritten || unchanged
         ? {
             historyGeneration: run.thread.historyCompactionGeneration,
-            lastMessageSeq: run.thread.nextMessageSeq - 1,
+            lastMessageSeq: coveredThrough,
             ...(rewritten ? { rewrittenAt: now } : {}),
           }
         : {}),
