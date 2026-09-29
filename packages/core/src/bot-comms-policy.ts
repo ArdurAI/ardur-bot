@@ -53,6 +53,20 @@ export function peerEffectArgsDigest(args: Record<string, unknown>): string {
 
 export type PeerEffectMismatchReason = "unbound" | "tool" | "resource" | "arguments";
 
+/**
+ * The resource identity a descriptor names, computed from the live connector route.
+ * MCP grants name one tool per entry, so the route tool is part of the identity.
+ */
+export function peerEffectResourceRef(route: {
+  connectorId: string;
+  resourceId?: string | null;
+  toolName: string;
+}): string {
+  return route.connectorId === "mcp"
+    ? `mcp:${route.resourceId ?? ""}:${route.toolName}`
+    : `${route.connectorId}:${route.resourceId ?? ""}`;
+}
+
 /** Exact match of the approved effect: tool, target resource and argument digest. */
 export function peerEffectMatches(
   approved: PeerEffectDescriptor | undefined,

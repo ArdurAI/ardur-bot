@@ -20,7 +20,7 @@ import {
   resolveBotAddress,
   taskCardPrompt,
 } from "@ardurbot/core";
-import type { PrismaClient } from "@ardurbot/db";
+import type { Prisma, PrismaClient } from "@ardurbot/db";
 import {
   appendBotMessageAuditInTransaction,
   appendEventInTransaction,
@@ -822,7 +822,10 @@ export async function messageBot(
               ? {
                   // One exact descriptor with owner-readable, digest-bound arguments
                   // binds a single approved effect; everything else prepares only.
-                  peerMode: binding.kind === "effect-bound" ? ("effect-bound" as const) : ("read-only" as const),
+                  peerMode:
+                    binding.kind === "effect-bound"
+                      ? ("effect-bound" as const)
+                      : ("read-only" as const),
                   tokens: goal.perWorkerTokens,
                   deadlineAt: new Date(
                     Math.min(
@@ -973,7 +976,7 @@ export async function messageBot(
               delegationId: admitted.record.id,
               state: held ? "held" : "delivered",
               wakeAdmittedAt: held ? null : now,
-              requestedEffects: effects.data,
+              requestedEffects: effects.data as Prisma.InputJsonValue,
               hop,
               authorityFingerprint: authorityFingerprint!,
               requestFingerprint: admitted.record.fingerprint,
@@ -1000,7 +1003,7 @@ export async function messageBot(
                 kind: "peer_hold",
                 idempotencyKey: `peer-hold:${deliveryKey}`,
                 status: "intended",
-                request: approvalRequest,
+                request: approvalRequest as Prisma.InputJsonValue,
               },
             });
             const home = await tx.instanceIdentity.findUnique({
@@ -1032,6 +1035,7 @@ export async function messageBot(
             const ask: MessageBlock = {
               kind: "ask",
               peerHold: true,
+              ...(bound ? { peerEffectBound: true } : {}),
               approvalEffectId: approval.id,
               text: bound
                 ? `${sender.name} wants ${target.name} to run ${bound.toolName}.`

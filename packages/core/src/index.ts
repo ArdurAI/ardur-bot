@@ -70,6 +70,7 @@ export * from "./model-pin-choice.js";
 export * from "./model-probe.js";
 export * from "./model-providers.js";
 export * from "./notifications.js";
+export * from "./peer-hold.js";
 export * from "./peer-transcript.js";
 export * from "./remote-policy.js";
 export * from "./response-bytes.js";

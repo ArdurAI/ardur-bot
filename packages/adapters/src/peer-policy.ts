@@ -50,9 +50,9 @@ export function peerReadOnlyToolAllowed(name: string): boolean {
  */
 export function peerEffectBoundToolAllowed(
   name: string,
-  bound: { toolName: string } | undefined,
+  bound: { toolName?: string } | undefined,
 ): boolean {
-  return peerReadOnlyToolAllowed(name) || (Boolean(bound) && name === bound!.toolName);
+  return peerReadOnlyToolAllowed(name) || (Boolean(bound?.toolName) && name === bound!.toolName);
 }
 
 export function peerReadOnlyRuntimeSupported(runtimeKind: string): boolean {
