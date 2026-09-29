@@ -243,3 +243,49 @@ and **Failed — reason**. Detailed inputs, environment and computer information
 collapsed. The budget disclosure is shown before execution because each extra run
 may incur a charge; the status labels remain visible because missing or paused
 results must be distinguishable from successful output.
+
+## Room coordinator asks
+
+A group can name one member its coordinator. Routing does not change: an explicit
+@-mention, a mention chip, `@everyone` or a reply still wakes exactly those bots, and
+any other room message goes to the coordinator. The coordinator's model decides what
+the message needs; the router never reads prose.
+
+On a room turn it was not handed, the coordinator receives short coordinator guidance
+and a member list in its bounded history. Each line gives a member's name, id, title,
+description and up to four saved skills, then what its run records say: working,
+queued or waiting for the owner in this room (with the task's card goal or prompt),
+busy, queued or waiting elsewhere (without the task text), unavailable, or free, and
+what it last finished, failed or stopped here. The list uses no model call. It is cut
+between members, never partway through one, when it does not fit its budget.
+
+`ask_members` (`packages/adapters/src/group-ask.ts`) takes member ids or exact names,
+or `["all"]`, and one request. It refuses unless the caller is the room's current
+coordinator, the run is still running and team messages are not paused for the room
+or space. In one transaction it sizes the coordinator's task budget for the asked
+members (each keeps a goal-sized worker reservation; the twelve-descendant, hop and
+one-hour limits are unchanged, and a goal's budget is never raised), admits one
+`group-handoff` delegation per member with a `group-ask:<round>:<run>:<call>:<member>`
+key, posts one coordinator message that addresses the asked members, and queues one
+turn per member in the room. Each admission is audited like a handoff, with a
+`group.handoff` event marked `mode: "ask"`. A member refused by admission is reported
+back with its one-sentence reason while the others are asked, and a member is never
+asked twice in one turn. Asked members run with the delegated authority ceiling, so
+their tool calls keep their normal approval cards.
+
+Runs in one room take turns, so the coordinator cannot wait inside its turn. Instead
+each asked member answers in the room under its own name, and its delegation settles
+without the usual "awaiting acceptance" summary. `wakeCoordinatorForGroupAsk`
+(`packages/db/src/group-asks.ts`) runs whenever an asked member's run ends: once every
+asked member has answered, failed, stopped or is waiting for the owner, it accepts the
+answered delegations and queues one `ask-wake:<round>:<run>` follow-up turn for the
+coordinator, whose history then carries every result. A person's Stop, a cancelled
+task, a paused room, a changed coordinator or a coordinator that already took another
+turn settles the ask without waking anyone. A busy coordinator is retried by the job
+reconciler, and an ask whose members never settle stops waiting fifteen minutes after
+its deadline. A follow-up turn may ask one more round; after that the tool is hidden.
+
+Offline tests cover the directory content and its read-only loading, target selection,
+fan-out with a refused member, pause and round limits, replay, the fan-in outcomes and
+budget sizing. `packages/testkit/src/journeys.test.ts` exercises a status question and
+an everyone ask end to end on PostgreSQL in CI.
