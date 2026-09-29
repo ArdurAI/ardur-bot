@@ -8,6 +8,7 @@ const RESULT_TRUNCATED_MARKER =
 // Overflowing history starts on a grid of quarter-budget steps: it gives up less than a quarter
 // of its budget, and its first kept character moves every few turns instead of every message.
 const HISTORY_STEPS = 4;
+const TOOL_CALL_ID = /<tool_call\b[^>]*\bid="([^"]+)"/;
 const STOP_WORDS = new Set(
   "the a an and or but is are was were be been do does did have has had i we you it this that these those what which who when where how why please about for from with can could would should tell me our your in on of to at as my any".split(
     " ",
@@ -28,21 +29,21 @@ export function needsRecall(text: string, brief: string): boolean {
   const known = new Set(words(brief));
   return words(text).some((word) => !known.has(word));
 }
-function frame(name: string, text: string, budget: number) {
-  if (!text.trim()) return "";
-  const prefix = `<${name}>\n`;
-  const suffix = `\n</${name}>`;
-  const escaped = text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
-  return prefix + escaped.slice(0, Math.max(0, budget - prefix.length - suffix.length)) + suffix;
+/** A tool call and its result are the call tag and the next result that names the same id. */
+function toolPairSpans(messages: Message[]): Array<{ start: number; end: number }> {
+  const spans: Array<{ start: number; end: number }> = [];
+  let offset = 0;
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = messages[index]!;
+    const call = TOOL_CALL_ID.exec(message.content);
+    const next = messages[index + 1];
+    if (call && next?.content.includes(`<tool_result id="${call[1]}">`))
+      spans.push({ start: offset, end: offset + message.content.length + next.content.length });
+    offset += message.content.length;
+  }
+  return spans;
 }
-/**
- * Keep the newest messages that fit the budget. The first kept character moves forward in whole
- * steps, not with every new message, so the kept history repeats byte for byte until the next
- * step and provider prompt caches can reuse it. A step of 1 keeps exactly the last `budget`.
- */
-export function boundMessages(messages: Message[], budget: number, step = 1): Message[] {
-  const overflow = messages.reduce((size, message) => size + message.content.length, 0) - budget;
-  const start = overflow > 0 ? Math.ceil(overflow / step) * step : overflow;
+function sliceFrom(messages: Message[], start: number): Message[] {
   const result: Message[] = [];
   let offset = 0;
   for (const message of messages) {
@@ -54,6 +55,41 @@ export function boundMessages(messages: Message[], budget: number, step = 1): Me
     offset = end;
   }
   return result;
+}
+function frame(name: string, text: string, budget: number) {
+  if (!text.trim()) return "";
+  const prefix = `<${name}>\n`;
+  const suffix = `\n</${name}>`;
+  const escaped = text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  return prefix + escaped.slice(0, Math.max(0, budget - prefix.length - suffix.length)) + suffix;
+}
+/**
+ * Keep the newest messages that fit the budget. The first kept character moves forward in whole
+ * steps, not with every new message, so the kept history repeats byte for byte until the next
+ * step and provider prompt caches can reuse it. A step of 1 keeps exactly the last `budget`.
+ * The cut never moves past the newest message, or past a tool call and its result. If aligning
+ * to the grid would drop more than one step of the history the exact cut kept, the exact cut wins.
+ */
+export function boundMessages(messages: Message[], budget: number, step = 1): Message[] {
+  if (budget <= 0) return [];
+  const total = messages.reduce((size, message) => size + message.content.length, 0);
+  if (total <= budget) return messages;
+  const overflow = total - budget;
+  const safeStep = Math.max(1, Math.floor(step));
+  let start = Math.ceil(overflow / safeStep) * safeStep;
+  // A step larger than the room left rounds past the end and drops the newest turn.
+  if (start - overflow > safeStep || start >= total) start = overflow;
+  const newestStart = total - (messages.at(-1)?.content.length ?? 0);
+  if (start > newestStart && overflow <= newestStart)
+    start = newestStart - overflow <= safeStep ? newestStart : overflow;
+  for (const span of toolPairSpans(messages)) {
+    const enters = start > span.start && start < span.end;
+    const passes = start >= span.end && overflow < span.end;
+    if (!enters && !passes) continue;
+    start = overflow <= span.start && span.start - overflow <= safeStep ? span.start : overflow;
+  }
+  if (start - overflow > safeStep || start >= total) start = overflow;
+  return sliceFrom(messages, start);
 }
 /**
  * Provider prompt caches reuse only the leading part of a request that repeats byte for byte,
@@ -93,14 +129,16 @@ export async function assembleTurnContext(run: {
       : 0;
   const stableCharacters = run.instructions.length + toolCharacters;
   // Instructions and the new request are authority-bearing. Never silently cut either in half.
-  if (stableCharacters > budgets.stable)
+  // Goal state used to share the instruction budget. It still does, so a message that fit
+  // before still fits; the goal is not charged against the message the user can send.
+  const goal = run.goal && !run.peerReadOnly ? run.goal : "";
+  if (stableCharacters + goal.length > budgets.stable)
     throw new Error(
       "Bot instructions exceed the context budget including exposed tools. Increase the space budget or load tools when needed.",
     );
-  // Goal state changes every turn (open assignments, token use), so it rides with the new turn.
-  const prompt = run.goal && !run.peerReadOnly ? `${run.goal}\n\n${run.message}` : run.message;
-  if (prompt.length > budgets.message)
+  if (run.message.length > budgets.message)
     throw new Error("This message exceeds the context budget. Send a shorter message.");
+  const prompt = goal ? `${goal}\n\n${run.message}` : run.message;
   const brief = frame("group_brief", run.peerReadOnly ? "" : (run.brief ?? ""), budgets.brief);
   const summary = frame(
     "thread_summary",
@@ -126,12 +164,16 @@ export async function assembleTurnContext(run: {
             : required.content,
       }
     : undefined;
+  const historyBudget = Math.max(0, budgets.messages - requiredAllowance - teammates.length);
+  // A quarter of the room left after the required result and the directory, not of the full
+  // message budget. A step taken from the full budget can round the cut past a short thread.
+  const historyStep = Math.max(1, Math.floor(historyBudget / HISTORY_STEPS));
   const messages = boundMessages(
     (run.peerReadOnly ? [] : run.history).filter(
       (message) => !run.sourceMessageId || message.id !== run.sourceMessageId,
     ),
-    budgets.messages - requiredAllowance - teammates.length,
-    Math.max(1, Math.floor(budgets.messages / HISTORY_STEPS)),
+    historyBudget,
+    historyStep,
   );
   const recallRan = Boolean(
     !run.peerReadOnly && run.recall && needsRecall(run.query ?? run.message, run.brief ?? ""),

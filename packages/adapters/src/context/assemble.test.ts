@@ -1,4 +1,5 @@
-import { botInstructionText } from "@ardurbot/core";
+import { BOT_NAME_MAX_LENGTH } from "@ardurbot/contracts";
+import { botInstructionText, renderGoalContext } from "@ardurbot/core";
 import { describe, expect, it, vi } from "vitest";
 import { assembleTurnContext, boundMessages, needsRecall } from "./assemble.js";
 import { markStablePrefix } from "./provider-cache.js";
@@ -60,10 +61,10 @@ describe("turn context", () => {
     ]);
     expect(context.history.at(-1)?.content).toBe(result);
     expect(context.snapshot.layers.messages).toBeLessThanOrEqual(12_000);
-    // 23 characters overflow the space left by the result; history starts at the next
-    // quarter-budget step, 3,000 characters in.
+    // 23 characters overflow the room left by the result. The step is a quarter of that
+    // room (2,994), not a quarter of the full 12,000, so the cut lands 2,994 characters in.
     expect(context.history.find((message) => message.id === "newer")?.content).toHaveLength(
-      12_001 - 3_000,
+      12_001 - 2_994,
     );
   });
   it("gives rolling history the space left by a required result, in whole steps", async () => {
@@ -75,10 +76,10 @@ describe("turn context", () => {
       budgets: { messages: 200 },
     });
     expect(context.history).toEqual([
-      { id: "newer", role: "user", content: "h".repeat(100) },
+      { id: "newer", role: "user", content: "h".repeat(110) },
       { id: "required", role: "user", content: "r".repeat(80) },
     ]);
-    expect(context.snapshot.layers.messages).toBe(180);
+    expect(context.snapshot.layers.messages).toBe(190);
   });
   it("keeps the head of an oversized required result with a visible budget marker", async () => {
     const marker =
@@ -244,9 +245,64 @@ describe("turn context", () => {
     expect(first.snapshot.layers.message).toBe(first.prompt.length);
     const peer = await assembleTurnContext({ ...base, peerReadOnly: true, goal: "PRIVATE_GOAL" });
     expect(peer.prompt).toBe("Continue");
+    // A goal that fits the instruction budget must not fail the message budget.
     await expect(
       assembleTurnContext({ ...base, goal: "g".repeat(48_000), message: "Continue" }),
-    ).rejects.toThrow("message exceeds");
+    ).resolves.toMatchObject({ prompt: expect.stringContaining("Continue") });
+  });
+  it("budgets a schema-sized goal apart from the message the user can send", async () => {
+    const now = new Date("2026-09-28T09:00:00.000Z");
+    const goal = renderGoalContext({
+      objective: "o".repeat(4_000),
+      doneWhen: Array.from({ length: 10 }, () => "d".repeat(500)),
+      status: "running",
+      members: [{ id: "bot-writer", name: "Writer" }],
+      assignments: Array.from({ length: 200 }, () => ({
+        actingName: "W".repeat(BOT_NAME_MAX_LENGTH),
+        status: "running",
+        createdAt: now,
+      })),
+      usedTokens: 10,
+      tokenLimit: 600_000,
+      untilAt: now,
+      now,
+    });
+    const message = "m".repeat(25_200);
+    expect(goal.length + 2 + message.length).toBeGreaterThan(48_000);
+    expect(message.length).toBeLessThanOrEqual(48_000);
+    const context = await assembleTurnContext({
+      instructions: "Coordinate the goal.",
+      history: [],
+      goal,
+      message,
+    });
+    expect(context.prompt.startsWith(goal)).toBe(true);
+    expect(context.prompt.endsWith(message)).toBe(true);
+    expect(context.stablePrefix).toBe("Coordinate the goal.");
+    await expect(
+      assembleTurnContext({
+        instructions: "Coordinate the goal.",
+        history: [],
+        goal: "g".repeat(64_000),
+        message: "Continue",
+      }),
+    ).rejects.toThrow("instructions exceed");
+  });
+  it("keeps the latest turns when a large directory leaves little history room", async () => {
+    const latest = "Where is the launch checklist?";
+    const context = await assembleTurnContext({
+      instructions: "Review completed work.",
+      teammates: `Teammate snapshot\n${"W".repeat(8_000)}`,
+      history: [
+        { id: "old", role: "user", content: "Earlier turn that can be cut." },
+        { id: "mid", role: "assistant", content: "n".repeat(1_600) },
+        { id: "latest", role: "user", content: latest },
+      ],
+      requiredContext: { id: "required", role: "user", content: "R".repeat(11_000) },
+      message: "Review the result.",
+    });
+    expect(context.history.find((message) => message.id === "latest")?.content).toBe(latest);
+    expect(context.snapshot.layers.messages).toBeLessThanOrEqual(12_000);
   });
   it("moves the start of overflowing history forward in whole steps", () => {
     const messages = [
@@ -275,6 +331,37 @@ describe("turn context", () => {
       ).toBeLessThanOrEqual(100);
     expect(boundMessages(messages, 200, 25)).toEqual(messages);
     expect(boundMessages(messages, 0, 25)).toEqual([]);
+  });
+  it("does not drop the newest message when the step is larger than the remaining room", () => {
+    const newest = "Where is the launch checklist?";
+    const thread = [
+      { role: "user" as const, content: "a".repeat(1_600) },
+      { role: "assistant" as const, content: newest },
+    ];
+    // The review's case: a 3,000-character step and 667 characters of room left.
+    const kept = boundMessages(thread, 667, 3_000);
+    expect(kept.at(-1)?.content).toBe(newest);
+    expect(kept.reduce((size, message) => size + message.content.length, 0)).toBeLessThanOrEqual(
+      667,
+    );
+    const exact = boundMessages(thread, 667, 1);
+    // A step that would erase the thread falls back to the old exact cut.
+    expect(boundMessages(thread, 667, 3_000)).toEqual(exact);
+  });
+  it("does not move the cut past a tool call and its result", () => {
+    const call = '<tool_call id="lookup">read</tool_call>';
+    const result = '<tool_result id="lookup">done</tool_result>';
+    const messages = [
+      { role: "user" as const, content: "o".repeat(100) },
+      { role: "assistant" as const, content: call },
+      { role: "user" as const, content: result },
+    ];
+    const budget = call.length + result.length + 10;
+    const kept = boundMessages(messages, budget, call.length);
+    const text = kept.map((message) => message.content).join("");
+    expect(text.includes("<tool_call")).toBe(true);
+    expect(text.includes("<tool_result")).toBe(true);
+    expect(text.length).toBeLessThanOrEqual(budget);
   });
   it("refuses to silently truncate instructions or the new request", async () => {
     await expect(
