@@ -40,7 +40,9 @@ const api = vi.hoisted(() => ({
   enableLearning: vi.fn(),
   setReviewer: vi.fn(),
   me: vi.fn(async () => ({ defaultProvider: "openai", defaultModel: "reviewer" })),
-  modelsList: vi.fn(async () => [{ provider: "openai", id: "reviewer", thinkingLevels: ["medium", "high"] }]),
+  modelsList: vi.fn(async () => [
+    { provider: "openai", id: "reviewer", thinkingLevels: ["medium", "high"] },
+  ]),
   modelsCredentials: vi.fn(async () => [{ id: "cred", provider: "openai", label: "OpenAI" }]),
 }));
 vi.mock("../../lib/rpc", () => ({
@@ -48,7 +50,11 @@ vi.mock("../../lib/rpc", () => ({
   rpc: {
     board: api,
     bots: { list: api.bots },
-    learning: { settings: api.learning, configure: api.enableLearning, setReviewer: api.setReviewer },
+    learning: {
+      settings: api.learning,
+      configure: api.enableLearning,
+      setReviewer: api.setReviewer,
+    },
     me: api.me,
     models: { list: api.modelsList, credentials: api.modelsCredentials },
   },
@@ -57,12 +63,17 @@ vi.mock("@lingui/react/macro", () => ({
   Trans: ({ children }: { children: ReactNode }) => children,
   useLingui: () => ({ t: (parts: TemplateStringsArray) => parts.join("") }),
 }));
+vi.mock("@lingui/core/macro", () => ({
+  t: (parts: TemplateStringsArray) => parts.join(""),
+}));
 vi.mock("@ardurbot/ui-web", () => ({
   Button: ({ variant: _variant, ...props }: ComponentProps<"button"> & { variant?: string }) => (
     <button {...props} />
   ),
   Input: (props: ComponentProps<"input">) => <input {...props} />,
   NativeSelect: (props: ComponentProps<"select">) => <select {...props} />,
+  NativeSelectOption: (props: ComponentProps<"option">) => <option {...props} />,
+  SuccessPop: ({ children }: { children?: ReactNode }) => <span>{children}</span>,
   Dialog: ({ open, children }: { open: boolean; children: ReactNode }) => (open ? children : null),
   DialogContent: ({ children }: { children: ReactNode }) => <div role="dialog">{children}</div>,
   DialogTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
@@ -292,40 +303,56 @@ it("shows a failed upkeep change beside its switch", async () => {
 });
 it("covers learning switch, model change, level change, no connection, CONFLICT and old text removal", async () => {
   api.enableLearning.mockResolvedValue({ ...(await api.learning()), enabled: true });
-  api.setReviewer.mockResolvedValue({ ...(await api.learning()), enabled: true, reviewerPin: { runtimeKind: "pi", provider: "openai", modelId: "reviewer", credentialId: "cred", effort: "high", revision: 2 } });
-  
+  api.setReviewer.mockResolvedValue({
+    ...(await api.learning()),
+    enabled: true,
+    reviewerPin: {
+      runtimeKind: "pi",
+      provider: "openai",
+      modelId: "reviewer",
+      credentialId: "cred",
+      effort: "high",
+      revision: 2,
+    },
+  });
+
   const node = await render();
-  
+
   // Verify old text is gone
   expect(node.textContent).not.toContain("Learning review is on");
   expect(node.textContent).not.toContain("Learning review is off");
   expect(node.textContent).not.toContain("Reviewer:");
   expect(node.textContent).not.toContain("No reviewer model yet.");
-  
+
   // Learning review is a switch
   const switchElement = node.querySelector<HTMLButtonElement>('[aria-label="Learning review"]');
   expect(switchElement).not.toBeNull();
-  
+
   await act(async () => switchElement!.click());
   expect(api.enableLearning).toHaveBeenCalledWith(
-    expect.objectContaining({ enabled: true }),
-    undefined
+    expect.objectContaining({ enabled: true, reviewerPin: null }),
   );
-  
-  // Model change
-  const reviewerSelect = node.querySelector<HTMLSelectElement>('#learning-reviewer');
+
+  // Model change selects a rendered connection key, not a hand-built colon string.
+  const reviewerSelect = node.querySelector<HTMLSelectElement>("#learning-reviewer");
   expect(reviewerSelect).not.toBeNull();
-  await act(async () => {
-    reviewerSelect!.value = "openai:reviewer:cred";
-    reviewerSelect!.dispatchEvent(new Event("change", { bubbles: true }));
-  });
+  const rendered = [...reviewerSelect!.options].find((option) => option.value.startsWith("["));
+  expect(rendered?.value).toBe(JSON.stringify(["openai", "reviewer", "cred"]));
+  await choose(reviewerSelect!, rendered!.value);
   expect(api.setReviewer).toHaveBeenCalledWith(
-    expect.objectContaining({ pin: expect.objectContaining({ modelId: "reviewer", effort: "medium" }) }),
-    undefined
+    expect.objectContaining({
+      expectedRevision: 0,
+      pin: expect.objectContaining({
+        provider: "openai",
+        modelId: "reviewer",
+        credentialId: "cred",
+        effort: "medium",
+      }),
+    }),
   );
-  
+
   // Level change
-  const effortSelect = node.querySelector<HTMLSelectElement>('#learning-reviewer-effort');
+  const effortSelect = node.querySelector<HTMLSelectElement>("#learning-reviewer-effort");
   expect(effortSelect).not.toBeNull();
   await act(async () => {
     effortSelect!.value = "high";
@@ -333,7 +360,6 @@ it("covers learning switch, model change, level change, no connection, CONFLICT 
   });
   expect(api.setReviewer).toHaveBeenCalledWith(
     expect.objectContaining({ pin: expect.objectContaining({ effort: "high" }) }),
-    undefined
   );
 
   // CONFLICT
@@ -344,9 +370,10 @@ it("covers learning switch, model change, level change, no connection, CONFLICT 
   });
   // Should reload and throw (error caught by work handler and displayed)
   expect(api.learning).toHaveBeenCalled();
-  
-  // No connection
+});
+
+it("shows connect a model when no connection can be chosen", async () => {
   api.modelsCredentials.mockResolvedValueOnce([]);
-  const node2 = await render();
-  expect(button(node2, "Connect a model")).not.toBeUndefined();
+  const node = await render();
+  expect(button(node, "Connect a model")).toBeTruthy();
 });

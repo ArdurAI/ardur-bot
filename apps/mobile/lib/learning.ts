@@ -1,3 +1,9 @@
+import type {
+  ModelCatalogEntry,
+  ModelCredential,
+  RuntimePin,
+  ThinkingLevel,
+} from "@ardurbot/contracts";
 import {
   LearningActionSchema,
   LearningInboxSchema,
@@ -5,8 +11,10 @@ import {
   ProposalEvidenceSchema,
   SpaceLearningConfigSchema,
 } from "@ardurbot/contracts";
-import { rpcErrorMessage } from "@ardurbot/core";
+import { connectedModelOptions, parseModelPinOptionKey, rpcErrorMessage } from "@ardurbot/core";
 import { RpcServerError, rpc } from "./api";
+
+type MenuOption = { label: string; onPress: () => void };
 
 export async function loadLearning(botId?: string) {
   return LearningInboxSchema.parse(await rpc("learning/list", { botId }));
@@ -61,31 +69,35 @@ export function learningBeforeAfter(diff: string) {
       .join("\n"),
   };
 }
-import { connectedModelOptions } from "@ardurbot/core";
-import type { ModelCatalogEntry, ModelCredential, ThinkingLevel, RuntimePin } from "@ardurbot/contracts";
-import type { ActionSheetOption } from "./message-action-sheet";
 
 export function reviewerMenuOptions(
   catalog: ModelCatalogEntry[],
   credentials: ModelCredential[],
   t: (key: string, values?: Record<string, string>) => string,
-  onSelect: (pin: { runtimeKind: "pi", provider: string, modelId: string, credentialId: string }) => void
-): ActionSheetOption[] {
+  onSelect: (pin: {
+    runtimeKind: "pi";
+    provider: string;
+    modelId: string;
+    credentialId: string;
+  }) => void,
+): MenuOption[] {
   const options = connectedModelOptions(catalog, credentials);
   if (options.length === 0) {
     return [{ label: t("Connect a model"), onPress: () => {} }];
   }
-  
+
   return options.map((opt) => ({
     label: opt.label,
     onPress: () => {
+      const selected = parseModelPinOptionKey(opt.key);
+      if (!selected?.credentialId) return;
       onSelect({
         runtimeKind: "pi",
-        provider: opt.provider,
-        modelId: opt.modelId,
-        credentialId: opt.key.split(":")[2] || "",
+        provider: selected.provider,
+        modelId: selected.modelId,
+        credentialId: selected.credentialId,
       });
-    }
+    },
   }));
 }
 
@@ -93,15 +105,15 @@ export function thinkingMenuOptions(
   supported: ThinkingLevel[],
   isOllama: boolean,
   t: (key: string, values?: Record<string, string>) => string,
-  onSelect: (effort: ThinkingLevel) => void
-): ActionSheetOption[] {
+  onSelect: (effort: ThinkingLevel) => void,
+): MenuOption[] {
   const options = supported.filter((level) =>
-    isOllama ? level === "off" || level === "medium" : level !== "off"
+    isOllama ? level === "off" || level === "medium" : level !== "off",
   );
-  
+
   return options.map((level) => ({
     label: isOllama ? (level === "off" ? t("Off") : t("On")) : level,
-    onPress: () => onSelect(level)
+    onPress: () => onSelect(level),
   }));
 }
 

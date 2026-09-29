@@ -1,5 +1,6 @@
 import type { SpaceLearningConfig } from "@ardurbot/contracts";
 import type { BoardConfiguration, BoardProblem, BoardWorkspace } from "@ardurbot/contracts/board";
+import { modelPinOptionKey, parseModelPinOptionKey, spaceDefaultEffort } from "@ardurbot/core";
 import {
   Button,
   Dialog,
@@ -10,16 +11,15 @@ import {
   Switch,
 } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
-import { useEffect, useState } from "react";
-import { SettingsRow } from "../../components/SettingsRow";
-import type { ModelSettings } from "../../lib/use-model-settings";
-import { ModelPinSelect, ModelEffortSelect } from "../shell/model-pin-select";
-import { SuccessPop } from "@ardurbot/ui-web";
-import { spaceDefaultEffort } from "@ardurbot/core";
 import { ORPCError } from "@orpc/client";
+import { useEffect, useState } from "react";
+import { SuccessPop } from "../../components/ai/primitives";
+import { SettingsRow } from "../../components/SettingsRow";
 import { actionMessage } from "../../lib/orpc-action-message";
-import { rpc, selectedSpaceId } from "../../lib/rpc";
+import { rpc } from "../../lib/rpc";
+import type { ModelSettings } from "../../lib/use-model-settings";
 import type { SettingsPageProps } from "../settings-types";
+import { ModelEffortSelect, ModelPinSelect } from "../shell/model-pin-select";
 
 export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageProps) {
   const { t } = useLingui();
@@ -42,15 +42,16 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
   const board = boards.find((row) => row.id === id) ?? boards[0];
   const reviewer = learning?.destination?.modelId ?? learning?.reviewerPin?.modelId ?? null;
   async function load() {
-    const [result, bots, upkeepResult, learningResult, me, catalog, credentials] = await Promise.all([
-      rpc.board.workspaces({}),
-      rpc.bots.list(),
-      rpc.board.upkeep({}),
-      rpc.learning.settings(),
-      rpc.me(),
-      rpc.models.list(),
-      rpc.models.credentials(),
-    ]);
+    const [result, bots, upkeepResult, learningResult, me, catalog, credentials] =
+      await Promise.all([
+        rpc.board.workspaces({}),
+        rpc.bots.list(),
+        rpc.board.upkeep({}),
+        rpc.learning.settings(),
+        rpc.me(),
+        rpc.models.list(),
+        rpc.models.credentials(),
+      ]);
     setBoards(result.workspaces);
     setProblem(result.problem);
     setBots(bots);
@@ -173,7 +174,7 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
                         reviewerPin: learning.reviewerPin,
                         consolidationEnabled: learning.consolidationEnabled,
                         budgets: learning.budgets,
-                      })
+                      }),
                     );
                   }, "learning")
                 }
@@ -188,7 +189,9 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
                   <Trans>Reviews use this connection and may incur model charges.</Trans>
                 </p>
                 {actionError?.target === "learning" ? (
-                  <p role="alert" className="text-sm text-destructive">{actionError.message}</p>
+                  <p role="alert" className="text-sm text-destructive">
+                    {actionError.message}
+                  </p>
                 ) : null}
               </div>
             }
@@ -202,35 +205,51 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
                     showAll={false}
                     disabled={busy || modelSettings?.credentials.length === 0}
                     value={
-                      learning.reviewerPin
-                        ? `${learning.reviewerPin.provider}:${learning.reviewerPin.modelId}:${learning.reviewerPin.credentialId}`
-                        : learning.destination
-                          ? `${learning.destination.provider}:${learning.destination.modelId}:${learning.destination.credentialId}`
+                      learning.reviewerPin?.provider && learning.reviewerPin.modelId
+                        ? modelPinOptionKey(
+                            learning.reviewerPin.provider,
+                            learning.reviewerPin.modelId,
+                            learning.reviewerPin.credentialId,
+                          )
+                        : learning.destination?.provider && learning.destination.modelId
+                          ? modelPinOptionKey(
+                              learning.destination.provider,
+                              learning.destination.modelId,
+                              learning.destination.credentialId,
+                            )
                           : ""
                     }
                     onChange={(value) => {
-                      if (!value) return;
-                      const [provider, modelId, credentialId] = value.split(":");
-                      if (!provider || !modelId || !credentialId) return;
-                      const entry = modelSettings?.catalog.find(e => e.provider === provider && e.id === modelId);
+                      const selected = parseModelPinOptionKey(value);
+                      if (!selected?.provider || !selected.modelId || !selected.credentialId)
+                        return;
+                      const entry = modelSettings?.catalog.find(
+                        (item) =>
+                          item.provider === selected.provider && item.id === selected.modelId,
+                      );
                       const effortLevels = entry?.thinkingLevels ?? [];
-                      
+                      const keptEffort =
+                        learning.reviewerPin?.effort &&
+                        effortLevels.includes(
+                          learning.reviewerPin.effort as (typeof effortLevels)[number],
+                        )
+                          ? learning.reviewerPin.effort
+                          : spaceDefaultEffort(undefined, effortLevels);
+
                       void work(async () => {
                         const nextPin = {
                           runtimeKind: "pi" as const,
-                          provider,
-                          modelId,
-                          credentialId,
-                          effort: learning.reviewerPin?.effort && effortLevels.includes(learning.reviewerPin.effort as any)
-                            ? learning.reviewerPin.effort
-                            : spaceDefaultEffort(undefined, effortLevels)
+                          provider: selected.provider,
+                          modelId: selected.modelId,
+                          credentialId: selected.credentialId,
+                          effort: keptEffort,
                         };
                         try {
                           setLearning(
                             await rpc.learning.setReviewer({
                               expectedRevision: learning.reviewerPin?.revision ?? 0,
                               pin: nextPin,
-                            })
+                            }),
                           );
                           setSavedPop(true);
                           setTimeout(() => setSavedPop(false), 2000);
@@ -247,7 +266,9 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
                   {(() => {
                     const pin = learning.reviewerPin ?? learning.destination;
                     if (!pin) return null;
-                    const entry = modelSettings?.catalog.find(e => e.provider === pin.provider && e.id === pin.modelId);
+                    const entry = modelSettings?.catalog.find(
+                      (e) => e.provider === pin.provider && e.id === pin.modelId,
+                    );
                     const effortLevels = entry?.thinkingLevels ?? [];
                     if (effortLevels.length === 0) return null;
                     return (
@@ -271,8 +292,8 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
                                   modelId: pin.modelId!,
                                   credentialId: pin.credentialId!,
                                   effort,
-                                }
-                              })
+                                },
+                              }),
                             );
                             setSavedPop(true);
                             setTimeout(() => setSavedPop(false), 2000);
@@ -281,13 +302,13 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
                       />
                     );
                   })()}
-                  <SuccessPop open={savedPop} onOpenChange={setSavedPop}>
-                    <Trans>Saved</Trans>
-                  </SuccessPop>
+                  {savedPop ? <SuccessPop label={t`Saved`} /> : null}
                 </>
               ) : (
                 <div className="mt-2 text-sm">
-                  {learning.reviewerPin?.modelId ?? learning.destination?.modelId ?? t`No reviewer model yet.`}
+                  {learning.reviewerPin?.modelId ??
+                    learning.destination?.modelId ??
+                    t`No reviewer model yet.`}
                   {learning.reviewerPin?.effort ? ` (${learning.reviewerPin.effort})` : ""}
                 </div>
               )}

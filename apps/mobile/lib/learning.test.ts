@@ -1087,15 +1087,51 @@ it("only trusts a message the server actually sent, and falls back for a transpo
   expect(actionMessage("not an error", fallback)).toBe(fallback);
 });
 
-import { reviewerMenuOptions, thinkingMenuOptions, setReviewerPin } from "./learning.js";
+import { reviewerMenuOptions, setReviewerPin, thinkingMenuOptions } from "./learning.js";
 
 it("reviewerMenuOptions returns connect a model if none", () => {
-  const options = reviewerMenuOptions([], [], (k) => k, () => {});
+  const options = reviewerMenuOptions(
+    [],
+    [],
+    (k) => k,
+    () => {},
+  );
   expect(options[0].label).toBe("Connect a model");
 });
 
+it("decodes a rendered connection key instead of splitting on colons", () => {
+  let chosen: { provider: string; modelId: string; credentialId: string } | null = null;
+  const options = reviewerMenuOptions(
+    [
+      {
+        provider: "openai",
+        id: "reviewer",
+        label: "Reviewer",
+        billing: "usage",
+      },
+    ],
+    [{ id: "cred", provider: "openai", label: "OpenAI", hasKey: true, isDefault: true }],
+    (key) => key,
+    (pin) => {
+      chosen = pin;
+    },
+  );
+  options[0]?.onPress();
+  expect(chosen).toEqual({
+    runtimeKind: "pi",
+    provider: "openai",
+    modelId: "reviewer",
+    credentialId: "cred",
+  });
+});
+
 it("thinkingMenuOptions returns options", () => {
-  const options = thinkingMenuOptions(["low", "medium", "high"] as any, false, (k) => k, () => {});
+  const options = thinkingMenuOptions(
+    ["low", "medium", "high"] as any,
+    false,
+    (k) => k,
+    () => {},
+  );
   expect(options.length).toBe(3);
   expect(options[0].label).toBe("low");
 });
@@ -1107,9 +1143,9 @@ it("setReviewerPin calls rpc", async () => {
     reviewerPin: null,
     budgets: {},
     destination: null,
-    canConfigure: true
+    canConfigure: true,
   });
-  
+
   await setReviewerPin(1, { runtimeKind: "pi", provider: "p1", modelId: "m1", credentialId: "c1" });
   expect(request).toHaveBeenCalledWith("learning/setReviewer", expect.any(Object));
 });
