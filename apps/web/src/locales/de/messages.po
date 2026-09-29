@@ -1036,8 +1036,8 @@ msgstr ""
 msgid "Ask"
 msgstr ""
 
-#: src/pages/ide/dialogs.tsx
 #: src/pages/ide/IdePage.tsx
+#: src/pages/workspace/dialogs.tsx
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Ask a bot"
 msgstr ""
@@ -1382,9 +1382,9 @@ msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
-#: src/pages/ide/dialogs.tsx
 #: src/pages/shell/OpenToSetting.tsx
 #: src/pages/shell/top-nav.ts
+#: src/pages/workspace/dialogs.tsx
 msgid "Bots"
 msgstr ""
 
@@ -2005,6 +2005,10 @@ msgstr ""
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Computer change pending."
 msgstr ""
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Computer changed. Refresh files."
+msgstr "Der Computer hat sich geändert. Aktualisiere die Dateien."
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Computer engine is unavailable."
@@ -2958,6 +2962,10 @@ msgstr "Diese Auswahl konnte nicht gespeichert werden"
 #: src/pages/customize/McpCredentialFix.tsx
 msgid "Could not save this credential. Check it and try again."
 msgstr ""
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Could not save this file. Try again."
+msgstr "Diese Datei konnte nicht gespeichert werden. Versuche es erneut."
 
 #: src/pages/customize/McpCredentialFix.tsx
 msgid "Could not save. Try again."
@@ -6690,7 +6698,7 @@ msgstr "In Warteschlange"
 msgid "Quick access shortcut"
 msgstr ""
 
-#: src/pages/ide/dialogs.tsx
+#: src/pages/workspace/dialogs.tsx
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Quick open"
 msgstr ""
@@ -6720,10 +6728,6 @@ msgstr "Gelesen"
 #: src/components/PeerMessageReceipt.tsx
 msgid "Read by {recipient}"
 msgstr "Gelesen von {recipient}"
-
-#: src/pages/workspace/WorkspaceFiles.tsx
-msgid "Read only in this pane. Open IDE to edit."
-msgstr ""
 
 #: src/pages/ide/IdePage.tsx
 msgid "Read only: file is larger than 2 MB"
@@ -7529,6 +7533,7 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/dialogs.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Save"
 msgstr "Speichern"
 
@@ -7560,6 +7565,7 @@ msgstr "Modell speichern"
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/MemoryHistory.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Saved"
 msgstr "Gespeichert"
 
@@ -7734,7 +7740,7 @@ msgstr ""
 msgid "Selected bots"
 msgstr "Ausgewählte Bots"
 
-#: src/pages/ide/dialogs.tsx
+#: src/pages/workspace/dialogs.tsx
 msgid "Selection shortened to 32,000 characters."
 msgstr "Die Auswahl wurde auf 32.000 Zeichen gekürzt."
 
@@ -8520,9 +8526,17 @@ msgstr ""
 msgid "The bot is working — wait or stop it"
 msgstr ""
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "The computer is busy. Wait for it to finish."
+msgstr "Der Computer ist beschäftigt. Warte, bis er fertig ist."
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr ""
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "The file changed. Open it again before saving."
+msgstr "Die Datei hat sich geändert. Öffne sie erneut, bevor du speicherst."
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "The first bot could not be created. Try again."
@@ -8568,9 +8582,9 @@ msgid "Thinking"
 msgstr "Denkmodus"
 
 #: src/components/ThreadCommandBlock.tsx
-#: src/pages/ide/dialogs.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/ide/terminal.tsx
+#: src/pages/workspace/dialogs.tsx
 #: src/pages/workspace/terminal-controller.ts
 msgid "This action could not finish; try again."
 msgstr ""
@@ -8674,11 +8688,23 @@ msgstr "Diese Konfigurationsversion wird nicht unterstützt."
 msgid "This field is not supported."
 msgstr "Dieses Feld wird nicht unterstützt."
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This file is larger than 2 MB. Open a copy to edit it."
+msgstr "Diese Datei ist größer als 2 MB. Öffne eine Kopie, um sie zu bearbeiten."
+
 #: src/components/ArtifactFileCard.tsx
 msgid "This file is not valid UTF-8 Markdown."
 msgstr "Diese Datei ist kein gültiges UTF-8-Markdown."
 
-#: src/pages/ide/file-tree.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This file is read-only. Open a copy to edit it."
+msgstr "Diese Datei ist schreibgeschützt. Öffne eine Kopie, um sie zu bearbeiten."
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This file no longer exists. Save it as a new file or close it."
+msgstr "Diese Datei existiert nicht mehr. Speichere sie als neue Datei oder schließe sie."
+
+#: src/pages/workspace/file-tree.tsx
 msgid "This folder is empty."
 msgstr ""
 
@@ -8693,6 +8719,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model."
 msgstr "Das Gruppenmodell wird durch die Bot- oder Bereichseinstellungen blockiert. Ändere die Zielrichtlinie oder wähle ein anderes Gruppenmodell."
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This is a binary file. You cannot edit it here."
+msgstr "Dies ist eine Binärdatei. Du kannst sie hier nicht bearbeiten."
 
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
@@ -9002,6 +9032,8 @@ msgid "Unpin"
 msgstr "Lösen"
 
 #: src/pages/ide/IdePage.tsx
+#: src/pages/workspace/WorkspaceFileGuard.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Unsaved changes"
 msgstr ""
 

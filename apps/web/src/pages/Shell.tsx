@@ -279,6 +279,7 @@ import { handleWorkspaceOpenRun } from "./shell/workspace-run";
 import { SystemDictation } from "./system/SystemDictation";
 import { WindowChrome } from "./WindowChrome";
 import { terminalSupported } from "./workspace/terminal-controller";
+import { WorkspaceFileGuard } from "./workspace/WorkspaceFileGuard";
 
 const BotSettings = lazy(() =>
   import("./shell/bot-panel").then((module) => ({ default: module.BotSettings })),
@@ -2896,6 +2897,7 @@ export function ShellPage({
         mobileSidebarSwipeRef.current = null;
       }}
     >
+      <WorkspaceFileGuard />
       <ComputerUpdateProgress
         onCompleted={() => {
           if (active) void refreshThread(active.id);
@@ -3816,7 +3818,7 @@ export function ShellPage({
             className={
               panel === "computer"
                 ? "flex h-full min-h-0 w-full flex-col overflow-hidden px-3 py-3"
-                : "rk-scroll h-full w-full overflow-y-auto px-5 py-[17px]"
+                : "rk-scroll h-full min-w-0 w-full overflow-y-auto px-5 py-[17px]"
             }
           >
             {hasSharedPanelHeader(panel) ? (

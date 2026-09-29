@@ -21,6 +21,11 @@ export const WorkspaceFileSchema = z.object({
   context: WorkspaceContextSchema,
   path: IdePathSchema.min(1),
   content: z.string(),
+  size: z.number().nonnegative(),
+  executable: z.boolean().optional(),
+  binary: z.boolean(),
+  readOnly: z.boolean(),
+  version: z.string(),
 });
 export const WorkspaceTasksSchema = z.object({
   runs: z.array(

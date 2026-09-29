@@ -113,13 +113,17 @@ export default function FilesScreen() {
     setError(false);
     try {
       if (botId && scopedWorkspace?.computerId && scopedWorkspace.generation !== null) {
-        const result = await rpc<{ path: string; content: string }>("workspace/read", {
-          botId,
-          computerId: scopedWorkspace.computerId,
-          generation: scopedWorkspace.generation,
-          path: entry.path,
-        });
-        if (currentBot.current === botId) setFile({ content: result.content, binary: false });
+        const result = await rpc<{ path: string; content: string; binary?: boolean }>(
+          "workspace/read",
+          {
+            botId,
+            computerId: scopedWorkspace.computerId,
+            generation: scopedWorkspace.generation,
+            path: entry.path,
+          },
+        );
+        if (currentBot.current === botId)
+          setFile({ content: result.content, binary: result.binary === true });
       } else {
         const result = await rpc<{ content: string; binary: boolean }>("ide/read", {
           rootId,

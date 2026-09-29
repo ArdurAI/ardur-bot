@@ -1,4 +1,4 @@
-import { test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import {
   activeBotId,
   captureScreenshot,
@@ -48,10 +48,10 @@ test("adds linked board items to bot open work", async ({ page }, testInfo) => {
   );
 
   await openBotSettings(page);
-  await page.getByRole("tab", { name: "Advanced" }).click();
-  await page.getByRole("button", { name: "Memory" }).click();
-
-  await page.getByRole("button", { name: "Add from board" }).click();
+  const settings = page.getByTestId("bot-settings");
+  // Open work sits in the Memory card under Advanced (the same way the knowledge panel test opens it).
+  await settings.getByText("Advanced", { exact: true }).click();
+  await settings.getByRole("button", { name: "Add from board" }).click();
   await page.getByText("Build feature X").click();
 
   await page.route("**/rpc/scratchpad/linkBoardItems", (route) =>
@@ -59,6 +59,7 @@ test("adds linked board items to bot open work", async ({ page }, testInfo) => {
   );
 
   await page.getByRole("dialog").getByRole("button", { name: "Add" }).click();
+  await expect(page.getByRole("dialog")).toBeHidden();
 
   await captureScreenshot(page, testInfo, "scratchpad-board-linked");
 });
