@@ -7,7 +7,12 @@ import {
   type SpaceLearningConfig,
 } from "@ardurbot/contracts";
 import type { BoardConfiguration, BoardProblem, BoardWorkspace } from "@ardurbot/contracts/board";
-import { modelPinOptionKey, parseModelPinOptionKey, hermesConnectionRefusal, spaceDefaultEffort } from "@ardurbot/core";
+import {
+  hermesConnectionRefusal,
+  modelPinOptionKey,
+  parseModelPinOptionKey,
+  spaceDefaultEffort,
+} from "@ardurbot/core";
 import {
   Button,
   Dialog,

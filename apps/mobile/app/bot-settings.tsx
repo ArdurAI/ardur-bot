@@ -8,9 +8,9 @@ import {
 } from "@ardurbot/contracts";
 import type { HermesRuntimeConfigV2 } from "@ardurbot/contracts/runtime-config";
 import {
+  hermesConnectionRefusal,
   modelPinOptionKey as modelOptionKey,
   parseModelPinOptionKey as parseModelOptionKey,
-  hermesConnectionRefusal,
   spaceDefaultEffort,
 } from "@ardurbot/core";
 import { effectiveHermesRuntimeConfigV2 } from "@ardurbot/core/runtime-config";

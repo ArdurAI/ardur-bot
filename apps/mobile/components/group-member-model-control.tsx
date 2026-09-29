@@ -1,6 +1,6 @@
 import type { GroupMember, RuntimeKind, SetGroupMemberModelPinInput } from "@ardurbot/contracts";
 import { runtimeLabels } from "@ardurbot/contracts";
-import { rpcErrorMessage, hermesConnectionRefusal, spaceDefaultEffort } from "@ardurbot/core";
+import { hermesConnectionRefusal, rpcErrorMessage, spaceDefaultEffort } from "@ardurbot/core";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, Text } from "react-native";
 import type { MobileBot, MobileGroup, MobileModel, MobileModelCredential } from "../lib/api";

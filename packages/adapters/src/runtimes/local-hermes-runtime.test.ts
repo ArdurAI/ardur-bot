@@ -9,6 +9,7 @@ import {
   HERMES_SOURCE_TREE,
 } from "@ardurbot/host-runtime/runtimes/hermes-install";
 import type { HermesRuntime } from "@ardurbot/host-runtime/runtimes/hermes-runtime";
+import type { AssistantMessageEvent } from "@earendil-works/pi-ai";
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import profileFixture from "../../../host-runtime/python/tests/valid_profile.json" with {
@@ -379,7 +380,8 @@ describe("LocalHermesRuntime", () => {
     async ({ provider, api, ownerKey }) => {
       const records: AgentUsage[] = [];
       const captured: Array<{ model: unknown; options: { apiKey?: string } | undefined }> = [];
-      const partial = (content: unknown[] = []) =>
+      type FixtureMessage = Extract<AssistantMessageEvent, { type: "done" }>["message"];
+      const partial = (content: FixtureMessage["content"] = []) =>
         ({
           role: "assistant",
           content,
@@ -396,7 +398,7 @@ describe("LocalHermesRuntime", () => {
           },
           stopReason: "pending",
           timestamp: Date.now(),
-        }) as never;
+        }) as unknown as FixtureMessage;
       const streamSimple = async (model: unknown, _context: unknown, options?: unknown) => {
         captured.push({ model, options: options as { apiKey?: string } | undefined });
         const stream = createAssistantMessageEventStream();

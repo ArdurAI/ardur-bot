@@ -44,9 +44,9 @@ describe("hermesCompatibility", () => {
       code: "pin-incomplete",
       reason: "Choose a connected model for Hermes.",
     });
-    expect(
-      hermesCompatibility(pin({ credentialId: "native:claude-code" }), model()),
-    ).toMatchObject({ code: "pin-incomplete" });
+    expect(hermesCompatibility(pin({ credentialId: "native:claude-code" }), model())).toMatchObject(
+      { code: "pin-incomplete" },
+    );
     expect(hermesCompatibility(pin({ modelId: "other" }), model())).toMatchObject({
       code: "pin-incomplete",
     });
@@ -138,7 +138,12 @@ describe("hermesCompatibility", () => {
     expect(
       hermesCompatibility(
         pin({ provider: "github-copilot", modelId: "gpt-4.1" }),
-        model({ provider: "github-copilot", id: "gpt-4.1", baseUrl: undefined, oauth: oauthMarker }),
+        model({
+          provider: "github-copilot",
+          id: "gpt-4.1",
+          baseUrl: undefined,
+          oauth: oauthMarker,
+        }),
       ),
     ).toMatchObject({
       code: "runtime-unsupported-protocol",
@@ -171,7 +176,12 @@ describe("hermesCompatibility", () => {
     expect(
       hermesCompatibility(
         pin({ provider: "anthropic", modelId: "claude-opus-5" }),
-        model({ provider: "anthropic", id: "claude-opus-5", baseUrl: undefined, maxTokens: 131_072 }),
+        model({
+          provider: "anthropic",
+          id: "claude-opus-5",
+          baseUrl: undefined,
+          maxTokens: 131_072,
+        }),
       ),
     ).toMatchObject({ code: "runtime-configuration-invalid" });
     expect(

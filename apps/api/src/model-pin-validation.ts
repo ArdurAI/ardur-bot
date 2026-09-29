@@ -224,7 +224,11 @@ export async function normalizeModelPinUpdate(
         maxTokens: compatible?.maxTokens,
         thinkingLevel: ThinkingLevelSchema.parse(effort),
         ...(signIn
-          ? { oauth: { credential: { type: "oauth" as const, access: "", refresh: "", expires: 0 } } }
+          ? {
+              oauth: {
+                credential: { type: "oauth" as const, access: "", refresh: "", expires: 0 },
+              },
+            }
           : {}),
       },
     );

@@ -5,7 +5,12 @@ import type {
   SetGroupMemberModelPinInput,
   ThinkingLevel,
 } from "@ardurbot/contracts";
-import { modelPinOptionKey, parseModelPinOptionKey, hermesConnectionRefusal, spaceDefaultEffort } from "@ardurbot/core";
+import {
+  hermesConnectionRefusal,
+  modelPinOptionKey,
+  parseModelPinOptionKey,
+  spaceDefaultEffort,
+} from "@ardurbot/core";
 import {
   canonicalRuntimeJson,
   effectiveHermesRuntimeConfigV2,

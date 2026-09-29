@@ -4,11 +4,12 @@ import type { HostFrame, HostOperation } from "@ardurbot/contracts/host-bridge";
 import { HermesRuntimeConfigV2Schema } from "@ardurbot/contracts/runtime-config";
 import { effectiveRuntimeConfigHash } from "@ardurbot/core/node/runtime-config-hash";
 import type { HostClient } from "@ardurbot/host-runtime/host-client";
-import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 import {
   compileHermesRuntimeConfig,
   validateCompiledHermesProfile,
 } from "@ardurbot/host-runtime/runtimes/hermes-config";
+import type { AssistantMessageEvent } from "@earendil-works/pi-ai";
+import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 import { describe, expect, it, vi } from "vitest";
 import profileFixture from "../../host-runtime/python/tests/valid_profile.json" with {
   type: "json",
@@ -754,7 +755,8 @@ describe("worker-owned remote runtime callbacks", () => {
         options: { apiKey?: string } | undefined;
       }> = [];
       const text = (value: string) => ({ type: "text" as const, text: value });
-      const partial = (content: unknown[] = []) =>
+      type FixtureMessage = Extract<AssistantMessageEvent, { type: "done" }>["message"];
+      const partial = (content: FixtureMessage["content"] = []) =>
         ({
           role: "assistant",
           content,
@@ -771,7 +773,7 @@ describe("worker-owned remote runtime callbacks", () => {
           },
           stopReason: "pending",
           timestamp: Date.now(),
-        }) as never;
+        }) as unknown as FixtureMessage;
       const streamSimple = async (model: unknown, _context: unknown, options?: unknown) => {
         captured.push({ model, options: options as { apiKey?: string } | undefined });
         const stream = createAssistantMessageEventStream();

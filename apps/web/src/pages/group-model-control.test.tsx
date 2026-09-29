@@ -293,9 +293,9 @@ describe("group model control", () => {
       "Add an API key connection to use this provider with Hermes.",
     );
     // The sign-in connection stays listed but cannot be picked.
-    const signInOption = [
-      ...container.querySelectorAll('select[id$="-model"] option'),
-    ].find((item) => item.getAttribute("value")?.includes("test"));
+    const signInOption = [...container.querySelectorAll('select[id$="-model"] option')].find(
+      (item) => item.getAttribute("value")?.includes("test"),
+    );
     expect(signInOption).toBeDefined();
     expect((signInOption as HTMLOptionElement).disabled).toBe(true);
     const saveButton = [...container.querySelectorAll("button")].find(
