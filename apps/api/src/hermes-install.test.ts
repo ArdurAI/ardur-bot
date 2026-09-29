@@ -232,9 +232,18 @@ describe("Hermes install action", () => {
     });
   });
 
-  it("reports a failed install when the lock is stale or the status failed", async () => {
+  it("keeps reporting an install while its live process holds an old lock", async () => {
     const { rpc } = harness();
     await writeLock(process.pid, 2 * 60 * 60 * 1000);
+    await writeStatus("installing", "python");
+    expect(await body(await rpc("availability", { runtimeKind: "hermes" }))).toEqual({
+      json: expect.objectContaining({ install: { state: "installing", phase: "python" } }),
+    });
+  });
+
+  it("reports a failed install when the lock is stale or the status failed", async () => {
+    const { rpc } = harness();
+    await writeLock(-1, 2 * 60 * 60 * 1000);
     await writeStatus("installing", "python");
     expect(await body(await rpc("availability", { runtimeKind: "hermes" }))).toEqual({
       json: expect.objectContaining({ install: { state: "failed" } }),

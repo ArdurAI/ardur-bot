@@ -119,8 +119,6 @@ export type HermesInstallStatus = {
   updatedAt: string;
 };
 
-const HERMES_INSTALL_LOCK_STALE_MS = 60 * 60 * 1000;
-
 export function hermesInstallStatusPath(root: string): string {
   return path.join(root, "install-status.json");
 }
@@ -156,15 +154,19 @@ export function readHermesInstallStatus(root: string): HermesInstallStatus | nul
   }
 }
 
-/** A live pid stays held for at most an hour. A lock that exists but cannot be parsed counts as held. */
-export function hermesInstallLockHeld(root: string, now = Date.now()): boolean {
+/**
+ * A lock is stale only when its recorded pid is gone (ESRCH); EPERM still counts as
+ * running, so a live installer is never stolen from whatever its age. A lock that
+ * exists but cannot be parsed counts as held.
+ */
+export function hermesInstallLockHeld(root: string): boolean {
   try {
-    const lockPath = hermesInstallLockPath(root);
-    const stat = statSync(lockPath);
-    const parsed = JSON.parse(readFileSync(lockPath, "utf8")) as { pid?: unknown };
+    const parsed = JSON.parse(readFileSync(hermesInstallLockPath(root), "utf8")) as {
+      pid?: unknown;
+    };
     const pid = typeof parsed.pid === "number" ? parsed.pid : undefined;
-    if (pid !== undefined && !installPidAlive(pid)) return false;
-    return now - stat.mtimeMs < HERMES_INSTALL_LOCK_STALE_MS;
+    if (pid === undefined) return true;
+    return installPidAlive(pid);
   } catch (error) {
     return (error as NodeJS.ErrnoException).code !== "ENOENT";
   }

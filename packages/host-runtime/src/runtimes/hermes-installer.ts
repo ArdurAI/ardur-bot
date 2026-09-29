@@ -170,12 +170,13 @@ export async function installHermes(deps: {
   const verifiedTree = deps.expectedTree ?? HERMES_SOURCE_TREE;
   const testing = deps.expectedTree !== undefined || deps.sources !== undefined;
   let locked = false;
+  let lockToken: string | undefined;
   let committed = false;
   let phase: HermesInstallPhase | undefined;
   let home: string | undefined;
 
   try {
-    await acquireLock(root);
+    lockToken = await acquireLock(root);
     locked = true;
     if (!testing && liveInstallReady(path.join(root, "runtimes", "hermes-agent"))) {
       await writeStatus(root, {
@@ -300,7 +301,7 @@ export async function installHermes(deps: {
     failure.cause = error;
     throw failure;
   } finally {
-    if (locked && hermesInstallLockHeld(root)) await releaseLock(root);
+    if (lockToken) await releaseLock(root, lockToken);
     if (home) await rm(home, { recursive: true, force: true }).catch(() => undefined);
   }
 }
@@ -329,11 +330,12 @@ function liveInstallReady(link: string): boolean {
   }
 }
 
-async function acquireLock(root: string): Promise<void> {
+async function acquireLock(root: string): Promise<string> {
   const lockPath = hermesInstallLockPath(root);
   const directory = path.dirname(lockPath);
   await mkdir(directory, { recursive: true });
-  const body = JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() });
+  const token = randomUUID();
+  const body = JSON.stringify({ pid: process.pid, token, createdAt: new Date().toISOString() });
   for (let attempt = 0; attempt < 5; attempt += 1) {
     // Write the full body to a temp file and link it into place, so a concurrent
     // reader never sees an empty or partial lock.
@@ -341,7 +343,7 @@ async function acquireLock(root: string): Promise<void> {
     try {
       await writeFile(temporary, body, { flag: "wx", mode: 0o644 });
       await link(temporary, lockPath);
-      return;
+      return token;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST")
         throw new HermesInstallError(HERMES_INSTALL_FAILED);
@@ -366,11 +368,12 @@ async function acquireLock(root: string): Promise<void> {
   throw new HermesInstallError(HERMES_INSTALL_RUNNING);
 }
 
-async function releaseLock(root: string): Promise<void> {
+/** Only the lock whose recorded token is ours is released; a stolen lock is left alone. */
+async function releaseLock(root: string, token: string): Promise<void> {
   const lockPath = hermesInstallLockPath(root);
   try {
-    const parsed = JSON.parse(await readFile(lockPath, "utf8")) as { pid?: unknown };
-    if (parsed.pid !== process.pid) return;
+    const parsed = JSON.parse(await readFile(lockPath, "utf8")) as { token?: unknown };
+    if (parsed.token !== token) return;
     await rm(lockPath, { force: true });
   } catch {
     // The lock is already gone.
