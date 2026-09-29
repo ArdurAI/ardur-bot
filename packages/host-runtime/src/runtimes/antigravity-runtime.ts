@@ -12,6 +12,7 @@ import {
   runtimePinProblem,
   validateAntigravityPin,
 } from "@ardurbot/contracts";
+import { guardrailConfigFromEnv } from "../host-guardrails.js";
 import { antigravityModels, capturedAntigravityModels } from "./antigravity-models.js";
 import {
   AntigravityDiagnostics,
@@ -21,6 +22,8 @@ import {
 import type { NativeSpawn } from "./native-process.js";
 import {
   findNativeBinary,
+  guardedSpawn,
+  guardNativeSpawn,
   probeCommand,
   RuntimeQueue,
   spawnNative,
@@ -47,17 +50,19 @@ const status = () =>
       : ("unknown" as const);
 
 export async function probeAntigravity(
-  start: NativeSpawn = spawnNative,
-  resolveBinary: typeof findNativeBinary = findNativeBinary,
+  start?: NativeSpawn,
+  resolveBinary?: typeof findNativeBinary,
   refreshSignIn = false,
 ): Promise<RuntimeAvailability> {
+  const launch = start ?? guardedSpawn();
+  const resolve = resolveBinary ?? findNativeBinary;
   if (refreshSignIn) signedOutAt = 0;
   const base = {
     runtimeKind: "antigravity" as const,
     models: capturedAntigravityModels,
     signInStatus: status(),
   };
-  if (process.env.VITEST && resolveBinary === findNativeBinary)
+  if (process.env.VITEST && resolve === findNativeBinary)
     return {
       ...base,
       available: false,
@@ -66,7 +71,7 @@ export async function probeAntigravity(
       catalogSource: "captured",
       catalogStale: true,
     };
-  const binary = await resolveBinary("agy");
+  const binary = await resolve("agy");
   if (!binary)
     return {
       ...base,
@@ -78,7 +83,7 @@ export async function probeAntigravity(
       catalogStale: true,
     };
   try {
-    const versionProbe = await probeCommand(binary, ["--version"], true, start);
+    const versionProbe = await probeCommand(binary, ["--version"], true, launch);
     const version = versionProbe.version;
     if (versionProbe.code !== 0 || !supportedAntigravityVersion(version))
       return {
@@ -91,7 +96,7 @@ export async function probeAntigravity(
         catalogStale: true,
       };
     // agy writes its usage to stderr with exit code 0.
-    const help = await probeCommand(binary, ["--help"], true, start, true);
+    const help = await probeCommand(binary, ["--help"], true, launch, true);
     if (
       help.code !== 0 ||
       ![
@@ -112,7 +117,7 @@ export async function probeAntigravity(
         catalogSource: "captured",
         catalogStale: true,
       };
-    const catalog = await antigravityModels(binary, version!, start);
+    const catalog = await antigravityModels(binary, version!, launch);
     const signInStatus = status();
     return {
       ...base,
@@ -175,7 +180,7 @@ export class AntigravityRuntime implements AgentRuntime {
     { child: ChildProcessWithoutNullStreams; abort: () => void }
   >();
   constructor(
-    private readonly start: NativeSpawn = spawnNative,
+    private readonly start: NativeSpawn = guardNativeSpawn(spawnNative, guardrailConfigFromEnv()),
     private readonly resolveBinary: typeof findNativeBinary = findNativeBinary,
     private readonly deadlineMs = 125_000,
   ) {}
@@ -230,12 +235,15 @@ export class AntigravityRuntime implements AgentRuntime {
         "Antigravity cannot use images yet.",
         "image-unsupported",
       );
-    if (request.tools !== "none" && request.tools.length)
-      throw problem(
-        "runtime-unavailable",
-        "Antigravity cannot use Ardur tools yet.",
-        "tools-unsupported",
-      );
+    if (request.tools !== "none" && request.tools.length) {
+      // A coordinator needs Ardur tools. Answer visibly instead of silently ending the turn.
+      yield {
+        type: "text",
+        text: "I can't use Ardur tools on the Antigravity runtime yet, so I can't do tool work here. Switch this bot's runtime to one that supports tools and try again.",
+      };
+      yield { type: "done" };
+      return;
+    }
     if (request.nativeSession)
       throw problem(
         "runtime-unavailable",

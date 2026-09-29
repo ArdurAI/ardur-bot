@@ -50,6 +50,10 @@ function fixture(
     | "turn-rejected"
     | "thread-rejected"
     | "skills-error"
+    | "mcp-approval"
+    | "mcp-approval-other"
+    | "mcp-form"
+    | "unknown-request"
     | "usage" = "success",
   scenario?: { beforeStart?: Message[]; duringTurn: Message[] },
 ) {
@@ -154,7 +158,51 @@ function fixture(
                   command: "must-not-run",
                 },
               });
-            else if (scenario) {
+            else if (
+              mode === "mcp-approval" ||
+              mode === "mcp-approval-other" ||
+              mode === "mcp-form"
+            ) {
+              send({
+                method: "mcpServer/elicitation/request",
+                id: "elicit",
+                params: {
+                  serverName: mode === "mcp-approval-other" ? "other-server" : "ardur",
+                  threadId: "thread-native",
+                  turnId: "turn-native",
+                  message: "Approve tool call?",
+                  mode: "form",
+                  requestedSchema: { type: "object", properties: {} },
+                  ...(mode === "mcp-form"
+                    ? {}
+                    : { _meta: { codex_approval_kind: "mcp_tool_call", tool_name: "handoff" } }),
+                },
+              });
+              if (mode === "mcp-approval") {
+                send({
+                  method: "item/agentMessage/delta",
+                  params: { threadId: "thread-native", delta: "hello" },
+                });
+                send({
+                  method: "turn/completed",
+                  params: { threadId: "thread-native", turn: { status: "completed" } },
+                });
+              }
+            } else if (mode === "unknown-request") {
+              send({
+                id: "auth-refresh",
+                method: "account/chatgptAuthTokens/refresh",
+                params: { reason: "unauthorized" },
+              });
+              send({
+                method: "item/agentMessage/delta",
+                params: { threadId: "thread-native", delta: "hello" },
+              });
+              send({
+                method: "turn/completed",
+                params: { threadId: "thread-native", turn: { status: "completed" } },
+              });
+            } else if (scenario) {
               for (const event of scenario.duringTurn) send(event);
             } else {
               if (mode === "usage")
@@ -328,6 +376,99 @@ describe("Codex app-server protocol", () => {
       },
     });
   });
+  it("names the limitation and keeps totals null when a turn is interrupted before usage", async () => {
+    const f = fixture("success", {
+      duringTurn: [
+        {
+          method: "item/agentMessage/delta",
+          params: { threadId: "thread-native", delta: "hello" },
+        },
+      ],
+    });
+    const controller = new AbortController();
+    const events: AgentRuntimeEvent[] = [];
+    for await (const event of f.runtime.run(f.request, { signal: controller.signal })) {
+      events.push(event);
+      if (event.type === "text") {
+        controller.abort();
+        await f.runtime.abort(f.request.runId);
+      }
+    }
+    const final = events.filter((event) => event.type === "usage").at(-1);
+    expect(final?.request?.categories).toEqual({
+      logicalInput: null,
+      uncachedInput: null,
+      cacheReadInput: null,
+      cacheWriteInput: null,
+      output: null,
+      reasoning: null,
+    });
+    expect(final?.request?.collection).toMatchObject({
+      outcome: "cancelled",
+      availability: "unavailable",
+      limitations: expect.arrayContaining(["late-usage-unverified"]),
+    });
+  });
+  it("keeps partial measured spend with a named limitation when interrupted mid-turn", async () => {
+    const f = fixture("success", {
+      duringTurn: [
+        usage(30, 8),
+        {
+          method: "item/agentMessage/delta",
+          params: { threadId: "thread-native", delta: "hello" },
+        },
+      ],
+    });
+    const controller = new AbortController();
+    const events: AgentRuntimeEvent[] = [];
+    for await (const event of f.runtime.run(f.request, { signal: controller.signal })) {
+      events.push(event);
+      if (event.type === "text") {
+        controller.abort();
+        await f.runtime.abort(f.request.runId);
+      }
+    }
+    const final = events.filter((event) => event.type === "usage").at(-1);
+    expect(final?.request?.categories).toMatchObject({ logicalInput: 30, output: 8 });
+    expect(final?.request?.collection).toMatchObject({
+      outcome: "cancelled",
+      limitations: expect.arrayContaining(["late-usage-unverified"]),
+    });
+  });
+  it("records a failed completed turn with its outcome and measured totals", async () => {
+    const f = fixture("success", {
+      duringTurn: [
+        usage(30, 8),
+        {
+          method: "turn/completed",
+          params: { threadId: "thread-native", turn: { id: "turn-native", status: "failed" } },
+        },
+      ],
+    });
+    const events: AgentRuntimeEvent[] = [];
+    await expect(
+      (async () => {
+        for await (const event of f.runtime.run(f.request)) events.push(event);
+      })(),
+    ).rejects.toMatchObject({ problem: { code: "runtime-unavailable" } });
+    const final = events.filter((event) => event.type === "usage").at(-1);
+    expect(final?.request?.categories).toMatchObject({ logicalInput: 30, output: 8 });
+    expect(final?.request?.collection?.outcome).toBe("failed");
+  });
+  it("names the limitation when a reroute interrupts the turn", async () => {
+    const f = fixture("reroute");
+    const events: AgentRuntimeEvent[] = [];
+    await expect(
+      (async () => {
+        for await (const event of f.runtime.run(f.request)) events.push(event);
+      })(),
+    ).rejects.toMatchObject({ problem: { code: "pin-model-unknown" } });
+    const final = events.filter((event) => event.type === "usage").at(-1);
+    expect(final?.request?.collection).toMatchObject({
+      outcome: "cancelled",
+      limitations: expect.arrayContaining(["late-usage-unverified"]),
+    });
+  });
   it("initializes ardur-bot, keeps the exact model and effort, records the session and disables other MCPs", async () => {
     const f = fixture();
     f.request.nativeCwd = "/safe-workspace";
@@ -464,6 +605,73 @@ describe("Codex app-server protocol", () => {
     ]);
     expect(f.messages).toContainEqual({ id: "approval", result: { decision: "decline" } });
     expect(f.messages.some((event) => event.method === "turn/interrupt")).toBe(true);
+  });
+  it("pre-approves only the ardur MCP server in the thread config", async () => {
+    const f = fixture();
+    await f.collect();
+    expect(f.messages.find((event) => event.method === "thread/start")).toMatchObject({
+      params: {
+        config: {
+          mcp_servers: {
+            untrusted: { enabled: false },
+            ardur: {
+              command: "node",
+              enabled: true,
+              required: true,
+              default_tools_approval_mode: "approve",
+            },
+          },
+        },
+      },
+    });
+  });
+  it("accepts an ardur MCP tool-call approval without a decline or a card", async () => {
+    const f = fixture("mcp-approval");
+    const events = await f.collect();
+    expect(events.filter((event) => event.type !== "usage")).toEqual([
+      { type: "text", text: "hello" },
+      { type: "done" },
+    ]);
+    expect(f.messages).toContainEqual({ id: "elicit", result: { action: "accept" } });
+    expect(f.messages.some((event) => JSON.stringify(event).includes("decline"))).toBe(false);
+    expect(events.some((event) => event.type === "ask")).toBe(false);
+  });
+  it("declines a tool-call approval from any other MCP server, with the card", async () => {
+    const f = fixture("mcp-approval-other");
+    expect((await f.collect()).filter((event) => event.type !== "usage")).toEqual([
+      {
+        type: "ask",
+        text: "Codex requested input for another MCP server — continue using Ardur tools.",
+        actions: [{ id: "continue", label: "Continue" }],
+      },
+    ]);
+    expect(f.messages).toContainEqual({ id: "elicit", result: { action: "decline" } });
+    expect(f.messages.some((event) => event.method === "turn/interrupt")).toBe(true);
+  });
+  it("declines an ardur elicitation that is not a marked tool-call approval", async () => {
+    const f = fixture("mcp-form");
+    expect((await f.collect()).filter((event) => event.type !== "usage")).toEqual([
+      {
+        type: "ask",
+        text: "Codex asked Ardur to collect form input — Ardur doesn't take forms, so it was declined.",
+        actions: [{ id: "continue", label: "Continue" }],
+      },
+    ]);
+    expect(f.messages).toContainEqual({ id: "elicit", result: { action: "decline" } });
+    expect(f.messages.some((event) => event.method === "turn/interrupt")).toBe(true);
+  });
+  it("answers unknown server requests with -32601 and continues the turn", async () => {
+    const f = fixture("unknown-request");
+    const events = await f.collect();
+    expect(events.filter((event) => event.type !== "usage")).toEqual([
+      { type: "text", text: "hello" },
+      { type: "done" },
+    ]);
+    expect(f.messages).toContainEqual({
+      id: "auth-refresh",
+      error: { code: -32601, message: "This request is not supported by Ardur." },
+    });
+    expect(events.some((event) => event.type === "ask")).toBe(false);
   });
 });
 

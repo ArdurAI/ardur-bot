@@ -17,6 +17,7 @@ import {
   isSecretAskBlock,
   LEGACY_RESTART_SUMMARY,
   messagingChannelId,
+  parseGroupAskKey,
   peerPairKey,
   RECEIPT_FILTERED_SUMMARY_MARKER,
   redactTaskValue,
@@ -1696,9 +1697,11 @@ async function finalizeRunOnce(
       delegation?.kind === "message" &&
       (delegation.admissionKey.startsWith("bot-message:") ||
         delegation.admissionKey.startsWith("message:"));
+    // A member asked by its room coordinator answers in the room under its own name.
+    const groupAskAnswer = Boolean(delegation && parseGroupAskKey(delegation.admissionKey));
     if (
       input.outcome === "completed" &&
-      (!writableRun?.delegationId || goalRoomAssignment || peerMessageAssignment)
+      (!writableRun?.delegationId || goalRoomAssignment || peerMessageAssignment || groupAskAnswer)
     ) {
       const peerReply = peerMessageAssignment
         ? redactTaskValue(

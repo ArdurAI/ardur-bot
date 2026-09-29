@@ -1,5 +1,5 @@
 import type { CommandBlock } from "@ardurbot/contracts";
-import { commandOutput, commandSummary } from "@ardurbot/core";
+import { commandOutput, commandSummaryDisplay } from "@ardurbot/core";
 import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { mobileTokens } from "../lib/appearance";
@@ -30,8 +30,11 @@ export function NativeCommandBlock({ block }: { block: CommandBlock }) {
         onPress={() => setExpanded(!expanded)}
         style={styles.control}
       >
-        <Text numberOfLines={expanded ? undefined : 2} style={{ color: tokens.foreground }}>
-          {commandSummary(block)}
+        <Text
+          numberOfLines={expanded ? undefined : 2}
+          style={[styles.summary, { color: tokens.foreground }]}
+        >
+          {commandSummaryDisplay(block)}
         </Text>
         <Text style={{ color: tokens.mutedForeground }}>
           {block.startedAt ?? t("Not recorded")} · {block.outcome}
@@ -76,4 +79,5 @@ const styles = StyleSheet.create({
   body: { padding: 12, gap: 8 },
   output: { maxHeight: 320 },
   mono: { fontFamily: "monospace", fontSize: 12 },
+  summary: { fontFamily: "monospace" },
 });

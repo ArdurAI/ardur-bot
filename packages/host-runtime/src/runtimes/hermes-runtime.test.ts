@@ -291,6 +291,35 @@ describe("HermesRuntime M0 ACP seam", () => {
     expect(document).not.toContain("turn-0");
     expect(document).toContain("[truncated]");
   });
+  it("drops the teammate directory before quoted conversation", () => {
+    const question = "Where is the launch checklist?";
+    const history = [
+      { role: "user" as const, content: "<thread_summary>\nFriday launch.\n</thread_summary>" },
+      { role: "user" as const, content: question },
+      { role: "assistant" as const, content: "Nine of fourteen items are done." },
+      {
+        role: "user" as const,
+        content: "<teammate_directory>\nWriter: busy\n</teammate_directory>",
+      },
+      { role: "user" as const, content: "<group_brief>\nPricing table\n</group_brief>" },
+      { role: "user" as const, content: "Completed assignment: pricing table checked." },
+      { role: "user" as const, content: "<recalled_memory>\nThree bullets.\n</recalled_memory>" },
+    ];
+    const run = request({ instructions: "Required owner instruction", history });
+    const full = hermesContextDocument(run, { maxInputBytes: 1024 * 1024, overflow: "trim" });
+    const document = hermesContextDocument(run, {
+      maxInputBytes: Buffer.byteLength(full) - 1,
+      overflow: "trim",
+    });
+    expect(document).toContain(question);
+    expect(document).toContain("Nine of fourteen items are done.");
+    expect(document).toContain("Completed assignment: pricing table checked.");
+    expect(document).toContain("<thread_summary>");
+    expect(document).toContain("<group_brief>");
+    expect(document).toContain("<recalled_memory>");
+    expect(document).not.toContain("<teammate_directory>");
+    expect(document).toContain("[truncated]");
+  });
   it("refuses required instructions alone above the pinned context budget", () => {
     expect(() =>
       hermesContextDocument(request({ instructions: "x".repeat(16 * 1024 + 1) })),

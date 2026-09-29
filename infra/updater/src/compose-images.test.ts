@@ -211,11 +211,16 @@ describe("the images compose file", () => {
     expect(firstPartyImageNames("ghcr.io/ardurai/ardur-bot/computer:edge")).toEqual(["computer"]);
   });
 
-  it("builds and publishes only the computer on dev, and all images on tags", () => {
+  it("builds and publishes only the computer profiles on dev, and all images on tags", () => {
     for (const job of ["build", "publish"] as const) {
       const matrixName = publishWorkflow.jobs?.[job]?.strategy?.matrix?.name;
-      expect(publishedNames(matrixName, "dev")).toEqual(["computer"]);
-      expect(publishedNames(matrixName, "tag").sort()).toEqual(["app", "computer", "updater"]);
+      expect(publishedNames(matrixName, "dev")).toEqual(["computer", "computer-developer"]);
+      expect(publishedNames(matrixName, "tag").sort()).toEqual([
+        "app",
+        "computer",
+        "computer-developer",
+        "updater",
+      ]);
     }
   });
 

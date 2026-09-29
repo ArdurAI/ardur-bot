@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { AdapterContext } from "@ardurbot/adapter-kit";
 import type { ComputerConnectionSettings, RemoteComputerAction } from "@ardurbot/contracts";
+import { hostAcceptsComputerImage } from "./computer-image.js";
 import { kubernetesComputerSpec, kubernetesVolumeSpec } from "./kubernetes-spec.js";
 import type { FleetProcess } from "./process.js";
 import { streamFleetProcess, systemFleetProcess } from "./process.js";
@@ -138,14 +139,15 @@ export class HostKubernetesConnection {
           };
           const normalized = { ...body, metadata: { ...body.metadata } };
           delete normalized.metadata.namespace;
-          const expected =
-            action.resource === "pods"
-              ? [
-                  kubernetesComputerSpec(name, "base", this.settings),
-                  kubernetesComputerSpec(name, "developer", this.settings),
-                ]
-              : [kubernetesVolumeSpec(name, this.settings)];
-          if (!expected.some((spec) => canonical(spec) === canonical(normalized)))
+          let expected = kubernetesVolumeSpec(name, this.settings);
+          if (action.resource === "pods") {
+            const image = (body.spec?.containers as { image?: unknown }[] | undefined)?.[0]?.image;
+            if (typeof image !== "string" || !hostAcceptsComputerImage(image, this.settings))
+              throw new Error("The computer image is not one this host starts.");
+            // Profiles differ only by image, so every other field must match exactly.
+            expected = kubernetesComputerSpec(name, undefined, this.settings, image);
+          }
+          if (canonical(expected) !== canonical(normalized))
             throw new Error("Invalid computer resource.");
           if (!(await owned(action.resource)))
             await run(["create", "-f", "-"], Buffer.from(JSON.stringify(body)));

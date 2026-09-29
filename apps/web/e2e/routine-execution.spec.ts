@@ -14,7 +14,7 @@ test("Slack message trigger uses the mounted messaging provider and persists", a
     }),
   );
   const stamp = Date.now();
-  await signup(page, `routine-slack-${stamp}@ardurbot.test`, "password12", "Slack Routine");
+  await signup(page, `routine-slack-${stamp}@example.test`, "password12", "Slack Routine");
   await completeOnboarding(page);
   const botId = activeBotId(page);
 
@@ -54,7 +54,7 @@ test("GitHub event trigger exposes signed delivery settings and persists", async
   page,
 }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `routine-github-${stamp}@ardurbot.test`, "password12", "GitHub Routine");
+  await signup(page, `routine-github-${stamp}@example.test`, "password12", "GitHub Routine");
   await completeOnboarding(page);
   const botId = activeBotId(page);
 
@@ -94,13 +94,13 @@ test("Korean webhook routine keeps technical field labels in English", async ({
 }, testInfo) => {
   const stamp = Date.now();
   const userName = `Korean Routine ${stamp}`;
-  await signup(page, `routine-ko-${stamp}@ardurbot.test`, "password12", userName);
+  await signup(page, `routine-ko-${stamp}@example.test`, "password12", userName);
   await completeOnboarding(page);
 
   await page.locator("header.app-drag").getByRole("button", { name: "Settings" }).click();
   const settings = page.getByTestId("user-settings");
   await settings.getByTestId("ui-locale-select").click();
-  await settings.getByRole("option", { name: "한국어", exact: true }).click();
+  await page.getByRole("option", { name: "한국어", exact: true }).click();
   await page.getByRole("button", { name: "계정 설정 닫기" }).click();
 
   await page.getByTitle("Agent 컴퓨터").click();
@@ -122,7 +122,7 @@ test("Korean webhook routine keeps technical field labels in English", async ({
 
 test("routine test-run completes and survives reload", async ({ page }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `routine-${stamp}@ardurbot.test`, "password12", "Routine");
+  await signup(page, `routine-${stamp}@example.test`, "password12", "Routine");
   await completeOnboarding(page);
 
   await page.getByTitle("Agent computer").click();

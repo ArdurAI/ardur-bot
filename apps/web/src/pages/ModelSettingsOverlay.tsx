@@ -29,8 +29,9 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from "@ardurbot/ui-web";
+import { selectableRowClasses } from "@ardurbot/ui-web/lib/state-classes";
 import { Plural, Trans, useLingui } from "@lingui/react/macro";
-import { ChevronDown, X } from "lucide-react";
+import { CheckIcon, ChevronDown, X } from "lucide-react";
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { OllamaSettings } from "../components/OllamaSettings";
@@ -455,20 +456,23 @@ export function ModelSettingsOverlay({
                 const connected = credentials.some(
                   (entry) => entry.provider === group.id && entry.hasKey,
                 );
+                const selected = group.id === provider;
                 return (
                   <button
                     key={group.id}
                     type="button"
+                    aria-current={selected ? "true" : undefined}
                     onClick={() => chooseProvider(group.id)}
-                    className={`flex w-full items-center gap-3 border-b border-border px-3.5 py-3 text-start last:border-0 ${
-                      group.id === provider ? "bg-muted" : "hover:bg-accent"
-                    }`}
+                    className={selectableRowClasses(
+                      selected,
+                      "flex w-full items-center gap-3 border-b border-border px-3.5 py-3 text-start last:border-0",
+                    )}
                   >
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[15px] text-foreground">
                         {group.name}
                       </span>
-                      <span className="mt-0.5 block text-[12px] text-muted-foreground/80">
+                      <span className="mt-0.5 block text-[12px] text-muted-foreground/80 font-normal">
                         <Plural value={group.entries.length} one="# model" other="# models" />
                         {" · "}
                         {localizedProviderHint(group.source)}
@@ -479,6 +483,7 @@ export function ModelSettingsOverlay({
                         <Trans>Connected</Trans>
                       </span>
                     ) : null}
+                    {selected ? <CheckIcon className="size-4 text-foreground" /> : null}
                   </button>
                 );
               })
@@ -1214,9 +1219,10 @@ function ModelOption({
       role="option"
       aria-selected={option.id === value}
       tabIndex={highlighted ? 0 : -1}
-      className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-start text-[13.5px] text-foreground outline-none hover:bg-accent focus-visible:bg-accent ${
-        highlighted || option.id === value ? "bg-accent" : ""
-      }`}
+      className={selectableRowClasses(
+        option.id === value,
+        `flex w-full items-center justify-between gap-3 px-3 py-2 text-start text-[13.5px] ${highlighted ? "bg-accent/50" : ""}`,
+      )}
       onClick={() => choose(index)}
       onKeyDown={(event) => onOptionKeyDown(event, index)}
     >
@@ -1228,9 +1234,12 @@ function ModelOption({
           </span>
         ) : null}
       </span>
-      {option.billing.toLowerCase().includes("free") ? (
-        <span className="shrink-0 text-[12px] text-muted-foreground">{t`Free`}</span>
-      ) : null}
+      <div className="flex shrink-0 items-center gap-2">
+        {option.billing.toLowerCase().includes("free") ? (
+          <span className="text-[12px] text-muted-foreground">{t`Free`}</span>
+        ) : null}
+        {option.id === value ? <CheckIcon className="size-4 shrink-0" /> : null}
+      </div>
     </button>
   );
 }

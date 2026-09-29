@@ -10,12 +10,15 @@ import type {
 import type { RuntimeAvailability } from "@ardurbot/contracts/runtime-pins";
 import { RuntimePinError, runtimePinProblem } from "@ardurbot/contracts/runtime-pins";
 import * as z from "zod";
+import { guardrailConfigFromEnv } from "../host-guardrails.js";
 import { startArdurMcpServer } from "./ardur-mcp-server.js";
 import { createArdurToolBridge } from "./claude-mcp-bridge.js";
 import { CodexUsageCollector } from "./codex-usage.js";
 import type { NativeSpawn } from "./native-process.js";
 import {
   findNativeBinary,
+  guardedSpawn,
+  guardNativeSpawn,
   jsonLines,
   probeCommand,
   RuntimeQueue,
@@ -232,7 +235,8 @@ export async function codexModels(rpc: CodexRpc): Promise<RuntimeAvailability["m
   return models;
 }
 
-export async function probeCodex(start: NativeSpawn = spawnNative): Promise<RuntimeAvailability> {
+export async function probeCodex(start?: NativeSpawn): Promise<RuntimeAvailability> {
+  const launch = start ?? guardedSpawn();
   const base = { runtimeKind: "codex-app-server" as const, models: [] };
   let rpc: CodexRpc | undefined;
   let version: string | undefined;
@@ -240,10 +244,10 @@ export async function probeCodex(start: NativeSpawn = spawnNative): Promise<Runt
   try {
     const binary = await findNativeBinary("codex");
     if (!binary) return { ...base, available: false, reason: "Codex is not installed." };
-    const result = await probeCommand(binary, ["--version"], true, start);
+    const result = await probeCommand(binary, ["--version"], true, launch);
     version = result.version;
     if (result.code !== 0) throw new Error("version probe failed");
-    rpc = await openCodex(start);
+    rpc = await openCodex(launch);
     const { account } = await rpc.request<{ account: { type: string } | null }>("account/read", {
       refreshToken: false,
     });
@@ -277,7 +281,9 @@ export async function probeCodex(start: NativeSpawn = spawnNative): Promise<Runt
 
 export class CodexAppServerRuntime implements AgentRuntime {
   private running = new Map<string, () => Promise<void>>();
-  constructor(private readonly start: NativeSpawn = spawnNative) {}
+  constructor(
+    private readonly start: NativeSpawn = guardNativeSpawn(spawnNative, guardrailConfigFromEnv()),
+  ) {}
   describe() {
     return {
       id: "codex-app-server",
@@ -414,7 +420,15 @@ export class CodexAppServerRuntime implements AgentRuntime {
       const mcpServers: Record<string, unknown> = Object.fromEntries(
         Object.keys(config.mcp_servers ?? {}).map((name) => [name, { enabled: false }]),
       );
-      mcpServers.ardur = { ...mcp.config, enabled: true, required: true };
+      mcpServers.ardur = {
+        ...mcp.config,
+        enabled: true,
+        required: true,
+        // Codex prompts before MCP tool calls unless the server opts out. Ardur's
+        // bridge already applies its own authorization, approvals and audit, so no
+        // Codex-side approval request is raised for these tools at all.
+        default_tools_approval_mode: "approve",
+      };
       const comparisonSkills: Array<{ path: string; enabled: false }> = [];
       if (request.controlledComparison) {
         const inventory = z
@@ -538,6 +552,29 @@ export class CodexAppServerRuntime implements AgentRuntime {
             }
             if (event.method === "model/rerouted") {
               queue.end(problem("pin-model-unknown", "Codex rerouted the pinned model."));
+              void interrupt();
+              break;
+            }
+            if (event.id !== undefined && event.method === "mcpServer/elicitation/request") {
+              // Codex routes MCP tool-call approvals through elicitation, marking them
+              // with _meta.codex_approval_kind and the required serverName. Only the
+              // ardur server is pre-approved (the bridge applies Ardur's own
+              // authorization, approvals and audit). Never accept a plain form
+              // elicitation — that would fabricate user input.
+              const meta = params._meta as Record<string, unknown> | undefined;
+              if (params.serverName === "ardur" && meta?.codex_approval_kind === "mcp_tool_call") {
+                rpc.send({ id: event.id, result: { action: "accept" } });
+                continue;
+              }
+              rpc.send({ id: event.id, result: { action: "decline" } });
+              queue.push({
+                type: "ask",
+                text:
+                  params.serverName === "ardur"
+                    ? "Codex asked Ardur to collect form input — Ardur doesn't take forms, so it was declined."
+                    : "Codex requested input for another MCP server — continue using Ardur tools.",
+                actions: [{ id: "continue", label: "Continue" }],
+              });
               void interrupt();
               break;
             }

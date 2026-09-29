@@ -26,6 +26,10 @@ const Config = z.strictObject({
   token: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
   root: z.string().max(4096).refine(path.isAbsolute),
   hostRoots: z.array(z.string().max(4096).refine(path.isAbsolute)).max(32),
+  guardPaths: z.array(z.string().max(4096).refine(path.isAbsolute)).max(64).default([]),
+  // Missing is invalid. An explicit empty list is how a stack with nothing on
+  // this Mac says so; a default of [] would block nothing.
+  guardPorts: z.array(z.number().int().min(1).max(65535)).max(64),
 });
 let socket: WebSocket | undefined;
 let agent: HostAgent | undefined;

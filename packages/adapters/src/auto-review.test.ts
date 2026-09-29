@@ -320,7 +320,9 @@ describe("runAutoReviewJudge instructions", () => {
   it("anchors the present moment in the judge system instructions", async () => {
     vi.resetModules();
     const { runAutoReviewJudge } = await import("./auto-review.js");
-    let captured: { instructions?: string; model?: unknown } | undefined;
+    let captured:
+      | { instructions?: string; model?: unknown; tools?: unknown; singleRequest?: boolean }
+      | undefined;
     const runtime = {
       describe: () => ({ capabilities: { scripted: false } }),
       run: (request: { instructions?: string }) => {
@@ -359,6 +361,8 @@ describe("runAutoReviewJudge instructions", () => {
     });
     expect(captured?.instructions).toContain("Current date and time");
     expect(captured?.instructions).toContain("fast safety checker");
+    // One JSON answer: no tool catalog to send, and no prompt-cache write to pay for.
+    expect(captured).toMatchObject({ tools: "none", singleRequest: true });
     expect(captured?.model).toMatchObject({
       provider: "xai",
       id: "grok-4.6",

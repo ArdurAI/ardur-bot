@@ -4,8 +4,8 @@
     "name": "Ardur",
     "tagline": "Your own AI team, on your own subscriptions.",
     "summary": "Open-source desktop bots that run on your own AI subscriptions and keys.",
-    "status": "pre-alpha",
-    "statusLine": "Pre-alpha. Unsigned desktop previews; build from source or self-host.",
+    "status": "alpha",
+    "statusLine": "Alpha. Unsigned desktop previews; build from source or self-host.",
     "license": "Apache-2.0",
     "repoUrl": "https://github.com/ArdurAI/ardur-bot",
     "docsUrl": "https://ardur.ai/docs/features/",
@@ -37,14 +37,14 @@
       "id": "delegate",
       "eyebrow": "DELEGATION",
       "title": "Bots work together",
-      "body": "A goal coordinator can send bounded requests to group members' desk threads. Receipts show delivery, confirmed reading and replies. Effect requests wait for owner approval before read-only preparation, and the owner can pause group or space team messages. Bots can also hand off room work or use short-lived subagents.",
+      "body": "A group's coordinator can ask members for their answers in the room and bring them back as one reply. A goal coordinator can send bounded requests to group members' desk threads. Receipts show delivery, confirmed reading and replies. Effect requests wait for owner approval before read-only preparation, and the owner can pause group or space team messages. Bots can also hand off room work or use short-lived subagents.",
       "source": "README.md#What you get today"
     },
     {
       "id": "choose",
       "eyebrow": "CHOICE",
       "title": "Choose each bot's model",
-      "body": "Choose each bot's runtime, model and thinking level. Experimental Hermes reuses a compatible Ardur connection on a paired macOS or Linux host with a configured pinned install; Hermes is unavailable on Windows. Group rooms can choose a separate runtime, model and thinking level for each bot.",
+      "body": "Choose each bot's runtime, model and thinking level. Experimental Hermes runs on this computer in desktop local mode and the dev stack, or on a paired macOS or Linux host, with a pinned install; Windows isn't supported. Group rooms can choose a separate runtime, model and thinking level for each bot.",
       "source": "README.md#What you get today"
     },
     {
@@ -410,7 +410,6 @@
       "commands": [
         "git clone https://github.com/ArdurAI/ardur-bot.git",
         "cd ardur-bot",
-        "git checkout dev",
         "cp .env.example .env",
         "docker compose --env-file .env -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.postgres-host.yml up postgres -d",
         "pnpm install",
@@ -452,13 +451,75 @@
           "os": "Linux arm64 deb",
           "assetPattern": "-linux-arm64\\.deb$"
         }
+      ],
+      "firstOpen": [
+        {
+          "os": "macOS",
+          "steps": [
+            {
+              "text": "In Finder, right-click the app, choose “Open”, then choose “Open” again."
+            },
+            {
+              "text": "If macOS doesn't offer “Open”, try to open the app once, then go to “System Settings”, then “Privacy & Security”, and choose “Open Anyway”."
+            },
+            {
+              "text": "Enter your password when asked, then choose “Open”."
+            },
+            {
+              "text": "Or remove the download's quarantine flag in Terminal.",
+              "command": "xattr -d com.apple.quarantine \"/Applications/Ardur.app\""
+            },
+            {
+              "text": "Then open the app.",
+              "command": "open \"/Applications/Ardur.app\""
+            }
+          ]
+        },
+        {
+          "os": "Windows",
+          "steps": [
+            {
+              "text": "If “Windows protected your PC” appears, choose “More info”, then “Run anyway”."
+            },
+            {
+              "text": "Finish the installer."
+            }
+          ]
+        },
+        {
+          "os": "Linux",
+          "steps": [
+            {
+              "text": "Make the AppImage executable, then open it.",
+              "command": "chmod +x ./ardur-*.AppImage"
+            },
+            {
+              "text": "On Debian or Ubuntu, you can install the deb instead.",
+              "command": "sudo apt install ./ardur-*.deb"
+            },
+            {
+              "text": "After installing the deb, check that it runs.",
+              "command": "ardur --version"
+            }
+          ]
+        }
+      ],
+      "note": "“This computer” starts the app's own database and services, so the first launch doesn't need Docker. Previews don't update themselves; download each new version by hand."
+    },
+    "installScript": {
+      "platforms": [
+        "macOS",
+        "Linux"
       ]
     },
     "homebrew": {
       "tapRepo": "ArdurAI/homebrew-tap",
       "caskPath": "Casks/ardur.rb",
       "command": "brew tap ArdurAI/tap && brew trust --cask ArdurAI/tap/ardur && brew install --cask ArdurAI/tap/ardur",
-      "verified": true
+      "verified": true,
+      "platforms": [
+        "macOS"
+      ]
     }
   },
   "personas": [
