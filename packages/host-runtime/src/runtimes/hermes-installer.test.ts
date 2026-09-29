@@ -233,10 +233,17 @@ function unusedPid(): number {
   throw new Error("no unused pid");
 }
 
-async function writeLock(root: string, pid: number): Promise<void> {
+async function writeLock(root: string, pid: number, token?: string): Promise<void> {
   const lock = hermesInstallLockPath(root);
   await mkdir(path.dirname(lock), { recursive: true });
-  await writeFile(lock, JSON.stringify({ pid, createdAt: "2026-01-01T00:00:00.000Z" }));
+  await writeFile(
+    lock,
+    JSON.stringify({
+      pid,
+      ...(token === undefined ? {} : { token }),
+      createdAt: "2026-01-01T00:00:00.000Z",
+    }),
+  );
 }
 
 it("hashes an extracted tree the same way git write-tree does", async () => {
@@ -771,6 +778,137 @@ it("does not release a lock another installer took over", async () => {
     expect(hermesInstallLockHeld(root)).toBe(true);
   } finally {
     openGate();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("lets only one installer take over a stale lock and never removes a fresh lock", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "hermes-stale-race-"));
+  const report = path.join(root, "uv-report.ndjson");
+  const expectedTree = await gitWriteTree();
+  const uv = uvArchive(uvScript(report, path.join(root, "install-status.json")));
+  let openGate: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => {
+    openGate = resolve;
+  });
+  const fetchImpl: HermesFetch = async (input) => {
+    if (input === HERMES_SOURCE_URL) {
+      await gate;
+      return new Response(sourceArchive());
+    }
+    return new Response(uv.gzip);
+  };
+  const deps = {
+    root,
+    fetch: fetchImpl,
+    platform: "linux" as const,
+    arch: "x64",
+    expectedTree,
+    sources: sourceMap(),
+    uvSha256: uv.sha256,
+  };
+  await writeLock(root, unusedPid(), "stale-token");
+  const lock = hermesInstallLockPath(root);
+  type Outcome = { ok: true } | { ok: false; error: Error };
+  try {
+    const outcomes = [installHermes(deps), installHermes(deps)].map(
+      (run): Promise<Outcome> =>
+        run.then(
+          () => ({ ok: true }),
+          (error: Error) => ({ ok: false, error }),
+        ),
+    );
+    // Wait until one installer holds a fresh lock in place of the stale one.
+    const deadline = Date.now() + 10_000;
+    let winnerToken = "";
+    while (winnerToken === "") {
+      const parsed = JSON.parse(await readFile(lock, "utf8").catch(() => "{}")) as {
+        token?: unknown;
+      };
+      if (typeof parsed.token === "string" && parsed.token !== "stale-token")
+        winnerToken = parsed.token;
+      else if (Date.now() > deadline) throw new Error("no installer took over the stale lock");
+      else await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    // The loser settles while the winner waits at the download gate.
+    const loser = await Promise.race(outcomes);
+    expect(loser.ok).toBe(false);
+    if (!loser.ok) expect(loser.error.message).toBe(HERMES_INSTALL_RUNNING);
+    // The loser must not have removed or replaced the winner's fresh lock.
+    const current = JSON.parse(await readFile(lock, "utf8")) as { token?: unknown };
+    expect(current.token).toBe(winnerToken);
+    openGate();
+    const results = await Promise.all(outcomes);
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(hermesInstallLockHeld(root)).toBe(false);
+    await expect(
+      readFile(path.join(root, "runtimes", ".install.lock.takeover"), "utf8"),
+    ).rejects.toThrow();
+    expect(readHermesInstallStatus(root)?.state).toBe("ready");
+  } finally {
+    openGate();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("leaves a stale lock alone while another installer holds the takeover lock", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "hermes-takeover-held-"));
+  await writeLock(root, unusedPid(), "stale-token");
+  await writeFile(
+    path.join(root, "runtimes", ".install.lock.takeover"),
+    JSON.stringify({
+      pid: process.pid,
+      token: "other-installer",
+      createdAt: "2026-01-02T03:04:05.000Z",
+    }),
+  );
+  const fetchImpl = vi.fn<HermesFetch>();
+  try {
+    await expect(
+      installHermes({ root, fetch: fetchImpl, platform: "linux", arch: "x64" }),
+    ).rejects.toThrow(HERMES_INSTALL_RUNNING);
+    expect(fetchImpl).not.toHaveBeenCalled();
+    // Only the takeover winner may remove the main lock, so the stale lock is untouched.
+    const stale = JSON.parse(await readFile(hermesInstallLockPath(root), "utf8")) as {
+      token?: unknown;
+    };
+    expect(stale.token).toBe("stale-token");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("breaks a takeover lock left by a dead installer and installs", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "hermes-takeover-dead-"));
+  const report = path.join(root, "uv-report.ndjson");
+  const expectedTree = await gitWriteTree();
+  const uv = uvArchive(uvScript(report, path.join(root, "install-status.json")));
+  await writeLock(root, unusedPid(), "stale-token");
+  await writeFile(
+    path.join(root, "runtimes", ".install.lock.takeover"),
+    JSON.stringify({
+      pid: unusedPid(),
+      token: "dead-installer",
+      createdAt: "2026-01-02T03:04:05.000Z",
+    }),
+  );
+  try {
+    await installHermes({
+      root,
+      fetch: async (input) =>
+        new Response(input === HERMES_SOURCE_URL ? sourceArchive() : uv.gzip),
+      platform: "linux",
+      arch: "x64",
+      expectedTree,
+      sources: sourceMap(),
+      uvSha256: uv.sha256,
+    });
+    expect(readHermesInstallStatus(root)?.state).toBe("ready");
+    expect(hermesInstallLockHeld(root)).toBe(false);
+    await expect(
+      readFile(path.join(root, "runtimes", ".install.lock.takeover"), "utf8"),
+    ).rejects.toThrow();
+  } finally {
     await rm(root, { recursive: true, force: true });
   }
 });

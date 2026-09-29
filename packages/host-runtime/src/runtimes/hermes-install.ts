@@ -166,7 +166,7 @@ export function hermesInstallLockHeld(root: string): boolean {
     };
     const pid = typeof parsed.pid === "number" ? parsed.pid : undefined;
     if (pid === undefined) return true;
-    return installPidAlive(pid);
+    return hermesInstallPidAlive(pid);
   } catch (error) {
     return (error as NodeJS.ErrnoException).code !== "ENOENT";
   }
@@ -189,7 +189,8 @@ export function hermesInstallProgress(root: string): HermesInstallView | null {
   return { state: "failed" };
 }
 
-function installPidAlive(pid: number): boolean {
+/** A recorded process id counts as running when it exists; EPERM still counts as running. */
+export function hermesInstallPidAlive(pid: number): boolean {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try {
     process.kill(pid, 0);

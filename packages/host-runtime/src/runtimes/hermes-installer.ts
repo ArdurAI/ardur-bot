@@ -24,6 +24,7 @@ import {
   type HermesInstallStatus,
   hermesInstallLockHeld,
   hermesInstallLockPath,
+  hermesInstallPidAlive,
   hermesInstallStatusPath,
   localHermesInstallCandidate,
   localHermesRoot,
@@ -349,35 +350,94 @@ async function acquireLock(root: string): Promise<string> {
   const token = randomUUID();
   const body = JSON.stringify({ pid: process.pid, token, createdAt: new Date().toISOString() });
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    // Write the full body to a temp file and link it into place, so a concurrent
-    // reader never sees an empty or partial lock.
-    const temporary = path.join(directory, `.install.lock.${process.pid}.${randomUUID()}.tmp`);
-    try {
-      await writeFile(temporary, body, { flag: "wx", mode: 0o644 });
-      await link(temporary, lockPath);
-      return token;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST")
-        throw new HermesInstallError(HERMES_INSTALL_FAILED);
-    } finally {
-      await unlink(temporary).catch(() => undefined);
-    }
+    if (await linkLock(directory, lockPath, body)) return token;
     if (hermesInstallLockHeld(root)) throw new HermesInstallError(HERMES_INSTALL_RUNNING);
-    let current = "";
-    try {
-      current = await readFile(lockPath, "utf8");
-    } catch {
-      continue;
-    }
-    if (hermesInstallLockHeld(root)) throw new HermesInstallError(HERMES_INSTALL_RUNNING);
-    try {
-      if ((await readFile(lockPath, "utf8")) !== current) continue;
-      await rm(lockPath, { force: true });
-    } catch {
-      // The other install replaced the stale lock.
-    }
+    const stale = await readLock(lockPath);
+    if (stale === undefined || stale === null) continue;
+    if (await breakStaleLock(lockPath, stale, body)) return token;
   }
   throw new HermesInstallError(HERMES_INSTALL_RUNNING);
+}
+
+type LockBody = { pid?: unknown; token?: unknown };
+
+/** undefined: the lock file is gone; null: present but unreadable; otherwise the parsed body. */
+async function readLock(lockPath: string): Promise<LockBody | null | undefined> {
+  let text: string;
+  try {
+    text = await readFile(lockPath, "utf8");
+  } catch {
+    return undefined;
+  }
+  try {
+    return JSON.parse(text) as LockBody;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Write the full body to a temp file and link it into place, so a concurrent
+ * reader never sees an empty or partial lock. False when the lock path exists.
+ */
+async function linkLock(directory: string, lockPath: string, body: string): Promise<boolean> {
+  const temporary = path.join(directory, `.install.lock.${process.pid}.${randomUUID()}.tmp`);
+  try {
+    await writeFile(temporary, body, { flag: "wx", mode: 0o644 });
+    await link(temporary, lockPath);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST")
+      throw new HermesInstallError(HERMES_INSTALL_FAILED);
+    return false;
+  } finally {
+    await unlink(temporary).catch(() => undefined);
+  }
+}
+
+/**
+ * A stale main lock is broken only under the takeover lock: the winner re-reads
+ * the main lock and removes it only while it still records the same dead pid
+ * and token, so a fresh lock is never removed. A takeover lock whose own pid is
+ * dead is broken the same way: re-read, confirm it is unchanged, then remove.
+ */
+async function breakStaleLock(
+  lockPath: string,
+  stale: LockBody,
+  body: string,
+): Promise<boolean> {
+  const directory = path.dirname(lockPath);
+  const takeoverPath = path.join(directory, ".install.lock.takeover");
+  const takeoverToken = randomUUID();
+  const takeoverBody = JSON.stringify({
+    pid: process.pid,
+    token: takeoverToken,
+    createdAt: new Date().toISOString(),
+  });
+  if (!(await linkLock(directory, takeoverPath, takeoverBody))) {
+    const holder = await readLock(takeoverPath);
+    if (holder === undefined) return false;
+    if (holder === null) throw new HermesInstallError(HERMES_INSTALL_RUNNING);
+    const pid = typeof holder.pid === "number" ? holder.pid : undefined;
+    if (pid === undefined || hermesInstallPidAlive(pid))
+      throw new HermesInstallError(HERMES_INSTALL_RUNNING);
+    const again = await readLock(takeoverPath);
+    if (again === undefined || again === null) return false;
+    if (again.pid !== holder.pid || again.token !== holder.token) return false;
+    await rm(takeoverPath, { force: true });
+    return false;
+  }
+  try {
+    const current = await readLock(lockPath);
+    if (current === undefined || current === null) return false;
+    if (current.pid !== stale.pid || current.token !== stale.token) return false;
+    await rm(lockPath, { force: true });
+    return await linkLock(directory, lockPath, body);
+  } finally {
+    const ours = await readLock(takeoverPath);
+    if (ours !== undefined && ours !== null && ours.token === takeoverToken)
+      await rm(takeoverPath, { force: true }).catch(() => undefined);
+  }
 }
 
 /** Only the lock whose recorded token is ours is released; a stolen lock is left alone. */
