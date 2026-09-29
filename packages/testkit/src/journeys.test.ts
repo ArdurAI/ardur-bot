@@ -37,6 +37,7 @@ import {
   createThreadMessageInTransaction,
   expireQuietBotMessages,
   finalizeRun,
+  pauseRunForInput,
   RunHistoryWriteError,
   sendUserMessage,
   updateWorkerTask,
@@ -1261,6 +1262,79 @@ describeJourneys("required product journeys", () => {
 
     expect(seqs).toEqual([0, 1]);
     expect((await prisma.run.findUniqueOrThrow({ where: { id: run.id } })).replySeq).toBeNull();
+    await settleFixtureWork([bot.id]);
+  });
+
+  it("keeps a streamed reply's place when its run pauses for input", async () => {
+    const cookie = await signup(app, `pause-order-${stamp}@ardurbot.test`, "Pause Order");
+    const me = await rpc<Me>(app, cookie, "me");
+    const bot = await rpc<Bot>(app, cookie, "bots/create", {
+      name: "Chief",
+      title: "",
+      description: "",
+      instructions: "",
+      notifyOnFinish: true,
+    });
+    const thread = await prisma.thread.findUniqueOrThrow({ where: { botId: bot.id } });
+    const scope = { spaceId: me.spaceId, threadId: thread.id, botId: bot.id };
+    const task = await prisma.task.create({
+      data: { ...scope, userId: me.userId, prompt: "status report", status: "running" },
+    });
+    const run = await prisma.run.create({
+      data: {
+        ...scope,
+        userId: me.userId,
+        taskId: task.id,
+        trigger: "user",
+        status: "running",
+        leaseOwner: "pause-order-fixture",
+        leaseFence: 1,
+        startedAt: new Date(),
+      },
+    });
+    const attempt = await prisma.attempt.create({
+      data: { runId: run.id, fence: 1, status: "running" },
+    });
+
+    // A streaming reply holds seq 0 while the owner's mid-run message takes seq 1.
+    await appendEvent(prisma, {
+      ...scope,
+      type: "thread.progress",
+      runId: run.id,
+      payload: { text: "Before I run that command, I need to ask.", streaming: true },
+    });
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: run.id } })).replySeq).toBe(0);
+    const followUp = await createThreadMessage(prisma, {
+      threadId: thread.id,
+      role: "user",
+      origin: "human",
+      actorId: me.userId,
+      blocks: [{ kind: "text", text: "which environment did you mean?" }],
+    });
+    expect(followUp.seq).toBe(1);
+
+    // The run pauses for input; its ask card must save into the held place.
+    const paused = await pauseRunForInput(prisma, {
+      ...scope,
+      runId: run.id,
+      attemptId: attempt.id,
+      leaseOwner: "pause-order-fixture",
+      leaseFence: 1,
+      blocks: [{ kind: "ask", text: "Which environment?", status: "pending" }],
+    });
+    expect(paused).toBe(true);
+    const askCard = await prisma.message.findFirstOrThrow({
+      where: { threadId: thread.id, runId: run.id, role: "bot" },
+    });
+    expect(askCard.seq).toBe(0);
+    expect(askCard.seq).toBeLessThan(followUp.seq);
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: run.id } })).replySeq).toBeNull();
+
+    // A refreshed transcript shows the ask card above the owner's mid-run message.
+    const snap = await rpc<Snap>(app, cookie, "threads/get", { botId: bot.id });
+    const ids = snap.messages.map((message) => message.id);
+    expect(ids.indexOf(askCard.id)).toBeGreaterThanOrEqual(0);
+    expect(ids.indexOf(askCard.id)).toBeLessThan(ids.indexOf(followUp.id));
     await settleFixtureWork([bot.id]);
   });
 

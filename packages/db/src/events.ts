@@ -1133,6 +1133,12 @@ async function pauseRunForInputOnce(prisma: PrismaClient, input: PauseRunForInpu
     );
     // Thread row first, then the delegated root task. clearThread and finalizeRun agree.
     await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
+    // Read the held place before the run leaves `running`, which releases it, so the
+    // pause card can still fill it below.
+    const pausingRun = await tx.run.findUnique({
+      where: { id: input.runId },
+      select: { replySeq: true },
+    });
     const paused = await tx.run.updateMany({
       where: {
         id: input.runId,
@@ -1181,6 +1187,10 @@ async function pauseRunForInputOnce(prisma: PrismaClient, input: PauseRunForInpu
         blocks: target.blocks,
         botId: target.botId,
         runId: input.runId,
+        // The card fills the reply's held place only when it lands on the run's own
+        // thread; a delegated approval card lands on the coordinator thread.
+        heldReplySeq:
+          target.threadId === input.threadId ? (pausingRun?.replySeq ?? undefined) : undefined,
       }));
     await appendEventInTransaction(tx, {
       spaceId: input.spaceId,
