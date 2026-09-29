@@ -6327,7 +6327,7 @@ const MessageView = memo(function MessageView({
             label={speakerName}
             size={22}
           />
-          {speakerName}
+          <span>{speakerName}</span>
         </div>
       ) : null}
       {parentJumpId ? (
