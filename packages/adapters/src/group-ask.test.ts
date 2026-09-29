@@ -12,12 +12,20 @@ vi.mock("@ardurbot/db", async (importOriginal) => ({
   ...(await importOriginal<typeof Database>()),
   sizeDelegationRootForAsk: vi.fn(async () => ({})),
   wakeCoordinatorForGroupAsk: vi.fn(async () => ({ runId: "wake-run", threadId: "room" })),
+  loadGroupAskResults: vi.fn(async () => [
+    { id: "ada", name: "Ada", request: "Introduce yourself", outcome: "answered", text: "Hi" },
+  ]),
 }));
 
 import type { PrismaClient } from "@ardurbot/db";
-import { sizeDelegationRootForAsk } from "@ardurbot/db";
+import { loadGroupAskResults, sizeDelegationRootForAsk } from "@ardurbot/db";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ASK_MEMBER_TOKENS, askGroupMembers, wakeCoordinatorAfterAsk } from "./group-ask.js";
+import {
+  ASK_MEMBER_TOKENS,
+  askGroupMembers,
+  loadAskWakeContext,
+  wakeCoordinatorAfterAsk,
+} from "./group-ask.js";
 
 const run = {
   id: "chief-run",
@@ -322,6 +330,32 @@ describe("ask_members fan-out", () => {
 });
 
 describe("ask_members fan-in", () => {
+  it("gives the coordinator's follow-up turn every result, reading only its own scope", async () => {
+    const prisma = {} as PrismaClient;
+    // The executor passes its whole run row; only the scope may reach the database.
+    const run = {
+      id: "wake-run",
+      spaceId: "space",
+      userId: "owner",
+      status: "running",
+      runtimePin: { modelId: "model" },
+      clientNonce: "ask-wake:1:chief-run",
+    };
+    const context = await loadAskWakeContext(prisma, run);
+    expect(loadGroupAskResults).toHaveBeenCalledWith(
+      prisma,
+      { spaceId: "space", userId: "owner" },
+      { round: 1, askRunId: "chief-run" },
+    );
+    expect(context).toContain("<ask_results>");
+    expect(context).toContain('- Ada (id: ada), asked "Introduce yourself", answered: Hi');
+    vi.mocked(loadGroupAskResults).mockClear();
+    await expect(
+      loadAskWakeContext(prisma, { ...run, clientNonce: "send:message:chief" }),
+    ).resolves.toBeUndefined();
+    expect(loadGroupAskResults).not.toHaveBeenCalled();
+  });
+
   it("queues the coordinator's follow-up turn once the last member settles", async () => {
     const jobs = { enqueue: vi.fn(async () => undefined) };
     await wakeCoordinatorAfterAsk({ prisma: {} as PrismaClient, jobs } as never, "delegation-ada");

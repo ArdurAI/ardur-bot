@@ -262,7 +262,9 @@ describe("group ask fan-in", () => {
       },
       delegation: { findMany: vi.fn(async () => members.map((entry) => entry.row)) },
     } as unknown as PrismaClient;
-    await expect(loadGroupAskResults(prisma, scope, ask)).resolves.toEqual([
+    // Callers may hand over a whole run row; only its scope may reach the queries.
+    const runRow = { ...scope, id: "wake-run", status: "running", runtimePin: { modelId: "m" } };
+    await expect(loadGroupAskResults(prisma, runRow, ask)).resolves.toEqual([
       { id: "ada", name: "ADA", request: "Introduce yourself", outcome: "answered", text: null },
       {
         id: "ben",
@@ -272,6 +274,9 @@ describe("group ask fan-in", () => {
         text: "Model missing",
       },
     ]);
+    expect(prisma.run.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { ...scope, id: "ask-run" } }),
+    );
     expect(prisma.delegation.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {

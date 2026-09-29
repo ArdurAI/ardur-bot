@@ -51,11 +51,12 @@ const cardGoal = (card: unknown) =>
  */
 export async function loadRoomMemberDirectory(
   prisma: PrismaClient,
-  scope: { spaceId: string; userId: string },
+  { spaceId, userId }: { spaceId: string; userId: string },
   groupId: string,
   selfId: string,
   now = new Date(),
 ): Promise<string | undefined> {
+  const scope = { spaceId, userId };
   const group = await prisma.chatGroup.findFirst({
     where: { ...scope, id: groupId, archivedAt: null },
     select: {

@@ -231,9 +231,10 @@ export type GroupAskResult = {
 /** What the coordinator's follow-up turn reads: each asked member's request and outcome. */
 export async function loadGroupAskResults(
   prisma: PrismaClient,
-  scope: { spaceId: string; userId: string },
+  { spaceId, userId }: { spaceId: string; userId: string },
   ask: GroupAsk,
 ): Promise<GroupAskResult[]> {
+  const scope = { spaceId, userId };
   const asking = await prisma.run.findFirst({
     where: { ...scope, id: ask.askRunId },
     select: { taskId: true, delegationRootTaskId: true },

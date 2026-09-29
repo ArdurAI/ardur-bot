@@ -5485,6 +5485,7 @@ describeJourneys("required product journeys", () => {
       );
 
     // A status question is answered from the member list; no member is started.
+    const statusRequestAt = new Date();
     const status = await rpc<{ runId: string; runIds?: string[] }>(app, owner, "threads/send", {
       groupId: group.id,
       text: "what is the status",
@@ -5511,15 +5512,29 @@ describeJourneys("required product journeys", () => {
     });
     expect(intro.runIds ?? [intro.runId]).toHaveLength(1);
     const wakeNonce = `ask-wake:1:${intro.runId}`;
-    await waitForDatabase(
-      async () =>
-        (
-          await prisma.run.findFirst({
-            where: { clientNonce: wakeNonce },
-            select: { status: true },
-          })
-        )?.status === "completed",
-    );
+    // Three members answer one at a time in the room before the coordinator's follow-up runs.
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        await waitForDatabase(
+          async () =>
+            (
+              await prisma.run.findFirst({
+                where: { clientNonce: wakeNonce },
+                select: { status: true },
+              })
+            )?.status === "completed",
+        );
+        break;
+      } catch (error) {
+        if (attempt < 3) continue;
+        const state = await prisma.run.findMany({
+          where: { threadId: group.threadId, createdAt: { gte: statusRequestAt } },
+          orderBy: { createdAt: "asc" },
+          select: { botId: true, status: true, error: true, clientNonce: true, trigger: true },
+        });
+        throw new Error(`${(error as Error).message}: ${JSON.stringify(state)}`);
+      }
+    }
     const asked = await prisma.delegation.findMany({
       where: { parentRunId: intro.runId },
       orderBy: { createdAt: "asc" },
@@ -5590,7 +5605,7 @@ describeJourneys("required product journeys", () => {
     expect(
       await prisma.run.count({ where: { delegationId: { in: asked.map((row) => row.id) } } }),
     ).toBe(3);
-  });
+  }, 90_000);
 
   it("57: a room handoff outlives its coordinator's heavy turn and posts its result", async () => {
     scriptCoordinator("pass the intro to Ben", "handoff_to_bot", {
