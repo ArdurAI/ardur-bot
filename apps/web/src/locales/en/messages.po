@@ -1317,6 +1317,7 @@ msgid "Bot screen preview"
 msgstr "Bot screen preview"
 
 #: src/pages/BotContextMenu.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Bot settings"
 msgstr "Bot settings"
 
@@ -1909,8 +1910,8 @@ msgstr "Comment"
 msgid "Compare bots"
 msgstr "Compare bots"
 
+#: src/components/composer/ComposerMenu.tsx
 #: src/pages/CompareStart.tsx
-#: src/pages/Shell.tsx
 msgid "Compare with…"
 msgstr "Compare with…"
 
@@ -4183,6 +4184,7 @@ msgstr "Granted"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group"
 msgstr "Group"
 
@@ -4190,7 +4192,7 @@ msgstr "Group"
 msgid "Group brief"
 msgstr "Group brief"
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group settings"
 msgstr "Group settings"
 
@@ -5129,6 +5131,7 @@ msgstr "Memories"
 #: src/pages/memory/MemoryProposals.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/settings-sections.ts
+#: src/pages/shell/bot-panel.tsx
 msgid "Memory"
 msgstr "Memory"
 
@@ -6446,6 +6449,7 @@ msgstr "Private workspace with its own bots and groups."
 #: src/pages/account/AccountProfile.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/memory/MemoryProposals.tsx
+#: src/pages/shell/bot-panel.tsx
 msgid "Profile"
 msgstr "Profile"
 
@@ -7019,6 +7023,10 @@ msgstr "Reset your password"
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Resetting…"
 msgstr "Resetting…"
+
+#: src/pages/Shell.tsx
+msgid "Resize pane"
+msgstr "Resize pane"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Resources"
@@ -7713,6 +7721,7 @@ msgstr "Set up servers"
 #: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Settings"
 msgstr "Settings"
 
@@ -7758,7 +7767,7 @@ msgstr "Show all models"
 msgid "Show bots"
 msgstr "Show bots"
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show computer"
 msgstr "Show computer"
 
@@ -7778,7 +7787,7 @@ msgstr "Show more"
 msgid "Show password"
 msgstr "Show password"
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show settings"
 msgstr "Show settings"
 
@@ -9232,7 +9241,7 @@ msgid "Working…"
 msgstr "Working…"
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Workspace"
 msgstr "Workspace"
 
