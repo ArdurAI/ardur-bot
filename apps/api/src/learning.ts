@@ -14,24 +14,23 @@ import {
   reviewerDestination,
   settleLearningInsight,
   skillDocumentContext,
-  effectiveHermesConfig,
-  hermesConfigHash,
 } from "@ardurbot/adapters";
 import type { Actor, SpaceLearningConfig } from "@ardurbot/contracts";
 import {
   CuratorReportSchema,
   ProposalEvidenceSchema,
   ReviewExecutionSchema,
-  SpaceLearningConfigInput,
-  SetLearningReviewerInput,
-  RuntimePinSchema,
   type RuntimePin,
+  RuntimePinSchema,
+  type SetLearningReviewerInput,
+  SpaceLearningConfigInput,
 } from "@ardurbot/contracts";
 import { learningJourney } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import { IsolationError, Prisma } from "@ardurbot/db";
 import type { MemoryService } from "@ardurbot/memory";
 import { ORPCError } from "@orpc/server";
+import { attachHermesSettingsSnapshot } from "./group-model-pin.js";
 import { requireSpaceOwner } from "./memory-provider-config.js";
 
 export function createLearningService(deps: {
@@ -308,16 +307,22 @@ export function createLearningService(deps: {
         });
         const storedPin = config?.reviewerPin ? RuntimePinSchema.parse(config.reviewerPin) : null;
         const savedRevision = storedPin?.revision ?? 0;
+        const storedHermesConfig =
+          storedPin?.runtimeKind === "hermes" ? (storedPin.runtimeConfig ?? null) : null;
+        const selected = attachHermesSettingsSnapshot(target.pin, storedHermesConfig);
+        if (!selected) {
+          throw new ORPCError("BAD_REQUEST", { message: "Choose a reviewer." });
+        }
 
-        const sameChoice = (a: RuntimePin | null, b: typeof target.pin) =>
-          a?.provider === b.provider &&
-          a?.modelId === b.modelId &&
-          a?.credentialId === b.credentialId &&
-          a?.effort === b.effort &&
-          a?.runtimeKind === b.runtimeKind &&
-          a?.runtimeConfigHash === (b as any)?.runtimeConfigHash;
+        const sameChoice =
+          storedPin?.provider === selected.provider &&
+          storedPin.modelId === selected.modelId &&
+          storedPin.credentialId === selected.credentialId &&
+          storedPin.effort === selected.effort &&
+          storedPin.runtimeKind === selected.runtimeKind &&
+          storedPin.runtimeConfigHash === selected.runtimeConfigHash;
 
-        if (sameChoice(storedPin, target.pin)) {
+        if (sameChoice) {
           return settings(actor);
         }
 
@@ -328,16 +333,28 @@ export function createLearningService(deps: {
         }
 
         if (savedRevision >= 2_147_483_647) {
-          throw new ORPCError("CONFLICT", { message: "This member's model revision cannot advance." });
+          throw new ORPCError("CONFLICT", {
+            message: "This member's model revision cannot advance.",
+          });
         }
 
         const revision = savedRevision + 1;
-        const configToHash = target.pin.runtimeKind === "hermes" ? effectiveHermesConfig(null) : null;
-        const nextPin = RuntimePinSchema.parse({
-          ...target.pin,
-          revision,
-          ...(configToHash ? { runtimeConfig: configToHash, runtimeConfigHash: hermesConfigHash(configToHash) } : {}),
+        const nextPin = RuntimePinSchema.parse({ ...selected, revision });
+        const data = {
+          enabled: config?.enabled ?? false,
+          consolidationEnabled: config?.consolidationEnabled ?? false,
+          insightsEnabled: config?.insightsEnabled ?? true,
+          reviewerPin: nextPin,
+          configuredBy: actor.userId,
+        };
+        await tx.spaceLearningConfig.upsert({
+          where: { spaceId: actor.spaceId },
+          create: { spaceId: actor.spaceId, ...data },
+          update: data,
         });
+        return settings(actor);
+      });
+    },
 
     async configure(
       actor: Actor,
@@ -346,29 +363,32 @@ export function createLearningService(deps: {
     ) {
       await requireSpaceOwner(deps.prisma, actor);
       const config = SpaceLearningConfigInput.parse(input);
-      
+
       return deps.prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM "Space" WHERE id = ${actor.spaceId} FOR UPDATE`;
         const previous = await tx.spaceLearningConfig.findUnique({
           where: { spaceId: actor.spaceId },
         });
 
+        const storedPin = previous?.reviewerPin
+          ? RuntimePinSchema.parse(previous.reviewerPin)
+          : null;
         let pin = config.enabled
           ? await reviewerDestination(deps.prisma, actor, config.reviewerPin)
           : config.reviewerPin;
 
-        if (pin) {
-          const storedPin = previous?.reviewerPin ? RuntimePinSchema.parse(previous.reviewerPin) : null;
-          if (storedPin && pin.revision <= storedPin.revision) {
-            pin = storedPin;
-          } else if (validateModelPin) {
-            const validated = await validateModelPin(pin);
-            pin = RuntimePinSchema.parse({ ...validated, revision: pin.revision });
-          }
+        // A missing pin, including the schema default, never clears a reviewer another window saved.
+        if (pin == null) {
+          pin = storedPin;
+        } else if (storedPin && pin.revision <= storedPin.revision) {
+          pin = storedPin;
+        } else if (validateModelPin) {
+          const validated = await validateModelPin(pin);
+          pin = RuntimePinSchema.parse({ ...validated, revision: pin.revision });
         }
 
-        if (config.enabled && !previous?.enabled && pin) {
-          if (!pin.provider || !pin.modelId || !pin.credentialId) {
+        if (config.enabled && !previous?.enabled) {
+          if (!pin?.provider || !pin.modelId || !pin.credentialId) {
             throw new ORPCError("BAD_REQUEST", {
               message: "Connect a model, then choose it as the reviewer.",
             });
@@ -376,7 +396,9 @@ export function createLearningService(deps: {
         }
 
         const insights =
-          config.insightsEnabled === undefined ? previous?.insightsEnabled ?? true : config.insightsEnabled;
+          config.insightsEnabled === undefined
+            ? (previous?.insightsEnabled ?? true)
+            : config.insightsEnabled;
 
         const data = {
           enabled: config.enabled,
@@ -387,18 +409,22 @@ export function createLearningService(deps: {
           ...config.budgets,
         };
 
-        const storedPinForCompare = previous?.reviewerPin ? RuntimePinSchema.parse(previous.reviewerPin) : null;
-        const newPinForCompare = data.reviewerPin === Prisma.DbNull ? null : (data.reviewerPin as RuntimePin | undefined);
-        const samePin = data.reviewerPin === undefined || (
-          storedPinForCompare?.provider === newPinForCompare?.provider &&
-          storedPinForCompare?.modelId === newPinForCompare?.modelId &&
-          storedPinForCompare?.credentialId === newPinForCompare?.credentialId &&
-          storedPinForCompare?.effort === newPinForCompare?.effort &&
-          storedPinForCompare?.runtimeKind === newPinForCompare?.runtimeKind &&
-          storedPinForCompare?.runtimeConfigHash === (newPinForCompare as any)?.runtimeConfigHash
-        );
+        const storedPinForCompare = previous?.reviewerPin
+          ? RuntimePinSchema.parse(previous.reviewerPin)
+          : null;
+        const newPinForCompare =
+          data.reviewerPin === Prisma.DbNull ? null : (data.reviewerPin as RuntimePin | undefined);
+        const samePin =
+          data.reviewerPin === undefined ||
+          (storedPinForCompare?.provider === newPinForCompare?.provider &&
+            storedPinForCompare?.modelId === newPinForCompare?.modelId &&
+            storedPinForCompare?.credentialId === newPinForCompare?.credentialId &&
+            storedPinForCompare?.effort === newPinForCompare?.effort &&
+            storedPinForCompare?.runtimeKind === newPinForCompare?.runtimeKind &&
+            storedPinForCompare?.runtimeConfigHash === newPinForCompare?.runtimeConfigHash);
 
-        const same = previous &&
+        const same =
+          previous &&
           previous.enabled === data.enabled &&
           previous.consolidationEnabled === data.consolidationEnabled &&
           previous.insightsEnabled === data.insightsEnabled &&
