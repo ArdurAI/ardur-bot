@@ -238,7 +238,7 @@ function validContent(content: unknown, images: boolean): boolean {
       image &&
         keys(image, ["url", "detail"]) &&
         typeof image.url === "string" &&
-        /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(image.url) &&
+        image.url.trim().length > 0 &&
         (image.detail === undefined || ["auto", "low", "high"].includes(String(image.detail))),
     );
   });
@@ -902,11 +902,17 @@ export class HermesProviderBroker {
       }
       if (outcome === "cancelled" || outcome === "timed-out")
         throw new Error("Provider request was cancelled.");
-      const status = error instanceof Error ? providerErrorStatus(error) : 500;
+      const isInlineImageError =
+        error instanceof Error && error.message === "Only inline images are supported.";
+      const status = isInlineImageError
+        ? 400
+        : error instanceof Error
+          ? providerErrorStatus(error)
+          : 500;
       return new Response(
         JSON.stringify({
           error: {
-            message: "Provider request failed.",
+            message: isInlineImageError ? error.message : "Provider request failed.",
             type: status === 400 ? "invalid_request_error" : "api_error",
             code: status,
           },

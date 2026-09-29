@@ -15,6 +15,7 @@ import {
   HermesProviderBroker,
   hermesToolName,
 } from "./hermes-provider-broker.js";
+import { piContext } from "./hermes-provider-translation.js";
 
 // Key literals are held in constants so the owner-key path stays visible in
 // assertions without echoing credential-shaped literals around the fixtures.
@@ -643,6 +644,57 @@ describe("worker provider broker translated route", () => {
       ],
       timestamp: 1,
     });
+  });
+
+  it("rejects remote image URLs with a Chat Completions 400 error without fetching", async () => {
+    const fetchSpy = vi.fn();
+    const f = translatedFixture([startEvent, doneEvent([text("should not reach")])], {
+      fetch: fetchSpy,
+    });
+    const response = await f.broker.open(
+      f.request({
+        body: {
+          model: "claude-fixture",
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: "what is this" },
+                { type: "image_url", image_url: { url: "https://example.com/remote.png" } },
+              ],
+            },
+          ],
+          stream: false,
+        },
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect(response.headers.get("content-type")).toBe("application/json");
+    const body = JSON.parse(await response.text());
+    expect(body).toEqual({
+      error: {
+        message: "Only inline images are supported.",
+        type: "invalid_request_error",
+        code: 400,
+      },
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(f.captured).toHaveLength(0);
+
+    expect(() =>
+      piContext({
+        model: ANTHROPIC_CATALOG.model!,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "image_url", image_url: { url: "https://example.com/remote.png" } },
+            ],
+          },
+        ],
+        allowedTools: new Map(),
+      }),
+    ).toThrow("Only inline images are supported.");
   });
 
   it("maps the pinned reasoning effort to the provider-layer thinking level", async () => {

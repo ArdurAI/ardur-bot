@@ -77,7 +77,7 @@ function imageParts(content: unknown): ImageContent[] {
     const url = object(value.image_url)?.url;
     if (typeof url !== "string") continue;
     const match = IMAGE_DATA_URL.exec(url);
-    if (!match) continue;
+    if (!match) throw new Error("Only inline images are supported.");
     images.push({ type: "image", data: match[2]!, mimeType: `image/${match[1]}` });
   }
   return images;
@@ -148,6 +148,7 @@ export function piContext(body: {
   const timestamp = () => ++clock;
   for (const message of body.messages) {
     if (message.role === "system" || message.role === "developer") {
+      imageParts(message.content);
       const text = textParts(message.content).join("\n");
       if (text) system.push(text);
       continue;
