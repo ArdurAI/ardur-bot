@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { HermesRuntimeConfigV2 } from "@ardurbot/contracts/runtime-config";
 import type { ReactNode } from "react";
-import { act, createElement } from "react";
+import { act, createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { beforeEach, expect, it, vi } from "vitest";
 import { RuntimeConfigAdvanced } from "../components/runtime-config-advanced";
@@ -42,7 +42,15 @@ vi.mock("react-native", () => ({
       children,
     ),
   Text: ({ children }: { children: ReactNode }) => createElement("span", null, children),
-  View: ({ children }: { children: ReactNode }) => createElement("div", null, children),
+  View: ({
+    children,
+    style,
+    ...rest
+  }: {
+    children: ReactNode;
+    style?: unknown;
+    [key: string]: unknown;
+  }) => createElement("div", { style, ...rest }, children),
   TextInput: ({
     value,
     onChangeText,
@@ -149,6 +157,24 @@ async function renderPanel(initial: HermesRuntimeConfigV2 | null = null) {
       await typeInto(input, text);
     },
   };
+}
+
+/** Mirrors bot-settings: the draft lives in the parent and Save follows onError. */
+function ControlledPanel({ onError }: { onError: (error: string | null) => void }) {
+  const [value, setValue] = useState<HermesRuntimeConfigV2 | null>(null);
+  return createElement(RuntimeConfigPanel, {
+    value,
+    onChange: setValue,
+    onError,
+    pin: null,
+  });
+}
+
+async function renderControlledPanel(onError: (error: string | null) => void) {
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  await act(async () => root.render(createElement(ControlledPanel, { onError })));
+  return { node, root };
 }
 
 it("shows the three numeric fields with numeric keyboards and no errors", async () => {
@@ -424,5 +450,115 @@ it("surfaces server issue messages from the preview endpoint", async () => {
   expect(node.textContent).toContain(
     "Use Ardur settings for tools, integrations, MCP servers, skills, and plugins.",
   );
+  await act(async () => root.unmount());
+});
+
+it("keeps invalid Advanced text and state across a close and reopen", async () => {
+  vi.mocked(rpc).mockResolvedValue(previewResponse);
+  const onError = vi.fn();
+  const { node, root } = await renderControlledPanel(onError);
+  const toggle = pressable(node, "Advanced");
+  await act(async () => toggle.click());
+  let editor = field(node, "Configuration (JSON)");
+  expect(editor.value).toBe(JSON.stringify(defaults, null, 2));
+
+  await typeInto(editor, "{");
+  expect(editor.value).toBe("{");
+  expect(onError).toHaveBeenLastCalledWith("Enter valid JSON.");
+  const calls = field(node, "Model calls per turn");
+  expect(calls.disabled).toBe(true);
+
+  // Close: the invalid text is destroyed today; the panel keeps its flag.
+  await act(async () => toggle.click());
+  expect(onError).toHaveBeenLastCalledWith("Enter valid JSON.");
+  expect(node.textContent).toContain("Enter valid JSON.");
+  expect(node.textContent).toContain("Fix the configuration JSON to edit these settings.");
+  expect(field(node, "Model calls per turn").disabled).toBe(true);
+
+  // Reopen: the same invalid text and state must still be there.
+  await act(async () => toggle.click());
+  editor = field(node, "Configuration (JSON)");
+  expect(editor.value).toBe("{");
+  expect(editor.disabled).toBe(false);
+  expect(node.textContent).toContain("Enter valid JSON.");
+  expect(field(node, "Model calls per turn").disabled).toBe(true);
+  expect(onError).toHaveBeenLastCalledWith("Enter valid JSON.");
+
+  // Fixing the JSON unlocks the form.
+  await typeInto(editor, JSON.stringify(defaults));
+  expect(onError).toHaveBeenLastCalledWith(null);
+  expect(node.textContent).not.toContain("Enter valid JSON.");
+  expect(node.textContent).not.toContain("Fix the configuration JSON to edit these settings.");
+  expect(field(node, "Model calls per turn").disabled).toBe(false);
+  await act(async () => root.unmount());
+});
+
+it("shows the Advanced error in the panel while it is closed and invalid", async () => {
+  vi.mocked(rpc).mockResolvedValue(previewResponse);
+  const onError = vi.fn();
+  const { node, root } = await renderControlledPanel(onError);
+  const toggle = pressable(node, "Advanced");
+  await act(async () => toggle.click());
+  const editor = field(node, "Configuration (JSON)");
+
+  await typeInto(editor, "{");
+  await act(async () => toggle.click());
+  expect(onError).toHaveBeenLastCalledWith("Enter valid JSON.");
+  expect(node.textContent).toContain("Enter valid JSON.");
+  expect(field(node, "Model calls per turn").disabled).toBe(true);
+  await act(async () => root.unmount());
+});
+
+it("clears a stale server-preview error after a short-panel edit", async () => {
+  // The server rejects the model key on the first preview; a later short-panel
+  // edit replaces the editor text, so the stale error must not keep Save off.
+  const serverRejected = {
+    preview: undefined,
+    issues: [{ code: "managed-model", path: "model", reasonId: "managed-model" }],
+  };
+  vi.mocked(rpc).mockResolvedValueOnce(serverRejected).mockResolvedValue(previewResponse);
+  const onError = vi.fn();
+  const { node, root } = await renderControlledPanel(onError);
+  const toggle = pressable(node, "Advanced");
+  await act(async () => toggle.click());
+
+  await act(async () => {});
+  expect(node.textContent).toContain(
+    "Ardur sets the model and thinking level. Change them in bot settings.",
+  );
+  expect(onError).toHaveBeenLastCalledWith(
+    "Ardur sets the model and thinking level. Change them in bot settings.",
+  );
+  // Save is blocked by the reported error; the JSON itself parses, so the
+  // short-panel fields stay editable.
+
+  // Close Advanced, then edit the short panel: the parent sends a normalized
+  // value, the editor text is replaced, the stale error clears and a fresh
+  // preview runs for the new value.
+  await act(async () => toggle.click());
+  const callsClosed = field(node, "Model calls per turn");
+  expect(callsClosed.disabled).toBe(false);
+  await typeInto(callsClosed, "24");
+  expect(onError).toHaveBeenLastCalledWith(null);
+  expect(node.textContent).not.toContain(
+    "Ardur sets the model and thinking level. Change them in bot settings.",
+  );
+
+  // Reopening shows the normalized text from the short-panel edit.
+  await act(async () => toggle.click());
+  expect(JSON.parse(field(node, "Configuration (JSON)").value).limits.maxProviderRequests).toBe(24);
+  expect(node.textContent).not.toContain(
+    "Ardur sets the model and thinking level. Change them in bot settings.",
+  );
+  expect(field(node, "Model calls per turn").disabled).toBe(false);
+
+  const previewCalls = vi
+    .mocked(rpc)
+    .mock.calls.filter((call) => call[0] === "runtimeConfig/preview");
+  expect(previewCalls.length).toBeGreaterThanOrEqual(2);
+  const lastPayload = previewCalls.at(-1)![1] as {
+    runtimeConfig: { limits: { maxProviderRequests: number } };
+  };
+  expect(lastPayload.runtimeConfig.limits.maxProviderRequests).toBe(24);
   await act(async () => root.unmount());
 });

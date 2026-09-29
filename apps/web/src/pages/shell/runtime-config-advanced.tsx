@@ -144,7 +144,14 @@ export function RuntimeConfigAdvanced({
     if (JSON.stringify(lastSyncValue.current) === JSON.stringify(value)) return;
     lastSyncValue.current = value;
     setText(JSON.stringify(value, null, 2));
-  }, [value, localError]);
+    // The replaced text was never previewed by this editor, and a stale
+    // server-preview error must not keep Save disabled for a draft the server
+    // has not judged: clear it and preview the incoming value.
+    setPreviewError(null);
+    onErrorRef.current(null);
+    void fetchPreview(value);
+    // fetchPreview is stable; it reads the pin and locale through refs.
+  }, [value, localError, fetchPreview]);
 
   // Initial preview fetch or when pin changes
   useEffect(() => {
