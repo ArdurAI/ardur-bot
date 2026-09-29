@@ -6617,7 +6617,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             ? []
             : finalBlocksAfterMidTurnProgress(
                 redactBlocks(completionBlocks, runSecrets),
-                publishedMidTurnUserMessage || runAllowsSilentEmpty(run.trigger),
+                runAllowsSilentEmpty(run.trigger) ? "silent-routine" : "ordinary-run",
               );
           const text = handedOff
             ? ""

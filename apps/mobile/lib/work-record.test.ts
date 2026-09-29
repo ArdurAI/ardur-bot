@@ -148,3 +148,20 @@ describe("work record label", () => {
     resetI18nForTests("en");
   });
 });
+
+import { workingBotsWithoutVisibleActivity } from "@ardurbot/core";
+
+describe("workingBotsWithoutVisibleActivity", () => {
+  it("filters out bots that already have visible activity in the message stream", () => {
+    const bots = [{ botId: "bot1" }, { botId: "bot2" }];
+    const messages = [
+      {
+        id: "progress:run1",
+        botId: "bot1",
+        blocks: [{ kind: "progress" as const, text: "Some text" }],
+      },
+    ];
+    const working = workingBotsWithoutVisibleActivity(bots, messages);
+    expect(working).toEqual([{ botId: "bot2" }]);
+  });
+});

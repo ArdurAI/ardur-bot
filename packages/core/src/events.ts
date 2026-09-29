@@ -238,12 +238,27 @@ export function reduceLiveMessageBlocks(
     const incoming = String(update.payload.text ?? "");
     const soFar = replyText(blocks);
     if (soFar.length > 0 && !incoming.startsWith(soFar)) {
-      let kept: MessageBlock[] = blocks.filter(
-        (block) => block.kind !== "text" && block.kind !== "progress",
-      );
+      let kept: MessageBlock[] = [];
       for (const block of blocks) {
-        if (block.kind !== "progress") continue;
-        for (const name of block.pendingToolNames ?? []) kept = appendToolCallSegment(kept, name);
+        if (block.kind === "text") continue;
+        if (block.kind === "progress" && block.activity !== true && block.reasoning !== true) {
+          for (const name of block.pendingToolNames ?? []) kept = appendToolCallSegment(kept, name);
+        } else {
+          if (
+            block.kind === "progress" &&
+            block.pendingToolNames &&
+            block.pendingToolNames.length > 0
+          ) {
+            const { pendingToolNames, ...rest } = block as Extract<
+              MessageBlock,
+              { kind: "progress" }
+            >;
+            kept.push(rest);
+            for (const name of pendingToolNames ?? []) kept = appendToolCallSegment(kept, name);
+          } else {
+            kept.push(block);
+          }
+        }
       }
       if (!incoming) return kept;
       return [...kept, { kind: "progress", text: incoming, streaming: true as const }];

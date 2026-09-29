@@ -32,6 +32,7 @@ import {
   selectedAskActionLabel,
   serializeComposerPrompt,
   userVisibleMessages,
+  workingBotsWithoutVisibleActivity,
 } from "@ardurbot/core";
 import * as Clipboard from "expo-clipboard";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
@@ -429,14 +430,15 @@ function Thread() {
     if (!inGroup) return [];
     const seen = new Set<string>();
     const working = snap?.activeRuns ?? (snap?.run ? [snap.run] : []);
-    return working.flatMap((run) => {
+    const bots = working.flatMap((run) => {
       if (!run.botId || seen.has(run.botId) || !isWorkingStatus(run.status)) return [];
       const member = snap?.members?.find((candidate) => candidate.botId === run.botId);
       if (!member) return [];
       seen.add(run.botId);
       return [{ ...member, status: run.status }];
     });
-  }, [inGroup, snap?.activeRuns, snap?.members, snap?.run]);
+    return workingBotsWithoutVisibleActivity(bots, visibleMessages);
+  }, [inGroup, snap?.activeRuns, snap?.members, snap?.run, visibleMessages]);
   const working = inGroup ? workingGroupBots.length > 0 : isWorkingStatus(currentBotStatus);
 
   useEffect(() => {

@@ -59,6 +59,31 @@ describe("isRunTerminalEvent", () => {
 });
 
 describe("reduceLiveMessageBlocks", () => {
+  it("keeps reasoning summary blocks and replaces only narration when followed by streaming text", () => {
+    let blocks = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Let me check." },
+    });
+    blocks = reduceLiveMessageBlocks(blocks, {
+      type: "tool",
+      name: "shell",
+    });
+    blocks = reduceLiveMessageBlocks(blocks, {
+      type: "progress",
+      payload: { text: "Weighing options.", reasoning: true },
+    });
+    // streamed reply whose text does not start with the narration
+    blocks = reduceLiveMessageBlocks(blocks, {
+      type: "progress",
+      payload: { text: "The answer is four.", streaming: true },
+    });
+
+    expect(blocks).toEqual([
+      { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+      { kind: "progress", text: "Weighing options.", reasoning: true },
+      { kind: "progress", text: "The answer is four.", streaming: true },
+    ]);
+  });
   it("preserves structured live activity markers", () => {
     expect(
       reduceLiveMessageBlocks([], {
