@@ -124,6 +124,21 @@ it.each(["upkeep", "learning"])(
 );
 
 it("opens the loaded reviewer choices and saves the selected connection", async () => {
+  const saved = {
+    enabled: true,
+    canConfigure: true,
+    reviewerPin: {
+      runtimeKind: "pi",
+      provider: "openai",
+      modelId: "reviewer",
+      credentialId: "cred",
+      effort: "medium",
+      revision: 1,
+    },
+    consolidationEnabled: false,
+    budgets: {},
+    destination: null,
+  };
   learningSettings.mockResolvedValue({
     enabled: false,
     canConfigure: true,
@@ -133,7 +148,7 @@ it("opens the loaded reviewer choices and saves the selected connection", async 
     destination: {
       runtimeKind: "pi",
       provider: "openai",
-      modelId: "reviewer",
+      modelId: "starter",
       credentialId: "cred",
       effort: "medium",
       revision: 2,
@@ -162,14 +177,9 @@ it("opens the loaded reviewer choices and saves the selected connection", async 
       return { available: false, models: [] };
     }
     if (procedure === "learning/setReviewer") {
-      return {
-        enabled: true,
-        canConfigure: true,
-        consolidationEnabled: false,
-        reviewerPin: null,
-        budgets: {},
-        destination: null,
-      };
+      // The server persisted the choice, so the reload after the save shows it.
+      learningSettings.mockResolvedValue(saved);
+      return saved;
     }
     throw new Error(`Unexpected ${procedure}`);
   });
@@ -177,7 +187,7 @@ it("opens the loaded reviewer choices and saves the selected connection", async 
   const reviewer = [...node.querySelectorAll("button")].find((button) =>
     button.textContent?.startsWith("Reviewer:"),
   );
-  expect(reviewer).toBeTruthy();
+  expect(reviewer?.textContent).toBe("Reviewer: starter");
   await act(async () => reviewer!.click());
   const opened = sheet.mock.calls.at(-1)?.[0] as {
     options?: unknown;
@@ -205,10 +215,14 @@ it("opens the loaded reviewer choices and saves the selected connection", async 
       }),
     }),
   );
-  const saved = request.mock.calls.find((call) => call[0] === "learning/setReviewer")?.[1] as {
+  const payload = request.mock.calls.find((call) => call[0] === "learning/setReviewer")?.[1] as {
     pin: { revision?: number };
   };
-  expect(saved.pin.revision).toBeUndefined();
+  expect(payload.pin.revision).toBeUndefined();
+  const afterSave = [...node.querySelectorAll("button")].find((button) =>
+    button.textContent?.startsWith("Reviewer:"),
+  );
+  expect(afterSave?.textContent).toBe("Reviewer: reviewer");
 });
 
 it("saves a Codex reviewer chosen from the runtime list", async () => {
@@ -339,12 +353,12 @@ it("sends a thinking change as a choice, with the revision beside it", async () 
   const thinking = [...node.querySelectorAll("button")].find((button) =>
     button.textContent?.startsWith("Thinking:"),
   );
-  expect(thinking?.textContent).toBe("Thinking: medium");
+  expect(thinking?.textContent).toBe("Thinking: Medium");
   await act(async () => thinking!.click());
   const opened = sheet.mock.calls.at(-1)?.[0] as {
     actions: { text: string; onPress: () => void }[];
   };
-  await act(async () => opened.actions.find((action) => action.text === "high")!.onPress());
+  await act(async () => opened.actions.find((action) => action.text === "High")!.onPress());
   const saved = request.mock.calls.find((call) => call[0] === "learning/setReviewer")?.[1] as {
     expectedRevision: number;
     pin: Record<string, unknown>;

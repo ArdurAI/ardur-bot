@@ -152,7 +152,9 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
       } catch (error) {
         if (error instanceof ORPCError && error.code === "CONFLICT") {
           await load();
-          throw new Error(t`The reviewer was changed in another window.`);
+          throw new ORPCError("CONFLICT", {
+            message: t`The reviewer was changed in another window.`,
+          });
         }
         throw error;
       }

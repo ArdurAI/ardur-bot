@@ -190,6 +190,7 @@ export async function openUserSettings(
     | "usage"
     | "integrations"
     | "computer"
+    | "boards"
     | "updates",
 ) {
   await page

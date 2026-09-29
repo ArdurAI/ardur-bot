@@ -136,43 +136,64 @@ vi.mock("./model-pin-validation.js", () => ({
 it("accepts and validates a Codex runtime reviewer", async () => {
   const { validateModelPinSelection: mockedValidate } = await import("./model-pin-validation.js");
   vi.mocked(mockedValidate).mockResolvedValue({
-    runtimeKind: "codex",
-    provider: "fake",
+    runtimeKind: "codex-app-server",
+    provider: "openai-codex",
     modelId: "fake-model",
-    credentialId: "cred-1",
+    credentialId: "native:codex-app-server",
     effort: "high",
     revision: 1,
   });
-  
-  const { call } = await routerFixture({
-    setReviewer: vi.fn().mockResolvedValue({}),
+
+  const setReviewer = vi.fn().mockResolvedValue({
+    enabled: true,
+    consolidationEnabled: false,
+    insightsEnabled: true,
+    reviewerPin: null,
+    budgets: {
+      botDailyTokens: 30000,
+      spaceDailyTokens: 150000,
+      maxProposals: 3,
+      timeoutMs: 30000,
+      maxOutputTokens: 2000,
+      maxOutputChars: 12000,
+    },
+    destination: null,
+    canConfigure: true,
   });
-  
-  const response = await call("learning/setReviewer", {
-    expectedRevision: 0,
-    pin: {
-      runtimeKind: "codex",
-      provider: "fake",
-      modelId: "fake-model",
-      credentialId: "cred-1",
-      effort: "high",
-    }
-  });
-  
+  const { call } = await routerFixture({ setReviewer });
+
+  const pin = {
+    runtimeKind: "codex-app-server",
+    provider: "openai-codex",
+    modelId: "fake-model",
+    credentialId: "native:codex-app-server",
+    effort: "high",
+  };
+  const response = await call("learning/setReviewer", { expectedRevision: 0, pin });
+
   expect(response.status).toBe(200);
+  expect(mockedValidate).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.objectContaining({ spaceId: "space-1", userId: "user-1" }),
+    pin,
+  );
+  expect(setReviewer).toHaveBeenCalledWith(expect.anything(), {
+    expectedRevision: 0,
+    pin: expect.objectContaining({ runtimeKind: "codex-app-server", revision: 1 }),
+  });
 });
 
 it("rejects another user's connection with a sentence", async () => {
   const { validateModelPinSelection: mockedValidate } = await import("./model-pin-validation.js");
   const { ORPCError } = await import("@orpc/server");
   vi.mocked(mockedValidate).mockRejectedValue(
-    new ORPCError("FORBIDDEN", { message: "This connection belongs to another space member." })
+    new ORPCError("FORBIDDEN", { message: "This connection belongs to another space member." }),
   );
-  
+
   const { call } = await routerFixture({
     setReviewer: vi.fn(),
   });
-  
+
   const response = await call("learning/setReviewer", {
     expectedRevision: 0,
     pin: {
@@ -181,9 +202,9 @@ it("rejects another user's connection with a sentence", async () => {
       modelId: "fake-model",
       credentialId: "cred-1",
       effort: null,
-    }
+    },
   });
-  
+
   expect(response.status).toBe(403);
   await expect(response.json()).resolves.toEqual({
     json: expect.objectContaining({

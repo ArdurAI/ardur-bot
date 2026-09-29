@@ -324,7 +324,7 @@ it("shows a failed upkeep change beside its switch", async () => {
 });
 it("covers learning switch, model change, level change, no connection, CONFLICT and old text removal", async () => {
   api.enableLearning.mockResolvedValue({ ...(await api.learning()), enabled: true });
-  api.setReviewer.mockResolvedValue({
+  const saved = {
     ...(await api.learning()),
     enabled: true,
     reviewerPin: {
@@ -335,7 +335,8 @@ it("covers learning switch, model change, level change, no connection, CONFLICT 
       effort: "high",
       revision: 2,
     },
-  });
+  };
+  api.setReviewer.mockResolvedValue(saved);
 
   const node = await render();
 
@@ -359,6 +360,8 @@ it("covers learning switch, model change, level change, no connection, CONFLICT 
   expect(reviewerSelect).not.toBeNull();
   const rendered = [...reviewerSelect!.options].find((option) => option.value.startsWith("["));
   expect(rendered?.value).toBe(JSON.stringify(["openai", "reviewer", "cred"]));
+  // The server persists the choice, so the reload after the save must show it.
+  api.learning.mockResolvedValue(saved);
   await choose(reviewerSelect!, rendered!.value);
   expect(api.setReviewer).toHaveBeenCalledWith(
     expect.objectContaining({
@@ -371,30 +374,43 @@ it("covers learning switch, model change, level change, no connection, CONFLICT 
       }),
     }),
   );
-
-  // Level change
+  const reloadedReviewer = node.querySelector<HTMLSelectElement>("#learning-reviewer");
+  expect(reloadedReviewer?.value).toBe(JSON.stringify(["openai", "reviewer", "cred"]));
   const effortSelect = node.querySelector<HTMLSelectElement>("#learning-reviewer-effort");
   expect(effortSelect).not.toBeNull();
-  await act(async () => {
-    effortSelect!.value = "high";
-    effortSelect!.dispatchEvent(new Event("change", { bubbles: true }));
-  });
-  expect(api.setReviewer).toHaveBeenCalledWith(
-    expect.objectContaining({ pin: expect.objectContaining({ effort: "high" }) }),
-  );
+  expect(effortSelect?.value).toBe("high");
 
-  // CONFLICT
-  api.setReviewer.mockRejectedValueOnce({ code: "CONFLICT" } as any);
+  // Level change sends the reloaded revision.
   await act(async () => {
     effortSelect!.value = "medium";
     effortSelect!.dispatchEvent(new Event("change", { bubbles: true }));
   });
-  // Should reload and throw (error caught by work handler and displayed)
-  expect(api.learning).toHaveBeenCalled();
+  expect(api.setReviewer).toHaveBeenCalledWith(
+    expect.objectContaining({
+      expectedRevision: 2,
+      pin: expect.objectContaining({ effort: "medium" }),
+    }),
+  );
+
+  // A real CONFLICT reloads the settings and shows the conflict sentence.
+  const loadsBefore = api.learning.mock.calls.length;
+  api.setReviewer.mockRejectedValueOnce(
+    new ORPCError("CONFLICT", { message: "The reviewer was changed in another window." }),
+  );
+  await act(async () => {
+    effortSelect!.value = "high";
+    effortSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(api.learning.mock.calls.length).toBeGreaterThan(loadsBefore);
+  expect(node.querySelector('[data-settings-row="Learning reviewer"]')?.textContent).toContain(
+    "The reviewer was changed in another window.",
+  );
 });
 
 it("shows connect a model when no connection can be chosen", async () => {
-  api.modelsCredentials.mockResolvedValueOnce([]);
+  const current = await api.learning();
+  api.learning.mockResolvedValue({ ...current, reviewerPin: null });
+  api.modelsCredentials.mockResolvedValue([]);
   const node = await render();
   expect(button(node, "Connect a model")).toBeTruthy();
 });
