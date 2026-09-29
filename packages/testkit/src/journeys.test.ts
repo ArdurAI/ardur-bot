@@ -5985,6 +5985,7 @@ describeJourneys("required product journeys", () => {
     // each member's run settles, which can trail the coordinator's follow-up.
     let askBlock: Record<string, unknown> | undefined;
     let askMessageMeta: { botId: string; runId: string | null } | undefined;
+    let askMessages: unknown[] = [];
     await waitForDatabase(async () => {
       const rows = await prisma.message.findMany({
         where: { threadId: group.threadId, role: "bot" },
@@ -5994,6 +5995,7 @@ describeJourneys("required product journeys", () => {
       const found = rows.filter((message) =>
         JSON.stringify(message.blocks).includes("Introduce yourself to the room"),
       );
+      askMessages = found;
       askMessageMeta = found[0] ? { botId: found[0].botId, runId: found[0].runId } : undefined;
       askBlock = (found[0]?.blocks as Array<Record<string, unknown>> | undefined)?.[0];
       const members = (askBlock?.members as Array<{ outcome: string }> | undefined) ?? [];
@@ -6002,7 +6004,8 @@ describeJourneys("required product journeys", () => {
         members.length === 3 &&
         members.every((member) => member.outcome === "answered")
       );
-    }).catch(() => undefined);
+    });
+    expect(askMessages).toHaveLength(1);
     expect(askMessageMeta).toEqual({ botId: chief.id, runId: intro.runId });
     expect(askBlock).toMatchObject({
       kind: "coordination",
