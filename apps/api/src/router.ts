@@ -1159,7 +1159,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           }
 
           const available = Boolean(
-            (isBridgeMode ? owner : true) &&
+            owner &&
               (!bot || bot.computer?.kind === "desktop") &&
               healthAvailable,
           );

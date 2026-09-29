@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { realpath } from "node:fs/promises";
+import { mkdir, realpath } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import sourceHashes from "../../python/hermes_sources.json" with { type: "json" };
@@ -18,7 +18,11 @@ export function localHermesRoot(): string {
 }
 
 export function localHermesStaging(): string {
-  return path.join(localHermesRoot(), "hermes-staging");
+  return path.join(localHermesRoot(), "staging");
+}
+
+export function localHermesInstallCandidate(): string | null {
+  return hermesInstallCandidate(localHermesStaging(), process.env.ARDUR_HERMES_INSTALL);
 }
 
 /** The workspace root is supplied by the trusted host configuration, never a bot request. */
@@ -121,6 +125,7 @@ export async function buildHermesRuntime(options: {
   const install = hermesInstallCandidate(options.hostRoot, options.explicitInstall);
   if (!install) return null;
   const qualified = probeHermesInstall(install);
+  await mkdir(options.hostRoot, { recursive: true, mode: 0o700 });
   const staging = await realpath(options.hostRoot);
   const overlap = path.relative(qualified.root, staging);
   if (

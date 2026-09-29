@@ -52,17 +52,14 @@ export class LocalHermesRuntime implements AgentRuntime {
 
     const relayDispatcher = new HermesRelayDispatcher(brokerSession, context?.signal ?? new AbortController().signal);
 
-    const relay = await startHermesProviderRelay(
-      { protocol: 1, ...brokerSession.broker.grant, hostGeneration: "local" },
-      (method, args) => relayDispatcher.dispatch(method, args),
-      () => {
-        void this.fail(request.runId);
-      }
-    );
-
     let profileAcknowledged = false;
 
-    const capturedPin = request.model.runtimePin as any;
+    const capturedPin = request.model.runtimePin as
+      | (NonNullable<AgentRunRequest["model"]["runtimePin"]> & {
+          effectiveRuntimeConfig?: unknown;
+          effectiveRuntimeConfigHash?: unknown;
+        })
+      | undefined;
     let executionEnvelope =
       (capturedPin?.runtimeConfig as { version?: number } | undefined)?.version === 2
         ? validateHermesExecutionEnvelope({
@@ -92,6 +89,7 @@ export class LocalHermesRuntime implements AgentRuntime {
       });
     }
 
+    let relay: Awaited<ReturnType<typeof startHermesProviderRelay>> | undefined;
     try {
       const runtime = await buildHermesRuntime({
         hostRoot: staging,
@@ -102,21 +100,43 @@ export class LocalHermesRuntime implements AgentRuntime {
         onProfileAcknowledged: () => {
           profileAcknowledged = true;
         },
-        onTurnFinished: () => relay.close(),
+        onTurnFinished: () => relay?.close(),
       });
 
       if (!runtime) throw new Error("Pinned Hermes install is unavailable.");
 
+      relay = await startHermesProviderRelay(
+        { protocol: 1, ...brokerSession.broker.grant, hostGeneration: "local" },
+        (method, args) => relayDispatcher.dispatch(method, args),
+        () => {
+          void this.fail(request.runId);
+        }
+      );
+
       this.running.set(request.runId, runtime);
-      yield* runtime.run(request, context);
-    } catch (error) {
-      if (error instanceof Error && error.message === "Provider request failed.") {
-        throw new Error("Tool failed."); // Keep the host path's error sanitization for tool failures
-      }
-      throw error;
+      const localRequest: AgentRunRequest = {
+        ...request,
+        model: {
+          ...request.model,
+          baseUrl: relay.url,
+          apiKey: brokerSession.broker.grant.token,
+        },
+        onToolCompleted: request.onToolCompleted
+          ? async (result) => {
+              await request.onToolCompleted?.({
+                ...result,
+                error: result.error ? "Tool failed." : undefined,
+              });
+            }
+          : undefined,
+      };
+      delete localRequest.model.oauth;
+      delete localRequest.model.headers;
+      yield* runtime.run(localRequest, context);
     } finally {
       this.running.delete(request.runId);
-      relay.close();
+      relay?.close();
+      brokerSession.broker.revoke();
     }
   }
 }

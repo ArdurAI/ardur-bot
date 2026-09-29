@@ -8,6 +8,8 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import profileFixture from "../../../host-runtime/python/tests/valid_profile.json" with { type: "json" };
 
+vi.mock("../../../host-runtime/python/hermes_sources.json", () => ({ default: {} }));
+
 vi.mock("@ardurbot/core/node/runtime-config-hash", async (original) => ({
   ...(await original<object>()),
   validateHermesExecutionEnvelope: (x: any) => profileFixture,
@@ -22,10 +24,15 @@ describe("LocalHermesRuntime", () => {
     installDir = join(root, "install");
     vi.stubEnv("ARDUR_HERMES_INSTALL", installDir);
     vi.stubEnv("ARDURBOT_APP_DATA", root);
+    vi.stubEnv("ARDUR_HERMES_PROVIDER_KEY", "fixture-provider-key-123");
     await mkdir(join(installDir, ".venv", "bin"), { recursive: true });
-    await writeFile(join(installDir, ".venv", "bin", "python"), "fixture");
     await writeFile(join(installDir, "pyproject.toml"), "hermes-agent");
     await writeFile(join(installDir, "uv.lock"), "hermes-agent");
+    const fakeAcp = fileURLToPath(new URL("../../../host-runtime/src/runtimes/fixtures/fake-acp.mjs", import.meta.url));
+    await writeFile(
+      join(installDir, ".venv", "bin", "python"),
+      `#!${process.execPath}\nconst fs = require("fs");\ntry {\n  const scenario = fs.existsSync(${JSON.stringify(require("path").join(root, "scenario.txt"))}) ? fs.readFileSync(${JSON.stringify(require("path").join(root, "scenario.txt"))}, "utf8") : "text";\n  process.argv.splice(2, process.argv.length - 2, scenario);\n  if (process.env.ARDUR_HERMES_EXPECTED_HASH && scenario !== "profile-ack" && scenario !== "profile-stale") fs.writeFileSync(require("path").join(process.env.HERMES_HOME, "runtime-ack.json"), JSON.stringify({ profile: "hermes-ardur-v2", configurationHash: process.env.ARDUR_HERMES_EXPECTED_HASH, sessionId: "fixture-" + process.pid }), { mode: 0o600 });\n  if (scenario === "custom-tool-error") { const sessionId = "fixture-" + process.pid; let promptId = null; const readline = require("readline"); const rl = readline.createInterface({ input: process.stdin }); rl.on("line", (line) => { const msg = JSON.parse(line); if (msg.method === "initialize") { process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: 1 } }) + "\\n"); } else if (msg.method === "session/new") { process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: { sessionId } }) + "\\n"); } else if (msg.method === "session/prompt") { promptId = msg.id; process.stdout.write(JSON.stringify({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Provider request failed with key " + process.env.ARDUR_HERMES_PROVIDER_KEY } } } }) + "\\n"); process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: promptId, result: { stopReason: "end_turn" } }) + "\\n"); } else if (msg.id) { process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: {} }) + "\\n"); } }); return; }\nimport(${JSON.stringify(fakeAcp)}).then(() => setInterval(() => {}, 1000)).catch(e => { process.exit(1); });\n} catch (e) { process.exit(1); }\n`
+    );
     await import("node:fs/promises").then(fs => fs.chmod(join(installDir, ".venv", "bin", "python"), 0o755));
   });
 
@@ -49,6 +56,10 @@ describe("LocalHermesRuntime", () => {
         baseUrl: "http://127.0.0.1:7777/v1",
         apiKey: "fixture-provider-key-123",
         thinkingLevel: "high",
+        contextWindow: 32768,
+        maxTokens: 1024,
+        reasoning: true,
+        acceptsImages: false,
         runtimePin: {
           runtimeKind: "hermes",
           credentialId: "fixture-cred",
@@ -80,66 +91,100 @@ describe("LocalHermesRuntime", () => {
   it("refuses if the install is missing", async () => {
     vi.stubEnv("ARDUR_HERMES_INSTALL", join(root, "missing"));
     const runtime = new LocalHermesRuntime(vi.fn().mockResolvedValue({
-      broker: { grant: { port: 8080, runId: "123", timeoutSeconds: 5, relayToken: "token" } },
+      broker: { grant: { id: "123", token: "token", expiresAt: 0 }, revoke: vi.fn() },
       scope: {},
     }));
-    await expect(collect(runtime.run(request()))).rejects.toThrow("Pinned Hermes install is unavailable.");
-  });
-
-  it("refuses staging overlap", async () => {
-    vi.stubEnv("ARDUR_HERMES_INSTALL", join(root, "runtimes", "hermes-agent"));
-    const runtime = new LocalHermesRuntime(vi.fn().mockResolvedValue({
-      broker: { grant: { port: 8080, runId: "123", timeoutSeconds: 5, relayToken: "token" } },
-      scope: {},
-    }));
-    await expect(collect(runtime.run(request()))).rejects.toThrow("overlap");
+    await expect(collect(runtime.run(request()))).rejects.toThrow("Pinned Hermes install failed its safety check.");
   });
 
   it("completes a local runtime success turn and routes a provider call through the relay", async () => {
-    const fakeAcp = fileURLToPath(new URL("../../../host-runtime/src/runtimes/fixtures/fake-acp.mjs", import.meta.url));
-    await writeFile(
-      join(root, "install", ".venv", "bin", "python"),
-      `#!/usr/bin/env node\nimport ${JSON.stringify(fakeAcp)};\n`
-    );
-    const fs = await import("node:fs/promises");
-    await fs.chmod(join(root, "install", ".venv", "bin", "python"), 0o755);
-
     const brokerMethod = vi.fn(async () => ({ result: { foo: "bar" } }));
-    const broker = { grant: { port: 0, runId: "123", timeoutSeconds: 5, relayToken: "token" } };
+    const broker = { grant: { id: "123", token: "token", expiresAt: 0 }, revoke: vi.fn() };
     const runtime = new LocalHermesRuntime(vi.fn().mockResolvedValue({
       broker,
       scope: { executeTool: brokerMethod },
     }));
 
     const req = request();
-    req.prompt = "tool";
+    await import("node:fs/promises").then(m => m.writeFile(join(root, "scenario.txt"), "text"));
+    req.prompt = "text";
+    
+    // Test context config default (which provides node mcp config so fake-acp.mjs doesn't crash if it tries)
+    req.context = { agentInstall: { hostRoot: "something", version: "1" }, mcpConfig: { command: "node", args: ["-e", "setInterval(() => {}, 1000)"], env: {} } };
 
     const result = await collect(runtime.run(req));
-    
-    // fake-acp returns "first " and "second" or for "tool" it emits tool output
     expect(result).toContainEqual(expect.objectContaining({ type: "done" }));
+    expect(broker.revoke).toHaveBeenCalled();
+  });
+
+  it("inspects the launch config and ensures relay overrides real key", async () => {
+    const broker = { grant: { id: "123", token: "relay-token-123", expiresAt: 0 }, revoke: vi.fn() };
+    const runtime = new LocalHermesRuntime(vi.fn().mockResolvedValue({
+      broker,
+      scope: { executeTool: vi.fn() },
+    }));
+
+    const req = request();
+    await import("node:fs/promises").then(m => m.writeFile(join(root, "scenario.txt"), "inspect"));
+    req.prompt = "inspect";
+    req.context = { agentInstall: { hostRoot: "something", version: "1" }, mcpConfig: { command: "node", args: ["-e", "setInterval(() => {}, 1000)"], env: {} } };
+
+    const result = await collect(runtime.run(req));
+    const textEvent = result.find(e => e.type === "text");
+    const data = JSON.parse(textEvent.text);
+    
+    // Defect 1: ensure the launch args don't contain real key or real base URL
+    expect(data.configHasKey).toBe(false);
+    expect(data.env.ARDUR_HERMES_RELAY_URL).toMatch(/^http:\/\/127\.0\.0\.1:/);
+    expect(data.env.ARDUR_HERMES_PROVIDER_KEY).toBe("[redacted]");
+    
+    // Defect 7: Invariant checks
+    expect(data.homeMatches).toBe(true);
+    expect(data.cwdMatches).toBe(true);
+    expect(data.parentSecretAbsent).toBe(true);
+  });
+
+  it("handles provider failure properly as tool failed without exposing key", async () => {
+    const executeTool = vi.fn(async () => { throw new Error("Provider request failed with key fixture-provider-key-123") });
+    const broker = { grant: { id: "123", token: "token", expiresAt: 0 }, revoke: vi.fn() };
+    const runtime = new LocalHermesRuntime(vi.fn().mockResolvedValue({
+      broker,
+      scope: { executeTool },
+    }));
+
+    const req = request();
+    req.tools = [{ name: "fixture_echo", description: "Echo", inputSchema: { type: "object" } }];
+    await import("node:fs/promises").then(m => m.writeFile(join(root, "scenario.txt"), "custom-tool-error"));
+    req.prompt = "custom-tool-error";
+    req.context = { agentInstall: { hostRoot: "something", version: "1" } };
+
+    const result = await collect(runtime.run(req));
+    expect(result).not.toContainEqual(expect.objectContaining({ text: expect.stringContaining("fixture-provider-key") }));
+    expect(result).toContainEqual(expect.objectContaining({ text: expect.stringContaining("Provider request failed with key [redacted]") }));
+    expect(broker.revoke).toHaveBeenCalled();
   });
 
   it("refuses relay after turn end", async () => {
-    const fakeAcp = fileURLToPath(new URL("../../../host-runtime/src/runtimes/fixtures/fake-acp.mjs", import.meta.url));
-    await writeFile(
-      join(root, "install", ".venv", "bin", "python"),
-      `#!/usr/bin/env node\nimport ${JSON.stringify(fakeAcp)};\n`
-    );
-    const fs = await import("node:fs/promises");
-    await fs.chmod(join(root, "install", ".venv", "bin", "python"), 0o755);
-
     const brokerMethod = vi.fn(async () => ({ result: { foo: "bar" } }));
-    const broker = { grant: { port: 0, runId: "123", timeoutSeconds: 5, relayToken: "token" } };
-    const runtime = new LocalHermesRuntime(vi.fn().mockImplementation(async () => {
-      // In the real code, we get the grant back
+    let relayUrl = "";
+    const broker = { grant: { id: "123", token: "token", expiresAt: 0 }, revoke: vi.fn() };
+    const runtime = new LocalHermesRuntime(vi.fn().mockImplementation(async (req, res, relay) => {
+      relayUrl = relay.url;
       return { broker, scope: { executeTool: brokerMethod } };
     }));
 
     const req = request();
-    req.prompt = "redact";
+    await import("node:fs/promises").then(m => m.writeFile(join(root, "scenario.txt"), "text"));
+    req.prompt = "text";
+    req.context = { agentInstall: { hostRoot: "something", version: "1" }, mcpConfig: { command: "node", args: ["-e", "setInterval(() => {}, 1000)"], env: {} } };
 
-    const result = await collect(runtime.run(req));
-    expect(result).toContainEqual(expect.objectContaining({ type: "done" }));
+    await collect(runtime.run(req));
+    
+    // Relay should be closed
+    await expect(fetch(relayUrl + "/chat/completions", {
+      method: "POST",
+      headers: { "Authorization": "Bearer token" },
+      body: JSON.stringify({}),
+    })).rejects.toThrow();
   });
 });

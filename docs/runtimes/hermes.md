@@ -28,6 +28,9 @@ On both macOS and Linux desktop, the managed install root is
 the host service's `workspaces` directory). To keep a qualified checkout in a
 different absolute location, set `ARDUR_HERMES_INSTALL=<install-root>` in the
 desktop or host-service launch environment; that explicit path takes priority.
+When running locally (such as in the dev stack), a relative `DATA_DIR` resolves
+differently for each process (e.g., worker vs API). To ensure a stable install
+path across the stack, set `ARDUR_HERMES_INSTALL` or use an absolute `DATA_DIR`.
 The host probes no other location, including `PATH`, pipx, Homebrew or a
 personal Hermes directory. Restart the desktop app or host service after
 installing or changing the selector. Until qualification passes, settings show
