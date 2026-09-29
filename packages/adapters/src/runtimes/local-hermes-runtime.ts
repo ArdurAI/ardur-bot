@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { AdapterContext, AgentRunRequest, AgentRuntime, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
-import { buildHermesRuntime, localHermesRoot, localHermesStaging } from "@ardurbot/host-runtime/runtimes/hermes-install";
+import { buildHermesRuntime, localHermesStaging } from "@ardurbot/host-runtime/runtimes/hermes-install";
 import { startHermesProviderRelay } from "@ardurbot/host-runtime/runtimes/hermes-provider-relay";
 import type { HermesRuntime } from "@ardurbot/host-runtime/runtimes/hermes-runtime";
 import { HermesRelayDispatcher } from "../hermes-provider-broker.js";
@@ -36,7 +36,6 @@ export class LocalHermesRuntime implements AgentRuntime {
   }
 
   async *run(request: AgentRunRequest, context?: Partial<AdapterContext>): AsyncIterable<AgentRuntimeEvent> {
-    const root = localHermesRoot();
     const staging = localHermesStaging();
     const install = process.env.ARDUR_HERMES_INSTALL;
 
@@ -131,7 +130,6 @@ export class LocalHermesRuntime implements AgentRuntime {
           : undefined,
       };
       delete (localRequest.model as any).oauth;
-      delete (localRequest.model as any).headers;
       yield* runtime.run(localRequest, context);
     } finally {
       this.running.delete(request.runId);
