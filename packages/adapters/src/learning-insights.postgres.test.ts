@@ -173,7 +173,7 @@ describePostgres("learning insights aggregation (PostgreSQL)", () => {
     prisma = db.prisma;
     const now = new Date();
     for (const id of [ownerId, memberId])
-      await prisma.user.create({ data: { id, name: id, email: `${id}@ardurbot.test` } });
+      await prisma.user.create({ data: { id, name: id, email: `${id}@example.test` } });
     await prisma.organization.create({
       data: { id: organizationId, name: "Insights", slug: organizationId, createdAt: now },
     });

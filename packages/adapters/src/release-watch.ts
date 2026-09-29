@@ -2,11 +2,11 @@
  * Provider-neutral helpers for the release-watch routine eval (GitHub issue about
  * Chief-of-Staff daily release monitoring falling back to a computer browser).
  *
- * Offline pieces run in normal CI. The live LLM path maps Elie's "GPT 5.6 Luna"
- * name to a concrete model id without locking the product to one vendor.
+ * Offline pieces run in normal CI. The live LLM path maps the "GPT 5.6 Luna"
+ * label to a concrete model id without locking the product to one vendor.
  */
 
-/** Elie's name for the eval model. */
+/** Display label for the eval model. */
 export const RELEASE_WATCH_EVAL_MODEL_LABEL = "GPT 5.6 Luna";
 
 /**

@@ -4,7 +4,7 @@ test("bot avatar ring stays still when reduced motion is enabled", async ({ page
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/e2e/fixtures/avatar-motion.html");
 
-  const avatar = page.locator(".ardurbot-bot-avatar");
+  const avatar = page.locator(".ardur-bot-avatar");
   await expect(avatar).toBeVisible();
   const ring = avatar.locator("svg").filter({ has: page.locator("circle") });
   await expect(ring).toBeVisible();

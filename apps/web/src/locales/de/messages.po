@@ -1317,8 +1317,9 @@ msgid "Bot screen preview"
 msgstr "Bot-Bildschirmvorschau"
 
 #: src/pages/BotContextMenu.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Bot settings"
-msgstr ""
+msgstr "Bot-Einstellungen"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Bot to link"
@@ -1909,10 +1910,10 @@ msgstr ""
 msgid "Compare bots"
 msgstr ""
 
+#: src/components/composer/ComposerMenu.tsx
 #: src/pages/CompareStart.tsx
-#: src/pages/Shell.tsx
 msgid "Compare with…"
-msgstr ""
+msgstr "Vergleichen mit…"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Complete"
@@ -2933,7 +2934,7 @@ msgstr ""
 
 #: src/pages/CompareStart.tsx
 msgid "Could not start comparison; retry."
-msgstr ""
+msgstr "Vergleich konnte nicht gestartet werden; bitte erneut versuchen."
 
 #: src/pages/CompareStart.tsx
 msgid "Could not start comparison; review the pins and retry."
@@ -3420,6 +3421,10 @@ msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Developer (git, GitHub and GitLab CLIs, node, jq)"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Developer image"
 msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
@@ -4183,6 +4188,7 @@ msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group"
 msgstr "Gruppe"
 
@@ -4190,7 +4196,7 @@ msgstr "Gruppe"
 msgid "Group brief"
 msgstr "Gruppenkurzfassung"
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group settings"
 msgstr "Gruppeneinstellungen"
 
@@ -4361,6 +4367,10 @@ msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Image profile"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Image pull secret"
 msgstr ""
 
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -5137,6 +5147,7 @@ msgstr ""
 #: src/pages/memory/MemoryProposals.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/settings-sections.ts
+#: src/pages/shell/bot-panel.tsx
 msgid "Memory"
 msgstr "Erinnerungen"
 
@@ -6454,8 +6465,9 @@ msgstr ""
 #: src/pages/account/AccountProfile.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/memory/MemoryProposals.tsx
+#: src/pages/shell/bot-panel.tsx
 msgid "Profile"
-msgstr ""
+msgstr "Profil"
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Project ID"
@@ -7027,6 +7039,10 @@ msgstr "Setze dein Passwort zurück"
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Resetting…"
 msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "Resize pane"
+msgstr "Panelgröße ändern"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Resources"
@@ -7721,6 +7737,7 @@ msgstr ""
 #: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Settings"
 msgstr "Einstellungen"
 
@@ -7766,9 +7783,9 @@ msgstr ""
 msgid "Show bots"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show computer"
-msgstr ""
+msgstr "Computer anzeigen"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Show in the menu bar."
@@ -7786,7 +7803,7 @@ msgstr "Mehr anzeigen"
 msgid "Show password"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show settings"
 msgstr "Einstellungen anzeigen"
 
@@ -8024,6 +8041,10 @@ msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Standard"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Standard image"
 msgstr ""
 
 #: src/components/composer/command-description.ts
@@ -9240,7 +9261,7 @@ msgid "Working…"
 msgstr "Wird verarbeitet…"
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Workspace"
 msgstr "Arbeitsbereich"
 

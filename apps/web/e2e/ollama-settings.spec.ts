@@ -4,7 +4,7 @@ import { captureScreenshot, completeOnboarding, openUserSettings, signup } from 
 test("Ollama settings discover installed models without an API key or manual model id", async ({
   page,
 }, testInfo) => {
-  await signup(page, `ollama-${Date.now()}@ardurbot.test`, "password12", "Local models");
+  await signup(page, `ollama-${Date.now()}@example.test`, "password12", "Local models");
   await completeOnboarding(page);
   const status = {
     baseUrl: "http://127.0.0.1:11434",

@@ -46,8 +46,8 @@ the repo file it comes from.
   [Learning reviews]({{< repo-link "docs/learning.md" >}}).
 - No public mobile app store listing yet; the mobile client points at a self-hosted or
   desktop-hosted server — [Mobile builds and store releases]({{< repo-link "docs/mobile-release.md" >}}).
-- The Claude subscription path only uses the owner's own unmodified `claude` binary; the inherited
-  Claude.ai OAuth login is being removed from {{< product >}} builds —
+- The Claude subscription path only uses the owner's own unmodified `claude` binary;
+  {{< product >}} builds do not include a Claude.ai OAuth login —
   [ADR-002: pins are promises]({{< repo-link "docs/decisions/ADR-002-runtime-pins.md" >}}).
 
 ## Roadmap
@@ -65,6 +65,6 @@ Roadmap discussion and open questions live in
 
 ## Changelog
 
-The [CHANGELOG]({{< repo-link "CHANGELOG.md" >}}) records the fork itself: forked from Rakazo
-commit `59d4f0c2` (2026-09-23) under Apache-2.0, project-wide rename to {{< product >}}, CI trimmed
-to advisory checks, and the ADR log added under `docs/decisions/`.
+The [CHANGELOG]({{< repo-link "CHANGELOG.md" >}}) records the fork itself: the fork from upstream
+commit `59d4f0c2` (2026-09-23) under Apache-2.0, the project-wide rename to {{< product >}}, CI
+trimmed to advisory checks, and the ADR log added under `docs/decisions/`.

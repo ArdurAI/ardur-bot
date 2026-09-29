@@ -7,9 +7,20 @@ import type { DesktopReachability, DesktopSetup } from "@ardurbot/contracts";
 import { GUIDED_SETUP_CHANNELS } from "@ardurbot/contracts/desktop-setup";
 import { LOCAL_SETTINGS_PAGE } from "@ardurbot/contracts/local-settings";
 import type { Session } from "electron";
-import { app, BrowserWindow, dialog, ipcMain, Menu, net, session, shell } from "electron";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  Menu,
+  nativeTheme,
+  net,
+  session,
+  shell,
+} from "electron";
 import type { ElectronAutoUpdater } from "./auto-update.js";
 import { DesktopUpdateController, LAUNCH_CHECK_DELAY_MS } from "./auto-update.js";
+import { BootSnapshotStore } from "./boot-snapshot.js";
 import { openBrowserAuth } from "./browser-auth.js";
 import { capDiskCacheSize, clearAppCaches, clearOversizedCache } from "./cache-limits.js";
 import { cliVersion } from "./cli.js";
@@ -103,6 +114,7 @@ import {
   developmentIconFile,
   setupWindowOptions,
   warmWindowTtlMs,
+  windowBackgroundColor,
 } from "./window-options.js";
 
 const versionOutput = cliVersion(process.argv, app.getVersion());
@@ -127,6 +139,8 @@ const DESKTOP_STACK_PROBE_PATH = "/.well-known/ardurbot-desktop-stack";
 const DESKTOP_STACK_TOKEN_HEADER = "x-ardurbot-desktop-stack-token";
 let desktopTray: ReturnType<typeof systemTray> = null;
 let mainWindow: BrowserWindow | null = null;
+/** The theme and language the app page last showed; new main windows open in that colour. */
+let bootSnapshot: BootSnapshotStore | undefined;
 const unsavedFiles = new UnsavedFiles<BrowserWindow>();
 const appWindowTargets = new WeakMap<BrowserWindow, string>();
 let setupWindow: BrowserWindow | null = null;
@@ -348,6 +362,7 @@ function createWindow(url: string, partition: string | null) {
   const icon = developmentIcon();
   const win = new BrowserWindow({
     ...browserWindowOptions(process.platform),
+    backgroundColor: windowBackgroundColor(bootSnapshot?.current, nativeTheme.shouldUseDarkColors),
     ...(icon ? { icon } : {}),
     webPreferences: {
       preload: path.join(import.meta.dirname, "preload.cjs"),
@@ -604,7 +619,7 @@ async function waitForMountedAppDocument(contents: Electron.WebContents) {
     if (contents.isCrashed()) throw new Error("Renderer stopped after load.");
     const ready = (await contents.executeJavaScript(`(() => {
       const appState =
-        document.querySelector("[data-ardurbot-app-state]")?.getAttribute("data-ardurbot-app-state") ??
+        document.querySelector("[data-ardur-app-state]")?.getAttribute("data-ardur-app-state") ??
         null;
       if (appState === "session-pending") return false;
 
@@ -614,7 +629,7 @@ async function waitForMountedAppDocument(contents: Electron.WebContents) {
           performance.getEntriesByName("rk:renderer:shell-ready").length > 0,
       );
       const authOrWelcomeSurface = Boolean(
-        document.querySelector('[data-ardurbot-surface="welcome"]') ||
+        document.querySelector('[data-ardur-surface="welcome"]') ||
           document.querySelector(
             'form input[type="email"], form input[name="email"], form input#email',
           ) ||
@@ -623,7 +638,7 @@ async function waitForMountedAppDocument(contents: Electron.WebContents) {
           ) ||
           document.querySelector(
             '[aria-label="Model"], [aria-label="Model id"], [aria-label="Models from server"]',
-          ) || document.querySelector('[data-ardurbot-surface="guided-onboarding"]'),
+          ) || document.querySelector('[data-ardur-surface="guided-onboarding"]'),
       );
       const surfaceReady = shellBootstrapped || authOrWelcomeSurface;
       const sessionReady =
@@ -1628,6 +1643,14 @@ app.whenReady().then(async () => {
       await guidedEngine?.recheckAccount();
     });
   }
+  const boot = new BootSnapshotStore(userDataDir);
+  bootSnapshot = boot;
+  await boot.load();
+  ipcMain.handle("desktop.boot.save", async (event, snapshot: unknown) => {
+    // Only the app page in the main window keeps it; other windows and frames are ignored.
+    if (systemSenderAllowed(event, mainWindow, permissionTarget()?.url ?? null))
+      await boot.save(snapshot);
+  });
   currentSetup = await readSetup(userDataDir);
   const target = resolveStartupTarget({
     envUrl: process.env.ARDURBOT_WEB_URL,

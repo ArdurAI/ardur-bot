@@ -5,7 +5,7 @@ export function ShellSkeleton() {
   return (
     <div
       className="flex h-full overflow-hidden bg-background"
-      data-ardurbot-app-state="session-pending"
+      data-ardur-app-state="session-pending"
     >
       <aside className="hidden w-[316px] shrink-0 border-e border-sidebar-border bg-sidebar px-3.5 pt-16 md:block">
         <Skeleton className="h-10 rounded-xl" />

@@ -25,7 +25,7 @@ async function patchBotNavigation(page: Page, patch: Partial<Bot>) {
 }
 
 test("an unbound legacy pin asks which connection to use", async ({ page }, testInfo) => {
-  await signup(page, `legacy-pin-${Date.now()}@ardurbot.test`, "password12", "Legacy Pin");
+  await signup(page, `legacy-pin-${Date.now()}@example.test`, "password12", "Legacy Pin");
   await completeOnboarding(page);
   await patchBotNavigation(page, {
     modelProvider: "xai",
@@ -97,7 +97,7 @@ test("an unbound legacy pin asks which connection to use", async ({ page }, test
 });
 
 test("the model chip and provider error open the bot model control", async ({ page }, testInfo) => {
-  await signup(page, `model-recovery-${Date.now()}@ardurbot.test`, "password12", "Model Recovery");
+  await signup(page, `model-recovery-${Date.now()}@example.test`, "password12", "Model Recovery");
   await completeOnboarding(page);
 
   const catalog: ModelCatalogEntry[] = [
@@ -220,7 +220,7 @@ test("the model chip and provider error open the bot model control", async ({ pa
 test("a pin failure opens its provider settings and the bot model control", async ({
   page,
 }, testInfo) => {
-  await signup(page, `pin-recovery-${Date.now()}@ardurbot.test`, "password12", "Pin Recovery");
+  await signup(page, `pin-recovery-${Date.now()}@example.test`, "password12", "Pin Recovery");
   await completeOnboarding(page);
   await page.route("**/rpc/models/list", (route) =>
     route.fulfill({
@@ -309,7 +309,7 @@ test("a pin failure opens its provider settings and the bot model control", asyn
 test("native runtime settings show unavailable sign-in without replacing the pin", async ({
   page,
 }, testInfo) => {
-  await signup(page, `native-runtime-${Date.now()}@ardurbot.test`, "password12", "Runtime Test");
+  await signup(page, `native-runtime-${Date.now()}@example.test`, "password12", "Runtime Test");
   await completeOnboarding(page);
   await patchBotNavigation(page, {
     runtimeKind: "claude-code",
@@ -377,7 +377,7 @@ test("native runtime settings show unavailable sign-in without replacing the pin
 test("Hermes picker keeps the Ardur connection and shows only its limits", async ({
   page,
 }, testInfo) => {
-  await signup(page, `hermes-picker-${Date.now()}@ardurbot.test`, "password12", "Runtime Test");
+  await signup(page, `hermes-picker-${Date.now()}@example.test`, "password12", "Runtime Test");
   await completeOnboarding(page);
   await patchBotNavigation(page, {
     runtimeKind: "pi",

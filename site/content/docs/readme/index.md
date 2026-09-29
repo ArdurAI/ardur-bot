@@ -15,16 +15,14 @@ always uses your ChatGPT account at `xhigh` effort, a research bot on Kimi, a lo
 Ollama. Bots work on computers you control: your machine, Docker, and (planned) Podman and
 Kubernetes.
 
-Ardur is a fork of [Rakazo](https://github.com/elie222/rakazo) (Apache-2.0). See
-[NOTICE](https://github.com/ArdurAI/ardur-bot/blob/__ARDUR_BOT_SOURCE_REF__/NOTICE) and [ADR-001](https://github.com/ArdurAI/ardur-bot/blob/__ARDUR_BOT_SOURCE_REF__/docs/decisions/ADR-001-fork-and-rename.md).
+Ardur is an independently maintained fork; see [NOTICE](https://github.com/ArdurAI/ardur-bot/blob/__ARDUR_BOT_SOURCE_REF__/NOTICE) for its upstream origin and
+Apache-2.0 attribution.
 
 > **Status: alpha.** Everything lands on the `dev` branch; `main` moves only after a
 > human has verified a build. The release workflow produces unsigned desktop previews;
 > check the release assets before choosing an installer. Running from source remains available.
 
 ## What you get today
-
-Inherited from Rakazo and working:
 
 - Persistent bots with their own conversation, memory, routines and history
 - Group chats and delegation between bots, plus short-lived subagents
@@ -68,10 +66,9 @@ After synchronization, shared notes are Markdown files in the connected reposito
 
 ## Where it is going
 
-- Subscription-honest providers: Claude Pro/Max through your own unmodified `claude` CLI
-  (the inherited Claude.ai OAuth login will be removed, since Anthropic's terms do not allow
-  third-party apps to use it), Codex through OpenAI's documented integration, Kimi and Z.ai
-  coding plans, Gemini with an API key, Ollama as a first-class choice
+- Subscription-honest providers: Claude Pro/Max through your own unmodified `claude` CLI,
+  Codex through OpenAI's documented integration, Kimi and Z.ai coding plans, Gemini with an
+  API key, Ollama as a first-class choice
 - Computers on Podman and kind/Kubernetes
 - Signed and notarized downloads
 - A fast, smooth UI on Windows, macOS and Linux
@@ -224,9 +221,8 @@ pnpm lint    # Biome lint and format
 pnpm test    # offline unit tests, no keys needed
 ```
 
-More checks, the branch policy and how to sync with upstream Rakazo are in
-[CONTRIBUTING.md](/docs/contributing/). Design notes are under [docs/](https://github.com/ArdurAI/ardur-bot/tree/__ARDUR_BOT_SOURCE_REF__/docs) where
-present and decisions under [docs/decisions/](https://github.com/ArdurAI/ardur-bot/tree/__ARDUR_BOT_SOURCE_REF__/docs/decisions).
+More checks and the branch policy are in [CONTRIBUTING.md](/docs/contributing/). Design notes
+are under [docs/](https://github.com/ArdurAI/ardur-bot/tree/__ARDUR_BOT_SOURCE_REF__/docs) where present and decisions under [docs/decisions/](https://github.com/ArdurAI/ardur-bot/tree/__ARDUR_BOT_SOURCE_REF__/docs/decisions).
 
 ## Community
 
@@ -237,4 +233,4 @@ present and decisions under [docs/decisions/](https://github.com/ArdurAI/ardur-b
 
 ## License
 
-Apache-2.0. Derived from Rakazo; see [NOTICE](https://github.com/ArdurAI/ardur-bot/blob/__ARDUR_BOT_SOURCE_REF__/NOTICE).
+Apache-2.0; see [LICENSE](https://github.com/ArdurAI/ardur-bot/blob/__ARDUR_BOT_SOURCE_REF__/LICENSE) and [NOTICE](https://github.com/ArdurAI/ardur-bot/blob/__ARDUR_BOT_SOURCE_REF__/NOTICE).
