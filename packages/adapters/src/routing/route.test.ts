@@ -59,3 +59,19 @@ it("rejects targets outside the authorized roster and handles multiword mentions
   ).toBe("mention");
   expect(routeIncoming({ bots: [], text: "Review" })).toBeNull();
 });
+it("reads only explicit @-mentions, never prose, before the coordinator", () => {
+  const input = { bots, groupCoordinatorId: "chief", lastActiveThread: bots[1] };
+  for (const text of ["tell everyone to introduce themselves", "ask the worker for its status"])
+    expect(routeIncoming({ ...input, text })).toMatchObject({
+      botId: "chief",
+      rule: "group-coordinator",
+    });
+  expect(routeIncoming({ ...input, text: "@researcher tell everyone" })).toMatchObject({
+    botId: "researcher",
+    rule: "mention",
+  });
+  expect(routeIncoming({ ...input, text: "ask everyone", replyTo: bots[2] })).toMatchObject({
+    botId: "researcher",
+    rule: "reply",
+  });
+});
