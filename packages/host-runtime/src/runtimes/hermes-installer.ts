@@ -189,9 +189,9 @@ export async function installHermes(deps: {
     }
     phase = "downloading";
     await writeStatus(root, phaseStatus(phase, clock));
-    await assertRealDirectory(path.join(root, "runtimes"));
+    await ensureRealDirectory(root, ["runtimes"]);
     await removeStaleVersions(root, versionName);
-    await assertRealDirectory(versionDir);
+    await ensureRealDirectory(root, ["runtimes", versionName]);
     await writeFile(path.join(root, "runtimes", ".install.log"), "", { mode: 0o600 });
 
     const source = await download(
@@ -224,8 +224,7 @@ export async function installHermes(deps: {
     if (sha256(uvArchive) !== (deps.uvSha256 ?? release.sha256))
       throw new HermesInstallError(HERMES_INSTALL_FAILED);
     const uvBinary = path.join(root, "runtimes", "uv", UV_VERSION, "uv");
-    await assertRealDirectory(path.join(root, "runtimes", "uv"));
-    await assertRealDirectory(path.dirname(uvBinary));
+    await ensureRealDirectory(root, ["runtimes", "uv", UV_VERSION]);
     await extractUvBinary(uvArchive, uvBinary, UV_INFLATED);
 
     home = await mkdtemp(path.join(tmpdir(), "hermes-uv-"));
@@ -234,7 +233,8 @@ export async function installHermes(deps: {
     const timeoutMs = deps.commandTimeoutMs ?? COMMAND_TIMEOUT_MS;
     phase = "python";
     await writeStatus(root, phaseStatus(phase, clock));
-    await assertRealDirectory(path.join(root, "runtimes", "python"));
+    await ensureRealDirectory(root, ["runtimes", "python"]);
+    await ensureRealDirectory(root, ["runtimes", ".uv-cache"]);
     await runChecked(run, uvBinary, ["python", "install", "3.13"], {
       cwd: versionDir,
       env: commandEnv,
@@ -346,7 +346,7 @@ function liveInstallReady(link: string): boolean {
 async function acquireLock(root: string): Promise<string> {
   const lockPath = hermesInstallLockPath(root);
   const directory = path.dirname(lockPath);
-  await mkdir(directory, { recursive: true });
+  await ensureRealDirectory(root, ["runtimes"]);
   const token = randomUUID();
   const body = JSON.stringify({ pid: process.pid, token, createdAt: new Date().toISOString() });
   for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -453,14 +453,25 @@ async function releaseLock(root: string, token: string): Promise<void> {
 }
 
 /** The install writes only into real directories it owns; a planted symlink is refused. */
-async function assertRealDirectory(directory: string): Promise<void> {
-  const stat = await lstat(directory).catch((error: NodeJS.ErrnoException) => {
-    if (error.code === "ENOENT") return undefined;
-    throw new HermesInstallError(HERMES_INSTALL_FAILED);
-  });
-  if (stat === undefined) return;
-  if (stat.isSymbolicLink() || !stat.isDirectory())
-    throw new HermesInstallError(HERMES_INSTALL_FAILED);
+async function ensureRealDirectory(root: string, segments: string[]): Promise<string> {
+  await mkdir(root, { recursive: true });
+  let current = root;
+  let stat = await lstat(current).catch(() => undefined);
+  if (!stat?.isDirectory()) throw new HermesInstallError(HERMES_INSTALL_FAILED);
+  // Each level is created with a non-recursive mkdir and then lstat'd, so a
+  // symlink planted between the check and the write is never followed.
+  for (const segment of segments) {
+    current = path.join(current, segment);
+    try {
+      await mkdir(current);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST")
+        throw new HermesInstallError(HERMES_INSTALL_FAILED);
+    }
+    stat = await lstat(current).catch(() => undefined);
+    if (!stat?.isDirectory()) throw new HermesInstallError(HERMES_INSTALL_FAILED);
+  }
+  return current;
 }
 
 async function removeStaleVersions(root: string, versionName: string): Promise<void> {

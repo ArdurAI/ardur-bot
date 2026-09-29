@@ -164,6 +164,8 @@ const entry = {
 fs.appendFileSync(${JSON.stringify(report)}, JSON.stringify(entry) + "\\n");
 if (entry.argv[0] === "python" && entry.argv[1] === "install" && entry.argv[2] === "3.13" && entry.argv.length === 3) {
   fs.mkdirSync(path.join(process.env.UV_PYTHON_INSTALL_DIR, "cpython-3.13.2-fixture"), { recursive: true });
+  fs.mkdirSync(process.env.UV_CACHE_DIR, { recursive: true });
+  fs.writeFileSync(path.join(process.env.UV_CACHE_DIR, "cache.bin"), "cached\\n");
   process.exit(0);
 }
 if (entry.argv[0] === "sync") {
@@ -946,6 +948,43 @@ it.skipIf(process.platform === "win32")(
       expect(fetchImpl).not.toHaveBeenCalled();
       expect(readHermesInstallStatus(root)?.message).toBe(HERMES_INSTALL_FAILED);
       expect(readdirSync(elsewhere)).toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      await rm(elsewhere, { recursive: true, force: true });
+    }
+  },
+);
+
+it.skipIf(process.platform === "win32")(
+  "refuses to write through a symlink planted where a runtime directory is created",
+  async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "hermes-planted-link-"));
+    const elsewhere = await mkdtemp(path.join(tmpdir(), "hermes-planted-target-"));
+    const report = path.join(root, "uv-report.ndjson");
+    const expectedTree = await gitWriteTree();
+    const uv = uvArchive(uvScript(report, path.join(root, "install-status.json")));
+    const fetchImpl: HermesFetch = async (input) =>
+      new Response(input === HERMES_SOURCE_URL ? sourceArchive() : uv.gzip);
+    try {
+      // The uv cache directory does not exist yet; a symlink is planted in its place.
+      await mkdir(path.join(root, "runtimes"));
+      await symlink(elsewhere, path.join(root, "runtimes", ".uv-cache"));
+      await expect(
+        installHermes({
+          root,
+          fetch: fetchImpl,
+          platform: "linux",
+          arch: "x64",
+          expectedTree,
+          sources: sourceMap(),
+          uvSha256: uv.sha256,
+        }),
+      ).rejects.toThrow(HERMES_INSTALL_FAILED);
+      expect(readdirSync(elsewhere)).toEqual([]);
+      expect(
+        lstatSync(path.join(root, "runtimes", ".uv-cache")).isSymbolicLink(),
+      ).toBe(true);
+      expect(readHermesInstallStatus(root)?.message).toBe(HERMES_INSTALL_FAILED);
     } finally {
       await rm(root, { recursive: true, force: true });
       await rm(elsewhere, { recursive: true, force: true });
