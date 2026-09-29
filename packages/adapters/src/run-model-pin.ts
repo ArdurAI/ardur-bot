@@ -239,6 +239,9 @@ export async function resolveRunModelPin(input: {
     const concrete = translatedHermes
       ? catalogModels().getModel(model.provider, model.id)
       : undefined;
+    // What the connection can produce today: its own declared limit, or the registry's for a
+    // key-based catalog connection, whose secret declares none.
+    const availableMaxTokens = model.maxTokens ?? concrete?.maxTokens ?? 4_096;
     const resolved = {
       ...model,
       ...(translatedHermes
@@ -252,10 +255,7 @@ export async function resolveRunModelPin(input: {
       ...(pin.runtimeKind === "hermes"
         ? {
             contextWindow: model.contextWindow ?? concrete?.contextWindow ?? 32_768,
-            maxTokens: Math.min(
-              model.maxTokens ?? concrete?.maxTokens ?? 4_096,
-              input.maxOutputTokens ?? 65_536,
-            ),
+            maxTokens: Math.min(availableMaxTokens, input.maxOutputTokens ?? 65_536),
           }
         : {}),
       runtimePin: pin,
@@ -296,7 +296,7 @@ export async function resolveRunModelPin(input: {
       if (
         captured.id !== resolved.id ||
         captured.contextWindow !== resolved.contextWindow ||
-        (model.maxTokens ?? 4096) < captured.maxTokens ||
+        availableMaxTokens < captured.maxTokens ||
         captured.reasoning !== (resolved.reasoning ?? false) ||
         captured.acceptsImages !== (resolved.acceptsImages ?? false) ||
         captured.thinkingLevel !== ThinkingLevelSchema.parse(resolved.thinkingLevel ?? "off")

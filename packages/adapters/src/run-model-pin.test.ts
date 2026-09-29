@@ -5,6 +5,7 @@ import { compileHermesRuntimeConfig } from "@ardurbot/host-runtime/runtimes/herm
 import { describe, expect, it, vi } from "vitest";
 import { effectiveHermesConfig, hermesConfigHash } from "./hermes-compatibility.js";
 import { resolveModelApiKey } from "./pi-oauth.js";
+import { catalogModels } from "./pi-runtime.js";
 import { resolveRunModelPin } from "./run-model-pin.js";
 
 const scope = { userId: "user", spaceId: "space" };
@@ -195,6 +196,67 @@ describe("run pin snapshots", () => {
         maxTokens: result.maxTokens,
       });
       expect(result.pin.effectiveRuntimeConfigHash).toMatch(/^[a-f0-9]{64}$/);
+    },
+  );
+  it.each(["primary", "group", "delegated"])(
+    "admits a key-based catalog connection for Hermes on %s admission, and again on resume",
+    async (path) => {
+      // The stored secret of a key-based connection is the key and nothing else: its limits
+      // live in the registry.
+      const f = fixture();
+      const catalog = catalogModels().getModel(pin.provider, pin.modelId);
+      expect(catalog?.maxTokens).toBeGreaterThan(4_096);
+      const config = effectiveHermesConfig(null);
+      const choice = {
+        ...pin,
+        runtimeKind: "hermes" as const,
+        runtimeConfig: config,
+        runtimeConfigHash: hermesConfigHash(config),
+      };
+      const admitted = await resolveRunModelPin({
+        ...f,
+        bot:
+          path === "group"
+            ? {}
+            : {
+                runtimeKind: "hermes",
+                modelProvider: choice.provider,
+                modelId: choice.modelId,
+                thinkingLevel: choice.effort,
+                modelCredentialId: choice.credentialId,
+                modelPinRevision: choice.revision,
+                runtimeConfig: config,
+              },
+        ...(path === "group" ? { snapshot: choice } : {}),
+        newAdmission: true,
+        ...(path === "delegated" ? { maxOutputTokens: 10_000 } : {}),
+      });
+      expect(admitted).toMatchObject({ kind: "resolved" });
+      if (admitted.kind !== "resolved") return;
+      expect(admitted.contextWindow).toBe(catalog?.contextWindow);
+      expect(admitted.maxTokens).toBe(
+        path === "delegated" ? 10_000 : Math.min(catalog?.maxTokens ?? 0, 65_536),
+      );
+      expect(admitted.pin.effectiveRuntimeConfig?.model).toMatchObject({
+        contextWindow: admitted.contextWindow,
+        maxTokens: admitted.maxTokens,
+      });
+      // A retry or a resume reads the recorded pin and resolves the same way.
+      expect(await resolveRunModelPin({ ...f, bot: {}, snapshot: admitted.pin })).toMatchObject({
+        kind: "resolved",
+        maxTokens: admitted.maxTokens,
+      });
+      // A connection that can now produce less than was recorded still fails closed.
+      f.loadKey.mockResolvedValue({
+        provider: pin.provider,
+        id: pin.modelId,
+        apiKey: "test-key",
+        maxTokens: 1_024,
+      });
+      expect(await resolveRunModelPin({ ...f, bot: {}, snapshot: admitted.pin })).toMatchObject({
+        kind: "problem",
+        code: "runtime-configuration-invalid",
+      });
     },
   );
   it("rejects a resumed Hermes pin when the connection capabilities changed", async () => {
