@@ -11,6 +11,7 @@ import { Id } from "./ids.js";
 import { McpTransportSchema } from "./mcp.js";
 import { RunFailurePayloadSchema } from "./provider-errors.js";
 import { FeedbackSchema } from "./reactions.js";
+import { RuntimeConfigOperationManifestSchema } from "./runtime-config.js";
 
 export const ProductEventType = z.enum([
   "thread.message.created",
@@ -27,6 +28,7 @@ export const ProductEventType = z.enum([
   "thread.cloud_agent",
   "run.started",
   "run.context",
+  "run.configurationApplied",
   "run.checkpointed",
   "run.waiting_input",
   "run.completed",
@@ -378,6 +380,19 @@ export const ProductEventSchema = z
   .superRefine((event, ctx) => {
     if (event.type === "run.context") {
       const result = ContextSnapshotSchema.safeParse(event.payload);
+      if (!result.success)
+        for (const issue of result.error.issues)
+          ctx.addIssue({ ...issue, path: ["payload", ...issue.path] });
+    }
+    if (event.type === "run.configurationApplied") {
+      const result = z
+        .strictObject({
+          operationId: Id,
+          sourceRunId: Id,
+          manifest: RuntimeConfigOperationManifestSchema,
+          hash: z.string().regex(/^[a-f0-9]{64}$/),
+        })
+        .safeParse(event.payload);
       if (!result.success)
         for (const issue of result.error.issues)
           ctx.addIssue({ ...issue, path: ["payload", ...issue.path] });

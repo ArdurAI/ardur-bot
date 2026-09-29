@@ -18,6 +18,27 @@ describe("lingui catalogs", () => {
   });
 
   it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+    "catalogs the rebuilt Account card headings and actions in %s",
+    async (locale) => {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const catalog = await formatter().parse(readFileSync(filename, "utf8"), {
+        locale,
+        sourceLocale: "en",
+        filename,
+      });
+      for (const message of [
+        "Sign-in and security",
+        "Devices and sessions",
+        "Save instructions",
+        "Saved, but not applied everywhere.",
+      ]) {
+        const entry = Object.values(catalog).find((value) => value.message === message);
+        expect(entry?.translation, `${locale}: ${message}`).toBeTruthy();
+      }
+    },
+  );
+
+  it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
     "catalogs the authenticated guided account controls in %s",
     async (locale) => {
       const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
@@ -36,6 +57,31 @@ describe("lingui catalogs", () => {
         "First bot not created",
         "Open Models",
         "The first bot could not be created. Try again.",
+      ]) {
+        const entry = Object.values(catalog).find((value) => value.message === message);
+        expect(entry?.translation, `${locale}: ${message}`).toBeTruthy();
+      }
+    },
+  );
+
+  it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+    "catalogs the command palette shortcut commands in %s",
+    async (locale) => {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const catalog = await formatter().parse(readFileSync(filename, "utf8"), {
+        locale,
+        sourceLocale: "en",
+        filename,
+      });
+      for (const message of [
+        "New bot",
+        "Message",
+        "Search",
+        "Hide bots",
+        "Show bots",
+        "Back",
+        "Forward",
+        "Settings",
       ]) {
         const entry = Object.values(catalog).find((value) => value.message === message);
         expect(entry?.translation, `${locale}: ${message}`).toBeTruthy();
@@ -486,6 +532,24 @@ describe("lingui catalogs", () => {
         expect(catalog).toContain(`#: src/pages/Shell.tsx\nmsgid ${JSON.stringify(sentence)}`);
         expect(catalog).not.toContain(`msgid ${JSON.stringify(sentence)}\nmsgstr ""`);
       }
+    }
+  });
+
+  it("translates the coordinator tools warning in every supported catalog", () => {
+    const message = "{0} can't use Ardur tools — a coordinator needs tools to hand off work.";
+    for (const locale of ["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      expect(catalog, `${locale}: extracted from GroupPanel`).toContain(
+        `#: src/pages/GroupPanel.tsx\nmsgid ${JSON.stringify(message)}`,
+      );
+      const key = `msgid ${JSON.stringify(message)}\nmsgstr "`;
+      const at = catalog.indexOf(key);
+      expect(at, `${locale}: ${message} missing from catalog`).toBeGreaterThanOrEqual(0);
+      const translated = catalog.slice(at + key.length, catalog.indexOf('"', at + key.length));
+      expect(translated.trim(), `${locale}: ${message} must not be empty`).toBeTruthy();
     }
   });
 

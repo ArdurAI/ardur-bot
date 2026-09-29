@@ -50,8 +50,24 @@ type UsageRow = {
   cost: number | null;
   pricingProvenance: unknown;
   createdAt: Date;
+  categoryCoverage: unknown;
+  reasoningSemantics: string;
 };
 const DAY = 86_400_000;
+
+/**
+ * Whether a record's input or output total is only a lower bound. Totals-only records
+ * carry no categories and count as reported. Missing cache splits leave totals exact.
+ */
+function totalsIncomplete(row: UsageRow) {
+  const coverage = row.categoryCoverage as Record<string, string> | null;
+  return Boolean(
+    coverage &&
+      (coverage.logicalInput !== "complete" ||
+        coverage.output !== "complete" ||
+        (row.reasoningSemantics === "separate" && coverage.reasoning !== "complete")),
+  );
+}
 
 export function usageWindows(now: Date) {
   const day = new Date(now);
@@ -70,6 +86,7 @@ function period(rows: UsageRow[]): UsagePeriod {
       rows.length && rows.every((row) => row.cost !== null && row.pricingProvenance)
         ? rows.reduce((sum, row) => sum + row.cost!, 0)
         : null,
+    incomplete: rows.some(totalsIncomplete),
   };
 }
 
@@ -113,6 +130,8 @@ export async function usageSummary(
         cost: true,
         pricingProvenance: true,
         createdAt: true,
+        categoryCoverage: true,
+        reasoningSemantics: true,
       },
     }),
   ]);

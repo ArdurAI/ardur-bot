@@ -22,6 +22,7 @@ msgid " — not available on your account"
 msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid " · not available"
 msgstr ""
 
@@ -62,6 +63,11 @@ msgstr "진행 중인 작업 {0}개"
 #: src/pages/settings/UploadedFiles.tsx
 msgid "{0} bytes"
 msgstr ""
+
+#. placeholder {0}: runtimeNames[coordinatorRuntime]
+#: src/pages/GroupPanel.tsx
+msgid "{0} can't use Ardur tools — a coordinator needs tools to hand off work."
+msgstr "{0}은(는) Ardur 도구를 사용할 수 없습니다 — 코디네이터가 작업을 맡기려면 도구가 필요합니다."
 
 #. placeholder {0}: block.name
 #: src/pages/shell/message-cards.tsx
@@ -386,7 +392,6 @@ msgid "Accessibility"
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
-#: src/pages/account/AccountSettings.tsx
 #: src/pages/settings-sections.ts
 msgid "Account"
 msgstr "계정"
@@ -589,6 +594,7 @@ msgstr "추가 중…"
 #: src/pages/RoutineSchedule.tsx
 #: src/pages/settings-sections.ts
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-config-panel.tsx
 msgid "Advanced"
 msgstr "고급 설정"
 
@@ -837,6 +843,10 @@ msgstr "Antigravity의 최신 모델 목록을 확인할 수 없습니다. 다�
 msgid "Any"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "API attempts"
+msgstr "API 시도"
+
 #: src/components/SoftwareUpdateSection.tsx
 msgid "API is back, but the update did not finish. Check the host logs."
 msgstr "API가 다시 작동하지만 업데이트가 완료되지 않았습니다. 호스트 로그를 확인하세요."
@@ -959,9 +969,21 @@ msgstr "보관되었습니다. 대화, 기억, 파일은 유지됩니다."
 msgid "Ardur (built-in)"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Ardur manages"
+msgstr "Ardur 관리 항목"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Ardur manages paths, hooks, permissions, and network access."
+msgstr "Ardur가 경로, 훅, 권한 및 네트워크 액세스를 관리합니다."
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Ardur reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Ardur sets the model and thinking level. Change them in bot settings."
+msgstr "모델과 사고 수준은 Ardur가 설정합니다. 봇 설정에서 변경하세요."
 
 #: src/lib/board-close-copy.ts
 msgid "Ardur tried five times. Close it on the Board, or check that this computer is connected."
@@ -1128,6 +1150,7 @@ msgstr ""
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
+#: src/pages/Shell.tsx
 msgid "Back"
 msgstr "뒤로"
 
@@ -1295,8 +1318,9 @@ msgid "Bot screen preview"
 msgstr "Bot 화면 미리보기"
 
 #: src/pages/BotContextMenu.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Bot settings"
-msgstr ""
+msgstr "봇 설정"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Bot to link"
@@ -1469,6 +1493,10 @@ msgstr "취소됨"
 msgid "Capabilities"
 msgstr ""
 
+#: src/pages/group-model-control.tsx
+msgid "Captured for this group."
+msgstr "이 그룹에 대해 캡처됨."
+
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Catalog"
 msgstr ""
@@ -1594,6 +1622,10 @@ msgstr "체크아웃에 로컬 변경 사항이 있습니다. 업데이트하기
 msgid "Checkpoints"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Child agents"
+msgstr "하위 에이전트"
+
 #: src/pages/customize/ConfigureExtension.tsx
 msgid "Choose"
 msgstr ""
@@ -1651,6 +1683,10 @@ msgstr ""
 #: src/pages/McpServersOverlay.tsx
 msgid "Choose one credential: a token or a header."
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Choose Trim older context or Stop the run."
+msgstr "“오래된 컨텍스트 정리” 또는 “실행 중지”를 선택하세요."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Choose which connected model Ardur uses."
@@ -1875,10 +1911,10 @@ msgstr ""
 msgid "Compare bots"
 msgstr ""
 
+#: src/components/composer/ComposerMenu.tsx
 #: src/pages/CompareStart.tsx
-#: src/pages/Shell.tsx
 msgid "Compare with…"
-msgstr ""
+msgstr "비교하기…"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Complete"
@@ -1966,6 +2002,14 @@ msgstr ""
 #: src/components/Context.tsx
 msgid "Concurrent runs"
 msgstr "동시 실행"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Configuration (JSON)"
+msgstr "구성 (JSON)"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Configuration must be 16 KiB or smaller."
+msgstr "구성은 16KiB 이하여야 합니다."
 
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Configure"
@@ -2166,6 +2210,12 @@ msgstr "컨텍스트"
 #: src/pages/Onboarding.tsx
 msgid "Context limit"
 msgstr "컨텍스트 한도"
+
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Context limit (KiB)"
+msgstr "컨텍스트 제한 (KiB)"
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/capabilities/CapabilitiesPage.tsx
@@ -2675,6 +2725,10 @@ msgstr "샘플 음성을 재생하지 못했습니다."
 msgid "Could not prepare the import. Try again."
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Could not preview the configuration. Try again."
+msgstr "구성을 미리 볼 수 없습니다. 다시 시도하세요."
+
 #: src/pages/LocalSettings.tsx
 msgid "Could not reach the local server. Start it and try again."
 msgstr ""
@@ -2881,7 +2935,7 @@ msgstr ""
 
 #: src/pages/CompareStart.tsx
 msgid "Could not start comparison; retry."
-msgstr ""
+msgstr "비교를 시작하지 못했습니다. 다시 시도하세요."
 
 #: src/pages/CompareStart.tsx
 msgid "Could not start comparison; review the pins and retry."
@@ -3370,6 +3424,10 @@ msgstr ""
 msgid "Developer (git, GitHub and GitLab CLIs, node, jq)"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Developer image"
+msgstr ""
+
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Developer is a larger download and uses more disk space."
 msgstr ""
@@ -3393,6 +3451,10 @@ msgstr ""
 #: src/pages/settings-sections.ts
 msgid "Devices"
 msgstr ""
+
+#: src/pages/account/AccountSettings.tsx
+msgid "Devices and sessions"
+msgstr "기기 및 세션"
 
 #: src/pages/DevicesSettings.tsx
 msgid "Devices are unavailable; reconnect to your home."
@@ -3624,6 +3686,10 @@ msgstr "수정 후 보내기"
 msgid "Education"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Effective configuration"
+msgstr "유효 구성"
+
 #: src/pages/TeamBoard.tsx
 msgid "Effort"
 msgstr ""
@@ -3633,7 +3699,6 @@ msgid "Effort: not applicable"
 msgstr ""
 
 #: src/pages/Auth.tsx
-#: src/pages/settings-sections.ts
 msgid "Email"
 msgstr "이메일"
 
@@ -3705,6 +3770,10 @@ msgstr "이미지 한도는 1에서 1000 사이의 정수로 입력하세요."
 #: src/pages/Onboarding.tsx
 msgid "Enter this code at <0>{0}</0>"
 msgstr "<0>{0}</0>에서 이 코드를 입력하세요"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Enter valid JSON."
+msgstr "유효한 JSON을 입력하세요."
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Environment values are requested when you connect this server."
@@ -3979,6 +4048,10 @@ msgstr "MCP 연결을 마무리하는 중…"
 msgid "First bot not created"
 msgstr "첫 번째 봇이 아직 생성되지 않았습니다"
 
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Fix the configuration JSON to edit these settings."
+msgstr "이 설정을 편집하려면 구성 JSON을 수정하세요."
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Flag unexpected actions"
 msgstr "예상하지 못한 작업 표시"
@@ -4018,6 +4091,10 @@ msgstr ""
 #: src/pages/Auth.tsx
 msgid "Forgot password?"
 msgstr "비밀번호를 잊으셨나요?"
+
+#: src/pages/Shell.tsx
+msgid "Forward"
+msgstr "앞으로"
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Found on this computer"
@@ -4126,6 +4203,7 @@ msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group"
 msgstr "그룹"
 
@@ -4133,7 +4211,7 @@ msgstr "그룹"
 msgid "Group brief"
 msgstr "그룹 브리핑"
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group settings"
 msgstr "그룹 설정"
 
@@ -4198,6 +4276,10 @@ msgstr "Hermes는 아직 이 연결을 지원하지 않습니다."
 msgid "Hermes is not installed on this computer."
 msgstr "이 컴퓨터에 Hermes가 설치되어 있지 않습니다."
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Hermes isn't available on Windows yet."
+msgstr "Hermes는 아직 Windows에서 사용할 수 없습니다."
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."
 msgstr "Hermes는 이 컴퓨터의 접근 권한으로 실행됩니다."
@@ -4208,7 +4290,7 @@ msgstr "안녕하세요. 답변을 소리 내어 읽을 때 이런 목소리로 
 
 #: src/pages/Shell.tsx
 msgid "Hide bots"
-msgstr ""
+msgstr "Bot 숨기기"
 
 #: src/pages/customize/McpDiagnostics.tsx
 msgid "Hide logs"
@@ -4296,6 +4378,10 @@ msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Image profile"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Image pull secret"
 msgstr ""
 
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -4708,6 +4794,7 @@ msgstr ""
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/settings-sections.ts
+#: src/pages/shell/runtime-config-panel.tsx
 msgid "Learning"
 msgstr ""
 
@@ -4902,6 +4989,7 @@ msgstr ""
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/SharedCommand.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
 msgid "Loading…"
 msgstr "불러오는 중…"
 
@@ -5078,6 +5166,7 @@ msgstr ""
 #: src/pages/memory/MemoryProposals.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/settings-sections.ts
+#: src/pages/shell/bot-panel.tsx
 msgid "Memory"
 msgstr "기억"
 
@@ -5241,7 +5330,9 @@ msgstr "모델"
 msgid "Model & effort"
 msgstr ""
 
-#: src/pages/shell/hermes-limits.tsx
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
 msgid "Model calls per turn"
 msgstr "턴당 모델 호출 수"
 
@@ -5289,6 +5380,10 @@ msgstr "모델이 변경되었습니다."
 #: src/pages/ComparePanel.tsx
 msgid "Model version"
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Model, thinking, connections, tools, and permissions come from Ardur."
+msgstr "모델, 사고, 연결, 도구 및 권한은 Ardur에서 제공합니다."
 
 #: src/pages/LocalSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -5406,6 +5501,18 @@ msgstr "이 루틴의 이름을 정하세요"
 msgid "Namespace"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Native child agents are not available with Hermes."
+msgstr "Hermes에서는 네이티브 하위 에이전트를 사용할 수 없습니다."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Native compression"
+msgstr "네이티브 압축"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Native compression is not available with Hermes."
+msgstr "Hermes에서는 네이티브 압축을 사용할 수 없습니다."
+
 #: src/pages/shell/TopNav.tsx
 msgid "Navigation"
 msgstr ""
@@ -5459,6 +5566,7 @@ msgstr ""
 msgid "New access token"
 msgstr ""
 
+#: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "New bot"
 msgstr "새 Bot 만들기"
@@ -5506,6 +5614,7 @@ msgid "Next"
 msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid "Next run"
 msgstr "다음 실행"
 
@@ -5881,6 +5990,7 @@ msgid "Obsidian vault"
 msgstr ""
 
 #: src/pages/shell/model-pin-select.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Off"
 msgstr ""
@@ -6156,6 +6266,10 @@ msgstr ""
 msgid "Park"
 msgstr "보류"
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Partially reported"
+msgstr "일부만 보고됨"
+
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
@@ -6375,8 +6489,9 @@ msgstr ""
 #: src/pages/account/AccountProfile.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/memory/MemoryProposals.tsx
+#: src/pages/shell/bot-panel.tsx
 msgid "Profile"
-msgstr ""
+msgstr "프로필"
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Project ID"
@@ -6758,6 +6873,10 @@ msgstr "일정 제거"
 msgid "Remove skill {0}"
 msgstr "작업 기술 {0} 삭제"
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Remove the duplicate field."
+msgstr "중복된 필드를 제거하세요."
+
 #: src/pages/RoutineEditor.tsx
 msgid "Remove webhook"
 msgstr "웹훅 제거"
@@ -6869,6 +6988,7 @@ msgstr "요청이 만료됨"
 
 #: src/pages/ComparePanel.tsx
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 #: src/pages/TeamBoard.tsx
 msgid "requested"
 msgstr "요청됨"
@@ -6932,6 +7052,10 @@ msgstr ""
 msgid "Reset password"
 msgstr "비밀번호 재설정"
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Reset to defaults"
+msgstr "기본값으로 재설정"
+
 #: src/pages/Auth.tsx
 msgid "Reset your password"
 msgstr "비밀번호를 재설정하세요"
@@ -6939,6 +7063,10 @@ msgstr "비밀번호를 재설정하세요"
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Resetting…"
 msgstr "재설정 중…"
+
+#: src/pages/Shell.tsx
+msgid "Resize pane"
+msgstr "패널 크기 조정"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Resources"
@@ -6993,6 +7121,7 @@ msgstr "팀 메시지 다시 시작"
 
 #: src/components/Context.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
+#: src/pages/account/AccountProfile.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -7233,6 +7362,14 @@ msgstr ""
 msgid "Runtime availability could not be checked."
 msgstr ""
 
+#: src/pages/group-model-control.tsx
+msgid "Runtime settings"
+msgstr "런타임 설정"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Runtime settings cannot install or load code."
+msgstr "런타임 설정은 코드를 설치하거나 로드할 수 없습니다."
+
 #: src/pages/LearningObservation.tsx
 msgid "safety"
 msgstr ""
@@ -7294,6 +7431,10 @@ msgstr "그래도 저장"
 msgid "Save credentials"
 msgstr ""
 
+#: src/pages/account/AccountProfile.tsx
+msgid "Save instructions"
+msgstr "지침 저장"
+
 #: src/pages/group-model-control.tsx
 msgid "Save model"
 msgstr "모델 저장"
@@ -7335,6 +7476,10 @@ msgstr ""
 #: src/pages/ScratchpadSection.tsx
 msgid "Saved, but list refresh failed"
 msgstr "저장했지만 목록을 새로고침하지 못했습니다."
+
+#: src/pages/account/AccountProfile.tsx
+msgid "Saved, but not applied everywhere."
+msgstr "저장했지만 모든 곳에 적용되지 않았습니다."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Saved."
@@ -7617,6 +7762,7 @@ msgstr ""
 #: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Settings"
 msgstr "설정"
 
@@ -7660,11 +7806,11 @@ msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Show bots"
-msgstr ""
+msgstr "Bot 표시"
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show computer"
-msgstr ""
+msgstr "컴퓨터 보기"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Show in the menu bar."
@@ -7682,7 +7828,7 @@ msgstr "더 보기"
 msgid "Show password"
 msgstr "비밀번호 표시"
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show settings"
 msgstr "설정 보기"
 
@@ -7727,6 +7873,10 @@ msgstr ""
 #: src/pages/Welcome.tsx
 msgid "Sign up"
 msgstr "가입하기"
+
+#: src/pages/account/AccountSettings.tsx
+msgid "Sign-in and security"
+msgstr "로그인 및 보안"
 
 #: src/lib/mcp-sign-in.ts
 msgid "Sign-in did not finish. Try again."
@@ -7918,6 +8068,10 @@ msgstr ""
 msgid "Standard"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Standard image"
+msgstr ""
+
 #: src/components/composer/command-description.ts
 msgid "Start a new chat"
 msgstr ""
@@ -8017,6 +8171,10 @@ msgstr "가르치기 종료"
 msgid "Stop the current run"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Stop the run"
+msgstr "실행 중지"
+
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Stop work in this conversation"
 msgstr ""
@@ -8105,8 +8263,8 @@ msgid "System"
 msgstr "시스템"
 
 #: src/pages/ide/terminal.tsx
-#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/take-control-button.tsx
 msgid "Take control"
 msgstr "제어 가져오기"
 
@@ -8244,6 +8402,10 @@ msgstr "첫 번째 봇을 만들 수 없습니다. 다시 시도하세요."
 msgid "The group model choice was reloaded. Pick again."
 msgstr "그룹의 모델 선택을 다시 불러왔습니다. 다시 선택하세요."
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "The Hermes install on this computer failed its safety check."
+msgstr "이 컴퓨터의 Hermes 설치가 안전 검사를 통과하지 못했습니다."
+
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
@@ -8363,6 +8525,18 @@ msgstr "이 컴퓨터"
 msgid "This computer"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "This configuration is too complex."
+msgstr "이 구성은 너무 복잡합니다."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "This configuration version is not supported."
+msgstr "지원되지 않는 구성 버전입니다."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "This field is not supported."
+msgstr "지원되지 않는 필드입니다."
+
 #: src/components/ArtifactFileCard.tsx
 msgid "This file is not valid UTF-8 Markdown."
 msgstr "이 파일은 올바른 UTF-8 Markdown 형식이 아닙니다."
@@ -8480,9 +8654,11 @@ msgstr ""
 msgid "Thumbs"
 msgstr ""
 
-#: src/pages/shell/hermes-limits.tsx
-msgid "Time limit"
-msgstr "시간 제한"
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Time limit (seconds)"
+msgstr "시간 제한 (초)"
 
 #: src/pages/RoutineSchedule.tsx
 msgid "Time of day"
@@ -8590,6 +8766,10 @@ msgstr ""
 msgid "Treg token"
 msgstr "Treg 토큰"
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Trim older context"
+msgstr "오래된 컨텍스트 정리"
+
 #: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Trusted folders"
@@ -8603,6 +8783,7 @@ msgstr ""
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/computer-screen-error.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
 msgid "Try again"
 msgstr "다시 시도"
 
@@ -8628,6 +8809,10 @@ msgstr "섹션 없음"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Unavailable"
 msgstr "사용할 수 없음"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Unavailable with Hermes."
+msgstr "Hermes에서 사용할 수 없습니다."
 
 #: src/pages/LearningObservation.tsx
 msgid "unclassified"
@@ -8804,6 +8989,23 @@ msgstr "찾은 모델 중에서 선택"
 msgid "Use a token"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Use a whole number from 1 to 3."
+msgstr "1에서 3 사이의 정수를 사용하세요."
+
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use a whole number from 1 to 600."
+msgstr "1에서 600 사이의 정수를 사용하세요."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use a whole number from 1 to 64."
+msgstr "1에서 64 사이의 정수를 사용하세요."
+
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use a whole number from 4 to 64."
+msgstr "4에서 64 사이의 정수를 사용하세요."
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Use all selected tools"
@@ -8812,6 +9014,22 @@ msgstr "선택한 도구 모두 사용"
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Use all selected tools, or choose a subset for this bot."
 msgstr "선택한 도구를 모두 사용하거나 이 봇에 사용할 도구만 고르세요."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Use Ardur Connections for provider settings."
+msgstr "제공자 설정에는 Ardur 연결을 사용하세요."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Use Ardur Learning settings."
+msgstr "Ardur 학습 설정을 사용하세요."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Use Ardur settings for tools, integrations, MCP servers, skills, and plugins."
+msgstr "도구, 통합, MCP 서버, 스킬 및 플러그인에는 Ardur 설정을 사용하세요."
+
+#: src/pages/group-model-control.tsx
+msgid "Use bot runtime settings"
+msgstr "봇 런타임 설정 사용"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Use default guidance"
@@ -8839,11 +9057,22 @@ msgstr ""
 msgid "Use this model"
 msgstr "이 모델 사용"
 
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use whole KiB."
+msgstr "정수 KiB를 사용하세요."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use whole seconds."
+msgstr "정수 초를 사용하세요."
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "User"
 msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid "Using {currentId}"
 msgstr "{currentId} 사용 중"
 
@@ -9004,6 +9233,10 @@ msgstr ""
 msgid "When a webhook fires"
 msgstr "웹훅이 실행될 때"
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "When context is full"
+msgstr "컨텍스트가 가득 찰 때"
+
 #: src/pages/settings/GeneralSettings.tsx
 msgid "When routines finish, cannot run, or need your input."
 msgstr ""
@@ -9067,7 +9300,7 @@ msgid "Working…"
 msgstr "처리 중…"
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Workspace"
 msgstr "작업 공간"
 
@@ -9144,6 +9377,10 @@ msgstr "이름"
 #: src/pages/DevicesSettings.tsx
 msgid "Your phone can reach this Mac on your network."
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Your settings"
+msgstr "내 설정"
 
 #: src/pages/Welcome.tsx
 msgid "Your team of always-on agents<0/>that you can give real work to."

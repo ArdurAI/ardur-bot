@@ -61,6 +61,30 @@ it("hides the open button when an error is present", async () => {
   container.remove();
 });
 
+it("leaves an error to the full window while it is open", async () => {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <WorkspaceScreen
+        computer={{ state: "running" } as any}
+        open={true}
+        url={null}
+        error={<div role="alert">Network error</div>}
+        onOpen={() => {}}
+      />,
+    );
+  });
+
+  expect(container.textContent).toContain("Open in full window");
+  expect(container.querySelector('[role="alert"]')).toBeNull();
+  expect(container.querySelector('[data-testid="computer-preview-open"]')).toBeNull();
+
+  root.unmount();
+  container.remove();
+});
+
 it("disconnects the preview iframe when not visible", async () => {
   const container = document.createElement("div");
   document.body.appendChild(container);

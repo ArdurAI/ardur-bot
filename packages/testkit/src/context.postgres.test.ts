@@ -108,6 +108,7 @@ describe.skipIf(!hasDb)("Chief of Staff context product journey", () => {
       });
       await rpc("bots/update", {
         botId: chief.id,
+        expectedModelPinRevision: 0,
         modelProvider: model.model.provider,
         modelId: model.model.id,
         concurrentRuns: 3,

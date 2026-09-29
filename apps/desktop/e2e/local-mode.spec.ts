@@ -79,7 +79,7 @@ test("a fresh install starts its own database and services, and opens the app af
     app.waitForEvent("window"),
     setup.getByRole("button", { name: "Continue" }).click(),
   ]).then(([window]) => window);
-  await expect(appWindow.locator('[data-ardurbot-app-state="ready"]')).toBeVisible({
+  await expect(appWindow.locator('[data-ardur-app-state="ready"]')).toBeVisible({
     timeout: 60_000,
   });
   await expect.poll(savedSetup).toMatchObject({ mode: "new" });

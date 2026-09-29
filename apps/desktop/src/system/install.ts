@@ -1,28 +1,11 @@
-import type { BrowserWindow, IpcMainInvokeEvent } from "electron";
+import type { BrowserWindow } from "electron";
 import { app, globalShortcut, ipcMain, powerSaveBlocker, shell, systemPreferences } from "electron";
 import type { SystemDependencies } from "./controller.js";
 import { SystemController } from "./controller.js";
+import { systemSenderAllowed } from "./sender.js";
 import { SystemStore } from "./store.js";
 
-export function systemSenderAllowed(
-  event: Pick<IpcMainInvokeEvent, "sender" | "senderFrame">,
-  window: BrowserWindow | null,
-  target: string | null,
-): boolean {
-  if (
-    !window ||
-    window.isDestroyed() ||
-    !target ||
-    event.sender !== window.webContents ||
-    event.senderFrame !== window.webContents.mainFrame
-  )
-    return false;
-  try {
-    return new URL(event.senderFrame.url).origin === new URL(target).origin;
-  } catch {
-    return false;
-  }
-}
+export { systemSenderAllowed };
 
 /** Called by the main-process composition root after app.whenReady(). */
 export async function installDesktopSystem(

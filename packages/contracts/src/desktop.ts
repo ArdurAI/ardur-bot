@@ -1,5 +1,6 @@
 import type { DesktopCustomization } from "./desktop-extensions.js";
 import type { GuidedSetupBridge, SetupSnapshot } from "./desktop-setup.js";
+import type { UserPreferences } from "./preferences.js";
 
 /**
  * `unsupported` covers an unpackaged build and a repository with no published releases, which is
@@ -49,7 +50,17 @@ export interface DesktopDeviceListenerState {
   reason?: string;
 }
 
+/**
+ * What the desktop app keeps so a new window paints in the right colours before its page loads.
+ * Only this value, never anything else from the account.
+ */
+export interface DesktopBootSnapshot {
+  theme: UserPreferences["theme"];
+}
+
 export interface ArdurBotDesktop {
+  /** Older desktop apps lack this; the page then keeps its own cache only. */
+  boot?: { save(snapshot: DesktopBootSnapshot): Promise<void> };
   system?: { runSetupAgain?(): Promise<void> };
   guidedSetup?: {
     returnToSetup(): Promise<void>;
@@ -60,6 +71,10 @@ export interface ArdurBotDesktop {
   notifications?: {
     supported(): Promise<boolean>;
     show(message: { title: string; body: string; threadId: string }): Promise<boolean>;
+  };
+  /** macOS Dock badge. Missing on older desktops and in the browser. */
+  dock?: {
+    setWaitingCount(count: number): Promise<void>;
   };
   host?: {
     state(): Promise<{
@@ -105,6 +120,10 @@ export interface ArdurBotDesktop {
     open(url: string): Promise<void>;
     focus(): Promise<void>;
     onReturn(listener: (id: string) => void): () => void;
+  };
+  /** Desktop menu items run the app shortcut with this id, as its keys would. */
+  shortcuts?: {
+    onRun(listener: (id: string) => void): () => void;
   };
   oauth: {
     /**

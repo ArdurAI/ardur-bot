@@ -1,7 +1,8 @@
 import type { IntegrationSetupState } from "@ardurbot/contracts";
 import { Button, Input } from "@ardurbot/ui-web";
+import { selectableRowClasses } from "@ardurbot/ui-web/lib/state-classes";
 import { Trans, useLingui } from "@lingui/react/macro";
-import { Check } from "lucide-react";
+import { Check, CheckIcon } from "lucide-react";
 import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
 import type { McpOauthWait } from "../../lib/mcp-connect";
 import { mcpOutcomeSentence } from "../../lib/mcp-sign-in";
@@ -117,7 +118,10 @@ export function IntegrationSetup({
                   setApiKey("");
                   setError(null);
                 }}
-                className={`flex min-h-11 w-full items-center justify-between border-b border-border px-3.5 py-2.5 text-left last:border-0 ${choice === id ? "bg-muted" : "hover:bg-accent"}`}
+                className={selectableRowClasses(
+                  choice === id,
+                  "flex min-h-11 w-full items-center justify-between border-b border-border px-3.5 py-2.5 text-left last:border-0 disabled:pointer-events-none disabled:opacity-50",
+                )}
               >
                 <span>{label}</span>
                 {choice === id ? <Check className="size-4" aria-hidden /> : null}

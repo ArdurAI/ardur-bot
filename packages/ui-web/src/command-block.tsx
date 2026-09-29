@@ -1,5 +1,5 @@
 import type { CommandBlock as RecordedCommand } from "@ardurbot/core";
-import { commandOutput, commandSummary } from "@ardurbot/core";
+import { commandOutput, commandSummaryDisplay } from "@ardurbot/core";
 import type { ReactNode } from "react";
 import { useId, useState } from "react";
 import { formatAbsoluteCommandTime, formatCommandTime } from "./command-time.js";
@@ -56,6 +56,7 @@ export function CommandBlock({
   };
   const formattedStartedAt = formatCommandTime(block.startedAt, new Date(), locale);
   const absoluteStartedAt = formatAbsoluteCommandTime(block.startedAt, locale);
+  const summary = commandSummaryDisplay(block);
   return (
     <section
       data-testid="command-block"
@@ -73,11 +74,8 @@ export function CommandBlock({
         }}
       >
         <span aria-hidden="true">{expanded ? "−" : "+"}</span>
-        <span
-          className="min-w-0 flex-1 truncate font-mono text-[13px] normal-case"
-          title={commandSummary(block)}
-        >
-          {commandSummary(block)}
+        <span className="min-w-0 flex-1 truncate font-mono text-[13px] normal-case" title={summary}>
+          {summary}
         </span>
         <span className="shrink-0 text-xs text-muted-foreground">{block.outcome}</span>
       </Button>

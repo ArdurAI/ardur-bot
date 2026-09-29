@@ -1,4 +1,6 @@
 import type { Bot } from "@ardurbot/contracts";
+import type { AppShortcutId } from "@ardurbot/contracts/app-shortcuts";
+import { appShortcutLabel } from "@ardurbot/contracts/app-shortcuts";
 import {
   Badge,
   BotAvatar,
@@ -9,18 +11,16 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandSeparator,
   CommandShortcut,
   Kbd,
 } from "@ardurbot/ui-web";
 import { t } from "@lingui/core/macro";
 import { Trans } from "@lingui/react/macro";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { isApplePlatform } from "../../lib/app-shortcuts";
 
-function isApplePlatform() {
-  if (typeof navigator === "undefined") return false;
-  // platform is deprecated but still the most reliable Apple check in browsers.
-  return /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
-}
+export type CommandPaletteAction = { id: AppShortcutId; label: string; onSelect: () => void };
 
 function botSearchText(bot: Bot) {
   return `${bot.name} ${bot.title} ${bot.description} ${bot.preview}`.toLowerCase();
@@ -46,6 +46,7 @@ export function CommandPalette({
   onOpenTerminal,
   workspaceTabs = [],
   onOpenWorkspaceTab,
+  actions = [],
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -54,12 +55,15 @@ export function CommandPalette({
   onOpenTerminal?: () => void;
   workspaceTabs?: Array<{ id: string; label: string }>;
   onOpenWorkspaceTab?: (id: string) => void;
+  actions?: CommandPaletteAction[];
 }) {
   const [search, setSearch] = useState("");
-  const [modKey, setModKey] = useState("⌘");
+  const [apple, setApple] = useState(true);
+  // Runs once the palette has closed, so its focus return cannot undo the action's own focus.
+  const pendingAction = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    setModKey(isApplePlatform() ? "⌘" : "Ctrl");
+    setApple(isApplePlatform());
   }, []);
 
   useEffect(() => {
@@ -90,10 +94,18 @@ export function CommandPalette({
     return () => window.removeEventListener("keydown", onKey);
   }, [filteredBots, onOpenChange, onSelectBot, open]);
 
+  const needle = search.trim().toLowerCase();
+  const filteredActions = actions.filter((action) => action.label.toLowerCase().includes(needle));
+
   return (
     <CommandDialog
       open={open}
       onOpenChange={onOpenChange}
+      onOpenChangeComplete={(value) => {
+        const run = pendingAction.current;
+        pendingAction.current = null;
+        if (!value && run) queueMicrotask(run);
+      }}
       title={t`Switch bot`}
       description={t`Search bots and switch conversations`}
       className="sm:max-w-xl"
@@ -117,7 +129,7 @@ export function CommandPalette({
             {filteredBots.map((bot, index) => {
               const subtitle = botSubtitle(bot);
               const titleTag = botTitleTag(bot);
-              const shortcut = index < 9 ? `${modKey}${index + 1}` : null;
+              const shortcut = index < 9 ? `${apple ? "⌘" : "Ctrl+"}${index + 1}` : null;
               return (
                 <CommandItem
                   key={bot.id}
@@ -129,7 +141,13 @@ export function CommandPalette({
                   }}
                   className="items-center gap-3 rounded-xl! px-2.5 py-2.5"
                 >
-                  <BotAvatar color={bot.color} identity={bot.id} size={32} status={bot.status} />
+                  <BotAvatar
+                    color={bot.color}
+                    identity={bot.id}
+                    label={bot.name}
+                    size={32}
+                    status={bot.status}
+                  />
                   <div className="min-w-0 flex-1">
                     <div className="flex min-w-0 items-center gap-2">
                       <span className="truncate font-medium text-foreground" dir="auto">
@@ -185,6 +203,29 @@ export function CommandPalette({
               </CommandItem>
             ) : null}
           </CommandGroup>
+          {filteredActions.length > 0 ? (
+            <>
+              <CommandSeparator />
+              <CommandGroup>
+                {filteredActions.map((action) => (
+                  <CommandItem
+                    key={action.id}
+                    value={`action-${action.id}`}
+                    data-testid={`command-palette-action-${action.id}`}
+                    onSelect={() => {
+                      pendingAction.current = action.onSelect;
+                      onOpenChange(false);
+                    }}
+                  >
+                    {action.label}
+                    <CommandShortcut className="tracking-normal">
+                      <Kbd>{appShortcutLabel(action.id, apple)}</Kbd>
+                    </CommandShortcut>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </>
+          ) : null}
         </CommandList>
       </Command>
     </CommandDialog>

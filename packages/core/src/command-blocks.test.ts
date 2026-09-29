@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import type { CommandMessagesState } from "./command-blocks.js";
 import {
   commandSummary,
+  commandSummaryDisplay,
   createBoundedCommandOutput,
   exportCommandLog,
   projectCommandBlocks,
@@ -47,8 +48,29 @@ describe("command projection", () => {
     expect(commandSummary(block!)).toBe(
       "Ran `Not recorded` in Not recorded · Not recorded · exit Not recorded",
     );
+    expect(commandSummaryDisplay(block!)).toBe(
+      "Ran Not recorded in Not recorded · Not recorded · exit Not recorded",
+    );
     expect(exportCommandLog("run-1", [block!])).toContain("stdout:\nNot recorded");
     expect(projectCommandBlocks([event, commandEvent()])).toHaveLength(1);
+  });
+  it("drops the markdown backticks in the display summary but keeps them in exports", () => {
+    const block = commandBlock({
+      command: "cat planning/release-checklist.md",
+      cwd: "/home/ardurbot/workspace",
+      durationMs: 2400,
+      exitCode: 0,
+    });
+    expect(commandSummaryDisplay(block)).toBe(
+      "Ran cat planning/release-checklist.md in /home/ardurbot/workspace · 2 s · exit 0",
+    );
+    expect(commandSummaryDisplay(block)).not.toContain("`");
+    expect(commandSummary(block)).toBe(
+      "Ran `cat planning/release-checklist.md` in /home/ardurbot/workspace · 2 s · exit 0",
+    );
+    expect(exportCommandLog("run-1", [block])).toContain(
+      "Ran `cat planning/release-checklist.md` in /home/ardurbot/workspace",
+    );
   });
   it("snapshots the shared thread projection and export", () => {
     expect(reduceCommandMessages(emptyState(), commandEvent()).messages).toMatchSnapshot();

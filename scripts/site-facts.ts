@@ -29,6 +29,7 @@ import { loadValidatedFeatureDocs, publishedDocumentation } from "./feature-docs
 import { createFeatureDocsLinks } from "./feature-docs-links";
 
 type Provider = SiteProduct["providers"][number];
+type InstallPlatform = NonNullable<SiteProduct["install"]["installScript"]>["platforms"][number];
 type ProviderMetadata = Pick<Provider, "name" | "access" | "status" | "accountHint">;
 
 // Every shipped catalog ID must be described here. Do not infer access from an OAuth flag:
@@ -284,6 +285,24 @@ function pickerRank(id: string): number {
   return rank === -1 ? POPULAR_MODEL_PROVIDER_IDS.length : rank;
 }
 
+// The `uname -s` values scripts/install.sh branches on; any other system exits as unsupported.
+const INSTALL_SCRIPT_SYSTEMS: Record<string, InstallPlatform> = { Darwin: "macOS", Linux: "Linux" };
+
+export function installScriptPlatforms(script: string): InstallPlatform[] {
+  const systems = new Set([...script.matchAll(/"\$OS" == "([^"]+)"/g)].map((match) => match[1]));
+  if (!systems.size)
+    throw new Error(
+      'scripts/install.sh no longer branches on "$OS"; update installScriptPlatforms in scripts/site-facts.ts.',
+    );
+  const platforms = [...systems].map((system = "") => {
+    const platform = INSTALL_SCRIPT_SYSTEMS[system];
+    if (!platform)
+      throw new Error(`Add uname "${system}" to INSTALL_SCRIPT_SYSTEMS in scripts/site-facts.ts.`);
+    return platform;
+  });
+  return [...new Set(platforms)];
+}
+
 export function computersFromRegistry(): SiteProduct["computers"] {
   const names: Record<string, string> = {
     docker: "Docker",
@@ -477,6 +496,12 @@ export async function generatedProduct(rootDir = root, docsRoot = rootDir): Prom
       "Expected one cask in homebrew/Casks; update scripts/site-facts.ts for multiple casks.",
     );
   const cask = casks[0].slice(0, -3);
+  const caskSource = await readFile(path.join(rootDir, "homebrew/Casks", `${cask}.rb`), "utf8");
+  if (!/^\s*depends_on :macos$/m.test(caskSource))
+    throw new Error(
+      "The cask no longer depends on macOS; update install.homebrew.platforms in scripts/site-facts.ts.",
+    );
+  const installScript = await readFile(path.join(rootDir, "scripts/install.sh"), "utf8");
   const result = {
     ...curated,
     // Omit the block entirely until a page is published; the website treats an empty block as invalid.
@@ -491,10 +516,12 @@ export async function generatedProduct(rootDir = root, docsRoot = rootDir): Prom
     },
     install: {
       ...curated.install,
+      installScript: { platforms: installScriptPlatforms(installScript) },
       homebrew: {
         ...curated.install.homebrew,
         caskPath: `Casks/${casks[0]}`,
         command: `brew tap ArdurAI/tap && brew trust --cask ArdurAI/tap/${cask} && brew install --cask ArdurAI/tap/${cask}`,
+        platforms: ["macOS"],
       },
     },
   };
@@ -578,7 +605,23 @@ export function generatedReadme(readme: string, product: SiteProduct): string {
       ),
     "```",
   ].join("\n");
-  return replaceBlock(replaceBlock(readme, "providers", providerText), "from-source", sourceText);
+  const firstOpenText = (["macOS", "Windows", "Linux"] as const)
+    .map((os) => {
+      const entry = product.install.desktop.firstOpen?.find((item) => item.os === os);
+      if (!entry) throw new Error(`install.desktop.firstOpen needs ${os} steps for the README.`);
+      const steps = entry.steps.map((step) =>
+        step.command
+          ? `- ${step.text}\n\n  \`\`\`sh\n  ${step.command}\n  \`\`\``
+          : `- ${step.text}`,
+      );
+      return [`**${os}**`, "", ...steps].join("\n");
+    })
+    .join("\n\n");
+  return replaceBlock(
+    replaceBlock(replaceBlock(readme, "providers", providerText), "from-source", sourceText),
+    "first-open",
+    firstOpenText,
+  );
 }
 
 export async function validateReferences(product: SiteProduct, rootDir = root): Promise<void> {

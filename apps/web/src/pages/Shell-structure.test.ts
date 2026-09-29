@@ -13,6 +13,20 @@ describe("Shell structure", () => {
     expect(code).not.toMatch(/!computerScreenError \? \(/);
   });
 
+  it("counts a waiting bot from the lists once that chat is closed", () => {
+    const code = readFileSync(join(__dirname, "Shell.tsx"), "utf8");
+    const start = code.indexOf("const dockWaitingCount = useMemo");
+    const end = code.indexOf("const activeReplyTarget", start);
+    expect(start).toBeGreaterThan(0);
+    expect(end).toBeGreaterThan(start);
+    const memo = code.slice(start, end);
+    // Dashboard and Team leave `active` empty. A leftover snapshot must not stay in charge.
+    expect(memo).toMatch(/openDockSnapshot\(\s*Boolean\(active\) \|\| inGroup/);
+    expect(memo).toContain("snapshot: view.snapshot");
+    expect(memo).toContain("viewingThreadId: view.viewingThreadId");
+    expect(memo).not.toMatch(/snapshot:\s*snapshot/);
+  });
+
   it("fetches the screen when its tab becomes visible", () => {
     const code = readFileSync(join(__dirname, "Shell.tsx"), "utf8");
     // Ensure there's an effect that depends on isVisible and calls refreshComputerScreen

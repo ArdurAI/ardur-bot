@@ -4,7 +4,65 @@ vi.mock("@ardurbot/db", () => ({
   appendEventInTransaction: vi.fn(),
 }));
 
-import { botProfileLabelsChanged, commitBotUpdate } from "./bot-update.js";
+import {
+  botProfileLabelsChanged,
+  commitBotUpdate,
+  prepareRuntimeConfigSave,
+} from "./bot-update.js";
+
+describe("runtime configuration save precondition", () => {
+  const old = {
+    runtimeKind: "hermes",
+    runtimeConfig: { version: 1, maxProviderRequests: 16, timeoutMs: 180000 },
+    modelPinRevision: 4,
+  };
+  it("treats a default-only version migration as a no-op", () => {
+    expect(
+      prepareRuntimeConfigSave(
+        old,
+        {
+          runtimeConfig: { version: 2, runtimeKind: "hermes" },
+        },
+        false,
+      ),
+    ).toMatchObject({ configChanged: false, incrementRevision: false });
+  });
+  it("requires and fences the client revision for an execution change", () => {
+    const edit = {
+      runtimeConfig: {
+        version: 2 as const,
+        runtimeKind: "hermes" as const,
+        limits: { maxProviderRequests: 5 },
+      },
+    };
+    expect(() => prepareRuntimeConfigSave(old, edit, false)).toThrow();
+    expect(() =>
+      prepareRuntimeConfigSave(old, { ...edit, expectedModelPinRevision: 3 }, false),
+    ).toThrow();
+    expect(
+      prepareRuntimeConfigSave(old, { ...edit, expectedModelPinRevision: 4 }, false),
+    ).toMatchObject({ configChanged: true, incrementRevision: true, expectedModelPinRevision: 4 });
+    expect(
+      prepareRuntimeConfigSave(old, { ...edit, expectedModelPinRevision: 4 }, true),
+    ).toMatchObject({ configChanged: true, incrementRevision: false, expectedModelPinRevision: 4 });
+  });
+  it("preserves dormant settings and rejects a mismatched runtime document", () => {
+    expect(
+      prepareRuntimeConfigSave(old, { runtimeKind: "pi", expectedModelPinRevision: 4 }, true),
+    ).toMatchObject({ configChanged: false });
+    expect(() =>
+      prepareRuntimeConfigSave(
+        old,
+        {
+          runtimeKind: "pi",
+          runtimeConfig: { version: 2, runtimeKind: "hermes" },
+          expectedModelPinRevision: 4,
+        },
+        true,
+      ),
+    ).toThrow();
+  });
+});
 
 describe("botProfileLabelsChanged", () => {
   it("is true when name, title, description, or color is present", () => {

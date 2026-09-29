@@ -17,6 +17,7 @@ import {
   createRunWorkspaceCheckpoint,
   loadCurrentTurnImages,
   missingTurnImagesInstruction,
+  offerAskMembers,
   parseUpdateBotPatch,
   runNotificationsEnabled,
   selectBuiltinToolsForRun,
@@ -25,6 +26,7 @@ import {
   toolCompletionAuditPayload,
   toolCompletionFromResult,
 } from "./executor.js";
+import { effectiveHermesConfig, hermesConfigHash } from "./hermes-compatibility.js";
 import { serializeModelSecret } from "./pi-oauth.js";
 import { agentHistoryTurn } from "./reply-context.js";
 
@@ -308,7 +310,56 @@ describe("run workspace checkpoint", () => {
   });
 });
 
+describe("offerAskMembers", () => {
+  const coordinator = {
+    groupCoordinator: true,
+    runtimeKind: "pi",
+    clientNonce: null,
+    delegated: false,
+    goal: false,
+    peerReadOnly: false,
+    comparison: false,
+    messaging: false,
+  };
+
+  it("offers an ask to a tool-capable room coordinator before the last round", () => {
+    expect(offerAskMembers(coordinator)).toBe(true);
+    expect(offerAskMembers({ ...coordinator, runtimeKind: "hermes" })).toBe(true);
+    expect(offerAskMembers({ ...coordinator, clientNonce: "ask-wake:1:ask-run" })).toBe(true);
+  });
+
+  it("withholds an ask from Antigravity, a third round, a delegated turn and a goal turn", () => {
+    expect(offerAskMembers({ ...coordinator, runtimeKind: "antigravity" })).toBe(false);
+    expect(offerAskMembers({ ...coordinator, clientNonce: "ask-wake:2:ask-run" })).toBe(false);
+    expect(offerAskMembers({ ...coordinator, delegated: true })).toBe(false);
+    expect(offerAskMembers({ ...coordinator, goal: true })).toBe(false);
+    expect(offerAskMembers({ ...coordinator, peerReadOnly: true })).toBe(false);
+    expect(offerAskMembers({ ...coordinator, comparison: true })).toBe(false);
+    expect(offerAskMembers({ ...coordinator, messaging: true })).toBe(false);
+    expect(offerAskMembers({ ...coordinator, groupCoordinator: false })).toBe(false);
+    expect(offerAskMembers({ ...coordinator, runtimeKind: "not-a-runtime" })).toBe(false);
+  });
+});
+
 describe("run tool selection", () => {
+  it("offers ask_members only to a group's coordinator", () => {
+    const names = (groupId: string | null, roomCoordinator?: boolean) =>
+      selectBuiltinToolsForRun({
+        graphicalToolsAllowed: false,
+        groupId,
+        trigger: "user",
+        semanticMemoryEnabled: false,
+        messagingChannelRun: false,
+        roomCoordinator,
+      }).map((tool) => tool.name);
+    expect(names("group-1", true)).toEqual(
+      expect.arrayContaining(["ask_members", "handoff_to_bot"]),
+    );
+    expect(names("group-1", false)).not.toContain("ask_members");
+    expect(names("group-1")).not.toContain("ask_members");
+    expect(names(null, true)).not.toContain("ask_members");
+  });
+
   it.each([
     [false, false],
     [false, true],
@@ -1714,6 +1765,59 @@ description: Prepare standup notes
       id: "text-only-model",
       acceptsImages: false,
     });
+  });
+
+  it("captures a bounded Hermes manifest before comparison admission persists the pin", async () => {
+    const provider = "openai-compatible";
+    const config = effectiveHermesConfig(null);
+    const plaintext = serializeModelSecret({
+      kind: "openai_compatible",
+      baseUrl: "http://127.0.0.1:8000/v1",
+      maxTokens: 16_384,
+    });
+    const bot = {
+      runtimeKind: "hermes",
+      modelProvider: provider,
+      modelId: "comparison-model",
+      thinkingLevel: "off",
+      modelCredentialId: "credential-openai-compatible",
+      modelPinRevision: 2,
+      runtimeConfig: config,
+      runtimeConfigHash: hermesConfigHash(config),
+    };
+    const preference = modelPreference({
+      provider,
+      secretId: "secret-openai-compatible",
+      modelId: bot.modelId,
+      isDefault: false,
+    });
+    const prisma = {
+      space: { findUnique: vi.fn(async () => ({ allowedModelDestinations: null })) },
+      bot: { findFirst: vi.fn(async () => bot) },
+      spaceModelPreference: { findFirst: vi.fn(async () => preference) },
+      userModelCredential: { findFirst: vi.fn(async () => preference.credential) },
+      deploymentSettings: { findUnique: vi.fn(async () => null) },
+      secret: {
+        findFirst: vi.fn(async () => ({ id: "secret-openai-compatible", ciphertext: plaintext })),
+        findUnique: vi.fn(async () => null),
+      },
+    } as unknown as PrismaClient;
+    const executor = createRunExecutor({
+      prisma,
+      secretStore: { load: vi.fn(() => plaintext), put: vi.fn() },
+    } as unknown as Parameters<typeof createRunExecutor>[0]);
+    const selected = await executor.resolveModel(
+      { userId: "user-1", spaceId: "ws-1", botId: "bot-1" },
+      true,
+    );
+    expect(selected.kind).toBe("resolved");
+    if (selected.kind !== "resolved") return;
+    expect(selected.maxTokens).toBe(10_000);
+    expect(selected.pin.effectiveRuntimeConfig?.model).toMatchObject({
+      contextWindow: selected.contextWindow,
+      maxTokens: selected.maxTokens,
+    });
+    expect(selected.pin.effectiveRuntimeConfigHash).toMatch(/^[a-f0-9]{64}$/);
   });
 
   it("keeps the pin and does not borrow the default provider credential", async () => {

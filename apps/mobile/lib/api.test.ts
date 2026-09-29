@@ -135,16 +135,16 @@ describe("mobile API authentication", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        jsonResponse({ passwordReset: true, resetUrl: "https://ardurbot.test/reset-password" }),
+        jsonResponse({ passwordReset: true, resetUrl: "https://example.test/reset-password" }),
       )
       .mockResolvedValueOnce(jsonResponse({ status: true }));
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(passwordResetCapabilities()).resolves.toEqual({
       passwordReset: true,
-      resetUrl: "https://ardurbot.test/reset-password",
+      resetUrl: "https://example.test/reset-password",
     });
-    await requestPasswordReset("ada@example.test", "https://ardurbot.test/reset-password");
+    await requestPasswordReset("ada@example.test", "https://example.test/reset-password");
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
@@ -153,7 +153,7 @@ describe("mobile API authentication", () => {
         method: "POST",
         body: JSON.stringify({
           email: "ada@example.test",
-          redirectTo: "https://ardurbot.test/reset-password",
+          redirectTo: "https://example.test/reset-password",
         }),
       }),
     );

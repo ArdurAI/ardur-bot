@@ -95,6 +95,7 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
     status: "queued",
     trigger: "user",
     sourceMessageId: null as string | null,
+    clientNonce: null as string | null,
     leaseFence: 0,
     screenLeaseId: null as string | null,
     commandReplayId: null as string | null,
@@ -204,6 +205,7 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
     },
     run: {
       findFirst: vi.fn(async () => run),
+      findMany: vi.fn(async () => []),
       findUnique: vi.fn(async () => run),
       findUniqueOrThrow: vi.fn(async () => run),
       update: vi.fn(async ({ data }: { data: Record<string, unknown> }) =>
@@ -230,6 +232,7 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
       create: vi.fn(async () => ({ id: "attempt-1" })),
       update: vi.fn(),
       updateMany: vi.fn(async () => ({ count: 1 })),
+      count: vi.fn(async () => 0),
     },
     thread: {
       findUniqueOrThrow: vi.fn(async () => ({
@@ -1100,6 +1103,123 @@ it("keeps a malformed snapshot failed across retries instead of binding the curr
   }
   expect(f.runtimeRun).not.toHaveBeenCalled();
   expect(f.effects).toEqual([]);
+});
+
+const PERSON_REQUEST = "tell the bots to introduce each other, do not mention individually";
+const POSTED_ANSWER = "POSTED_ANSWER_BODY_SHOULD_NOT_REPEAT";
+
+it("posts the coordinator's combined reply on the follow-up and keeps the person's request", async () => {
+  const f = fixture("ask-wake-post");
+  f.runRecord.clientNonce = "ask-wake:1:ask-run";
+  const runFindFirst = f.prisma.run.findFirst as unknown as {
+    mockImplementation(fn: (args?: { where?: Record<string, unknown> }) => Promise<unknown>): void;
+  };
+  runFindFirst.mockImplementation(async (args = {}) => {
+    const where = args.where ?? {};
+    if (where.id === "ask-run") {
+      const extra = Object.keys(where).filter((key) => !["id", "spaceId", "userId"].includes(key));
+      if (extra.length) throw new Error(`ask lookup included ${extra.join(",")}`);
+      return {
+        id: "ask-run",
+        taskId: "task-1",
+        delegationRootTaskId: null,
+        sourceMessageId: "person-message",
+        threadId: "thread-1",
+      };
+    }
+    return f.runRecord;
+  });
+  const runFindMany = f.prisma.run.findMany as unknown as {
+    mockResolvedValue(value: unknown): void;
+  };
+  runFindMany.mockResolvedValue([{ id: "ada-run", status: "completed" }]);
+  (f.prisma as { delegation?: { findMany: ReturnType<typeof vi.fn> } }).delegation = {
+    findMany: vi.fn(async () => [
+      {
+        actingBotId: "ada",
+        actingName: "Ada",
+        status: "accepted",
+        result: POSTED_ANSWER,
+        card: { goal: "Introduce yourself" },
+        runId: "ada-run",
+      },
+    ]),
+  };
+  const messageFindFirst = f.prisma.message.findFirst as unknown as {
+    mockImplementation(fn: (args?: { where?: { id?: string } }) => Promise<unknown>): void;
+  };
+  messageFindFirst.mockImplementation(async (args = {}) => {
+    if (args.where?.id === "person-message") {
+      return {
+        id: "person-message",
+        threadId: "thread-1",
+        role: "user",
+        blocks: [{ kind: "text", text: PERSON_REQUEST }],
+      };
+    }
+    return null;
+  });
+  const messageFindMany = f.prisma.message.findMany as unknown as {
+    mockImplementation(
+      fn: (args?: { where?: { runId?: { in?: string[] }; threadId?: string } }) => Promise<unknown>,
+    ): void;
+  };
+  messageFindMany.mockImplementation(async (args = {}) => {
+    const runId = args.where?.runId;
+    if (runId && typeof runId === "object" && Array.isArray(runId.in))
+      return [{ runId: "ada-run", role: "bot" }];
+    return [];
+  });
+  f.runtimeRun.mockImplementation(async function* () {
+    yield { type: "done" as const, text: "Ada researches languages." };
+  });
+
+  await f.executor.continueRun(f.runRecord.id, "worker-1");
+
+  const request = f.runtimeRun.mock.calls[0]?.[0];
+  const seen = JSON.stringify({ prompt: request?.prompt, history: request?.history });
+  expect(seen).toContain(PERSON_REQUEST);
+  expect(seen).not.toContain(POSTED_ANSWER);
+  const completed = f.finalizeRun.mock.calls
+    .map((call) => call[0])
+    .find((input) => input.outcome === "completed");
+  expect(JSON.stringify(completed ?? {})).toContain("Ada researches languages.");
+});
+
+it("stops an ask follow-up after repeated setup failures so the room can continue", async () => {
+  const f = fixture("ask-wake-stop");
+  f.runRecord.clientNonce = "ask-wake:1:ask-run";
+  f.prisma.attempt.count.mockResolvedValue(2);
+  await expect(f.executor.continueRun(f.runRecord.id, "worker-1")).resolves.toBeUndefined();
+  expect(f.finalizeRun).toHaveBeenCalledWith(
+    expect.objectContaining({
+      outcome: "failed",
+      error: "Could not sum up the answers. Ask again.",
+    }),
+  );
+  expect(f.prisma.attempt.update).not.toHaveBeenCalledWith(
+    expect.objectContaining({ data: expect.objectContaining({ status: "setup_failed" }) }),
+  );
+  expect(f.prisma.run.updateMany).not.toHaveBeenCalledWith(
+    expect.objectContaining({
+      data: expect.objectContaining({ error: "Run setup failed; retrying" }),
+    }),
+  );
+  expect(f.runtimeRun).not.toHaveBeenCalled();
+});
+
+it("still retries an ask follow-up the first times setup fails", async () => {
+  const f = fixture("ask-wake-retry");
+  f.runRecord.clientNonce = "ask-wake:1:ask-run";
+  f.prisma.attempt.count.mockResolvedValue(1);
+  await expect(f.executor.continueRun(f.runRecord.id, "worker-1")).rejects.toThrow(
+    "Run setup failed; retrying",
+  );
+  expect(f.finalizeRun).not.toHaveBeenCalledWith(
+    expect.objectContaining({
+      error: "Could not sum up the answers. Ask again.",
+    }),
+  );
 });
 
 it("fails a run whose computer engine is not configured with the fix instead of retrying", async () => {
