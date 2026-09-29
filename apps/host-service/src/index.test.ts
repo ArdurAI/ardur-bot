@@ -83,6 +83,7 @@ async function connect() {
       token: "x".repeat(43),
       root: "/fixture",
       hostRoots: ["/fixture"],
+      guardPorts: [],
     },
     undefined,
   );
@@ -149,6 +150,7 @@ it("does not retry a permanent configuration failure during initial connection",
       token: "x".repeat(43),
       root: "/fixture",
       hostRoots: ["/fixture"],
+      guardPorts: [],
     },
     undefined,
   );
@@ -193,6 +195,26 @@ it("accepts guardrail paths and ports and hands them to the host agent", async (
   });
 });
 
+it("does not start when the port list is missing", async () => {
+  mocks.read.mockResolvedValueOnce(Response.json(registrations));
+  await import("./index.js");
+  processEvents.emit(
+    "message",
+    {
+      apiUrl: "https://example.test",
+      token: "x".repeat(43),
+      root: "/fixture",
+      hostRoots: ["/fixture"],
+      guardPaths: ["/fixture/user-data/secrets.env"],
+    },
+    undefined,
+  );
+  await vi.advanceTimersByTimeAsync(1500);
+  expect(mocks.sockets).toHaveLength(0);
+  expect(mocks.agentConfigs).toHaveLength(0);
+  expect(mocks.process.exit).toHaveBeenCalledExactlyOnceWith(0);
+});
+
 it("refuses a configuration with a relative guardrail path", async () => {
   mocks.read.mockResolvedValueOnce(Response.json(registrations));
   await import("./index.js");
@@ -204,6 +226,7 @@ it("refuses a configuration with a relative guardrail path", async () => {
       root: "/fixture",
       hostRoots: ["/fixture"],
       guardPaths: ["relative/secrets.env"],
+      guardPorts: [],
     },
     undefined,
   );

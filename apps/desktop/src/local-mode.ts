@@ -11,6 +11,7 @@ import type { EmbeddedPostgresLike, EmbeddedPostgresOptions } from "./local-post
 import {
   APP_DATABASE_USER,
   DATABASE_NAME,
+  EMBEDDED_POSTGRES_FLAGS,
   FORBIDDEN_PORTS,
   initialisePrivately,
   MissingDatabaseBinariesError,
@@ -569,16 +570,11 @@ export class LocalModeController {
       password: secrets.POSTGRES_PASSWORD,
       persistent: true,
       authMethod: "scram-sha-256",
-      postgresFlags: [
-        "-c",
-        "listen_addresses=127.0.0.1",
-        // No unix-domain socket: the database accepts loopback TCP only, so a bot
-        // command on This Mac has no socket path to connect to (a file deny cannot
-        // cover a unix-socket connect, and the socket's default directory is the
-        // shared /tmp). Everything Ardur runs connects over 127.0.0.1.
-        "-c",
-        "unix_socket_directories=",
-      ],
+      // No unix-domain socket: the database accepts loopback TCP only, so a bot
+      // command on This Mac has no socket path to connect to (a file deny cannot
+      // cover a unix-socket connect, and the socket's default directory is the
+      // shared /tmp). Everything Ardur runs connects over 127.0.0.1.
+      postgresFlags: [...EMBEDDED_POSTGRES_FLAGS],
       onLog: (message) => {
         void writeServiceLog(path.join(this.deps.userDataDir, "logs", "postgres.log"), message);
       },
@@ -1180,13 +1176,11 @@ function serviceEnvironment(
   // A parent environment may already hold the secrets. Drop them after the spread
   // so they are not part of the block the kernel keeps for the child.
   for (const key of Object.keys(SECRET_KEYS)) delete env[key];
-  if (env.REALTIME_DATABASE_URL) {
-    try {
-      env.REALTIME_DATABASE_URL = passwordlessDatabaseUrl(env.REALTIME_DATABASE_URL);
-    } catch {
-      delete env.REALTIME_DATABASE_URL;
-    }
-  }
+  // The API and worker prefer REALTIME_DATABASE_URL over the local database, and
+  // the local password is joined onto DATABASE_URL only. Drop an inherited URL
+  // here. This process still has it, so a missing port list can still block that
+  // loopback port.
+  delete env.REALTIME_DATABASE_URL;
   delete env.ARDURBOT_HOST_BRIDGE;
   if (platform === "win32") env.ELECTRON_NO_ATTACH_CONSOLE = "1";
   return env;

@@ -18,7 +18,11 @@ import {
   resetMoveFailure,
 } from "./local-mode.js";
 import type { EmbeddedPostgresLike, EmbeddedPostgresOptions } from "./local-postgres.js";
-import { MissingDatabaseBinariesError, postgresServesFolder } from "./local-postgres.js";
+import {
+  EMBEDDED_POSTGRES_FLAGS,
+  MissingDatabaseBinariesError,
+  postgresServesFolder,
+} from "./local-postgres.js";
 
 const directories: string[] = [];
 const fixturePids = new Set<number>();
@@ -89,7 +93,7 @@ describe("local mode start", () => {
     expect(state.phase).toBe("ready");
     // The database listens on loopback TCP only; no unix socket exists for a
     // sandboxed host command to connect to.
-    expect(flags).toEqual(["-c", "listen_addresses=127.0.0.1", "-c", "unix_socket_directories="]);
+    expect(flags).toEqual([...EMBEDDED_POSTGRES_FLAGS]);
     expect(spawned.some((args) => args.some((arg) => /docker|compose/.test(arg)))).toBe(false);
     expect(spawned.length).toBeGreaterThan(0);
     expect(controller.origin()).toBe(`http://127.0.0.1:${port}`);
@@ -181,7 +185,9 @@ describe("local mode start", () => {
       ])
         expect(encoded).not.toContain(marker);
       expect(new URL(env.DATABASE_URL!).password).toBe("");
-      expect(new URL(env.REALTIME_DATABASE_URL!).password).toBe("");
+      // Drop an inherited realtime URL. The API and worker would use that host
+      // instead of the local database, and its password is not the local one.
+      expect(env.REALTIME_DATABASE_URL).toBeUndefined();
       expect(env.ARDURBOT_SECRETS_FILE).toBe(path.join(root, "secrets.env"));
     }
   });
@@ -1443,10 +1449,11 @@ describe("database lifecycle", () => {
       expect(state).toMatchObject({ phase: "failed", message: sentence });
       expect(state.offerReset).toBe(offerReset);
       expect(failed).toEqual([[sentence, offerReset === true]]);
-      await new Promise((resolve) => setTimeout(resolve, 20));
-      expect(await readFile(path.join(root, "logs", "local-mode.log"), "utf8")).toContain(
-        `Migration "20260101000000_init" (${reason})`,
-      );
+      await vi.waitFor(async () => {
+        expect(await readFile(path.join(root, "logs", "local-mode.log"), "utf8")).toContain(
+          `Migration "20260101000000_init" (${reason})`,
+        );
+      });
     },
   );
 

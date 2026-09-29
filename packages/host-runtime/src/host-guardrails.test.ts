@@ -10,6 +10,7 @@ import {
   GUARDED_DATA_DIR_CHILDREN,
   guardrailConfigFromEnv,
   isGuardedPath,
+  knownLoopbackGuardPorts,
   loopbackPortOf,
   resolveGuardrailPaths,
   resolveGuardrailPathsSync,
@@ -304,6 +305,25 @@ describe("loopbackPortOf", () => {
     expect(loopbackPortOf("postgres://u:***@192.0.2.10:5432/db")).toBeUndefined();
     expect(loopbackPortOf(undefined)).toBeUndefined();
     expect(loopbackPortOf("")).toBeUndefined();
+  });
+});
+
+describe("knownLoopbackGuardPorts", () => {
+  it("keeps loopback database and supervisor ports and skips a remote host", () => {
+    expect(
+      knownLoopbackGuardPorts({
+        DATABASE_URL: "postgres://app:fake-db-marker@127.0.0.1:23456/ardurbot",
+        REALTIME_DATABASE_URL: "postgres://app@10.1.2.3:5432/remote",
+        SANDBOX_SUPERVISOR_URL: "http://127.0.0.1:17091",
+      }),
+    ).toEqual([23456, 17091]);
+    expect(
+      knownLoopbackGuardPorts({
+        DATABASE_URL: "postgres://app@127.0.0.1/ardurbot",
+        SANDBOX_SUPERVISOR_URL: "http://db.internal:7091",
+      }),
+    ).toEqual([5432]);
+    expect(knownLoopbackGuardPorts({})).toEqual([]);
   });
 });
 

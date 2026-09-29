@@ -76,6 +76,22 @@ export function loopbackPortOf(value: string | undefined): number | undefined {
   return undefined;
 }
 
+/**
+ * Loopback ports this desktop can already see: the database, a realtime database
+ * on this machine, and the sandbox supervisor. A remote host is skipped. An empty
+ * result means nothing here is listening — the desktop Compose stack — and is not
+ * the same as a missing list.
+ */
+export function knownLoopbackGuardPorts(env: NodeJS.ProcessEnv): number[] {
+  return [
+    ...new Set(
+      [env.DATABASE_URL, env.REALTIME_DATABASE_URL, env.SANDBOX_SUPERVISOR_URL]
+        .map((value) => loopbackPortOf(value))
+        .filter((port): port is number => port !== undefined),
+    ),
+  ];
+}
+
 function validPort(value: string | undefined): number | undefined {
   if (!value?.trim()) return undefined;
   const port = Number(value);

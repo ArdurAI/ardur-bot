@@ -69,6 +69,7 @@ beforeEach(() => {
   fake.read.mockResolvedValue({ apiUrl: "https://example.test", hostRoots: [] });
 });
 afterEach(async () => {
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
   await Promise.all(directories.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
@@ -78,7 +79,10 @@ function fixture(
 ) {
   let currentTarget = target;
   const frame = { url: `${target}/app` };
-  const window = { webContents: { mainFrame: frame } } as unknown as BrowserWindow;
+  const sessionFetch = vi.fn();
+  const window = {
+    webContents: { mainFrame: frame, session: { fetch: sessionFetch } },
+  } as unknown as BrowserWindow;
   const service = installHostService({
     window: () => window,
     target: () => currentTarget,
@@ -86,9 +90,12 @@ function fixture(
     local: { owns: (url) => new URL(url).origin === LOCAL_ORIGIN, folders },
   });
   const event = { sender: window.webContents, senderFrame: frame } as unknown as IpcMainInvokeEvent;
+  const handler = (name: string) => fake.handlers.get(`desktop.host.${name}`)!;
   return {
     event,
     service,
+    fetch: sessionFetch,
+    handler,
     changeTarget: (next: string) => {
       currentTarget = next;
     },
@@ -96,13 +103,19 @@ function fixture(
   };
 }
 
+const PAIR_TOKEN = "a".repeat(43);
+
 describe("saved host pairing activation", () => {
   it("restores a pairing after the matching window becomes active", async () => {
+    vi.stubEnv("DATABASE_URL", "");
+    vi.stubEnv("REALTIME_DATABASE_URL", "");
+    vi.stubEnv("SANDBOX_SUPERVISOR_URL", "");
     const f = fixture();
     await f.service.activate("https://example.test");
     expect(fake.start).toHaveBeenCalledExactlyOnceWith({
       apiUrl: "https://example.test",
       hostRoots: [],
+      guardPorts: [],
     });
   });
 
@@ -288,5 +301,102 @@ describe("local mode folders", () => {
     await f.service.activate(LOCAL_ORIGIN);
     expect(fake.start).not.toHaveBeenCalled();
     expect(fake.stop).toHaveBeenCalled();
+  });
+});
+
+function stubLoopbackPorts() {
+  vi.stubEnv("DATABASE_URL", "postgres://app:fake-db-marker@127.0.0.1:23456/ardurbot");
+  vi.stubEnv("SANDBOX_SUPERVISOR_URL", "http://127.0.0.1:17091");
+  vi.stubEnv("REALTIME_DATABASE_URL", "postgres://app@10.1.2.3:5432/remote");
+}
+
+function pairResponse(body: unknown, status = 200) {
+  return { status, ok: status >= 200 && status < 300, json: async () => body };
+}
+
+describe("pairing port list", () => {
+  const stored = {
+    apiUrl: "https://example.test",
+    token: PAIR_TOKEN,
+    root: "/fixture/host-service/workspaces",
+    hostRoots: [] as string[],
+  };
+
+  it("blocks the known loopback ports when the pair response omits the list", async () => {
+    stubLoopbackPorts();
+    fake.read.mockResolvedValue(null);
+    const f = fixture();
+    f.fetch.mockResolvedValue(pairResponse({ token: PAIR_TOKEN }));
+    await f.handler("setup")(f.event);
+    const config = { ...stored, guardPorts: [23456, 17091] };
+    expect(fake.write).toHaveBeenCalledWith(config);
+    expect(fake.start).toHaveBeenCalledWith(config);
+    expect(JSON.stringify(fake.write.mock.calls)).not.toContain("fake-db-marker");
+    expect(JSON.stringify(fake.start.mock.calls)).not.toContain("fake-db-marker");
+  });
+
+  it("keeps an explicit empty port list from the pair response", async () => {
+    stubLoopbackPorts();
+    fake.read.mockResolvedValue(null);
+    const f = fixture();
+    f.fetch.mockResolvedValue(pairResponse({ token: PAIR_TOKEN, guardPorts: [] }));
+    await f.handler("setup")(f.event);
+    expect(fake.write).toHaveBeenCalledWith({ ...stored, guardPorts: [] });
+    expect(fake.start).toHaveBeenCalledWith({ ...stored, guardPorts: [] });
+  });
+
+  it("keeps an explicit port list from the pair response", async () => {
+    stubLoopbackPorts();
+    fake.read.mockResolvedValue(null);
+    const f = fixture();
+    f.fetch.mockResolvedValue(pairResponse({ token: PAIR_TOKEN, guardPorts: [55433] }));
+    await f.handler("setup")(f.event);
+    expect(fake.start).toHaveBeenCalledWith(expect.objectContaining({ guardPorts: [55433] }));
+  });
+
+  it("starts a reconnect that has no stored port list with the known loopback ports", async () => {
+    stubLoopbackPorts();
+    fake.read.mockResolvedValue(stored);
+    const f = fixture();
+    f.fetch.mockResolvedValue(pairResponse({ error: "Disconnect the existing host" }, 409));
+    await f.handler("setup")(f.event);
+    expect(fake.write).not.toHaveBeenCalled();
+    expect(fake.start).toHaveBeenCalledWith({ ...stored, guardPorts: [23456, 17091] });
+  });
+
+  it("keeps an explicit empty stored port list on reconnect", async () => {
+    stubLoopbackPorts();
+    const empty = { ...stored, guardPorts: [] as number[] };
+    fake.read.mockResolvedValue(empty);
+    const f = fixture();
+    f.fetch.mockResolvedValue(pairResponse({ error: "Disconnect the existing host" }, 409));
+    await f.handler("setup")(f.event);
+    expect(fake.write).not.toHaveBeenCalled();
+    expect(fake.start).toHaveBeenCalledWith(empty);
+  });
+
+  it("restores an older pairing with the known loopback ports", async () => {
+    stubLoopbackPorts();
+    const older = { ...stored, hostRoots: ["/fixture/projects"] };
+    fake.read.mockResolvedValue(older);
+    const f = fixture();
+    await f.service.activate("https://example.test");
+    expect(fake.write).not.toHaveBeenCalled();
+    expect(fake.start).toHaveBeenCalledWith({ ...older, guardPorts: [23456, 17091] });
+  });
+
+  it("fills a missing port list when a folder is added", async () => {
+    stubLoopbackPorts();
+    fake.read.mockResolvedValue({ ...stored });
+    const f = fixture();
+    fake.picker.mockResolvedValue({ canceled: false, filePaths: ["/fixture/approved"] });
+    await f.add(f.event, "/fixture/approved");
+    expect(fake.write).toHaveBeenCalledWith({ ...stored, hostRoots: ["/fixture/approved"] });
+    expect(fake.start).toHaveBeenCalledWith({
+      ...stored,
+      hostRoots: ["/fixture/approved"],
+      guardPorts: [23456, 17091],
+    });
+    expect(JSON.stringify(fake.write.mock.calls)).not.toContain("fake-db-marker");
   });
 });

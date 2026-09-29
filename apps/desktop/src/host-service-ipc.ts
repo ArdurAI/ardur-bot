@@ -1,6 +1,7 @@
 import { stat } from "node:fs/promises";
 import path from "node:path";
 import { DESKTOP_FOLDER_ERRORS } from "@ardurbot/contracts/desktop-errors";
+import { knownLoopbackGuardPorts } from "@ardurbot/host-runtime/host-guardrails";
 import type { BrowserWindow, IpcMainInvokeEvent, Tray } from "electron";
 import { app, dialog, ipcMain, safeStorage } from "electron";
 import {
@@ -30,6 +31,14 @@ function secureHostTarget(target: string) {
   } catch {
     return false;
   }
+}
+
+/**
+ * A list that was stored or returned is kept, including an explicit empty list.
+ * No list means the loopback database and supervisor ports this process can see.
+ */
+function withGuardPorts<T extends { guardPorts?: number[] }>(config: T): T {
+  return { ...config, guardPorts: config.guardPorts ?? knownLoopbackGuardPorts(process.env) };
 }
 
 /** Registered folders that are not a folder right now; commands skip them until they return. */
@@ -66,7 +75,7 @@ export function installHostService(options: {
     (connected) => updateHostTray(options.tray(), connected),
     undefined,
     (config) => ({
-      ...config,
+      ...withGuardPorts(config),
       guardPaths: hostGuardPaths(app.getPath("userData")),
     }),
   );
@@ -148,7 +157,7 @@ export function installHostService(options: {
       { method: "POST", credentials: "include", redirect: "error" },
     );
     if (response.status === 409 && existing?.apiUrl === target) {
-      supervisor.start(existing);
+      supervisor.start(withGuardPorts(existing));
       return;
     }
     if (!response.ok) throw new Error("Disconnect the existing computer, then try again.");
@@ -156,18 +165,21 @@ export function installHostService(options: {
     if (!result || typeof result !== "object") throw new Error("Could not connect this computer.");
     const token = "token" in result && typeof result.token === "string" ? result.token : "";
     if (!/^[A-Za-z0-9_-]{43}$/.test(token)) throw new Error("Could not connect this computer.");
-    const rawPorts = "guardPorts" in result ? result.guardPorts : undefined;
-    const guardPorts = Array.isArray(rawPorts)
-      ? rawPorts.filter(
-          (port): port is number =>
-            typeof port === "number" && Number.isInteger(port) && port > 0 && port <= 65535,
-        )
-      : [];
-    if (
-      rawPorts !== undefined &&
-      (!Array.isArray(rawPorts) || guardPorts.length !== rawPorts.length)
-    )
+    let guardPorts: number[];
+    if (!("guardPorts" in result) || result.guardPorts === undefined) {
+      guardPorts = knownLoopbackGuardPorts(process.env);
+    } else if (Array.isArray(result.guardPorts)) {
+      const rawPorts = result.guardPorts;
+      guardPorts = rawPorts.filter(
+        (port): port is number =>
+          typeof port === "number" && Number.isInteger(port) && port > 0 && port <= 65535,
+      );
+      if (guardPorts.length !== rawPorts.length) {
+        throw new Error("Could not connect this computer.");
+      }
+    } else {
       throw new Error("Could not connect this computer.");
+    }
     const config = {
       apiUrl: target,
       token,
@@ -203,7 +215,7 @@ export function installHostService(options: {
     config.hostRoots = [...new Set([...config.hostRoots, root])];
     if (config.hostRoots.length > 32) throw new Error("Remove a folder before adding another.");
     await store.write(config);
-    supervisor.start(config);
+    supervisor.start(withGuardPorts(config));
     return root;
   });
   register("removeRoot", async (event, value) => {
@@ -218,7 +230,7 @@ export function installHostService(options: {
       throw new Error("Folder unavailable.");
     config.hostRoots = config.hostRoots.filter((root) => root !== value);
     await store.write(config);
-    supervisor.start(config);
+    supervisor.start(withGuardPorts(config));
   });
   register("clear", async (event) => {
     trusted(event);
@@ -252,7 +264,7 @@ export function installHostService(options: {
           !options.local.owns(target) &&
           config?.apiUrl === target
         )
-          supervisor.start(config);
+          supervisor.start(withGuardPorts(config));
         else supervisor.stop();
       });
       tail = result.then(

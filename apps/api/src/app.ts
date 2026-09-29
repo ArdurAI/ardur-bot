@@ -94,11 +94,11 @@ import { RPCHandler } from "@orpc/server/fetch";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { mountExportRoutes } from "./account-export.js";
+import { loadAppEnv } from "./app-env.js";
 import { warnAutoReviewConfiguration } from "./auto-review-status.js";
 import { backfillRuntimePins } from "./backfill-runtime-pins.js";
 import { boardCloseRetry } from "./board.js";
 import type { AppEnv } from "./env.js";
-import { loadEnv } from "./env.js";
 import { reconcileFleetSecretCleanup } from "./fleet.js";
 import { HostBridge } from "./host-bridge.js";
 import { mountHostMcpRoutes } from "./host-mcp-routes.js";
@@ -177,7 +177,7 @@ export async function createApp(
     runtime: runtimeOverride,
     ...envOverrides
   } = overrides;
-  const env = { ...loadEnv(process.env), ...envOverrides };
+  const env = { ...loadAppEnv(), ...envOverrides };
   const logger = loggerOverride ?? createServiceLogger({ service: SERVICE_NAMES.api });
   installLogger(logger);
   warnAutoReviewConfiguration(logger);
