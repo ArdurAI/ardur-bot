@@ -8878,6 +8878,7 @@ msgstr "Sin asignar"
 
 #: src/components/SoftwareUpdateSection.tsx
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Unavailable"
 msgstr "No disponible"
 
