@@ -15,9 +15,9 @@ import { startArdurMcpServer } from "./ardur-mcp-server.js";
 import { createArdurToolBridge } from "./claude-mcp-bridge.js";
 import { CodexUsageCollector } from "./codex-usage.js";
 import {
+  nativeFailureCategory,
   nativeFailureDetail,
   nativeFailureProblem,
-  nativeFailureReasonId,
 } from "./native-failure-signals.js";
 import type { NativeSpawn } from "./native-process.js";
 import {
@@ -643,7 +643,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
               usageFinished = true;
               if (status !== "completed" && !paused && !context?.signal?.aborted) {
                 // The failed turn's error text names only the category; it is never echoed.
-                const reasonId = nativeFailureReasonId(nativeFailureDetail(params.error));
+                const reasonId = nativeFailureCategory(nativeFailureDetail(params.error));
                 throw reasonId
                   ? new RuntimePinError(nativeFailureProblem(pin, reasonId))
                   : problem(
@@ -657,7 +657,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
               break;
             }
             if (event.method === "error") {
-              const reasonId = nativeFailureReasonId(
+              const reasonId = nativeFailureCategory(
                 nativeFailureDetail(params.message, params.error),
               );
               throw reasonId

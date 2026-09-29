@@ -126,6 +126,23 @@ async function handle(value) {
     return;
   }
   if (scenario === "exit") process.exit(4);
+  if (
+    scenario === "provider-usage-limit" ||
+    scenario === "provider-signed-out" ||
+    scenario === "provider-model-missing" ||
+    scenario === "provider-unknown"
+  ) {
+    const text =
+      scenario === "provider-usage-limit"
+        ? "HTTP 429: rate limit exceeded, usage limit reached"
+        : scenario === "provider-signed-out"
+          ? "HTTP 401: invalid api key"
+          : scenario === "provider-model-missing"
+            ? "model fixture-pro is not available"
+            : "upstream socket reset";
+    send({ id: value.id, error: { code: -32000, message: text } });
+    return;
+  }
   if (scenario === "held-malformed") {
     message(`before failure ${process.env.ARDUR_HERMES_PROVIDER_KEY[0]}`);
     process.stdout.write("{broken\n");

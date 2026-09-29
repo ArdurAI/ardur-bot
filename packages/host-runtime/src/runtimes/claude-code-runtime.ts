@@ -14,9 +14,9 @@ import { guardrailConfigFromEnv } from "../host-guardrails.js";
 import { startArdurMcpServer } from "./ardur-mcp-server.js";
 import { createArdurToolBridge } from "./claude-mcp-bridge.js";
 import {
+  nativeFailureCategory,
   nativeFailureDetail,
   nativeFailureProblem,
-  nativeFailureReasonId,
 } from "./native-failure-signals.js";
 import type { NativeSpawn } from "./native-process.js";
 import {
@@ -376,7 +376,7 @@ export class ClaudeStreamParser {
         const reasonId =
           value.subtype === "error_max_turns"
             ? ("max-turns" as const)
-            : (nativeFailureReasonId(nativeFailureDetail(value.result, value.errors)) ??
+            : (nativeFailureCategory(nativeFailureDetail(value.result, value.errors)) ??
               (value.subtype === "error_max_budget_usd" ? ("usage-limit" as const) : undefined));
         throw new RuntimePinError(
           reasonId

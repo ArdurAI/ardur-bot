@@ -14,6 +14,7 @@ import type { RuntimeInfo } from "@ardurbot/contracts/runtime-pins";
 import {
   HERMES_RUNTIME_DEFAULTS,
   HermesRuntimeConfigSchema,
+  RuntimePinError,
 } from "@ardurbot/contracts/runtime-pins";
 import type * as z from "zod";
 import { redactMcpText } from "../mcp-diagnostics.js";
@@ -22,6 +23,11 @@ import { startArdurMcpServer } from "./ardur-mcp-server.js";
 import { createArdurToolBridge } from "./claude-mcp-bridge.js";
 import { validateCompiledHermesProfile } from "./hermes-config.js";
 import { RuntimeQueue, stopNative } from "./native-process.js";
+import {
+  nativeFailureCategory,
+  nativeFailureDetail,
+  nativeFailureProblem,
+} from "./native-failure-signals.js";
 
 export interface HermesLaunchSpec {
   command: string;
@@ -670,12 +676,24 @@ export class HermesRuntime implements AgentRuntime {
           void this.finishTurn(request.runId, "done").catch(() => {});
         } catch (error) {
           if (turn.active) {
+            // Classify the provider failure before the generic rewrite: a usage limit,
+            // an expired or missing credential and an unavailable model each record their
+            // category sentence; the vendor's text is never stored.
+            const pin = request.model.runtimePin;
+            const category = nativeFailureCategory(
+              nativeFailureDetail(
+                error instanceof AcpClientError ? error.detail : undefined,
+                error instanceof Error ? error.cause : undefined,
+              ),
+            );
             void this.finishTurn(
               request.runId,
               "failure",
-              new Error("Hermes could not complete this turn.", {
-                cause: error instanceof AcpClientError ? error : undefined,
-              }),
+              category && pin
+                ? new RuntimePinError(nativeFailureProblem(pin, category))
+                : new Error("Hermes could not complete this turn.", {
+                    cause: error instanceof AcpClientError ? error : undefined,
+                  }),
             ).catch(() => {});
           }
         }

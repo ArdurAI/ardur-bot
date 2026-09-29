@@ -1,21 +1,27 @@
+import type { FailureCategoryId } from "@ardurbot/contracts/failure-categories";
+import { failureCategoryMessage } from "@ardurbot/contracts/failure-categories";
 import type { RuntimePin, RuntimeProblem } from "@ardurbot/contracts/runtime-pins";
 import { runtimeNames, runtimePinProblem } from "@ardurbot/contracts/runtime-pins";
 
 /**
- * Limit and sign-in signals in a native runtime's own error text. "out of extra usage" is
- * Anthropic's documented 400 for an exhausted plan (packages/adapters/src/mcp-connector.ts
- * works around exactly that text); the remaining patterns are the provider-error
- * classifier's (packages/adapters/src/provider-error.ts) applied to native output, and the
- * sign-in patterns Antigravity already matches (antigravity-stream.ts).
+ * Limit, sign-in and model signals in a native runtime's own error text. "out of extra
+ * usage" is Anthropic's documented 400 for an exhausted plan
+ * (packages/adapters/src/mcp-connector.ts works around exactly that text); the remaining
+ * patterns are the provider-error classifier's (packages/adapters/src/provider-error.ts)
+ * applied to native output, and the sign-in patterns Antigravity already matches
+ * (antigravity-stream.ts).
  */
 const USAGE_LIMIT_SIGNAL = /usage limit|out of (?:extra )?usage|rate limit|too many requests/i;
 const SIGN_IN_SIGNAL =
-  /not logged in|not signed in|sign in required|invalid api key|unauthorized|authentication/i;
+  /not logged in|not signed in|sign in required|invalid api key|unauthorized|authentication|expired token|token expired/i;
+const MODEL_UNAVAILABLE_SIGNAL =
+  /\bmodel\b(?:\s+["'`][^"'`\n]+["'`]|\s+[\w./:-]+)?\s+(?:is\s+)?(?:not supported|not available|does not exist|not found|unknown)\b|\bunknown model\b|model_not_found|model_not_available|unsupported_model/i;
 
 /** The category of a native runtime failure, or undefined when the text says nothing known. */
-export function nativeFailureReasonId(detail: string): "usage-limit" | "signed-out" | undefined {
+export function nativeFailureCategory(detail: string): FailureCategoryId | undefined {
   if (USAGE_LIMIT_SIGNAL.test(detail)) return "usage-limit";
   if (SIGN_IN_SIGNAL.test(detail)) return "signed-out";
+  if (MODEL_UNAVAILABLE_SIGNAL.test(detail)) return "model-unavailable";
   return undefined;
 }
 
@@ -33,30 +39,19 @@ export function nativeFailureDetail(...values: unknown[]): string {
     .join("\n");
 }
 
-/** A category sentence for a native failure; never echoes the runtime's raw text. */
+/**
+ * A category sentence for a native failure, from the failure-category table; never echoes
+ * the runtime's raw text.
+ */
 export function nativeFailureProblem(
   pin: RuntimePin,
-  reasonId: "usage-limit" | "signed-out" | "max-turns",
+  reasonId: FailureCategoryId,
 ): RuntimeProblem {
   const name = runtimeNames[pin.runtimeKind] ?? "This runtime";
-  if (reasonId === "usage-limit")
-    return runtimePinProblem(
-      pin,
-      "runtime-unavailable",
-      `${name}'s usage limit is reached. Try again after it resets.`,
-      reasonId,
-    );
-  if (reasonId === "signed-out")
-    return runtimePinProblem(
-      pin,
-      "runtime-unavailable",
-      `Sign in to ${name} on this computer, then try again.`,
-      reasonId,
-    );
   return runtimePinProblem(
     pin,
     "runtime-unavailable",
-    `${name} reached this run's turn limit. Narrow the task and try again.`,
+    failureCategoryMessage(reasonId, { runtime: name }),
     reasonId,
   );
 }

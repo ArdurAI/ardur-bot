@@ -688,6 +688,67 @@ describe("HermesRuntime M0 ACP seam", () => {
     });
   }
 
+  describe("provider failure classification", () => {
+    const pinnedRequest = () => {
+      const base = request();
+      return request({
+        model: {
+          ...base.model,
+          runtimePin: {
+            runtimeKind: "hermes",
+            provider: "fixture",
+            modelId: "fixture-model",
+            effort: "high",
+            credentialId: "fixture-connection",
+            revision: 1,
+          },
+        },
+      });
+    };
+    it.each([
+      [
+        "provider-usage-limit",
+        "usage-limit",
+        "Hermes's usage limit is reached. Try again after it resets.",
+      ],
+      [
+        "provider-signed-out",
+        "signed-out",
+        "Sign in to Hermes on this computer, then try again.",
+      ],
+      [
+        "provider-model-missing",
+        "model-unavailable",
+        "Hermes's pinned model is unavailable. Change the pin and try again.",
+      ],
+    ] as const)(
+      "classifies %s as %s without echoing the provider's text",
+      async (scenario, reasonId, reason) => {
+        const failure = await collect(runtime(scenario), pinnedRequest()).catch(
+          (error: unknown) => error,
+        );
+        expect(failure).toMatchObject({
+          name: "RuntimePinError",
+          problem: { code: "runtime-unavailable", reasonId, reason },
+        });
+        expect(JSON.stringify(failure)).not.toContain("HTTP ");
+        expect(JSON.stringify(failure)).not.toContain("fixture-pro");
+      },
+    );
+    it("keeps the generic line for an unclassified provider failure", async () => {
+      await expect(
+        collect(runtime("provider-unknown"), pinnedRequest()),
+      ).rejects.toMatchObject({
+        message: "Hermes could not complete this turn.",
+      });
+    });
+    it("keeps the generic line when the run carries no pin", async () => {
+      await expect(collect(runtime("provider-usage-limit"), request())).rejects.toMatchObject({
+        message: "Hermes could not complete this turn.",
+      });
+    });
+  });
+
   it("fences an authorized tool immediately when ACP fails while the consumer is paused", async () => {
     let authorizationEntered!: () => void;
     const entered = new Promise<void>((resolve) => {
