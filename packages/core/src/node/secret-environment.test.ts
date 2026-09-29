@@ -8,7 +8,7 @@ import {
   resolveSupervisorToken,
 } from "@ardurbot/core";
 import { afterEach, describe, expect, it } from "vitest";
-import { secretEnvironment } from "./service-secrets.js";
+import { resetServiceSecretsMemo, secretEnvironment } from "./service-secrets.js";
 
 const AUTH = `fake-auth-marker-${"a".repeat(16)}`;
 const KEY = `fake-encryption-marker-${"b".repeat(12)}`;
@@ -17,6 +17,7 @@ const SUPERVISOR = `fake-supervisor-marker-${"d".repeat(12)}`;
 
 const roots: string[] = [];
 afterEach(async () => {
+  resetServiceSecretsMemo();
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
@@ -72,5 +73,30 @@ describe("secretEnvironment", () => {
     expect(explicit.APP_DATABASE_PASSWORD).toBeUndefined();
     expect(new URL(explicit.DATABASE_URL!).password).toBe("");
     expect(new URL(source.DATABASE_URL!).password).toBe("fake-role-marker");
+  });
+
+  it("resolves database URLs from the secrets file alone", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "secret-environment-db-"));
+    roots.push(root);
+    const file = path.join(root, "secrets.env");
+    await writeFile(
+      file,
+      [
+        "DATABASE_URL=postgres://file_user:file_pass@127.0.0.1:5433/file_db",
+        "REALTIME_DATABASE_URL=postgres://rt_user:rt_pass@127.0.0.1:5433/rt_db",
+      ].join("\n"),
+      { mode: 0o600 },
+    );
+    const explicit: NodeJS.ProcessEnv = {
+      NODE_ENV: "production",
+      ARDURBOT_SECRETS_FILE: file,
+      DATABASE_URL: "postgres://env_user@127.0.0.1:5433/env_db",
+      REALTIME_DATABASE_URL: "postgres://rt_env@127.0.0.1:5433/rt_env_db",
+    };
+    const source = secretEnvironment(explicit);
+    expect(source.DATABASE_URL).toBe("postgres://file_user:file_pass@127.0.0.1:5433/file_db");
+    expect(source.REALTIME_DATABASE_URL).toBe("postgres://rt_user:rt_pass@127.0.0.1:5433/rt_db");
+    expect(explicit.DATABASE_URL).toBe("postgres://env_user@127.0.0.1:5433/env_db");
+    expect(explicit.REALTIME_DATABASE_URL).toBe("postgres://rt_env@127.0.0.1:5433/rt_env_db");
   });
 });

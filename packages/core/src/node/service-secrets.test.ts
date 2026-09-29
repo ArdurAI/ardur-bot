@@ -1,15 +1,17 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   loadServiceSecrets,
+  resetServiceSecretsMemo,
   SERVICE_SECRET_KEYS,
   serviceProcessEnvironment,
 } from "./service-secrets.js";
 
 const roots: string[] = [];
 afterEach(async () => {
+  resetServiceSecretsMemo();
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
@@ -37,6 +39,8 @@ describe("loadServiceSecrets", () => {
       "ENCRYPTION_KEY=fake-encryption-marker",
       "SCREEN_PROXY_SECRET=fake-screen-marker",
       "SANDBOX_SUPERVISOR_TOKEN=fake-supervisor-marker",
+      "DATABASE_URL=fake-database-marker",
+      "REALTIME_DATABASE_URL=fake-realtime-marker",
     ]);
     const env: NodeJS.ProcessEnv = { ARDURBOT_SECRETS_FILE: file, PATH: "/usr/bin" };
     const overlay = loadServiceSecrets(env);
@@ -111,5 +115,62 @@ describe("loadServiceSecrets", () => {
       "The service secrets file could not be read.",
     );
     expect(missing.ENCRYPTION_KEY).toBeUndefined();
+  });
+
+  it("accepts password-bearing DATABASE_URL and REALTIME_DATABASE_URL from the secrets file", async () => {
+    const file = await secretsFile([
+      "DATABASE_URL=postgres://file_user:file_pass@127.0.0.1:5433/file_db",
+      "REALTIME_DATABASE_URL=postgres://rt_user:rt_pass@127.0.0.1:5433/rt_db",
+    ]);
+    const env: NodeJS.ProcessEnv = { ARDURBOT_SECRETS_FILE: file };
+    const overlay = loadServiceSecrets(env);
+    expect(overlay.DATABASE_URL).toBe("postgres://file_user:file_pass@127.0.0.1:5433/file_db");
+    expect(overlay.REALTIME_DATABASE_URL).toBe("postgres://rt_user:rt_pass@127.0.0.1:5433/rt_db");
+    expect(env.DATABASE_URL).toBeUndefined();
+    expect(env.REALTIME_DATABASE_URL).toBeUndefined();
+  });
+
+  it("prefers a URL given in the file over a passwordless one in the environment", async () => {
+    const file = await secretsFile([
+      "DATABASE_URL=postgres://file_user:file_pass@127.0.0.1:5433/file_db",
+      "REALTIME_DATABASE_URL=postgres://rt_user:rt_pass@127.0.0.1:5433/rt_db",
+    ]);
+    const env: NodeJS.ProcessEnv = {
+      ARDURBOT_SECRETS_FILE: file,
+      DATABASE_URL: "postgres://env_user@127.0.0.1:5433/env_db",
+      REALTIME_DATABASE_URL: "postgres://rt_env@127.0.0.1:5433/rt_env_db",
+    };
+    const overlay = loadServiceSecrets(env);
+    expect(overlay.DATABASE_URL).toBe("postgres://file_user:file_pass@127.0.0.1:5433/file_db");
+    expect(overlay.REALTIME_DATABASE_URL).toBe("postgres://rt_user:rt_pass@127.0.0.1:5433/rt_db");
+    expect(env.DATABASE_URL).toBe("postgres://env_user@127.0.0.1:5433/env_db");
+    expect(env.REALTIME_DATABASE_URL).toBe("postgres://rt_env@127.0.0.1:5433/rt_env_db");
+    const serviceEnv = serviceProcessEnvironment(env);
+    expect(serviceEnv.DATABASE_URL).toBe("postgres://file_user:file_pass@127.0.0.1:5433/file_db");
+    expect(serviceEnv.REALTIME_DATABASE_URL).toBe(
+      "postgres://rt_user:rt_pass@127.0.0.1:5433/rt_db",
+    );
+    expect(env.DATABASE_URL).toBe("postgres://env_user@127.0.0.1:5433/env_db");
+    expect(env.REALTIME_DATABASE_URL).toBe("postgres://rt_env@127.0.0.1:5433/rt_env_db");
+  });
+
+  it("reads and parses the secrets file only once for repeated calls with the same path", async () => {
+    const file = await secretsFile(["APP_DATABASE_PASSWORD=fake-role-marker"]);
+    const readFile = vi.fn().mockReturnValue("APP_DATABASE_PASSWORD=fake-role-marker\n");
+    const env: NodeJS.ProcessEnv = { ARDURBOT_SECRETS_FILE: file };
+    loadServiceSecrets(env, readFile);
+    loadServiceSecrets(env, readFile);
+    expect(readFile).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows re-reading after the memo is reset", async () => {
+    const file = await secretsFile(["APP_DATABASE_PASSWORD=fake-role-marker"]);
+    const readFile = vi.fn().mockReturnValue("APP_DATABASE_PASSWORD=fake-role-marker\n");
+    const env: NodeJS.ProcessEnv = { ARDURBOT_SECRETS_FILE: file };
+    loadServiceSecrets(env, readFile);
+    expect(readFile).toHaveBeenCalledTimes(1);
+    resetServiceSecretsMemo();
+    loadServiceSecrets(env, readFile);
+    expect(readFile).toHaveBeenCalledTimes(2);
   });
 });
