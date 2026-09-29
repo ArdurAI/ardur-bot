@@ -37,8 +37,8 @@ import {
   reduceLiveMessageBlocks,
   reduceRunContext,
   runFailureError,
-  signupRequiresEmailVerification,
   showsReplyText,
+  signupRequiresEmailVerification,
   takeLiveMessage,
   updateCloudAgentMessages,
   upsertAtLivePlace,
@@ -51,7 +51,6 @@ import type { EndpointResult } from "./endpoint";
 import { defaultApiBase, normalizeApiBase } from "./endpoint";
 import { t } from "./i18n";
 import { resumeLiveNotifications } from "./live-notifications";
-import { hasVisibleMessagePresentation } from "./message-presentation";
 import { RpcError } from "./rpc-error";
 import {
   clearSessionToken,

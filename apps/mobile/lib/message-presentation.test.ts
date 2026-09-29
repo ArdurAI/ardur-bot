@@ -181,7 +181,12 @@ describe("mobile message presentation", () => {
     // A reasoning summary the provider streams is a thought, not reply text.
     expect(
       liveReplyTextStreaming([
-        { kind: "progress", text: "Weighing options.", reasoning: true, streaming: true } as MessageBlock,
+        {
+          kind: "progress",
+          text: "Weighing options.",
+          reasoning: true,
+          streaming: true,
+        } as MessageBlock,
       ]),
     ).toBe(false);
     // Narration a later tool call folds into the work record loses the cursor.
