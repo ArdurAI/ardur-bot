@@ -5,8 +5,9 @@ installation on a paired macOS or Linux host, or running Ardur natively on this 
 native acceptance lane passes. Selecting Hermes reuses the bot's existing Ardur
 connection, model, effort, computer, integrations, connectors, MCP assignments,
 skills and plugins. It does not import local configuration or ask for a Hermes
-account. A missing install, unsupported connection, non-host computer (unless running locally) or old host
-relay protocol blocks execution without changing the saved pin.
+account. A missing install, unsupported connection, non-host computer, or old host
+relay protocol blocks execution without changing the saved pin. Local mode and the
+dev stack still need a desktop host computer.
 
 ## Install a pinned source checkout
 
