@@ -325,9 +325,9 @@ describe("RuntimeConfigPanel", () => {
       details.dispatchEvent(new Event("toggle"));
     });
     expect(onError).toHaveBeenLastCalledWith("Enter valid JSON.");
-    expect(
-      container.querySelector('[data-testid="runtime-config-panel-error"]')?.textContent,
-    ).toBe("Enter valid JSON.");
+    expect(container.querySelector('[data-testid="runtime-config-panel-error"]')?.textContent).toBe(
+      "Enter valid JSON.",
+    );
 
     // Reopen and fix: the error clears and Save is allowed again.
     await act(async () => {
