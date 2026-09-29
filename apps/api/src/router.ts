@@ -103,6 +103,7 @@ import {
   screenLeaseIdForRun,
   scriptedCatalogEntry,
   serializeModelSecret,
+  SUBSCRIPTION_SIGN_IN_PROVIDERS,
   takeoverLeaseMs,
   toComputerRef,
   touchRunningComputer,
@@ -1321,16 +1322,19 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           },
           orderBy: newestModelCredentialOrder,
         });
-        const compatibleRows = rows.filter(
+        // OAuth markers need the stored secret too, and only subscription
+        // sign-in providers can hold an OAuth credential.
+        const secretRows = rows.filter(
           (row) =>
             row.provider === OPENAI_COMPATIBLE_PROVIDER_ID ||
             row.provider === "anthropic" ||
-            row.provider === "ollama",
+            row.provider === "ollama" ||
+            row.provider in SUBSCRIPTION_SIGN_IN_PROVIDERS,
         );
-        const secrets = compatibleRows.length
+        const secrets = secretRows.length
           ? await deps.prisma.secret.findMany({
               where: {
-                id: { in: compatibleRows.map((row) => row.secretId) },
+                id: { in: secretRows.map((row) => row.secretId) },
                 userId: context.actor.userId,
                 spaceId: null,
               },

@@ -1117,6 +1117,8 @@ export const ModelCredentialSchema = z.object({
   label: z.string(),
   hasKey: z.boolean(),
   connectionIssue: z.literal("api-key-required").optional(),
+  /** True when the stored secret is a subscription sign-in (OAuth), not an API key. */
+  oauth: z.boolean().optional(),
   isDefault: z.boolean(),
   baseUrl: z.string().optional(),
   modelId: z.string().optional(),

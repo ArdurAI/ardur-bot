@@ -48,6 +48,7 @@ export * from "./featured-connectors.js";
 export * from "./goal-context.js";
 export * from "./group-ask.js";
 export * from "./group-mentions.js";
+export * from "./hermes-connections.js";
 export * from "./history-summary.js";
 export * from "./http-response.js";
 export * from "./ide-changes.js";
