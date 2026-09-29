@@ -152,7 +152,8 @@ export class MemoryRecallIndex {
           if (document.id && !EXCLUDED_PATH.test(document.path))
             this.replace(db, { id: document.id, document });
         entry.slices.add(sliceKey);
-        // Writes that arrived while the database was opening replay after the bulk load.
+        // Writes that committed before or during the build replay after the bulk load, so
+        // the index and the store never diverge across the first build.
         for (const write of entry.pending.splice(0)) this.replace(db, write);
       } finally {
         db.exec("COMMIT");
@@ -212,13 +213,21 @@ export class MemoryRecallIndex {
   }
 
   private write(spaceId: string, id: string, document: RecallIndexDocument | null): void {
-    const entry = this.spaces.get(spaceId);
-    if (!entry || entry.failed) return;
+    if (this.disabled) return;
+    let entry = this.spaces.get(spaceId);
+    if (!entry) {
+      // A write can commit before the space's first slice build creates its entry, while the
+      // build's store read is still in flight. Open the entry so the write reaches the
+      // replay buffer instead of being dropped; the build replays it over its snapshot.
+      entry = { db: null, failed: false, opening: null, slices: new Set(), pending: [] };
+      this.spaces.set(spaceId, entry);
+    }
+    if (entry.failed) return;
     const row = { id, document };
     if (!entry.db) {
-      // The lazy build reads the store after the write commits, so only a build already in
-      // flight needs the replay buffer.
-      if (entry.opening) entry.pending.push(row);
+      // The lazy build's snapshot may predate this write, so anything arriving before the
+      // database is ready must replay after the bulk load, not just during `opening`.
+      entry.pending.push(row);
       return;
     }
     try {

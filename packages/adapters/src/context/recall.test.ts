@@ -351,6 +351,109 @@ describe.skipIf(!ftsAvailable)("indexed local recall", () => {
     expect(fullReads).toHaveBeenCalledTimes(2);
   });
 
+  /** Real store + service + sink stack with a gate that holds the first full-scope read. */
+  function gatedWritePathStack(index: MemoryRecallIndex) {
+    let documents: JournalDocument[] = [];
+    const store = new JournalDocumentStore(
+      {
+        transaction: async (_access, action) => {
+          const copy = structuredClone(documents);
+          const result = await action(copy);
+          documents = copy;
+          return result;
+        },
+      },
+      "fixture",
+    );
+    const service = new MemoryService({
+      open: (ctx, action) =>
+        action({
+          access: { ...ctx, botIds: ["chief"] },
+          store,
+          generation: 0,
+          semantic: null,
+        }),
+      enqueue: async () => undefined,
+      recallIndex: index,
+    });
+    const base = new LifecycleMemoryStore(service);
+    let releaseFirstRead!: () => void;
+    const firstReadHeld = new Promise<void>((resolve) => {
+      releaseFirstRead = resolve;
+    });
+    let fullReads = 0;
+    // The gate holds after the snapshot is captured, so a write commits with the first slice
+    // build in flight and a snapshot that does not yet contain it.
+    const memory = {
+      describe: () => base.describe(),
+      read: async (request: MemoryReadRequest, ctx: AdapterContext) => {
+        const page = await base.read(request, ctx);
+        if (!request.path) {
+          fullReads += 1;
+          if (fullReads === 1) await firstReadHeld;
+        }
+        return page;
+      },
+      search: base.search.bind(base),
+      commit: base.commit.bind(base),
+      exportMarkdown: base.exportMarkdown.bind(base),
+      importMarkdown: base.importMarkdown.bind(base),
+    } satisfies MemoryStore;
+    return { service, memory, releaseFirstRead, readCount: () => fullReads };
+  }
+
+  it("indexes a write that commits while the first slice build is reading the store", async () => {
+    const index = new MemoryRecallIndex();
+    const stack = gatedWritePathStack(index);
+    const run = { ...context, botId: "chief" };
+    const firstRecall = recallLocalDocuments(stack.memory, "chief", "zephyr", run, index);
+    await vi.waitFor(() => expect(stack.readCount()).toBe(1));
+    // The write commits through the sink while the build's snapshot read is held open.
+    const saved = await stack.service.save(
+      {
+        scope: "bot",
+        botId: "chief",
+        path: "facts/mid-build.md",
+        content: "zephyr cinnamon note",
+      },
+      run,
+    );
+    stack.releaseFirstRead();
+    await firstRecall;
+    const hits = await recallLocalDocuments(stack.memory, "chief", "cinnamon", run, index);
+    expect(hits.map((result) => result.provenance)).toEqual([`[ardur-memory:${saved.id}:1]`]);
+    // Answered from the index: no further full-scope reads after the first build.
+    expect(stack.readCount()).toBe(2);
+  });
+
+  it("drops a delete that commits while the first slice build is reading the store", async () => {
+    const index = new MemoryRecallIndex();
+    const stack = gatedWritePathStack(index);
+    const run = { ...context, botId: "chief" };
+    const saved = await stack.service.save(
+      { scope: "bot", botId: "chief", path: "facts/vanish.md", content: "zephyr vanilla note" },
+      run,
+    );
+    // The first recall must not match the document, so no re-verification heals the row
+    // before the index itself is checked below.
+    const firstRecall = recallLocalDocuments(stack.memory, "chief", "housekeeping", run, index);
+    await vi.waitFor(() => expect(stack.readCount()).toBe(1));
+    // The build's snapshot still holds the document; the delete commits before it returns.
+    await stack.service.delete(saved.id, saved.revision, run);
+    stack.releaseFirstRead();
+    await firstRecall;
+    // The replayed delete must remove the row so the document cannot reappear from the index.
+    expect(
+      await index.query("space", {
+        words: ["vanilla"],
+        botId: "chief",
+        userId: "owner",
+        limit: 5,
+      }),
+    ).toEqual([]);
+    expect(await recallLocalDocuments(stack.memory, "chief", "vanilla", run, index)).toEqual([]);
+  });
+
   it("answers from the index well under the scan time on 5,000 notes", async () => {
     const rows = Array.from({ length: 5000 }, (_, i) => ({
       id: `note-${i}`,
@@ -390,6 +493,7 @@ describe.skipIf(!ftsAvailable)("indexed local recall", () => {
     expect(results.length).toBeGreaterThan(0);
     expect(results.length).toBeLessThanOrEqual(5);
     expect(indexed).toBeLessThan(scan / 2);
-    expect(indexed).toBeLessThan(100);
+    // Absolute bound, stretched by the scan measured in the same run so CI load cannot trip it.
+    expect(indexed).toBeLessThan(Math.max(100, scan));
   });
 });
