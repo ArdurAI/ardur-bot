@@ -1,6 +1,7 @@
 import type { AgentRunRequest } from "@ardurbot/adapter-kit";
 import type { ContextBudgets, ContextSnapshot, RoutingRule } from "@ardurbot/contracts";
 import { ContextBudgetsSchema } from "@ardurbot/contracts";
+import { escapePromptData } from "@ardurbot/core";
 
 type Message = AgentRunRequest["history"][number];
 const RESULT_TRUNCATED_MARKER =
@@ -29,8 +30,23 @@ function frame(name: string, text: string, budget: number) {
   if (!text.trim()) return "";
   const prefix = `<${name}>\n`;
   const suffix = `\n</${name}>`;
-  const escaped = text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  const escaped = escapePromptData(text);
   return prefix + escaped.slice(0, Math.max(0, budget - prefix.length - suffix.length)) + suffix;
+}
+/** Keeps whole lines, so a bounded directory never ends partway through a member. */
+function frameLines(name: string, text: string, budget: number) {
+  if (!text.trim()) return "";
+  const prefix = `<${name}>\n`;
+  const suffix = `\n</${name}>`;
+  let room = budget - prefix.length - suffix.length;
+  const kept: string[] = [];
+  for (const line of escapePromptData(text).split("\n")) {
+    const cost = line.length + (kept.length ? 1 : 0);
+    if (cost > room) break;
+    kept.push(line);
+    room -= cost;
+  }
+  return kept.length ? prefix + kept.join("\n") + suffix : "";
 }
 export function boundMessages(messages: Message[], budget: number): Message[] {
   const result: Message[] = [];
@@ -94,7 +110,7 @@ export async function assembleTurnContext(run: {
   );
   const teammates =
     teammateAllowance >= 64
-      ? frame("teammate_directory", run.teammates ?? "", teammateAllowance)
+      ? frameLines("teammate_directory", run.teammates ?? "", teammateAllowance)
       : "";
   const requiredMessage = required
     ? {
