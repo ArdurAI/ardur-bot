@@ -1,5 +1,6 @@
 import type { PreferencesPatch, UserPreferences } from "@ardurbot/contracts";
 import { DEFAULT_USER_PREFERENCES } from "@ardurbot/contracts";
+import { SealScenePackProvider } from "@ardurbot/ui-web";
 import type { ReactNode } from "react";
 import { createContext, useContext, useEffect, useLayoutEffect, useState } from "react";
 import {
@@ -50,7 +51,9 @@ export function PreferencesProvider({ userId, children }: { userId: string; chil
   }
   return (
     <Context value={{ preferences, ready, update, reload: () => setAttempt((value) => value + 1) }}>
-      {settled ? children : <ShellSkeleton />}
+      <SealScenePackProvider value={preferences.sealScenes}>
+        {settled ? children : <ShellSkeleton />}
+      </SealScenePackProvider>
     </Context>
   );
 }

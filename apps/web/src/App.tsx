@@ -61,12 +61,21 @@ const WelcomePage = lazy(() =>
   import("./pages/Welcome").then((module) => ({ default: module.WelcomePage })),
 );
 const NotFoundPage = lazy(() => import("./pages/NotFound"));
+/** Development only, and linked from nowhere: every seal scene for design review. */
+const SEAL_GALLERY_PATH = "/dev/seals";
+const SealGallery = import.meta.env.DEV ? lazy(() => import("./pages/dev/SealGallery")) : null;
 
 export function App() {
   if (window.location.pathname === LOCAL_SETTINGS_PAGE)
     return (
       <Suspense fallback={<div className="h-full bg-background" />}>
         <LocalSettingsPage />
+      </Suspense>
+    );
+  if (SealGallery && window.location.pathname === SEAL_GALLERY_PATH)
+    return (
+      <Suspense fallback={<div className="h-full bg-background" />}>
+        <SealGallery />
       </Suspense>
     );
   return <SessionApp />;

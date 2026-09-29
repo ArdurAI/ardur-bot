@@ -22,6 +22,7 @@ import {
   cloudAgentHttpsUrl,
   composerCommands,
   composerSkills,
+  deriveSealPhase,
   isApprovalAskBlock,
   isRunTerminalEvent,
   isSecretAskBlock,
@@ -29,6 +30,7 @@ import {
   mentionChipKey,
   projectMessageReactions,
   resolveComposerSendPlan,
+  sealActivity,
   selectedAskActionLabel,
   serializeComposerPrompt,
   userVisibleMessages,
@@ -1538,6 +1540,14 @@ function Thread() {
       ? (snap?.activeRuns?.find((run) => run.botId === activityBotId)?.status ??
         (snap?.run?.botId === activityBotId ? snap.run.status : currentBotStatus))
       : undefined;
+    // The live work record says whether the bot is searching or working through steps.
+    const activityPhase =
+      activityBotId && message.runId
+        ? deriveSealPhase({
+            status: activityStatus,
+            activity: sealActivity(visibleMessages, message.runId),
+          }).phase
+        : undefined;
     return (
       <View
         key={message.id}
@@ -1570,6 +1580,7 @@ function Thread() {
               identity={activityBotId}
               label={activityBot?.name}
               size={inGroup ? 20 : 28}
+              phase={activityPhase}
               status={activityStatus}
             />
           </View>

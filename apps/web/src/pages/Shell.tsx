@@ -186,6 +186,8 @@ import { quoteDraftForSelection } from "../lib/quote-selection";
 import { clearSpaceSelection, rpc, selectedSpaceId, selectSpace } from "../lib/rpc";
 import { readSeenRunErrorIds, rememberSeenRunErrorId } from "../lib/run-error-storage";
 import type {} from "../lib/scoreboard-trace";
+import { useSealPhaseLabel } from "../lib/seal-labels";
+import { botSealPhase, useThreadSealPhases } from "../lib/seal-phase";
 import { sharedInflight } from "../lib/shared-inflight";
 import {
   activeThreadRuns,
@@ -611,6 +613,11 @@ export function ShellPage({
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [dismissedRunErrorIds, setDismissedRunErrorIds] =
     useState<ReadonlySet<string>>(readSeenRunErrorIds);
+  // When each bot's latest run completed while its thread was open; seals show done briefly.
+  const [completedRuns, setCompletedRuns] = useState<ReadonlyMap<string, number>>(() => new Map());
+  const recordRunCompleted = useCallback((botId: string) => {
+    setCompletedRuns((current) => new Map(current).set(botId, Date.now()));
+  }, []);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const mobileSidebarSwipeRef = useRef<{ startX: number; startY: number } | null>(null);
   const [draggedBotId, setDraggedBotId] = useState<string | null>(null);
@@ -1365,6 +1372,7 @@ export function ShellPage({
       applyEvent: (event) =>
         applyThreadEvent(event, commitSnapshot, commitComputer, snapshotRef, computerRef),
       onEvent: (event) => {
+        if (event.type === "run.completed") recordRunCompleted(event.botId);
         if (event.type === "thread.cleared") {
           expandedHistoryThread.current = null;
           pinnedAroundRef.current = null;
@@ -1466,6 +1474,7 @@ export function ShellPage({
           computerRef,
         ),
       onEvent: (event) => {
+        if (event.type === "run.completed") recordRunCompleted(event.botId);
         if (isGroupMemberModelPinEvent(event)) {
           void refreshBots().catch(() => undefined);
         }
@@ -1807,6 +1816,21 @@ export function ShellPage({
     setReplyQuote(null);
   }, []);
   const currentRuns = activeThreadRuns(activeSnapshot);
+  // On the dashboard, team and board views activeSnapshot can still be the group thread the
+  // reader left, whose runs are no longer followed; seals then speak from the bot list alone.
+  const threadSeals = useThreadSealPhases(
+    active || inGroup ? activeSnapshot : null,
+    completedRuns,
+    dismissedRunErrorIds,
+  );
+  const sealPhaseOf = (botId: string, status?: string) =>
+    botSealPhase(threadSeals.get(botId), status);
+  const sealLabel = useSealPhaseLabel();
+  /** A busy bot's phase, read after its name the way "(unread)" is. */
+  const sealPhaseNote = (botId: string, status?: string) => {
+    const phase = sealPhaseOf(botId, status);
+    return phase === "idle" ? null : <span className="sr-only">{`, ${sealLabel(phase)}`}</span>;
+  };
   const answerableAskMessageId = latestAnswerableAskMessageId(activeSnapshot);
   const workingRuns = currentRuns.filter((run) =>
     ["running", "queued", "leased"].includes(run.status),
@@ -1843,6 +1867,7 @@ export function ShellPage({
       color: bot?.color ?? FALLBACK_BOT_COLOR,
       name: bot?.name,
       status: run.status,
+      phase: threadSeals.get(run.botId)?.phase,
     };
   });
   const resolveTranscriptMemberName = useCallback(
@@ -3131,13 +3156,16 @@ export function ShellPage({
                               identity={item.chat.id}
                               label={item.chat.name}
                               size={38}
-                              status={item.chat.status}
+                              phase={sealPhaseOf(item.chat.id, item.chat.status)}
                             />
                           ) : (
                             <GroupAvatar
                               members={
                                 item.chat.id === activeSnapshot?.groupId
-                                  ? (activeSnapshot.members ?? item.chat.members)
+                                  ? (activeSnapshot.members ?? item.chat.members).map((member) => ({
+                                      ...member,
+                                      phase: sealPhaseOf(member.botId, member.status),
+                                    }))
                                   : item.chat.members
                               }
                               size={38}
@@ -3160,6 +3188,9 @@ export function ShellPage({
                                     <Trans> (unread)</Trans>
                                   </span>
                                 ) : null}
+                                {item.kind === "bot"
+                                  ? sealPhaseNote(item.chat.id, item.chat.status)
+                                  : null}
                               </div>
                               <div className="flex shrink-0 items-center gap-1.5">
                                 <span className="text-[11.5px] text-muted-foreground/60 tabular-nums">
@@ -3440,7 +3471,12 @@ export function ShellPage({
             >
               {inGroup ? (
                 <GroupAvatar
-                  members={activeSnapshot?.members ?? activeGroup?.members ?? []}
+                  members={(activeSnapshot?.members ?? activeGroup?.members ?? []).map(
+                    (member) => ({
+                      ...member,
+                      phase: sealPhaseOf(member.botId, member.status),
+                    }),
+                  )}
                   size={26}
                 />
               ) : active ? (
@@ -3449,7 +3485,7 @@ export function ShellPage({
                   identity={active.id}
                   label={active.name}
                   size={26}
-                  status={active.status}
+                  phase={sealPhaseOf(active.id, active.status)}
                 />
               ) : null}
               <span className="min-w-0">
@@ -4644,7 +4680,7 @@ export function ShellPage({
                   identity={computerBot.id}
                   label={computerBot.name}
                   size={28}
-                  status={computerBot.status}
+                  phase={sealPhaseOf(computerBot.id, computerBot.status)}
                 />
                 {recordingSkill ? (
                   <TeachRecordingChrome

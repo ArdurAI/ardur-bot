@@ -3590,6 +3590,11 @@ msgstr "还没有账户？"
 msgid "Done"
 msgstr "完成"
 
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Done"
+msgstr "完成"
+
 #: src/pages/TeamBoard.tsx
 msgid "Done — waiting for your OK"
 msgstr ""
@@ -4342,6 +4347,11 @@ msgstr ""
 #: src/pages/TeamBoard.tsx
 msgid "Idle"
 msgstr ""
+
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Idle"
+msgstr "空闲"
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "If you heard that, voice is ready."
@@ -6277,6 +6287,11 @@ msgstr "暂停团队消息"
 msgid "Paused"
 msgstr "已暂停"
 
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Paused"
+msgstr "已暂停"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Permission denied on the socket"
 msgstr "没有套接字访问权限"
@@ -7537,6 +7552,11 @@ msgstr ""
 msgid "Search skills and plugins"
 msgstr ""
 
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Searching"
+msgstr "正在搜索"
+
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/SpaceSearch.tsx
 msgid "Searching…"
@@ -7925,6 +7945,11 @@ msgstr "部分条目的名称不受支持，已隐藏（{hiddenCount}）。"
 msgid "Some items exceeded the scan limits."
 msgstr "部分项目超出了扫描限制。"
 
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Something went wrong"
+msgstr "出了点问题"
+
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Sort by name"
 msgstr ""
@@ -8055,6 +8080,11 @@ msgid "Start the engine and press Test."
 msgstr "启动引擎后点击“测试”。"
 
 #: src/lib/run-status-label.ts
+msgid "Starting"
+msgstr "正在开始"
+
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
 msgid "Starting"
 msgstr "正在开始"
 
@@ -8373,6 +8403,11 @@ msgstr ""
 #: src/pages/shell/runtime-settings.tsx
 msgid "Thinking"
 msgstr "思考"
+
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Thinking"
+msgstr "正在思考"
 
 #: src/components/ThreadCommandBlock.tsx
 #: src/pages/ide/dialogs.tsx
@@ -9080,6 +9115,11 @@ msgstr "等待登录…"
 msgid "Waiting for the API to come back…"
 msgstr "正在等待 API 恢复…"
 
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Waiting for you"
+msgstr "正在等你"
+
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
 #: src/pages/dashboard/NowPanel.tsx
@@ -9224,6 +9264,11 @@ msgstr "正在处理 {task}"
 #: src/pages/TeamBoard.tsx
 msgid "Working on {task} for {0}"
 msgstr "正在为 {0} 处理 {task}"
+
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Working through steps"
+msgstr "正在逐步处理"
 
 #: src/pages/Auth.tsx
 #: src/pages/CallView.tsx

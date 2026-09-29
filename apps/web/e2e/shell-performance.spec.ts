@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import type { CDPSession, Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
-import { installPerformanceFixture } from "./performance-fixture";
+import { installPerformanceFixture, tokenEvent } from "./performance-fixture";
 
 async function traceFrames(page: Page, name: string, action: () => Promise<void>) {
   await page.evaluate((label) => {
@@ -55,7 +55,8 @@ test("production shell startup, fake-provider first token, and three motions", a
   for (let sample = 0; sample < 5; sample++) {
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const page = await context.newPage();
-    await installPerformanceFixture(page);
+    // Manual events let the seal-motion sample start the sent run.
+    await installPerformanceFixture(page, false, true);
     const cdp = await context.newCDPSession(page);
     await cdp.send("Network.enable");
     await cdp.send("Network.setCacheDisabled", { cacheDisabled: true });
@@ -104,6 +105,18 @@ test("production shell startup, fake-provider first token, and three motions", a
         );
       });
       await page.screenshot({ path: testInfo.outputPath("first-token.png") });
+      if (sample === 4) {
+        // Start the sent run so its seals play their scene, then measure a second of it.
+        await page.evaluate(
+          (event) =>
+            window.dispatchEvent(new CustomEvent("fixture:product-event", { detail: event })),
+          { ...tokenEvent, id: "fixture-started", seq: 102, type: "run.started", payload: {} },
+        );
+        await page
+          .waitForFunction(() => document.getAnimations().length > 0, undefined, { timeout: 5000 })
+          .catch(() => warnings.push("Nothing was animating during the seal-motion sample."));
+        await traceFrames(page, "seal-motion", () => page.waitForTimeout(1000));
+      }
       const overhead = await page.evaluate(
         () =>
           performance.getEntriesByName("perf:first-token")[0]!.startTime -
@@ -122,7 +135,13 @@ test("production shell startup, fake-provider first token, and three motions", a
       });
       if (sample === 4) {
         const events = JSON.parse(trace).traceEvents as { name: string; ts: number; ph: string }[];
-        for (const motion of ["panel-open", "panel-close", "bot-switch", "message-arrival"]) {
+        for (const motion of [
+          "panel-open",
+          "panel-close",
+          "bot-switch",
+          "message-arrival",
+          "seal-motion",
+        ]) {
           const frames = events
             .filter((event) => event.name === `perf:motion:${motion}` && event.ph !== "e")
             .map((event) => event.ts / 1000)

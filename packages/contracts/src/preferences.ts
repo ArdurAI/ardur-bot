@@ -29,10 +29,17 @@ export const NotificationActivitySchema = z.object({
 });
 export type NotificationActivity = z.infer<typeof NotificationActivitySchema>;
 
+/** A seal scene pack id. Null keeps the default pack; an unknown id falls back to it. */
+const SealScenesPreferenceSchema = z
+  .string()
+  .regex(/^[a-z0-9-]{1,64}$/)
+  .nullable();
+
 export const UserPreferencesSchema = z.object({
   theme: z.enum(["system", "light", "dark"]).default("system"),
   chatFont: z.enum(["sans", "serif", "system"]).default("sans"),
   motion: z.enum(["system", "reduced"]).default("system"),
+  sealScenes: SealScenesPreferenceSchema.default(null),
   notifications: NotificationPreferencesSchema.default(() =>
     NotificationPreferencesSchema.parse({}),
   ),
@@ -45,6 +52,7 @@ export const PreferencesPatchSchema = z.object({
   theme: z.enum(["system", "light", "dark"]).optional(),
   chatFont: z.enum(["sans", "serif", "system"]).optional(),
   motion: z.enum(["system", "reduced"]).optional(),
+  sealScenes: SealScenesPreferenceSchema.optional(),
   preferredBrowser: z.enum(["builtin"]).optional(),
   notifications: z
     .object({

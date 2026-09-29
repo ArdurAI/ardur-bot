@@ -11,6 +11,7 @@ import {
   resolvePersonaColorDef,
   resolvePersonaShape,
 } from "./bot-avatar.js";
+import { SealScenePackProvider } from "./seal-scene.js";
 
 describe("BotAvatar", () => {
   it("renders concurrent working avatars correctly", () => {
@@ -31,17 +32,17 @@ describe("BotAvatar", () => {
       if (status === "running" || status === "queued" || status === "leased") {
         expect(html).toContain("<circle");
       } else if (status === "waiting_input") {
-        expect(html).toContain("background:var(--warning)");
+        expect(html).toContain('fill="var(--warning)"');
       } else if (status === "waiting_takeover") {
-        expect(html).toContain("dashed");
+        expect(html).toContain('stroke-dasharray="8 6"');
       }
     },
   );
 
-  it("keeps working attribute false when idle", () => {
+  it("draws only the disc and initial when idle", () => {
     const html = renderToString(<BotAvatar color="#F59E0B" status="idle" />);
-    expect(html).not.toContain("<circle");
-    expect(html).not.toContain("dashed");
+    expect(html).not.toContain("<svg");
+    expect(html).toContain('data-phase="idle"');
   });
 
   it("renders a seal by default for plain color values", () => {
@@ -122,13 +123,58 @@ describe("BotAvatar", () => {
     expect(html).not.toContain("evil.example");
   });
 
-  it("honors reduced-motion by keeping the arc still (not a closed circle)", () => {
+  it("draws the phase's still pose and names its motion when motion is allowed", () => {
     const html = renderToString(
       <BotAvatar color="#8B5CF6" identity="maya" size={32} status="running" />,
     );
     expect(html).toContain('data-status="running"');
-    expect(html).toContain("122 41");
-    expect(html).not.toContain("animate-pulse");
+    expect(html).toContain('data-phase="thinking"');
+    expect(html).toContain('opacity="0.65"');
+    expect(html).toContain('class="ardurbot-seal-landscapes-wonders-thinking-ring"');
+  });
+
+  it("draws the still pose without motion classes when asked to hold still", () => {
+    const html = renderToString(<BotAvatar color="#2F4A7A" phase="searching" size={112} still />);
+    expect(html).toContain('transform="rotate(-40 50 50)"');
+    expect(html).not.toContain("ardurbot-seal-");
+  });
+
+  it("shows the scene from 40 px and the small-only layers below it", () => {
+    const large = renderToString(<BotAvatar color="#2F4A7A" phase="waiting" size={40} />);
+    expect(large).toContain("<line");
+    expect(large).not.toContain("M8.43 74");
+    const small = renderToString(<BotAvatar color="#2F4A7A" phase="waiting" size={24} />);
+    expect(small).not.toContain("<line");
+    expect(small).toContain("M8.43 74");
+  });
+
+  it("keeps the initial between the scene and the ring", () => {
+    const html = renderToString(
+      <BotAvatar color="#2F4A7A" label="Scout" phase="error" size={112} />,
+    );
+    const initial = html.indexOf(">S</span>");
+    expect(html.indexOf("<svg")).toBeLessThan(initial);
+    expect(html.lastIndexOf("<svg")).toBeGreaterThan(initial);
+    expect(html).toContain("font-size:54px");
+    expect(renderToString(<BotAvatar color="#2F4A7A" label="Scout" size={24} />)).toContain(
+      "font-size:14px",
+    );
+  });
+
+  it("prefers an explicit phase over the run status", () => {
+    const html = renderToString(<BotAvatar color="#2F4A7A" phase="done" status="running" />);
+    expect(html).toContain('data-phase="done"');
+    expect(html).toContain('data-status="idle"');
+  });
+
+  it("switches the whole look with the chosen pack", () => {
+    const html = renderToString(
+      <SealScenePackProvider value="simple-ring">
+        <BotAvatar color="#2F4A7A" identity="arc-test" size={40} status="running" />
+      </SealScenePackProvider>,
+    );
+    expect(html).toContain('stroke-dasharray="198 66"');
+    expect(html).toContain("ardurbot-seal-simple-ring-thinking-arc");
   });
 
   it("exposes shape picker name and pressed state", () => {
@@ -207,15 +253,6 @@ describe("BotAvatar", () => {
       <BotAvatar color="#9A3B1E" identity="test" status={raw as string} />,
     );
     expect(html).toContain(`data-status="${expected}"`);
-  });
-
-  it("never uses strokeDasharray=none on the running ring (arc is always 122 41)", () => {
-    const html = renderToString(
-      <BotAvatar color="#2F4A7A" identity="arc-test" size={40} status="running" />,
-    );
-    expect(html).toContain("122 41");
-    expect(html).not.toContain('stroke-dasharray="none"');
-    expect(html).not.toContain("strokeDasharray:none");
   });
 
   it("applies the hand-cut seal edge at 28 px and above", () => {

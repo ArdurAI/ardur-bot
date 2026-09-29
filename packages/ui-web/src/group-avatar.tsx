@@ -1,4 +1,5 @@
-import { type CSSProperties, memo } from "react";
+import type { SealPhase } from "@ardurbot/core";
+import { memo } from "react";
 import { BotAvatar } from "./bot-avatar.js";
 import { cn } from "./lib/utils.js";
 
@@ -7,6 +8,7 @@ export interface GroupAvatarMember {
   name?: string;
   color: string;
   status?: string;
+  phase?: SealPhase;
 }
 
 export interface GroupAvatarProps {
@@ -58,6 +60,7 @@ export const GroupAvatar = memo(function GroupAvatar({
         identity={firstMember.botId ?? firstMember.name}
         label={firstMember.name}
         size={size}
+        phase={firstMember.phase}
         status={firstMember.status}
         className={cn("ardurbot-group-avatar", className)}
       />
@@ -94,6 +97,7 @@ export const GroupAvatar = memo(function GroupAvatar({
             identity={member.botId ?? member.name}
             label={member.name}
             size={size}
+            phase={member.phase}
             status={member.status}
           />
         </div>

@@ -3590,6 +3590,11 @@ msgstr "खाता नहीं है?"
 msgid "Done"
 msgstr "पूर्ण"
 
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Done"
+msgstr "पूर्ण"
+
 #: src/pages/TeamBoard.tsx
 msgid "Done — waiting for your OK"
 msgstr ""
@@ -4342,6 +4347,11 @@ msgstr ""
 #: src/pages/TeamBoard.tsx
 msgid "Idle"
 msgstr ""
+
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Idle"
+msgstr "निष्क्रिय"
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "If you heard that, voice is ready."
@@ -6277,6 +6287,11 @@ msgstr "टीम संदेश रोकें"
 msgid "Paused"
 msgstr "रुका हुआ"
 
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Paused"
+msgstr "रुका हुआ"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Permission denied on the socket"
 msgstr "सॉकेट की अनुमति नहीं है"
@@ -7537,6 +7552,11 @@ msgstr ""
 msgid "Search skills and plugins"
 msgstr ""
 
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Searching"
+msgstr "खोज रहा है"
+
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/SpaceSearch.tsx
 msgid "Searching…"
@@ -7925,6 +7945,11 @@ msgstr "कुछ प्रविष्टियों के नाम सम�
 msgid "Some items exceeded the scan limits."
 msgstr ""
 
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Something went wrong"
+msgstr "कुछ गलत हो गया"
+
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Sort by name"
 msgstr ""
@@ -8055,6 +8080,11 @@ msgid "Start the engine and press Test."
 msgstr "इंजन शुरू करें और टेस्ट दबाएँ।"
 
 #: src/lib/run-status-label.ts
+msgid "Starting"
+msgstr "शुरू हो रहा है"
+
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
 msgid "Starting"
 msgstr "शुरू हो रहा है"
 
@@ -8371,6 +8401,11 @@ msgstr ""
 
 #: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
+msgid "Thinking"
+msgstr "सोच रहा है"
+
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
 msgid "Thinking"
 msgstr "सोच रहा है"
 
@@ -9080,6 +9115,11 @@ msgstr "साइन-इन की प्रतीक्षा…"
 msgid "Waiting for the API to come back…"
 msgstr ""
 
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Waiting for you"
+msgstr "आपकी प्रतीक्षा कर रहा है"
+
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
 #: src/pages/dashboard/NowPanel.tsx
@@ -9224,6 +9264,11 @@ msgstr "{task} पर काम कर रहा है"
 #: src/pages/TeamBoard.tsx
 msgid "Working on {task} for {0}"
 msgstr "{0} के लिए {task} पर काम कर रहा है"
+
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Working through steps"
+msgstr "चरण-दर-चरण काम कर रहा है"
 
 #: src/pages/Auth.tsx
 #: src/pages/CallView.tsx

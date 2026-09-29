@@ -1227,4 +1227,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Same as bot": "与 Bot 相同",
   "Could not save group model.": "无法保存群组模型。",
   "This member's model changed. Reload the group.": "此成员的模型已更改。请重新加载群组。",
+  "Working through steps": "正在逐步处理",
+  "Waiting for you": "正在等你",
+  "Something went wrong": "出了点问题",
 };
