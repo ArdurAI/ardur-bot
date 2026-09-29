@@ -74,6 +74,11 @@ msgstr "{0} Ardur टूल उपयोग नहीं कर सकता —
 msgid "{0} connection"
 msgstr "{0} कनेक्शन"
 
+#. placeholder {0}: member.name
+#: src/components/ai/CoordinationLine.tsx
+msgid "{0} couldn't answer"
+msgstr "{0} जवाब नहीं दे सका"
+
 #. placeholder {0}: bot.name
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} default"
@@ -775,6 +780,10 @@ msgstr ""
 msgid "Answer"
 msgstr "उत्तर"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "answered"
+msgstr "जवाब दिया"
+
 #: src/components/AskCard.tsx
 msgid "Answered"
 msgstr "उत्तर दिया गया"
@@ -1047,6 +1056,10 @@ msgstr ""
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Ask the server owner to configure this provider."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Asked {asked, plural, one {# bot} other {# bots}} · {answered, plural, one {# answered} other {# answered}}"
+msgstr "{asked, plural, one {# बॉट} other {# बॉट}} से पूछा · {answered, plural, one {# ने जवाब दिया} other {# ने जवाब दिए}}"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "asks first"
@@ -2249,6 +2262,10 @@ msgstr ""
 msgid "Conversation with {0}"
 msgstr "{0} के साथ बातचीत"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Coordination round: {asked} asked, {answered} answered"
+msgstr "समन्वय चक्र: {asked} से पूछा, {answered} ने जवाब दिया"
+
 #: src/pages/GroupPanel.tsx
 msgid "Coordinator"
 msgstr "समन्वयक"
@@ -3047,6 +3064,10 @@ msgstr ""
 #: src/pages/settings/UploadedFiles.tsx
 msgid "Could not update uploaded files."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "couldn't answer"
+msgstr "जवाब नहीं दे सका"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't load messaging settings"
@@ -4048,6 +4069,10 @@ msgstr "MCP कनेक्शन पूरा हो रहा है…"
 msgid "First bot not created"
 msgstr "पहला बॉट नहीं बनाया गया"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Fix"
+msgstr "ठीक करें"
+
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Fix the configuration JSON to edit these settings."
 msgstr "ये सेटिंग्स संपादित करने के लिए कॉन्फ़िगरेशन JSON ठीक करें।"
@@ -4234,6 +4259,10 @@ msgstr ""
 #: src/pages/CallView.tsx
 msgid "Hang up, then enter the code on screen."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "has not answered yet"
+msgstr "अभी तक जवाब नहीं दिया"
 
 #: src/pages/RoutineEditor.tsx
 msgid "header"
@@ -4618,6 +4647,10 @@ msgstr "अंतराल मात्रा"
 #: src/pages/RoutineSchedule.tsx
 msgid "Interval unit"
 msgstr "अंतराल इकाई"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "is waiting for you"
+msgstr "आपकी प्रतीक्षा में है"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Isolated"
@@ -8184,6 +8217,10 @@ msgstr ""
 #: src/pages/GroupPanel.tsx
 msgid "Stopped"
 msgstr "बंद"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "stopped before answering"
+msgstr "जवाब देने से पहले रुक गया"
 
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx

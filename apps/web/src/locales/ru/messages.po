@@ -74,6 +74,11 @@ msgstr "{0} не может использовать инструменты Ardu
 msgid "{0} connection"
 msgstr "Соединение {0}"
 
+#. placeholder {0}: member.name
+#: src/components/ai/CoordinationLine.tsx
+msgid "{0} couldn't answer"
+msgstr "{0} не смог ответить"
+
 #. placeholder {0}: bot.name
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} default"
@@ -775,6 +780,10 @@ msgstr ""
 msgid "Answer"
 msgstr "Ответ"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "answered"
+msgstr "ответил"
+
 #: src/components/AskCard.tsx
 msgid "Answered"
 msgstr "Ответил"
@@ -1047,6 +1056,10 @@ msgstr ""
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Ask the server owner to configure this provider."
 msgstr "Попросите владельца сервера настроить этого провайдера."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Asked {asked, plural, one {# bot} other {# bots}} · {answered, plural, one {# answered} other {# answered}}"
+msgstr "Спросили {asked, plural, one {# бота} other {# ботов}} · {answered, plural, one {# ответил} other {# ответили}}"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "asks first"
@@ -2249,6 +2262,10 @@ msgstr "разговоров"
 msgid "Conversation with {0}"
 msgstr "Диалог с {0}"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Coordination round: {asked} asked, {answered} answered"
+msgstr "Раунд координации: спрошено {asked}, ответили {answered}"
+
 #: src/pages/GroupPanel.tsx
 msgid "Coordinator"
 msgstr "Координатор"
@@ -3047,6 +3064,10 @@ msgstr ""
 #: src/pages/settings/UploadedFiles.tsx
 msgid "Could not update uploaded files."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "couldn't answer"
+msgstr "не смог ответить"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't load messaging settings"
@@ -4048,6 +4069,10 @@ msgstr "Завершение подключения MCP…"
 msgid "First bot not created"
 msgstr "Первый бот ещё не создан"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Fix"
+msgstr "Исправить"
+
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Fix the configuration JSON to edit these settings."
 msgstr "Исправьте JSON конфигурации, чтобы редактировать эти настройки."
@@ -4234,6 +4259,10 @@ msgstr "Сначала повесьте трубку, затем введите 
 #: src/pages/CallView.tsx
 msgid "Hang up, then enter the code on screen."
 msgstr "Повесьте трубку, затем введите код на экране."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "has not answered yet"
+msgstr "пока не ответил"
 
 #: src/pages/RoutineEditor.tsx
 msgid "header"
@@ -4618,6 +4647,10 @@ msgstr "Значение интервала"
 #: src/pages/RoutineSchedule.tsx
 msgid "Interval unit"
 msgstr "Единица интервала"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "is waiting for you"
+msgstr "ждёт вас"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Isolated"
@@ -8184,6 +8217,10 @@ msgstr ""
 #: src/pages/GroupPanel.tsx
 msgid "Stopped"
 msgstr "Остановлено"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "stopped before answering"
+msgstr "остановился, не ответив"
 
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx

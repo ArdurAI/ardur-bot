@@ -74,6 +74,11 @@ msgstr "{0}은(는) Ardur 도구를 사용할 수 없습니다 — 코디네이�
 msgid "{0} connection"
 msgstr "{0} 연결"
 
+#. placeholder {0}: member.name
+#: src/components/ai/CoordinationLine.tsx
+msgid "{0} couldn't answer"
+msgstr "{0}이(가) 응답할 수 없음"
+
 #. placeholder {0}: bot.name
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} default"
@@ -775,6 +780,10 @@ msgstr ""
 msgid "Answer"
 msgstr "답변"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "answered"
+msgstr "응답함"
+
 #: src/components/AskCard.tsx
 msgid "Answered"
 msgstr "응답함"
@@ -1047,6 +1056,10 @@ msgstr ""
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Ask the server owner to configure this provider."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Asked {asked, plural, one {# bot} other {# bots}} · {answered, plural, one {# answered} other {# answered}}"
+msgstr "{asked, plural, one {#개 봇} other {#개 봇}}에게 질문 · {answered, plural, one {#개 응답} other {#개 응답}}"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "asks first"
@@ -2249,6 +2262,10 @@ msgstr ""
 msgid "Conversation with {0}"
 msgstr "{0}와의 대화"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Coordination round: {asked} asked, {answered} answered"
+msgstr "조정 라운드: {asked}개 질문, {answered}개 응답"
+
 #: src/pages/GroupPanel.tsx
 msgid "Coordinator"
 msgstr "조정 봇"
@@ -3047,6 +3064,10 @@ msgstr ""
 #: src/pages/settings/UploadedFiles.tsx
 msgid "Could not update uploaded files."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "couldn't answer"
+msgstr "응답할 수 없음"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't load messaging settings"
@@ -4048,6 +4069,10 @@ msgstr "MCP 연결을 마무리하는 중…"
 msgid "First bot not created"
 msgstr "첫 번째 봇이 아직 생성되지 않았습니다"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Fix"
+msgstr "수정"
+
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Fix the configuration JSON to edit these settings."
 msgstr "이 설정을 편집하려면 구성 JSON을 수정하세요."
@@ -4234,6 +4259,10 @@ msgstr "먼저 전화를 끊은 다음 화면에 표시된 코드를 입력하�
 #: src/pages/CallView.tsx
 msgid "Hang up, then enter the code on screen."
 msgstr "전화를 끊은 다음 화면에 표시된 코드를 입력하세요."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "has not answered yet"
+msgstr "아직 응답하지 않음"
 
 #: src/pages/RoutineEditor.tsx
 msgid "header"
@@ -4618,6 +4647,10 @@ msgstr "간격 숫자"
 #: src/pages/RoutineSchedule.tsx
 msgid "Interval unit"
 msgstr "간격 단위"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "is waiting for you"
+msgstr "기다리는 중"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Isolated"
@@ -8184,6 +8217,10 @@ msgstr ""
 #: src/pages/GroupPanel.tsx
 msgid "Stopped"
 msgstr "중지됨"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "stopped before answering"
+msgstr "응답 전 중지됨"
 
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx

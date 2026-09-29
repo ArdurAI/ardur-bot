@@ -74,6 +74,11 @@ msgstr "{0} can't use Ardur tools — a coordinator needs tools to hand off work
 msgid "{0} connection"
 msgstr "{0} connection"
 
+#. placeholder {0}: member.name
+#: src/components/ai/CoordinationLine.tsx
+msgid "{0} couldn't answer"
+msgstr "{0} couldn't answer"
+
 #. placeholder {0}: bot.name
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} default"
@@ -775,6 +780,10 @@ msgstr "Another service"
 msgid "Answer"
 msgstr "Answer"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "answered"
+msgstr "answered"
+
 #: src/components/AskCard.tsx
 msgid "Answered"
 msgstr "Answered"
@@ -1047,6 +1056,10 @@ msgstr "Ask first"
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Ask the server owner to configure this provider."
 msgstr "Ask the server owner to configure this provider."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Asked {asked, plural, one {# bot} other {# bots}} · {answered, plural, one {# answered} other {# answered}}"
+msgstr "Asked {asked, plural, one {# bot} other {# bots}} · {answered, plural, one {# answered} other {# answered}}"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "asks first"
@@ -2249,6 +2262,10 @@ msgstr "conversation"
 msgid "Conversation with {0}"
 msgstr "Conversation with {0}"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Coordination round: {asked} asked, {answered} answered"
+msgstr "Coordination round: {asked} asked, {answered} answered"
+
 #: src/pages/GroupPanel.tsx
 msgid "Coordinator"
 msgstr "Coordinator"
@@ -3047,6 +3064,10 @@ msgstr "Could not update this task; try again."
 #: src/pages/settings/UploadedFiles.tsx
 msgid "Could not update uploaded files."
 msgstr "Could not update uploaded files."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "couldn't answer"
+msgstr "couldn't answer"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't load messaging settings"
@@ -4048,6 +4069,10 @@ msgstr "Finishing MCP connection…"
 msgid "First bot not created"
 msgstr "First bot not created"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Fix"
+msgstr "Fix"
+
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Fix the configuration JSON to edit these settings."
 msgstr "Fix the configuration JSON to edit these settings."
@@ -4234,6 +4259,10 @@ msgstr "Hang up first, then enter the code on screen."
 #: src/pages/CallView.tsx
 msgid "Hang up, then enter the code on screen."
 msgstr "Hang up, then enter the code on screen."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "has not answered yet"
+msgstr "has not answered yet"
 
 #: src/pages/RoutineEditor.tsx
 msgid "header"
@@ -4618,6 +4647,10 @@ msgstr "Interval amount"
 #: src/pages/RoutineSchedule.tsx
 msgid "Interval unit"
 msgstr "Interval unit"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "is waiting for you"
+msgstr "is waiting for you"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Isolated"
@@ -8184,6 +8217,10 @@ msgstr "Stop work in this conversation"
 #: src/pages/GroupPanel.tsx
 msgid "Stopped"
 msgstr "Stopped"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "stopped before answering"
+msgstr "stopped before answering"
 
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
