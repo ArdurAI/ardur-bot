@@ -57,10 +57,17 @@ export function taskCardPrompt(value: unknown, workerName?: string): string {
   ].join("\n");
 }
 export function taskCardChecklist(card: TaskCard): string {
+  // A card the worker closed without complete_task has no per-criterion reports, but its
+  // terminal event carries what the worker actually posted; "not reported" would claim
+  // the worker said nothing.
+  const closed = card.timeline.findLast((event) =>
+    ["completed", "failed", "cancelled"].includes(event.kind),
+  );
+  const unreported = closed?.text.trim() ? "not reported separately" : "not reported";
   return card.doneWhen
     .map((item, index) => {
       const report = card.reports.find((entry) => entry.index === index);
-      return `- ${item}: ${report ? `${report.met ? "reported met" : "reported unmet"} — ${report.report}` : "not reported"}`;
+      return `- ${item}: ${report ? `${report.met ? "reported met" : "reported unmet"} — ${report.report}` : unreported}`;
     })
     .join("\n");
 }

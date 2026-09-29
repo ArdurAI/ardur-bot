@@ -176,6 +176,22 @@ describe("team.board", () => {
     else expect(result.rows[0].executing).toBeNull();
   });
 
+  it.each(["failed", "cancelled"])(
+    "keeps a %s handoff record listed after its run ends",
+    async (status) => {
+      const f = fixture("cancelled", status);
+      const result = TeamBoardSchema.parse(await teamBoard(f.prisma, actor));
+      expect(f.db.delegation.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            status: { in: expect.arrayContaining(["failed", "cancelled"]) },
+          }),
+        }),
+      );
+      expect(result.rows[0]!.delegations.map((row) => row.status)).toContain(status);
+    },
+  );
+
   it("keeps unavailable usage off the card instead of showing zero", async () => {
     const f = fixture();
     f.db.usageRecord.findMany.mockResolvedValue([

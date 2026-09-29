@@ -60,3 +60,48 @@ it("preserves all of a long free-text task in bounded typed inputs", () => {
   expect(card.goal).toHaveLength(2000);
   expect(card.inputs).toEqual([{ type: "text", text: "Keep this requirement" }]);
 });
+
+it("does not claim an unreported criterion was never answered once the card closed", () => {
+  const card: TaskCard = {
+    ...taskCardRequest("Check the sources"),
+    requesterBotId: "chief",
+    workerBotId: "reviewer",
+    approvalBoundaries: { scopes: ["ordinary"], connectors: [] },
+    snapshot: {
+      pin: {
+        runtimeKind: "pi",
+        provider: "fixture",
+        modelId: "fixture",
+        effort: "high",
+        credentialId: "connection",
+        revision: 1,
+      },
+      computer: { id: null, mode: "team", kind: null },
+      destination: { host: null, local: false },
+    },
+    budget: { tokens: 100, deadlineAt: "2026-09-25T18:00:00.000Z" },
+    artifacts: [],
+    doneWhen: ["Check citations"],
+    reports: [],
+    timeline: [
+      { id: "1", kind: "started", at: "2026-09-25T17:00:00.000Z", text: "" },
+      {
+        id: "2",
+        kind: "completed",
+        at: "2026-09-25T17:01:00.000Z",
+        text: "All three sources agree.",
+      },
+    ],
+  };
+  expect(taskCardChecklist(card)).toBe("- Check citations: not reported separately");
+  // A card still open, or closed with nothing posted, keeps the plainer line.
+  expect(taskCardChecklist({ ...card, timeline: card.timeline.slice(0, 1) })).toBe(
+    "- Check citations: not reported",
+  );
+  expect(
+    taskCardChecklist({
+      ...card,
+      timeline: [{ ...card.timeline[1]!, text: "" }],
+    }),
+  ).toBe("- Check citations: not reported");
+});

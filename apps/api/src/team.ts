@@ -81,7 +81,14 @@ export async function teamBoard(
         orderBy: { createdAt: "desc" },
       }),
       prisma.delegation.findMany({
-        where: { ...scope, status: { in: ["queued", "running", "cancel-requested", "completed"] } },
+        // Terminal records stay listed after the run ends; a failed or cancelled handoff
+        // must not vanish from the board while it is still that bot's latest work.
+        where: {
+          ...scope,
+          status: {
+            in: ["queued", "running", "cancel-requested", "completed", "failed", "cancelled"],
+          },
+        },
         orderBy: { createdAt: "desc" },
       }),
       prisma.delegation.findMany({

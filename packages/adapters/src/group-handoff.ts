@@ -6,6 +6,7 @@ import {
   nextBotMessageHop,
   redactTaskValue,
   renderGroupMembersContext,
+  taskCardGoal,
   taskCardPrompt,
 } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
@@ -120,6 +121,11 @@ export async function handoffToGroupBot(
       }
       const card = input.mode === "assign" ? TaskCardRequestSchema.safeParse(input.card) : null;
       if (card && !card.success) return { error: "assign requires a valid task card" } as const;
+      // A card-carrying handoff (comparisons, assignments) may leave the message blank;
+      // the visible line then falls back to the card's goal instead of posting empty.
+      const visibleMessage = input.message.trim();
+      if (!visibleMessage && !input.card)
+        return { error: "Give the handoff a message describing the next stage." } as const;
       const deliveryKey =
         input.mode === "assign"
           ? `group-handoff:${run.id}:${targetId}:${createHash("sha256")
@@ -213,11 +219,12 @@ export async function handoffToGroupBot(
         deps.resolveDelegationPin,
       );
       if (!admitted.ok) return admitted;
+      const handoffText = visibleMessage || taskCardGoal(admitted.record.card) || "";
       const handoffBlock: MessageBlock = {
         kind: "handoff",
         fromBotId: run.botId,
         toBotId: targetId,
-        text: input.message,
+        text: handoffText,
         hop,
       };
       const message = await createThreadMessageInTransaction(tx, {
@@ -265,7 +272,7 @@ export async function handoffToGroupBot(
           messageId: message.id,
           fromBotId: run.botId,
           toBotId: targetId,
-          text: input.message,
+          text: handoffText,
         },
       });
       const assignedEvent = goal
