@@ -9,7 +9,7 @@ Thanks for helping. Ardur is early and moves fast, so the process is deliberatel
 - `main` only moves from `dev` after a human has tested and verified the build.
 - CI (lint, typecheck, build, unit tests) is advisory. A red check is a hint, not a gate.
   Please look at it, but a maintainer can merge with it red when the failure is unrelated.
-- Small, focused changes are easier to review and easier to keep in sync with upstream Rakazo.
+- Small, focused changes are easier to review.
 
 ## Run locally
 
@@ -32,18 +32,13 @@ you touch that area.
 
 When running web E2E locally (`pnpm --filter @ardurbot/web e2e`), Playwright starts its own web server and fails fast if the web port is already in use, preventing test signups (`@ardurbot.test`) from polluting a running developer database. To opt in to reusing a running dev server, set `PLAYWRIGHT_REUSE_SERVER=1`.
 
-## Syncing with upstream
+## Changes from upstream
 
-Ardur is a fork of [Rakazo](https://github.com/elie222/rakazo). To pull upstream changes:
-
-```sh
-git fetch upstream
-git merge upstream/main
-python3 scripts/rename-from-upstream.py
-# review the diff, then commit
-```
-
-See `docs/decisions/ADR-001-fork-and-rename.md`.
+Ardur does not sync with its upstream project automatically. To bring in an upstream change,
+port it on a branch like any other change: use Ardur's names for anything it adds, keep the
+stable internal identifiers (app and bundle ids, database names, storage keys, protocol names,
+the `ARDURBOT_*` variables and the `@ardurbot/*` package scope), and review the diff before it
+lands. See `docs/decisions/ADR-001-fork-and-rename.md`.
 
 ## Public repository
 

@@ -45,7 +45,7 @@ jobs:
           set -euo pipefail
           python3 site/scripts/validate_claims.py
 
-      - name: Guard against a hard-coded product name
+      - name: Guard against a hard-coded or stale product name
         run: |
           set -euo pipefail
           python3 site/scripts/validate_no_hardcoded_name.py
