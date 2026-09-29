@@ -3250,17 +3250,26 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     await expect(loadPeerBoundEffect(prisma, child.id, { approvedOnly: true })).resolves.toBeNull();
   });
 
+  // A group keeps at least two bots, so add a third member before removing the worker.
+  async function removeWorkerFromGroup(f: Awaited<ReturnType<typeof fixture>>) {
+    const third = await prisma.bot.create({
+      data: { spaceId, userId, name: `Third ${fixtureNumber}`, color: "ink" },
+    });
+    await prisma.chatGroupMember.create({ data: { groupId: f.goal.groupId, botId: third.id } });
+    const actor = { userId, spaceId, email: `${scopeId}@example.test`, isDeploymentOwner: true };
+    await createGroupRepos(prisma).updateGroup(actor, {
+      groupId: f.goal.groupId,
+      botIds: [f.coordinator.id, third.id],
+    });
+  }
+
   it("S4b voids an approved exact effect when the worker is removed from the group", async () => {
     const f = await fixture();
     const { delivery, child, answer } = await sendExactEffectHold(f, "s4b-remove-void");
     const effectId = delivery.approvalEffectId!;
     expect(await answer("allow")).toBe(true);
 
-    const actor = { userId, spaceId, email: `${scopeId}@example.test`, isDeploymentOwner: true };
-    await createGroupRepos(prisma).updateGroup(actor, {
-      groupId: f.goal.groupId,
-      botIds: [], // Remove the worker
-    });
+    await removeWorkerFromGroup(f);
 
     const voided = await prisma.externalEffect.findUniqueOrThrow({ where: { id: effectId } });
     expect(voided).toMatchObject({ status: "failed", result: { reason: "peer-member-removed" } });
@@ -3297,11 +3306,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     const claimed = await claimPeerBoundEffect(prisma, bound, exactLiveCall);
     expect(claimed.ok).toBe(true);
 
-    const actor = { userId, spaceId, email: `${scopeId}@example.test`, isDeploymentOwner: true };
-    await createGroupRepos(prisma).updateGroup(actor, {
-      groupId: f.goal.groupId,
-      botIds: [], // Remove the worker
-    });
+    await removeWorkerFromGroup(f);
 
     // The effect should still be executing
     const executing = await prisma.externalEffect.findUniqueOrThrow({ where: { id: effectId } });

@@ -384,6 +384,10 @@ export function createGroupRepos(prisma: PrismaClient) {
     ): Promise<{ group: Group; cancelledRunIds: string[] }> {
       const members = input.botIds ? await assertOwnedBots(prisma, actor, input.botIds) : undefined;
       const updated = await prisma.$transaction(async (tx) => {
+        // A member change can void peer holds. Senders take the policy lock before the
+        // group row, so take it first here too, or a removal and a send can deadlock.
+        if (input.botIds)
+          await lockPeerTrafficPolicy(tx, { spaceId: actor.spaceId, userId: actor.userId });
         await lockOwnedGroup(tx, actor, input.groupId);
         const current = await tx.chatGroup.findFirst({
           where: {
@@ -418,8 +422,6 @@ export function createGroupRepos(prisma: PrismaClient) {
         const removedRunsToCancel: { id: string; taskId: string }[] = [];
 
         if (removedBotIds.length) {
-          await lockPeerTrafficPolicy(tx, { spaceId: actor.spaceId, userId: actor.userId });
-
           const removedDeliveries = await tx.botMessageDelivery.findMany({
             where: {
               targetGroupId: input.groupId,
