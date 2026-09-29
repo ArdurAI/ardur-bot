@@ -55,6 +55,7 @@ function fixture() {
     setupError: null,
     desktopSystem: undefined,
     desktopTray: null,
+    dockBadge: { attach: vi.fn() },
     quitting: false,
     warmWindowTimer: undefined,
     clearTimeout: vi.fn(),
@@ -277,6 +278,7 @@ describe("main window host lifecycle", () => {
   it("keeps the reactivated host running when reconnect destroys the previous window", async () => {
     const f = fixture();
     expect(await f.openAppOnce(url)).toBe(true);
+    expect(f.dockBadge.attach).toHaveBeenCalledOnce();
     f.commitPendingAppSwitch();
     const previous = f.mainWindow!;
     expect(await f.openAppOnce(url)).toBe(true);

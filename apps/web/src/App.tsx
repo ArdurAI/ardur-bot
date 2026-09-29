@@ -8,6 +8,7 @@ import { PreferencesProvider } from "./components/PreferencesProvider";
 import { ShellSkeleton } from "./components/ShellSkeleton";
 import { authClient } from "./lib/auth";
 import { authReturnPath } from "./lib/auth-return-path";
+import { publishDockWaitingCount } from "./lib/dock-badge";
 import { markAfterPaint, markOnce } from "./lib/performance";
 import { resetPreferences } from "./lib/preferences";
 import {
@@ -78,7 +79,10 @@ function SessionApp() {
   const session = authClient.useSession();
   const gate = sessionGate(session);
   useEffect(() => {
-    if (gate === "anonymous") resetPreferences();
+    if (gate === "anonymous") {
+      resetPreferences();
+      publishDockWaitingCount(0);
+    }
   }, [gate]);
   const [holdingUnreachable, setHoldingUnreachable] = useState(false);
   const nextHolding = holdUnreachableGate(gate, holdingUnreachable);

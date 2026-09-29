@@ -20,6 +20,7 @@ import {
   sqlMigrationsReady,
 } from "./db-migrate.js";
 import { installDevices } from "./devices-ipc.js";
+import { installDockBadge } from "./dock-badge.js";
 import { DOCKER_INSTALL_LINKS, isDesktopSetupLink, runDocker } from "./docker-cli.js";
 import { installCustomizationIpc } from "./extensions/ipc.js";
 import { accountGuidedSteps } from "./guided-setup/account.js";
@@ -126,6 +127,7 @@ const DESKTOP_STACK_PROBE_PATH = "/.well-known/ardurbot-desktop-stack";
 const DESKTOP_STACK_TOKEN_HEADER = "x-ardurbot-desktop-stack-token";
 let desktopTray: ReturnType<typeof systemTray> = null;
 let mainWindow: BrowserWindow | null = null;
+let dockBadge: ReturnType<typeof installDockBadge> | null = null;
 const unsavedFiles = new UnsavedFiles<BrowserWindow>();
 const appWindowTargets = new WeakMap<BrowserWindow, string>();
 let setupWindow: BrowserWindow | null = null;
@@ -466,6 +468,7 @@ function createWindow(url: string, partition: string | null) {
   win.webContents.once("dom-ready", () => markOnce("rk:main:dom-ready"));
   win.webContents.once("did-finish-load", () => markOnce("rk:main:did-finish-load"));
   win.webContents.once("did-stop-loading", () => markOnce("rk:main:did-stop-loading"));
+  dockBadge?.attach(win.webContents);
   markOnce("rk:main:load-url-start");
   const loaded = loadAppUrl(win, url).then(
     () => markOnce("rk:main:load-url-resolved"),
@@ -1401,6 +1404,7 @@ app.whenReady().then(async () => {
   if (initialLink) pendingIntegrationReturn = integrationReturnId(initialLink);
   installCustomizationIpc({ window: () => mainWindow, target: () => currentTargetUrl });
   installDesktopNotifications({ window: () => mainWindow, target: () => currentTargetUrl });
+  dockBadge = installDockBadge({ window: () => mainWindow, target: () => currentTargetUrl });
   const userDataDir = app.getPath("userData");
   hostService = installHostService({
     window: () => mainWindow,

@@ -171,6 +171,7 @@ import {
   screenIframeSandbox,
 } from "../lib/computer-screen";
 import { desktopBridge } from "../lib/desktop";
+import { countOwnerWaiting, publishDockWaitingCount } from "../lib/dock-badge";
 import { scheduleFocusPrompt } from "../lib/focus-prompt";
 import { INSIGHT_ACTION_EVENT } from "../lib/insight-actions";
 import { localTimezone } from "../lib/local-timezone";
@@ -801,6 +802,23 @@ export function ShellPage({
   const manuallyUnread = useRef(new Set<string>());
   const readVisibleGroups = useRef(new Set<string>());
   useNotifications();
+  const dockWaitingCount = useMemo(
+    () =>
+      countOwnerWaiting({
+        bots,
+        groups,
+        spaces,
+        currentSpaceId: bootstrapMe?.spaceId,
+        snapshot: snapshot
+          ? { threadId: snapshot.threadId, runs: activeThreadRuns(snapshot) }
+          : null,
+      }),
+    [bots, groups, spaces, bootstrapMe?.spaceId, snapshot],
+  );
+  useEffect(() => {
+    if (!initialBotsLoaded) return;
+    publishDockWaitingCount(dockWaitingCount);
+  }, [dockWaitingCount, initialBotsLoaded]);
   const computerVisible = useRef(false);
 
   const autoSpoken = useRef<string | null>(null);
