@@ -25,6 +25,10 @@ export function hasMentionToken(text: string, name: string): boolean {
  */
 const ADDRESS_OPENERS = new Set(["hey", "hi", "hello", "yo", "ok", "okay", "so"]);
 
+const OPENER_PATTERN = /^(\p{L}+)(?:\s*,\s*|\s+)/u;
+const CONJUNCTION_PATTERN = /^(?:and(?![\p{L}\p{N}_-])|&|\+)\s*/iu;
+const CLOSING_PUNCTUATION_PATTERN = /^[;:!?.]/;
+
 /**
  * Members a message addresses by name at its start, with or without "@".
  *
@@ -32,7 +36,7 @@ const ADDRESS_OPENERS = new Set(["hey", "hi", "hello", "yo", "ok", "okay", "so"]
  * the message must begin with one or more whole member names (case-insensitive,
  * same Unicode boundaries as hasMentionToken, longest name first), joined by
  * commas, "and", "&" or "+". The address then counts when it is closed by
- * punctuation (, ; : ! ?), by the end of the message, by an "@" on any matched
+ * punctuation (, ; : ! ? .), by the end of the message, by an "@" on any matched
  * name, or by the leading opener. Anything else leaves the message unaddressed.
  */
 export function resolveAddressedBotIds(input: {
@@ -42,15 +46,16 @@ export function resolveAddressedBotIds(input: {
   const candidates = input.members
     .map((member) => ({ id: member.id, name: member.name.trim() }))
     .filter((member) => member.name.length > 0)
-    .sort((a, b) => b.name.length - a.name.length);
+    .sort((a, b) => b.name.length - a.name.length)
+    .map((candidate) => ({
+      id: candidate.id,
+      pattern: new RegExp(`^(@?)${escapeRegExp(candidate.name)}(?![\\p{L}\\p{N}_-])`, "iu"),
+    }));
   if (!candidates.length) return [];
 
   const matchName = (rest: string) => {
     for (const candidate of candidates) {
-      const match = new RegExp(
-        `^(@?)${escapeRegExp(candidate.name)}(?![\\p{L}\\p{N}_-])`,
-        "iu",
-      ).exec(rest);
+      const match = candidate.pattern.exec(rest);
       if (match) return { id: candidate.id, length: match[0].length, mentioned: match[1] === "@" };
     }
     return undefined;
@@ -58,7 +63,7 @@ export function resolveAddressedBotIds(input: {
 
   let rest = input.text.trimStart();
   let openerSeen = false;
-  const opener = /^(\p{L}+)\s+/u.exec(rest);
+  const opener = OPENER_PATTERN.exec(rest);
   if (opener?.[1] && ADDRESS_OPENERS.has(opener[1].toLowerCase())) {
     openerSeen = true;
     rest = rest.slice(opener[0].length);
@@ -82,14 +87,22 @@ export function resolveAddressedBotIds(input: {
         rest = past;
         continue;
       }
+      const conjunction = CONJUNCTION_PATTERN.exec(past);
+      if (conjunction) {
+        const afterConjunction = past.slice(conjunction[0].length);
+        if (matchName(afterConjunction)) {
+          rest = afterConjunction;
+          continue;
+        }
+      }
       terminated = true;
       break;
     }
-    if (/^[;:!?]/.test(rest)) {
+    if (CLOSING_PUNCTUATION_PATTERN.test(rest)) {
       terminated = true;
       break;
     }
-    const conjunction = /^(?:and(?![\p{L}\p{N}_-])|&|\+)\s*/iu.exec(rest);
+    const conjunction = CONJUNCTION_PATTERN.exec(rest);
     if (conjunction) {
       const past = rest.slice(conjunction[0].length);
       if (matchName(past)) {

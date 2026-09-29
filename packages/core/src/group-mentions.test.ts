@@ -110,21 +110,43 @@ describe("resolveAddressedBotIds", () => {
     expect(resolveAddressedBotIds({ text: "so chief, did rad do it?", members: group })).toEqual([
       "chief",
     ]);
+    expect(resolveAddressedBotIds({ text: "ok, Chief, status?", members: group })).toEqual([
+      "chief",
+    ]);
+    expect(resolveAddressedBotIds({ text: "hey, Chief what's up", members: group })).toEqual([
+      "chief",
+    ]);
+    expect(resolveAddressedBotIds({ text: "Chief. Status?", members: group })).toEqual(["chief"]);
     expect(resolveAddressedBotIds({ text: "Chief", members: group })).toEqual(["chief"]);
   });
 
   it("addresses several members at the start", () => {
+    const trio = [
+      { id: "chief", name: "Chief" },
+      { id: "radiant", name: "Radiant" },
+      { id: "writer", name: "Writer" },
+    ];
     expect(resolveAddressedBotIds({ text: "Chief and Radiant, status?", members: group })).toEqual([
       "chief",
       "radiant",
     ]);
+    expect(resolveAddressedBotIds({ text: "Chief, and Radiant, status?", members: group })).toEqual(
+      ["chief", "radiant"],
+    );
     expect(resolveAddressedBotIds({ text: "Chief, Radiant: status?", members: group })).toEqual([
       "chief",
       "radiant",
     ]);
+    expect(
+      resolveAddressedBotIds({ text: "Chief, Radiant, and Writer: go", members: trio }),
+    ).toEqual(["chief", "radiant", "writer"]);
   });
 
   it("does not reroute a name used mid-sentence as a subject", () => {
+    expect(resolveAddressedBotIds({ text: "Chief is great.", members: group })).toEqual([]);
+    expect(resolveAddressedBotIds({ text: "Radiant light everywhere", members: group })).toEqual(
+      [],
+    );
     expect(resolveAddressedBotIds({ text: "ask chief why this happened", members: group })).toEqual(
       [],
     );
