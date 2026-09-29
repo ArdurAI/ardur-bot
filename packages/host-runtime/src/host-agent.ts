@@ -35,7 +35,11 @@ import { discoverFleet } from "./fleet/discovery.js";
 import { engineFailureReason } from "./fleet/probe.js";
 import { systemFleetProcess } from "./fleet/process.js";
 import { FleetService } from "./fleet/service.js";
-import { getHostEnvironment, inspectHostEnvironment } from "./host-environment.js";
+import {
+  getHostEnvironment,
+  inspectHostEnvironment,
+  setHostCommandGuard,
+} from "./host-environment.js";
 import {
   containerEngineGuard,
   type HostGuardrailConfig,
@@ -119,6 +123,9 @@ export class HostAgent {
       ],
       sockets: engine.sockets,
     };
+    // Probes that do not take this agent's spawn (login shell, tool inventory)
+    // use the same deny list. Set before initialize(), which captures the shell.
+    setHostCommandGuard(this.guard);
     this.mcp = new HostMcpServers(config.mcpServers, this.guard);
     const start: NativeSpawn = guardNativeSpawn(spawnNative, this.guard);
     this.runtimes = runtimes ?? {
@@ -148,7 +155,10 @@ export class HostAgent {
   }
   async health(refreshSignIn = false): Promise<HostHealth> {
     const cwd = await confinedHostCwd(this.config.root, [this.config.root]);
-    const start: NativeSpawn = (binary, args) => spawnNative(binary, args, cwd);
+    const start: NativeSpawn = guardNativeSpawn(
+      (binary, args) => spawnNative(binary, args, cwd),
+      this.guard,
+    );
     const [claude, codex, antigravity, environment, integrations] = await Promise.all([
       probeClaude(start),
       probeCodex(start),

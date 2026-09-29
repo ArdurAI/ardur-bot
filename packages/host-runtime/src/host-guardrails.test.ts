@@ -4,6 +4,7 @@ import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { hostProbe, setHostCommandGuard } from "./host-environment.js";
 import {
   containerEngineGuard,
   GUARDED_DATA_DIR_CHILDREN,
@@ -19,6 +20,7 @@ import {
 const cleanup: string[] = [];
 const servers: Server[] = [];
 afterEach(async () => {
+  setHostCommandGuard(undefined);
   await Promise.all(
     servers
       .splice(0)
@@ -127,6 +129,33 @@ describe("guardrailConfigFromEnv", () => {
     expect(config.ports).toEqual([5433, 3100, 7091]);
     // The default Docker socket is always denied, even with no engine configuration.
     expect(config.sockets).toContain("/var/run/docker.sock");
+    // Postgres's default unix socket for that loopback port is denied too.
+    expect(config.sockets).toContain("/tmp/.s.PGSQL.5433");
+  });
+
+  it("uses an absolute PGHOST as the Postgres socket directory", () => {
+    const moved = guardrailConfigFromEnv(
+      {
+        DATABASE_URL: "postgres://app@127.0.0.1:23456/ardurbot",
+        PGHOST: "/fixture/pg",
+        HOME: "/fixture/home",
+        DATA_DIR: "/fixture/data",
+      },
+      "/fixture",
+    );
+    expect(moved.sockets).toContain("/fixture/pg/.s.PGSQL.23456");
+    const fallback = guardrailConfigFromEnv(
+      {
+        DATABASE_URL: "postgres://app@127.0.0.1:23456/ardurbot",
+        PGHOST: "db.internal",
+        ARDURBOT_PG_SOCKET_DIR: "/fixture/override",
+        HOME: "/fixture/home",
+        DATA_DIR: "/fixture/data",
+      },
+      "/fixture",
+    );
+    expect(fallback.sockets).toContain("/fixture/override/.s.PGSQL.23456");
+    expect(fallback.sockets).not.toContain("/tmp/.s.PGSQL.23456");
   });
 
   it("ignores unset, relative, and malformed values", () => {
@@ -179,6 +208,31 @@ describe("guardrailConfigFromEnv", () => {
 });
 
 describe("containerEngineGuard", () => {
+  it("includes every documented engine socket", () => {
+    const home = "/fixture/home";
+    const { sockets } = containerEngineGuard({
+      HOME: home,
+      XDG_RUNTIME_DIR: "/fixture/run",
+      XDG_DATA_HOME: "/fixture/data",
+    });
+    const documented = [
+      "/var/run/docker.sock",
+      "/fixture/home/.docker/run/docker.sock",
+      "/fixture/home/.docker/desktop/docker.sock",
+      "/fixture/home/Library/Containers/com.docker.docker/Data/docker.raw.sock",
+      "/fixture/home/.rd/docker.sock",
+      "/fixture/home/.orbstack/run/docker.sock",
+      "/fixture/home/.colima/default/docker.sock",
+      "/fixture/home/.lima/default/sock/docker.sock",
+      "/fixture/home/.lima/docker/sock/docker.sock",
+      "/fixture/home/.lima/docker-rootful/sock/docker.sock",
+      "/fixture/home/.lima/podman/sock/podman.sock",
+      "/fixture/home/.lima/podman-rootful/sock/podman.sock",
+      "/fixture/home/.local/share/containers/podman/machine/podman.sock",
+    ];
+    for (const socket of documented) expect(sockets).toContain(socket);
+  });
+
   it("lists every known engine socket under the configured home", () => {
     const { sockets } = containerEngineGuard({ HOME: "/fixture/home" });
     expect(sockets).toContain("/var/run/docker.sock");
@@ -387,6 +441,48 @@ describe.skipIf(process.platform !== "darwin")("seatbelt profile under real sand
     expect(allowed.stdout).toContain("TCP_OK");
   });
 
+  it("fails connecting to a Postgres socket while another socket in that directory still connects", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "guard-exec-pg-"));
+    cleanup.push(root);
+    const deniedSocket = path.join(root, ".s.PGSQL.23456");
+    const allowedSocket = path.join(root, "other.sock");
+    await listenUnix(deniedSocket);
+    await listenUnix(allowedSocket);
+    const profile = seatbeltProfile({
+      paths: [],
+      ports: [],
+      sockets: await resolveGuardrailPaths([deniedSocket]),
+    });
+    expect(profile).not.toContain("other.sock");
+    const denied = await sandboxed(profile, connectArgv("unix", deniedSocket));
+    expect(denied.code).not.toBe(0);
+    expect(denied.stdout).not.toContain("UNIX_OK");
+    const allowed = await sandboxed(profile, connectArgv("unix", allowedSocket));
+    expect(allowed.code).toBe(0);
+    expect(allowed.stdout).toContain("UNIX_OK");
+  });
+
+  it("runs a host probe inside the same profile", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "guard-exec-probe-"));
+    cleanup.push(root);
+    const deniedDir = path.join(root, "denied");
+    await mkdir(deniedDir);
+    const secret = path.join(deniedDir, "secrets.env");
+    await writeFile(secret, "FAKE_MARKER=1\n");
+    const env = { HOME: root, PATH: "/bin:/usr/bin" };
+    setHostCommandGuard({ paths: [deniedDir], ports: [], sockets: [] });
+    try {
+      const denied = await hostProbe("/bin/cat", [secret], env, true, 5_000, "darwin");
+      expect(denied.code).not.toBe(0);
+      expect(denied.output).not.toContain("FAKE_MARKER");
+      const allowed = await hostProbe("/bin/echo", ["probe-ok"], env, true, 5_000, "darwin");
+      expect(allowed.code).toBe(0);
+      expect(allowed.output).toContain("probe-ok");
+    } finally {
+      setHostCommandGuard(undefined);
+    }
+  });
+
   it("fails connecting to a denied unix socket while another socket still connects", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "guard-exec-sock-"));
     cleanup.push(root);
@@ -415,5 +511,29 @@ describe.skipIf(process.platform !== "darwin")("seatbelt profile under real sand
     const result = await sandboxed("(version 1)(this is not a rule", ["/usr/bin/touch", marker]);
     expect(result.code).not.toBe(0);
     await expect(realpath(marker)).rejects.toThrow();
+  });
+});
+
+describe("host probe fail closed", () => {
+  it("does not start a command when the profile cannot be built", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "guard-probe-closed-"));
+    cleanup.push(root);
+    const marker = path.join(root, "marker");
+    setHostCommandGuard({ paths: ["/bad\npath"], ports: [], sockets: [] });
+    try {
+      const result = await hostProbe(
+        "/usr/bin/touch",
+        [marker],
+        { HOME: root, PATH: "/bin:/usr/bin" },
+        true,
+        5_000,
+        "darwin",
+      );
+      expect(result.failure).toBe("not started");
+      expect(result.code).toBeNull();
+      await expect(realpath(marker)).rejects.toThrow();
+    } finally {
+      setHostCommandGuard(undefined);
+    }
   });
 });

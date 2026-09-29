@@ -22,6 +22,7 @@ import {
 import type { NativeSpawn } from "./native-process.js";
 import {
   findNativeBinary,
+  guardedSpawn,
   guardNativeSpawn,
   probeCommand,
   RuntimeQueue,
@@ -49,17 +50,19 @@ const status = () =>
       : ("unknown" as const);
 
 export async function probeAntigravity(
-  start: NativeSpawn = spawnNative,
-  resolveBinary: typeof findNativeBinary = findNativeBinary,
+  start?: NativeSpawn,
+  resolveBinary?: typeof findNativeBinary,
   refreshSignIn = false,
 ): Promise<RuntimeAvailability> {
+  const launch = start ?? guardedSpawn();
+  const resolve = resolveBinary ?? findNativeBinary;
   if (refreshSignIn) signedOutAt = 0;
   const base = {
     runtimeKind: "antigravity" as const,
     models: capturedAntigravityModels,
     signInStatus: status(),
   };
-  if (process.env.VITEST && resolveBinary === findNativeBinary)
+  if (process.env.VITEST && resolve === findNativeBinary)
     return {
       ...base,
       available: false,
@@ -68,7 +71,7 @@ export async function probeAntigravity(
       catalogSource: "captured",
       catalogStale: true,
     };
-  const binary = await resolveBinary("agy");
+  const binary = await resolve("agy");
   if (!binary)
     return {
       ...base,
@@ -80,7 +83,7 @@ export async function probeAntigravity(
       catalogStale: true,
     };
   try {
-    const versionProbe = await probeCommand(binary, ["--version"], true, start);
+    const versionProbe = await probeCommand(binary, ["--version"], true, launch);
     const version = versionProbe.version;
     if (versionProbe.code !== 0 || !supportedAntigravityVersion(version))
       return {
@@ -93,7 +96,7 @@ export async function probeAntigravity(
         catalogStale: true,
       };
     // agy writes its usage to stderr with exit code 0.
-    const help = await probeCommand(binary, ["--help"], true, start, true);
+    const help = await probeCommand(binary, ["--help"], true, launch, true);
     if (
       help.code !== 0 ||
       ![
@@ -114,7 +117,7 @@ export async function probeAntigravity(
         catalogSource: "captured",
         catalogStale: true,
       };
-    const catalog = await antigravityModels(binary, version!, start);
+    const catalog = await antigravityModels(binary, version!, launch);
     const signInStatus = status();
     return {
       ...base,

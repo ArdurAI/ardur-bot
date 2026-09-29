@@ -1,5 +1,6 @@
 import type { Socket } from "node:net";
 import { loadRootEnv } from "@ardurbot/core/node/load-root-env";
+import { serviceProcessEnvironment } from "@ardurbot/core/node/service-secrets";
 
 loadRootEnv();
 
@@ -12,7 +13,7 @@ import { loadEnv } from "./env.js";
 const logger = createRootLogger(SERVICE_NAMES.api);
 
 try {
-  const env = loadEnv();
+  const env = loadEnv(serviceProcessEnvironment());
   const { app, stop, installTerminal } = await createApp({ ...env, logger });
   const server = serve({ fetch: app.fetch, port: env.port, hostname: env.apiHost }, () => {
     logger.info("api listening", { "http.host": env.apiHost, "http.port": env.port });

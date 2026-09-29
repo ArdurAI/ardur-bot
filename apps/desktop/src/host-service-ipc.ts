@@ -153,17 +153,25 @@ export function installHostService(options: {
     }
     if (!response.ok) throw new Error("Disconnect the existing computer, then try again.");
     const result: unknown = await response.json();
+    if (!result || typeof result !== "object") throw new Error("Could not connect this computer.");
+    const token = "token" in result && typeof result.token === "string" ? result.token : "";
+    if (!/^[A-Za-z0-9_-]{43}$/.test(token)) throw new Error("Could not connect this computer.");
+    const rawPorts = "guardPorts" in result ? result.guardPorts : undefined;
+    const guardPorts = Array.isArray(rawPorts)
+      ? rawPorts.filter(
+          (port): port is number =>
+            typeof port === "number" && Number.isInteger(port) && port > 0 && port <= 65535,
+        )
+      : [];
     if (
-      !result ||
-      typeof result !== "object" ||
-      !("token" in result) ||
-      typeof result.token !== "string" ||
-      !/^[A-Za-z0-9_-]{43}$/.test(result.token)
+      rawPorts !== undefined &&
+      (!Array.isArray(rawPorts) || guardPorts.length !== rawPorts.length)
     )
       throw new Error("Could not connect this computer.");
     const config = {
       apiUrl: target,
-      token: result.token,
+      token,
+      guardPorts,
       root: path.join(directory, "workspaces"),
       hostRoots: [],
     };

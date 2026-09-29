@@ -17,6 +17,7 @@ import { CodexUsageCollector } from "./codex-usage.js";
 import type { NativeSpawn } from "./native-process.js";
 import {
   findNativeBinary,
+  guardedSpawn,
   guardNativeSpawn,
   jsonLines,
   probeCommand,
@@ -234,7 +235,8 @@ export async function codexModels(rpc: CodexRpc): Promise<RuntimeAvailability["m
   return models;
 }
 
-export async function probeCodex(start: NativeSpawn = spawnNative): Promise<RuntimeAvailability> {
+export async function probeCodex(start?: NativeSpawn): Promise<RuntimeAvailability> {
+  const launch = start ?? guardedSpawn();
   const base = { runtimeKind: "codex-app-server" as const, models: [] };
   let rpc: CodexRpc | undefined;
   let version: string | undefined;
@@ -242,10 +244,10 @@ export async function probeCodex(start: NativeSpawn = spawnNative): Promise<Runt
   try {
     const binary = await findNativeBinary("codex");
     if (!binary) return { ...base, available: false, reason: "Codex is not installed." };
-    const result = await probeCommand(binary, ["--version"], true, start);
+    const result = await probeCommand(binary, ["--version"], true, launch);
     version = result.version;
     if (result.code !== 0) throw new Error("version probe failed");
-    rpc = await openCodex(start);
+    rpc = await openCodex(launch);
     const { account } = await rpc.request<{ account: { type: string } | null }>("account/read", {
       refreshToken: false,
     });

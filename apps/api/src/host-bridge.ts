@@ -22,6 +22,7 @@ import type { HostWire } from "@ardurbot/host-runtime/bridge-wire";
 import { receiveFrames, wsWire } from "@ardurbot/host-runtime/bridge-wire";
 import { isKubernetesMaintenanceCommand } from "@ardurbot/host-runtime/fleet/kubernetes-files";
 import type { HostStreamFrame } from "@ardurbot/host-runtime/host-client";
+import { loopbackPortOf } from "@ardurbot/host-runtime/host-guardrails";
 import { RuntimeQueue } from "@ardurbot/host-runtime/runtimes/native-process";
 import { hostTokenMatches, hostWorkerToken } from "@ardurbot/host-runtime/worker-auth";
 import { WebSocketServer } from "ws";
@@ -52,6 +53,19 @@ export class HostBridge {
     if (deployment?.ownerUserId !== userId)
       throw new Error("Only the deployment owner can connect this computer.");
     const token = randomBytes(32).toString("base64url");
+    // The paired host agent denies these loopback ports in addition to its own apiUrl:
+    // the stack's database and sandbox supervisor. Derived from this process's
+    // configuration — the same sources guardrailConfigFromEnv uses in-process — never
+    // hardcoded; a remote database or supervisor contributes nothing.
+    const guardPorts = [
+      ...new Set(
+        [
+          loopbackPortOf(process.env.DATABASE_URL),
+          loopbackPortOf(process.env.REALTIME_DATABASE_URL),
+          loopbackPortOf(process.env.SANDBOX_SUPERVISOR_URL),
+        ].filter((port): port is number => port !== undefined),
+      ),
+    ];
     await this.prisma.$transaction(async (tx) => {
       // Creation is deliberately not an upsert: a second desktop cannot silently replace the first.
       await tx.hostRegistration.create({
@@ -65,7 +79,7 @@ export class HostBridge {
           data: { computerHost: "this-mac" },
         });
     });
-    return { token };
+    return { token, guardPorts };
   }
   async disconnect(userId: string) {
     await this.prisma.$transaction(async (tx) => {

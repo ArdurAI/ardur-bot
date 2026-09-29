@@ -8,6 +8,7 @@ import {
   resolveHostBinary,
 } from "../host-environment.js";
 import {
+  guardrailConfigFromEnv,
   type HostGuardrailConfig,
   resolveGuardrailPathsSync,
   seatbeltArgv,
@@ -72,6 +73,11 @@ export function guardNativeSpawn(
     const wrapped = seatbeltArgv([binary, ...args], profile());
     return base(wrapped[0]!, wrapped.slice(1), cwd);
   };
+}
+
+/** The guardrail wrap for a probe that was not given a spawn of its own. Built at call time. */
+export function guardedSpawn(platform: NodeJS.Platform = process.platform): NativeSpawn {
+  return guardNativeSpawn(spawnNative, guardrailConfigFromEnv(), platform);
 }
 
 export async function probeCommand(

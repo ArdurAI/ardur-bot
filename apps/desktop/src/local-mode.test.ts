@@ -68,6 +68,7 @@ describe("local mode start", () => {
     const spawned: string[][] = [];
     const envs: NodeJS.ProcessEnv[] = [];
     let port = 0;
+    let flags: string[] = [];
     const controller = new LocalModeController(
       harness(root, {
         allocatePort: async () => 23456,
@@ -79,12 +80,16 @@ describe("local mode start", () => {
         },
         postgresFactory: (options) => {
           port = options.port;
+          flags = options.postgresFlags;
           return runningPostgres();
         },
       }),
     );
     const state = await controller.start();
     expect(state.phase).toBe("ready");
+    // The database listens on loopback TCP only; no unix socket exists for a
+    // sandboxed host command to connect to.
+    expect(flags).toEqual(["-c", "listen_addresses=127.0.0.1", "-c", "unix_socket_directories="]);
     expect(spawned.some((args) => args.some((arg) => /docker|compose/.test(arg)))).toBe(false);
     expect(spawned.length).toBeGreaterThan(0);
     expect(controller.origin()).toBe(`http://127.0.0.1:${port}`);
@@ -99,7 +104,23 @@ describe("local mode start", () => {
       expect(env.BETTER_AUTH_URL).toBe(`http://127.0.0.1:${port}`);
       expect(env.WEB_ORIGIN).toBe(`http://127.0.0.1:${port}`);
       expect(env.API_URL).toBe(`http://127.0.0.1:${port}`);
-      expect(env.SANDBOX_SUPERVISOR_TOKEN?.length).toBeGreaterThanOrEqual(32);
+      // Control-plane secrets never enter the spawned environment (the kernel keeps
+      // it readable to the owner's other processes); the services read the guarded
+      // secrets file at startup instead.
+      expect(env.ARDURBOT_SECRETS_FILE).toBe(path.join(root, "secrets.env"));
+      expect(new URL(env.DATABASE_URL!).password).toBe("");
+      for (const key of [
+        "POSTGRES_PASSWORD",
+        "APP_DATABASE_PASSWORD",
+        "BETTER_AUTH_SECRET",
+        "ENCRYPTION_KEY",
+        "SCREEN_PROXY_SECRET",
+        "SANDBOX_SUPERVISOR_TOKEN",
+      ])
+        expect(env[key]).toBeUndefined();
+      const saved = await readFile(env.ARDURBOT_SECRETS_FILE!, "utf8");
+      for (const value of saved.match(/=(.+)/g) ?? [])
+        expect(JSON.stringify(env)).not.toContain(value.slice(1));
       // Local mode's own folder list; a pairing with another server is never read.
       expect(env.ARDURBOT_HOST_ROOTS_FILE).toBe(localFoldersFile(root));
       // The command guardrail denies Ardur's control-plane files to host work.
@@ -116,6 +137,53 @@ describe("local mode start", () => {
       args.some((arg) => arg.endsWith("index.ts") || arg.endsWith("api.cjs")),
     );
     expect(api?.join(" ")).not.toMatch(/docker|compose/);
+  });
+
+  it("strips control-plane secrets already present on the parent environment", async () => {
+    const root = await userData();
+    const envs: NodeJS.ProcessEnv[] = [];
+    const controller = new LocalModeController(
+      harness(root, {
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        env: {
+          PATH: "/usr/bin",
+          DATABASE_URL: "postgres://ardurbot_app:fake-url-marker@127.0.0.1:23456/ardurbot",
+          ENCRYPTION_KEY: "fake-encryption-marker",
+          BETTER_AUTH_SECRET: "fake-auth-marker",
+          SANDBOX_SUPERVISOR_TOKEN: "fake-supervisor-marker",
+          SCREEN_PROXY_SECRET: "fake-screen-marker",
+          POSTGRES_PASSWORD: "fake-superuser-marker",
+          APP_DATABASE_PASSWORD: "fake-role-marker",
+          REALTIME_DATABASE_URL: "postgres://app:fake-realtime-marker@127.0.0.1:23457/ardurbot",
+        },
+        spawn: (_command, _args, options) => {
+          envs.push(options.env ?? {});
+          return fakeChild();
+        },
+        postgresFactory: () => runningPostgres(),
+      }),
+    );
+    const state = await controller.start();
+    expect(state.phase).toBe("ready");
+    expect(envs.length).toBeGreaterThan(0);
+    for (const env of envs) {
+      const encoded = JSON.stringify(env);
+      for (const marker of [
+        "fake-url-marker",
+        "fake-encryption-marker",
+        "fake-auth-marker",
+        "fake-supervisor-marker",
+        "fake-screen-marker",
+        "fake-superuser-marker",
+        "fake-role-marker",
+        "fake-realtime-marker",
+      ])
+        expect(encoded).not.toContain(marker);
+      expect(new URL(env.DATABASE_URL!).password).toBe("");
+      expect(new URL(env.REALTIME_DATABASE_URL!).password).toBe("");
+      expect(env.ARDURBOT_SECRETS_FILE).toBe(path.join(root, "secrets.env"));
+    }
   });
 });
 
@@ -313,8 +381,15 @@ describe("database credentials", () => {
       pathname: "/ardurbot",
     });
     for (const env of envs) {
-      expect(env.DATABASE_URL).toBe(migrations[0]!.databaseUrl);
-      expect(env.DATABASE_URL).not.toContain(superuser);
+      // The spawned environment carries only the passwordless URL; the role's
+      // password stays in the guarded secrets file the services read at startup.
+      const serviceUrl = new URL(env.DATABASE_URL!);
+      expect(serviceUrl.username).toBe("ardurbot_app");
+      expect(serviceUrl.password).toBe("");
+      expect(serviceUrl.pathname).toBe("/ardurbot");
+      expect(JSON.stringify(env)).not.toContain(superuser!);
+      expect(JSON.stringify(env)).not.toContain(role!);
+      expect(env.ARDURBOT_SECRETS_FILE).toBe(path.join(root, "secrets.env"));
     }
     await controller.stop();
   });

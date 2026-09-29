@@ -105,32 +105,76 @@ function parseEngineEndpoint(value: string | undefined): { socket?: string; port
 }
 
 /**
+ * Engine sockets named in the vendors' own documentation. containerEngineGuard denies
+ * every one of these (`~` expands to the configured home), whether or not the path
+ * exists yet — an engine installed later lands where a deny already points. The guard's
+ * test fails when a documented socket is missing from the deny list. Sources:
+ * - Docker Engine's default socket (docs.docker.com/engine/daemon/),
+ * - Docker Desktop's user socket and Linux socket
+ *   (docs.docker.com/desktop/troubleshoot-and-support/faqs/general),
+ * - Docker Desktop for Mac's raw engine socket
+ *   `~/Library/Containers/com.docker.docker/Data/docker.raw.sock`. It is a
+ *   different socket from the launchd symlink `/var/run/docker.sock`, which
+ *   points at `~/.docker/run/docker.sock`. The current public install docs do
+ *   not name the raw socket; it is denied because a same-user process can reach
+ *   the engine through it,
+ * - Rancher Desktop: docs.rancherdesktop.io/ui/preferences/application/general
+ *   (`~/.rd/docker.sock` without administrative access),
+ * - OrbStack: docs.orbstack.dev docker compatibility (`~/.orbstack/run/docker.sock`),
+ * - Colima's default profile (github.com/abiosoft/colima README),
+ * - Lima instances (lima-vm.io/docs/examples/containers/docker and .../podman):
+ *   `unix://{{.Dir}}/sock/docker.sock` for the `docker` and `docker-rootful`
+ *   templates, and `unix://{{.Dir}}/sock/podman.sock` for the `podman` and
+ *   `podman-rootful` templates. `LIMA_HOME` defaults to `~/.lima`,
+ * - Podman machine's socket (docs.podman.io, podman machine).
+ */
+export const DOCUMENTED_ENGINE_SOCKETS = [
+  "/var/run/docker.sock",
+  "~/.docker/run/docker.sock",
+  "~/.docker/desktop/docker.sock",
+  "~/Library/Containers/com.docker.docker/Data/docker.raw.sock",
+  "~/.rd/docker.sock",
+  "~/.orbstack/run/docker.sock",
+  "~/.colima/default/docker.sock",
+  "~/.lima/default/sock/docker.sock",
+  "~/.lima/docker/sock/docker.sock",
+  "~/.lima/docker-rootful/sock/docker.sock",
+  "~/.lima/podman/sock/podman.sock",
+  "~/.lima/podman-rootful/sock/podman.sock",
+  "~/.local/share/containers/podman/machine/podman.sock",
+] as const;
+
+/**
  * The local container-engine endpoints a host command must never reach. An engine socket is
  * root-equivalent on this machine: through it a command can inspect or enter Ardur's own
  * containers and read the stack's DATABASE_URL, Postgres password and supervisor token from
- * their environment. The list covers the default Docker socket, Docker Desktop's user
- * sockets, Colima profiles, OrbStack, Podman machine sockets, and whatever `DOCKER_HOST` or
- * `CONTAINER_HOST` points at, resolved from the running configuration where it is set.
- * `fleet/discovery.ts` probes the same engines to offer Docker computers; a bot that needs
- * containers belongs on one of those (or a VM), not on This Mac. Missing paths are still
- * denied as written: an engine installed later lands where the deny already points.
+ * their environment. The list covers every socket in DOCUMENTED_ENGINE_SOCKETS, every
+ * Colima profile and Lima instance and Podman machine provider present on disk (Lima's
+ * home honors `LIMA_HOME`, Podman's `XDG_DATA_HOME`), the rootless Podman socket under
+ * `XDG_RUNTIME_DIR`, and whatever `DOCKER_HOST` or `CONTAINER_HOST` points at, resolved
+ * from the running configuration where it is set. `fleet/discovery.ts` probes the same
+ * engines to offer Docker computers; a bot that needs containers belongs on one of those
+ * (or a VM), not on This Mac.
  */
 export function containerEngineGuard(env: NodeJS.ProcessEnv = process.env): {
   sockets: string[];
   ports: number[];
 } {
-  const sockets: string[] = ["/var/run/docker.sock"];
+  const sockets: string[] = [];
   const ports: number[] = [];
   const home = env.HOME?.trim();
+  for (const documented of DOCUMENTED_ENGINE_SOCKETS) {
+    if (!documented.startsWith("~/")) sockets.push(documented);
+    else if (home && path.isAbsolute(home)) sockets.push(path.join(home, documented.slice(2)));
+  }
   if (home && path.isAbsolute(home)) {
-    sockets.push(
-      path.join(home, ".docker", "run", "docker.sock"),
-      path.join(home, ".docker", "desktop", "docker.sock"),
-      path.join(home, ".orbstack", "run", "docker.sock"),
-    );
     const colima = path.join(home, ".colima");
-    for (const profile of ["default", ...subdirectories(colima)])
+    for (const profile of subdirectories(colima))
       sockets.push(path.join(colima, profile, "docker.sock"));
+    const limaHome = env.LIMA_HOME?.trim();
+    const lima = limaHome && path.isAbsolute(limaHome) ? limaHome : path.join(home, ".lima");
+    for (const instance of subdirectories(lima))
+      sockets.push(path.join(lima, instance, "sock", "docker.sock"));
     const dataHome = env.XDG_DATA_HOME?.trim();
     const podmanMachine =
       dataHome && path.isAbsolute(dataHome)
@@ -168,6 +212,24 @@ function databaseDataPaths(resolvedData: string): string[] {
   }
 }
 
+/** The socket path a Postgres server on `port` creates in `directory` (its default /tmp). */
+export function postgresSocketPath(port: number, directory = "/tmp"): string {
+  return path.join(directory, `.s.PGSQL.${port}`);
+}
+
+/**
+ * libpq treats an absolute `PGHOST` as the client socket directory. A hostname is
+ * not one. `ARDURBOT_PG_SOCKET_DIR` names a layout of our own; otherwise the
+ * server's default directory is /tmp.
+ */
+function postgresSocketDirectory(env: NodeJS.ProcessEnv): string {
+  const pghost = env.PGHOST?.trim();
+  if (pghost && path.isAbsolute(pghost)) return pghost;
+  const override = env.ARDURBOT_PG_SOCKET_DIR?.trim();
+  if (override && path.isAbsolute(override)) return override;
+  return "/tmp";
+}
+
 /**
  * The deny list for this process, from its own configuration:
  * - the env file the stack loaded (`ARDURBOT_ENV_FILE`, recorded by loadRootEnv);
@@ -181,6 +243,13 @@ function databaseDataPaths(resolvedData: string): string[] {
  * - the loopback ports of `DATABASE_URL` / `REALTIME_DATABASE_URL`, `API_PORT`, `API_URL`,
  *   and `SANDBOX_SUPERVISOR_URL`. A database or API on another host is out of reach of a
  *   loopback deny and is skipped;
+ * - the unix-domain sockets of those same loopback database URLs: a Postgres server
+ *   without `unix_socket_directories=` also listens on
+ *   `<unix_socket_directories>/.s.PGSQL.<port>`, and a socket connect is a network
+ *   operation a file deny cannot cover (verified with sandbox-exec on macOS 26). The
+ *   default directory is /tmp; an absolute `PGHOST` is libpq's client socket
+ *   directory, and `ARDURBOT_PG_SOCKET_DIR` can name one for deployments with
+ *   their own layout;
  * - the local container-engine sockets (and any loopback engine TCP port) from
  *   containerEngineGuard.
  */
@@ -200,9 +269,15 @@ export function guardrailConfigFromEnv(
     if (trimmed && path.isAbsolute(trimmed)) paths.push(trimmed);
   }
   const engine = containerEngineGuard(env);
+  const databasePorts = [env.DATABASE_URL, env.REALTIME_DATABASE_URL]
+    .map((value) => loopbackPortOf(value))
+    .filter((port): port is number => port !== undefined);
+  const sockets = [...engine.sockets];
+  const socketDirectory = postgresSocketDirectory(env);
+  if (path.isAbsolute(socketDirectory))
+    for (const port of databasePorts) sockets.push(postgresSocketPath(port, socketDirectory));
   const ports = [
-    loopbackPortOf(env.DATABASE_URL),
-    loopbackPortOf(env.REALTIME_DATABASE_URL),
+    ...databasePorts,
     validPort(env.API_PORT),
     loopbackPortOf(env.API_URL),
     loopbackPortOf(env.SANDBOX_SUPERVISOR_URL),
@@ -211,7 +286,7 @@ export function guardrailConfigFromEnv(
   return {
     paths: [...new Set(paths)],
     ports: [...new Set(ports)],
-    sockets: engine.sockets,
+    sockets: [...new Set(sockets)],
   };
 }
 
@@ -306,6 +381,12 @@ function quotePort(port: number): string {
  * `remote unix-socket` rule with one filter clause per socket — several `literal` values
  * inside a single clause apply only the first. Throws on untrustworthy input; callers must
  * fail the command closed, never skip the wrap.
+ *
+ * A same-user process can still read another process's arguments and environment through
+ * the kern.procargs2 sysctl. Scoped process-info and sysctl-read filters do not hide that
+ * read, and the denies that do hide it also stop ordinary commands such as a shell. This
+ * profile therefore does not deny process-info. Secrets stay out of the process environment
+ * instead of being hidden after the fact.
  */
 export function seatbeltProfile(config: HostGuardrailConfig): string {
   const rules = ["(version 1)", "(allow default)"];

@@ -569,7 +569,16 @@ export class LocalModeController {
       password: secrets.POSTGRES_PASSWORD,
       persistent: true,
       authMethod: "scram-sha-256",
-      postgresFlags: ["-c", "listen_addresses=127.0.0.1"],
+      postgresFlags: [
+        "-c",
+        "listen_addresses=127.0.0.1",
+        // No unix-domain socket: the database accepts loopback TCP only, so a bot
+        // command on This Mac has no socket path to connect to (a file deny cannot
+        // cover a unix-socket connect, and the socket's default directory is the
+        // shared /tmp). Everything Ardur runs connects over 127.0.0.1.
+        "-c",
+        "unix_socket_directories=",
+      ],
       onLog: (message) => {
         void writeServiceLog(path.join(this.deps.userDataDir, "logs", "postgres.log"), message);
       },
@@ -720,7 +729,6 @@ export class LocalModeController {
       dataDir: path.join(this.deps.userDataDir, "data"),
       origin: this.originUrl,
       apiPort: this.apiPort,
-      secrets: this.secrets,
       userDataDir: this.deps.userDataDir,
     });
     if (launch.nodePath) env.NODE_PATH = launch.nodePath;
@@ -1141,21 +1149,23 @@ function serviceEnvironment(
     dataDir: string;
     origin: string;
     apiPort: number;
-    secrets: Record<SecretKey, string>;
     userDataDir: string;
   },
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     ...source,
     ELECTRON_RUN_AS_NODE: "1",
-    DATABASE_URL: settings.databaseUrl,
+    // The database password and the other control-plane secrets never enter the
+    // process environment: the kernel keeps a process's original environment block
+    // (KERN_PROCARGS2), readable by the owner's other processes — a sandboxed bot
+    // command among them. Assigning those keys after start is still visible, and
+    // deleting them does not remove them. The services read the guarded secrets
+    // file into a plain object at startup and join this passwordless URL there.
+    DATABASE_URL: passwordlessDatabaseUrl(settings.databaseUrl),
+    ARDURBOT_SECRETS_FILE: path.join(settings.userDataDir, "secrets.env"),
     DATA_DIR: settings.dataDir,
     SANDBOX_PROVIDER: "desktop",
     ARDURBOT_HOST_ROOTS_FILE: localFoldersFile(settings.userDataDir),
-    BETTER_AUTH_SECRET: settings.secrets.BETTER_AUTH_SECRET,
-    ENCRYPTION_KEY: settings.secrets.ENCRYPTION_KEY,
-    SCREEN_PROXY_SECRET: settings.secrets.SCREEN_PROXY_SECRET,
-    SANDBOX_SUPERVISOR_TOKEN: settings.secrets.SANDBOX_SUPERVISOR_TOKEN,
     BETTER_AUTH_URL: settings.origin,
     WEB_ORIGIN: settings.origin,
     API_URL: settings.origin,
@@ -1167,9 +1177,30 @@ function serviceEnvironment(
     // The supervisor reads the worker's ready line from structured logs.
     LOG_FORMAT: "json",
   };
+  // A parent environment may already hold the secrets. Drop them after the spread
+  // so they are not part of the block the kernel keeps for the child.
+  for (const key of Object.keys(SECRET_KEYS)) delete env[key];
+  if (env.REALTIME_DATABASE_URL) {
+    try {
+      env.REALTIME_DATABASE_URL = passwordlessDatabaseUrl(env.REALTIME_DATABASE_URL);
+    } catch {
+      delete env.REALTIME_DATABASE_URL;
+    }
+  }
   delete env.ARDURBOT_HOST_BRIDGE;
   if (platform === "win32") env.ELECTRON_NO_ATTACH_CONSOLE = "1";
   return env;
+}
+
+function passwordlessDatabaseUrl(databaseUrl: string): string {
+  let url: URL;
+  try {
+    url = new URL(databaseUrl);
+  } catch {
+    throw new Error("The local database address is not a URL.");
+  }
+  url.password = "";
+  return url.toString();
 }
 
 function signalChild(
