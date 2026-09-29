@@ -3709,7 +3709,11 @@ export function ShellPage({
                   {active &&
                   panel === "computer" &&
                   !computerOpen &&
-                  computerPanelNeedsMaintenance(computer?.state, booting) ? (
+                  computerPanelNeedsMaintenance(
+                    computer?.state,
+                    booting,
+                    Boolean(computerErrorState.operation),
+                  ) ? (
                     <ComputerMaintenanceActions
                       botId={active.id}
                       computer={computer}

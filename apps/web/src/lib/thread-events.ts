@@ -590,11 +590,13 @@ export function computerPanelAutoUsesBoot(
   return action === "boot" || action === "recover-screen";
 }
 
+/** A computer that was never started needs no maintenance; one whose boot failed does. */
 export function computerPanelNeedsMaintenance(
   state: ComputerStatus["state"] | undefined,
   booting: boolean,
+  bootFailed: boolean,
 ): boolean {
-  return !booting && (state === "error" || state === "stopped");
+  return !booting && (state === "error" || (state === "stopped" && bootFailed));
 }
 
 export function reduceComputerStatus(

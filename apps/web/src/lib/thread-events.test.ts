@@ -1681,19 +1681,22 @@ describe("computer event reduction", () => {
     expect(computerPanelAutoUsesBoot("wait")).toBe(false);
   });
 
-  it("shows maintenance only after a stopped or errored computer finishes booting", () => {
-    expect(computerPanelNeedsMaintenance("error", false)).toBe(true);
-    expect(computerPanelNeedsMaintenance("stopped", false)).toBe(true);
-    expect(computerPanelNeedsMaintenance("error", true)).toBe(false);
-    expect(computerPanelNeedsMaintenance("running", false)).toBe(false);
-    expect(computerPanelNeedsMaintenance(undefined, false)).toBe(false);
+  it("shows maintenance for an errored computer or a stopped one whose boot failed", () => {
+    expect(computerPanelNeedsMaintenance("error", false, false)).toBe(true);
+    expect(computerPanelNeedsMaintenance("stopped", false, true)).toBe(true);
+    expect(computerPanelNeedsMaintenance("stopped", false, false)).toBe(false);
+    expect(computerPanelNeedsMaintenance("error", true, false)).toBe(false);
+    expect(computerPanelNeedsMaintenance("running", false, true)).toBe(false);
+    expect(computerPanelNeedsMaintenance(undefined, false, false)).toBe(false);
   });
 
   it("hides side-panel maintenance while the computer overlay is open", () => {
     const panel = "computer";
     const booting = false;
     const showInSidePanel = (computerOpen: boolean) =>
-      panel === "computer" && !computerOpen && computerPanelNeedsMaintenance("stopped", booting);
+      panel === "computer" &&
+      !computerOpen &&
+      computerPanelNeedsMaintenance("error", booting, false);
 
     expect(showInSidePanel(false)).toBe(true);
     expect(showInSidePanel(true)).toBe(false);
