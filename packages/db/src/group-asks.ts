@@ -311,6 +311,50 @@ export function delegationCoordinationNonce(admissionKey: string): string | null
 }
 
 /**
+ * The room's Stop, clearing it, removing a member or archiving a bot or group
+ * ends runs directly, so no finalize ever settles their delegations or records
+ * an outcome and the round would pulse pending forever. Mark each cancelled
+ * group-ask member stopped on its round's message. The delegation row stays
+ * unsettled on purpose: the fan-in settles it silently and never wakes the
+ * coordinator for an ask the person ended.
+ */
+export async function recordStoppedGroupAskOutcomesInTransaction(
+  tx: Prisma.TransactionClient,
+  runs: ReadonlyArray<{ delegationId: string | null; threadId: string; spaceId: string }>,
+  now?: Date,
+): Promise<void> {
+  const delegationIds = [
+    ...new Set(runs.flatMap((run) => (run.delegationId ? [run.delegationId] : []))),
+  ];
+  if (!delegationIds.length) return;
+  const delegations = await tx.delegation.findMany({
+    where: {
+      id: { in: delegationIds },
+      admissionKey: { startsWith: GROUP_ASK_KEY_PREFIX },
+    },
+    select: { id: true, actingBotId: true, actingName: true, admissionKey: true },
+  });
+  if (!delegations.length) return;
+  const byId = new Map(delegations.map((delegation) => [delegation.id, delegation]));
+  for (const run of runs) {
+    const delegation = run.delegationId ? byId.get(run.delegationId) : undefined;
+    if (!delegation) continue;
+    await recordGroupAskOutcomeInTransaction(tx, {
+      spaceId: run.spaceId,
+      threadId: run.threadId,
+      delegation: {
+        actingBotId: delegation.actingBotId,
+        actingName: delegation.actingName,
+        admissionKey: delegation.admissionKey,
+      },
+      delegationStatus: "cancelled",
+      runStatus: "cancelled",
+      now,
+    });
+  }
+}
+
+/**
  * Append one coordinator progress note to a round's coordination message, so
  * mid-round narration folds into the round's collapsed line instead of posting
  * a chat bubble. `nonce` is the round message's exact client nonce, or the

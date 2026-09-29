@@ -8,6 +8,7 @@ import {
   loadGroupAskResults,
   recordGroupAskOutcomeInTransaction,
   recordGroupAskUpdateInTransaction,
+  recordStoppedGroupAskOutcomesInTransaction,
   sizeDelegationRootForAsk,
   wakeCoordinatorForGroupAsk,
 } from "./group-asks.js";
@@ -521,6 +522,7 @@ describe("coordination round recording", () => {
       ...data,
     }));
     const tx = {
+      $queryRaw: vi.fn(async () => []),
       message: {
         findUnique: vi.fn(async () => stored),
         findFirst: vi.fn(async () => stored),
@@ -690,6 +692,65 @@ describe("coordination round recording", () => {
     );
     const prefixBlocks = prefix.messageUpdate.mock.calls[0]?.[0].data.blocks;
     expect(prefixBlocks?.[0]?.updates).toEqual(["Two of three said hello."]);
+  });
+
+  it("settles a still-running member to stopped when the room's Stop cancels its run", async () => {
+    // Stop cancels runs directly: no finalize settles the delegation, so the
+    // round must learn the outcome here or the line pulses pending forever.
+    const stored = structuredClone(coordinationMessage);
+    const messageUpdate = vi.fn(
+      async (_args: {
+        data: { blocks: Array<{ members: Array<{ botId: string; outcome: string }> }> };
+      }) => ({}),
+    );
+    const delegationUpdateMany = vi.fn(async () => ({ count: 0 }));
+    const tx = {
+      $queryRaw: vi.fn(async () => []),
+      delegation: {
+        findMany: vi.fn(async () => [
+          {
+            id: "delegation-ada",
+            actingBotId: "ada",
+            actingName: "Ada",
+            admissionKey: groupAskKey(ask, callId, "ada"),
+          },
+        ]),
+        updateMany: delegationUpdateMany,
+      },
+      message: {
+        findUnique: vi.fn(async () => stored),
+        findFirst: vi.fn(async () => stored),
+        update: messageUpdate,
+      },
+      thread: { update: vi.fn(async () => ({ nextEventSeq: 7 })) },
+      event: {
+        create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+          id: "event",
+          ...data,
+        })),
+      },
+    };
+
+    await recordStoppedGroupAskOutcomesInTransaction(
+      tx as never,
+      [
+        {
+          delegationId: "delegation-ada",
+          threadId: "room",
+          spaceId: scope.spaceId,
+        },
+        // A coordinator run and a run with no delegation record nothing.
+        { delegationId: null, threadId: "room", spaceId: scope.spaceId },
+      ],
+      now,
+    );
+
+    const blocks = messageUpdate.mock.calls[0]?.[0].data.blocks;
+    expect(blocks?.[0]?.members?.find((row) => row.botId === "ada")?.outcome).toBe("stopped");
+    expect(blocks?.[0]?.members?.find((row) => row.botId === "ben")?.outcome).toBe("pending");
+    // The delegation row stays unsettled so the fan-in settles silently and
+    // never wakes the coordinator for an ask the person ended.
+    expect(delegationUpdateMany).not.toHaveBeenCalled();
   });
 
   it("records nothing when the round's message is gone", async () => {
