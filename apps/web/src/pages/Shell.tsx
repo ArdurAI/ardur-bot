@@ -177,7 +177,7 @@ import { countOwnerWaiting, openDockSnapshot, publishDockWaitingCount } from "..
 import { scheduleFocusPrompt } from "../lib/focus-prompt";
 import { INSIGHT_ACTION_EVENT } from "../lib/insight-actions";
 import { localTimezone } from "../lib/local-timezone";
-import { copyableMessageText } from "../lib/message-text";
+import { copyableMessageText, replyMarkdownProps } from "../lib/message-text";
 import { messageProviderLabel } from "../lib/messaging";
 import {
   isFileDrag,
@@ -266,6 +266,7 @@ import { useTakeControl } from "./shell/use-take-control";
 import { handleWorkspaceOpenRun } from "./shell/workspace-run";
 import { SystemDictation } from "./system/SystemDictation";
 import { WindowChrome } from "./WindowChrome";
+import { terminalSupported } from "./workspace/terminal-controller";
 
 const BotSettings = lazy(() =>
   import("./shell/bot-panel").then((module) => ({ default: module.BotSettings })),
@@ -859,6 +860,8 @@ export function ShellPage({
   const effectiveWorkspaceTab = getEffectiveWorkspaceTab(
     workspaceTab,
     computer?.capabilities?.graphical,
+    true,
+    terminalSupported(computer),
   );
   const isVisible = isComputerVisible(computerOpen, panel, effectiveWorkspaceTab);
   computerVisible.current = isVisible;
@@ -3869,6 +3872,28 @@ export function ShellPage({
                   computer={computer}
                   tab={workspaceTab}
                   onTabChange={setWorkspaceTab}
+                  terminal={
+                    computer
+                      ? {
+                          working: composerRunning,
+                          onTakeControl: async () => {
+                            await rpc.computer.takeover({ botId: active.id });
+                            await refreshComputerFor(active.id);
+                          },
+                          onStop: stopRun,
+                          onStart: async () => {
+                            await bootComputer({
+                              botId: active.id,
+                              takeControl: false,
+                              overlay: false,
+                            });
+                          },
+                          onReleased: () => {
+                            void refreshComputerFor(active.id).catch(() => undefined);
+                          },
+                        }
+                      : null
+                  }
                   onOpenRun={(run) =>
                     handleWorkspaceOpenRun({
                       run,
@@ -4546,6 +4571,9 @@ export function ShellPage({
                       (computer.state === "running" ||
                         (computer.homeRevision && computer.homeRevision !== "empty"))
                         ? [{ id: "files", label: t`Files` }]
+                        : []),
+                      ...(terminalSupported(computer)
+                        ? [{ id: "terminal", label: t`Terminal` }]
                         : []),
                       { id: "routines", label: t`Routines` },
                       ...(computer?.capabilities?.graphical === true
@@ -6519,7 +6547,7 @@ const MessageView = memo(function MessageView({
                     key={i}
                     data-quote-message-id={block.kind === "text" ? quoteMessageId : undefined}
                   >
-                    <ChatMarkdown streaming={block.kind === "progress"}>{block.text}</ChatMarkdown>
+                    <ChatMarkdown {...replyMarkdownProps(block)}>{block.text}</ChatMarkdown>
                   </div>
                 );
               }
@@ -6607,7 +6635,7 @@ const MessageView = memo(function MessageView({
                 className="max-w-full rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
                 dir="auto"
               >
-                <ChatMarkdown streaming>{block.text}</ChatMarkdown>
+                <ChatMarkdown {...replyMarkdownProps(block)}>{block.text}</ChatMarkdown>
               </div>
             </div>
           );

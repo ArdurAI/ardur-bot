@@ -33,6 +33,29 @@ describe("ChatMarkdown", () => {
     expect(html).toContain("rk-chat-markdown-cursor");
   });
 
+  it("shows the cursor only while the reply text is still growing", () => {
+    // Text is streaming in: cursor on.
+    const growing = renderToStaticMarkup(
+      <ChatMarkdown streaming cursor>
+        {"Chief's summary"}
+      </ChatMarkdown>,
+    );
+    expect(growing).toContain("rk-chat-markdown-cursor");
+
+    // Text stopped but the run is still working: the draft keeps streaming
+    // layout (partial fences stay sealed) but the cursor goes away.
+    const paused = renderToStaticMarkup(
+      <ChatMarkdown streaming cursor={false}>
+        {"Chief's summary"}
+      </ChatMarkdown>,
+    );
+    expect(paused).not.toContain("rk-chat-markdown-cursor");
+
+    // The run ended: the durable message has no cursor.
+    const saved = renderToStaticMarkup(<ChatMarkdown>{"Chief's summary"}</ChatMarkdown>);
+    expect(saved).not.toContain("rk-chat-markdown-cursor");
+  });
+
   it("renders a copy button alongside each code block", () => {
     const html = renderToStaticMarkup(
       <ChatMarkdown>{"```ts\nconst value = 1;\n```"}</ChatMarkdown>,

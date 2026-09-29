@@ -185,3 +185,17 @@ it("asks the server to allow a read tool only after the person confirms it", asy
   expect(api.allowInsightTool).toHaveBeenCalledWith({ insightId: "approval" });
   expect(api.actOnInsight).not.toHaveBeenCalled();
 });
+
+it("wraps insight text and scrolls the comparison table inside the dialog", async () => {
+  api.insights.mockResolvedValue({
+    insights: [insight("choice", choice, { kind: "bot-model", botId: "coder" })],
+  });
+  await act(async () => root.render(<LearningInsights />));
+  const card = container.querySelector('[data-testid="learning-insight"]');
+  expect(card?.className).toContain("min-w-0");
+  expect(card?.className).toContain("max-w-full");
+  expect(card?.className).toContain("break-words");
+  expect(card?.querySelector("p")?.className).toContain("break-words");
+  const table = container.querySelector("table");
+  expect(table?.parentElement?.className).toContain("overflow-x-auto");
+});

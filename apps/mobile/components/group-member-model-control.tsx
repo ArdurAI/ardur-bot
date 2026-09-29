@@ -54,9 +54,9 @@ export function GroupMemberModelControl({
   const [activeBot, setActiveBot] = useState(bot);
   const initialKind =
     member.runtimePin?.runtimeKind ??
+    member.effectiveRuntimePin?.runtimeKind ??
     botRuntimeKind ??
     bot?.runtimeKind ??
-    member.effectiveRuntimePin?.runtimeKind ??
     "pi";
   const [draftKind, setDraftKind] = useState<RuntimeKind>(initialKind);
   const connectionKind = draftKind === "hermes" ? "hermes" : "pi";
@@ -65,9 +65,9 @@ export function GroupMemberModelControl({
     setActiveMember(member);
     setDraftKind(
       member.runtimePin?.runtimeKind ??
+        member.effectiveRuntimePin?.runtimeKind ??
         botRuntimeKind ??
         bot?.runtimeKind ??
-        member.effectiveRuntimePin?.runtimeKind ??
         "pi",
     );
   }, [member, botRuntimeKind, bot?.runtimeKind]);
@@ -181,9 +181,9 @@ export function GroupMemberModelControl({
         resolvedPin
           ? resolvedPin.runtimeKind
           : (updatedMember.runtimePin?.runtimeKind ??
+              updatedMember.effectiveRuntimePin?.runtimeKind ??
               botRuntimeKind ??
               bot?.runtimeKind ??
-              updatedMember.effectiveRuntimePin?.runtimeKind ??
               "pi"),
       );
       onSaved(group);
@@ -236,18 +236,18 @@ export function GroupMemberModelControl({
         const confirmed = refreshedMember ?? activeMember;
         setDraftKind(
           confirmed.runtimePin?.runtimeKind ??
+            confirmed.effectiveRuntimePin?.runtimeKind ??
             botRuntimeKind ??
             bot?.runtimeKind ??
-            confirmed.effectiveRuntimePin?.runtimeKind ??
             "pi",
         );
         onError(t(message));
       } else {
         setDraftKind(
           activeMember.runtimePin?.runtimeKind ??
+            activeMember.effectiveRuntimePin?.runtimeKind ??
             botRuntimeKind ??
             bot?.runtimeKind ??
-            activeMember.effectiveRuntimePin?.runtimeKind ??
             "pi",
         );
         // Say why the server refused the choice (for example a runtime this host cannot run); other

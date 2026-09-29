@@ -45,4 +45,12 @@ describe("getEffectiveWorkspaceTab", () => {
   it("resolves files to tasks when files are unavailable", () => {
     expect(getEffectiveWorkspaceTab("files", true, false)).toBe("tasks");
   });
+
+  it("keeps terminal when the computer supports a terminal", () => {
+    expect(getEffectiveWorkspaceTab("terminal", true, true, true)).toBe("terminal");
+  });
+
+  it("resolves terminal to tasks when the computer has no terminal", () => {
+    expect(getEffectiveWorkspaceTab("terminal", true, true, false)).toBe("tasks");
+  });
 });

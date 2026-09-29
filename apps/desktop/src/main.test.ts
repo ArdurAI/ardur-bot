@@ -63,6 +63,10 @@ function fixture() {
     desktopSystem: undefined,
     desktopTray: null,
     dockBadge: { attach: vi.fn(), sync: vi.fn() },
+    // The shortcut menu follows the active window; the real menu needs Electron, so stub it here.
+    Menu: { getApplicationMenu: () => null },
+    watchAppShortcutMenu: vi.fn(),
+    syncAppShortcutMenu: vi.fn(),
     quitting: false,
     warmWindowTimer: undefined,
     clearTimeout: vi.fn(),
