@@ -34,8 +34,10 @@ body,
   font-family: var(--chat-font-system);
 }
 
-/* Search removes a group's chrome when all of its registered rows are hidden. */
-[data-settings-group]:not(:has([data-settings-row]:not([hidden]))) {
+/* Settings search removes a group's chrome when all of its registered rows are hidden.
+   Scoped to the settings overlay: card groups without searchable rows (like the bot
+   panel's) must always stay visible. */
+[data-settings-section] [data-settings-group]:not(:has([data-settings-row]:not([hidden]))) {
   display: none;
 }
 
@@ -71,9 +73,9 @@ body,
   background-image: none;
   -webkit-text-fill-color: currentColor;
 }
-[data-motion="reduced"] .ardurbot-organic-avatar[data-shape-family] .ardurbot-organic-avatar-body {
+[data-motion="reduced"] .ardur-organic-avatar[data-shape-family] .ardur-organic-avatar-body {
   animation: none;
-  d: var(--ardurbot-organic-path);
+  d: var(--ardur-organic-path);
 }
 
 .rk-scroll::-webkit-scrollbar {

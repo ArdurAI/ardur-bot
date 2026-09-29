@@ -15,7 +15,6 @@ import {
   HardDrive,
   Laptop,
   LayoutDashboard,
-  Monitor,
   Plug,
   Puzzle,
   Server,

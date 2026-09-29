@@ -10,7 +10,7 @@ test("Anthropic offers API keys and asks old subscription connections to reconne
   page,
 }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `anthropic-key-${stamp}@ardurbot.test`, "password12", "API key connection");
+  await signup(page, `anthropic-key-${stamp}@example.test`, "password12", "API key connection");
   await completeOnboarding(page);
   await page.route("**/rpc/models/credentials", (route) =>
     route.fulfill({
@@ -54,7 +54,7 @@ test("custom connections persist reasoning support and bot thinking", async ({
 }, testInfo) => {
   const stamp = Date.now();
   const userName = `Reasoning ${stamp}`;
-  await signup(page, `reasoning-model-${stamp}@ardurbot.test`, "password12", userName);
+  await signup(page, `reasoning-model-${stamp}@example.test`, "password12", userName);
   await completeOnboarding(page);
   await openUserSettings(page, "models");
   await page.getByPlaceholder("Search providers").fill("openai-compatible");
@@ -210,7 +210,7 @@ test("connects, lists, and uses an OpenAI-compatible endpoint", async ({ page },
     const baseUrl = `http://127.0.0.1:${address.port}/v1`;
     const stamp = Date.now();
     const userName = `Local model ${stamp}`;
-    await signup(page, `local-model-${stamp}@ardurbot.test`, "password12", userName);
+    await signup(page, `local-model-${stamp}@example.test`, "password12", userName);
     await completeOnboarding(page);
 
     await openUserSettings(page, "models");
@@ -275,7 +275,7 @@ test("connects, lists, and uses an OpenAI-compatible endpoint", async ({ page },
 test("model settings connect, replace, and cancel provider authentication", async ({ page }) => {
   const stamp = Date.now();
   const userName = `Models ${stamp}`;
-  await signup(page, `models-${stamp}@ardurbot.test`, "password12", userName);
+  await signup(page, `models-${stamp}@example.test`, "password12", userName);
   await completeOnboarding(page);
 
   await openUserSettings(page, "models");

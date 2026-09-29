@@ -1150,6 +1150,7 @@ msgstr ""
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
+#: src/pages/Shell.tsx
 msgid "Back"
 msgstr "뒤로"
 
@@ -1317,8 +1318,9 @@ msgid "Bot screen preview"
 msgstr "Bot 화면 미리보기"
 
 #: src/pages/BotContextMenu.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Bot settings"
-msgstr ""
+msgstr "봇 설정"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Bot to link"
@@ -1913,10 +1915,10 @@ msgstr ""
 msgid "Compare bots"
 msgstr ""
 
+#: src/components/composer/ComposerMenu.tsx
 #: src/pages/CompareStart.tsx
-#: src/pages/Shell.tsx
 msgid "Compare with…"
-msgstr ""
+msgstr "비교하기…"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Complete"
@@ -2937,7 +2939,7 @@ msgstr ""
 
 #: src/pages/CompareStart.tsx
 msgid "Could not start comparison; retry."
-msgstr ""
+msgstr "비교를 시작하지 못했습니다. 다시 시도하세요."
 
 #: src/pages/CompareStart.tsx
 msgid "Could not start comparison; review the pins and retry."
@@ -3428,6 +3430,10 @@ msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Developer (git, GitHub and GitLab CLIs, node, jq)"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Developer image"
 msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
@@ -4096,6 +4102,10 @@ msgstr ""
 msgid "Forgot password?"
 msgstr "비밀번호를 잊으셨나요?"
 
+#: src/pages/Shell.tsx
+msgid "Forward"
+msgstr "앞으로"
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Found on this computer"
 msgstr ""
@@ -4203,6 +4213,7 @@ msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group"
 msgstr "그룹"
 
@@ -4210,7 +4221,7 @@ msgstr "그룹"
 msgid "Group brief"
 msgstr "그룹 브리핑"
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group settings"
 msgstr "그룹 설정"
 
@@ -4275,6 +4286,10 @@ msgstr "Hermes는 아직 이 연결을 지원하지 않습니다."
 msgid "Hermes is not installed on this computer."
 msgstr "이 컴퓨터에 Hermes가 설치되어 있지 않습니다."
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Hermes isn't available on Windows yet."
+msgstr "Hermes는 아직 Windows에서 사용할 수 없습니다."
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."
 msgstr "Hermes는 이 컴퓨터의 접근 권한으로 실행됩니다."
@@ -4285,7 +4300,7 @@ msgstr "안녕하세요. 답변을 소리 내어 읽을 때 이런 목소리로 
 
 #: src/pages/Shell.tsx
 msgid "Hide bots"
-msgstr ""
+msgstr "Bot 숨기기"
 
 #: src/pages/customize/McpDiagnostics.tsx
 msgid "Hide logs"
@@ -4373,6 +4388,10 @@ msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Image profile"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Image pull secret"
 msgstr ""
 
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -5032,6 +5051,11 @@ msgstr ""
 msgid "low — quick, with a little checking"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/HostComputerPrompt.tsx
+msgid "macOS will not ask for extra permission if you let bots run on this Mac. They run as you."
+msgstr "이 Mac에서 실행하면 Bot이 내 계정 권한으로 동작하며 macOS가 작업마다 별도 승인을 묻지 않습니다."
+
 #: src/pages/board/BoardsSettings.tsx
 msgid "Make default"
 msgstr "기본값으로 설정"
@@ -5157,6 +5181,7 @@ msgstr ""
 #: src/pages/memory/MemoryProposals.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/settings-sections.ts
+#: src/pages/shell/bot-panel.tsx
 msgid "Memory"
 msgstr "기억"
 
@@ -5556,6 +5581,7 @@ msgstr ""
 msgid "New access token"
 msgstr ""
 
+#: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "New bot"
 msgstr "새 Bot 만들기"
@@ -6255,6 +6281,10 @@ msgstr ""
 msgid "Park"
 msgstr "보류"
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Partially reported"
+msgstr "일부만 보고됨"
+
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
@@ -6474,8 +6504,9 @@ msgstr ""
 #: src/pages/account/AccountProfile.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/memory/MemoryProposals.tsx
+#: src/pages/shell/bot-panel.tsx
 msgid "Profile"
-msgstr ""
+msgstr "프로필"
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Project ID"
@@ -7051,6 +7082,10 @@ msgstr "비밀번호를 재설정하세요"
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Resetting…"
 msgstr "재설정 중…"
+
+#: src/pages/Shell.tsx
+msgid "Resize pane"
+msgstr "패널 크기 조정"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Resources"
@@ -7749,6 +7784,7 @@ msgstr "Python 준비 중"
 #: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Settings"
 msgstr "설정"
 
@@ -7792,11 +7828,11 @@ msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Show bots"
-msgstr ""
+msgstr "Bot 표시"
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show computer"
-msgstr ""
+msgstr "컴퓨터 보기"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Show in the menu bar."
@@ -7814,7 +7850,7 @@ msgstr "더 보기"
 msgid "Show password"
 msgstr "비밀번호 표시"
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show settings"
 msgstr "설정 보기"
 
@@ -8054,6 +8090,10 @@ msgstr ""
 msgid "Standard"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Standard image"
+msgstr ""
+
 #: src/components/composer/command-description.ts
 msgid "Start a new chat"
 msgstr ""
@@ -8245,8 +8285,8 @@ msgid "System"
 msgstr "시스템"
 
 #: src/pages/ide/terminal.tsx
-#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/take-control-button.tsx
 msgid "Take control"
 msgstr "제어 가져오기"
 
@@ -8384,6 +8424,10 @@ msgstr "첫 번째 봇을 만들 수 없습니다. 다시 시도하세요."
 msgid "The group model choice was reloaded. Pick again."
 msgstr "그룹의 모델 선택을 다시 불러왔습니다. 다시 선택하세요."
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "The Hermes install on this computer failed its safety check."
+msgstr "이 컴퓨터의 Hermes 설치가 안전 검사를 통과하지 못했습니다."
+
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
@@ -8488,6 +8532,7 @@ msgstr "이 채팅은 읽기 전용입니다"
 msgid "This command is not available to this account."
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "이 컴퓨터"
@@ -8535,6 +8580,7 @@ msgstr ""
 msgid "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model."
 msgstr "봇 또는 공간 설정에서 이 그룹의 모델을 차단했습니다. 대상 정책을 변경하거나 다른 그룹 모델을 선택하세요."
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "이 Mac"
@@ -9269,7 +9315,7 @@ msgid "Working…"
 msgstr "처리 중…"
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Workspace"
 msgstr "작업 공간"
 
@@ -9342,6 +9388,11 @@ msgstr "이메일 주소"
 #: src/pages/Auth.tsx
 msgid "Your name"
 msgstr "이름"
+
+#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/HostComputerPrompt.tsx
+msgid "Your OS will not ask for extra permission if you let bots run on {hostLabel}. They run as you."
+msgstr "{hostLabel}에서 실행하면 Bot이 내 계정 권한으로 동작하며 운영체제가 작업마다 별도 승인을 묻지 않습니다."
 
 #: src/pages/DevicesSettings.tsx
 msgid "Your phone can reach this Mac on your network."

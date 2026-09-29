@@ -1150,6 +1150,7 @@ msgstr ""
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
+#: src/pages/Shell.tsx
 msgid "Back"
 msgstr "返回"
 
@@ -1317,8 +1318,9 @@ msgid "Bot screen preview"
 msgstr "Bot 屏幕预览"
 
 #: src/pages/BotContextMenu.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Bot settings"
-msgstr ""
+msgstr "Bot 设置"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Bot to link"
@@ -1913,10 +1915,10 @@ msgstr ""
 msgid "Compare bots"
 msgstr ""
 
+#: src/components/composer/ComposerMenu.tsx
 #: src/pages/CompareStart.tsx
-#: src/pages/Shell.tsx
 msgid "Compare with…"
-msgstr ""
+msgstr "对比…"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Complete"
@@ -2937,7 +2939,7 @@ msgstr ""
 
 #: src/pages/CompareStart.tsx
 msgid "Could not start comparison; retry."
-msgstr ""
+msgstr "无法开始对比；请重试。"
 
 #: src/pages/CompareStart.tsx
 msgid "Could not start comparison; review the pins and retry."
@@ -3428,6 +3430,10 @@ msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Developer (git, GitHub and GitLab CLIs, node, jq)"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Developer image"
 msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
@@ -4096,6 +4102,10 @@ msgstr "在你的{task}运行中，本机上的 {better} 表现与 {other} 一�
 msgid "Forgot password?"
 msgstr "忘记密码？"
 
+#: src/pages/Shell.tsx
+msgid "Forward"
+msgstr "前进"
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Found on this computer"
 msgstr ""
@@ -4203,6 +4213,7 @@ msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group"
 msgstr "群组"
 
@@ -4210,7 +4221,7 @@ msgstr "群组"
 msgid "Group brief"
 msgstr "群组简报"
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group settings"
 msgstr "群组设置"
 
@@ -4275,6 +4286,10 @@ msgstr "Hermes 尚不支持此连接。"
 msgid "Hermes is not installed on this computer."
 msgstr "此计算机上未安装 Hermes。"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Hermes isn't available on Windows yet."
+msgstr "Hermes 暂不支持 Windows。"
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."
 msgstr "Hermes 使用此计算机的访问权限运行。"
@@ -4285,7 +4300,7 @@ msgstr "你好，这是我朗读回复时的声音。"
 
 #: src/pages/Shell.tsx
 msgid "Hide bots"
-msgstr ""
+msgstr "隐藏 Bot"
 
 #: src/pages/customize/McpDiagnostics.tsx
 msgid "Hide logs"
@@ -4373,6 +4388,10 @@ msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Image profile"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Image pull secret"
 msgstr ""
 
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -5032,6 +5051,11 @@ msgstr "其中似乎包含凭据。请从文件中删除后重新扫描。"
 msgid "low — quick, with a little checking"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/HostComputerPrompt.tsx
+msgid "macOS will not ask for extra permission if you let bots run on this Mac. They run as you."
+msgstr "若让 Bot 在这台 Mac 上运行，它们会使用你的账户权限，macOS 不会再逐项询问。"
+
 #: src/pages/board/BoardsSettings.tsx
 msgid "Make default"
 msgstr "设为默认"
@@ -5157,6 +5181,7 @@ msgstr ""
 #: src/pages/memory/MemoryProposals.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/settings-sections.ts
+#: src/pages/shell/bot-panel.tsx
 msgid "Memory"
 msgstr "记忆"
 
@@ -5556,6 +5581,7 @@ msgstr ""
 msgid "New access token"
 msgstr "新的访问令牌"
 
+#: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "New bot"
 msgstr "新建 Bot"
@@ -6255,6 +6281,10 @@ msgstr ""
 msgid "Park"
 msgstr "搁置"
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Partially reported"
+msgstr "部分已报告"
+
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
@@ -6474,8 +6504,9 @@ msgstr ""
 #: src/pages/account/AccountProfile.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/memory/MemoryProposals.tsx
+#: src/pages/shell/bot-panel.tsx
 msgid "Profile"
-msgstr ""
+msgstr "资料"
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Project ID"
@@ -7051,6 +7082,10 @@ msgstr "重置你的密码"
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Resetting…"
 msgstr "正在重置…"
+
+#: src/pages/Shell.tsx
+msgid "Resize pane"
+msgstr "调整面板大小"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Resources"
@@ -7749,6 +7784,7 @@ msgstr "正在设置 Python"
 #: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Settings"
 msgstr "设置"
 
@@ -7792,11 +7828,11 @@ msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Show bots"
-msgstr ""
+msgstr "显示 Bot"
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show computer"
-msgstr ""
+msgstr "显示电脑"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Show in the menu bar."
@@ -7814,7 +7850,7 @@ msgstr "显示更多"
 msgid "Show password"
 msgstr "显示密码"
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show settings"
 msgstr "显示设置"
 
@@ -8054,6 +8090,10 @@ msgstr ""
 msgid "Standard"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Standard image"
+msgstr ""
+
 #: src/components/composer/command-description.ts
 msgid "Start a new chat"
 msgstr ""
@@ -8245,8 +8285,8 @@ msgid "System"
 msgstr "系统"
 
 #: src/pages/ide/terminal.tsx
-#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/take-control-button.tsx
 msgid "Take control"
 msgstr "接管控制"
 
@@ -8384,6 +8424,10 @@ msgstr "无法创建第一个机器人。请重试。"
 msgid "The group model choice was reloaded. Pick again."
 msgstr "已重新加载群组的模型选择。请重新选择。"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "The Hermes install on this computer failed its safety check."
+msgstr "此计算机上的 Hermes 安装未通过安全检查。"
+
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
@@ -8488,6 +8532,7 @@ msgstr "此对话为只读"
 msgid "This command is not available to this account."
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "这台电脑"
@@ -8535,6 +8580,7 @@ msgstr ""
 msgid "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model."
 msgstr "群组模型被 Bot 或空间设置阻止。请更改目标位置策略，或选择其他群组模型。"
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "这台 Mac"
@@ -9269,7 +9315,7 @@ msgid "Working…"
 msgstr "处理中…"
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Workspace"
 msgstr "工作区"
 
@@ -9342,6 +9388,11 @@ msgstr "你的邮箱"
 #: src/pages/Auth.tsx
 msgid "Your name"
 msgstr "你的名字"
+
+#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/HostComputerPrompt.tsx
+msgid "Your OS will not ask for extra permission if you let bots run on {hostLabel}. They run as you."
+msgstr "若让 Bot 在 {hostLabel} 上运行，它们会使用你的账户权限，系统不会再逐项询问。"
 
 #: src/pages/DevicesSettings.tsx
 msgid "Your phone can reach this Mac on your network."

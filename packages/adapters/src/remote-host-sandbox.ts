@@ -13,13 +13,14 @@ import {
   hostEnvironmentNote,
 } from "@ardurbot/contracts/host-bridge";
 import { resolveEncryptionKey } from "@ardurbot/core";
+import { secretEnvironment } from "@ardurbot/core/node/service-secrets";
 import { DesktopSandboxProvider } from "@ardurbot/host-runtime/desktop-sandbox";
 import { HostClient } from "@ardurbot/host-runtime/host-client";
 
 export function usesHostBridge(env: NodeJS.ProcessEnv = process.env) {
   return env.ARDURBOT_HOST_BRIDGE === "api";
 }
-export function createHostClient(env: NodeJS.ProcessEnv = process.env) {
+export function createHostClient(env: NodeJS.ProcessEnv = secretEnvironment()) {
   return new HostClient({
     apiUrl: env.API_INTERNAL_URL ?? env.API_URL ?? "http://127.0.0.1:3100",
     encryptionKey: resolveEncryptionKey(env),

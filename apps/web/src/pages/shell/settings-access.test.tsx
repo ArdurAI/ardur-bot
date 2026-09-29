@@ -36,7 +36,7 @@ vi.mock("@ardurbot/ui-web", () => {
   };
 });
 
-import { useSettingsShortcut } from "../../lib/use-settings-shortcut";
+import { useAppShortcuts } from "../../lib/app-shortcuts";
 import { BotContextMenu } from "../BotContextMenu";
 import { DashboardAccountArea } from "../dashboard/DashboardAccountArea";
 import { SettingsSupportLinks } from "../settings-support-links";
@@ -55,10 +55,14 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-it("opens Settings from its persistent entry or either platform shortcut and cleans up", async () => {
+it("opens Settings from its persistent entry or the platform shortcut and cleans up", async () => {
   const open = vi.fn();
+  // Node has its own navigator beside jsdom's; Control is the modifier off Apple platforms.
+  const navigators = new Set([window.navigator, globalThis.navigator]);
+  for (const nav of navigators)
+    Object.defineProperty(nav, "platform", { value: "Win32", configurable: true });
   function Access() {
-    useSettingsShortcut(open);
+    useAppShortcuts({ settings: open });
     return (
       <DashboardAccountArea
         name="Test Owner"
@@ -77,23 +81,23 @@ it("opens Settings from its persistent entry or either platform shortcut and cle
   );
   expect(settings).toBeDefined();
   await act(async () => settings?.click());
-  for (const modifier of ["metaKey", "ctrlKey"]) {
-    const event = new KeyboardEvent("keydown", { key: ",", [modifier]: true, cancelable: true });
-    window.dispatchEvent(event);
-    expect(event.defaultPrevented).toBe(true);
-  }
-  expect(open).toHaveBeenCalledTimes(3);
+  const event = new KeyboardEvent("keydown", { key: ",", ctrlKey: true, cancelable: true });
+  window.dispatchEvent(event);
+  expect(event.defaultPrevented).toBe(true);
+  expect(open).toHaveBeenCalledTimes(2);
   for (const options of [
     {},
+    { metaKey: true },
     { ctrlKey: true, altKey: true },
-    { metaKey: true, repeat: true },
+    { ctrlKey: true, repeat: true },
     { ctrlKey: true, isComposing: true },
   ])
     window.dispatchEvent(new KeyboardEvent("keydown", { key: ",", ...options }));
-  expect(open).toHaveBeenCalledTimes(3);
+  expect(open).toHaveBeenCalledTimes(2);
   await act(async () => root.render(null));
-  window.dispatchEvent(new KeyboardEvent("keydown", { key: ",", metaKey: true }));
-  expect(open).toHaveBeenCalledTimes(3);
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: ",", ctrlKey: true }));
+  expect(open).toHaveBeenCalledTimes(2);
+  for (const nav of navigators) delete (nav as { platform?: string }).platform;
 });
 
 it("links to project support in an external browsing context", async () => {

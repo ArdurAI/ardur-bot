@@ -110,6 +110,18 @@ describe("host pairing and grants", () => {
     await bridge.disconnect("owner");
     expect((await bridge.status("owner")).configured).toBe(false);
   });
+  it("returns the loopback database and supervisor ports, and skips a remote database", async () => {
+    vi.stubEnv("DATABASE_URL", "postgres://app@127.0.0.1:23456/ardurbot");
+    vi.stubEnv("REALTIME_DATABASE_URL", "postgres://app@10.1.2.3:5432/remote");
+    vi.stubEnv("SANDBOX_SUPERVISOR_URL", "http://127.0.0.1:17091");
+    try {
+      const { bridge } = fixture();
+      const paired = await bridge.pair("owner");
+      expect(paired.guardPorts).toEqual([23456, 17091]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
   it("keeps host tokens out of Compose and process logs", () => {
     const compose = readFileSync(
       new URL("../../../infra/compose/docker-compose.images.yml", import.meta.url),

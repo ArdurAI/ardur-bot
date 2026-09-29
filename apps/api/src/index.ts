@@ -7,12 +7,12 @@ import { SERVICE_NAMES } from "@ardurbot/logging";
 import { createRootLogger } from "@ardurbot/logging/axiom";
 import { serve } from "@hono/node-server";
 import { createApp } from "./app.js";
-import { loadEnv } from "./env.js";
+import { loadAppEnv } from "./app-env.js";
 
 const logger = createRootLogger(SERVICE_NAMES.api);
 
 try {
-  const env = loadEnv();
+  const env = loadAppEnv();
   const { app, stop, installTerminal } = await createApp({ ...env, logger });
   const server = serve({ fetch: app.fetch, port: env.port, hostname: env.apiHost }, () => {
     logger.info("api listening", { "http.host": env.apiHost, "http.port": env.port });

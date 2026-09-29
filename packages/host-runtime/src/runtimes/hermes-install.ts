@@ -7,6 +7,12 @@ import { fileURLToPath } from "node:url";
 import type { HermesExecutionEnvelopeSchema } from "@ardurbot/contracts/runtime-config";
 import type * as z from "zod";
 import sourceHashes from "../../python/hermes_sources.json" with { type: "json" };
+import {
+  type HostGuardrailConfig,
+  resolveGuardrailPathsSync,
+  seatbeltArgv,
+  seatbeltProfile,
+} from "../host-guardrails.js";
 import { type HermesLaunch, type HermesLaunchSpec, HermesRuntime } from "./hermes-runtime.js";
 import { stopNative } from "./native-process.js";
 
@@ -239,12 +245,17 @@ export function resolveHermesLauncherAsset(
 }
 
 /** Native execution has host authority; qualification and the broker remain mandatory. */
-export function pinnedHermesLaunch(install: string, launcher: string): HermesLaunch {
+export function pinnedHermesLaunch(
+  install: string,
+  launcher: string,
+  guard?: HostGuardrailConfig,
+): HermesLaunch {
   return async (spec: HermesLaunchSpec) => {
     const qualified = probeHermesInstall(install);
     if (!existsSync(launcher) || spec.command !== qualified.python || spec.args[0] !== launcher)
       throw new Error("Pinned Hermes launcher is unavailable.");
-    const child = spawn(qualified.python, ["-B", launcher], {
+    const argv = hermesLaunchArgv(qualified.python, launcher, guard);
+    const child = spawn(argv[0]!, argv.slice(1), {
       cwd: spec.cwd,
       env: {
         ...spec.env,
@@ -260,11 +271,39 @@ export function pinnedHermesLaunch(install: string, launcher: string): HermesLau
   };
 }
 
+/**
+ * Hermes' own terminal/files/code tools run inside this process with host authority, so the
+ * process itself runs under the host command guardrail on macOS; other platforms return the
+ * launch unchanged. A profile that cannot be built throws — the turn fails closed.
+ */
+export function hermesLaunchArgv(
+  python: string,
+  launcher: string,
+  guard?: HostGuardrailConfig,
+  platform: NodeJS.Platform = process.platform,
+): string[] {
+  if (
+    platform !== "darwin" ||
+    !guard ||
+    (!guard.paths.length && !guard.ports.length && !guard.sockets.length)
+  )
+    return [python, "-B", launcher];
+  return seatbeltArgv(
+    [python, "-B", launcher],
+    seatbeltProfile({
+      paths: resolveGuardrailPathsSync(guard.paths),
+      ports: guard.ports,
+      sockets: resolveGuardrailPathsSync(guard.sockets),
+    }),
+  );
+}
+
 export async function buildHermesRuntime(options: {
   hostRoot: string;
   explicitInstall?: string;
   bundleFile: string;
   moduleUrl: string | undefined;
+  guard?: HostGuardrailConfig;
   executionEnvelope?: z.infer<typeof HermesExecutionEnvelopeSchema>;
   onProfileAcknowledged: () => void;
   onTurnFinished: () => void;
@@ -284,7 +323,7 @@ export async function buildHermesRuntime(options: {
   return new HermesRuntime({
     command: qualified.python,
     args: [launcher],
-    launch: pinnedHermesLaunch(qualified.root, launcher),
+    launch: pinnedHermesLaunch(qualified.root, launcher, options.guard),
     pinned: true,
     executionEnvelope: options.executionEnvelope,
     onProfileAcknowledged: options.onProfileAcknowledged,

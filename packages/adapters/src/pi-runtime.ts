@@ -289,11 +289,9 @@ export class PiAgentRuntime implements AgentRuntime {
         seenSteeringIds.push(...initialSteering.map((item) => item.id));
         let initialInputPending = true;
         let pendingSteeringDeliveryIds = initialSteering.flatMap((item) => item.deliveryIds ?? []);
-        const history = toHistory(
-          withoutSteeringMessages(request.history, initialSteering),
-          request.prompt,
-          request.sourceMessageId,
-        );
+        const keptHistory = withoutSteeringMessages(request.history, initialSteering);
+        const history = toHistory(keptHistory, request.prompt, request.sourceMessageId);
+        const historyEnd = stableHistoryEnd(request, keptHistory);
         const initialPrompt = promptWithInitialSteering(request.prompt, initialSteering);
         const systemPrompt =
           request.instructions ||
@@ -335,15 +333,7 @@ export class PiAgentRuntime implements AgentRuntime {
               m,
               {
                 ...reliableStreamOptions(m, options, request.model.maxTokens),
-                ...(m.api === "anthropic-messages" && request.stablePrefix
-                  ? {
-                      onPayload: async (payload: unknown) =>
-                        markStablePrefix(
-                          (await options?.onPayload?.(payload, m)) ?? payload,
-                          request.stablePrefix!,
-                        ),
-                    }
-                  : {}),
+                ...promptCacheOptions(m, options, request, historyEnd),
               },
               (next) => models.streamSimple(m, ctx, next),
               (usage) => {
@@ -844,6 +834,44 @@ function stableToolNameHash(name: string): string {
     hash = Math.imul(hash, 16777619);
   }
   return (hash >>> 0).toString(36);
+}
+
+/**
+ * One-shot requests skip the cache-write premium; nothing ever reads them back. Conversational
+ * Anthropic turns mark the system prompt and the end of the history that repeats next turn.
+ */
+export function promptCacheOptions(
+  model: Pick<Model<Api>, "api">,
+  options: SimpleStreamOptions | undefined,
+  request: Pick<AgentRunRequest, "singleRequest" | "stablePrefix">,
+  historyEnd?: { index: number; text: string },
+): SimpleStreamOptions {
+  if (request.singleRequest) return { cacheRetention: "none" };
+  if (model.api !== "anthropic-messages" || (!request.stablePrefix && !historyEnd)) return {};
+  return {
+    onPayload: async (payload, payloadModel) =>
+      markStablePrefix(
+        (await options?.onPayload?.(payload, payloadModel)) ?? payload,
+        request.stablePrefix,
+        historyEnd,
+      ),
+  };
+}
+
+/** Where the history the assembler marked stable ends among the messages a provider receives. */
+export function stableHistoryEnd(
+  request: Pick<AgentRunRequest, "history" | "stableHistory" | "prompt" | "sourceMessageId">,
+  keptHistory: AgentRunRequest["history"],
+): { index: number; text: string } | undefined {
+  const stable = new Set(request.history.slice(0, request.stableHistory ?? 0));
+  // Providers drop blank messages, so they do not count toward the position.
+  const sent = toHistory(
+    keptHistory.filter((message) => stable.has(message)),
+    request.prompt,
+    request.sourceMessageId,
+  ).filter((message) => message.content.trim());
+  const last = sent.at(-1);
+  return last ? { index: sent.length - 1, text: last.content } : undefined;
 }
 
 export function toHistory(

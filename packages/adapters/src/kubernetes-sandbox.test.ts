@@ -15,16 +15,17 @@ const context = {
 };
 const apis: FakeKubernetesApi[] = [];
 afterEach(() => {
+  vi.unstubAllEnvs();
   for (const api of apis.splice(0)) api.dispose();
 });
-function fixture() {
+function fixture(settings: Record<string, unknown> = {}) {
   const api = new FakeKubernetesApi();
   apis.push(api);
   return {
     api,
     provider: new KubernetesSandboxProvider(
       api,
-      ComputerConnectionSettingsSchema.parse({ engine: "kubernetes" }),
+      ComputerConnectionSettingsSchema.parse({ engine: "kubernetes", ...settings }),
     ),
   };
 }
@@ -41,6 +42,14 @@ describe("Kubernetes computer", () => {
       [Symbol.asyncIterator]();
     expect((await execution.next()).value).toEqual({ type: "stderr", data: "progress" });
     await execution.return?.();
+  });
+
+  it("maps connection failure during test to engine-not-running", async () => {
+    const { api, provider } = fixture();
+    vi.spyOn(api, "version").mockRejectedValue(
+      new Error("Kubernetes request failed; check the connection."),
+    );
+    await expect(provider.test(context)).rejects.toThrow("engine-not-running");
   });
 
   it("waits for PVC deletion before allowing a replacement to reuse its name", async () => {
@@ -100,6 +109,7 @@ describe("Kubernetes computer", () => {
     expect(api.objects.size).toBe(0);
   });
   it("creates only non-root workloads without credentials or service account tokens", async () => {
+    vi.stubEnv("ARDURBOT_COMPUTER_CHANNEL", "");
     const { api, provider } = fixture();
     await provider.provision(
       { botId: "bot", homePath: "/unused", imageProfile: "developer" },
@@ -111,7 +121,8 @@ describe("Kubernetes computer", () => {
       securityContext: { runAsNonRoot: true, runAsUser: 1000, fsGroup: 1000 },
       containers: [
         {
-          image: "ardurbot/computer:0.1.0-developer",
+          image: expect.stringMatching(/^ghcr\.io\/ardurai\/ardur-bot\/computer:.+-developer$/),
+          imagePullPolicy: "IfNotPresent",
           securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: ["ALL"] } },
           resources: {
             requests: { cpu: "250m", memory: "256Mi" },
@@ -120,7 +131,9 @@ describe("Kubernetes computer", () => {
         },
       ],
     });
-    expect(JSON.stringify(pod)).not.toMatch(/kubeconfig|credential|hostPath|secretKeyRef|envFrom/i);
+    expect(JSON.stringify(pod)).not.toMatch(
+      /kubeconfig|credential|hostPath|secretKeyRef|envFrom|imagePullSecrets/i,
+    );
     expect(api.requests[0]!.body!.spec).toMatchObject({
       resources: { requests: { storage: "10Gi" } },
     });
@@ -165,5 +178,24 @@ describe("Kubernetes computer", () => {
     );
     api.objects.set(`pods/${computer.id}`, { metadata: { name: computer.id, labels: {} } });
     await expect(provider.destroy(computer, context)).rejects.toThrow("identity");
+  });
+  it("runs the connection's own image with its pull Secret, and swaps a running image on drift", async () => {
+    vi.stubEnv("ARDURBOT_COMPUTER_IMAGE", "registry.example/deployment:1");
+    const { api, provider } = fixture({
+      standardImage: "registry.example/private/computer:1",
+      developerImage: "registry.example/private/computer:1-developer",
+      imagePullSecret: "registry-login",
+    });
+    const request = { botId: "bot", homePath: "/unused", imageProfile: "developer" as const };
+    const computer = await provider.provision(request, context);
+    const pod = api.requests.find((entry) => entry.resource === "pods")!.body!;
+    expect(pod.spec).toMatchObject({
+      imagePullSecrets: [{ name: "registry-login" }],
+      containers: [{ image: "registry.example/private/computer:1-developer" }],
+    });
+    await provider.provision({ ...request, imageProfile: "base" }, context);
+    expect(api.objects.get(`pods/${computer.id}`)?.spec).toMatchObject({
+      containers: [{ image: "registry.example/private/computer:1" }],
+    });
   });
 });

@@ -1,8 +1,8 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AdapterContext, AgentRunRequest } from "@ardurbot/adapter-kit";
+import type { AgentRunRequest } from "@ardurbot/adapter-kit";
 import {
   buildHermesRuntime,
   HERMES_SOURCE_PIN,
@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import profileFixture from "../../../host-runtime/python/tests/valid_profile.json" with {
   type: "json",
 };
-import type { HermesProviderBroker } from "../hermes-provider-broker.js";
+import type { BrokerRequest, HermesProviderBroker } from "../hermes-provider-broker.js";
 import { advertisedHostTools, buildHostTurn } from "../host-turn.js";
 import { LocalHermesRuntime } from "./local-hermes-runtime.js";
 
@@ -26,7 +26,7 @@ vi.mock("@ardurbot/host-runtime/runtimes/hermes-install", async (original) => {
 
 vi.mock("@ardurbot/core/node/runtime-config-hash", async (original) => ({
   ...(await original<object>()),
-  validateHermesExecutionEnvelope: (x: any) => profileFixture,
+  validateHermesExecutionEnvelope: (_x: any) => profileFixture,
 }));
 
 describe("LocalHermesRuntime", () => {
@@ -52,7 +52,7 @@ describe("LocalHermesRuntime", () => {
     );
     await writeFile(
       join(installDir, ".venv", "bin", "python"),
-      `#!${process.execPath}\nconst fs = require("fs");\ntry {\n  const scenario = fs.existsSync(${JSON.stringify(require("path").join(root, "scenario.txt"))}) ? fs.readFileSync(${JSON.stringify(require("path").join(root, "scenario.txt"))}, "utf8") : "text";\n  process.argv.splice(2, process.argv.length - 2, scenario);\n  if (process.env.ARDUR_HERMES_EXPECTED_HASH && scenario !== "profile-ack" && scenario !== "profile-stale") fs.writeFileSync(require("path").join(process.env.HERMES_HOME, "runtime-ack.json"), JSON.stringify({ profile: "hermes-ardur-v2", configurationHash: process.env.ARDUR_HERMES_EXPECTED_HASH, sessionId: "fixture-" + process.pid }), { mode: 0o600 });\n  if (scenario === "custom-tool-error") { const sessionId = "fixture-" + process.pid; let promptId = null; const readline = require("readline"); const rl = readline.createInterface({ input: process.stdin }); rl.on("line", (line) => { const msg = JSON.parse(line); if (msg.method === "initialize") { process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: 1 } }) + "\\n"); } else if (msg.method === "session/new") { process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: { sessionId } }) + "\\n"); } else if (msg.method === "session/prompt") { promptId = msg.id; process.stdout.write(JSON.stringify({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Provider request failed with key " + process.env.ARDUR_HERMES_PROVIDER_KEY } } } }) + "\\n"); process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: promptId, result: { stopReason: "end_turn" } }) + "\\n"); } else if (msg.id) { process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: {} }) + "\\n"); } }); return; }\nimport(${JSON.stringify(fakeAcp)}).then(() => setInterval(() => {}, 1000)).catch(e => { process.exit(1); });\n} catch (e) { process.exit(1); }\n`,
+      `#!${process.execPath}\nconst fs = require("fs");\ntry {\n  const scenario = fs.existsSync(${JSON.stringify(require("node:path").join(root, "scenario.txt"))}) ? fs.readFileSync(${JSON.stringify(require("node:path").join(root, "scenario.txt"))}, "utf8") : "text";\n  process.argv.splice(2, process.argv.length - 2, scenario);\n  if (process.env.ARDUR_HERMES_EXPECTED_HASH && scenario !== "profile-ack" && scenario !== "profile-stale") fs.writeFileSync(require("path").join(process.env.HERMES_HOME, "runtime-ack.json"), JSON.stringify({ profile: "hermes-ardur-v2", configurationHash: process.env.ARDUR_HERMES_EXPECTED_HASH, sessionId: "fixture-" + process.pid }), { mode: 0o600 });\n  if (scenario === "custom-tool-error") { const sessionId = "fixture-" + process.pid; let promptId = null; const readline = require("readline"); const rl = readline.createInterface({ input: process.stdin }); rl.on("line", (line) => { const msg = JSON.parse(line); if (msg.method === "initialize") { process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: 1 } }) + "\\n"); } else if (msg.method === "session/new") { process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: { sessionId } }) + "\\n"); } else if (msg.method === "session/prompt") { promptId = msg.id; process.stdout.write(JSON.stringify({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Provider request failed with key " + process.env.ARDUR_HERMES_PROVIDER_KEY } } } }) + "\\n"); process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: promptId, result: { stopReason: "end_turn" } }) + "\\n"); } else if (msg.id) { process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: {} }) + "\\n"); } }); return; }\nimport(${JSON.stringify(fakeAcp)}).then(() => setInterval(() => {}, 1000)).catch(e => { process.exit(1); });\n} catch (e) { process.exit(1); }\n`,
     );
     await import("node:fs/promises").then((fs) =>
       fs.chmod(join(installDir, ".venv", "bin", "python"), 0o755),
@@ -309,34 +309,70 @@ describe("LocalHermesRuntime", () => {
     expect(broker.revoke).toHaveBeenCalled();
   });
 
-  it("completes a local runtime success turn and routes a provider call through the relay", async () => {
-    const brokerMethod = vi.fn(async () => ({ result: { foo: "bar" } }));
-    const broker = { grant: { id: "123", token: "token", expiresAt: 0 }, revoke: vi.fn() };
+  function grantBroker() {
+    const token = "a".repeat(43);
+    const open = vi.fn(async (_request: BrokerRequest) => {
+      return new Response('{"id":"fixture","choices":[]}', {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    const broker = {
+      grant: { id: crypto.randomUUID(), token, expiresAt: Date.now() + 60_000 },
+      revoke: vi.fn(),
+      open,
+    };
+    return { token, open, broker };
+  }
+
+  async function runRelay(broker: {
+    grant: { id: string; token: string; expiresAt: number };
+    revoke: ReturnType<typeof vi.fn>;
+    open: ReturnType<typeof vi.fn>;
+  }) {
     const runtime = new LocalHermesRuntime(
       vi.fn().mockResolvedValue({
         broker,
-        scope: { executeTool: brokerMethod },
+        scope: {},
       }),
     );
-
     const req = request();
-    await import("node:fs/promises").then((m) => m.writeFile(join(root, "scenario.txt"), "text"));
-    req.prompt = "text";
-
-    // Test context config default (which provides node mcp config so fake-acp.mjs doesn't crash if it tries)
+    await writeFile(join(root, "scenario.txt"), "relay");
+    req.prompt = "relay";
     const context: any = {
       agentInstall: { hostRoot: "something", version: "1" },
       mcpConfig: { command: "node", args: ["-e", "setInterval(() => {}, 1000)"], env: {} },
     };
-
     const result = await collect(runtime.run(req, context));
+    const report = JSON.parse(await readFile(join(installDir, "relay-report.json"), "utf8")) as {
+      status: number;
+      relayUrl: string;
+    };
+    return { result, report };
+  }
+
+  it("completes a local runtime success turn and routes a provider call through the relay", async () => {
+    const { open, broker } = grantBroker();
+    const { result, report } = await runRelay(broker);
+
     expect(result).toContainEqual(expect.objectContaining({ type: "done" }));
+    expect(report.status).toBe(200);
+    expect(report.relayUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/v1$/);
+    expect(open).toHaveBeenCalledOnce();
+    expect(open.mock.calls[0]?.[0]).toMatchObject({
+      path: "/v1/chat/completions",
+      body: {
+        model: "fixture-model",
+        messages: [{ role: "user", content: "relay-probe" }],
+      },
+    });
     expect(broker.revoke).toHaveBeenCalled();
   });
 
-  it("inspects the launch config and ensures relay overrides real key", async () => {
+  it("keeps the real provider key off the spawned Hermes process", async () => {
+    const token = "b".repeat(43);
     const broker = {
-      grant: { id: "123", token: "relay-token-123", expiresAt: 0 },
+      grant: { id: "123", token, expiresAt: Date.now() + 60_000 },
       revoke: vi.fn(),
     };
     const runtime = new LocalHermesRuntime(
@@ -346,10 +382,14 @@ describe("LocalHermesRuntime", () => {
       }),
     );
 
+    vi.stubEnv("ARDUR_PARENT_SECRET", "sentinel-parent");
     const req = request();
-    await import("node:fs/promises").then((m) =>
-      m.writeFile(join(root, "scenario.txt"), "inspect"),
-    );
+    req.model = {
+      ...req.model,
+      apiKey: "sentinel-real-provider-key",
+      baseUrl: "http://127.0.0.1:9/sentinel-real-base",
+    };
+    await writeFile(join(root, "scenario.txt"), "inspect");
     req.prompt = "inspect";
     const context: any = {
       agentInstall: { hostRoot: "something", version: "1" },
@@ -357,18 +397,25 @@ describe("LocalHermesRuntime", () => {
     };
 
     const result = await collect(runtime.run(req, context));
-    const textEvent = result.find((e) => e.type === "text");
-    const data = JSON.parse(textEvent.text);
-
-    // Defect 1: ensure the launch args don't contain real key or real base URL
-    expect(data.configHasKey).toBe(false);
-    expect(data.env.ARDUR_HERMES_RELAY_URL).toMatch(/^http:\/\/127\.0\.0\.1:/);
-    expect(data.env.ARDUR_HERMES_PROVIDER_KEY).toBe("[redacted]");
-
-    // Defect 7: Invariant checks
-    expect(data.homeMatches).toBe(true);
-    expect(data.cwdMatches).toBe(true);
-    expect(data.parentSecretAbsent).toBe(true);
+    expect(result).toContainEqual(expect.objectContaining({ type: "done" }));
+    const report = JSON.parse(await readFile(join(installDir, "spawn-report.json"), "utf8")) as {
+      providerKey: string;
+      baseUrl: string;
+      env: Record<string, string>;
+      config: unknown;
+      homeMatches: boolean;
+      cwdMatches: boolean;
+      parentSecretAbsent: boolean;
+    };
+    const dumped = JSON.stringify({ env: report.env, config: report.config });
+    expect(dumped).not.toContain("sentinel-real-provider-key");
+    expect(dumped).not.toContain("sentinel-real-base");
+    expect(dumped).not.toContain("sentinel-parent");
+    expect(report.providerKey).toBe(token);
+    expect(report.baseUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/v1$/);
+    expect(report.homeMatches).toBe(true);
+    expect(report.cwdMatches).toBe(true);
+    expect(report.parentSecretAbsent).toBe(true);
   });
 
   it("handles provider failure properly as tool failed without exposing key", async () => {
@@ -403,34 +450,35 @@ describe("LocalHermesRuntime", () => {
     expect(broker.revoke).toHaveBeenCalled();
   });
 
-  it("refuses relay after turn end", async () => {
-    const brokerMethod = vi.fn(async () => ({ result: { foo: "bar" } }));
-    let relayUrl = "";
-    const broker = { grant: { id: "123", token: "token", expiresAt: 0 }, revoke: vi.fn() };
-    const runtime = new LocalHermesRuntime(
-      vi.fn().mockImplementation(async (req, res, relay) => {
-        relayUrl = relay.url;
-        return { broker, scope: { executeTool: brokerMethod } };
-      }),
-    );
-
-    const req = request();
-    await import("node:fs/promises").then((m) => m.writeFile(join(root, "scenario.txt"), "text"));
-    req.prompt = "text";
-    const context: any = {
-      agentInstall: { hostRoot: "something", version: "1" },
-      mcpConfig: { command: "node", args: ["-e", "setInterval(() => {}, 1000)"], env: {} },
-    };
-
-    await collect(runtime.run(req, context));
-
-    // Relay should be closed
-    await expect(
-      fetch(relayUrl + "/chat/completions", {
+  async function relayStatus(relayUrl: string, token: string): Promise<number | string> {
+    try {
+      const response = await fetch(`${relayUrl}/chat/completions`, {
         method: "POST",
-        headers: { Authorization: "Bearer token" },
-        body: JSON.stringify({}),
-      }),
-    ).rejects.toThrow();
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "fixture-model",
+          messages: [{ role: "user", content: "relay-probe" }],
+        }),
+      });
+      await response.text();
+      return response.status;
+    } catch (error) {
+      const cause = (error as { cause?: { code?: string } }).cause;
+      return cause?.code ?? (error as { code?: string }).code ?? "error";
+    }
+  }
+
+  it("refuses relay after turn end", async () => {
+    const { token, open, broker } = grantBroker();
+    const { report } = await runRelay(broker);
+
+    expect(report.status).toBe(200);
+    expect(report.relayUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/v1$/);
+    expect(open).toHaveBeenCalledOnce();
+    const after = await relayStatus(report.relayUrl, token);
+    expect(after === "ECONNREFUSED" || after === "ECONNRESET" || after === 403).toBe(true);
   });
 });

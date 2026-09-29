@@ -4,7 +4,7 @@ import { captureScreenshot, completeOnboarding, rpc, signup } from "./helpers";
 test("sidebar preview preserves underscores in filenames", async ({ page }, testInfo) => {
   await signup(
     page,
-    `preview-identifiers-${Date.now()}@ardurbot.test`,
+    `preview-identifiers-${Date.now()}@example.test`,
     "password12",
     "Preview Test",
   );

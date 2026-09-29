@@ -1,0 +1,92 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { createCompiledCatalog, getCatalogForFile, getCatalogs } from "@lingui/cli/api";
+import { getConfig } from "@lingui/conf";
+import { i18n } from "@lingui/core";
+import { formatter } from "@lingui/format-po";
+import { describe, expect, it } from "vitest";
+
+const webRoot = fileURLToPath(new URL("../..", import.meta.url));
+const config = getConfig({ configPath: path.join(webRoot, "lingui.config.ts") });
+const catalogs = getCatalogs(config);
+const locales: string[] = config.locales;
+
+function catalogFile(locale: string) {
+  return path.join(webRoot, "src", "locales", locale, "messages.po");
+}
+
+/** Message id to source text, as the English source catalog declares it. */
+const sourceMessages = (async () => {
+  const filename = catalogFile(config.sourceLocale);
+  const catalog = await formatter().parse(readFileSync(filename, "utf8"), {
+    locale: config.sourceLocale,
+    sourceLocale: config.sourceLocale,
+    filename,
+  });
+  return new Map(Object.entries(catalog).map(([id, entry]) => [id, entry.message ?? id]));
+})();
+
+/** The id-to-text lookup the Vite plugin compiles when the app imports a catalog. */
+async function translations(locale: string) {
+  const file = getCatalogForFile(
+    path.relative(config.rootDir, catalogFile(locale)),
+    await catalogs,
+  );
+  if (!file) throw new Error(`No catalog is configured for ${locale}`);
+  const { messages } = await file.catalog.getTranslations(locale, {
+    fallbackLocales: config.fallbackLocales,
+    sourceLocale: config.sourceLocale,
+  });
+  return messages;
+}
+
+describe("web catalogs", () => {
+  it.each(locales)("pairs every msgid in the %s catalog with one msgstr", (locale) => {
+    const broken = readFileSync(catalogFile(locale), "utf8")
+      .split(/\n{2,}/)
+      .filter((block) => {
+        const lines = block.split("\n").filter((line) => line !== "" && !line.startsWith("#"));
+        if (lines.length === 0) return false;
+        const ids = lines.filter((line) => line.startsWith("msgid ")).length;
+        const strs = lines.filter((line) => /^msgstr(\[\d+\])? /.test(line)).length;
+        return ids !== 1 || strs !== 1;
+      });
+    expect(broken).toEqual([]);
+  });
+
+  it("maps every English message to its own text", async () => {
+    const sources = await sourceMessages;
+    const messages = await translations(config.sourceLocale);
+    const mismatched = [...sources]
+      .filter(([id, source]) => messages[id] !== source)
+      .map(([id, source]) => ({ source, shown: messages[id] }));
+    expect(mismatched).toEqual([]);
+  });
+
+  it.each([
+    ["en", "Cost unavailable", "Partially reported"],
+    ["de", "Kosten nicht verfügbar", "Teilweise erfasst"],
+    ["es", "Costo no disponible", "Parcialmente reportado"],
+    ["hi", "लागत उपलब्ध नहीं है", "आंशिक रूप से रिपोर्ट किया गया"],
+    ["ko", "비용 정보 없음", "일부만 보고됨"],
+    ["pt-BR", "Custo indisponível", "Parcialmente reportado"],
+    ["ru", "Стоимость недоступна", "Частично зафиксировано"],
+    ["tr", "Maliyet bilgisi yok", "Kısmen raporlandı"],
+    ["zh-CN", "费用不可用", "部分已报告"],
+  ] as const)(
+    "shows each usage period marker as its own text in %s",
+    async (locale, costUnavailable, partiallyReported) => {
+      const sources = await sourceMessages;
+      const idOf = (text: string) => [...sources].find(([, source]) => source === text)?.[0];
+      const { source, errors } = createCompiledCatalog(locale, await translations(locale), {
+        namespace: "json",
+      });
+      expect(errors).toEqual([]);
+      i18n.load(locale, JSON.parse(source).messages);
+      i18n.activate(locale);
+      expect(i18n._({ id: idOf("Cost unavailable") ?? "" })).toBe(costUnavailable);
+      expect(i18n._({ id: idOf("Partially reported") ?? "" })).toBe(partiallyReported);
+    },
+  );
+});

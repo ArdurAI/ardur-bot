@@ -8,6 +8,7 @@ import {
   HERMES_SOURCE_PIN,
   HERMES_SOURCE_TREE,
   hermesInstallCandidate,
+  hermesLaunchArgv,
   localHermesInstallCandidate,
   localHermesRoot,
   localHermesStaging,
@@ -15,6 +16,33 @@ import {
   qualifyHermesInstall,
   resolveHermesLauncherAsset,
 } from "./hermes-install.js";
+
+it("wraps the pinned Hermes process in the host guardrail only on macOS", () => {
+  const guard = {
+    paths: ["/fixture/user-data/secrets.env"],
+    ports: [55433],
+    sockets: ["/fixture/run/docker.sock"],
+  };
+  const wrapped = hermesLaunchArgv(
+    "/fixture/.venv/bin/python",
+    "/fixture/launcher.py",
+    guard,
+    "darwin",
+  );
+  expect(wrapped[0]).toBe("/usr/bin/sandbox-exec");
+  expect(wrapped[1]).toBe("-p");
+  expect(wrapped[2]).toContain('(subpath "/fixture/user-data/secrets.env")');
+  expect(wrapped[2]).toContain('(remote ip "localhost:55433")');
+  expect(wrapped[2]).toContain('(remote unix-socket (literal "/fixture/run/docker.sock"))');
+  expect(wrapped.slice(3)).toEqual(["/fixture/.venv/bin/python", "-B", "/fixture/launcher.py"]);
+  for (const platform of ["linux", "win32"] as const)
+    expect(
+      hermesLaunchArgv("/fixture/.venv/bin/python", "/fixture/launcher.py", guard, platform),
+    ).toEqual(["/fixture/.venv/bin/python", "-B", "/fixture/launcher.py"]);
+  expect(
+    hermesLaunchArgv("/fixture/.venv/bin/python", "/fixture/launcher.py", undefined, "darwin"),
+  ).toEqual(["/fixture/.venv/bin/python", "-B", "/fixture/launcher.py"]);
+});
 
 it("resolves the local root, staging and managed install under DATA_DIR", async () => {
   const data = await mkdtemp(path.join(tmpdir(), "hermes-local-root-"));

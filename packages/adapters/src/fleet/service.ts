@@ -1,13 +1,14 @@
 import { homedir } from "node:os";
 import path from "node:path";
 import { resolveEncryptionKey } from "@ardurbot/core";
+import { secretEnvironment } from "@ardurbot/core/node/service-secrets";
 import { FleetService } from "@ardurbot/host-runtime/fleet/service";
 
 let service: FleetService | undefined;
 export function localFleetService() {
   service ??= new FleetService(
     path.join(homedir(), ".ardurbot", "host"),
-    resolveEncryptionKey(process.env),
+    resolveEncryptionKey(secretEnvironment()),
   );
   return service;
 }

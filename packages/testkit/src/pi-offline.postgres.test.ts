@@ -70,7 +70,7 @@ describe.skipIf(!databaseAvailable)("offline Pi product journey", () => {
         method: "POST",
         headers: { "content-type": "application/json", origin: fixtureOrigin },
         body: JSON.stringify({
-          email: `offline-pi-${randomUUID()}@ardurbot.test`,
+          email: `offline-pi-${randomUUID()}@example.test`,
           password: "password12",
           name: "Offline fixture",
         }),

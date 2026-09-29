@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { expect, it } from "vitest";
 import { changeInput, renderSettings } from "../test/settings-ui";
 import {
@@ -56,4 +58,40 @@ it("keeps content inside its row and renders SettingsGroup heading", async () =>
 
   const row = container.querySelector('[data-settings-row="Row 1"]');
   expect(row?.querySelector(".pb-4")?.textContent).toContain("Row 1 content");
+});
+
+it("hides only the settings overlay's fully-filtered groups, never row-less cards", () => {
+  // The stylesheet rule that collapses empty groups exists for the settings overlay's
+  // search. Applied to the panel cards (Profile, Model, …), which hold no searchable
+  // rows, it must not hide them.
+  const css = readFileSync(path.join(import.meta.dirname, "../styles.css"), "utf8");
+  const rules = css.match(/[^{}]*\[data-settings-group\][^{}]*\{[^}]*\}/g) ?? [];
+  expect(rules.length).toBeGreaterThan(0);
+  const style = document.createElement("style");
+  style.textContent = rules.join("\n");
+  document.head.append(style);
+  try {
+    const card = document.createElement("section");
+    card.setAttribute("data-settings-group", "");
+    document.body.append(card);
+    expect(getComputedStyle(card).display).not.toBe("none");
+    card.remove();
+
+    const overlay = document.createElement("div");
+    overlay.setAttribute("data-settings-section", "general");
+    const group = document.createElement("section");
+    group.setAttribute("data-settings-group", "");
+    const row = document.createElement("fieldset");
+    row.setAttribute("data-settings-row", "Chat font");
+    row.hidden = true;
+    group.append(row);
+    overlay.append(group);
+    document.body.append(overlay);
+    expect(getComputedStyle(group).display).toBe("none");
+    row.hidden = false;
+    expect(getComputedStyle(group).display).not.toBe("none");
+    overlay.remove();
+  } finally {
+    style.remove();
+  }
 });

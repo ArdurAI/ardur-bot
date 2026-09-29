@@ -189,18 +189,30 @@ async function handle(value) {
     const home = process.env.HERMES_HOME;
     const config = JSON.parse(await readFile(join(home, "config.yaml"), "utf8"));
     const context = await readFile(join(home, "SOUL.md"), "utf8");
-    message(
-      JSON.stringify({
-        homeMatches: home === process.env.HOME,
-        cwdMatches: (await realpath(process.cwd())) === (await realpath(join(home, "workspace"))),
-        parentSecretAbsent: process.env.ARDUR_PARENT_SECRET === undefined,
-        configHasKey: JSON.stringify(config).includes(process.env.ARDUR_HERMES_PROVIDER_KEY),
-        config,
-        env: process.env,
-        context,
-        prompt: value.params.prompt,
-      }),
-    );
+    const report = {
+      homeMatches: home === process.env.HOME,
+      cwdMatches: (await realpath(process.cwd())) === (await realpath(join(home, "workspace"))),
+      parentSecretAbsent: process.env.ARDUR_PARENT_SECRET === undefined,
+      configHasKey: JSON.stringify(config).includes(process.env.ARDUR_HERMES_PROVIDER_KEY),
+      config,
+      env: process.env,
+      context,
+      prompt: value.params.prompt,
+      providerKey: process.env.ARDUR_HERMES_PROVIDER_KEY ?? null,
+      baseUrl: process.env.ARDUR_HERMES_RELAY_URL ?? null,
+    };
+    // Stdout is redacted with whatever key this process was given, so the
+    // unredacted proof has to be a file the parent reads after the turn.
+    if (process.env.ARDUR_HERMES_INSTALL) {
+      writeFileSync(
+        join(process.env.ARDUR_HERMES_INSTALL, "spawn-report.json"),
+        JSON.stringify(report),
+        {
+          mode: 0o600,
+        },
+      );
+    }
+    message(JSON.stringify(report));
     send({ id: value.id, result: { stopReason: "end_turn" } });
     return;
   }
@@ -353,6 +365,30 @@ async function handle(value) {
           : JSON.stringify(result.content),
     );
     await client.close();
+    send({ id: value.id, result: { stopReason: "end_turn" } });
+    return;
+  }
+  if (scenario === "relay") {
+    const relayUrl = process.env.ARDUR_HERMES_RELAY_URL;
+    const response = await fetch(`${relayUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${process.env.ARDUR_HERMES_PROVIDER_KEY}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "fixture-model",
+        messages: [{ role: "user", content: "relay-probe" }],
+      }),
+    });
+    // The parent redacts child text with the key it handed this process, so the
+    // acceptance proof is a file the test reads, not the assistant transcript.
+    writeFileSync(
+      join(process.env.ARDUR_HERMES_INSTALL, "relay-report.json"),
+      JSON.stringify({ status: response.status, relayUrl }),
+      { mode: 0o600 },
+    );
+    message("relay accepted");
     send({ id: value.id, result: { stopReason: "end_turn" } });
     return;
   }

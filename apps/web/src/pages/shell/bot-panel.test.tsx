@@ -352,6 +352,39 @@ describe("bot model settings", () => {
   });
 });
 
+it("groups bot settings into cards and keeps memory and computer under Advanced", async () => {
+  await act(async () => root.render(settings()));
+  const cards = [...container.querySelectorAll("section[data-settings-group]")];
+  const title = (card: Element) => card.querySelector("h3")?.textContent;
+  expect(cards.map(title)).toEqual(["Profile", "Model", "Notifications", "Memory", "Computer"]);
+  const card = (label: string) => cards.find((item) => title(item) === label)!;
+  const profileFields = card("Profile").querySelector('input[id$="-name"]')?.closest(".grid");
+  const defaultPaneWidth = 560;
+  const border = 1;
+  const padding = 40; // px-5 padding on scroll container
+  const classicScrollbar = 16;
+  const defaultContainerWidth = defaultPaneWidth - border - padding - classicScrollbar; // ~503 px
+  const minContainerWidth = 384 - border - padding; // ~343 px
+  const breakpointMatch = profileFields?.className.match(/@min-\[(\d+)px\]:grid-cols-2/);
+  expect(breakpointMatch).not.toBeNull();
+  const breakpoint = Number(breakpointMatch![1]);
+  expect(breakpoint).toBeLessThanOrEqual(defaultContainerWidth);
+  expect(breakpoint).toBeGreaterThan(minContainerWidth);
+  expect(container.querySelector('[data-testid="bot-settings"]')?.className).toContain(
+    "@container",
+  );
+  expect(card("Model").contains(modelSelect())).toBe(true);
+  expect(card("Notifications").textContent).toContain(
+    "Get notified when this Bot finishes or needs input",
+  );
+  expect(card("Notifications").textContent).toContain("Read replies aloud");
+  const advanced = container.querySelector('[data-testid="bot-settings-advanced"]');
+  expect(advanced?.contains(card("Memory"))).toBe(true);
+  expect(advanced?.contains(card("Computer"))).toBe(true);
+  expect(advanced?.contains(card("Notifications"))).toBe(false);
+  expect(card("Computer").textContent).toBe("ComputerTeamPrivate");
+});
+
 describe("effective bot model", () => {
   const state = { me, catalog, credentials };
   it("shows the catalog label and default reasoning effort", () => {

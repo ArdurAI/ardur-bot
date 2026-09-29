@@ -64,8 +64,14 @@ POSTGRES_IMAGE=registry.example.com/library/postgres@sha256:<trusted-postgres-di
 BUSYBOX_IMAGE=registry.example.com/library/busybox@sha256:<trusted-busybox-digest>
 ```
 
-Mirror both app and computer images and pair their tags to the same published version. Arm64
-hosts need multi-architecture tags; see [published images and tags](./self-host.md#published-images-and-tags).
+Mirror both app and computer images and pair their tags to the same published version. The
+default Docker engine uses `ARDURBOT_COMPUTER_IMAGE` only for the Standard profile; if bots use
+the Developer profile, retag its mirrored image as `ardurbot/computer:0.1.0-developer` or the
+resolved `ghcr.io/ardurai/ardur-bot/computer` name so the local engine finds it without pulling.
+Arm64 hosts need multi-architecture tags; see [published images and tags](./self-host.md#published-images-and-tags).
+Kubernetes clusters and Docker or Podman engines added in **Settings → Computers** can name their
+own images under **Advanced**, and a cluster an existing image pull Secret; see
+[hosted clusters](./compute-profiles.md#hosted-clusters-eks-aks-gke).
 Image overrides are defined in [docker-compose.images.yml](../infra/compose/docker-compose.images.yml).
 
 For Docker Hub images, you can instead merge `registry-mirrors` into the Docker daemon's existing
