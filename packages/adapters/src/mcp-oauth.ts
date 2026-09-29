@@ -9,6 +9,7 @@ import {
 } from "@ardurbot/contracts";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
 import { argumentSecrets } from "@ardurbot/host-runtime/mcp-diagnostics";
+import { getLogger } from "@ardurbot/logging";
 import type {
   OAuthClientProvider,
   OAuthDiscoveryState,
@@ -21,6 +22,7 @@ import type {
   OAuthClientMetadata,
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
+import { sanitizeConnectorError } from "./connector-safety.js";
 import { transientIntegrationError } from "./integration-lifecycle.js";
 import { secureFetch, validateUrl, withEndpointOriginFallback } from "./mcp-transport.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
@@ -489,12 +491,13 @@ export class McpOAuthBroker {
     context: ActorRef,
     loaded?: { material: OAuthMaterial; secretId?: string },
   ): Promise<OAuthClientProvider | undefined> {
-    const material = loaded ?? (await this.loadMaterial(server, context));
+    const actor = { spaceId: context.spaceId, userId: context.userId };
+    const material = loaded ?? (await this.loadMaterial(server, actor));
     if (!material.material.oauth) return undefined;
-    return this.createProvider(server, context, material, {
-      refresh: (force) => this.refreshMaterial(server, context, material.material, force),
+    return this.createProvider(server, actor, material, {
+      refresh: (force) => this.refreshMaterial(server, actor, material.material, force),
       rejected: async () => {
-        await this.rejectMaterial(server, context, material.material);
+        await this.rejectMaterial(server, actor, material.material);
       },
     });
   }
@@ -503,10 +506,18 @@ export class McpOAuthBroker {
     await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${server.id}))`;
       const current = await tx.mcpServer.findFirst({
-        where: { id: server.id, ...context, enabled: true, revision: server.revision },
+        where: {
+          id: server.id,
+          spaceId: context.spaceId,
+          userId: context.userId,
+          enabled: true,
+          revision: server.revision,
+        },
       });
       const row = current?.secretId
-        ? await tx.secret.findFirst({ where: { id: current.secretId, ...context } })
+        ? await tx.secret.findFirst({
+            where: { id: current.secretId, spaceId: context.spaceId, userId: context.userId },
+          })
         : null;
       if (!current || !row) return;
       const material = this.read(row.ciphertext, row.id);
@@ -518,7 +529,15 @@ export class McpOAuthBroker {
         traceId: "mcp.refresh",
         signal: AbortSignal.timeout(15_000),
       });
-      await tx.secret.create({ data: { ...stored, ...context, kind: "mcp" } });
+      await tx.secret.create({
+        data: {
+          id: stored.id,
+          spaceId: context.spaceId,
+          userId: context.userId,
+          kind: "mcp",
+          ciphertext: stored.ciphertext,
+        },
+      });
       await tx.mcpServer.update({
         where: { id: server.id },
         data: {
@@ -527,7 +546,9 @@ export class McpOAuthBroker {
           lastError: mcpSignInDiagnostic("invalid_token"),
         },
       });
-      await tx.secret.deleteMany({ where: { id: row.id, ...context } });
+      await tx.secret.deleteMany({
+        where: { id: row.id, spaceId: context.spaceId, userId: context.userId },
+      });
     });
   }
 
@@ -665,10 +686,18 @@ export class McpOAuthBroker {
         async (tx) => {
           await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${server.id}))`;
           const current = await tx.mcpServer.findFirst({
-            where: { id: server.id, ...context, enabled: true, revision: server.revision },
+            where: {
+              id: server.id,
+              spaceId: context.spaceId,
+              userId: context.userId,
+              enabled: true,
+              revision: server.revision,
+            },
           });
           const row = current?.secretId
-            ? await tx.secret.findFirst({ where: { id: current.secretId, ...context } })
+            ? await tx.secret.findFirst({
+                where: { id: current.secretId, spaceId: context.spaceId, userId: context.userId },
+              })
             : null;
           if (!current || !row || !server.endpoint) throw new Error("MCP server is unavailable");
           const material = this.read(row.ciphertext, row.id);
@@ -714,12 +743,22 @@ export class McpOAuthBroker {
               traceId: "mcp.refresh",
               signal: AbortSignal.timeout(15_000),
             });
-            await tx.secret.create({ data: { ...stored, ...context, kind: "mcp" } });
+            await tx.secret.create({
+              data: {
+                id: stored.id,
+                spaceId: context.spaceId,
+                userId: context.userId,
+                kind: "mcp",
+                ciphertext: stored.ciphertext,
+              },
+            });
             await tx.mcpServer.update({
               where: { id: server.id },
               data: { secretId: stored.id, lastError: null },
             });
-            await tx.secret.deleteMany({ where: { id: row.id, ...context } });
+            await tx.secret.deleteMany({
+              where: { id: row.id, spaceId: context.spaceId, userId: context.userId },
+            });
             return oauth;
           } catch (error) {
             const reason =
@@ -750,7 +789,15 @@ export class McpOAuthBroker {
                 traceId: "mcp.refresh",
                 signal: AbortSignal.timeout(15_000),
               });
-              await tx.secret.create({ data: { ...stored, ...context, kind: "mcp" } });
+              await tx.secret.create({
+                data: {
+                  id: stored.id,
+                  spaceId: context.spaceId,
+                  userId: context.userId,
+                  kind: "mcp",
+                  ciphertext: stored.ciphertext,
+                },
+              });
               await tx.mcpServer.update({
                 where: { id: server.id },
                 data: {
@@ -759,7 +806,9 @@ export class McpOAuthBroker {
                   lastError: mcpSignInDiagnostic(providerReason),
                 },
               });
-              await tx.secret.deleteMany({ where: { id: row.id, ...context } });
+              await tx.secret.deleteMany({
+                where: { id: row.id, spaceId: context.spaceId, userId: context.userId },
+              });
               return { ...oauth, tokens: undefined, failure: providerReason } as OAuthState & {
                 failure: string;
               };
@@ -775,6 +824,16 @@ export class McpOAuthBroker {
         if ("failure" in value)
           throw new McpReauthorizationRequiredError(server.id, String(value.failure));
         return value;
+      })
+      .catch((error: unknown) => {
+        if (!(error instanceof McpReauthorizationRequiredError)) {
+          getLogger().error("mcp oauth refresh failed", {
+            serverId: server.id,
+            spaceId: context.spaceId,
+            detail: sanitizeConnectorError(error, oauthMaterialSecrets(previous)),
+          });
+        }
+        throw error;
       });
   }
 
@@ -1131,6 +1190,7 @@ export class McpOAuthBroker {
     loaded: { material: OAuthMaterial; secretId?: string },
     options: ProviderOptions = {},
   ): StoredMcpOAuthProvider {
+    const actor = { spaceId: context.spaceId, userId: context.userId };
     return new StoredMcpOAuthProvider(
       server.id,
       loaded.material,
@@ -1138,7 +1198,7 @@ export class McpOAuthBroker {
         const stored = await this.replaceMaterial(
           server.id,
           material,
-          context,
+          actor,
           false,
           server.endpoint,
           server.catalogId || server.imported ? server.revision : undefined,
