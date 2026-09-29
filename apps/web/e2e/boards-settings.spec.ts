@@ -89,9 +89,23 @@ test("Boards settings save the chosen learning reviewer across a reload", async 
       },
     });
   });
-  await page.route("**/rpc/me", (route) =>
-    route.fulfill({ json: { json: { defaultProvider: "openai", defaultModel: "model-a" } } }),
-  );
+  // Settings > Boards is owner-only, and the e2e user is not the deployment owner by default.
+  await page.route("**/rpc/bootstrap", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: { json: { ...body.json, me: { ...body.json.me, isDeploymentOwner: true } } },
+    });
+  });
+  await page.route("**/rpc/me", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: { json: { ...body.json, defaultProvider: "openai", defaultModel: "model-a" } },
+    });
+  });
   await page.route("**/rpc/models/list", (route) =>
     route.fulfill({
       json: {
