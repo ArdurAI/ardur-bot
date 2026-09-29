@@ -620,3 +620,12 @@ it("settles each attempt against the amount it actually reserved", async () => {
   await db.$transaction((tx) => finishDelegation(tx, row.id, "completed", "Second pass"));
   expect(f.state().root.reservedTokens).toBe(0);
 });
+it("writes the overspend annotation into the card's completion event", async () => {
+  const f = fixture();
+  const row = await f.admit();
+  f.state().rows[0].usedTokens = row.reservedTokens + 100;
+  await f.worker().$transaction((tx) => finishDelegation(tx, row.id, "completed", "Done"));
+  const card = TaskCardSchema.parse(f.state().rows[0].card);
+  const event = card.timeline.findLast((entry) => entry.kind === "completed");
+  expect(event?.text).toContain("Overspent its token budget by 100 tokens.");
+});

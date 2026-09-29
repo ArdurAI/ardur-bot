@@ -559,7 +559,7 @@ export async function finishDelegation(
     },
   });
   if (!changed.count) return;
-  await appendTaskEvent(tx, row, status, text);
+  await appendTaskEvent(tx, row, status, resultText);
   const brokerHeld = row.runId ? await unresolvedBrokerTokens(tx, row.id, row.runId) : 0;
   const attemptSpent =
     row.hop > 1 && row.runId
