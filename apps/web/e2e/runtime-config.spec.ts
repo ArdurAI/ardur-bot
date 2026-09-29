@@ -65,8 +65,11 @@ test("the Hermes short panel and Advanced editor share one draft", async ({ page
     }),
   );
   await page.goto("/app/fixture-bot-0");
+  await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
   await page.getByTestId("bot-settings-trigger").click();
   const settings = page.getByTestId("bot-settings");
+  await expect(settings).toBeVisible();
+  await expect(settings.getByRole("combobox", { name: "Runs on" })).toBeVisible();
   await settings.getByRole("combobox", { name: "Runs on" }).selectOption("hermes");
 
   const panel = settings.getByTestId("runtime-config-panel");
@@ -160,6 +163,7 @@ test("a group shows captured runtime settings and refreshes them from the bot", 
   });
 
   await page.goto(`/app/g/${group.id}`);
+  await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
   await page.getByTestId("bot-settings-trigger").click();
   const control = page.getByTestId(`group-model-${botId}`);
   await control.getByText("Runtime settings", { exact: true }).click();
