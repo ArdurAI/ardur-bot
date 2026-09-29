@@ -22,6 +22,7 @@ msgid " — not available on your account"
 msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid " · not available"
 msgstr ""
 
@@ -62,6 +63,11 @@ msgstr "{0} सक्रिय कार्य"
 #: src/pages/settings/UploadedFiles.tsx
 msgid "{0} bytes"
 msgstr ""
+
+#. placeholder {0}: runtimeNames[coordinatorRuntime]
+#: src/pages/GroupPanel.tsx
+msgid "{0} can't use Ardur tools — a coordinator needs tools to hand off work."
+msgstr "{0} Ardur टूल उपयोग नहीं कर सकता — कोऑर्डिनेटर को काम सौंपने के लिए टूल चाहिए।"
 
 #. placeholder {0}: block.name
 #: src/pages/shell/message-cards.tsx
@@ -386,7 +392,6 @@ msgid "Accessibility"
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
-#: src/pages/account/AccountSettings.tsx
 #: src/pages/settings-sections.ts
 msgid "Account"
 msgstr "खाता"
@@ -589,6 +594,7 @@ msgstr "जोड़ा जा रहा है…"
 #: src/pages/RoutineSchedule.tsx
 #: src/pages/settings-sections.ts
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-config-panel.tsx
 msgid "Advanced"
 msgstr "उन्नत"
 
@@ -837,6 +843,10 @@ msgstr "Antigravity की वर्तमान मॉडल सूची क�
 msgid "Any"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "API attempts"
+msgstr "API प्रयास"
+
 #: src/components/SoftwareUpdateSection.tsx
 msgid "API is back, but the update did not finish. Check the host logs."
 msgstr ""
@@ -959,9 +969,21 @@ msgstr "आर्काइव किया गया। चैट, मेमो�
 msgid "Ardur (built-in)"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Ardur manages"
+msgstr "Ardur द्वारा प्रबंधित"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Ardur manages paths, hooks, permissions, and network access."
+msgstr "Ardur पथ, हुक, अनुमतियाँ और नेटवर्क पहुँच प्रबंधित करता है।"
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Ardur reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Ardur sets the model and thinking level. Change them in bot settings."
+msgstr "Ardur मॉडल और थिंकिंग स्तर सेट करता है। इन्हें बॉट सेटिंग्स में बदलें।"
 
 #: src/lib/board-close-copy.ts
 msgid "Ardur tried five times. Close it on the Board, or check that this computer is connected."
@@ -1264,6 +1286,10 @@ msgstr "बोर्ड"
 msgid "Booting"
 msgstr ""
 
+#: src/pages/Shell.tsx
+msgid "Booting live desktop…"
+msgstr "लाइव डेस्कटॉप बूट हो रहा है…"
+
 #. placeholder {0}: computerBot?.name ?? active?.name
 #: src/pages/Shell.tsx
 msgid "Booting up {0}’s computer"
@@ -1291,8 +1317,9 @@ msgid "Bot screen preview"
 msgstr "बॉट स्क्रीन प्रीव्यू"
 
 #: src/pages/BotContextMenu.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Bot settings"
-msgstr ""
+msgstr "बॉट सेटिंग्स"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Bot to link"
@@ -1465,6 +1492,10 @@ msgstr "रद्द किया गया"
 msgid "Capabilities"
 msgstr ""
 
+#: src/pages/group-model-control.tsx
+msgid "Captured for this group."
+msgstr "इस समूह के लिए कैप्चर किया गया।"
+
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Catalog"
 msgstr ""
@@ -1590,6 +1621,10 @@ msgstr ""
 msgid "Checkpoints"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Child agents"
+msgstr "चाइल्ड एजेंट"
+
 #: src/pages/customize/ConfigureExtension.tsx
 msgid "Choose"
 msgstr ""
@@ -1647,6 +1682,10 @@ msgstr ""
 #: src/pages/McpServersOverlay.tsx
 msgid "Choose one credential: a token or a header."
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Choose Trim older context or Stop the run."
+msgstr "«पुराना कॉन्टेक्स्ट छाँटें» या «रन रोकें» चुनें।"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Choose which connected model Ardur uses."
@@ -1871,10 +1910,10 @@ msgstr ""
 msgid "Compare bots"
 msgstr ""
 
+#: src/components/composer/ComposerMenu.tsx
 #: src/pages/CompareStart.tsx
-#: src/pages/Shell.tsx
 msgid "Compare with…"
-msgstr ""
+msgstr "तुलना करें…"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Complete"
@@ -1901,6 +1940,7 @@ msgstr ""
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Computer"
 msgstr "कंप्यूटर"
 
@@ -1916,6 +1956,10 @@ msgstr ""
 msgid "Computer engine is unavailable."
 msgstr ""
 
+#: src/pages/Shell.tsx
+msgid "Computer failed to boot"
+msgstr "कंप्यूटर बूट होने में विफल रहा"
+
 #: src/pages/storage/StorageSettings.tsx
 msgid "Computer homes"
 msgstr ""
@@ -1923,6 +1967,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Computer is asleep"
 msgstr "कंप्यूटर निष्क्रिय है"
+
+#: src/pages/Shell.tsx
+msgid "Computer is asleep. Open it to wake."
+msgstr "कंप्यूटर स्लीप मोड में है। जगाने के लिए इसे खोलें।"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -1953,6 +2001,14 @@ msgstr ""
 #: src/components/Context.tsx
 msgid "Concurrent runs"
 msgstr "समवर्ती रन"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Configuration (JSON)"
+msgstr "कॉन्फ़िगरेशन (JSON)"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Configuration must be 16 KiB or smaller."
+msgstr "कॉन्फ़िगरेशन 16 KiB या उससे छोटा होना चाहिए।"
 
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Configure"
@@ -2153,6 +2209,12 @@ msgstr "संदर्भ"
 #: src/pages/Onboarding.tsx
 msgid "Context limit"
 msgstr "कॉन्टेक्स्ट सीमा"
+
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Context limit (KiB)"
+msgstr "कॉन्टेक्स्ट सीमा (KiB)"
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/capabilities/CapabilitiesPage.tsx
@@ -2662,6 +2724,10 @@ msgstr "टेस्ट क्लिप नहीं चलाई जा सक�
 msgid "Could not prepare the import. Try again."
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Could not preview the configuration. Try again."
+msgstr "कॉन्फ़िगरेशन का पूर्वावलोकन नहीं हो सका। फिर कोशिश करें।"
+
 #: src/pages/LocalSettings.tsx
 msgid "Could not reach the local server. Start it and try again."
 msgstr ""
@@ -2868,7 +2934,7 @@ msgstr ""
 
 #: src/pages/CompareStart.tsx
 msgid "Could not start comparison; retry."
-msgstr ""
+msgstr "तुलना शुरू नहीं हो सकी; फिर से कोशिश करें।"
 
 #: src/pages/CompareStart.tsx
 msgid "Could not start comparison; review the pins and retry."
@@ -3357,6 +3423,10 @@ msgstr ""
 msgid "Developer (git, GitHub and GitLab CLIs, node, jq)"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Developer image"
+msgstr ""
+
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Developer is a larger download and uses more disk space."
 msgstr ""
@@ -3380,6 +3450,10 @@ msgstr ""
 #: src/pages/settings-sections.ts
 msgid "Devices"
 msgstr ""
+
+#: src/pages/account/AccountSettings.tsx
+msgid "Devices and sessions"
+msgstr "डिवाइस और सेशन"
 
 #: src/pages/DevicesSettings.tsx
 msgid "Devices are unavailable; reconnect to your home."
@@ -3606,6 +3680,10 @@ msgstr "पहले संपादित करें"
 msgid "Education"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Effective configuration"
+msgstr "प्रभावी कॉन्फ़िगरेशन"
+
 #: src/pages/TeamBoard.tsx
 msgid "Effort"
 msgstr ""
@@ -3615,7 +3693,6 @@ msgid "Effort: not applicable"
 msgstr ""
 
 #: src/pages/Auth.tsx
-#: src/pages/settings-sections.ts
 msgid "Email"
 msgstr "ईमेल"
 
@@ -3687,6 +3764,10 @@ msgstr "इमेज सीमा के लिए 1 से 1000 के बी�
 #: src/pages/Onboarding.tsx
 msgid "Enter this code at <0>{0}</0>"
 msgstr "यह कोड <0>{0}</0> पर दर्ज करें"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Enter valid JSON."
+msgstr "मान्य JSON दर्ज करें।"
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Environment values are requested when you connect this server."
@@ -3778,7 +3859,7 @@ msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Expand workspace"
-msgstr ""
+msgstr "कार्यक्षेत्र का विस्तार करें"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
@@ -3890,7 +3971,7 @@ msgstr ""
 #: src/pages/workspace/WorkspaceFiles.tsx
 #: src/pages/workspace/WorkspacePane.tsx
 msgid "Files"
-msgstr ""
+msgstr "फ़ाइलें"
 
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Files are unavailable on this computer."
@@ -3955,6 +4036,10 @@ msgstr "MCP कनेक्शन पूरा हो रहा है…"
 #: src/pages/GuidedOnboarding.tsx
 msgid "First bot not created"
 msgstr "पहला बॉट नहीं बनाया गया"
+
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Fix the configuration JSON to edit these settings."
+msgstr "ये सेटिंग्स संपादित करने के लिए कॉन्फ़िगरेशन JSON ठीक करें।"
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Flag unexpected actions"
@@ -4103,6 +4188,7 @@ msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group"
 msgstr "समूह"
 
@@ -4110,7 +4196,7 @@ msgstr "समूह"
 msgid "Group brief"
 msgstr "समूह का संक्षिप्त विवरण"
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group settings"
 msgstr "समूह सेटिंग्स"
 
@@ -4174,6 +4260,10 @@ msgstr "Hermes अभी इस कनेक्शन का समर्थन 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes is not installed on this computer."
 msgstr "इस कंप्यूटर पर Hermes इंस्टॉल नहीं है।"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Hermes isn't available on Windows yet."
+msgstr "Hermes अभी Windows पर उपलब्ध नहीं है।"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."
@@ -4273,6 +4363,10 @@ msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Image profile"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Image pull secret"
 msgstr ""
 
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -4677,6 +4771,7 @@ msgstr ""
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/settings-sections.ts
+#: src/pages/shell/runtime-config-panel.tsx
 msgid "Learning"
 msgstr ""
 
@@ -4844,7 +4939,7 @@ msgstr ""
 
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Loading tasks…"
-msgstr ""
+msgstr "कार्य लोड हो रहे हैं…"
 
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Loading the extension catalogue…"
@@ -4871,6 +4966,7 @@ msgstr ""
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/SharedCommand.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
 msgid "Loading…"
 msgstr "लोड हो रहा है…"
 
@@ -5047,6 +5143,7 @@ msgstr ""
 #: src/pages/memory/MemoryProposals.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/settings-sections.ts
+#: src/pages/shell/bot-panel.tsx
 msgid "Memory"
 msgstr "मेमोरी"
 
@@ -5210,7 +5307,9 @@ msgstr "मॉडल"
 msgid "Model & effort"
 msgstr ""
 
-#: src/pages/shell/hermes-limits.tsx
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
 msgid "Model calls per turn"
 msgstr "प्रति टर्न मॉडल कॉल"
 
@@ -5258,6 +5357,10 @@ msgstr "मॉडल अपडेट किया गया।"
 #: src/pages/ComparePanel.tsx
 msgid "Model version"
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Model, thinking, connections, tools, and permissions come from Ardur."
+msgstr "मॉडल, थिंकिंग, कनेक्शन, टूल और अनुमतियाँ Ardur से आती हैं।"
 
 #: src/pages/LocalSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -5375,6 +5478,18 @@ msgstr ""
 msgid "Namespace"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Native child agents are not available with Hermes."
+msgstr "Hermes के साथ नेटिव चाइल्ड एजेंट उपलब्ध नहीं हैं।"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Native compression"
+msgstr "नेटिव कंप्रेशन"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Native compression is not available with Hermes."
+msgstr "Hermes के साथ नेटिव कंप्रेशन उपलब्ध नहीं है।"
+
 #: src/pages/shell/TopNav.tsx
 msgid "Navigation"
 msgstr ""
@@ -5475,6 +5590,7 @@ msgid "Next"
 msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid "Next run"
 msgstr "अगला रन"
 
@@ -5795,7 +5911,7 @@ msgstr ""
 
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Nothing running or queued"
-msgstr ""
+msgstr "कुछ भी चल नहीं रहा है या कतार में नहीं है"
 
 #: src/pages/LearningInbox.tsx
 msgid "Nothing to review."
@@ -5850,6 +5966,7 @@ msgid "Obsidian vault"
 msgstr ""
 
 #: src/pages/shell/model-pin-select.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Off"
 msgstr ""
@@ -5970,7 +6087,7 @@ msgstr ""
 
 #: src/pages/workspace/WorkspaceScreen.tsx
 msgid "Open screen"
-msgstr ""
+msgstr "स्क्रीन खोलें"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open Screen recording settings"
@@ -5978,7 +6095,7 @@ msgstr ""
 
 #: src/pages/workspace/WorkspaceScreen.tsx
 msgid "Open screen to view this computer."
-msgstr ""
+msgstr "इस कंप्यूटर को देखने के लिए स्क्रीन खोलें।"
 
 #: src/components/composer/command-description.ts
 msgid "Open Settings"
@@ -6344,8 +6461,9 @@ msgstr ""
 #: src/pages/account/AccountProfile.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/memory/MemoryProposals.tsx
+#: src/pages/shell/bot-panel.tsx
 msgid "Profile"
-msgstr ""
+msgstr "प्रोफ़ाइल"
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Project ID"
@@ -6727,6 +6845,10 @@ msgstr ""
 msgid "Remove skill {0}"
 msgstr "स्किल {0} हटाएं"
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Remove the duplicate field."
+msgstr "डुप्लिकेट फ़ील्ड हटाएँ।"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Remove webhook"
 msgstr ""
@@ -6838,6 +6960,7 @@ msgstr "अनुरोध की समय-सीमा समाप्त ह�
 
 #: src/pages/ComparePanel.tsx
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 #: src/pages/TeamBoard.tsx
 msgid "requested"
 msgstr "अनुरोधित"
@@ -6901,6 +7024,10 @@ msgstr ""
 msgid "Reset password"
 msgstr "पासवर्ड रीसेट करें"
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Reset to defaults"
+msgstr "डिफ़ॉल्ट पर रीसेट करें"
+
 #: src/pages/Auth.tsx
 msgid "Reset your password"
 msgstr "अपना पासवर्ड रीसेट करें"
@@ -6908,6 +7035,10 @@ msgstr "अपना पासवर्ड रीसेट करें"
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Resetting…"
 msgstr "रीसेट हो रहा है…"
+
+#: src/pages/Shell.tsx
+msgid "Resize pane"
+msgstr "पैनल का आकार बदलें"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Resources"
@@ -6962,6 +7093,7 @@ msgstr "टीम संदेश फिर शुरू करें"
 
 #: src/components/Context.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
+#: src/pages/account/AccountProfile.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -7005,7 +7137,7 @@ msgstr "Ardur पर लौटें"
 
 #: src/pages/Shell.tsx
 msgid "Return to conversation"
-msgstr ""
+msgstr "बातचीत पर लौटें"
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "Return to setup"
@@ -7201,6 +7333,14 @@ msgstr ""
 msgid "Runtime availability could not be checked."
 msgstr ""
 
+#: src/pages/group-model-control.tsx
+msgid "Runtime settings"
+msgstr "रनटाइम सेटिंग्स"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Runtime settings cannot install or load code."
+msgstr "रनटाइम सेटिंग्स कोड इंस्टॉल या लोड नहीं कर सकतीं।"
+
 #: src/pages/LearningObservation.tsx
 msgid "safety"
 msgstr ""
@@ -7262,6 +7402,10 @@ msgstr "फिर भी सहेजें"
 msgid "Save credentials"
 msgstr ""
 
+#: src/pages/account/AccountProfile.tsx
+msgid "Save instructions"
+msgstr "निर्देश सहेजें"
+
 #: src/pages/group-model-control.tsx
 msgid "Save model"
 msgstr "मॉडल सहेजें"
@@ -7303,6 +7447,10 @@ msgstr ""
 #: src/pages/ScratchpadSection.tsx
 msgid "Saved, but list refresh failed"
 msgstr "सहेजा गया, लेकिन सूची रिफ़्रेश विफल रही"
+
+#: src/pages/account/AccountProfile.tsx
+msgid "Saved, but not applied everywhere."
+msgstr "सहेजा गया, लेकिन हर जगह लागू नहीं हुआ।"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Saved."
@@ -7346,7 +7494,7 @@ msgstr ""
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/workspace/WorkspacePane.tsx
 msgid "Screen"
-msgstr ""
+msgstr "स्क्रीन"
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Screen and terminal: Not available on this computer"
@@ -7585,6 +7733,7 @@ msgstr ""
 #: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Settings"
 msgstr "सेटिंग्स"
 
@@ -7630,9 +7779,9 @@ msgstr ""
 msgid "Show bots"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show computer"
-msgstr ""
+msgstr "कंप्यूटर दिखाएं"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Show in the menu bar."
@@ -7650,7 +7799,7 @@ msgstr "और दिखाएँ"
 msgid "Show password"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show settings"
 msgstr "सेटिंग्स दिखाएं"
 
@@ -7695,6 +7844,10 @@ msgstr ""
 #: src/pages/Welcome.tsx
 msgid "Sign up"
 msgstr "साइन अप करें"
+
+#: src/pages/account/AccountSettings.tsx
+msgid "Sign-in and security"
+msgstr "साइन-इन और सुरक्षा"
 
 #: src/lib/mcp-sign-in.ts
 msgid "Sign-in did not finish. Try again."
@@ -7886,6 +8039,10 @@ msgstr ""
 msgid "Standard"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Standard image"
+msgstr ""
+
 #: src/components/composer/command-description.ts
 msgid "Start a new chat"
 msgstr ""
@@ -7985,6 +8142,10 @@ msgstr "सिखाना रोकें"
 msgid "Stop the current run"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Stop the run"
+msgstr "रन रोकें"
+
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Stop work in this conversation"
 msgstr ""
@@ -8073,9 +8234,10 @@ msgid "System"
 msgstr "सिस्टम"
 
 #: src/pages/ide/terminal.tsx
+#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 msgid "Take control"
-msgstr ""
+msgstr "नियंत्रण लें"
 
 #: src/pages/ide/terminal.tsx
 #: src/pages/shell/computer-terminal.tsx
@@ -8098,7 +8260,7 @@ msgstr ""
 #: src/pages/Shell.tsx
 #: src/pages/workspace/WorkspacePane.tsx
 msgid "Tasks"
-msgstr ""
+msgstr "कार्य"
 
 #: src/pages/customize/SkillsPage.tsx
 msgid "Taught skills"
@@ -8210,6 +8372,10 @@ msgstr "पहला बॉट नहीं बनाया जा सका। 
 #: src/pages/group-model-control.tsx
 msgid "The group model choice was reloaded. Pick again."
 msgstr "समूह का मॉडल चयन फिर से लोड हो गया है। दोबारा चुनें।"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "The Hermes install on this computer failed its safety check."
+msgstr "इस कंप्यूटर पर Hermes की स्थापना सुरक्षा जाँच में विफल रही।"
 
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
@@ -8330,6 +8496,18 @@ msgstr "यह कंप्यूटर"
 msgid "This computer"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "This configuration is too complex."
+msgstr "यह कॉन्फ़िगरेशन बहुत जटिल है।"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "This configuration version is not supported."
+msgstr "यह कॉन्फ़िगरेशन संस्करण समर्थित नहीं है।"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "This field is not supported."
+msgstr "यह फ़ील्ड समर्थित नहीं है।"
+
 #: src/components/ArtifactFileCard.tsx
 msgid "This file is not valid UTF-8 Markdown."
 msgstr "यह फ़ाइल मान्य UTF-8 Markdown नहीं है।"
@@ -8447,9 +8625,11 @@ msgstr ""
 msgid "Thumbs"
 msgstr ""
 
-#: src/pages/shell/hermes-limits.tsx
-msgid "Time limit"
-msgstr "समय सीमा"
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Time limit (seconds)"
+msgstr "समय सीमा (सेकंड)"
 
 #: src/pages/RoutineSchedule.tsx
 msgid "Time of day"
@@ -8557,6 +8737,10 @@ msgstr ""
 msgid "Treg token"
 msgstr "Treg टोकन"
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Trim older context"
+msgstr "पुराना कॉन्टेक्स्ट छाँटें"
+
 #: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Trusted folders"
@@ -8570,6 +8754,7 @@ msgstr ""
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/computer-screen-error.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
 msgid "Try again"
 msgstr "फिर से कोशिश करें"
 
@@ -8595,6 +8780,10 @@ msgstr "असाइन नहीं किया गया"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Unavailable"
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Unavailable with Hermes."
+msgstr "Hermes के साथ उपलब्ध नहीं।"
 
 #: src/pages/LearningObservation.tsx
 msgid "unclassified"
@@ -8766,6 +8955,23 @@ msgstr "मिला हुआ मॉडल उपयोग करें"
 msgid "Use a token"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Use a whole number from 1 to 3."
+msgstr "1 से 3 तक की पूर्ण संख्या डालें।"
+
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use a whole number from 1 to 600."
+msgstr "1 से 600 तक की पूर्ण संख्या डालें।"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use a whole number from 1 to 64."
+msgstr "1 से 64 तक की पूर्ण संख्या डालें।"
+
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use a whole number from 4 to 64."
+msgstr "4 से 64 तक की पूर्ण संख्या डालें।"
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Use all selected tools"
@@ -8774,6 +8980,22 @@ msgstr "सभी चुने हुए टूल इस्तेमाल क�
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Use all selected tools, or choose a subset for this bot."
 msgstr "सभी चुने हुए टूल इस्तेमाल करें या इस बॉट के लिए कुछ टूल चुनें।"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Use Ardur Connections for provider settings."
+msgstr "प्रदाता सेटिंग्स के लिए Ardur कनेक्शन का उपयोग करें।"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Use Ardur Learning settings."
+msgstr "Ardur लर्निंग सेटिंग्स का उपयोग करें।"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Use Ardur settings for tools, integrations, MCP servers, skills, and plugins."
+msgstr "टूल, इंटीग्रेशन, MCP सर्वर, स्किल और प्लगइन के लिए Ardur सेटिंग्स का उपयोग करें।"
+
+#: src/pages/group-model-control.tsx
+msgid "Use bot runtime settings"
+msgstr "बॉट रनटाइम सेटिंग्स उपयोग करें"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Use default guidance"
@@ -8801,11 +9023,22 @@ msgstr ""
 msgid "Use this model"
 msgstr "यह मॉडल उपयोग करें"
 
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use whole KiB."
+msgstr "पूर्ण KiB डालें।"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use whole seconds."
+msgstr "पूर्ण सेकंड डालें।"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "User"
 msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid "Using {currentId}"
 msgstr "{currentId} का उपयोग हो रहा है"
 
@@ -8966,6 +9199,10 @@ msgstr ""
 msgid "When a webhook fires"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "When context is full"
+msgstr "जब कॉन्टेक्स्ट भर जाए"
+
 #: src/pages/settings/GeneralSettings.tsx
 msgid "When routines finish, cannot run, or need your input."
 msgstr ""
@@ -9008,11 +9245,14 @@ msgstr "काम जारी है"
 msgid "Working from the last copy"
 msgstr ""
 
-#. placeholder {0}: row.currentTaskTitle ?? row.sentence
-#. placeholder {1}: row.requesterName
 #: src/pages/TeamBoard.tsx
-msgid "Working on {0} for {1}"
-msgstr ""
+msgid "Working on {task}"
+msgstr "{task} पर काम कर रहा है"
+
+#. placeholder {0}: row.requesterName
+#: src/pages/TeamBoard.tsx
+msgid "Working on {task} for {0}"
+msgstr "{0} के लिए {task} पर काम कर रहा है"
 
 #: src/pages/Auth.tsx
 #: src/pages/CallView.tsx
@@ -9021,9 +9261,9 @@ msgid "Working…"
 msgstr "काम चल रहा है…"
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Workspace"
-msgstr ""
+msgstr "कार्यक्षेत्र"
 
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Workspace or server ID"
@@ -9098,6 +9338,10 @@ msgstr "आपका नाम"
 #: src/pages/DevicesSettings.tsx
 msgid "Your phone can reach this Mac on your network."
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Your settings"
+msgstr "आपकी सेटिंग्स"
 
 #: src/pages/Welcome.tsx
 msgid "Your team of always-on agents<0/>that you can give real work to."

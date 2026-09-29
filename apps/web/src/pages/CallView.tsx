@@ -56,6 +56,7 @@ export function CallView({
   }
 
   function interrupt() {
+    setCaption("");
     if (phaseRef.current === "speaking") void withSpeaker((speaker) => speaker.stop());
     else dictation.stop("cancel");
     void listen();
@@ -150,6 +151,7 @@ export function CallView({
     });
     void listen();
     return () => {
+      closing.current = true;
       cancelled = true;
       unsubSpeech?.();
       unsubDictation();
@@ -200,6 +202,7 @@ export function CallView({
               },
             ),
           (error) => {
+            if (closing.current) return;
             console.error(error);
             setError(t`Voice failed`);
             setCaption("");
@@ -239,6 +242,7 @@ export function CallView({
           (speaker) =>
             speaker.speak(phrases.join(". "), { botId, messageId: `narrate:${lastKey}` }),
           (error) => {
+            if (closing.current) return;
             console.error(error);
             setError(t`Voice failed`);
             setCaption("");

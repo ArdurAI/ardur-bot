@@ -18,6 +18,27 @@ describe("lingui catalogs", () => {
   });
 
   it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+    "catalogs the rebuilt Account card headings and actions in %s",
+    async (locale) => {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const catalog = await formatter().parse(readFileSync(filename, "utf8"), {
+        locale,
+        sourceLocale: "en",
+        filename,
+      });
+      for (const message of [
+        "Sign-in and security",
+        "Devices and sessions",
+        "Save instructions",
+        "Saved, but not applied everywhere.",
+      ]) {
+        const entry = Object.values(catalog).find((value) => value.message === message);
+        expect(entry?.translation, `${locale}: ${message}`).toBeTruthy();
+      }
+    },
+  );
+
+  it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
     "catalogs the authenticated guided account controls in %s",
     async (locale) => {
       const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
@@ -460,6 +481,21 @@ describe("lingui catalogs", () => {
     }
   });
 
+  it("ships the Team board working labels in every catalog", () => {
+    // Production strips source text, so a label missing from the catalog renders as its message id.
+    const sentences = ["Working on {task}", "Working on {task} for {0}"];
+    for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      for (const sentence of sentences) {
+        expect(catalog).toContain(`#: src/pages/TeamBoard.tsx\nmsgid ${JSON.stringify(sentence)}`);
+        expect(catalog).not.toContain(`msgid ${JSON.stringify(sentence)}\nmsgstr ""`);
+      }
+    }
+  });
+
   it("ships both computer preparation messages in every catalog", () => {
     const sentences = ["Preparing the bot computer…", "Preparing the bot computer… {percent}%"];
     for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {
@@ -470,6 +506,45 @@ describe("lingui catalogs", () => {
       for (const sentence of sentences) {
         expect(catalog).toContain(`#: src/pages/Shell.tsx\nmsgid ${JSON.stringify(sentence)}`);
         expect(catalog).not.toContain(`msgid ${JSON.stringify(sentence)}\nmsgstr ""`);
+      }
+    }
+  });
+
+  it("translates the coordinator tools warning in every supported catalog", () => {
+    const message = "{0} can't use Ardur tools — a coordinator needs tools to hand off work.";
+    for (const locale of ["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      expect(catalog, `${locale}: extracted from GroupPanel`).toContain(
+        `#: src/pages/GroupPanel.tsx\nmsgid ${JSON.stringify(message)}`,
+      );
+      const key = `msgid ${JSON.stringify(message)}\nmsgstr "`;
+      const at = catalog.indexOf(key);
+      expect(at, `${locale}: ${message} missing from catalog`).toBeGreaterThanOrEqual(0);
+      const translated = catalog.slice(at + key.length, catalog.indexOf('"', at + key.length));
+      expect(translated.trim(), `${locale}: ${message} must not be empty`).toBeTruthy();
+    }
+  });
+
+  it("translates new computer placeholders in every shipped catalog", () => {
+    const sentences = [
+      "Booting live desktop…",
+      "Computer is asleep. Open it to wake.",
+      "Computer failed to boot",
+      "Computer",
+    ];
+    for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      for (const sentence of sentences) {
+        expect(catalog).toContain(`msgid ${JSON.stringify(sentence)}`);
+        if (locale !== "en") {
+          expect(catalog).not.toContain(`msgid ${JSON.stringify(sentence)}\nmsgstr ""`);
+        }
       }
     }
   });

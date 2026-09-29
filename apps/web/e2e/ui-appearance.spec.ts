@@ -46,7 +46,7 @@ async function captureSidebarSearchSelected(
 
 test("account settings appearance control switches to light mode", async ({ page }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `ui-appearance-${stamp}@ardurbot.test`, "password12", "Appearance QA");
+  await signup(page, `ui-appearance-${stamp}@example.test`, "password12", "Appearance QA");
   await completeOnboarding(page, testInfo);
 
   await page.locator("header.app-drag").getByRole("button", { name: "Settings" }).click();
@@ -96,7 +96,7 @@ test("account settings appearance control switches to light mode", async ({ page
 
 test("sidebar bot rows share the same hover tone", async ({ page }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `ui-hover-${stamp}@ardurbot.test`, "password12", "Hover QA");
+  await signup(page, `ui-hover-${stamp}@example.test`, "password12", "Hover QA");
   await completeOnboarding(page, testInfo);
   await createNamedBot(page, "Second Bot");
 

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import type { Bot, GroupMember, ProductEvent, ThreadSnapshot } from "@ardurbot/contracts";
+import type { Bot, GroupMember } from "@ardurbot/contracts";
 import { modelPinOptionKey } from "@ardurbot/core";
+import { ORPCError } from "@orpc/client";
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -40,7 +41,6 @@ vi.mock("../lib/rpc", () => ({
   },
 }));
 
-import { activeMemberRun, reduceThreadSnapshot } from "../lib/thread-events";
 import { GroupModelControl } from "./group-model-control";
 import { BotModelChip } from "./shell/bot-model-chip";
 
@@ -351,7 +351,7 @@ describe("group model control", () => {
     expect(save).toHaveBeenLastCalledWith(member, null);
   });
 
-  it("keeps the confirmed choice after a failed save", async () => {
+  it("keeps the unsaved choice selected after a failed save", async () => {
     const save = vi.fn(async () => {
       throw new Error("conflict");
     });
@@ -363,10 +363,45 @@ describe("group model control", () => {
         .querySelector("button:last-child")!
         .dispatchEvent(new MouseEvent("click", { bubbles: true })),
     );
-    expect(select.value).toBe(modelPinOptionKey("test", "model-a", "credential"));
+    expect(select.value).toBe("");
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(
       "Could not save group model.",
     );
+  });
+
+  it("shows the server message next to the control, retains the unsaved choice on save failure, and clears on retry", async () => {
+    let attempts = 0;
+    const save = vi.fn(async () => {
+      attempts++;
+      if (attempts === 1) {
+        throw new ORPCError("FORBIDDEN", {
+          message: "Native runtimes need a single-user host for now — change the pin.",
+        });
+      }
+      return undefined;
+    });
+    await render(member, save);
+    const select = container.querySelector("select")!;
+    expect(select.value).toBe("");
+    const newChoice = modelPinOptionKey("test", "model-a", "credential");
+    await change(select, newChoice);
+    expect(select.value).toBe(newChoice);
+
+    const saveButton = [...container.querySelectorAll("button")].find(
+      (b) => b.textContent === "Save model",
+    )!;
+    await act(async () => saveButton.click());
+
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "Native runtimes need a single-user host for now — change the pin.",
+    );
+    expect(select.value).toBe(newChoice);
+
+    // Retry saving the same unsaved choice
+    await act(async () => saveButton.click());
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(container.querySelector('[role="alert"]')).toBeNull();
   });
 
   it("reloads a conflicting member so the next save uses the fresh revision", async () => {
@@ -374,8 +409,8 @@ describe("group model control", () => {
     const fresh = { ...stale, modelPinRevision: 2 };
     const save = vi.fn(async (value: GroupMember) => {
       if (value.modelPinRevision !== 2) {
-        throw Object.assign(new Error("Server conflict detail"), {
-          code: "CONFLICT",
+        throw new ORPCError("CONFLICT", {
+          message: "This member's model revision cannot advance.",
         });
       }
     });
@@ -402,12 +437,12 @@ describe("group model control", () => {
     expect(save).toHaveBeenLastCalledWith(fresh, expect.objectContaining({ modelId: "model-a" }));
   });
 
-  it("restores inheritance when a conflict reload finds a cleared override", async () => {
+  it("reloads the latest choice and asks to pick again after a conflict", async () => {
     const stale = { ...member, modelPinRevision: 1, runtimePin: pin };
     const fresh = { ...member, modelPinRevision: 2, runtimePin: null };
     const save = vi.fn(async () => {
-      throw Object.assign(new Error("This member's model changed. Reload the group."), {
-        code: "CONFLICT",
+      throw new ORPCError("CONFLICT", {
+        message: "This member's model changed. Reload the group.",
       });
     });
     await act(async () =>
@@ -422,7 +457,11 @@ describe("group model control", () => {
       ),
     );
     await act(async () => container.querySelector<HTMLButtonElement>("button:last-child")!.click());
+    // Someone else changed this member's model: show the reloaded choice, not the stale one.
     expect(container.querySelector("select")?.value).toBe("");
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "The group model choice was reloaded. Pick again.",
+    );
   });
 
   it("disables edits for an unsaved member", async () => {
@@ -430,92 +469,6 @@ describe("group model control", () => {
     expect(container.querySelector("select")?.disabled).toBe(true);
     expect(container.querySelector("button:last-child")?.hasAttribute("disabled")).toBe(true);
     expect(save).not.toHaveBeenCalled();
-  });
-
-  it("uses the active run's saved pin for the participant badge", async () => {
-    await act(async () =>
-      root.render(
-        <BotModelChip
-          bot={bot}
-          settings={settings}
-          pin={pin}
-          nextPin={pin}
-          display="using"
-          run={{ runtimePin: { ...pin, modelId: "model-old", revision: 0 } }}
-        />,
-      ),
-    );
-    expect(container.querySelector('[aria-label="Using model-old"]')).not.toBeNull();
-    expect(container.textContent).toContain("Next run");
-  });
-
-  it("waits for a live run's admitted pin before showing Using", async () => {
-    const snapshot: ThreadSnapshot = {
-      groupId: "room",
-      threadId: "thread",
-      cursor: 0,
-      messages: [],
-      olderCursor: null,
-      run: null,
-      activeRuns: [],
-    };
-    const start = {
-      id: "event",
-      spaceId: "space",
-      threadId: "thread",
-      botId: "bot",
-      seq: 1,
-      type: "run.started",
-      runId: "run",
-      createdAt: "2026-09-01T00:00:00Z",
-      payload: {},
-    } as ProductEvent;
-    const nextPin = { ...pin, modelId: "new-choice" };
-    const renderBadge = async (current: ThreadSnapshot | null) =>
-      act(async () =>
-        root.render(
-          <BotModelChip
-            bot={bot}
-            settings={settings}
-            pin={nextPin}
-            nextPin={nextPin}
-            display="using"
-            run={activeMemberRun(current?.activeRuns ?? [], "bot")}
-          />,
-        ),
-      );
-
-    const pending = reduceThreadSnapshot(snapshot, start);
-    await renderBadge(pending);
-    expect(container.querySelector('[aria-label="Using new-choice"]')).toBeNull();
-    expect(container.textContent).toContain("Next run");
-
-    const admitted = reduceThreadSnapshot(pending!, {
-      ...start,
-      id: "admitted",
-      seq: 2,
-      payload: { runtimePin: pin },
-    });
-    await renderBadge(admitted);
-    expect(container.querySelector('[aria-label="Using model-a"]')).not.toBeNull();
-    expect(container.textContent).toContain("Next run");
-  });
-
-  it("shows the inherited next choice after clearing an active override", async () => {
-    await act(async () =>
-      root.render(
-        <BotModelChip
-          bot={bot}
-          settings={settings}
-          nextPin={null}
-          display="using"
-          run={{ runtimePin: { ...pin, modelId: "model-old", revision: 0 } }}
-        />,
-      ),
-    );
-    expect(container.querySelector('[aria-label="Using model-old"]')).not.toBeNull();
-    expect(container.textContent).toContain("Next run");
-    expect(container.textContent).toContain("model-a");
   });
 
   it("names the default connection when a newer matching connection comes first", async () => {
@@ -807,5 +760,172 @@ describe("group model control", () => {
     );
     expect(container.querySelector("button")?.getAttribute("aria-label")).toContain("model-b");
     expect(container.querySelector("button")?.getAttribute("aria-label")).not.toContain("model-a");
+  });
+
+  it("displays captured Hermes runtime settings and allows refreshing to bot settings", async () => {
+    const groupMember = {
+      ...member,
+      modelPinRevision: 1,
+      runtimePin: {
+        runtimeKind: "hermes" as const,
+        provider: "openai-compatible",
+        modelId: "model-a",
+        credentialId: "credential",
+        effort: "high",
+        revision: 1,
+        runtimeConfig: {
+          version: 2 as const,
+          runtimeKind: "hermes" as const,
+          limits: {
+            maxProviderRequests: 5,
+            timeoutMs: 30_000,
+          },
+          context: {
+            maxInputBytes: 16_384,
+            overflow: "trim" as const,
+          },
+          harness: {
+            agent: {
+              api_max_retries: 1,
+            },
+          },
+        },
+      },
+    };
+    const hermesBot = {
+      ...bot,
+      runtimeKind: "hermes" as const,
+      modelPinRevision: 3,
+      runtimeExperimental: true,
+      runtimeConfig: {
+        version: 2 as const,
+        runtimeKind: "hermes" as const,
+        limits: {
+          maxProviderRequests: 10,
+          timeoutMs: 60_000,
+        },
+        context: {
+          maxInputBytes: 32_768,
+          overflow: "trim" as const,
+        },
+        harness: {
+          agent: {
+            api_max_retries: 1,
+          },
+        },
+      },
+    };
+    const save = vi.fn(async () => undefined);
+    await act(async () =>
+      root.render(
+        <GroupModelControl
+          member={groupMember}
+          bot={hermesBot}
+          settings={settings}
+          onSave={save}
+        />,
+      ),
+    );
+
+    const text = container.textContent ?? "";
+    expect(text).toContain("Runtime settings");
+    expect(text).toContain("Model calls per turn: 5");
+    expect(text).toContain("Time limit (seconds): 30");
+    expect(text).toContain("Context limit (KiB): 16");
+    expect(text).toContain("Captured for this group.");
+
+    const refreshButton = [...container.querySelectorAll("button")].find(
+      (b) => b.textContent === "Use bot runtime settings",
+    );
+    expect(refreshButton).toBeDefined();
+
+    await act(async () => refreshButton!.click());
+    expect(save).toHaveBeenCalledWith(
+      groupMember,
+      expect.objectContaining({
+        runtimeKind: "hermes",
+        provider: "openai-compatible",
+        modelId: "model-a",
+      }),
+      3,
+    );
+  });
+
+  it("handles conflict when refreshing group runtime settings", async () => {
+    const groupMember = {
+      ...member,
+      modelPinRevision: 1,
+      runtimePin: {
+        runtimeKind: "hermes" as const,
+        provider: "openai-compatible",
+        modelId: "model-a",
+        credentialId: "credential",
+        effort: "high",
+        revision: 1,
+        runtimeConfig: {
+          version: 2 as const,
+          runtimeKind: "hermes" as const,
+          limits: {
+            maxProviderRequests: 5,
+            timeoutMs: 30_000,
+          },
+          context: {
+            maxInputBytes: 16_384,
+            overflow: "trim" as const,
+          },
+          harness: {
+            agent: {
+              api_max_retries: 1,
+            },
+          },
+        },
+      },
+    };
+    const hermesBot = {
+      ...bot,
+      runtimeKind: "hermes" as const,
+      modelPinRevision: 3,
+      runtimeExperimental: true,
+      runtimeConfig: {
+        version: 2 as const,
+        runtimeKind: "hermes" as const,
+        limits: {
+          maxProviderRequests: 10,
+          timeoutMs: 60_000,
+        },
+        context: {
+          maxInputBytes: 32_768,
+          overflow: "trim" as const,
+        },
+        harness: {
+          agent: {
+            api_max_retries: 1,
+          },
+        },
+      },
+    };
+    const save = vi.fn(async () => {
+      throw new ORPCError("CONFLICT", {
+        message: "Bot settings changed. Reload before saving.",
+      });
+    });
+    await act(async () =>
+      root.render(
+        <GroupModelControl
+          member={groupMember}
+          bot={hermesBot}
+          settings={settings}
+          onSave={save}
+        />,
+      ),
+    );
+
+    const refreshButton = [...container.querySelectorAll("button")].find(
+      (b) => b.textContent === "Use bot runtime settings",
+    );
+    await act(async () => refreshButton!.click());
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "Bot settings changed. Reload before saving.",
+    );
   });
 });

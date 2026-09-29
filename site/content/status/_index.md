@@ -32,8 +32,10 @@ the repo file it comes from.
 
 - Desktop previews are **unsigned**; macOS builds are also **not notarized**, and updates are
   download-only on every OS — [Desktop pre-releases]({{< repo-link "docs/desktop-release.md" >}}).
-- No signed installer and no published Homebrew tap yet; the cask template exists but has not been
-  published — [Homebrew tap handoff]({{< repo-link "docs/desktop-release.md#homebrew-tap-handoff" >}}).
+- The published Homebrew cask carries the same preview: `brew tap ArdurAI/tap`,
+  `brew trust --cask ArdurAI/tap/ardur`, then `brew install --cask ArdurAI/tap/ardur`;
+  previews are unsigned and not notarized, and current Homebrew needs the trust step —
+  [Homebrew tap handoff]({{< repo-link "docs/desktop-release.md#homebrew-tap-handoff" >}}).
 - A tag push currently stops at the performance-evidence gate because no physical evidence runner
   exists yet; publication needs a manual dispatch with an explicit waiver reason —
   [Evidence index]({{< repo-link "docs/performance.md#evidence-index" >}}).
@@ -44,8 +46,8 @@ the repo file it comes from.
   [Learning reviews]({{< repo-link "docs/learning.md" >}}).
 - No public mobile app store listing yet; the mobile client points at a self-hosted or
   desktop-hosted server — [Mobile builds and store releases]({{< repo-link "docs/mobile-release.md" >}}).
-- The Claude subscription path only uses the owner's own unmodified `claude` binary; the inherited
-  Claude.ai OAuth login is being removed from {{< product >}} builds —
+- The Claude subscription path only uses the owner's own unmodified `claude` binary;
+  {{< product >}} builds do not include a Claude.ai OAuth login —
   [ADR-002: pins are promises]({{< repo-link "docs/decisions/ADR-002-runtime-pins.md" >}}).
 
 ## Roadmap
@@ -54,7 +56,7 @@ the repo file it comes from.
   OpenAI's documented integration, Kimi and Z.ai coding plans, Gemini with an API key, and Ollama
   as a first-class choice — [README]({{< repo-link "README.md#where-it-is-going" >}}).
 - Computers on Podman and kind/Kubernetes — [README]({{< repo-link "README.md#where-it-is-going" >}}).
-- A published Homebrew tap and, later, signed and notarized downloads —
+- Signed and notarized downloads —
   [README]({{< repo-link "README.md#where-it-is-going" >}}).
 - A fast, smooth UI on Windows, macOS and Linux — [README]({{< repo-link "README.md#where-it-is-going" >}}).
 
@@ -63,6 +65,6 @@ Roadmap discussion and open questions live in
 
 ## Changelog
 
-The [CHANGELOG]({{< repo-link "CHANGELOG.md" >}}) records the fork itself: forked from Rakazo
-commit `59d4f0c2` (2026-09-23) under Apache-2.0, project-wide rename to {{< product >}}, CI trimmed
-to advisory checks, and the ADR log added under `docs/decisions/`.
+The [CHANGELOG]({{< repo-link "CHANGELOG.md" >}}) records the fork itself: the fork from upstream
+commit `59d4f0c2` (2026-09-23) under Apache-2.0, the project-wide rename to {{< product >}}, CI
+trimmed to advisory checks, and the ADR log added under `docs/decisions/`.

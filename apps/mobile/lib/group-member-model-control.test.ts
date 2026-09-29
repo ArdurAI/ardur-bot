@@ -85,6 +85,8 @@ it("persists runtime-only switches before screen Save and after reload in both d
   const root = createRoot(node);
   const props = {
     groupId: "room",
+
+    bot: { modelPinRevision: 1 },
     experimental: true,
     catalog: [
       {
@@ -178,6 +180,7 @@ it.each([
       root.render(
         createElement(GroupMemberModelControl, {
           groupId: "room",
+
           member: nativeMember,
           experimental: false,
           catalog: [
@@ -248,6 +251,7 @@ it("chooses a compatible Hermes group connection, reads it back, and keeps it on
   const root = createRoot(node);
   const props = {
     groupId: "room",
+
     member,
     experimental: true,
     catalog: [
@@ -320,6 +324,7 @@ it("explains an incompatible saved connection and omits it from Hermes choices",
     root.render(
       createElement(GroupMemberModelControl, {
         groupId: "room",
+
         member: {
           ...member,
           runtimePin: {
@@ -385,6 +390,7 @@ it("uses the native model sheet to save and clear the selected member pin", asyn
     root.render(
       createElement(GroupMemberModelControl, {
         groupId: "room",
+
         member,
         catalog: [
           {
@@ -419,8 +425,10 @@ it("uses the native model sheet to save and clear the selected member pin", asyn
   await act(async () => sheet.actions[1]!.onPress());
   expect(rpc).toHaveBeenCalledWith("groups/setMemberModelPin", {
     groupId: "room",
+
     botId: "worker",
     memberId: "member",
+    expectedBotModelPinRevision: expect.any(Number),
     expectedRevision: 2,
     pin: {
       runtimeKind: "pi",
@@ -435,6 +443,7 @@ it("uses the native model sheet to save and clear the selected member pin", asyn
     root.render(
       createElement(GroupMemberModelControl, {
         groupId: "room",
+        bot: { modelPinRevision: 1 },
         member: updated,
         catalog: [
           {
@@ -464,6 +473,7 @@ it("uses the native model sheet to save and clear the selected member pin", asyn
   await act(async () => resetSheet.actions[0]!.onPress());
   expect(rpc).toHaveBeenLastCalledWith("groups/clearMemberModelPin", {
     groupId: "room",
+
     botId: "worker",
     memberId: "member",
     expectedRevision: 3,
@@ -494,6 +504,7 @@ it("preserves saved effort when reselecting the member's current model", async (
     root.render(
       createElement(GroupMemberModelControl, {
         groupId: "room",
+        bot: { modelPinRevision: 1 },
         member: pinnedMember,
         catalog: [
           {
@@ -520,8 +531,10 @@ it("preserves saved effort when reselecting the member's current model", async (
   await act(async () => sheet.actions[1]!.onPress());
   expect(rpc).toHaveBeenCalledWith("groups/setMemberModelPin", {
     groupId: "room",
+
     botId: "worker",
     memberId: "member",
+    expectedBotModelPinRevision: expect.any(Number),
     expectedRevision: 3,
     pin: {
       runtimeKind: "pi",
@@ -564,6 +577,7 @@ it("changes effort on the same saved model and connection", async () => {
     root.render(
       createElement(GroupMemberModelControl, {
         groupId: "room",
+        bot: { modelPinRevision: 1 },
         member: pinnedMember,
         catalog: [
           {
@@ -589,8 +603,10 @@ it("changes effort on the same saved model and connection", async () => {
   await act(async () => sheet.actions.find((action) => action.text === "Low")!.onPress());
   expect(rpc).toHaveBeenCalledWith("groups/setMemberModelPin", {
     groupId: "room",
+
     botId: "worker",
     memberId: "member",
+    expectedBotModelPinRevision: expect.any(Number),
     expectedRevision: 2,
     pin: {
       runtimeKind: "pi",
@@ -619,6 +635,7 @@ it("reloads the group on conflict and sends the refreshed revision on the next s
       new RpcError("This member's model changed. Reload the group.", "CONFLICT"),
     )
     .mockResolvedValueOnce([reloadedGroup])
+    .mockResolvedValueOnce([{ id: "worker", modelPinRevision: 3 }])
     .mockResolvedValueOnce(savedGroup);
 
   const node = document.createElement("div");
@@ -629,6 +646,7 @@ it("reloads the group on conflict and sends the refreshed revision on the next s
     root.render(
       createElement(GroupMemberModelControl, {
         groupId: "room",
+        bot: { modelPinRevision: 1 },
         member,
         catalog: [
           {
@@ -660,8 +678,10 @@ it("reloads the group on conflict and sends the refreshed revision on the next s
 
   expect(rpc).toHaveBeenNthCalledWith(1, "groups/setMemberModelPin", {
     groupId: "room",
+
     botId: "worker",
     memberId: "member",
+    expectedBotModelPinRevision: expect.any(Number),
     expectedRevision: 2,
     pin: {
       runtimeKind: "pi",
@@ -672,6 +692,7 @@ it("reloads the group on conflict and sends the refreshed revision on the next s
     },
   });
   expect(rpc).toHaveBeenNthCalledWith(2, "groups/list");
+  expect(rpc).toHaveBeenNthCalledWith(3, "bots/list");
   expect(onError).toHaveBeenCalledWith("This member's model changed. Reload the group.");
   expect(onSaved).toHaveBeenCalledWith(reloadedGroup);
 
@@ -684,10 +705,12 @@ it("reloads the group on conflict and sends the refreshed revision on the next s
   const nextSheet = vi.mocked(presentMessageActionSheet).mock.calls.at(-1)![0];
   await act(async () => nextSheet.actions[1]!.onPress());
 
-  expect(rpc).toHaveBeenNthCalledWith(3, "groups/setMemberModelPin", {
+  expect(rpc).toHaveBeenNthCalledWith(4, "groups/setMemberModelPin", {
     groupId: "room",
+
     botId: "worker",
     memberId: "member",
+    expectedBotModelPinRevision: 3,
     expectedRevision: 5,
     pin: {
       runtimeKind: "pi",
@@ -721,6 +744,7 @@ it("translates an off effort in the thinking row", async () => {
     root.render(
       createElement(GroupMemberModelControl, {
         groupId: "room",
+        bot: { modelPinRevision: 1 },
         member: pinnedOff,
         catalog: [
           {
@@ -763,6 +787,7 @@ it("displays an inherited Hermes runtime initially and persists a runtime-only s
     root.render(
       createElement(GroupMemberModelControl, {
         groupId: "room",
+        bot: { modelPinRevision: 1 },
         member: inheritedHermesMember,
         botRuntimeKind: "hermes",
         experimental: true,
@@ -826,6 +851,7 @@ it("displays an inherited Hermes runtime initially and persists a runtime-only s
     root.render(
       createElement(GroupMemberModelControl, {
         groupId: "room",
+        bot: { modelPinRevision: 1 },
         member: inheritedPiMember,
         botRuntimeKind: "pi",
         experimental: true,
@@ -866,8 +892,10 @@ it("displays an inherited Hermes runtime initially and persists a runtime-only s
   );
   expect(rpc).toHaveBeenCalledWith("groups/setMemberModelPin", {
     groupId: "room",
+
     botId: "worker",
     memberId: "member",
+    expectedBotModelPinRevision: expect.any(Number),
     expectedRevision: 2,
     pin: {
       runtimeKind: "hermes",
@@ -895,6 +923,75 @@ it("restores confirmed runtime and keeps runtime recovery available when save fa
     },
   };
   vi.mocked(rpc).mockRejectedValueOnce(new Error("Save failed"));
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  const onError = vi.fn();
+  await act(async () =>
+    root.render(
+      createElement(GroupMemberModelControl, {
+        groupId: "room",
+        bot: { modelPinRevision: 1 },
+        member: hermesMember,
+        experimental: false,
+        catalog: [
+          {
+            provider: "openai-compatible",
+            id: "valid",
+            label: "Valid",
+            reasoning: true,
+            thinkingLevels: ["high"],
+          },
+        ],
+        credentials: [
+          {
+            id: "connection",
+            provider: "openai-compatible",
+            label: "Connection",
+            thinkingLevel: "high",
+          },
+        ],
+        onSaved: vi.fn(),
+        onError,
+      } as never),
+    ),
+  );
+  const runtimeButton = node.querySelector(
+    'button[aria-label="Runtime · Worker"]',
+  ) as HTMLButtonElement;
+  expect(runtimeButton).not.toBeNull();
+  expect(runtimeButton.textContent).toContain("Hermes");
+  await act(async () => runtimeButton.click());
+  await act(async () =>
+    vi
+      .mocked(presentMessageActionSheet)
+      .mock.calls.at(-1)![0]
+      .actions.find((action) => action.text === "Ardur (built-in)")!
+      .onPress(),
+  );
+  expect(onError).toHaveBeenCalledWith("Could not save group model.");
+  const retryButton = node.querySelector('button[aria-label="Runtime · Worker"]');
+  expect(retryButton).not.toBeNull();
+  expect(retryButton?.textContent).toContain("Hermes");
+  await act(async () => root.unmount());
+});
+
+it("shows the server's reason when it refuses a group model", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const hermesMember: GroupMember = {
+    ...member,
+    modelPinRevision: 2,
+    runtimePin: {
+      runtimeKind: "hermes",
+      provider: "openai-compatible",
+      modelId: "valid",
+      credentialId: "connection",
+      effort: "high",
+      revision: 2,
+    },
+  };
+  vi.mocked(rpc).mockRejectedValueOnce(
+    new RpcError("Native runtimes need a single-user host for now — change the pin.", "FORBIDDEN"),
+  );
   const node = document.createElement("div");
   const root = createRoot(node);
   const onError = vi.fn();
@@ -939,7 +1036,9 @@ it("restores confirmed runtime and keeps runtime recovery available when save fa
       .actions.find((action) => action.text === "Ardur (built-in)")!
       .onPress(),
   );
-  expect(onError).toHaveBeenCalledWith("Could not save group model.");
+  expect(onError).toHaveBeenCalledWith(
+    "Native runtimes need a single-user host for now — change the pin.",
+  );
   const retryButton = node.querySelector('button[aria-label="Runtime · Worker"]');
   expect(retryButton).not.toBeNull();
   expect(retryButton?.textContent).toContain("Hermes");

@@ -94,6 +94,7 @@ function fixture() {
     deviceAuditEvent: { create: vi.fn(async () => ({})) },
     attempt: { updateMany: vi.fn(async () => ({ count: 1 })) },
     dispatchSummary: { upsert: vi.fn(async (_input: unknown) => ({})) },
+    botMessageWake: { findMany: vi.fn(async () => []) },
   };
   const db = { ...tx, $transaction: vi.fn(async (fn) => fn(tx)) } as unknown as PrismaClient;
   return {

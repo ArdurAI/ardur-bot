@@ -2,6 +2,7 @@ import type { GrokColorDef } from "@ardurbot/core";
 import {
   ACTIVE_RUN_STATUSES,
   avatarIdentitySeed,
+  avatarInitial,
   DEFAULT_GROK_BOT_COLOR,
   GROK_BOT_COLORS,
   GROK_COLOR_LIST,
@@ -81,6 +82,8 @@ export interface BotAvatarProps {
   size?: number;
   status?: string;
   identity?: string;
+  /** Display name used for the seal initial; identity stays the hash seed. */
+  label?: string;
   className?: string;
   variant?: AvatarStyle;
 }
@@ -90,6 +93,7 @@ export const BotAvatar = memo(function BotAvatar({
   size = 36,
   status,
   identity = "",
+  label,
   className,
   variant,
 }: BotAvatarProps) {
@@ -115,7 +119,7 @@ export const BotAvatar = memo(function BotAvatar({
     return resolvePersonaShape(effectiveId);
   }, [parsed.shapeIndex, effectiveId]);
 
-  const initial = (effectiveId || "A")[0]!.toUpperCase();
+  const initial = avatarInitial(label ?? effectiveId);
 
   const reducedMotion = useSyncExternalStore(
     subscribeToReducedMotion,
@@ -130,9 +134,10 @@ export const BotAvatar = memo(function BotAvatar({
     return (
       <div
         className={cn(
-          "ardurbot-bot-avatar relative flex shrink-0 select-none items-center justify-center bg-secondary",
+          "ardur-bot-avatar relative flex shrink-0 select-none items-center justify-center bg-secondary",
           className,
         )}
+        aria-hidden="true"
         data-status={avatarStatus}
         style={{
           width: size,
@@ -204,9 +209,10 @@ export const BotAvatar = memo(function BotAvatar({
     return (
       <div
         className={cn(
-          "ardurbot-bot-avatar relative flex shrink-0 select-none items-center justify-center bg-card",
+          "ardur-bot-avatar relative flex shrink-0 select-none items-center justify-center bg-card",
           className,
         )}
+        aria-hidden="true"
         data-status={avatarStatus}
         style={{
           width: size,
@@ -270,9 +276,10 @@ export const BotAvatar = memo(function BotAvatar({
   return (
     <div
       className={cn(
-        "ardurbot-bot-avatar relative flex shrink-0 select-none items-center justify-center",
+        "ardur-bot-avatar relative flex shrink-0 select-none items-center justify-center",
         className,
       )}
+      aria-hidden="true"
       data-status={avatarStatus}
       style={{
         width: isRunning ? size * 0.8 : size,
@@ -356,7 +363,7 @@ function OrganicAvatar({
     <svg
       viewBox="-60 -60 120 120"
       aria-hidden="true"
-      className={cn("ardurbot-organic-avatar overflow-visible select-none", className)}
+      className={cn("ardur-organic-avatar overflow-visible select-none", className)}
       data-status={avatarStatus}
       data-working={isWorking}
       data-shape-family={seed % 10}
@@ -370,12 +377,12 @@ function OrganicAvatar({
       {(["idle", "working"] as const).map((mode) => (
         <path
           key={mode}
-          className={`ardurbot-organic-avatar-body ardurbot-organic-avatar-body-${mode}`}
+          className={`ardur-organic-avatar-body ardur-organic-avatar-body-${mode}`}
           d={shapeA}
           fill={color}
           style={
             {
-              "--ardurbot-organic-path": `path("${shapeA}")`,
+              "--ardur-organic-path": `path("${shapeA}")`,
               filter:
                 mode === "working"
                   ? `drop-shadow(0 0 ${Math.round(size * 0.16)}px ${color})`
@@ -397,7 +404,7 @@ function OrganicAvatar({
         {(["idle", "working"] as const).map((mode) => (
           <g
             key={mode}
-            className={`ardurbot-organic-avatar-eyes ardurbot-organic-avatar-eyes-${mode}`}
+            className={`ardur-organic-avatar-eyes ardur-organic-avatar-eyes-${mode}`}
             fill={tokens.background}
           >
             <rect x="-14" y="-12" width="7" height="24" rx="3.5" />
@@ -412,10 +419,11 @@ function OrganicAvatar({
 const reducedMotionMedia = "(prefers-reduced-motion: reduce)";
 
 function reducedMotionSnapshot(): boolean {
-  return window.matchMedia(reducedMotionMedia).matches;
+  return typeof window.matchMedia === "function" && window.matchMedia(reducedMotionMedia).matches;
 }
 
 function subscribeToReducedMotion(onChange: () => void): () => void {
+  if (typeof window.matchMedia !== "function") return () => {};
   const media = window.matchMedia(reducedMotionMedia);
   media.addEventListener("change", onChange);
   return () => media.removeEventListener("change", onChange);
@@ -427,16 +435,18 @@ export function GrokShapePreview({
   selected,
   onClick,
   identity,
+  label,
 }: {
   shapeIndex: number;
   color: string;
   selected?: boolean;
   onClick?: () => void;
   identity?: string;
+  label?: string;
 }) {
   const colorDef = resolvePersonaColorDef("preview", color);
   const effectiveId = identity || color || "agent";
-  const initial = (effectiveId || "A")[0]!.toUpperCase();
+  const initial = avatarInitial(label ?? effectiveId);
 
   return (
     <button
@@ -444,7 +454,7 @@ export function GrokShapePreview({
       onClick={onClick}
       aria-label={
         shapeIndex === -1
-          ? "Initial"
+          ? "Seal"
           : (SHIPPED_SHAPE_KEYS[shapeIndex % SHIPPED_SHAPE_KEYS.length] ?? "hex")
       }
       aria-pressed={selected ?? false}

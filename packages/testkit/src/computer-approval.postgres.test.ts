@@ -115,7 +115,7 @@ describe.skipIf(!databaseAvailable)("offline Pi computer approval", () => {
           method: "POST",
           headers: { "content-type": "application/json", origin: fixtureOrigin },
           body: JSON.stringify({
-            email: `computer-approval-${randomUUID()}@ardurbot.test`,
+            email: `computer-approval-${randomUUID()}@example.test`,
             password: "password12",
             name: "Computer approval fixture",
           }),
@@ -129,15 +129,21 @@ describe.skipIf(!databaseAvailable)("offline Pi computer approval", () => {
           apiKey: fixtureKey,
           supportsImages: true,
         });
-        const bot = await rpc<{ id: string }>(handles.app, cookie, "bots/create", {
-          name: "Computer fixture",
-          title: "",
-          description: "",
-          instructions: "Complete the computer task.",
-          notifyOnFinish: false,
-        });
+        const bot = await rpc<{ id: string; modelPinRevision?: number }>(
+          handles.app,
+          cookie,
+          "bots/create",
+          {
+            name: "Computer fixture",
+            title: "",
+            description: "",
+            instructions: "Complete the computer task.",
+            notifyOnFinish: false,
+          },
+        );
         await rpc(handles.app, cookie, "bots/update", {
           botId: bot.id,
+          expectedModelPinRevision: bot.modelPinRevision ?? 0,
           modelProvider: model.model.provider,
           modelId: model.model.id,
         });

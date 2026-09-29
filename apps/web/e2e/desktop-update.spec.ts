@@ -58,7 +58,7 @@ test("desktop update can be checked, deferred, and installed from settings", asy
     });
   });
   const stamp = Date.now();
-  await signup(page, `desktop-update-${stamp}@ardurbot.test`, "password12", "Update Tester");
+  await signup(page, `desktop-update-${stamp}@example.test`, "password12", "Update Tester");
   await completeOnboarding(page);
   await expect(page.getByRole("complementary", { name: "Desktop update" })).toHaveCount(0);
   await openUserSettings(page, "updates");
@@ -92,7 +92,7 @@ test("desktop update can be checked, deferred, and installed from settings", asy
 });
 
 test("ordinary web sessions do not show desktop update controls", async ({ page }) => {
-  await signup(page, `web-update-${Date.now()}@ardurbot.test`, "password12", "Web Tester");
+  await signup(page, `web-update-${Date.now()}@example.test`, "password12", "Web Tester");
   await completeOnboarding(page);
   const settings = await openUserSettings(page);
   await expect(settings.getByTestId("settings-nav-updates")).toHaveCount(0);

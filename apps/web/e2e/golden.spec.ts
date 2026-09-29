@@ -24,11 +24,11 @@ test("two users are isolated and a bot completes durable work", async ({ browser
   const pageB = await b.newPage();
 
   const stamp = Date.now();
-  await signup(pageA, `ada-${stamp}@ardurbot.test`, "password12", "Ada", testInfo);
+  await signup(pageA, `ada-${stamp}@example.test`, "password12", "Ada", testInfo);
   await completeOnboarding(pageA, testInfo);
   await expect(pageA.getByText("Chief").first()).toBeVisible();
 
-  await signup(pageB, `bob-${stamp}@ardurbot.test`, "password12", "Bob");
+  await signup(pageB, `bob-${stamp}@example.test`, "password12", "Bob");
   await completeOnboarding(pageB);
   await expect(pageB.getByText("Chief").first()).toBeVisible();
   await expect(pageB.getByText("Ada", { exact: true })).toHaveCount(0);
@@ -52,7 +52,7 @@ test("two users are isolated and a bot completes durable work", async ({ browser
 
 test("takeover, routine, integrations, and export are reachable", async ({ page }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `flow-${stamp}@ardurbot.test`, "password12", "Flow");
+  await signup(page, `flow-${stamp}@example.test`, "password12", "Flow");
   await completeOnboarding(page);
 
   const composer = page.getByPlaceholder(/Message/);
@@ -99,7 +99,8 @@ test("takeover, routine, integrations, and export are reachable", async ({ page 
   }
   await page.getByTitle("Agent computer").click();
   await expect(sidePanel).toHaveAttribute("data-panel", "computer");
-  await expect(sidePanel).toHaveCSS("width", "384px");
+  await expect(sidePanel).toHaveCSS("width", "480px");
+  await sidePanel.getByRole("tab", { name: "Screen", exact: true }).click();
   const [mainBox, panelBox] = await Promise.all([
     page.locator("main").boundingBox(),
     sidePanel.boundingBox(),
@@ -119,6 +120,7 @@ test("takeover, routine, integrations, and export are reachable", async ({ page 
   });
   await captureScreenshot(page, testInfo, "09a-computer-takeover-skipped");
 
+  await sidePanel.getByRole("tab", { name: "Routines", exact: true }).click();
   await page.getByRole("button", { name: "Create Routine" }).click();
   await page.locator("label:has-text('Name') input").fill("Monday briefing");
   await page
@@ -209,7 +211,7 @@ test("sign-in, spawn, and stop work in the shell", async ({ page }, testInfo) =>
     );
   });
   const stamp = Date.now();
-  const email = `shell-${stamp}@ardurbot.test`;
+  const email = `shell-${stamp}@example.test`;
   await signup(page, email, "password12", "Shell");
   await completeOnboarding(page);
   await page.evaluate(() => {
@@ -302,7 +304,7 @@ test("bot context menu pins, duplicates, edits, and confirms deletion", async ({
   page,
 }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `menu-${stamp}@ardurbot.test`, "password12", "Menu");
+  await signup(page, `menu-${stamp}@example.test`, "password12", "Menu");
   await completeOnboarding(page);
 
   const chief = page.getByRole("button", { name: /Chief/ }).first();

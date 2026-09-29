@@ -15,21 +15,22 @@ import {
   UI_APPEARANCE_STORAGE_KEY,
 } from "./index.js";
 
+function luminance(colour: string): number {
+  if (!/^#[0-9a-fA-F]{6}$/.test(colour)) throw new Error(`Unsupported colour ${colour}`);
+  const [r, g, b] = [1, 3, 5].map((start) => {
+    const channel = Number.parseInt(colour.slice(start, start + 2), 16) / 255;
+    return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  }) as [number, number, number];
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+function contrast(first: string, second: string): number {
+  const a = luminance(first);
+  const b = luminance(second);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
 describe("appearance preference", () => {
   it("meets WCAG AA contrast for foreground/background pairs", () => {
-    function luminance(colour: string): number {
-      if (!/^#[0-9a-fA-F]{6}$/.test(colour)) throw new Error(`Unsupported colour ${colour}`);
-      const [r, g, b] = [1, 3, 5].map((start) => {
-        const channel = Number.parseInt(colour.slice(start, start + 2), 16) / 255;
-        return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
-      }) as [number, number, number];
-      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    }
-    function contrast(first: string, second: string): number {
-      const a = luminance(first);
-      const b = luminance(second);
-      return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
-    }
     const checkPairs = (tokens: Readonly<Record<string, string>>) => {
       const pairs: ReadonlyArray<readonly [string, string]> = [
         ["foreground", "background"],
@@ -89,7 +90,11 @@ describe("appearance preference", () => {
     expect(tokensForAppearance("dark")).toBe(darkTokens);
     expect(tokensForAppearance("light")).toBe(lightTokens);
     for (const key of Object.keys(darkTokens) as (keyof ColorTokens)[]) {
-      if (key === "destructiveForeground") continue;
+      if (
+        key === "destructiveForeground" ||
+        ["bengara", "indigo", "moss", "persimmon", "plum", "teal", "ochre", "slate"].includes(key)
+      )
+        continue;
       expect(darkTokens[key], key).not.toBe(lightTokens[key]);
     }
   });
@@ -107,6 +112,32 @@ describe("appearance preference", () => {
       const palette = tokensForAppearance(appearance);
       expect(palette.accent).not.toBe(palette.secondary);
       expect(palette.accent).not.toBe(palette.background);
+    }
+  });
+
+  it("keeps the selected default tab and its indicator at 3:1 against the track", () => {
+    for (const appearance of ["light", "dark"] as const) {
+      const palette = tokensForAppearance(appearance);
+      // The default tab track is `secondary`; the selected trigger fills with
+      // `card` (light) or `accent` (dark) and draws a `foreground` ink bar.
+      const track = palette.secondary;
+      const selectedFill = appearance === "light" ? palette.card : palette.accent;
+      const indicator = palette.foreground;
+      const fillOnTrack = contrast(selectedFill, track);
+      const indicatorOnTrack = contrast(indicator, track);
+      expect(
+        Math.max(fillOnTrack, indicatorOnTrack),
+        `${appearance}: selected tab must be identifiable on track ${track} at 3:1 (fill ${selectedFill} gives ${fillOnTrack}, ink indicator gives ${indicatorOnTrack})`,
+      ).toBeGreaterThanOrEqual(3);
+      expect(
+        indicatorOnTrack,
+        `${appearance}: ink indicator ${indicator} on track ${track}`,
+      ).toBeGreaterThanOrEqual(3);
+      const indicatorOnFill = contrast(indicator, selectedFill);
+      expect(
+        indicatorOnFill,
+        `${appearance}: ink indicator ${indicator} on selected fill ${selectedFill}`,
+      ).toBeGreaterThanOrEqual(3);
     }
   });
 

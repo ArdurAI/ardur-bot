@@ -6,14 +6,14 @@ describe("GroupAvatar", () => {
   it("renders a placeholder for empty members", () => {
     const html = renderToString(<GroupAvatar members={[]} />);
     expect(html).toContain("svg");
-    expect(html).not.toContain("ardurbot-bot-avatar");
+    expect(html).not.toContain("ardur-bot-avatar");
   });
 
   it("renders a single bot avatar for 1 member", () => {
     const html = renderToString(
       <GroupAvatar members={[{ name: "A", color: "#F59E0B" }]} size={32} />,
     );
-    expect(html).toContain("ardurbot-bot-avatar");
+    expect(html).toContain("ardur-bot-avatar");
     expect(html).not.toContain("z-index");
   });
 
@@ -27,8 +27,9 @@ describe("GroupAvatar", () => {
         size={40}
       />,
     );
-    const count = (html.match(/ardurbot-bot-avatar/g) || []).length;
+    const count = (html.match(/ardur-bot-avatar/g) || []).length;
     expect(count).toBe(2);
+    expect(html).toContain('aria-hidden="true"');
   });
 
   it("renders a working member inside a group avatar", () => {
@@ -41,7 +42,7 @@ describe("GroupAvatar", () => {
       />,
     );
     expect(html).toContain("<circle"); // Running status has a ring
-    expect(html).toContain("ardurbot-bot-avatar");
+    expect(html).toContain("ardur-bot-avatar");
   });
 
   it("renders 3 overlapping bot avatars for 3 members", () => {
@@ -54,7 +55,7 @@ describe("GroupAvatar", () => {
         ]}
       />,
     );
-    const count = (html.match(/ardurbot-bot-avatar/g) || []).length;
+    const count = (html.match(/ardur-bot-avatar/g) || []).length;
     expect(count).toBe(3);
   });
 
@@ -72,7 +73,7 @@ describe("GroupAvatar", () => {
     );
     expect(html).toContain("+3");
     // Should show 2 members plus the badge
-    const count = (html.match(/ardurbot-bot-avatar/g) || []).length;
+    const count = (html.match(/ardur-bot-avatar/g) || []).length;
     expect(count).toBe(2);
   });
 

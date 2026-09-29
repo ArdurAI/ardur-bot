@@ -5,12 +5,22 @@ import { createRoot } from "react-dom/client";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { MobileBot, MobileGroup } from "./api";
 import { rpc } from "./api";
+import { presentMessageActionSheet } from "./message-action-sheet";
 
 let lastOnSaved: ((refreshed: MobileGroup) => void) | undefined;
 let lastSelectedMembers: string[] = [];
 
 vi.mock("./api", () => ({ rpc: vi.fn() }));
-vi.mock("./i18n", () => ({ useI18n: () => ({ t: (text: string) => text }) }));
+vi.mock("./i18n", () => ({
+  useI18n: () => ({
+    t: (text: string, values?: Record<string, string | number>) =>
+      values
+        ? text.replace(/\{([A-Za-z0-9_]+)\}/g, (match, key: string) =>
+            Object.hasOwn(values, key) ? String(values[key]) : match,
+          )
+        : text,
+  }),
+}));
 vi.mock("./native", () => ({
   useMobileTokens: () => ({}),
   useResolvedAppearance: () => "light",
@@ -253,6 +263,73 @@ it("adopts two refreshes delivered before a render without dropping the newest m
     "groups/update",
     expect.objectContaining({ botIds: expect.anything() }),
   );
+
+  await act(async () => root.unmount());
+});
+
+it("warns only while the picked coordinator's runtime can't use Ardur tools", async () => {
+  const antigravityGroup = {
+    ...initialGroup,
+    coordinatorBotId: "bot-a",
+  } as unknown as MobileGroup;
+  const runtimeBots = [
+    { id: "bot-a", name: "Bot A", color: "#111", runtimeKind: "antigravity" },
+    { id: "bot-b", name: "Bot B", color: "#222", runtimeKind: "codex-app-server" },
+  ] as unknown as MobileBot[];
+  vi.mocked(rpc).mockImplementation(async (route) => {
+    if (route === "groups/list") return [antigravityGroup];
+    if (route === "bots/list") return runtimeBots;
+    if (route === "models/list") return [];
+    if (route === "models/credentials") return [];
+    if (route === "groups/update") return antigravityGroup;
+    return null;
+  });
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  await act(async () => root.render(createElement(GroupSettingsScreen)));
+
+  const warning = () =>
+    [...node.querySelectorAll("span")].find((el) =>
+      el.textContent?.includes("can't use Ardur tools"),
+    );
+  expect(warning()?.textContent).toContain(
+    "Antigravity can't use Ardur tools — a coordinator needs tools to hand off work.",
+  );
+
+  const coordinatorButton = [...node.querySelectorAll("button")].find((b) =>
+    b.textContent?.startsWith("Coordinator:"),
+  )!;
+  const sheet = () =>
+    vi.mocked(presentMessageActionSheet).mock.calls.at(-1)![0] as unknown as {
+      actions: { text: string; onPress: () => void }[];
+    };
+
+  // Choosing None clears the warning.
+  await act(async () => coordinatorButton.click());
+  await act(async () =>
+    sheet()
+      .actions.find((action) => action.text === "None")!
+      .onPress(),
+  );
+  expect(warning()).toBeUndefined();
+
+  // A tools-capable coordinator shows no warning either.
+  await act(async () => coordinatorButton.click());
+  await act(async () =>
+    sheet()
+      .actions.find((action) => action.text === "Bot B")!
+      .onPress(),
+  );
+  expect(warning()).toBeUndefined();
+
+  // Picking the Antigravity bot again brings the warning back.
+  await act(async () => coordinatorButton.click());
+  await act(async () =>
+    sheet()
+      .actions.find((action) => action.text === "Bot A")!
+      .onPress(),
+  );
+  expect(warning()?.textContent).toContain("Antigravity");
 
   await act(async () => root.unmount());
 });

@@ -5,7 +5,7 @@ import { activeBotId, captureScreenshot, completeOnboarding, signup } from "./he
 test("Terminal is optional, keeps Screen default and exposes a clear unavailable state", async ({
   page,
 }, testInfo) => {
-  await signup(page, `terminal-${Date.now()}@ardurbot.test`, "password12", "Terminal");
+  await signup(page, `terminal-${Date.now()}@example.test`, "password12", "Terminal");
   await completeOnboarding(page);
   const botId = activeBotId(page);
   await page.route("**/rpc/terminal/available", (route) =>
@@ -39,7 +39,7 @@ test("Terminal is optional, keeps Screen default and exposes a clear unavailable
 test("Terminal loads on demand and shell shortcuts stay in the terminal", async ({
   page,
 }, testInfo) => {
-  await signup(page, `terminal-input-${Date.now()}@ardurbot.test`, "password12", "Terminal Input");
+  await signup(page, `terminal-input-${Date.now()}@example.test`, "password12", "Terminal Input");
   await completeOnboarding(page);
   const botId = activeBotId(page);
   const computer: ComputerStatus = {

@@ -9,6 +9,19 @@ const text = z
   });
 const httpsUrl = z.url().startsWith("https://");
 const id = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+const installPlatform = z.enum(["macOS", "Windows", "Linux"]);
+const installPlatforms = z
+  .array(installPlatform)
+  .min(1)
+  .refine((platforms) => new Set(platforms).size === platforms.length, {
+    message: "Install platforms must be unique",
+  });
+// Install guidance names UI labels in curly quotes, as the other facts do.
+const installGuidance = text
+  .max(280)
+  .refine((value) => !value.includes('"') && value.split("“").length === value.split("”").length, {
+    message: "Quote UI labels with matching curly quotes",
+  });
 const source = z.object({
   repo: z.literal("ArdurAI/ardur-bot"),
   ref: z.literal("dev"),
@@ -185,11 +198,40 @@ export const SiteProductSchema = z
       desktop: z.strictObject({
         releasesUrl: httpsUrl,
         platforms: z.array(z.strictObject({ os: text, assetPattern: text })).min(1),
+        firstOpen: z
+          .array(
+            z.strictObject({
+              os: installPlatform,
+              steps: z
+                .array(
+                  z.strictObject({
+                    text: installGuidance,
+                    command: text
+                      .max(200)
+                      .regex(/^[^\r\n]+$/, "Use a single-line command")
+                      .optional(),
+                  }),
+                )
+                .min(1)
+                .max(6),
+            }),
+          )
+          .min(1)
+          .max(3)
+          .refine((entries) => new Set(entries.map((entry) => entry.os)).size === entries.length, {
+            message: "First-launch steps need one entry per system",
+          })
+          .optional(),
+        note: installGuidance.optional(),
       }),
+      installScript: z.strictObject({ platforms: installPlatforms }).optional(),
       homebrew: z.strictObject({
         tapRepo: text,
         caskPath: z.string().regex(/^Casks\/[a-z0-9-]+\.rb$/),
         command: text,
+        // Set only after the full command installs cleanly; the website hides Homebrew without it.
+        verified: z.boolean().optional(),
+        platforms: installPlatforms.optional(),
       }),
     }),
     personas: z.array(z.strictObject({ name: text, line: text })).min(1),

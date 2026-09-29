@@ -4,6 +4,7 @@ import { expect, it } from "vitest";
 import { changeInput, renderSettings } from "../test/settings-ui";
 import {
   matchesSetting,
+  SettingsGroup,
   SettingsRow,
   SettingsSearchProvider,
   useSettingsSearch,
@@ -38,4 +39,21 @@ it("filters registered row labels without unmounting their controls", async () =
   await changeInput(input, "General");
   expect(container.querySelectorAll("fieldset[hidden]")).toHaveLength(0);
   expect(matchesSetting("Chat font", "unknown")).toBe(false);
+});
+
+it("keeps content inside its row and renders SettingsGroup heading", async () => {
+  const { container } = await renderSettings(
+    <SettingsGroup label="Test Group">
+      <SettingsRow label="Row 1" content={<div>Row 1 content</div>}>
+        <button type="button">Action</button>
+      </SettingsRow>
+    </SettingsGroup>,
+  );
+
+  const group = container.querySelector("[data-settings-group]");
+  expect(group).not.toBeNull();
+  expect(group?.querySelector("h3")?.textContent).toBe("Test Group");
+
+  const row = container.querySelector('[data-settings-row="Row 1"]');
+  expect(row?.querySelector(".pb-4")?.textContent).toContain("Row 1 content");
 });

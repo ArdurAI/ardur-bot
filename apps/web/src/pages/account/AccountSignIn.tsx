@@ -105,7 +105,6 @@ export function AccountSignIn({
           ) : null}
           <div className="mt-4 flex items-center gap-3">
             <Button
-              className="rounded-full"
               disabled={pending || currentPassword.length < 8 || newPassword.length < 8}
               type="submit"
             >

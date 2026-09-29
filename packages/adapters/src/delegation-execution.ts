@@ -1,6 +1,6 @@
 import type { ConnectorRoute } from "@ardurbot/adapter-kit";
 import { DelegationAuthoritySchema, TaskCardSchema } from "@ardurbot/contracts";
-import { classifyRemoteTool, remotePermissionExpansion } from "@ardurbot/core";
+import { classifyRemoteTool, parseGroupAskKey, remotePermissionExpansion } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import {
   peerTrafficPaused,
@@ -11,13 +11,19 @@ import {
 import { grantedMcpTools, mcpGrantForBot } from "./integration-access.js";
 import { peerReadOnlyRuntimeSupported, peerReadOnlyToolAllowed } from "./peer-policy.js";
 
-/** The recorded ceiling also applies to connector routes resolved after catalog lookup. */
+/**
+ * The recorded ceiling also applies to connector routes resolved after catalog lookup. A worker
+ * that has used its reservation is stopped before its next step; the background stop check
+ * passes `reservation: false`, because usage arrives only after a request finishes and a turn
+ * that ended over its reservation must keep its answer rather than race to discard it.
+ */
 export async function checkDelegationExecution(
   prisma: PrismaClient,
   runId: string,
   tool?: string,
   route?: ConnectorRoute,
   helperDelegationId?: string,
+  options: { reservation?: boolean } = {},
 ): Promise<string | undefined> {
   const run = await prisma.run.findUniqueOrThrow({ where: { id: runId } });
   if (run.goalId) {
@@ -60,9 +66,15 @@ export async function checkDelegationExecution(
   }
   const rootTaskId = run.delegationRootTaskId ?? run.taskId;
   const root = await prisma.delegationRoot.findUnique({ where: { rootTaskId } });
+  // Outside a goal, spending past the task's token budget refuses new workers at admission but
+  // never takes back reservations already admitted. A native coordinator reports its whole
+  // turn's usage as the turn ends, just before its room workers can start. A goal's budget
+  // stays the owner's cap for the whole tree.
   if (
     root &&
-    (root.cancelRequestedAt || root.deadlineAt <= new Date() || root.usedTokens >= root.tokenLimit)
+    (root.cancelRequestedAt ||
+      root.deadlineAt <= new Date() ||
+      (run.goalId && root.usedTokens >= root.tokenLimit))
   ) {
     if (!root.cancelRequestedAt)
       await requestCancel(prisma, { spaceId: run.spaceId, userId: run.userId }, rootTaskId);
@@ -72,6 +84,27 @@ export async function checkDelegationExecution(
   const delegationId = helperDelegationId ?? run.delegationId;
   if (!delegationId) return;
   const row = await prisma.delegation.findUniqueOrThrow({ where: { id: delegationId } });
+  // A member asked by its room coordinator stops when the owner pauses team messages there.
+  if (parseGroupAskKey(row.admissionKey)) {
+    const thread = await prisma.thread.findUnique({
+      where: { id: run.threadId },
+      select: { groupId: true },
+    });
+    if (
+      thread?.groupId &&
+      (await peerTrafficPaused(prisma, {
+        spaceId: run.spaceId,
+        userId: run.userId,
+        groupId: thread.groupId,
+      }))
+    ) {
+      await prisma.run.updateMany({
+        where: { id: run.id, cancelRequestedAt: null },
+        data: { cancelRequestedAt: new Date() },
+      });
+      return "Team messages are paused.";
+    }
+  }
   const card = TaskCardSchema.safeParse(row.card);
   if (card.success && card.data.peerMode === "read-only") {
     if (
@@ -104,7 +137,7 @@ export async function checkDelegationExecution(
   if (
     !["queued", "running"].includes(row.status) ||
     row.deadlineAt <= new Date() ||
-    row.usedTokens >= row.reservedTokens
+    (options.reservation !== false && row.usedTokens >= row.reservedTokens)
   ) {
     if (!helperDelegationId)
       await prisma.run.updateMany({

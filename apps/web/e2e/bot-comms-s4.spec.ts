@@ -14,7 +14,7 @@ test("holds a peer ask and lets the owner pause group and space traffic", async 
   test.setTimeout(360_000);
   await signup(
     page,
-    `s4-${testInfo.workerIndex}-${Date.now()}@ardurbot.test`,
+    `s4-${testInfo.workerIndex}-${Date.now()}@example.test`,
     "password12",
     "Fixture owner",
   );
@@ -43,9 +43,9 @@ test("holds a peer ask and lets the owner pause group and space traffic", async 
       tokenLimit: 100_000,
       untilAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
     });
-    await expect(page.getByText("Coordinator wants Worker to prepare a team request.")).toBeVisible(
-      { timeout: 60_000 },
-    );
+    await expect(
+      page.getByTestId("ask-card").getByText("Coordinator wants Worker to prepare a team request."),
+    ).toBeVisible({ timeout: 60_000 });
     await expect(
       page.getByTestId("peer-receipt-chip").filter({ hasText: "Waiting for your approval" }),
     ).toBeVisible();

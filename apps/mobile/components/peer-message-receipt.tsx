@@ -86,7 +86,7 @@ export function PeerMessageReceipt({
           gap: 6,
         }}
       >
-        <BotAvatar color={color} identity={peerBotId} size={16} />
+        <BotAvatar color={color} identity={peerBotId} label={peer} size={16} />
         <Text
           numberOfLines={1}
           style={{ color: tokens.mutedForeground, fontSize: 13.5, flexShrink: 1 }}

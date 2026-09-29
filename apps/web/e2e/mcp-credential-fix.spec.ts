@@ -14,7 +14,7 @@ test("shows Update credential for a server whose saved token was rejected", asyn
   page,
 }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `mcp-credential-fix-${stamp}@ardurbot.test`, "password12", "Credential Fix");
+  await signup(page, `mcp-credential-fix-${stamp}@example.test`, "password12", "Credential Fix");
   await completeOnboarding(page);
 
   const server: McpServer = {
@@ -63,7 +63,7 @@ test("shows Keep token and Keep header for a server with two saved credentials",
   const stamp = Date.now();
   await signup(
     page,
-    `mcp-credential-conflict-${stamp}@ardurbot.test`,
+    `mcp-credential-conflict-${stamp}@example.test`,
     "password12",
     "Credential Conflict",
   );

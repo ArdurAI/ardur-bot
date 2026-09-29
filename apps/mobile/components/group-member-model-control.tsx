@@ -1,6 +1,6 @@
 import type { GroupMember, RuntimeKind, SetGroupMemberModelPinInput } from "@ardurbot/contracts";
 import { runtimeLabels } from "@ardurbot/contracts";
-import { spaceDefaultEffort } from "@ardurbot/core";
+import { rpcErrorMessage, spaceDefaultEffort } from "@ardurbot/core";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, Text } from "react-native";
 import type { MobileBot, MobileGroup, MobileModel, MobileModelCredential } from "../lib/api";
@@ -32,6 +32,7 @@ export function GroupMemberModelControl({
   bot,
   experimental,
   onSaved,
+  onBotReloaded,
   onError,
 }: {
   groupId: string;
@@ -42,6 +43,7 @@ export function GroupMemberModelControl({
   bot?: MobileBot;
   experimental?: boolean;
   onSaved: (group: MobileGroup) => void;
+  onBotReloaded?: (bot: MobileBot) => void;
   onError: (message: string) => void;
 }) {
   const { t } = useI18n();
@@ -49,6 +51,7 @@ export function GroupMemberModelControl({
   const colorScheme = useResolvedAppearance();
   const [pending, setPending] = useState(false);
   const [activeMember, setActiveMember] = useState(member);
+  const [activeBot, setActiveBot] = useState(bot);
   const initialKind =
     member.runtimePin?.runtimeKind ??
     botRuntimeKind ??
@@ -68,6 +71,8 @@ export function GroupMemberModelControl({
         "pi",
     );
   }, [member, botRuntimeKind, bot?.runtimeKind]);
+
+  useEffect(() => setActiveBot(bot), [bot]);
 
   const choices = useMemo<Choice[]>(() => {
     const currentPin = activeMember.runtimePin;
@@ -155,11 +160,17 @@ export function GroupMemberModelControl({
         groupId,
         botId: activeMember.botId,
         memberId: activeMember.memberId,
-        expectedRevision: activeMember.modelPinRevision,
+        expectedRevision: activeMember.modelPinRevision ?? 0,
       };
       const group = await rpc<MobileGroup>(
         resolvedPin ? "groups/setMemberModelPin" : "groups/clearMemberModelPin",
-        resolvedPin ? { ...target, pin: resolvedPin } : target,
+        resolvedPin
+          ? {
+              ...target,
+              expectedBotModelPinRevision: activeBot?.modelPinRevision ?? 0,
+              pin: resolvedPin,
+            }
+          : target,
       );
       const updatedMember =
         group.members.find(
@@ -188,10 +199,22 @@ export function GroupMemberModelControl({
       if (isConflict) {
         let refreshedMember: GroupMember | undefined;
         try {
-          const groups = await rpc<MobileGroup[]>("groups/list");
-          const refreshed = Array.isArray(groups)
-            ? groups.find((item) => item.id === groupId)
-            : null;
+          const [groupsResult, botsResult] = await Promise.allSettled([
+            rpc<MobileGroup[]>("groups/list"),
+            rpc<MobileBot[]>("bots/list"),
+          ]);
+          const refreshedBot =
+            botsResult.status === "fulfilled"
+              ? botsResult.value.find((item) => item.id === activeMember.botId)
+              : undefined;
+          if (refreshedBot) {
+            setActiveBot(refreshedBot);
+            onBotReloaded?.(refreshedBot);
+          }
+          const refreshed =
+            groupsResult.status === "fulfilled"
+              ? groupsResult.value.find((item) => item.id === groupId)
+              : null;
           if (refreshed) {
             const reloadedMember = refreshed.members.find(
               (item) =>
@@ -227,7 +250,10 @@ export function GroupMemberModelControl({
             activeMember.effectiveRuntimePin?.runtimeKind ??
             "pi",
         );
-        onError(t("Could not save group model."));
+        // Say why the server refused the choice (for example a runtime this host cannot run); other
+        // failures keep the generic sentence.
+        const fallback = t("Could not save group model.");
+        onError(error instanceof RpcError ? rpcErrorMessage(error, fallback) : fallback);
       }
     } finally {
       setPending(false);

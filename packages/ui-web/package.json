@@ -7,6 +7,7 @@
     ".": "./src/index.ts",
     "./styles.css": "./src/styles.css",
     "./lib/utils": "./src/lib/utils.ts",
+    "./lib/state-classes": "./src/lib/state-classes.ts",
     "./components/ui/*": "./src/components/ui/*.tsx",
     "./hooks/*": "./src/hooks/*.ts",
     "./terminal": "./src/terminal/index.tsx",

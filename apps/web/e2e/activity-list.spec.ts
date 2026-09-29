@@ -39,7 +39,7 @@ async function captureActivitySidebar(
 
 test("sidebar Now and Recent surface active and terminal runs", async ({ page }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `activity-${stamp}@ardurbot.test`, "password12", "Activity");
+  await signup(page, `activity-${stamp}@example.test`, "password12", "Activity");
   await completeOnboarding(page);
 
   const aside = page.locator("aside").first();
@@ -98,8 +98,53 @@ test("sidebar Now and Recent surface active and terminal runs", async ({ page },
   await expect(activityRow(page, "Chief")).toBeVisible();
 });
 
+test("Activity keeps owner decisions visible when presence is unavailable", async ({
+  page,
+}, testInfo) => {
+  await signup(page, `activity-waiting-${Date.now()}@example.test`, "password12", "Activity");
+  await completeOnboarding(page);
+  const runs = (["waiting_input", "waiting_takeover"] as const).map((status, index) => ({
+    runId: `waiting-${index}`,
+    botId: "chief",
+    botName: "Chief",
+    groupId: null,
+    groupName: null,
+    threadId: "chief-thread",
+    status,
+    trigger: "user",
+    notificationsEnabled: true,
+    promptSnippet: "Owner decision",
+    updatedAt: new Date().toISOString(),
+    delegations: [],
+  }));
+  await page.route("**/rpc/runs/list", (route) =>
+    route.fulfill({
+      json: {
+        json: { runs: route.request().postDataJSON()?.json?.filter === "active" ? runs : [] },
+      },
+    }),
+  );
+  await page.route("**/rpc/team/board", (route) =>
+    route.fulfill({
+      json: {
+        json: {
+          rows: [
+            { botId: "chief", availability: "unavailable", observedAt: new Date().toISOString() },
+          ],
+          hostLabel: "This computer",
+        },
+      },
+    }),
+  );
+  await page.getByRole("button", { name: "Activity", exact: true }).click();
+  await expect(activityRow(page, "Chief").filter({ hasText: "Needs input" })).toBeVisible();
+  await expect(activityRow(page, "Chief").filter({ hasText: "Needs takeover" })).toBeVisible();
+  await expect(page.locator("aside").first().getByText("Status unavailable")).toHaveCount(0);
+  await captureActivitySidebar(page, testInfo, "activity-owner-decisions");
+});
+
 test("Activity shows delegation lineage and requests a tree stop", async ({ page }, testInfo) => {
-  await signup(page, `delegation-${Date.now()}@ardurbot.test`, "password12", "Delegation");
+  await signup(page, `delegation-${Date.now()}@example.test`, "password12", "Delegation");
   await completeOnboarding(page);
   let stopping = false;
   await page.route("**/rpc/runs/list", (route) =>

@@ -26,11 +26,11 @@ export function teamState(input: {
   blocked?: boolean;
 }): TeamRow["state"] {
   if (input.approval) return "waiting-approval";
+  if (input.blocked) return "blocked";
   if (input.delegationStatus === "completed") return "completed";
   if (input.delegationStatus === "accepted" && !active.includes(input.runStatus ?? ""))
     return "accepted";
   if (
-    input.blocked ||
     ["waiting_input", "waiting_takeover", "failed"].includes(input.runStatus ?? "") ||
     ["failed", "cancel-requested"].includes(input.delegationStatus ?? "")
   )
@@ -176,7 +176,9 @@ export async function teamBoard(
       runStatus: run?.status,
       delegationStatus: selected?.status,
       approval,
-      blocked: selected?.status === "running" && timelineState?.kind === "blocked",
+      blocked:
+        (selected?.status === "running" && timelineState?.kind === "blocked") ||
+        ["error", "failed"].includes(bot.computer?.state ?? ""),
     });
     const executing = run?.startedAt
       ? DelegationSnapshotSchema.safeParse({

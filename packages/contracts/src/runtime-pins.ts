@@ -1,6 +1,10 @@
 import * as z from "zod";
 import type { ThinkingLevel } from "./domain.js";
 import { Id } from "./ids.js";
+import {
+  HistoricalHermesRuntimeConfigSchema,
+  RuntimeConfigExecutionManifestSchema,
+} from "./runtime-config.js";
 import { HERMES_RUNTIME_V1_DEFAULTS, HermesRuntimeConfigV1Schema } from "./runtime-config-v1.js";
 
 export const RuntimeKindSchema = z.enum([
@@ -39,6 +43,19 @@ export const nativeRuntimeHealthKeys = {
   antigravity: "antigravity",
   hermes: "hermes",
 } as const;
+
+/**
+ * Mirrors each runtime's declared `capabilities.tools`. A runtime that cannot call
+ * Ardur tools cannot coordinate tool work; surfaces that pick a coordinator warn on these.
+ */
+export const runtimeToolSupport: Record<RuntimeKind, boolean> = {
+  pi: true,
+  "claude-code": true,
+  "codex-app-server": true,
+  antigravity: false,
+  hermes: true,
+};
+export const runtimeSupportsTools = (kind: RuntimeKind): boolean => runtimeToolSupport[kind];
 
 export const HermesRuntimeConfigSchema = HermesRuntimeConfigV1Schema;
 export type HermesRuntimeConfig = z.infer<typeof HermesRuntimeConfigSchema>;
@@ -84,6 +101,11 @@ export const RuntimeInfoSchema = z.object({
   requestedEffort: z.string().optional(),
   wireEffort: z.string().optional(),
   effortMappingVersion: z.string().optional(),
+  effectiveRuntimeConfig: RuntimeConfigExecutionManifestSchema.optional(),
+  effectiveRuntimeConfigHash: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
 });
 export type RuntimeInfo = z.infer<typeof RuntimeInfoSchema>;
 
@@ -95,8 +117,13 @@ export const RuntimePinSchema = z.object({
   effort: z.string().nullable(),
   credentialId: z.string().nullable(),
   revision: z.number().int().nonnegative(),
-  runtimeConfig: HermesRuntimeConfigSchema.optional(),
+  runtimeConfig: HistoricalHermesRuntimeConfigSchema.optional(),
   runtimeConfigHash: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
+  effectiveRuntimeConfig: RuntimeConfigExecutionManifestSchema.optional(),
+  effectiveRuntimeConfigHash: z
     .string()
     .regex(/^[a-f0-9]{64}$/)
     .optional(),
