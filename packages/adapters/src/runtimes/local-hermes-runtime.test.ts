@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import profileFixture from "../../../host-runtime/python/tests/valid_profile.json" with {
   type: "json",
 };
-import type { HermesProviderBroker } from "../hermes-provider-broker.js";
+import type { BrokerRequest, HermesProviderBroker } from "../hermes-provider-broker.js";
 import { advertisedHostTools, buildHostTurn } from "../host-turn.js";
 import { LocalHermesRuntime } from "./local-hermes-runtime.js";
 
@@ -303,13 +303,12 @@ describe("LocalHermesRuntime", () => {
 
   function grantBroker() {
     const token = "a".repeat(43);
-    const open = vi.fn(
-      async () =>
-        new Response('{"id":"fixture","choices":[]}', {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-    );
+    const open = vi.fn(async (_request: BrokerRequest) => {
+      return new Response('{"id":"fixture","choices":[]}', {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
     const broker = {
       grant: { id: crypto.randomUUID(), token, expiresAt: Date.now() + 60_000 },
       revoke: vi.fn(),
