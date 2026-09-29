@@ -1881,10 +1881,10 @@ msgstr ""
 msgid "Compare bots"
 msgstr ""
 
+#: src/components/composer/ComposerMenu.tsx
 #: src/pages/CompareStart.tsx
-#: src/pages/Shell.tsx
 msgid "Compare with…"
-msgstr ""
+msgstr "Comparar con…"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Complete"
@@ -2887,7 +2887,7 @@ msgstr ""
 
 #: src/pages/CompareStart.tsx
 msgid "Could not start comparison; retry."
-msgstr ""
+msgstr "No se pudo iniciar la comparación; inténtalo de nuevo."
 
 #: src/pages/CompareStart.tsx
 msgid "Could not start comparison; review the pins and retry."

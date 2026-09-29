@@ -244,3 +244,65 @@ it("includes the current bot and requires the per-pin budget preview before star
   expect(onCreated).toHaveBeenCalledOnce();
   await act(async () => root.unmount());
 });
+it("opens from the composer menu without its own trigger and reloads bots each time", async () => {
+  calls.list.mockClear();
+  calls.list.mockResolvedValue([
+    { id: "a", name: "a" },
+    { id: "b", name: "b" },
+  ]);
+  calls.preview.mockResolvedValue({
+    participants: [participant("a"), participant("b")],
+    runs: 3,
+    tokens: 30000,
+  });
+  calls.create.mockResolvedValue(comparison);
+  calls.get.mockResolvedValue(comparison);
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  const onOpenChange = vi.fn();
+  const onCreated = vi.fn();
+  const render = (open: boolean) =>
+    root.render(
+      <CompareStart
+        botId="a"
+        text="One task"
+        open={open}
+        onOpenChange={onOpenChange}
+        onCreated={onCreated}
+      />,
+    );
+  const button = (label: string) =>
+    [...node.querySelectorAll("button")].find((button) => button.textContent === label)!;
+  await act(async () => render(false));
+  expect(node.querySelector("button")).toBeNull();
+  expect(calls.list).not.toHaveBeenCalled();
+  await act(async () => render(true));
+  expect(calls.list).toHaveBeenCalledOnce();
+  expect(node.querySelector<HTMLInputElement>("#compare-bot-a")!.checked).toBe(true);
+  await act(async () => node.querySelector<HTMLInputElement>("#compare-bot-b")!.click());
+  await act(async () => render(false));
+  await act(async () => render(true));
+  expect(calls.list).toHaveBeenCalledTimes(2);
+  expect(node.querySelector<HTMLInputElement>("#compare-bot-b")!.checked).toBe(false);
+  await act(async () => node.querySelector<HTMLInputElement>("#compare-bot-b")!.click());
+  await act(async () => button("Preview").click());
+  await act(async () => button("Start comparison").click());
+  expect(calls.create).toHaveBeenCalledWith(
+    expect.objectContaining({ participantBotIds: ["a", "b"], text: "One task" }),
+  );
+  expect(onOpenChange).toHaveBeenCalledWith(false);
+  expect(onCreated).toHaveBeenCalledOnce();
+  await act(async () => root.unmount());
+});
+it("says the comparison could not start when the bots cannot load", async () => {
+  calls.list.mockRejectedValueOnce(new Error("offline"));
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  await act(async () =>
+    root.render(<CompareStart botId="a" text="One task" open onOpenChange={() => undefined} />),
+  );
+  expect(node.querySelector('[role="alert"]')?.textContent).toBe(
+    "Could not start comparison; retry.",
+  );
+  await act(async () => root.unmount());
+});

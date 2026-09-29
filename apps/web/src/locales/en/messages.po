@@ -1881,8 +1881,8 @@ msgstr "Comment"
 msgid "Compare bots"
 msgstr "Compare bots"
 
+#: src/components/composer/ComposerMenu.tsx
 #: src/pages/CompareStart.tsx
-#: src/pages/Shell.tsx
 msgid "Compare with…"
 msgstr "Compare with…"
 

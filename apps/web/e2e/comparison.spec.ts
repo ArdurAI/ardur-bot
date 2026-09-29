@@ -15,7 +15,10 @@ test("compares a frozen task from the composer and opens separate outputs", asyn
   });
   await page.reload();
   await page.locator("textarea").fill("Explain why sources matter in a comparison.");
-  await page.getByRole("button", { name: "Compare with…", exact: true }).click();
+  // Nothing floats above the composer; comparing starts from its + menu.
+  await expect(page.getByRole("button", { name: "Compare with…", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Add files or photos", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Compare with…", exact: true }).click();
   await page.getByRole("checkbox", { name: "Reviewer", exact: true }).check();
   await page.getByRole("button", { name: "Preview", exact: true }).click();
   await expect(page.getByText(/hosted providers may bill per run/)).toBeVisible();

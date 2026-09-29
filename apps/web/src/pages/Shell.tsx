@@ -5407,11 +5407,16 @@ export const Composer = memo(function Composer({
   const mentionListboxId = useId();
   const dragDepth = useRef(0);
   const [draggingFiles, setDraggingFiles] = useState(false);
+  const [comparing, setComparing] = useState(false);
+  const [compareLoaded, setCompareLoaded] = useState(false);
   const canSend =
     draft.trim().length > 0 ||
     selectedSkill !== null ||
     selectedMentions.length > 0 ||
     pendingAttachments.length > 0;
+  const comparePrompt = comparisonBotId
+    ? serializeComposerPrompt(draft, selectedSkill, selectedMentions)
+    : "";
 
   useEffect(() => {
     if (!runError || !runErrorId) return;
@@ -5789,19 +5794,14 @@ export const Composer = memo(function Composer({
           />
         </Suspense>
       ) : null}
-      {comparisonBotId ? (
-        <Suspense
-          fallback={
-            <Button type="button" variant="ghost" size="sm" disabled>
-              <Trans>Compare with…</Trans>
-            </Button>
-          }
-        >
+      {comparisonBotId && compareLoaded ? (
+        <Suspense fallback={null}>
           <CompareStart
             botId={comparisonBotId}
-            text={serializeComposerPrompt(draft, selectedSkill, selectedMentions)}
+            text={comparePrompt}
             files={pendingAttachments.map((item) => item.file)}
-            disabled={disabled || sending}
+            open={comparing}
+            onOpenChange={setComparing}
             onCreated={() => {
               setDraft("");
               setSelectedSkill(null);
@@ -5811,56 +5811,58 @@ export const Composer = memo(function Composer({
           />
         </Suspense>
       ) : null}
-      <div className="relative h-8">
-        <div className="absolute bottom-1 start-12 flex max-w-[calc(100%-3rem)] gap-1.5 overflow-x-auto whitespace-nowrap">
-          {selectedSkill ? (
-            <span
-              data-testid="skill-chip"
-              className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-accent px-2.5 py-1 text-[13px] text-foreground"
-            >
-              <Box size={13} strokeWidth={1.7} className="shrink-0 text-muted-foreground/70" />
-              <span dir="auto" className="truncate">
-                {selectedSkill.name}
-              </span>
-              <button
-                type="button"
-                aria-label={t`Remove skill ${selectedSkill.name}`}
-                onClick={() => setSelectedSkill(null)}
-                className="text-muted-foreground hover:text-foreground"
+      {selectedSkill || selectedMentions.length ? (
+        <div data-testid="composer-chips" className="relative h-8">
+          <div className="absolute bottom-1 start-12 flex max-w-[calc(100%-3rem)] gap-1.5 overflow-x-auto whitespace-nowrap">
+            {selectedSkill ? (
+              <span
+                data-testid="skill-chip"
+                className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-accent px-2.5 py-1 text-[13px] text-foreground"
               >
-                <X size={12} strokeWidth={2} />
-              </button>
-            </span>
-          ) : null}
-          {selectedMentions.map((mention) => (
-            <span
-              key={mentionChipKey(mention)}
-              data-testid="mention-chip"
-              data-mention-kind={mention.kind}
-              className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-accent px-2.5 py-1 text-[13px] text-foreground"
-            >
-              <MentionChipIcon mention={mention} />
-              <span dir="auto" className="truncate">
-                {mention.name}
+                <Box size={13} strokeWidth={1.7} className="shrink-0 text-muted-foreground/70" />
+                <span dir="auto" className="truncate">
+                  {selectedSkill.name}
+                </span>
+                <button
+                  type="button"
+                  aria-label={t`Remove skill ${selectedSkill.name}`}
+                  onClick={() => setSelectedSkill(null)}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <X size={12} strokeWidth={2} />
+                </button>
               </span>
-              <button
-                type="button"
-                aria-label={t`Remove mention ${mention.name}`}
-                onClick={() =>
-                  setSelectedMentions((current) =>
-                    current.filter(
-                      (selected) => mentionChipKey(selected) !== mentionChipKey(mention),
-                    ),
-                  )
-                }
-                className="text-muted-foreground hover:text-foreground"
+            ) : null}
+            {selectedMentions.map((mention) => (
+              <span
+                key={mentionChipKey(mention)}
+                data-testid="mention-chip"
+                data-mention-kind={mention.kind}
+                className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-accent px-2.5 py-1 text-[13px] text-foreground"
               >
-                <X size={12} strokeWidth={2} />
-              </button>
-            </span>
-          ))}
+                <MentionChipIcon mention={mention} />
+                <span dir="auto" className="truncate">
+                  {mention.name}
+                </span>
+                <button
+                  type="button"
+                  aria-label={t`Remove mention ${mention.name}`}
+                  onClick={() =>
+                    setSelectedMentions((current) =>
+                      current.filter(
+                        (selected) => mentionChipKey(selected) !== mentionChipKey(mention),
+                      ),
+                    )
+                  }
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <X size={12} strokeWidth={2} />
+                </button>
+              </span>
+            ))}
+          </div>
         </div>
-      </div>
+      ) : null}
       <div
         data-testid="composer-bar"
         className="flex items-center gap-3.5 rounded-full border border-border bg-background py-[9px] pe-2.5 ps-3 transition-colors focus-within:border-ring"
@@ -5886,6 +5888,14 @@ export const Composer = memo(function Composer({
           onManage={onManage}
           onError={onComposerError}
           onOpen={onSlashOpen}
+          onCompare={
+            comparePrompt.trim() && !sending
+              ? () => {
+                  setCompareLoaded(true);
+                  setComparing(true);
+                }
+              : undefined
+          }
         />
         <div className="relative flex min-w-0 flex-1 items-end gap-1.5">
           <textarea

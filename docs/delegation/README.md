@@ -147,12 +147,13 @@ service.
 
 ## Compare mode (P3)
 
-The composer offers **Compare with…** when the space has at least two bots. A Team
-task card offers **Run on other bots**. Both select two through four existing bots,
-including the current bot. Preview resolves their pins before the owner starts the
-run and displays the aggregate token reservation. The optional merge reserves one
-additional run. Hosted providers may bill separately for each run; neither the
-preview nor the results invent prices.
+In a one-to-one chat, the composer's **+** menu offers **Compare with…** once there is
+a draft and the space has at least two bots. A Team task card offers **Run on other
+bots**. Both select two through four existing bots, including the current bot.
+Preview resolves their pins before the owner starts the run and displays the
+aggregate token reservation. The optional merge reserves one additional run. Hosted
+providers may bill separately for each run; neither the preview nor the results
+invent prices.
 
 `packages/contracts/src/comparison.ts` defines the frozen input, participants,
 results, merge and JSON export. `packages/adapters/src/comparison.ts` orchestrates

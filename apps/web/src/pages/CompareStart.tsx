@@ -2,7 +2,7 @@ import type { Bot, ComparisonParticipant, ComparisonStart } from "@ardurbot/cont
 import { inferAttachmentMimeType } from "@ardurbot/core";
 import { Button, Checkbox, Dialog, DialogContent, DialogTitle } from "@ardurbot/ui-web";
 import { Trans } from "@lingui/react/macro";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { rpc } from "../lib/rpc";
 import { ComparePanel, ComparisonPin } from "./ComparePanel";
 
@@ -13,6 +13,8 @@ export function CompareStart({
   files = [],
   disabled,
   onCreated,
+  open: openProp,
+  onOpenChange,
 }: {
   botId: string;
   text?: string;
@@ -20,8 +22,13 @@ export function CompareStart({
   files?: File[];
   disabled?: boolean;
   onCreated?: () => void;
+  /** Opened from elsewhere, such as the composer's menu, which then shows no trigger. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [ownOpen, setOwnOpen] = useState(false);
+  const open = openProp ?? ownOpen;
+  const setOpen = onOpenChange ?? setOwnOpen;
   const [bots, setBots] = useState<Bot[]>([]);
   const [selected, setSelected] = useState([botId]);
   const [reserveMerge, setReserveMerge] = useState(true);
@@ -33,41 +40,50 @@ export function CompareStart({
   const [request, setRequest] = useState<ComparisonStart | null>(null);
   const [comparisonId, setComparisonId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<"load" | "start" | null>(null);
+  // Every opening starts from this bot and a fresh list of the space's bots.
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    setSelected([botId]);
+    setPreview(null);
+    setRequest(null);
+    setError(null);
+    rpc.bots.list().then(
+      (next) => {
+        if (active) setBots(next);
+      },
+      () => {
+        if (active) setError("load");
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [open, botId]);
   const act = async (fn: () => Promise<void>) => {
     setBusy(true);
-    setError(false);
+    setError(null);
     try {
       await fn();
     } catch {
-      setError(true);
+      setError("start");
     } finally {
       setBusy(false);
     }
   };
   return (
     <>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        disabled={disabled || busy || (!delegationId && !text?.trim())}
-        onClick={() =>
-          void act(async () => {
-            setBots(await rpc.bots.list());
-            setSelected([botId]);
-            setPreview(null);
-            setRequest(null);
-            setOpen(true);
-          })
-        }
-      >
-        {delegationId ? <Trans>Run on other bots</Trans> : <Trans>Compare with…</Trans>}
-      </Button>
-      {error && !open ? (
-        <p role="alert">
-          <Trans>Could not start comparison; retry.</Trans>
-        </p>
+      {openProp === undefined ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={disabled || busy || (!delegationId && !text?.trim())}
+          onClick={() => setOpen(true)}
+        >
+          {delegationId ? <Trans>Run on other bots</Trans> : <Trans>Compare with…</Trans>}
+        </Button>
       ) : null}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
@@ -126,7 +142,11 @@ export function CompareStart({
               </p>
             </div>
           ) : null}
-          {error ? (
+          {error === "load" ? (
+            <p role="alert">
+              <Trans>Could not start comparison; retry.</Trans>
+            </p>
+          ) : error ? (
             <p role="alert">
               <Trans>Could not start comparison; review the pins and retry.</Trans>
             </p>

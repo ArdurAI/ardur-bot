@@ -35,6 +35,8 @@ export type ComposerMenuProps = {
   onMention: (mention: ComposerMention) => void;
   onManage: (connectionId?: string) => void;
   onError: (message: string) => void;
+  /** Present only when this draft can be compared with other bots. */
+  onCompare?: () => void;
 };
 
 export default function ComposerMenu(props: ComposerMenuProps) {
@@ -116,6 +118,9 @@ export default function ComposerMenu(props: ComposerMenuProps) {
         <DropdownMenuItem onClick={props.onFolder}>{t`Add folder`}</DropdownMenuItem>
       ) : null}
       <DropdownMenuItem onClick={props.onSlash}>{t`Slash commands`}</DropdownMenuItem>
+      {props.onCompare ? (
+        <DropdownMenuItem onClick={props.onCompare}>{t`Compare with…`}</DropdownMenuItem>
+      ) : null}
       <DropdownMenuSub>
         <DropdownMenuSubTrigger>
           {t`Integrations`}
