@@ -171,6 +171,7 @@ import {
   screenIframeSandbox,
 } from "../lib/computer-screen";
 import { desktopBridge } from "../lib/desktop";
+import { countOwnerWaiting, openDockSnapshot, publishDockWaitingCount } from "../lib/dock-badge";
 import { scheduleFocusPrompt } from "../lib/focus-prompt";
 import { INSIGHT_ACTION_EVENT } from "../lib/insight-actions";
 import { localTimezone } from "../lib/local-timezone";
@@ -1806,6 +1807,26 @@ export function ShellPage({
     : snapshot?.botId === active?.id
       ? snapshot
       : null;
+  const dockWaitingCount = useMemo(() => {
+    const view = openDockSnapshot(
+      Boolean(active) || inGroup,
+      activeSnapshot
+        ? { threadId: activeSnapshot.threadId, runs: activeThreadRuns(activeSnapshot) }
+        : null,
+    );
+    return countOwnerWaiting({
+      bots,
+      groups,
+      spaces,
+      currentSpaceId: bootstrapMe?.spaceId,
+      snapshot: view.snapshot,
+      viewingThreadId: view.viewingThreadId,
+    });
+  }, [active, activeSnapshot, bots, bootstrapMe?.spaceId, groups, inGroup, spaces]);
+  useEffect(() => {
+    if (!initialBotsLoaded) return;
+    publishDockWaitingCount(dockWaitingCount);
+  }, [dockWaitingCount, initialBotsLoaded]);
   const activeReplyTarget =
     replyTarget && activeSnapshot?.messages.some((message) => message.id === replyTarget.id)
       ? replyTarget
