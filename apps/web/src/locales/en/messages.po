@@ -260,6 +260,22 @@ msgstr "{location} · Docker not running"
 msgid "{minutes}m ago"
 msgstr "{minutes}m ago"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer"
+msgstr "{name} couldn't answer"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model account hit a rate limit"
+msgstr "{name} couldn't answer: its model account hit a rate limit"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model account needs attention"
+msgstr "{name} couldn't answer: its model account needs attention"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model is unavailable"
+msgstr "{name} couldn't answer: its model is unavailable"
+
 #. js-lingui-explicit-id
 #: src/lib/use-notifications.ts
 msgid "{name} failed"
@@ -274,6 +290,10 @@ msgstr "{name} finished"
 #: src/lib/use-notifications.ts
 msgid "{name} needs your input"
 msgstr "{name} needs your input"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} stopped before answering"
+msgstr "{name} stopped before answering"
 
 #: src/pages/LearningInbox.tsx
 msgid "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
@@ -319,7 +339,7 @@ msgstr "{tokens, plural, one {# token} other {# tokens}}"
 msgid "{toolCount, plural, one {# tool} other {# tools}}"
 msgstr "{toolCount, plural, one {# tool} other {# tools}}"
 
-#: src/pages/Shell.tsx
+#: src/lib/working-indicator.ts
 msgid "{workingBotName} is working"
 msgstr "{workingBotName} is working"
 
@@ -492,6 +512,10 @@ msgstr "Add a server name."
 #: src/pages/McpServersOverlay.tsx
 msgid "Add a stdio command."
 msgstr "Add a stdio command."
+
+#: src/lib/hermes-refusal.ts
+msgid "Add an API key connection to use this provider with Hermes."
+msgstr "Add an API key connection to use this provider with Hermes."
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Add an HTTPS server URL."
@@ -782,6 +806,10 @@ msgstr "Another service"
 msgid "Answer"
 msgstr "Answer"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "answered"
+msgstr "answered"
+
 #: src/components/AskCard.tsx
 msgid "Answered"
 msgstr "Answered"
@@ -1056,6 +1084,10 @@ msgstr "Ask first"
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Ask the server owner to configure this provider."
 msgstr "Ask the server owner to configure this provider."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Asked {asked, plural, one {# bot} other {# bots}} · {answered, plural, one {# answered} other {# answered}}"
+msgstr "Asked {asked, plural, one {# bot} other {# bots}} · {answered, plural, one {# answered} other {# answered}}"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "asks first"
@@ -1364,7 +1396,11 @@ msgstr "Bots"
 msgid "Bots act without asking by default. Add an exception only when you want to review a type of action first."
 msgstr "Bots act without asking by default. Add an exception only when you want to review a type of action first."
 
-#: src/pages/Shell.tsx
+#: src/pages/GroupPanel.tsx
+msgid "Bots answering at once"
+msgstr "Bots answering at once"
+
+#: src/lib/working-indicator.ts
 msgid "Bots are working"
 msgstr "Bots are working"
 
@@ -1590,6 +1626,10 @@ msgstr "Chat service"
 msgid "Chat Settings"
 msgstr "Chat Settings"
 
+#: src/lib/hermes-refusal.ts
+msgid "ChatGPT sign-ins only work inside Codex; add an OpenAI API key to use GPT models with Hermes."
+msgstr "ChatGPT sign-ins only work inside Codex; add an OpenAI API key to use GPT models with Hermes."
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Check"
 msgstr "Check"
@@ -1731,6 +1771,10 @@ msgstr "Claude Code (your claude sign-in)"
 #: src/pages/shell/runtime-settings.tsx
 msgid "Claude Code runs on host computers for now — change the bot's computer or its runtime."
 msgstr "Claude Code runs on host computers for now — change the bot's computer or its runtime."
+
+#: src/lib/hermes-refusal.ts
+msgid "Claude subscriptions only work in Anthropic's own apps; add an Anthropic API key to use Claude with Hermes."
+msgstr "Claude subscriptions only work in Anthropic's own apps; add an Anthropic API key to use Claude with Hermes."
 
 #: src/pages/shell/dialogs.tsx
 msgid "Clear"
@@ -2278,6 +2322,10 @@ msgstr "conversation"
 #: src/pages/TeamBoard.tsx
 msgid "Conversation with {0}"
 msgstr "Conversation with {0}"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Coordination round: {asked} asked, {answered} answered"
+msgstr "Coordination round: {asked} asked, {answered} answered"
 
 #: src/pages/GroupPanel.tsx
 msgid "Coordinator"
@@ -3081,6 +3129,10 @@ msgstr "Could not update this task; try again."
 #: src/pages/settings/UploadedFiles.tsx
 msgid "Could not update uploaded files."
 msgstr "Could not update uploaded files."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "couldn't answer"
+msgstr "couldn't answer"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Couldn't install Hermes. Try again."
@@ -4097,6 +4149,10 @@ msgstr "Finishing MCP connection…"
 msgid "First bot not created"
 msgstr "First bot not created"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Fix"
+msgstr "Fix"
+
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Fix the configuration JSON to edit these settings."
 msgstr "Fix the configuration JSON to edit these settings."
@@ -4284,6 +4340,10 @@ msgstr "Hang up first, then enter the code on screen."
 msgid "Hang up, then enter the code on screen."
 msgstr "Hang up, then enter the code on screen."
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "has not answered yet"
+msgstr "has not answered yet"
+
 #: src/pages/RoutineEditor.tsx
 msgid "header"
 msgstr "header"
@@ -4311,16 +4371,6 @@ msgstr "Hear a sample"
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes"
 msgstr "Hermes"
-
-#: src/pages/group-model-control.tsx
-#: src/pages/shell/bot-panel.tsx
-msgid "Hermes does not yet support Anthropic connections."
-msgstr "Hermes does not yet support Anthropic connections."
-
-#: src/pages/group-model-control.tsx
-#: src/pages/shell/bot-panel.tsx
-msgid "Hermes does not yet support this connection."
-msgstr "Hermes does not yet support this connection."
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes is not installed on this computer."
@@ -4676,6 +4726,10 @@ msgstr "Interval amount"
 #: src/pages/RoutineSchedule.tsx
 msgid "Interval unit"
 msgstr "Interval unit"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "is waiting for you"
+msgstr "is waiting for you"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Isolated"
@@ -8270,6 +8324,10 @@ msgstr "Stop work in this conversation"
 msgid "Stopped"
 msgstr "Stopped"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "stopped before answering"
+msgstr "stopped before answering"
+
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
@@ -9235,6 +9293,10 @@ msgstr "Voice failed"
 #: src/pages/system/SystemPage.tsx
 msgid "Voice shortcut"
 msgstr "Voice shortcut"
+
+#: src/lib/working-indicator.ts
+msgid "Waiting for a free place"
+msgstr "Waiting for a free place"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts

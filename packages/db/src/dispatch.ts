@@ -22,6 +22,7 @@ import {
   deviceDigest,
 } from "./device-grants.js";
 import { appendEventInTransaction, steerRunInTransaction } from "./events.js";
+import { recordGroupAskOutcomeInTransaction } from "./group-asks.js";
 import { createThreadMessageInTransaction } from "./messages.js";
 import type { ChannelDispatchOrigin } from "./messaging-routes.js";
 import { answerChannelQuestion, enqueueChat } from "./messaging-routes.js";
@@ -512,6 +513,17 @@ export async function confirmDispatchStop(
             )
           : delegationStopLine("stopped", "Worker"),
       );
+      // A stopped room member marks its coordination round instead of leaving
+      // the line pending.
+      if (delegation)
+        await recordGroupAskOutcomeInTransaction(tx, {
+          spaceId: run.spaceId,
+          threadId: run.threadId,
+          delegation,
+          delegationStatus: "cancelled",
+          runStatus: "cancelled",
+          now,
+        });
     }
     const stopped = await tx.run.updateMany({
       where: { id: runId, cancelRequestedAt: { not: null }, status: { in: ACTIVE } },

@@ -2955,6 +2955,94 @@ describe("stopThreadRuns", () => {
     expect(transaction.event.create).toHaveBeenCalledOnce();
   });
 
+  it("marks a still-running ask member stopped on its round when the room stops", async () => {
+    const storedMessage = {
+      id: "ask-message",
+      botId: "chief",
+      blocks: [
+        {
+          kind: "coordination",
+          nonce: "group-ask:1:ask-run:call-1",
+          round: 1,
+          text: "Say hello.",
+          updates: [],
+          members: [
+            { botId: "ada", name: "Ada", outcome: "answered" },
+            { botId: "cy", name: "Cy", outcome: "pending" },
+          ],
+        },
+      ],
+    };
+    const messageUpdate = vi.fn(async () => ({}));
+    const transaction = {
+      event: {
+        create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+          id: "cancel-event",
+          ...data,
+        })),
+      },
+      thread: { update: vi.fn().mockResolvedValue({ nextEventSeq: 1 }) },
+      $queryRaw: vi.fn(),
+      run: {
+        updateManyAndReturn: vi.fn().mockResolvedValue([
+          { id: "run-chief", botId: "chief", delegationId: null },
+          { id: "run-cy", botId: "cy", delegationId: "delegation-cy" },
+        ]),
+      },
+      delegation: {
+        findMany: vi.fn(async () => [
+          {
+            id: "delegation-cy",
+            actingBotId: "cy",
+            actingName: "Cy",
+            admissionKey: "group-ask:1:ask-run:call-1:cy",
+          },
+        ]),
+      },
+      message: {
+        findUnique: vi.fn(async () => storedMessage),
+        update: messageUpdate,
+      },
+      steeringMessage: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      computer: { findMany: vi.fn().mockResolvedValue([]) },
+      computerExecutionLease: { findMany: vi.fn().mockResolvedValue([]) },
+    };
+    const prisma = {
+      $transaction: vi.fn(async (callback: (client: typeof transaction) => unknown) =>
+        callback(transaction),
+      ),
+      computer: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      computerExecutionLease: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      event: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    } as unknown as PrismaClient;
+
+    await stopThreadRuns(
+      { prisma, sandbox: {} as SandboxProvider },
+      { spaceId: "workspace-1", userId: "user-1" } as Actor,
+      {
+        kind: "group",
+        groupId: "group-1",
+        groupName: "Test group",
+        threadId: "thread-1",
+        members: [],
+        memberBotIds: ["chief", "ada", "cy"],
+      } satisfies ThreadTarget,
+    );
+
+    const blocks = messageUpdate.mock.calls[0]?.[0].data.blocks as Array<{
+      members: Array<{ botId: string; outcome: string }>;
+    }>;
+    // The stopped member settles on the round, so the line stops pulsing;
+    // the answered member keeps its first terminal outcome.
+    expect(blocks[0]?.members.find((row) => row.botId === "cy")?.outcome).toBe("stopped");
+    expect(blocks[0]?.members.find((row) => row.botId === "ada")?.outcome).toBe("answered");
+    expect(transaction.event.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ type: "thread.message.updated" }),
+      }),
+    );
+  });
+
   it("does not tear down a stale legacy execution run when the lease owns a cancelled run", async () => {
     const releaseScreen = vi.fn().mockResolvedValue(undefined);
     const execute = vi.fn(async function* () {

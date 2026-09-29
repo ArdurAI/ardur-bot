@@ -260,6 +260,22 @@ msgstr ""
 msgid "{minutes}m ago"
 msgstr "{minutes} मिनट पहले"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer"
+msgstr "{name} जवाब नहीं दे सका"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model account hit a rate limit"
+msgstr "{name} जवाब नहीं दे सका: इसके मॉडल खाते ने रेट लिमिट पार कर ली है"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model account needs attention"
+msgstr "{name} जवाब नहीं दे सका: इसके मॉडल खाते पर ध्यान देना ज़रूरी है"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model is unavailable"
+msgstr "{name} जवाब नहीं दे सका: इसका मॉडल उपलब्ध नहीं है"
+
 #. js-lingui-explicit-id
 #: src/lib/use-notifications.ts
 msgid "{name} failed"
@@ -274,6 +290,10 @@ msgstr "{name} पूरा हुआ"
 #: src/lib/use-notifications.ts
 msgid "{name} needs your input"
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} stopped before answering"
+msgstr "{name} जवाब देने से पहले रुक गया"
 
 #: src/pages/LearningInbox.tsx
 msgid "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
@@ -319,7 +339,7 @@ msgstr "{tokens, plural, one {# टोकन} other {# टोकन}}"
 msgid "{toolCount, plural, one {# tool} other {# tools}}"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/lib/working-indicator.ts
 msgid "{workingBotName} is working"
 msgstr "{workingBotName} काम कर रहा है"
 
@@ -492,6 +512,10 @@ msgstr "सर्वर का नाम दर्ज करें।"
 #: src/pages/McpServersOverlay.tsx
 msgid "Add a stdio command."
 msgstr "एक stdio कमांड दर्ज करें।"
+
+#: src/lib/hermes-refusal.ts
+msgid "Add an API key connection to use this provider with Hermes."
+msgstr "इस प्रदाता को Hermes के साथ इस्तेमाल करने के लिए API कुंजी कनेक्शन जोड़ें।"
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Add an HTTPS server URL."
@@ -782,6 +806,10 @@ msgstr ""
 msgid "Answer"
 msgstr "उत्तर"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "answered"
+msgstr "जवाब दिया"
+
 #: src/components/AskCard.tsx
 msgid "Answered"
 msgstr "उत्तर दिया गया"
@@ -1056,6 +1084,10 @@ msgstr ""
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Ask the server owner to configure this provider."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Asked {asked, plural, one {# bot} other {# bots}} · {answered, plural, one {# answered} other {# answered}}"
+msgstr "{asked, plural, one {# बॉट} other {# बॉट}} से पूछा · {answered, plural, one {# ने जवाब दिया} other {# ने जवाब दिए}}"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "asks first"
@@ -1364,7 +1396,11 @@ msgstr ""
 msgid "Bots act without asking by default. Add an exception only when you want to review a type of action first."
 msgstr "बॉट डिफ़ॉल्ट रूप से बिना पूछे कार्रवाई करते हैं। अपवाद तभी जोड़ें जब आप किसी प्रकार की कार्रवाई की पहले समीक्षा करना चाहते हों।"
 
-#: src/pages/Shell.tsx
+#: src/pages/GroupPanel.tsx
+msgid "Bots answering at once"
+msgstr "एक साथ जवाब देने वाले बॉट"
+
+#: src/lib/working-indicator.ts
 msgid "Bots are working"
 msgstr "बॉट काम कर रहे हैं"
 
@@ -1590,6 +1626,10 @@ msgstr ""
 msgid "Chat Settings"
 msgstr "चैट सेटिंग्स"
 
+#: src/lib/hermes-refusal.ts
+msgid "ChatGPT sign-ins only work inside Codex; add an OpenAI API key to use GPT models with Hermes."
+msgstr "ChatGPT साइन-इन सिर्फ़ Codex के अंदर काम करते हैं; Hermes के साथ GPT मॉडल इस्तेमाल करने के लिए OpenAI API कुंजी जोड़ें।"
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Check"
 msgstr ""
@@ -1731,6 +1771,10 @@ msgstr ""
 #: src/pages/shell/runtime-settings.tsx
 msgid "Claude Code runs on host computers for now — change the bot's computer or its runtime."
 msgstr ""
+
+#: src/lib/hermes-refusal.ts
+msgid "Claude subscriptions only work in Anthropic's own apps; add an Anthropic API key to use Claude with Hermes."
+msgstr "Claude सब्सक्रिप्शन सिर्फ़ Anthropic के अपने ऐप में काम करते हैं; Hermes के साथ Claude इस्तेमाल करने के लिए Anthropic API कुंजी जोड़ें।"
 
 #: src/pages/shell/dialogs.tsx
 msgid "Clear"
@@ -2278,6 +2322,10 @@ msgstr ""
 #: src/pages/TeamBoard.tsx
 msgid "Conversation with {0}"
 msgstr "{0} के साथ बातचीत"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Coordination round: {asked} asked, {answered} answered"
+msgstr "समन्वय चक्र: {asked} से पूछा, {answered} ने जवाब दिया"
 
 #: src/pages/GroupPanel.tsx
 msgid "Coordinator"
@@ -3081,6 +3129,10 @@ msgstr ""
 #: src/pages/settings/UploadedFiles.tsx
 msgid "Could not update uploaded files."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "couldn't answer"
+msgstr "जवाब नहीं दे सका"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Couldn't install Hermes. Try again."
@@ -4097,6 +4149,10 @@ msgstr "MCP कनेक्शन पूरा हो रहा है…"
 msgid "First bot not created"
 msgstr "पहला बॉट नहीं बनाया गया"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Fix"
+msgstr "ठीक करें"
+
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Fix the configuration JSON to edit these settings."
 msgstr "ये सेटिंग्स संपादित करने के लिए कॉन्फ़िगरेशन JSON ठीक करें।"
@@ -4284,6 +4340,10 @@ msgstr ""
 msgid "Hang up, then enter the code on screen."
 msgstr ""
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "has not answered yet"
+msgstr "अभी तक जवाब नहीं दिया"
+
 #: src/pages/RoutineEditor.tsx
 msgid "header"
 msgstr ""
@@ -4311,16 +4371,6 @@ msgstr "एक नमूना सुनें"
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes"
 msgstr "Hermes"
-
-#: src/pages/group-model-control.tsx
-#: src/pages/shell/bot-panel.tsx
-msgid "Hermes does not yet support Anthropic connections."
-msgstr "Hermes अभी Anthropic कनेक्शन का समर्थन नहीं करता।"
-
-#: src/pages/group-model-control.tsx
-#: src/pages/shell/bot-panel.tsx
-msgid "Hermes does not yet support this connection."
-msgstr "Hermes अभी इस कनेक्शन का समर्थन नहीं करता।"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes is not installed on this computer."
@@ -4676,6 +4726,10 @@ msgstr "अंतराल मात्रा"
 #: src/pages/RoutineSchedule.tsx
 msgid "Interval unit"
 msgstr "अंतराल इकाई"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "is waiting for you"
+msgstr "आपकी प्रतीक्षा में है"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Isolated"
@@ -8270,6 +8324,10 @@ msgstr ""
 msgid "Stopped"
 msgstr "बंद"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "stopped before answering"
+msgstr "जवाब देने से पहले रुक गया"
+
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
@@ -9235,6 +9293,10 @@ msgstr "आवाज़ विफल"
 #: src/pages/system/SystemPage.tsx
 msgid "Voice shortcut"
 msgstr ""
+
+#: src/lib/working-indicator.ts
+msgid "Waiting for a free place"
+msgstr "खाली जगह का इंतज़ार"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts

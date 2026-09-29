@@ -9,10 +9,16 @@ import {
 } from "@ardurbot/contracts";
 import type { HistoricalHermesRuntimeConfig } from "@ardurbot/contracts/runtime-config";
 import {
+  HERMES_CONNECTION_POLICY,
+  hermesConnectionRefusal,
+  isHermesPassThroughProvider,
+} from "@ardurbot/core";
+import {
   legacyHermesRuntimeConfigHash,
   runtimeConfigV2Hash,
 } from "@ardurbot/core/node/runtime-config-hash";
 import { effectiveHermesRuntimeConfigV2 } from "@ardurbot/core/runtime-config";
+import { piKeyBasedCatalogModel } from "./pi-models.js";
 
 export function effectiveHermesConfig(value: unknown) {
   return effectiveHermesRuntimeConfigV2(value);
@@ -59,12 +65,36 @@ export function hermesCompatibility(
     pin.modelId !== model.id
   )
     return runtimePinProblem(pin, "pin-incomplete", "Choose a connected model for Hermes.");
-  if (!["openai-compatible", "ollama"].includes(model.provider) || model.oauth || !model.baseUrl)
+  // Sign-in (OAuth/subscription) connections never back Hermes: vendors reserve
+  // them for their own apps. API-key connections go through the broker. The
+  // decision and its sentences come from the one shared policy table.
+  const refusal = hermesConnectionRefusal(
+    model.provider,
+    model.oauth ? { oauth: true } : undefined,
+  );
+  if (refusal)
     return runtimePinProblem(
       pin,
       "runtime-unsupported-protocol",
-      "Hermes needs a Chat Completions connection with a direct endpoint.",
+      HERMES_CONNECTION_POLICY.refusalSentences[refusal],
     );
+  // Custom endpoints pass Chat Completions through to their direct URL; every
+  // other key-based connection is translated through Ardur's provider layer,
+  // which needs a registry model served by an API-key provider.
+  if (isHermesPassThroughProvider(model.provider)) {
+    if (!model.baseUrl)
+      return runtimePinProblem(
+        pin,
+        "runtime-unsupported-protocol",
+        "This connection cannot run Hermes.",
+      );
+  } else if (!piKeyBasedCatalogModel(model.provider, model.id)) {
+    return runtimePinProblem(
+      pin,
+      "runtime-unsupported-protocol",
+      "This connection cannot run Hermes.",
+    );
+  }
   if (
     !Number.isSafeInteger(model.contextWindow ?? DEFAULT_MODEL_CONTEXT_WINDOW) ||
     !Number.isSafeInteger(model.maxTokens ?? DEFAULT_MODEL_MAX_TOKENS) ||

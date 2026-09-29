@@ -338,6 +338,64 @@ it("explains an incompatible saved connection and omits it from Hermes choices",
         },
         experimental: true,
         catalog: [{ provider: "anthropic", id: "valid", label: "Valid" }],
+        credentials: [
+          {
+            id: "connection",
+            provider: "anthropic",
+            label: "Connection",
+            connectionIssue: "api-key-required",
+          },
+        ],
+        onSaved: vi.fn(),
+        onError: vi.fn(),
+      } as never),
+    ),
+  );
+  await act(async () =>
+    (node.querySelector('button[aria-label="Runtime · Worker"]') as HTMLButtonElement).click(),
+  );
+  await act(async () =>
+    vi
+      .mocked(presentMessageActionSheet)
+      .mock.calls.at(-1)![0]
+      .actions.find((action) => action.text === "Hermes")!
+      .onPress(),
+  );
+  expect(node.textContent).toContain(
+    "Claude subscriptions only work in Anthropic's own apps; add an Anthropic API key to use Claude with Hermes.",
+  );
+  await act(async () =>
+    (
+      node.querySelector('button[aria-label="Model in this group · Worker"]') as HTMLButtonElement
+    ).click(),
+  );
+  expect(vi.mocked(presentMessageActionSheet).mock.calls.at(-1)![0].actions).toHaveLength(1);
+  expect(rpc).not.toHaveBeenCalled();
+  await act(async () => root.unmount());
+});
+
+it("offers a key-based connection in the Hermes choices without a warning", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  await act(async () =>
+    root.render(
+      createElement(GroupMemberModelControl, {
+        groupId: "room",
+
+        member: {
+          ...member,
+          runtimePin: {
+            runtimeKind: "pi",
+            provider: "anthropic",
+            modelId: "valid",
+            credentialId: "connection",
+            effort: "high",
+            revision: 2,
+          },
+        },
+        experimental: true,
+        catalog: [{ provider: "anthropic", id: "valid", label: "Valid" }],
         credentials: [{ id: "connection", provider: "anthropic", label: "Connection" }],
         onSaved: vi.fn(),
         onError: vi.fn(),
@@ -354,14 +412,14 @@ it("explains an incompatible saved connection and omits it from Hermes choices",
       .actions.find((action) => action.text === "Hermes")!
       .onPress(),
   );
-  expect(node.textContent).toContain("Hermes does not yet support Anthropic connections.");
+  expect(node.textContent).not.toContain("Claude subscriptions");
   await act(async () =>
     (
       node.querySelector('button[aria-label="Model in this group · Worker"]') as HTMLButtonElement
     ).click(),
   );
-  expect(vi.mocked(presentMessageActionSheet).mock.calls.at(-1)![0].actions).toHaveLength(1);
-  expect(rpc).not.toHaveBeenCalled();
+  const actions = vi.mocked(presentMessageActionSheet).mock.calls.at(-1)![0].actions;
+  expect(actions.some((action) => action.text === "anthropic · Valid")).toBe(true);
   await act(async () => root.unmount());
 });
 

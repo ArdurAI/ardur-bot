@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Group coordination round</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module">
+      import { setupI18n } from "@lingui/core";
+      import { I18nProvider } from "@lingui/react";
+      import { createElement as h } from "react";
+      import { createRoot } from "react-dom/client";
+      import { CoordinationLine } from "../../src/components/ai/CoordinationLine";
+      import "../../src/styles.css";
+
+      const i18n = setupI18n({ locale: "en", messages: { en: {} } });
+      const failed = new URLSearchParams(location.search).get("failed") === "1";
+
+      // One ask round: three members asked. Without a failure, all three
+      // answered; with one, Radiant could not use its model account.
+      const members = failed
+        ? [
+            { botId: "radiant", name: "Radiant", outcome: "failed", reasonCode: "auth" },
+            { botId: "test", name: "test", outcome: "answered" },
+            { botId: "zai", name: "zai-bot", outcome: "answered" },
+          ]
+        : [
+            { botId: "radiant", name: "Radiant", outcome: "answered" },
+            { botId: "test", name: "test", outcome: "answered" },
+            { botId: "zai", name: "zai-bot", outcome: "answered" },
+          ];
+
+      const block = {
+        kind: "coordination",
+        nonce: "group-ask:1:chief-run:call-1",
+        round: 1,
+        text: "Say hello to your teammates in this thread.",
+        updates: [],
+        members,
+      };
+
+      // Mirrors the transcript: the owner's message, the coordinator's collapsed
+      // coordination line, then each member's own reply as ordinary messages.
+      const owner = h(
+        "div",
+        { className: "relative flex w-full justify-end" },
+        h(
+          "div",
+          {
+            "data-testid": "message-user-bubble",
+            className:
+              "max-w-[min(70%,calc(100%_-_6rem))] whitespace-pre-wrap rounded-[20px] bg-chat-user px-[18px] py-3 text-[15.5px] leading-[1.45] text-chat-user-foreground",
+          },
+          "make every say hello to each other",
+        ),
+      );
+      const memberBubble = (name, text) =>
+        h(
+          "div",
+          { className: "relative flex w-full justify-start" },
+          h(
+            "div",
+            {
+              "data-testid": "message-bot-bubble",
+              className:
+                "max-w-[min(74%,calc(100%_-_6rem))] rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90",
+            },
+            h("div", null, `${name}: ${text}`),
+          ),
+        );
+
+      createRoot(document.getElementById("root")).render(
+        h(
+          I18nProvider,
+          { i18n },
+          h(
+            "main",
+            {
+              className:
+                "flex min-h-screen flex-col justify-end gap-2 bg-background px-4 py-6 md:px-7 md:py-6",
+            },
+            owner,
+            h(
+              "div",
+              { "data-testid": "coordination-round" },
+              h(CoordinationLine, {
+                block,
+                onOpenMemberSettings: (botId) => {
+                  window.location.assign(`/app/${botId}`);
+                },
+              }),
+            ),
+            memberBubble("Radiant", "Hello everyone! Glad to be here."),
+            memberBubble("test", "Hi all 👋"),
+            memberBubble("zai-bot", "Hey team, good to meet you."),
+          ),
+        ),
+      );
+    </script>
+  </body>
+</html>

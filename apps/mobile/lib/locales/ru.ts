@@ -51,9 +51,12 @@ export const RU_MESSAGES: Record<string, string> = {
   "The Hermes install on this computer failed its safety check.":
     "Установка Hermes на этом компьютере не прошла проверку безопасности.",
   "Hermes isn't available on Windows yet.": "Hermes пока недоступен в Windows.",
-  "Hermes does not yet support Anthropic connections.":
-    "Hermes пока не поддерживает подключения Anthropic.",
-  "Hermes does not yet support this connection.": "Hermes пока не поддерживает это подключение.",
+  "Claude subscriptions only work in Anthropic's own apps; add an Anthropic API key to use Claude with Hermes.":
+    "Подписки Claude работают только в собственных приложениях Anthropic; добавьте API-ключ Anthropic, чтобы использовать Claude с Hermes.",
+  "ChatGPT sign-ins only work inside Codex; add an OpenAI API key to use GPT models with Hermes.":
+    "Вход через ChatGPT работает только внутри Codex; добавьте API-ключ OpenAI, чтобы использовать модели GPT с Hermes.",
+  "Add an API key connection to use this provider with Hermes.":
+    "Добавьте подключение с API-ключом, чтобы использовать этого поставщика с Hermes.",
   "Hermes runs with this computer's access.": "Hermes работает с правами доступа этого компьютера.",
   "Antigravity did not finish in time. Try again.":
     "Antigravity не завершил запрос вовремя. Повторите попытку.",
@@ -167,6 +170,7 @@ export const RU_MESSAGES: Record<string, string> = {
   Read: "Прочитано",
   Replied: "Получен ответ",
   "Waiting for a turn": "Ожидает очереди",
+  "Waiting for a free place": "Ждёт свободного места",
   Expired: "Срок истёк",
   "Could not update learning. Try again.": "Не удалось обновить обучение. Повторите попытку.",
   "Could not update this task; try again.": "Не удалось обновить задачу. Повторите попытку.",
@@ -1162,6 +1166,7 @@ export const RU_MESSAGES: Record<string, string> = {
   "All bots": "Все боты",
   "Bots keep the board and memory current":
     "Боты поддерживают доску и память в актуальном состоянии",
+  "Bots answering at once": "Боты, отвечающие одновременно",
   "Learning review is off": "Проверка обучения выключена",
   "Learning review is on": "Проверка обучения включена",
   "Reviewer: {model}": "Проверяющая модель: {model}",
@@ -1342,4 +1347,22 @@ export const RU_MESSAGES: Record<string, string> = {
   "Interrupted: {title}": "Прервано: {title}",
   "Unknown: {title}": "Неизвестно: {title}",
   Command: "Команда",
+  "1 bot": "1 бот",
+  "{count} bots": "{count} бота",
+  "{count} answered": "{count} ответили",
+  "Asked {asked} · {answered}": "Спрошено: {asked} · {answered}",
+  "{name} couldn't answer": "{name} не смог ответить",
+  "{name} couldn't answer: its model account needs attention":
+    "{name} не смог ответить: аккаунт его модели требует внимания",
+  "{name} couldn't answer: its model account hit a rate limit":
+    "{name} не смог ответить: аккаунт его модели достиг лимита запросов",
+  "{name} couldn't answer: its model is unavailable":
+    "{name} не смог ответить: его модель недоступна",
+  "{name} stopped before answering": "{name} остановился до ответа",
+  Fix: "Исправить",
+  answered: "ответил",
+  "couldn't answer": "не смог ответить",
+  "stopped before answering": "остановился до ответа",
+  "is waiting for you": "ждёт вас",
+  "has not answered yet": "пока не ответил",
 };

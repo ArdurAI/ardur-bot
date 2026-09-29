@@ -458,7 +458,9 @@ export async function maintainBriefs(
           AND NOT source.blocks @> '[{"kind":"channel_message"}]'::jsonb
       ))
       AND (b."leaseExpiresAt" IS NULL OR b."leaseExpiresAt" <= NOW())
-      AND NOT EXISTS (SELECT 1 FROM runs active WHERE active."threadId" = t.id AND active.status IN ('running', 'leased') AND active."leaseExpiresAt" > NOW())
+      -- A room's other members may still be answering; only this bot's own active run
+      -- in the thread postpones its brief.
+      AND NOT EXISTS (SELECT 1 FROM runs active WHERE active."threadId" = t.id AND active."botId" = b."botId" AND active.status IN ('running', 'leased') AND active."leaseExpiresAt" > NOW())
     ORDER BY b."attemptedAt" ASC NULLS FIRST, b.id ASC LIMIT 5
   `;
   for (const brief of pending) await refresh(brief.pendingRunId);

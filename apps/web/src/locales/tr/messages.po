@@ -260,6 +260,22 @@ msgstr ""
 msgid "{minutes}m ago"
 msgstr "{minutes} dk önce"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer"
+msgstr "{name} yanıtlayamadı"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model account hit a rate limit"
+msgstr "{name} yanıtlayamadı: model hesabı hız sınırına ulaştı"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model account needs attention"
+msgstr "{name} yanıtlayamadı: model hesabı ilgi gerektiriyor"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model is unavailable"
+msgstr "{name} yanıtlayamadı: modeli kullanılamıyor"
+
 #. js-lingui-explicit-id
 #: src/lib/use-notifications.ts
 msgid "{name} failed"
@@ -274,6 +290,10 @@ msgstr "{name} çalışmasını tamamladı"
 #: src/lib/use-notifications.ts
 msgid "{name} needs your input"
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} stopped before answering"
+msgstr "{name} yanıtlamadan önce durduruldu"
 
 #: src/pages/LearningInbox.tsx
 msgid "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
@@ -319,7 +339,7 @@ msgstr "{tokens, plural, one {# token} other {# token}}"
 msgid "{toolCount, plural, one {# tool} other {# tools}}"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/lib/working-indicator.ts
 msgid "{workingBotName} is working"
 msgstr "{workingBotName} çalışıyor"
 
@@ -492,6 +512,10 @@ msgstr "Bir sunucu adı gir."
 #: src/pages/McpServersOverlay.tsx
 msgid "Add a stdio command."
 msgstr "Bir stdio komutu gir."
+
+#: src/lib/hermes-refusal.ts
+msgid "Add an API key connection to use this provider with Hermes."
+msgstr "Bu sağlayıcıyı Hermes ile kullanmak için bir API anahtarı bağlantısı ekleyin."
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Add an HTTPS server URL."
@@ -782,6 +806,10 @@ msgstr ""
 msgid "Answer"
 msgstr "Yanıtla"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "answered"
+msgstr "yanıtladı"
+
 #: src/components/AskCard.tsx
 msgid "Answered"
 msgstr "Yanıtlandı"
@@ -1056,6 +1084,10 @@ msgstr ""
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Ask the server owner to configure this provider."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Asked {asked, plural, one {# bot} other {# bots}} · {answered, plural, one {# answered} other {# answered}}"
+msgstr "{asked, plural, one {# bota} other {# bota}} soruldu · {answered, plural, one {# yanıtladı} other {# yanıtladı}}"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "asks first"
@@ -1364,7 +1396,11 @@ msgstr ""
 msgid "Bots act without asking by default. Add an exception only when you want to review a type of action first."
 msgstr "Botlar varsayılan olarak sormadan hareket eder. Yalnızca belirli bir işlem türünü önce incelemek istediğinde istisna ekle."
 
-#: src/pages/Shell.tsx
+#: src/pages/GroupPanel.tsx
+msgid "Bots answering at once"
+msgstr "Aynı anda yanıt veren botlar"
+
+#: src/lib/working-indicator.ts
 msgid "Bots are working"
 msgstr "Botlar çalışıyor"
 
@@ -1590,6 +1626,10 @@ msgstr ""
 msgid "Chat Settings"
 msgstr "Sohbet Ayarları"
 
+#: src/lib/hermes-refusal.ts
+msgid "ChatGPT sign-ins only work inside Codex; add an OpenAI API key to use GPT models with Hermes."
+msgstr "ChatGPT oturumları yalnızca Codex içinde çalışır; GPT modellerini Hermes ile kullanmak için bir OpenAI API anahtarı ekleyin."
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Check"
 msgstr ""
@@ -1731,6 +1771,10 @@ msgstr ""
 #: src/pages/shell/runtime-settings.tsx
 msgid "Claude Code runs on host computers for now — change the bot's computer or its runtime."
 msgstr ""
+
+#: src/lib/hermes-refusal.ts
+msgid "Claude subscriptions only work in Anthropic's own apps; add an Anthropic API key to use Claude with Hermes."
+msgstr "Claude abonelikleri yalnızca Anthropic'in kendi uygulamalarında çalışır; Claude'u Hermes ile kullanmak için bir Anthropic API anahtarı ekleyin."
 
 #: src/pages/shell/dialogs.tsx
 msgid "Clear"
@@ -2278,6 +2322,10 @@ msgstr ""
 #: src/pages/TeamBoard.tsx
 msgid "Conversation with {0}"
 msgstr "{0} ile konuşma"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Coordination round: {asked} asked, {answered} answered"
+msgstr "Koordinasyon turu: {asked} soruldu, {answered} yanıtladı"
 
 #: src/pages/GroupPanel.tsx
 msgid "Coordinator"
@@ -3081,6 +3129,10 @@ msgstr ""
 #: src/pages/settings/UploadedFiles.tsx
 msgid "Could not update uploaded files."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "couldn't answer"
+msgstr "yanıtlayamadı"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Couldn't install Hermes. Try again."
@@ -4097,6 +4149,10 @@ msgstr "MCP bağlantısı tamamlanıyor…"
 msgid "First bot not created"
 msgstr "İlk bot oluşturulmadı"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Fix"
+msgstr "Düzelt"
+
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Fix the configuration JSON to edit these settings."
 msgstr "Bu ayarları düzenlemek için yapılandırma JSON'unu düzeltin."
@@ -4284,6 +4340,10 @@ msgstr ""
 msgid "Hang up, then enter the code on screen."
 msgstr ""
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "has not answered yet"
+msgstr "henüz yanıtlamadı"
+
 #: src/pages/RoutineEditor.tsx
 msgid "header"
 msgstr ""
@@ -4311,16 +4371,6 @@ msgstr "Örnek dinle"
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes"
 msgstr "Hermes"
-
-#: src/pages/group-model-control.tsx
-#: src/pages/shell/bot-panel.tsx
-msgid "Hermes does not yet support Anthropic connections."
-msgstr "Hermes henüz Anthropic bağlantılarını desteklemiyor."
-
-#: src/pages/group-model-control.tsx
-#: src/pages/shell/bot-panel.tsx
-msgid "Hermes does not yet support this connection."
-msgstr "Hermes henüz bu bağlantıyı desteklemiyor."
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes is not installed on this computer."
@@ -4676,6 +4726,10 @@ msgstr "Aralık miktarı"
 #: src/pages/RoutineSchedule.tsx
 msgid "Interval unit"
 msgstr "Aralık birimi"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "is waiting for you"
+msgstr "sizi bekliyor"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Isolated"
@@ -8270,6 +8324,10 @@ msgstr ""
 msgid "Stopped"
 msgstr "Durduruldu"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "stopped before answering"
+msgstr "yanıtlamadan durdu"
+
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
@@ -9235,6 +9293,10 @@ msgstr "Ses hatası"
 #: src/pages/system/SystemPage.tsx
 msgid "Voice shortcut"
 msgstr ""
+
+#: src/lib/working-indicator.ts
+msgid "Waiting for a free place"
+msgstr "Boş yer bekleniyor"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts

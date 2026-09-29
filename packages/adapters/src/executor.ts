@@ -80,6 +80,8 @@ import {
   expandSkillReferencesInPrompt,
   formatSkillRunPrompt,
   formatSkillsCatalogInstruction,
+  groupAskMessageNonce,
+  groupAskPrefix,
   humanizeToolName,
   inferAttachmentMimeType,
   isMessagingChannelRun,
@@ -291,7 +293,12 @@ import { resolveDeploymentModel } from "./deployment-model.js";
 import { startExecutionHeartbeat } from "./execution-heartbeat.js";
 import { beforeFileChange, fileChangeText, recordFileChange } from "./file-changes.js";
 import { wakeGoalAfterDelegation } from "./goal-wake.js";
-import { askGroupMembers, loadAskWakeContext, wakeCoordinatorAfterAsk } from "./group-ask.js";
+import {
+  askGroupMembers,
+  loadAskWakeContext,
+  recordGroupAskProgress,
+  wakeCoordinatorAfterAsk,
+} from "./group-ask.js";
 import { handoffToGroupBot, loadGroupContext } from "./group-handoff.js";
 import { captureRunModelPin, selectRunPinSource } from "./group-model-pin.js";
 import {
@@ -362,6 +369,7 @@ import {
   secretValuesToRedact,
   serializeModelSecret,
 } from "./pi-oauth.js";
+import { catalogModels } from "./pi-runtime.js";
 import {
   assertPlotDataWithinLimits,
   PLOT_TOOL_GUIDE,
@@ -1191,6 +1199,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
       if (!Number.isSafeInteger(runOutputTokens) || runOutputTokens < maxOutputTokens)
         throw new Error("The Hermes run model limits are invalid.");
       const sourceAllowance = await brokerRunAllowance(deps.prisma, sourceRunId);
+      // Custom endpoints pass Chat Completions through to their own URL; every
+      // other admitted key-based connection is translated through the provider
+      // layer with the same registry the built-in runtime streams from.
+      const translated = pin.provider !== "openai-compatible" && pin.provider !== "ollama";
+      const catalogModel = translated
+        ? catalogModels().getModel(pin.provider!, pin.modelId!)
+        : undefined;
+      if (translated && !catalogModel)
+        throw new Error("The pinned model is not available in this runtime.");
       const broker = new HermesProviderBroker({
         scope,
         credentialId: pin.credentialId!,
@@ -1199,9 +1216,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
           credentialId: pin.credentialId!,
           provider: pin.provider!,
           modelId: pin.modelId!,
-          baseUrl: request.model.baseUrl!,
-          apiKey: request.model.apiKey,
-          route: "openai-completions",
+          baseUrl: request.model.baseUrl ?? catalogModel?.baseUrl ?? "",
+          apiKey: translated ? undefined : request.model.apiKey,
+          route: translated ? "provider-translated" : "openai-completions",
           contextWindow,
           maxOutputTokens,
           acceptsImages: Boolean(request.model.acceptsImages),
@@ -1212,6 +1229,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           },
           reportedModel: "required",
         },
+        ...(translated ? { catalog: { model: catalogModel!, apiKey: request.model.apiKey } } : {}),
         tools:
           request.tools === "none"
             ? []
@@ -2941,6 +2959,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
         let handedOff = false;
         // Asked members answer after this turn; an empty coordinator reply adds nothing then.
         let askedMembers = false;
+        // The coordination round this turn opened; its progress notes fold into
+        // the round's line instead of posting chat bubbles.
+        let openCoordinationNonce: string | undefined;
         let progressRedactor = createStreamingRedactor(runSecrets);
         const scripted = runtime.describe().capabilities.scripted;
         const script =
@@ -5147,6 +5168,25 @@ export function createRunExecutor(deps: ExecutorDeps) {
             const text = clampUserProgressMessage(rawMessage);
             if (!text) return finish({ error: "message is required" });
             const truncated = isProgressMessageTruncated(rawMessage);
+            // During a coordination round a progress note folds into the round's
+            // collapsed line instead of a chat bubble: this turn's own ask, or
+            // the round whose wake this turn is answering.
+            const wake = parseAskWakeNonce(run.clientNonce);
+            const coordinationNonce =
+              openCoordinationNonce ?? (wake ? groupAskPrefix(wake) : undefined);
+            if (coordinationNonce && thread.groupId) {
+              const folded = await recordGroupAskProgress(deps, run, {
+                nonce: coordinationNonce,
+                note: text,
+              });
+              if (folded) {
+                publishedMidTurnUserMessage = true;
+                return finish({
+                  ok: true,
+                  note: "Progress noted on the open ask; the room shows it on the ask's line, not as a separate message.",
+                });
+              }
+            }
             await flushProgress();
             await publishMidTurnNarration();
             await publishMessage(
@@ -5300,7 +5340,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 callId: executionId,
               },
             );
-            if ("ok" in result) askedMembers = true;
+            if ("ok" in result) {
+              askedMembers = true;
+              openCoordinationNonce = groupAskMessageNonce(
+                { round: askRoundForRun(run.clientNonce), askRunId: run.id },
+                executionId,
+              );
+            }
             return finish(result);
           }
           if (name === "archive_bot" || name === "delete_bot") {

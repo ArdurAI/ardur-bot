@@ -20,6 +20,8 @@ export function previewFromBlocks(blocks: unknown): string {
     if (!block || typeof block !== "object") continue;
     const candidate = block as MessageBlock;
     if (isReasoningSummaryBlock(candidate)) continue;
+    // A coordination round is room bookkeeping; the replies after it preview.
+    if (candidate.kind === "coordination") continue;
     if ("text" in candidate && typeof candidate.text === "string") {
       return plainTextFromMarkdown(candidate.text);
     }

@@ -498,6 +498,44 @@ it("still asks to connect a model when only Hermes is available", async () => {
   }));
 });
 
+it("says why a saved Hermes reviewer on a sign-in connection cannot run", async () => {
+  const current = await api.learning();
+  api.learning.mockResolvedValue({
+    ...current,
+    reviewerPin: {
+      runtimeKind: "hermes",
+      provider: "openai-codex",
+      modelId: "gpt-6-sol",
+      credentialId: "chatgpt",
+      effort: "medium",
+      revision: 2,
+    },
+  });
+  api.modelsList.mockResolvedValue([
+    { provider: "openai-codex", id: "gpt-6-sol", thinkingLevels: ["medium"] },
+    { provider: "openai-compatible", id: "local-model", thinkingLevels: ["off"] },
+  ]);
+  const connections: { id: string; provider: string; label: string; oauth?: boolean }[] = [
+    { id: "chatgpt", provider: "openai-codex", label: "ChatGPT", oauth: true },
+    { id: "local", provider: "openai-compatible", label: "Local" },
+  ];
+  api.modelsCredentials.mockResolvedValue(connections);
+  const node = await render();
+  expect(node.querySelector<HTMLSelectElement>("#learning-reviewer-runtime")?.value).toBe("hermes");
+  expect(node.querySelector('[role="status"]')?.textContent).toBe(
+    "ChatGPT sign-ins only work inside Codex; add an OpenAI API key to use GPT models with Hermes.",
+  );
+  const reviewer = node.querySelector<HTMLSelectElement>("#learning-reviewer")!;
+  const option = (provider: string) =>
+    [...reviewer.options].find((entry) => entry.value.includes(`"${provider}"`));
+  expect(option("openai-codex")?.disabled).toBe(true);
+  expect(option("openai-compatible")?.disabled).toBe(false);
+  // Another runtime for the reviewer: the line goes with it.
+  await choose(node.querySelector<HTMLSelectElement>("#learning-reviewer-runtime")!, "pi");
+  expect(node.querySelector('[role="status"]')).toBeNull();
+  api.learning.mockResolvedValue(current);
+});
+
 it("saves Hermes and Antigravity reviewers as those runtimes", async () => {
   api.modelsList.mockResolvedValue([
     { provider: "openai-compatible", id: "local-model", thinkingLevels: ["off", "medium"] },

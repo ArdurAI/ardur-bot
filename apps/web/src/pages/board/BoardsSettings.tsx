@@ -7,7 +7,12 @@ import {
   type SpaceLearningConfig,
 } from "@ardurbot/contracts";
 import type { BoardConfiguration, BoardProblem, BoardWorkspace } from "@ardurbot/contracts/board";
-import { modelPinOptionKey, parseModelPinOptionKey, spaceDefaultEffort } from "@ardurbot/core";
+import {
+  hermesConnectionRefusal,
+  modelPinOptionKey,
+  parseModelPinOptionKey,
+  spaceDefaultEffort,
+} from "@ardurbot/core";
 import {
   Button,
   Dialog,
@@ -22,6 +27,7 @@ import { ORPCError } from "@orpc/client";
 import { useEffect, useState } from "react";
 import { SuccessPop } from "../../components/ai/primitives";
 import { SettingsRow } from "../../components/SettingsRow";
+import { hermesRefusalMessage } from "../../lib/hermes-refusal";
 import { actionMessage } from "../../lib/orpc-action-message";
 import { rpc } from "../../lib/rpc";
 import type { ModelSettings } from "../../lib/use-model-settings";
@@ -99,6 +105,16 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
   const [savedPop, setSavedPop] = useState(false);
   const board = boards.find((row) => row.id === id) ?? boards[0];
   const savedReviewer = learning?.reviewerPin ?? null;
+  // A saved Hermes reviewer on a sign-in connection stays visible; this says why it cannot run.
+  const reviewerRefusal =
+    kind === "hermes" && savedReviewer?.runtimeKind === "hermes"
+      ? hermesConnectionRefusal(
+          savedReviewer.provider,
+          modelSettings?.credentials.find(
+            (credential) => credential.id === savedReviewer.credentialId,
+          ),
+        )
+      : undefined;
   const canChooseReviewer =
     (modelSettings?.credentials.length ?? 0) > 0 ||
     Boolean(savedReviewer?.provider && savedReviewer.modelId && savedReviewer.credentialId) ||
@@ -318,8 +334,11 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
                       settings={modelSettings}
                       showAll={false}
                       disabled={busy || !canChooseReviewer}
-                      allowedProviders={
-                        kind === "hermes" ? ["openai-compatible", "ollama"] : undefined
+                      isCredentialDisabled={
+                        kind === "hermes"
+                          ? (credential) =>
+                              Boolean(hermesConnectionRefusal(credential.provider, credential))
+                          : undefined
                       }
                       value={(() => {
                         const selected =
@@ -412,6 +431,11 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
                       )}
                     </NativeSelect>
                   )}
+                  {reviewerRefusal ? (
+                    <p role="status" className="mt-2 text-sm text-muted-foreground">
+                      {hermesRefusalMessage(reviewerRefusal)}
+                    </p>
+                  ) : null}
                   {kind === "pi" || kind === "hermes"
                     ? (() => {
                         const pin = choiceForKind();

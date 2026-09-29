@@ -1,43 +1,69 @@
 import { describe, expect, it } from "vitest";
 import {
-  latestAnswerableAskMessageId,
+  answerableAskMessageIds,
   resolveAskChoice,
   selectedAskActionLabel,
 } from "./answerable-ask.js";
 
-describe("latestAnswerableAskMessageId", () => {
+describe("answerableAskMessageIds", () => {
+  const ask = (id: string, runId: string, status = "pending") => ({
+    id,
+    runId,
+    blocks: [{ kind: "ask", status }],
+  });
+
   it("finds a waiting prompt even when a newer group run is active", () => {
-    expect(
-      latestAnswerableAskMessageId({
+    expect([
+      ...answerableAskMessageIds({
         run: { id: "run-newer", status: "running" },
         activeRuns: [
           { id: "run-newer", status: "running" },
           { id: "run-waiting", status: "waiting_input" },
         ],
-        messages: [
-          {
-            id: "ask-1",
-            runId: "run-waiting",
-            blocks: [{ kind: "ask", status: "pending" }],
-          },
-        ],
+        messages: [ask("ask-1", "run-waiting")],
       }),
-    ).toBe("ask-1");
+    ]).toEqual(["ask-1"]);
   });
 
   it("ignores answered prompts and prompts from non-waiting runs", () => {
     expect(
-      latestAnswerableAskMessageId({
+      answerableAskMessageIds({
         run: { id: "run-1", status: "running" },
-        messages: [{ id: "ask-1", runId: "run-1", blocks: [{ kind: "ask", status: "pending" }] }],
-      }),
-    ).toBeNull();
+        messages: [ask("ask-1", "run-1")],
+      }).size,
+    ).toBe(0);
     expect(
-      latestAnswerableAskMessageId({
+      answerableAskMessageIds({
         run: { id: "run-1", status: "waiting_input" },
-        messages: [{ id: "ask-1", runId: "run-1", blocks: [{ kind: "ask", status: "answered" }] }],
-      }),
-    ).toBeNull();
+        messages: [ask("ask-1", "run-1", "answered")],
+      }).size,
+    ).toBe(0);
+    expect(answerableAskMessageIds(null).size).toBe(0);
+  });
+
+  it("lets the person answer every room bot that waits at the same time", () => {
+    const answerable = answerableAskMessageIds({
+      run: { id: "run-b", status: "waiting_input" },
+      activeRuns: [
+        { id: "run-a", status: "waiting_input" },
+        { id: "run-b", status: "waiting_input" },
+        { id: "run-c", status: "running" },
+      ],
+      messages: [
+        ask("ask-a", "run-a"),
+        { id: "text-c", runId: "run-c", blocks: [{ kind: "text" }] },
+        ask("ask-b", "run-b"),
+      ],
+    });
+    expect([...answerable].sort()).toEqual(["ask-a", "ask-b"]);
+  });
+
+  it("offers only the newest unanswered question of one waiting run", () => {
+    const answerable = answerableAskMessageIds({
+      run: { id: "run-a", status: "waiting_input" },
+      messages: [ask("ask-old", "run-a"), ask("ask-new", "run-a")],
+    });
+    expect([...answerable]).toEqual(["ask-new"]);
   });
 });
 

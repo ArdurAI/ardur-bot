@@ -160,4 +160,24 @@ describe("member directory", () => {
     expect(instructions).toContain("Never claim a member said or did something");
     expect(instructions).not.toMatch(/ask_members|Ask members|handoff_to_bot/);
   });
+
+  it("keeps the coordinator's replies user-facing: no internal detail, no summaries of direct answers", () => {
+    for (const canAsk of [true, false]) {
+      const instructions = roomCoordinatorInstructions(canAsk);
+      expect(instructions).toContain("do not summarize or repeat what they said");
+      expect(instructions).toContain(
+        "Never mention tool names, board or task ids, retries, provider errors or other internal details",
+      );
+      expect(instructions).toContain("one plain sentence");
+    }
+  });
+
+  it("makes retries silent: no narration about what is different or what worked", () => {
+    const instructions = roomCoordinatorInstructions(true);
+    expect(instructions).toContain("When the user asks you to try again, just try again");
+    expect(instructions).toContain('No "what\'s different this time"');
+    expect(instructions).toContain('no "it worked this time"');
+    // The retry rule rides on asking: a turn that cannot ask never sees it.
+    expect(roomCoordinatorInstructions(false)).not.toContain("try again");
+  });
 });

@@ -186,3 +186,14 @@ export function piModelLimits(
     reasoning: model?.reasoning === true ? true : undefined,
   };
 }
+
+/**
+ * True when the bundled registry knows this model and the provider accepts a
+ * plain API key. OAuth-only providers (ChatGPT sign-in) report false, so the
+ * Hermes broker never routes a subscription through the translated path.
+ */
+export function piKeyBasedCatalogModel(provider: string, id: string): boolean {
+  cachedRegistry ??= builtinModels();
+  const entry = cachedRegistry.getProvider(provider);
+  return Boolean(entry?.auth.apiKey && cachedRegistry.getModel(provider, id));
+}
