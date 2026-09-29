@@ -1175,12 +1175,12 @@ describeWithDatabase("API authorization and resource isolation", () => {
     ).toMatchObject({ apiKey: "fake-saved-key", reasoning: true });
     const update = {
       botId: bot.id,
+      expectedModelPinRevision: bot.modelPinRevision ?? 0,
       modelProvider: connection.provider,
       modelId: connection.modelId,
     };
-    expect(
-      await rpc(app, cookie, "bots/update", { ...update, thinkingLevel: "low" }),
-    ).toMatchObject({ thinkingLevel: "low" });
+    const low = await rpc<Bot>(app, cookie, "bots/update", { ...update, thinkingLevel: "low" });
+    expect(low).toMatchObject({ thinkingLevel: "low" });
     expect(
       (await raw(app, cookie, "bots/update", { ...update, thinkingLevel: "xhigh" })).status,
     ).toBe(400);
@@ -1190,7 +1190,11 @@ describeWithDatabase("API authorization and resource isolation", () => {
       (await raw(app, cookie, "bots/update", { ...update, thinkingLevel: "medium" })).status,
     ).toBe(400);
     expect(
-      await rpc(app, cookie, "bots/update", { ...update, thinkingLevel: "off" }),
+      await rpc(app, cookie, "bots/update", {
+        ...update,
+        expectedModelPinRevision: low.modelPinRevision,
+        thinkingLevel: "off",
+      }),
     ).toMatchObject({ thinkingLevel: "off" });
   });
 
@@ -1218,6 +1222,7 @@ describeWithDatabase("API authorization and resource isolation", () => {
       }
     >(app, cookie, "bots/update", {
       botId: bot.id,
+      expectedModelPinRevision: bot.modelPinRevision ?? 0,
       modelProvider: "xai",
       modelId: "grok-4.6",
       thinkingLevel: "high",

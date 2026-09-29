@@ -183,7 +183,8 @@ import {
 import { ExportDownloadSchema } from "./privacy.js";
 import { FeedbackReasonSchema, MessageReactionSchema } from "./reactions.js";
 import { RoutineRunSchema, RunsListOutputSchema } from "./runs.js";
-import { RuntimeAvailabilitySchema, RuntimeKindSchema } from "./runtime-pins.js";
+import { HermesRuntimeConfigPreviewSchema, RuntimeConfigIssueSchema } from "./runtime-config.js";
+import { RuntimeAvailabilitySchema, RuntimeKindSchema, RuntimePinSchema } from "./runtime-pins.js";
 import { SearchQueryOutputSchema } from "./search.js";
 import { teamContract } from "./team.js";
 import {
@@ -329,6 +330,21 @@ function createFleetContract() {
       .output(z.object({ ok: z.literal(true) })),
   };
 }
+
+export const groupsContract = {
+  create: oc.input(CreateGroupInput).output(GroupSchema),
+  list: oc.output(z.array(GroupSchema)),
+  listArchived: oc.output(z.array(GroupSchema)),
+  get: oc.input(groupId).output(GroupDetailSchema),
+  duplicate: oc.input(groupId).output(GroupSchema),
+  update: oc.input(UpdateGroupInput).output(GroupSchema),
+  setMemberModelPin: oc.input(SetGroupMemberModelPinInput).output(GroupSchema),
+  clearMemberModelPin: oc.input(ClearGroupMemberModelPinInput).output(GroupSchema),
+  archive: oc.input(groupId).output(z.object({ ok: z.literal(true) })),
+  restore: oc.input(groupId).output(z.object({ ok: z.literal(true) })),
+  remove: oc.input(groupId).output(z.object({ ok: z.literal(true) })),
+};
+export type GroupsContract = typeof groupsContract;
 
 export const appContract = {
   features: featuresContract,
@@ -499,6 +515,22 @@ export const appContract = {
       .input(z.object({ loginId: z.string() }))
       .output(z.object({ ok: z.literal(true) })),
   },
+  runtimeConfig: {
+    preview: oc
+      .input(
+        z.object({
+          runtimeKind: z.string(),
+          runtimeConfig: z.unknown(),
+          pin: RuntimePinSchema.omit({ revision: true }),
+        }),
+      )
+      .output(
+        z.object({
+          preview: HermesRuntimeConfigPreviewSchema.optional(),
+          issues: z.array(RuntimeConfigIssueSchema),
+        }),
+      ),
+  },
   models: {
     ollama: oc.output(OllamaStatusSchema),
     testOllama: oc.input(z.object({ baseUrl: z.string() })).output(OllamaStatusSchema),
@@ -567,19 +599,7 @@ export const appContract = {
       }),
     ),
   },
-  groups: {
-    create: oc.input(CreateGroupInput).output(GroupSchema),
-    list: oc.output(z.array(GroupSchema)),
-    listArchived: oc.output(z.array(GroupSchema)),
-    get: oc.input(groupId).output(GroupDetailSchema),
-    duplicate: oc.input(groupId).output(GroupSchema),
-    update: oc.input(UpdateGroupInput).output(GroupSchema),
-    setMemberModelPin: oc.input(SetGroupMemberModelPinInput).output(GroupSchema),
-    clearMemberModelPin: oc.input(ClearGroupMemberModelPinInput).output(GroupSchema),
-    archive: oc.input(groupId).output(z.object({ ok: z.literal(true) })),
-    restore: oc.input(groupId).output(z.object({ ok: z.literal(true) })),
-    remove: oc.input(groupId).output(z.object({ ok: z.literal(true) })),
-  },
+  groups: groupsContract as GroupsContract,
   botSections: {
     list: oc.output(z.array(BotSectionSchema)),
     create: oc

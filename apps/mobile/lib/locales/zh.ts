@@ -15,6 +15,8 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Conversation with {name}": "与 {name} 的对话",
   "{count} active tasks": "{count} 项进行中的任务",
   "{count} peer messages waiting": "{count} 条待处理的 Bot 消息",
+  "{runtime} can't use Ardur tools — a coordinator needs tools to hand off work.":
+    "{runtime} 无法使用 Ardur 工具——协调者需要工具来分派工作。",
   Conversation: "对话",
   "Open peer thread": "打开对方的对话",
   "This chat is view-only": "此对话仅可查看",
@@ -99,6 +101,9 @@ export const ZH_MESSAGES: Record<string, string> = {
   "What should your bots call you?": "你的 Bot 应该如何称呼你？",
   "What best describes your work?": "哪一项最符合你的工作？",
   "Instructions for all bots": "所有 Bot 的指令",
+  "Save instructions": "保存指令",
+  "Sign-in and security": "登录与安全",
+  "Devices and sessions": "设备与会话",
   "Space ID": "空间 ID",
   "Log out of all devices": "退出所有设备",
   "This signs out every other session and keeps this one signed in.":

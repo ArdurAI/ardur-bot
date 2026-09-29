@@ -22,6 +22,7 @@ import {
   HOST_WINDOW,
   HostRequestSchema,
   HostRuntimeEventSchema,
+  negotiateHostHealth,
 } from "@ardurbot/contracts/host-bridge";
 import type { RuntimeAvailability } from "@ardurbot/contracts/runtime-pins";
 import { normalizedThinkingLevel, RuntimePinError } from "@ardurbot/contracts/runtime-pins";
@@ -48,14 +49,14 @@ import {
   validateCompiledHermesProfile,
 } from "./runtimes/hermes-config.js";
 import {
+  buildHermesRuntime,
   HERMES_SOURCE_PIN,
   hermesInstallCandidate,
-  pinnedHermesLaunch,
   probeHermesInstall,
   resolveHermesLauncherAsset,
 } from "./runtimes/hermes-install.js";
 import { startHermesProviderRelay } from "./runtimes/hermes-provider-relay.js";
-import { HermesRuntime } from "./runtimes/hermes-runtime.js";
+import type { HermesRuntime } from "./runtimes/hermes-runtime.js";
 import type { NativeSpawn } from "./runtimes/native-process.js";
 import { spawnNative } from "./runtimes/native-process.js";
 
@@ -76,6 +77,10 @@ export class HostAgent {
   private importer?: LocalImportScanner;
   private readonly mcp: HostMcpServers;
   refreshMcp?: () => Promise<void>;
+  private acceptedHealth?: string;
+  setAcceptedHealth(advertisement?: string) {
+    this.acceptedHealth = advertisement;
+  }
   constructor(
     private readonly config: {
       token?: string;
@@ -306,7 +311,10 @@ export class HostAgent {
       } else if (op.op === "computer.remote.call") {
         await this.fleet.call(op, context, send);
       } else if (op.op === "host.health") {
-        await send("result", await this.health(op.refreshSignIn));
+        await send(
+          "result",
+          negotiateHostHealth(await this.health(op.refreshSignIn), this.acceptedHealth),
+        );
       } else if (op.op === "board.run") {
         const result = await new BoardRunner({ root: this.config.root, hostRoots: this.roots }).run(
           op.request,
@@ -634,29 +642,20 @@ export class HostAgent {
     try {
       let runtime = this.runtimes[kind];
       if (kind === "hermes") {
-        const install = hermesInstallCandidate(this.config.root, process.env.ARDUR_HERMES_INSTALL);
-        if (!install || !relay) throw new Error("Pinned Hermes install is unavailable.");
-        const qualified = probeHermesInstall(install);
-        const staging = await realpath(this.config.root);
-        const overlap = path.relative(qualified.root, staging);
-        if (
-          overlap === "" ||
-          (overlap !== ".." && !overlap.startsWith(`..${path.sep}`) && !path.isAbsolute(overlap))
-        )
-          throw new Error("Hermes staging cannot overlap its install.");
-        const launcher = resolveHermesLauncherAsset(process.argv[1] ?? "", import.meta.url);
-        hermes = new HermesRuntime({
-          command: qualified.python,
-          args: [launcher],
-          launch: pinnedHermesLaunch(qualified.root, launcher),
-          pinned: true,
+        if (!relay) throw new Error("Pinned Hermes install is unavailable.");
+        const runtimeInstance = await buildHermesRuntime({
+          hostRoot: this.config.root,
+          explicitInstall: process.env.ARDUR_HERMES_INSTALL,
+          bundleFile: process.argv[1] ?? "",
+          moduleUrl: import.meta.url,
           executionEnvelope: profile?.envelope,
           onProfileAcknowledged: () => {
             profileAcknowledged = true;
           },
-          stagingParent: this.config.root,
           onTurnFinished: () => relay.close(),
         });
+        if (!runtimeInstance) throw new Error("Pinned Hermes install is unavailable.");
+        hermes = runtimeInstance;
         runtime = hermes;
       }
       if (!runtime) throw new Error("Host runtime is unavailable.");

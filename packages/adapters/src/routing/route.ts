@@ -1,4 +1,5 @@
 import type { RoutingRule } from "@ardurbot/contracts";
+import { resolveAddressedBotIds } from "@ardurbot/core";
 
 export type RouteTarget = { botId: string; threadId: string };
 export function routeIncoming(message: {
@@ -22,7 +23,13 @@ export function routeIncoming(message: {
     message.bots.find((bot) => {
       const escaped = bot.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       return new RegExp(`(?:^|\\s)@${escaped}(?=$|[\\s,.:!?])`, "iu").test(message.text);
-    });
+    }) ??
+    byId(
+      resolveAddressedBotIds({
+        text: message.text,
+        members: message.bots.map((bot) => ({ id: bot.botId, name: bot.name })),
+      })[0],
+    );
   const candidates: Array<[RoutingRule, RouteTarget | null | undefined]> = [
     ["mention", explicit],
     ["reply", allowed(message.replyTo)],

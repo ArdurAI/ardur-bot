@@ -10,6 +10,7 @@ import {
   TaskCompletionSchema,
   TaskProgressSchema,
 } from "@ardurbot/contracts";
+import { ASK_REQUEST_MAX_LENGTH } from "@ardurbot/core";
 import { z } from "zod";
 import { boardTools } from "./board/tools.js";
 
@@ -24,6 +25,7 @@ export const DELEGATION_TOOL_NAMES = new Set([
   "delete_bot",
   "handoff_to_bot",
   "assign",
+  "ask_members",
   "message_bot",
 ]);
 
@@ -1009,6 +1011,30 @@ export const builtinAgentTools: ConnectorTool[] = [
         message: { type: "string", description: "What the receiving bot should do next." },
       },
       required: ["message"],
+    },
+  },
+  {
+    name: "ask_members",
+    description:
+      'For this group\'s coordinator only: ask room members for their answer or contribution. Each asked member starts its own turn with your request and answers in this chat; every answer or failure comes back to you on a follow-up turn. Use ["all"] only when the request needs every member.',
+    inputSchema: {
+      type: "object",
+      properties: {
+        members: {
+          type: "array",
+          minItems: 1,
+          maxItems: 6,
+          items: { type: "string" },
+          description: 'Member ids or exact names from the room member list, or ["all"].',
+        },
+        request: {
+          type: "string",
+          minLength: 1,
+          maxLength: ASK_REQUEST_MAX_LENGTH,
+          description: "What each asked member should answer or do, specifically.",
+        },
+      },
+      required: ["members", "request"],
     },
   },
 ];

@@ -24,9 +24,11 @@ export function teamRowText(
   now = Date.now(),
 ): string {
   if (
-    row.availability === "unknown" ||
-    row.availability === "unavailable" ||
-    (row.observedAt && presenceFreshness(row.observedAt, now) === "unavailable")
+    row.state !== "blocked" &&
+    row.state !== "waiting-approval" &&
+    (row.availability === "unknown" ||
+      row.availability === "unavailable" ||
+      (row.observedAt && presenceFreshness(row.observedAt, now) === "unavailable"))
   )
     return t("Status unavailable");
   const title = row.currentTaskTitle ?? row.sentence;

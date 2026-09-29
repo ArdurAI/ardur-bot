@@ -69,6 +69,51 @@ export function effectiveBotModel(
   };
 }
 
+export function resolveBotModelChip(
+  bot: Bot,
+  settings: ModelSettings | null,
+  options: {
+    pin?: RuntimePin | null;
+    run?: { runtimePin?: RuntimePin | null; runtimeInfo?: RuntimeInfo | null } | null;
+    display?: "change" | "using";
+    requested: string;
+    notAvailable: string;
+  },
+): {
+  label: string;
+  currentId: string;
+  pinUnknown: boolean;
+  model: NonNullable<ReturnType<typeof effectiveBotModel>>;
+} | null {
+  const display = options.display ?? "change";
+  const pin = options.pin;
+  const run = options.run;
+  const pinUnknown = display === "using" && Boolean(run) && !run?.runtimePin;
+  const requested = display === "using" ? (run?.runtimePin ?? pin) : pin;
+  const displayBot = requested
+    ? {
+        ...bot,
+        runtimeKind: requested.runtimeKind,
+        modelProvider: requested.provider,
+        modelId: requested.modelId,
+        thinkingLevel: (requested.provider === "ollama" && requested.effort === "none"
+          ? "off"
+          : requested.effort) as Bot["thinkingLevel"],
+        modelCredentialId: requested.credentialId,
+        modelPinRevision: pin ? requested.revision : bot.modelPinRevision,
+      }
+    : bot;
+  const model = effectiveBotModel(displayBot, settings);
+  if (!model) return null;
+  const effort =
+    displayBot.runtimeKind === "claude-code" || displayBot.runtimeKind === "antigravity"
+      ? botEffortLabel(displayBot, display === "using" ? run : null, options.requested)
+      : (model.effortLabel ?? model.thinkingLevel);
+  const label = `${displayBot.runtimeKind && displayBot.runtimeKind !== "pi" ? "" : "Ardur · "}${model.providerLabel} · ${model.label}${effort ? ` · ${effort}` : ""}${model.unavailable ? options.notAvailable : ""}`;
+  const currentId = requested?.modelId ?? displayBot.modelId ?? model.label;
+  return { label, currentId, pinUnknown, model };
+}
+
 function nextBotPin(bot: Bot, settings: ModelSettings | null): Omit<RuntimePin, "revision"> {
   const overridden = Boolean(
     bot.modelProvider != null || bot.modelId != null || bot.modelCredentialId != null,
@@ -124,6 +169,39 @@ function sameSelection(a: Omit<RuntimePin, "revision">, b: Omit<RuntimePin, "rev
   );
 }
 
+/** The saved choice that the next run will use, and whether the admitted run still differs from it. */
+export function resolveNextRunDisclosure(
+  bot: Bot,
+  settings: ModelSettings | null,
+  options: {
+    display?: "change" | "using";
+    run?: { runtimePin?: RuntimePin | null; runtimeInfo?: RuntimeInfo | null } | null;
+    nextPin?: RuntimePin | null;
+  },
+): { label: string; differs: boolean } {
+  const display = options.display ?? "change";
+  const next = options.nextPin
+    ? normalizeSuppliedNextPin(options.nextPin, settings)
+    : nextBotPin(bot, settings);
+  const connection = settings?.credentials.find((item) => item.id === next.credentialId);
+  const label = [
+    runtimeNames[next.runtimeKind],
+    next.provider,
+    next.modelId,
+    next.effort,
+    connection?.label ?? next.credentialId,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  // An admitted explicit group pin can still carry the stored "off"; compare both sides in
+  // the same representation so an unchanged local selection never reads as a change.
+  const admitted = options.run?.runtimePin;
+  const differs =
+    display === "using" &&
+    (admitted ? !sameSelection(normalizeSuppliedNextPin(admitted, settings), next) : false);
+  return { label, differs };
+}
+
 export function BotModelChip({
   bot,
   settings,
@@ -142,46 +220,20 @@ export function BotModelChip({
   display?: "change" | "using";
 }) {
   const { t } = useLingui();
-  const pinUnknown = display === "using" && Boolean(run) && !run?.runtimePin;
-  const requested = display === "using" ? (run?.runtimePin ?? pin) : pin;
-  const displayBot = requested
-    ? {
-        ...bot,
-        runtimeKind: requested.runtimeKind,
-        modelProvider: requested.provider,
-        modelId: requested.modelId,
-        thinkingLevel: (requested.provider === "ollama" && requested.effort === "none"
-          ? "off"
-          : requested.effort) as Bot["thinkingLevel"],
-        modelCredentialId: requested.credentialId,
-        modelPinRevision: pin ? requested.revision : bot.modelPinRevision,
-      }
-    : bot;
-  const model = effectiveBotModel(displayBot, settings);
-  if (!model) return null;
-  const effort =
-    displayBot.runtimeKind === "claude-code" || displayBot.runtimeKind === "antigravity"
-      ? botEffortLabel(displayBot, display === "using" ? run : null, t`requested`)
-      : (model.effortLabel ?? model.thinkingLevel);
-  const label = `${displayBot.runtimeKind && displayBot.runtimeKind !== "pi" ? "" : "Ardur · "}${model.providerLabel} · ${model.label}${effort ? ` · ${effort}` : ""}${model.unavailable ? t` · not available` : ""}`;
-  const currentId = requested?.modelId ?? displayBot.modelId ?? model.label;
-  const next = nextPin ? normalizeSuppliedNextPin(nextPin, settings) : nextBotPin(bot, settings);
-  const connection = settings?.credentials.find((item) => item.id === next.credentialId);
-  const nextLabel = [
-    runtimeNames[next.runtimeKind],
-    next.provider,
-    next.modelId,
-    next.effort,
-    connection?.label ?? next.credentialId,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-  // An admitted explicit group pin can still carry the stored "off"; compare both sides in
-  // the same representation so an unchanged local selection never reads as a change.
-  const nextDiffers =
-    display === "using" &&
-    run?.runtimePin &&
-    !sameSelection(normalizeSuppliedNextPin(run.runtimePin, settings), next);
+  const chip = resolveBotModelChip(bot, settings, {
+    pin,
+    run,
+    display,
+    requested: t`requested`,
+    notAvailable: t` · not available`,
+  });
+  if (!chip) return null;
+  const { label, currentId, pinUnknown, model } = chip;
+  const { label: nextLabel, differs: nextDiffers } = resolveNextRunDisclosure(bot, settings, {
+    display,
+    run,
+    nextPin,
+  });
   return (
     <span className="inline-flex min-w-0 items-center gap-1">
       {onClick ? (

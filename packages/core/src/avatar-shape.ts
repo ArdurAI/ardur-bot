@@ -11,6 +11,22 @@ export function avatarIdentitySeed(identity: string): number {
   return Math.abs(hash);
 }
 
+/**
+ * Seal letter for a bot: the first grapheme of the trimmed display label,
+ * uppercased locale-aware. Grapheme segmentation keeps emoji, flags, and
+ * composed characters intact instead of slicing a surrogate pair.
+ */
+export function avatarInitial(label: string, fallback = "A"): string {
+  const trimmed = label.trim();
+  if (!trimmed) return fallback;
+  const graphemes =
+    typeof Intl.Segmenter === "function"
+      ? new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(trimmed)
+      : null;
+  const first = graphemes ? ([...graphemes][0]?.segment ?? fallback) : Array.from(trimmed)[0]!; // code-point fallback for runtimes without Segmenter
+  return first.toLocaleUpperCase();
+}
+
 export function organicAvatarPath(seed: number, phaseOffset = 0): string {
   const phase = ((seed % 360) * Math.PI) / 180 + phaseOffset;
   const family = seed % 10;

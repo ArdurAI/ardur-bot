@@ -792,6 +792,7 @@ function ActivityRow({
         avatar={
           <BotAvatar
             identity={run.botId}
+            label={bot?.name}
             color={bot?.color ?? FALLBACK_COLOR}
             status={run.status}
           />
@@ -964,6 +965,7 @@ function BotRow({
         <BotAvatar
           color={bot.color || FALLBACK_COLOR}
           identity={bot.id}
+          label={bot.name}
           status={bot.status}
           muted={!bot.notifyOnFinish}
         />

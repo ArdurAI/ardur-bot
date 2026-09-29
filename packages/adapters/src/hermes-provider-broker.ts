@@ -1,7 +1,10 @@
-import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import type { AgentUsage, UsagePurpose } from "@ardurbot/adapter-kit";
 import { RequestUsageCollector } from "@ardurbot/adapter-kit";
+import type { RuntimePin } from "@ardurbot/contracts";
+import { RuntimeConfigOperationManifestSchema } from "@ardurbot/contracts/runtime-config";
+import { canonicalRuntimeJson } from "@ardurbot/core/runtime-config";
 import { chatCompletionsUsage } from "./openai-chat-usage.js";
 import {
   assertAllowedOpenAiCompatibleUrl,
@@ -43,6 +46,38 @@ export type BrokerScope = {
   briefAttemptedAt?: string;
   pin: { credentialId: string; provider: string; modelId: string; effort: string };
 };
+
+/** A maintenance operation keeps the source pin but has its own bounded admission identity. */
+export function summaryOperationManifest(pin: RuntimePin, maxOutputTokens: number) {
+  const hash = pin.effectiveRuntimeConfigHash ?? pin.runtimeConfigHash;
+  if (
+    pin.runtimeKind !== "hermes" ||
+    !hash ||
+    (pin.runtimeConfig?.version === 2 && !pin.effectiveRuntimeConfigHash) ||
+    !Number.isSafeInteger(maxOutputTokens) ||
+    maxOutputTokens < 1 ||
+    maxOutputTokens > 65_536
+  )
+    throw new Error("The summary configuration is incomplete.");
+  return RuntimeConfigOperationManifestSchema.parse({
+    format: 1 as const,
+    purpose: "summary" as const,
+    sourceEffectiveRuntimeConfigHash: hash,
+    maxOutputTokens,
+    tools: "none" as const,
+    modelId: pin.modelId,
+    effort: pin.effort,
+  });
+}
+
+export function summaryOperationHash(
+  manifest: ReturnType<typeof summaryOperationManifest>,
+): string {
+  return createHash("sha256")
+    .update("ardur:runtime-operation:v1\n", "utf8")
+    .update(canonicalRuntimeJson(manifest), "utf8")
+    .digest("hex");
+}
 
 export type BrokerConnection = {
   credentialId: string;
@@ -634,5 +669,59 @@ export class HermesProviderBroker {
       this.controller = null;
       this.busy = false;
     }
+  }
+}
+
+export class HermesRelayDispatcher {
+  private opening = false;
+  private response: Buffer | undefined;
+  private responseStatus = 200;
+  private responseType: "application/json" | "text/event-stream" = "application/json";
+  private readSequence = 0;
+
+  constructor(
+    private readonly brokerSession: { broker: HermesProviderBroker; scope: BrokerScope },
+    private readonly abortSignal: AbortSignal,
+  ) {}
+
+  async dispatch(method: string, args: unknown[]) {
+    if (method === "provider.cancel") {
+      if (this.opening) this.brokerSession.broker.revoke();
+      this.response = undefined;
+      return;
+    }
+    if (method === "provider.open") {
+      if (this.opening || this.response) throw new Error("Provider request is already active.");
+      this.opening = true;
+      try {
+        const opened = await this.brokerSession.broker.open({
+          grant: this.brokerSession.broker.grant,
+          scope: this.brokerSession.scope,
+          path: "/v1/chat/completions",
+          body: args[0],
+          signal: this.abortSignal,
+        });
+        if (!opened.ok) throw new Error("Provider request failed.");
+        this.responseStatus = opened.status;
+        this.responseType = opened.headers.get("content-type")?.includes("text/event-stream")
+          ? "text/event-stream"
+          : "application/json";
+        this.response = Buffer.from(await opened.arrayBuffer());
+        this.readSequence = 0;
+        return { status: this.responseStatus, contentType: this.responseType };
+      } finally {
+        this.opening = false;
+      }
+    }
+    if (!this.response || args[0] !== this.readSequence)
+      throw new Error("Provider response sequence changed.");
+    const chunk = this.response.subarray(
+      this.readSequence * 24 * 1024,
+      (this.readSequence + 1) * 24 * 1024,
+    );
+    const done = (this.readSequence + 1) * 24 * 1024 >= this.response.length;
+    const seq = this.readSequence++;
+    if (done) this.response = undefined;
+    return { seq, chunk: chunk.toString("base64"), done };
   }
 }

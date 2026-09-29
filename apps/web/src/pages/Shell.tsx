@@ -76,7 +76,6 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-  resolvePersonaColorDef,
   SlidingPanel,
 } from "@ardurbot/ui-web";
 import { i18n } from "@lingui/core";
@@ -132,6 +131,10 @@ import { AskCard } from "../components/AskCard";
 import { ActiveBotGlyph } from "../components/ai/CollaborationMarker";
 import { CloudAgentCard } from "../components/CloudAgentCard";
 import { ComputerMaintenanceActions } from "../components/ComputerMaintenanceActions";
+import {
+  ComputersUnavailableHint,
+  computersAreUnavailable,
+} from "../components/ComputersUnavailableHint";
 import { ComputerUpdateProgress } from "../components/ComputerUpdateProgress";
 import { RunContext } from "../components/ContextEntry";
 import type { PendingAttachment } from "../components/composer/attachments";
@@ -185,7 +188,6 @@ import { readSeenRunErrorIds, rememberSeenRunErrorId } from "../lib/run-error-st
 import type {} from "../lib/scoreboard-trace";
 import { sharedInflight } from "../lib/shared-inflight";
 import {
-  activeMemberRun,
   activeThreadRuns,
   applyThreadSendReceipt,
   clearActiveThreadRuns,
@@ -227,7 +229,6 @@ import {
 import type { SettingsSection } from "./SettingsOverlay";
 import { SpaceSearchResults } from "./SpaceSearch";
 import { BotModelChip } from "./shell/bot-model-chip";
-import { BotSettings, CreateBotForm } from "./shell/bot-panel";
 import { isCommandPaletteHotkey } from "./shell/command-palette-hotkey";
 import {
   initialComputerErrorState,
@@ -236,6 +237,8 @@ import {
 } from "./shell/computer-error-state";
 import { ComputerScreenError } from "./shell/computer-screen-error";
 import { useComputerTerminal } from "./shell/computer-terminal";
+import { getEffectiveWorkspaceTab, isComputerVisible } from "./shell/computer-visibility";
+import { GroupParticipantModels } from "./shell/group-participants";
 import {
   AppConnectCard,
   ArtifactImage,
@@ -244,9 +247,18 @@ import {
   McpApprovalCard,
 } from "./shell/message-cards";
 import { ProviderErrorMessage } from "./shell/provider-error-message";
+import { useComputerTerminalOpen } from "./shell/use-computer-terminal-open";
+import { useTakeControl } from "./shell/use-take-control";
 import { handleWorkspaceOpenRun } from "./shell/workspace-run";
 import { SystemDictation } from "./system/SystemDictation";
 import { WindowChrome } from "./WindowChrome";
+
+const BotSettings = lazy(() =>
+  import("./shell/bot-panel").then((module) => ({ default: module.BotSettings })),
+);
+const CreateBotForm = lazy(() =>
+  import("./shell/bot-panel").then((module) => ({ default: module.CreateBotForm })),
+);
 
 const TeamBoard = lazy(() =>
   import("./TeamBoard").then((module) => ({ default: module.TeamBoard })),
@@ -464,6 +476,7 @@ export function ShellPage({
         event.target.closest("[data-workspace-chrome]")
       ) {
         event.preventDefault();
+        setWorkspaceExpanded(false);
         setPanel(null);
         paneReturnFocus.current?.focus();
         return;
@@ -485,6 +498,7 @@ export function ShellPage({
       if (!activeBotId.current) return;
       event.preventDefault();
       if (panel === "computer") {
+        setWorkspaceExpanded(false);
         setPanel(null);
         paneReturnFocus.current?.focus();
       } else {
@@ -689,6 +703,7 @@ export function ShellPage({
   }, [sectionMenu]);
   const closeSectionMenu = useCallback(() => setSectionMenu(null), []);
   const [booting, setBooting] = useState(false);
+  const { takingControl, takeControl } = useTakeControl(bootComputer);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [initialBotsLoaded, setInitialBotsLoaded] = useState(false);
   const [bootstrapMe, setBootstrapMe] = useState<Me | null>();
@@ -787,7 +802,7 @@ export function ShellPage({
   const readVisibleGroups = useRef(new Set<string>());
   useNotifications();
   const computerVisible = useRef(false);
-  computerVisible.current = computerOpen;
+
   const autoSpoken = useRef<string | null>(null);
   const autoSpokenBotId = useRef<string | null>(null);
 
@@ -798,6 +813,12 @@ export function ShellPage({
       : (bots.find((b) => b.id === botId) ?? bots[0]);
   const computerBot =
     (computerBotId ? bots.find((bot) => bot.id === computerBotId) : undefined) ?? active;
+  const effectiveWorkspaceTab = getEffectiveWorkspaceTab(
+    workspaceTab,
+    computer?.capabilities?.graphical,
+  );
+  const isVisible = isComputerVisible(computerOpen, panel, effectiveWorkspaceTab);
+  computerVisible.current = isVisible;
   computerOpenRef.current = computerOpen;
   computerBotIdRef.current = computerBotId ?? active?.id;
   const activeGroup = groups.find((group) => group.id === groupId);
@@ -1754,6 +1775,7 @@ export function ShellPage({
         setEditingRoutine(routine);
         setPanel("routine");
       } else {
+        setWorkspaceTab("routines");
         setPanel("computer");
       }
       const next = new URLSearchParams(searchParams);
@@ -2570,13 +2592,18 @@ export function ShellPage({
 
   useEffect(() => {
     const heartbeatBotId = computerBot?.id ?? active?.id;
-    if (!computerOpen || !heartbeatBotId || computer?.state !== "running") return;
+    if (
+      !isComputerVisible(computerOpen, panel, effectiveWorkspaceTab) ||
+      !heartbeatBotId ||
+      computer?.state !== "running"
+    )
+      return;
     const ping = () =>
       void rpc.computer.heartbeat({ botId: heartbeatBotId }).catch(() => undefined);
     ping();
     const timer = window.setInterval(ping, 60_000);
     return () => window.clearInterval(timer);
-  }, [panel, computerOpen, computerBot?.id, active?.id, computer?.state]);
+  }, [panel, workspaceTab, computerOpen, computerBot?.id, active?.id, computer?.state]);
 
   async function openComputer(botId?: string, viewOnly = false) {
     const id = botId ?? active?.id;
@@ -2593,6 +2620,7 @@ export function ShellPage({
       setScreenUrl(targetScreen);
     }
     setComputerOpen(true);
+    setWorkspaceExpanded(false);
     computerVisible.current = true;
     const needsTakeover = !userHoldsComputerControl(targetComputer, id);
     const blocked = computerTakeoverBlocked(targetComputer, snapshot?.run?.status);
@@ -2659,12 +2687,18 @@ export function ShellPage({
       }
     },
     onStop: stopRun,
-    onOpen: () => setComputerOpen(true),
+    onOpen: useComputerTerminalOpen(setComputerOpen, setWorkspaceExpanded),
   });
   const displayedComputerError = visibleComputerError(
     computerErrorState,
     Boolean(embeddedScreenUrl),
   );
+  useEffect(() => {
+    if (isVisible && !embeddedScreenUrl && computer?.state === "running") {
+      const targetId = computerBot?.id ?? active?.id;
+      if (targetId) void refreshComputerScreen(targetId);
+    }
+  }, [isVisible, embeddedScreenUrl, computer?.state, computerBot?.id, active?.id]);
   const computerScreenError = displayedComputerError ? (
     <ComputerScreenError
       message={displayedComputerError.message}
@@ -3095,6 +3129,7 @@ export function ShellPage({
                             <BotAvatar
                               color={item.chat.color}
                               identity={item.chat.id}
+                              label={item.chat.name}
                               size={38}
                               status={item.chat.status}
                             />
@@ -3187,6 +3222,7 @@ export function ShellPage({
                       <BotAvatar
                         color={bot.color}
                         identity={bot.id}
+                        label={bot.name}
                         size={28}
                         status={bot.status}
                       />
@@ -3411,6 +3447,7 @@ export function ShellPage({
                 <BotAvatar
                   color={active.color}
                   identity={active.id}
+                  label={active.name}
                   size={26}
                   status={active.status}
                 />
@@ -3433,33 +3470,12 @@ export function ShellPage({
               />
             ) : null}
             {inGroup && activeGroup ? (
-              <div
-                data-testid="group-participant-models"
-                className="app-no-drag flex min-w-0 items-center gap-2 overflow-x-auto"
-              >
-                {activeGroup.members.map((member) => {
-                  const participant = bots.find((bot) => bot.id === member.botId);
-                  if (!participant) return null;
-                  const admitted = activeMemberRun(currentRuns, member.botId);
-                  return (
-                    <div
-                      key={member.botId}
-                      data-testid={`group-participant-${member.botId}`}
-                      className="flex shrink-0 items-center gap-1"
-                    >
-                      <span className="text-xs text-muted-foreground">{member.name}</span>
-                      <BotModelChip
-                        bot={participant}
-                        settings={modelSettings}
-                        pin={member.effectiveRuntimePin}
-                        nextPin={member.effectiveRuntimePin}
-                        run={admitted}
-                        display="using"
-                      />
-                    </div>
-                  );
-                })}
-              </div>
+              <GroupParticipantModels
+                activeGroup={activeGroup}
+                bots={bots}
+                currentRuns={currentRuns}
+                modelSettings={modelSettings}
+              />
             ) : null}
             <RunContext run={activeSnapshot?.contextRun ?? activeSnapshot?.run} />
           </div>
@@ -3746,6 +3762,19 @@ export function ShellPage({
                     open: computerOpen,
                     url: embeddedScreenUrl,
                     error: computerScreenError,
+                    status:
+                      !embeddedScreenUrl || computer?.state !== "running" ? (
+                        computersAreUnavailable(bootstrapMe?.sandboxProvider) ? (
+                          <ComputersUnavailableHint />
+                        ) : (
+                          computerPlaceholder(
+                            computer?.state,
+                            booting,
+                            computerLabel(computer?.mode, active.name),
+                            computer?.imagePulling ? computer.imagePullPercent : undefined,
+                          )
+                        )
+                      ) : null,
                     onOpen: () => void openComputer(undefined, true),
                   }}
                   routines={
@@ -3794,7 +3823,7 @@ export function ShellPage({
                 group={activeGroup}
                 bots={bots}
                 modelSettings={modelSettings}
-                onModelPin={async (member, pin) => {
+                onModelPin={async (member, pin, expectedBotModelPinRevision) => {
                   if (!member.memberId) return;
                   const target = {
                     groupId: activeGroup.id,
@@ -3803,7 +3832,14 @@ export function ShellPage({
                     expectedRevision: member.modelPinRevision ?? 0,
                   };
                   const updated = pin
-                    ? await rpc.groups.setMemberModelPin({ ...target, pin })
+                    ? await rpc.groups.setMemberModelPin({
+                        ...target,
+                        expectedBotModelPinRevision:
+                          expectedBotModelPinRevision ??
+                          bots.find((b) => b.id === member.botId)?.modelPinRevision ??
+                          0,
+                        pin,
+                      })
                     : await rpc.groups.clearMemberModelPin(target);
                   setGroups((current) =>
                     current.map((group) => (group.id === updated.id ? updated : group)),
@@ -3811,9 +3847,8 @@ export function ShellPage({
                   await refreshGroupThread(activeGroup.id).catch(() => undefined);
                 }}
                 onReloadMember={async (member) => {
-                  const latest = (await rpc.groups.list()).find(
-                    (group) => group.id === activeGroup.id,
-                  );
+                  const [groups] = await Promise.all([rpc.groups.list(), refreshBots()]);
+                  const latest = groups.find((group) => group.id === activeGroup.id);
                   if (!latest) return undefined;
                   setGroups((current) =>
                     current.map((group) => (group.id === latest.id ? latest : group)),
@@ -3849,44 +3884,49 @@ export function ShellPage({
               />
             ) : null}
             {panel === "create" ? (
-              <CreateBotForm
-                onCancel={() => setPanel(null)}
-                onCreate={(input) => createBot(input)}
-              />
+              <Suspense fallback={null}>
+                <CreateBotForm
+                  onCancel={() => setPanel(null)}
+                  onCreate={(input) => createBot(input)}
+                />
+              </Suspense>
             ) : null}
             {panel === "settings" && active ? (
-              <BotSettings
-                key={active.id}
-                bot={active}
-                modelFocusRequest={modelFocusRequest}
-                runtimeFocusRequest={runtimeFocusRequest}
-                modelSettings={modelSettings}
-                overrideGroups={groups}
-                onOpenGroup={(id) => {
-                  navigate(`/app/g/${id}`);
-                  setPanel("group-settings");
-                }}
-                memoryProviderConfigured={memoryProviderConfig != null}
-                onSkillsChange={setAgentSkills}
-                onSave={async ({ computerMode, ...patch }) => {
-                  if (computerMode !== active.computerMode) {
-                    await rpc.bots.setComputer({
-                      botId: active.id,
-                      mode: computerMode,
-                    });
-                  }
-                  await rpc.bots.update({ botId: active.id, ...patch });
-                  await refreshBots();
-                }}
-                onExport={async () => {
-                  const { path } = await rpc.export.bot({ botId: active.id });
-                  const anchor = document.createElement("a");
-                  anchor.href = path;
-                  anchor.download = "bot-v2.tar.gz";
-                  anchor.click();
-                }}
-                onClear={() => setClearTarget({ kind: "bot", chat: active })}
-              />
+              <Suspense fallback={null}>
+                <BotSettings
+                  key={active.id}
+                  bot={active}
+                  modelFocusRequest={modelFocusRequest}
+                  runtimeFocusRequest={runtimeFocusRequest}
+                  modelSettings={modelSettings}
+                  overrideGroups={groups}
+                  onOpenGroup={(id) => {
+                    navigate(`/app/g/${id}`);
+                    setPanel("group-settings");
+                  }}
+                  memoryProviderConfigured={memoryProviderConfig != null}
+                  onSkillsChange={setAgentSkills}
+                  onSave={async ({ computerMode, ...patch }) => {
+                    if (computerMode !== active.computerMode) {
+                      await rpc.bots.setComputer({
+                        botId: active.id,
+                        mode: computerMode,
+                      });
+                    }
+                    const updated = await rpc.bots.update({ botId: active.id, ...patch });
+                    await refreshBots();
+                    return updated;
+                  }}
+                  onExport={async () => {
+                    const { path } = await rpc.export.bot({ botId: active.id });
+                    const anchor = document.createElement("a");
+                    anchor.href = path;
+                    anchor.download = "bot-v2.tar.gz";
+                    anchor.click();
+                  }}
+                  onClear={() => setClearTarget({ kind: "bot", chat: active })}
+                />
+              </Suspense>
             ) : null}
             {panel === "routines" && active ? (
               <Suspense fallback={null}>
@@ -3936,7 +3976,10 @@ export function ShellPage({
                 saving={savingRoutine}
                 running={runningRoutine}
                 error={routineError}
-                onBack={() => setPanel("computer")}
+                onBack={() => {
+                  setWorkspaceTab("routines");
+                  setPanel("computer");
+                }}
                 onClose={() => setPanel(null)}
                 onEnsureWebhook={async () => {
                   await ensureWebhookSecret(active.id);
@@ -4066,6 +4109,7 @@ export function ShellPage({
                     setDeleteRoutineTarget(editingRoutine);
                     return;
                   }
+                  setWorkspaceTab("routines");
                   setPanel("computer");
                 }}
               />
@@ -4468,7 +4512,10 @@ export function ShellPage({
                 setEditingRoutine((current) => (current?.id === target.id ? null : current));
                 if (activeBotId.current !== target.botId) return;
                 await refreshThread(target.botId);
-                if (activeBotId.current === target.botId) setPanel("computer");
+                if (activeBotId.current === target.botId) {
+                  setWorkspaceTab("routines");
+                  setPanel("computer");
+                }
               }}
             />
           </Suspense>
@@ -4595,6 +4642,7 @@ export function ShellPage({
                 <BotAvatar
                   color={computerBot.color}
                   identity={computerBot.id}
+                  label={computerBot.name}
                   size={28}
                   status={computerBot.status}
                 />
@@ -4643,7 +4691,22 @@ export function ShellPage({
                     takeoverRequested={Boolean(computer?.takeoverRequested)}
                     onRelease={releaseComputer}
                   />
-                ) : null}
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={takingControl}
+                    aria-label={t`Take control`}
+                    onClick={async () => {
+                      if (computerBotIdRef.current) {
+                        await takeControl(computerBotIdRef.current);
+                      }
+                    }}
+                  >
+                    <Trans>Take control</Trans>
+                  </Button>
+                )}
                 {computerBot && !recordingSkill ? (
                   <TeachComputerOverlayControl
                     key={computerBot.id}
@@ -4681,6 +4744,9 @@ export function ShellPage({
                 {sendError}
               </div>
             ) : null}
+            {computerScreenError ? (
+              <div className="border-b border-border bg-background py-6">{computerScreenError}</div>
+            ) : null}
             {terminalSurface.tabs}
             <div className="relative min-h-0 flex-1 bg-background">
               {terminalSurface.content ??
@@ -4688,7 +4754,7 @@ export function ShellPage({
                   <p className="p-4 text-muted-foreground">{t`Not available on this computer`}</p>
                 ) : computer?.kind === "desktop" ? (
                   <DesktopKindEmptyState className="grid h-full place-items-center px-8 text-center text-sm text-muted-foreground/80" />
-                ) : computer?.state === "running" && embeddedScreenUrl && !computerScreenError ? (
+                ) : computer?.state === "running" && embeddedScreenUrl ? (
                   <>
                     <iframe
                       title={t`Bot screen`}
@@ -4712,12 +4778,11 @@ export function ShellPage({
                   </>
                 ) : (
                   <div className="grid h-full place-items-center text-sm text-muted-foreground/80">
-                    {computerScreenError ??
-                      (computer?.state === "suspended"
-                        ? t`Computer is asleep`
-                        : computer?.imagePulling
-                          ? computerPullLabel(computer.imagePullPercent)
-                          : computerLabel(computer?.mode, computerBot.name))}
+                    {computer?.state === "suspended"
+                      ? t`Computer is asleep`
+                      : computer?.imagePulling
+                        ? computerPullLabel(computer.imagePullPercent)
+                        : computerLabel(computer?.mode, computerBot.name)}
                   </div>
                 ))}
             </div>
@@ -5958,7 +6023,14 @@ function MentionOptionIcon({ mention }: { mention: ComposerMention }) {
       </span>
     );
   }
-  return <BotAvatar color={mention.color ?? FALLBACK_BOT_COLOR} identity={mention.id} size={16} />;
+  return (
+    <BotAvatar
+      color={mention.color ?? FALLBACK_BOT_COLOR}
+      identity={mention.id}
+      label={mention.name}
+      size={16}
+    />
+  );
 }
 
 function MentionChipIcon({ mention }: { mention: ComposerMention }) {
@@ -5975,7 +6047,14 @@ function MentionChipIcon({ mention }: { mention: ComposerMention }) {
       </span>
     );
   }
-  return <BotAvatar color={mention.color ?? FALLBACK_BOT_COLOR} identity={mention.id} size={16} />;
+  return (
+    <BotAvatar
+      color={mention.color ?? FALLBACK_BOT_COLOR}
+      identity={mention.id}
+      label={mention.name}
+      size={16}
+    />
+  );
 }
 
 function previewMessageText(message: ThreadMessage): string {
@@ -6239,21 +6318,17 @@ const MessageView = memo(function MessageView({
   const visibleNarrationBlocks = message.blocks.filter((block) => !isToolActivityBlock(block));
   const parentJumpId = replyPreview?.id ?? replyToMessageId;
   const speakerBot = message.botId ? peerBot?.(message.botId) : undefined;
-  const speakerColorDef = useMemo(
-    () => resolvePersonaColorDef(message.botId ?? "bot", speakerBot?.color),
-    [message.botId, speakerBot?.color],
-  );
   const messageContext = (
     <>
       {speakerName ? (
         <div
-          className="mb-1.5 flex items-center gap-2 text-[13px] font-semibold tracking-tight"
+          className="mb-1.5 flex items-center gap-2 text-[13px] font-semibold tracking-tight text-foreground"
           dir="auto"
-          style={{ color: speakerColorDef.light }}
         >
           <BotAvatar
             color={speakerBot?.color ?? FALLBACK_BOT_COLOR}
             identity={message.botId}
+            label={speakerName}
             size={22}
           />
           {speakerName}
@@ -6665,6 +6740,19 @@ function DesktopKindEmptyState({ className }: { className?: string }) {
   );
 }
 
+function computerPlaceholder(
+  state: ComputerStatus["state"] | undefined,
+  booting: boolean,
+  label: string,
+  imagePullPercent?: number | null,
+) {
+  if (imagePullPercent !== undefined) return computerPullLabel(imagePullPercent);
+  if (state === "booting" || booting) return t`Booting live desktop…`;
+  if (state === "running") return label;
+  if (state === "suspended") return t`Computer is asleep. Open it to wake.`;
+  if (state === "error") return t`Computer failed to boot`;
+  return null;
+}
 function computerPullLabel(percent: number | null | undefined) {
   return percent === null || percent === undefined
     ? t`Preparing the bot computer…`

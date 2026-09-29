@@ -3,7 +3,6 @@ import type {
   Bot,
   ComputerMode,
   Group,
-  HermesRuntimeConfig,
   ModelCatalogEntry,
   RuntimeKind,
   ThinkingLevel,
@@ -13,8 +12,11 @@ import {
   BOT_DESCRIPTION_MAX_LENGTH,
   BOT_NAME_MAX_LENGTH,
   BOT_TITLE_MAX_LENGTH,
-  HERMES_RUNTIME_DEFAULTS,
 } from "@ardurbot/contracts";
+import type {
+  HermesRuntimeConfigV2,
+  HistoricalHermesRuntimeConfig,
+} from "@ardurbot/contracts/runtime-config";
 import {
   modelPinOptionKey as modelOptionKey,
   parseModelPinOptionKey as parseModelOptionKey,
@@ -53,8 +55,8 @@ const KnowledgeSection = lazy(() =>
   import("../KnowledgeSection").then((module) => ({ default: module.KnowledgeSection })),
 );
 
-const HermesLimits = lazy(() =>
-  import("./hermes-limits").then((module) => ({ default: module.HermesLimits })),
+const RuntimeConfigPanel = lazy(() =>
+  import("./runtime-config-panel").then((module) => ({ default: module.RuntimeConfigPanel })),
 );
 
 const fieldLabelClass = "mt-4 block text-[14px] text-muted-foreground";
@@ -241,10 +243,11 @@ export function BotSettings({
     modelId?: string | null;
     modelCredentialId?: string | null;
     runtimeKind?: RuntimeKind;
-    runtimeConfig?: HermesRuntimeConfig;
+    runtimeConfig?: HermesRuntimeConfigV2;
+    expectedModelPinRevision?: number;
     runtimeExperimental?: boolean;
     thinkingLevel?: ThinkingLevel | null;
-  }) => Promise<void>;
+  }) => Promise<{ modelPinRevision?: number } | Bot | undefined>;
   onExport: () => Promise<void>;
   onClear: () => void;
   overrideGroups?: Group[];
@@ -252,6 +255,9 @@ export function BotSettings({
 }) {
   const { t } = useLingui();
   const [advancedOpened, setAdvancedOpened] = useState(false);
+  const [knowledgeTab, setKnowledgeTab] = useState<"memory" | "skills" | "learning">("memory");
+  const knowledgeRef = useRef<HTMLDivElement>(null);
+  const advancedDetailsRef = useRef<HTMLDetailsElement>(null);
   const modelRef = useRef<HTMLSelectElement>(null);
   const runtimeRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -295,8 +301,8 @@ export function BotSettings({
   const [voices, setVoices] = useState<VoiceInfo[]>([]);
   const [runtimeExperimental, setRuntimeExperimental] = useState(bot.runtimeExperimental ?? false);
   const [runtimeKind, setRuntimeKind] = useState<RuntimeKind>(bot.runtimeKind ?? "pi");
-  const [runtimeConfig, setRuntimeConfig] = useState<HermesRuntimeConfig>(
-    bot.runtimeConfig ?? HERMES_RUNTIME_DEFAULTS,
+  const [runtimeConfig, setRuntimeConfig] = useState<HistoricalHermesRuntimeConfig | null>(
+    bot.runtimeConfig ?? null,
   );
   const [modelKey, setModelKey] = useState(
     bot.modelProvider && bot.modelId
@@ -304,6 +310,64 @@ export function BotSettings({
       : "",
   );
   const [thinkingLevel, setThinkingLevel] = useState(bot.thinkingLevel ?? "");
+
+  const [seededBot, setSeededBot] = useState(bot);
+  const [draftPinRevision, setDraftPinRevision] = useState(bot.modelPinRevision ?? 0);
+
+  useEffect(() => {
+    const currentRev = bot.modelPinRevision ?? 0;
+    if (currentRev > draftPinRevision) {
+      const isClean =
+        runtimeKind === (seededBot.runtimeKind ?? "pi") &&
+        JSON.stringify(runtimeConfig) === JSON.stringify(seededBot.runtimeConfig ?? null) &&
+        runtimeExperimental === (seededBot.runtimeExperimental ?? false) &&
+        modelKey ===
+          (seededBot.modelProvider && seededBot.modelId
+            ? modelOptionKey(
+                seededBot.modelProvider,
+                seededBot.modelId,
+                seededBot.modelCredentialId,
+              )
+            : "") &&
+        thinkingLevel === (seededBot.thinkingLevel ?? "") &&
+        title === (seededBot.title ?? "") &&
+        name === (seededBot.name ?? "");
+      const draftMatchesIncoming =
+        runtimeKind === (bot.runtimeKind ?? "pi") &&
+        JSON.stringify(runtimeConfig) === JSON.stringify(bot.runtimeConfig ?? null) &&
+        runtimeExperimental === (bot.runtimeExperimental ?? false) &&
+        modelKey ===
+          (bot.modelProvider && bot.modelId
+            ? modelOptionKey(bot.modelProvider, bot.modelId, bot.modelCredentialId)
+            : "") &&
+        thinkingLevel === (bot.thinkingLevel ?? "") &&
+        title === (bot.title ?? "") &&
+        name === (bot.name ?? "");
+
+      if (isClean || draftMatchesIncoming) {
+        setRuntimeKind(bot.runtimeKind ?? "pi");
+        setRuntimeConfig(bot.runtimeConfig ?? null);
+        setRuntimeExperimental(bot.runtimeExperimental ?? false);
+        setModelKey(
+          bot.modelProvider && bot.modelId
+            ? modelOptionKey(bot.modelProvider, bot.modelId, bot.modelCredentialId)
+            : "",
+        );
+        setThinkingLevel(bot.thinkingLevel ?? "");
+        setDraftPinRevision(currentRev);
+        setSeededBot(bot);
+      }
+    }
+  }, [
+    bot,
+    draftPinRevision,
+    runtimeKind,
+    runtimeConfig,
+    runtimeExperimental,
+    modelKey,
+    thinkingLevel,
+    seededBot,
+  ]);
   const loadedSettings = useModelSettings(undefined, false, modelSettings === undefined);
   const metadata = modelSettings === undefined ? loadedSettings : modelSettings;
   const credentials = metadata?.credentials ?? [];
@@ -312,6 +376,7 @@ export function BotSettings({
   const modelMetaReady = metadata !== null;
   const [showAllModels, setShowAllModels] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const saveQueueRef = useRef(Promise.resolve());
   const executeSaveRef = useRef<
@@ -360,6 +425,8 @@ export function BotSettings({
     (modelMetaReady &&
       modelUnavailable({ catalog, credentials }, selectedModel?.provider, selectedModel?.modelId));
 
+  const activeValidationError = runtimeKind === "hermes" ? validationError : null;
+
   async function executeSave(patchOverrides?: {
     name?: string;
     title?: string;
@@ -367,6 +434,7 @@ export function BotSettings({
     color?: string;
     notifyOnFinish?: boolean;
   }) {
+    if (activeValidationError) return;
     const selected = modelKey ? parseModelOptionKey(modelKey) : null;
     const nextName = (patchOverrides?.name !== undefined ? patchOverrides.name : name).trim();
     const nextTitle = (patchOverrides?.title !== undefined ? patchOverrides.title : title).trim();
@@ -384,7 +452,7 @@ export function BotSettings({
     try {
       setSaving(true);
       setError(null);
-      await onSave({
+      const saved = await onSave({
         name: nextName || bot.name,
         title: nextTitle,
         description: nextDescription,
@@ -397,7 +465,8 @@ export function BotSettings({
         autoSpeak,
         voiceId: voiceId || null,
         runtimeKind,
-        ...(runtimeKind === "hermes" ? { runtimeConfig } : {}),
+        expectedModelPinRevision: draftPinRevision,
+        ...(runtimeKind === "hermes" && runtimeConfig?.version === 2 ? { runtimeConfig } : {}),
         runtimeExperimental,
         modelProvider: selected?.provider ?? null,
         modelId: selected?.modelId ?? null,
@@ -412,6 +481,19 @@ export function BotSettings({
             }
           : {}),
       });
+      if (
+        saved &&
+        typeof saved === "object" &&
+        "modelPinRevision" in saved &&
+        typeof saved.modelPinRevision === "number"
+      ) {
+        setDraftPinRevision(saved.modelPinRevision);
+        setSeededBot((prev) => ({
+          ...prev,
+          ...(saved as Partial<Bot>),
+          modelPinRevision: saved.modelPinRevision,
+        }));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : t`Could not save`);
     } finally {
@@ -442,6 +524,7 @@ export function BotSettings({
         <AvatarStudioPopover
           value={color}
           identity={bot.id}
+          label={name}
           status={bot.status}
           size={76}
           onChange={(newColor) => {
@@ -588,7 +671,24 @@ export function BotSettings({
                 </p>
               ) : null}
               <Suspense fallback={null}>
-                <HermesLimits value={runtimeConfig} onChange={setRuntimeConfig} />
+                <RuntimeConfigPanel
+                  value={runtimeConfig}
+                  pin={{
+                    runtimeKind: "hermes",
+                    provider: selectedModel?.provider ?? null,
+                    modelId: selectedModel?.modelId ?? null,
+                    effort: thinkingLevel || null,
+                    credentialId: selectedModel?.credentialId ?? null,
+                  }}
+                  onChange={setRuntimeConfig}
+                  onError={setValidationError}
+                  onOpenLearning={() => {
+                    setAdvancedOpened(true);
+                    setKnowledgeTab("learning");
+                    if (advancedDetailsRef.current) advancedDetailsRef.current.open = true;
+                    knowledgeRef.current?.scrollIntoView({ block: "nearest" });
+                  }}
+                />
               </Suspense>
             </>
           ) : null}
@@ -624,6 +724,7 @@ export function BotSettings({
         </details>
       ) : null}
       <details
+        ref={advancedDetailsRef}
         data-testid="bot-settings-advanced"
         className="group mt-5"
         onToggle={(event) => {
@@ -642,7 +743,13 @@ export function BotSettings({
         <Suspense fallback={null}>
           <ScratchpadSection botId={bot.id} />
           {advancedOpened ? (
-            <KnowledgeSection botId={bot.id} onSkillsChange={onSkillsChange} />
+            <div ref={knowledgeRef}>
+              <KnowledgeSection
+                botId={bot.id}
+                onSkillsChange={onSkillsChange}
+                defaultTab={knowledgeTab}
+              />
+            </div>
           ) : null}
         </Suspense>
         {memoryProviderConfigured ? (
@@ -710,7 +817,7 @@ export function BotSettings({
       ) : null}
       <div className="mt-5 flex flex-col items-start gap-3">
         <Button
-          disabled={saving}
+          disabled={saving || Boolean(activeValidationError)}
           onClick={() => {
             void enqueueSave({
               name,

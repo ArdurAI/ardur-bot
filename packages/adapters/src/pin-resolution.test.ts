@@ -48,6 +48,22 @@ describe("runtime pin selection", () => {
     expect(RuntimePinSchema.parse(legacy).runtimeKind).toBe("pi");
     expect(RuntimePinSchema.safeParse({ ...pin, runtimeKind: "missing" }).success).toBe(false);
   });
+  it("resolves current Hermes settings to v2 while leaving a dormant Pi document unused", () => {
+    const bot = {
+      runtimeKind: "hermes",
+      runtimeConfig: { version: 1, maxProviderRequests: 5, timeoutMs: 90000 },
+      modelProvider: "openai-compatible",
+      modelId: "fixture",
+      modelCredentialId: "connection",
+      thinkingLevel: "off",
+      modelPinRevision: 3,
+    };
+    expect(requestedBotPin(bot)).toMatchObject({
+      runtimeConfig: { version: 2, limits: { maxProviderRequests: 5, timeoutMs: 90000 } },
+      runtimeConfigHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+    });
+    expect(requestedBotPin({ ...bot, runtimeKind: "pi" })).not.toHaveProperty("runtimeConfig");
+  });
   it("lets a signed-out Antigravity pin attempt immediate recovery when its catalogue is live", async () => {
     const runtime = {} as AgentRuntime;
     const agyPin: RuntimePin = {
