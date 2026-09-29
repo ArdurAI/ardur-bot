@@ -97,3 +97,70 @@ it("shows each item's own text and keeps the shared review reason secondary", as
   expect(rows[0]).not.toBe(rows[1]);
   act(() => root.unmount());
 });
+
+it("counts and lists only items still waiting for a decision", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const memory = (id: string, proposedContent: string, status: "pending" | "rejected") => ({
+    id,
+    type: "memory" as const,
+    operation: "memory-import" as const,
+    scope: { spaceId: "space" },
+    target: {},
+    proposedContent,
+    rationale: "Imported memory. Review before saving.",
+    evidenceIds: ["evidence"],
+    confidence: { label: "model estimate" as const, value: 0.5 },
+    diff: "",
+    status,
+    expiresAt: "2099-01-01T00:00:00.000Z",
+  });
+  await act(async () =>
+    root.render(
+      <LearningPanel
+        data={{
+          reviews: [],
+          proposals: [
+            memory("decided", "Already rejected item", "rejected"),
+            memory("waiting", "Still waiting item", "pending"),
+          ],
+          botNames: {},
+          pendingCount: 1,
+          appliedThisWeek: 0,
+          insightCount: 0,
+        }}
+        openLearning={vi.fn()}
+        openSettings={vi.fn()}
+        refresh={vi.fn(async () => undefined)}
+      />,
+    ),
+  );
+  const text = container.textContent ?? "";
+  expect(text).toContain("Inbox (1)");
+  expect(text).toContain("Still waiting item");
+  expect(text).not.toContain("Already rejected item");
+  expect(text).not.toContain("No proposals");
+  await act(async () =>
+    root.render(
+      <LearningPanel
+        data={{
+          reviews: [],
+          proposals: [memory("decided", "Already rejected item", "rejected")],
+          botNames: {},
+          pendingCount: 0,
+          appliedThisWeek: 0,
+          insightCount: 0,
+        }}
+        openLearning={vi.fn()}
+        openSettings={vi.fn()}
+        refresh={vi.fn(async () => undefined)}
+      />,
+    ),
+  );
+  const empty = container.textContent ?? "";
+  expect(empty).toContain("Inbox (0)");
+  expect(empty).toContain("No proposals");
+  expect(empty).not.toContain("Already rejected item");
+  act(() => root.unmount());
+});

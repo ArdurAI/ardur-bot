@@ -412,7 +412,7 @@ it("renders panel data and answers through the real chat approval card and threa
   });
   api.learning.mockResolvedValue({
     pendingCount: 1,
-    proposals: [{ id: "proposal", rationale: "Keep the preferred format" }],
+    proposals: [{ id: "proposal", status: "pending", rationale: "Keep the preferred format" }],
   });
   await renderPage();
   for (const text of [

@@ -14,6 +14,7 @@ export default function LearningPanel({
   const { t } = useLingui();
   const count = data.pendingCount;
   const insights = data.insightCount;
+  const waiting = data.proposals.filter((proposal) => proposal.status === "pending");
   return (
     <div className="space-y-3 text-sm">
       <div className="flex gap-4">
@@ -30,12 +31,12 @@ export default function LearningPanel({
           >{t`Insights (${insights})`}</Button>
         ) : null}
       </div>
-      {!data.proposals.length ? (
+      {!waiting.length ? (
         <p className="text-muted-foreground">
           <Trans>No proposals</Trans>
         </p>
       ) : null}
-      {data.proposals.slice(0, 3).map((proposal) => {
+      {waiting.slice(0, 3).map((proposal) => {
         const title =
           proposal.operation === "revert-suggestion"
             ? t`Possible regression — review undo`
