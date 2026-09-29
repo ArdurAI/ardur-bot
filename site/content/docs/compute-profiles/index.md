@@ -44,7 +44,7 @@ then try again.**
 
 When the desktop's host service reaches a cluster or engine for a server or Compose stack, it
 cannot see the server's environment. It resolves the channel from its own app version and starts
-only a published image or the connection's own image. Set a mirror or private image on the
+only a published image. Set a mirror or private image on the
 connection rather than in `ARDURBOT_COMPUTER_IMAGE`. A Kubernetes computer whose server image the
 host would refuse stops with **Set this cluster's image under Advanced on its connection:
 ARDURBOT_COMPUTER_IMAGE does not reach the machine that runs kubectl.**

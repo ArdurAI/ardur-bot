@@ -48,7 +48,10 @@ export const ComputerConnectionSettingsSchema = z.object({
   standardImage: imageReference.optional(),
   developerImage: imageReference.optional(),
   /** An existing image pull Secret in the namespace; the app never creates Secrets. */
-  imagePullSecret: z.string().regex(/^[a-z0-9](?:[-a-z0-9.]{0,251}[a-z0-9])?$/).optional(),
+  imagePullSecret: z
+    .string()
+    .regex(/^[a-z0-9](?:[-a-z0-9.]{0,251}[a-z0-9])?$/)
+    .optional(),
 });
 export type ComputerConnectionSettings = z.infer<typeof ComputerConnectionSettingsSchema>;
 export const ComputerConnectionInputSchema = z.object({

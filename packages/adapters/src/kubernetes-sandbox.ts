@@ -25,7 +25,7 @@ import { cachedCapacity } from "@ardurbot/host-runtime/fleet/capacity";
 import { connectionComputerImage } from "@ardurbot/host-runtime/fleet/computer-image";
 import { normalizeWorkspacePath } from "./computer-support.js";
 import { kubernetesCapacity } from "./fleet/kubernetes-capacity.js";
-import type { KubernetesApi, KubernetesObject } from "./kubernetes-client.js";
+import type { KubernetesApi } from "./kubernetes-client.js";
 import { KUBERNETES_FILE_SCRIPT } from "./kubernetes-files.js";
 
 const HOME = "/home/ardurbot";
@@ -61,11 +61,12 @@ export class KubernetesSandboxProvider implements SandboxProvider {
   }
   /** Reaching the API is the test; capacity stays unknown when the account cannot read nodes. */
   async test(context: AdapterContext) {
-    const version = await this.api.version?.(context.signal).catch((error) => {
-      if (error instanceof Error && error.message.includes("check the connection"))
-        throw new Error("engine-not-running");
-      throw error;
-    }) ?? "Kubernetes";
+    const version =
+      (await this.api.version?.(context.signal).catch((error) => {
+        if (error instanceof Error && error.message.includes("check the connection"))
+          throw new Error("engine-not-running");
+        throw error;
+      })) ?? "Kubernetes";
     return { capacity: await this.capacity(), os: "Linux", version };
   }
   describe() {

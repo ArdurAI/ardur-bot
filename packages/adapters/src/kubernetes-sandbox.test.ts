@@ -46,7 +46,9 @@ describe("Kubernetes computer", () => {
 
   it("maps connection failure during test to engine-not-running", async () => {
     const { api, provider } = fixture();
-    vi.spyOn(api, "version").mockRejectedValue(new Error("Kubernetes request failed; check the connection."));
+    vi.spyOn(api, "version").mockRejectedValue(
+      new Error("Kubernetes request failed; check the connection."),
+    );
     await expect(provider.test(context)).rejects.toThrow("engine-not-running");
   });
 

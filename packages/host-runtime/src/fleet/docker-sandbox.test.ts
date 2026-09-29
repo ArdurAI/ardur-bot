@@ -270,9 +270,9 @@ it("recreates a legacy-tag container and keeps its home volume", async () => {
   );
   expect(createCall?.[1]).toContain(defaultImage);
   expect(createCall?.[1]).toContain(`type=volume,src=${name}-home,dst=/home/ardurbot`);
-  expect(run.mock.calls.some(([, args]) => args.includes("volume") && args.includes("create"))).toBe(
-    false,
-  );
+  expect(
+    run.mock.calls.some(([, args]) => args.includes("volume") && args.includes("create")),
+  ).toBe(false);
   expect(run.mock.calls.some(([, args]) => args.includes("volume") && args.includes("rm"))).toBe(
     false,
   );
@@ -288,9 +288,7 @@ it("throws when an existing container has a user-changed image", async () => {
     }),
     { run, start: vi.fn() } as FleetProcess,
   );
-  await expect(
-    provider.provision({ botId: "bot", homePath: "/ignored" }, context),
-  ).rejects.toThrow(
+  await expect(provider.provision({ botId: "bot", homePath: "/ignored" }, context)).rejects.toThrow(
     "The computer image differs from its saved profile; confirm an update in Computers.",
   );
   expect(run.mock.calls.some(([, args]) => args.includes("rm"))).toBe(false);
