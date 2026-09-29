@@ -304,7 +304,8 @@ export function GroupModelControl({
               <Trans>Time limit (seconds)</Trans>: {Math.round(groupConfig.limits.timeoutMs / 1000)}
             </div>
             <div>
-              <Trans>Context limit (KiB)</Trans>: {Math.round(groupConfig.context.maxInputBytes / 1024)}
+              <Trans>Context limit (KiB)</Trans>:{" "}
+              {Math.round(groupConfig.context.maxInputBytes / 1024)}
             </div>
             {isCapturedDifferentFromBot ? (
               <div className="mt-2 flex items-center justify-between gap-2 border-t border-border pt-2">

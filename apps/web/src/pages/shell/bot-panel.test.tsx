@@ -140,7 +140,7 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-const onSave = vi.fn(async (): Promise<{ modelPinRevision?: number } | void> => undefined);
+const onSave = vi.fn(async (): Promise<{ modelPinRevision?: number } | undefined> => undefined);
 function settings(
   overrides: Partial<Bot> = {},
   modelFocusRequest = 0,
@@ -1280,7 +1280,6 @@ it("does not block saving another runtime when Hermes limits had an error", asyn
   expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ runtimeKind: "pi" }));
 });
 
-
 it("shows the incompatible Hermes connection only while it is selected", async () => {
   api.availability.mockResolvedValue({ runtimeKind: "hermes", available: true, models: [] });
   await act(async () =>
@@ -1571,4 +1570,3 @@ it("advances draft revision from the save response", async () => {
     expect.objectContaining({ expectedModelPinRevision: 5, title: "second edit" }),
   );
 });
-

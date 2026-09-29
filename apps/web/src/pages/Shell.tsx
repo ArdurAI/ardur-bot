@@ -3857,7 +3857,8 @@ export function ShellPage({
                         ...target,
                         expectedBotModelPinRevision:
                           expectedBotModelPinRevision ??
-                          (bots.find((b) => b.id === member.botId)?.modelPinRevision ?? 0),
+                          bots.find((b) => b.id === member.botId)?.modelPinRevision ??
+                          0,
                         pin,
                       })
                     : await rpc.groups.clearMemberModelPin(target);

@@ -247,7 +247,7 @@ export function BotSettings({
     expectedModelPinRevision?: number;
     runtimeExperimental?: boolean;
     thinkingLevel?: ThinkingLevel | null;
-  }) => Promise<{ modelPinRevision?: number } | Bot | void>;
+  }) => Promise<{ modelPinRevision?: number } | Bot | undefined>;
   onExport: () => Promise<void>;
   onClear: () => void;
   overrideGroups?: Group[];

@@ -1,12 +1,6 @@
 import type { AppBootstrap, Bot, Group, SpaceNavigation } from "@ardurbot/contracts";
-import { expect, type Page, test } from "@playwright/test";
-import {
-  captureScreenshot,
-  completeOnboarding,
-  createNamedBot,
-  rpc,
-  signup,
-} from "./helpers";
+import { expect, test } from "@playwright/test";
+import { captureScreenshot, completeOnboarding, createNamedBot, rpc, signup } from "./helpers";
 import { installPerformanceFixture } from "./performance-fixture";
 
 const botConfig = {
@@ -25,9 +19,7 @@ const capturedConfig = {
   harness: { agent: { api_max_retries: 1 } },
 } as const;
 
-test("the Hermes short panel and Advanced editor share one draft", async ({
-  page,
-}, testInfo) => {
+test("the Hermes short panel and Advanced editor share one draft", async ({ page }, testInfo) => {
   await installPerformanceFixture(page);
   await page.route("**/rpc/runtimeConfig/preview", (route) =>
     route.fulfill({

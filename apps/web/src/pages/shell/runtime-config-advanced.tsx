@@ -2,8 +2,8 @@ import type {
   HermesRuntimeConfigPreview,
   HermesRuntimeConfigV2,
   HermesRuntimeConfigV2Draft,
+  RuntimeConfigIssue,
 } from "@ardurbot/contracts/runtime-config";
-import type { RuntimeConfigIssue } from "@ardurbot/contracts/runtime-config";
 import { HERMES_RUNTIME_V2_DEFAULTS } from "@ardurbot/contracts/runtime-config";
 import { parseRuntimeConfigText } from "@ardurbot/contracts/runtime-config-editor";
 import type { RuntimePin } from "@ardurbot/contracts/runtime-pins";
