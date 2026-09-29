@@ -44,6 +44,18 @@ function sameChoice(left: RuntimePin | null, right: Choice | null) {
   );
 }
 
+/** Store the effective Hermes settings document and its settings hash. Run admission compiles the manifest. */
+export function attachHermesSettingsSnapshot<T extends { runtimeKind: string }>(
+  choice: T | null,
+  storedConfig: unknown,
+):
+  | (T & { runtimeConfig?: ReturnType<typeof effectiveHermesConfig>; runtimeConfigHash?: string })
+  | null {
+  if (!choice || choice.runtimeKind !== "hermes") return choice;
+  const config = effectiveHermesConfig(storedConfig === Prisma.DbNull ? null : storedConfig);
+  return { ...choice, runtimeConfig: config, runtimeConfigHash: hermesConfigHash(config) };
+}
+
 function auditPin(pin: RuntimePin | null) {
   return (
     pin && {
@@ -130,13 +142,7 @@ export async function updateGroupMemberModelPin(
     )
       throw new IsolationError();
     const storedConfig: unknown = member.bot.runtimeConfig;
-    const config =
-      choice?.runtimeKind === "hermes"
-        ? effectiveHermesConfig(storedConfig === Prisma.DbNull ? null : storedConfig)
-        : null;
-    const selectedChoice = config
-      ? { ...choice!, runtimeConfig: config, runtimeConfigHash: hermesConfigHash(config) }
-      : choice;
+    const selectedChoice = attachHermesSettingsSnapshot(choice, storedConfig);
     const oldPin = member.runtimePin == null ? null : RuntimePinSchema.parse(member.runtimePin);
     const refresh =
       oldPin?.runtimeKind === "hermes" &&

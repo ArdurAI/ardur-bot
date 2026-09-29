@@ -1,6 +1,11 @@
 import type { ConnectorRoute } from "@ardurbot/adapter-kit";
 import { DelegationAuthoritySchema, TaskCardSchema } from "@ardurbot/contracts";
-import { classifyRemoteTool, parseGroupAskKey, remotePermissionExpansion } from "@ardurbot/core";
+import {
+  classifyRemoteTool,
+  parseGroupAskKey,
+  peerEffectResourceRef,
+  remotePermissionExpansion,
+} from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import {
   peerTrafficPaused,
@@ -9,7 +14,12 @@ import {
   updateWorkerTask,
 } from "@ardurbot/db";
 import { grantedMcpTools, mcpGrantForBot } from "./integration-access.js";
-import { peerReadOnlyRuntimeSupported, peerReadOnlyToolAllowed } from "./peer-policy.js";
+import { loadPeerBoundEffect } from "./peer-bound-effect.js";
+import {
+  peerEffectBoundToolAllowed,
+  peerReadOnlyRuntimeSupported,
+  peerReadOnlyToolAllowed,
+} from "./peer-policy.js";
 
 /**
  * The recorded ceiling also applies to connector routes resolved after catalog lookup. A worker
@@ -106,14 +116,33 @@ export async function checkDelegationExecution(
     }
   }
   const card = TaskCardSchema.safeParse(row.card);
-  if (card.success && card.data.peerMode === "read-only") {
+  if (
+    card.success &&
+    (card.data.peerMode === "read-only" || card.data.peerMode === "effect-bound")
+  ) {
     if (
       !peerReadOnlyRuntimeSupported(
         String((run.runtimePin as { runtimeKind?: string } | null)?.runtimeKind ?? ""),
       )
     )
       return "This connection cannot run this peer task safely.";
-    if ((tool && !peerReadOnlyToolAllowed(tool)) || (route && route.connectorId !== "builtin")) {
+    // An effect-bound card admits exactly the approved tool on the approved
+    // connector route. Anything else is refused and recorded, as for read-only.
+    const bound =
+      card.data.peerMode === "effect-bound"
+        ? ((await loadPeerBoundEffect(prisma, runId)) ?? undefined)
+        : undefined;
+    const boundRouteAllowed = Boolean(
+      bound &&
+        tool === bound.effect.toolName &&
+        route &&
+        route.connectorId !== "builtin" &&
+        peerEffectResourceRef(route) === bound.effect.resourceRef,
+    );
+    if (
+      (tool && !peerEffectBoundToolAllowed(tool, bound?.effect)) ||
+      (route && route.connectorId !== "builtin" && !boundRouteAllowed)
+    ) {
       await prisma.$transaction((tx) =>
         updateWorkerTask(tx, {
           runId: run.id,
@@ -124,7 +153,7 @@ export async function checkDelegationExecution(
           tool: "report_progress",
           args: {
             state: "blocked",
-            text: "This desk request needs an action outside its read-only card.",
+            text: "This desk request needs an action outside its approved card.",
             action: "Bring the request to the owner for review.",
           },
         }),

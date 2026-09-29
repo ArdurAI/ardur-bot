@@ -14,6 +14,7 @@ const KNOWN_ASK_ACTION_LABELS: Record<string, string> = {
 export function AskActions({
   actions,
   peerHold,
+  peerEffectBound,
   disabled,
   onAnswer,
   accessibilityActions,
@@ -21,6 +22,7 @@ export function AskActions({
 }: {
   actions: AskAction[];
   peerHold?: boolean;
+  peerEffectBound?: boolean;
   disabled?: boolean;
   onAnswer: (answer: string) => Promise<void>;
   accessibilityActions?: ViewProps["accessibilityActions"];
@@ -77,7 +79,7 @@ export function AskActions({
             >
               {pendingAction === action.id
                 ? t("Sending…")
-                : peerHold && action.id === "allow"
+                : peerHold && !peerEffectBound && action.id === "allow"
                   ? t("Allow preparation")
                   : Object.hasOwn(KNOWN_ASK_ACTION_LABELS, action.id)
                     ? t(KNOWN_ASK_ACTION_LABELS[action.id]!)

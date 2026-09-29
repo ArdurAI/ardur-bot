@@ -3,6 +3,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { AgentRuntime } from "@ardurbot/adapter-kit";
 import type { RuntimePin } from "@ardurbot/contracts";
+import {
+  HERMES_SOURCE_PIN,
+  HERMES_SOURCE_TREE,
+} from "@ardurbot/host-runtime/runtimes/hermes-install";
 import { describe, expect, it, vi } from "vitest";
 import { nativeRuntimeAvailability, RuntimeRegistry } from "./runtime-registry.js";
 
@@ -81,6 +85,10 @@ describe("local Hermes availability", () => {
         const managed = path.join(path.resolve(data), "hermes", "runtimes", "hermes-agent");
         await mkdir(path.join(managed, ".venv", "bin"), { recursive: true });
         await writeFile(path.join(managed, ".venv", "bin", "python"), "fixture");
+        await writeFile(
+          path.join(managed, ".ardur-install.json"),
+          JSON.stringify({ pin: HERMES_SOURCE_PIN, tree: HERMES_SOURCE_TREE }),
+        );
         const availability = await nativeRuntimeAvailability("hermes");
         expect(availability).toMatchObject({ runtimeKind: "hermes", available: true });
       } finally {
@@ -114,10 +122,33 @@ describe("local Hermes availability", () => {
     vi.stubEnv("DATA_DIR", data);
     vi.stubEnv("ARDUR_HERMES_INSTALL", install);
     try {
+      const availability = await nativeRuntimeAvailability("hermes");
+      expect(availability).toMatchObject({
+        runtimeKind: "hermes",
+        available: false,
+        reason: "The Hermes install on this computer failed its safety check.",
+      });
+      // An explicit install belongs to the operator: no reinstall offer.
+      expect(availability.install).toBeUndefined();
+    } finally {
+      vi.unstubAllEnvs();
+      await rm(data, { recursive: true, force: true });
+    }
+  });
+
+  it("offers reinstall when the managed install fails its safety check", async () => {
+    const data = await mkdtemp(path.join(tmpdir(), "hermes-managed-unsafe-"));
+    const managed = path.join(path.resolve(data), "hermes", "runtimes", "hermes-agent");
+    await mkdir(managed, { recursive: true });
+    await writeFile(path.join(managed, ".env"), "fixture");
+    vi.stubEnv("DATA_DIR", data);
+    vi.stubEnv("ARDUR_HERMES_INSTALL", "");
+    try {
       await expect(nativeRuntimeAvailability("hermes")).resolves.toMatchObject({
         runtimeKind: "hermes",
         available: false,
         reason: "The Hermes install on this computer failed its safety check.",
+        install: { state: "absent" },
       });
     } finally {
       vi.unstubAllEnvs();

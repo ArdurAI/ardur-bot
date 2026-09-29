@@ -1,6 +1,18 @@
-import type { SpaceLearningConfig } from "@ardurbot/contracts";
+import type {
+  ModelCatalogEntry,
+  ModelCredential,
+  RuntimeAvailability,
+  RuntimeKind,
+  SpaceLearningConfig,
+} from "@ardurbot/contracts";
+import {
+  antigravityEffortForModel,
+  nativeRuntimeProviders,
+  runtimeLabels,
+} from "@ardurbot/contracts";
 import type { BoardConfiguration, BoardProblem, BoardWorkspace } from "@ardurbot/contracts/board";
-import { Stack } from "expo-router";
+import { spaceDefaultEffort } from "@ardurbot/core";
+import { Stack, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -16,12 +28,62 @@ import {
 import { rpc } from "../lib/api";
 import { hasPairedDevice } from "../lib/dispatch";
 import { useI18n } from "../lib/i18n";
-import { enableLearningReview, loadLearningSettings } from "../lib/learning";
-import { useMobileTokens } from "../lib/native";
+import {
+  effortLabel,
+  loadLearningSettings,
+  reviewerMenuOptions,
+  setReviewerPin,
+  thinkingMenuOptions,
+} from "../lib/learning";
+import { presentMessageActionSheet } from "../lib/message-action-sheet";
+import { useMobileTokens, useResolvedAppearance } from "../lib/native";
+
+const REVIEWER_PROBE_KINDS = ["claude-code", "codex-app-server", "antigravity", "hermes"] as const;
+type ReviewerProbeKind = (typeof REVIEWER_PROBE_KINDS)[number];
+const NATIVE_REVIEWER_KINDS = ["claude-code", "codex-app-server", "antigravity"] as const;
+type NativeReviewerKind = (typeof NATIVE_REVIEWER_KINDS)[number];
+
+function isNativeReviewerKind(kind: RuntimeKind): kind is NativeReviewerKind {
+  return (NATIVE_REVIEWER_KINDS as readonly string[]).includes(kind);
+}
+
+async function loadReviewerProbes(): Promise<
+  Partial<Record<ReviewerProbeKind, RuntimeAvailability | null>>
+> {
+  const entries = await Promise.all(
+    REVIEWER_PROBE_KINDS.map(async (runtimeKind) => {
+      try {
+        const value = await rpc<RuntimeAvailability>("runtimes/availability", { runtimeKind });
+        return [runtimeKind, value] as const;
+      } catch {
+        return [runtimeKind, null] as const;
+      }
+    }),
+  );
+  return Object.fromEntries(entries) as Partial<
+    Record<ReviewerProbeKind, RuntimeAvailability | null>
+  >;
+}
+
+function nativeReviewerEffort(
+  kind: NativeReviewerKind,
+  modelId: string,
+  efforts: readonly string[],
+  kept: string | null | undefined,
+): string | null {
+  if (kind === "antigravity") {
+    const expected = antigravityEffortForModel(modelId);
+    return expected === undefined ? (efforts[0] ?? null) : expected;
+  }
+  if (kept && efforts.includes(kept)) return kept;
+  return efforts[0] ?? null;
+}
 
 export default function BoardsSettings() {
   const { t } = useI18n();
   const tokens = useMobileTokens();
+  const colorScheme = useResolvedAppearance();
+  const router = useRouter();
   const [boards, setBoards] = useState<BoardWorkspace[]>([]);
   const [bots, setBots] = useState<{ id: string; name: string }[]>([]);
   const [selected, setSelected] = useState("");
@@ -33,20 +95,41 @@ export default function BoardsSettings() {
   const [owner, setOwner] = useState(false);
   const [upkeep, setUpkeep] = useState(true);
   const [learning, setLearning] = useState<SpaceLearningConfig | null>(null);
+  const [catalog, setCatalog] = useState<ModelCatalogEntry[]>([]);
+  const [credentials, setCredentials] = useState<ModelCredential[]>([]);
+  const [probes, setProbes] = useState<
+    Partial<Record<ReviewerProbeKind, RuntimeAvailability | null>>
+  >({});
+  const [kind, setKind] = useState<RuntimeKind>("pi");
   const board = boards.find((row) => row.id === selected) ?? boards[0];
   useEffect(() => setName(board?.name ?? ""), [board?.id, board?.name]);
   async function load() {
-    const [result, bots, upkeepResult, learningResult] = await Promise.all([
+    const [
+      result,
+      bots,
+      upkeepResult,
+      learningResult,
+      catalogResult,
+      credentialResult,
+      nextProbes,
+    ] = await Promise.all([
       rpc<{ workspaces: BoardWorkspace[]; problem: BoardProblem | null }>("board/workspaces", {}),
       rpc<{ id: string; name: string }[]>("bots/list"),
       rpc<{ enabled: boolean }>("board/upkeep", {}),
       loadLearningSettings(),
+      rpc<ModelCatalogEntry[]>("models/list"),
+      rpc<ModelCredential[]>("models/credentials"),
+      loadReviewerProbes(),
     ]);
     setBoards(result.workspaces);
     setBots(bots);
     setProblem(result.problem);
     setUpkeep(upkeepResult.enabled);
     setLearning(learningResult);
+    setCatalog(catalogResult);
+    setCredentials(credentialResult);
+    setProbes(nextProbes);
+    setKind(learningResult.reviewerPin?.runtimeKind ?? "pi");
     setLoaded(true);
   }
   async function bootstrap() {
@@ -138,27 +221,193 @@ export default function BoardsSettings() {
               })
             }
           />
-          <Text style={foreground}>
-            {learning?.enabled ? t("Learning review is on") : t("Learning review is off")}
-          </Text>
-          <Text style={foreground}>
-            {learning?.destination?.modelId
-              ? t("Reviewer: {model}", { model: learning.destination.modelId })
-              : t("No reviewer model yet.")}
-          </Text>
-          {!learning?.enabled ? (
-            <Button
-              title={t("Enable")}
-              disabled={busy || !learning?.canConfigure || !learning.destination}
-              onPress={() =>
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginVertical: 8,
+            }}
+          >
+            <Text style={foreground}>{t("Learning review")}</Text>
+            <Switch
+              accessibilityLabel={t("Learning review")}
+              value={learning?.enabled ?? false}
+              disabled={busy || !learning?.canConfigure}
+              onValueChange={(enabled) =>
                 learning
                   ? void work(async () => {
-                      setLearning(await enableLearningReview(learning));
+                      setLearning(
+                        await rpc<SpaceLearningConfig>("learning/configure", {
+                          enabled,
+                          reviewerPin: learning.reviewerPin,
+                          consolidationEnabled: learning.consolidationEnabled,
+                          budgets: learning.budgets,
+                        }),
+                      );
                     })
                   : undefined
               }
             />
-          ) : null}
+          </View>
+          <Text style={foreground}>
+            {t("Reviews use this connection and may incur model charges.")}
+          </Text>
+          <Button
+            title={t(runtimeLabels[kind])}
+            disabled={busy || !learning?.canConfigure}
+            onPress={() =>
+              presentMessageActionSheet({
+                title: t("Runs on"),
+                cancel: t("Cancel"),
+                more: t("More"),
+                colorScheme,
+                actions: (Object.keys(runtimeLabels) as RuntimeKind[]).map((value) => ({
+                  text: t(runtimeLabels[value]),
+                  onPress: () => setKind(value),
+                })),
+              })
+            }
+          />
+          <Button
+            title={(() => {
+              const shown =
+                learning?.reviewerPin?.runtimeKind === kind
+                  ? learning.reviewerPin
+                  : kind === "pi"
+                    ? learning?.destination
+                    : null;
+              return shown?.modelId
+                ? t("Reviewer: {model}", { model: shown.modelId })
+                : t("Choose a model");
+            })()}
+            disabled={busy || !learning?.canConfigure}
+            onPress={() => {
+              if (!learning) return;
+              const sheet = {
+                cancel: t("Cancel"),
+                more: t("More"),
+                colorScheme,
+              };
+              const expectedRevision = learning.reviewerPin?.revision ?? 0;
+              if (isNativeReviewerKind(kind)) {
+                const models = probes[kind]?.models ?? [];
+                if (models.length === 0) {
+                  router.push("/models");
+                  return;
+                }
+                presentMessageActionSheet({
+                  ...sheet,
+                  title: t("Learning reviewer"),
+                  actions: models.map((entry) => ({
+                    text: entry.label,
+                    onPress: () => {
+                      const previous =
+                        learning.reviewerPin?.runtimeKind === kind ? learning.reviewerPin : null;
+                      void work(async () => {
+                        setLearning(
+                          await setReviewerPin(expectedRevision, {
+                            runtimeKind: kind,
+                            provider: nativeRuntimeProviders[kind],
+                            modelId: entry.id,
+                            credentialId: `native:${kind}`,
+                            effort: nativeReviewerEffort(
+                              kind,
+                              entry.id,
+                              entry.efforts,
+                              previous?.effort,
+                            ),
+                          }),
+                        );
+                      });
+                    },
+                  })),
+                });
+                return;
+              }
+              const runtimeKind = kind === "hermes" ? "hermes" : "pi";
+              const actions = reviewerMenuOptions(
+                catalog,
+                credentials,
+                t,
+                (pin) => {
+                  const entry = catalog.find(
+                    (item) => item.provider === pin.provider && item.id === pin.modelId,
+                  );
+                  const previous =
+                    learning.reviewerPin?.runtimeKind === runtimeKind ? learning.reviewerPin : null;
+                  const effortLevels = entry?.thinkingLevels ?? [];
+                  const effort =
+                    previous?.effort &&
+                    effortLevels.includes(previous.effort as (typeof effortLevels)[number])
+                      ? previous.effort
+                      : spaceDefaultEffort(undefined, effortLevels);
+                  void work(async () => {
+                    setLearning(await setReviewerPin(expectedRevision, { ...pin, effort }));
+                  });
+                },
+                runtimeKind,
+                () => router.push("/models"),
+              );
+              if (actions.length === 1 && actions[0]?.text === t("Connect a model")) {
+                router.push("/models");
+                return;
+              }
+              presentMessageActionSheet({
+                ...sheet,
+                title: t("Learning reviewer"),
+                actions,
+              });
+            }}
+          />
+          {(() => {
+            const pin =
+              learning?.reviewerPin?.runtimeKind === kind
+                ? learning.reviewerPin
+                : kind === "pi"
+                  ? learning?.destination
+                  : null;
+            if (!pin) return null;
+            const entry = catalog.find(
+              (item) => item.provider === pin.provider && item.id === pin.modelId,
+            );
+            const effortLevels = entry?.thinkingLevels ?? [];
+            if (effortLevels.length === 0 || isNativeReviewerKind(kind)) return null;
+            return (
+              <Button
+                title={t("Thinking: {level}", { level: effortLabel(pin.effort ?? "medium", t) })}
+                disabled={busy || !learning?.canConfigure}
+                onPress={() => {
+                  presentMessageActionSheet({
+                    title: t("Thinking"),
+                    cancel: t("Cancel"),
+                    more: t("More"),
+                    colorScheme,
+                    actions: thinkingMenuOptions(
+                      effortLevels,
+                      pin.provider === "ollama" || pin.provider === "local",
+                      t,
+                      (effort) => {
+                        void work(async () => {
+                          if (!pin.provider || !pin.modelId || !pin.credentialId) return;
+                          const expectedRevision = learning?.reviewerPin?.revision ?? 0;
+                          setLearning(
+                            await setReviewerPin(expectedRevision, {
+                              runtimeKind: pin.runtimeKind,
+                              provider: pin.provider,
+                              modelId: pin.modelId,
+                              credentialId: pin.credentialId,
+                              effort,
+                            }),
+                          );
+                        });
+                      },
+                    ),
+                  });
+                }}
+              />
+            );
+          })()}
           <Text style={[styles.heading, foreground]}>{t("Beads")}</Text>
           <Text style={foreground}>
             {problem?.code === "not_installed"

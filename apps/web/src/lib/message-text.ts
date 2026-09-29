@@ -1,10 +1,48 @@
-import type { ThreadMessage } from "@ardurbot/contracts";
+import type { MessageBlock, ThreadMessage } from "@ardurbot/contracts";
+import {
+  isInterimNarrationAt,
+  isReasoningSummaryBlock,
+  isStreamingTextBlock,
+  isToolActivityBlock,
+  workRecordEntries,
+} from "@ardurbot/core";
 import { messageProviderLabel } from "./messaging";
+
+/**
+ * Blocks shown inside the reply bubble. Tool activity, supplied reasoning
+ * summaries, and interim narration (notes interrupted by later tool activity)
+ * live in the compact work record instead. Plain narration — including old
+ * stored messages with no reasoning flag — streams and stays here.
+ */
+export function narrationBubbleBlocks(blocks: readonly MessageBlock[]): MessageBlock[] {
+  return blocks.filter(
+    (block, index) =>
+      !isToolActivityBlock(block) &&
+      !isReasoningSummaryBlock(block) &&
+      !isInterimNarrationAt(blocks, index),
+  );
+}
+
+/**
+ * True while an in-flight message already shows the run's activity — reply
+ * text streaming in the bubble or a visible compact work record — so the
+ * transcript does not need the fallback working glyph as a second indicator.
+ */
+export function liveMessageHasVisibleActivity(message: ThreadMessage): boolean {
+  if (!message.id.startsWith("progress:")) return false;
+  return (
+    message.blocks.some(
+      (block) => block.kind === "progress" && !isToolActivityBlock(block) && Boolean(block.text),
+    ) || workRecordEntries(message.blocks).length > 0
+  );
+}
 
 /** Plain message text for clipboard copy — text/ask/progress only, no chrome. */
 export function copyableMessageText(message: ThreadMessage): string {
   return message.blocks
-    .map((block) => {
+    .map((block, index) => {
+      if (isReasoningSummaryBlock(block)) return "";
+      if (isInterimNarrationAt(message.blocks, index)) return "";
       if (block.kind === "channel_message") {
         return `${messageProviderLabel(block.provider, block.transport)} · ${block.fromLabel}: ${block.text}`;
       }
@@ -16,4 +54,25 @@ export function copyableMessageText(message: ThreadMessage): string {
     .filter(Boolean)
     .join("\n")
     .trim();
+}
+
+/** Working bots whose live message does not already show this turn's activity. */
+export function workingBotsWithoutVisibleActivity<Bot extends { botId?: string }>(
+  workingBots: readonly Bot[],
+  messages: readonly ThreadMessage[],
+): Bot[] {
+  const covered = new Set(
+    messages.flatMap((message) =>
+      message.botId && liveMessageHasVisibleActivity(message) ? [message.botId] : [],
+    ),
+  );
+  return workingBots.filter((bot) => bot.botId == null || !covered.has(bot.botId));
+}
+
+/**
+ * How a reply's text or progress block renders: live progress keeps the streaming layout
+ * (partial fences stay sealed), and the cursor shows only while its text is still growing.
+ */
+export function replyMarkdownProps(block: MessageBlock): { streaming: boolean; cursor: boolean } {
+  return { streaming: block.kind === "progress", cursor: isStreamingTextBlock(block) };
 }

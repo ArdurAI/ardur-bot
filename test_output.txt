@@ -1,3 +1,0 @@
-
- RUN  v4.1.11 /Users/nutakki/repos/ardur-bot-wt/token-poc
-
