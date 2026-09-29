@@ -9,6 +9,11 @@ import {
 } from "@ardurbot/contracts";
 import type { HistoricalHermesRuntimeConfig } from "@ardurbot/contracts/runtime-config";
 import {
+  HERMES_CONNECTION_POLICY,
+  hermesConnectionRefusal,
+  isHermesPassThroughProvider,
+} from "@ardurbot/core";
+import {
   legacyHermesRuntimeConfigHash,
   runtimeConfigV2Hash,
 } from "@ardurbot/core/node/runtime-config-hash";
@@ -61,21 +66,22 @@ export function hermesCompatibility(
   )
     return runtimePinProblem(pin, "pin-incomplete", "Choose a connected model for Hermes.");
   // Sign-in (OAuth/subscription) connections never back Hermes: vendors reserve
-  // them for their own apps. API-key connections go through the broker.
-  if (model.oauth || model.provider === "openai-codex")
+  // them for their own apps. API-key connections go through the broker. The
+  // decision and its sentences come from the one shared policy table.
+  const refusal = hermesConnectionRefusal(
+    model.provider,
+    model.oauth ? { oauth: true } : undefined,
+  );
+  if (refusal)
     return runtimePinProblem(
       pin,
       "runtime-unsupported-protocol",
-      model.provider === "anthropic"
-        ? "Claude subscriptions only work in Anthropic's own apps; add an Anthropic API key to use Claude with Hermes."
-        : model.provider === "openai-codex"
-          ? "ChatGPT sign-ins only work inside Codex; add an OpenAI API key to use GPT models with Hermes."
-          : "Add an API key connection to use this provider with Hermes.",
+      HERMES_CONNECTION_POLICY.refusalSentences[refusal],
     );
   // Custom endpoints pass Chat Completions through to their direct URL; every
   // other key-based connection is translated through Ardur's provider layer,
   // which needs a registry model served by an API-key provider.
-  if (model.provider === "openai-compatible" || model.provider === "ollama") {
+  if (isHermesPassThroughProvider(model.provider)) {
     if (!model.baseUrl)
       return runtimePinProblem(
         pin,
