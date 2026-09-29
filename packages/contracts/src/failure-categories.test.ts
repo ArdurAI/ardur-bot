@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   FAILURE_CATEGORIES,
   FailureCategoryIdSchema,
+  failureCategoryFromMemberLine,
   failureCategoryFromText,
   failureCategoryMessage,
   fillFailureCategoryMessage,
@@ -71,8 +72,7 @@ describe("failure categories table", () => {
       "configuration-invalid",
       { bot: "Reviewer" },
     ],
-    ["Worker stopped.", "stopped", { member: "Worker" }],
-    ["Reviewer failed.", "other", { member: "Reviewer" }],
+    ["Worker stopped.", "stopped", {}],
     [
       "Claude Code could not finish this run — connect it or change the pin.",
       "other",
@@ -86,5 +86,28 @@ describe("failure categories table", () => {
     expect(failureCategoryFromText("Timed out.")).toBeUndefined();
     expect(failureCategoryFromText("")).toBeUndefined();
     expect(failureCategoryFromText("   ")).toBeUndefined();
+  });
+
+  it.each([
+    "npm test failed.",
+    "The build failed.",
+    "The owner stopped.",
+    "Reviewer failed.",
+    "Reviewer stopped.",
+  ])("keeps the words of a recorded reason that ends like a handoff line: %j", (text) => {
+    expect(failureCategoryFromText(text)).toBeUndefined();
+  });
+
+  it("recognises a handoff line only for the member it was written for", () => {
+    expect(failureCategoryFromMemberLine("Reviewer failed.", "Reviewer")).toBe("other");
+    expect(failureCategoryFromMemberLine(" Reviewer stopped. ", "Reviewer")).toBe("stopped");
+    // Written by older versions, whatever the member was called.
+    expect(failureCategoryFromMemberLine("Worker stopped.", "Reviewer")).toBe("stopped");
+    expect(failureCategoryFromMemberLine("npm test failed.", "Reviewer")).toBeUndefined();
+    expect(failureCategoryFromMemberLine("Reviewer failed.", "Writer")).toBeUndefined();
+    expect(
+      failureCategoryFromMemberLine("Reviewer failed: out of disk.", "Reviewer"),
+    ).toBeUndefined();
+    expect(failureCategoryFromMemberLine("", "Reviewer")).toBeUndefined();
   });
 });

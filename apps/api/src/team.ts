@@ -3,6 +3,7 @@ import type { Actor, HostLabel, TeamRow } from "@ardurbot/contracts";
 import {
   DelegationSnapshotSchema,
   FailureCategoryIdSchema,
+  failureCategoryFromMemberLine,
   failureCategoryFromText,
   RunFailurePayloadSchema,
   RuntimeInfoSchema,
@@ -201,9 +202,15 @@ export async function teamBoard(
     const runtimeProblem = failure.success ? failure.data.runtimeProblem : undefined;
     // A finished failed or cancelled handoff carries its own recorded reason (already
     // redacted); a run that ended cancelled leaves no run.failed event to read one from.
-    const recordedReason =
+    const recorded =
       selected && ["failed", "cancelled"].includes(selected.status)
         ? selected.result?.trim()
+        : undefined;
+    // A handoff line ("Reviewer failed.") says that the handoff ended, never why: it is
+    // not a reason to show.
+    const recordedReason =
+      recorded && selected && !failureCategoryFromMemberLine(recorded, selected.actingName)
+        ? recorded
         : undefined;
     const problemCategory = FailureCategoryIdSchema.safeParse(runtimeProblem?.reasonId);
     const legacyCategory = recordedReason ? failureCategoryFromText(recordedReason) : undefined;

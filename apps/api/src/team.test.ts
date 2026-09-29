@@ -239,6 +239,30 @@ describe("team.board", () => {
     expect(row.reasonCategory).toBeUndefined();
   });
 
+  it.each(["npm test failed.", "The build failed.", "The owner stopped."])(
+    "keeps the words of a recorded reason that ends like a handoff line: %j",
+    async (recorded) => {
+      const f = fixture("failed", "failed");
+      f.delegation.result = recorded;
+      const row = TeamBoardSchema.parse(await teamBoard(f.prisma, actor)).rows[0]!;
+      expect(row.state).toBe("blocked");
+      expect(row.reason).toBe(recorded);
+      expect(row.reasonCategory).toBeUndefined();
+    },
+  );
+
+  it.each([
+    ["Reviewer failed.", "failed"],
+    ["Worker stopped.", "cancelled"],
+  ])("shows no reason for a handoff line, which says only that it ended: %j", async (line, run) => {
+    const f = fixture(run, "failed");
+    f.delegation.result = line;
+    const row = TeamBoardSchema.parse(await teamBoard(f.prisma, actor)).rows[0]!;
+    expect(row.state).toBe("blocked");
+    expect(row.reason).toBe(run === "failed" ? "The run failed" : "The task needs attention");
+    expect(row.reasonCategory).toBeUndefined();
+  });
+
   it("stops showing a failed handoff as blocked once the bot has newer work", async () => {
     const f = fixture("completed", "failed");
     f.delegation.result = "Claude Code's usage limit is reached. Try again after it resets.";

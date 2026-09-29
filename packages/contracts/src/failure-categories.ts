@@ -168,6 +168,11 @@ function templateToPattern(template: string): RegExp {
  * Map a stored English sentence back to its category and captured parameters. Older
  * records hold the sentence verbatim; anything unknown returns undefined so the caller
  * shows its generic line.
+ *
+ * The handoff lines ("{member} failed.", "{member} stopped.") are not matched here. They
+ * are too short to tell from a recorded reason that ends the same way ("npm test
+ * failed."), and a recorded reason must keep its own words. A handoff line is recognised
+ * by failureCategoryFromMemberLine, which needs the member's name.
  */
 export function failureCategoryFromText(
   text: string,
@@ -178,7 +183,6 @@ export function failureCategoryFromText(
     const templates = [
       entry.message,
       ...(entry.groupMessage ? [entry.groupMessage] : []),
-      ...(entry.memberMessage ? [entry.memberMessage] : []),
       ...entry.legacy,
     ];
     for (const template of templates) {
@@ -194,6 +198,25 @@ export function failureCategoryFromText(
         },
       };
     }
+  }
+  return undefined;
+}
+
+/**
+ * The category of a handoff line written for this member ("Reviewer failed."), or
+ * undefined for any other text. The line says that a handoff ended, never why, so a
+ * reader that finds one has no recorded reason to show.
+ */
+export function failureCategoryFromMemberLine(
+  text: string,
+  member: string,
+): FailureCategoryId | undefined {
+  const trimmed = text.trim();
+  if (!trimmed) return undefined;
+  for (const entry of FAILURE_CATEGORIES) {
+    if (!entry.memberMessage) continue;
+    const lines = [fillFailureCategoryMessage(entry.memberMessage, { member }), ...entry.legacy];
+    if (lines.includes(trimmed)) return entry.id;
   }
   return undefined;
 }
