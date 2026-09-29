@@ -592,6 +592,74 @@ it("refuses a second install while the lock is held", async () => {
   }
 });
 
+it("treats an unreadable lock as held and never steals it", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "hermes-garbage-lock-"));
+  const lock = hermesInstallLockPath(root);
+  await mkdir(path.dirname(lock), { recursive: true });
+  await writeFile(lock, "not json {");
+  const fetchImpl = vi.fn<HermesFetch>();
+  try {
+    expect(hermesInstallLockHeld(root)).toBe(true);
+    await expect(
+      installHermes({ root, fetch: fetchImpl, platform: "linux", arch: "x64" }),
+    ).rejects.toThrow(HERMES_INSTALL_RUNNING);
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(await readFile(lock, "utf8")).toBe("not json {");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("locks atomically so a concurrent installer sees a complete lock", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "hermes-lock-race-"));
+  const report = path.join(root, "uv-report.ndjson");
+  const expectedTree = await gitWriteTree();
+  const uv = uvArchive(uvScript(report, path.join(root, "install-status.json")));
+  let openGate: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => {
+    openGate = resolve;
+  });
+  const fetchImpl: HermesFetch = async (input) => {
+    if (input === HERMES_SOURCE_URL) {
+      await gate;
+      return new Response(sourceArchive());
+    }
+    return new Response(uv.gzip);
+  };
+  const deps = {
+    root,
+    fetch: fetchImpl,
+    platform: "linux" as const,
+    arch: "x64",
+    expectedTree,
+    sources: sourceMap(),
+    uvSha256: uv.sha256,
+  };
+  try {
+    const first = installHermes(deps);
+    const deadline = Date.now() + 10_000;
+    while (!hermesInstallLockHeld(root)) {
+      if (Date.now() > deadline) throw new Error("the first install never took the lock");
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    // Every read of the lock file sees complete JSON, never a partial write.
+    for (let check = 0; check < 20; check += 1) {
+      const parsed = JSON.parse(await readFile(hermesInstallLockPath(root), "utf8")) as {
+        pid?: unknown;
+      };
+      expect(parsed.pid).toBe(process.pid);
+    }
+    await expect(installHermes(deps)).rejects.toThrow(HERMES_INSTALL_RUNNING);
+    openGate();
+    await first;
+    expect(hermesInstallLockHeld(root)).toBe(false);
+    expect(readHermesInstallStatus(root)?.state).toBe("ready");
+  } finally {
+    openGate();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 it("treats a dead pid and an hour-old lock as free", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "hermes-stale-lock-"));
   try {

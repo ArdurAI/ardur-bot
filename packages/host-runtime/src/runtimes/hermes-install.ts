@@ -156,7 +156,7 @@ export function readHermesInstallStatus(root: string): HermesInstallStatus | nul
   }
 }
 
-/** A live pid stays held for at most an hour. A dead pid is stale immediately. */
+/** A live pid stays held for at most an hour. A lock that exists but cannot be parsed counts as held. */
 export function hermesInstallLockHeld(root: string, now = Date.now()): boolean {
   try {
     const lockPath = hermesInstallLockPath(root);
@@ -165,8 +165,8 @@ export function hermesInstallLockHeld(root: string, now = Date.now()): boolean {
     const pid = typeof parsed.pid === "number" ? parsed.pid : undefined;
     if (pid !== undefined && !installPidAlive(pid)) return false;
     return now - stat.mtimeMs < HERMES_INSTALL_LOCK_STALE_MS;
-  } catch {
-    return false;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== "ENOENT";
   }
 }
 

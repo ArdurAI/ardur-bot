@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync, lstatSync, readdirSync } from "node:fs";
 import {
+  link,
   lstat,
   mkdir,
   mkdtemp,
@@ -330,15 +331,22 @@ function liveInstallReady(link: string): boolean {
 
 async function acquireLock(root: string): Promise<void> {
   const lockPath = hermesInstallLockPath(root);
-  await mkdir(path.dirname(lockPath), { recursive: true });
+  const directory = path.dirname(lockPath);
+  await mkdir(directory, { recursive: true });
   const body = JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() });
   for (let attempt = 0; attempt < 5; attempt += 1) {
+    // Write the full body to a temp file and link it into place, so a concurrent
+    // reader never sees an empty or partial lock.
+    const temporary = path.join(directory, `.install.lock.${process.pid}.${randomUUID()}.tmp`);
     try {
-      await writeFile(lockPath, body, { flag: "wx", mode: 0o644 });
+      await writeFile(temporary, body, { flag: "wx", mode: 0o644 });
+      await link(temporary, lockPath);
       return;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST")
         throw new HermesInstallError(HERMES_INSTALL_FAILED);
+    } finally {
+      await unlink(temporary).catch(() => undefined);
     }
     if (hermesInstallLockHeld(root)) throw new HermesInstallError(HERMES_INSTALL_RUNNING);
     let current = "";
