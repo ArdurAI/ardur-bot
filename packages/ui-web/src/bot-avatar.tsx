@@ -134,7 +134,7 @@ export const BotAvatar = memo(function BotAvatar({
     return (
       <div
         className={cn(
-          "ardurbot-bot-avatar relative flex shrink-0 select-none items-center justify-center bg-secondary",
+          "ardur-bot-avatar relative flex shrink-0 select-none items-center justify-center bg-secondary",
           className,
         )}
         aria-hidden="true"
@@ -209,7 +209,7 @@ export const BotAvatar = memo(function BotAvatar({
     return (
       <div
         className={cn(
-          "ardurbot-bot-avatar relative flex shrink-0 select-none items-center justify-center bg-card",
+          "ardur-bot-avatar relative flex shrink-0 select-none items-center justify-center bg-card",
           className,
         )}
         aria-hidden="true"
@@ -276,7 +276,7 @@ export const BotAvatar = memo(function BotAvatar({
   return (
     <div
       className={cn(
-        "ardurbot-bot-avatar relative flex shrink-0 select-none items-center justify-center",
+        "ardur-bot-avatar relative flex shrink-0 select-none items-center justify-center",
         className,
       )}
       aria-hidden="true"
@@ -363,7 +363,7 @@ function OrganicAvatar({
     <svg
       viewBox="-60 -60 120 120"
       aria-hidden="true"
-      className={cn("ardurbot-organic-avatar overflow-visible select-none", className)}
+      className={cn("ardur-organic-avatar overflow-visible select-none", className)}
       data-status={avatarStatus}
       data-working={isWorking}
       data-shape-family={seed % 10}
@@ -377,12 +377,12 @@ function OrganicAvatar({
       {(["idle", "working"] as const).map((mode) => (
         <path
           key={mode}
-          className={`ardurbot-organic-avatar-body ardurbot-organic-avatar-body-${mode}`}
+          className={`ardur-organic-avatar-body ardur-organic-avatar-body-${mode}`}
           d={shapeA}
           fill={color}
           style={
             {
-              "--ardurbot-organic-path": `path("${shapeA}")`,
+              "--ardur-organic-path": `path("${shapeA}")`,
               filter:
                 mode === "working"
                   ? `drop-shadow(0 0 ${Math.round(size * 0.16)}px ${color})`
@@ -404,7 +404,7 @@ function OrganicAvatar({
         {(["idle", "working"] as const).map((mode) => (
           <g
             key={mode}
-            className={`ardurbot-organic-avatar-eyes ardurbot-organic-avatar-eyes-${mode}`}
+            className={`ardur-organic-avatar-eyes ardur-organic-avatar-eyes-${mode}`}
             fill={tokens.background}
           >
             <rect x="-14" y="-12" width="7" height="24" rx="3.5" />

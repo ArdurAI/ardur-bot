@@ -1317,8 +1317,9 @@ msgid "Bot screen preview"
 msgstr "Bot 화면 미리보기"
 
 #: src/pages/BotContextMenu.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Bot settings"
-msgstr ""
+msgstr "봇 설정"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Bot to link"
@@ -1909,10 +1910,10 @@ msgstr ""
 msgid "Compare bots"
 msgstr ""
 
+#: src/components/composer/ComposerMenu.tsx
 #: src/pages/CompareStart.tsx
-#: src/pages/Shell.tsx
 msgid "Compare with…"
-msgstr ""
+msgstr "비교하기…"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Complete"
@@ -2933,7 +2934,7 @@ msgstr ""
 
 #: src/pages/CompareStart.tsx
 msgid "Could not start comparison; retry."
-msgstr ""
+msgstr "비교를 시작하지 못했습니다. 다시 시도하세요."
 
 #: src/pages/CompareStart.tsx
 msgid "Could not start comparison; review the pins and retry."
@@ -3420,6 +3421,10 @@ msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Developer (git, GitHub and GitLab CLIs, node, jq)"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Developer image"
 msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
@@ -4183,6 +4188,7 @@ msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group"
 msgstr "그룹"
 
@@ -4190,7 +4196,7 @@ msgstr "그룹"
 msgid "Group brief"
 msgstr "그룹 브리핑"
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group settings"
 msgstr "그룹 설정"
 
@@ -4254,6 +4260,10 @@ msgstr "Hermes는 아직 이 연결을 지원하지 않습니다."
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes is not installed on this computer."
 msgstr "이 컴퓨터에 Hermes가 설치되어 있지 않습니다."
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Hermes isn't available on Windows yet."
+msgstr "Hermes는 아직 Windows에서 사용할 수 없습니다."
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."
@@ -4353,6 +4363,10 @@ msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Image profile"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Image pull secret"
 msgstr ""
 
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -5129,6 +5143,7 @@ msgstr ""
 #: src/pages/memory/MemoryProposals.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/settings-sections.ts
+#: src/pages/shell/bot-panel.tsx
 msgid "Memory"
 msgstr "기억"
 
@@ -6446,8 +6461,9 @@ msgstr ""
 #: src/pages/account/AccountProfile.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/memory/MemoryProposals.tsx
+#: src/pages/shell/bot-panel.tsx
 msgid "Profile"
-msgstr ""
+msgstr "프로필"
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Project ID"
@@ -7019,6 +7035,10 @@ msgstr "비밀번호를 재설정하세요"
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Resetting…"
 msgstr "재설정 중…"
+
+#: src/pages/Shell.tsx
+msgid "Resize pane"
+msgstr "패널 크기 조정"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Resources"
@@ -7713,6 +7733,7 @@ msgstr ""
 #: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Settings"
 msgstr "설정"
 
@@ -7758,9 +7779,9 @@ msgstr ""
 msgid "Show bots"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show computer"
-msgstr ""
+msgstr "컴퓨터 보기"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Show in the menu bar."
@@ -7778,7 +7799,7 @@ msgstr "더 보기"
 msgid "Show password"
 msgstr "비밀번호 표시"
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show settings"
 msgstr "설정 보기"
 
@@ -8016,6 +8037,10 @@ msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Standard"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Standard image"
 msgstr ""
 
 #: src/components/composer/command-description.ts
@@ -8347,6 +8372,10 @@ msgstr "첫 번째 봇을 만들 수 없습니다. 다시 시도하세요."
 #: src/pages/group-model-control.tsx
 msgid "The group model choice was reloaded. Pick again."
 msgstr "그룹의 모델 선택을 다시 불러왔습니다. 다시 선택하세요."
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "The Hermes install on this computer failed its safety check."
+msgstr "이 컴퓨터의 Hermes 설치가 안전 검사를 통과하지 못했습니다."
 
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
@@ -9232,7 +9261,7 @@ msgid "Working…"
 msgstr "처리 중…"
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Workspace"
 msgstr "작업 공간"
 

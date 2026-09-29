@@ -2197,3 +2197,38 @@ it("moves a Docker computer to an E2B deployment default through Settings", asyn
     await rm(homeRoot, { recursive: true, force: true });
   }
 });
+
+it("keeps a Kubernetes computer available with unknown capacity when nodes are unreadable", async () => {
+  vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
+  vi.spyOn(DockerSandboxProvider.prototype, "engineInfo").mockRejectedValue(new Error("offline"));
+  const prisma = listingPrisma([{ kind: "kubernetes" }]);
+  // The namespaced Role alone cannot list nodes or pods across namespaces.
+  const api = Object.assign(new FakeKubernetesApi(), {
+    capacity: async (): Promise<never> => {
+      throw Object.assign(new Error("forbidden"), { code: 403 });
+    },
+  });
+  try {
+    const sandbox = createRunSandbox("kubernetes", {
+      kubernetes: {
+        api,
+        settings: ComputerConnectionSettingsSchema.parse({ engine: "kubernetes", context: "c" }),
+      },
+      prisma,
+      secrets: { load: () => "" },
+    });
+    const fleet = await new FleetCatalog(prisma, { load: () => "" }, {}, sandbox).list(runContext);
+    expect(fleet.targets.find((target) => target.id === "default")).toMatchObject({
+      state: "connected",
+      capacity: {
+        source: "not-reported",
+        cpuCount: null,
+        memoryTotal: null,
+        memoryFree: null,
+        diskFree: null,
+      },
+    });
+  } finally {
+    api.dispose();
+  }
+});

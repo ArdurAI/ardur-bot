@@ -1,5 +1,10 @@
 import { BOT_NAME_MAX_LENGTH } from "@ardurbot/contracts";
-import { botInstructionText, renderGoalContext } from "@ardurbot/core";
+import {
+  ASK_WAKE_PROMPT,
+  botInstructionText,
+  renderAskResults,
+  renderGoalContext,
+} from "@ardurbot/core";
 import { describe, expect, it, vi } from "vitest";
 import { assembleTurnContext, boundMessages, needsRecall } from "./assemble.js";
 import { markStablePrefix } from "./provider-cache.js";
@@ -180,6 +185,7 @@ describe("turn context", () => {
     );
     expect(first.snapshot.layers.messages).toBeLessThanOrEqual(600);
   });
+
   it("keeps everything before per-turn data byte-identical on the next turn", async () => {
     const earlier = [
       { id: "u1", role: "user" as const, content: "Where is the launch checklist?" },
@@ -362,6 +368,63 @@ describe("turn context", () => {
     expect(text.includes("<tool_call")).toBe(true);
     expect(text.includes("<tool_result")).toBe(true);
     expect(text.length).toBeLessThanOrEqual(budget);
+  });
+
+  it("cuts a long teammate directory between members, never partway through one", async () => {
+    const lines = Array.from({ length: 40 }, (_, index) => `- Member ${index}: ${"x".repeat(60)}`);
+    const result = await assembleTurnContext({
+      instructions: "Coordinate.",
+      history: [],
+      message: "What is the status?",
+      teammates: ["Room members.", ...lines].join("\n"),
+      budgets: { messages: 3_000 },
+    });
+    const framed = result.history[0]?.content ?? "";
+    expect(framed.length).toBeLessThanOrEqual(1_000);
+    const body = framed.split("\n").slice(1, -1);
+    expect(body[0]).toBe("Room members.");
+    for (const line of body.slice(1)) expect(line).toMatch(/^- Member \d+: x{60}$/);
+    expect(framed.endsWith("</teammate_directory>")).toBe(true);
+  });
+  it("keeps the person's request when posted answers would fill the history budget", async () => {
+    const userRequest = "tell the bots to introduce each other, do not mention individually";
+    const answer = "y".repeat(1_900);
+    const names = ["Ada", "Ben", "Cy", "Dee"];
+    const block = renderAskResults(
+      names.map((name) => ({
+        id: name.toLowerCase(),
+        name,
+        request: "Introduce yourself",
+        outcome: "answered" as const,
+        text: answer,
+        posted: true,
+      })),
+      userRequest,
+    );
+    const context = await assembleTurnContext({
+      instructions: "You coordinate this room.",
+      history: [
+        { id: "person", role: "user", content: userRequest },
+        {
+          id: "ask-message",
+          role: "assistant",
+          content: "@Ada @Ben @Cy @Dee Introduce yourself",
+        },
+        ...names.map((name) => ({
+          id: `answer-${name.toLowerCase()}`,
+          role: "assistant" as const,
+          content: answer,
+        })),
+      ],
+      requiredContext: { id: "ask-results:wake", role: "user", content: block },
+      sourceMessageId: "ask-message",
+      message: ASK_WAKE_PROMPT,
+    });
+    const joined = [context.prompt, ...context.history.map((message) => message.content)].join(
+      "\n",
+    );
+    expect(block).not.toContain(answer);
+    expect(joined).toContain(userRequest);
   });
   it("refuses to silently truncate instructions or the new request", async () => {
     await expect(

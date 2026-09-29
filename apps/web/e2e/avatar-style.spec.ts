@@ -5,7 +5,7 @@ test("account settings show seal and organic previews and persist the selected s
   page,
 }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `avatar-style-${stamp}@ardurbot.test`, "password12", "Avatar style QA");
+  await signup(page, `avatar-style-${stamp}@example.test`, "password12", "Avatar style QA");
   await completeOnboarding(page);
 
   const settings = await openUserSettings(page, "account");
@@ -16,14 +16,14 @@ test("account settings show seal and organic previews and persist the selected s
   await expect(robot).toBeVisible();
   await expect(organic).toBeVisible();
   await expect(robot).toHaveAttribute("aria-pressed", "true");
-  const seal = robot.locator(".ardurbot-bot-avatar");
+  const seal = robot.locator(".ardur-bot-avatar");
   await expect(seal).toBeVisible();
   await expect(seal).toContainText("A");
   await expect(seal).toHaveAttribute("aria-hidden", "true");
   await expect(seal.locator("svg")).toHaveCount(0);
-  await expect(organic.locator(".ardurbot-organic-avatar")).toBeVisible();
-  await expect(robot.locator(".ardurbot-organic-avatar")).toHaveCount(0);
-  await expect(organic.locator(".ardurbot-bot-avatar")).toHaveCount(0);
+  await expect(organic.locator(".ardur-organic-avatar")).toBeVisible();
+  await expect(robot.locator(".ardur-organic-avatar")).toHaveCount(0);
+  await expect(organic.locator(".ardur-bot-avatar")).toHaveCount(0);
 
   await captureScreenshot(page, testInfo, "account-avatars-style-previews");
   await settings.getByRole("textbox", { name: "What should your bots call you?" }).fill("Captain");

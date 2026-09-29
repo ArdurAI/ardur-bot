@@ -26,6 +26,10 @@ vi.mock("../../lib/rpc", () => ({
   selectedSpaceId: () => "space",
 }));
 vi.mock("../../lib/auth", () => ({ authClient: {} }));
+vi.mock("../../pages/CompareStart", () => ({
+  CompareStart: ({ open, botId, text }: { open?: boolean; botId: string; text?: string }) =>
+    open ? <div role="dialog" aria-label="Compare with…">{`${botId}: ${text}`}</div> : null,
+}));
 const translate = (parts: TemplateStringsArray, ...values: unknown[]) =>
   parts.reduce((text, part, index) => text + part + (values[index] ?? ""), "");
 vi.mock("@lingui/react/macro", () => ({
@@ -336,6 +340,51 @@ describe("composer controls", () => {
     await key(document.activeElement!, "Escape");
     await vi.waitFor(() => expect(document.querySelector('[role="menu"]')).toBeNull());
     expect(document.activeElement).toBe(button("Add files or photos"));
+  });
+  it("offers Compare with… from the menu only for a one-to-one draft", async () => {
+    const floating = () =>
+      [...document.querySelectorAll("button")].filter(
+        (item) => item.textContent === "Compare with…",
+      );
+    await mount({ comparisonBotId: "bot" });
+    expect(floating()).toHaveLength(0);
+    await openMenu();
+    expect(document.body.textContent).not.toContain("Compare with…");
+    const first = menuItem("Add files or photos");
+    first.focus();
+    await key(first, "Escape");
+    await vi.waitFor(() => expect(document.querySelector('[role="menu"]')).toBeNull());
+
+    await type("Explain why sources matter");
+    await openMenu();
+    expect(
+      [...document.querySelectorAll('[role="menuitem"]')].map((row) => row.textContent).slice(1, 3),
+    ).toEqual(["Slash commands", "Compare with…"]);
+    await click(menuItem("Compare with…"));
+    await vi.waitFor(() =>
+      expect(
+        document.querySelector('[role="dialog"][aria-label="Compare with…"]')?.textContent,
+      ).toBe("bot: Explain why sources matter"),
+    );
+    expect(floating()).toHaveLength(0);
+  });
+  it("keeps Compare with… out of a draft that cannot be compared", async () => {
+    await mount();
+    await type("Explain why sources matter");
+    await openMenu();
+    expect(document.body.textContent).not.toContain("Compare with…");
+  });
+  it("shows the chip row only while a chip is selected", async () => {
+    await mount();
+    expect(document.querySelector('[data-testid="composer-chips"]')).toBeNull();
+    await openMenu();
+    await click(menuItem("Plugins"));
+    await click(menuItem("Daily review"));
+    expect(document.querySelector('[data-testid="composer-chips"]')?.textContent).toContain(
+      "Daily review",
+    );
+    await click(button("Remove skill Daily review"));
+    expect(document.querySelector('[data-testid="composer-chips"]')).toBeNull();
   });
   it("has a reduced-motion rule for menu and drag animations", () => {
     const css = readFileSync(path.join(import.meta.dirname, "composer.css"), "utf8");

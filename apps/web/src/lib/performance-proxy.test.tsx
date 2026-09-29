@@ -54,7 +54,7 @@ it("measures shell preparation and submit-to-first-token reduction with an offli
     const shellStart = performance.now();
     const html = renderToString(<ShellSkeleton />);
     const shellMs = performance.now() - shellStart;
-    expect(html).toContain('data-ardurbot-app-state="session-pending"');
+    expect(html).toContain('data-ardur-app-state="session-pending"');
     const sendStart = performance.now();
     let snapshot = applyThreadSendReceipt(initial, {
       botId: "fixture-bot",

@@ -21,6 +21,20 @@ const capturedConfig = {
 
 test("the Hermes short panel and Advanced editor share one draft", async ({ page }, testInfo) => {
   await installPerformanceFixture(page);
+  // The shared fixture answers every runtime probe with an empty list. The settings
+  // form reads that result's model list, so Hermes never stays on screen.
+  await page.route("**/rpc/runtimes/availability", (route) =>
+    route.fulfill({
+      json: {
+        json: {
+          runtimeKind: "hermes",
+          available: false,
+          reason: "Hermes is not installed on this computer.",
+          models: [],
+        },
+      },
+    }),
+  );
   await page.route("**/rpc/runtimeConfig/preview", (route) =>
     route.fulfill({
       json: {
@@ -88,11 +102,14 @@ test("a group shows captured runtime settings and refreshes them from the bot", 
   await completeOnboarding(page);
   await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
   const botId = await createNamedBot(page, "Config bot");
+  const partnerId = await createNamedBot(page, "Config partner");
   const group = await rpc<Group>(page, "groups/create", {
     name: "Config room",
-    botIds: [botId],
+    botIds: [botId, partnerId],
   });
-  const member = group.members.find((entry) => entry.botId === botId)!;
+  const memberId = group.members.find((entry) => entry.botId === botId)?.memberId;
+  const partnerMemberId = group.members.find((entry) => entry.botId === partnerId)?.memberId;
+  if (!memberId || !partnerMemberId) throw new Error("group is missing a member");
 
   const hermesBot = {
     runtimeKind: "hermes",
@@ -171,7 +188,7 @@ test("a group shows captured runtime settings and refreshes them from the bot", 
     };
   };
   expect(sent.json.botId).toBe(botId);
-  expect(sent.json.memberId).toBe(member.memberId);
+  expect(sent.json.memberId).toBe(memberId);
   expect(sent.json.expectedRevision).toBe(1);
   expect(sent.json.expectedBotModelPinRevision).toBe(3);
   expect(sent.json.pin).toMatchObject({
