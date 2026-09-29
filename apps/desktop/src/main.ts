@@ -66,6 +66,7 @@ import {
   stackDir,
   stackResourceDir,
 } from "./local-stack.js";
+import { showMainWindowWhenPainted } from "./main-window-show.js";
 import {
   memoryFolderBridgeAllowed,
   nativeMemoryFolderDependencies,
@@ -312,7 +313,10 @@ function defaultSessionProfileExists() {
   );
 }
 
-/** Page storage in the default session means a pre-partition install for this origin. */
+/**
+ * Page storage in the default session means a pre-partition install for this origin.
+ * The probe is never shown.
+ */
 async function defaultSessionHasOriginData(origin: string): Promise<boolean> {
   const probe = new BrowserWindow({
     show: false,
@@ -478,6 +482,7 @@ function createWindow(url: string, partition: string | null) {
   if (win.isVisible()) markOnce("rk:main:window-shown");
   win.once("show", () => markOnce("rk:main:window-shown"));
   win.once("ready-to-show", () => markOnce("rk:main:ready-to-show"));
+  showMainWindowWhenPainted(win);
   win.webContents.once("dom-ready", () => markOnce("rk:main:dom-ready"));
   win.webContents.once("did-finish-load", () => markOnce("rk:main:did-finish-load"));
   win.webContents.once("did-stop-loading", () => markOnce("rk:main:did-stop-loading"));
@@ -902,6 +907,8 @@ async function showLocalSettings() {
     await installBundledRenderer(url, targetSession, partition);
     const win = new BrowserWindow({
       ...browserWindowOptions(process.platform),
+      // Main-window options stay hidden until first paint. Settings opens now.
+      show: true,
       title: "Local Server Settings",
       frame: true,
       titleBarStyle: "default",

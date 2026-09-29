@@ -6,6 +6,7 @@ import vm from "node:vm";
 import { darkTokens, lightTokens } from "@ardurbot/ui-tokens";
 import { describe, expect, it, vi } from "vitest";
 import { localResetFailure } from "./local-mode.js";
+import { MAIN_WINDOW_SHOW_FALLBACK_MS, showMainWindowWhenPainted } from "./main-window-show.js";
 import { managedLocalOpenUrl, parseSetupInput } from "./setup-config.js";
 import { systemSenderAllowed } from "./system/install.js";
 import { UnsavedFiles } from "./unsaved-files.js";
@@ -65,6 +66,7 @@ function fixture() {
     warmWindowTimer: undefined,
     clearTimeout: vi.fn(),
     launchUpdateCheckScheduled: true,
+    showMainWindowWhenPainted: vi.fn(),
     // createWindow reads the guided-setup flag and the legacy Compose marker from module scope.
     GUIDED_SETUP_ENABLED: false,
     legacyCompose: false,
@@ -898,5 +900,28 @@ describe("cache limits wiring in the main process", () => {
     const f = fixture();
     expect(await f.openAppOnce(url)).toBe(true);
     expect(f.resolveSessionForTarget).toHaveBeenCalledExactlyOnceWith(url);
+  });
+});
+
+describe("main window ready-to-show wiring", () => {
+  it("shows the new window once on ready-to-show and still records the mark", async () => {
+    vi.useFakeTimers();
+    try {
+      const f = fixture();
+      f.showMainWindowWhenPainted = showMainWindowWhenPainted;
+      expect(await f.openAppOnce(url)).toBe(true);
+      const win = f.mainWindow!;
+      expect(win.show).not.toHaveBeenCalled();
+      win.emit("ready-to-show");
+      expect(win.show).toHaveBeenCalledOnce();
+      expect(win.focus).toHaveBeenCalledOnce();
+      expect(f.markOnce).toHaveBeenCalledWith("rk:main:ready-to-show");
+      win.emit("ready-to-show");
+      vi.advanceTimersByTime(MAIN_WINDOW_SHOW_FALLBACK_MS);
+      expect(win.show).toHaveBeenCalledOnce();
+      expect(win.focus).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

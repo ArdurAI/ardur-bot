@@ -9,6 +9,13 @@ import {
 } from "./window-options.js";
 
 describe("desktop window chrome", () => {
+  it("keeps the main window hidden until the first paint", () => {
+    for (const platform of ["darwin", "win32", "linux"] as const) {
+      expect(browserWindowOptions(platform).show).toBe(false);
+      expect(setupWindowOptions(platform).show).toBe(true);
+    }
+  });
+
   it("uses native traffic lights on macOS", () => {
     const opts = browserWindowOptions("darwin");
     expect(opts.frame).toBe(true);

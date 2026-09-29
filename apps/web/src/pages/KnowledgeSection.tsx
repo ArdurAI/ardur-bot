@@ -32,14 +32,21 @@ const fieldClass = "mt-2 w-full font-mono text-[13px] leading-relaxed";
 export function KnowledgeSection({
   botId,
   onSkillsChange,
+  defaultTab = "memory",
 }: {
   botId: string;
   onSkillsChange: (skills: AgentSkillCatalogEntry[]) => void;
+  defaultTab?: "memory" | "skills" | "learning";
 }) {
   const { t } = useLingui();
+  const [tab, setTab] = useState<string>(defaultTab);
+  useEffect(() => {
+    setTab(defaultTab);
+  }, [defaultTab]);
+
   return (
     <section className="mt-6" data-testid="bot-knowledge">
-      <Tabs defaultValue="memory">
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList aria-label={t`Knowledge`}>
           <TabsTrigger value="memory">
             <Trans>Memory</Trans>

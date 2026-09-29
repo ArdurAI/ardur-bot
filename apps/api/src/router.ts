@@ -1137,12 +1137,31 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
               },
             ];
           });
-          const available = Boolean(
-            owner &&
+          const isBridgeMode = process.env.ARDURBOT_HOST_BRIDGE === "api";
+
+          let healthAvailable = false;
+          let healthReason: string | undefined;
+
+          if (isBridgeMode) {
+            healthAvailable = Boolean(
               host?.connected &&
-              (!bot || bot.computer?.kind === "desktop") &&
-              health?.capabilities?.providerRelay === 1 &&
-              health.hermes?.available,
+                health?.capabilities?.providerRelay === 1 &&
+                health.hermes?.available,
+            );
+            healthReason =
+              !host?.connected || !health
+                ? "Host service is not running — open the desktop app."
+                : health.capabilities?.providerRelay !== 1
+                  ? "Update Ardur on the connected computer for the provider relay."
+                  : (health?.hermes?.reason ?? "Hermes is not installed on this computer.");
+          } else {
+            const localProbe = await nativeRuntimeAvailability("hermes", input.refresh);
+            healthAvailable = localProbe.available;
+            healthReason = localProbe.reason ?? "Hermes is not installed on this computer.";
+          }
+
+          const available = Boolean(
+            owner && (!bot || bot.computer?.kind === "desktop") && healthAvailable,
           );
           return {
             runtimeKind: "hermes" as const,
@@ -1154,11 +1173,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                     ? NATIVE_HOST_OWNER_MESSAGE
                     : bot && bot.computer?.kind !== "desktop"
                       ? "Choose a host computer for Hermes."
-                      : !host?.connected || !health
-                        ? "Host service is not running — open the desktop app."
-                        : health.capabilities?.providerRelay !== 1
-                          ? "Update Ardur on the connected computer for the provider relay."
-                          : (health?.hermes?.reason ?? "Hermes is not installed on this computer."),
+                      : healthReason,
                 }
               : {}),
           };
