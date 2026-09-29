@@ -6248,6 +6248,10 @@ msgstr ""
 msgid "Park"
 msgstr "Приостановить"
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Partially reported"
+msgstr "Частично зафиксировано"
+
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx

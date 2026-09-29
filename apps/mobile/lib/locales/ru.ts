@@ -76,6 +76,7 @@ export const RU_MESSAGES: Record<string, string> = {
   "Antigravity could not run this turn: {reason}.":
     "Antigravity не смог выполнить этот запрос: {reason}.",
   "Cost unavailable": "Стоимость недоступна",
+  "Partially reported": "Частично зафиксировано",
   "Antigravity is installed (version {version})": "Antigravity установлен (версия {version})",
   "Sign-in unknown until the first run": "Статус входа неизвестен до первого запуска",
   "Antigravity is not installed on this computer. Install it and sign in there, then check again.":

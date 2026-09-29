@@ -111,7 +111,7 @@ it("keeps loading and error recovery independent without exposing approval or se
   expect(node.textContent).not.toContain("Could not load");
 });
 it("shows recorded provider periods and never substitutes a price for unknown cost", async () => {
-  const period = { records: 3, inputTokens: 30, outputTokens: 12, cost: null };
+  const period = { records: 3, inputTokens: 30, outputTokens: 12, cost: null, incomplete: false };
   vi.mocked(loadOverviewUsage).mockResolvedValue({
     ...usage,
     providers: [{ provider: "Local provider", today: period, week: period, daily: [] }],
@@ -275,7 +275,14 @@ it("renders the Work summary from a server that has no filing outcomes", async (
   }
 });
 it("identifies totals-only usage as records on mobile", async () => {
-  const period = { records: 1, requests: 1, inputTokens: 20, outputTokens: 5, cost: null };
+  const period = {
+    records: 1,
+    requests: 1,
+    inputTokens: 20,
+    outputTokens: 5,
+    cost: null,
+    incomplete: false,
+  };
   vi.mocked(loadOverviewUsage).mockResolvedValue({
     ...usage,
     providers: [{ provider: "Aggregate collector", today: period, week: period, daily: [] }],
@@ -283,10 +290,33 @@ it("identifies totals-only usage as records on mobile", async () => {
   await act(async () => root.render(createElement(OverviewScreen)));
   expect(node.textContent).toContain("1 usage records · 25 tokens");
   expect(node.textContent).not.toContain("requests");
+  expect(node.textContent).not.toContain("Partially reported");
+});
+
+it("marks a period that includes unreported usage as partially reported", async () => {
+  const period = {
+    records: 2,
+    inputTokens: 20,
+    outputTokens: 5,
+    cost: null,
+    incomplete: true,
+  };
+  vi.mocked(loadOverviewUsage).mockResolvedValue({
+    ...usage,
+    providers: [{ provider: "fixture", today: period, week: period, daily: [] }],
+  });
+  await act(async () => root.render(createElement(OverviewScreen)));
+  expect(node.textContent).toContain("25 tokens · Partially reported");
 });
 
 it("shows unavailable cost for Antigravity usage", async () => {
-  const period = { records: 1, inputTokens: 20, outputTokens: 5, cost: null };
+  const period = {
+    records: 1,
+    inputTokens: 20,
+    outputTokens: 5,
+    cost: null,
+    incomplete: false,
+  };
   vi.mocked(loadOverviewUsage).mockResolvedValue({
     ...usage,
     providers: [{ provider: "antigravity", today: period, week: period, daily: [] }],
