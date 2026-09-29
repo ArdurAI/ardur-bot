@@ -136,7 +136,7 @@ jobs:
             *) exit "$bundle_status" ;;
           esac
           pnpm --filter @ardurbot/web exec playwright test --config playwright.performance.config.ts
-      - name: Warn on timing regressions above twenty percent
+      - name: Warn on timing regressions
         if: always()
         shell: bash
         run: |
@@ -146,6 +146,7 @@ jobs:
             if [[ "$kind" == browser ]]; then after=.context/performance/browser.json; fi
             if [[ -f "$before" && -f "$after" ]]; then
               # Two-file summaries always read as incomplete: they cannot establish a paired verdict.
+              # The script annotates each slower metric itself; any other exit code fails the step.
               verdict=0
               node scripts/performance-budget.mjs "$before" "$after" || verdict=$?
               case "$verdict" in

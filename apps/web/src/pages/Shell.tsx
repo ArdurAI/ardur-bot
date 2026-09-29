@@ -2624,7 +2624,7 @@ export function ShellPage({
     setWorkspaceExpanded(false);
     computerVisible.current = true;
     const needsTakeover = !userHoldsComputerControl(targetComputer, id);
-    const blocked = computerTakeoverBlocked(targetComputer, snapshot?.run?.status);
+    const blocked = computerTakeoverBlocked(targetComputer, currentRuns, id);
     try {
       await bootComputer({
         botId: id,
@@ -4696,7 +4696,8 @@ export function ShellPage({
                 ) : (
                   <TakeControlButton
                     computer={computer}
-                    runStatus={snapshot?.run?.status}
+                    runs={currentRuns}
+                    botId={computerBot.id}
                     taking={takingControl}
                     onTakeControl={() => {
                       if (computerBotIdRef.current) void takeControl(computerBotIdRef.current);

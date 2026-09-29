@@ -143,8 +143,9 @@ mandatory:
 node scripts/performance-budget.mjs parent.json candidate.json fixed-release.json policy.json
 ```
 
-Standard output is JSON; standard error is a brief human summary. Exit **0** means the selected
-evidence passes, **1** means a known regression or safety failure, and **2** means incomplete or
+Standard output is JSON; standard error has one `::warning` line for each entry in `warnings`,
+then a brief human summary. Exit **0** means the selected evidence passes, **1** means a known
+regression or safety failure, and **2** means incomplete or
 inconclusive evidence. Every result retains raw report envelopes, comparisons and machine-readable
 reasons. A required release invocation must also require `mode: "release"` and
 `releaseEligible: true`; a commit pass is advisory and cannot authorize publication. This comparator
@@ -460,9 +461,9 @@ fake streamed provider; it has no Docker or hosted-provider dependency. It measu
 browser contexts with HTTP cache disabled, using the shell's existing `rk:renderer:shell-painted`
 mark. That is navigation to painted authenticated shell, not OS process cold start. Composer-submit
 to the first streamed token appearing in the DOM is recorded separately. It compares the previous
-revision and current revision on the same Ubuntu runner, and emits warnings above **20%**.
-Those comparisons read two-file summaries, which are always incomplete evidence, so the step
-reports incomplete as a warning; only a known regression fails it.
+revision and current revision on the same Ubuntu runner and adds a warning for each metric that rose
+above both **5% and 25 ms**. Two-file summaries are always incomplete evidence, so the step also
+warns that timings remain advisory. It fails only when the comparison itself cannot run.
 
 The browser test captures Playwright traces and Chromium timeline traces for message arrival,
 bot switching, and both side-panel transitions. Animation-frame markers within those traces report
