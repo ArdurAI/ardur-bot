@@ -308,4 +308,35 @@ describe("RuntimeConfigPanel", () => {
     expect(callsInput.value).toBe("32");
     expect(timeInput.value).toBe("60");
   });
+
+  it("keeps the Advanced error visible and Save blocked while the section is closed", async () => {
+    const onError = vi.fn();
+    await act(async () => {
+      root.render(<ControlledHarness onError={onError} />);
+    });
+    const { details, textarea } = await openAdvanced();
+
+    await changeTextarea(textarea, "{ not valid json");
+    expect(onError).toHaveBeenLastCalledWith("Enter valid JSON.");
+
+    // Closing the section must not hide the reason Save stays disabled.
+    await act(async () => {
+      details.open = false;
+      details.dispatchEvent(new Event("toggle"));
+    });
+    expect(onError).toHaveBeenLastCalledWith("Enter valid JSON.");
+    expect(
+      container.querySelector('[data-testid="runtime-config-panel-error"]')?.textContent,
+    ).toBe("Enter valid JSON.");
+
+    // Reopen and fix: the error clears and Save is allowed again.
+    await act(async () => {
+      details.open = true;
+      details.dispatchEvent(new Event("toggle"));
+    });
+    await changeTextarea(textarea, JSON.stringify({ version: 2, runtimeKind: "hermes" }));
+    expect(onError).toHaveBeenLastCalledWith(null);
+    expect(container.querySelector('[data-testid="runtime-config-panel-error"]')).toBeNull();
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+  });
 });

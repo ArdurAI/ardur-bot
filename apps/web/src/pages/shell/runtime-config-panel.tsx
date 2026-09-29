@@ -38,6 +38,7 @@ export function RuntimeConfigPanel({
   const [contextError, setContextError] = useState<string | null>(null);
   const [advancedError, setAdvancedError] = useState<string | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [advancedMounted, setAdvancedMounted] = useState(false);
   const [advancedInvalid, setAdvancedInvalid] = useState(false);
 
   useEffect(() => {
@@ -119,8 +120,12 @@ export function RuntimeConfigPanel({
     updateErrors(callsError, timeError, null, advancedError);
   };
 
-  // Advanced errors render in place inside the editor; the top alert shows field errors.
+  // Advanced errors render in place inside the editor while it is open; when the
+  // section is closed the panel's visible error area must still explain why Save
+  // is disabled.
   const fieldError = callsError || timeError || contextError;
+  const hiddenAdvancedError = !advancedOpen ? advancedError : null;
+  const visibleError = fieldError || hiddenAdvancedError;
 
   return (
     <div className="mt-3 space-y-3" data-testid="runtime-config-panel">
@@ -175,13 +180,13 @@ export function RuntimeConfigPanel({
         </p>
       ) : null}
 
-      {fieldError ? (
+      {visibleError ? (
         <p
           role="alert"
           data-testid="runtime-config-panel-error"
           className="text-xs text-destructive"
         >
-          {fieldError}
+          {visibleError}
         </p>
       ) : null}
 
@@ -201,7 +206,9 @@ export function RuntimeConfigPanel({
       <details
         className="group mt-2 border-t border-border pt-2"
         onToggle={(event) => {
-          if (event.currentTarget.open) setAdvancedOpen(true);
+          const open = event.currentTarget.open;
+          setAdvancedOpen(open);
+          if (open) setAdvancedMounted(true);
         }}
       >
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[14px] text-muted-foreground">
@@ -212,7 +219,7 @@ export function RuntimeConfigPanel({
             ›
           </span>
         </summary>
-        {advancedOpen ? (
+        {advancedMounted ? (
           <Suspense fallback={null}>
             <RuntimeConfigAdvanced
               value={settings}
