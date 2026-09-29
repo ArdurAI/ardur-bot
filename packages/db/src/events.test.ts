@@ -83,6 +83,22 @@ describe("finalizeRun", () => {
       notice: { id: "group-model-locality-denied", botName: "Worker" },
     });
   });
+  it("names a limit or expired sign-in instead of blaming settings", () => {
+    expect(groupModelFailureNotice("runtime-unavailable", "Worker", "usage-limit")).toEqual({
+      kind: "text",
+      text: "Worker hit the group model's usage limit. Try again after it resets, or change the group model.",
+      notice: { id: "group-model-usage-limit", botName: "Worker" },
+    });
+    expect(groupModelFailureNotice("runtime-unavailable", "Worker", "signed-out")).toEqual({
+      kind: "text",
+      text: "Worker's sign-in for the group model expired. Reconnect it or change the group model.",
+      notice: { id: "group-model-sign-in-expired", botName: "Worker" },
+    });
+    // An unknown cause keeps the settings line; it is for real configuration problems.
+    expect(groupModelFailureNotice("runtime-unavailable", "Worker").notice?.id).toBe(
+      "group-model-unavailable",
+    );
+  });
   it("stamps the final steps block with wall-clock run duration", () => {
     const blocks = [
       { kind: "steps" as const, steps: [{ label: "Read file", count: 1 }] },

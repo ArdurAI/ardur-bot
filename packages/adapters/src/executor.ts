@@ -143,6 +143,7 @@ import {
   type PrismaClient,
   parseComputerMode,
   quietHistoryDeliveryIds,
+  recordDelegationFailure,
   refreshBoundBotMessageWakeRun,
   releaseQuietBotMessageClaims,
   requestCancel,
@@ -368,7 +369,7 @@ import {
   renderPlotSpecToSvg,
   searchChartCatalog,
 } from "./plot-tool.js";
-import { classifyProviderError } from "./provider-error.js";
+import { classifyProviderError, ProviderError } from "./provider-error.js";
 import {
   approvalRequestRoute,
   bindDeviceApproval,
@@ -6713,7 +6714,29 @@ export function createRunExecutor(deps: ExecutorDeps) {
             where: { id: runId },
             select: { cancelRequestedAt: true },
           });
-          if (error instanceof DispatchStopRequested || stopping?.cancelRequestedAt) return;
+          if (error instanceof DispatchStopRequested || stopping?.cancelRequestedAt) {
+            // A genuine runtime or provider failure while stopping is still the handoff's
+            // real cause: record it once so the stop confirmation labels the handoff
+            // failed with this reason instead of "cancelled. Worker stopped."
+            if (!(error instanceof DispatchStopRequested) && stopping?.cancelRequestedAt) {
+              if (error instanceof RuntimePinError || error instanceof ProviderError) {
+                const message = redactSecrets(
+                  error instanceof Error ? error.message : String(error),
+                  runSecrets,
+                );
+                getLogger().error(`run ${runId} failed while stopping: ${message}`, {
+                  ...(error instanceof RuntimePinError
+                    ? { runtimeProblem: error.problem.code }
+                    : { providerErrorKind: error.providerErrorKind }),
+                });
+                if (run.delegationId)
+                  await recordDelegationFailure(deps.prisma, run.delegationId, message).catch(
+                    (recordError) => getLogger().error("delegation failure record", recordError),
+                  );
+              }
+            }
+            return;
+          }
           if (!terminalCheckpointComplete) {
             await workspaceCheckpoint.flush().catch(() => undefined);
           }
@@ -6721,6 +6744,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             error instanceof Error ? error.message : String(error),
             runSecrets,
           );
+          const providerErrorKind = classifyProviderError(error);
           const failed = await deps.events.finalizeRun({
             onCommitted: () =>
               tracePoint(runId, "terminal.committed", { attempt: fence, outcome: "failed" }),
@@ -6734,10 +6758,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
             leaseFence: fence,
             outcome: "failed",
             error: message,
-            providerErrorKind: classifyProviderError(error),
+            providerErrorKind,
             ...(error instanceof RuntimePinError ? { runtimeProblem: error.problem } : {}),
           });
           if (!failed) return;
+          // Every run failure leaves its classified cause in the worker log, once.
+          getLogger().error(`run ${runId} failed: ${message}`, {
+            providerErrorKind,
+            ...(error instanceof RuntimePinError ? { runtimeProblem: error.problem.code } : {}),
+          });
           if (run.boardItemId)
             await finishBoardRun(
               deps,
@@ -6795,6 +6824,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
             error: setupError.message,
             runtimeProblem: setupError instanceof RuntimePinError ? setupError.problem : undefined,
           });
+          // Pin and computer failures never reached the runtime's own error path; log the cause.
+          if (finalized)
+            getLogger().error(`run ${runId} failed: ${setupError.message}`, {
+              ...(setupError instanceof RuntimePinError
+                ? { runtimeProblem: setupError.problem.code }
+                : {}),
+            });
           if (finalized && !finalized.continuationRunId && deps.notifications) {
             const bot = await deps.prisma.bot.findUnique({
               where: { id: run.botId },

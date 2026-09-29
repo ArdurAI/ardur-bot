@@ -14,6 +14,7 @@ import {
   delegationEffectiveStopReason,
   delegationStopReason,
   finishDelegation,
+  recordDelegationFailure,
   requestCancel,
 } from "./delegation.js";
 import { rejectDelegation } from "./delegation-rework.js";
@@ -755,4 +756,45 @@ it.each([
   ],
 ] as const)("reads the recorded stop reason first: %s", (reason, row) => {
   expect(delegationEffectiveStopReason(row)).toBe(reason);
+});
+it("reads a recorded failure as the stop reason", () => {
+  expect(
+    delegationEffectiveStopReason({
+      cancelReason: "failed",
+      deadlineAt: new Date(Date.now() + 60_000),
+      usedTokens: 0,
+      reservedTokens: 36_864,
+    }),
+  ).toBe("failed");
+});
+it("records a worker's genuine failure once without replacing a known cause", async () => {
+  const f = fixture();
+  const row = await f.admit();
+  const db = f.worker();
+  await requestCancel(db, { spaceId: "space", userId: "owner" }, "root");
+  await recordDelegationFailure(db, row.id, " Claude's usage limit is reached. ");
+  expect(f.state().rows[0]).toMatchObject({
+    cancelReason: "failed",
+    result: "Claude's usage limit is reached.",
+  });
+  // A second report does not rewrite the first, and neither does one after a known cause.
+  await recordDelegationFailure(db, row.id, "A different failure");
+  expect(f.state().rows[0].result).toBe("Claude's usage limit is reached.");
+  f.state().rows[0].cancelReason = "budget";
+  await recordDelegationFailure(db, row.id, "Late failure");
+  expect(f.state().rows[0].result).toBe("Claude's usage limit is reached.");
+  expect(f.state().rows[0].cancelReason).toBe("budget");
+});
+it("shows a failed handoff as failed with its reason, even after a cancel request", async () => {
+  const f = fixture();
+  const row = await f.admit();
+  const db = f.worker();
+  await requestCancel(db, { spaceId: "space", userId: "owner" }, "root");
+  await recordDelegationFailure(db, row.id, "Claude's usage limit is reached.");
+  await db.$transaction((tx) =>
+    finishDelegation(tx, row.id, "failed", f.state().rows[0].result ?? ""),
+  );
+  expect(f.state().rows[0].status).toBe("failed");
+  const summary = f.tx.message.create.mock.calls.at(-1)![0].data.blocks[0].text as string;
+  expect(summary).toBe("Coordinator → Worker: failed: Claude's usage limit is reached.");
 });

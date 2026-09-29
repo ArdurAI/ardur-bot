@@ -212,6 +212,16 @@ export function fixture() {
               if (row.cancelReason != null) continue;
             } else if (row.cancelReason !== where.cancelReason) continue;
           }
+          if (
+            Array.isArray(where.OR) &&
+            !where.OR.some((clause: Record<string, unknown>) => {
+              if (!("cancelReason" in clause)) return false;
+              return clause.cancelReason === null
+                ? row.cancelReason == null
+                : row.cancelReason === clause.cancelReason;
+            })
+          )
+            continue;
           const statusOk =
             typeof where.status === "string"
               ? row.status === where.status

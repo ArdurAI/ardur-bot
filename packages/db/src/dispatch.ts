@@ -501,15 +501,17 @@ export async function confirmDispatchStop(
     });
     if (run.delegationId) {
       const delegation = await tx.delegation.findUnique({ where: { id: run.delegationId } });
+      // A worker that reported a genuine failure while stopping finishes failed with that
+      // reason, not "cancelled. Worker stopped."
+      const reason = delegation ? delegationEffectiveStopReason(delegation, now) : "stopped";
       await finishDelegation(
         tx,
         run.delegationId,
-        "cancelled",
+        reason === "failed" ? "failed" : "cancelled",
         delegation
-          ? delegationStopLine(
-              delegationEffectiveStopReason(delegation, now),
-              delegation.actingName,
-            )
+          ? reason === "failed" && delegation.result?.trim()
+            ? delegation.result
+            : delegationStopLine(reason, delegation.actingName)
           : delegationStopLine("stopped", "Worker"),
       );
     }

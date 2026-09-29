@@ -415,4 +415,24 @@ describe("delegated stop cause", () => {
     const summary = f.tx.message.create.mock.calls.at(-1)?.[0].data.blocks[0].text as string;
     expect(summary).toContain("Worker used its token budget. Raise the budget and try again.");
   });
+  it("labels a worker that failed while stopping as failed with its recorded reason", async () => {
+    const f = delegatedFixture(
+      delegationRow({
+        cancelReason: "failed",
+        result: "Claude Code's usage limit is reached. Try again after it resets.",
+      }),
+    );
+    await requestDispatchStop(f.db, grant, "task-a");
+    expect(await confirmDispatchStop(f.db, "run-a")).toBe(true);
+    const summary = f.tx.message.create.mock.calls.at(-1)?.[0].data.blocks[0].text as string;
+    expect(summary).toContain(
+      "Chief → Worker: failed: Claude Code's usage limit is reached. Try again after it resets.",
+    );
+    expect(summary).not.toContain("Worker stopped.");
+    expect(f.tx.delegation.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "failed" }),
+      }),
+    );
+  });
 });

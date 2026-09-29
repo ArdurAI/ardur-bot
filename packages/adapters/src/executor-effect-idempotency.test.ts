@@ -8,11 +8,13 @@ vi.mock("./run-usage.js", () => ({ recordRunUsage: vi.fn(async () => null) }));
 
 import type { AgentRunRequest, AgentRuntimeEvent, ProcessEvent } from "@ardurbot/adapter-kit";
 import type { CommandBlock as FixtureCommandBlock, MessageBlock } from "@ardurbot/contracts";
+import { RuntimePinError, runtimePinProblem } from "@ardurbot/contracts";
 import type { ActionApprovalRule } from "@ardurbot/core";
 import {
   legacyScopedToolEffectIdempotencyKey,
   toolEffectIdempotencyKey,
 } from "@ardurbot/core/node/approval-effect-key";
+import { createLogger, createTestSink, installLogger } from "@ardurbot/logging";
 import type { MemoryService } from "@ardurbot/memory";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type * as AutoReviewModule from "./auto-review.js";
@@ -50,6 +52,12 @@ vi.mock("./auto-review.js", async (importOriginal) => ({
 
 vi.mock("./computer-workspace.js", () => ({
   checkpointRunComputerWorkspace: vi.fn(async () => undefined),
+}));
+
+// Only the failure-cause tests delegate; the admitted destination is not their subject.
+vi.mock("./model-locality.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./model-locality.js")>()),
+  enforceDelegationDestination: vi.fn(async () => 36_864),
 }));
 
 type Effect = {
@@ -104,6 +112,7 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
     boardCloseWhenDone: false,
     boardCommentedAt: null as Date | null,
     cancelRequestedAt: null as Date | null,
+    delegationId: null as string | null,
   };
   const memoryCommit = vi.fn(async () => ({ revision: "rev-1" }));
   const externalEffect = {
@@ -165,9 +174,47 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
   const replayRequest = { command: "pnpm test", cwd: "/workspace" };
   const prisma = {
     chatGroupMember: { findMany: vi.fn(async () => []) },
-    botMessageDelivery: { updateMany: vi.fn(async () => ({ count: 0 })) },
+    botMessageDelivery: {
+      findFirst: vi.fn(async () => null),
+      updateMany: vi.fn(async () => ({ count: 0 })),
+    },
     botMessageWake: { findMany: vi.fn(async () => []) },
-    delegationRoot: { findUnique: vi.fn(async () => null) },
+    delegationRoot: {
+      findUnique: vi.fn(async () => null),
+      findUniqueOrThrow: vi.fn(async () => ({
+        rootTaskId: "root",
+        coordinatorThreadId: "thread-1",
+        coordinatorBotId: "bot-1",
+      })),
+    },
+    delegation: {
+      findMany: vi.fn(async () => []),
+      findUnique: vi.fn(async () => null),
+      findUniqueOrThrow: vi.fn(async ({ where }: { where: { id: string } }) => ({
+        id: where.id,
+        admissionKey: "fixture",
+        kind: "message",
+        status: "running",
+        card: null,
+        usedTokens: 0,
+        reservedTokens: 36_864,
+        deadlineAt: new Date(Date.now() + 3_600_000),
+        snapshot: {
+          pin: {
+            runtimeKind: "pi",
+            provider: "xai",
+            modelId: "grok-4.6",
+            effort: null,
+            credentialId: "model-connection",
+            revision: 1,
+          },
+          computer: { id: "computer-1", mode: "dedicated", kind: "desktop" },
+          destination: { host: null, local: false },
+        },
+      })),
+      update: vi.fn(async () => ({})),
+      updateMany: vi.fn(async () => ({ count: 1 })),
+    },
     botBrief: { updateMany: vi.fn(async () => ({ count: 0 })) },
     runKnowledgeExposure: { createMany: vi.fn(async () => ({ count: 1 })) },
     space: {
@@ -1224,6 +1271,10 @@ it("posts the coordinator's combined reply on the follow-up and keeps the person
 it("stops an ask follow-up after repeated setup failures so the room can continue", async () => {
   const f = fixture("ask-wake-stop");
   f.runRecord.clientNonce = "ask-wake:1:ask-run";
+  // The setup failure under test: the ask's results cannot be loaded.
+  (
+    f.prisma.delegation.findMany as unknown as { mockRejectedValue(e: unknown): void }
+  ).mockRejectedValue(new Error("fixture setup failure"));
   f.prisma.attempt.count.mockResolvedValue(2);
   await expect(f.executor.continueRun(f.runRecord.id, "worker-1")).resolves.toBeUndefined();
   expect(f.finalizeRun).toHaveBeenCalledWith(
@@ -1246,6 +1297,10 @@ it("stops an ask follow-up after repeated setup failures so the room can continu
 it("still retries an ask follow-up the first times setup fails", async () => {
   const f = fixture("ask-wake-retry");
   f.runRecord.clientNonce = "ask-wake:1:ask-run";
+  // The setup failure under test: the ask's results cannot be loaded.
+  (
+    f.prisma.delegation.findMany as unknown as { mockRejectedValue(e: unknown): void }
+  ).mockRejectedValue(new Error("fixture setup failure"));
   f.prisma.attempt.count.mockResolvedValue(1);
   await expect(f.executor.continueRun(f.runRecord.id, "worker-1")).rejects.toThrow(
     "Run setup failed; retrying",
@@ -1621,5 +1676,87 @@ describe("reasoning survival across pauses", () => {
         ]),
       }),
     );
+  });
+});
+
+describe("run failure cause", () => {
+  it("logs the classified cause once when a run fails", async () => {
+    const f = fixture("run-fails");
+    const sink = createTestSink();
+    installLogger(createLogger({ service: "ardurbot-worker", sinks: [sink] }));
+    // biome-ignore lint/correctness/useYield: the runtime fails before its first event.
+    f.runtimeRun.mockImplementation(async function* (): AsyncGenerator<AgentRuntimeEvent> {
+      throw new Error("Rate limit exceeded");
+    });
+    try {
+      await f.executor.continueRun(f.runRecord.id, "worker-1");
+    } finally {
+      installLogger(createLogger({ service: "ardurbot-worker", sinks: [] }));
+    }
+    expect(f.finalizeRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outcome: "failed",
+        error: "Rate limit exceeded",
+        providerErrorKind: "rate-limit",
+      }),
+    );
+    const logged = sink.events.filter((event) => event.message.startsWith("run run-fails failed"));
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toMatchObject({
+      level: "error",
+      message: "run run-fails failed: Rate limit exceeded",
+      providerErrorKind: "rate-limit",
+    });
+  });
+
+  it("records and logs a genuine failure reported while the run was stopping", async () => {
+    const f = fixture("run-stops");
+    f.runRecord.delegationId = "delegation-1";
+    const sink = createTestSink();
+    installLogger(createLogger({ service: "ardurbot-worker", sinks: [sink] }));
+    // biome-ignore lint/correctness/useYield: the runtime reports its failure before any event.
+    f.runtimeRun.mockImplementation(async function* (): AsyncGenerator<AgentRuntimeEvent> {
+      // The stop lands mid-turn, then the runtime reports why it really ended.
+      f.runRecord.cancelRequestedAt = new Date();
+      throw new RuntimePinError(
+        runtimePinProblem(
+          {
+            runtimeKind: "claude-code",
+            provider: "anthropic",
+            modelId: "claude-opus-5",
+            effort: "low",
+            credentialId: "native:claude-code",
+            revision: 1,
+          },
+          "runtime-unavailable",
+          "Claude Code's usage limit is reached. Try again after it resets.",
+          "usage-limit",
+        ),
+      );
+    });
+    try {
+      await f.executor.continueRun(f.runRecord.id, "worker-1");
+    } finally {
+      installLogger(createLogger({ service: "ardurbot-worker", sinks: [] }));
+    }
+    // The failure is not re-finalized as a generic failure, but it is not lost either.
+    expect(f.finalizeRun).not.toHaveBeenCalledWith(expect.objectContaining({ outcome: "failed" }));
+    expect(f.prisma.delegation.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: "delegation-1" }),
+        data: {
+          result: "Claude Code's usage limit is reached. Try again after it resets.",
+          cancelReason: "failed",
+        },
+      }),
+    );
+    const logged = sink.events.filter((event) =>
+      event.message.startsWith("run run-stops failed while stopping"),
+    );
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toMatchObject({
+      level: "error",
+      runtimeProblem: "runtime-unavailable",
+    });
   });
 });

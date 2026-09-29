@@ -218,11 +218,12 @@ export function delegationProblem(code: DelegationProblem["code"]): DelegationPr
   return { kind: "problem", code, message, action };
 }
 /** Why a worker stopped; the gate and the finished card share these lines. */
-export type DelegationStopReason = "budget" | "deadline" | "stopped";
+export type DelegationStopReason = "budget" | "deadline" | "stopped" | "failed";
 export function delegationStopLine(reason: DelegationStopReason, worker: string): string {
   if (reason === "budget")
     return `${worker} used its token budget. Raise the budget and try again.`;
   if (reason === "deadline") return `${worker} reached its deadline. Start a new task to continue.`;
+  if (reason === "failed") return `${worker} failed.`;
   return "Worker stopped.";
 }
 /**

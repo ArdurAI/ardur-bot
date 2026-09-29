@@ -66,6 +66,7 @@ const POLL_ONLY_CATCH_UP_MS = 400;
 export function groupModelFailureNotice(
   code: string,
   name: string | null,
+  reasonId?: string,
 ): Extract<MessageBlock, { kind: "text" }> {
   const botName = name ?? "This bot";
   if (code === "locality-denied") {
@@ -80,6 +81,21 @@ export function groupModelFailureNotice(
       kind: "text",
       text: `${botName} couldn't use the model set for this group. Reconnect it or change the group model.`,
       notice: { id: "group-model-credential-missing", botName },
+    };
+  }
+  // Limit and sign-in causes are not settings problems; the notice says what happened.
+  if (reasonId === "usage-limit") {
+    return {
+      kind: "text",
+      text: `${botName} hit the group model's usage limit. Try again after it resets, or change the group model.`,
+      notice: { id: "group-model-usage-limit", botName },
+    };
+  }
+  if (reasonId === "signed-out") {
+    return {
+      kind: "text",
+      text: `${botName}'s sign-in for the group model expired. Reconnect it or change the group model.`,
+      notice: { id: "group-model-sign-in-expired", botName },
     };
   }
   return {
@@ -1651,7 +1667,9 @@ async function finalizeRunOnce(
     const failedGroupPin = pinProblem && groupSource?.kind === "group-member";
     if (failedGroupPin) {
       const bot = await tx.bot.findUnique({ where: { id: input.botId }, select: { name: true } });
-      const blocks = [groupModelFailureNotice(pinProblem.code, bot?.name ?? null)];
+      const blocks = [
+        groupModelFailureNotice(pinProblem.code, bot?.name ?? null, pinProblem.reasonId),
+      ];
       const notice = await createThreadMessageInTransaction(tx, {
         threadId: input.threadId,
         role: "system",

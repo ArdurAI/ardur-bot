@@ -554,9 +554,32 @@ export function delegationEffectiveStopReason(
 ): DelegationStopReason {
   return row.cancelReason === "budget" ||
     row.cancelReason === "deadline" ||
-    row.cancelReason === "stopped"
+    row.cancelReason === "stopped" ||
+    row.cancelReason === "failed"
     ? row.cancelReason
     : delegationStopReason(row, now);
+}
+/**
+ * The genuine failure a cancel-requested worker reported while unwinding. Recorded once,
+ * and only over an unrecorded or generic stop: a known budget or deadline cause stays the
+ * cause. Confirmation then labels the handoff failed with this reason instead of
+ * "cancelled. Worker stopped."
+ */
+export async function recordDelegationFailure(
+  prisma: PrismaClient,
+  delegationId: string,
+  reason: string,
+) {
+  const text = redactTaskValue(reason).trim().slice(0, PEER_RECEIPT_MAX_LENGTH);
+  if (!text) return;
+  await prisma.delegation.updateMany({
+    where: {
+      id: delegationId,
+      status: { in: ACTIVE_DELEGATIONS },
+      OR: [{ cancelReason: null }, { cancelReason: "stopped" }],
+    },
+    data: { result: text, cancelReason: "failed" },
+  });
 }
 /** Called only after the executor finishes or confirms its abort. The unique summary is durable. */
 export async function finishDelegation(
@@ -570,7 +593,8 @@ export async function finishDelegation(
   await lockDelegationRoot(tx, row.rootTaskId);
   row = await tx.delegation.findUniqueOrThrow({ where: { id } });
   if (expectedRunId !== undefined && row.runId !== expectedRunId) return;
-  if (row.status === "cancel-requested" && status !== "cancelled") return;
+  // A genuine failure still lands after a cancel request: it is the handoff's real cause.
+  if (row.status === "cancel-requested" && status !== "cancelled" && status !== "failed") return;
   const redactedText = redactTaskValue(text);
   const brokerHeld = row.runId ? await unresolvedBrokerTokens(tx, row.id, row.runId) : 0;
   const attemptSpent =
@@ -629,6 +653,17 @@ export async function finishDelegation(
   const peerMessageResult =
     row.kind === "message" &&
     (row.admissionKey.startsWith("bot-message:") || row.admissionKey.startsWith("message:"));
+  // A failure names its reason inline ("failed: <reason>"); other terminal states keep the
+  // reason on the following line. An empty failure reason still shows the state plainly.
+  const reason = resultText.slice(0, 2000).trim();
+  const stateLine =
+    status === "completed"
+      ? "completed, awaiting acceptance."
+      : status === "failed"
+        ? reason
+          ? `failed: ${reason}`
+          : "failed."
+        : `${status}.`;
   const blocks: MessageBlock[] =
     peerMessageResult && status === "completed" && text.trim().length > 0
       ? [
@@ -646,8 +681,8 @@ export async function finishDelegation(
           {
             kind: "text",
             text: goalRoomAssignment
-              ? `${row.actingName}: ${status === "completed" ? "completed, awaiting acceptance" : status}.`
-              : `${row.requesterName} → ${row.actingName}: ${status === "completed" ? "completed, awaiting acceptance" : status}.\n${resultText.slice(0, 2000)}${row.card && TaskCardSchema.parse(row.card).doneWhen.length ? `\n${taskCardChecklist(TaskCardSchema.parse(row.card))}` : ""}`,
+              ? `${row.actingName}: ${stateLine}`
+              : `${row.requesterName} → ${row.actingName}: ${stateLine}${status === "failed" ? "" : `\n${resultText.slice(0, 2000)}`}${row.card && TaskCardSchema.parse(row.card).doneWhen.length ? `\n${taskCardChecklist(TaskCardSchema.parse(row.card))}` : ""}`,
           },
         ];
   const message = row.summaryMessageId

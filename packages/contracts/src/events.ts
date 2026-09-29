@@ -131,6 +131,8 @@ export const GroupModelFailureNotice = z.object({
   id: z.enum([
     "group-model-locality-denied",
     "group-model-credential-missing",
+    "group-model-usage-limit",
+    "group-model-sign-in-expired",
     "group-model-unavailable",
   ]),
   botName: z.string(),
