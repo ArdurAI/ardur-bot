@@ -1207,7 +1207,7 @@ it("blocks saving and shows a validation error for fractional Hermes limits", as
   });
   expect(calls.value).toBe("1.5");
   expect(time.value).toBe("1.5");
-  expect(container.textContent).toContain("Enter a whole number");
+  expect(container.textContent).toContain("Use a whole number");
 
   const button = [...container.querySelectorAll("button")].find(
     (element) => element.textContent === "Save",
@@ -1234,7 +1234,7 @@ it("retains the validation error when editing another valid limit", async () => 
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(calls, "1.5");
     calls.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  expect(container.textContent).toContain("Enter a whole number between 1 and 64");
+  expect(container.textContent).toContain("Use a whole number from 1 to 64.");
   const button = [...container.querySelectorAll("button")].find(
     (element) => element.textContent === "Save",
   ) as HTMLButtonElement;
@@ -1244,7 +1244,7 @@ it("retains the validation error when editing another valid limit", async () => 
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(time, "60");
     time.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  expect(container.textContent).toContain("Enter a whole number between 1 and 64");
+  expect(container.textContent).toContain("Use a whole number from 1 to 64.");
   expect(button.disabled).toBe(true);
 });
 

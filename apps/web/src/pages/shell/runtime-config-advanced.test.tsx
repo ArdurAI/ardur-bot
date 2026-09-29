@@ -68,9 +68,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  console.log("=== AFTER EACH START ===");
   await act(async () => root.unmount());
-  console.log("=== AFTER EACH UNMOUNT ===");
   container.remove();
 });
 
@@ -107,9 +105,7 @@ async function changeTextarea(textarea: HTMLTextAreaElement, value: string) {
 
 describe("RuntimeConfigAdvanced", () => {
   it("renders editor with initial formatted configuration and previews", async () => {
-    console.log("=== STARTING TEST ===");
     await render();
-    console.log("=== RENDER COMPLETE ===");
 
     const textarea = container.querySelector("textarea")!;
     expect(textarea).not.toBeNull();
@@ -125,7 +121,6 @@ describe("RuntimeConfigAdvanced", () => {
     expect(text).toContain("Ardur manages");
     expect(text).toContain("Unavailable with Hermes.");
     expect(text).toContain("Off");
-    console.log("=== TEST END ===");
   });
 
   it("updates and normalizes valid JSON", async () => {
@@ -208,6 +203,39 @@ describe("RuntimeConfigAdvanced", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  it("reports nesting beyond the depth limit without echoing input", async () => {
+    const { onError, onChange } = await render();
+    const textarea = container.querySelector("textarea")!;
+
+    let deep = "{}";
+    for (let index = 0; index < 12; index += 1) deep = `{"a":${deep}}`;
+    onChange.mockClear();
+    await changeTextarea(textarea, deep);
+
+    expect(onError).toHaveBeenCalledWith("This configuration is too complex.");
+    expect(onChange).not.toHaveBeenCalled();
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "This configuration is too complex.",
+    );
+  });
+
+  it("rejects prototype keys with the generic unsupported-field message", async () => {
+    const { onError, onChange } = await render();
+    const textarea = container.querySelector("textarea")!;
+
+    onChange.mockClear();
+    await changeTextarea(
+      textarea,
+      '{"version": 2, "runtimeKind": "hermes", "__proto__": {"polluted": true}}',
+    );
+
+    expect(onError).toHaveBeenCalledWith("This field is not supported.");
+    expect(onChange).not.toHaveBeenCalled();
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "This field is not supported.",
+    );
+  });
+
   it.each([
     {
       field: "model",
@@ -225,13 +253,13 @@ describe("RuntimeConfigAdvanced", () => {
       expected: "Use Ardur settings for tools, integrations, MCP servers, skills, and plugins.",
     },
     {
-      field: "paths",
-      json: { version: 2, runtimeKind: "hermes", paths: [] },
+      field: "env",
+      json: { version: 2, runtimeKind: "hermes", env: { SECRET: "x" } },
       expected: "Ardur manages paths, hooks, permissions, and network access.",
     },
     {
-      field: "install",
-      json: { version: 2, runtimeKind: "hermes", install: "pip" },
+      field: "packages",
+      json: { version: 2, runtimeKind: "hermes", packages: ["pip"] },
       expected: "Runtime settings cannot install or load code.",
     },
     {

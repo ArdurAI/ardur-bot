@@ -12,14 +12,12 @@ import {
   normalizeHermesRuntimeConfig,
 } from "@ardurbot/core/runtime-config";
 import { Button, Textarea } from "@ardurbot/ui-web";
+import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { rpc } from "../../lib/rpc";
 
-export function runtimeConfigIssueMessage(
-  issue: RuntimeConfigIssue,
-  t: (id: string, values?: Record<string, unknown>) => string,
-): string {
+export function runtimeConfigIssueMessage(issue: RuntimeConfigIssue): string {
   switch (issue.code) {
     case "invalid-json":
       return t`Enter valid JSON.`;
@@ -27,10 +25,14 @@ export function runtimeConfigIssueMessage(
       return t`Remove the duplicate field.`;
     case "document-too-large":
       return t`Configuration must be 16 KiB or smaller.`;
+    case "too-deep":
+    case "too-many-members":
+      return t`This configuration is too complex.`;
     case "unsupported-version":
     case "unsupported-runtime":
       return t`This configuration version is not supported.`;
     case "unknown-field":
+    case "prototype-key":
       return t`This field is not supported.`;
     case "managed-model":
       return t`Ardur sets the model and thinking level. Change them in bot settings.`;
@@ -65,7 +67,6 @@ export function runtimeConfigIssueMessage(
 export interface RuntimeConfigAdvancedProps {
   value: HermesRuntimeConfigV2Draft | HermesRuntimeConfigV2;
   pin?: Partial<RuntimePin> | null;
-  botId?: string;
   onChange: (value: HermesRuntimeConfigV2) => void;
   onError: (error: string | null) => void;
   onReset: () => void;
@@ -94,48 +95,43 @@ export function RuntimeConfigAdvanced({
 
   const latestRequestId = useRef(0);
 
-  const fetchPreview = useCallback(
-    async (doc: HermesRuntimeConfigV2Draft) => {
-      const currentPin = pinRef.current;
-      const reqId = ++latestRequestId.current;
-      console.log("fetchPreview started", reqId);
-      setPreviewLoading(true);
-      setPreviewError(null);
-      try {
-        console.log("Before rpc.runtimeConfig.preview");
-        const res = await rpc.runtimeConfig.preview({
+  const fetchPreview = useCallback(async (doc: HermesRuntimeConfigV2Draft) => {
+    const currentPin = pinRef.current;
+    const reqId = ++latestRequestId.current;
+    setPreviewLoading(true);
+    setPreviewError(null);
+    try {
+      const res = await rpc.runtimeConfig.preview({
+        runtimeKind: "hermes",
+        runtimeConfig: doc,
+        pin: {
           runtimeKind: "hermes",
-          runtimeConfig: doc,
-          pin: {
-            runtimeKind: "hermes",
-            provider: currentPin?.provider ?? null,
-            modelId: currentPin?.modelId ?? null,
-            effort: currentPin?.effort ?? null,
-            credentialId: currentPin?.credentialId ?? null,
-            revision: 0,
-          } as RuntimePin,
-        });
-        console.log("After rpc.runtimeConfig.preview", res);
-        if (latestRequestId.current !== reqId) return;
-        if (res.issues && res.issues.length > 0) {
-          const msg = runtimeConfigIssueMessage(res.issues[0], t);
-          setPreviewError(msg);
-          onErrorRef.current(msg);
-        } else if (res.preview) {
-          setPreview(res.preview);
-          setPreviewError(null);
-        }
-      } catch {
-        if (latestRequestId.current !== reqId) return;
-        setPreviewError(t`Could not preview the configuration. Try again.`);
-      } finally {
-        if (latestRequestId.current === reqId) {
-          setPreviewLoading(false);
-        }
+          provider: currentPin?.provider ?? null,
+          modelId: currentPin?.modelId ?? null,
+          effort: currentPin?.effort ?? null,
+          credentialId: currentPin?.credentialId ?? null,
+        },
+      });
+      if (latestRequestId.current !== reqId) return;
+      if (res.issues && res.issues.length > 0) {
+        const msg = runtimeConfigIssueMessage(res.issues[0]);
+        setPreviewError(msg);
+        onErrorRef.current(msg);
+      } else if (res.preview) {
+        setPreview(res.preview);
+        setPreviewError(null);
       }
-    },
-    [t],
-  );
+    } catch {
+      if (latestRequestId.current !== reqId) return;
+      setPreviewError(t`Could not preview the configuration. Try again.`);
+    } finally {
+      if (latestRequestId.current === reqId) {
+        setPreviewLoading(false);
+      }
+    }
+    // t is captured from the first render; the i18n instance is stable across renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Sync incoming value from short-panel when editor text is valid
   const lastSyncValue = useRef(value);
@@ -161,7 +157,7 @@ export function RuntimeConfigAdvanced({
     const parsed = parseRuntimeConfigText(newText);
     if (!parsed.success) {
       const firstIssue = parsed.issues[0];
-      const msg = runtimeConfigIssueMessage(firstIssue, t);
+      const msg = runtimeConfigIssueMessage(firstIssue);
       setLocalError(msg);
       onError(msg);
       return;
@@ -333,26 +329,6 @@ export function RuntimeConfigAdvanced({
                 <Trans>Off</Trans>
               </span>
             </div>
-            {preview?.managed ? (
-              <>
-                <div>
-                  <span className="text-muted-foreground">Model: </span>
-                  <span className="font-mono">{preview.managed.model}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Thinking: </span>
-                  <span className="font-mono">{preview.managed.thinkingLevel}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Connection: </span>
-                  <span className="font-mono">{preview.managed.connection}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Tools: </span>
-                  <span className="font-mono">{preview.managed.tools}</span>
-                </div>
-              </>
-            ) : null}
           </div>
         </div>
       </div>

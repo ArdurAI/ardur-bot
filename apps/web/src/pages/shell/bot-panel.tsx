@@ -680,7 +680,6 @@ export function BotSettings({
                     effort: thinkingLevel || null,
                     credentialId: selectedModel?.credentialId ?? null,
                   }}
-                  botId={bot.id}
                   onChange={setRuntimeConfig}
                   onError={setValidationError}
                   onOpenLearning={() => {
@@ -810,11 +809,7 @@ export function BotSettings({
           </label>
         ) : null}
       </details>
-      {activeValidationError ? (
-        <p className="mt-2 text-[13px] text-destructive">{activeValidationError}</p>
-      ) : error ? (
-        <p className="mt-2 text-[13px] text-destructive">{error}</p>
-      ) : null}
+      {error ? <p className="mt-2 text-[13px] text-destructive">{error}</p> : null}
       {needsConnection ? (
         <p className="mt-2 text-[12px] text-muted-foreground">
           <Trans>This bot's connection needs to be chosen. Pick the connection to use.</Trans>

@@ -16,7 +16,6 @@ export interface RuntimeConfigPanelProps {
   onError?: (error: string | null) => void;
   onOpenLearning?: () => void;
   pin?: Partial<RuntimePin> | null;
-  botId?: string;
 }
 
 export function RuntimeConfigPanel({
@@ -25,7 +24,6 @@ export function RuntimeConfigPanel({
   onError,
   onOpenLearning,
   pin,
-  botId,
 }: RuntimeConfigPanelProps) {
   const id = useId();
   const { t } = useLingui();
@@ -120,7 +118,8 @@ export function RuntimeConfigPanel({
     updateErrors(callsError, timeError, null, advancedError);
   };
 
-  const activeError = callsError || timeError || contextError || advancedError;
+  // Advanced errors render in place inside the editor; the top alert shows field errors.
+  const fieldError = callsError || timeError || contextError;
 
   return (
     <div className="mt-3 space-y-3" data-testid="runtime-config-panel">
@@ -163,13 +162,13 @@ export function RuntimeConfigPanel({
         </label>
       </div>
 
-      {activeError ? (
+      {fieldError ? (
         <p
           role="alert"
           data-testid="runtime-config-panel-error"
           className="text-xs text-destructive"
         >
-          {activeError}
+          {fieldError}
         </p>
       ) : null}
 
@@ -205,7 +204,6 @@ export function RuntimeConfigPanel({
             <RuntimeConfigAdvanced
               value={settings}
               pin={pin}
-              botId={botId}
               onChange={(next) => {
                 onChange(next);
                 updateErrors(null, null, null, null);
