@@ -5852,7 +5852,10 @@ export const Composer = memo(function Composer({
                 aria-label={t`@${mention.name}`}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => insertMention(mention)}
-                onMouseEnter={() => setMentionHighlightIndex(index)}
+                // Only a pointer that actually moves may take the keyboard highlight: a
+                // layout shift can open the picker under a parked cursor, and mouseenter
+                // would otherwise steal the highlight and complete the wrong mention.
+                onMouseMove={() => setMentionHighlightIndex(index)}
                 className={`flex w-full items-start gap-3 px-4 py-2.5 text-start hover:bg-accent ${
                   highlighted ? "bg-accent" : ""
                 }`}
