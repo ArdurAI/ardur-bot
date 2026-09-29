@@ -15,6 +15,8 @@ export const RU_MESSAGES: Record<string, string> = {
   "Conversation with {name}": "Диалог с {name}",
   "{count} active tasks": "{count} активных задач",
   "{count} peer messages waiting": "{count} сообщений от ботов ожидают",
+  "{runtime} can't use Ardur tools — a coordinator needs tools to hand off work.":
+    "{runtime} не может использовать инструменты Ardur — координатору нужны инструменты, чтобы передавать работу.",
   Conversation: "Диалог",
   "Open peer thread": "Открыть диалог с ботом",
   "This chat is view-only": "Этот диалог доступен только для чтения",

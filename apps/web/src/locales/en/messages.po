@@ -22,6 +22,7 @@ msgid " — not available on your account"
 msgstr " — not available on your account"
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid " · not available"
 msgstr " · not available"
 
@@ -62,6 +63,11 @@ msgstr "{0} active tasks"
 #: src/pages/settings/UploadedFiles.tsx
 msgid "{0} bytes"
 msgstr "{0} bytes"
+
+#. placeholder {0}: runtimeNames[coordinatorRuntime]
+#: src/pages/GroupPanel.tsx
+msgid "{0} can't use Ardur tools — a coordinator needs tools to hand off work."
+msgstr "{0} can't use Ardur tools — a coordinator needs tools to hand off work."
 
 #. placeholder {0}: block.name
 #: src/pages/shell/message-cards.tsx
@@ -5569,6 +5575,7 @@ msgid "Next"
 msgstr "Next"
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid "Next run"
 msgstr "Next run"
 
@@ -6937,6 +6944,7 @@ msgstr "Request expired"
 
 #: src/pages/ComparePanel.tsx
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 #: src/pages/TeamBoard.tsx
 msgid "requested"
 msgstr "requested"
@@ -9001,6 +9009,7 @@ msgid "User"
 msgstr "User"
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid "Using {currentId}"
 msgstr "Using {currentId}"
 

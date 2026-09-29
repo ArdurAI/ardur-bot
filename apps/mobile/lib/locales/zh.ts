@@ -15,6 +15,8 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Conversation with {name}": "与 {name} 的对话",
   "{count} active tasks": "{count} 项进行中的任务",
   "{count} peer messages waiting": "{count} 条待处理的 Bot 消息",
+  "{runtime} can't use Ardur tools — a coordinator needs tools to hand off work.":
+    "{runtime} 无法使用 Ardur 工具——协调者需要工具来分派工作。",
   Conversation: "对话",
   "Open peer thread": "打开对方的对话",
   "This chat is view-only": "此对话仅可查看",

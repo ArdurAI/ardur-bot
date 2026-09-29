@@ -22,6 +22,7 @@ msgid " — not available on your account"
 msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid " · not available"
 msgstr ""
 
@@ -62,6 +63,11 @@ msgstr "{0} सक्रिय कार्य"
 #: src/pages/settings/UploadedFiles.tsx
 msgid "{0} bytes"
 msgstr ""
+
+#. placeholder {0}: runtimeNames[coordinatorRuntime]
+#: src/pages/GroupPanel.tsx
+msgid "{0} can't use Ardur tools — a coordinator needs tools to hand off work."
+msgstr "{0} Ardur टूल उपयोग नहीं कर सकता — कोऑर्डिनेटर को काम सौंपने के लिए टूल चाहिए।"
 
 #. placeholder {0}: block.name
 #: src/pages/shell/message-cards.tsx
@@ -5569,6 +5575,7 @@ msgid "Next"
 msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid "Next run"
 msgstr "अगला रन"
 
@@ -6937,6 +6944,7 @@ msgstr "अनुरोध की समय-सीमा समाप्त ह�
 
 #: src/pages/ComparePanel.tsx
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 #: src/pages/TeamBoard.tsx
 msgid "requested"
 msgstr "अनुरोधित"
@@ -9001,6 +9009,7 @@ msgid "User"
 msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid "Using {currentId}"
 msgstr "{currentId} का उपयोग हो रहा है"
 
