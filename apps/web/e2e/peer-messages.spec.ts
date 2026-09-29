@@ -59,13 +59,17 @@ test("shows peer chips in transcript and opens view-only peer chat", async ({ pa
     .and(transcript.getByRole("button", { name: /Researcher$/ }))
     .first();
   await expect(chip).toBeVisible({ timeout: 30_000 });
-  await expect(chip).toContainText(
-    /^(Sent|Delivered (to|from) Researcher|Read by \w+|Replied|Waiting for a turn)$/,
-  );
+  // The avatar seal draws the peer's initial, so the receipt label is matched on its own.
+  await expect(
+    chip.getByText(
+      /^(Sent|Delivered (to|from) Researcher|Read by \w+|Replied|Waiting for a turn)$/,
+    ),
+  ).toBeVisible();
   await expect(chip).toHaveAccessibleName(
     /^((Sent|Delivered) to|(Message|Delivered) from|(Read by \w+|Replied|Waiting for a turn) · (to|from)) Researcher$/,
   );
   await expect(chip.locator(".ardur-bot-avatar")).toBeVisible();
+  await expect(chip.locator(".ardur-bot-avatar")).toHaveText("R");
   await expect(chip).not.toContainText("{peer}");
   // User bubble still contains the phrase; peer body must not appear outside the chip.
   await expect(chip).not.toContainText("peer-exchange-alpha");

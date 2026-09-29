@@ -1,11 +1,12 @@
 import type { LookupOptions } from "node:dns";
 import type * as DnsPromises from "node:dns/promises";
 import type { AgentRunRequest, AgentRuntimeEvent, AgentUsage } from "@ardurbot/adapter-kit";
-import { normalizeUsageCounts } from "@ardurbot/adapter-kit";
+import { normalizeUsageCounts, RequestUsageCollector } from "@ardurbot/adapter-kit";
 import { startModelEmulator } from "@ardurbot/testkit/model-emulator";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { piWireUsage } from "./pi-request-usage.js";
+import { applyPiWireSnapshot, piWireUsage } from "./pi-request-usage.js";
 import { PiAgentRuntime } from "./pi-runtime.js";
+import { accumulateRequestUsage, parseRequestUsage } from "./request-usage.js";
 import { ObservedUsageTotals } from "./runtime-usage.js";
 import { startScoreboardTrace, traceRuntime } from "./scoreboard-trace.js";
 
@@ -72,6 +73,38 @@ describe("Pi raw numeric mappings", () => {
       reasoning: 8,
     });
   });
+  it("maps Z.ai GLM additive cache counters when prompt_tokens excludes cache hits", () => {
+    // DeepSeek-style OpenAI-compatible shape used by Z.ai's GLM routes:
+    // prompt_tokens carries only the cache-miss portion, and the hit count is
+    // disclosed beside it. Cache subsets must still partition logical input.
+    const raw = piWireUsage("openai-completions", {
+      usage: {
+        prompt_tokens: 60,
+        completion_tokens: 20,
+        total_tokens: 1520,
+        prompt_cache_hit_tokens: 1440,
+        prompt_cache_miss_tokens: 60,
+      },
+    });
+    expect(normalizeUsageCounts(raw!, "total-with-cache-subsets").categories).toEqual({
+      logicalInput: 1500,
+      uncachedInput: null,
+      cacheReadInput: 1440,
+      cacheWriteInput: null,
+      output: 20,
+      reasoning: null,
+    });
+  });
+  it("treats a GLM response without cache fields as not reported, not zero", () => {
+    const raw = piWireUsage("openai-completions", {
+      usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
+    });
+    expect(normalizeUsageCounts(raw!, "total-with-cache-subsets").categories).toMatchObject({
+      logicalInput: 100,
+      cacheReadInput: null,
+      cacheWriteInput: null,
+    });
+  });
   it("maps Anthropic additive fields and retains the cache TTL subset", () => {
     const raw = piWireUsage("anthropic-messages", {
       type: "message_start",
@@ -89,6 +122,99 @@ describe("Pi raw numeric mappings", () => {
       raw: { cacheWrite1h: 20 },
       categories: { logicalInput: 100, output: 0, reasoning: null },
     });
+  });
+  it.each(["failed", "cancelled"] as const)(
+    "keeps Anthropic message_start counts as a lower bound when the attempt %s before final usage",
+    (outcome) => {
+      // message_start reports the prompt and a starting output count (often 1).
+      // The final output arrives later, on message_delta. A failure or cancel
+      // in between must not store that start count as a complete bill.
+      const counts = piWireUsage("anthropic-messages", {
+        type: "message_start",
+        message: {
+          usage: {
+            input_tokens: 25,
+            output_tokens: 1,
+            cache_read_input_tokens: 80,
+            cache_creation_input_tokens: 15,
+          },
+        },
+      });
+      const collector = new RequestUsageCollector({
+        provider: "anthropic",
+        model: "claude-fixture",
+        mappingVersion: "pi-anthropic-messages-wire-v1",
+        inputSemantics: "additive-cache-categories",
+      });
+      collector.start();
+      collector.snapshot(counts!);
+      const finished = collector.finish(outcome);
+      const totals = accumulateRequestUsage(null, finished.request!);
+      expect(totals.categories).toMatchObject({ logicalInput: 120, output: 1 });
+      expect(totals.categoryCoverage.output).toBe("partial");
+      expect(totals.categoryCoverage.logicalInput).toBe("partial");
+      expect(parseRequestUsage(finished.request).collection?.limitations).toContain(
+        "usage-not-final",
+      );
+    },
+  );
+  it("keeps the bill complete when message_delta arrived before the attempt failed", () => {
+    const collector = new RequestUsageCollector({
+      provider: "anthropic",
+      model: "claude-fixture",
+      mappingVersion: "pi-anthropic-messages-wire-v1",
+      inputSemantics: "additive-cache-categories",
+    });
+    collector.start();
+    const merged = {};
+    for (const payload of [
+      {
+        type: "message_start",
+        message: {
+          usage: {
+            input_tokens: 25,
+            output_tokens: 1,
+            cache_read_input_tokens: 80,
+            cache_creation_input_tokens: 15,
+          },
+        },
+      },
+      { type: "message_delta", usage: { output_tokens: 40 } },
+    ])
+      applyPiWireSnapshot(collector, "anthropic-messages", payload, merged);
+    const finished = collector.finish("failed");
+    const totals = accumulateRequestUsage(null, finished.request!);
+    expect(totals.categories).toMatchObject({ logicalInput: 120, output: 40 });
+    expect(totals.categoryCoverage.output).toBe("complete");
+    expect(totals.categoryCoverage.logicalInput).toBe("complete");
+    expect(finished.request?.collection?.limitations ?? []).not.toContain("usage-not-final");
+  });
+  it("accepts final totals from an error body after the failed finish", () => {
+    const collector = new RequestUsageCollector({
+      provider: "anthropic",
+      model: "claude-fixture",
+      mappingVersion: "pi-anthropic-messages-wire-v1",
+      inputSemantics: "additive-cache-categories",
+    });
+    collector.start();
+    collector.finish("failed");
+    const snap = applyPiWireSnapshot(
+      collector,
+      "anthropic-messages",
+      {
+        type: "message",
+        usage: {
+          input_tokens: 10,
+          output_tokens: 4,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0,
+        },
+      },
+      {},
+    );
+    const totals = accumulateRequestUsage(null, snap!.request!);
+    expect(totals.categories).toMatchObject({ logicalInput: 10, output: 4 });
+    expect(totals.categoryCoverage.output).toBe("complete");
   });
   it("does not infer usage from provider text or empty usage", () => {
     expect(

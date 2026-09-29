@@ -38,7 +38,9 @@ export function legacyTimingVerdict(before, after) {
       if (!Number.isFinite(value) || value < 0 || !Number.isFinite(current) || current < 0)
         invalid("invalid-value", `Missing or invalid timing: ${metric}.`);
       else if (current - value > Math.max(value * 0.05, 25))
-        warnings.push(`${metric} exceeds the proposed 5% and 25 ms advisory margin.`);
+        warnings.push(
+          `${before.kind} ${metric} exceeds the proposed 5% and 25 ms advisory margin.`,
+        );
     }
   }
   for (const report of [before, after]) {
@@ -144,6 +146,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     };
   }
   console.log(JSON.stringify(result, null, 2));
+  // One check annotation per warning, so a slower metric stands apart from an unchanged run.
+  for (const warning of result.warnings ?? [])
+    console.warn(`::warning title=Performance budget::${warning}`);
   console.error(
     `Performance budget: ${result.status}; ${result.reasons.length} reason(s). Development checks remain advisory.`,
   );
