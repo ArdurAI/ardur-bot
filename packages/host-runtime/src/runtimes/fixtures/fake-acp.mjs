@@ -356,6 +356,30 @@ async function handle(value) {
     send({ id: value.id, result: { stopReason: "end_turn" } });
     return;
   }
+  if (scenario === "relay") {
+    const relayUrl = process.env.ARDUR_HERMES_RELAY_URL;
+    const response = await fetch(`${relayUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${process.env.ARDUR_HERMES_PROVIDER_KEY}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "fixture-model",
+        messages: [{ role: "user", content: "relay-probe" }],
+      }),
+    });
+    // The parent redacts child text with the key it handed this process, so the
+    // acceptance proof is a file the test reads, not the assistant transcript.
+    writeFileSync(
+      join(process.env.ARDUR_HERMES_INSTALL, "relay-report.json"),
+      JSON.stringify({ status: response.status, relayUrl }),
+      { mode: 0o600 },
+    );
+    message("relay accepted");
+    send({ id: value.id, result: { stopReason: "end_turn" } });
+    return;
+  }
   message("first ");
   message("second");
   send({ id: value.id, result: { stopReason: "end_turn" } });

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -301,28 +301,64 @@ describe("LocalHermesRuntime", () => {
     expect(broker.revoke).toHaveBeenCalled();
   });
 
-  it("completes a local runtime success turn and routes a provider call through the relay", async () => {
-    const brokerMethod = vi.fn(async () => ({ result: { foo: "bar" } }));
-    const broker = { grant: { id: "123", token: "token", expiresAt: 0 }, revoke: vi.fn() };
+  function grantBroker() {
+    const token = "a".repeat(43);
+    const open = vi.fn(
+      async () =>
+        new Response('{"id":"fixture","choices":[]}', {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    const broker = {
+      grant: { id: crypto.randomUUID(), token, expiresAt: Date.now() + 60_000 },
+      revoke: vi.fn(),
+      open,
+    };
+    return { token, open, broker };
+  }
+
+  async function runRelay(broker: {
+    grant: { id: string; token: string; expiresAt: number };
+    revoke: ReturnType<typeof vi.fn>;
+    open: ReturnType<typeof vi.fn>;
+  }) {
     const runtime = new LocalHermesRuntime(
       vi.fn().mockResolvedValue({
         broker,
-        scope: { executeTool: brokerMethod },
+        scope: {},
       }),
     );
-
     const req = request();
-    await import("node:fs/promises").then((m) => m.writeFile(join(root, "scenario.txt"), "text"));
-    req.prompt = "text";
-
-    // Test context config default (which provides node mcp config so fake-acp.mjs doesn't crash if it tries)
+    await writeFile(join(root, "scenario.txt"), "relay");
+    req.prompt = "relay";
     const context: any = {
       agentInstall: { hostRoot: "something", version: "1" },
       mcpConfig: { command: "node", args: ["-e", "setInterval(() => {}, 1000)"], env: {} },
     };
-
     const result = await collect(runtime.run(req, context));
+    const report = JSON.parse(await readFile(join(installDir, "relay-report.json"), "utf8")) as {
+      status: number;
+      relayUrl: string;
+    };
+    return { result, report };
+  }
+
+  it("completes a local runtime success turn and routes a provider call through the relay", async () => {
+    const { open, broker } = grantBroker();
+    const { result, report } = await runRelay(broker);
+
     expect(result).toContainEqual(expect.objectContaining({ type: "done" }));
+    expect(report.status).toBe(200);
+    expect(report.relayUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/v1$/);
+    expect(open).toHaveBeenCalledOnce();
+    expect(open.mock.calls[0]?.[0]).toMatchObject({
+      path: "/v1/chat/completions",
+      body: {
+        model: "fixture-model",
+        messages: [{ role: "user", content: "relay-probe" }],
+      },
+    });
     expect(broker.revoke).toHaveBeenCalled();
   });
 
@@ -395,34 +431,35 @@ describe("LocalHermesRuntime", () => {
     expect(broker.revoke).toHaveBeenCalled();
   });
 
-  it("refuses relay after turn end", async () => {
-    const brokerMethod = vi.fn(async () => ({ result: { foo: "bar" } }));
-    let relayUrl = "";
-    const broker = { grant: { id: "123", token: "token", expiresAt: 0 }, revoke: vi.fn() };
-    const runtime = new LocalHermesRuntime(
-      vi.fn().mockImplementation(async (req, res, relay) => {
-        relayUrl = relay.url;
-        return { broker, scope: { executeTool: brokerMethod } };
-      }),
-    );
-
-    const req = request();
-    await import("node:fs/promises").then((m) => m.writeFile(join(root, "scenario.txt"), "text"));
-    req.prompt = "text";
-    const context: any = {
-      agentInstall: { hostRoot: "something", version: "1" },
-      mcpConfig: { command: "node", args: ["-e", "setInterval(() => {}, 1000)"], env: {} },
-    };
-
-    await collect(runtime.run(req, context));
-
-    // Relay should be closed
-    await expect(
-      fetch(relayUrl + "/chat/completions", {
+  async function relayStatus(relayUrl: string, token: string): Promise<number | string> {
+    try {
+      const response = await fetch(`${relayUrl}/chat/completions`, {
         method: "POST",
-        headers: { Authorization: "Bearer token" },
-        body: JSON.stringify({}),
-      }),
-    ).rejects.toThrow();
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "fixture-model",
+          messages: [{ role: "user", content: "relay-probe" }],
+        }),
+      });
+      await response.text();
+      return response.status;
+    } catch (error) {
+      const cause = (error as { cause?: { code?: string } }).cause;
+      return cause?.code ?? (error as { code?: string }).code ?? "error";
+    }
+  }
+
+  it("refuses relay after turn end", async () => {
+    const { token, open, broker } = grantBroker();
+    const { report } = await runRelay(broker);
+
+    expect(report.status).toBe(200);
+    expect(report.relayUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/v1$/);
+    expect(open).toHaveBeenCalledOnce();
+    const after = await relayStatus(report.relayUrl, token);
+    expect(after === "ECONNREFUSED" || after === "ECONNRESET" || after === 403).toBe(true);
   });
 });
