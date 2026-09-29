@@ -39,3 +39,30 @@ it("uses each item's own first line and leaves the review reason alone", () => {
     }),
   ).toBe("bot.notifyOnFinish");
 });
+
+it("drops a leading markdown list marker from the shown title", () => {
+  const stored = "- Stored line stays in the body";
+  expect(
+    learningItemTitle({
+      type: "memory",
+      rationale: shared,
+      proposedContent: "- Helm chart release mechanics and gotchas",
+    }),
+  ).toBe("Helm chart release mechanics and gotchas");
+  expect(
+    learningItemTitle({
+      type: "memory",
+      rationale: shared,
+      proposedContent: "* Keep the nightly check\n- second line",
+    }),
+  ).toBe("Keep the nightly check");
+  expect(
+    learningItemTitle({
+      type: "memory",
+      rationale: shared,
+      proposedContent: "- \n+ The real line",
+    }),
+  ).toBe("The real line");
+  learningItemTitle({ type: "memory", rationale: shared, proposedContent: stored });
+  expect(stored).toBe("- Stored line stays in the body");
+});

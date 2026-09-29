@@ -141,6 +141,18 @@ beforeEach(() => {
   api.observation.mockResolvedValue(observation);
   api.proposal.mockResolvedValue(proposal);
 });
+it("does not show a markdown list marker at the start of an item title", async () => {
+  api.list.mockResolvedValue({
+    reviews: [],
+    proposals: [{ ...proposal, proposedContent: "- Helm chart release mechanics and gotchas" }],
+    pendingCount: 1,
+    appliedThisWeek: 0,
+  });
+  await act(async () => root.render(<LearningInbox />));
+  expect(container.querySelector('[data-testid="learning-item-title"]')?.textContent).toBe(
+    "Helm chart release mechanics and gotchas",
+  );
+});
 it("wraps item text inside the dialog instead of clipping it", async () => {
   api.list.mockResolvedValue({
     reviews: [],
