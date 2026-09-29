@@ -39,6 +39,10 @@ export interface MemorySession {
   semantic: SemanticMemoryProvider | null;
   beforeWrite?: (documentId: string) => Promise<void>;
 }
+/** Receives every durable document write so the in-process recall index stays current. */
+export interface MemoryRecallIndexSink {
+  applyWrite(spaceId: string, document: MemoryDocumentHead): void;
+}
 export interface MemoryServiceDependencies {
   open<T>(
     context: MemoryOperationContext,
@@ -46,6 +50,7 @@ export interface MemoryServiceDependencies {
   ): Promise<T>;
   enqueue(context: AdapterContext, document: MemoryDocumentHead): Promise<void>;
   enqueueGit?(context: MemoryOperationContext): Promise<void>;
+  recallIndex?: MemoryRecallIndexSink;
 }
 export class MemoryService {
   constructor(readonly dependencies: MemoryServiceDependencies) {}
@@ -131,6 +136,8 @@ export class MemoryService {
   }
   private async queued(document: MemoryDocumentHead, context: MemoryOperationContext) {
     if (context.databaseTransaction) return document;
+    // Runs after the document transaction commits; the sink is advisory and never throws.
+    this.dependencies.recallIndex?.applyWrite(context.spaceId, document);
     if (document.delivery.status === "pending") {
       // The committed revision is the outbox. Reconciliation retries a failed enqueue.
       await this.dependencies.enqueue(context, document).catch(() => undefined);

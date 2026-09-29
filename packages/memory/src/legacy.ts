@@ -35,13 +35,22 @@ export class LifecycleMemoryStore implements MemoryStore {
           (!input.path || r.path === input.path),
       );
     return {
-      documents: documents.map((r) => ({
-        id: r.documentId,
-        path: r.path,
-        content: r.content,
-        revision: r.revision,
-        updatedAt: r.createdAt,
-      })),
+      documents: documents.map((r) => {
+        const key = r.scopeKey;
+        // Group documents are filtered out above; only bot, user and space-shared remain.
+        const placement =
+          key.kind === "bot" || key.kind === "user"
+            ? { scope: key.kind, owner: key.kind === "bot" ? key.botId : key.userId }
+            : { scope: "shared" as const, owner: "" };
+        return {
+          id: r.documentId,
+          path: r.path,
+          content: r.content,
+          revision: r.revision,
+          updatedAt: r.createdAt,
+          ...placement,
+        };
+      }),
     };
   }
   async search(input: MemorySearchRequest, context: AdapterContext) {
