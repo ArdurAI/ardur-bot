@@ -8297,11 +8297,8 @@ msgstr ""
 msgid "System"
 msgstr "Системная"
 
-#: src/pages/Shell.tsx
-#: src/pages/workspace/terminal-controller.ts
-#: src/pages/ide/terminal.tsx
-#: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/take-control-button.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Take control"
 msgstr "Взять под контроль"
 
