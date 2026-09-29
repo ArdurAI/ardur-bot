@@ -39,7 +39,12 @@ test("a group member choice appears in the room and on its captured run", async 
   await panel.getByRole("button", { name: "Create group", exact: true }).click();
   await page.waitForURL(/\/app\/g\/[^/]+$/);
   const groupId = page.url().split("/").at(-1)!;
-  await page.getByTestId("bot-settings-trigger").click();
+  const groupSettingsButton = page
+    .locator("main")
+    .getByRole("button", { name: "Group settings", exact: true });
+  await groupSettingsButton.click();
+  await expect(panel).toHaveAttribute("data-panel", "group-settings");
+  await expect(groupSettingsButton).toHaveAttribute("aria-pressed", "true");
   const control = panel.getByTestId(`group-model-${first}`);
   const select = control.locator("select").first();
   await expect

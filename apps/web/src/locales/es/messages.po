@@ -1317,8 +1317,9 @@ msgid "Bot screen preview"
 msgstr "Vista previa de la pantalla del bot"
 
 #: src/pages/BotContextMenu.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Bot settings"
-msgstr ""
+msgstr "Configuración del bot"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Bot to link"
@@ -1909,10 +1910,10 @@ msgstr ""
 msgid "Compare bots"
 msgstr ""
 
+#: src/components/composer/ComposerMenu.tsx
 #: src/pages/CompareStart.tsx
-#: src/pages/Shell.tsx
 msgid "Compare with…"
-msgstr ""
+msgstr "Comparar con…"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Complete"
@@ -2933,7 +2934,7 @@ msgstr ""
 
 #: src/pages/CompareStart.tsx
 msgid "Could not start comparison; retry."
-msgstr ""
+msgstr "No se pudo iniciar la comparación; inténtalo de nuevo."
 
 #: src/pages/CompareStart.tsx
 msgid "Could not start comparison; review the pins and retry."
@@ -4183,6 +4184,7 @@ msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group"
 msgstr "Grupo"
 
@@ -4190,7 +4192,7 @@ msgstr "Grupo"
 msgid "Group brief"
 msgstr "Resumen del grupo"
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group settings"
 msgstr "Configuración del grupo"
 
@@ -5129,6 +5131,7 @@ msgstr ""
 #: src/pages/memory/MemoryProposals.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/settings-sections.ts
+#: src/pages/shell/bot-panel.tsx
 msgid "Memory"
 msgstr "Memoria"
 
@@ -6446,8 +6449,9 @@ msgstr ""
 #: src/pages/account/AccountProfile.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/memory/MemoryProposals.tsx
+#: src/pages/shell/bot-panel.tsx
 msgid "Profile"
-msgstr ""
+msgstr "Perfil"
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Project ID"
@@ -7019,6 +7023,10 @@ msgstr "Restablece tu contraseña"
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Resetting…"
 msgstr "Restableciendo…"
+
+#: src/pages/Shell.tsx
+msgid "Resize pane"
+msgstr "Cambiar tamaño del panel"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Resources"
@@ -7713,6 +7721,7 @@ msgstr ""
 #: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Settings"
 msgstr "Configuración"
 
@@ -7758,9 +7767,9 @@ msgstr ""
 msgid "Show bots"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show computer"
-msgstr ""
+msgstr "Mostrar computadora"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Show in the menu bar."
@@ -7778,7 +7787,7 @@ msgstr "Mostrar más"
 msgid "Show password"
 msgstr "Mostrar contraseña"
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show settings"
 msgstr "Mostrar configuración"
 
@@ -9232,7 +9241,7 @@ msgid "Working…"
 msgstr "Trabajando…"
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Workspace"
 msgstr "Espacio de trabajo"
 

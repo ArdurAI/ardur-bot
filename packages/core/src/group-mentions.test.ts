@@ -3,6 +3,7 @@ import {
   hasMentionToken,
   inferHandoffTargetBotId,
   inferHandoffTargetName,
+  resolveAddressedBotIds,
   resolveGroupTargetBotIds,
 } from "./group-mentions.js";
 
@@ -88,6 +89,100 @@ describe("resolveGroupTargetBotIds", () => {
         members,
       }),
     ).toEqual(["a"]);
+  });
+});
+
+describe("resolveAddressedBotIds", () => {
+  const group = [
+    { id: "chief", name: "Chief" },
+    { id: "radiant", name: "Radiant" },
+  ];
+
+  it("routes a message that starts by addressing a member by name", () => {
+    expect(resolveAddressedBotIds({ text: "Chief, did rad do it?", members: group })).toEqual([
+      "chief",
+    ]);
+    expect(resolveAddressedBotIds({ text: "chief: status?", members: group })).toEqual(["chief"]);
+    expect(resolveAddressedBotIds({ text: "hey Chief what happened", members: group })).toEqual([
+      "chief",
+    ]);
+    expect(resolveAddressedBotIds({ text: "@chief why", members: group })).toEqual(["chief"]);
+    expect(resolveAddressedBotIds({ text: "so chief, did rad do it?", members: group })).toEqual([
+      "chief",
+    ]);
+    expect(resolveAddressedBotIds({ text: "ok, Chief, status?", members: group })).toEqual([
+      "chief",
+    ]);
+    expect(resolveAddressedBotIds({ text: "hey, Chief what's up", members: group })).toEqual([
+      "chief",
+    ]);
+    expect(resolveAddressedBotIds({ text: "Chief. Status?", members: group })).toEqual(["chief"]);
+    expect(resolveAddressedBotIds({ text: "Chief", members: group })).toEqual(["chief"]);
+  });
+
+  it("addresses several members at the start", () => {
+    const trio = [
+      { id: "chief", name: "Chief" },
+      { id: "radiant", name: "Radiant" },
+      { id: "writer", name: "Writer" },
+    ];
+    expect(resolveAddressedBotIds({ text: "Chief and Radiant, status?", members: group })).toEqual([
+      "chief",
+      "radiant",
+    ]);
+    expect(resolveAddressedBotIds({ text: "Chief, and Radiant, status?", members: group })).toEqual(
+      ["chief", "radiant"],
+    );
+    expect(resolveAddressedBotIds({ text: "Chief, Radiant: status?", members: group })).toEqual([
+      "chief",
+      "radiant",
+    ]);
+    expect(
+      resolveAddressedBotIds({ text: "Chief, Radiant, and Writer: go", members: trio }),
+    ).toEqual(["chief", "radiant", "writer"]);
+  });
+
+  it("does not reroute a name used mid-sentence as a subject", () => {
+    expect(resolveAddressedBotIds({ text: "Chief is great.", members: group })).toEqual([]);
+    expect(resolveAddressedBotIds({ text: "Radiant light everywhere", members: group })).toEqual(
+      [],
+    );
+    expect(resolveAddressedBotIds({ text: "ask chief why this happened", members: group })).toEqual(
+      [],
+    );
+    expect(
+      resolveAddressedBotIds({ text: "Radiant said Chief was wrong", members: group }),
+    ).toEqual([]);
+    expect(
+      resolveAddressedBotIds({ text: "why did you answer and why not chief", members: group }),
+    ).toEqual([]);
+    expect(
+      resolveAddressedBotIds({ text: "but since Chief, is the Chief of ...", members: group }),
+    ).toEqual([]);
+    expect(resolveAddressedBotIds({ text: "hi there", members: group })).toEqual([]);
+  });
+
+  it("requires the whole name at a word boundary", () => {
+    const annaGroup = [
+      { id: "ann", name: "Ann" },
+      { id: "anna", name: "Anna" },
+    ];
+    expect(resolveAddressedBotIds({ text: "Chiefly speaking", members: group })).toEqual([]);
+    expect(resolveAddressedBotIds({ text: "Anna, hi", members: annaGroup })).toEqual(["anna"]);
+  });
+
+  it("supports multi-word and Unicode member names", () => {
+    const namedGroup = [
+      { id: "research", name: "Research Writer" },
+      { id: "edit", name: "Éditeur" },
+    ];
+    expect(
+      resolveAddressedBotIds({ text: "Research Writer, please compare", members: namedGroup }),
+    ).toEqual(["research"]);
+    expect(resolveAddressedBotIds({ text: "Éditeur: check this", members: namedGroup })).toEqual([
+      "edit",
+    ]);
+    expect(resolveAddressedBotIds({ text: "hey éditeur", members: namedGroup })).toEqual(["edit"]);
   });
 });
 

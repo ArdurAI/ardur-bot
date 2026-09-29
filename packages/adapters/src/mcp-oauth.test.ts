@@ -539,7 +539,9 @@ describe("MCP OAuth", () => {
       where: { id: "server-1", spaceId: "workspace-1", userId: "user-1" },
       data: { secretId: "secret-next", revision: { increment: 1 } },
     });
-    expect(tx.secret.deleteMany).toHaveBeenCalledWith({ where: { id: "secret-current" } });
+    expect(tx.secret.deleteMany).toHaveBeenCalledWith({
+      where: { id: "secret-current", spaceId: "workspace-1", userId: "user-1" },
+    });
     // A sign-in that is still waiting for this server can never complete once
     // its material is gone; the pending attempt must not be left dangling. Cleared
     // by the exact id this call observed, the way claimSignIn/releaseAttempt do.
