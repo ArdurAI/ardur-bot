@@ -296,14 +296,16 @@ export async function installHermes(deps: {
     await writeStatus(root, { state: "ready", message: "Ready.", updatedAt: installedAt });
   } catch (error) {
     const message = error instanceof HermesInstallError ? error.message : HERMES_INSTALL_FAILED;
-    if (locked && message !== HERMES_INSTALL_RUNNING) {
+    // Any failure records `failed`, even before the lock, so the settings screen can
+    // stop waiting. Only a lock held by a live installer leaves its status alone.
+    if (message !== HERMES_INSTALL_RUNNING) {
       await writeStatus(root, {
         state: "failed",
         ...(phase ? { phase } : {}),
         message: publicFailure(message),
         updatedAt: clock().toISOString(),
       }).catch(() => undefined);
-      if (!committed) await rm(versionDir, { recursive: true, force: true }).catch(() => undefined);
+      if (locked && !committed) await rm(versionDir, { recursive: true, force: true }).catch(() => undefined);
     }
     if (error instanceof HermesInstallError) throw error;
     const failure = new HermesInstallError(HERMES_INSTALL_FAILED);

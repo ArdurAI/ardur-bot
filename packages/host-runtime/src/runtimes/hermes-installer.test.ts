@@ -776,6 +776,25 @@ it("does not release a lock another installer took over", async () => {
   }
 });
 
+it("records a failed status when the install fails before the lock is taken", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "hermes-early-failure-"));
+  // runtimes exists as a plain file, so creating the lock directory fails.
+  await writeFile(path.join(root, "runtimes"), "occupied");
+  const fetchImpl = vi.fn<HermesFetch>();
+  try {
+    await expect(
+      installHermes({ root, fetch: fetchImpl, platform: "linux", arch: "x64" }),
+    ).rejects.toThrow(HERMES_INSTALL_FAILED);
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(readHermesInstallStatus(root)).toMatchObject({
+      state: "failed",
+      message: HERMES_INSTALL_FAILED,
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 it.skipIf(process.platform === "win32")(
   "refuses to install into a symlinked runtimes directory",
   async () => {

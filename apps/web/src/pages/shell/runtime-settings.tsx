@@ -6,6 +6,9 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useId, useRef, useState } from "react";
 import { rpc } from "../../lib/rpc";
 
+/** Give up on a started install when no installing or ready status shows up in time. */
+const HERMES_INSTALL_TIMEOUT_MS = 90_000;
+
 export function RuntimeSettings({
   kind,
   botId,
@@ -38,6 +41,7 @@ export function RuntimeSettings({
   const [pendingInstall, setPendingInstall] = useState(false);
   const [installFailed, setInstallFailed] = useState(false);
   const installLock = useRef(false);
+  const installStartedAt = useRef(0);
   useEffect(() => {
     setAvailability(null);
     setError(null);
@@ -58,6 +62,7 @@ export function RuntimeSettings({
   useEffect(() => {
     setPendingInstall(false);
     setInstallFailed(false);
+    installStartedAt.current = 0;
   }, [kind, botId]);
   const hermesState = kind === "hermes" ? availability?.install?.state : undefined;
   const showProgress =
@@ -83,11 +88,20 @@ export function RuntimeSettings({
           setAvailability(value);
           const state = value.install?.state;
           if (state === "failed") {
+            installStartedAt.current = 0;
             setPendingInstall(false);
             setInstallFailed(true);
           } else if (state === "ready" || state === "installing" || value.available) {
+            installStartedAt.current = 0;
             setPendingInstall(false);
             setInstallFailed(false);
+          } else if (
+            installStartedAt.current > 0 &&
+            Date.now() - installStartedAt.current >= HERMES_INSTALL_TIMEOUT_MS
+          ) {
+            installStartedAt.current = 0;
+            setPendingInstall(false);
+            setInstallFailed(true);
           }
         })
         .catch(() => undefined);
@@ -100,6 +114,7 @@ export function RuntimeSettings({
   async function startHermesInstall() {
     if (installLock.current) return;
     installLock.current = true;
+    installStartedAt.current = Date.now();
     setInstallFailed(false);
     setPendingInstall(true);
     let rejected = false;

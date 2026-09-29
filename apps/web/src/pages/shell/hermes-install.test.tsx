@@ -148,6 +148,31 @@ describe("Install Hermes", () => {
     expect(button("Try again")).toBeUndefined();
   });
 
+  it("stops waiting when no install status appears within ninety seconds", async () => {
+    api.installHermes.mockResolvedValue({ ok: true });
+    api.availability.mockResolvedValue(hermes({ state: "absent" }));
+    vi.useFakeTimers();
+    await renderHermes();
+    await act(async () => {
+      button("Install Hermes")?.click();
+    });
+    expect(api.installHermes).toHaveBeenCalledExactlyOnceWith({});
+    expect(container.textContent).toContain("Downloading");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(89_000);
+    });
+    expect(container.textContent).toContain("Downloading");
+    expect(button("Try again")).toBeUndefined();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    const alert = container.querySelector("[role='alert']");
+    expect(alert?.textContent).toBe("Couldn't install Hermes. Try again.");
+    expect(container.textContent).not.toContain("Downloading");
+    const retry = button("Try again");
+    expect(retry?.getAttribute("aria-describedby")).toBe(alert?.id);
+  });
+
   it("announces a failure and retries from the linked button", async () => {
     api.installHermes
       .mockRejectedValueOnce(new Error("ECONNREFUSED secret-token"))
