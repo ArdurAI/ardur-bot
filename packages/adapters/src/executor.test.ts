@@ -7,7 +7,7 @@ vi.mock("./context/concurrency.js", () => ({
     input.claim(prisma),
 }));
 
-import type { MessageBlock } from "@ardurbot/contracts";
+import { DELEGATION_LIMITS, type MessageBlock } from "@ardurbot/contracts";
 import { ONCE_ROUTINE_CRON } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
@@ -1773,7 +1773,8 @@ description: Prepare standup notes
     const plaintext = serializeModelSecret({
       kind: "openai_compatible",
       baseUrl: "http://127.0.0.1:8000/v1",
-      maxTokens: 16_384,
+      // Above the worker reservation, so admission is what bounds the manifest.
+      maxTokens: 65_536,
     });
     const bot = {
       runtimeKind: "hermes",
@@ -1812,7 +1813,7 @@ description: Prepare standup notes
     );
     expect(selected.kind).toBe("resolved");
     if (selected.kind !== "resolved") return;
-    expect(selected.maxTokens).toBe(10_000);
+    expect(selected.maxTokens).toBe(DELEGATION_LIMITS.reservationTokens);
     expect(selected.pin.effectiveRuntimeConfig?.model).toMatchObject({
       contextWindow: selected.contextWindow,
       maxTokens: selected.maxTokens,
