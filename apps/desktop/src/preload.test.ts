@@ -123,13 +123,12 @@ describe("desktop preload bridge", () => {
     ]);
   });
 
-  it("hands the theme and language to the main process for the next window", async () => {
+  it("hands the theme to the main process for the next window", async () => {
     const { invoke, exposeInMainWorld } = runPreload("preload.cjs");
     const [, bridge] = exposeInMainWorld.mock.calls[0] as [string, ArdurBotDesktop];
-    await bridge.boot?.save({ theme: "light", language: "de" });
+    await bridge.boot?.save({ theme: "light" });
     expect(invoke).toHaveBeenCalledExactlyOnceWith("desktop.boot.save", {
       theme: "light",
-      language: "de",
     });
   });
 

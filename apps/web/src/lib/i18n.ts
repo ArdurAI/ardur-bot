@@ -1,8 +1,7 @@
 import { i18n } from "@lingui/core";
 import { applyUiDirection } from "./apply-ui-direction";
-import { rememberDesktopBoot } from "./desktop-boot";
 import type { UiLocale } from "./ui-locale";
-import { persistResolvedUiLocale, persistUiLocale, resolveUiLocale } from "./ui-locale";
+import { persistUiLocale, resolveUiLocale } from "./ui-locale";
 
 export { i18n };
 
@@ -60,8 +59,6 @@ function activateLoaded(
   activeLocale = locale;
   settledLocale = requested;
   applyUiDirection(locale);
-  persistResolvedUiLocale(locale);
-  rememberDesktopBoot({ language: locale });
   return locale;
 }
 

@@ -7,6 +7,7 @@ import { darkTokens, lightTokens } from "@ardurbot/ui-tokens";
 import { describe, expect, it, vi } from "vitest";
 import { localResetFailure } from "./local-mode.js";
 import { managedLocalOpenUrl, parseSetupInput } from "./setup-config.js";
+import { systemSenderAllowed } from "./system/install.js";
 import { UnsavedFiles } from "./unsaved-files.js";
 import { windowBackgroundColor } from "./window-options.js";
 
@@ -114,11 +115,11 @@ describe("main window colour before the first paint", () => {
     await f.openAppOnce(url);
     expect(f.mainWindow!.options.backgroundColor).toBe(lightTokens.background);
 
-    f.bootSnapshot = { current: { theme: "dark", language: "de" } };
+    f.bootSnapshot = { current: { theme: "dark" } };
     await f.openAppOnce(url);
     expect(f.mainWindow!.options.backgroundColor).toBe(darkTokens.background);
     f.nativeTheme.shouldUseDarkColors = true;
-    f.bootSnapshot = { current: { theme: "light", language: "de" } };
+    f.bootSnapshot = { current: { theme: "light" } };
     await f.openAppOnce(url);
     expect(f.mainWindow!.options.backgroundColor).toBe(lightTokens.background);
   });
@@ -297,6 +298,60 @@ describe("guided setup service handoff", () => {
     context.currentSetup.mode = "existing";
     expect(retry({})).toBeNull();
     expect(localMode.start).toHaveBeenCalledTimes(2);
+  });
+
+  it("allows only the app page in the main window to save the boot snapshot", async () => {
+    const source = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+    const start = source.indexOf('ipcMain.handle("desktop.boot.save"');
+    const end = source.indexOf("currentSetup = await readSetup", start);
+    expect(start).toBeGreaterThan(0);
+    expect(end).toBeGreaterThan(start);
+    const handlers = new Map<string, (event: unknown, snapshot: unknown) => Promise<unknown>>();
+    const boot = { save: vi.fn(async () => true) };
+    const mainFrame = { url: "https://app.ardur.ai/chat" };
+    const mainWindow = {
+      isDestroyed: () => false,
+      webContents: { mainFrame },
+    };
+    const context = {
+      ipcMain: {
+        handle: (name: string, handler: (event: unknown, snapshot: unknown) => Promise<unknown>) =>
+          handlers.set(name, handler),
+      },
+      boot,
+      mainWindow,
+      permissionTarget: () => ({ url: "https://app.ardur.ai/chat" }),
+      systemSenderAllowed,
+    };
+    vm.runInNewContext(stripTypeScriptTypes(source.slice(start, end)), context);
+    const handler = handlers.get("desktop.boot.save")!;
+    expect(handler).toBeDefined();
+
+    // 1. The main window's own main frame saves successfully.
+    await handler({ sender: mainWindow.webContents, senderFrame: mainFrame }, { theme: "dark" });
+    expect(boot.save).toHaveBeenCalledWith({ theme: "dark" });
+    boot.save.mockClear();
+
+    // 2. A subframe in the main window is ignored.
+    const subframe = { url: "https://app.ardur.ai/chat" };
+    await handler({ sender: mainWindow.webContents, senderFrame: subframe }, { theme: "dark" });
+    expect(boot.save).not.toHaveBeenCalled();
+
+    // 3. Another window is ignored.
+    const otherContents = { mainFrame: { url: "https://app.ardur.ai/chat" } };
+    await handler(
+      { sender: otherContents, senderFrame: otherContents.mainFrame },
+      { theme: "dark" },
+    );
+    expect(boot.save).not.toHaveBeenCalled();
+
+    // 4. Another origin in the main window is ignored.
+    const otherOriginFrame = { url: "https://evil.example.com/chat" };
+    await handler(
+      { sender: mainWindow.webContents, senderFrame: otherOriginFrame },
+      { theme: "dark" },
+    );
+    expect(boot.save).not.toHaveBeenCalled();
   });
 });
 

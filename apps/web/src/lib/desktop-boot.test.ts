@@ -18,29 +18,22 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it("sends the theme and language once both are known, then only when one changes", async () => {
+it("sends the theme as soon as it is known, and sends again only when it changes", async () => {
   const { rememberDesktopBoot } = await import("./desktop-boot");
   rememberDesktopBoot({ theme: "light" });
-  expect(save).not.toHaveBeenCalled();
+  expect(save).toHaveBeenCalledExactlyOnceWith({ theme: "light" });
 
-  rememberDesktopBoot({ language: "de" });
   rememberDesktopBoot({ theme: "light" });
-  rememberDesktopBoot({ language: "de", theme: "light" });
-  expect(save).toHaveBeenCalledExactlyOnceWith({ theme: "light", language: "de" });
+  expect(save).toHaveBeenCalledOnce();
 
   rememberDesktopBoot({ theme: "dark" });
-  rememberDesktopBoot({ language: "ko" });
-  expect(save.mock.calls).toEqual([
-    [{ theme: "light", language: "de" }],
-    [{ theme: "dark", language: "de" }],
-    [{ theme: "dark", language: "ko" }],
-  ]);
+  expect(save.mock.calls).toEqual([[{ theme: "light" }], [{ theme: "dark" }]]);
 });
 
-it("sends the same values again after a save failed", async () => {
+it("sends the same theme again after a save failed", async () => {
   const { rememberDesktopBoot } = await import("./desktop-boot");
   save.mockRejectedValueOnce(new Error("The app is closing."));
-  rememberDesktopBoot({ theme: "system", language: "en" });
+  rememberDesktopBoot({ theme: "system" });
   await vi.waitFor(() => expect(save).toHaveBeenCalledOnce());
   await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -51,32 +44,19 @@ it("sends the same values again after a save failed", async () => {
 it("does nothing in a browser", async () => {
   vi.stubGlobal("window", {});
   const { rememberDesktopBoot } = await import("./desktop-boot");
-  expect(() => rememberDesktopBoot({ theme: "dark", language: "en" })).not.toThrow();
+  expect(() => rememberDesktopBoot({ theme: "dark" })).not.toThrow();
 });
 
-it("records the account theme the app applies and the language on screen", async () => {
+it("records the account theme the app applies", async () => {
   const { setUiAppearance } = await import("./ui-appearance");
-  const { activateUiLocale, setCatalogLoadersForTests } = await import("./i18n");
-  const empty = async () => ({ messages: {} });
-  setCatalogLoadersForTests({
-    en: empty,
-    de: empty,
-    ko: empty,
-    tr: empty,
-    hi: empty,
-    "pt-BR": empty,
-    "zh-CN": empty,
-    es: empty,
-    ru: empty,
-  });
-
-  await activateUiLocale("de");
-  expect(save).not.toHaveBeenCalled();
   setUiAppearance("light");
-  expect(save).toHaveBeenCalledExactlyOnceWith({ theme: "light", language: "de" });
+  expect(save).toHaveBeenCalledExactlyOnceWith({ theme: "light" });
 
-  // Applying the same values again sends nothing.
+  // Applying the same value again sends nothing.
   setUiAppearance("light");
-  await activateUiLocale("de");
   expect(save).toHaveBeenCalledOnce();
+
+  setUiAppearance("dark");
+  expect(save).toHaveBeenCalledTimes(2);
+  expect(save).toHaveBeenLastCalledWith({ theme: "dark" });
 });

@@ -52,12 +52,10 @@ export interface DesktopDeviceListenerState {
 
 /**
  * What the desktop app keeps so a new window paints in the right colours before its page loads.
- * Only these two values, never anything else from the account.
+ * Only this value, never anything else from the account.
  */
 export interface DesktopBootSnapshot {
   theme: UserPreferences["theme"];
-  /** The UI language the app showed last, as a BCP 47 tag such as `de` or `pt-BR`. */
-  language: string;
 }
 
 export interface ArdurBotDesktop {
