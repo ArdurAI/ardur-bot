@@ -374,6 +374,70 @@ describe("MCP connector session cache", () => {
     await connector.close();
   });
 
+  it("records an unauthenticated server once and skips it until its state changes", async () => {
+    const network = vi.fn(async () => new Response("fake-private-response", { status: 401 }));
+    vi.stubGlobal("fetch", network);
+    const append = vi.fn().mockResolvedValue(undefined);
+    const serverRow = {
+      ...SERVER,
+      catalogId: null,
+      secretId: "secret-1",
+      connectionState: "not-connected",
+      lastError: null as string | null,
+      recentErrors: [] as unknown[],
+    };
+    const assignment = { ...ASSIGNMENT, server: serverRow };
+    const updates: Record<string, unknown>[] = [];
+    const prisma = {
+      bot: { findFirst: vi.fn(async () => ({ id: "bot-1", computer: { kind: "desktop" } })) },
+      mcpServer: {
+        findMany: vi.fn(async () => [{ ...serverRow, assignments: [assignment] }]),
+        findFirst: vi.fn(async () => serverRow),
+        updateMany: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+          updates.push(data);
+          Object.assign(serverRow, data);
+          return { count: 1 };
+        }),
+      },
+      secret: { findFirst: vi.fn(async () => ({ id: "secret-1", ciphertext: "encrypted" })) },
+      run: { findUnique: vi.fn(async () => ({ threadId: "thread-1" })) },
+    };
+    const connector = fixtureConnector(
+      prisma as never,
+      { load: () => JSON.stringify({ headers: { Authorization: "Bearer fake-token" } }) } as never,
+      { network: TEST_NETWORK, events: { append } },
+    );
+    const context = {
+      spaceId: "w1",
+      userId: "u1",
+      botId: "bot-1",
+      runId: "run-1",
+      signal: new AbortController().signal,
+    } as never;
+
+    await expect(connector.discoverTools(context)).resolves.toEqual([]);
+    // The state changed once: one write, one audit event, the sign-in diagnostic recorded.
+    expect(updates).toHaveLength(1);
+    expect(updates[0]).toMatchObject({ connectionState: "needs-sign-in" });
+    expect(serverRow.lastError).toBe(mcpSignInDiagnostic("credential_rejected"));
+    expect(append).toHaveBeenCalledTimes(1);
+
+    // Later runs skip the server entirely: no network, no audit, no state write.
+    const networkCalls = network.mock.calls.length;
+    await expect(connector.discoverTools(context)).resolves.toEqual([]);
+    expect(network.mock.calls.length).toBe(networkCalls);
+    expect(append).toHaveBeenCalledTimes(1);
+    expect(updates).toHaveLength(1);
+
+    // A state change (the owner reconnected) resumes discovery.
+    serverRow.connectionState = "connected";
+    serverRow.lastError = null;
+    serverRow.revision++;
+    await expect(connector.discoverTools(context)).resolves.toEqual([]);
+    expect(network.mock.calls.length).toBeGreaterThan(networkCalls);
+    await connector.close();
+  });
+
   it("redacts credentials of a connect that failed before the session was cached", async () => {
     const localAssignment = {
       ...ASSIGNMENT,

@@ -220,6 +220,9 @@ export class McpConnector implements ConnectorProvider {
     const groups = await Promise.all(
       assignments.map(async (assignment): Promise<ConnectorTool[]> => {
         const startedAt = Date.now();
+        // A server recorded as unauthenticated is skipped until its state changes
+        // (reconnect, new credential): no per-run retry, no per-run log.
+        if (assignment.server.connectionState === "needs-sign-in") return [];
         try {
           if (
             !grantedMcpTools(
@@ -296,14 +299,34 @@ export class McpConnector implements ConnectorProvider {
             }));
         } catch (error) {
           // A single unavailable server must not hide tools from other connectors.
-          getLogger().error(
-            `mcp discovery failed for server ${assignment.server.slug}:`,
-            sanitizeConnectorError(error),
-          );
           // Capture material before eviction so the audited reason stays redacted, the
           // same reason execute() captures it before callTool.
           const key = this.sessionKey(assignment.server, context);
           const material = this.sessions.get(key)?.material;
+          const failure = connectionError(error, assignment.server, material);
+          if (failure instanceof McpReauthorizationRequiredError) {
+            // An unauthenticated server is recorded once; later runs skip it above.
+            // The one log line and one audit event happen only when the state changes.
+            await this.evict(key);
+            if (await this.recordDiscoveryAuthState(assignment.server, failure)) {
+              getLogger().warn(
+                `mcp server ${assignment.server.slug} needs sign-in; discovery pauses until its state changes`,
+                { spaceId: context.spaceId, botId: context.botId },
+              );
+              await this.recordDiscoveryFailure(
+                assignment.server.slug,
+                failure,
+                context,
+                startedAt,
+                material ? oauthMaterialSecrets(material) : [],
+              );
+            }
+            return [];
+          }
+          getLogger().error(
+            `mcp discovery failed for server ${assignment.server.slug}:`,
+            sanitizeConnectorError(error),
+          );
           await this.evict(key);
           await this.recordDiscoveryFailure(
             assignment.server.slug,
@@ -517,6 +540,40 @@ export class McpConnector implements ConnectorProvider {
       }
     } catch {
       /* Telemetry must not replay an already completed effect. */
+    }
+  }
+
+  /**
+   * Persist a discovery-time authentication failure once. Returns true only when this call
+   * changed the stored state, so the caller logs and audits on the transition, not on
+   * every run. Telemetry must never fail the run that discovered the failure.
+   */
+  private async recordDiscoveryAuthState(
+    server: McpServer,
+    error: McpReauthorizationRequiredError,
+  ): Promise<boolean> {
+    try {
+      const message = integrationFailure(error);
+      const current = await this.prisma.mcpServer.findFirst({
+        where: { id: server.id, spaceId: server.spaceId, userId: server.userId, enabled: true },
+      });
+      if (!current) return false;
+      if (current.connectionState === "needs-sign-in" && current.lastError === message)
+        return false;
+      await this.prisma.mcpServer.updateMany({
+        where: { id: server.id, revision: current.revision },
+        data: {
+          connectionState: "needs-sign-in",
+          lastError: message,
+          recentErrors: [
+            ...(Array.isArray(current.recentErrors) ? current.recentErrors : []),
+            { at: new Date().toISOString(), message },
+          ].slice(-10),
+        },
+      });
+      return true;
+    } catch {
+      return false;
     }
   }
 
