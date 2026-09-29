@@ -51,9 +51,12 @@ export const RU_MESSAGES: Record<string, string> = {
   "The Hermes install on this computer failed its safety check.":
     "Установка Hermes на этом компьютере не прошла проверку безопасности.",
   "Hermes isn't available on Windows yet.": "Hermes пока недоступен в Windows.",
-  "Hermes does not yet support Anthropic connections.":
-    "Hermes пока не поддерживает подключения Anthropic.",
-  "Hermes does not yet support this connection.": "Hermes пока не поддерживает это подключение.",
+  "Claude subscriptions only work in Anthropic's own apps; add an Anthropic API key to use Claude with Hermes.":
+    "Подписки Claude работают только в собственных приложениях Anthropic; добавьте API-ключ Anthropic, чтобы использовать Claude с Hermes.",
+  "ChatGPT sign-ins only work inside Codex; add an OpenAI API key to use GPT models with Hermes.":
+    "Вход через ChatGPT работает только внутри Codex; добавьте API-ключ OpenAI, чтобы использовать модели GPT с Hermes.",
+  "Add an API key connection to use this provider with Hermes.":
+    "Добавьте подключение с API-ключом, чтобы использовать этого поставщика с Hermes.",
   "Hermes runs with this computer's access.": "Hermes работает с правами доступа этого компьютера.",
   "Antigravity did not finish in time. Try again.":
     "Antigravity не завершил запрос вовремя. Повторите попытку.",

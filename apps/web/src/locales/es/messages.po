@@ -493,6 +493,10 @@ msgstr "Agrega un nombre de servidor."
 msgid "Add a stdio command."
 msgstr "Agrega un comando stdio."
 
+#: src/lib/hermes-refusal.ts
+msgid "Add an API key connection to use this provider with Hermes."
+msgstr "Añade una conexión con clave de API para usar este proveedor con Hermes."
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Add an HTTPS server URL."
 msgstr "Agrega una URL de servidor HTTPS."
@@ -1590,6 +1594,10 @@ msgstr ""
 msgid "Chat Settings"
 msgstr "Configuración del chat"
 
+#: src/lib/hermes-refusal.ts
+msgid "ChatGPT sign-ins only work inside Codex; add an OpenAI API key to use GPT models with Hermes."
+msgstr "Los inicios de sesión de ChatGPT solo funcionan dentro de Codex; añade una clave de API de OpenAI para usar modelos GPT con Hermes."
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Check"
 msgstr ""
@@ -1731,6 +1739,10 @@ msgstr ""
 #: src/pages/shell/runtime-settings.tsx
 msgid "Claude Code runs on host computers for now — change the bot's computer or its runtime."
 msgstr ""
+
+#: src/lib/hermes-refusal.ts
+msgid "Claude subscriptions only work in Anthropic's own apps; add an Anthropic API key to use Claude with Hermes."
+msgstr "Las suscripciones de Claude solo funcionan en las aplicaciones propias de Anthropic; añade una clave de API de Anthropic para usar Claude con Hermes."
 
 #: src/pages/shell/dialogs.tsx
 msgid "Clear"
@@ -4311,16 +4323,6 @@ msgstr "Escuchar una muestra"
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes"
 msgstr "Hermes"
-
-#: src/pages/group-model-control.tsx
-#: src/pages/shell/bot-panel.tsx
-msgid "Hermes does not yet support Anthropic connections."
-msgstr "Hermes aún no admite conexiones de Anthropic."
-
-#: src/pages/group-model-control.tsx
-#: src/pages/shell/bot-panel.tsx
-msgid "Hermes does not yet support this connection."
-msgstr "Hermes aún no admite esta conexión."
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes is not installed on this computer."
