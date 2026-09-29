@@ -9,8 +9,59 @@ import type { HostEnvironment } from "@ardurbot/contracts/host-bridge";
 import { HOST_TOOLS } from "@ardurbot/contracts/host-bridge";
 import { filterHostEnvironment } from "@ardurbot/contracts/host-environment";
 import { stripCommandControls } from "@ardurbot/core/command-limits";
+import {
+  guardrailConfigFromEnv,
+  type HostGuardrailConfig,
+  resolveGuardrailPathsSync,
+  seatbeltArgv,
+  seatbeltProfile,
+} from "./host-guardrails.js";
 
 export { filterHostEnvironment } from "@ardurbot/contracts/host-environment";
+
+/**
+ * The host agent's deny list, shared by login, tool and version probes. Unset means
+ * "use the process configuration". An explicit empty guard means no wrap. Passing
+ * undefined clears the explicit guard and restores the fallback.
+ */
+let hostCommandGuard: HostGuardrailConfig | undefined;
+let hostCommandGuardExplicit = false;
+
+export function setHostCommandGuard(guard?: HostGuardrailConfig): void {
+  if (guard === undefined) {
+    hostCommandGuardExplicit = false;
+    hostCommandGuard = undefined;
+    return;
+  }
+  hostCommandGuardExplicit = true;
+  hostCommandGuard = guard;
+}
+
+function hostProbeGuard(): HostGuardrailConfig | undefined {
+  if (hostCommandGuardExplicit) return hostCommandGuard;
+  return guardrailConfigFromEnv();
+}
+
+function wrapHostProbe(
+  binary: string,
+  args: string[],
+  platform: NodeJS.Platform,
+): { binary: string; args: string[] } {
+  const guard = hostProbeGuard();
+  if (
+    platform !== "darwin" ||
+    !guard ||
+    (guard.paths.length === 0 && guard.ports.length === 0 && guard.sockets.length === 0)
+  )
+    return { binary, args };
+  const profile = seatbeltProfile({
+    paths: resolveGuardrailPathsSync(guard.paths),
+    ports: guard.ports,
+    sockets: resolveGuardrailPathsSync(guard.sockets),
+  });
+  const wrapped = seatbeltArgv([binary, ...args], profile);
+  return { binary: wrapped[0]!, args: wrapped.slice(1) };
+}
 
 type HostEnvironmentSnapshot = { env: NodeJS.ProcessEnv; diagnostic?: string };
 let snapshot: HostEnvironmentSnapshot | undefined;
@@ -58,8 +109,16 @@ export function hostProbe(
       clearTimeout(timer);
       resolve({ code, output, ...(failure ? { failure } : {}) });
     };
+    let command = binary;
+    let commandArgs = args;
     try {
-      child = spawn(binary, args, {
+      ({ binary: command, args: commandArgs } = wrapHostProbe(binary, args, platform));
+    } catch {
+      finish(null, "not started");
+      return;
+    }
+    try {
+      child = spawn(command, commandArgs, {
         cwd: env.HOME,
         env,
         shell: false,

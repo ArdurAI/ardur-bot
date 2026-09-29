@@ -160,7 +160,8 @@ export class ModelTeamChatEngagementJudge implements TeamChatEngagementJudge {
             'Return JSON only: {"act":false} or {"act":true,"reason":"one short sentence","asked_by":"event id when directly asked"}.',
           ].join(" "),
           history: [],
-          tools: [],
+          tools: "none",
+          singleRequest: true,
           model: resolved.model,
         },
         {

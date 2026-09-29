@@ -1,8 +1,8 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AdapterContext, AgentRunRequest } from "@ardurbot/adapter-kit";
+import type { AgentRunRequest } from "@ardurbot/adapter-kit";
 import { buildHermesRuntime } from "@ardurbot/host-runtime/runtimes/hermes-install";
 import type { HermesRuntime } from "@ardurbot/host-runtime/runtimes/hermes-runtime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -22,7 +22,7 @@ vi.mock("@ardurbot/host-runtime/runtimes/hermes-install", async (original) => {
 
 vi.mock("@ardurbot/core/node/runtime-config-hash", async (original) => ({
   ...(await original<object>()),
-  validateHermesExecutionEnvelope: (x: any) => profileFixture,
+  validateHermesExecutionEnvelope: (_x: any) => profileFixture,
 }));
 
 describe("LocalHermesRuntime", () => {
@@ -44,7 +44,7 @@ describe("LocalHermesRuntime", () => {
     );
     await writeFile(
       join(installDir, ".venv", "bin", "python"),
-      `#!${process.execPath}\nconst fs = require("fs");\ntry {\n  const scenario = fs.existsSync(${JSON.stringify(require("path").join(root, "scenario.txt"))}) ? fs.readFileSync(${JSON.stringify(require("path").join(root, "scenario.txt"))}, "utf8") : "text";\n  process.argv.splice(2, process.argv.length - 2, scenario);\n  if (process.env.ARDUR_HERMES_EXPECTED_HASH && scenario !== "profile-ack" && scenario !== "profile-stale") fs.writeFileSync(require("path").join(process.env.HERMES_HOME, "runtime-ack.json"), JSON.stringify({ profile: "hermes-ardur-v2", configurationHash: process.env.ARDUR_HERMES_EXPECTED_HASH, sessionId: "fixture-" + process.pid }), { mode: 0o600 });\n  if (scenario === "custom-tool-error") { const sessionId = "fixture-" + process.pid; let promptId = null; const readline = require("readline"); const rl = readline.createInterface({ input: process.stdin }); rl.on("line", (line) => { const msg = JSON.parse(line); if (msg.method === "initialize") { process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: 1 } }) + "\\n"); } else if (msg.method === "session/new") { process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: { sessionId } }) + "\\n"); } else if (msg.method === "session/prompt") { promptId = msg.id; process.stdout.write(JSON.stringify({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Provider request failed with key " + process.env.ARDUR_HERMES_PROVIDER_KEY } } } }) + "\\n"); process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: promptId, result: { stopReason: "end_turn" } }) + "\\n"); } else if (msg.id) { process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: {} }) + "\\n"); } }); return; }\nimport(${JSON.stringify(fakeAcp)}).then(() => setInterval(() => {}, 1000)).catch(e => { process.exit(1); });\n} catch (e) { process.exit(1); }\n`,
+      `#!${process.execPath}\nconst fs = require("fs");\ntry {\n  const scenario = fs.existsSync(${JSON.stringify(require("node:path").join(root, "scenario.txt"))}) ? fs.readFileSync(${JSON.stringify(require("node:path").join(root, "scenario.txt"))}, "utf8") : "text";\n  process.argv.splice(2, process.argv.length - 2, scenario);\n  if (process.env.ARDUR_HERMES_EXPECTED_HASH && scenario !== "profile-ack" && scenario !== "profile-stale") fs.writeFileSync(require("path").join(process.env.HERMES_HOME, "runtime-ack.json"), JSON.stringify({ profile: "hermes-ardur-v2", configurationHash: process.env.ARDUR_HERMES_EXPECTED_HASH, sessionId: "fixture-" + process.pid }), { mode: 0o600 });\n  if (scenario === "custom-tool-error") { const sessionId = "fixture-" + process.pid; let promptId = null; const readline = require("readline"); const rl = readline.createInterface({ input: process.stdin }); rl.on("line", (line) => { const msg = JSON.parse(line); if (msg.method === "initialize") { process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: 1 } }) + "\\n"); } else if (msg.method === "session/new") { process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: { sessionId } }) + "\\n"); } else if (msg.method === "session/prompt") { promptId = msg.id; process.stdout.write(JSON.stringify({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Provider request failed with key " + process.env.ARDUR_HERMES_PROVIDER_KEY } } } }) + "\\n"); process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: promptId, result: { stopReason: "end_turn" } }) + "\\n"); } else if (msg.id) { process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: {} }) + "\\n"); } }); return; }\nimport(${JSON.stringify(fakeAcp)}).then(() => setInterval(() => {}, 1000)).catch(e => { process.exit(1); });\n} catch (e) { process.exit(1); }\n`,
     );
     await import("node:fs/promises").then((fs) =>
       fs.chmod(join(installDir, ".venv", "bin", "python"), 0o755),

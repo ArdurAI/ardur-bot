@@ -5041,6 +5041,11 @@ msgstr ""
 msgid "low — quick, with a little checking"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/HostComputerPrompt.tsx
+msgid "macOS will not ask for extra permission if you let bots run on this Mac. They run as you."
+msgstr "Auf diesem Mac fragt macOS nicht nach zusätzlichen Berechtigungen, wenn Bots dort ausgeführt werden. Sie handeln mit deinen Rechten."
+
 #: src/pages/board/BoardsSettings.tsx
 msgid "Make default"
 msgstr "Als Standard festlegen"
@@ -8510,6 +8515,7 @@ msgstr "Dieser Chat ist schreibgeschützt"
 msgid "This command is not available to this account."
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "dieser Computer"
@@ -8557,6 +8563,7 @@ msgstr ""
 msgid "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model."
 msgstr "Das Gruppenmodell wird durch die Bot- oder Bereichseinstellungen blockiert. Ändere die Zielrichtlinie oder wähle ein anderes Gruppenmodell."
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "dieser Mac"
@@ -9373,6 +9380,11 @@ msgstr "Deine E-Mail-Adresse"
 #: src/pages/Auth.tsx
 msgid "Your name"
 msgstr "Dein Name"
+
+#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/HostComputerPrompt.tsx
+msgid "Your OS will not ask for extra permission if you let bots run on {hostLabel}. They run as you."
+msgstr "Auf {hostLabel} fragt dein Betriebssystem nicht nach zusätzlichen Berechtigungen, wenn Bots dort ausgeführt werden. Sie handeln mit deinen Rechten."
 
 #: src/pages/DevicesSettings.tsx
 msgid "Your phone can reach this Mac on your network."

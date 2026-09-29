@@ -5041,6 +5041,11 @@ msgstr ""
 msgid "low — quick, with a little checking"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/HostComputerPrompt.tsx
+msgid "macOS will not ask for extra permission if you let bots run on this Mac. They run as you."
+msgstr "Botların bu Mac'te çalışmasına izin verirsen macOS ek izin istemez. Botlar senin adına çalışır."
+
 #: src/pages/board/BoardsSettings.tsx
 msgid "Make default"
 msgstr "Varsayılan yap"
@@ -8510,6 +8515,7 @@ msgstr "Bu sohbet yalnızca görüntülenebilir"
 msgid "This command is not available to this account."
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "bu bilgisayar"
@@ -8557,6 +8563,7 @@ msgstr ""
 msgid "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model."
 msgstr "Grup modeli bot veya alan ayarları tarafından engelleniyor. Hedef ilkesini değiştirin veya başka bir grup modeli seçin."
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "bu Mac"
@@ -9373,6 +9380,11 @@ msgstr "E-posta adresin"
 #: src/pages/Auth.tsx
 msgid "Your name"
 msgstr "Adın"
+
+#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/HostComputerPrompt.tsx
+msgid "Your OS will not ask for extra permission if you let bots run on {hostLabel}. They run as you."
+msgstr "Botların {hostLabel} üzerinde çalışmasına izin verirsen işletim sistemin ek izin istemez. Botlar senin adına çalışır."
 
 #: src/pages/DevicesSettings.tsx
 msgid "Your phone can reach this Mac on your network."

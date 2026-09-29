@@ -311,7 +311,8 @@ export async function runAutoReviewJudge(input: {
           "You are a fast safety checker. Output strict JSON only. No tools. No markdown.",
         ].join(" "),
         history: [],
-        tools: [],
+        tools: "none",
+        singleRequest: true,
         model: input.model ?? {
           provider: input.checker.provider,
           id: input.checker.model,

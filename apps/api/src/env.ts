@@ -9,6 +9,7 @@ import {
   resolveScreenProxySecret,
   resolveSupervisorToken,
 } from "@ardurbot/core";
+import { secretEnvironment } from "@ardurbot/core/node/service-secrets";
 
 export { resolveCloudAgentProvider, resolveSandboxProvider } from "@ardurbot/adapters";
 
@@ -94,7 +95,7 @@ export interface AppEnv {
   imageTag: string | undefined;
 }
 
-export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
+export function loadEnv(source: NodeJS.ProcessEnv = secretEnvironment()): AppEnv {
   const authSecret = resolveAuthSecret(source);
   const sandboxProvider = resolveSandboxProvider(source);
   const cloudAgentProvider = resolveCloudAgentProvider(source);

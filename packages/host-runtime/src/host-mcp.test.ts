@@ -3,7 +3,12 @@ import type { HostMcpRegistration } from "@ardurbot/contracts/host-bridge";
 import { HostMcpRegistrationSchema } from "@ardurbot/contracts/host-bridge";
 import { describe, expect, it, vi } from "vitest";
 
-const fixture = vi.hoisted(() => ({ starts: vi.fn(), closes: vi.fn(), calls: vi.fn() }));
+const fixture = vi.hoisted(() => ({
+  starts: vi.fn(),
+  closes: vi.fn(),
+  calls: vi.fn(),
+  transports: [] as { command: string; args?: string[] }[],
+}));
 vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
   Client: class {
     onclose?: () => void;
@@ -30,6 +35,9 @@ vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
 vi.mock("@modelcontextprotocol/sdk/client/stdio.js", () => ({
   StdioClientTransport: class {
     stderr = new PassThrough();
+    constructor(options: { command: string; args?: string[] }) {
+      fixture.transports.push(options);
+    }
   },
 }));
 
@@ -102,5 +110,80 @@ describe("paired host MCP process ownership", () => {
     );
     expect(JSON.stringify(result)).toContain("[redacted] information");
     await servers.replace([]);
+  });
+});
+
+describe("paired host MCP servers under the host guardrail", () => {
+  const guard = {
+    paths: ["/fixture/user-data/secrets.env"],
+    ports: [55433],
+    sockets: ["/fixture/run/docker.sock"],
+  };
+  const scope = { spaceId: "space", userId: "owner", botId: "bot", runId: "run" };
+
+  function registration(): HostMcpRegistration {
+    return HostMcpRegistrationSchema.parse({
+      serverId: "server",
+      spaceId: "space",
+      userId: "owner",
+      revision: 1,
+      command: "node",
+      args: ["server.js"],
+      env: {},
+      cwd: "/fixture",
+    });
+  }
+
+  it("starts the server process through sandbox-exec with the guardrail profile on macOS", async () => {
+    fixture.transports.length = 0;
+    const servers = new HostMcpServers([registration()], guard, "darwin");
+    await servers.execute(
+      { op: "mcp.tools", serverId: "server", revision: 1 },
+      scope,
+      new AbortController().signal,
+    );
+    const transport = fixture.transports.at(-1)!;
+    expect(transport.command).toBe("/usr/bin/sandbox-exec");
+    expect(transport.args?.[0]).toBe("-p");
+    const profile = transport.args?.[1] ?? "";
+    expect(profile).toContain('(subpath "/fixture/user-data/secrets.env")');
+    expect(profile).toContain('(remote ip "localhost:55433")');
+    expect(profile).toContain('(remote unix-socket (literal "/fixture/run/docker.sock"))');
+    // The registered server follows the profile untouched.
+    expect(transport.args?.slice(2)).toEqual(["node", "server.js"]);
+    await servers.close();
+  });
+
+  it("starts unwrapped off macOS without implying protection", async () => {
+    fixture.transports.length = 0;
+    const servers = new HostMcpServers([registration()], guard, "linux");
+    await servers.execute(
+      { op: "mcp.tools", serverId: "server", revision: 1 },
+      scope,
+      new AbortController().signal,
+    );
+    const transport = fixture.transports.at(-1)!;
+    expect(transport.command).toBe("node");
+    expect(transport.args).toEqual(["server.js"]);
+    await servers.close();
+  });
+
+  it("refuses the server with a clear message when the profile cannot be built", async () => {
+    fixture.transports.length = 0;
+    const servers = new HostMcpServers(
+      [registration()],
+      { paths: ["relative/secrets.env"], ports: [], sockets: [] },
+      "darwin",
+    );
+    await expect(
+      servers.execute(
+        { op: "mcp.tools", serverId: "server", revision: 1 },
+        scope,
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("cannot start inside the host guardrail");
+    // It never starts unsandboxed.
+    expect(fixture.transports).toEqual([]);
+    await servers.close();
   });
 });
