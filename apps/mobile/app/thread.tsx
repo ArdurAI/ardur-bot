@@ -16,6 +16,7 @@ import {
 import type { ComposerActionId, ComposerCommand, ComposerSkill } from "@ardurbot/core";
 import {
   abortableDelay,
+  answerableAskMessageIds,
   attachmentsForThread,
   buildComposerMentionOptions,
   type ComposerMention,
@@ -25,7 +26,6 @@ import {
   isApprovalAskBlock,
   isRunTerminalEvent,
   isSecretAskBlock,
-  latestAnswerableAskMessageId,
   mentionChipKey,
   projectMessageReactions,
   resolveComposerSendPlan,
@@ -1404,7 +1404,7 @@ function Thread() {
     );
   }
 
-  const answerableAskMessageId = latestAnswerableAskMessageId(snap);
+  const answerableAskIds = useMemo(() => answerableAskMessageIds(snap), [snap]);
   const pinRecovery = snap?.run?.runtimeProblem
     ? runtimePinRecovery(snap.run.runtimeProblem, snap.run.botId ?? botId ?? "")
     : null;
@@ -1603,7 +1603,7 @@ function Thread() {
                 message.replyToMessageId ? messagesById.get(message.replyToMessageId) : undefined
               }
               canAnswer={
-                message.id === answerableAskMessageId ||
+                answerableAskIds.has(message.id) ||
                 message.blocks.some(
                   (block) => block.kind === "ask" && block.peerHold && block.status === "pending",
                 )
@@ -1792,7 +1792,7 @@ function Thread() {
             data={liveMessages}
             inverted
             keyExtractor={(message) => message.id}
-            extraData={answerableAskMessageId}
+            extraData={answerableAskIds}
             style={{ flex: 1, marginTop: 8 }}
             maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
             scrollEventThrottle={16}

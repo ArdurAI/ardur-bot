@@ -35,6 +35,7 @@ import {
 } from "@ardurbot/contracts";
 import type { ComposerActionId, ComposerMention, ComposerSkill } from "@ardurbot/core";
 import {
+  answerableAskMessageIds,
   attachmentsForThread,
   buildComposerMentionOptions,
   canAddComposerFolder,
@@ -49,7 +50,6 @@ import {
   isReasoningSummaryBlock,
   isRunTerminalEvent,
   isToolActivityBlock,
-  latestAnswerableAskMessageId,
   mentionChipKey,
   projectMessageReactions,
   reorderBotTo,
@@ -1887,7 +1887,7 @@ export function ShellPage({
     setReplyQuote(null);
   }, []);
   const currentRuns = activeThreadRuns(activeSnapshot);
-  const answerableAskMessageId = latestAnswerableAskMessageId(activeSnapshot);
+  const answerableAskIds = useMemo(() => answerableAskMessageIds(activeSnapshot), [activeSnapshot]);
   const workingRuns = currentRuns.filter((run) =>
     ["running", "queued", "leased"].includes(run.status),
   );
@@ -3679,7 +3679,7 @@ export function ShellPage({
             messages={transcriptMessages}
             olderCursor={activeSnapshot?.olderCursor ?? null}
             loadingOlder={loadingOlder}
-            answerableAskMessageId={answerableAskMessageId}
+            answerableAskIds={answerableAskIds}
             running={transcriptRunning}
             workingBots={workingBots}
             room={inGroup}
@@ -5005,7 +5005,7 @@ const Transcript = memo(function Transcript({
   messages,
   olderCursor,
   loadingOlder,
-  answerableAskMessageId,
+  answerableAskIds,
   running,
   workingBots,
   room,
@@ -5033,7 +5033,7 @@ const Transcript = memo(function Transcript({
   messages: ThreadMessage[];
   olderCursor: number | null;
   loadingOlder: boolean;
-  answerableAskMessageId: string | null;
+  answerableAskIds: ReadonlySet<string>;
   running: boolean;
   workingBots: GroupAvatarMember[];
   room: boolean;
@@ -5316,7 +5316,7 @@ const Transcript = memo(function Transcript({
                     artifactTarget={artifactTarget}
                     message={message}
                     canAnswer={
-                      message.id === answerableAskMessageId ||
+                      answerableAskIds.has(message.id) ||
                       message.blocks.some(
                         (block) =>
                           block.kind === "ask" && block.peerHold && block.status === "pending",
