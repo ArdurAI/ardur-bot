@@ -1,7 +1,12 @@
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import type { AgentRuntime } from "@ardurbot/adapter-kit";
 import type { RuntimePin } from "@ardurbot/contracts";
 import { describe, expect, it, vi } from "vitest";
-import { RuntimeRegistry } from "./runtime-registry.js";
+import { nativeRuntimeAvailability, RuntimeRegistry } from "./runtime-registry.js";
+
+vi.mock("../../host-runtime/python/hermes_sources.json", () => ({ default: {} }));
 
 const pin: RuntimePin = {
   runtimeKind: "hermes",
@@ -62,5 +67,76 @@ describe("Hermes registry admission", () => {
       code: "runtime-unavailable",
     });
     expect(f.factory).not.toHaveBeenCalled();
+  });
+});
+
+describe("local Hermes availability", () => {
+  it.skipIf(process.platform === "win32")(
+    "probes the same managed install candidate the local runtime uses",
+    async () => {
+      const data = await mkdtemp(path.join(tmpdir(), "hermes-availability-"));
+      vi.stubEnv("DATA_DIR", data);
+      vi.stubEnv("ARDUR_HERMES_INSTALL", "");
+      try {
+        const managed = path.join(path.resolve(data), "hermes", "runtimes", "hermes-agent");
+        await mkdir(path.join(managed, ".venv", "bin"), { recursive: true });
+        await writeFile(path.join(managed, ".venv", "bin", "python"), "fixture");
+        const availability = await nativeRuntimeAvailability("hermes");
+        expect(availability).toMatchObject({ runtimeKind: "hermes", available: true });
+      } finally {
+        vi.unstubAllEnvs();
+        await rm(data, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("says Hermes is missing when this computer has no checkout", async () => {
+    const data = await mkdtemp(path.join(tmpdir(), "hermes-missing-"));
+    vi.stubEnv("DATA_DIR", data);
+    vi.stubEnv("ARDUR_HERMES_INSTALL", "");
+    try {
+      await expect(nativeRuntimeAvailability("hermes")).resolves.toMatchObject({
+        runtimeKind: "hermes",
+        available: false,
+        reason: "Hermes is not installed on this computer.",
+      });
+    } finally {
+      vi.unstubAllEnvs();
+      await rm(data, { recursive: true, force: true });
+    }
+  });
+
+  it("says the safety check failed when the checkout is present but unsafe", async () => {
+    const data = await mkdtemp(path.join(tmpdir(), "hermes-unsafe-"));
+    const install = path.join(data, "install");
+    await mkdir(install, { recursive: true });
+    await writeFile(path.join(install, ".env"), "fixture");
+    vi.stubEnv("DATA_DIR", data);
+    vi.stubEnv("ARDUR_HERMES_INSTALL", install);
+    try {
+      await expect(nativeRuntimeAvailability("hermes")).resolves.toMatchObject({
+        runtimeKind: "hermes",
+        available: false,
+        reason: "The Hermes install on this computer failed its safety check.",
+      });
+    } finally {
+      vi.unstubAllEnvs();
+      await rm(data, { recursive: true, force: true });
+    }
+  });
+
+  it("says Hermes is not available on Windows", async () => {
+    vi.spyOn(process, "platform", "get").mockReturnValue("win32");
+    vi.stubEnv("ARDUR_HERMES_INSTALL", "");
+    try {
+      await expect(nativeRuntimeAvailability("hermes")).resolves.toMatchObject({
+        runtimeKind: "hermes",
+        available: false,
+        reason: "Hermes isn't available on Windows yet.",
+      });
+    } finally {
+      vi.unstubAllEnvs();
+      vi.restoreAllMocks();
+    }
   });
 });

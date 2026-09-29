@@ -2,7 +2,60 @@ import type { AgentUsage } from "@ardurbot/adapter-kit";
 import { RequestUsageCollector } from "@ardurbot/adapter-kit";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
 import { expect, it, vi } from "vitest";
-import { recordRunUsage, recordStandaloneUsage } from "./run-usage.js";
+import { brokerRootTokensBlock, recordRunUsage, recordStandaloneUsage } from "./run-usage.js";
+
+it("admits a non-goal coordinator and an admitted worker when ask reservations fill the task", () => {
+  expect(
+    brokerRootTokensBlock({
+      goal: false,
+      delegated: false,
+      usedTokens: 20_000,
+      reservedTokens: 120_000,
+      requestTokens: 8_000,
+      tokenLimit: 140_000,
+    }),
+  ).toBe(false);
+  expect(
+    brokerRootTokensBlock({
+      goal: false,
+      delegated: true,
+      usedTokens: 200_000,
+      reservedTokens: 30_000,
+      requestTokens: 1_000,
+      tokenLimit: 120_000,
+    }),
+  ).toBe(false);
+  expect(
+    brokerRootTokensBlock({
+      goal: false,
+      delegated: false,
+      usedTokens: 0,
+      reservedTokens: 0,
+      requestTokens: 100,
+      tokenLimit: 99,
+    }),
+  ).toBe(true);
+  expect(
+    brokerRootTokensBlock({
+      goal: true,
+      delegated: false,
+      usedTokens: 20_000,
+      reservedTokens: 120_000,
+      requestTokens: 8_000,
+      tokenLimit: 140_000,
+    }),
+  ).toBe(true);
+  expect(
+    brokerRootTokensBlock({
+      goal: true,
+      delegated: true,
+      usedTokens: 200_000,
+      reservedTokens: 30_000,
+      requestTokens: 1_000,
+      tokenLimit: 120_000,
+    }),
+  ).toBe(true);
+});
 
 it("attributes the usage record and its event to the same run", async () => {
   const create = vi.fn(async () => ({ id: "usage" }));

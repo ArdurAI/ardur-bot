@@ -15,6 +15,8 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Conversation with {name}": "与 {name} 的对话",
   "{count} active tasks": "{count} 项进行中的任务",
   "{count} peer messages waiting": "{count} 条待处理的 Bot 消息",
+  "{runtime} can't use Ardur tools — a coordinator needs tools to hand off work.":
+    "{runtime} 无法使用 Ardur 工具——协调者需要工具来分派工作。",
   Conversation: "对话",
   "Open peer thread": "打开对方的对话",
   "This chat is view-only": "此对话仅可查看",
@@ -46,6 +48,9 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Model calls per turn": "每轮模型调用次数",
   "Time limit": "时间限制",
   "Hermes is not installed on this computer.": "此计算机上未安装 Hermes。",
+  "The Hermes install on this computer failed its safety check.":
+    "此计算机上的 Hermes 安装未通过安全检查。",
+  "Hermes isn't available on Windows yet.": "Hermes 暂不支持 Windows。",
   "Hermes does not yet support Anthropic connections.": "Hermes 尚不支持 Anthropic 连接。",
   "Hermes does not yet support this connection.": "Hermes 尚不支持此连接。",
   "Hermes runs with this computer's access.": "Hermes 使用此计算机的访问权限运行。",

@@ -1,0 +1,27 @@
+# Optional. Lets Ardur read node allocatable resources and scheduled pod requests (plus node
+# metrics when metrics-server is installed) to show free capacity. Without it, capacity is unknown
+# and computers still work. The binding is per namespace so several namespaces can share the role.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ardurbot-computers-capacity
+rules:
+  - apiGroups: [""]
+    resources: [nodes, pods]
+    verbs: [list]
+  - apiGroups: [metrics.k8s.io]
+    resources: [nodes]
+    verbs: [list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ardurbot-computers-capacity-ardurbot
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ardurbot-computers-capacity
+subjects:
+  - kind: ServiceAccount
+    name: ardurbot-computers
+    namespace: ardurbot

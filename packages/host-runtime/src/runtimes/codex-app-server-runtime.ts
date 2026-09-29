@@ -414,7 +414,15 @@ export class CodexAppServerRuntime implements AgentRuntime {
       const mcpServers: Record<string, unknown> = Object.fromEntries(
         Object.keys(config.mcp_servers ?? {}).map((name) => [name, { enabled: false }]),
       );
-      mcpServers.ardur = { ...mcp.config, enabled: true, required: true };
+      mcpServers.ardur = {
+        ...mcp.config,
+        enabled: true,
+        required: true,
+        // Codex prompts before MCP tool calls unless the server opts out. Ardur's
+        // bridge already applies its own authorization, approvals and audit, so no
+        // Codex-side approval request is raised for these tools at all.
+        default_tools_approval_mode: "approve",
+      };
       const comparisonSkills: Array<{ path: string; enabled: false }> = [];
       if (request.controlledComparison) {
         const inventory = z
@@ -538,6 +546,29 @@ export class CodexAppServerRuntime implements AgentRuntime {
             }
             if (event.method === "model/rerouted") {
               queue.end(problem("pin-model-unknown", "Codex rerouted the pinned model."));
+              void interrupt();
+              break;
+            }
+            if (event.id !== undefined && event.method === "mcpServer/elicitation/request") {
+              // Codex routes MCP tool-call approvals through elicitation, marking them
+              // with _meta.codex_approval_kind and the required serverName. Only the
+              // ardur server is pre-approved (the bridge applies Ardur's own
+              // authorization, approvals and audit). Never accept a plain form
+              // elicitation — that would fabricate user input.
+              const meta = params._meta as Record<string, unknown> | undefined;
+              if (params.serverName === "ardur" && meta?.codex_approval_kind === "mcp_tool_call") {
+                rpc.send({ id: event.id, result: { action: "accept" } });
+                continue;
+              }
+              rpc.send({ id: event.id, result: { action: "decline" } });
+              queue.push({
+                type: "ask",
+                text:
+                  params.serverName === "ardur"
+                    ? "Codex asked Ardur to collect form input — Ardur doesn't take forms, so it was declined."
+                    : "Codex requested input for another MCP server — continue using Ardur tools.",
+                actions: [{ id: "continue", label: "Continue" }],
+              });
               void interrupt();
               break;
             }

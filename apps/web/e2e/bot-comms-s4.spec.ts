@@ -14,7 +14,7 @@ test("holds a peer ask and lets the owner pause group and space traffic", async 
   test.setTimeout(360_000);
   await signup(
     page,
-    `s4-${testInfo.workerIndex}-${Date.now()}@ardurbot.test`,
+    `s4-${testInfo.workerIndex}-${Date.now()}@example.test`,
     "password12",
     "Fixture owner",
   );

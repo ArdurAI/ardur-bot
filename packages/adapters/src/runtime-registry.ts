@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import type { AdapterContext, AgentRunRequest, AgentRuntime } from "@ardurbot/adapter-kit";
 import type {
   RuntimeAvailability,
@@ -103,6 +104,7 @@ export class RuntimeRegistry {
   }
 }
 
+import { LocalHermesRuntime } from "./runtimes/local-hermes-runtime.js";
 /** A runtime for a one-off call outside a run, with the request fields it must run with. */
 export type DetachedRuntime = {
   runtime: AgentRuntime;
@@ -143,7 +145,9 @@ export function createRuntimeRegistry(
   const antigravity = client
     ? new RemoteHostRuntime(client, "antigravity")
     : new AntigravityRuntime();
-  const hermes = client ? new RemoteHostRuntime(client, "hermes", brokerForTurn) : undefined;
+  const hermes = client
+    ? new RemoteHostRuntime(client, "hermes", brokerForTurn)
+    : new LocalHermesRuntime(brokerForTurn);
   return new RuntimeRegistry({
     pi: {
       factory: () => pi,
@@ -164,10 +168,7 @@ export function createRuntimeRegistry(
       probe: () => nativeRuntimeAvailability("antigravity"),
     },
     hermes: {
-      factory: () => {
-        if (!hermes) throw new Error("Hermes needs a connected host.");
-        return hermes;
-      },
+      factory: () => hermes,
       probe: () => nativeRuntimeAvailability("hermes"),
     },
   });
@@ -192,13 +193,39 @@ export async function nativeRuntimeAvailability(
       }
     );
   }
-  if (kind === "hermes")
-    return {
-      runtimeKind: kind,
-      available: false,
-      models: [],
-      reason: "Hermes needs a connected host.",
-    };
+  if (kind === "hermes") {
+    if (process.platform === "win32") {
+      return {
+        runtimeKind: "hermes",
+        available: false,
+        models: [],
+        reason: "Hermes isn't available on Windows yet.",
+      };
+    }
+    const { localHermesInstallCandidate, probeHermesInstall } = await import(
+      "@ardurbot/host-runtime/runtimes/hermes-install"
+    );
+    const install = localHermesInstallCandidate();
+    if (!install || !existsSync(install)) {
+      return {
+        runtimeKind: "hermes",
+        available: false,
+        models: [],
+        reason: "Hermes is not installed on this computer.",
+      };
+    }
+    try {
+      probeHermesInstall(install);
+      return { runtimeKind: "hermes", available: true, models: [] };
+    } catch {
+      return {
+        runtimeKind: "hermes",
+        available: false,
+        models: [],
+        reason: "The Hermes install on this computer failed its safety check.",
+      };
+    }
+  }
   return kind === "claude-code"
     ? probeClaude()
     : kind === "codex-app-server"

@@ -510,6 +510,24 @@ describe("lingui catalogs", () => {
     }
   });
 
+  it("translates the coordinator tools warning in every supported catalog", () => {
+    const message = "{0} can't use Ardur tools — a coordinator needs tools to hand off work.";
+    for (const locale of ["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      expect(catalog, `${locale}: extracted from GroupPanel`).toContain(
+        `#: src/pages/GroupPanel.tsx\nmsgid ${JSON.stringify(message)}`,
+      );
+      const key = `msgid ${JSON.stringify(message)}\nmsgstr "`;
+      const at = catalog.indexOf(key);
+      expect(at, `${locale}: ${message} missing from catalog`).toBeGreaterThanOrEqual(0);
+      const translated = catalog.slice(at + key.length, catalog.indexOf('"', at + key.length));
+      expect(translated.trim(), `${locale}: ${message} must not be empty`).toBeTruthy();
+    }
+  });
+
   it("translates new computer placeholders in every shipped catalog", () => {
     const sentences = [
       "Booting live desktop…",
