@@ -121,9 +121,13 @@ sequenceDiagram
   session starts and before any turn is sent, every file Codex reports as loaded must
   be an ordinary file outside the protected paths and outside the project, unchanged
   since just before the session was asked for; a file swapped for a link and put back
-  keeps the time of that change, which cannot be reset. One gap remains until bot
-  commands are kept out of the agent tools' own folders: replacing Codex's whole folder
-  with a copy for the moment a session starts, and putting it back, is not detected.
+  keeps the time of that change, which cannot be reset. The bot's folder is
+  looked at again once the session exists, before any turn is sent. What remains open until bot commands are
+  kept out of the agent tools' own folders: Codex's own folder holds its instruction
+  file, memories, skills and settings, and a bot command can write there. What it writes
+  is its own text, never protected data, which a guarded command cannot read; and
+  replacing that whole folder with a prepared copy for the moment a session starts is
+  not detected.
   A probe uses that same wrap. When the profile cannot be built, the probe
   does not start the command. The profile is `(allow default)` plus targeted denies, so
   ordinary work is untouched while the deny list blocks reads and writes of Ardur's

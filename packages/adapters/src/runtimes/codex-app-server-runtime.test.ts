@@ -59,8 +59,18 @@ function fixture(
   scenario?: { beforeStart?: Message[]; duringTurn: Message[] },
 ) {
   const messages: Message[] = [];
-  /** What this Codex says it loaded, and anything it does to the disk while a session starts. */
-  const loaded: { instructionSources?: unknown; whileStarting?: () => void } = {};
+  /**
+   * What this Codex answers when a session starts, and anything that happens to the disk
+   * along the way. It reports the instruction files it loaded (none, unless set) and the
+   * folder it was asked to use.
+   */
+  const loaded: {
+    instructionSources?: unknown;
+    omitInstructionSources?: boolean;
+    cwd?: unknown;
+    whileConfiguring?: () => void;
+    whileStarting?: () => void;
+  } = {};
   const child = new EventEmitter() as ChildProcessWithoutNullStreams;
   const stdout = new PassThrough();
   const stderr = new PassThrough();
@@ -92,6 +102,7 @@ function fixture(
           });
           break;
         case "config/read":
+          loaded.whileConfiguring?.();
           result({
             config: {
               mcp_servers: {
@@ -125,9 +136,10 @@ function fixture(
           for (const event of scenario?.beforeStart ?? []) send(event);
           loaded.whileStarting?.();
           result({
-            ...(loaded.instructionSources === undefined
+            ...(loaded.omitInstructionSources
               ? {}
-              : { instructionSources: loaded.instructionSources }),
+              : { instructionSources: loaded.instructionSources ?? [] }),
+            cwd: "cwd" in loaded ? loaded.cwd : message.params?.cwd,
             thread: { id: "thread-native" },
             model: mode === "wrong-model" ? "replacement" : "model",
             modelProvider: "openai",
@@ -917,7 +929,7 @@ describe("instruction file grants", () => {
         problem: {
           code: "runtime-unavailable",
           reason:
-            "Codex can't start: Ardur can't safely read AGENTS.md for this bot. Replace it with a plain file in the bot's folder.",
+            "Codex can't start: Ardur can't safely read AGENTS.md for this bot. Replace it with a plain file.",
         },
       });
       expect(f.messages.some((event) => event.method === method)).toBe(false);
@@ -997,6 +1009,13 @@ describe("instruction file grants", () => {
       expect(f.messages.some((event) => event.method === "turn/start")).toBe(false);
       expect(f.info).not.toHaveBeenCalled();
     });
+    it("sends no turn when Codex does not say what it loaded", async () => {
+      const f = fixture();
+      f.loaded.omitInstructionSources = true;
+      await expect(f.collect()).rejects.toMatchObject(refusal);
+      expect(f.messages.some((event) => event.method === "turn/start")).toBe(false);
+      expect(f.info).not.toHaveBeenCalled();
+    });
     it("sends no turn when Codex loaded a file from the project all the same", async () => {
       const folder = path.join(await scratch(), "bot");
       await mkdir(folder, { recursive: true });
@@ -1050,6 +1069,61 @@ describe("instruction file grants", () => {
       },
     });
     expect(closed.spawn).not.toHaveBeenCalled();
+  });
+  describe("a bot folder swapped for a link into protected data", () => {
+    const folderRefusal = {
+      problem: {
+        code: "runtime-unavailable",
+        reason:
+          "Codex could not start a session in this bot's folder \u2014 change the bot's computer or the pin.",
+      },
+    };
+    const planted = async () => {
+      const data = path.join(await scratch(), "data");
+      const home = path.join(data, "desktop-computers", "team-a");
+      const secrets = path.join(data, "homes");
+      await mkdir(home, { recursive: true });
+      await mkdir(secrets, { recursive: true });
+      const swap = () => {
+        renameSync(home, `${home}.kept`);
+        symlinkSync(secrets, home);
+      };
+      return { home, guard: { paths: [secrets], ports: [], sockets: [] }, swap };
+    };
+    it("asks for no session when the swap happens after the first look", async () => {
+      const { home, guard, swap } = await planted();
+      const f = fixture();
+      f.request.nativeCwd = home;
+      f.loaded.whileConfiguring = swap;
+      await expect(refused(f, new CodexAppServerRuntime(f.spawn, guard))).rejects.toMatchObject(
+        folderRefusal,
+      );
+      expect(f.messages.some((event) => event.method === "thread/start")).toBe(false);
+    });
+    it("sends no turn when the swap happens while the session starts", async () => {
+      const { home, guard, swap } = await planted();
+      const f = fixture();
+      f.request.nativeCwd = home;
+      f.loaded.whileStarting = swap;
+      await expect(refused(f, new CodexAppServerRuntime(f.spawn, guard))).rejects.toMatchObject(
+        folderRefusal,
+      );
+      expect(f.messages.some((event) => event.method === "turn/start")).toBe(false);
+      expect(f.info).not.toHaveBeenCalled();
+    });
+    it.each([
+      ["another folder", "/somewhere/else"],
+      ["no folder", undefined],
+    ])("sends no turn when Codex answers with %s", async (_label, cwd) => {
+      const { home, guard } = await planted();
+      const f = fixture();
+      f.request.nativeCwd = home;
+      f.loaded.cwd = cwd;
+      await expect(refused(f, new CodexAppServerRuntime(f.spawn, guard))).rejects.toMatchObject(
+        folderRefusal,
+      );
+      expect(f.messages.some((event) => event.method === "turn/start")).toBe(false);
+    });
   });
   it("refuses a bot folder that overlaps Ardur's protected data, before Codex starts", async () => {
     // Codex runs under its own sandbox, so the protected paths are enforced on its profile.

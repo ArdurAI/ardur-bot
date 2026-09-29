@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import {
   link,
   mkdir,
@@ -181,6 +182,21 @@ describe("project instructions", () => {
   });
 });
 
+it.skipIf(process.platform === "win32")(
+  "refuses a named pipe at once, where a plain open would wait forever",
+  async () => {
+    const folder = path.join(await scratch(), "bot");
+    await mkdir(folder, { recursive: true });
+    execFileSync("mkfifo", [path.join(folder, "AGENTS.md")]);
+    const started = Date.now();
+    await expect(loadProjectInstructions(folder)).rejects.toBeInstanceOf(
+      UnsafeInstructionFileError,
+    );
+    expect(Date.now() - started).toBeLessThan(2_000);
+  },
+  5_000,
+);
+
 describe("what Codex says it loaded", () => {
   const minute = 60_000;
   const check = (directories: string[] = [], guarded: string[] = [], askedAtMs = Date.now()) => ({
@@ -199,8 +215,10 @@ describe("what Codex says it loaded", () => {
     const file = await settled(path.join(home, "AGENTS.md"));
     const later = Date.now() + minute;
     expect(await trustedInstructionSources([file], check([], [], later))).toBe(true);
+    // Codex loaded nothing: an empty list. No list at all is no evidence.
     expect(await trustedInstructionSources([], check())).toBe(true);
-    expect(await trustedInstructionSources(undefined, check())).toBe(true);
+    expect(await trustedInstructionSources(undefined, check())).toBe(false);
+    expect(await trustedInstructionSources(null, check())).toBe(false);
   });
 
   it("trusts a link to the person's own file elsewhere", async () => {

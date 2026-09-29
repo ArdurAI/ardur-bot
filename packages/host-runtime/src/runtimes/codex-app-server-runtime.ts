@@ -202,7 +202,8 @@ async function readInstructionFile(
 ): Promise<{ real: string; text: string }> {
   const real = await realpath(file);
   if (!within(project, real) || isGuardedPath(guarded, real)) throw new Error("outside");
-  const handle = await open(real, constants.O_RDONLY | constants.O_NOFOLLOW);
+  // Without waiting: a named pipe with no writer would hold a plain open forever.
+  const handle = await open(real, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const [held, named, still] = await Promise.all([
       handle.stat({ bigint: true }),
@@ -304,7 +305,7 @@ export async function trustedInstructionSources(
   sources: unknown,
   check: { directories: string[]; guarded: string[]; askedAtMs: number },
 ): Promise<boolean> {
-  if (sources === undefined || sources === null) return true;
+  // Codex always reports the list, empty when it loaded nothing. No list is no evidence.
   if (!Array.isArray(sources)) return false;
   const asked = BigInt(Math.floor(check.askedAtMs)) * 1_000_000n;
   const fromProject = (file: string) =>
@@ -630,7 +631,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
               if (error instanceof UnsafeInstructionFileError)
                 throw problem(
                   "runtime-unavailable",
-                  `Codex can't start: Ardur can't safely read ${error.filename} for this bot. Replace it with a plain file in the bot's folder.`,
+                  `Codex can't start: Ardur can't safely read ${error.filename} for this bot. Replace it with a plain file.`,
                 );
               throw error;
             })
@@ -690,6 +691,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
           reasoningEffort: string;
           sandbox?: { type: string; networkAccess?: boolean };
           activePermissionProfile?: { id: string } | null;
+          cwd?: unknown;
           instructionSources?: unknown;
         }>(request.nativeSession?.sessionId ? "thread/resume" : "thread/start", {
           ...options,
@@ -717,6 +719,20 @@ export class CodexAppServerRuntime implements AgentRuntime {
         throw problem(
           "runtime-unavailable",
           "Codex cannot enforce the requested sandbox — change the pin.",
+        );
+      // Codex answers with the folder it was asked to use, as it was spelled. The folder is
+      // looked at once more now that the session exists, before any turn is sent: a swap
+      // that is still in place shows here.
+      if (
+        folder &&
+        (typeof session.cwd !== "string" ||
+          !within(folder, session.cwd) ||
+          !within(session.cwd, folder) ||
+          resolveRealPathSync(folder) !== folder)
+      )
+        throw problem(
+          "runtime-unavailable",
+          "Codex could not start a session in this bot's folder — change the bot's computer or the pin.",
         );
       if (
         !(await trustedInstructionSources(session.instructionSources, {
