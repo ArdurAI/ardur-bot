@@ -69,6 +69,8 @@ export function useTerminalController({
   // The bot whose control this surface took; only this grant is ever released.
   const acquired = useRef<string | null>(null);
   const alive = useRef(true);
+  const activeBot = useRef(botId);
+  activeBot.current = botId;
   const releaseOnLeaveRef = useRef(releaseOnLeave);
   releaseOnLeaveRef.current = releaseOnLeave;
   const onReleasedRef = useRef(onReleased);
@@ -155,7 +157,7 @@ export function useTerminalController({
       .then(() => {
         if (state !== "take-control" || !botId) return;
         // The surface went away mid-takeover: hand the grant straight back.
-        if (alive.current) acquired.current = botId;
+        if (alive.current && activeBot.current === botId) acquired.current = botId;
         else void rpc.computer.release({ botId }).catch(() => {});
       })
       .catch((cause) => {

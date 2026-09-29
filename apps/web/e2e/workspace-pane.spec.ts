@@ -232,3 +232,71 @@ test("workspace pane Terminal reports an ended session instead of a dead termina
   await expect(pane.getByRole("button", { name: "Open a new terminal" })).toBeVisible();
   await captureScreenshot(page, testInfo, "workspace-terminal-ended");
 });
+
+test("workspace pane Terminal boots a stopped computer without taking control", async ({
+  page,
+}) => {
+  const botId = bots[0]!.id;
+  const computer = {
+    botId,
+    computerId: "fixture-computer",
+    mode: "team",
+    kind: "docker",
+    state: "stopped",
+    capabilities: { graphical: false, interactiveTerminal: true },
+    controlHolder: "none",
+    controlBotId: null,
+    takeoverRequested: false,
+    screenAvailable: false,
+    screenWidth: 1280,
+    screenHeight: 800,
+    homeRevision: "saved",
+    busyBotName: null,
+    canUpdate: false,
+  };
+  const context = {
+    botId,
+    computerId: "fixture-computer",
+    generation: 1,
+    files: "unavailable",
+    observedAt: "2026-09-28T00:00:00.000Z",
+  };
+  const calls: string[] = [];
+  await installPerformanceFixture(page, false, false, {}, computer);
+  await page.route("**/rpc/**", async (route) => {
+    const url = new URL(route.request().url());
+    const name = url.pathname.slice(5);
+    if (name === "terminal/available")
+      return route.fulfill({ json: { json: { available: true } } });
+    if (name === "computer/boot") {
+      calls.push(name);
+      computer.state = "running";
+      return route.fulfill({ json: { json: { ...computer, state: "running" } } });
+    }
+    if (name === "computer/takeover") {
+      calls.push(name);
+      return route.fulfill({
+        json: { json: { leaseId: "fixture-lease", expiresAt: "2099-01-01T00:00:00.000Z" } },
+      });
+    }
+    if (name === "workspace/describe") return route.fulfill({ json: { json: context } });
+    await route.fallback();
+  });
+  await page.goto(`/app/${botId}`);
+  await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
+  await page.getByRole("button", { name: "Agent computer" }).click();
+  const pane = page.getByTestId("side-panel");
+  await expect(pane).toHaveAttribute("data-panel", "computer");
+  const tab = pane.getByRole("tab", { name: "Terminal" });
+  await expect(tab).toBeVisible();
+  await tab.click();
+  await expect(pane.getByText("Start computer to open a terminal", { exact: true })).toBeVisible();
+  const startButton = pane.getByRole("button", { name: "Start computer" });
+  await expect(startButton).toBeVisible();
+  expect(calls).toEqual([]);
+  await startButton.click();
+  await expect.poll(() => calls).toEqual(["computer/boot"]);
+  expect(calls).not.toContain("computer/takeover");
+  await expect(pane.getByText("Take control to open a terminal", { exact: true })).toBeVisible();
+  await expect(pane.getByRole("button", { name: "Take control" })).toBeVisible();
+});

@@ -173,6 +173,26 @@ describe("useTerminalController", () => {
     expect(calls.release).toHaveBeenCalledWith({ botId: "bot" });
   });
 
+  it("hands control straight back when the pane switches bots mid-takeover", async () => {
+    let finish = () => {};
+    const onTakeControl = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const propsA = baseProps({ botId: "bot-a", onTakeControl });
+    await render(propsA);
+    await act(async () => state?.runAction());
+    const propsB = baseProps({ botId: "bot-b", onTakeControl });
+    await act(async () => root.render(<Harness props={propsB} />));
+    await act(async () => finish());
+    expect(calls.release).toHaveBeenCalledWith({ botId: "bot-a" });
+    calls.release.mockClear();
+    await act(async () => root.unmount());
+    expect(calls.release).not.toHaveBeenCalled();
+  });
+
   it("shows the refusal reason when taking control fails", async () => {
     const onTakeControl = vi.fn(async () => {
       throw new Error("The bot is working on this computer");

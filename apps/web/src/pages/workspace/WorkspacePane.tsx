@@ -115,6 +115,7 @@ export function WorkspacePane({
             content: (
               <Suspense fallback={null}>
                 <WorkspaceTerminal
+                  key={bot.id}
                   bot={bot}
                   computer={computer}
                   visible={selected === "terminal"}
