@@ -383,6 +383,42 @@ describe("reduceLiveMessageBlocks", () => {
     ]);
   });
 
+  it("clears a stale activity title on an empty activity update while its tool lands once as a step", () => {
+    // The Pi runtime starts a tool whose activity title has no sentence
+    // ending, so the tool name is held on the title.
+    const activity = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Reading notes/plan.md", activity: true },
+    });
+    const working = reduceLiveMessageBlocks(activity, { type: "tool", name: "read_file" });
+    expect(working).toEqual([
+      {
+        kind: "progress",
+        text: "Reading notes/plan.md",
+        activity: true,
+        pendingToolNames: ["read_file"],
+      },
+    ]);
+
+    // Pi then clears the transient title before the reply resumes.
+    const cleared = reduceLiveMessageBlocks(working, {
+      type: "progress",
+      payload: { text: "", activity: true },
+    });
+
+    // Narration resumes: no stale activity block, and the held tool lands
+    // exactly once as a step.
+    expect(
+      reduceLiveMessageBlocks(cleared, {
+        type: "progress",
+        payload: { text: "Here are the notes.", streaming: true },
+      }),
+    ).toEqual([
+      { kind: "steps", steps: [{ label: "Read file", count: 1 }] },
+      { kind: "progress", text: "Here are the notes.", streaming: true },
+    ]);
+  });
+
   it("keeps a narration text chunk that arrives after a tool call", () => {
     const narration = reduceLiveMessageBlocks([], {
       type: "progress",
@@ -873,6 +909,33 @@ describe("merged behavior of reasoning, narration and streaming", () => {
     const tool = reduceLiveMessageBlocks(narration, { type: "tool", name: "run_command" });
     expect(tool).toEqual([
       { kind: "progress", text: "Here is the plan", pendingToolNames: ["run_command"] },
+    ]);
+  });
+
+  it("retains reasoning and dumps held tools on reply replacement", () => {
+    // A reasoning block, a plain narration block, and an activity block with held tools.
+    const state: MessageBlock[] = [
+      { kind: "progress", text: "Thinking...", reasoning: true },
+      { kind: "progress", text: "Starting reply..." },
+      {
+        kind: "progress",
+        text: "Doing work...",
+        activity: true,
+        pendingToolNames: ["run_command"],
+      },
+    ];
+
+    // An entirely new reply segment arrives. This triggers replacement.
+    const replaced = reduceLiveMessageBlocks(state, {
+      type: "progress",
+      payload: { text: "Here is my final answer", streaming: true },
+    });
+
+    // The activity block goes away, its tools become steps, reasoning stays.
+    expect(replaced).toEqual([
+      { kind: "progress", text: "Thinking...", reasoning: true },
+      { kind: "steps", steps: [{ label: "Run command", count: 1 }] },
+      { kind: "progress", text: "Here is my final answer", streaming: true },
     ]);
   });
 

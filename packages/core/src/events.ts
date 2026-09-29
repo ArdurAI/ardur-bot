@@ -241,23 +241,17 @@ export function reduceLiveMessageBlocks(
       let kept: MessageBlock[] = [];
       for (const block of blocks) {
         if (block.kind === "text") continue;
-        if (block.kind === "progress" && block.activity !== true && block.reasoning !== true) {
+        if (block.kind === "progress") {
           for (const name of block.pendingToolNames ?? []) kept = appendToolCallSegment(kept, name);
-        } else {
-          if (
-            block.kind === "progress" &&
-            block.pendingToolNames &&
-            block.pendingToolNames.length > 0
-          ) {
+          if (block.reasoning === true) {
             const { pendingToolNames, ...rest } = block as Extract<
               MessageBlock,
               { kind: "progress" }
             >;
             kept.push(rest);
-            for (const name of pendingToolNames ?? []) kept = appendToolCallSegment(kept, name);
-          } else {
-            kept.push(block);
           }
+        } else {
+          kept.push(block);
         }
       }
       if (!incoming) return kept;
@@ -290,6 +284,21 @@ export function reduceLiveMessageBlocks(
     !textPayload.trim() &&
     (tailProgress?.pendingToolNames?.length ?? 0) > 0
   ) {
+    // A same-category activity update with an empty title clears the transient
+    // activity line instead (the Pi runtime sends one before the reply
+    // resumes): the stale title goes away while its held tool names still
+    // land once as steps.
+    if (
+      updateCategory === "activity" &&
+      tailProgress !== null &&
+      progressCategory(tailProgress) === "activity"
+    ) {
+      let cleared: MessageBlock[] = [...blocks.slice(0, -1)];
+      for (const name of tailProgress.pendingToolNames ?? []) {
+        cleared = appendToolCallSegment(cleared, name);
+      }
+      return cleared;
+    }
     return [...blocks];
   }
   // Held tool names ride across the seal onto the new block, so the sealed
