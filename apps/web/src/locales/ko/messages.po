@@ -264,6 +264,14 @@ msgstr "{learned, plural, other {이번 주에 #가지를 학습함}}"
 msgid "{location} · Docker not running"
 msgstr ""
 
+#: src/lib/failure-category-copy.ts
+msgid "{member} failed."
+msgstr "{member}이(가) 실패했습니다."
+
+#: src/lib/failure-category-copy.ts
+msgid "{member} stopped."
+msgstr "{member}이(가) 중지되었습니다."
+
 #: src/pages/ActivityList.tsx
 msgid "{minutes}m ago"
 msgstr "{minutes}분 전"
@@ -319,15 +327,35 @@ msgstr "{records, plural, other {사용 기록 #개}}"
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "남은 시간 {remaining} · Bot은 화면만 보고 직접 조작하지 않습니다"
 
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} could not finish this run. Check the runtime or change the pin."
+msgstr "{runtime}이(가) 이 실행을 완료하지 못했습니다. 런타임을 확인하거나 고정을 변경하세요."
+
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "{runtime} loads all connected tools because deferred loading is unavailable."
 msgstr ""
 
-#: src/pages/shell/provider-error-message.tsx
+#: src/lib/failure-category-copy.ts
 msgid "{runtime} reached this run's turn limit. Narrow the task and try again."
 msgstr "{runtime}이(가) 이 실행의 턴 한도에 도달했습니다. 작업 범위를 좁히고 다시 시도하세요."
 
-#: src/pages/shell/provider-error-message.tsx
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} stopped before finishing this run."
+msgstr "{runtime}이(가) 이 실행을 완료하기 전에 중지되었습니다."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s configuration is invalid. Check this bot's settings."
+msgstr "{runtime}의 구성이 올바르지 않습니다. 이 봇의 설정을 확인하세요."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model connection is missing. Connect it or change the pin."
+msgstr "{runtime}의 모델 연결이 없습니다. 연결하거나 고정을 변경하세요."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s pinned model is unavailable. Change the pin and try again."
+msgstr "{runtime}에 고정된 모델을 사용할 수 없습니다. 고정을 변경하고 다시 시도하세요."
+
+#: src/lib/failure-category-copy.ts
 msgid "{runtime}'s usage limit is reached. Try again after it resets."
 msgstr "{runtime}의 사용량 한도에 도달했습니다. 한도가 초기화된 후 다시 시도하세요."
 
@@ -1303,10 +1331,10 @@ msgstr ""
 msgid "Blocked"
 msgstr "차단됨"
 
-#. placeholder {0}: row.reason
+#. placeholder {0}: row.reasonCategory ? t(failureCategoryMessages[row.reasonCategory], { runtime: row.reasonRuntime ?? "This runtime", }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
-msgstr ""
+msgstr "차단됨 — {0}"
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
@@ -7993,7 +8021,7 @@ msgstr "로그인"
 msgid "Sign in again to manage sessions."
 msgstr ""
 
-#: src/pages/shell/provider-error-message.tsx
+#: src/lib/failure-category-copy.ts
 msgid "Sign in to {runtime} on this computer, then try again."
 msgstr "이 컴퓨터에서 {runtime}에 로그인한 후 다시 시도하세요."
 

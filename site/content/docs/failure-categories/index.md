@@ -1,0 +1,43 @@
+---
+title: "Failure categories"
+description: "One typed table — `packages/contracts/src/failure-categories.ts` — names every cause a run"
+source_path: "docs/failure-categories.md"
+---
+
+> [Source: docs/failure-categories.md](https://github.com/ArdurAI/ardur-bot/blob/__ARDUR_BOT_SOURCE_REF__/docs/failure-categories.md). Edit the source file, then run `python3 site/scripts/sync_docs.py` to refresh this page.
+
+One typed table — `packages/contracts/src/failure-categories.ts` — names every cause a run
+or a handoff can end with. The server stores the category id plus its parameters (bot,
+runtime, member); the worker stores only the category, never the provider's raw text. Each
+app translates the category's sentence through its own catalogs: web through Lingui
+(`apps/web/src/lib/failure-category-copy.ts`, whose test pins every message to the table),
+mobile through its own catalogs (English source plus ru and zh).
+
+## The categories
+
+| id | meaning | action offered |
+| --- | --- | --- |
+| `usage-limit` | the runtime's usage limit is reached; it resets on its own | retry |
+| `signed-out` | the runtime's sign-in expired or is missing | connect |
+| `max-turns` | the run reached its turn limit | retry with a narrower task |
+| `model-unavailable` | the pinned model no longer exists or is not offered | open the model pin settings |
+| `configuration-invalid` | the pin or runtime configuration is invalid | open the model pin settings |
+| `connection-missing` | the model connection is missing | connect |
+| `stopped` | the run or worker was stopped before finishing | none |
+| `other` | any failure the signals above do not name | none |
+
+A category's entry also carries the sentences for the group-model and handoff contexts
+when those apply, and the sentences older builds stored verbatim. Readers map stored
+English text back to its id with `failureCategoryFromText`; anything unknown shows the
+consumer's generic line, never a wrong category.
+
+## Adding a category
+
+1. Add one entry to `FAILURE_CATEGORIES` (id, default English sentence, action, optional
+   group-model and handoff sentences, legacy sentences).
+2. Add the matching message in `apps/web/src/lib/failure-category-copy.ts` — the
+   completeness test fails until the table, the web message, the mobile catalog entries
+   and this page all name the new id.
+3. Extract and fill the web catalogs (`pnpm --filter @ardurbot/web intl:extract`, then a
+   non-empty `msgstr` in all nine) and add the ru and zh mobile catalog entries.
+4. Add the row above.

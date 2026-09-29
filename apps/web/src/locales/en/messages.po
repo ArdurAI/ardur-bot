@@ -264,6 +264,14 @@ msgstr "{learned, plural, one {learned # thing this week} other {learned # thing
 msgid "{location} · Docker not running"
 msgstr "{location} · Docker not running"
 
+#: src/lib/failure-category-copy.ts
+msgid "{member} failed."
+msgstr "{member} failed."
+
+#: src/lib/failure-category-copy.ts
+msgid "{member} stopped."
+msgstr "{member} stopped."
+
 #: src/pages/ActivityList.tsx
 msgid "{minutes}m ago"
 msgstr "{minutes}m ago"
@@ -319,15 +327,35 @@ msgstr "{records, plural, one {# usage record} other {# usage records}}"
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "{remaining} left · bot is watching, not acting"
 
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} could not finish this run. Check the runtime or change the pin."
+msgstr "{runtime} could not finish this run. Check the runtime or change the pin."
+
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "{runtime} loads all connected tools because deferred loading is unavailable."
 msgstr "{runtime} loads all connected tools because deferred loading is unavailable."
 
-#: src/pages/shell/provider-error-message.tsx
+#: src/lib/failure-category-copy.ts
 msgid "{runtime} reached this run's turn limit. Narrow the task and try again."
 msgstr "{runtime} reached this run's turn limit. Narrow the task and try again."
 
-#: src/pages/shell/provider-error-message.tsx
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} stopped before finishing this run."
+msgstr "{runtime} stopped before finishing this run."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s configuration is invalid. Check this bot's settings."
+msgstr "{runtime}'s configuration is invalid. Check this bot's settings."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model connection is missing. Connect it or change the pin."
+msgstr "{runtime}'s model connection is missing. Connect it or change the pin."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s pinned model is unavailable. Change the pin and try again."
+msgstr "{runtime}'s pinned model is unavailable. Change the pin and try again."
+
+#: src/lib/failure-category-copy.ts
 msgid "{runtime}'s usage limit is reached. Try again after it resets."
 msgstr "{runtime}'s usage limit is reached. Try again after it resets."
 
@@ -1303,7 +1331,7 @@ msgstr "Block link copied."
 msgid "Blocked"
 msgstr "Blocked"
 
-#. placeholder {0}: row.reason
+#. placeholder {0}: row.reasonCategory ? t(failureCategoryMessages[row.reasonCategory], { runtime: row.reasonRuntime ?? "This runtime", }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
 msgstr "Blocked — {0}"
@@ -7993,7 +8021,7 @@ msgstr "Sign in"
 msgid "Sign in again to manage sessions."
 msgstr "Sign in again to manage sessions."
 
-#: src/pages/shell/provider-error-message.tsx
+#: src/lib/failure-category-copy.ts
 msgid "Sign in to {runtime} on this computer, then try again."
 msgstr "Sign in to {runtime} on this computer, then try again."
 

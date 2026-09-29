@@ -264,6 +264,14 @@ msgstr "{learned, plural, other {本周学习了 # 件事}}"
 msgid "{location} · Docker not running"
 msgstr "{location} · Docker 未运行"
 
+#: src/lib/failure-category-copy.ts
+msgid "{member} failed."
+msgstr "{member} 失败了。"
+
+#: src/lib/failure-category-copy.ts
+msgid "{member} stopped."
+msgstr "{member} 已停止。"
+
 #: src/pages/ActivityList.tsx
 msgid "{minutes}m ago"
 msgstr "{minutes} 分钟前"
@@ -319,15 +327,35 @@ msgstr "{records, plural, other {# 条用量记录}}"
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "剩余 {remaining} · Bot 只看不操作"
 
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} could not finish this run. Check the runtime or change the pin."
+msgstr "{runtime} 无法完成此次运行。请检查运行时或更改固定模型。"
+
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "{runtime} loads all connected tools because deferred loading is unavailable."
 msgstr ""
 
-#: src/pages/shell/provider-error-message.tsx
+#: src/lib/failure-category-copy.ts
 msgid "{runtime} reached this run's turn limit. Narrow the task and try again."
 msgstr "{runtime} 已达到此次运行的轮次上限。请缩小任务范围后重试。"
 
-#: src/pages/shell/provider-error-message.tsx
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} stopped before finishing this run."
+msgstr "{runtime} 在完成此次运行前已停止。"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s configuration is invalid. Check this bot's settings."
+msgstr "{runtime} 的配置无效。请检查此 Bot 的设置。"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model connection is missing. Connect it or change the pin."
+msgstr "{runtime} 的模型连接缺失。请连接或更改固定模型。"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s pinned model is unavailable. Change the pin and try again."
+msgstr "{runtime} 固定的模型不可用。请更改固定模型后重试。"
+
+#: src/lib/failure-category-copy.ts
 msgid "{runtime}'s usage limit is reached. Try again after it resets."
 msgstr "{runtime} 的用量已达上限。请在限额重置后重试。"
 
@@ -1303,10 +1331,10 @@ msgstr ""
 msgid "Blocked"
 msgstr "已阻止"
 
-#. placeholder {0}: row.reason
+#. placeholder {0}: row.reasonCategory ? t(failureCategoryMessages[row.reasonCategory], { runtime: row.reasonRuntime ?? "This runtime", }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
-msgstr ""
+msgstr "已阻塞 — {0}"
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
@@ -7993,7 +8021,7 @@ msgstr "登录"
 msgid "Sign in again to manage sessions."
 msgstr ""
 
-#: src/pages/shell/provider-error-message.tsx
+#: src/lib/failure-category-copy.ts
 msgid "Sign in to {runtime} on this computer, then try again."
 msgstr "请在这台电脑上登录 {runtime}，然后重试。"
 

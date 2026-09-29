@@ -677,6 +677,38 @@ describe("lingui catalogs", () => {
     }
   });
 
+  it("translates every failure-category sentence in every shipped catalog", () => {
+    // The table's default sentences (packages/contracts/src/failure-categories.ts) plus
+    // the blocked-card frame they render inside.
+    const sentences = [
+      "{runtime}'s usage limit is reached. Try again after it resets.",
+      "Sign in to {runtime} on this computer, then try again.",
+      "{runtime} reached this run's turn limit. Narrow the task and try again.",
+      "{runtime}'s pinned model is unavailable. Change the pin and try again.",
+      "{runtime}'s configuration is invalid. Check this bot's settings.",
+      "{runtime}'s model connection is missing. Connect it or change the pin.",
+      "{runtime} stopped before finishing this run.",
+      "{runtime} could not finish this run. Check the runtime or change the pin.",
+      "{member} stopped.",
+      "{member} failed.",
+      "Blocked — {0}",
+    ];
+    for (const locale of ["de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      for (const sentence of sentences) {
+        const key = `msgid ${JSON.stringify(sentence)}\nmsgstr "`;
+        const at = catalog.indexOf(key);
+        expect(at, `${locale}: ${sentence} missing from catalog`).toBeGreaterThanOrEqual(0);
+        const translated = catalog.slice(at + key.length, catalog.indexOf('"', at + key.length));
+        expect(translated.trim(), `${locale}: ${sentence} must not be empty`).toBeTruthy();
+        expect(translated, `${locale}: ${sentence} must be translated`).not.toEqual(sentence);
+      }
+    }
+  });
+
   it("translates open-work board links in every shipped catalog", () => {
     const sentences = ["Add from board", "New work item", "Open in board"];
     for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {

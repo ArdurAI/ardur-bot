@@ -264,6 +264,14 @@ msgstr "{learned, plural, one {इस सप्ताह # बात सीख�
 msgid "{location} · Docker not running"
 msgstr ""
 
+#: src/lib/failure-category-copy.ts
+msgid "{member} failed."
+msgstr "{member} विफल रहा।"
+
+#: src/lib/failure-category-copy.ts
+msgid "{member} stopped."
+msgstr "{member} रुक गया।"
+
 #: src/pages/ActivityList.tsx
 msgid "{minutes}m ago"
 msgstr "{minutes} मिनट पहले"
@@ -319,15 +327,35 @@ msgstr "{records, plural, one {# उपयोग रिकॉर्ड} other {#
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "{remaining} शेष · बॉट देख रहा है, कार्रवाई नहीं कर रहा"
 
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} could not finish this run. Check the runtime or change the pin."
+msgstr "{runtime} इस रन को पूरा नहीं कर सका। रनटाइम जांचें या पिन बदलें।"
+
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "{runtime} loads all connected tools because deferred loading is unavailable."
 msgstr ""
 
-#: src/pages/shell/provider-error-message.tsx
+#: src/lib/failure-category-copy.ts
 msgid "{runtime} reached this run's turn limit. Narrow the task and try again."
 msgstr "{runtime} इस रन की टर्न सीमा तक पहुँच गया। काम को सीमित करें और फिर कोशिश करें।"
 
-#: src/pages/shell/provider-error-message.tsx
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} stopped before finishing this run."
+msgstr "{runtime} इस रन को पूरा करने से पहले रुक गया।"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s configuration is invalid. Check this bot's settings."
+msgstr "{runtime} का कॉन्फ़िगरेशन अमान्य है। इस बॉट की सेटिंग्स जांचें।"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model connection is missing. Connect it or change the pin."
+msgstr "{runtime} का मॉडल कनेक्शन मौजूद नहीं है। उसे कनेक्ट करें या पिन बदलें।"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s pinned model is unavailable. Change the pin and try again."
+msgstr "{runtime} का पिन किया गया मॉडल उपलब्ध नहीं है। पिन बदलें और फिर प्रयास करें।"
+
+#: src/lib/failure-category-copy.ts
 msgid "{runtime}'s usage limit is reached. Try again after it resets."
 msgstr "{runtime} की उपयोग सीमा पूरी हो गई। सीमा रीसेट होने के बाद फिर कोशिश करें।"
 
@@ -1303,10 +1331,10 @@ msgstr ""
 msgid "Blocked"
 msgstr "अवरुद्ध"
 
-#. placeholder {0}: row.reason
+#. placeholder {0}: row.reasonCategory ? t(failureCategoryMessages[row.reasonCategory], { runtime: row.reasonRuntime ?? "This runtime", }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
-msgstr ""
+msgstr "अवरुद्ध — {0}"
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
@@ -7993,7 +8021,7 @@ msgstr "साइन इन करें"
 msgid "Sign in again to manage sessions."
 msgstr ""
 
-#: src/pages/shell/provider-error-message.tsx
+#: src/lib/failure-category-copy.ts
 msgid "Sign in to {runtime} on this computer, then try again."
 msgstr "इस कंप्यूटर पर {runtime} में साइन इन करें, फिर कोशिश करें।"
 

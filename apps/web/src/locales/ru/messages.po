@@ -264,6 +264,14 @@ msgstr "{learned, plural, one {на этой неделе изучена # ве�
 msgid "{location} · Docker not running"
 msgstr "{location} · Docker не запущен"
 
+#: src/lib/failure-category-copy.ts
+msgid "{member} failed."
+msgstr "{member} завершился с ошибкой."
+
+#: src/lib/failure-category-copy.ts
+msgid "{member} stopped."
+msgstr "{member} остановился."
+
 #: src/pages/ActivityList.tsx
 msgid "{minutes}m ago"
 msgstr "{minutes} мин назад"
@@ -319,15 +327,35 @@ msgstr "{records, plural, one {# запись об использовании} f
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "Осталось: {remaining} · бот наблюдает, но не действует"
 
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} could not finish this run. Check the runtime or change the pin."
+msgstr "{runtime} не смог завершить этот запуск. Проверьте среду выполнения или измените закрепление."
+
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "{runtime} loads all connected tools because deferred loading is unavailable."
 msgstr ""
 
-#: src/pages/shell/provider-error-message.tsx
+#: src/lib/failure-category-copy.ts
 msgid "{runtime} reached this run's turn limit. Narrow the task and try again."
 msgstr "{runtime} достиг лимита шагов этого запуска. Сузьте задачу и повторите попытку."
 
-#: src/pages/shell/provider-error-message.tsx
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} stopped before finishing this run."
+msgstr "{runtime} остановился, не завершив этот запуск."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s configuration is invalid. Check this bot's settings."
+msgstr "Недействительная конфигурация {runtime}. Проверьте настройки этого бота."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model connection is missing. Connect it or change the pin."
+msgstr "Подключение модели {runtime} отсутствует. Подключите его или измените закрепление."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s pinned model is unavailable. Change the pin and try again."
+msgstr "Закреплённая модель {runtime} недоступна. Измените закреплённую модель и повторите попытку."
+
+#: src/lib/failure-category-copy.ts
 msgid "{runtime}'s usage limit is reached. Try again after it resets."
 msgstr "Лимит использования {runtime} исчерпан. Повторите попытку после его сброса."
 
@@ -1303,10 +1331,10 @@ msgstr ""
 msgid "Blocked"
 msgstr "Заблокировано"
 
-#. placeholder {0}: row.reason
+#. placeholder {0}: row.reasonCategory ? t(failureCategoryMessages[row.reasonCategory], { runtime: row.reasonRuntime ?? "This runtime", }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
-msgstr ""
+msgstr "Заблокировано — {0}"
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
@@ -7993,7 +8021,7 @@ msgstr "Войти"
 msgid "Sign in again to manage sessions."
 msgstr ""
 
-#: src/pages/shell/provider-error-message.tsx
+#: src/lib/failure-category-copy.ts
 msgid "Sign in to {runtime} on this computer, then try again."
 msgstr "Войдите в {runtime} на этом компьютере и повторите попытку."
 
