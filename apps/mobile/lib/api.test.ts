@@ -1799,6 +1799,78 @@ describe("mobile thread event reduction", () => {
     });
   });
 
+  it("keeps two room bots' drafts independent and clears them as their runs end", () => {
+    const room: MobileSnapshot = {
+      ...snapshot([]),
+      botId: undefined,
+      groupId: "group-1",
+      members: [
+        { botId: "bot-a", name: "Ada", color: "#111" },
+        { botId: "bot-b", name: "Beck", color: "#222" },
+      ],
+      activeRuns: [
+        { id: "run-a", botId: "bot-a", status: "running" },
+        { id: "run-b", botId: "bot-b", status: "running" },
+      ],
+    };
+    const streaming = [
+      {
+        type: "thread.progress",
+        seq: 4,
+        runId: "run-a",
+        botId: "bot-a",
+        payload: { delta: "Ada says hel" },
+      },
+      {
+        type: "thread.progress",
+        seq: 5,
+        runId: "run-b",
+        botId: "bot-b",
+        payload: { delta: "Beck says hi" },
+      },
+      {
+        type: "thread.progress",
+        seq: 6,
+        runId: "run-a",
+        botId: "bot-a",
+        payload: { delta: "lo" },
+      },
+    ].reduce<MobileSnapshot | null>(
+      (current, event) => applyMobileThreadEvent(current, event as never),
+      room,
+    );
+    // Each draft accumulates only its own run's deltas.
+    expect(
+      streaming?.messages.find((message) => message.id === "progress:run-a")?.blocks,
+    ).toEqual([{ kind: "progress", text: "Ada says hello" }]);
+    expect(
+      streaming?.messages.find((message) => message.id === "progress:run-b")?.blocks,
+    ).toEqual([{ kind: "progress", text: "Beck says hi" }]);
+
+    // One run finishing drops only its own draft; the other keeps streaming.
+    const oneDone = applyMobileThreadEvent(streaming, {
+      type: "run.completed",
+      seq: 7,
+      runId: "run-a",
+      botId: "bot-a",
+      payload: {},
+    } as never);
+    expect(oneDone?.messages.some((message) => message.id === "progress:run-a")).toBe(false);
+    expect(oneDone?.messages.some((message) => message.id === "progress:run-b")).toBe(true);
+    expect(oneDone?.activeRuns?.map((run) => run.id)).toEqual(["run-b"]);
+
+    // Stop ends every run; each terminal event clears its own draft.
+    const stopped = applyMobileThreadEvent(oneDone, {
+      type: "run.cancelled",
+      seq: 8,
+      runId: "run-b",
+      botId: "bot-b",
+      payload: {},
+    } as never);
+    expect(stopped?.messages.some((message) => message.id.startsWith("progress:"))).toBe(false);
+    expect(stopped?.activeRuns).toEqual([]);
+  });
+
   it("prepends ordered history pages without duplicating the boundary message", () => {
     const initial = snapshot([mobileMessage("m-2", [], 2), mobileMessage("m-3", [], 3)], 2);
 

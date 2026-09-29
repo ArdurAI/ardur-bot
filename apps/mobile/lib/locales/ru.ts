@@ -167,6 +167,7 @@ export const RU_MESSAGES: Record<string, string> = {
   Read: "Прочитано",
   Replied: "Получен ответ",
   "Waiting for a turn": "Ожидает очереди",
+  "Waiting for a free place": "Ждёт свободного места",
   Expired: "Срок истёк",
   "Could not update learning. Try again.": "Не удалось обновить обучение. Повторите попытку.",
   "Could not update this task; try again.": "Не удалось обновить задачу. Повторите попытку.",
@@ -1162,6 +1163,7 @@ export const RU_MESSAGES: Record<string, string> = {
   "All bots": "Все боты",
   "Bots keep the board and memory current":
     "Боты поддерживают доску и память в актуальном состоянии",
+  "Bots answering at once": "Боты, отвечающие одновременно",
   "Learning review is off": "Проверка обучения выключена",
   "Learning review is on": "Проверка обучения включена",
   "Reviewer: {model}": "Проверяющая модель: {model}",

@@ -1677,9 +1677,11 @@ function Thread() {
     ) : inGroup && workingGroupBots.length > 0 ? (
       <View
         accessibilityLabel={
-          workingGroupBots.length === 1
-            ? t("{name} is working", { name: workingGroupBots[0]?.name ?? t("Agent") })
-            : t("{count} agents working", { count: workingGroupBots.length })
+          workingGroupBots.every((bot) => bot.status === "queued")
+            ? t("Waiting for a free place")
+            : workingGroupBots.length === 1
+              ? t("{name} is working", { name: workingGroupBots[0]?.name ?? t("Agent") })
+              : t("{count} agents working", { count: workingGroupBots.length })
         }
         accessibilityRole="text"
         style={{
@@ -1708,6 +1710,11 @@ function Thread() {
             </View>
           ))}
         </View>
+        {workingGroupBots.every((bot) => bot.status === "queued") ? (
+          <Text style={{ color: tokens.mutedForeground, fontSize: 13 }}>
+            {t("Waiting for a free place")}
+          </Text>
+        ) : null}
       </View>
     ) : null;
 

@@ -830,6 +830,7 @@ export type MobileGroup = Pick<
   | "updatedAt"
   | "members"
   | "coordinatorBotId"
+  | "roomPolicy"
 > &
   Partial<Pick<Group, "spaceId">>;
 
