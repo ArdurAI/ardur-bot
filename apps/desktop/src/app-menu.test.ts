@@ -3,7 +3,14 @@ import type { AppShortcutId } from "@ardurbot/contracts/app-shortcuts";
 import { APP_SHORTCUTS } from "@ardurbot/contracts/app-shortcuts";
 import type { MenuItemConstructorOptions } from "electron";
 import { describe, expect, it, vi } from "vitest";
-import { APP_SHORTCUT_CHANNEL, applicationMenuTemplate, runAppShortcut } from "./app-menu.js";
+import {
+  APP_SHORTCUT_CHANNEL,
+  applicationMenuTemplate,
+  applyAppShortcutMenu,
+  appShortcutsEnabled,
+  runAppShortcut,
+  watchAppShortcutMenu,
+} from "./app-menu.js";
 
 const server = {
   localSettings: { id: "local-server-settings", label: "Local Server Settings…" },
@@ -132,4 +139,91 @@ describe("desktop application menu", () => {
     );
     expect(send).not.toHaveBeenCalled();
   });
+
+  it("turns every shortcut off on the IDE page and back on everywhere else", () => {
+    expect(appShortcutsEnabled("https://ardurbot.local/app/ide")).toBe(false);
+    expect(appShortcutsEnabled("https://ardurbot.local/app/ide/")).toBe(false);
+    expect(appShortcutsEnabled("https://ardurbot.local/app/ide?file=a.ts#L1")).toBe(false);
+    expect(appShortcutsEnabled("/app/ide")).toBe(false);
+    expect(appShortcutsEnabled("https://ardurbot.local/app/bots")).toBe(true);
+    expect(appShortcutsEnabled("https://ardurbot.local/app/ide/extra")).toBe(true);
+    expect(appShortcutsEnabled("https://ardurbot.local/app/identity")).toBe(true);
+    expect(appShortcutsEnabled("about:blank")).toBe(true);
+    expect(appShortcutsEnabled("not a url")).toBe(true);
+
+    const menu = shortcutMenu(true);
+    applyAppShortcutMenu(menu, "https://ardurbot.local/app/ide/");
+    for (const shortcut of APP_SHORTCUTS) {
+      expect(menu.getMenuItemById(`app-shortcut-${shortcut.id}`)?.enabled, shortcut.id).toBe(false);
+    }
+    applyAppShortcutMenu(menu, "https://ardurbot.local/app/bots");
+    for (const shortcut of APP_SHORTCUTS) {
+      expect(menu.getMenuItemById(`app-shortcut-${shortcut.id}`)?.enabled, shortcut.id).toBe(true);
+    }
+  });
+
+  it("follows the main frame and ignores a hidden window", () => {
+    const menu = shortcutMenu(true);
+    const contents = fakeContents("about:blank");
+    let active = true;
+    watchAppShortcutMenu(
+      contents as unknown as Parameters<typeof watchAppShortcutMenu>[0],
+      () => menu,
+      () => active,
+    );
+    contents.emitInPage("https://ardurbot.local/app/ide", false);
+    expect(menu.getMenuItemById("app-shortcut-back")?.enabled).toBe(true);
+    contents.emitInPage("https://ardurbot.local/app/ide?x=1", true);
+    expect(menu.getMenuItemById("app-shortcut-settings")?.enabled).toBe(false);
+    contents.emitNavigate("https://ardurbot.local/app/bots");
+    expect(menu.getMenuItemById("app-shortcut-back")?.enabled).toBe(true);
+    active = false;
+    contents.emitNavigate("https://ardurbot.local/app/ide");
+    expect(menu.getMenuItemById("app-shortcut-back")?.enabled).toBe(true);
+    contents.emitFinish("https://ardurbot.local/app/ide");
+    expect(menu.getMenuItemById("app-shortcut-find")?.enabled).toBe(true);
+    active = true;
+    contents.emitFinish("https://ardurbot.local/app/ide");
+    expect(menu.getMenuItemById("app-shortcut-find")?.enabled).toBe(false);
+
+    const main = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+    expect(main).toContain("watchAppShortcutMenu(");
+    expect(main).toContain("applyAppShortcutMenu(");
+  });
 });
+
+function shortcutMenu(enabled: boolean) {
+  const entries = new Map(
+    APP_SHORTCUTS.map((shortcut) => [`app-shortcut-${shortcut.id}`, { enabled }]),
+  );
+  return {
+    getMenuItemById: (id: string) => entries.get(id) ?? null,
+  };
+}
+
+function fakeContents(url: string) {
+  const listeners = new Map<string, Array<(...args: never[]) => void>>();
+  let current = url;
+  return {
+    getURL: () => current,
+    on(event: string, listener: (...args: never[]) => void) {
+      const list = listeners.get(event) ?? [];
+      list.push(listener);
+      listeners.set(event, list);
+    },
+    emitNavigate(next: string) {
+      current = next;
+      for (const listener of listeners.get("did-navigate") ?? [])
+        listener({} as never, next as never);
+    },
+    emitInPage(next: string, isMainFrame: boolean) {
+      current = next;
+      for (const listener of listeners.get("did-navigate-in-page") ?? [])
+        listener({} as never, next as never, isMainFrame as never);
+    },
+    emitFinish(next: string) {
+      current = next;
+      for (const listener of listeners.get("did-finish-load") ?? []) listener();
+    },
+  };
+}

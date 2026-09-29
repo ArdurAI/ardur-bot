@@ -1,6 +1,6 @@
 import type { AppShortcutId } from "@ardurbot/contracts/app-shortcuts";
-import { appShortcutAccelerator } from "@ardurbot/contracts/app-shortcuts";
-import type { BrowserWindow, MenuItemConstructorOptions } from "electron";
+import { APP_SHORTCUTS, appShortcutAccelerator } from "@ardurbot/contracts/app-shortcuts";
+import type { BrowserWindow, MenuItemConstructorOptions, WebContents } from "electron";
 
 export const APP_SHORTCUT_CHANNEL = "desktop.shortcuts.run";
 
@@ -17,8 +17,8 @@ const LABELS: Record<AppShortcutId, string> = {
 
 /**
  * The page handles app shortcut keys itself, so Windows and Linux only show the accelerator.
- * macOS always registers menu keys; it receives only the ones the page leaves alone, such as
- * keys pressed in the terminal, and the page then applies its own rules to the request.
+ * macOS always registers menu keys. The page refuses a request while the terminal is focused.
+ * On the IDE page these items are turned off, so indent and the editor keep the key.
  */
 export function appShortcutMenuItem(
   id: AppShortcutId,
@@ -108,4 +108,48 @@ export function applicationMenuTemplate(
     },
     ...app,
   ];
+}
+
+/** Shell shortcuts stay off on the IDE page so the editor, including indent, receives the key. */
+export function appShortcutsEnabled(url: string): boolean {
+  try {
+    const pathname = new URL(url, "https://ardurbot.local").pathname.replace(/\/+$/, "") || "/";
+    return pathname !== "/app/ide";
+  } catch {
+    return true;
+  }
+}
+
+type AppShortcutMenu = {
+  getMenuItemById(id: string): { enabled: boolean } | null;
+};
+
+export function applyAppShortcutMenu(menu: AppShortcutMenu, url: string) {
+  const enabled = appShortcutsEnabled(url);
+  for (const shortcut of APP_SHORTCUTS) {
+    const item = menu.getMenuItemById(`app-shortcut-${shortcut.id}`);
+    if (item) item.enabled = enabled;
+  }
+}
+
+/**
+ * Keeps the shared menu in step with the main window. A hidden window from a server switch
+ * must not change it, and a frame inside the page must not either.
+ */
+export function watchAppShortcutMenu(
+  contents: WebContents,
+  getMenu: () => AppShortcutMenu | null,
+  isActive: () => boolean = () => true,
+) {
+  const apply = (url: string) => {
+    if (!isActive()) return;
+    const menu = getMenu();
+    if (menu) applyAppShortcutMenu(menu, url);
+  };
+  contents.on("did-navigate", (_event, url) => apply(url));
+  contents.on("did-navigate-in-page", (_event, url, isMainFrame) => {
+    if (isMainFrame === false) return;
+    apply(url);
+  });
+  contents.on("did-finish-load", () => apply(contents.getURL()));
 }

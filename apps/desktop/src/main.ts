@@ -8,7 +8,12 @@ import { GUIDED_SETUP_CHANNELS } from "@ardurbot/contracts/desktop-setup";
 import { LOCAL_SETTINGS_PAGE } from "@ardurbot/contracts/local-settings";
 import type { Session } from "electron";
 import { app, BrowserWindow, dialog, ipcMain, Menu, net, session, shell } from "electron";
-import { applicationMenuTemplate, runAppShortcut } from "./app-menu.js";
+import {
+  applicationMenuTemplate,
+  applyAppShortcutMenu,
+  runAppShortcut,
+  watchAppShortcutMenu,
+} from "./app-menu.js";
 import type { ElectronAutoUpdater } from "./auto-update.js";
 import { DesktopUpdateController, LAUNCH_CHECK_DELAY_MS } from "./auto-update.js";
 import { openBrowserAuth } from "./browser-auth.js";
@@ -364,6 +369,11 @@ function createWindow(url: string, partition: string | null) {
     },
   });
   mainWindow = win;
+  watchAppShortcutMenu(
+    win.webContents,
+    () => Menu.getApplicationMenu(),
+    () => mainWindow === win,
+  );
   appWindowTargets.set(win, url);
   desktopSystem?.attachWindow(win, url);
   const targetOrigin = safeOrigin(url);
@@ -944,6 +954,12 @@ async function showLocalSettings() {
   }
 }
 
+function syncAppShortcutMenu(win: BrowserWindow) {
+  if (win.isDestroyed()) return;
+  const menu = Menu.getApplicationMenu();
+  if (menu) applyAppShortcutMenu(menu, win.webContents.getURL());
+}
+
 function installApplicationMenu() {
   if (process.platform === "darwin") app.setAboutPanelOptions({ applicationName: "Ardur" });
   const localSettings: Electron.MenuItemConstructorOptions = {
@@ -1122,7 +1138,10 @@ async function openAppOnce(targetUrl: string, resolved?: ResolvedSessionTarget) 
   } catch (error) {
     pendingPreviousWindow = null;
     // Keep the previous app window so Cancel / close can restore it.
-    if (previous !== null && !previous.isDestroyed()) mainWindow = previous;
+    if (previous !== null && !previous.isDestroyed()) {
+      mainWindow = previous;
+      syncAppShortcutMenu(previous);
+    }
     // Show the setup window BEFORE destroying the failed one: on Windows/Linux,
     // destroying the last window fires "window-all-closed" -> app.quit() before
     // showSetupWindow() runs, so the app silently exits instead of showing this error.
@@ -1152,6 +1171,7 @@ async function abandonPendingAppSwitch(
   if (previous !== null && !previous.isDestroyed()) {
     const failed = mainWindow;
     mainWindow = previous;
+    syncAppShortcutMenu(previous);
     if (failed !== null && !failed.isDestroyed() && failed !== previous) failed.destroy();
     currentSetup = previousSetup;
     currentTargetUrl = previousUrl;

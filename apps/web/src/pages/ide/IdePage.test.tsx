@@ -533,4 +533,29 @@ describe("IDE page", () => {
     await key("p");
     expect(host.querySelector("input[aria-label='Quick open']")).not.toBeNull();
   });
+
+  it("leaves indent keys to the editor", async () => {
+    await click("readme.md");
+    await tick();
+    const editor = host.querySelector("textarea[data-editor]")!;
+    for (const [key, code] of [
+      ["[", "BracketLeft"],
+      ["]", "BracketRight"],
+    ] as const) {
+      for (const modifier of ["metaKey", "ctrlKey"] as const) {
+        const event = new KeyboardEvent("keydown", {
+          key,
+          code,
+          [modifier]: true,
+          bubbles: true,
+          cancelable: true,
+        });
+        await act(async () => {
+          editor.dispatchEvent(event);
+        });
+        expect(event.defaultPrevented, `${modifier} ${key}`).toBe(false);
+      }
+    }
+    expect(window.location.pathname).toBe("/app/ide");
+  });
 });

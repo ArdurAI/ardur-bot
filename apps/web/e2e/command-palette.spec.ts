@@ -123,4 +123,19 @@ test("daily shortcuts run from the keyboard and show in the palette", async ({
   await settings.click();
   await expect(dialog).toBeHidden();
   await expect(page.getByTestId("user-settings")).toBeVisible();
+
+  // Search from the Board has to land on the bots list and focus that search.
+  // Settings is closed first so the dialog does not take the key.
+  await page.getByRole("button", { name: "Close user settings" }).click();
+  await expect(page.getByTestId("user-settings")).toBeHidden();
+  await page.getByRole("link", { name: "Dashboard", exact: true }).click();
+  await expect(page.getByTestId("dashboard")).toBeVisible();
+  await page
+    .getByRole("navigation", { name: "Dashboard", exact: true })
+    .getByRole("link", { name: "Board", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/app\/board$/);
+  await page.keyboard.press("ControlOrMeta+F");
+  await expect(page).toHaveURL(/\/app\/bots$/);
+  await expect(page.getByTestId("sidebar-search").locator("input")).toBeFocused();
 });

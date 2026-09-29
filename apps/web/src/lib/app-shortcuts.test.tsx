@@ -182,6 +182,36 @@ describe("useAppShortcuts", () => {
     expect(press(document.body, "toggleSidebar", false).defaultPrevented).toBe(false);
     expect(press(document.body, "settings", false).defaultPrevented).toBe(true);
     expect(settings).toHaveBeenCalledOnce();
+    // No Back handler: a dialog does not become a reason to cancel the key.
+    const panel = container.querySelector('[role="dialog"]')!;
+    expect(press(panel, "back", false).defaultPrevented).toBe(false);
+  });
+
+  it("cancels Back and Forward on a dialog panel, and leaves a text field alone", async () => {
+    setPlatform("MacIntel");
+    await act(async () => root.render(<Harness />));
+    const panel = container.querySelector('[role="dialog"]')!;
+    for (const id of ["back", "forward"] as const) {
+      const event = press(panel, id, true);
+      expect(event.defaultPrevented, id).toBe(true);
+    }
+    expect(handlers.back).not.toHaveBeenCalled();
+    expect(handlers.forward).not.toHaveBeenCalled();
+    // Other shortcuts still wait. The palette and Settings keep running.
+    expect(press(panel, "find", true).defaultPrevented).toBe(false);
+    expect(handlers.find).not.toHaveBeenCalled();
+    expect(press(panel, "settings", true).defaultPrevented).toBe(true);
+    expect(handlers.settings).toHaveBeenCalledOnce();
+
+    const dialogField = field("Dialog field");
+    for (const id of ["back", "forward"] as const) {
+      expect(press(dialogField, id, true).defaultPrevented, id).toBe(true);
+    }
+    expect(handlers.back).not.toHaveBeenCalled();
+    expect(handlers.forward).not.toHaveBeenCalled();
+    const typed = new KeyboardEvent("keydown", { key: "a", bubbles: true, cancelable: true });
+    dialogField.dispatchEvent(typed);
+    expect(typed.defaultPrevented).toBe(false);
   });
 
   it("runs desktop menu requests through the same rules and stops listening on unmount", async () => {
@@ -208,6 +238,30 @@ describe("useAppShortcuts", () => {
     expect(stop).toHaveBeenCalledOnce();
     press(document.body, "newBot", true);
     expect(handlers.newBot).toHaveBeenCalledOnce();
+  });
+
+  it("refuses a desktop menu shortcut while the terminal is focused", async () => {
+    setPlatform("MacIntel");
+    let menu: ((id: string) => void) | undefined;
+    window.ardurbotDesktop = {
+      shortcuts: {
+        onRun: (listener: (id: string) => void) => {
+          menu = listener;
+          return () => undefined;
+        },
+      },
+    } as unknown as ArdurBotDesktop;
+    await act(async () => root.render(<Harness />));
+    const terminal = field("Terminal") as HTMLTextAreaElement;
+    terminal.focus();
+    expect(document.activeElement).toBe(terminal);
+    menu!("back");
+    menu!("commandPalette");
+    expect(fired()).toEqual([]);
+    // The key stays with the terminal, as it does when the menu does not register it.
+    expect(press(terminal, "back", true).defaultPrevented).toBe(false);
+    expect(press(terminal, "commandPalette", true).defaultPrevented).toBe(false);
+    expect(fired()).toEqual([]);
   });
 
   it("calls the latest handler after a re-render", async () => {

@@ -125,7 +125,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArtifactFileCard } from "../components/ArtifactFileCard";
 import { AskCard } from "../components/AskCard";
 import { ActiveBotGlyph } from "../components/ai/CollaborationMarker";
@@ -247,6 +247,11 @@ import {
   McpApprovalCard,
 } from "./shell/message-cards";
 import { ProviderErrorMessage } from "./shell/provider-error-message";
+import {
+  botsSidebarCollapsedForPage,
+  sidebarSearchFocusRequested,
+  useSidebarSearchFocus,
+} from "./shell/sidebar-search-focus";
 import { useComputerTerminalOpen } from "./shell/use-computer-terminal-open";
 import { useTakeControl } from "./shell/use-take-control";
 import { handleWorkspaceOpenRun } from "./shell/workspace-run";
@@ -401,6 +406,7 @@ export function ShellPage({
   teamView.current = team || board || dashboard;
   const { botId, groupId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   // Mirrors searchParams for effects that only need to read it once on run,
   // not re-run on every unrelated query-param change (e.g. the SSE subscribe
@@ -427,9 +433,16 @@ export function ShellPage({
   useEffect(() => {
     setCollapsedSidebarSections(readCollapsedSidebarSections(userId));
   }, [userId]);
+  const [sidebarPrefReady, setSidebarPrefReady] = useState(false);
+  // A search from the Board arrives on the next page. Open the list before focusing it,
+  // and save that, or the stored preference closes the list again once the request is cleared.
   useEffect(() => {
-    setBotsSidebarCollapsed(readBotsSidebarCollapsed(userId));
-  }, [userId]);
+    const stored = readBotsSidebarCollapsed(userId);
+    const requested = sidebarSearchFocusRequested(location.state);
+    setBotsSidebarCollapsed(botsSidebarCollapsedForPage(stored, requested, dashboard));
+    if (requested && !dashboard && stored) writeBotsSidebarCollapsed(userId, false);
+    setSidebarPrefReady(true);
+  }, [userId, dashboard, location.state]);
   const [query, setQuery] = useState("");
   const [searchHits, setSearchHits] = useState<SearchHit[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -2580,16 +2593,17 @@ export function ShellPage({
   }, [computerOpen]);
 
   const sidebarSearchRef = useRef<HTMLInputElement>(null);
-  const sidebarSearchPending = useRef(false);
-  const [sidebarSearchRequest, setSidebarSearchRequest] = useState(0);
-  // Search waits until the bots list is shown: it is hidden on the dashboard and when minimized.
-  useEffect(() => {
-    if (!sidebarSearchPending.current || dashboard || (botsSidebarCollapsed && !mobileSidebarOpen))
-      return;
-    sidebarSearchPending.current = false;
-    sidebarSearchRef.current?.focus();
-  }, [sidebarSearchRequest, dashboard, botsSidebarCollapsed, mobileSidebarOpen]);
   const narrowLayout = () => window.matchMedia("(max-width: 767px)").matches;
+  const requestSidebarSearch = useSidebarSearchFocus({
+    dashboard,
+    hidden: botsSidebarCollapsed && !mobileSidebarOpen,
+    ready: sidebarPrefReady,
+    reveal: () => {
+      if (narrowLayout()) setMobileSidebarOpen(true);
+      else setBotsSidebarCollapsedPref(false);
+    },
+    inputRef: sidebarSearchRef,
+  });
   const shortcutHandlers = {
     commandPalette: () => setCommandPaletteState(!commandPaletteOpenRef.current),
     newBot: () => {
@@ -2607,11 +2621,10 @@ export function ShellPage({
             );
           },
     find: () => {
-      if (dashboard) navigate("/app/bots");
-      if (narrowLayout()) setMobileSidebarOpen(true);
-      else if (botsSidebarCollapsed) setBotsSidebarCollapsedPref(false);
-      sidebarSearchPending.current = true;
-      setSidebarSearchRequest((request) => request + 1);
+      // The Board shell unmounts on the way to the bots list, so the request has to
+      // travel with the route. Remember the list open before that page reads the preference.
+      if (dashboard) writeBotsSidebarCollapsed(userId, false);
+      requestSidebarSearch();
     },
     toggleSidebar: dashboard
       ? undefined
@@ -4864,7 +4877,7 @@ export function ShellPage({
             size="icon"
             className="app-no-drag"
             aria-label={t`Search`}
-            aria-keyshortcuts={shortcutAria("commandPalette")}
+            aria-keyshortcuts={shortcutAria("find")}
             onClick={() => setCommandPaletteState(true)}
           >
             <Search size={17} />

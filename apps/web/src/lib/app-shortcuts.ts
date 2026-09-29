@@ -49,36 +49,47 @@ function isTextField(target: Element) {
   );
 }
 
+type ShortcutRun = "ran" | "dialog" | "skipped";
+
 /**
  * Runs app shortcuts from the keyboard and from the desktop menu. Handlers that are missing
  * leave the key to the browser, for example Hide bots on a page without the bots list.
+ * The terminal refuses every shortcut, so a desktop menu request cannot run one either.
+ * A dialog blocks every shortcut except the palette and Settings; Back and Forward still
+ * cancel the browser's history keys. A text field keeps its own rule and is unchanged.
  */
 export function useAppShortcuts(handlers: AppShortcutHandlers) {
   const latest = useRef(handlers);
   latest.current = handlers;
   useEffect(() => {
     const apple = isApplePlatform();
-    function run(id: AppShortcutId, focus: Element | null) {
+    function run(id: AppShortcutId, focus: Element | null): ShortcutRun {
       const handler = latest.current[id];
-      if (!handler) return false;
+      if (!handler) return "skipped";
+      // One rule for the keyboard and the desktop menu (`desktop.shortcuts.run`).
+      if (focus?.closest("[data-terminal-root]")) return "skipped";
       if (!OVER_DIALOGS.has(id) && focus?.closest('[role="dialog"], [role="alertdialog"]'))
-        return false;
+        return "dialog";
       handler();
-      return true;
+      return "ran";
     }
     function onKey(event: KeyboardEvent) {
       if (event.defaultPrevented || event.repeat || event.isComposing) return;
       const shortcut = matchAppShortcut(event, apple);
       if (!shortcut) return;
       const target = event.target instanceof Element ? event.target : null;
-      // The terminal sends Control keys to the shell.
-      if (target?.closest("[data-terminal-root]")) return;
-      if (!shortcut.typing && target && isTextField(target)) {
-        // Swallowed so neither the browser nor the desktop menu leaves the draft.
+      const inTerminal = target?.closest("[data-terminal-root]");
+      // Swallowed so neither the browser nor the desktop menu leaves the draft.
+      // The terminal is excluded: it keeps the key, including on a Mac where the
+      // menu would otherwise claim a key the page did not cancel.
+      if (!inTerminal && !shortcut.typing && target && isTextField(target)) {
         event.preventDefault();
         return;
       }
-      if (run(shortcut.id, target)) event.preventDefault();
+      const result = run(shortcut.id, target);
+      if (result === "ran") event.preventDefault();
+      else if (result === "dialog" && (shortcut.id === "back" || shortcut.id === "forward"))
+        event.preventDefault();
     }
     window.addEventListener("keydown", onKey);
     const stopMenu = desktopBridge()?.shortcuts?.onRun((id) => {
