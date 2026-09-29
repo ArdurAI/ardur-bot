@@ -954,6 +954,8 @@ export function blockText(
     .map((block, index) => {
       if (isReasoningSummaryBlock(block)) return "";
       if (isInterimNarrationAt(message.blocks, index)) return "";
+      // Coordination is the owner's quiet line, never spoken text (same as web).
+      if (block.kind === "coordination") return "";
       if (block.kind === "text" && block.notice && translateNotice)
         return translateNotice(block.notice);
       if (block.kind === "channel_message") {
