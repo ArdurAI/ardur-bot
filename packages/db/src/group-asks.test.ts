@@ -479,13 +479,17 @@ describe("group ask budget", () => {
 });
 
 describe("coordination round recording", () => {
+  // Tool call ids from runtimes can contain colons (the scripted runtime uses
+  // `<runId>:<tool>:<seq>`), so the round's message nonce is the admission key
+  // minus its final member segment, not a fixed part count.
+  const callId = "ask-run:ask_members:0";
   const coordinationMessage = {
     id: "ask-message",
     botId: "chief",
     blocks: [
       {
         kind: "coordination",
-        nonce: "group-ask:1:ask-run:call-1",
+        nonce: `group-ask:1:ask-run:${callId}`,
         round: 1,
         text: "Say hello.",
         updates: [],
@@ -531,7 +535,7 @@ describe("coordination round recording", () => {
   const delegation = (patch: Record<string, unknown> = {}) => ({
     actingBotId: "ada",
     actingName: "Ada",
-    admissionKey: groupAskKey(ask, "call-1", "ada"),
+    admissionKey: groupAskKey(ask, callId, "ada"),
     ...patch,
   });
 

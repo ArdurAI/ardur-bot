@@ -359,9 +359,13 @@ export async function recordGroupAskUpdateInTransaction(
 }
 
 function groupAskMessageNonceFromPrefix(admissionKey: string): string | null {
-  // group-ask:<round>:<askRunId>:<callId>:<memberId> → group-ask:<round>:<askRunId>:<callId>
-  const parts = admissionKey.split(":");
-  return parts.length === 5 ? parts.slice(0, 4).join(":") : null;
+  // group-ask:<round>:<askRunId>:<callId>:<memberId> → the round message nonce.
+  // The call id itself may contain colons, so drop the final member segment
+  // instead of counting parts.
+  const at = admissionKey.lastIndexOf(":");
+  return at > GROUP_ASK_KEY_PREFIX.length && at < admissionKey.length - 1
+    ? admissionKey.slice(0, at)
+    : null;
 }
 
 export type GroupAskResults = {
