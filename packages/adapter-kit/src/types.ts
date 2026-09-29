@@ -264,6 +264,9 @@ export interface MemorySnapshot {
     content: string;
     revision: number;
     updatedAt?: string;
+    /** Durable scope and owner when the store knows them; the recall index filters by them. */
+    scope?: "bot" | "user" | "shared";
+    owner?: string;
   }>;
 }
 
