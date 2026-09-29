@@ -1,6 +1,7 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { renameSync, rmSync, symlinkSync } from "node:fs";
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough, Writable } from "node:stream";
@@ -58,6 +59,18 @@ function fixture(
   scenario?: { beforeStart?: Message[]; duringTurn: Message[] },
 ) {
   const messages: Message[] = [];
+  /**
+   * What this Codex answers when a session starts, and anything that happens to the disk
+   * along the way. It reports the instruction files it loaded (none, unless set) and the
+   * folder it was asked to use.
+   */
+  const loaded: {
+    instructionSources?: unknown;
+    omitInstructionSources?: boolean;
+    cwd?: unknown;
+    whileConfiguring?: () => void;
+    whileStarting?: () => void;
+  } = {};
   const child = new EventEmitter() as ChildProcessWithoutNullStreams;
   const stdout = new PassThrough();
   const stderr = new PassThrough();
@@ -89,6 +102,7 @@ function fixture(
           });
           break;
         case "config/read":
+          loaded.whileConfiguring?.();
           result({
             config: {
               mcp_servers: {
@@ -120,7 +134,12 @@ function fixture(
             break;
           }
           for (const event of scenario?.beforeStart ?? []) send(event);
+          loaded.whileStarting?.();
           result({
+            ...(loaded.omitInstructionSources
+              ? {}
+              : { instructionSources: loaded.instructionSources ?? [] }),
+            cwd: "cwd" in loaded ? loaded.cwd : message.params?.cwd,
             thread: { id: "thread-native" },
             model: mode === "wrong-model" ? "replacement" : "model",
             modelProvider: "openai",
@@ -281,7 +300,7 @@ function fixture(
     for await (const event of runtime.run(request)) events.push(event);
     return events;
   };
-  return { collect, messages, request, info, spawn, runtime, child };
+  return { collect, messages, request, info, spawn, runtime, child, loaded };
 }
 describe("Codex app-server protocol", () => {
   it("stops a held turn after cancellation", async () => {
@@ -869,14 +888,27 @@ describe("instruction file grants", () => {
   afterEach(async () => {
     if (root) await rm(root, { recursive: true, force: true });
   });
+  /** A scratch folder, spelled as the disk spells it (the system temp folder is itself a link). */
+  const scratch = async () => {
+    root = await realpath(await mkdtemp(path.join(tmpdir(), "codex-grants-")));
+    return root;
+  };
+  const refused = (f: ReturnType<typeof fixture>, runtime: CodexAppServerRuntime) =>
+    (async () => {
+      for await (const _event of runtime.run(f.request)) {
+        // drain
+      }
+    })();
   it.each(["thread/start", "thread/resume"] as const)(
-    "grants exactly the ancestor instruction files for %s",
+    "hands Codex the project instructions as text and grants only the folder for %s",
     async (method) => {
-      root = await mkdtemp(path.join(tmpdir(), "codex-grants-"));
-      const repo = path.join(root, "repo");
+      const repo = path.join(await scratch(), "repo");
       const folder = path.join(repo, "a", "b");
       await mkdir(path.join(repo, ".git"), { recursive: true });
       await mkdir(folder, { recursive: true });
+      await writeFile(path.join(repo, "AGENTS.md"), "root rules\n");
+      await writeFile(path.join(repo, "a", "AGENTS.override.md"), "area rules");
+      await writeFile(path.join(folder, "AGENTS.md"), "folder rules");
       const f = fixture();
       f.request.nativeCwd = folder;
       if (method === "thread/resume")
@@ -884,19 +916,276 @@ describe("instruction file grants", () => {
       await f.collect();
       const start = f.messages.find((event) => event.method === method);
       const config = start?.params?.config as {
+        project_doc_max_bytes?: number;
         permissions?: { "ardur-read": { filesystem: Record<string, string> } };
       };
-      const files = [repo, path.join(repo, "a"), folder].flatMap((dir) => [
-        path.join(dir, "AGENTS.md"),
-        path.join(dir, "AGENTS.override.md"),
-      ]);
+      // Codex opens no file for project instructions, so none is granted.
+      expect(config.project_doc_max_bytes).toBe(0);
       expect(config.permissions?.["ardur-read"].filesystem).toEqual({
         ":minimal": "read",
         [folder]: "read",
-        ...Object.fromEntries(files.map((file) => [file, "read"])),
       });
+      expect(start?.params?.baseInstructions).toBe(
+        [
+          "bot instructions",
+          "Project instructions (from the folder's instruction files):",
+          "root rules\n\narea rules\n\nfolder rules",
+        ].join("\n\n"),
+      );
     },
   );
+  it("sends the bot's own instructions alone when the folder has no instruction files", async () => {
+    const folder = path.join(await scratch(), "bot");
+    await mkdir(folder, { recursive: true });
+    const f = fixture();
+    f.request.nativeCwd = folder;
+    await f.collect();
+    const start = f.messages.find((event) => event.method === "thread/start");
+    expect(start?.params?.baseInstructions).toBe("bot instructions");
+    expect(start?.params?.config).toMatchObject({ project_doc_max_bytes: 0 });
+  });
+  it.each(["thread/start", "thread/resume"] as const)(
+    "refuses an instruction file that links outside the project for %s",
+    async (method) => {
+      const folder = path.join(await scratch(), "bot");
+      const vault = path.join(root, "vault");
+      await mkdir(folder, { recursive: true });
+      await mkdir(vault, { recursive: true });
+      await writeFile(path.join(vault, "secret.txt"), "protected");
+      await symlink(path.join(vault, "secret.txt"), path.join(folder, "AGENTS.md"));
+      const f = fixture();
+      f.request.nativeCwd = folder;
+      if (method === "thread/resume")
+        f.request.nativeSession = { runtimeKind: "codex-app-server", sessionId: "thread-native" };
+      await expect(f.collect()).rejects.toMatchObject({
+        problem: {
+          code: "runtime-unavailable",
+          reason:
+            "Codex can't start: Ardur can't safely read AGENTS.md for this bot. Replace it with a plain file.",
+        },
+      });
+      expect(f.messages.some((event) => event.method === method)).toBe(false);
+      expect(f.messages.some((event) => event.method === "turn/start")).toBe(false);
+    },
+  );
+  it("reads no instruction file for a controlled comparison, even an unsafe one", async () => {
+    const folder = path.join(await scratch(), "bot");
+    const vault = path.join(root, "vault");
+    await mkdir(folder, { recursive: true });
+    await mkdir(vault, { recursive: true });
+    await writeFile(path.join(vault, "secret.txt"), "protected");
+    await symlink(path.join(vault, "secret.txt"), path.join(folder, "AGENTS.md"));
+    const f = fixture();
+    f.request.nativeCwd = folder;
+    f.request.controlledComparison = true;
+    await f.collect();
+    const start = f.messages.find((event) => event.method === "thread/start");
+    expect(start?.params?.baseInstructions).toBe("bot instructions");
+    expect(start?.params?.config).toMatchObject({
+      project_doc_max_bytes: 0,
+      developer_instructions: "",
+    });
+  });
+  describe("what Codex says it loaded", () => {
+    const refusal = {
+      problem: {
+        code: "runtime-unavailable",
+        reason:
+          "Codex can't start: an instructions file it loaded changed or points at protected data. Check the file in Codex's folder and try again.",
+      },
+    };
+    /** Codex's own folder with its instruction file, last changed a while ago. */
+    const codexHome = async () => {
+      const home = path.join(await scratch(), "codex-home");
+      await mkdir(home, { recursive: true });
+      const file = path.join(home, "AGENTS.md");
+      await writeFile(file, "the person's own rules");
+      // The disk's clock and the process's clock tick apart by a hair; let the file settle.
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return file;
+    };
+    it("starts the turn when the file is ordinary and unchanged", async () => {
+      const file = await codexHome();
+      const f = fixture();
+      f.loaded.instructionSources = [file];
+      const events = await f.collect();
+      expect(events.some((event) => event.type === "done")).toBe(true);
+      expect(f.messages.some((event) => event.method === "turn/start")).toBe(true);
+    });
+    it("sends no turn when the file points at protected data", async () => {
+      const file = await codexHome();
+      const data = path.join(root, "data");
+      await mkdir(data, { recursive: true });
+      await writeFile(path.join(data, "secrets.env"), "KEY=1");
+      await rm(file);
+      await symlink(path.join(data, "secrets.env"), file);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const f = fixture();
+      f.loaded.instructionSources = [file];
+      const runtime = new CodexAppServerRuntime(f.spawn, { paths: [data], ports: [], sockets: [] });
+      await expect(refused(f, runtime)).rejects.toMatchObject(refusal);
+      expect(f.messages.some((event) => event.method === "turn/start")).toBe(false);
+      expect(f.info).not.toHaveBeenCalled();
+    });
+    it("sends no turn when the file was swapped while the session started, then put back", async () => {
+      const file = await codexHome();
+      const f = fixture();
+      f.loaded.instructionSources = [file];
+      f.loaded.whileStarting = () => {
+        renameSync(file, `${file}.kept`);
+        symlinkSync("/nowhere", file);
+        rmSync(file);
+        renameSync(`${file}.kept`, file);
+      };
+      await expect(f.collect()).rejects.toMatchObject(refusal);
+      expect(f.messages.some((event) => event.method === "turn/start")).toBe(false);
+      expect(f.info).not.toHaveBeenCalled();
+    });
+    it("sends no turn when Codex does not say what it loaded", async () => {
+      const f = fixture();
+      f.loaded.omitInstructionSources = true;
+      await expect(f.collect()).rejects.toMatchObject(refusal);
+      expect(f.messages.some((event) => event.method === "turn/start")).toBe(false);
+      expect(f.info).not.toHaveBeenCalled();
+    });
+    it("sends no turn when Codex loaded a file from the project all the same", async () => {
+      const folder = path.join(await scratch(), "bot");
+      await mkdir(folder, { recursive: true });
+      await writeFile(path.join(folder, "AGENTS.md"), "folder rules");
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const f = fixture();
+      f.request.nativeCwd = folder;
+      f.loaded.instructionSources = [path.join(folder, "AGENTS.md")];
+      await expect(f.collect()).rejects.toMatchObject(refusal);
+      expect(f.messages.some((event) => event.method === "turn/start")).toBe(false);
+    });
+  });
+  it("grants the folder as the disk spells it, and refuses one that links into protected data", async () => {
+    const data = path.join(await scratch(), "data");
+    const home = path.join(data, "desktop-computers", "team-a");
+    const secrets = path.join(data, "homes");
+    await mkdir(home, { recursive: true });
+    await mkdir(secrets, { recursive: true });
+    const guard = { paths: [secrets], ports: [], sockets: [] };
+
+    const alias = path.join(root, "alias");
+    await symlink(home, alias);
+    const open = fixture();
+    open.request.nativeCwd = alias;
+    for await (const _event of new CodexAppServerRuntime(open.spawn, guard).run(open.request)) {
+      // drain
+    }
+    const start = open.messages.find((event) => event.method === "thread/start");
+    const config = start?.params?.config as {
+      permissions: { "ardur-read": { filesystem: Record<string, string> } };
+    };
+    expect(config.permissions["ardur-read"].filesystem).toEqual({
+      ":minimal": "read",
+      [home]: "read",
+    });
+    // Codex's own sandbox cannot enter a folder reached through a link, so it gets the real one.
+    expect(start?.params?.cwd).toBe(home);
+    expect((open.spawn.mock.calls[0] as unknown[])[2]).toBe(home);
+
+    const planted = path.join(data, "desktop-computers", "team-b");
+    await symlink(secrets, planted);
+    const closed = fixture();
+    closed.request.nativeCwd = planted;
+    await expect(
+      refused(closed, new CodexAppServerRuntime(closed.spawn, guard)),
+    ).rejects.toMatchObject({
+      problem: {
+        code: "runtime-unavailable",
+        reason:
+          "Codex could not start a session in this bot's folder \u2014 change the bot's computer or the pin.",
+      },
+    });
+    expect(closed.spawn).not.toHaveBeenCalled();
+  });
+  describe("a bot folder swapped for a link into protected data", () => {
+    const folderRefusal = {
+      problem: {
+        code: "runtime-unavailable",
+        reason:
+          "Codex could not start a session in this bot's folder \u2014 change the bot's computer or the pin.",
+      },
+    };
+    const planted = async () => {
+      const data = path.join(await scratch(), "data");
+      const home = path.join(data, "desktop-computers", "team-a");
+      const secrets = path.join(data, "homes");
+      await mkdir(home, { recursive: true });
+      await mkdir(secrets, { recursive: true });
+      const swap = () => {
+        renameSync(home, `${home}.kept`);
+        symlinkSync(secrets, home);
+      };
+      return { home, guard: { paths: [secrets], ports: [], sockets: [] }, swap };
+    };
+    it("asks for no session when the swap happens after the first look", async () => {
+      const { home, guard, swap } = await planted();
+      const f = fixture();
+      f.request.nativeCwd = home;
+      f.loaded.whileConfiguring = swap;
+      await expect(refused(f, new CodexAppServerRuntime(f.spawn, guard))).rejects.toMatchObject(
+        folderRefusal,
+      );
+      expect(f.messages.some((event) => event.method === "thread/start")).toBe(false);
+    });
+    it("sends no turn when the swap happens while the session starts", async () => {
+      const { home, guard, swap } = await planted();
+      const f = fixture();
+      f.request.nativeCwd = home;
+      f.loaded.whileStarting = swap;
+      await expect(refused(f, new CodexAppServerRuntime(f.spawn, guard))).rejects.toMatchObject(
+        folderRefusal,
+      );
+      expect(f.messages.some((event) => event.method === "turn/start")).toBe(false);
+      expect(f.info).not.toHaveBeenCalled();
+    });
+    it.each([
+      ["another folder", "/somewhere/else"],
+      ["no folder", undefined],
+    ])("sends no turn when Codex answers with %s", async (_label, cwd) => {
+      const { home, guard } = await planted();
+      const f = fixture();
+      f.request.nativeCwd = home;
+      f.loaded.cwd = cwd;
+      await expect(refused(f, new CodexAppServerRuntime(f.spawn, guard))).rejects.toMatchObject(
+        folderRefusal,
+      );
+      expect(f.messages.some((event) => event.method === "turn/start")).toBe(false);
+    });
+  });
+  it("refuses a bot folder that overlaps Ardur's protected data, before Codex starts", async () => {
+    // Codex runs under its own sandbox, so the protected paths are enforced on its profile.
+    const guard = { paths: ["/fixture/ardur/data/homes"], ports: [], sockets: [] };
+    for (const folder of ["/fixture/ardur/data/homes/bot-a", "/fixture/ardur/data"]) {
+      const f = fixture();
+      const runtime = new CodexAppServerRuntime(f.spawn, guard);
+      f.request.nativeCwd = folder;
+      await expect(refused(f, runtime)).rejects.toMatchObject({
+        problem: {
+          code: "runtime-unavailable",
+          reason:
+            "Codex could not start a session in this bot's folder \u2014 change the bot's computer or the pin.",
+        },
+      });
+      expect(f.spawn).not.toHaveBeenCalled();
+    }
+  });
+  it("starts in a folder outside Ardur's protected data", async () => {
+    const guard = { paths: ["/fixture/ardur/data/homes"], ports: [], sockets: [] };
+    const f = fixture();
+    const runtime = new CodexAppServerRuntime(f.spawn, guard);
+    f.request.nativeCwd = "/fixture/ardur/data/desktop-computers/team-a";
+    const events: AgentRuntimeEvent[] = [];
+    for await (const event of runtime.run(f.request)) events.push(event);
+    expect(events.some((event) => event.type === "done")).toBe(true);
+    const launched = f.spawn.mock.calls.map((call) => String((call as unknown[])[0]));
+    expect(launched.length).toBeGreaterThan(0);
+    expect(launched).not.toContain("/usr/bin/sandbox-exec");
+  });
   it("reports a rejected session start as such and sends no turn", async () => {
     const f = fixture("thread-rejected");
     await expect(f.collect()).rejects.toMatchObject({

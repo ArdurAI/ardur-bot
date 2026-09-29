@@ -75,6 +75,39 @@ export function guardNativeSpawn(
   };
 }
 
+/**
+ * How each native runtime's session process is launched under the host guardrails.
+ *
+ * - `wrapped`: the process runs inside Ardur's Seatbelt profile.
+ * - `own-sandbox`: the runtime applies its own macOS sandbox, which cannot start inside ours.
+ *   Once a Seatbelt profile with any deny rule is in force, the kernel refuses a second
+ *   `sandbox_apply` ("Operation not permitted", verified on macOS 26). Codex starts a sandbox
+ *   helper to read instruction files, so a wrapped Codex rejects every `thread/start`. It runs
+ *   unwrapped; its own permission profile (read-only, no network, shell tools off) carries the
+ *   protection, and the runtime refuses a folder that holds Ardur's own data.
+ *
+ * Version and sign-in probes stay wrapped for every runtime: they start no sandbox.
+ * To add a runtime, add its entry here and a test in native-platform.test.ts.
+ */
+export const NATIVE_SESSION_GUARD = {
+  "claude-code": "wrapped",
+  "codex-app-server": "own-sandbox",
+  antigravity: "wrapped",
+} as const;
+export type GuardedNativeRuntime = keyof typeof NATIVE_SESSION_GUARD;
+
+/** The spawn a native runtime uses for its session process, chosen from NATIVE_SESSION_GUARD. */
+export function sessionSpawnFor(
+  runtime: GuardedNativeRuntime,
+  guard: HostGuardrailConfig | undefined = guardrailConfigFromEnv(),
+  base: NativeSpawn = spawnNative,
+  platform: NodeJS.Platform = process.platform,
+): NativeSpawn {
+  return NATIVE_SESSION_GUARD[runtime] === "own-sandbox"
+    ? base
+    : guardNativeSpawn(base, guard, platform);
+}
+
 /** The guardrail wrap for a probe that was not given a spawn of its own. Built at call time. */
 export function guardedSpawn(platform: NodeJS.Platform = process.platform): NativeSpawn {
   return guardNativeSpawn(spawnNative, guardrailConfigFromEnv(), platform);

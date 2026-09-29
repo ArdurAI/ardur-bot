@@ -1,10 +1,13 @@
 import type { RuntimePin } from "@ardurbot/contracts";
 import {
   type Actor,
+  applyRoomPolicyPatch,
   GROUP_MEMBER_MAX,
   GROUP_MEMBER_MIN,
   type Group,
   type GroupMember,
+  parseRoomPolicy,
+  type RoomPolicyPatch,
   RuntimePinSchema,
   type SpaceGroup,
 } from "@ardurbot/contracts";
@@ -25,6 +28,7 @@ type GroupRecord = {
   userId: string;
   name: string;
   coordinatorBotId?: string | null;
+  policy?: unknown;
   pinned: boolean;
   sectionId: string | null;
   archivedAt: Date | null;
@@ -116,6 +120,7 @@ function mapGroup(group: GroupRecord): Group {
     threadId: group.thread.id,
     preview,
     unread: group.thread.unread,
+    roomPolicy: parseRoomPolicy(group.policy),
     updatedAt: group.updatedAt.toISOString(),
     createdAt: group.createdAt.toISOString(),
   };
@@ -381,6 +386,7 @@ export function createGroupRepos(prisma: PrismaClient) {
         botIds?: string[];
         pinned?: boolean;
         sectionId?: string | null;
+        roomPolicy?: RoomPolicyPatch;
       },
     ): Promise<{ group: Group; cancelledRunIds: string[] }> {
       const members = input.botIds ? await assertOwnedBots(prisma, actor, input.botIds) : undefined;
@@ -577,6 +583,11 @@ export function createGroupRepos(prisma: PrismaClient) {
                   : undefined,
             pinned: input.pinned,
             sectionId: input.sectionId,
+            // Laid over what the room has stored, under the group lock, so a change to
+            // one setting never resets another.
+            ...(input.roomPolicy !== undefined
+              ? { policy: applyRoomPolicyPatch(current.policy, input.roomPolicy) }
+              : {}),
           },
         });
         return tx.chatGroup

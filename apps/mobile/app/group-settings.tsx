@@ -2,6 +2,10 @@ import {
   type BotCommunicationPolicy,
   GROUP_MEMBER_MAX,
   GROUP_MEMBER_MIN,
+  parseRoomPolicy,
+  ROOM_POLICY_MAX_CONCURRENT_RUNS_MAX,
+  ROOM_POLICY_MAX_CONCURRENT_RUNS_MIN,
+  type RoomPolicyPatch,
   runtimeNames,
   runtimeSupportsTools,
 } from "@ardurbot/contracts";
@@ -39,6 +43,9 @@ export default function GroupSettingsScreen() {
   const [name, setName] = useState("");
   const [coordinator, setCoordinator] = useState<string | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
+  const [maxConcurrentRuns, setMaxConcurrentRuns] = useState(
+    parseRoomPolicy(undefined).maxConcurrentRuns,
+  );
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [spaceTraffic, setSpaceTraffic] = useState<BotCommunicationPolicy | null>(null);
@@ -112,6 +119,7 @@ export default function GroupSettingsScreen() {
         setName(nextGroup.name);
         setCoordinator(nextGroup.coordinatorBotId ?? null);
         setSelected(nextGroup.members.map((member) => member.botId));
+        setMaxConcurrentRuns(parseRoomPolicy(nextGroup.roomPolicy).maxConcurrentRuns);
         setBots(nextBots.filter((bot) => !bot.archivedAt));
       })
       .catch((err) => setError(err instanceof Error ? err.message : t("Could not load group")));
@@ -149,6 +157,11 @@ export default function GroupSettingsScreen() {
       setCoordinator((current) =>
         current === baseCoordinator ? (refreshed.coordinatorBotId ?? null) : current,
       );
+      const baseConcurrency = parseRoomPolicy(base.roomPolicy).maxConcurrentRuns;
+      const refreshedConcurrency = parseRoomPolicy(refreshed.roomPolicy).maxConcurrentRuns;
+      setMaxConcurrentRuns((current) =>
+        current === baseConcurrency ? refreshedConcurrency : current,
+      );
     }
     setGroup(refreshed);
   }
@@ -163,6 +176,7 @@ export default function GroupSettingsScreen() {
         name?: string;
         botIds?: string[];
         coordinatorBotId?: string | null;
+        roomPolicy?: RoomPolicyPatch;
       } = {
         groupId,
         coordinatorBotId: coordinator && selected.includes(coordinator) ? coordinator : null,
@@ -170,6 +184,9 @@ export default function GroupSettingsScreen() {
       if (name.trim() !== group.name) input.name = name.trim();
       const memberIds = group.members.map((member) => member.botId).join(",");
       if (selected.join(",") !== memberIds) input.botIds = selected;
+      if (maxConcurrentRuns !== parseRoomPolicy(group.roomPolicy).maxConcurrentRuns) {
+        input.roomPolicy = { maxConcurrentRuns };
+      }
       await rpc("groups/update", input);
       router.back();
     } catch (err) {
@@ -292,6 +309,32 @@ export default function GroupSettingsScreen() {
             })}
           </Text>
         ) : null}
+        <Pressable
+          accessibilityRole="button"
+          style={{ marginTop: 16 }}
+          onPress={() =>
+            presentMessageActionSheet({
+              title: t("Bots answering at once"),
+              cancel: t("Cancel"),
+              more: t("More"),
+              colorScheme,
+              actions: Array.from(
+                {
+                  length:
+                    ROOM_POLICY_MAX_CONCURRENT_RUNS_MAX - ROOM_POLICY_MAX_CONCURRENT_RUNS_MIN + 1,
+                },
+                (_, index) => {
+                  const value = ROOM_POLICY_MAX_CONCURRENT_RUNS_MIN + index;
+                  return { text: String(value), onPress: () => setMaxConcurrentRuns(value) };
+                },
+              ),
+            })
+          }
+        >
+          <Text style={{ color: tokens.foreground }}>
+            {t("Bots answering at once")}: {maxConcurrentRuns}
+          </Text>
+        </Pressable>
         {error ? <Text style={{ color: tokens.destructive, marginTop: 12 }}>{error}</Text> : null}
         <Pressable
           onPress={() => void save()}

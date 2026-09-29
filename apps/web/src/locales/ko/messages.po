@@ -383,7 +383,7 @@ msgstr "{tokens, plural, other {토큰 #개}}"
 msgid "{toolCount, plural, one {# tool} other {# tools}}"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/lib/working-indicator.ts
 msgid "{workingBotName} is working"
 msgstr "{workingBotName} 작업 중"
 
@@ -556,6 +556,10 @@ msgstr "서버 이름을 입력하세요."
 #: src/pages/McpServersOverlay.tsx
 msgid "Add a stdio command."
 msgstr "stdio 명령을 입력하세요."
+
+#: src/lib/hermes-refusal.ts
+msgid "Add an API key connection to use this provider with Hermes."
+msgstr "Hermes에서 이 제공업체를 사용하려면 API 키 연결을 추가하세요."
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Add an HTTPS server URL."
@@ -1436,7 +1440,11 @@ msgstr ""
 msgid "Bots act without asking by default. Add an exception only when you want to review a type of action first."
 msgstr "Bot은 기본적으로 묻지 않고 작업합니다. 먼저 확인하고 싶은 작업만 예외로 추가하세요."
 
-#: src/pages/Shell.tsx
+#: src/pages/GroupPanel.tsx
+msgid "Bots answering at once"
+msgstr "동시에 답변하는 봇"
+
+#: src/lib/working-indicator.ts
 msgid "Bots are working"
 msgstr "봇 작업 중"
 
@@ -1662,6 +1670,10 @@ msgstr ""
 msgid "Chat Settings"
 msgstr "채팅 설정"
 
+#: src/lib/hermes-refusal.ts
+msgid "ChatGPT sign-ins only work inside Codex; add an OpenAI API key to use GPT models with Hermes."
+msgstr "ChatGPT 로그인은 Codex 안에서만 작동합니다. Hermes에서 GPT 모델을 사용하려면 OpenAI API 키를 추가하세요."
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Check"
 msgstr ""
@@ -1803,6 +1815,10 @@ msgstr ""
 #: src/pages/shell/runtime-settings.tsx
 msgid "Claude Code runs on host computers for now — change the bot's computer or its runtime."
 msgstr ""
+
+#: src/lib/hermes-refusal.ts
+msgid "Claude subscriptions only work in Anthropic's own apps; add an Anthropic API key to use Claude with Hermes."
+msgstr "Claude 구독은 Anthropic 자체 앱에서만 작동합니다. Hermes에서 Claude를 사용하려면 Anthropic API 키를 추가하세요."
 
 #: src/pages/shell/dialogs.tsx
 msgid "Clear"
@@ -4399,16 +4415,6 @@ msgstr "샘플 듣기"
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes"
 msgstr "Hermes"
-
-#: src/pages/group-model-control.tsx
-#: src/pages/shell/bot-panel.tsx
-msgid "Hermes does not yet support Anthropic connections."
-msgstr "Hermes는 아직 Anthropic 연결을 지원하지 않습니다."
-
-#: src/pages/group-model-control.tsx
-#: src/pages/shell/bot-panel.tsx
-msgid "Hermes does not yet support this connection."
-msgstr "Hermes는 아직 이 연결을 지원하지 않습니다."
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes is not installed on this computer."
@@ -9339,6 +9345,10 @@ msgstr "음성을 사용할 수 없습니다."
 #: src/pages/system/SystemPage.tsx
 msgid "Voice shortcut"
 msgstr ""
+
+#: src/lib/working-indicator.ts
+msgid "Waiting for a free place"
+msgstr "빈 자리를 기다리는 중"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts

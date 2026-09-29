@@ -711,6 +711,68 @@ describe("thread event reduction", () => {
     expect(stopped.computer?.busyBotName).toBeNull();
   });
 
+  it("keeps two room bots' drafts independent and stops every run together", () => {
+    const room: ThreadSnapshot = {
+      ...snapshot([]),
+      groupId: "group-1",
+      members: [
+        { botId: "bot-a", name: "Ada", color: "#111" },
+        { botId: "bot-b", name: "Beck", color: "#222" },
+      ],
+    };
+    const started = [
+      event({ type: "run.started", seq: 4, runId: "run-a", botId: "bot-a" }),
+      event({ type: "run.started", seq: 5, runId: "run-b", botId: "bot-b" }),
+    ].reduce<ThreadSnapshot | null>((current, e) => reduceThreadSnapshot(current, e), room);
+    expect(started?.activeRuns?.map((run) => run.id).sort()).toEqual(["run-a", "run-b"]);
+
+    const streaming = [
+      event({
+        type: "thread.progress",
+        seq: 6,
+        runId: "run-a",
+        botId: "bot-a",
+        payload: { delta: "Ada says hel" },
+      }),
+      event({
+        type: "thread.progress",
+        seq: 7,
+        runId: "run-b",
+        botId: "bot-b",
+        payload: { delta: "Beck says hi" },
+      }),
+      event({
+        type: "thread.progress",
+        seq: 8,
+        runId: "run-a",
+        botId: "bot-a",
+        payload: { delta: "lo" },
+      }),
+    ].reduce<ThreadSnapshot | null>((current, e) => reduceThreadSnapshot(current, e), started);
+    const draftA = streaming?.messages.find((message) => message.id === "progress:run-a");
+    const draftB = streaming?.messages.find((message) => message.id === "progress:run-b");
+    // Each draft accumulates only its own run's deltas.
+    expect(draftA?.blocks).toEqual([{ kind: "progress", text: "Ada says hello" }]);
+    expect(draftB?.blocks).toEqual([{ kind: "progress", text: "Beck says hi" }]);
+    expect(draftA?.botId).toBe("bot-a");
+    expect(draftB?.botId).toBe("bot-b");
+
+    // One run finishing drops only its own draft.
+    const oneDone = reduceThreadSnapshot(
+      streaming,
+      event({ type: "run.completed", seq: 9, runId: "run-a", botId: "bot-a" }),
+    );
+    expect(oneDone?.messages.some((message) => message.id === "progress:run-a")).toBe(false);
+    expect(oneDone?.messages.some((message) => message.id === "progress:run-b")).toBe(true);
+    expect(oneDone?.activeRuns?.map((run) => run.id)).toEqual(["run-b"]);
+
+    // Stop clears every active run and every remaining draft at once.
+    const stopped = clearActiveThreadRuns(oneDone!);
+    expect(stopped.activeRuns).toEqual([]);
+    expect(stopped.run).toBeNull();
+    expect(stopped.messages.some((message) => message.id.startsWith("progress:"))).toBe(false);
+  });
+
   it("keeps an optimistic stop clear when an older cursor refresh still looks busy", () => {
     // Stop has no terminal event, so progress can leave the local cursor ahead of threads.get.
     // After the shell clears run/busy locally, that older get must not restore Stop / Take control block.

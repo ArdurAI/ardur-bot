@@ -70,8 +70,12 @@ export const ZH_MESSAGES: Record<string, string> = {
   "The Hermes install on this computer failed its safety check.":
     "此计算机上的 Hermes 安装未通过安全检查。",
   "Hermes isn't available on Windows yet.": "Hermes 暂不支持 Windows。",
-  "Hermes does not yet support Anthropic connections.": "Hermes 尚不支持 Anthropic 连接。",
-  "Hermes does not yet support this connection.": "Hermes 尚不支持此连接。",
+  "Claude subscriptions only work in Anthropic's own apps; add an Anthropic API key to use Claude with Hermes.":
+    "Claude 订阅只能在 Anthropic 自家的应用中使用；添加 Anthropic API 密钥即可在 Hermes 中使用 Claude。",
+  "ChatGPT sign-ins only work inside Codex; add an OpenAI API key to use GPT models with Hermes.":
+    "ChatGPT 登录只能在 Codex 内使用；添加 OpenAI API 密钥即可在 Hermes 中使用 GPT 模型。",
+  "Add an API key connection to use this provider with Hermes.":
+    "添加 API 密钥连接，即可在 Hermes 中使用此提供商。",
   "Hermes runs with this computer's access.": "Hermes 使用此计算机的访问权限运行。",
   "Antigravity did not finish in time. Try again.": "Antigravity 未能按时完成。请重试。",
   "Antigravity's live model list could not be checked. Check again.":
@@ -178,6 +182,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   Read: "已读",
   Replied: "已回复",
   "Waiting for a turn": "等待轮次",
+  "Waiting for a free place": "正在等待空位",
   Expired: "已过期",
   "Could not update learning. Try again.": "无法更新学习设置。请重试。",
   "Could not update this task; try again.": "无法更新此任务，请重试。",
@@ -1136,6 +1141,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Work items": "工作事项",
   "All bots": "所有机器人",
   "Bots keep the board and memory current": "机器人会保持看板和记忆为最新",
+  "Bots answering at once": "同时应答的机器人",
   "Learning review is off": "学习复查已关闭",
   "Learning review is on": "学习复查已开启",
   "Reviewer: {model}": "复查模型：{model}",

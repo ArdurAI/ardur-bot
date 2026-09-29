@@ -356,6 +356,19 @@ export function resolveGuardrailPathsSync(paths: string[]): string[] {
   return [...new Set(resolved.flat())];
 }
 
+/**
+ * The path as the disk spells it: links resolved, and a tail that does not exist yet kept
+ * under its nearest real ancestor. Checks that compare a folder with protected paths use
+ * this, because a program that opens the folder follows its links.
+ */
+export function resolveRealPathSync(entry: string): string {
+  try {
+    return realpathSync(entry);
+  } catch {
+    return realpathAncestorSync(entry) ?? entry;
+  }
+}
+
 function realpathAncestorSync(entry: string): string | undefined {
   const missing: string[] = [];
   let candidate = entry;

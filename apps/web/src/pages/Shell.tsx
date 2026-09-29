@@ -35,6 +35,7 @@ import {
 } from "@ardurbot/contracts";
 import type { ComposerActionId, ComposerMention, ComposerSkill } from "@ardurbot/core";
 import {
+  answerableAskMessageIds,
   attachmentsForThread,
   buildComposerMentionOptions,
   canAddComposerFolder,
@@ -50,7 +51,6 @@ import {
   isReasoningSummaryBlock,
   isRunTerminalEvent,
   isToolActivityBlock,
-  latestAnswerableAskMessageId,
   mentionChipKey,
   projectMessageReactions,
   reorderBotTo,
@@ -226,6 +226,7 @@ import {
 import { whenSpeakerReady, withSpeaker } from "../lib/tts-lazy";
 import { useModelSettings } from "../lib/use-model-settings";
 import { useNotifications } from "../lib/use-notifications";
+import { workingIndicatorLabel } from "../lib/working-indicator";
 import type { ContextMenuPosition } from "./BotContextMenu";
 import { ConnectorSuggestion } from "./capabilities/ConnectorSuggestion";
 import { DashboardPage } from "./dashboard/DashboardPage";
@@ -1888,7 +1889,7 @@ export function ShellPage({
     setReplyQuote(null);
   }, []);
   const currentRuns = activeThreadRuns(activeSnapshot);
-  const answerableAskMessageId = latestAnswerableAskMessageId(activeSnapshot);
+  const answerableAskIds = useMemo(() => answerableAskMessageIds(activeSnapshot), [activeSnapshot]);
   const workingRuns = currentRuns.filter((run) =>
     ["running", "queued", "leased"].includes(run.status),
   );
@@ -3680,9 +3681,10 @@ export function ShellPage({
             messages={transcriptMessages}
             olderCursor={activeSnapshot?.olderCursor ?? null}
             loadingOlder={loadingOlder}
-            answerableAskMessageId={answerableAskMessageId}
+            answerableAskIds={answerableAskIds}
             running={transcriptRunning}
             workingBots={workingBots}
+            room={inGroup}
             onLoadOlder={loadOlder}
             onOpenBot={openBot}
             onAnswer={answerMessage}
@@ -5006,9 +5008,10 @@ const Transcript = memo(function Transcript({
   messages,
   olderCursor,
   loadingOlder,
-  answerableAskMessageId,
+  answerableAskIds,
   running,
   workingBots,
+  room,
   onLoadOlder,
   onOpenBot,
   onAnswer,
@@ -5034,9 +5037,10 @@ const Transcript = memo(function Transcript({
   messages: ThreadMessage[];
   olderCursor: number | null;
   loadingOlder: boolean;
-  answerableAskMessageId: string | null;
+  answerableAskIds: ReadonlySet<string>;
   running: boolean;
   workingBots: GroupAvatarMember[];
+  room: boolean;
   onLoadOlder: () => void | Promise<void>;
   onOpenBot: (botId: string) => void;
   onAnswer: (message: ThreadMessage, text: string) => Promise<void>;
@@ -5074,11 +5078,7 @@ const Transcript = memo(function Transcript({
   );
   const reactionView = useMemo(() => projectMessageReactions(messages), [messages]);
   const indicatorBots = workingBotsWithoutVisibleActivity(workingBots, messages);
-  const workingBotName = indicatorBots.length === 1 ? indicatorBots[0]?.name : undefined;
-  const workingLabel =
-    workingBotName != null && workingBotName !== ""
-      ? t`${workingBotName} is working`
-      : t`Bots are working`;
+  const workingLabel = workingIndicatorLabel(indicatorBots, { room });
   const [quoteDraft, setQuoteDraft] = useState<{
     message: ThreadMessage;
     text: string;
@@ -5332,7 +5332,7 @@ const Transcript = memo(function Transcript({
                       artifactTarget={artifactTarget}
                       message={message}
                       canAnswer={
-                        message.id === answerableAskMessageId ||
+                        answerableAskIds.has(message.id) ||
                         message.blocks.some(
                           (block) =>
                             block.kind === "ask" && block.peerHold && block.status === "pending",

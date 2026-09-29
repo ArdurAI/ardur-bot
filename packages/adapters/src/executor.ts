@@ -370,6 +370,7 @@ import {
   secretValuesToRedact,
   serializeModelSecret,
 } from "./pi-oauth.js";
+import { catalogModels } from "./pi-runtime.js";
 import {
   assertPlotDataWithinLimits,
   PLOT_TOOL_GUIDE,
@@ -1199,6 +1200,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
       if (!Number.isSafeInteger(runOutputTokens) || runOutputTokens < maxOutputTokens)
         throw new Error("The Hermes run model limits are invalid.");
       const sourceAllowance = await brokerRunAllowance(deps.prisma, sourceRunId);
+      // Custom endpoints pass Chat Completions through to their own URL; every
+      // other admitted key-based connection is translated through the provider
+      // layer with the same registry the built-in runtime streams from.
+      const translated = pin.provider !== "openai-compatible" && pin.provider !== "ollama";
+      const catalogModel = translated
+        ? catalogModels().getModel(pin.provider!, pin.modelId!)
+        : undefined;
+      if (translated && !catalogModel)
+        throw new Error("The pinned model is not available in this runtime.");
       const broker = new HermesProviderBroker({
         scope,
         credentialId: pin.credentialId!,
@@ -1207,9 +1217,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
           credentialId: pin.credentialId!,
           provider: pin.provider!,
           modelId: pin.modelId!,
-          baseUrl: request.model.baseUrl!,
-          apiKey: request.model.apiKey,
-          route: "openai-completions",
+          baseUrl: request.model.baseUrl ?? catalogModel?.baseUrl ?? "",
+          apiKey: translated ? undefined : request.model.apiKey,
+          route: translated ? "provider-translated" : "openai-completions",
           contextWindow,
           maxOutputTokens,
           acceptsImages: Boolean(request.model.acceptsImages),
@@ -1220,6 +1230,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           },
           reportedModel: "required",
         },
+        ...(translated ? { catalog: { model: catalogModel!, apiKey: request.model.apiKey } } : {}),
         tools:
           request.tools === "none"
             ? []

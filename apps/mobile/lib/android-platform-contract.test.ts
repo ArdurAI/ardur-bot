@@ -167,9 +167,14 @@ describe("Android mobile platform contract", () => {
     expect(thread).toContain("inGroup && workingGroupBots.length > 0 ?");
     expect(thread).toContain("workingGroupBots.length - index");
     expect(thread).toContain("agents working");
-    // Visible chrome is avatar-only; copy stays on accessibilityLabel.
+    // Visible chrome is the avatar stack; the working label stays on accessibilityLabel.
+    // The one visible line is the waiting notice, shown only while every listed bot is
+    // queued for a free place in the room.
     expect(thread).toMatch(
-      /accessibilityLabel=\{\s*workingGroupBots\.length === 1[\s\S]*agents working/,
+      /accessibilityLabel=\{\s*workingGroupBots\.every\(\(bot\) => bot\.status === "queued"\)[\s\S]*agents working/,
+    );
+    expect(thread).toMatch(
+      /workingGroupBots\.every\(\(bot\) => bot\.status === "queued"\) \?\s*\(\s*<Text[^>]*>\s*\{t\("Waiting for a free place"\)\}/,
     );
     expect(thread).not.toMatch(
       /workingGroupBots\.length === 1\s*\?[\s\S]*<Text[^>]*>\s*\{t\("\{name\} is working"/,

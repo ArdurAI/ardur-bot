@@ -12,6 +12,8 @@ import {
   validateAntigravityPin,
 } from "@ardurbot/contracts";
 import type { BrokerScope, HermesProviderBroker } from "./hermes-provider-broker.js";
+import { setHermesProviderStream } from "./hermes-provider-broker.js";
+import { catalogModels } from "./pi-runtime.js";
 import { RemoteHostRuntime } from "./remote-host-runtime.js";
 import { createHostClient, usesHostBridge } from "./remote-host-sandbox.js";
 import { AntigravityRuntime, probeAntigravity } from "./runtimes/antigravity-runtime.js";
@@ -136,6 +138,12 @@ export function createRuntimeRegistry(
     fence: { operationId: string; hostGeneration: string },
   ) => Promise<{ broker: HermesProviderBroker; scope: BrokerScope }>,
 ) {
+  // The broker's translated route streams through Ardur's provider layer with
+  // the same registry the built-in runtime uses; the connection's resolved key
+  // travels in the broker's catalog binding, never to the Hermes process.
+  setHermesProviderStream((model, context, options) =>
+    catalogModels().streamSimple(model, context, options),
+  );
   const client = usesHostBridge() ? createHostClient() : undefined;
   const claude = client ? new RemoteHostRuntime(client, "claude-code") : new ClaudeCodeRuntime();
   const codex = client

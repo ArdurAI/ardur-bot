@@ -67,7 +67,7 @@ import {
 import { startHermesProviderRelay } from "./runtimes/hermes-provider-relay.js";
 import type { HermesRuntime } from "./runtimes/hermes-runtime.js";
 import type { NativeSpawn } from "./runtimes/native-process.js";
-import { guardNativeSpawn, spawnNative } from "./runtimes/native-process.js";
+import { guardNativeSpawn, sessionSpawnFor, spawnNative } from "./runtimes/native-process.js";
 
 type Active = {
   abort: AbortController;
@@ -130,7 +130,10 @@ export class HostAgent {
     const start: NativeSpawn = guardNativeSpawn(spawnNative, this.guard);
     this.runtimes = runtimes ?? {
       "claude-code": new ClaudeCodeRuntime(start),
-      "codex-app-server": new CodexAppServerRuntime(start),
+      "codex-app-server": new CodexAppServerRuntime(
+        sessionSpawnFor("codex-app-server", this.guard),
+        this.guard,
+      ),
       antigravity: new AntigravityRuntime(start),
     };
     this.sandbox = new DesktopSandboxProvider({

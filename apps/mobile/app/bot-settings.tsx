@@ -8,6 +8,7 @@ import {
 } from "@ardurbot/contracts";
 import type { HermesRuntimeConfigV2 } from "@ardurbot/contracts/runtime-config";
 import {
+  hermesConnectionRefusal,
   modelPinOptionKey as modelOptionKey,
   parseModelPinOptionKey as parseModelOptionKey,
   spaceDefaultEffort,
@@ -24,6 +25,7 @@ import { RuntimeSettings } from "../components/runtime-settings";
 import type { MobileBot, MobileMe, MobileModel, MobileModelCredential } from "../lib/api";
 import { rpc } from "../lib/api";
 import { COMPUTER_LIFECYCLE_TIMEOUT_MS } from "../lib/computer";
+import { hermesRefusalMessage } from "../lib/hermes-refusal";
 import { useI18n } from "../lib/i18n";
 import { loadLearning } from "../lib/learning";
 import { presentMessageActionSheet } from "../lib/message-action-sheet";
@@ -137,6 +139,9 @@ export default function BotSettingsScreen() {
     const options: ModelOption[] = [];
     const seen = new Set<string>();
     for (const credential of credentials) {
+      // Sign-in connections stay off the Hermes choices; key-based ones are served.
+      if (runtimeKind === "hermes" && hermesConnectionRefusal(credential.provider, credential))
+        continue;
       const providerModels = catalog.filter(
         (entry) =>
           entry.provider === credential.provider &&
@@ -173,7 +178,7 @@ export default function BotSettingsScreen() {
         Number(a.provider === "ollama" || a.provider === "local") -
         Number(b.provider === "ollama" || b.provider === "local"),
     );
-  }, [catalog, credentials]);
+  }, [catalog, credentials, runtimeKind]);
 
   const effectiveProvider = modelKey
     ? parseModelOptionKey(modelKey)?.provider
@@ -194,6 +199,10 @@ export default function BotSettingsScreen() {
   );
   const supportedThinking =
     effectiveCredential?.thinkingLevels ?? effectiveEntry?.thinkingLevels ?? [];
+  const hermesRefusal =
+    runtimeKind === "hermes"
+      ? hermesConnectionRefusal(effectiveProvider, effectiveCredential)
+      : undefined;
   const isOllama = effectiveProvider === "ollama";
   const thinkingOptions: ThinkingLevel[] = supportedThinking.filter((level) =>
     isOllama ? level === "off" || level === "medium" : level !== "off",
@@ -581,13 +590,9 @@ export default function BotSettingsScreen() {
             >
               <Text style={{ color: tokens.foreground }}>{selectedModelLabel}</Text>
             </Pressable>
-            {runtimeKind === "hermes" &&
-            effectiveProvider &&
-            !["openai-compatible", "ollama"].includes(effectiveProvider) ? (
+            {hermesRefusal ? (
               <Text style={{ color: tokens.mutedForeground, marginTop: 8 }}>
-                {effectiveProvider === "anthropic"
-                  ? t("Hermes does not yet support Anthropic connections.")
-                  : t("Hermes does not yet support this connection.")}
+                {hermesRefusalMessage(hermesRefusal, t)}
               </Text>
             ) : null}
             {isOllama && effectiveEntry?.reasoning === false ? (
@@ -672,7 +677,7 @@ export default function BotSettingsScreen() {
             !name.trim() ||
             pending ||
             !bot ||
-            (runtimeKind === "hermes" && Boolean(runtimeConfigError))
+            (runtimeKind === "hermes" && Boolean(runtimeConfigError || hermesRefusal))
           }
           style={{
             marginTop: 24,
