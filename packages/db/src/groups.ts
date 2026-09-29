@@ -424,7 +424,10 @@ export function createGroupRepos(prisma: PrismaClient) {
         if (removedBotIds.length) {
           const removedDeliveries = await tx.botMessageDelivery.findMany({
             where: {
-              targetGroupId: input.groupId,
+              spaceId: actor.spaceId,
+              userId: actor.userId,
+              // Goal messages record the room as their source group (same match as pausing).
+              OR: [{ sourceGroupId: input.groupId }, { targetGroupId: input.groupId }],
               recipientBotId: { in: removedBotIds },
               delegationId: { not: null },
             },
