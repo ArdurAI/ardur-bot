@@ -25,8 +25,9 @@ outputs:
 params:
   # The product name lives in exactly this one place. Templates read
   # {{ .Site.Params.productName }} and content uses the {{< product >}}
-  # shortcode, so a rename is a one-line change here.
-  productName: "Ardur Bot"
+  # shortcode, so a rename is a one-line change here. CI checks that it
+  # matches product.name in site/data/product.json.
+  productName: "Ardur"
   repoURL: "https://github.com/ArdurAI/ardur-bot"
   # CI overrides this with the commit SHA via HUGO_PARAMS_SOURCEREF.
   sourceRef: "dev"

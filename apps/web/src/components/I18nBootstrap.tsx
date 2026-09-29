@@ -26,7 +26,7 @@ export function I18nBootstrap({ children }: { children: ReactNode }) {
     return (
       <div
         className="grid h-full place-items-center text-muted-foreground/80"
-        data-ardurbot-app-state="i18n-pending"
+        data-ardur-app-state="i18n-pending"
       />
     );
   }

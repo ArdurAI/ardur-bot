@@ -9,7 +9,7 @@ import {
 
 test("bot creation, editing, and deletion persist", async ({ page }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `bot-crud-${stamp}@ardurbot.test`, "password12", "Bot CRUD");
+  await signup(page, `bot-crud-${stamp}@example.test`, "password12", "Bot CRUD");
   await completeOnboarding(page);
   await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 

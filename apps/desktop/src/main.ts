@@ -623,7 +623,7 @@ async function waitForMountedAppDocument(contents: Electron.WebContents) {
     if (contents.isCrashed()) throw new Error("Renderer stopped after load.");
     const ready = (await contents.executeJavaScript(`(() => {
       const appState =
-        document.querySelector("[data-ardurbot-app-state]")?.getAttribute("data-ardurbot-app-state") ??
+        document.querySelector("[data-ardur-app-state]")?.getAttribute("data-ardur-app-state") ??
         null;
       if (appState === "session-pending") return false;
 
@@ -633,7 +633,7 @@ async function waitForMountedAppDocument(contents: Electron.WebContents) {
           performance.getEntriesByName("rk:renderer:shell-ready").length > 0,
       );
       const authOrWelcomeSurface = Boolean(
-        document.querySelector('[data-ardurbot-surface="welcome"]') ||
+        document.querySelector('[data-ardur-surface="welcome"]') ||
           document.querySelector(
             'form input[type="email"], form input[name="email"], form input#email',
           ) ||
@@ -642,7 +642,7 @@ async function waitForMountedAppDocument(contents: Electron.WebContents) {
           ) ||
           document.querySelector(
             '[aria-label="Model"], [aria-label="Model id"], [aria-label="Models from server"]',
-          ) || document.querySelector('[data-ardurbot-surface="guided-onboarding"]'),
+          ) || document.querySelector('[data-ardur-surface="guided-onboarding"]'),
       );
       const surfaceReady = shellBootstrapped || authOrWelcomeSurface;
       const sessionReady =

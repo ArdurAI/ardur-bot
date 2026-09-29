@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { captureScreenshot, completeOnboarding, signup } from "./helpers";
 
 test("Board route shows dependencies across five columns", async ({ page }, testInfo) => {
-  await signup(page, `board-${Date.now()}@ardurbot.test`, "password12", "Board owner");
+  await signup(page, `board-${Date.now()}@example.test`, "password12", "Board owner");
   await completeOnboarding(page);
   const items = ["open", "in_progress", "blocked", "deferred", "closed"].map((status, index) => ({
     id: `board-${index}`,

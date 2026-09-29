@@ -946,3 +946,75 @@ it("opens empty Add computer dialog from header, protects pending saves, handles
     document.body.innerHTML = "";
   }
 });
+
+it("saves a cluster's own images and pull Secret, and offers engines only the images", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  api.list.mockResolvedValue({
+    targets: [],
+    bots: [],
+    placement: { mode: "manual", preferredTargetId: "host", minimumFreeGb: 4 },
+  });
+  api.connect.mockResolvedValue({ id: "cluster" });
+  const element = document.createElement("div");
+  document.body.appendChild(element);
+  const root = createRoot(element);
+  const field = (label: string) =>
+    document.body.querySelector<HTMLInputElement>(`[aria-label="${label}"]`);
+  const change = (input: HTMLInputElement | HTMLSelectElement, value: string) => {
+    const prototype =
+      input instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(prototype, "value")!.set!.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+  const submit = () =>
+    document.body
+      .querySelector("form")!
+      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  try {
+    await act(async () =>
+      root.render(
+        <SettingsWrapper>
+          <FleetSettings />
+        </SettingsWrapper>,
+      ),
+    );
+    await act(async () =>
+      [...document.body.querySelectorAll("button")]
+        .find((button) => button.textContent === "Add computer")!
+        .click(),
+    );
+    const type = document.body.querySelector<HTMLSelectElement>('[aria-label="Connection type"]')!;
+    await act(async () => change(type, "docker"));
+    expect(field("Standard image")).not.toBeNull();
+    expect(field("Developer image")).not.toBeNull();
+    expect(field("Image pull secret")).toBeNull();
+    await act(async () => change(type, "kubernetes"));
+    await act(async () => {
+      change(field("Name")!, "Hosted cluster");
+      change(field("Context")!, "ardurbot");
+      change(field("Standard image")!, "registry.example.com/computer:1");
+      change(field("Developer image")!, "registry.example.com/computer:1-developer");
+      change(field("Image pull secret")!, "Not A Label");
+    });
+    await act(async () => submit());
+    expect(api.connect).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain("Could not add the computer.");
+    await act(async () => change(field("Image pull secret")!, "registry-login"));
+    await act(async () => submit());
+    expect(api.connect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        settings: expect.objectContaining({
+          engine: "kubernetes",
+          standardImage: "registry.example.com/computer:1",
+          developerImage: "registry.example.com/computer:1-developer",
+          imagePullSecret: "registry-login",
+        }),
+      }),
+    );
+  } finally {
+    await act(async () => root.unmount());
+    element.remove();
+    document.body.innerHTML = "";
+  }
+});

@@ -4,7 +4,7 @@ import { captureScreenshot, completeOnboarding, rpc, signup } from "./helpers";
 test("compares a frozen task from the composer and opens separate outputs", async ({
   page,
 }, testInfo) => {
-  await signup(page, `compare-${Date.now()}@ardurbot.test`, "password12", "Compare");
+  await signup(page, `compare-${Date.now()}@example.test`, "password12", "Compare");
   await completeOnboarding(page);
   await rpc(page, "bots/create", {
     name: "Reviewer",
