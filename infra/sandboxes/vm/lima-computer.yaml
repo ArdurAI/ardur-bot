@@ -13,7 +13,8 @@ minimumLimaVersion: "2.2.0"
 vmType: vz
 
 # Ubuntu 24.04 LTS, pinned by release date and SHA-256; Lima checks the digest after download.
-# These are the entries Lima 2.2.0 ships in templates/_images/ubuntu-24.04.yaml.
+# These are the entries Lima 2.2.0 ships in templates/_images/ubuntu-24.04.yaml. Dated releases
+# move to Ubuntu's archive host after a few months, so pin a current one before shipping.
 images:
   - location: "https://cloud-images.ubuntu.com/releases/noble/release-20260705/ubuntu-24.04-server-cloudimg-arm64.img"
     arch: aarch64
@@ -79,6 +80,10 @@ provision:
       # Runs as root at every boot. The slow part runs once per set of pinned versions.
       set -euo pipefail
       export DEBIAN_FRONTEND=noninteractive
+      install -d -m 0755 /var/lib/ardur
+      # This boot's outcome lives in /run, which starts empty at every boot. A failed step is
+      # recorded so the readiness probe stops waiting at once.
+      trap 'echo "$BASH_COMMAND" >/run/ardur-failed' ERR
 
       BOT_USER=bot
       BOT_UID=2000
@@ -193,7 +198,6 @@ provision:
           DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$BOT_UID/bus" \
           dockerd-rootless-setuptool.sh install
 
-        install -d -m 0755 /var/lib/ardur
         printf '%s\n' "$PINS" >/var/lib/ardur/provisioned
       fi
 
@@ -209,6 +213,7 @@ provision:
       install -d -m 0700 -o "$BOT_USER" -g "$BOT_USER" "/home/$BOT_USER/.ssh"
       install -m 0600 -o "$BOT_USER" -g "$BOT_USER" "$admin_home/.ssh/authorized_keys" \
         "/home/$BOT_USER/.ssh/authorized_keys"
+      touch /run/ardur-ready
 
 probes:
   - mode: readiness
@@ -216,7 +221,8 @@ probes:
     script: |
       #!/bin/bash
       set -eu
-      if ! timeout 900 bash -c 'until [ -f /var/lib/ardur/provisioned ]; do sleep 5; done'; then
+      finished='[ -f /run/ardur-ready ] || [ -f /run/ardur-failed ]'
+      if ! timeout 900 bash -c "until $finished; do sleep 5; done" || [ -f /run/ardur-failed ]; then
         echo >&2 "Ardur provisioning did not finish"
         exit 1
       fi
