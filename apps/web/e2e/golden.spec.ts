@@ -113,6 +113,8 @@ test("takeover, routine, integrations, and export are reachable", async ({ page 
   await expect(openComputer).toBeVisible({ timeout: 30_000 });
   await openComputer.click();
   await expect(page.getByRole("button", { name: "Close computer" })).toBeVisible();
+  // The workspace opens the screen to watch; taking control is its own step.
+  await page.getByTestId("computer-chrome").getByRole("button", { name: "Take control" }).click();
   await page.getByRole("button", { name: "Skip", exact: true }).last().click();
   await expect(page.getByRole("button", { name: "Close computer" })).toBeHidden();
   await expect(page.getByText(/login was skipped/i).last()).toBeVisible({
