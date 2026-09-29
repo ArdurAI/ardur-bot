@@ -43,6 +43,22 @@ export const RU_MESSAGES: Record<string, string> = {
     "Срок входа {botName} для модели группы истёк. Восстановите подключение или измените модель группы.",
   "{botName} couldn't use the model set for this group. Change the group model or check this bot's settings.":
     "{botName} не смог использовать модель, выбранную для этой группы. Измените модель группы или проверьте настройки бота.",
+  "{runtime}'s usage limit is reached. Try again after it resets.":
+    "Лимит использования {runtime} исчерпан. Повторите попытку после его сброса.",
+  "Sign in to {runtime} on this computer, then try again.":
+    "Войдите в {runtime} на этом компьютере и повторите попытку.",
+  "{runtime} reached this run's turn limit. Narrow the task and try again.":
+    "{runtime} достиг лимита шагов этого запуска. Сузьте задачу и повторите попытку.",
+  "{runtime}'s pinned model is unavailable. Change the pin and try again.":
+    "Закреплённая модель {runtime} недоступна. Измените закреплённую модель и повторите попытку.",
+  "{runtime}'s configuration is invalid. Check this bot's settings.":
+    "Недействительная конфигурация {runtime}. Проверьте настройки этого бота.",
+  "{runtime}'s model connection is missing. Connect it or change the pin.":
+    "Подключение модели {runtime} отсутствует. Подключите его или измените закрепление.",
+  "{runtime} stopped before finishing this run.":
+    "{runtime} остановился, не завершив этот запуск.",
+  "{runtime} could not finish this run. Check the runtime or change the pin.":
+    "{runtime} не смог завершить этот запуск. Проверьте среду выполнения или измените закрепление.",
   Antigravity: "Antigravity",
   Hermes: "Hermes",
   "Ardur (built-in)": "Ardur (встроенная)",

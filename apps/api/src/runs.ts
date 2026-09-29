@@ -1,5 +1,13 @@
-import type { Actor, RunActivityRow } from "@ardurbot/contracts";
-import { MessageBlock, RunTriggerSchema } from "@ardurbot/contracts";
+import type { Actor, FailureCategoryId, RunActivityRow } from "@ardurbot/contracts";
+import {
+  FailureCategoryIdSchema,
+  failureCategoryFromText,
+  MessageBlock,
+  RunTriggerSchema,
+  runtimeNames,
+  RuntimePinSchema,
+  RuntimeProblemSchema,
+} from "@ardurbot/contracts";
 import { ACTIVE_RUN_STATUSES, botMessageContext, runNotificationCategory } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import { delegationView, getUserPreferences } from "@ardurbot/db";
@@ -34,6 +42,40 @@ export function activityNotificationsEnabled(
   notifyOnFinish: boolean,
 ): boolean {
   return groupId !== null || notifyOnFinish;
+}
+
+/** The classified cause a failed run carries, for the activity row's one short reason. */
+export function activityRunFailure(row: {
+  status: string;
+  runtimeProblem: unknown;
+  providerErrorKind: string | null;
+  runtimePin: unknown;
+  error: string | null;
+}): { failureCategory: FailureCategoryId; failureRuntime: string | null } | Record<string, never> {
+  if (row.status !== "failed") return {};
+  const pin = RuntimePinSchema.safeParse(row.runtimePin);
+  const pinRuntime =
+    pin.success && pin.data.runtimeKind ? (runtimeNames[pin.data.runtimeKind] ?? null) : null;
+  const problem = RuntimeProblemSchema.safeParse(row.runtimeProblem);
+  if (problem.success) {
+    const category = FailureCategoryIdSchema.safeParse(problem.data.reasonId);
+    if (category.success)
+      return {
+        failureCategory: category.data,
+        failureRuntime: runtimeNames[problem.data.pin.runtimeKind] ?? pinRuntime,
+      };
+  }
+  if (row.providerErrorKind === "rate-limit")
+    return { failureCategory: "usage-limit", failureRuntime: pinRuntime };
+  if (row.providerErrorKind === "auth")
+    return { failureCategory: "signed-out", failureRuntime: pinRuntime };
+  if (row.providerErrorKind === "model-unavailable")
+    return { failureCategory: "model-unavailable", failureRuntime: pinRuntime };
+  // Older records hold the English sentence; map it back so the row translates it too.
+  const legacy = row.error ? failureCategoryFromText(row.error) : undefined;
+  if (legacy)
+    return { failureCategory: legacy.id, failureRuntime: legacy.params.runtime ?? pinRuntime };
+  return {};
 }
 
 export async function listSpaceRuns(
@@ -153,6 +195,7 @@ export async function listSpaceRuns(
       : null,
     externalThread: Boolean(row.thread.externalConversationId),
     status: row.status as RunActivityRow["status"],
+    ...activityRunFailure(row),
     trigger: RunTriggerSchema.parse(row.trigger),
     routineId: row.routineId,
     notificationsEnabled:

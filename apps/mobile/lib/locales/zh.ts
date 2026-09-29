@@ -43,6 +43,21 @@ export const ZH_MESSAGES: Record<string, string> = {
     "{botName} 的群组模型登录已过期。请重新连接，或更改群组模型。",
   "{botName} couldn't use the model set for this group. Change the group model or check this bot's settings.":
     "{botName} 无法使用为此群组设置的模型。请更改群组模型，或检查 Bot 设置。",
+  "{runtime}'s usage limit is reached. Try again after it resets.":
+    "{runtime} 的用量已达上限。请在限额重置后重试。",
+  "Sign in to {runtime} on this computer, then try again.":
+    "请在这台电脑上登录 {runtime}，然后重试。",
+  "{runtime} reached this run's turn limit. Narrow the task and try again.":
+    "{runtime} 已达到此次运行的轮次上限。请缩小任务范围后重试。",
+  "{runtime}'s pinned model is unavailable. Change the pin and try again.":
+    "{runtime} 固定的模型不可用。请更改固定模型后重试。",
+  "{runtime}'s configuration is invalid. Check this bot's settings.":
+    "{runtime} 的配置无效。请检查 Bot 设置。",
+  "{runtime}'s model connection is missing. Connect it or change the pin.":
+    "{runtime} 的模型连接缺失。请连接或更改固定模型。",
+  "{runtime} stopped before finishing this run.": "{runtime} 在完成此次运行前已停止。",
+  "{runtime} could not finish this run. Check the runtime or change the pin.":
+    "{runtime} 无法完成此次运行。请检查运行时或更改固定模型。",
   Antigravity: "Antigravity",
   Hermes: "Hermes",
   "Ardur (built-in)": "Ardur（内置）",

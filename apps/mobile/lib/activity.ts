@@ -1,5 +1,6 @@
 import type { RunActivityRow } from "@ardurbot/contracts";
 import { rpc } from "../lib/api";
+import { failureCategoryText } from "./failure-categories";
 import { dateLocaleForUi, t } from "./i18n";
 
 export async function fetchSpaceActivity(): Promise<{
@@ -48,4 +49,12 @@ export function activityStatusLabel(status: RunActivityRow["status"]): string {
     default:
       return status;
   }
+}
+
+/** One short line: a failed run shows its recorded cause next to the Failed label. */
+export function activityRowPreview(run: RunActivityRow): string {
+  const status = activityStatusLabel(run.status);
+  if (run.status === "failed" && run.failureCategory)
+    return `${failureCategoryText(run.failureCategory, { runtime: run.failureRuntime ?? undefined })} · ${status}`;
+  return run.promptSnippet ? `${run.promptSnippet} · ${status}` : status;
 }

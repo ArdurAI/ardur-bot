@@ -14,7 +14,10 @@ vi.mock("../lib/rpc", () => ({
   rpc: { runs: { list: calls.list }, team: { board: calls.board } },
 }));
 vi.mock("../lib/run-status-label", () => ({ statusLabel: (status: string) => status }));
-vi.mock("@lingui/core/macro", () => ({ t: (parts: TemplateStringsArray) => parts.join("") }));
+vi.mock("@lingui/core/macro", () => ({
+  t: (parts: TemplateStringsArray) => parts.join(""),
+  msg: (parts: TemplateStringsArray) => ({ id: parts.join(""), message: parts.join("") }),
+}));
 vi.mock("@lingui/core", () => ({ i18n: { locale: "en" } }));
 vi.mock("@lingui/react/macro", () => ({
   Trans: ({ children }: { children: ReactNode }) => children,
@@ -71,6 +74,33 @@ it("keeps each run's task and completed outcome when the bot starts new work", a
     expect(rows[1]?.textContent).toContain("Review release");
     expect(rows[1]?.textContent).toContain("completed");
     expect(rows[1]?.textContent).not.toContain("Status unavailable");
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});
+
+it("shows the recorded failure reason next to a failed run's label", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  calls.list.mockImplementation(async ({ filter }: { filter: string }) => ({
+    runs:
+      filter === "active"
+        ? []
+        : [
+            {
+              ...makeRun("failed-run", "failed", "Draft documentation"),
+              failureCategory: "usage-limit" as const,
+              failureRuntime: "Claude Code",
+            },
+          ],
+  }));
+  calls.board.mockResolvedValue({ rows: [] });
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  try {
+    await act(async () => root.render(createElement(ActivityList, { onOpenRun: vi.fn() })));
+    expect(node.textContent).toContain("usage limit is reached");
+    expect(node.textContent).toContain("failed");
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();
