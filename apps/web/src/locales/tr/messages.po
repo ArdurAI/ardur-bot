@@ -3543,6 +3543,11 @@ msgstr "Hesabın yok mu?"
 msgid "Done"
 msgstr "Bitti"
 
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Done"
+msgstr "Bitti"
+
 #: src/pages/TeamBoard.tsx
 msgid "Done — waiting for your OK"
 msgstr ""
@@ -4291,6 +4296,11 @@ msgstr ""
 #: src/pages/TeamBoard.tsx
 msgid "Idle"
 msgstr ""
+
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Idle"
+msgstr "Boşta"
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "If you heard that, voice is ready."
@@ -6205,6 +6215,11 @@ msgstr "Ekip mesajlarını duraklat"
 msgid "Paused"
 msgstr "Duraklatıldı"
 
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Paused"
+msgstr "Duraklatıldı"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Permission denied on the socket"
 msgstr "Soket erişim izni reddedildi"
@@ -7449,6 +7464,11 @@ msgstr ""
 msgid "Search skills and plugins"
 msgstr ""
 
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Searching"
+msgstr "Arıyor"
+
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/SpaceSearch.tsx
 msgid "Searching…"
@@ -7837,6 +7857,11 @@ msgstr "Bazı öğelerin adları desteklenmediği için gizlendi ({hiddenCount})
 msgid "Some items exceeded the scan limits."
 msgstr ""
 
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Something went wrong"
+msgstr "Bir şeyler ters gitti"
+
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Sort by name"
 msgstr ""
@@ -7967,6 +7992,11 @@ msgid "Start the engine and press Test."
 msgstr "Motoru başlatıp Test düğmesine basın."
 
 #: src/lib/run-status-label.ts
+msgid "Starting"
+msgstr "Başlıyor"
+
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
 msgid "Starting"
 msgstr "Başlıyor"
 
@@ -8279,6 +8309,11 @@ msgstr ""
 
 #: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
+msgid "Thinking"
+msgstr "Düşünüyor"
+
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
 msgid "Thinking"
 msgstr "Düşünüyor"
 
@@ -8922,6 +8957,11 @@ msgstr "Oturum açma bekleniyor…"
 msgid "Waiting for the API to come back…"
 msgstr ""
 
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Waiting for you"
+msgstr "Seni bekliyor"
+
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
 #: src/pages/dashboard/NowPanel.tsx
@@ -9062,6 +9102,11 @@ msgstr "{task} üzerinde çalışıyor"
 #: src/pages/TeamBoard.tsx
 msgid "Working on {task} for {0}"
 msgstr "{0} için {task} üzerinde çalışıyor"
+
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Working through steps"
+msgstr "Adım adım çalışıyor"
 
 #: src/pages/Auth.tsx
 #: src/pages/CallView.tsx

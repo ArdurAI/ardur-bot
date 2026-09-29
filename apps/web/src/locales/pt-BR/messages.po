@@ -3543,6 +3543,11 @@ msgstr "Não tem uma conta?"
 msgid "Done"
 msgstr "Concluído"
 
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Done"
+msgstr "Concluído"
+
 #: src/pages/TeamBoard.tsx
 msgid "Done — waiting for your OK"
 msgstr ""
@@ -4291,6 +4296,11 @@ msgstr ""
 #: src/pages/TeamBoard.tsx
 msgid "Idle"
 msgstr ""
+
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Idle"
+msgstr "Ocioso"
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "If you heard that, voice is ready."
@@ -6205,6 +6215,11 @@ msgstr "Pausar mensagens da equipe"
 msgid "Paused"
 msgstr "Pausado"
 
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Paused"
+msgstr "Pausado"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Permission denied on the socket"
 msgstr "Permissão negada no socket"
@@ -7449,6 +7464,11 @@ msgstr ""
 msgid "Search skills and plugins"
 msgstr ""
 
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Searching"
+msgstr "Pesquisando"
+
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/SpaceSearch.tsx
 msgid "Searching…"
@@ -7837,6 +7857,11 @@ msgstr "Algumas entradas têm nomes não compatíveis e estão ocultas ({hiddenC
 msgid "Some items exceeded the scan limits."
 msgstr ""
 
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Something went wrong"
+msgstr "Algo deu errado"
+
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Sort by name"
 msgstr ""
@@ -7967,6 +7992,11 @@ msgid "Start the engine and press Test."
 msgstr "Inicie o mecanismo e clique em Testar."
 
 #: src/lib/run-status-label.ts
+msgid "Starting"
+msgstr "Iniciando"
+
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
 msgid "Starting"
 msgstr "Iniciando"
 
@@ -8279,6 +8309,11 @@ msgstr ""
 
 #: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
+msgid "Thinking"
+msgstr "Pensando"
+
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
 msgid "Thinking"
 msgstr "Pensando"
 
@@ -8922,6 +8957,11 @@ msgstr "Aguardando login..."
 msgid "Waiting for the API to come back…"
 msgstr ""
 
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Waiting for you"
+msgstr "Aguardando você"
+
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
 #: src/pages/dashboard/NowPanel.tsx
@@ -9062,6 +9102,11 @@ msgstr "Trabalhando em {task}"
 #: src/pages/TeamBoard.tsx
 msgid "Working on {task} for {0}"
 msgstr "Trabalhando em {task} para {0}"
+
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Working through steps"
+msgstr "Trabalhando em etapas"
 
 #: src/pages/Auth.tsx
 #: src/pages/CallView.tsx

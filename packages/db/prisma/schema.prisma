@@ -66,6 +66,7 @@ model UserPreferences {
   theme String @default("system")
   chatFont String @default("sans") @map("chat_font")
   motion String @default("system")
+  sealScenes String? @map("seal_scenes")
   responseCompletions Boolean @default(true) @map("response_completions")
   routines Boolean @default(true)
   approvalsNeeded Boolean @default(true) @map("approvals_needed")

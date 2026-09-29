@@ -74,6 +74,11 @@
   transition: box-shadow 150ms ease-out;
 }
 
+/* A seal scrolled out of view holds its scene until it returns. */
+.ardurbot-bot-avatar[data-offscreen] * {
+  animation-play-state: paused;
+}
+
 .ardurbot-bot-avatar[data-working="true"] .ardurbot-bot-avatar-ring {
   opacity: 1;
 }

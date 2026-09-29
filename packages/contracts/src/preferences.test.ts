@@ -14,8 +14,16 @@ describe("preference patches", () => {
     { motion: false },
     { preferredBrowser: "chrome" },
     { notifications: { routines: "yes" } },
+    { sealScenes: "Not a pack!" },
   ])("rejects unsupported values: %j", (patch) => {
     expect(PreferencesPatchSchema.safeParse(patch).success).toBe(false);
+  });
+  it("stores a seal scene pack by id, or null for the default pack", () => {
+    expect(PreferencesPatchSchema.parse({ sealScenes: "simple-ring" })).toEqual({
+      sealScenes: "simple-ring",
+    });
+    expect(PreferencesPatchSchema.parse({ sealScenes: null })).toEqual({ sealScenes: null });
+    expect(DEFAULT_USER_PREFERENCES.sealScenes).toBeNull();
   });
   it("preserves existing delivery defaults without granting OS permission", () => {
     expect(DEFAULT_USER_PREFERENCES.notifications).toEqual({

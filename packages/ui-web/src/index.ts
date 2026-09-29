@@ -40,5 +40,11 @@ export { GroupAvatar, type GroupAvatarMember, type GroupAvatarProps } from "./gr
 export { useLocalDayTick } from "./hooks/use-local-day-tick.js";
 export { cn } from "./lib/utils.js";
 export { ModelThinkingOptions } from "./model-thinking-options.js";
+export {
+  SealScenePackProvider,
+  sealWebColors,
+  useReducedMotion,
+  useSealScenePack,
+} from "./seal-scene.js";
 export { SlidingPanel } from "./sliding-panel.js";
 export { type WorkspaceTab, WorkspaceTabs } from "./workspace/tabs.js";

@@ -143,6 +143,15 @@ export const lightTokens = {
 /** Dark palette. Prefer `tokensForAppearance` when theme-aware. */
 export const tokens = darkTokens;
 
+/**
+ * Ink & Seal: a bot's seal prints paper and ink on its pigment and looks the
+ * same in both themes, so both come from the light palette.
+ */
+export const sealPaints = {
+  paper: lightTokens.background,
+  ink: lightTokens.foreground,
+} as const;
+
 export const RADIUS = "10px";
 export const fontStacks = {
   sans: '"Instrument Sans Variable", ui-sans-serif, system-ui, sans-serif',

@@ -3543,6 +3543,11 @@ msgstr "계정이 없나요?"
 msgid "Done"
 msgstr "완료"
 
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Done"
+msgstr "완료"
+
 #: src/pages/TeamBoard.tsx
 msgid "Done — waiting for your OK"
 msgstr ""
@@ -4291,6 +4296,11 @@ msgstr ""
 #: src/pages/TeamBoard.tsx
 msgid "Idle"
 msgstr ""
+
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Idle"
+msgstr "대기 중"
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "If you heard that, voice is ready."
@@ -6205,6 +6215,11 @@ msgstr "팀 메시지 일시 중지"
 msgid "Paused"
 msgstr "일시 중지됨"
 
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Paused"
+msgstr "일시 중지됨"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Permission denied on the socket"
 msgstr "소켓 접근 권한 없음"
@@ -7449,6 +7464,11 @@ msgstr ""
 msgid "Search skills and plugins"
 msgstr ""
 
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Searching"
+msgstr "찾는 중"
+
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/SpaceSearch.tsx
 msgid "Searching…"
@@ -7837,6 +7857,11 @@ msgstr "지원되지 않는 이름을 가진 항목이 숨겨졌습니다({hidde
 msgid "Some items exceeded the scan limits."
 msgstr ""
 
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Something went wrong"
+msgstr "문제가 발생했습니다"
+
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Sort by name"
 msgstr ""
@@ -7967,6 +7992,11 @@ msgid "Start the engine and press Test."
 msgstr "엔진을 시작하고 테스트를 누르세요."
 
 #: src/lib/run-status-label.ts
+msgid "Starting"
+msgstr "시작 중"
+
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
 msgid "Starting"
 msgstr "시작 중"
 
@@ -8281,6 +8311,11 @@ msgstr ""
 #: src/pages/shell/runtime-settings.tsx
 msgid "Thinking"
 msgstr "생각 깊이"
+
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Thinking"
+msgstr "생각 중"
 
 #: src/components/ThreadCommandBlock.tsx
 #: src/pages/ide/dialogs.tsx
@@ -8922,6 +8957,11 @@ msgstr "로그인 완료를 기다리는 중…"
 msgid "Waiting for the API to come back…"
 msgstr "API가 다시 작동하기를 기다리는 중…"
 
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Waiting for you"
+msgstr "사용자를 기다리는 중"
+
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
 #: src/pages/dashboard/NowPanel.tsx
@@ -9062,6 +9102,11 @@ msgstr "{task} 작업 중"
 #: src/pages/TeamBoard.tsx
 msgid "Working on {task} for {0}"
 msgstr "{0}님을 위해 {task} 작업 중"
+
+#: src/lib/seal-labels.ts
+msgctxt "Bot seal phase"
+msgid "Working through steps"
+msgstr "단계별로 작업 중"
 
 #: src/pages/Auth.tsx
 #: src/pages/CallView.tsx

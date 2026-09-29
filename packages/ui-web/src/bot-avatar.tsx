@@ -1,26 +1,37 @@
-import type { GrokColorDef } from "@ardurbot/core";
+import type { GrokColorDef, SealPhase } from "@ardurbot/core";
 import {
-  ACTIVE_RUN_STATUSES,
   avatarIdentitySeed,
   avatarInitial,
   DEFAULT_GROK_BOT_COLOR,
+  deriveSealPhase,
   GROK_BOT_COLORS,
   GROK_COLOR_LIST,
   organicAvatarPath,
   resolvePersonaColorDef,
+  SEAL_PICTURE_BANDS,
   SHIPPED_BOT_AVATAR_CENTER,
   SHIPPED_BOT_AVATAR_SHAPE_KEYS,
   SHIPPED_BOT_AVATAR_SHAPES,
   SHIPPED_BOT_AVATAR_VIEWBOX,
+  sealInitial,
+  sealLayers,
+  sealMotions,
   shippedBotAvatarShapePath,
   shippedHash,
 } from "@ardurbot/core";
 import { tokens } from "@ardurbot/ui-tokens";
 import type { CSSProperties } from "react";
-import { memo, useId, useMemo, useSyncExternalStore } from "react";
+import { memo, useMemo } from "react";
 import type { AvatarStyle } from "./avatar-style.js";
 import { useAvatarStyle } from "./avatar-style.js";
 import { cn } from "./lib/utils.js";
+import {
+  SealLayers,
+  sealWebColors,
+  usePauseOffscreen,
+  useReducedMotion,
+  useSealScenePack,
+} from "./seal-scene.js";
 import "./styles.css";
 
 export type { GrokColorDef };
@@ -80,6 +91,9 @@ export function parseBotAvatar(
 export interface BotAvatarProps {
   color: string;
   size?: number;
+  /** What the bot is doing; takes precedence over `status`. */
+  phase?: SealPhase;
+  /** A run status, mapped to a phase when `phase` is not given. */
   status?: string;
   identity?: string;
   /** Display name used for the seal initial; identity stays the hash seed. */
@@ -88,21 +102,35 @@ export interface BotAvatarProps {
   variant?: AvatarStyle;
 }
 
+/** The four states the avatar exposed before phases, kept for styling hooks and tests. */
+const AVATAR_STATUS: Record<SealPhase, "running" | "waiting" | "paused" | "idle"> = {
+  idle: "idle",
+  starting: "running",
+  thinking: "running",
+  searching: "running",
+  steps: "running",
+  waiting: "waiting",
+  paused: "paused",
+  done: "idle",
+  error: "idle",
+};
+
 export const BotAvatar = memo(function BotAvatar({
   color,
   size = 36,
+  phase: phaseProp,
   status,
   identity = "",
   label,
   className,
   variant,
 }: BotAvatarProps) {
-  const isRunning = status === "running" || status === "queued" || status === "leased";
-  const isWaiting = status === "waiting_input";
-  const isPaused = status === "waiting_takeover";
-  const avatarStatus = isRunning ? "running" : isWaiting ? "waiting" : isPaused ? "paused" : "idle";
+  const phase = phaseProp ?? deriveSealPhase({ status }).phase;
+  const avatarStatus = AVATAR_STATUS[phase];
 
   const preferredVariant = useAvatarStyle();
+  const pack = useSealScenePack();
+  const reducedMotion = useReducedMotion();
 
   const parsed = useMemo(() => parseBotAvatar(color, identity), [color, identity]);
   const effectiveId = identity || parsed.color || "agent";
@@ -120,84 +148,72 @@ export const BotAvatar = memo(function BotAvatar({
   }, [parsed.shapeIndex, effectiveId]);
 
   const initial = avatarInitial(label ?? effectiveId);
+  const organic = parsed.shapeIndex === undefined && (variant ?? preferredVariant) === "organic";
+  // A chosen picture keeps its pigment edge and shows only the ring and badge bands.
+  const picture = Boolean(parsed.isImage && parsed.imageUrl) || parsed.shapeIndex !== undefined;
+  const layers = organic
+    ? []
+    : sealLayers(pack, phase, size, picture ? SEAL_PICTURE_BANDS : undefined);
+  const moving = !reducedMotion && layers.some((layer) => sealMotions(layer).length > 0);
+  const rootRef = usePauseOffscreen(moving);
+  const colors = sealWebColors(colorDef.hex);
+  const scene = (bands: readonly string[], inset?: number) => {
+    const drawn = layers.filter((layer) => bands.includes(layer.band));
+    return drawn.length > 0 ? (
+      <SealLayers
+        pack={pack}
+        phase={phase}
+        layers={drawn}
+        size={size}
+        colors={colors}
+        moving={moving}
+        inset={inset}
+      />
+    ) : null;
+  };
 
-  const reducedMotion = useSyncExternalStore(
-    subscribeToReducedMotion,
-    reducedMotionSnapshot,
-    () => false,
-  );
-
-  // Determine standard seal styles
+  // Ink & Seal: under 28 px the edge is a true circle.
   const sealRadius = size < 28 ? "50%" : "50% 48% 52% 50% / 49% 51% 49% 51%";
 
   if (parsed.isImage && parsed.imageUrl) {
     return (
       <div
+        ref={rootRef}
         className={cn(
           "ardurbot-bot-avatar relative flex shrink-0 select-none items-center justify-center bg-secondary",
           className,
         )}
         aria-hidden="true"
         data-status={avatarStatus}
+        data-phase={phase}
         style={{
           width: size,
           height: size,
           borderRadius: sealRadius,
           borderColor: colorDef.hex,
           borderWidth: 2,
-          borderStyle: isPaused ? "dashed" : "solid",
+          borderStyle: "solid",
         }}
       >
-        {isRunning ? (
-          <svg
-            className={cn("absolute pointer-events-none", !reducedMotion && "animate-spin")}
-            style={{ width: size + 8, height: size + 8, inset: -6, animationDuration: "1.6s" }}
-            viewBox="0 0 56 56"
-            fill="none"
-            aria-hidden="true"
-          >
-            <circle
-              cx="28"
-              cy="28"
-              r="26"
-              stroke="var(--foreground)"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeDasharray="122 41"
-              transform="rotate(-60 28 28)"
-            />
-          </svg>
-        ) : null}
-        {isWaiting && (
-          <div
-            className="absolute top-0 right-0 rounded-full"
-            style={{
-              width: Math.max(8, size * 0.3),
-              height: Math.max(8, size * 0.3),
-              background: "var(--warning)",
-              border: "3px solid var(--background)",
-              transform: "translate(20%, -20%)",
-            }}
-          />
-        )}
         <img
           src={parsed.imageUrl}
           alt=""
           className="h-full w-full object-cover"
           style={{ borderRadius: sealRadius }}
         />
+        {scene(SEAL_PICTURE_BANDS, 2)}
       </div>
     );
   }
 
   // Active Organic variant
-  if (parsed.shapeIndex === undefined && (variant ?? preferredVariant) === "organic") {
+  if (organic) {
     return (
       <OrganicAvatar
         color={colorDef.hex}
         identity={effectiveId}
         size={size}
-        isWorking={isRunning || isWaiting || isPaused}
+        isWorking={avatarStatus !== "idle"}
         avatarStatus={avatarStatus}
         className={className}
       />
@@ -208,53 +224,23 @@ export const BotAvatar = memo(function BotAvatar({
   if (parsed.shapeIndex !== undefined) {
     return (
       <div
+        ref={rootRef}
         className={cn(
           "ardurbot-bot-avatar relative flex shrink-0 select-none items-center justify-center bg-card",
           className,
         )}
         aria-hidden="true"
         data-status={avatarStatus}
+        data-phase={phase}
         style={{
           width: size,
           height: size,
           borderRadius: sealRadius,
           borderColor: colorDef.hex,
           borderWidth: 2,
-          borderStyle: isPaused ? "dashed" : "solid",
+          borderStyle: "solid",
         }}
       >
-        {isRunning ? (
-          <svg
-            className={cn("absolute pointer-events-none", !reducedMotion && "animate-spin")}
-            style={{ width: size + 8, height: size + 8, inset: -6, animationDuration: "1.6s" }}
-            viewBox="0 0 56 56"
-            fill="none"
-            aria-hidden="true"
-          >
-            <circle
-              cx="28"
-              cy="28"
-              r="26"
-              stroke="var(--foreground)"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeDasharray="122 41"
-              transform="rotate(-60 28 28)"
-            />
-          </svg>
-        ) : null}
-        {isWaiting && (
-          <div
-            className="absolute top-0 right-0 rounded-full"
-            style={{
-              width: Math.max(8, size * 0.3),
-              height: Math.max(8, size * 0.3),
-              background: "var(--warning)",
-              border: "3px solid var(--background)",
-              transform: "translate(20%, -20%)",
-            }}
-          />
-        )}
         <svg
           viewBox={VIEWBOX}
           width={size * 0.8}
@@ -268,68 +254,42 @@ export const BotAvatar = memo(function BotAvatar({
             <ellipse cx={CENTER + 29} cy={CENTER - 8} rx={10} ry={7} />
           </g>
         </svg>
+        {scene(SEAL_PICTURE_BANDS, 2)}
       </div>
     );
   }
 
-  // Default Seal with Initial
+  // Default seal: the pigment disc and initial, with the phase's scene around the initial.
+  const initialRule = sealInitial(size);
   return (
     <div
+      ref={rootRef}
       className={cn(
         "ardurbot-bot-avatar relative flex shrink-0 select-none items-center justify-center",
         className,
       )}
       aria-hidden="true"
       data-status={avatarStatus}
+      data-phase={phase}
       style={{
-        width: isRunning ? size * 0.8 : size,
-        height: isRunning ? size * 0.8 : size,
+        width: size,
+        height: size,
         borderRadius: sealRadius,
         background: colorDef.hex,
-        border: isPaused ? `2px dashed var(--background)` : "none",
         color: colorDef.eyeColor,
         fontFamily: "'Instrument Serif', Georgia, serif",
         fontStyle: "italic",
-        fontSize: Math.round((isRunning ? size * 0.8 : size) * 0.6),
-        boxSizing: "border-box",
-        margin: isRunning ? size * 0.1 : 0,
+        fontSize: Math.round((size * initialRule.size) / 100),
       }}
     >
-      {isRunning ? (
-        <svg
-          className={cn("absolute pointer-events-none", !reducedMotion && "animate-spin")}
-          style={{ width: size + 8, height: size + 8, animationDuration: "1.6s" }}
-          viewBox="0 0 56 56"
-          fill="none"
-          aria-hidden="true"
-        >
-          <circle
-            cx="28"
-            cy="28"
-            r="26"
-            stroke="var(--foreground)"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeDasharray="122 41"
-            transform="rotate(-60 28 28)"
-          />
-        </svg>
-      ) : null}
-
-      {initial}
-
-      {isWaiting && (
-        <div
-          className="absolute top-0 right-0 rounded-full"
-          style={{
-            width: Math.max(8, size * 0.3),
-            height: Math.max(8, size * 0.3),
-            background: "var(--warning)",
-            border: "3px solid var(--background)",
-            transform: "translate(20%, -20%)",
-          }}
-        />
-      )}
+      {scene(["disc", "scene"])}
+      <span
+        className="relative"
+        style={{ transform: `translateY(${((initialRule.y - 50) * size) / 100}px)` }}
+      >
+        {initial}
+      </span>
+      {scene(["ring", "badge"])}
     </div>
   );
 });
@@ -349,11 +309,7 @@ function OrganicAvatar({
   avatarStatus: string;
   className?: string;
 }) {
-  const reducedMotion = useSyncExternalStore(
-    subscribeToReducedMotion,
-    reducedMotionSnapshot,
-    () => false,
-  );
+  const reducedMotion = useReducedMotion();
   const seed = avatarIdentitySeed(identity || color || DEFAULT_GROK_BOT_COLOR);
   const duration = `${4.8 + (seed % 24) / 10}s`;
   const shapeA = organicAvatarPath(seed);
@@ -414,19 +370,6 @@ function OrganicAvatar({
       </g>
     </svg>
   );
-}
-
-const reducedMotionMedia = "(prefers-reduced-motion: reduce)";
-
-function reducedMotionSnapshot(): boolean {
-  return typeof window.matchMedia === "function" && window.matchMedia(reducedMotionMedia).matches;
-}
-
-function subscribeToReducedMotion(onChange: () => void): () => void {
-  if (typeof window.matchMedia !== "function") return () => {};
-  const media = window.matchMedia(reducedMotionMedia);
-  media.addEventListener("change", onChange);
-  return () => media.removeEventListener("change", onChange);
 }
 
 export function GrokShapePreview({
