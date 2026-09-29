@@ -1293,6 +1293,12 @@ export const ZH_MESSAGES: Record<string, string> = {
   "{count} answered": "{count} 已回答",
   "Asked {asked} · {answered}": "询问了 {asked} · {answered}",
   "{name} couldn't answer": "{name} 无法回答",
+  "{name} couldn't answer: its model account needs attention":
+    "{name} 无法回答：其模型账户需要处理",
+  "{name} couldn't answer: its model account hit a rate limit":
+    "{name} 无法回答：其模型账户已达到速率限制",
+  "{name} couldn't answer: its model is unavailable": "{name} 无法回答：其模型不可用",
+  "{name} stopped before answering": "{name} 在回答前已停止",
   Fix: "修复",
   answered: "已回答",
   "couldn't answer": "无法回答",

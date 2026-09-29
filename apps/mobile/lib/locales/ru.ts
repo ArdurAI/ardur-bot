@@ -1347,6 +1347,13 @@ export const RU_MESSAGES: Record<string, string> = {
   "{count} answered": "{count} ответили",
   "Asked {asked} · {answered}": "Спрошено: {asked} · {answered}",
   "{name} couldn't answer": "{name} не смог ответить",
+  "{name} couldn't answer: its model account needs attention":
+    "{name} не смог ответить: аккаунт его модели требует внимания",
+  "{name} couldn't answer: its model account hit a rate limit":
+    "{name} не смог ответить: аккаунт его модели достиг лимита запросов",
+  "{name} couldn't answer: its model is unavailable":
+    "{name} не смог ответить: его модель недоступна",
+  "{name} stopped before answering": "{name} остановился до ответа",
   Fix: "Исправить",
   answered: "ответил",
   "couldn't answer": "не смог ответить",

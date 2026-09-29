@@ -1,5 +1,5 @@
 import type { CoordinationBlock, CoordinationMember } from "@ardurbot/core";
-import { fixableFailure } from "@ardurbot/core";
+import { coordinationMemberFailureCode, fixableFailure } from "@ardurbot/core";
 import { t } from "./i18n";
 
 /** The one-line summary for a collapsed coordination round. */
@@ -17,9 +17,21 @@ export function coordinationAccessibilityLabel(block: CoordinationBlock): string
   return coordinationSummary(block);
 }
 
-/** The plain line a failed member shows while collapsed. */
+/** The plain line a failed member shows while collapsed, translated from its reason code. */
 export function coordinationFailureLine(member: CoordinationMember): string {
-  return member.reason ?? t("{name} couldn't answer", { name: member.name });
+  const name = member.name;
+  switch (coordinationMemberFailureCode(member)) {
+    case "auth":
+      return t("{name} couldn't answer: its model account needs attention", { name });
+    case "rate-limit":
+      return t("{name} couldn't answer: its model account hit a rate limit", { name });
+    case "model-unavailable":
+      return t("{name} couldn't answer: its model is unavailable", { name });
+    case "stopped":
+      return t("{name} stopped before answering", { name });
+    default:
+      return t("{name} couldn't answer", { name });
+  }
 }
 
 /** Whether the failed member's line should offer a fix link. */

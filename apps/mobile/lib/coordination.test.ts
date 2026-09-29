@@ -44,23 +44,46 @@ describe("mobile coordination line", () => {
     expect(coordinationAccessibilityLabel(block())).toBe("Asked 3 bots · 3 answered");
   });
 
-  it("keeps a failed member to one plain line and marks fixable causes", () => {
+  it("keeps a failed member to one plain line and marks fixable causes from the code", () => {
     const failed = {
       botId: "zai",
       name: "zai-bot",
       outcome: "failed" as const,
-      reason: "zai-bot couldn't answer: its model account needs attention",
+      reasonCode: "auth" as const,
     };
     expect(coordinationFailureLine(failed)).toBe(
       "zai-bot couldn't answer: its model account needs attention",
     );
     expect(coordinationFailureFixable(failed)).toBe(true);
-    expect(coordinationFailureFixable({ ...failed, reason: "zai-bot couldn't answer" })).toBe(
-      false,
-    );
+    expect(coordinationFailureFixable({ ...failed, reasonCode: "rate-limit" as const })).toBe(true);
+    expect(
+      coordinationFailureFixable({ ...failed, reasonCode: "model-unavailable" as const }),
+    ).toBe(true);
+    expect(coordinationFailureFixable({ ...failed, reasonCode: "other" as const })).toBe(false);
     expect(coordinationFailureLine({ botId: "x", name: "X", outcome: "failed" })).toBe(
       "X couldn't answer",
     );
+  });
+
+  it("reads old rounds with an English reason through the mapped code", () => {
+    const legacy = {
+      botId: "zai",
+      name: "zai-bot",
+      outcome: "failed" as const,
+      reason: "zai-bot couldn't answer: its model is unavailable",
+    };
+    expect(coordinationFailureLine(legacy)).toBe(
+      "zai-bot couldn't answer: its model is unavailable",
+    );
+    expect(coordinationFailureFixable(legacy)).toBe(true);
+    const unknown = {
+      botId: "zai",
+      name: "zai-bot",
+      outcome: "failed" as const,
+      reason: "zai-bot froze mid-reply",
+    };
+    expect(coordinationFailureLine(unknown)).toBe("zai-bot couldn't answer");
+    expect(coordinationFailureFixable(unknown)).toBe(false);
   });
 
   it("labels each member outcome in plain words", () => {
