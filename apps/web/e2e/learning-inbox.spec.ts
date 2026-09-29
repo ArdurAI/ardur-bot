@@ -1,6 +1,12 @@
 import { expect, test } from "@playwright/test";
 import { dashboardFixture } from "./dashboard-fixture";
-import { captureScreenshot, completeOnboarding, openUserSettings, signup } from "./helpers";
+import {
+  captureScreenshot,
+  completeOnboarding,
+  expectVisibleTextInside,
+  openUserSettings,
+  signup,
+} from "./helpers";
 
 const observation = {
   documentId: "doc",
@@ -233,6 +239,10 @@ test("learning inbox shows board-item suggestions, their outcome, and a close th
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("switch", { name: "Learning for this space" })).toBeChecked();
   await expect(dialog.getByText("Finish the import follow-up", { exact: true })).toBeVisible();
+  await expectVisibleTextInside(dialog);
+  await page.setViewportSize({ width: 375, height: 800 });
+  await expectVisibleTextInside(dialog);
+  await page.setViewportSize({ width: 1280, height: 900 });
   await expect(dialog.getByTestId("learning-waiting")).not.toContainText(
     "A board item filed by a bot could not be closed.",
   );

@@ -141,6 +141,28 @@ beforeEach(() => {
   api.observation.mockResolvedValue(observation);
   api.proposal.mockResolvedValue(proposal);
 });
+it("wraps item text inside the dialog instead of clipping it", async () => {
+  api.list.mockResolvedValue({
+    reviews: [],
+    proposals: [
+      {
+        ...proposal,
+        proposedContent: "For conversation, a long model finished as often as another model.",
+      },
+    ],
+    pendingCount: 1,
+    appliedThisWeek: 0,
+  });
+  await act(async () => root.render(<LearningInbox />));
+  const title = container.querySelector('[data-testid="learning-item-title"]');
+  expect(title?.textContent).toContain("For conversation, a long model finished");
+  expect(title?.className).toContain("break-words");
+  expect(title?.className).not.toContain("truncate");
+  expect(title?.className).not.toContain("whitespace-nowrap");
+  const section = container.querySelector('[data-testid="learning-inbox"]');
+  expect(section?.className).toContain("min-w-0");
+  expect(section?.className).toContain("max-w-full");
+});
 it("opens an older timeline proposal even when it is outside the inbox page", async () => {
   api.list.mockResolvedValue({ reviews: [], proposals: [], pendingCount: 0, appliedThisWeek: 0 });
   api.journey.mockResolvedValue([

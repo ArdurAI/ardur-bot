@@ -57,7 +57,7 @@ export function LearningBadge({ botId }: { botId?: string }) {
   }, [botId]);
   if (!counts) return null;
   return (
-    <span className="block truncate whitespace-nowrap text-xs text-muted-foreground">
+    <span className="block min-w-0 break-words text-xs text-muted-foreground">
       {counts.pendingCount > 0 ? t`${counts.pendingCount} suggestions to review` : null}
       {counts.pendingCount > 0 && counts.appliedThisWeek > 0 ? " · " : null}
       {counts.appliedThisWeek > 0 ? t`learned ${counts.appliedThisWeek} things this week` : null}
@@ -162,7 +162,11 @@ export function LearningInbox({ botId }: { botId?: string }) {
     />
   );
   return (
-    <section aria-label={t`What I learned`} data-testid="learning-inbox" className="space-y-3 py-3">
+    <section
+      aria-label={t`What I learned`}
+      data-testid="learning-inbox"
+      className="min-w-0 max-w-full space-y-3 py-3"
+    >
       <h3 className="text-sm font-medium">
         <Trans>What I learned</Trans>
       </h3>
@@ -380,11 +384,11 @@ function LearningCard({
   const pending = proposal.status === "pending";
   return (
     <article
-      className="rounded-lg border p-3 motion-safe:animate-in motion-safe:fade-in duration-[240ms] ease-[cubic-bezier(0.2,0.7,0.2,1)] motion-reduce:animate-none"
+      className="min-w-0 max-w-full break-words rounded-lg border p-3 motion-safe:animate-in motion-safe:fade-in duration-[240ms] ease-[cubic-bezier(0.2,0.7,0.2,1)] motion-reduce:animate-none"
       data-status={proposal.status}
       id={`learning-${proposal.id}`}
     >
-      <p className="truncate text-sm font-medium">
+      <p className="break-words text-sm font-medium" data-testid="learning-item-title">
         {proposal.operation === "revert-suggestion"
           ? t`Possible regression — review undo`
           : proposal.operation === "consolidation"
@@ -541,7 +545,9 @@ function LearningCard({
             ) : null}
           </div>
         ) : (
-          <pre className="max-h-64 overflow-auto whitespace-pre-wrap py-2">{proposal.diff}</pre>
+          <pre className="max-h-64 min-w-0 max-w-full overflow-auto break-words whitespace-pre-wrap py-2">
+            {proposal.diff}
+          </pre>
         )}
         <p>{proposal.rationale}</p>
         {proposal.observation ? (
@@ -668,15 +674,15 @@ function LearningCard({
               <p>
                 <Trans>Before</Trans>
               </p>
-              <pre className="whitespace-pre-wrap">{conflict.before}</pre>
+              <pre className="break-words whitespace-pre-wrap">{conflict.before}</pre>
               <p>
                 <Trans>Applied</Trans>
               </p>
-              <pre className="whitespace-pre-wrap">{conflict.applied}</pre>
+              <pre className="break-words whitespace-pre-wrap">{conflict.applied}</pre>
               <p>
                 <Trans>Current</Trans>
               </p>
-              <pre className="whitespace-pre-wrap">{conflict.current}</pre>
+              <pre className="break-words whitespace-pre-wrap">{conflict.current}</pre>
             </>
           )}
         </div>
