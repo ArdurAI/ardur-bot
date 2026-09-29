@@ -218,6 +218,56 @@ describe.skipIf(!ftsAvailable)("space recall index", () => {
       }),
     ).toEqual([]);
   });
+
+  it("leaves no entry or buffered writes for a space that was never recalled", async () => {
+    const index = new MemoryRecallIndex();
+    index.applyWrite("space-a", head({ id: "a", content: "zephyr saved" }));
+    index.upsert("space-a", doc({ id: "b", content: "zephyr noted" }));
+    index.remove("space-a", "c");
+    // No build was ever announced, so nothing buffered: the first build is the store's
+    // fresh snapshot alone and the earlier writes never replay.
+    expect(await index.indexSlice("space-a", "bot:bot-a", [])).toBe(true);
+    expect(
+      await index.query("space-a", {
+        words: ["zephyr"],
+        botId: "bot-a",
+        userId: "user-a",
+        limit: 5,
+      }),
+    ).toEqual([]);
+  });
+
+  it("clears buffered writes when a build fails", async () => {
+    const { DatabaseSync } = await import("node:sqlite");
+    let fail = true;
+    class FlakyDatabase extends DatabaseSync {
+      override exec(sql: string) {
+        if (fail && sql === "BEGIN") {
+          fail = false;
+          throw new Error("build failed");
+        }
+        super.exec(sql);
+      }
+    }
+    const index = new MemoryRecallIndex({
+      loader: async () => FlakyDatabase as never,
+      onUnavailable: () => undefined,
+    });
+    index.beginSlice("space-a", "bot:bot-a");
+    index.upsert("space-a", doc({ id: "lost", content: "zephyr lost" }));
+    expect(await index.indexSlice("space-a", "bot:bot-a", [])).toBe(false);
+    // The failed build dropped what it buffered: the retry holds its own snapshot alone.
+    expect(
+      await index.indexSlice("space-a", "bot:bot-a", [doc({ id: "kept", content: "zephyr kept" })]),
+    ).toBe(true);
+    const hits = await index.query("space-a", {
+      words: ["zephyr"],
+      botId: "bot-a",
+      userId: "user-a",
+      limit: 5,
+    });
+    expect(hits?.map((hit) => hit.id)).toEqual(["kept"]);
+  });
 });
 
 describe("recall index availability", () => {

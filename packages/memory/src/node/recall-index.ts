@@ -99,8 +99,21 @@ interface SpaceEntry {
   db: RecallIndexDatabase | null;
   failed: boolean;
   opening: Promise<RecallIndexDatabase | null> | null;
+  /** Slice builds announced by `beginSlice` that have not finished or aborted yet. */
+  building: Set<string>;
   slices: Set<string>;
   pending: Array<{ id: string; document: RecallIndexDocument | null }>;
+}
+
+function newEntry(): SpaceEntry {
+  return {
+    db: null,
+    failed: false,
+    opening: null,
+    building: new Set(),
+    slices: new Set(),
+    pending: [],
+  };
 }
 
 /**
@@ -130,6 +143,33 @@ export class MemoryRecallIndex {
     return this.spaces.get(spaceId)?.slices.has(sliceKey) ?? false;
   }
 
+  /**
+   * Announce a slice build before its store read starts. Writes that commit while the build
+   * is under way may be missing from its snapshot, so they buffer into `pending` and the
+   * build replays them over the bulk load. Without the announcement a write would have to
+   * buffer on speculation alone, which nothing would ever drain.
+   */
+  beginSlice(spaceId: string, sliceKey: string): void {
+    if (this.disabled) return;
+    let entry = this.spaces.get(spaceId);
+    if (!entry) {
+      entry = newEntry();
+      this.spaces.set(spaceId, entry);
+    }
+    if (entry.failed || entry.slices.has(sliceKey)) return;
+    entry.building.add(sliceKey);
+  }
+
+  /** Abandon an announced build whose store read failed: nothing it buffered may linger. */
+  abortSlice(spaceId: string, sliceKey: string): void {
+    const entry = this.spaces.get(spaceId);
+    if (!entry) return;
+    entry.building.delete(sliceKey);
+    entry.pending.splice(0);
+    if (!entry.db && !entry.opening && !entry.building.size && !entry.slices.size)
+      this.spaces.delete(spaceId);
+  }
+
   /** Index one slice of a space (one bot or one user read). False means the caller must scan. */
   async indexSlice(
     spaceId: string,
@@ -139,37 +179,46 @@ export class MemoryRecallIndex {
     if (this.disabled) return false;
     let entry = this.spaces.get(spaceId);
     if (!entry) {
-      entry = { db: null, failed: false, opening: null, slices: new Set(), pending: [] };
+      entry = newEntry();
       this.spaces.set(spaceId, entry);
     }
-    if (entry.slices.has(sliceKey)) return true;
-    const db = await this.database(spaceId, entry);
-    if (!db) return false;
+    entry.building.add(sliceKey);
     try {
-      db.exec("BEGIN");
-      try {
-        for (const document of documents)
-          if (document.id && !EXCLUDED_PATH.test(document.path))
-            this.replace(db, { id: document.id, document });
-        entry.slices.add(sliceKey);
-        // Writes that committed before or during the build replay after the bulk load, so
-        // the index and the store never diverge across the first build.
-        for (const write of entry.pending.splice(0)) this.replace(db, write);
-      } finally {
-        db.exec("COMMIT");
+      if (entry.slices.has(sliceKey)) return true;
+      const db = await this.database(spaceId, entry);
+      if (!db) {
+        // No database, no build: nothing the announcement buffered may linger.
+        entry.pending.splice(0);
+        return false;
       }
-    } catch (error) {
       try {
-        db.exec("ROLLBACK");
-      } catch {
-        // The rollback only matters when the transaction is still open.
+        db.exec("BEGIN");
+        try {
+          for (const document of documents)
+            if (document.id && !EXCLUDED_PATH.test(document.path))
+              this.replace(db, { id: document.id, document });
+          entry.slices.add(sliceKey);
+          // Writes that committed before or during the build replay after the bulk load, so
+          // the index and the store never diverge across the first build.
+          for (const write of entry.pending.splice(0)) this.replace(db, write);
+        } finally {
+          db.exec("COMMIT");
+        }
+      } catch (error) {
+        try {
+          db.exec("ROLLBACK");
+        } catch {
+          // The rollback only matters when the transaction is still open.
+        }
+        entry.failed = true;
+        this.spaces.delete(spaceId);
+        this.noteUnavailable(error instanceof Error ? error.message : "index build failed");
+        return false;
       }
-      entry.failed = true;
-      this.spaces.delete(spaceId);
-      this.noteUnavailable(error instanceof Error ? error.message : "index build failed");
-      return false;
+      return true;
+    } finally {
+      entry.building.delete(sliceKey);
     }
-    return true;
   }
 
   /** Write-path sink: upsert or remove one committed document. Never throws. */
@@ -214,22 +263,17 @@ export class MemoryRecallIndex {
 
   private write(spaceId: string, id: string, document: RecallIndexDocument | null): void {
     if (this.disabled) return;
-    let entry = this.spaces.get(spaceId);
-    if (!entry) {
-      // A write can commit before the space's first slice build creates its entry, while the
-      // build's store read is still in flight. Open the entry so the write reaches the
-      // replay buffer instead of being dropped; the build replays it over its snapshot.
-      entry = { db: null, failed: false, opening: null, slices: new Set(), pending: [] };
-      this.spaces.set(spaceId, entry);
-    }
-    if (entry.failed) return;
+    const entry = this.spaces.get(spaceId);
+    // No entry means no build is under way, so the next build reads the store fresh and this
+    // write would only linger in a buffer nothing drains.
+    if (!entry || entry.failed) return;
     const row = { id, document };
-    if (!entry.db) {
-      // The lazy build's snapshot may predate this write, so anything arriving before the
-      // database is ready must replay after the bulk load, not just during `opening`.
+    if (entry.building.size || (!entry.db && entry.opening)) {
+      // A build's snapshot may predate this write, so it replays after the bulk load.
       entry.pending.push(row);
       return;
     }
+    if (!entry.db) return;
     try {
       this.replace(entry.db, row);
     } catch {

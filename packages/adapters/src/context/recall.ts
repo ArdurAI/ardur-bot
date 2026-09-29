@@ -78,7 +78,13 @@ async function recallFromIndex(
   ];
   for (const slice of slices) {
     if (index.hasSlice(spaceId, slice.key)) continue;
-    const page = await memory.read(slice.request, context);
+    // Announce the build before the store read so a write that commits while it is in
+    // flight buffers into the index and replays over the snapshot.
+    index.beginSlice(spaceId, slice.key);
+    const page = await memory.read(slice.request, context).catch((error: unknown) => {
+      index.abortSlice(spaceId, slice.key);
+      throw error;
+    });
     const documents: RecallIndexDocument[] = page.documents.flatMap((doc) => {
       if (!doc.id) return [];
       const shared = doc.scope === "shared";
