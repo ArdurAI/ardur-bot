@@ -165,7 +165,8 @@ export class MemoryRecallIndex {
     const entry = this.spaces.get(spaceId);
     if (!entry) return;
     entry.building.delete(sliceKey);
-    entry.pending.splice(0);
+    // Another build in this space may still need the buffered writes.
+    if (!entry.building.size) entry.pending.splice(0);
     if (!entry.db && !entry.opening && !entry.building.size && !entry.slices.size)
       this.spaces.delete(spaceId);
   }
@@ -199,8 +200,9 @@ export class MemoryRecallIndex {
               this.replace(db, { id: document.id, document });
           entry.slices.add(sliceKey);
           // Writes that committed before or during the build replay after the bulk load, so
-          // the index and the store never diverge across the first build.
-          for (const write of entry.pending.splice(0)) this.replace(db, write);
+          // the index and the store never diverge across the first build. They stay buffered
+          // while another build is still reading: its older snapshot must not win over them.
+          for (const write of entry.pending) this.replace(db, write);
         } finally {
           db.exec("COMMIT");
         }
@@ -218,6 +220,7 @@ export class MemoryRecallIndex {
       return true;
     } finally {
       entry.building.delete(sliceKey);
+      if (!entry.building.size) entry.pending.splice(0);
     }
   }
 

@@ -237,6 +237,41 @@ describe.skipIf(!ftsAvailable)("space recall index", () => {
     ).toEqual([]);
   });
 
+  it("keeps a newer write when an overlapping build finishes with an older snapshot", async () => {
+    const index = new MemoryRecallIndex();
+    index.beginSlice("space-a", "bot:bot-a");
+    index.beginSlice("space-a", "bot:bot-b");
+    // Bot B's document changes while both builds are still reading the store.
+    index.upsert("space-a", doc({ id: "x", owner: "bot-b", content: "quokka fresh" }));
+    expect(await index.indexSlice("space-a", "bot:bot-a", [])).toBe(true);
+    // B's snapshot was read before the write: it must not win over the buffered write.
+    expect(
+      await index.indexSlice("space-a", "bot:bot-b", [
+        doc({ id: "x", owner: "bot-b", content: "quokka stale" }),
+      ]),
+    ).toBe(true);
+    const query = (word: string) =>
+      index.query("space-a", { words: [word], botId: "bot-b", userId: "user-a", limit: 5 });
+    expect((await query("fresh"))?.map((hit) => hit.id)).toEqual(["x"]);
+    expect(await query("stale")).toEqual([]);
+  });
+
+  it("keeps buffered writes for another build when one build's read fails", async () => {
+    const index = new MemoryRecallIndex();
+    index.beginSlice("space-a", "bot:bot-a");
+    index.beginSlice("space-a", "bot:bot-b");
+    index.upsert("space-a", doc({ id: "y", owner: "bot-b", content: "wombat" }));
+    index.abortSlice("space-a", "bot:bot-a");
+    expect(await index.indexSlice("space-a", "bot:bot-b", [])).toBe(true);
+    const hits = await index.query("space-a", {
+      words: ["wombat"],
+      botId: "bot-b",
+      userId: "user-a",
+      limit: 5,
+    });
+    expect(hits?.map((hit) => hit.id)).toEqual(["y"]);
+  });
+
   it("clears buffered writes when a build fails", async () => {
     const { DatabaseSync } = await import("node:sqlite");
     let fail = true;
