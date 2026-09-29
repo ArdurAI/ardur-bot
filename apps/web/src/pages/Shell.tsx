@@ -224,6 +224,7 @@ import {
 import { whenSpeakerReady, withSpeaker } from "../lib/tts-lazy";
 import { useModelSettings } from "../lib/use-model-settings";
 import { useNotifications } from "../lib/use-notifications";
+import { workingIndicatorLabel } from "../lib/working-indicator";
 import type { ContextMenuPosition } from "./BotContextMenu";
 import { ConnectorSuggestion } from "./capabilities/ConnectorSuggestion";
 import { DashboardPage } from "./dashboard/DashboardPage";
@@ -3681,6 +3682,7 @@ export function ShellPage({
             answerableAskMessageId={answerableAskMessageId}
             running={transcriptRunning}
             workingBots={workingBots}
+            room={inGroup}
             onLoadOlder={loadOlder}
             onOpenBot={openBot}
             onAnswer={answerMessage}
@@ -5006,6 +5008,7 @@ const Transcript = memo(function Transcript({
   answerableAskMessageId,
   running,
   workingBots,
+  room,
   onLoadOlder,
   onOpenBot,
   onAnswer,
@@ -5033,6 +5036,7 @@ const Transcript = memo(function Transcript({
   answerableAskMessageId: string | null;
   running: boolean;
   workingBots: GroupAvatarMember[];
+  room: boolean;
   onLoadOlder: () => void | Promise<void>;
   onOpenBot: (botId: string) => void;
   onAnswer: (message: ThreadMessage, text: string) => Promise<void>;
@@ -5069,11 +5073,7 @@ const Transcript = memo(function Transcript({
   );
   const reactionView = useMemo(() => projectMessageReactions(messages), [messages]);
   const indicatorBots = workingBotsWithoutVisibleActivity(workingBots, messages);
-  const workingBotName = indicatorBots.length === 1 ? indicatorBots[0]?.name : undefined;
-  const workingLabel =
-    workingBotName != null && workingBotName !== ""
-      ? t`${workingBotName} is working`
-      : t`Bots are working`;
+  const workingLabel = workingIndicatorLabel(indicatorBots, { room });
   const [quoteDraft, setQuoteDraft] = useState<{
     message: ThreadMessage;
     text: string;

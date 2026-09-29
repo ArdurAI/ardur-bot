@@ -6,6 +6,9 @@ import {
   GROUP_MEMBER_MIN,
   type Group,
   type GroupMember,
+  ROOM_POLICY_MAX_CONCURRENT_RUNS_MAX,
+  ROOM_POLICY_MAX_CONCURRENT_RUNS_MIN,
+  ROOM_POLICY_V1_DEFAULTS,
   runtimeNames,
   runtimeSupportsTools,
   type SetGroupMemberModelPinInput,
@@ -207,6 +210,7 @@ export function GroupSettings({
     name?: string;
     botIds?: string[];
     coordinatorBotId?: string | null;
+    maxConcurrentRuns?: number;
   }) => Promise<void>;
   onModelPin: (
     member: GroupMember,
@@ -220,9 +224,13 @@ export function GroupSettings({
   const { t } = useLingui();
   const nameId = useId();
   const coordinatorId = useId();
+  const concurrencyId = useId();
   const [name, setName] = useState(group.name);
   const [coordinator, setCoordinator] = useState(group.coordinatorBotId ?? "");
   const [selected, setSelected] = useState(group.members.map((member) => member.botId));
+  const [maxConcurrentRuns, setMaxConcurrentRuns] = useState(
+    group.roomPolicy?.maxConcurrentRuns ?? ROOM_POLICY_V1_DEFAULTS.maxConcurrentRuns,
+  );
   const baseline = useRef(group);
   const [pending, setPending] = useState<"save" | "remove" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -276,10 +284,13 @@ export function GroupSettings({
     const previous = baseline.current;
     if (previous === group) return;
     baseline.current = group;
+    const effectiveConcurrency = (value: Group) =>
+      value.roomPolicy?.maxConcurrentRuns ?? ROOM_POLICY_V1_DEFAULTS.maxConcurrentRuns;
     if (previous.id !== group.id) {
       setName(group.name);
       setCoordinator(group.coordinatorBotId ?? "");
       setSelected(group.members.map((member) => member.botId));
+      setMaxConcurrentRuns(effectiveConcurrency(group));
       return;
     }
     setName((current) => (current === previous.name ? group.name : current));
@@ -293,6 +304,9 @@ export function GroupSettings({
       )
         ? group.members.map((member) => member.botId)
         : current,
+    );
+    setMaxConcurrentRuns((current) =>
+      current === effectiveConcurrency(previous) ? effectiveConcurrency(group) : current,
     );
   }, [group]);
 
@@ -316,6 +330,8 @@ export function GroupSettings({
   }
 
   function save() {
+    const effectiveConcurrency =
+      group.roomPolicy?.maxConcurrentRuns ?? ROOM_POLICY_V1_DEFAULTS.maxConcurrentRuns;
     return onSave({
       coordinatorBotId: selected.includes(coordinator) ? coordinator : null,
       name: name.trim() !== group.name ? name.trim() : undefined,
@@ -325,6 +341,7 @@ export function GroupSettings({
       )
         ? undefined
         : selected,
+      maxConcurrentRuns: maxConcurrentRuns !== effectiveConcurrency ? maxConcurrentRuns : undefined,
     });
   }
 
@@ -405,6 +422,26 @@ export function GroupSettings({
           </Trans>
         </p>
       ) : null}
+      <label htmlFor={concurrencyId} className="mt-4 block text-sm text-muted-foreground">
+        <Trans>Bots answering at once</Trans>
+        <NativeSelect
+          id={concurrencyId}
+          aria-label={t`Bots answering at once`}
+          value={String(maxConcurrentRuns)}
+          onChange={(event) => setMaxConcurrentRuns(Number(event.target.value))}
+        >
+          {Array.from(
+            {
+              length: ROOM_POLICY_MAX_CONCURRENT_RUNS_MAX - ROOM_POLICY_MAX_CONCURRENT_RUNS_MIN + 1,
+            },
+            (_, index) => ROOM_POLICY_MAX_CONCURRENT_RUNS_MIN + index,
+          ).map((value) => (
+            <NativeSelectOption key={value} value={String(value)}>
+              {value}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </label>
       <Button
         className="mt-5 w-full"
         disabled={pending !== null || !validSelection(name, selected)}

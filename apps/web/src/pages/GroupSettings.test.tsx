@@ -79,6 +79,7 @@ it("adopts two refreshed groups before Save without removing a peer's new member
     name: undefined,
     botIds: undefined,
     coordinatorBotId: "c",
+    maxConcurrentRuns: undefined,
   });
 });
 
@@ -114,7 +115,40 @@ it("keeps an edited name while adopting an untouched refreshed member list", asy
     name: "My edit",
     botIds: undefined,
     coordinatorBotId: null,
+    maxConcurrentRuns: undefined,
   });
+});
+
+it("saves how many bots answer at once, defaulting to four", async () => {
+  const onSave = vi.fn(async () => undefined);
+  const withPolicy = group("Team", ["a", "b"]);
+  withPolicy.roomPolicy = { version: 1, maxConcurrentRuns: 2 };
+  await act(async () =>
+    root.render(
+      <GroupSettings
+        group={withPolicy}
+        bots={bots}
+        goal={null}
+        canManageGoal={false}
+        onStartGoal={vi.fn()}
+        onSave={onSave}
+        onModelPin={vi.fn()}
+        modelSettings={null}
+        onRemove={vi.fn()}
+      />,
+    ),
+  );
+  // The second select is the room policy (the first is the coordinator).
+  const select = node.querySelectorAll("select")[1]!;
+  expect(select.value).toBe("2");
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(select, "1");
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await act(async () => saveButton().click());
+  expect(onSave).toHaveBeenCalledWith(
+    expect.objectContaining({ maxConcurrentRuns: 1, name: undefined, botIds: undefined }),
+  );
 });
 
 it("warns only while the picked coordinator's runtime can't use Ardur tools", async () => {

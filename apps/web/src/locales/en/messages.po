@@ -319,7 +319,7 @@ msgstr "{tokens, plural, one {# token} other {# tokens}}"
 msgid "{toolCount, plural, one {# tool} other {# tools}}"
 msgstr "{toolCount, plural, one {# tool} other {# tools}}"
 
-#: src/pages/Shell.tsx
+#: src/lib/working-indicator.ts
 msgid "{workingBotName} is working"
 msgstr "{workingBotName} is working"
 
@@ -1364,7 +1364,11 @@ msgstr "Bots"
 msgid "Bots act without asking by default. Add an exception only when you want to review a type of action first."
 msgstr "Bots act without asking by default. Add an exception only when you want to review a type of action first."
 
-#: src/pages/Shell.tsx
+#: src/pages/GroupPanel.tsx
+msgid "Bots answering at once"
+msgstr "Bots answering at once"
+
+#: src/lib/working-indicator.ts
 msgid "Bots are working"
 msgstr "Bots are working"
 
@@ -9235,6 +9239,10 @@ msgstr "Voice failed"
 #: src/pages/system/SystemPage.tsx
 msgid "Voice shortcut"
 msgstr "Voice shortcut"
+
+#: src/lib/working-indicator.ts
+msgid "Waiting for a free place"
+msgstr "Waiting for a free place"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
