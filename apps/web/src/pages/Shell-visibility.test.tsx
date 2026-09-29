@@ -3,7 +3,13 @@
 // render the real ShellPage against a scripted RPC surface and assert on the
 // requests the shell actually makes (screen, heartbeat, boot, takeover) and on
 // the keep-alive interval it really holds — never on Shell.tsx's source text.
-import type { Bot, ComputerStatus, ProductEvent, ThreadSnapshot } from "@ardurbot/contracts";
+import type {
+  Bot,
+  ComputerStatus,
+  ProductEvent,
+  ThreadMessage,
+  ThreadSnapshot,
+} from "@ardurbot/contracts";
 import type { ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -76,6 +82,8 @@ const state = vi.hoisted(
       bots: Bot[];
       threads: Record<string, ThreadSnapshot>;
       calls: string[];
+      screenRequestedBots: string[];
+      bootstrapBotId?: string;
       takeoverRejections: number;
       takeoverFailures: number;
     },
@@ -86,6 +94,7 @@ state.threads = {
   "bot-2": snapshotFor("bot-2", false),
 };
 state.calls = [];
+state.screenRequestedBots = [];
 state.takeoverRejections = 0;
 state.takeoverFailures = 0;
 
@@ -165,7 +174,7 @@ vi.mock("../lib/rpc", () => {
           botSections: [],
           archivedBots: [],
           archivedGroups: [],
-          thread: state.threads["bot-1"] ?? null,
+          thread: state.threads[state.bootstrapBotId ?? "bot-1"] ?? null,
           routines: [],
           spaces: [{ id: "space-1", name: "Space", isDefault: true, hasContent: true }],
         };
@@ -205,8 +214,16 @@ vi.mock("../lib/rpc", () => {
         restart: record("threads.restart"),
       },
       computer: {
-        status: record("computer.status"),
-        boot: record("computer.boot"),
+        status: async (input?: { botId?: string }) => {
+          state.calls.push("computer.status");
+          const botId = input?.botId ?? "bot-1";
+          return state.threads[botId]?.computer ?? computerFor(botId, true);
+        },
+        boot: async (input?: { botId?: string }) => {
+          state.calls.push("computer.boot");
+          const botId = input?.botId ?? "bot-1";
+          return state.threads[botId]?.computer ?? computerFor(botId, true);
+        },
         stop: record("computer.stop"),
         recover: record("computer.recover"),
         reset: record("computer.reset"),
@@ -222,6 +239,7 @@ vi.mock("../lib/rpc", () => {
         },
         screenUrl: async (input: { botId: string }) => {
           state.calls.push("computer.screenUrl");
+          state.screenRequestedBots.push(input.botId);
           return { url: `https://screen.example/${input.botId}` };
         },
         heartbeat: record("computer.heartbeat"),
@@ -380,6 +398,8 @@ beforeEach(() => {
   document.body.appendChild(host);
   root = createRoot(host);
   state.calls.length = 0;
+  state.screenRequestedBots = [];
+  state.bootstrapBotId = undefined;
   state.takeoverRejections = 0;
   state.takeoverFailures = 0;
   state.threads = {
@@ -650,4 +670,68 @@ it("entering the Screen tab neither boots the computer nor takes control", async
   expect(count("computer.takeover")).toBe(0);
   // The rendered tab fetches its screen instead.
   expect(count("computer.screenUrl")).toBeGreaterThan(0);
+}, 30_000);
+
+it("does not request a screen for a background bot while the full-window view is open for another bot", async () => {
+  state.bootstrapBotId = "bot-2";
+  state.threads["bot-2"] = {
+    ...snapshotFor("bot-2", false),
+    messages: [
+      {
+        id: "msg-1",
+        runId: "run-1",
+        role: "bot",
+        botId: "bot-1",
+        text: "bot-1 card",
+        createdAt: "2026-09-28T00:00:00Z",
+        blocks: [{ kind: "computer", state: "Ready", text: "Ready" }],
+      } as unknown as ThreadMessage,
+    ],
+  };
+  await renderShell("/app/bot-2");
+  await until(() => host.querySelector('[data-testid="computer-card-open"]') !== null);
+  const openCardButton = host.querySelector<HTMLButtonElement>(
+    '[data-testid="computer-card-open"]',
+  );
+  expect(openCardButton).not.toBeNull();
+  click(openCardButton);
+  await until(() => overlayTab("Screen") !== undefined);
+  await until(() => count("computer.screenUrl") > 0);
+  await tick(100);
+
+  const screensBefore = count("computer.screenUrl");
+  // Trigger a refresh for the background bot (bot-2) while full-window view is open for bot-1
+  await deliverCapabilityFlip("bot-2", false);
+  expect(count("computer.screenUrl")).toBe(screensBefore);
+  expect(state.screenRequestedBots).not.toContain("bot-2");
+}, 30_000);
+
+it("does not request a screen when the full-window view is on the Terminal tab", async () => {
+  await renderShell("/app/bot-1");
+  await openWorkspacePane();
+  click(paneTab("Screen"));
+  await until(() => paneTab("Screen")?.getAttribute("aria-selected") === "true");
+  await tick(150);
+
+  const openScreen = [...host.querySelectorAll('[data-testid="computer-preview-open"]')].at(-1);
+  click(openScreen);
+  await until(() => overlayTab("Screen") !== undefined);
+  await tick(150);
+
+  // Switch to the Terminal tab in the full-window view
+  click(overlayTab("Terminal"));
+  await until(() => overlayTab("Terminal")?.getAttribute("aria-selected") === "true");
+  await tick(100);
+
+  const beforeRefresh = count("computer.screenUrl");
+  // Trigger a refresh while Terminal is selected: screen is unmounted, so no request
+  await deliverCapabilityFlip("bot-1", true);
+  expect(count("computer.screenUrl")).toBe(beforeRefresh);
+
+  // Switch back to the screen tab and trigger a refresh: assert one request
+  click(overlayTab("Screen"));
+  await until(() => overlayTab("Screen")?.getAttribute("aria-selected") === "true");
+  await tick(100);
+  await deliverCapabilityFlip("bot-1", true);
+  expect(count("computer.screenUrl")).toBe(beforeRefresh + 1);
 }, 30_000);

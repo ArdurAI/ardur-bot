@@ -249,7 +249,6 @@ import {
 } from "./shell/message-cards";
 import { ProviderErrorMessage } from "./shell/provider-error-message";
 import {
-  BotSettingsTitle,
   hasSharedPanelHeader,
   isSettingsPanel,
   PanelHeaderTitle,
@@ -618,7 +617,11 @@ export function ShellPage({
   // Visibility judged from the computer identity that owns the screen right now —
   // commitComputer can run mid-refresh, before React re-renders with the new state.
   function computerScreenVisible(targetBotId: string): boolean {
-    if (computerOpenRef.current) return true;
+    if (computerOpenRef.current) {
+      const modalBotId = computerBotIdRef.current ?? computerRef.current?.botId;
+      if (modalBotId !== targetBotId) return false;
+      return computerTabRef.current === "screen";
+    }
     if (panelRef.current !== "computer") return false;
     const computer = computerRef.current;
     if (computer?.botId !== targetBotId) return false;
@@ -756,6 +759,7 @@ export function ShellPage({
   const [computerBotId, setComputerBotId] = useState<string | undefined>();
   const computerOpenRef = useRef(false);
   const computerBotIdRef = useRef<string | undefined>(undefined);
+  const computerTabRef = useRef<"screen" | "terminal">("screen");
   // Latest panel/tab identity for guards that run before React re-renders.
   const panelRef = useRef<Panel>(null);
   const workspaceTabRef = useRef(workspaceTab);
@@ -2784,6 +2788,7 @@ export function ShellPage({
     botId: computerBot?.id,
     hasControl,
     working: composerRunning,
+    open: computerOpen,
     onTakeControl: async () => {
       if (computerBot) {
         await rpc.computer.takeover({ botId: computerBot.id });
@@ -2792,7 +2797,11 @@ export function ShellPage({
     },
     onStop: stopRun,
     onOpen: useComputerTerminalOpen(setComputerOpen, setWorkspaceExpanded),
+    onTabChange: (nextTab) => {
+      computerTabRef.current = nextTab;
+    },
   });
+  computerTabRef.current = terminalSurface.tab;
   const displayedComputerError = visibleComputerError(
     computerErrorState,
     Boolean(embeddedScreenUrl),
