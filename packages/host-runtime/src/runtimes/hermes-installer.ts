@@ -299,7 +299,7 @@ export async function installHermes(deps: {
     const message = error instanceof HermesInstallError ? error.message : HERMES_INSTALL_FAILED;
     // Any failure records `failed`, even before the lock, so the settings screen can
     // stop waiting. Only a lock held by a live installer leaves its status alone.
-    if (message !== HERMES_INSTALL_RUNNING) {
+    if (message !== HERMES_INSTALL_RUNNING && !(await foreignLockHeld(root, lockToken))) {
       await writeStatus(root, {
         state: "failed",
         ...(phase ? { phase } : {}),
@@ -438,6 +438,15 @@ async function breakStaleLock(
     if (ours !== undefined && ours !== null && ours.token === takeoverToken)
       await rm(takeoverPath, { force: true }).catch(() => undefined);
   }
+}
+
+/** True while a live installer other than this run holds the main lock. */
+async function foreignLockHeld(root: string, token: string | undefined): Promise<boolean> {
+  if (!hermesInstallLockHeld(root)) return false;
+  const current = await readLock(hermesInstallLockPath(root));
+  if (current === undefined) return false;
+  if (current === null) return true;
+  return current.token !== token;
 }
 
 /** Only the lock whose recorded token is ours is released; a stolen lock is left alone. */

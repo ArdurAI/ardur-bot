@@ -934,6 +934,47 @@ it("records a failed status when the install fails before the lock is taken", as
   }
 });
 
+it("leaves a live installer's status alone when this install fails before the lock", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "hermes-foreign-failure-"));
+  const runtimes = path.join(root, "runtimes");
+  await mkdir(runtimes);
+  await writeFile(
+    hermesInstallLockPath(root),
+    JSON.stringify({
+      pid: process.pid,
+      token: "another-installer",
+      createdAt: "2026-01-02T03:04:05.000Z",
+    }),
+  );
+  await writeFile(
+    path.join(root, "install-status.json"),
+    `${JSON.stringify({
+      state: "installing",
+      phase: "downloading",
+      message: "Downloading.",
+      updatedAt: "2026-01-02T03:04:05.000Z",
+    })}\n`,
+  );
+  // The lock directory is not writable, so creating the temp lock file fails
+  // the way ENOSPC would. Another live installer holds the lock meanwhile.
+  await chmod(runtimes, 0o555);
+  const fetchImpl = vi.fn<HermesFetch>();
+  try {
+    await expect(
+      installHermes({ root, fetch: fetchImpl, platform: "linux", arch: "x64" }),
+    ).rejects.toThrow(HERMES_INSTALL_FAILED);
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(readHermesInstallStatus(root)).toMatchObject({
+      state: "installing",
+      phase: "downloading",
+      message: "Downloading.",
+    });
+  } finally {
+    await chmod(runtimes, 0o755).catch(() => undefined);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 it.skipIf(process.platform === "win32")(
   "refuses to install into a symlinked runtimes directory",
   async () => {
