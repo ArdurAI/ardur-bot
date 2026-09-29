@@ -32,7 +32,7 @@ vi.mock("@lingui/react/macro", () => {
   return {
     useLingui: () => ({ t: translate }),
     Trans: ({ children }: { children: ReactNode }) =>
-      typeof children === "string" ? <>{lookup(children) || children}</> : <>{children}</>,
+      (typeof children === "string" ? lookup(children) || children : children) as ReactNode,
     Plural: ({ value, one, other }: { value: number; one: string; other: string }) => (
       <>{value === 1 ? one.replace("#", "1") : other.replace("#", String(value))}</>
     ),

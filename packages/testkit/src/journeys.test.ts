@@ -5994,9 +5994,7 @@ describeJourneys("required product journeys", () => {
       const found = rows.filter((message) =>
         JSON.stringify(message.blocks).includes("Introduce yourself to the room"),
       );
-      askMessageMeta = found[0]
-        ? { botId: found[0].botId, runId: found[0].runId }
-        : undefined;
+      askMessageMeta = found[0] ? { botId: found[0].botId, runId: found[0].runId } : undefined;
       askBlock = (found[0]?.blocks as Array<Record<string, unknown>> | undefined)?.[0];
       const members = (askBlock?.members as Array<{ outcome: string }> | undefined) ?? [];
       return (
