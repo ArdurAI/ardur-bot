@@ -4,6 +4,7 @@ import {
   copyableMessageText,
   liveMessageHasVisibleActivity,
   narrationBubbleBlocks,
+  replyMarkdownProps,
   workingBotsWithoutVisibleActivity,
 } from "./message-text.js";
 
@@ -207,5 +208,41 @@ describe("workingBotsWithoutVisibleActivity", () => {
         message([{ kind: "steps", steps: [{ label: "Shell", count: 1 }] }]),
       ]),
     ).toEqual(bots);
+  });
+});
+
+describe("replyMarkdownProps", () => {
+  it("shows the cursor only on reply text that is still streaming", () => {
+    expect(
+      replyMarkdownProps({ kind: "progress", text: "Chief's summary", streaming: true }),
+    ).toEqual({ streaming: true, cursor: true });
+    // The text paused while the run works: the streaming layout stays, the cursor goes.
+    expect(replyMarkdownProps({ kind: "progress", text: "Chief's summary" })).toEqual({
+      streaming: true,
+      cursor: false,
+    });
+    // Tool activity never carries the reply cursor.
+    expect(
+      replyMarkdownProps({
+        kind: "progress",
+        text: "Running gh pr list",
+        activity: true,
+        streaming: true,
+      }),
+    ).toEqual({ streaming: true, cursor: false });
+    // A reasoning summary never carries the reply cursor, even mid-stream.
+    expect(
+      replyMarkdownProps({
+        kind: "progress",
+        text: "Weighing options.",
+        reasoning: true,
+        streaming: true,
+      }),
+    ).toEqual({ streaming: true, cursor: false });
+    // A saved reply is plain text.
+    expect(replyMarkdownProps({ kind: "text", text: "Chief's summary" })).toEqual({
+      streaming: false,
+      cursor: false,
+    });
   });
 });

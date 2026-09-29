@@ -211,6 +211,8 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     activity: z.literal(true).optional(),
     /** Supplied reasoning summary; without it a plain progress block is narration. */
     reasoning: z.literal(true).optional(),
+    /** The reply's text is still growing; drives the typewriter cursor. */
+    streaming: z.literal(true).optional(),
     pendingToolNames: z.array(z.string()).optional(),
   }),
   z.object({

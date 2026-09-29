@@ -27,3 +27,27 @@ export function isInterimNarrationAt(blocks: readonly MessageBlock[], index: num
   if (!narration) return false;
   return blocks.slice(index + 1).some((later) => isToolActivityBlock(later));
 }
+
+/** True only while a live reply's text is still growing — the sole state with a cursor. */
+export function isStreamingTextBlock(block: MessageBlock): boolean {
+  return (
+    block.kind === "progress" &&
+    block.streaming === true &&
+    block.activity !== true &&
+    block.reasoning !== true
+  );
+}
+
+/**
+ * True once a run's live draft shows reply text the owner has seen stream:
+ * narration or sealed text, never tool activity or a reasoning summary. The
+ * server holds the reply's thread place from that first streamed text, so the
+ * client keeps the draft in that place from there on.
+ */
+export function showsReplyText(blocks: readonly MessageBlock[]): boolean {
+  return blocks.some(
+    (block) =>
+      block.kind === "text" ||
+      (block.kind === "progress" && block.activity !== true && block.reasoning !== true),
+  );
+}

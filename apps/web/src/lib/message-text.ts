@@ -2,6 +2,7 @@ import type { MessageBlock, ThreadMessage } from "@ardurbot/contracts";
 import {
   isInterimNarrationAt,
   isReasoningSummaryBlock,
+  isStreamingTextBlock,
   isToolActivityBlock,
   workRecordEntries,
 } from "@ardurbot/core";
@@ -66,4 +67,12 @@ export function workingBotsWithoutVisibleActivity<Bot extends { botId?: string }
     ),
   );
   return workingBots.filter((bot) => bot.botId == null || !covered.has(bot.botId));
+}
+
+/**
+ * How a reply's text or progress block renders: live progress keeps the streaming layout
+ * (partial fences stay sealed), and the cursor shows only while its text is still growing.
+ */
+export function replyMarkdownProps(block: MessageBlock): { streaming: boolean; cursor: boolean } {
+  return { streaming: block.kind === "progress", cursor: isStreamingTextBlock(block) };
 }

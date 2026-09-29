@@ -184,6 +184,7 @@ import { localTimezone } from "../lib/local-timezone";
 import {
   copyableMessageText,
   narrationBubbleBlocks,
+  replyMarkdownProps,
   workingBotsWithoutVisibleActivity,
 } from "../lib/message-text";
 import { messageProviderLabel } from "../lib/messaging";
@@ -258,7 +259,6 @@ import {
 } from "./shell/message-cards";
 import { ProviderErrorMessage } from "./shell/provider-error-message";
 import {
-  BotSettingsTitle,
   hasSharedPanelHeader,
   isSettingsPanel,
   PanelHeaderTitle,
@@ -6531,7 +6531,7 @@ const MessageView = memo(function MessageView({
                 className="max-w-full rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
                 dir="auto"
               >
-                <ChatMarkdown streaming>{block.text}</ChatMarkdown>
+                <ChatMarkdown {...replyMarkdownProps(block)}>{block.text}</ChatMarkdown>
               </div>
             </div>
           );
