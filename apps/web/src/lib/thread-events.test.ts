@@ -1841,6 +1841,7 @@ describe("thread event reduction", () => {
     );
     expect(state?.messages.map((item) => item.id)).toEqual(["m-0", "progress:run-1", "chart-1"]);
     expect(state?.messages[1]?.blocks).toEqual([
+      { kind: "progress", text: "Rendering a chart", activity: true },
       { kind: "progress", text: "Weekly numbers.", streaming: true },
     ]);
     state = reduceThreadSnapshot(
