@@ -155,6 +155,9 @@ it("separates members with a distinct separator that differs from intra-member s
   // The member separator differs from " · "
   expect(separator?.textContent?.trim()).not.toBe("·");
   expect(separator?.textContent).toBe(" | ");
+  // Full muted colour, never faded with an opacity modifier, so it keeps readable contrast.
+  expect(separator?.className.split(" ")).toContain("text-muted-foreground");
+  expect(separator?.className).not.toMatch(/text-muted-foreground\/\d+/);
 });
 
 it("marks a member whose admitted run has no pin as Next run", async () => {

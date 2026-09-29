@@ -67,7 +67,7 @@ export function GroupParticipantModels({
             {index > 0 ? (
               <span
                 data-testid="group-participant-separator"
-                className="mx-1.5 text-muted-foreground/40"
+                className="mx-1.5 text-muted-foreground"
               >
                 {MEMBER_SEPARATOR}
               </span>
