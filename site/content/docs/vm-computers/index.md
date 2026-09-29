@@ -99,18 +99,27 @@ These rules hold for every call on the host:
   key is namespace 1380019075 with id 5 in the low three bits and the hash of `vm:<name>` above
   them (ids 1 to 4 are taken). Postgres releases a session lock when its connection ends, so a
   crashed API or worker never leaves a VM locked, and it grants a lock that the same session
-  already holds again, so calls in one process first queue on an in-process lock per key
+  already holds again, so only an in-process lock keeps two calls in one process apart
   ([advisory locks](https://www.postgresql.org/docs/current/explicit-locking.html#ADVISORY-LOCKS)).
-  Each process holds its VM locks on one dedicated connection from its lock pool
-  (`createFilingLockPool`, `packages/db/src/client.ts`), kept while it holds any. If that
-  connection breaks, its locks are gone: operations already running finish, and new ones wait for
-  a new connection. In bridge mode the host service is the only process of its deployment that
-  runs `limactl`, and it has no database, so it uses the in-process lock alone. `host-runtime`
-  sees only a `VmLocks` interface; `localFleetService(locks)` receives the Postgres one from the
-  API's and the worker's startup. A lock file was rejected: Node has no `flock`, so a lock file
-  needs a stale-lock rule, and breaking a stale lock races with a new holder. A row lock was
-  rejected too: `SELECT … FOR UPDATE` holds a transaction open for as long as the lock, up to 14
-  minutes.
+  VM keys (id 5) queue on an in-process mutex per key. A call waits at most 60 seconds for that
+  mutex, polling once a second, and the wait counts from the moment the call started, against
+  the call's time budget (see [The time budget](#the-time-budget)). If the lock is still held,
+  the call returns "This virtual machine is busy. Try again in a minute." and does no VM work.
+  A stop can hold the lock for about 2.5 minutes, longer than this wait, on purpose: a prepare
+  that arrives then comes back busy, and the caller retries, which is safer than waiting through
+  the boot. Image keys (id 6) are not a mutex. They are an in-process readers-writer lock with
+  try semantics (see [Image download](#image-download)). VM locks and image locks share the one
+  dedicated connection each process takes from its lock pool (`createFilingLockPool`,
+  `packages/db/src/client.ts`), kept while it holds any. If that connection breaks, its locks
+  are gone: operations already running finish, and new ones wait for a new connection. In bridge
+  mode the host service is the only process of its deployment that runs `limactl`, and it has no
+  database, so it uses the in-process lock alone. `host-runtime` sees only a `VmLocks` interface;
+  `localFleetService(locks)` receives the Postgres one from the API's and the worker's startup.
+  A lock file was rejected: Node has no `flock`, so a lock file needs a stale-lock rule, and
+  breaking a stale lock races with a new holder. A row lock was rejected too: `SELECT … FOR UPDATE`
+  holds a transaction open for as long as the lock, which is the whole of `prepare`, including
+  its cleanup. Phase 1 confirms that ids 5 and 6 are still free and that the lock pool can spare
+  that one long-held connection per process.
 - **Last use is a file stamp.** Every provider call for a VM sets the modification time of
   `~/.ardurbot/vm/used/<name>` when it starts, every minute while it runs, and when it ends. Any
   process on the machine can read it, so the reconciler sees the worker's calls, and a call that
@@ -204,73 +213,146 @@ install that the interruption left half done is finished first (see
 
 #### The time budget
 
-`prepare` stays under the host bridge's 15-minute limit for one operation
-(`apps/api/src/host-hub.ts`): its three steps take at most 13 minutes, and the cleanup after a
-failure (below) at most one more minute and a forced stop. It logs how long each step took:
+The clock starts when `prepare` is entered, before any lock is taken. The host bridge's 15-minute
+limit for one operation (`apps/api/src/host-hub.ts`), and the 15-minute timers on the host client,
+the hub and the host agent's execute, are that same host operation, so they start at entry too.
+`prepare`'s own work, the lock waits and the three steps below, ends by the 13-minute mark from
+entry. A lock wait shortens the steps. It does not add time on top. `prepare` logs how long each
+wait and each step took.
 
-1. `create`, if the instance is missing, bounded at 3 minutes. Most of it is the image copy and
-   disk conversion above. **To verify:** the measured time; the manual acceptance run records it
-   and the bound is set from it.
+The waits, only when this call needs them:
+
+1. The VM lock, at most 60 seconds, polling once a second. Otherwise the busy sentence in
+   [Provider](#provider), and no `create` or `start`.
+2. The image lock, shared, only when this `prepare` will `create`: at most 15 seconds, polling
+   once a second, or the same busy sentence. Concurrent creates in one process do not queue on
+   each other (see [Image download](#image-download)); this wait is only while a delete holds the
+   lock. The two waits together are at most 75 seconds, inside the 13 minutes.
+
+The steps use whatever time is left until the marks below, measured from entry:
+
+1. `create`, if the instance is missing, bounded at the lesser of 3 minutes and the time left
+   until the 12-minute mark. Most of it is the image copy and disk conversion above. If that mark
+   has already passed, `prepare` does not start `create`: it fails with the setup sentence and
+   cleans up. **To verify:** the measured time; the manual acceptance run records it and the bound
+   is set from it. A full 3-minute `create` after both waits have run to their limits leaves 7
+   minutes and 45 seconds before the 12-minute mark, which is under Lima's roughly ten-minute
+   want for provisioning. If a real first boot needs more than the time left after that longest
+   wait, phase 1 raises the bridge limit or lowers the `create` bound before shipping. A lock
+   wait is never left running with no bound of its own.
 2. `start`, if the VM is not running, with `--timeout` set to the time left until the 12-minute
-   mark on a first boot, or 3 minutes on a wake. The provider stops waiting for the `limactl`
-   process at the same moment, because `start`'s own `Prepare` step runs before `--timeout`
-   applies.
-3. One SSH session as `bot`, bounded at 60 seconds, that requires `/run/ardur-ready` and runs
-   `docker version`, `kind version` and `kubectl version --client`. The script already waited for
-   the bot's Docker to answer before it wrote the marker.
+   mark on a first boot (no `provisioned` record), or the lesser of 3 minutes and the time left
+   on a wake. The provider stops waiting for the `limactl` process at the same moment, because
+   `start`'s own `Prepare` step runs before `--timeout` applies.
+3. One SSH session as `bot` that requires `/run/ardur-ready` and runs `docker version`,
+   `kind version` and `kubectl version --client`. The script already waited for the bot's Docker
+   to answer before it wrote the marker. On a wake, and on a first boot this `prepare` started
+   itself, the session is bounded at 60 seconds and finishes by the 13-minute mark. If less than
+   60 seconds remains, it uses the time left. If the 13-minute mark has passed, `prepare` fails
+   with the setup sentence. A VM that is already `Running` and has no `provisioned` record is the
+   exception in [Failure, cancellation and rollback](#failure-cancellation-and-rollback): it waits
+   for the marker until the 12-minute mark, not for 60 seconds.
 
 A first boot must also fit Lima's own budget: the final requirement gives provisioning about ten
 minutes after SSH comes up. **To verify:** the first-boot time on an ordinary connection; the
 manual acceptance run records it.
 
-#### Failure and rollback
+#### Failure, cancellation and rollback
 
 Every failure in these steps ends `prepare` with one sentence, "The virtual machine could not
 finish setting up. Check the internet connection and try again.": a `create` or `start` error or
 timeout, a login refused because provisioning stopped before the bot's account existed, a missing
-ready marker, or a failing tool. The provider logs the reason from `/run/ardur-failed` when it can
-read it, and the path of the instance's `ha.stderr.log`.
+or failed marker, or a failing tool. A lock that is still held is the other sentence, the busy
+one, and it is a run failure in English like the rest (see [Copy](#copy)). The provider logs the
+reason from `/run/ardur-failed` when it can read it, and the path of the instance's `ha.stderr.log`.
 
-`prepare` cleans up after itself before it throws, still under its lock: if it began a `start`, it
-stops the VM with `limactl stop`, then `stop --force` if that fails or takes more than 60 seconds,
-the same bound as Quit. On a timeout `start` returns but leaves the VM running (see above), and
-killing the `limactl` client does not stop it either, because `start` runs the host agent as a
-separate process in its own process group
-([`start.go`](https://github.com/lima-vm/lima/blob/v2.2.0/pkg/instance/start.go), `StartWithPaths`;
-[`opts_others.go`](https://github.com/lima-vm/lima/blob/v2.2.0/pkg/executil/opts_others.go)); only
-`stop` does. A VM that was already running when `prepare` began is left running. The lifecycle's
-rollback then runs as today (`rollbackProvisionedComputer` in `computer-lifecycle.ts`): it destroys
-a fresh VM with `delete --force`, which also stops a running one
-([`limactl delete`](https://lima-vm.io/docs/reference/limactl_delete/)), or calls `stop` on one that
-already existed, which finds it stopped and does nothing. Because every step ends in a `limactl`
-command that is bounded and forced, a failed `prepare` leaves no VM running and gives the single
-sentence, not the "could not be rolled back" error.
+`create`, `start` and the readiness SSH use the caller's signal. Cleanup and rollback do not. That
+signal is aborted when the person cancels the run during "Preparing the bot computer…", when the
+worker shuts down or the dev stack restarts, when a failed stop-check heartbeat aborts the run
+(`executor.ts`), when the hub cancels a worker that disconnected (`host-hub.ts`), or when any of
+the three 15-minute timers fires (the host client, `host-hub.ts`, and the host agent's execute
+timeout). `FleetProcess.run` refuses to spawn once that signal is aborted (`process.ts`).
+`stopNative` kills only `limactl`'s own process group. The host client refuses a signal that is
+already aborted (`host-client.ts`). Lima starts the host agent in its own process group
+([`opts_others.go`](https://github.com/lima-vm/lima/blob/v2.2.0/pkg/executil/opts_others.go)), and
+the client's command returns without cancelling that agent, so killing `limactl` does not stop
+the VM. `rollbackProvisionedComputer` (`computer-lifecycle.ts`) used to pass that same aborted
+context into `destroy` or `stop`, and the host client then refused the call. The VM stayed
+running in the middle of provisioning, and the owner saw "could not be rolled back".
 
-`stop`, for sleep, idle suspend and rollback, never starts a VM and never waits on SSH:
+Cleanup and the rollback's `stop` and `destroy` each run under a new `AbortSignal.timeout`,
+created before the host call so the host client accepts it. The caller's cancel cannot abort
+that signal, and each of those calls is its own host operation with its own bound. The process
+that is still alive runs them before it exits a normal shutdown. A hard kill of that process is
+the crash-recovery case (the reconciler, the creating marker and the first-boot wait below), not
+this cleanup. The owner sees the setup sentence.
+
+`prepare` cleans up before it throws, still under its VM lock. Its fresh signal covers the whole
+cleanup, 3 minutes: `limactl stop` bounded at 60 seconds, then `stop --force` bounded at 2
+minutes. It does not run the 30-second SSH cleanup on this path, because the bot may not exist
+yet. It does this when it began a `start`, and when it found a `Running` VM that has no
+`provisioned` record (below). A wake whose VM was already running, and whose only failure is the
+readiness check, is left running. On a timeout `start` returns but leaves the VM running, and
+killing the `limactl` client does not stop it either
+([`start.go`](https://github.com/lima-vm/lima/blob/v2.2.0/pkg/instance/start.go), `StartWithPaths`);
+only `stop` does.
+
+The lifecycle's rollback then runs as today, except for the signal and one skip. It destroys a
+fresh VM with `delete --force`, bounded at 3 minutes on its own fresh signal, which also stops a
+running one ([`limactl delete`](https://lima-vm.io/docs/reference/limactl_delete/)). It calls
+`stop` on a VM that already existed. That `stop` finds the VM stopped, and does nothing, when
+`prepare`'s cleanup has already stopped it: a VM this `prepare` started, or a running VM with no
+record whose marker wait failed. It does not call `stop` when the failure is a readiness failure
+of a wake that `prepare` left running, so that VM stays up. Other engines keep today's rollback
+choice of `stop` or `destroy`; only the signal changes for them, so a cancel cannot skip their
+cleanup either.
+
+A VM that is already `Running` when `prepare` starts, and that has no `provisioned` record, is an
+unfinished first boot. It happens after a cancel whose cleanup did not run, or after a local-mode
+worker crash while `limactl start` and the host agent were still running. It does not get the
+60-second readiness check. `prepare` polls `/run/ardur-ready` and `/run/ardur-failed` over SSH
+until one appears, or until the time left before the 12-minute mark from entry runs out. A ready
+marker writes `provisioned/<name>` and the call succeeds. A failed marker, or that deadline, is
+a failure. This `prepare` did not start the VM, but the boot is unfinished, so cleanup stops it
+on the fresh signal (no SSH cleanup, and `stop` within 2 minutes). Rollback's `stop` then finds
+it stopped. Waiting out the first-boot budget is what keeps a live install from being stopped at
+60 seconds.
+
+Because cleanup and rollback finish under signals the cancel cannot abort, every abort path listed
+above leaves no VM running when this `prepare` started the VM or found one running with no
+`provisioned` record. A wake that was already running, and that has a record, stays running.
+
+`stop`, for sleep, idle suspend and rollback, never starts a VM and never uses the wake path:
 
 - It takes the VM's lock and reads the instance's status. A `Stopped` VM needs nothing more.
-- A `Running` VM gets the existing in-guest cleanup (revoke terminals, `LinuxFleetSandbox`'s stop
-  script) through the internal SSH provider directly, not through the wake path, bounded at 30
-  seconds including the connection, with any failure (for example a guest whose provisioning never
-  created `bot`) logged and ignored.
+- A `Running` VM that is past its first boot gets the existing in-guest cleanup (revoke terminals,
+  `LinuxFleetSandbox`'s stop script) through the internal SSH provider directly, not through the
+  wake path, bounded at 30 seconds including the connection, with any failure (for example a guest
+  whose provisioning never created `bot`) logged and ignored. An unfinished first boot that missed
+  its marker deadline skips this SSH cleanup.
 - It always ends with `limactl stop`, then `stop --force` if that fails or takes more than two
-  minutes. A `Broken` VM goes straight to `stop --force`.
+  minutes. A `Broken` VM goes straight to `stop --force`. A rollback `stop` uses a fresh signal
+  that covers the 30-second cleanup, when it runs, and the two-minute stop.
 
 #### The boot claim
 
-A VM `prepare` can take up to 14 minutes, but the lifecycle treats a `booting` claim older than
-`BOOT_CLAIM_STALE_MS` (5 minutes, `computer-lifecycle.ts`) as abandoned unless a run lease is
-still heartbeating, and a boot outside a run has no run lease (for example the manual
-`computer.boot` route in `apps/api/src/router.ts`). A second caller could then reclaim a live VM
-boot, and the first caller's rollback would destroy the fresh VM under it. So `provisionComputer`
-renews its claim every minute while `provision` and `prepare` run: it sets `updatedAt` on the row
+A VM `prepare` can run until the 13-minute mark, and the restore and layout that follow it take
+more time, but the lifecycle treats a `booting` claim older than `BOOT_CLAIM_STALE_MS` (5 minutes,
+`computer-lifecycle.ts`) as abandoned unless a run lease is still heartbeating, and a boot outside
+a run has no run lease (for example the manual `computer.boot` route in `apps/api/src/router.ts`).
+A second caller could then reclaim a live VM boot, and the first caller's rollback would destroy
+the fresh VM under it. So `provisionComputer` renews its claim every minute from the start of
+`provisionComputer` until it activates or rolls back. That stretch includes `provision`, `prepare`,
+and the `restoreComputerWorkspace` and `ensureComputerWorkspaceLayout` calls that run after
+`prepare` returns and before activation (`computer-lifecycle.ts`). It sets `updatedAt` on the row
 where `id`, `state: "booting"` and its own `provisioningId` still match, and it waits for the
 renewal in flight to finish before it activates or rolls back. The five-minute rule then means
 five minutes without a renewal. A crashed worker's boot is still reclaimable five minutes after it
-died, and a live `prepare` is never reclaimed, however long it takes. Activation and the failure
+died, and a live boot is never reclaimed, however long it takes. Activation and the failure
 write already match on `provisioningId`, not `updatedAt`; activation uses a stamp later than the
 last renewal. A reclaimer that observed an older stamp fails its compare-and-set, as it does
-today. The renewal applies to every engine: it only keeps live claims live.
+today. The renewal applies to every engine: it only keeps live claims live. Phase 1 confirms the
+renewal still fires through that restore and layout stretch.
 
 ### Ardur's Lima home
 
@@ -312,7 +394,8 @@ Ardur never uses the owner's `~/.lima`. It sets `LIMA_HOME=~/.ardurbot/vm/lima` 
 | `known_hosts/<name>` | Ardur | The VM's pinned SSH host key. |
 | `provisioned/<name>` | Ardur | Written when the VM first passes the readiness check; it makes later starts wakes. |
 | `used/<name>` | Ardur | Empty; its modification time is the VM's last provider call. |
-| `tombstones/<name>` | Ardur | A destroy in progress, retried after a crash. |
+| `creating/<name>` | Ardur | Written immediately before `limactl create`, removed only after `create` returns successfully. A later `prepare` that still sees it deletes the instance and creates it again. |
+| `tombstones/<name>` | Ardur | A destroy in progress. The next `prepare` for that name finishes it before it adopts anything; the reconciler retries it under the same rules as a stop. |
 
 Directories are created with mode 0700 and files with 0600. The VM locks are not files (see
 [Provider](#provider)).
@@ -404,18 +487,18 @@ current entry equal to the `images` in the template.
 | `infra/sandboxes/vm/lima-computer.yaml` | The template (this change). |
 | `packages/host-runtime/src/fleet/lima-template.ts` (new) | Embeds the template text, as `linux-scripts.ts` embeds Python, so every bundle ships it; `vmLimits`; builds the `create` argv. |
 | `packages/host-runtime/src/fleet/lima.ts` (new) | `LimaSandboxProvider`, the `limactl` argv builders, the `list --json` parser, the last-use stamps and the first-boot record. |
-| `packages/host-runtime/src/fleet/vm-locks.ts` (new) | The `VmLocks` interface and its in-process implementation, used alone by the host service and as the per-key queue in front of the Postgres locks. |
+| `packages/host-runtime/src/fleet/vm-locks.ts` (new) | The `VmLocks` interface and its in-process implementation: a mutex per VM key, and a readers-writer lock with try semantics per image key. The host service uses it alone; elsewhere it sits in front of the Postgres locks. |
 | `packages/host-runtime/src/fleet/vm-image.ts` (new) | The verified image download job and the per-deployment image references. |
-| `packages/host-runtime/src/fleet/ssh-sandbox.ts` | `SshTransportOptions` for a key file path, a per-VM known-hosts file, `HostKeyAlias` and `accept-new` while no pin exists. Existing SSH machines keep today's options. |
+| `packages/host-runtime/src/fleet/ssh-sandbox.ts` | `SshTransportOptions` for a key file path, a per-VM known-hosts file, `HostKeyAlias` and `accept-new` while no pin exists. Existing SSH machines keep today's options. `supportsNetworkEgress` returns false, matching the refusal `provision` already makes. |
 | `packages/host-runtime/src/fleet/process.ts` | A `FleetProcess` factory that takes its `PATH`, so tests can put a fake `limactl` first. |
 | `packages/host-runtime/src/fleet/service.ts` | Route `engine: "vm"` to `LimaSandboxProvider`; `vm:<name>` references; the `computer.remote.vm` operation; stop VMs in `close()` when the host service quits. |
 | `packages/host-runtime/src/fleet/discovery.ts` | Report Lima's presence and version so Computers can offer the option. |
 | `packages/contracts/src/{fleet,computer-connections,ids,fleet-bridge,vm-images}.ts` | The contracts above, including `VM_RESOURCE_DEFAULTS`, the engine-aware defaults and the new reachability reasons. |
 | `packages/adapters/src/computer-connections.ts`, `fleet/service.ts` | Resolve `vm` connections like SSH ones: bridge or local `FleetService`; `localFleetService(locks)` takes the process's VM locks. |
-| `packages/adapters/src/fleet/vm-locks.ts` (new) | The Postgres VM locks: `pg_try_advisory_lock` on one dedicated lock-pool connection per process, id 5 for VMs and id 6 for images in namespace 1380019075. |
+| `packages/adapters/src/fleet/vm-locks.ts` (new) | The Postgres locks on one dedicated lock-pool connection per process, namespace 1380019075: id 5 for VMs (`pg_try_advisory_lock`) and id 6 for images (`pg_try_advisory_lock_shared` for a create, `pg_try_advisory_lock` for a delete). |
 | `packages/adapters/src/fleet/remote-sandbox.ts`, `catalog.ts` | Kind `vm`; VM connections are their own engine family. |
-| `packages/adapters/src/computer-lifecycle.ts` | `provisionComputer` renews its booting claim every minute (see [The boot claim](#the-boot-claim)); `replaceComputer` skips the checkpoint for a stopped or suspended `vm` computer, as it does for Kubernetes, because sleep already recorded one; the existing "Preparing the bot computer…" progress shows for `vm` as it does for Docker. |
-| `apps/api/src/computer-settings.ts` | `validateComputerConfiguration` refuses to move a computer whose network access is off to a `vm` connection, before anything is saved or destroyed. |
+| `packages/adapters/src/computer-lifecycle.ts` | `provisionComputer` renews its booting claim every minute from its start until activation or rollback (see [The boot claim](#the-boot-claim)); rollback's `stop` and `destroy` use a fresh bounded signal, not the caller's; `replaceComputer` skips the checkpoint for a stopped or suspended `vm` computer, as it does for Kubernetes, because sleep already recorded one; the existing "Preparing the bot computer…" progress shows for `vm` as it does for Docker. |
+| `apps/api/src/computer-settings.ts` | `validateComputerConfiguration` refuses to move a computer whose network access is off onto SSH or a VM, before anything is saved or destroyed (see [Network access](#network-access)). |
 | `apps/api/src/fleet.ts`, `apps/api/src/host-bridge.ts` | Test and details for VM connections; authorization for `computer.remote.vm`; a VM reconciler next to `reconcileFleetSecretCleanup` that also sends `images`. |
 | `apps/api/src/app.ts`, `apps/worker/src/index.ts` | Create the Postgres VM locks from the process's lock pool and pass them to `localFleetService`. |
 | `apps/host-service/src/index.ts`, `apps/desktop/src/local-mode.ts` | Stop running VMs on Quit. |
@@ -440,7 +523,7 @@ unless another source is named.
 | `mounts` | `[]` | No host directory is shared. Lima's own default is also `[]`; the explicit value keeps it that way if plain mode is ever turned off. |
 | `portForwards` | One rule: `guestIP: "0.0.0.0"`, `proto: any`, `ignore: true` | Lima forwards guest ports to the host's `127.0.0.1` by default through an internal fallback rule covering every port. The reference template documents `ignore: true` with `guestIP: 0.0.0.0` as "don't forward these ports". With plain mode on, dynamic forwarding is already off; the rule keeps it off if plain mode changes. SSH on `ssh.localPort` is the one forward Lima keeps, and it "cannot be overridden". |
 | `networks` | `[]` | No `vzNAT`, `socket_vmnet` or `user-v2` network: nothing lets the host, the LAN or another VM connect to the guest. Only Lima's default [user-mode network](https://lima-vm.io/docs/config/network/user/) remains, which gives the guest outbound internet through the host: QEMU's user network (libslirp) on `qemu`, and an in-process gvisor-tap-vsock network on `vz` ([`vm_darwin.go`](https://github.com/lima-vm/lima/blob/v2.2.0/pkg/driver/vz/vm_darwin.go), `startUsernet`). Both use 192.168.5.0/24, with the gateway at 192.168.5.2 standing for the host's loopback. |
-| `hostResolver.enabled` | `true` | Matters on `qemu` only. Lima gives the guest one nameserver ([`cidata.go`](https://github.com/lima-vm/lima/blob/v2.2.0/pkg/cidata/cidata.go), `templateArgs`; the `nameservers` of [`network-config`](https://github.com/lima-vm/lima/blob/v2.2.0/pkg/cidata/cidata.TEMPLATE.d/network-config)). On `vz` it is the gateway, 192.168.5.2, whatever this setting says; gvisor-tap-vsock's own DNS server listens there on port 53. On `qemu` this setting makes it 192.168.5.3; without it the guest would get the host's own nameservers, often a LAN or loopback address the firewall blocks. The guest firewall allows DNS only to that one address (see [Guest firewall](#provisioning)). |
+| `hostResolver.enabled` | `true` | Matters on `qemu` only. Lima's cloud-init network config lists one IPv4 nameserver ([`cidata.go`](https://github.com/lima-vm/lima/blob/v2.2.0/pkg/cidata/cidata.go), `templateArgs`; the `nameservers` of [`network-config`](https://github.com/lima-vm/lima/blob/v2.2.0/pkg/cidata/cidata.TEMPLATE.d/network-config)). On `vz` it is the gateway, 192.168.5.2, whatever this setting says; gvisor-tap-vsock's own DNS server listens there on port 53. On `qemu` this setting makes the configured address 192.168.5.3; without it the guest would get the host's own nameservers, often a LAN or loopback address the firewall blocks. QEMU's user network can add a second, IPv6, nameserver. Lima 2.2.0 starts that network without `ipv6=off` ([`qemu.go`](https://github.com/lima-vm/lima/blob/v2.2.0/pkg/driver/qemu/qemu.go)), QEMU's `ipv6-dns` default is the third address of the guest network (`fec0::3` on the `fec0::/64` prefix; [QEMU](https://www.qemu.org/docs/master/system/invocation.html)), and libslirp v4.8.0 announces it in a router advertisement when the host's resolver list has an IPv6 nameserver (`ndp_send_ra` in [`ip6_icmp.c`](https://gitlab.freedesktop.org/slirp/libslirp/-/blob/v4.8.0/src/ip6_icmp.c)). Which libslirp the host's QEMU is linked with was not checked; v4.8.0 is the source that was read. The guest firewall allows DNS only to the one IPv4 address and rejects every IPv6 packet (see [Provisioning](#provisioning)). |
 | `ssh.localPort` | `0` | Lima picks a free port on the host's loopback, forwarded to the guest's port 22. Ardur reads it from `limactl list --json` after every start. |
 | `ssh.loadDotSSHPubKeys`, `ssh.forwardAgent`, `ssh.forwardX11`, `ssh.forwardX11Trusted` | `false` | Only Lima's own generated key is authorized; the owner's `~/.ssh/*.pub` keys, SSH agent and X11 display never reach the guest. |
 | `ssh.overVsock` | `false` | Keeps SSH on the loopback TCP forward that Ardur connects to. Lima uses vsock only with systemd 256 or later, which Ubuntu 24.04 does not have ([port forwarding](https://lima-vm.io/docs/config/port/)), so this changes nothing today but keeps the transport fixed. |
@@ -467,19 +550,22 @@ system replaces the file in one step
 either the old file or the new one, never a truncated one. Apart from the helpers, it does five
 things.
 
-- **apt helpers**, used only on boots that install packages. Quit stops VMs within 60 seconds and
-  can cut an install short; apt then refuses to run until `dpkg --configure -a` has finished it
-  (`debSystem::Lock` in apt's
-  [`debsystem.cc`](https://salsa.debian.org/apt-team/apt/-/blob/2.7.14/apt-pkg/deb/debsystem.cc)),
-  so the install helper runs that first whenever dpkg's journal directory, `/var/lib/dpkg/updates`,
-  is not empty, which is the condition apt checks (`debSystem::CheckUpdates`, same file);
-  `--configure -a` configures every package that is unpacked but not yet configured
-  ([dpkg(1)](https://man7.org/linux/man-pages/man1/dpkg.1.html)).
-  Installs pass `-o DPkg::Lock::Timeout=300`, so they wait up to five minutes for the dpkg lock that
-  Ubuntu's own daily apt jobs may hold. `apt-get update` takes the package lists' lock without any
-  wait (`pkgAcquire::GetLock` in
-  [`acquire.cc`](https://salsa.debian.org/apt-team/apt/-/blob/2.7.14/apt-pkg/acquire.cc)), so it is
-  retried up to six times, ten seconds apart.
+- **apt helpers**, used only on boots that install or remove packages. Quit stops VMs within 60
+  seconds and can cut an install short; apt then refuses to run until `dpkg --configure -a` has
+  finished it (`debSystem::Lock` in apt 2.8.3's
+  [`debsystem.cc`](https://salsa.debian.org/apt-team/apt/-/blob/2.8.3/apt-pkg/deb/debsystem.cc)),
+  so the install and purge helpers run that first whenever dpkg's journal directory,
+  `/var/lib/dpkg/updates`, is not empty. apt 2.8.3's `debSystem::CheckUpdates` (same file) treats
+  an all-digit name in that directory as a dirty journal; the helper is a little broader and runs
+  whenever the directory lists any entry. `--configure -a` configures every package that is
+  unpacked but not yet configured ([dpkg(1)](https://man7.org/linux/man-pages/man1/dpkg.1.html)).
+  Installs and purges pass `-o DPkg::Lock::Timeout=300`, so they wait up to five minutes for the
+  dpkg lock that Ubuntu's own daily apt jobs may hold. `apt-get update` takes the package lists'
+  lock without any wait (`pkgAcquire::GetLock` in apt 2.8.3's
+  [`acquire.cc`](https://salsa.debian.org/apt-team/apt/-/blob/2.8.3/apt-pkg/acquire.cc) calls
+  `GetLock` on `lists/lock` with no timeout), so it is retried up to six times, ten seconds apart.
+  The image whose manifest was read is Ubuntu 24.04 `release-20260705` amd64, which ships apt
+  2.8.3. The arm64 manifest was not read.
 
 0. **Labels and a stable host key.** It writes the two labels to `/etc/ardur-labels`, and
    `ssh_deletekeys: false` to `/etc/cloud/cloud.cfg.d/90-ardur-keep-host-keys.cfg`. Lima gives
@@ -491,17 +577,33 @@ things.
    Lima's issue [#678](https://github.com/lima-vm/lima/issues/678), "SSH host keys are regenerated
    each time a VM does a stop/start", is still open. Without this step, Ardur's pinned host key
    would stop matching at the first wake.
-1. **Guest firewall.** From `ArdurVmType` it takes the guest's nameserver: 192.168.5.2 on `vz`,
-   192.168.5.3 on `qemu` (see the `hostResolver` row above), and it stops unless the nameservers
-   the guest actually received, as systemd-resolved lists them in
-   `/run/systemd/resolve/resolv.conf`
-   ([systemd-resolved.service(8)](https://www.freedesktop.org/software/systemd/man/latest/systemd-resolved.service.html)),
-   are exactly that one address. So a param that disagrees with the real VM type cannot open the
-   host's port 53. It installs `nftables` if needed and writes `/etc/ardur/firewall.nft`, checked
+1. **Guest firewall.** Before any `apt` on this boot, including the `nftables` install below, the
+   script removes `/etc/apt/apt.conf.d/99needrestart` if it is there. That file is needrestart's
+   apt hook; step 3 purges the package. See [Who could remove the firewall](#who-could-remove-the-firewall).
+   From `ArdurVmType` it takes the guest's IPv4 nameserver: 192.168.5.2 on `vz`, 192.168.5.3 on
+   `qemu` (see the `hostResolver` row above). It reads `/run/systemd/resolve/resolv.conf`
+   ([systemd-resolved.service(8)](https://www.freedesktop.org/software/systemd/man/latest/systemd-resolved.service.html))
+   and compares only the IPv4 `nameserver` lines (`awk` keeps a line whose second field has no
+   colon). It stops unless that list is exactly the one address. An IPv6 line, including `fec0::3`,
+   is ignored, because the rules reject every IPv6 packet. So a param that disagrees with the real
+   VM type cannot open the host's port 53, and a host whose resolver list also has an IPv6
+   nameserver still passes the gate. On a `qemu` host whose resolver list has only IPv6
+   nameservers, the guest has no working DNS. libslirp's `sotranslate_out4` forwards 192.168.5.3
+   only when the host has an IPv4 nameserver (v4.8.0, [`socket.c`](https://gitlab.freedesktop.org/slirp/libslirp/-/blob/v4.8.0/src/socket.c)),
+   and `fec0::3` is rejected by the IPv6 rule. Lima's network config still lists 192.168.5.3, so
+   the IPv4 gate can pass and the failure comes later, when a lookup does not resolve: the owner
+   sees the setup sentence, the VM is rolled back, and every retry fails the same way until the
+   host has an IPv4 nameserver. It fails closed, and it opens no hole. If the guest's list has
+   `fec0::3` and does not have 192.168.5.3, the gate fails first, with the nameserver reported as
+   missing, and the firewall file is not written. systemd-networkd accepts router advertisements
+   by default when forwarding is off, and `UseDNS=` defaults to true
+   ([systemd.network(5)](https://www.freedesktop.org/software/systemd/man/latest/systemd.network.html)),
+   which is how `fec0::3` arrives; that default was not re-checked against a guest.
+   It installs `nftables` if needed and writes `/etc/ardur/firewall.nft`, checked
    with `nft -c -f` before it replaces the old file. The file starts with `flush ruleset` and then
    defines one table, and `nft -f` applies a whole file as one transaction, so a load never leaves
    the guest partly configured ([atomic rule replacement](https://wiki.nftables.org/wiki-nftables/index.php/Atomic_rule_replacement)).
-   The table has one `output` chain, in this order:
+   The table has an `output` chain and a `forward` chain. The `output` chain is, in this order:
    1. accept everything on the loopback interface;
    2. reject every IPv6 packet, so IPv6 works only on the guest's own loopback;
    3. accept `ct state established,related ct direction reply`: packets of connections the host
@@ -513,11 +615,23 @@ things.
       (which holds the gateway, 192.168.5.2, the host's loopback), 198.18.0.0/15 and 224.0.0.0/3
       (multicast and reserved, which holds 255.255.255.255).
 
-   Everything else, the public IPv4 internet, is accepted for image pulls. The IPv6 reject comes
-   before rule 3, so nothing skips it. Rule 3 has to come before rule 5, because the replies to
-   Ardur's SSH go to 192.168.5.2, but it applies only to the reply direction, so a connection the
-   guest opens never skips rule 5, even one that got established while no rules were loaded. Rule
-   4's DHCP exception exists because systemd-networkd renews its lease with unicast UDP to the
+   The `forward` chain is `type filter hook forward priority filter; policy drop` and has no
+   rules, so every forwarded packet is dropped. The `output` chain is what a userspace socket
+   hits (slirp4netns or pasta, which is how the bot's traffic leaves today). The `forward` chain
+   means a reject does not depend on that. Docker's engine turns on `net.ipv4.ip_forward` and
+   `net.ipv6.conf.all.forwarding` when it starts, and it creates `docker0`
+   ([packet filtering and firewalls](https://docs.docker.com/engine/network/packet-filtering-firewalls/),
+   the current page, checked 2026-09-28). The `docker-ce` package starts that root daemon during
+   install; the script then disables and masks it, but forwarding and `docker0` can remain until
+   the next reboot.
+
+   Everything else, the public IPv4 internet, is accepted for image pulls on the `output` chain.
+   The IPv6 reject comes before rule 3, so nothing skips it. Rule 3 has to come before rule 5,
+   because the replies to Ardur's SSH go to 192.168.5.2, but it applies only to the reply
+   direction, so a connection the guest opens never skips rule 5, even one that got established
+   while no rules were loaded. A packet that is forwarded instead of sent from a local socket
+   hits the `forward` chain and is dropped. Rule 4's DHCP exception exists because
+   systemd-networkd renews its lease with unicast UDP to the
    server, 192.168.5.2, through the normal socket path (`client_send_request` in
    [`sd-dhcp-client.c`](https://github.com/systemd/systemd/blob/v255/src/libsystemd-network/sd-dhcp-client.c)),
    and the vz network's lease lasts one hour
@@ -553,24 +667,41 @@ things.
    [version in Ubuntu 24.04](https://packages.ubuntu.com/noble/openssh-server)), so the rule changes
    nothing for Lima's admin user.
 3. **Pinned software, once.** Downloads and GnuPG use `/var/lib/ardur/work`, which only root can
-   write.
+   write. Before anything else is installed, the script purges `needrestart`, `apport` and `snapd`
+   when `dpkg-query` still shows them as installed, with the same journal check and
+   `DPkg::Lock::Timeout=300` as an install. It then stops unless each of those three is absent or
+   `dpkg-query` reports `unknown ok not-installed`. A purge that fails, including a snap that is
+   still mounted, stops the script. `unattended-upgrades` is not purged. See
+   [Who could remove the firewall](#who-could-remove-the-firewall).
    - **Docker, pinned and signed.** Docker's apt repository is added the way Docker documents
      ([Ubuntu install](https://docs.docker.com/engine/install/ubuntu/)), except for the key. apt
      accepts a signature from any key in a `Signed-By` file
      ([sources.list](https://manpages.ubuntu.com/manpages/noble/man5/sources.list.5.html)), and it
-     does not read an `.asc` file with GnuPG: apt 2.7 (Ubuntu 24.04) verifies through
-     `apt-key --readonly verify` ([`gpgv.cc`](https://salsa.debian.org/apt-team/apt/-/blob/2.7.14/apt-pkg/contrib/gpgv.cc)),
-     which turns an `.asc` file into a keyring with its own small parser that decodes and joins
-     every `-----BEGIN` block of any type
-     ([`apt-key.in`](https://salsa.debian.org/apt-team/apt/-/blob/2.7.14/cmdline/apt-key.in),
-     `dearmor_keyring`). GnuPG skips blocks it does not recognise, so checking the downloaded file
-     with `gpg` and then installing its bytes, as the first revision did, lets a network attacker
-     add a key that `gpg` never lists but apt trusts. So the downloaded file is never installed.
-     The script imports it into a scratch keyring, exports only the pinned key,
-     `9DC8 5822 9FC7 DD38 854A E2D8 8D81 803C 0EBF CD88`, as a binary keyring, checks that the
-     exported file holds exactly one primary key with that fingerprint (GnuPG's colon listing gives
-     each primary key a `pub` record followed by its `fpr` record,
-     [`DETAILS`](https://github.com/gpg/gnupg/blob/master/doc/DETAILS)), and installs that file as
+     does not read an `.asc` file with GnuPG. The pinned image ships apt 2.8.3, gnupg
+     `2.4.4-2ubuntu17.4` and gpgv `2.4.4-2ubuntu17.4` (amd64 manifest of `release-20260705`).
+     apt 2.8.3 still verifies through `apt-key --quiet --readonly --keyring <file> verify`
+     ([`gpgv.cc`](https://salsa.debian.org/apt-team/apt/-/blob/2.8.3/apt-pkg/contrib/gpgv.cc)),
+     and `dearmor_filename` in
+     [`apt-key.in`](https://salsa.debian.org/apt-team/apt/-/blob/2.8.3/cmdline/apt-key.in)
+     still passes a `.gpg` file through unchanged. An `.asc` file is still turned into a keyring
+     by `dearmor_keyring`, which decodes and joins every `-----BEGIN` block of any type. GnuPG
+     skips blocks it does not recognise, so checking the downloaded file with `gpg` and then
+     installing its bytes, as the first revision did, lets a network attacker add a key that `gpg`
+     never lists but apt trusts. So the downloaded file is never installed. The script imports it
+     into a scratch keyring and exports the pinned fingerprint,
+     `9DC8 5822 9FC7 DD38 854A E2D8 8D81 803C 0EBF CD88`. `gpg --export` of a fingerprint exports
+     every keyblock whose primary key or subkey has that fingerprint
+     ([How to specify a user ID](https://www.gnupg.org/documentation/manuals/gnupg/Specify-a-User-ID.html);
+     the manual page checked is dated 2026-09-22). A fingerprint can name a primary key or a
+     secondary key. RFC 4880 requires the `0x19` back-signature only for a signing subkey
+     ([section 5.2.1](https://www.rfc-editor.org/rfc/rfc4880#section-5.2.1)), so an attacker who
+     has only Docker's public key can publish their own primary key with that material attached
+     as an encryption or authentication subkey, and the export then contains their keyblock too.
+     The script therefore requires the export to hold exactly one primary key, and that primary
+     key to be the pinned one. GnuPG's colon listing gives each primary key a `pub` record
+     followed by its `fpr` record ([`DETAILS`](https://github.com/gpg/gnupg/blob/master/doc/DETAILS)).
+     Anything else fails with "The exported Docker keyring does not hold exactly the pinned primary
+     key". It installs that file as
      `/etc/apt/keyrings/docker.gpg`, the `Signed-By` of `docker.sources`. apt passes a `.gpg`
      keyring to `gpgv` as it is. It installs `docker-ce`,
      `docker-ce-cli` and `docker-ce-rootless-extras` `5:29.8.1-1~ubuntu.24.04~noble`,
@@ -592,12 +723,14 @@ things.
      iptables modules rootless kind needs ([rootless kind](https://kind.sigs.k8s.io/docs/user/rootless/)).
    - **The bot's rootless Docker.** `bot` gets subordinate ids, lingering, and its own rootless
      Docker through `dockerd-rootless-setuptool.sh install`, which runs as `bot` through `runuser`
-     ([rootless mode](https://docs.docker.com/engine/security/rootless/)). With the rootless extras
+     ([rootless mode](https://docs.docker.com/engine/security/rootless/)). That `runuser` sends
+     the child's standard input, output and error to `/dev/null`. With the rootless extras
      installed from Docker's deb package, the AppArmor profile that lets `rootlesskit` create user
      namespaces under Ubuntu 24.04's restriction already comes with Ubuntu's `apparmor` package
      ([troubleshooting](https://docs.docker.com/engine/security/rootless/troubleshoot/)).
 4. **Ready.** At every boot it waits up to 60 seconds, as `bot`, for `docker version` to answer,
-   then writes `/run/ardur-ready`.
+   then writes `/run/ardur-ready`. That `runuser` also sends the child's standard input, output
+   and error to `/dev/null`.
 
 Nothing in the template or its params is secret: the guest can read both, and the rule is that
 neither ever will be.
@@ -621,6 +754,7 @@ VM share this user, as they share one OS user on every computer today.
 | Host services through broadcast, on `qemu` | The same libslirp function also sends 255.255.255.255 to the host's `127.0.0.1`, and any process can send a UDP broadcast (`SO_BROADCAST` needs no privilege, [socket(7)](https://man7.org/linux/man-pages/man7/socket.7.html)), which would reach UDP services on the host's loopback. The rejected 224.0.0.0/3 holds that address, which is why the template test pins the whole reject set. |
 | The two exceptions | Neither reaches a host service on the loopback. DHCP (UDP port 67 on the gateway) is answered by the virtual network: libslirp handles BOOTP to the host alias before it forwards anything (`udp_input` in [`udp.c`](https://gitlab.freedesktop.org/slirp/libslirp/-/blob/master/src/udp.c)), and gvisor-tap-vsock's DHCP server is bound to port 67 inside the network ([`dhcp.go`](https://github.com/containers/gvisor-tap-vsock/blob/v0.8.9/pkg/services/dhcp/dhcp.go)). DNS on `vz` goes to gvisor-tap-vsock's DNS server, bound to the gateway's port 53 inside the network; the NAT to the host's loopback handles only packets no bound endpoint takes ([`services.go`](https://github.com/containers/gvisor-tap-vsock/blob/v0.8.9/pkg/virtualnetwork/services.go); v0.8.9 is the version in Lima's [`go.mod`](https://github.com/lima-vm/lima/blob/v2.2.0/go.mod)). DNS on `qemu` goes to 192.168.5.3, which libslirp forwards to the host's own nameserver, port 53 only (`sotranslate_out4`). That nameserver can itself listen on the host's loopback (for example systemd-resolved at 127.0.0.53), so the one DNS port of the one resolver the host uses is reachable, by design. Allowing both addresses would be wrong: on `qemu`, 192.168.5.2:53 is the host's own `127.0.0.1:53`, and on `vz`, 192.168.5.3 is an ordinary address that the Mac dials on its own network. |
 | Services on the host's localhost, over IPv6 | On Linux hosts Lima starts QEMU's user network without `ipv6=off` ([`qemu.go`](https://github.com/lima-vm/lima/blob/v2.2.0/pkg/driver/qemu/qemu.go)). QEMU turns IPv6 on there by default, with the prefix `fec0::/64` ([QEMU](https://www.qemu.org/docs/master/system/invocation.html)), and libslirp sends every address in that prefix except its DNS address to the host's `::1` (`sotranslate_out` in [`socket.c`](https://gitlab.freedesktop.org/slirp/libslirp/-/blob/master/src/socket.c)). The guest firewall allows IPv6 only on the guest's own loopback, so no IPv6 packet leaves the VM, on any host. |
+| Forwarded packets | The `forward` chain's policy is drop, and it has no accept rule. A packet does not escape the `output` rejects by being forwarded, including during the window after `docker-ce`'s install has turned forwarding on (see [Provisioning](#provisioning)). |
 | The owner's LAN and tailnet | The firewall rejects private, link-local and carrier-grade NAT ranges, and all IPv6. |
 | Other computers | Each VM has its own user-mode network; no shared network is configured. Other computers' SSH forwards and published ports are on the host's loopback, which is blocked. |
 | The host's SSH agent, X11 display, proxy credentials | Forwarding is off, and proxy variables are not copied. |
@@ -687,19 +821,62 @@ section.
 
 The bot has no root: no sudo, no membership in the `docker` group, and its rootless Docker gives
 containers network privileges only inside their own network namespace, where the guest's rules do
-not live. **Residual risk: a kernel privilege escalation.** Rootless Docker and kind deliberately
-give the bot user namespaces in which it holds `CAP_NET_ADMIN` and `CAP_SYS_ADMIN` (Ubuntu 24.04
-allows this for `rootlesskit` through the AppArmor profile above). That exposes kernel code that
-an unprivileged user cannot otherwise reach, such as nf_tables, which has had local privilege
-escalations, for example [CVE-2024-1086](https://nvd.nist.gov/vuln/detail/CVE-2024-1086). A bot
-that exploits such a bug becomes root in the VM, can drop the firewall and can then reach the
-host's loopback services. The hypervisor still keeps host files and processes out of reach. Kernel
-fixes reach the guest only through Ubuntu's unattended security upgrades, which the image runs by
-default once a day ([automatic updates](https://documentation.ubuntu.com/server/how-to/software/automatic-updates/)),
+not live. **Residual risk.** Two kinds remain.
+
+A kernel privilege escalation. Rootless Docker and kind deliberately give the bot user namespaces
+in which it holds `CAP_NET_ADMIN` and `CAP_SYS_ADMIN` (Ubuntu 24.04 allows this for `rootlesskit`
+through the AppArmor profile above). That exposes kernel code that an unprivileged user cannot
+otherwise reach, such as nf_tables, which has had local privilege escalations, for example
+[CVE-2024-1086](https://nvd.nist.gov/vuln/detail/CVE-2024-1086). A bot that exploits such a bug
+becomes root in the VM, can drop the firewall and can then reach the host's loopback services. The
+hypervisor still keeps host files and processes out of reach. Kernel fixes reach the guest only
+through Ubuntu's unattended security upgrades, which the image runs by default once a day
+([automatic updates](https://documentation.ubuntu.com/server/how-to/software/automatic-updates/)),
 not through Lima (`upgradePackages: false`). They need DNS, which the first revision's firewall
 broke on `vz` and this one allows. A new kernel takes effect only at the next boot, which for a VM
 computer is the next wake, and a new VM starts with the pinned image's kernel until its first
-upgrade run. **To verify:** that unattended upgrades are active in the pinned image.
+upgrade run.
+
+Root code that reads the bot's state when the VM wakes. The amd64 manifest of
+`release-20260705` lists needrestart `3.6-7ubuntu4.5`, apport `2.28.1-0ubuntu3.8`, snapd
+`2.75.2+ubuntu24.04`, polkitd `124-2ubuntu1.24.04.3`, udisks2 `2.10.1-6ubuntu1.3` and
+unattended-upgrades `2.9.1+nmu4ubuntu1`. The arm64 manifest was not read.
+
+needrestart, apport and snapd are purged in provisioning step 3, before the other packages, and
+`/etc/apt/apt.conf.d/99needrestart` is removed on every boot before any `apt` run. The bot account
+does not exist yet when step 1 may install `nftables`, and `/etc/apt` is root-owned, so the bot
+cannot put the hook back. The noble-updates file list for needrestart `3.6-7ubuntu4.5` includes
+that hook file and `/usr/lib/needrestart/apt-pinvoke`
+([packages.ubuntu.com](https://packages.ubuntu.com/noble-updates/amd64/needrestart/filelist)).
+Upstream, the hook is a `DPkg::Post-Invoke` that runs needrestart, which walks every process
+(upstream `ex/99needrestart`; the exact Ubuntu file was not retrieved, so its directives are not
+quoted here). That walk is the class behind CVE-2024-48990, CVE-2024-48991, CVE-2024-48992 and
+CVE-2024-11003. [USN-7117-1](https://ubuntu.com/security/notices/USN-7117-1) fixed them in
+`3.6-7ubuntu4.3`, and the image ships the later `3.6-7ubuntu4.5`, so those bugs are patched in
+this image. The package is still removed: it is root code that can read the bot's environment and
+command line, including a Docker client that is holding a token. apport is the root crash handler.
+[CVE-2025-5054](https://ubuntu.com/security/CVE-2025-5054) was a race in apport through 2.32.0 that
+involved namespaces, which rootlesskit gives the bot; Ubuntu fixed 24.04 in `2.28.1-0ubuntu3.6`,
+and the image ships `2.28.1-0ubuntu3.8`, so that fix is included. apport is still removed, because
+the handler itself is root code on the bot's crashes. snapd is unused here. If its purge fails
+because a snap is mounted, provisioning stops. unattended-upgrades does not reinstall a package
+that was purged.
+
+unattended-upgrades stays. Its timer is persistent (`Persistent=true`, `OnCalendar=*-*-* 6:00`,
+`RandomizedDelaySec=60m` in apt 2.8.3's
+[`debian/apt-daily-upgrade.timer`](https://salsa.debian.org/apt-team/apt/-/blob/2.8.3/debian/apt-daily-upgrade.timer)),
+so it runs as root soon after a wake. It installs Ubuntu security updates, not packages the bot
+supplies. The bot is not root and cannot change apt's configuration. The Docker packages are held,
+and Docker's origin is not one of Ubuntu's default allowed origins. Acceptance step 20 checks that
+`APT::Periodic::Unattended-Upgrade` is `"1"`, that `dpkg-query` finds none of needrestart, apport
+and snapd, and that the hook file is absent.
+
+polkitd and udisks2 stay. The bot is not an administrator, so polkit does not grant it root
+actions, and the VM has no removable disks. They do not walk every process the way needrestart
+does. Removing them can remove packages the cloud image expects.
+
+**To verify:** that unattended upgrades are active in the pinned image, and that purging snapd
+succeeds on that image.
 
 ### Root and the bot's files
 
@@ -712,7 +889,12 @@ directory. The design removes that class of problem instead of guarding one path
 - The bot's authorized key lives in a root-owned file that sshd reads through `Match User bot`.
   Root never writes into the bot's home, and the bot cannot change the key or add one.
 - The bot's home is created by `useradd` before the bot exists, and root never touches it again.
-  The rootless Docker setup and the readiness check run as `bot` through `runuser`.
+  The rootless Docker setup and the readiness check run as `bot` through `runuser`, and both
+  commands send that child's standard input, output and error to `/dev/null`. Root shares no
+  writable standard stream with the bot. Lima reads the cloud-init log only for `--progress`
+  ([`hostagent.go`](https://github.com/lima-vm/lima/blob/v2.2.0/pkg/hostagent/hostagent.go)), which
+  Ardur does not pass, so that log was not something Ardur trusted. The redirect removes the
+  sharing anyway.
 - Downloads and GnuPG use `/var/lib/ardur/work`, not `/tmp`, and commands resolve only from system
   directories, never from `/usr/local`.
 - The outcome markers are files directly in `/run`, which only root can write to (not in
@@ -723,18 +905,35 @@ directory. The design removes that class of problem instead of guarding one path
 ### Network access
 
 A VM always reaches the public internet: builders need it to pull images, and the firewall above
-is the only filter. A computer whose network access is turned off cannot use one, as on SSH
-machines:
+is the only filter. A computer whose network access is turned off cannot use a VM, and it cannot
+be moved onto an SSH connection either. **Pick: refuse that move before anything is saved or
+destroyed.** The trade-off is one extra check in the settings call, against destroying the old
+computer and then failing.
+
+`SshSandboxProvider.provision` already throws "Network isolation is not available on SSH
+computers." when `networkEgress` is false (`ssh-sandbox.ts`). `supportsNetworkEgress` is not
+implemented on that provider today, so the optional call in automatic placement
+(`packages/adapters/src/fleet/placement.ts`) is falsy and placement will not pick SSH. A manual
+move does not go through placement. `validateComputerConfiguration`
+(`apps/api/src/computer-settings.ts`) does not look at network access. `replaceComputer`
+(`computer-lifecycle.ts`) checkpoints, destroys the old computer, saves the new connection, and
+only then calls `provisionComputer`. That call fails, the catch sets the computer's state to
+error, and the old computer is already gone. The workspace was saved. The computer does not gain
+full internet. That is the same hole the VM move had, on the SSH path.
 
 - `LimaSandboxProvider.provision` refuses `networkEgress: false` with "Network isolation is not
-  available on virtual machine computers.", as `SshSandboxProvider` does for SSH computers
-  (`ssh-sandbox.ts`).
-- Today only automatic placement checks network support (`packages/adapters/src/fleet/placement.ts`),
-  so `validateComputerConfiguration` refuses a manual move of such a computer to a `vm` connection
-  with the same sentence, before anything is saved or destroyed.
-- `supportsNetworkEgress` is false for `vm`, so automatic placement never picks a VM for it, and
-  Capabilities reports network control as unsupported for VM computers
-  (`apps/api/src/capability-settings.ts`).
+  available on virtual machine computers."
+- `SshSandboxProvider.supportsNetworkEgress` returns false, so the refusal is explicit and not
+  only a missing method. `supportsNetworkEgress` is false for `vm` too, so automatic placement
+  never picks either engine, and Capabilities reports network control as unsupported for VM
+  computers (`apps/api/src/capability-settings.ts`).
+- `validateComputerConfiguration` refuses the move, before anything is saved or destroyed, for
+  every engine whose `supportsNetworkEgress` is false. SSH uses its existing sentence. A VM uses
+  "Network isolation is not available on virtual machine computers." Kubernetes already implements
+  the method and returns false when that cluster cannot control egress; the move is refused then
+  too, with "Network egress control is unsupported on this computer." Docker returns true, so a
+  network-off computer can still move to Docker. If the destination cannot be asked, the move is
+  refused rather than destroying the old computer first.
 
 A network-off VM (a firewall that also rejects the public internet) is possible later, but it is
 not designed here.
@@ -803,13 +1002,35 @@ with "This virtual machine is damaged. Reset it in Settings, Computers."
 | --- | --- |
 | Add a VM connection (owner confirms the download) | Ardur downloads and verifies the image once and records it for this deployment. |
 | `provision` | Derive the name, refuse network off, and check whether the instance exists. No VM work. |
-| `prepare`, first boot (no `provisioned/<name>` record yet, including a retry after an interrupted first boot) | `create` if the instance is missing, `start` (which waits for provisioning) until the 12-minute mark, one readiness check over SSH; the host key is trusted on first use, and a passing check writes the record. At most 13 minutes, and one more to stop the VM after a failure, with the booting claim renewed every minute. |
-| `prepare`, wake (the record exists) | `start` (3 minutes at most), then the same readiness check. |
+| `prepare`, first boot (no `provisioned/<name>` record yet, including a retry after an interrupted first boot) | Under the VM lock, finish or clear this name's tombstone, then delete and recreate if a `creating` marker is left. Then `create` if the instance is missing, `start` until the 12-minute mark, and one readiness check. A VM that is already running with no record waits for the ready or failed marker until that same mark. Lock waits count from call entry. A passing check writes the record. Cleanup after a failure is its own 3 minutes and is not aborted by the caller's cancel. The booting claim is renewed every minute until activation or rollback. |
+| `prepare`, wake (the record exists) | `start` for the lesser of 3 minutes and the time left until the 12-minute mark, then the same 60-second readiness check. A VM that was already running is left running if only that check fails. |
 | Any SSH-backed call on a stopped VM | Start it first: rows can still say running after Quit stopped their VMs. |
-| Sleep and idle suspend | Checkpoint (as today), then `stop`: best-effort cleanup of the bot's processes on a running, ready VM, then `limactl stop`, forced after two minutes. `stop` never starts a VM. The disk persists. |
+| Sleep and idle suspend | Checkpoint (as today), then `stop`: one in-guest cleanup on a running, ready VM, bounded at 30 seconds, then `limactl stop`, forced after two minutes. `stop` never starts a VM and never uses the wake path. The disk persists. |
 | Wake | The next `prepare` starts the VM. |
-| Destroy and reset | Write a tombstone, `delete --force`, remove the pin, the `provisioned` record, the `used` stamp and the tombstone. |
-| Update (rebuild), move and resize | The existing flow: checkpoint, destroy, create with the current template, restore. A stopped or suspended VM is not woken for the checkpoint: `replaceComputer` uses the one idle sleep recorded before `stop` (`computer-idle.ts`), as it does for Kubernetes. |
+| Destroy and reset | Write a tombstone, `delete --force` (3 minutes on a fresh signal), remove the pin, the `provisioned` record, the `used` stamp, the `creating` marker and the tombstone. |
+| Update (rebuild), move and resize | The existing flow: checkpoint, destroy, create with the current template, restore. A stopped or suspended VM is not woken for the checkpoint: `replaceComputer` uses the one idle sleep recorded before `stop` (`computer-idle.ts`), as it does for Kubernetes. A move of a network-off computer onto SSH or a VM is refused before this flow starts. |
+
+`prepare` holds the VM lock from the start of its work. Before it decides whether the instance is
+new or one it can adopt, it deals with a pending tombstone for its own name. If
+`tombstones/<name>` exists and the instance is already gone, it deletes the tombstone file. If the
+instance is still there, it finishes the destroy: `delete --force` on a fresh signal, bounded at
+3 minutes, then it removes the tombstone, the pin, the `provisioned` record, the `used` stamp and
+the `creating` marker. A name with a pending tombstone is never adopted. The same call then looks
+for `creating/<name>`. That file is written immediately before `limactl create`, while this
+`prepare` holds the VM lock and the image lock shared, and it is removed only after `create`
+returns successfully. Destroy removes it too. If the marker is still there, the instance directory
+or its `image` file may be a partial copy: Lima's `Prepare` skips both the copy and the digest
+check whenever `<instance>/image` exists
+([`start.go`](https://github.com/lima-vm/lima/blob/v2.2.0/pkg/instance/start.go), `Prepare`;
+[`downloader.go`](https://github.com/lima-vm/lima/blob/v2.2.0/pkg/downloader/downloader.go) logs
+that the file already exists and skips the digest). `copyLocal` writes that file in place
+(continuity's `fs.CopyFile`), not by renaming a finished copy into place; only the disk conversion
+is atomic. A `create` that was killed, cancelled or cut by Quit can leave a truncated image, and
+a later `start` would convert it and fail until Reset. So a leftover marker makes this `prepare`
+delete the instance (`delete --force`, on the fresh signal, 3 minutes) and create it again, even
+when the directory or the image file is present. The person does not press Reset. A `start` of an
+instance whose disk already exists does not read the shared image, which is why `create` stays
+the only step that does. Both of these deletes count against the time budget from call entry.
 
 ### Image download
 
@@ -843,18 +1064,42 @@ on the account shares `~/.ardurbot/vm/` (for example a dev stack beside the inst
 a deployment's own database knows which image ids its connections use. So each deployment records
 its ids in `images/refs/<deployment>` through the `images` operation, and an image file is deleted
 only when no deployment's list names it and no create in the same deployment is using it. That
-second condition is enforced by the image's lock, the same kind of lock as the VM locks (id 6, key
-`vm-image:<id>`): every `create` holds it shared, with `pg_try_advisory_lock_shared` or the
-in-process equivalent, until `create` returns, and deletion takes it exclusively without waiting and
-skips the image if that fails. `create` is the only step that reads the image: it copies the image
-into the instance (see [Lima commands](#lima-commands)). Across deployments nothing is shared but
-the file system, so a create in one deployment can still find its image deleted by another
-deployment's `images` call. When a create finds its image missing, the provider starts the verified
-download again (the owner agreed to it when adding the connection), and the run fails with "The
-Ubuntu download is not finished. Try again when Computers shows it is ready."; the reconciler's next
-`images` call restarts it too. A deletion that races with another deployment's new reference
-therefore costs that deployment one verified download, never a broken VM. An image referenced only
-by a deployment that never runs again stays on disk.
+second condition is enforced by the image's lock (id 6, key `vm-image:<id>`). `create` holds it
+shared for the whole of `create`, which covers both times Lima opens the file
+(`validateLocalFileDigest`, then `CopyFile`), and a delete takes it exclusively without waiting
+and skips the image if that fails. `create` is the only step that reads the shared image. A
+`start` whose instance disk already exists does not.
+
+Postgres re-grants an advisory lock to a session that already holds it, and this design uses one
+lock connection per process, so only the in-process layer keeps an exclusive delete away from a
+shared create. That layer is a readers-writer lock with try semantics, not a mutex:
+
+- Several creates in one process hold the lock shared at the same time and do not queue. Each
+  waits at most 15 seconds, polling once a second (see [The time budget](#the-time-budget)).
+- The first shared holder is the one that calls `pg_try_advisory_lock_shared`. The last release
+  drops it. A shared try fails in-process, without calling Postgres, while this process holds the
+  lock exclusively.
+- If Postgres says no, because another process holds the lock exclusively, the in-process shared
+  acquisition fails and the poll retries until the 15-second bound, then the busy sentence.
+- A try for the exclusive lock fails immediately, in-process, when any shared or exclusive holder
+  exists in this process, and it never calls Postgres in that case. Postgres would otherwise grant
+  the exclusive request to a session that already holds the shared lock. The exclusive call to
+  `pg_try_advisory_lock` runs only after the in-process try has succeeded. If Postgres says no,
+  the delete skips the image.
+
+Across deployments nothing is shared but the file system, so a create in one deployment can still
+find its image deleted by another deployment's `images` call. When a create finds its image
+missing before it starts, the provider starts the verified download again (the owner agreed to it
+when adding the connection), and the run fails with "The Ubuntu download is not finished. Try
+again when Computers shows it is ready."; the reconciler's next `images` call restarts it too.
+Lima opens the cached file twice during one `create`. A deletion by another deployment between
+those two opens fails inside `create`. That failure is the setup sentence, not the download
+sentence, and the `creating` marker stays. The next `prepare` sees the marker, deletes the partial
+instance, and, if the image is still missing, restarts the verified download and returns the
+download sentence before it creates. A deletion that races with another deployment's new reference
+therefore costs that deployment one verified download. The next `prepare` does not adopt an
+instance that still has a half-written image.
+An image referenced only by a deployment that never runs again stays on disk.
 
 Dated Ubuntu releases move to the archive host after a few months: the `release-20260705`
 directory in the template already redirects there, and Lima's own entry is the same one. Each
@@ -900,9 +1145,17 @@ possible later improvement and is not designed here.
   only if it is still running, is marked inactive, and its `used/<name>` stamp is more than 10
   minutes old. The lock and the stamp are shared by every process on the machine (see
   [Provider](#provider)), so in the dev stack and local mode the API's reconciler sees the
-  worker's boots and calls, not only its own. After a crash nothing refreshes the stamps, so the
-  reconciler stops a leftover VM at most 10 minutes after its last call; a VM skipped because it
-  was just used is stopped by a later pass if it stays inactive.
+  worker's boots and calls, not only its own. **Pick: keep the 10-minute window.** It is the same
+  period as the reconciler. The lock covers a call that is still running; the stamp covers the
+  gap after a call ends and before the next one, including a reconcile snapshot taken while the
+  computer looked inactive. A shorter window can stop a VM between two steps. A longer window
+  only leaves a crashed VM using memory for longer. Quit already stops VMs within 60 seconds, so
+  this window is crash recovery, not the normal way a VM stops. The stamp is refreshed when a
+  call starts, every minute while it runs, and when it ends. An active computer is not stopped,
+  whatever the stamp says. A leftover VM is not stopped within 10 minutes of its last call. A
+  host-connect pass that sees a fresh stamp skips it, and the next pass is about 10 minutes
+  later, so it stops within about 20 minutes of that last call (the window plus one reconciler
+  period). A VM skipped because it was just used is stopped by a later pass if it stays inactive.
 - **Orphans.** An instance in Ardur's Lima home whose name starts with `ardur-` and whose
   `ArdurDeployment` label matches, but which no computer row names, is stopped and reported as
   unused, under the same lock and recent-use rule, so a VM created after the snapshot is never
@@ -910,13 +1163,22 @@ possible later improvement and is not designed here.
   of disks the API does not know about is deliberately not done; see the
   [open questions](#open-questions-for-the-owner). Instances without the prefix, or with another
   deployment's label (for example a dev stack beside the installed app), are never touched.
-- **Interrupted destroy.** A tombstone written before `limactl delete` is retried on the next
-  reconcile, so a crash mid-destroy does not leave an orphan.
+- **Interrupted destroy.** A tombstone is written before `limactl delete`. The next `prepare` for
+  that same name finishes or clears it before it adopts the instance (see [Lifecycle](#lifecycle)).
+  The reconciler also retries tombstones. It skips a name an active computer uses (the snapshot's
+  active names). It takes the VM lock without waiting and skips the name if the lock is held. It
+  skips a `used/<name>` stamp younger than 10 minutes. Otherwise it finishes the delete the way
+  destroy does. Those are the same lock and recent-use rules as the reconciler's stop, so a retry
+  cannot `delete --force` a VM that is live and was just provisioned.
+- **Interrupted create.** A `creating/<name>` marker left by a killed, cancelled or crashed
+  `limactl create` makes the next `prepare` delete that instance and create it again. The person
+  does not press Reset. See [Lifecycle](#lifecycle).
 - **Interrupted first boot.** The retry is still a first boot, because the `provisioned` record
   is written only after a readiness check passes, so it gets the first-boot budget (see
-  [First boot and wake](#first-boot-and-wake)). Provisioning finishes any install that the
-  interruption cut short before it uses apt again, and the retry connects with `accept-new`,
-  because no pin exists yet (see [SSH keys and host keys](#ssh-keys-and-host-keys)).
+  [First boot and wake](#first-boot-and-wake)). A VM left `Running` with no record waits for the
+  marker inside that budget instead of failing the 60-second check. Provisioning finishes any
+  install that the interruption cut short before it uses apt again, and the retry connects with
+  `accept-new`, because no pin exists yet (see [SSH keys and host keys](#ssh-keys-and-host-keys)).
 - **Broken VMs.** `Broken` status fails the run with a sentence and a **Reset** action.
 
 ## UX
@@ -955,7 +1217,7 @@ possible later improvement and is not designed here.
 | Row, only when some exist | **{count, plural, one {# unused virtual machine} other {# unused virtual machines}}** with the existing **Remove** | Their disks take space and belong to no computer. | Shown only when there are some. |
 | Confirmation after **Remove** on that row | Title: the row's count message. Sentence: **{count, plural, one {Its disk and everything on it will be deleted.} other {Their disks and everything on them will be deleted.}}** Buttons: the existing **Remove** and **Cancel**. | Deleting a disk cannot be undone, so the owner confirms it. | Shown only after pressing **Remove**; one sentence, because the title already names what goes. |
 | Test and discovery reasons, only when they apply | "Install Lima 2.2 or later on this computer, then press Test." (`lima-missing`) · "Virtual machines need macOS 13 or later." (`macos-too-old`) · "Virtual machines need access to /dev/kvm on this computer." (`kvm-unavailable`) · "This computer's home folder path is too long for virtual machines." (`vm-path-too-long`) | The owner can fix each before adding or using the connection. | Shown only for a connection that fails that check. |
-| Run and move failures only | "Network isolation is not available on virtual machine computers." · "Not enough memory for another virtual machine. Put another computer to sleep, or choose less memory." · "Not enough free disk space for this virtual machine. Free up space and try again." · "The Ubuntu download is not finished. Try again when Computers shows it is ready." · "The virtual machine could not finish setting up. Check the internet connection and try again." · "This virtual machine is damaged. Reset it in Settings, Computers." (and the four reasons above, when a run meets them) | Each says what happened and what to do. | Shown only after the failure. |
+| Run and move failures only | "Network isolation is not available on virtual machine computers." · "Network isolation is not available on SSH computers." (already used today, now also when a network-off computer is moved onto SSH) · "This virtual machine is busy. Try again in a minute." · "Not enough memory for another virtual machine. Put another computer to sleep, or choose less memory." · "Not enough free disk space for this virtual machine. Free up space and try again." · "The Ubuntu download is not finished. Try again when Computers shows it is ready." · "The virtual machine could not finish setting up. Check the internet connection and try again." · "This virtual machine is damaged. Reset it in Settings, Computers." (and the four reasons above, when a run meets them) | Each says what happened and what to do. The busy sentence is a lock that did not free within its wait. | Shown only after the failure. These stay English, like today's Fleet run failures; the busy sentence is not a new catalog string. |
 
 ### Translations
 
@@ -1009,8 +1271,13 @@ the existing `fakeSshTransport`.
   gateway filled in) equals a golden ruleset exactly: loopback accept, IPv6 reject,
   `ct state established,related ct direction reply accept`, TCP and UDP 53 to 192.168.5.2 on `vz`
   or 192.168.5.3 on `qemu` and never both, UDP 67 to 192.168.5.2, then the full reject set,
-  including 192.168.0.0/16 and 224.0.0.0/3, in that order. The nameserver `case` fails on any
-  other `ArdurVmType`, and the script compares it with `/run/systemd/resolve/resolv.conf`. The
+  including 192.168.0.0/16 and 224.0.0.0/3, in that order, and then a `forward` chain whose policy
+  is drop and which has no rules. The nameserver `case` fails on any other `ArdurVmType`. The
+  comparison keeps only IPv4 `nameserver` lines (`$2` has no colon). A fixture
+  `testdata/resolv/with-ipv6.conf` holds `nameserver 192.168.5.3` and `nameserver fec0::3`, and the
+  qemu comparison passes. A fixture `testdata/resolv/ipv6-only.conf` holds only `nameserver fec0::3`,
+  and the comparison fails. The script removes `/etc/apt/apt.conf.d/99needrestart` before any
+  `apt` command. The
   rules are written through `write_file` with `nft -c -f`. The unit file has
   `DefaultDependencies=no`, `Before=` both `network-pre.target` and `systemd-networkd.service`,
   `RequiredBy=systemd-networkd.service`, an `ExecStartPost` that lists the table, an
@@ -1028,8 +1295,15 @@ the existing `fakeSshTransport`.
   `/etc/ssh/ardur`; the drop-in has `Match User bot`, `AuthorizedKeysFile` and
   `SetEnv DOCKER_HOST=…`; the `sshd -T` check greps both.
 - **Docker key.** The downloaded `.asc` file is never installed: the script imports it into the
-  scratch keyring, exports `$DOCKER_KEY_FINGERPRINT` alone, checks the export and installs only
-  `/etc/apt/keyrings/docker.gpg`, which is the `Signed-By` of `docker.sources`.
+  scratch keyring, exports the keyblocks that contain `$DOCKER_KEY_FINGERPRINT`, requires that
+  export to hold exactly one primary key and that primary key to be the pinned one, and installs
+  only `/etc/apt/keyrings/docker.gpg`, which is the `Signed-By` of `docker.sources`. The failure
+  text is "The exported Docker keyring does not hold exactly the pinned primary key".
+- **Bot children.** Both `runuser` commands (the rootless setup and the readiness loop) end with
+  `</dev/null >/dev/null 2>&1`.
+- **Removed packages.** Inside the pinned-install block, and before the other `apt_install`
+  calls, the script purges `needrestart`, `apport` and `snapd` through `apt_purge` when they are
+  still installed, then refuses any status other than empty or `unknown ok not-installed`.
 - **Behaviour, run with bash.** The test extracts the script's helpers and runs them in a
   temporary directory:
   - `fail` and the `EXIT` trap: a failing command, a failing pipeline, an explicit `fail` and
@@ -1037,19 +1311,24 @@ the existing `fakeSshTransport`.
   - `write_file`: a new file is created with its mode; the same content keeps the file and its
     inode and only sets the mode; new content replaces it; a failing check leaves the old file and records the
     reason; no temporary file is left in any case.
-  - `apt_install`, with fake `ls`, `dpkg` and `apt-get` first on `PATH`: `dpkg --configure -a`
-    runs first exactly when the journal is not empty, and `apt-get` always gets
-    `DPkg::Lock::Timeout=300`. `apt_update` retries a failing `apt-get update` six times and then
-    records the reason.
+  - `apt_install` and `apt_purge`, with fake `ls`, `dpkg` and `apt-get` first on `PATH`:
+    `dpkg --configure -a` runs first exactly when the journal is not empty, and `apt-get` always
+    gets `DPkg::Lock::Timeout=300` (`install` for one, `purge` for the other). `apt_update` retries
+    a failing `apt-get update` six times and then records the reason.
   - The Docker key steps, with fixture public keys and signatures in
     `testdata/docker-key/` (made once with throwaway keys; no private key is committed) and a
     scratch GnuPG home: from the pinned key alone, and from the pinned key plus a second key hidden
     in an armor block of another type, before or after it, the exported keyring holds exactly the
-    pinned key, `gpgv` with it accepts the fixture signature by the pinned key and rejects the one
-    by the other key; a file without the pinned key is refused. The same fixtures show that the
-    first revision's check listed only the pinned key for the hidden-key files, the gap this
-    closes. This part needs `gpg` and `gpgv` (on CI's Linux runners) and is skipped, with that
-    reason, where they are missing.
+    pinned primary key, `gpgv` with it accepts the fixture signature by the pinned key and rejects
+    the one by the other key; a file without the pinned key is refused. One more fixture is an
+    attacker primary key with the pinned key's public material attached as an encryption or
+    authentication subkey and no `0x19` back-signature. `gpg --export` of the pinned fingerprint
+    yields that keyblock, and the primary-key check refuses it. Removing or loosening the check
+    fails this fixture. The hidden-armor fixtures stay, and they still show that the first
+    revision's check listed only the pinned key for those files. This part needs `gpg` and `gpgv`
+    (on CI's Linux runners) and is skipped, with that reason, where they are missing. The guest's
+    versions, apt 2.8.3 and gnupg and gpgv `2.4.4-2ubuntu17.4`, are what the amd64 manifest lists;
+    the test uses the runner's `gpg`.
 - The `create` argv is exact: `vz` on macOS, `qemu` on Linux, refused on Windows; values are
   JSON-encoded; `ArdurVmType` always equals `vmType`. `vmLimits` converts `2`, `4Gi` and `40Gi`,
   and refuses millicores, sizes that are not whole GiB and out-of-range values before any process
@@ -1065,18 +1344,36 @@ the existing `fakeSshTransport`.
   check; `Broken` → the reset sentence; labels that do not match → refused; `cpus`, `memory`,
   `disk` or `vmType` that differ from the connection → the damaged sentence, with no `start`;
   image not downloaded → the download restarts and a typed error comes back before `create`.
-- Time limits (fake timers): `create` is bounded at 3 minutes; `start --timeout` is the time left
-  to the 12-minute mark when there is no `provisioned` record, including for an instance that
-  already exists after an interrupted first boot, and 3 minutes when there is one; the record is
-  written only after a passing readiness check and removed by destroy. A `create` or `start`
-  error, a "degraded" start, a `start` that never returns, a refused login, a missing ready marker
-  and a failing tool each end with the setup sentence; the steps stay within 13 minutes and the
-  whole of `prepare`, cleanup included, within 14 minutes and a forced stop.
-- Cleanup and rollback: when a `start` that `prepare` began fails or times out and leaves the fake
-  VM running, `prepare` runs `limactl stop`, then `stop --force` when the graceful stop takes more
-  than 60 seconds, before it throws the setup sentence. A following `stop` from the rollback finds
-  the VM stopped and runs no SSH and no `start`. A readiness failure on a VM that was already
-  running before `prepare` leaves it running.
+- Time limits (fake timers): the clock starts at `prepare`'s entry, before the locks. The VM lock
+  wait is at most 60 seconds and the image lock wait, only when creating, at most 15 seconds;
+  past either bound the busy sentence comes back and nothing is created or started. `create` is
+  bounded at the lesser of 3 minutes and the time left until the 12-minute mark. `start --timeout`
+  is the time left to that mark when there is no `provisioned` record, including for an instance
+  that already exists after an interrupted first boot, and the lesser of 3 minutes and the time
+  left when there is one. A VM that is already `Running` with no record is polled for the ready
+  or failed marker until that mark, not for 60 seconds; a ready marker writes the record. The
+  record is otherwise written only after a passing readiness check and removed by destroy. A
+  `create` or `start` error, a "degraded" start, a `start` that never returns, a refused login, a
+  missing ready marker and a failing tool each end with the setup sentence. The waits and the
+  three steps stay within 13 minutes from entry.
+- Cleanup, cancellation and rollback: when a `start` that `prepare` began fails or times out and
+  leaves the fake VM running, `prepare` runs `limactl stop`, then `stop --force` when the graceful
+  stop takes more than 60 seconds, before it throws the setup sentence. The same cleanup runs when
+  the caller's signal aborts during `start`, and when it aborts during `create` (the `creating`
+  marker is left set). Cleanup uses a fresh signal, so an already-aborted caller signal does not
+  skip it, no `AggregateError` is thrown, and the VM is not left running. The fresh signal's bound
+  is 3 minutes (60 seconds, then 2 minutes of `stop --force`) and this path runs no SSH cleanup.
+  A following `stop` from the rollback finds the VM stopped and runs no SSH and no `start`.
+  Rollback's own `stop` and `destroy` also use a fresh signal: destroy of a fresh VM is
+  `delete --force` bounded at 3 minutes. A readiness failure on a wake whose VM was already
+  running, and which has a record, leaves it running and does not call `stop`. A running VM with
+  no record that misses the marker deadline is stopped by cleanup with no SSH cleanup.
+- Tombstone and partial create: a pending tombstone for this name is cleared when the instance is
+  gone, and finished with `delete --force` when it is not, before any adopt. A `creating` marker
+  deletes the instance and creates again even when `<instance>/image` is present. `create` holds
+  the image lock shared across both opens. A missing image between those opens is the setup
+  sentence and leaves the marker; the next `prepare` then takes the download path if the image is
+  gone.
 - `stop`: on a `Stopped` VM it runs nothing; on a `Running` VM it runs the in-guest cleanup,
   bounded at 30 seconds, and then `limactl stop` even when the cleanup fails or hangs; on a
   `Broken` VM it runs `stop --force`. It never takes the wake path.
@@ -1089,8 +1386,8 @@ the existing `fakeSshTransport`.
   the lock before the SSH work.
 - Last use: every call sets `used/<name>` when it starts and ends, and a call that runs longer
   than a minute refreshes it every minute.
-- Destroy writes a tombstone, runs `delete --force`, clears the pin, the record, the stamp and the
-  tombstone, and retries after a failure.
+- Destroy writes a tombstone, runs `delete --force`, clears the pin, the record, the stamp, the
+  `creating` marker and the tombstone, and retries after a failure.
 - `list --json` parsing reads one object per line, ignores unknown fields and refuses malformed
   lines.
 - The memory ceiling and disk floor refuse with sentences before `create` or `start`. The path
@@ -1102,16 +1399,22 @@ the existing `fakeSshTransport`.
   in flight) and one whose stamp is less than 10 minutes old, stops an inactive running VM
   otherwise, reports unused ones only when prefix and label match, never reports a VM created
   after the snapshot, and never touches other instances. `remove` refuses names that a computer
-  still uses.
+  still uses. A tombstone retry skips a name the snapshot marks active, skips a held lock, skips
+  a stamp younger than 10 minutes, and otherwise finishes the delete.
 - `closeAll` stops running VMs within its bound.
 - Files, checkpoints and the terminal round-trip through the fake transport.
 
-`vm-locks.test.ts` (host runtime): the in-process lock serializes one key, lets different keys run
-at once, and a try without waiting reports a held key as busy. `vm-locks.postgres.test.ts`
-(adapters, run where the other `*.postgres.test.ts` suites run): with two pools standing for two
-processes, the second cannot take a key the first holds; closing the holder's connection releases
-it; two calls for one key in one process queue in memory instead of sharing Postgres's lock; an
-image's shared lock blocks an exclusive try but not another shared one.
+`vm-locks.test.ts` (host runtime): a VM key is a mutex. It serializes one key, lets different keys
+run at once, queues two calls for one key in one process, and stops waiting at 60 seconds with
+the busy result. An image key is a readers-writer lock with try semantics: two shared holders
+both proceed, an exclusive try fails immediately while a shared holder exists and does not call
+the Postgres stand-in, a shared try fails while an exclusive holder exists, and different ids do
+not block. `vm-locks.postgres.test.ts` (adapters, run where the other `*.postgres.test.ts` suites
+run): with two pools standing for two processes, the second cannot take a VM key the first holds;
+closing the holder's connection releases it; two calls for one VM key in one process queue in
+memory instead of sharing Postgres's re-grant; an image's shared lock blocks an exclusive try but
+not another shared one; an exclusive try while this process holds the lock shared never calls
+`pg_try_advisory_lock`.
 
 `vm-image.test.ts` uses a loopback HTTP server fixture: the digest is verified, a wrong digest
 deletes the partial file, progress is reported, concurrent callers in one process join one job,
@@ -1128,10 +1431,12 @@ VM bounds; the new reachability reasons; capabilities), `remote-sandbox.test.ts`
 `sandbox-conformance.test.ts` (the Lima provider with the fake `limactl` and SSH),
 `computer-lifecycle.test.ts` (updating or moving a suspended `vm` computer does not export and
 restores from the revision recorded at sleep; with fake timers, a boot that runs longer than five
-minutes keeps renewing its claim and a second caller gets busy, a boot whose renewals stopped is
-reclaimable five minutes after the last one, and activation after renewals succeeds),
-`computer-settings.test.ts` (moving a computer whose network is off to a `vm` connection is
-refused and nothing is saved), `fleet-host-authorization.test.ts` (mismatched VM settings refused;
+minutes keeps renewing its claim through `prepare` and through the restore and layout that follow
+it, and a second caller gets busy; a boot whose renewals stopped is reclaimable five minutes
+after the last one; activation after renewals succeeds; a cancelled boot's rollback `stop` and
+`destroy` run on a fresh signal and do not throw "could not be rolled back"),
+`computer-settings.test.ts` (moving a computer whose network is off to a `vm` connection, and to
+an SSH connection, is refused before anything is saved or destroyed), `fleet-host-authorization.test.ts` (mismatched VM settings refused;
 `computer.remote.vm` accepted only from the API) and `fleet-connections.test.ts` (a VM connection
 requires image consent). Phase 2 adds `FleetSettings.test.tsx` (VM defaults in the form, the
 translated reasons, the unused-VM confirmation), `fleet.spec.ts` for the CI screenshot,
@@ -1180,8 +1485,8 @@ means `LIMA_HOME=~/.ardurbot/vm/lima limactl shell <name>`, which logs in as Lim
     `systemctl show -p ExecStop ardur-firewall.service` shows no command, and
     `systemctl list-dependencies --reverse ardur-firewall.service` lists `systemd-networkd.service`.
     Run `sudo systemctl restart ardur-firewall.service`, then `sudo apt-get install --reinstall nftables`:
-    after each, `sudo nft list table inet ardur` still shows the rules and the bot's
-    `curl -m 3 http://192.168.5.2:8766` still fails.
+    after each, `sudo nft list table inet ardur` still shows the rules, including a `forward` chain
+    whose policy is `drop`, and the bot's `curl -m 3 http://192.168.5.2:8766` still fails.
 11. The firewall fails closed: in `limactl shell`, replace `/etc/ardur/firewall.nft` with one
     invalid line, then sleep and wake the computer. The wake fails with "The virtual machine could
     not finish setting up…", `limactl shell` cannot connect (the guest has no network), and
@@ -1190,7 +1495,10 @@ means `LIMA_HOME=~/.ardurbot/vm/lima limactl shell <name>`, which logs in as Lim
     "Preparing the bot computer…" shows, ideally while `limactl shell` then
     `sudo tail -f /var/log/cloud-init-output.log` shows apt installing Docker. Relaunch and start a
     run again: it succeeds without **Reset**, the log shows the first-boot budget, and, if the
-    install had been cut short, `dpkg --configure -a` in the next boot's cloud-init output.
+    install had been cut short, `dpkg --configure -a` in the next boot's cloud-init output. On
+    another new computer, cancel the run (do not quit the app) during the same "Preparing the bot
+    computer…" line: the VM is not left running, the owner sees the setup sentence rather than
+    "could not be rolled back", and the next run succeeds without **Reset**.
 13. Failure is reported quickly: turn the Mac's network off after the image is downloaded, add a
     third VM computer and start a run. It fails with "The virtual machine could not finish setting
     up…" well within 13 minutes, and the VM is gone from `limactl list`.
@@ -1199,25 +1507,34 @@ means `LIMA_HOME=~/.ardurbot/vm/lima limactl shell <name>`, which logs in as Lim
     `limactl list` shows a VM with a new name and 3 CPUs, and not the old one.
 15. Network off: turn a Docker computer's network access off in Capabilities, then try to move it
     to a VM connection. It is refused with "Network isolation is not available on virtual machine
-    computers." and the computer is unchanged.
+    computers." and the computer is unchanged, including its old connection. Move the same
+    computer toward an SSH connection: it is refused with "Network isolation is not available on
+    SSH computers." and the old computer is still there.
 16. Delete: remove the computer. The instance is gone from that `limactl list` and its directory
     from `~/.ardurbot/vm/lima`.
 17. Quit Ardur with a VM running; it stops. Force-quit Ardur (or its host service) with a VM
-    running, relaunch, and check that the reconciler stops it within about 10 minutes if its
-    computer is not active.
+    running, relaunch, and check that the reconciler stops it within about 20 minutes if its
+    computer is not active (the 10-minute window, then the next pass).
 18. Remove a computer while the host service is disconnected, reconnect, and check that Computers
     shows "1 unused virtual machine", that **Remove** asks with "Its disk and everything on it will
     be deleted." and that confirming deletes it.
 19. Lease renewal: leave a computer running for more than an hour (the vz network's lease is one
     hour). The network still works, and `limactl shell` then
     `sudo journalctl -u systemd-networkd -b` shows no lost DHCPv4 lease.
-20. Updates: in `limactl shell`, `apt-config dump APT::Periodic::Unattended-Upgrade` shows `"1"`.
+20. Updates and removed packages: in `limactl shell`, `apt-config dump APT::Periodic::Unattended-Upgrade`
+    shows `"1"`. `dpkg-query -W -f '${Status}' needrestart apport snapd` finds none of them
+    installed (`unknown ok not-installed`, or no row), and `test ! -e /etc/apt/apt.conf.d/99needrestart`
+    succeeds.
 
 ### Manual acceptance on a Linux host
 
-Use a Linux machine with KVM and Lima 2.2 or later. Repeat steps 1 to 11 of the Mac list (in step
-6, `resolvectl dns` lists only 192.168.5.3), then check the paths that QEMU's user network opens
-there:
+Use a Linux machine with KVM and Lima 2.2 or later, whose `/etc/resolv.conf` lists an IPv6
+nameserver as well as an IPv4 one (the gate used to fail that host). Repeat steps 1 to 11 and
+step 20 of the Mac list. In step 6, `resolvectl dns` lists 192.168.5.3 and may also list
+`fec0::3`; do not require it to list only 192.168.5.3. IPv4 lookups still answer. An IPv6-only
+resolver list is not a separate acceptance run: the template test covers the `fec0::3`-only
+fixture, and a real host with no IPv4 nameserver is expected to fail setup and roll the VM back.
+Then check the paths that QEMU's user network opens:
 
 1. On the host, run `python3 -m http.server 8767 --bind ::1`.
 2. From the bot, `ip -6 addr` may list an `fec0::` address, but
@@ -1248,18 +1565,24 @@ A VM connection can be created through the API and used by bots; the web form wa
   `vm-images.ts`, pinned to a current dated Ubuntu release (digests from Ubuntu's signed
   `SHA256SUMS`), with the template's `images` updated to match.
 - Host runtime: `lima-template.ts` (with `vmLimits`), `lima.ts` (readiness, first boot and wake,
-  time limits, cleanup after a failed start, `stop` that never wakes, host-key trust, network
-  refusal, the size check, the real-path guard, last-use stamps and waking before SSH),
-  `vm-locks.ts` (the interface and the in-process lock), `vm-image.ts` (downloads, `.part` names
-  and references), the fake `testdata/limactl`, the Docker key fixtures in
-  `testdata/docker-key/`, and the changes to `ssh-sandbox.ts`, `process.ts`, `service.ts` and
+  time limits counted from call entry, a tombstone finished or cleared before adopt, the
+  `creating` marker and recreate, cleanup and rollback on a fresh bounded signal, the
+  running-without-record wait, `stop` that never wakes, host-key trust, network refusal, the size
+  check, the real-path guard, last-use stamps and waking before SSH), `vm-locks.ts` (the interface,
+  the in-process VM mutex and the image readers-writer lock), `vm-image.ts` (downloads, `.part`
+  names and references), the fake `testdata/limactl`, the Docker key fixtures in
+  `testdata/docker-key/`, the resolver fixtures in `testdata/resolv/`, and the changes to
+  `ssh-sandbox.ts` (`supportsNetworkEgress` returns false), `process.ts`, `service.ts` and
   `discovery.ts`.
 - Adapters: `computer-connections.ts`, `fleet/service.ts` and the new `fleet/vm-locks.ts` (the
-  Postgres locks), `fleet/remote-sandbox.ts`, `fleet/catalog.ts`, `computer-lifecycle.ts` (the
-  booting-claim renewal, the checkpoint skip for stopped or suspended `vm` computers, and the
-  progress label).
+  Postgres locks; confirm ids 5 and 6 are free and that the pool can spare one long-held
+  connection per process), `fleet/remote-sandbox.ts`, `fleet/catalog.ts`, `computer-lifecycle.ts`
+  (the booting-claim renewal from the start of `provisionComputer` until activation or rollback,
+  rollback `stop` and `destroy` on a fresh bounded signal, the checkpoint skip for stopped or
+  suspended `vm` computers, and the progress label).
 - API and host: `apps/api/src/app.ts` and `apps/worker/src/index.ts` (the VM locks from each
-  process's lock pool), `apps/api/src/computer-settings.ts` (the network-off refusal),
+  process's lock pool), `apps/api/src/computer-settings.ts` (the network-off refusal for SSH and
+  VM),
   `apps/api/src/fleet.ts`, `apps/api/src/host-bridge.ts`, the VM reconciler with `images`,
   `apps/host-service/src/index.ts` and `apps/desktop/src/local-mode.ts` for stop on Quit.
 - Tests: `lima-template.test.ts`, `lima.test.ts`, `vm-locks.test.ts`, `vm-locks.postgres.test.ts`,
@@ -1315,6 +1638,20 @@ adapter, as AGENTS.md requires, and nothing in the core loop depends on a cloud 
 5. **Installing Lima.** Ask the owner to install Lima (recommended: no new dependency in Ardur), or
    bundle it with the desktop app.
 
+### Decided
+
+Two questions the first review left open are decided in the body, not added to the list above.
+
+- **Moving a network-off computer to an SSH connection.** Same outcome the VM move used to have:
+  the move destroys the old computer, then the new one refuses, and the computer is left in error.
+  Pick: refuse the move first, for SSH and for VMs, with the sentence each one already uses. One
+  extra check, and the old computer stays. See [Network access](#network-access).
+- **Whether 10 minutes is the right recent-use window.** Pick: keep 10 minutes. It matches how
+  often the background check runs. Shorter can stop a VM between two steps; longer only keeps a
+  crashed VM in memory longer. A leftover VM then stops within about 20 minutes of its last call,
+  because a pass that sees a fresh stamp waits for the next pass. See
+  [Crash recovery and orphans](#crash-recovery-and-orphans).
+
 ## What is not verified yet
 
 No VM was created, started or stopped while writing this design, so everything inside the guest is
@@ -1324,10 +1661,12 @@ unexecuted:
   rootless Docker set up through `runuser`, rootless kind on Ubuntu 24.04, and the kubectl path
   inside the client tarball;
 - the firewall in a guest: the rules themselves (`nft` is not available on macOS, so not even
-  `nft -c` ran), `ardur-firewall.service` loading before systemd-networkd and keeping the network
-  down when it fails, that the image's network is managed by systemd-networkd, the nameserver
-  check against `/run/systemd/resolve/resolv.conf` at provisioning time, DNS on both VM types,
-  and DHCP renewals through the new exception;
+  `nft -c` ran), including the `forward` chain, `ardur-firewall.service` loading before
+  systemd-networkd and keeping the network down when it fails, that the image's network is managed
+  by systemd-networkd, the IPv4-only nameserver check against
+  `/run/systemd/resolve/resolv.conf` at provisioning time (including a host that also lists an
+  IPv6 nameserver, and an IPv6-only host), DNS and DHCP renewal on both VM types, and whether
+  `fec0::3` makes the guest stall before it uses 192.168.5.3;
 - the sshd drop-in and the `sshd -T` check in the guest, and whether `/run/sshd` is the privilege
   separation directory `sshd -T` wants there. The same drop-in, with `SetEnv`, was checked in test
   mode with the host's own OpenSSH 10.3 against a scratch configuration: the `Match` applied to
@@ -1340,26 +1679,34 @@ unexecuted:
   [the round-2 notes](#review-notes));
 - the `EXIT` trap and `write_file` were run with the host's bash 3.2, not the guest's bash 5.2,
   and with a stand-in for `sync`, whose file argument the host's `sync` does not take;
-- the apt helpers against a real interrupted install, and whether Ubuntu's daily apt jobs hold
-  apt's locks during a first boot;
+- the apt helpers against a real interrupted install, whether Ubuntu's daily apt jobs hold apt's
+  locks during a first boot, and whether purging snapd succeeds on the cloud image (a mounted snap
+  stops provisioning);
 - Lima's `create`, `start`, requirement and timeout behaviour, the IPv6 and broadcast paths through
   QEMU's user network, gvisor-tap-vsock's DNS and DHCP services, and the `limactl list --json`
   fields were read from the source of Lima 2.2.0, libslirp and gvisor-tap-vsock 0.8.9, not
   observed; whether apt and curl fall back to IPv4 promptly on a Linux host;
 - a local image path at `create` and `start` time;
-- the pinned `release-20260705` image download: its directory now redirects to Ubuntu's archive
-  host, which could not be reached while checking. The digests are Lima 2.2.0's own; phase 1 pins
-  a current release before shipping;
+- the pinned `release-20260705` image file itself was not downloaded. Its directory redirects to
+  Ubuntu's archive host. The amd64 manifest was read from that archive
+  (`ubuntu-24.04-server-cloudimg-amd64.manifest`); the arm64 manifest was not. The digests in the
+  template are Lima 2.2.0's own; phase 1 pins a current release before shipping;
 - whether any vsock endpoint on the host is reachable from the guest in plain mode;
 - download time, `create` time, first-boot time (against Lima's roughly ten-minute final
   requirement) and disk use;
-- that unattended upgrades are active in the pinned image;
-- the Postgres VM locks and the booting-claim renewal, which exist only as this design;
+- that unattended upgrades actually run in the pinned image (the timer file was read; a boot was
+  not), and the exact text of Ubuntu's `99needrestart` (the package file list and the upstream
+  hook were read; the Ubuntu file was not);
+- which libslirp Lima 2.2.0's host QEMU links. The RDNSS and `sotranslate_out4` behaviour above
+  was read from libslirp v4.8.0;
+- the Postgres advisory lock ids 5 and 6 (namespace 1380019075) are still free, and that the lock
+  pool can spare one long-held connection per process. The booting-claim renewal through restore
+  and layout exists only as this design;
 - a Linux host with QEMU and KVM.
 
 ### Review notes
 
-Two review rounds shaped this page. The second one found, among others, that the first revision's
+Three review rounds shaped this page. The second one found, among others, that the first revision's
 firewall blocked the only nameserver a `vz` guest has, and that its Docker key check could be
 bypassed. Both were checked before being fixed: the nameserver layout in Lima 2.2.0's `cidata.go`
 and gvisor-tap-vsock 0.8.9's `services.go`; the key bypass with throwaway keys in scratch GnuPG
@@ -1367,6 +1714,15 @@ homes, where a second key hidden in an armor block of another type was not liste
 `gpg` check, was kept by the `awk` program from apt 2.7.14's `apt-key.in`, and was then accepted
 by `gpgv`. The new export gave a keyring with only the pinned key in every case, and `gpgv` with it
 rejected the other key's signature.
+
+The third round kept that export and added the requirement that the pinned fingerprint is the
+only primary key, because `gpg --export` of a fingerprint also exports a keyblock that merely
+carries it as a subkey (GnuPG's user-id rules; RFC 4880 requires the `0x19` back-signature only
+for a signing subkey). The nameserver gate now compares IPv4 lines only: Lima 2.2.0's `qemu.go`
+does not pass `ipv6=off`, and libslirp v4.8.0 announces `fec0::3` when the host has an IPv6
+nameserver. apt citations moved from 2.7.14 to 2.8.3, the version in the image's amd64 manifest,
+which also lists gnupg and gpgv `2.4.4-2ubuntu17.4`. Guest behaviour, the lock ids and the claim
+renewal are still unverified, as the list above says.
 
 ## Sources
 
@@ -1445,22 +1801,29 @@ Guest system:
   [`postinst-systemd-restartnostart`](https://salsa.debian.org/debian/debhelper/-/blob/main/autoscripts/postinst-systemd-restartnostart).
 - systemd [systemd.unit(5)](https://www.freedesktop.org/software/systemd/man/latest/systemd.unit.html),
   [systemctl(1)](https://www.freedesktop.org/software/systemd/man/latest/systemctl.html),
-  [systemd-resolved.service(8)](https://www.freedesktop.org/software/systemd/man/latest/systemd-resolved.service.html)
-  and, at v255 (Ubuntu 24.04's),
+  [systemd-resolved.service(8)](https://www.freedesktop.org/software/systemd/man/latest/systemd-resolved.service.html),
+  [systemd.network(5)](https://www.freedesktop.org/software/systemd/man/latest/systemd.network.html)
+  (`IPv6AcceptRA=` and `UseDNS=` defaults) and, at v255 (Ubuntu 24.04's),
   [`sd-dhcp-client.c`](https://github.com/systemd/systemd/blob/v255/src/libsystemd-network/sd-dhcp-client.c).
-- QEMU's [`-netdev user` options](https://www.qemu.org/docs/master/system/invocation.html);
-  libslirp's [`socket.c`](https://gitlab.freedesktop.org/slirp/libslirp/-/blob/master/src/socket.c)
-  and [`udp.c`](https://gitlab.freedesktop.org/slirp/libslirp/-/blob/master/src/udp.c);
+- QEMU's [`-netdev user` options](https://www.qemu.org/docs/master/system/invocation.html)
+  (`ipv6-dns` defaults to the third address of the guest network);
+  libslirp v4.8.0's [`ip6_icmp.c`](https://gitlab.freedesktop.org/slirp/libslirp/-/blob/v4.8.0/src/ip6_icmp.c)
+  (`ndp_send_ra`) and [`socket.c`](https://gitlab.freedesktop.org/slirp/libslirp/-/blob/v4.8.0/src/socket.c)
+  (`sotranslate_out4`), and current [`udp.c`](https://gitlab.freedesktop.org/slirp/libslirp/-/blob/master/src/udp.c);
   gvisor-tap-vsock 0.8.9's
   [`services.go`](https://github.com/containers/gvisor-tap-vsock/blob/v0.8.9/pkg/virtualnetwork/services.go)
   and [`dhcp.go`](https://github.com/containers/gvisor-tap-vsock/blob/v0.8.9/pkg/services/dhcp/dhcp.go).
-- GnuPG's colon listing format, [`doc/DETAILS`](https://github.com/gpg/gnupg/blob/master/doc/DETAILS);
+- GnuPG's colon listing format, [`doc/DETAILS`](https://github.com/gpg/gnupg/blob/master/doc/DETAILS),
+  and [How to specify a user ID](https://www.gnupg.org/documentation/manuals/gnupg/Specify-a-User-ID.html)
+  (manual page dated 2026-09-22);
+  [RFC 4880 section 5.2.1](https://www.rfc-editor.org/rfc/rfc4880#section-5.2.1);
   [sources.list](https://manpages.ubuntu.com/manpages/noble/man5/sources.list.5.html) and
-  [apt-secure](https://manpages.ubuntu.com/manpages/noble/man8/apt-secure.8.html); apt 2.7.14's
-  [`gpgv.cc`](https://salsa.debian.org/apt-team/apt/-/blob/2.7.14/apt-pkg/contrib/gpgv.cc),
-  [`apt-key.in`](https://salsa.debian.org/apt-team/apt/-/blob/2.7.14/cmdline/apt-key.in),
-  [`debsystem.cc`](https://salsa.debian.org/apt-team/apt/-/blob/2.7.14/apt-pkg/deb/debsystem.cc)
-  and [`acquire.cc`](https://salsa.debian.org/apt-team/apt/-/blob/2.7.14/apt-pkg/acquire.cc);
+  [apt-secure](https://manpages.ubuntu.com/manpages/noble/man8/apt-secure.8.html); apt 2.8.3's
+  [`gpgv.cc`](https://salsa.debian.org/apt-team/apt/-/blob/2.8.3/apt-pkg/contrib/gpgv.cc),
+  [`apt-key.in`](https://salsa.debian.org/apt-team/apt/-/blob/2.8.3/cmdline/apt-key.in),
+  [`debsystem.cc`](https://salsa.debian.org/apt-team/apt/-/blob/2.8.3/apt-pkg/deb/debsystem.cc),
+  [`acquire.cc`](https://salsa.debian.org/apt-team/apt/-/blob/2.8.3/apt-pkg/acquire.cc) and
+  [`debian/apt-daily-upgrade.timer`](https://salsa.debian.org/apt-team/apt/-/blob/2.8.3/debian/apt-daily-upgrade.timer);
   [dpkg(1)](https://man7.org/linux/man-pages/man1/dpkg.1.html).
 - Ubuntu's sudo [`/etc/pam.d/sudo`](https://git.launchpad.net/ubuntu/+source/sudo/tree/debian/etc/pam.d/sudo?h=applied/ubuntu/noble-updates),
   [pam_env(8)](https://man7.org/linux/man-pages/man8/pam_env.8.html) and
@@ -1468,16 +1831,23 @@ Guest system:
   [`config-top.h`](https://git.launchpad.net/ubuntu/+source/bash/tree/config-top.h?h=applied/ubuntu/noble-updates).
 - [rename(2)](https://man7.org/linux/man-pages/man2/rename.2.html),
   [socket(7)](https://man7.org/linux/man-pages/man7/socket.7.html),
-  [CVE-2024-1086](https://nvd.nist.gov/vuln/detail/CVE-2024-1086) and Ubuntu Server's
+  [CVE-2024-1086](https://nvd.nist.gov/vuln/detail/CVE-2024-1086),
+  [USN-7117-1](https://ubuntu.com/security/notices/USN-7117-1),
+  [CVE-2025-5054](https://ubuntu.com/security/CVE-2025-5054) and Ubuntu Server's
   [automatic updates](https://documentation.ubuntu.com/server/how-to/software/automatic-updates/).
 - PostgreSQL [advisory locks](https://www.postgresql.org/docs/current/explicit-locking.html#ADVISORY-LOCKS).
 
 Ubuntu, Docker, kind and Kubernetes:
 
 - [Ubuntu 24.04 cloud images, release 20260705](https://cloud-images.ubuntu.com/releases/noble/release-20260705/).
+  The amd64 package list was read from the archive copy of
+  `ubuntu-24.04-server-cloudimg-amd64.manifest` for that release. needrestart's file list:
+  [noble-updates](https://packages.ubuntu.com/noble-updates/amd64/needrestart/filelist).
 - Docker [Engine on Ubuntu](https://docs.docker.com/engine/install/ubuntu/),
-  [rootless mode](https://docs.docker.com/engine/security/rootless/) and its
-  [troubleshooting](https://docs.docker.com/engine/security/rootless/troubleshoot/); the package
+  [rootless mode](https://docs.docker.com/engine/security/rootless/), its
+  [troubleshooting](https://docs.docker.com/engine/security/rootless/troubleshoot/) and
+  [packet filtering and firewalls](https://docs.docker.com/engine/network/packet-filtering-firewalls/)
+  (current page, checked 2026-09-28); the package
   versions were read from Docker's `noble` pool for
   [arm64](https://download.docker.com/linux/ubuntu/dists/noble/pool/stable/arm64/) and
   [amd64](https://download.docker.com/linux/ubuntu/dists/noble/pool/stable/amd64/).

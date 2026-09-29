@@ -54,7 +54,8 @@ ssh:
 
 # The guest's nameserver is the gateway 192.168.5.2 on vz, whatever this setting says, and
 # 192.168.5.3 on qemu, where this setting keeps the host's own nameservers out of the guest.
-# The guest firewall allows DNS only to that address.
+# On qemu the guest can also learn fec0::3 when the host has an IPv6 nameserver. The guest
+# firewall allows DNS only to the IPv4 address and rejects every IPv6 packet.
 hostResolver:
   enabled: true
 # Do not copy the host's proxy variables, and any credentials in them, into the guest.
@@ -156,6 +157,12 @@ provision:
         fi
         apt-get -o DPkg::Lock::Timeout=300 install -y "$@"
       }
+      apt_purge() {
+        if [ -n "$(ls -A /var/lib/dpkg/updates)" ]; then
+          dpkg --configure -a
+        fi
+        apt-get -o DPkg::Lock::Timeout=300 purge -y "$@"
+      }
 
       BOT_USER=bot
       BOT_UID=2000
@@ -193,22 +200,31 @@ provision:
       write_file /etc/cloud/cloud.cfg.d/90-ardur-keep-host-keys.cfg 0644 \
         < <(printf '%s\n' "ssh_deletekeys: false")
 
+      # needrestart's apt hook runs as root and inspects every process, including the bot's.
+      # The package is purged in step 3, with apport and snapd. Remove the hook on every boot
+      # before any apt runs, including the nftables install below. /etc/apt is root-owned;
+      # the bot cannot put the hook back.
+      rm -f /etc/apt/apt.conf.d/99needrestart
+
       # 1. Guest firewall. Lima's user-mode network maps the gateway, 192.168.5.2, to the host's
       # loopback. The guest's nameserver is the gateway itself on vz, where the network's own DNS
-      # server answers on port 53, and 192.168.5.3 on qemu; the nameserver the guest received
-      # must be exactly that one, or provisioning stops. The rules reject outbound IPv4 to the
-      # host's loopback, private, link-local, carrier-grade NAT, multicast and reserved ranges
-      # (255.255.255.255 included: QEMU's user network also sends it to the host's loopback),
-      # except DNS to that nameserver and DHCP to the gateway. Replies on connections the host
-      # opened, such as SSH, pass; packets of connections the guest opened never skip a reject.
-      # IPv6 works only on the guest's own loopback.
+      # server answers on port 53, and 192.168.5.3 on qemu. On qemu the guest can also learn
+      # fec0::3 when the host has an IPv6 nameserver; a colon marks an IPv6 address, and those
+      # lines are ignored because the rules reject every IPv6 packet. The IPv4 nameserver the
+      # guest received must be exactly the one above, or provisioning stops. The rules reject
+      # outbound IPv4 to the host's loopback, private, link-local, carrier-grade NAT, multicast
+      # and reserved ranges (255.255.255.255 included: QEMU's user network also sends it to the
+      # host's loopback), except DNS to that nameserver and DHCP to the gateway. Replies on
+      # connections the host opened, such as SSH, pass. The forward chain drops everything, so
+      # a packet the guest opened cannot skip a reject by being forwarded instead of sent from
+      # a local socket. IPv6 works only on the guest's own loopback.
       gateway=192.168.5.2
       case "$PARAM_ArdurVmType" in
         vz) nameserver=192.168.5.2 ;;
         qemu) nameserver=192.168.5.3 ;;
         *) fail "Unknown VM type: $PARAM_ArdurVmType" ;;
       esac
-      received="$(awk '$1 == "nameserver" { print $2 }' /run/systemd/resolve/resolv.conf 2>/dev/null |
+      received="$(awk '$1 == "nameserver" && $2 !~ /:/ { print $2 }' /run/systemd/resolve/resolv.conf 2>/dev/null |
         sort -u || true)"
       [ "$received" = "$nameserver" ] ||
         fail "The guest's nameserver is ${received:-missing}, not $nameserver"
@@ -228,6 +244,9 @@ provision:
           ip daddr $nameserver meta l4proto { tcp, udp } th dport 53 accept
           ip daddr $gateway udp dport 67 accept
           ip daddr { 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.0.0.0/24, 192.168.0.0/16, 198.18.0.0/15, 224.0.0.0/3 } reject
+        }
+        chain forward {
+          type filter hook forward priority filter; policy drop;
         }
       }
       EOF
@@ -295,22 +314,43 @@ provision:
       # 3. Pinned software, installed once, in a directory only root can write.
       if [ "$(cat /var/lib/ardur/provisioned 2>/dev/null || true)" != "$PINS" ]; then
         apt_update
+        # Root code that reads bot state. needrestart walks every process from an apt hook.
+        # apport is the crash handler. snapd is unused here. Purge them before anything else
+        # is installed. A purge that fails, including a mounted snap, stops the script.
+        # unattended-upgrades stays: it installs Ubuntu security updates, not these packages.
+        to_purge=()
+        for pkg in needrestart apport snapd; do
+          status="$(dpkg-query -W -f '${Status}' "$pkg" 2>/dev/null || true)"
+          if [ -n "$status" ] && [ "$status" != "unknown ok not-installed" ]; then
+            to_purge+=("$pkg")
+          fi
+        done
+        if [ "${#to_purge[@]}" -gt 0 ]; then
+          apt_purge "${to_purge[@]}"
+        fi
+        for pkg in needrestart apport snapd; do
+          status="$(dpkg-query -W -f '${Status}' "$pkg" 2>/dev/null || true)"
+          if [ -n "$status" ] && [ "$status" != "unknown ok not-installed" ]; then
+            fail "Could not remove $pkg (status: $status)"
+          fi
+        done
         apt_install ca-certificates curl gnupg uidmap dbus-user-session slirp4netns
         work=/var/lib/ardur/work
         rm -rf "$work"
         install -d -m 0700 "$work" "$work/gnupg"
 
-        # Docker's apt repository, signed by the pinned key only. apt accepts a signature from any
-        # key in a Signed-By file, and reads an .asc file with its own parser rather than GnuPG's,
-        # so the downloaded file is never installed. The pinned key alone is exported from a
-        # scratch keyring into a binary keyring, which is checked again before apt uses it.
+        # Docker's apt repository. apt accepts a signature from any key in a Signed-By file, and
+        # reads an .asc file with its own parser rather than GnuPG's, so the downloaded file is
+        # never installed. gpg --export of a fingerprint exports every keyblock whose primary key
+        # or subkey has that fingerprint. The export must then hold exactly one primary key, and
+        # that primary key must be the pinned one.
         curl -fsSLo "$work/docker.asc" https://download.docker.com/linux/ubuntu/gpg
         gpg --homedir "$work/gnupg" --batch --quiet --import "$work/docker.asc"
         gpg --homedir "$work/gnupg" --batch --export "$DOCKER_KEY_FINGERPRINT" >"$work/docker.gpg"
         primary_keys="$(gpg --homedir "$work/gnupg" --batch --show-keys --with-colons "$work/docker.gpg" |
           awk -F: '$1 == "pub" { primary = 1; next } primary && $1 == "fpr" { print $10; primary = 0 }')"
         [ "$primary_keys" = "$DOCKER_KEY_FINGERPRINT" ] ||
-          fail "The exported Docker keyring does not hold exactly the pinned key"
+          fail "The exported Docker keyring does not hold exactly the pinned primary key"
         install -m 0755 -d /etc/apt/keyrings
         write_file /etc/apt/keyrings/docker.gpg 0644 <"$work/docker.gpg"
         write_file /etc/apt/sources.list.d/docker.sources 0644 \
@@ -354,7 +394,7 @@ provision:
         systemctl start "user@$BOT_UID.service"
         runuser -u "$BOT_USER" -- env HOME="/home/$BOT_USER" XDG_RUNTIME_DIR="/run/user/$BOT_UID" \
           DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$BOT_UID/bus" \
-          dockerd-rootless-setuptool.sh install
+          dockerd-rootless-setuptool.sh install </dev/null >/dev/null 2>&1
 
         write_file /var/lib/ardur/provisioned 0644 < <(printf '%s\n' "$PINS")
       fi
@@ -362,6 +402,7 @@ provision:
       # 4. Every boot: ready once the bot's Docker answers. The command runs as the bot.
       runuser -u "$BOT_USER" -- env HOME="/home/$BOT_USER" XDG_RUNTIME_DIR="/run/user/$BOT_UID" \
         DOCKER_HOST="$BOT_DOCKER_HOST" \
-        timeout 60 sh -c 'until docker version >/dev/null 2>&1; do sleep 2; done' ||
+        timeout 60 sh -c 'until docker version >/dev/null 2>&1; do sleep 2; done' \
+        </dev/null >/dev/null 2>&1 ||
         fail "The bot's Docker did not start"
       touch /run/ardur-ready
