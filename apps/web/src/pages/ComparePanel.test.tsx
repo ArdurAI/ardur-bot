@@ -7,6 +7,8 @@ import { expect, it, vi } from "vitest";
 import { ComparePanel, ComparisonPin } from "./ComparePanel";
 import { CompareStart } from "./CompareStart";
 
+vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+
 const calls = vi.hoisted(() => ({
   get: vi.fn(),
   list: vi.fn(),
@@ -304,5 +306,36 @@ it("says the comparison could not start when the bots cannot load", async () => 
   expect(node.querySelector('[role="alert"]')?.textContent).toBe(
     "Could not start comparison; retry.",
   );
+  await act(async () => root.unmount());
+});
+
+it("clears stale bots on reopen and does not show old roster on load failure", async () => {
+  calls.list.mockClear();
+  calls.list.mockResolvedValueOnce([
+    { id: "a", name: "Bot A" },
+    { id: "b", name: "Bot B" },
+  ]);
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  const render = (open: boolean) =>
+    root.render(
+      <CompareStart botId="a" text="One task" open={open} onOpenChange={() => undefined} />,
+    );
+  await act(async () => render(true));
+  expect(node.querySelector("#compare-bot-b")).not.toBeNull();
+
+  await act(async () => render(false));
+
+  // Reopen with failed list
+  calls.list.mockRejectedValueOnce(new Error("offline"));
+  await act(async () => render(true));
+
+  expect(node.querySelector('[role="alert"]')?.textContent).toBe(
+    "Could not start comparison; retry.",
+  );
+  expect(node.querySelector("#compare-bot-b")).toBeNull();
+  const button = (label: string) =>
+    [...node.querySelectorAll("button")].find((btn) => btn.textContent === label)!;
+  expect(button("Preview").disabled).toBe(true);
   await act(async () => root.unmount());
 });

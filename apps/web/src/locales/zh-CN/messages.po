@@ -4133,6 +4133,7 @@ msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group"
 msgstr "群组"
 
@@ -4140,7 +4141,6 @@ msgstr "群组"
 msgid "Group brief"
 msgstr "群组简报"
 
-#: src/pages/GroupPanel.tsx
 #: src/pages/shell/settings-chrome.tsx
 msgid "Group settings"
 msgstr "群组设置"
@@ -6944,6 +6944,10 @@ msgstr "重置你的密码"
 msgid "Resetting…"
 msgstr "正在重置…"
 
+#: src/pages/Shell.tsx
+msgid "Resize pane"
+msgstr "调整面板大小"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Resources"
 msgstr ""
@@ -7629,6 +7633,7 @@ msgstr ""
 #: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Settings"
 msgstr "设置"
 
@@ -9074,7 +9079,7 @@ msgid "Working…"
 msgstr "处理中…"
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Workspace"
 msgstr "工作区"
 

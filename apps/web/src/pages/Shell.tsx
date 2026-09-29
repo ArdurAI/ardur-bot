@@ -249,7 +249,9 @@ import {
 import { ProviderErrorMessage } from "./shell/provider-error-message";
 import {
   BotSettingsTitle,
+  hasSharedPanelHeader,
   isSettingsPanel,
+  PanelHeaderTitle,
   SettingsPanelToggle,
   ThreadSettingsButton,
 } from "./shell/settings-chrome";
@@ -3682,6 +3684,7 @@ export function ShellPage({
         size={isSettingsPanel(panel) ? "wide" : "narrow"}
         workspace={panel === "computer"}
         expanded={panel === "computer" && workspaceExpanded}
+        resizeLabel={t`Resize pane`}
       >
         {panel && (active || activeGroup || panel === "create") ? (
           <div
@@ -3691,29 +3694,16 @@ export function ShellPage({
                 : "rk-scroll h-full w-full overflow-y-auto px-5 py-[17px]"
             }
           >
-            {panel !== "routine" &&
-            panel !== "create" &&
-            panel !== "create-group" &&
-            panel !== "group-settings" ? (
+            {hasSharedPanelHeader(panel) ? (
               <div
                 data-workspace-chrome={panel === "computer" ? "" : undefined}
                 className="mb-4 flex shrink-0 items-center justify-between gap-2"
               >
-                {panel === "settings" && active ? (
-                  <BotSettingsTitle bot={active} />
-                ) : (
-                  <span className="text-[13.5px] text-muted-foreground">
-                    {panel === "settings" ? (
-                      <Trans>Settings</Trans>
-                    ) : panel === "computer" ? (
-                      <Trans>Workspace</Trans>
-                    ) : active ? (
-                      (computer?.state ?? active.status)
-                    ) : (
-                      <Trans>Group</Trans>
-                    )}
-                  </span>
-                )}
+                <PanelHeaderTitle
+                  panel={panel}
+                  activeBot={active}
+                  computerState={computer?.state}
+                />
                 <div className="flex gap-1">
                   {panel === "computer" ? (
                     <Button

@@ -92,8 +92,11 @@ it("opens wide panels at 560 px with their own remembered width", async () => {
     );
     const aside = host.querySelector("aside");
     expect(aside?.className).toContain("md:w-(--pane-width)");
-    expect(aside?.className).not.toContain("max-w-[384px]");
+    expect(aside?.className).toContain("max-w-[384px]");
+    expect(aside?.className).toContain("md:max-w-none");
     expect(aside?.style.getPropertyValue("--pane-width")).toBe("min(560px, calc(100vw - 400px))");
+    expect(handle()?.getAttribute("role")).toBe("slider");
+    expect(handle()?.getAttribute("aria-label")).toBe("Resize pane");
     expect(handle()?.getAttribute("aria-valuemin")).toBe("384");
     expect(handle()?.getAttribute("aria-valuemax")).toBe("800");
     await act(async () => {
@@ -174,7 +177,8 @@ it("keeps a wide panel's width while it slides closed", async () => {
     );
     const aside = host.querySelector("aside");
     expect(aside?.className).toContain("md:w-(--pane-width)");
-    expect(aside?.className).not.toContain("max-w-[384px]");
+    expect(aside?.className).toContain("max-w-[384px]");
+    expect(aside?.className).toContain("md:max-w-none");
     expect(host.querySelector("hr")).toBeNull();
 
     await act(async () =>
@@ -186,6 +190,36 @@ it("keeps a wide panel's width while it slides closed", async () => {
     );
     expect(host.querySelector("aside")?.className).toContain("max-w-[384px]");
   } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+it("adjusts resize handle for RTL layouts and custom translated labels", async () => {
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  const handle = () => host.querySelector("hr");
+  try {
+    document.dir = "rtl";
+    await act(async () =>
+      root.render(
+        <SlidingPanel open panel="settings" size="wide" resizeLabel="Panelgröße ändern">
+          <div />
+        </SlidingPanel>,
+      ),
+    );
+    expect(handle()?.getAttribute("role")).toBe("slider");
+    expect(handle()?.getAttribute("aria-label")).toBe("Panelgröße ändern");
+    expect(handle()?.getAttribute("aria-valuenow")).toBe("560");
+    await act(async () => {
+      handle()?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
+    });
+    expect(handle()?.getAttribute("aria-valuenow")).toBe("540");
+    await act(async () => {
+      handle()?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    });
+    expect(handle()?.getAttribute("aria-valuenow")).toBe("560");
+  } finally {
+    document.dir = "ltr";
     await act(async () => root.unmount());
   }
 });

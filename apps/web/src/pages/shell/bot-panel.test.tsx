@@ -359,7 +359,17 @@ it("groups bot settings into cards and keeps memory and computer under Advanced"
   expect(cards.map(title)).toEqual(["Profile", "Model", "Notifications", "Memory", "Computer"]);
   const card = (label: string) => cards.find((item) => title(item) === label)!;
   const profileFields = card("Profile").querySelector('input[id$="-name"]')?.closest(".grid");
-  expect(profileFields?.className).toContain("@min-[520px]:grid-cols-2");
+  const defaultPaneWidth = 560;
+  const border = 1;
+  const padding = 40; // px-5 padding on scroll container
+  const classicScrollbar = 16;
+  const defaultContainerWidth = defaultPaneWidth - border - padding - classicScrollbar; // ~503 px
+  const minContainerWidth = 384 - border - padding; // ~343 px
+  const breakpointMatch = profileFields?.className.match(/@min-\[(\d+)px\]:grid-cols-2/);
+  expect(breakpointMatch).not.toBeNull();
+  const breakpoint = Number(breakpointMatch![1]);
+  expect(breakpoint).toBeLessThanOrEqual(defaultContainerWidth);
+  expect(breakpoint).toBeGreaterThan(minContainerWidth);
   expect(container.querySelector('[data-testid="bot-settings"]')?.className).toContain(
     "@container",
   );

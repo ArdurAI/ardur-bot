@@ -4133,6 +4133,7 @@ msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group"
 msgstr "Grupo"
 
@@ -4140,7 +4141,6 @@ msgstr "Grupo"
 msgid "Group brief"
 msgstr "Resumen del grupo"
 
-#: src/pages/GroupPanel.tsx
 #: src/pages/shell/settings-chrome.tsx
 msgid "Group settings"
 msgstr "Configuración del grupo"
@@ -6944,6 +6944,10 @@ msgstr "Restablece tu contraseña"
 msgid "Resetting…"
 msgstr "Restableciendo…"
 
+#: src/pages/Shell.tsx
+msgid "Resize pane"
+msgstr "Cambiar tamaño del panel"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Resources"
 msgstr ""
@@ -7629,6 +7633,7 @@ msgstr ""
 #: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Settings"
 msgstr "Configuración"
 
@@ -9074,7 +9079,7 @@ msgid "Working…"
 msgstr "Trabajando…"
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Workspace"
 msgstr "Espacio de trabajo"
 

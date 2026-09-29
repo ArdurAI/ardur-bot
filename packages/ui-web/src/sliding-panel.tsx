@@ -27,6 +27,7 @@ export function SlidingPanel({
   workspace = false,
   expanded = false,
   size = "narrow",
+  resizeLabel = "Resize pane",
 }: {
   open: boolean;
   panel: string;
@@ -35,6 +36,7 @@ export function SlidingPanel({
   expanded?: boolean;
   /** Narrow forms stay at 384 px; wide panes start roomier and can be dragged wider. */
   size?: "narrow" | "wide";
+  resizeLabel?: string;
 }) {
   const [retained, setRetained] = useState(children);
   const [widths, setWidths] = useState(() => ({
@@ -85,19 +87,22 @@ export function SlidingPanel({
         aria-hidden={!open}
         inert={!open}
         style={widthStyle}
-        className={`${expanded ? "fixed inset-0 z-50 max-w-none" : "absolute inset-y-0 end-0 z-20 border-s border-sidebar-border"} flex w-full min-h-0 flex-col overflow-hidden bg-background transition-[transform,opacity] duration-[240ms] ease-[cubic-bezier(0.2,0.7,0.2,1)] motion-reduce:transition-none ${!expanded && resizable ? "md:w-(--pane-width)" : !expanded ? "max-w-[384px]" : ""} ${open ? "translate-x-0 opacity-100" : "pointer-events-none translate-x-full opacity-0 rtl:-translate-x-full"}`}
+        className={`${expanded ? "fixed inset-0 z-50 max-w-none" : "absolute inset-y-0 end-0 z-20 border-s border-sidebar-border"} flex w-full min-h-0 flex-col overflow-hidden bg-background transition-[transform,opacity] duration-[240ms] ease-[cubic-bezier(0.2,0.7,0.2,1)] motion-reduce:transition-none ${!expanded && resizable ? "max-w-[384px] md:max-w-none md:w-(--pane-width)" : !expanded ? "max-w-[384px]" : ""} ${open ? "translate-x-0 opacity-100" : "pointer-events-none translate-x-full opacity-0 rtl:-translate-x-full"}`}
       >
         {resizable && open && !expanded ? (
           <hr
+            role="slider"
             aria-orientation="vertical"
-            aria-label="Resize pane"
+            aria-label={resizeLabel}
             aria-valuenow={widths[resizable]}
             aria-valuemin={paneWidths[resizable].min}
             aria-valuemax={maxPaneWidth}
             tabIndex={0}
             className="absolute inset-y-0 start-0 z-30 hidden w-1 cursor-col-resize hover:bg-border focus-visible:bg-ring md:block"
             onKeyDown={(event) => {
-              const delta = event.key === "ArrowLeft" ? 20 : event.key === "ArrowRight" ? -20 : 0;
+              const direction = typeof document !== "undefined" && document.dir === "rtl" ? -1 : 1;
+              const delta =
+                (event.key === "ArrowLeft" ? 20 : event.key === "ArrowRight" ? -20 : 0) * direction;
               if (!delta) return;
               event.preventDefault();
               resize(resizable, (current) => current + delta);

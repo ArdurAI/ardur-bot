@@ -4133,6 +4133,7 @@ msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group"
 msgstr "समूह"
 
@@ -4140,7 +4141,6 @@ msgstr "समूह"
 msgid "Group brief"
 msgstr "समूह का संक्षिप्त विवरण"
 
-#: src/pages/GroupPanel.tsx
 #: src/pages/shell/settings-chrome.tsx
 msgid "Group settings"
 msgstr "समूह सेटिंग्स"
@@ -6944,6 +6944,10 @@ msgstr "अपना पासवर्ड रीसेट करें"
 msgid "Resetting…"
 msgstr "रीसेट हो रहा है…"
 
+#: src/pages/Shell.tsx
+msgid "Resize pane"
+msgstr "पैनल का आकार बदलें"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Resources"
 msgstr ""
@@ -7629,6 +7633,7 @@ msgstr ""
 #: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Settings"
 msgstr "सेटिंग्स"
 
@@ -9074,7 +9079,7 @@ msgid "Working…"
 msgstr "काम चल रहा है…"
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Workspace"
 msgstr "कार्यक्षेत्र"
 

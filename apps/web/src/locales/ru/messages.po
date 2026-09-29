@@ -4133,6 +4133,7 @@ msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group"
 msgstr "Группа"
 
@@ -4140,7 +4141,6 @@ msgstr "Группа"
 msgid "Group brief"
 msgstr "Сводка группы"
 
-#: src/pages/GroupPanel.tsx
 #: src/pages/shell/settings-chrome.tsx
 msgid "Group settings"
 msgstr "Настройки группы"
@@ -6944,6 +6944,10 @@ msgstr "Сбросить пароль"
 msgid "Resetting…"
 msgstr "Сброс…"
 
+#: src/pages/Shell.tsx
+msgid "Resize pane"
+msgstr "Изменить размер панели"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Resources"
 msgstr ""
@@ -7629,6 +7633,7 @@ msgstr ""
 #: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Settings"
 msgstr "Настройки"
 
@@ -9074,7 +9079,7 @@ msgid "Working…"
 msgstr "Выполняется…"
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Workspace"
 msgstr "Рабочая область"
 

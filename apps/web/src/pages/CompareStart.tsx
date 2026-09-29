@@ -40,21 +40,31 @@ export function CompareStart({
   const [request, setRequest] = useState<ComparisonStart | null>(null);
   const [comparisonId, setComparisonId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<"load" | "start" | null>(null);
   // Every opening starts from this bot and a fresh list of the space's bots.
   useEffect(() => {
     if (!open) return;
     let active = true;
+    setBots([]);
     setSelected([botId]);
     setPreview(null);
     setRequest(null);
     setError(null);
+    setLoading(true);
     rpc.bots.list().then(
       (next) => {
-        if (active) setBots(next);
+        if (active) {
+          setBots(next);
+          setLoading(false);
+        }
       },
       () => {
-        if (active) setError("load");
+        if (active) {
+          setBots([]);
+          setError("load");
+          setLoading(false);
+        }
       },
     );
     return () => {
@@ -152,7 +162,7 @@ export function CompareStart({
             </p>
           ) : null}
           <Button
-            disabled={busy || selected.length < 2}
+            disabled={busy || loading || error === "load" || selected.length < 2}
             onClick={() =>
               void act(async () => {
                 if (preview && request) {

@@ -26,7 +26,9 @@ vi.mock("@ardurbot/ui-web", () => ({
 
 import {
   BotSettingsTitle,
+  hasSharedPanelHeader,
   isSettingsPanel,
+  PanelHeaderTitle,
   SettingsPanelToggle,
   ThreadSettingsButton,
 } from "./settings-chrome";
@@ -114,4 +116,23 @@ it("fills the panel's settings gear with ink while settings are open", async () 
   await act(async () => root.render(<SettingsPanelToggle open={false} onToggle={onToggle} />));
   expect(gear()?.getAttribute("aria-label")).toBe("Show settings");
   expect(gear()?.dataset.variant).toBe("ghost");
+});
+
+it("gives settings, group settings, and computer the shared header with a close button", () => {
+  const panels = [
+    "settings",
+    "group-settings",
+    "computer",
+    "routine",
+    "routines",
+    "create",
+    "create-group",
+    null,
+  ];
+  expect(panels.filter(hasSharedPanelHeader)).toEqual(["settings", "group-settings", "computer"]);
+});
+
+it("heads group settings with Group settings title", async () => {
+  await act(async () => root.render(<PanelHeaderTitle panel="group-settings" />));
+  expect(container.textContent).toBe("Group settings");
 });

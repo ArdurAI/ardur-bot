@@ -515,7 +515,7 @@ export function BotSettings({
         />
       </div>
       <SettingsGroup label={t`Profile`}>
-        <div className="grid gap-x-4 pb-4 @min-[520px]:grid-cols-2">
+        <div className="grid gap-x-4 pb-4 @min-[480px]:grid-cols-2">
           <label htmlFor={`${ids}-name`} className={fieldLabelClass}>
             <Trans>Name</Trans>
             <Input
@@ -541,7 +541,7 @@ export function BotSettings({
           </label>
           <label
             htmlFor={`${ids}-description`}
-            className={`${fieldLabelClass} @min-[520px]:col-span-2`}
+            className={`${fieldLabelClass} @min-[480px]:col-span-2`}
           >
             <Trans>Description</Trans>
             <Textarea

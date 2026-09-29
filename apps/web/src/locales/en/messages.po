@@ -4133,6 +4133,7 @@ msgstr "Granted"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group"
 msgstr "Group"
 
@@ -4140,7 +4141,6 @@ msgstr "Group"
 msgid "Group brief"
 msgstr "Group brief"
 
-#: src/pages/GroupPanel.tsx
 #: src/pages/shell/settings-chrome.tsx
 msgid "Group settings"
 msgstr "Group settings"
@@ -6944,6 +6944,10 @@ msgstr "Reset your password"
 msgid "Resetting…"
 msgstr "Resetting…"
 
+#: src/pages/Shell.tsx
+msgid "Resize pane"
+msgstr "Resize pane"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Resources"
 msgstr "Resources"
@@ -7629,6 +7633,7 @@ msgstr "Set up servers"
 #: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Settings"
 msgstr "Settings"
 
@@ -9074,7 +9079,7 @@ msgid "Working…"
 msgstr "Working…"
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Workspace"
 msgstr "Workspace"
 

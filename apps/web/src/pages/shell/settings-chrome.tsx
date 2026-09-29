@@ -1,6 +1,6 @@
 import type { Bot } from "@ardurbot/contracts";
 import { BotAvatar, Button } from "@ardurbot/ui-web";
-import { useLingui } from "@lingui/react/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Settings } from "lucide-react";
 
 export type SettingsPanel = "settings" | "group-settings";
@@ -8,6 +8,11 @@ export type SettingsPanel = "settings" | "group-settings";
 /** Bot and group settings open wide; create forms and routines stay narrow. */
 export function isSettingsPanel(panel: string | null): panel is SettingsPanel {
   return panel === "settings" || panel === "group-settings";
+}
+
+/** Panels that share the shell header with title and close button. */
+export function hasSharedPanelHeader(panel: string | null): boolean {
+  return panel === "settings" || panel === "group-settings" || panel === "computer";
 }
 
 /** The conversation header's entry to the settings of the bot or group in view. */
@@ -64,5 +69,35 @@ export function SettingsPanelToggle({ open, onToggle }: { open: boolean; onToggl
     >
       <Settings size={16} strokeWidth={1.7} />
     </Button>
+  );
+}
+
+/** Heads the shared panel with bot seal or localized title. */
+export function PanelHeaderTitle({
+  panel,
+  activeBot,
+  computerState,
+}: {
+  panel: string | null;
+  activeBot?: Pick<Bot, "id" | "name" | "color" | "status"> | null;
+  computerState?: string;
+}) {
+  if (panel === "settings" && activeBot) {
+    return <BotSettingsTitle bot={activeBot} />;
+  }
+  return (
+    <span className="text-[13.5px] text-muted-foreground">
+      {panel === "settings" ? (
+        <Trans>Settings</Trans>
+      ) : panel === "group-settings" ? (
+        <Trans>Group settings</Trans>
+      ) : panel === "computer" ? (
+        <Trans>Workspace</Trans>
+      ) : activeBot ? (
+        (computerState ?? activeBot.status)
+      ) : (
+        <Trans>Group</Trans>
+      )}
+    </span>
   );
 }
