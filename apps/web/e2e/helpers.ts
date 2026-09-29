@@ -1,4 +1,4 @@
-import { expect, type Page, type TestInfo } from "@playwright/test";
+import { expect, type Locator, type Page, type TestInfo } from "@playwright/test";
 import { DEPLOYMENT_OWNER_RENEW_MS } from "../../../packages/testkit/src/cli/deployment-owner.js";
 
 export function isRealSandboxProvider(provider = process.env.SANDBOX_PROVIDER) {
@@ -118,6 +118,22 @@ export async function signup(
   await page.getByRole("button", { name: "Create account" }).click();
 }
 
+/** Visible text stays inside the dialog, including on a narrow window. */
+export async function expectVisibleTextInside(scope: Locator) {
+  const box = await scope.boundingBox();
+  expect(box).not.toBeNull();
+  if (!box) return;
+  const nodes = scope.locator("p, h2, h3, h4");
+  const count = await nodes.count();
+  for (let index = 0; index < count; index += 1) {
+    const node = nodes.nth(index);
+    if (!(await node.isVisible())) continue;
+    const rect = await node.boundingBox();
+    if (!rect) continue;
+    expect(rect.x + rect.width).toBeLessThanOrEqual(box.x + box.width + 1);
+  }
+}
+
 export async function captureScreenshot(page: Page, testInfo: TestInfo, name: string) {
   const screenshotPath = testInfo.outputPath(`${name}.png`);
   await page.screenshot({
@@ -190,6 +206,7 @@ export async function openUserSettings(
     | "usage"
     | "integrations"
     | "computer"
+    | "boards"
     | "updates",
 ) {
   await page

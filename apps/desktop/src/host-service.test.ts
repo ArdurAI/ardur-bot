@@ -8,6 +8,7 @@ import {
   HostLifecyclePreferences,
   HostServiceStore,
   HostServiceSupervisor,
+  hostGuardPaths,
   hostServiceEnvironment,
   hostServiceIdentity,
   hostServiceLaunch,
@@ -48,6 +49,49 @@ describe("desktop host service", () => {
     expect(hostServiceIdentity({ ...config, token: "another-fixture-pairing" })).not.toBe(
       registrationId,
     );
+  });
+  it("lists the control-plane files the host guardrail denies, from the data directory", () => {
+    const paths = hostGuardPaths("/fixture/user-data");
+    expect(paths).toContain("/fixture/user-data/secrets.env");
+    expect(paths).toContain("/fixture/user-data/postgres");
+    // A local-data reset moves the old secrets and cluster aside; the moved copies stay denied.
+    expect(paths).toContain("/fixture/user-data/backups");
+    expect(paths).toContain(path.join("/fixture/user-data", "stack", ".env"));
+    expect(paths).toContain(path.join("/fixture/user-data", "stack", ".desktop-stack-token"));
+    expect(paths).toContain(path.join("/fixture/user-data", "host-service", "host-service.enc"));
+    expect(paths).toContain(path.join("/fixture/user-data", "data", "homes"));
+    expect(paths).toContain(path.join("/fixture/user-data", "data", "pi-sessions"));
+    // The bots' own computer homes stay reachable.
+    expect(paths).not.toContain(path.join("/fixture/user-data", "data", "desktop-computers"));
+  });
+  it("adds the guardrail deny list to every pairing configuration it starts", () => {
+    const children: ChildProcess[] = [];
+    const startChild = vi.fn(() => {
+      const child = Object.assign(new EventEmitter(), {
+        connected: true,
+        send: vi.fn(),
+        kill: vi.fn(),
+      }) as unknown as ChildProcess;
+      children.push(child);
+      return child;
+    });
+    const supervisor = new HostServiceSupervisor(
+      hostServiceLaunch({
+        packaged: true,
+        execPath: "/app/electron",
+        resourcesPath: "/app/resources",
+        appPath: "/app",
+      }),
+      () => undefined,
+      startChild,
+      (config) => ({ ...config, guardPaths: hostGuardPaths("/fixture/user-data") }),
+    );
+    supervisor.start(config);
+    children[0]!.emit("spawn");
+    const sent = children[0]!.send as unknown as ReturnType<typeof vi.fn>;
+    expect(sent.mock.calls[0]![0].guardPaths).toEqual(hostGuardPaths("/fixture/user-data"));
+    // A token-free pairing identity never learns the guard list either.
+    expect(JSON.stringify(startChild.mock.calls)).not.toContain(config.token);
   });
   it("persists the close-window choice separately from pairing secrets", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "host-lifecycle-"));

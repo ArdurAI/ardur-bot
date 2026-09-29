@@ -65,7 +65,7 @@ export async function prepareDelegation(
     prompt: string;
     newChild?: boolean;
     card?: unknown;
-    peerMode?: "read-only";
+    peerMode?: "read-only" | "effect-bound";
     tokens?: number;
     deadlineAt?: Date;
     targetThreadId?: string;

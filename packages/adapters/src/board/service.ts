@@ -17,6 +17,7 @@ import {
   type PrismaClient,
 } from "@ardurbot/db";
 import { BoardRunner } from "@ardurbot/host-runtime/board/runner";
+import { guardrailConfigFromEnv } from "@ardurbot/host-runtime/host-guardrails";
 import { getLogger } from "@ardurbot/logging";
 import { createHostClient, usesHostBridge } from "../remote-host-sandbox.js";
 import { BeadsBoardProvider } from "./beads.js";
@@ -170,6 +171,7 @@ export class BoardService {
     return new BoardRunner({
       root: this.options.dataDir,
       hostRoots: registration?.userId === scope.userId ? registration.hostRoots : [],
+      guard: guardrailConfigFromEnv(),
     }).run(request, scope.spaceId, scope.signal);
   }
   async workspace(scope: BoardScope, id?: string, options: { allowUninitialized?: boolean } = {}) {

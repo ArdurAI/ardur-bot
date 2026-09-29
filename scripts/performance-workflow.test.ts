@@ -1,8 +1,9 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const workflow = readFileSync(
@@ -105,7 +106,74 @@ ${script}`,
   );
 }
 
+const REPO = fileURLToPath(new URL("..", import.meta.url));
+const timingReport = (kind: string, metrics: Record<string, number>) => ({
+  kind,
+  machine: { platform: "fixture" },
+  metrics,
+});
+
+async function compareTimings({ dependencies = true } = {}) {
+  const root = await mkdtemp(path.join(os.tmpdir(), "performance-timings-"));
+  const runnerTemp = path.join(root, "runner");
+  await mkdir(path.join(root, ".context/performance"), { recursive: true });
+  await mkdir(path.join(root, "scripts"));
+  await mkdir(runnerTemp);
+  // A copy, not a link: the script runs its command line only when started by its own path.
+  await copyFile(
+    path.join(REPO, "scripts/performance-budget.mjs"),
+    path.join(root, "scripts/performance-budget.mjs"),
+  );
+  if (dependencies) await symlink(path.join(REPO, "node_modules"), path.join(root, "node_modules"));
+  const proxy = timingReport("offline-proxy", { shellPrepareMs: 100, submitToFirstTokenMs: 50 });
+  const reports = {
+    [path.join(runnerTemp, "proxy-before.json")]: proxy,
+    [path.join(root, ".context/performance/proxy-after.json")]: proxy,
+    [path.join(runnerTemp, "browser-before.json")]: timingReport("browser-proxy", {
+      coldShellPaintMs: 400,
+      submitToFirstTokenMs: 200,
+    }),
+    [path.join(root, ".context/performance/browser.json")]: timingReport("browser-proxy", {
+      coldShellPaintMs: 900,
+      submitToFirstTokenMs: 600,
+    }),
+  };
+  for (const [file, report] of Object.entries(reports))
+    await writeFile(file, `${JSON.stringify(report)}\n`);
+  try {
+    // GitHub runs `shell: bash` steps with errexit and pipefail.
+    const result = spawnSync(
+      "bash",
+      ["-e", "-o", "pipefail", "-c", stepScript("Warn on timing regressions")],
+      { cwd: root, encoding: "utf8", env: { ...process.env, RUNNER_TEMP: runnerTemp } },
+    );
+    const annotations = (output: string) =>
+      output.split("\n").filter((line) => line.startsWith("::warning"));
+    return { result, stdout: annotations(result.stdout), stderr: annotations(result.stderr) };
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
 describe("advisory performance workflow", () => {
+  it("annotates each slower metric and keeps incomplete evidence advisory", async () => {
+    const { result, stdout, stderr } = await compareTimings();
+    expect(result.status, result.stderr).toBe(0);
+    expect(stdout).toEqual([
+      "::warning title=Performance baseline::Incomplete proxy evidence; timings remain advisory.",
+      "::warning title=Performance baseline::Incomplete browser evidence; timings remain advisory.",
+    ]);
+    // The unchanged proxy pair adds nothing; each slower browser metric gets its own annotation.
+    expect(stderr).toEqual([
+      "::warning title=Performance budget::browser-proxy coldShellPaintMs exceeds the proposed 5% and 25 ms advisory margin.",
+      "::warning title=Performance budget::browser-proxy submitToFirstTokenMs exceeds the proposed 5% and 25 ms advisory margin.",
+    ]);
+  });
+  it("fails the timing step when the comparison cannot run", async () => {
+    const { result } = await compareTimings({ dependencies: false });
+    expect(result.status).toBe(1);
+    expect(result.stdout).not.toContain("::warning");
+  });
   it("measures the base revision with the candidate's harness and its own production code", async () => {
     const measured = await prepareBase("measure");
     try {

@@ -72,6 +72,10 @@ export interface ArdurBotDesktop {
     supported(): Promise<boolean>;
     show(message: { title: string; body: string; threadId: string }): Promise<boolean>;
   };
+  /** macOS Dock badge. Missing on older desktops and in the browser. */
+  dock?: {
+    setWaitingCount(count: number): Promise<void>;
+  };
   host?: {
     state(): Promise<{
       configured: boolean;
@@ -116,6 +120,10 @@ export interface ArdurBotDesktop {
     open(url: string): Promise<void>;
     focus(): Promise<void>;
     onReturn(listener: (id: string) => void): () => void;
+  };
+  /** Desktop menu items run the app shortcut with this id, as its keys would. */
+  shortcuts?: {
+    onRun(listener: (id: string) => void): () => void;
   };
   oauth: {
     /**

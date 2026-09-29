@@ -293,6 +293,7 @@ function Period({ value, provider }: { value: UsagePeriod; provider: string }) {
           ? ` · ${t("Cost unavailable")}`
           : null
         : ` · ${t("Cost")}: ${value.cost.toLocaleString(undefined, { maximumFractionDigits: 6 })}`}
+      {value.incomplete ? ` · ${t("Partially reported")}` : null}
     </Line>
   );
 }

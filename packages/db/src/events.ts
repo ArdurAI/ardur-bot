@@ -6,6 +6,7 @@ import {
   CommandEventPayloadSchema,
   type MessageBlock,
   MessageBlock as MessageBlockSchema,
+  PeerEffectDescriptorsSchema,
   type ProductEvent,
   RuntimePinSourceSchema,
 } from "@ardurbot/contracts";
@@ -18,12 +19,14 @@ import {
   LEGACY_RESTART_SUMMARY,
   messagingChannelId,
   parseGroupAskKey,
+  peerHoldBoundEffect,
   peerPairKey,
   RECEIPT_FILTERED_SUMMARY_MARKER,
   redactTaskValue,
   resolveAskChoice,
   sanitizeJsonValue,
 } from "@ardurbot/core";
+import { classifyPeerEffectBinding } from "@ardurbot/core/node/peer-effect-digest";
 import { getLogger } from "@ardurbot/logging";
 import {
   appendBotMessageAuditInTransaction,
@@ -928,6 +931,25 @@ async function commitAnswerRunInput(
         })) !== peerHold.authorityFingerprint
       )
         return null;
+      // An effect-bound hold approves only the exact digest-bound descriptor captured
+      // when the hold was created. If the stored request or the delivery's descriptor
+      // list no longer proves that binding, refuse the answer like any other stale
+      // approval: the card stays pending and nothing is released.
+      const boundHold = peerHoldBoundEffect(approvalEffect!.request);
+      if (boundHold.kind === "invalid") return null;
+      if (boundHold.kind === "bound") {
+        const storedEffects = PeerEffectDescriptorsSchema.safeParse(peerHold.requestedEffects);
+        const binding = storedEffects.success
+          ? classifyPeerEffectBinding(storedEffects.data)
+          : { kind: "preparation-only" as const };
+        if (
+          binding.kind !== "effect-bound" ||
+          binding.effect.toolName !== boundHold.effect.toolName ||
+          binding.effect.resourceRef !== boundHold.effect.resourceRef ||
+          binding.effect.argsDigest !== boundHold.effect.argsDigest
+        )
+          return null;
+      }
     }
   }
 
@@ -1134,6 +1156,12 @@ async function pauseRunForInputOnce(prisma: PrismaClient, input: PauseRunForInpu
     );
     // Thread row first, then the delegated root task. clearThread and finalizeRun agree.
     await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
+    // Read the held place before the run leaves `running`, which releases it, so the
+    // pause card can still fill it below.
+    const pausingRun = await tx.run.findUnique({
+      where: { id: input.runId },
+      select: { replySeq: true },
+    });
     const paused = await tx.run.updateMany({
       where: {
         id: input.runId,
@@ -1182,6 +1210,10 @@ async function pauseRunForInputOnce(prisma: PrismaClient, input: PauseRunForInpu
         blocks: target.blocks,
         botId: target.botId,
         runId: input.runId,
+        // The card fills the reply's held place only when it lands on the run's own
+        // thread; a delegated approval card lands on the coordinator thread.
+        heldReplySeq:
+          target.threadId === input.threadId ? (pausingRun?.replySeq ?? undefined) : undefined,
       }));
     await appendEventInTransaction(tx, {
       spaceId: input.spaceId,
@@ -1522,6 +1554,7 @@ async function finalizeRunOnce(
           remoteRootTaskId: string | null;
           delegationId: string | null;
           delegationRootTaskId: string | null;
+          replySeq: number | null;
         }
       | undefined;
     try {
@@ -1660,6 +1693,8 @@ async function finalizeRunOnce(
           botId: input.botId,
           runId: input.runId,
           markUnread: input.markUnread,
+          // Read before the run left `running`, which released the place.
+          heldReplySeq: writableRun?.replySeq,
         });
         finalMessageId = message.id;
         await appendEventInTransaction(tx, {
@@ -2042,7 +2077,12 @@ export async function appendEventInTransaction(
     });
     if (existing) return existing;
   }
-  if (!terminal || input.type !== "run.cancelled") await assertRunCanWriteHistory(tx, input.runId);
+  const run =
+    !terminal || input.type !== "run.cancelled"
+      ? await assertRunCanWriteHistory(tx, input.runId)
+      : undefined;
+  if (input.type === "thread.progress" && input.runId && run && isStreamingReplyText(input.payload))
+    await holdReplyPlace(tx, input.threadId, input.runId, run);
   // Unpaired UTF-16 surrogates (e.g. a split emoji high half) are invalid JSON for Postgres.
   const payload = sanitizeJsonValue(input.payload);
   const event = await tx.event.create({
@@ -2058,6 +2098,37 @@ export async function appendEventInTransaction(
   });
   await materializeCommandEvent(tx, event);
   return event;
+}
+
+/**
+ * Hold the thread place of a run's reply from its first visible text, not from when the
+ * run ends, so anything the owner sends meanwhile lands below the saved reply. One place
+ * per streamed draft: the bot message that saves the text fills it, and the run leaving
+ * `running` by any path releases it (a trigger on runs), so a place is never held after
+ * its draft is gone. The caller has locked the thread and read the run after that lock.
+ */
+async function holdReplyPlace(
+  tx: Prisma.TransactionClient,
+  threadId: string,
+  runId: string,
+  run: { threadId: string; status: string; replySeq: number | null },
+) {
+  if (run.status !== "running" || run.replySeq !== null || run.threadId !== threadId) return;
+  const thread = await tx.thread.update({
+    where: { id: threadId },
+    data: { nextMessageSeq: { increment: 1 } },
+    select: { nextMessageSeq: true },
+  });
+  await tx.run.update({ where: { id: runId }, data: { replySeq: thread.nextMessageSeq - 1 } });
+}
+
+/** Reply text the owner can already see, as opposed to tool activity lines. */
+function isStreamingReplyText(payload: Record<string, unknown>): boolean {
+  if (payload.streaming !== true) return false;
+  return (
+    (typeof payload.text === "string" && payload.text.length > 0) ||
+    (typeof payload.delta === "string" && payload.delta.length > 0)
+  );
 }
 
 async function notifyRealtime(

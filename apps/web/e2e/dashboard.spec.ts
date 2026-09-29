@@ -215,6 +215,7 @@ test("Dashboard opens first, preserves Bots navigation and approves through the 
   }
   await expect(page).toHaveTitle("Dashboard — Ardur");
   await expect(page.getByText("Waiting for your approval", { exact: true })).toBeVisible();
+  await expect(page.getByText("Partially reported").first()).toBeVisible();
   const governance = page.locator('[data-panel="governance"]');
   await expect(governance.getByRole("link")).toHaveText(
     "Governance and encryption are not part of this build yet.",

@@ -10,6 +10,7 @@
       "default": "./src/index.ts"
     },
     "./desktop-errors": "./src/desktop-errors.js",
+    "./app-shortcuts": "./src/app-shortcuts.js",
     "./computer-image": "./src/computer-image.js",
     "./desktop-setup": "./src/desktop-setup.js",
     "./host-folders": "./src/host-folders.js",

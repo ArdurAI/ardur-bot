@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DashboardNowSchema, UsagePeriodSchema } from "./dashboard.js";
+import { DashboardNowSchema, UsagePeriodSchema, UsageSummarySchema } from "./dashboard.js";
 
 describe("Dashboard read contracts", () => {
   it("keeps usage records distinct from request counts", () => {
@@ -10,6 +10,23 @@ describe("Dashboard read contracts", () => {
     expect(
       UsagePeriodSchema.parse({ records: 1, inputTokens: 20, outputTokens: 5, cost: null }),
     ).toEqual({ records: 1, inputTokens: 20, outputTokens: 5, cost: null });
+  });
+  it("parses usage from a server that predates the partially reported marker", () => {
+    const period = { records: 1, inputTokens: 20, outputTokens: 5, cost: null };
+    const summary = UsageSummarySchema.parse({
+      inputTokens: 20,
+      outputTokens: 5,
+      runs: 1,
+      dayStart: "2026-09-24T00:00:00Z",
+      weekStart: "2026-09-21T00:00:00Z",
+      asOf: "2026-09-24T12:00:00Z",
+      providers: [{ provider: "fixture", today: period, week: period, daily: [] }],
+    });
+    expect(summary.providers[0]?.today).toEqual(period);
+    expect(
+      UsagePeriodSchema.parse({ ...period, incomplete: true }).incomplete,
+      "a current server's marker still parses",
+    ).toBe(true);
   });
   it("accepts complete pending cards and rejects answered or non-approval blocks", () => {
     const block = {

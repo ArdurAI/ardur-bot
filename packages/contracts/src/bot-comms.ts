@@ -24,6 +24,9 @@ export const BOT_MESSAGE_BATCH_MAX_CHARACTERS = 16_000;
 export const BOT_MESSAGE_PENDING_MAX = 20;
 export const BOT_MESSAGE_UNRESOLVED_PER_RUN_MAX = 4;
 
+/** Owner-readable effect arguments stay small enough to show on one card. */
+export const PEER_EFFECT_ARGS_MAX_BYTES = 4_000;
+
 export const PeerEffectDescriptorSchema = z
   .object({
     kind: z.enum([
@@ -44,11 +47,26 @@ export const PeerEffectDescriptorSchema = z
       .string()
       .regex(/^[a-f0-9]{64}$/)
       .optional(),
+    /** Exact arguments the peer will run; only meaningful with a matching argsDigest. */
+    args: z.record(z.string(), z.unknown()).optional(),
   })
   .strict();
 export type PeerEffectDescriptor = z.infer<typeof PeerEffectDescriptorSchema>;
 
-export const PeerEffectDescriptorsSchema = z.array(PeerEffectDescriptorSchema).max(10);
+export const PeerEffectDescriptorsSchema = z
+  .array(PeerEffectDescriptorSchema)
+  .max(10)
+  .refine(
+    (effects) =>
+      effects.every(
+        (effect) =>
+          !effect.args ||
+          (effect.argsDigest !== undefined &&
+            new TextEncoder().encode(JSON.stringify(effect.args)).byteLength <=
+              PEER_EFFECT_ARGS_MAX_BYTES),
+      ),
+    "Effect arguments must be digest-bound and bounded.",
+  );
 export const BotCommunicationPolicySchema = z.object({
   scope: z.enum(["space", "group"]),
   groupId: Id.nullable(),

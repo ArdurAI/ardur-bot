@@ -6,7 +6,9 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { MigrationApplyError, MigrationHistoryError } from "@ardurbot/db/migrate";
+import { isGuardedPath } from "@ardurbot/host-runtime/host-guardrails";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { hostGuardPaths } from "./host-service.js";
 import { localFoldersFile } from "./local-folders.js";
 import { appendCappedLog, LOG_CAP_BYTES, writeServiceLog } from "./local-logs.js";
 import {
@@ -16,7 +18,11 @@ import {
   resetMoveFailure,
 } from "./local-mode.js";
 import type { EmbeddedPostgresLike, EmbeddedPostgresOptions } from "./local-postgres.js";
-import { MissingDatabaseBinariesError, postgresServesFolder } from "./local-postgres.js";
+import {
+  EMBEDDED_POSTGRES_FLAGS,
+  MissingDatabaseBinariesError,
+  postgresServesFolder,
+} from "./local-postgres.js";
 
 const directories: string[] = [];
 const fixturePids = new Set<number>();
@@ -66,6 +72,7 @@ describe("local mode start", () => {
     const spawned: string[][] = [];
     const envs: NodeJS.ProcessEnv[] = [];
     let port = 0;
+    let flags: string[] = [];
     const controller = new LocalModeController(
       harness(root, {
         allocatePort: async () => 23456,
@@ -77,12 +84,16 @@ describe("local mode start", () => {
         },
         postgresFactory: (options) => {
           port = options.port;
+          flags = options.postgresFlags;
           return runningPostgres();
         },
       }),
     );
     const state = await controller.start();
     expect(state.phase).toBe("ready");
+    // The database listens on loopback TCP only; no unix socket exists for a
+    // sandboxed host command to connect to.
+    expect(flags).toEqual([...EMBEDDED_POSTGRES_FLAGS]);
     expect(spawned.some((args) => args.some((arg) => /docker|compose/.test(arg)))).toBe(false);
     expect(spawned.length).toBeGreaterThan(0);
     expect(controller.origin()).toBe(`http://127.0.0.1:${port}`);
@@ -97,9 +108,31 @@ describe("local mode start", () => {
       expect(env.BETTER_AUTH_URL).toBe(`http://127.0.0.1:${port}`);
       expect(env.WEB_ORIGIN).toBe(`http://127.0.0.1:${port}`);
       expect(env.API_URL).toBe(`http://127.0.0.1:${port}`);
-      expect(env.SANDBOX_SUPERVISOR_TOKEN?.length).toBeGreaterThanOrEqual(32);
+      // Control-plane secrets never enter the spawned environment (the kernel keeps
+      // it readable to the owner's other processes); the services read the guarded
+      // secrets file at startup instead.
+      expect(env.ARDURBOT_SECRETS_FILE).toBe(path.join(root, "secrets.env"));
+      expect(new URL(env.DATABASE_URL!).password).toBe("");
+      for (const key of [
+        "POSTGRES_PASSWORD",
+        "APP_DATABASE_PASSWORD",
+        "BETTER_AUTH_SECRET",
+        "ENCRYPTION_KEY",
+        "SCREEN_PROXY_SECRET",
+        "SANDBOX_SUPERVISOR_TOKEN",
+      ])
+        expect(env[key]).toBeUndefined();
+      const saved = await readFile(env.ARDURBOT_SECRETS_FILE!, "utf8");
+      for (const value of saved.match(/=(.+)/g) ?? [])
+        expect(JSON.stringify(env)).not.toContain(value.slice(1));
       // Local mode's own folder list; a pairing with another server is never read.
       expect(env.ARDURBOT_HOST_ROOTS_FILE).toBe(localFoldersFile(root));
+      // The command guardrail denies Ardur's control-plane files to host work.
+      const guarded = env.ARDURBOT_GUARD_PATHS?.split(path.delimiter) ?? [];
+      expect(guarded).toContain(path.join(root, "secrets.env"));
+      expect(guarded).toContain(path.join(root, "postgres"));
+      expect(guarded).toContain(path.join(root, "stack", ".env"));
+      expect(guarded).toContain(path.join(root, "host-service", "host-service.enc"));
       expect(env.LOG_FORMAT).toBe("json");
     }
     expect(port).not.toBe(5432);
@@ -108,6 +141,55 @@ describe("local mode start", () => {
       args.some((arg) => arg.endsWith("index.ts") || arg.endsWith("api.cjs")),
     );
     expect(api?.join(" ")).not.toMatch(/docker|compose/);
+  });
+
+  it("strips control-plane secrets already present on the parent environment", async () => {
+    const root = await userData();
+    const envs: NodeJS.ProcessEnv[] = [];
+    const controller = new LocalModeController(
+      harness(root, {
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        env: {
+          PATH: "/usr/bin",
+          DATABASE_URL: "postgres://ardurbot_app:fake-url-marker@127.0.0.1:23456/ardurbot",
+          ENCRYPTION_KEY: "fake-encryption-marker",
+          BETTER_AUTH_SECRET: "fake-auth-marker",
+          SANDBOX_SUPERVISOR_TOKEN: "fake-supervisor-marker",
+          SCREEN_PROXY_SECRET: "fake-screen-marker",
+          POSTGRES_PASSWORD: "fake-superuser-marker",
+          APP_DATABASE_PASSWORD: "fake-role-marker",
+          REALTIME_DATABASE_URL: "postgres://app:fake-realtime-marker@127.0.0.1:23457/ardurbot",
+        },
+        spawn: (_command, _args, options) => {
+          envs.push(options.env ?? {});
+          return fakeChild();
+        },
+        postgresFactory: () => runningPostgres(),
+      }),
+    );
+    const state = await controller.start();
+    expect(state.phase).toBe("ready");
+    expect(envs.length).toBeGreaterThan(0);
+    for (const env of envs) {
+      const encoded = JSON.stringify(env);
+      for (const marker of [
+        "fake-url-marker",
+        "fake-encryption-marker",
+        "fake-auth-marker",
+        "fake-supervisor-marker",
+        "fake-screen-marker",
+        "fake-superuser-marker",
+        "fake-role-marker",
+        "fake-realtime-marker",
+      ])
+        expect(encoded).not.toContain(marker);
+      expect(new URL(env.DATABASE_URL!).password).toBe("");
+      // Drop an inherited realtime URL. The API and worker would use that host
+      // instead of the local database, and its password is not the local one.
+      expect(env.REALTIME_DATABASE_URL).toBeUndefined();
+      expect(env.ARDURBOT_SECRETS_FILE).toBe(path.join(root, "secrets.env"));
+    }
   });
 });
 
@@ -305,8 +387,15 @@ describe("database credentials", () => {
       pathname: "/ardurbot",
     });
     for (const env of envs) {
-      expect(env.DATABASE_URL).toBe(migrations[0]!.databaseUrl);
-      expect(env.DATABASE_URL).not.toContain(superuser);
+      // The spawned environment carries only the passwordless URL; the role's
+      // password stays in the guarded secrets file the services read at startup.
+      const serviceUrl = new URL(env.DATABASE_URL!);
+      expect(serviceUrl.username).toBe("ardurbot_app");
+      expect(serviceUrl.password).toBe("");
+      expect(serviceUrl.pathname).toBe("/ardurbot");
+      expect(JSON.stringify(env)).not.toContain(superuser!);
+      expect(JSON.stringify(env)).not.toContain(role!);
+      expect(env.ARDURBOT_SECRETS_FILE).toBe(path.join(root, "secrets.env"));
     }
     await controller.stop();
   });
@@ -684,6 +773,34 @@ describe("reset", () => {
     expect(initialised).toHaveLength(1);
     expect(await readFile(path.join(root, "secrets.env"), "utf8")).toMatch(/^POSTGRES_PASSWORD=/m);
     await controller.stop();
+  });
+
+  it("keeps the moved secrets on the host guardrail deny list after a reset", async () => {
+    const root = await userData();
+    await mkdir(path.join(root, "postgres"), { recursive: true });
+    await writeFile(path.join(root, "postgres", "PG_VERSION"), "16\n");
+    await mkdir(path.join(root, "data"), { recursive: true });
+    await writeFile(path.join(root, "secrets.env"), "POSTGRES_PASSWORD=a\n");
+    const controller = new LocalModeController(
+      harness(root, {
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        now: () => Date.UTC(2026, 8, 25, 10, 30),
+        postgresFactory: () => runningPostgres(),
+      }),
+    );
+    const backup = await controller.resetData();
+    // The live copies moved aside; what a later host command must not read is the backup.
+    expect(await readFile(path.join(backup, "secrets.env"), "utf8")).toBe("POSTGRES_PASSWORD=a\n");
+    const denied = hostGuardPaths(root);
+    expect(isGuardedPath(denied, path.join(backup, "secrets.env"))).toBe(true);
+    expect(isGuardedPath(denied, path.join(backup, "postgres", "PG_VERSION"))).toBe(true);
+    expect(isGuardedPath(denied, path.join(backup, "data", "note.txt"))).toBe(true);
+    // The folders host work and the next start still need are not swept in.
+    expect(
+      isGuardedPath(denied, path.join(root, "data", "desktop-computers", "bot", "f.txt")),
+    ).toBe(false);
+    expect(isGuardedPath(denied, path.join(root, "data", "board", "space", "b.db"))).toBe(false);
   });
 
   const unmovable =
@@ -1332,10 +1449,11 @@ describe("database lifecycle", () => {
       expect(state).toMatchObject({ phase: "failed", message: sentence });
       expect(state.offerReset).toBe(offerReset);
       expect(failed).toEqual([[sentence, offerReset === true]]);
-      await new Promise((resolve) => setTimeout(resolve, 20));
-      expect(await readFile(path.join(root, "logs", "local-mode.log"), "utf8")).toContain(
-        `Migration "20260101000000_init" (${reason})`,
-      );
+      await vi.waitFor(async () => {
+        expect(await readFile(path.join(root, "logs", "local-mode.log"), "utf8")).toContain(
+          `Migration "20260101000000_init" (${reason})`,
+        );
+      });
     },
   );
 

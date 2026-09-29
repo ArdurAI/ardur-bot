@@ -10,11 +10,14 @@ import type {
 import { RequestUsageCollector, usageEvent } from "@ardurbot/adapter-kit";
 import type { RuntimeAvailability, RuntimePin } from "@ardurbot/contracts/runtime-pins";
 import { RuntimePinError, runtimePinProblem } from "@ardurbot/contracts/runtime-pins";
+import { guardrailConfigFromEnv } from "../host-guardrails.js";
 import { startArdurMcpServer } from "./ardur-mcp-server.js";
 import { createArdurToolBridge } from "./claude-mcp-bridge.js";
 import type { NativeSpawn } from "./native-process.js";
 import {
   findNativeBinary,
+  guardedSpawn,
+  guardNativeSpawn,
   jsonLines,
   probeCommand,
   RuntimeQueue,
@@ -63,13 +66,15 @@ export function claudeModels(version?: string, help = ""): RuntimeAvailability["
   }));
 }
 
-export async function probeClaude(start = spawnNative): Promise<RuntimeAvailability> {
+export async function probeClaude(start?: NativeSpawn): Promise<RuntimeAvailability> {
+  // Callers pass undefined explicitly (a registry refresh). That is the guardrail wrap.
+  const launch = start ?? guardedSpawn();
   const base = { runtimeKind: "claude-code" as const, models: claudeModels() };
   const binary = await findNativeBinary("claude");
   if (!binary)
     return { ...base, available: false, reason: "claude is not installed on this computer" };
   try {
-    const { code, version } = await probeCommand(binary, ["--version"], true, start);
+    const { code, version } = await probeCommand(binary, ["--version"], true, launch);
     if (code !== 0 || !version)
       return { ...base, available: false, reason: "Claude Code is unavailable on this computer." };
     if (!supportedClaudeVersion(version))
@@ -79,10 +84,10 @@ export async function probeClaude(start = spawnNative): Promise<RuntimeAvailabil
         available: false,
         reason: "Update Claude Code to use this runtime.",
       };
-    const help = await probeCommand(binary, ["--help"], true, start);
+    const help = await probeCommand(binary, ["--help"], true, launch);
     const hasEffortLine = help.code === 0 && /--effort\s+<level>/.test(help.output ?? "");
     // Documented exit status only. Authentication output is consumed and discarded.
-    const auth = await probeCommand(binary, ["auth", "status"], false, start);
+    const auth = await probeCommand(binary, ["auth", "status"], false, launch);
     return {
       ...base,
       version,
@@ -395,7 +400,9 @@ export class ClaudeStreamParser {
 
 export class ClaudeCodeRuntime implements AgentRuntime {
   private running = new Map<string, ChildProcessWithoutNullStreams>();
-  constructor(private readonly start: NativeSpawn = spawnNative) {}
+  constructor(
+    private readonly start: NativeSpawn = guardNativeSpawn(spawnNative, guardrailConfigFromEnv()),
+  ) {}
   describe() {
     return {
       id: "claude-code",

@@ -200,6 +200,7 @@ export async function proposeMemoryIntent(
                 prompt,
                 history: [],
                 tools: "none",
+                singleRequest: true,
                 model: {
                   ...resolved,
                   maxTokens: Math.min(

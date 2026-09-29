@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promise
 import os from "node:os";
 import path from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { DEFAULT_PREFERENCES } from "./contract.js";
+import { DEFAULT_PREFERENCES, defaultPreferences } from "./contract.js";
 import { SystemStore } from "./store.js";
 
 const directories: string[] = [];
@@ -22,8 +22,11 @@ async function fixture() {
 }
 it("persists machine preferences in an owner-only atomic local file", async () => {
   const f = await fixture();
-  expect(await f.store.read()).toEqual(DEFAULT_PREFERENCES);
-  await f.store.write({ ...DEFAULT_PREFERENCES, menuBar: true, quickAccess: "Alt+Space" });
+  expect(await f.store.read()).toEqual(defaultPreferences(process.platform));
+  await f.store.write(
+    { ...DEFAULT_PREFERENCES, menuBar: true, quickAccess: "Alt+Space" },
+    { menuBar: true },
+  );
   expect(await new SystemStore(f.directory).read()).toMatchObject({
     menuBar: true,
     quickAccess: "Alt+Space",
@@ -43,7 +46,7 @@ it("ignores corrupt, oversized, unknown and invalid preferences", async () => {
     }),
   ]) {
     await writeFile(f.file, value);
-    expect(await f.store.read()).toEqual(DEFAULT_PREFERENCES);
+    expect(await f.store.read()).toEqual(defaultPreferences(process.platform));
   }
 });
 it("does not read or overwrite a symlink target", async () => {
@@ -51,7 +54,59 @@ it("does not read or overwrite a symlink target", async () => {
   const other = path.join(f.directory, "other");
   await writeFile(other, '{"keepAwake":true}');
   await symlink(other, f.file);
-  expect(await f.store.read()).toEqual(DEFAULT_PREFERENCES);
+  expect(await f.store.read()).toEqual(defaultPreferences(process.platform));
   await f.store.write(DEFAULT_PREFERENCES);
   expect(await readFile(other, "utf8")).toBe('{"keepAwake":true}');
+});
+
+it("shows the menu bar by default only on macOS, and keeps an explicit off", async () => {
+  const f = await fixture();
+  expect(DEFAULT_PREFERENCES.menuBar).toBe(false);
+  expect((await new SystemStore(f.directory, "darwin").read()).menuBar).toBe(true);
+  expect((await new SystemStore(f.directory, "linux").read()).menuBar).toBe(false);
+  expect((await new SystemStore(f.directory, "win32").read()).menuBar).toBe(false);
+
+  await writeFile(f.file, JSON.stringify({ ...DEFAULT_PREFERENCES, keepAwake: true }));
+  expect(await new SystemStore(f.directory, "darwin").read()).toMatchObject({
+    menuBar: true,
+    keepAwake: true,
+  });
+  expect(await new SystemStore(f.directory, "linux").read()).toMatchObject({
+    menuBar: false,
+    keepAwake: true,
+  });
+  expect((await new SystemStore(f.directory, "win32").read()).menuBar).toBe(false);
+
+  await writeFile(f.file, JSON.stringify({ menuBar: true }));
+  expect((await new SystemStore(f.directory, "linux").read()).menuBar).toBe(true);
+  expect((await new SystemStore(f.directory, "win32").read()).menuBar).toBe(true);
+
+  await writeFile(f.file, JSON.stringify({ menuBar: true, menuBarChoice: null }));
+  expect((await new SystemStore(f.directory, "linux").read()).menuBar).toBe(false);
+  expect((await new SystemStore(f.directory, "darwin").read()).menuBar).toBe(true);
+  await writeFile(f.file, JSON.stringify({ menuBar: true, menuBarChoice: "yes" }));
+  expect((await new SystemStore(f.directory, "darwin").read()).menuBar).toBe(true);
+  expect((await new SystemStore(f.directory, "win32").read()).menuBar).toBe(false);
+
+  const darwin = new SystemStore(f.directory, "darwin");
+  await darwin.write({ ...defaultPreferences("darwin"), menuBar: false }, { menuBar: false });
+  await darwin.write({ ...defaultPreferences("darwin"), menuBar: true, keepAwake: true });
+  expect(JSON.parse(await readFile(f.file, "utf8")).menuBarChoice).toBe(false);
+  expect(await new SystemStore(f.directory, "darwin").read()).toMatchObject({
+    menuBar: false,
+    keepAwake: true,
+  });
+  expect((await new SystemStore(f.directory, "linux").read()).menuBar).toBe(false);
+  expect((await new SystemStore(f.directory, "win32").read()).menuBar).toBe(false);
+
+  await rm(f.file, { force: true });
+  await darwin.write({ ...defaultPreferences("darwin"), keepAwake: true });
+  const saved = JSON.parse(await readFile(f.file, "utf8")) as {
+    menuBar: boolean;
+    menuBarChoice: boolean | null;
+  };
+  expect(saved.menuBar).toBe(true);
+  expect(saved.menuBarChoice).toBe(null);
+  expect((await new SystemStore(f.directory, "linux").read()).menuBar).toBe(false);
+  expect((await new SystemStore(f.directory, "darwin").read()).menuBar).toBe(true);
 });

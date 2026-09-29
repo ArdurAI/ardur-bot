@@ -16,12 +16,13 @@ function formatAnsweredState(
   outcome?: "created" | "cancelled",
   actions?: AskBlock["actions"],
   peerHold?: boolean,
+  peerEffectBound?: boolean,
 ): string {
   if (secret) return t`Saved`;
   if (!answer) return t`Answered`;
   if (!approval) return t`Answered: ${selectedAskActionLabel(answer, actions)}`;
   if (peerHold && answer === "expired") return t`Request expired`;
-  if (peerHold && answer === "allow") return t`Preparation allowed`;
+  if (peerHold && !peerEffectBound && answer === "allow") return t`Preparation allowed`;
   if (outcome === "created") return t`Created`;
   if (outcome === "cancelled") return t`Cancelled`;
   if (answer === "allow") return t`Allowed once`;
@@ -35,8 +36,9 @@ function approvalActionLabel(
   fallback: string,
   outcome?: "created" | "cancelled",
   peerHold?: boolean,
+  peerEffectBound?: boolean,
 ): string {
-  if (peerHold && id === "allow") return t`Allow preparation`;
+  if (peerHold && !peerEffectBound && id === "allow") return t`Allow preparation`;
   if (outcome === "created") return t`Create space`;
   if (outcome === "cancelled") return t`Cancel`;
   if (id === "allow") return t`Allow once`;
@@ -139,6 +141,7 @@ export function AskCard({
             approvalActions?.find((action) => action.id === block.answer)?.outcome,
             askActions,
             block.peerHold,
+            block.peerEffectBound,
           )}
         </div>
       ) : !canAnswer ? (
@@ -158,7 +161,13 @@ export function AskCard({
               {pendingAction === action.id ? (
                 <Trans>Sending…</Trans>
               ) : approvalActions ? (
-                approvalActionLabel(action.id, action.label, action.outcome, block.peerHold)
+                approvalActionLabel(
+                  action.id,
+                  action.label,
+                  action.outcome,
+                  block.peerHold,
+                  block.peerEffectBound,
+                )
               ) : (
                 action.label
               )}
