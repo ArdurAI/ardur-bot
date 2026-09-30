@@ -63,6 +63,13 @@ def load_compat() -> dict:
                 "Compatibility table is invalid")
         require(type(entry["callbacks"].get("setup_mcp_callback")) is str,
                 "Compatibility table is invalid")
+        constructed = entry.get("constructedToolsets")
+        require(constructed is None or (
+                type(constructed) is dict and
+                type(constructed.get("enabled")) is list and
+                type(constructed.get("disabled")) is list and
+                all(type(name) is str for name in constructed["enabled"] + constructed["disabled"])),
+                "Compatibility table is invalid")
     return data
 
 
@@ -141,6 +148,32 @@ def check_hooks(session, server, run_agent, entry: dict) -> None:
     require(callback in agent_parameters or hasattr(run_agent.AIAgent, callback), "Agent MCP callback changed")
 
 
+def harden_constructed_agent(agent, entry: dict) -> None:
+    """Prove the constructed agent enforces Ardur's toolset restriction.
+
+    Runs for every entry that declares the stronger expectations; entries
+    without them (the original pin) are untouched.
+    """
+    constructed = entry.get("constructedToolsets")
+    if constructed:
+        require(getattr(agent, "enabled_toolsets", None) == constructed["enabled"] and
+                getattr(agent, "disabled_toolsets", None) == constructed["disabled"],
+                "Constructed toolsets changed")
+    callback_name = entry["callbacks"]["setup_mcp_callback"]
+    if callback_name != "setup_mcp_callback":
+        original = getattr(agent, callback_name, None)
+        require(original is None or callable(original), "MCP attach callback is invalid")
+
+        def ardur_guarded_connect(*args, **kwargs):
+            server = kwargs.get("server") or kwargs.get("name") or (args[0] if args else None)
+            require(getattr(server, "name", server) == "ardur", "MCP server attachment refused")
+            if original is None:
+                return None
+            return original(*args, **kwargs)
+
+        setattr(agent, callback_name, ardur_guarded_connect)
+
+
 def main() -> None:
     root = Path(os.environ["ARDUR_HERMES_INSTALL"]).resolve()
     home = Path(os.environ["HERMES_HOME"]).resolve()
@@ -192,6 +225,7 @@ def main() -> None:
                 )
                 agent.session_cwd = kwargs["cwd"]
                 agent._print_fn = session._acp_stderr_print
+                harden_constructed_agent(agent, entry)
                 if profile:
                     agent._skip_mcp_refresh = True
                     check_constructed(agent, profile["manifest"])

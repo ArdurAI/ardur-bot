@@ -24,6 +24,12 @@ export interface HermesCompatCallbacks {
   setup_mcp_callback: string;
 }
 
+/** Exact toolsets the constructed agent must carry; entries without it keep the source-guard-only check. */
+export interface HermesCompatConstructedToolsets {
+  enabled: string[];
+  disabled: string[];
+}
+
 /** Reviewed qualification of one Hermes source tree. Keyed by git tree id. */
 export interface HermesCompatEntry {
   version: string;
@@ -36,6 +42,7 @@ export interface HermesCompatEntry {
   agentInit: HermesCompatAgentInit;
   sourceGuard: HermesCompatSourceGuard;
   callbacks: HermesCompatCallbacks;
+  constructedToolsets?: HermesCompatConstructedToolsets;
 }
 
 export interface HermesCompatTable {
@@ -97,7 +104,13 @@ export const HERMES_COMPAT: HermesCompatTable = (() => {
       !Array.isArray(entry.sourceGuard.mustContain) ||
       !Array.isArray(entry.sourceGuard.mustNotContain) ||
       !entry.callbacks ||
-      typeof entry.callbacks.setup_mcp_callback !== "string"
+      typeof entry.callbacks.setup_mcp_callback !== "string" ||
+      (entry.constructedToolsets !== undefined &&
+        (!entry.constructedToolsets ||
+          !Array.isArray(entry.constructedToolsets.enabled) ||
+          !Array.isArray(entry.constructedToolsets.disabled) ||
+          entry.constructedToolsets.enabled.some((name) => typeof name !== "string") ||
+          entry.constructedToolsets.disabled.some((name) => typeof name !== "string")))
     )
       throw new Error("Compatibility table is invalid");
     checkHook(entry.sessionHook);

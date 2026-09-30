@@ -45,6 +45,30 @@ describe("hermes compatibility table", () => {
       expect(
         entry.sourceGuard.mustContain.length + entry.sourceGuard.mustNotContain.length,
       ).toBeGreaterThan(0);
+      if (entry.constructedToolsets) {
+        expect(entry.constructedToolsets.enabled.length).toBeGreaterThan(0);
+        expect(entry.constructedToolsets.disabled.length).toBeGreaterThan(0);
+        for (const name of [
+          ...entry.constructedToolsets.enabled,
+          ...entry.constructedToolsets.disabled,
+        ]) {
+          expect(typeof name).toBe("string");
+        }
+      }
     }
+  });
+
+  it("qualifies v2026.9.24 with stronger constructed-agent expectations", () => {
+    const qualified = HERMES_COMPAT.entries["5849eacde63aaea608ca418821cc84771fce3bec"];
+    expect(qualified?.version).toBe("v2026.9.24");
+    expect(qualified?.agentInit.parameterCount).toBe(85);
+    expect(qualified?.sessionHook.parameters.map(([name]) => name)).toContain("disabled_toolsets");
+    expect(qualified?.callbacks.setup_mcp_callback).toBe("connection_callback");
+    expect(qualified?.constructedToolsets).toEqual({
+      enabled: ["mcp-ardur"],
+      disabled: ["hermes-acp"],
+    });
+    const pinned = HERMES_COMPAT.entries[HERMES_SOURCE_TREE];
+    expect(pinned?.constructedToolsets).toBeUndefined();
   });
 });

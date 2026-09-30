@@ -14,12 +14,14 @@ from pathlib import Path
 import sys
 import types
 import unittest
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from hermes_launcher import check_hooks, load_compat
+from hermes_launcher import check_hooks, harden_constructed_agent, load_compat
 
 
 ENTRY = load_compat()["entries"]["daaffc303ae437041b7f76be17c5f61b14f2ce99"]
+NEW_ENTRY = load_compat()["entries"]["5849eacde63aaea608ca418821cc84771fce3bec"]
 _COUNTER = itertools.count()
 
 
@@ -39,10 +41,11 @@ def build_stub_modules(entry: dict) -> tuple:
         f"{name}" if kind == "POSITIONAL_OR_KEYWORD" else f"{name}=None"
         for name, kind in make_params[1:]
     )
+    body = "".join(f"        {needle}\n" for needle in entry["sourceGuard"]["mustContain"])
     make_source = (
         f"class SessionManager:\n"
         f"    def _make_agent(self, *, {signature}):\n"
-        f'        return ["hermes-acp"]\n'
+        f"{body}"
     )
     helper_params = [name for name, _kind in entry["toolsetHelper"]["parameters"]]
     helper_source = (
@@ -174,6 +177,73 @@ class HookTests(unittest.TestCase):
             for p in params.values()])
         with self.assertRaisesRegex(RuntimeError, "Agent MCP callback changed"):
             check_hooks(session, server, run_agent, ENTRY)
+
+
+class NewEntryTests(unittest.TestCase):
+    def test_new_entry_guard_passes_stubs_built_from_its_signatures(self):
+        check_hooks(*build_stub_modules(NEW_ENTRY), NEW_ENTRY)
+
+    def test_new_entry_source_guard_requires_toolset_threading(self):
+        modules = with_make_source(NEW_ENTRY, '        return ["hermes-acp"]')
+        with self.assertRaisesRegex(RuntimeError, "Session hook behavior changed"):
+            check_hooks(*modules, NEW_ENTRY)
+
+    def test_new_entry_rejects_the_old_hooks(self):
+        modules = build_stub_modules(ENTRY)
+        with self.assertRaisesRegex(RuntimeError, "Session hook signature changed"):
+            check_hooks(*modules, NEW_ENTRY)
+
+    def test_old_entry_rejects_the_new_hooks(self):
+        modules = build_stub_modules(NEW_ENTRY)
+        with self.assertRaisesRegex(RuntimeError, "Session hook signature changed"):
+            check_hooks(*modules, ENTRY)
+
+
+class ConstructedAgentTests(unittest.TestCase):
+    def agent(self, enabled=None, disabled=None, callback=None):
+        return SimpleNamespace(enabled_toolsets=enabled, disabled_toolsets=disabled,
+                               connection_callback=callback)
+
+    def test_new_entry_asserts_exact_toolsets(self):
+        agent = self.agent(["mcp-ardur"], ["hermes-acp"])
+        harden_constructed_agent(agent, NEW_ENTRY)
+        agent.enabled_toolsets = ["terminal"]
+        with self.assertRaisesRegex(RuntimeError, "Constructed toolsets changed"):
+            harden_constructed_agent(agent, NEW_ENTRY)
+        agent.enabled_toolsets = ["mcp-ardur"]
+        agent.disabled_toolsets = []
+        with self.assertRaisesRegex(RuntimeError, "Constructed toolsets changed"):
+            harden_constructed_agent(agent, NEW_ENTRY)
+
+    def test_callback_guard_refuses_servers_ardur_did_not_configure(self):
+        agent = self.agent(["mcp-ardur"], ["hermes-acp"])
+        harden_constructed_agent(agent, NEW_ENTRY)
+        self.assertIsNone(agent.connection_callback(server="ardur"))
+        self.assertIsNone(agent.connection_callback(SimpleNamespace(name="ardur")))
+        with self.assertRaisesRegex(RuntimeError, "MCP server attachment refused"):
+            agent.connection_callback(server="other")
+        with self.assertRaisesRegex(RuntimeError, "MCP server attachment refused"):
+            agent.connection_callback(SimpleNamespace(name="other"))
+
+    def test_callback_guard_delegates_to_an_installed_callback(self):
+        calls = []
+
+        def original(*args, **kwargs):
+            calls.append((args, kwargs))
+            return "attached"
+
+        agent = self.agent(["mcp-ardur"], ["hermes-acp"], callback=original)
+        harden_constructed_agent(agent, NEW_ENTRY)
+        self.assertEqual(agent.connection_callback(name="ardur"), "attached")
+        self.assertEqual(len(calls), 1)
+        with self.assertRaisesRegex(RuntimeError, "MCP server attachment refused"):
+            agent.connection_callback(name="other")
+        self.assertEqual(len(calls), 1)
+
+    def test_old_entry_leaves_the_constructed_agent_untouched(self):
+        agent = SimpleNamespace(enabled_toolsets=None, disabled_toolsets=None)
+        harden_constructed_agent(agent, ENTRY)
+        self.assertFalse(hasattr(agent, "connection_callback"))
 
 
 if __name__ == "__main__":
