@@ -516,7 +516,7 @@ export async function requestSelectiveCancelInTransaction(
   });
   await tx.botMessageDelivery.updateMany({
     where: { ...scope, usageRunIds: { hasSome: ids }, state: "held" },
-    data: { state: "denied", deniedAt: now },
+    data: { state: "denied" },
   });
   return ids;
 }
