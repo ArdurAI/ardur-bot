@@ -174,7 +174,7 @@ export function CreateBotForm({
         title: title.trim(),
         description: description.trim(),
         computerMode,
-        ...(computerMode === "dedicated" ? { isolatedComputer: container } : {}),
+        ...(computerMode === "dedicated" && container ? { isolatedComputer: container } : {}),
       });
     } catch (err) {
       const refusal = errorDataCode(err) === ISOLATED_COMPUTER_UNAVAILABLE_CODE;

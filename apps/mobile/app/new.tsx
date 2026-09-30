@@ -102,7 +102,7 @@ export default function NewBot() {
         ...normalizeCreateBotProfile({ name, title, description }),
         notifyOnFinish: true,
         computerMode,
-        ...(computerMode === "dedicated" ? { isolatedComputer: container } : {}),
+        ...(computerMode === "dedicated" && container ? { isolatedComputer: container } : {}),
       });
       allowFocusPrompt(bot.id);
       router.replace({ pathname: "/thread", params: { botId: bot.id, name: bot.name } });
