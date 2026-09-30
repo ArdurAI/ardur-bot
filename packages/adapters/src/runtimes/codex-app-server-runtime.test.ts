@@ -16,7 +16,14 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks());
 
 vi.mock("@ardurbot/host-runtime/runtimes/ardur-mcp-server", () => ({
-  startArdurMcpServer: async () => ({ config: { command: "node", args: [] }, close: vi.fn() }),
+  startArdurMcpServer: async () => ({
+    config: {
+      command: "node",
+      args: ["bridge", "a1".repeat(32)],
+      env: { BRIDGE_TOKEN: "b2".repeat(32) },
+    },
+    close: vi.fn(),
+  }),
 }));
 vi.mock("@ardurbot/host-runtime/runtimes/native-process", async (original) => ({
   ...(await original<object>()),
@@ -307,6 +314,26 @@ function fixture(
   return { collect, messages, request, info, spawn, runtime, child, loaded };
 }
 describe("Codex app-server protocol", () => {
+  it("redacts bridge credentials registered after the app-server starts", async () => {
+    vi.stubEnv("LOG_LEVEL", "debug");
+    const write = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    try {
+      const f = fixture();
+      f.loaded.whileStarting = () => {
+        (f.child.stderr as PassThrough).write(`${"a1".repeat(32)}\n${"b2".repeat(32)}\n`);
+      };
+      await f.collect();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      const logs = write.mock.calls.map(([line]) => String(line)).join("");
+      expect(logs).toContain("codex-app-server stderr: [redacted]");
+      expect(logs).not.toContain("a1".repeat(32));
+      expect(logs).not.toContain("b2".repeat(32));
+    } finally {
+      write.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("stops a held turn after cancellation", async () => {
     const f = fixture("success", {
       duringTurn: [

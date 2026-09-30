@@ -1,7 +1,25 @@
 import type { McpDiagnostics } from "@ardurbot/contracts";
 import { redactSensitiveText } from "../../logging/src/redaction.js";
 
-const sensitiveFlag = /(?:password|passwd|secret|token|api[-_]?key|credential|authorization)/i;
+const sensitiveFlag = /(?:password|passwd|secret|token|key|credential|authorization|cookie)/i;
+
+export function environmentSecrets(env: NodeJS.ProcessEnv): string[] {
+  return Object.entries(env).flatMap(([key, value]) =>
+    sensitiveFlag.test(key) && value ? [value] : [],
+  );
+}
+
+/** The private Ardur relay passes its capability as the final positional argument. */
+export function mcpConfigSecrets(config: {
+  args: readonly string[];
+  env?: NodeJS.ProcessEnv;
+}): string[] {
+  return [
+    config.args.at(-1) ?? "",
+    ...argumentSecrets(config.args),
+    ...environmentSecrets(config.env ?? {}),
+  ].filter(Boolean);
+}
 export function argumentSecrets(args: readonly string[]): string[] {
   const values: string[] = [];
   for (let i = 0; i < args.length; i++) {
@@ -26,7 +44,8 @@ export function mcpTextContainsSecret(value: string, secret: string): boolean {
 
 export function redactMcpText(value: string, secrets: readonly string[] = []): string {
   let result = value;
-  for (const secret of [...new Set(secrets)].filter(Boolean).sort((a, b) => b.length - a.length)) {
+  const active = secrets.flatMap((secret) => [secret, ...secret.split(/\r?\n/).filter(Boolean)]);
+  for (const secret of [...new Set(active)].filter(Boolean).sort((a, b) => b.length - a.length)) {
     for (const spelling of secretSpellings(secret))
       result = result.split(spelling).join("[redacted]");
   }

@@ -21,6 +21,7 @@ import {
   seatbeltArgv,
   seatbeltProfile,
 } from "./host-guardrails.js";
+import { argumentSecrets, environmentSecrets } from "./mcp-diagnostics.js";
 
 export { filterHostEnvironment } from "@ardurbot/contracts/host-environment";
 
@@ -167,7 +168,11 @@ export function hostProbe(
     if (captureStderr) {
       child.stderr.on("data", consume);
     } else {
-      captured = captureChildOutput(child, { kind: "host-probe", logger: childProcessLogger() });
+      captured = captureChildOutput(child, {
+        kind: "host-probe",
+        secrets: [...argumentSecrets(commandArgs), ...environmentSecrets(env)],
+        logger: childProcessLogger(),
+      });
     }
     timer = setTimeout(() => stop("timeout"), timeoutMs);
     child.stdin.end();

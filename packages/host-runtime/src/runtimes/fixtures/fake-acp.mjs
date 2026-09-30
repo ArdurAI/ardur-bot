@@ -126,6 +126,12 @@ async function handle(value) {
     return;
   }
   if (scenario === "exit") process.exit(4);
+  if (scenario === "stderr-bridge") {
+    process.stderr.write(
+      `${mcp.args.at(-1)}\n${mcp.env.find(({ name }) => name === "BRIDGE_TOKEN")?.value}\n${process.env.ARDUR_HERMES_PROVIDER_KEY}\n`,
+    );
+    process.exit(4);
+  }
   if (scenario === "stderr-failure") {
     process.stderr.write("fixture diagnostic before failure\n");
     process.stderr.write("fixture prompt contents\nfixture document contents\n");

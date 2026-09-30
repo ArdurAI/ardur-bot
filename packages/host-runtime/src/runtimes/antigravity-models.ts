@@ -1,6 +1,8 @@
 import type { RuntimeAvailability } from "@ardurbot/contracts";
 import { antigravityEffortForModel } from "@ardurbot/contracts";
 import { captureChildOutput, childProcessLogger } from "../child-output.js";
+import { nativeEnvironment } from "../host-environment.js";
+import { environmentSecrets } from "../mcp-diagnostics.js";
 import type { NativeSpawn } from "./native-process.js";
 import { spawnNative, stopNative } from "./native-process.js";
 
@@ -94,6 +96,7 @@ export async function antigravityModels(
   const timer = setTimeout(() => void stopNative(child), 5_000);
   const captured = captureChildOutput(child, {
     kind: "antigravity-models",
+    secrets: environmentSecrets(nativeEnvironment()),
     logger: childProcessLogger(),
   });
   child.stdout.on("data", (chunk: Buffer) => {

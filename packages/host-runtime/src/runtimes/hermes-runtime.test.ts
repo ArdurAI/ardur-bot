@@ -80,6 +80,32 @@ function turnFinishSignal(runId: string) {
 }
 
 describe("HermesRuntime M0 ACP seam", () => {
+  it("redacts provider and overridden bridge credentials from child stderr", async () => {
+    const debug: string[] = [];
+    const adapter = new HermesRuntime({
+      command: process.execPath,
+      args: [fixture, "stderr-bridge"],
+      launch: async (spec) => ({
+        ...(await launchUnconfinedProcess(spec)),
+        mcpConfig: {
+          command: "fixture",
+          args: ["bridge", "a1".repeat(32)],
+          env: { BRIDGE_TOKEN: "b2".repeat(32) },
+        },
+      }),
+      logger: {
+        debug: (message) => {
+          debug.push(message);
+        },
+      },
+    });
+    await collect(adapter, request()).catch(() => undefined);
+    expect(debug.join("\n")).toContain("hermes stderr: [redacted]");
+    expect(debug.join("\n")).not.toContain("a1".repeat(32));
+    expect(debug.join("\n")).not.toContain("b2".repeat(32));
+    expect(debug.join("\n")).not.toContain(request().model.apiKey!);
+  });
+
   it("keeps prompt/file content out of production fallback and worker logs at info", async () => {
     vi.stubEnv("LOG_LEVEL", "info");
     const records: string[] = [];

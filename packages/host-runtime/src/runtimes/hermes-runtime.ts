@@ -20,7 +20,7 @@ import type * as z from "zod";
 import { serializeError } from "../../../logging/src/serialize-error.js";
 import type { CapturedChildOutput, ChildOutputLogger } from "../child-output.js";
 import { captureChildOutput, childProcessLogger } from "../child-output.js";
-import { redactMcpText } from "../mcp-diagnostics.js";
+import { argumentSecrets, mcpConfigSecrets, redactMcpText } from "../mcp-diagnostics.js";
 import { AcpClient, AcpClientError } from "./acp-client.js";
 import { startArdurMcpServer } from "./ardur-mcp-server.js";
 import { createArdurToolBridge } from "./claude-mcp-bridge.js";
@@ -548,8 +548,11 @@ export class HermesRuntime implements AgentRuntime {
       );
       mcp = await startArdurMcpServer(bridge);
       if (!turn.active) return;
-      const relayKey = mcp.config.args.at(-1) ?? "";
-      const secrets = [request.model.apiKey!, relayKey];
+      const secrets = [
+        request.model.apiKey!,
+        ...mcpConfigSecrets(mcp.config),
+        ...argumentSecrets(this.options.args ?? []),
+      ];
       turn.secrets = secrets;
       const allowedToolTitles = new Set(
         Array.isArray(request.tools)
@@ -608,6 +611,7 @@ export class HermesRuntime implements AgentRuntime {
         },
       });
       turn.child = result.child;
+      if (result.mcpConfig) secrets.push(...mcpConfigSecrets(result.mcpConfig));
       turn.teardown = result.teardown;
       if (!turn.active) {
         await this.finishTurn(request.runId, turn.stopReason ?? "cancel");

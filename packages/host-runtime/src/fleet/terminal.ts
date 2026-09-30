@@ -65,7 +65,11 @@ export class FleetTerminal implements TerminalProvider {
       computer: ComputerRef,
       argv: string[],
       context: AdapterContext,
-    ) => Promise<{ child: ChildProcessWithoutNullStreams; cleanup(): Promise<void> }>,
+    ) => Promise<{
+      child: ChildProcessWithoutNullStreams;
+      secrets?: readonly string[];
+      cleanup(): Promise<void>;
+    }>,
     private readonly root: (computer: ComputerRef, context: AdapterContext) => Promise<string>,
   ) {}
   async open(
@@ -132,6 +136,7 @@ export class FleetTerminal implements TerminalProvider {
     });
     const capturedStderr = captureChildOutput(opened.child, {
       kind: "fleet-terminal",
+      secrets: opened.secrets,
       logger: childProcessLogger(),
     });
     opened.child.stdin.on("error", () => undefined);
