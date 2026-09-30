@@ -28,14 +28,21 @@ beforeEach(() => {
 });
 
 describe("workspace layout", () => {
+  it("starts with Tasks and Routines but preserves remembered view closures", () => {
+    const layout = defaultWorkspaceLayout();
+    expect(layout.open).toEqual([{ type: "tasks" }, { type: "routines" }]);
+    const key = workspaceLayoutKey("user", "space", "bot");
+    writeWorkspaceLayout(key, closeWorkspaceView(layout, "routines"));
+    expect(readWorkspaceLayout(key).open).toEqual([{ type: "tasks" }]);
+  });
   it("deduplicates opens and selects the adjacent view when closing", () => {
     const tasks = defaultWorkspaceLayout();
     const terminal = openWorkspaceView(tasks, "terminal");
-    expect(openWorkspaceView(terminal, "terminal").open).toHaveLength(2);
+    expect(openWorkspaceView(terminal, "terminal").open).toHaveLength(3);
     const files = openWorkspaceView(terminal, "files");
     expect(closeWorkspaceView(files, "files").active).toBe("terminal");
     expect(closeWorkspaceView(files, "tasks").active).toBe("files");
-    const empty = closeWorkspaceView(tasks, "tasks");
+    const empty = closeWorkspaceView(closeWorkspaceView(tasks, "routines"), "tasks");
     expect(empty).toMatchObject({ open: [], active: null, visible: false, expanded: false });
     expect(openWorkspaceView(empty, "routines")).toMatchObject({
       active: "routines",
@@ -62,7 +69,7 @@ describe("workspace layout", () => {
         ...defaultWorkspaceLayout(),
         width: 900,
         height: -10,
-        open: [{ type: "tasks", token: "placeholder" }, { type: "tasks" }],
+        open: [{ type: "tasks", token: "placeholder" }, { type: "tasks" }, { type: "routines" }],
         output: "never store this",
         dirtyContent: "draft",
         url: "https://example.invalid",

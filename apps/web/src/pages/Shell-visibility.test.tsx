@@ -11,7 +11,7 @@ import type {
   ThreadSnapshot,
 } from "@ardurbot/contracts";
 import type { ReactNode } from "react";
-import { useEffect } from "react";
+import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -527,6 +527,61 @@ async function deliverCapabilityFlip(botId: string, graphical: boolean) {
   await tick(200);
 }
 
+it("opens the dashboard account popover on its first click with the existing actions", async () => {
+  root.render(
+    <StrictMode>
+      <MemoryRouter initialEntries={["/app?view=dashboard"]}>
+        <ShellPage dashboard />
+      </MemoryRouter>
+    </StrictMode>,
+  );
+  await until(() => host.querySelector('[data-testid="user-menu-trigger"]') !== null);
+  click(host.querySelector('[data-testid="user-menu-trigger"]'));
+  await until(() => document.querySelector('[data-slot="popover-content"]') !== null);
+  const menu = document.querySelector('[data-slot="popover-content"]')!;
+  expect([...menu.querySelectorAll("button")].map((button) => button.textContent)).toEqual([
+    "Settings",
+    "Usage",
+    "Log out",
+  ]);
+  await tick(300);
+  expect(document.querySelector('[data-slot="popover-content"]')).toBe(menu);
+});
+
+it("keeps Show settings in the workspace header and Show computer returns to the selected view", async () => {
+  await renderShell("/app/bot-1");
+  await openWorkspacePane();
+  click(paneTab("Screen"));
+  await until(() => paneTab("Screen")?.getAttribute("aria-selected") === "true");
+  const settings = pane()?.querySelector('[aria-label="Show settings"]');
+  expect(settings).not.toBeNull();
+  click(settings);
+  await until(() => pane()?.getAttribute("data-panel") === "settings");
+  click(pane()?.querySelector('[aria-label="Show computer"]'));
+  await until(() => pane()?.getAttribute("data-panel") === "computer");
+  expect(paneTab("Screen")?.getAttribute("aria-selected")).toBe("true");
+});
+
+it("offers Tasks and Routines tabs on first open without overriding remembered closures", async () => {
+  await renderShell("/app/bot-1");
+  await openWorkspacePane();
+  expect([...pane()!.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual([
+    "Tasks",
+    "Routines",
+  ]);
+  click(paneTab("Routines"));
+  await until(() => paneTab("Routines")?.getAttribute("aria-selected") === "true");
+  click(pane()?.querySelector('[aria-label="Close Routines"]'));
+  await until(() => pane()?.querySelectorAll('[role="tab"]').length === 1);
+  click(host.querySelector("[data-workspace-toggle]"));
+  await until(() => pane()?.getAttribute("aria-hidden") === "true");
+  click(host.querySelector("[data-workspace-toggle]"));
+  await until(() => pane()?.getAttribute("aria-hidden") === "false");
+  expect([...pane()!.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual([
+    "Tasks",
+  ]);
+});
+
 it("remembers distinct A/B layouts and restores focus when a view closes", async () => {
   await renderShell("/app/bot-1");
   await openWorkspacePane();
@@ -545,13 +600,18 @@ it("remembers distinct A/B layouts and restores focus when a view closes", async
   await tick(300);
   await openWorkspacePane();
   expect(pane()?.querySelector("hr")?.getAttribute("aria-valuenow")).toBe("480");
-  expect(pane()?.querySelector('[role="tablist"]')?.textContent).toBe("Tasks");
+  expect([...pane()!.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual([
+    "Tasks",
+    "Routines",
+  ]);
   click(paneTab("Computer"));
   await until(() => paneTab("Computer")?.getAttribute("aria-selected") === "true");
   click(host.querySelector('[data-roster-bot-id="bot-1"]'));
   await until(() => paneTab("Screen")?.getAttribute("aria-selected") === "true");
   expect(pane()?.querySelector("hr")?.getAttribute("aria-valuenow")).toBe("500");
   click(pane()?.querySelector('[aria-label="Close Screen"]'));
+  await until(() => paneTab("Routines")?.getAttribute("aria-selected") === "true");
+  click(pane()?.querySelector('[aria-label="Close Routines"]'));
   await until(() => paneTab("Tasks")?.getAttribute("aria-selected") === "true");
   await tick(100);
   expect(document.activeElement).toBe(paneTab("Tasks"));

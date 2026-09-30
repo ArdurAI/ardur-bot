@@ -4084,20 +4084,23 @@ export function ShellPage({
                     onClose={closeWorkspace}
                     onRetry={() => void refreshThread(active.id).catch(() => undefined)}
                     headerActions={
-                      !computerOpen &&
-                      computerPanelNeedsMaintenance(
-                        computer?.state,
-                        booting,
-                        Boolean(computerErrorState.operation),
-                      ) ? (
-                        <ComputerMaintenanceActions
-                          botId={active.id}
-                          computer={computer}
-                          onChanged={async () => {
-                            await refreshThread(active.id);
-                          }}
-                        />
-                      ) : null
+                      <>
+                        {!computerOpen &&
+                        computerPanelNeedsMaintenance(
+                          computer?.state,
+                          booting,
+                          Boolean(computerErrorState.operation),
+                        ) ? (
+                          <ComputerMaintenanceActions
+                            botId={active.id}
+                            computer={computer}
+                            onChanged={async () => {
+                              await refreshThread(active.id);
+                            }}
+                          />
+                        ) : null}
+                        <SettingsPanelToggle open={false} onToggle={() => setPanel("settings")} />
+                      </>
                     }
                     terminal={
                       computer

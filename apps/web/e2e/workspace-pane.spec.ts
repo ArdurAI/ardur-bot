@@ -118,6 +118,8 @@ test("workspace pane opens Tasks and bot files without starting the computer", a
   const pane = page.getByTestId("side-panel");
   await expect(pane).toHaveAttribute("data-panel", "computer");
   await expect(pane.getByRole("tab", { name: "Tasks" })).toBeVisible();
+  await expect(pane.getByRole("tab", { name: "Routines", exact: true })).toBeVisible();
+  await expect(pane.getByRole("button", { name: "Show settings", exact: true })).toBeVisible();
   await expect(pane.getByRole("tab", { name: "Screen" })).toHaveCount(0);
   await expect(pane).toContainText("Review the workspace");
   await captureScreenshot(page, testInfo, "workspace-tasks-running");

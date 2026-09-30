@@ -106,7 +106,7 @@ it("closes only the named view, selecting its neighbour and unmounting its body"
     host.querySelector<HTMLButtonElement>('[aria-label="Close Terminal"]')!.click(),
   );
   expect(host.querySelector('[data-body="terminal"]')).toBeNull();
-  expect(host.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe("Tasks");
+  expect(host.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe("Routines");
 });
 it("never mounts a restored terminal until explicitly requested", async () => {
   const change = vi.fn();

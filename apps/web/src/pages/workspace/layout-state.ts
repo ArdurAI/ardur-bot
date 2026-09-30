@@ -26,7 +26,7 @@ import { isWorkspaceViewId } from "./view-registry";
 export function defaultWorkspaceLayout(): WorkspaceLayout {
   return {
     version: 1,
-    open: [{ type: "tasks" }],
+    open: [{ type: "tasks" }, { type: "routines" }],
     active: "tasks",
     visible: false,
     expanded: false,
