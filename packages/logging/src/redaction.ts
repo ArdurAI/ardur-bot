@@ -84,6 +84,8 @@ function redactAssignments(text: string): string {
       if (closed && PLACEHOLDER.test(value)) continue;
       replacement = `${quote}${REDACTED}${closed ? quote : ""}`;
     } else {
+      // JSON facts and containers are not text credentials; keep their types intact.
+      if (match[2] !== undefined) continue;
       while (end < text.length && !/[\s,;}]/.test(text[end]!)) end++;
       keys.lastIndex = end;
       if (end === start) continue;

@@ -35,6 +35,21 @@ describe("redaction", () => {
     expect(redactSensitiveText(input)).toBe(expected);
   });
 
+  it("preserves non-string JSON facts and containers under sensitive-looking keys", () => {
+    const data = {
+      parentSecretAbsent: true,
+      configHasKey: false,
+      tokenCount: 42,
+      credential: null,
+      tokens: [],
+      secrets: { password: "fixture-credential" },
+    };
+    expect(JSON.parse(redactSensitiveText(JSON.stringify(data)))).toEqual({
+      ...data,
+      secrets: { password: "[Redacted]" },
+    });
+  });
+
   it.each([
     "PASSWORD",
     "Secret",
