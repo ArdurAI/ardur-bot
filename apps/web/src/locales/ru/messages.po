@@ -8070,6 +8070,15 @@ msgid "Shared documents will be published directly."
 msgstr ""
 
 #: src/pages/GitMemorySettings.tsx
+msgid "Sharing"
+msgstr "Общий доступ"
+
+msgid "Change location on desktop."
+msgstr "Измените местоположение на компьютере."
+
+msgid "Set up a container on desktop, then try again."
+msgstr "Настройте контейнер на компьютере и повторите попытку."
+
 msgid "Shared recall will use proposed facts after merge."
 msgstr ""
 

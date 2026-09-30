@@ -988,7 +988,7 @@
             "uiLabels": [
               "New bot",
               "Name",
-              "Private"
+              "Only this bot"
             ],
             "screenshotId": "docs-bots-create-form",
             "expected": "Name and computer mode controls are visible.",
@@ -999,13 +999,13 @@
             "aliases": [
               "private"
             ],
-            "text": "Name the bot and choose Private computer mode.",
+            "text": "Name the bot and choose Only this bot mode.",
             "uiLabels": [
               "Name",
-              "Private"
+              "Only this bot"
             ],
             "screenshotId": "docs-bots-create-private",
-            "expected": "Private is selected before creation.",
+            "expected": "Only this bot is selected before creation.",
             "availableSince": "0.1.0-alpha.2"
           },
           {
