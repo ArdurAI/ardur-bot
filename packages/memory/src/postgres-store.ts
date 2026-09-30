@@ -10,7 +10,6 @@ import { DocumentRevisionSchema } from "@ardurbot/contracts";
 import { Prisma } from "@ardurbot/db";
 import type { JournalDocument, MemoryJournal } from "./journal.js";
 import { JournalDocumentStore } from "./journal.js";
-import { assertMemorySafe } from "./redaction.js";
 import { scopeKey } from "./scope.js";
 import { authorizedDocumentWhere, documentWhereSql, listedDocumentWhere } from "./scoped-where.js";
 
@@ -277,7 +276,7 @@ export class PostgresDocumentStore extends JournalDocumentStore {
     private readonly tx: Prisma.TransactionClient,
     clock?: () => Date,
     private readonly selectListIds?: ListIds,
-    onUnsafeDocument?: (path: string) => void,
+    onUnsafeDocument?: (documentId: string) => void,
   ) {
     super(new PostgresMemoryJournal(tx), "postgres", clock, onUnsafeDocument);
   }
@@ -330,8 +329,7 @@ export class PostgresDocumentStore extends JournalDocumentStore {
     });
     const latest = await this.currentRevisions(rows);
     const head = rows[0] ? rowHead(rows[0], latest.get(rows[0].id)) : null;
-    assertMemorySafe(head, access.knownSecrets);
-    return head;
+    return head && this.isSafe(head.id, head, access.knownSecrets) ? head : null;
   }
 
   override async history(
@@ -367,11 +365,9 @@ export class PostgresDocumentStore extends JournalDocumentStore {
       (!input.cursor || row.revision < input.cursor)
         ? [legacyRevision(row)]
         : revisions.slice(0, limit).map((revision) => rowRevision(row, revision));
-    const page = {
-      items,
+    return {
+      items: items.filter((revision) => this.isSafe(row.id, revision, access.knownSecrets)),
       nextCursor: revisions.length > limit ? revisions[limit - 1]!.revision : null,
     };
-    assertMemorySafe(page, access.knownSecrets);
-    return page;
   }
 }

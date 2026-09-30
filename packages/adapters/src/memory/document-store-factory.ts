@@ -22,9 +22,9 @@ export async function selectDocumentStore(
   secrets?: Pick<EncryptedSecretStore, "load">,
   selectListIds?: ListIdSelector,
 ): Promise<MemoryDocumentStore> {
-  const postgres = new PostgresDocumentStore(tx, undefined, selectListIds, (documentPath) =>
-    // The path only; refused content is never logged.
-    getLogger().warn("memory document left out: it failed the credential check", { documentPath }),
+  const postgres = new PostgresDocumentStore(tx, undefined, selectListIds, (documentId) =>
+    // The id only: neither the content nor the path (which is checked too) is logged.
+    getLogger().warn("memory document left out: it failed the credential check", { documentId }),
   );
   if (!config?.documentStore || config.documentStore === "postgres") return postgres;
   if (config.documentStore === "git")
