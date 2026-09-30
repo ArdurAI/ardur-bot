@@ -4,6 +4,8 @@ export function getEffectiveWorkspaceTab(
   filesAvailable: boolean = true,
   terminalAvailable: boolean = false,
 ): string {
+  // Side-effect eligibility only. The pane retains a lost-capability view with
+  // its reason; heartbeat and screen requests must still fail closed here.
   return tab === "tasks" ||
     tab === "routines" ||
     (tab === "files" && filesAvailable) ||

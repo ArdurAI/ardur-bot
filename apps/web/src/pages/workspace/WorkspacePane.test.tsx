@@ -155,7 +155,7 @@ describe("WorkspacePane tab selection and content rendering", () => {
     expect(tasksContent?.getAttribute("data-visible")).toBe("true");
   });
 
-  it("renders Tasks from selected fallback when switching to a computer without files", async () => {
+  it("retains Files with a reason when the computer loses files", async () => {
     await act(async () =>
       root.render(
         <WorkspacePane
@@ -177,10 +177,9 @@ describe("WorkspacePane tab selection and content rendering", () => {
       ),
     );
     const activeTab = container.querySelector('[role="tab"][data-active]');
-    expect(activeTab?.textContent).toBe("Tasks");
-    const tasksContent = container.querySelector('[data-testid="workspace-tasks"]');
-    expect(tasksContent).not.toBeNull();
-    expect(tasksContent?.getAttribute("data-visible")).toBe("true");
+    expect(activeTab?.textContent).toBe("Files");
+    expect(container.textContent).toContain("Files are unavailable on this computer.");
+    expect(container.querySelector('[data-testid="workspace-files"]')).toBeNull();
   });
 
   it("activates Screen tab only when explicitly chosen on graphical computers", async () => {
@@ -208,7 +207,7 @@ describe("WorkspacePane tab selection and content rendering", () => {
     expect(activeTab?.textContent).toBe("Screen");
   });
 
-  it("falls back to Tasks tab when Screen is chosen on non-graphical computers", async () => {
+  it("retains Screen with a reason on non-graphical computers", async () => {
     const nonGraphical = {
       ...graphicalComputer,
       capabilities: { graphical: false, interactiveTerminal: false },
@@ -234,8 +233,9 @@ describe("WorkspacePane tab selection and content rendering", () => {
       ),
     );
     const activeTab = container.querySelector('[role="tab"][data-active]');
-    expect(activeTab?.textContent).toBe("Tasks");
-    expect(container.querySelector('[role="tablist"]')?.textContent).not.toContain("Screen");
+    expect(activeTab?.textContent).toBe("Screen");
+    expect(container.textContent).toContain("Screen is unavailable on this computer.");
+    expect(container.querySelector('[data-testid="workspace-screen"]')).toBeNull();
     expect(container.querySelector('[role="tablist"]')?.textContent).toContain("Computer");
   });
 
@@ -343,7 +343,7 @@ describe("WorkspacePane terminal tab", () => {
     expect(content?.getAttribute("data-visible")).toBe("true");
   });
 
-  it("omits the Terminal tab and falls back to Tasks on computers without terminal support", async () => {
+  it("retains Terminal with a reason without starting a session when support is lost", async () => {
     await act(async () =>
       root.render(
         <WorkspacePane
@@ -365,12 +365,12 @@ describe("WorkspacePane terminal tab", () => {
       ),
     );
     const activeTab = container.querySelector('[role="tab"][data-active]');
-    expect(activeTab?.textContent).toBe("Tasks");
-    expect(container.querySelector('[role="tablist"]')?.textContent).not.toContain("Terminal");
+    expect(activeTab?.textContent).toBe("Terminal");
+    expect(container.textContent).toContain("Terminal is unavailable on this computer.");
     expect(container.querySelector('[data-testid="workspace-terminal"]')).toBeNull();
   });
 
-  it("omits the Terminal tab when no terminal surface is provided", async () => {
+  it("keeps a remembered Terminal unavailable when no terminal surface is provided", async () => {
     await act(async () =>
       root.render(
         <WorkspacePane
@@ -392,7 +392,7 @@ describe("WorkspacePane terminal tab", () => {
       ),
     );
     const activeTab = container.querySelector('[role="tab"][data-active]');
-    expect(activeTab?.textContent).toBe("Tasks");
-    expect(container.querySelector('[role="tablist"]')?.textContent).not.toContain("Terminal");
+    expect(activeTab?.textContent).toBe("Terminal");
+    expect(container.textContent).toContain("Terminal is unavailable on this computer.");
   });
 });

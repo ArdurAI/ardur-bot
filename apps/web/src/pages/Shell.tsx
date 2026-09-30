@@ -25,6 +25,7 @@ import type {
   ThreadMessage,
   ThreadSnapshot,
   VoiceStatus,
+  WorkspaceLayout,
 } from "@ardurbot/contracts";
 import {
   ATTACHMENT_ALLOWED_MIME_TYPES,
@@ -95,7 +96,6 @@ import {
   Clock,
   Copy,
   Lock,
-  Maximize2,
   Menu,
   Mic,
   Monitor,
@@ -285,7 +285,14 @@ import { useTakeControl } from "./shell/use-take-control";
 import { handleWorkspaceOpenRun } from "./shell/workspace-run";
 import { SystemDictation } from "./system/SystemDictation";
 import { WindowChrome } from "./WindowChrome";
+import {
+  closeWorkspaceView,
+  openWorkspaceView,
+  useWorkspaceLayout,
+  workspaceLayoutKey,
+} from "./workspace/layout-state";
 import { terminalSupported } from "./workspace/terminal-controller";
+import { availableWorkspaceViews, isWorkspaceViewId } from "./workspace/view-registry";
 import { WorkspaceFileGuard } from "./workspace/WorkspaceFileGuard";
 
 const BotSettings = lazy(() =>
@@ -379,6 +386,9 @@ const WorkspacePane = lazy(() =>
   import("./workspace/WorkspacePane").then((module) => ({ default: module.WorkspacePane })),
 );
 const SlashPicker = lazy(() => import("../components/composer/SlashPicker"));
+const ViewControls = lazy(() =>
+  import("./workspace/ViewControls").then((module) => ({ default: module.ViewControls })),
+);
 
 const ATTACHMENT_ACCEPT = ATTACHMENT_ALLOWED_MIME_TYPES.join(",");
 /** Identity colour for bots the roster no longer knows about. */
@@ -508,6 +518,9 @@ export function ShellPage({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [panel, setPanelUnchecked] = useState<Panel>(null);
   const terminalCloseGuard = useRef<(() => boolean) | null>(null);
+  const workspaceLayoutUpdateRef = useRef<
+    ((change: (layout: WorkspaceLayout) => WorkspaceLayout) => void) | null
+  >(null);
   const panelRef = useRef(panel);
   panelRef.current = panel;
   const registerTerminalCloseGuard = useCallback((guard: (() => boolean) | null) => {
@@ -518,11 +531,15 @@ export function ShellPage({
     if (target !== panelRef.current && terminalCloseGuard.current && !terminalCloseGuard.current())
       return false;
     setPanelUnchecked(target);
+    workspaceLayoutUpdateRef.current?.((layout) =>
+      target === "computer"
+        ? { ...(layout.open.length ? layout : openWorkspaceView(layout, "tasks")), visible: true }
+        : { ...layout, visible: false, expanded: false },
+    );
     return true;
   }, []);
-  const [workspaceTab, setWorkspaceTab] = useState("tasks");
-  const [workspaceExpanded, setWorkspaceExpanded] = useState(false);
   const paneReturnFocus = useRef<HTMLElement | null>(null);
+  const [terminalRequestedKey, setTerminalRequestedKey] = useState<string | null>(null);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (
@@ -805,7 +822,7 @@ export function ShellPage({
   const computerBotIdRef = useRef<string | undefined>(undefined);
   const computerTabRef = useRef<"screen" | "terminal">("screen");
   // Latest panel/tab identity for guards that run before React re-renders.
-  const workspaceTabRef = useRef(workspaceTab);
+  const workspaceTabRef = useRef<string>("tasks");
   const computerBootEpoch = useRef(0);
   const openComputerRef = useRef<(botId?: string) => Promise<void>>(async () => {});
   const [computerViewport, setComputerViewport] = useState<{
@@ -899,6 +916,47 @@ export function ShellPage({
       : (bots.find((b) => b.id === botId) ?? bots[0]);
   const computerBot =
     (computerBotId ? bots.find((bot) => bot.id === computerBotId) : undefined) ?? active;
+  const workspaceKey =
+    userId && active ? workspaceLayoutKey(userId, active.spaceId, active.id) : null;
+  const { layout: workspaceLayout, update: updateWorkspaceLayout } =
+    useWorkspaceLayout(workspaceKey);
+  workspaceLayoutUpdateRef.current = updateWorkspaceLayout;
+  const workspaceTab = workspaceLayout.active ?? "tasks";
+  const workspaceExpanded = workspaceLayout.expanded;
+  const setWorkspaceExpanded = (next: boolean | ((current: boolean) => boolean)) =>
+    updateWorkspaceLayout((layout) => ({
+      ...layout,
+      expanded: typeof next === "function" ? next(layout.expanded) : next,
+    }));
+  const setWorkspaceTab = (tab: string) => {
+    if (tab === "terminal") setTerminalRequestedKey(workspaceKey);
+    if (isWorkspaceViewId(tab)) updateWorkspaceLayout((layout) => openWorkspaceView(layout, tab));
+  };
+  useEffect(() => {
+    setPanelUnchecked(workspaceLayout.visible ? "computer" : null);
+    setTerminalRequestedKey(null);
+  }, [workspaceKey]);
+  const openWorkspace = (tab: string) => {
+    if (!isWorkspaceViewId(tab) || !setPanel("computer")) return;
+    paneReturnFocus.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setWorkspaceTab(tab);
+  };
+  const closeWorkspace = (tab: string) => {
+    if (!isWorkspaceViewId(tab)) return;
+    if (tab === "terminal" && terminalCloseGuard.current && !terminalCloseGuard.current()) return;
+    const next = closeWorkspaceView(workspaceLayout, tab);
+    updateWorkspaceLayout(() => next);
+    if (!next.open.length) setPanelUnchecked(null);
+    requestAnimationFrame(() => {
+      const selected = document.querySelector<HTMLElement>(
+        '[data-panel="computer"] [role="tab"][aria-selected="true"]',
+      );
+      if (next.open.length && selected) selected.focus();
+      else if (paneReturnFocus.current?.isConnected) paneReturnFocus.current.focus();
+      else document.querySelector<HTMLElement>("[data-workspace-toggle]")?.focus();
+    });
+  };
   const effectiveWorkspaceTab = getEffectiveWorkspaceTab(
     workspaceTab,
     computer?.capabilities?.graphical,
@@ -3647,6 +3705,19 @@ export function ShellPage({
             <RunContext run={activeSnapshot?.contextRun ?? activeSnapshot?.run} />
           </div>
           <div className="flex items-center gap-1">
+            {!inGroup && active ? (
+              <Suspense fallback={null}>
+                <ViewControls
+                  capabilities={{ computer }}
+                  layout={workspaceLayout}
+                  visible={panel === "computer"}
+                  onOpen={openWorkspace}
+                  onPosition={(position) =>
+                    updateWorkspaceLayout((layout) => ({ ...layout, position }))
+                  }
+                />
+              </Suspense>
+            ) : null}
             {(inGroup ? activeGroup : active) ? (
               <ThreadSettingsButton
                 group={inGroup}
@@ -3661,6 +3732,7 @@ export function ShellPage({
               <button
                 type="button"
                 title={t`Agent computer`}
+                data-workspace-toggle
                 onClick={() => {
                   const next = panel === "computer" ? null : "computer";
                   setPanel(next);
@@ -3888,45 +3960,14 @@ export function ShellPage({
                 : "rk-scroll h-full min-w-0 w-full overflow-y-auto px-5 py-[17px]"
             }
           >
-            {hasSharedPanelHeader(panel) ? (
-              <div
-                data-workspace-chrome={panel === "computer" ? "" : undefined}
-                className="mb-4 flex shrink-0 items-center justify-between gap-2"
-              >
+            {hasSharedPanelHeader(panel) && panel !== "computer" ? (
+              <div className="mb-4 flex shrink-0 items-center justify-between gap-2">
                 <PanelHeaderTitle
                   panel={panel}
                   activeBot={active}
                   computerState={computer?.state}
                 />
                 <div className="flex gap-1">
-                  {panel === "computer" ? (
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={
-                        workspaceExpanded ? t`Return to conversation` : t`Expand workspace`
-                      }
-                      onClick={() => setWorkspaceExpanded((value) => !value)}
-                    >
-                      {workspaceExpanded ? <X size={16} /> : <Maximize2 size={16} />}
-                    </Button>
-                  ) : null}
-                  {active &&
-                  panel === "computer" &&
-                  !computerOpen &&
-                  computerPanelNeedsMaintenance(
-                    computer?.state,
-                    booting,
-                    Boolean(computerErrorState.operation),
-                  ) ? (
-                    <ComputerMaintenanceActions
-                      botId={active.id}
-                      computer={computer}
-                      onChanged={async () => {
-                        await refreshThread(active.id);
-                      }}
-                    />
-                  ) : null}
                   {active ? (
                     <SettingsPanelToggle
                       open={panel === "settings"}
@@ -3950,10 +3991,33 @@ export function ShellPage({
             {panel === "computer" && active ? (
               <Suspense fallback={null}>
                 <WorkspacePane
+                  key={workspaceKey}
                   bot={active}
                   computer={computer}
                   tab={workspaceTab}
                   onTabChange={setWorkspaceTab}
+                  openViews={workspaceLayout.open}
+                  allowTerminalStart={terminalRequestedKey === workspaceKey}
+                  expanded={workspaceExpanded}
+                  onExpand={() => setWorkspaceExpanded((value) => !value)}
+                  onClose={closeWorkspace}
+                  onRetry={() => void refreshThread(active.id).catch(() => undefined)}
+                  headerActions={
+                    !computerOpen &&
+                    computerPanelNeedsMaintenance(
+                      computer?.state,
+                      booting,
+                      Boolean(computerErrorState.operation),
+                    ) ? (
+                      <ComputerMaintenanceActions
+                        botId={active.id}
+                        computer={computer}
+                        onChanged={async () => {
+                          await refreshThread(active.id);
+                        }}
+                      />
+                    ) : null
+                  }
                   terminal={
                     computer
                       ? {
@@ -4648,29 +4712,13 @@ export function ShellPage({
               onOpenTerminal={terminalSurface.open}
               workspaceTabs={
                 active
-                  ? [
-                      { id: "tasks", label: t`Tasks` },
-                      ...(computer?.computerId &&
-                      computer.kind !== "fake" &&
-                      computer.kind !== "desktop" &&
-                      (computer.state === "running" ||
-                        (computer.homeRevision && computer.homeRevision !== "empty"))
-                        ? [{ id: "files", label: t`Files` }]
-                        : []),
-                      ...(terminalSupported(computer)
-                        ? [{ id: "terminal", label: t`Terminal` }]
-                        : []),
-                      { id: "routines", label: t`Routines` },
-                      ...(computer?.capabilities?.graphical === true
-                        ? [{ id: "screen", label: t`Screen` }]
-                        : []),
-                    ]
+                  ? availableWorkspaceViews({ computer }).map((view) => ({
+                      id: view.id,
+                      label: view.label(t),
+                    }))
                   : []
               }
-              onOpenWorkspaceTab={(tab) => {
-                setWorkspaceTab(tab);
-                setPanel("computer");
-              }}
+              onOpenWorkspaceTab={openWorkspace}
               onSelectBot={(id) => {
                 setMobileSidebarOpen(false);
                 navigate(`/app/${id}`);

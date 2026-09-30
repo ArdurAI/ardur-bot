@@ -2,7 +2,31 @@ import type { ComputerStatus, WorkspaceContext, WorkspaceViewId } from "@ardurbo
 import type { useLingui } from "@lingui/react/macro";
 import type { LucideIcon } from "lucide-react";
 import { ClipboardList, Folder, Monitor, Repeat, Terminal } from "lucide-react";
+import type { ReactNode } from "react";
+import { createElement, lazy } from "react";
 import { terminalSupported } from "./terminal-controller";
+import type { WorkspacePaneProps } from "./WorkspacePane";
+
+const Tasks = lazy(() =>
+  import("./WorkspaceTasks").then((module) => ({ default: module.WorkspaceTasks })),
+);
+const Files = lazy(() =>
+  import("./WorkspaceFiles").then((module) => ({ default: module.WorkspaceFiles })),
+);
+const Screen = lazy(() =>
+  import("./WorkspaceScreen").then((module) => ({ default: module.WorkspaceScreen })),
+);
+const TerminalView = lazy(() =>
+  import("./WorkspaceTerminal").then((module) => ({ default: module.WorkspaceTerminal })),
+);
+type ViewBodyProps = Pick<
+  WorkspacePaneProps,
+  "bot" | "computer" | "routines" | "screen" | "terminal" | "onOpenRun"
+> & {
+  context: WorkspaceContext | null;
+  visible: boolean;
+  controlsHost: HTMLElement | null;
+};
 
 type Translate = ReturnType<typeof useLingui>["t"];
 export type ViewCapabilities = {
@@ -17,6 +41,7 @@ export type WorkspaceViewDefinition = {
   primary?: boolean;
   available(capabilities: ViewCapabilities): boolean;
   unavailable(t: Translate): string;
+  render(props: ViewBodyProps): ReactNode;
 };
 
 /** One registration point for labels, icons, menus, palette and capability policy. */
@@ -27,6 +52,8 @@ export const workspaceViews = {
     icon: ClipboardList,
     available: () => true,
     unavailable: (t) => t`Tasks`,
+    render: ({ bot, visible, onOpenRun }) =>
+      createElement(Tasks, { key: bot.id, botId: bot.id, visible, onOpenRun }),
   },
   files: {
     id: "files",
@@ -43,6 +70,7 @@ export const workspaceViews = {
                 (computer.homeRevision && computer.homeRevision !== "empty")),
           ),
     unavailable: (t) => t`Files are unavailable on this computer.`,
+    render: ({ bot, context }) => (context ? createElement(Files, { bot, context }) : null),
   },
   terminal: {
     id: "terminal",
@@ -51,6 +79,17 @@ export const workspaceViews = {
     primary: true,
     available: ({ computer, terminal }) => terminal !== false && terminalSupported(computer),
     unavailable: (t) => t`Terminal is unavailable on this computer.`,
+    render: ({ bot, computer, visible, terminal, controlsHost }) =>
+      terminal
+        ? createElement(TerminalView, {
+            key: bot.id,
+            bot,
+            computer,
+            visible,
+            ...terminal,
+            controlsHost,
+          })
+        : null,
   },
   routines: {
     id: "routines",
@@ -58,6 +97,7 @@ export const workspaceViews = {
     icon: Repeat,
     available: () => true,
     unavailable: (t) => t`Routines`,
+    render: ({ routines }) => routines,
   },
   screen: {
     id: "screen",
@@ -66,13 +106,16 @@ export const workspaceViews = {
     primary: true,
     available: ({ computer }) => computer?.capabilities?.graphical === true,
     unavailable: (t) => t`Screen is unavailable on this computer.`,
+    render: ({ screen, visible }) => createElement(Screen, { ...screen, visible }),
   },
   computer: {
     id: "computer",
+    primary: true,
     label: (t) => t`Computer`,
     icon: Monitor,
     available: ({ computer }) => computer?.capabilities?.graphical !== true,
     unavailable: (t) => t`Open Screen to view this computer.`,
+    render: ({ screen, visible }) => createElement(Screen, { ...screen, visible }),
   },
 } satisfies Record<WorkspaceViewId, WorkspaceViewDefinition>;
 
