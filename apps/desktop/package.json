@@ -87,6 +87,10 @@
         "to": "host-service/python/hermes_sources.json"
       },
       {
+        "from": "../host-service/dist/python/hermes_compat.json",
+        "to": "host-service/python/hermes_compat.json"
+      },
+      {
         "from": "../host-service/dist/python/runtime_config_profile.json",
         "to": "host-service/python/runtime_config_profile.json"
       },

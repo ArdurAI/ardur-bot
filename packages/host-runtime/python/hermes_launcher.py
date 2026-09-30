@@ -17,12 +17,70 @@ from hermes_profile import acknowledge, check_catalog, check_constructed, valida
 
 PIN = "29112bef099274229cadff79cdff7bf7b99c4b77"
 TREE = "daaffc303ae437041b7f76be17c5f61b14f2ce99"
-SOURCES = json.loads(Path(__file__).with_name("hermes_sources.json").read_text())
 
 
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise RuntimeError(message)
+
+
+def load_compat() -> dict:
+    """Load the reviewed per-tree compatibility table and check its shape."""
+    data = json.loads(Path(__file__).with_name("hermes_compat.json").read_text(encoding="utf-8"))
+    require(type(data) is dict and data.get("format") == 1 and type(data.get("entries")) is dict,
+            "Compatibility table is invalid")
+    for tree, entry in data["entries"].items():
+        require(type(entry) is dict and entry.get("tree") == tree and
+                type(entry.get("version")) is str and
+                type(entry.get("commit")) is str and len(entry["commit"]) == 40 and
+                type(entry.get("sources")) is dict and
+                all(type(name) is str and type(digest) is str and len(digest) == 64
+                    for name, digest in entry["sources"].items()) and
+                type(entry.get("sessionHook")) is dict and
+                type(entry.get("toolsetHelper")) is dict and
+                type(entry.get("acpAgentInit")) is dict and
+                type(entry.get("agentInit")) is dict and
+                type(entry.get("sourceGuard")) is dict and
+                type(entry.get("callbacks")) is dict,
+                "Compatibility table is invalid")
+        for hook in ("sessionHook", "toolsetHelper", "acpAgentInit"):
+            parameters = entry[hook]["parameters"]
+            require(type(parameters) is list and parameters and
+                    all(type(pair) is list and len(pair) == 2 and type(pair[0]) is str and
+                        type(pair[1]) is str for pair in parameters),
+                    "Compatibility table is invalid")
+        require(entry["sessionHook"]["parameters"][0][0] == "self" and
+                entry["acpAgentInit"]["parameters"][0][0] == "self",
+                "Compatibility table is invalid")
+        agent_init = entry["agentInit"]
+        require(type(agent_init.get("parameterCount")) is int and
+                type(agent_init.get("required")) is list and
+                all(type(name) is str for name in agent_init["required"]),
+                "Compatibility table is invalid")
+        guard = entry["sourceGuard"]
+        require(type(guard.get("mustContain")) is list and type(guard.get("mustNotContain")) is list and
+                all(type(needle) is str for needle in guard["mustContain"] + guard["mustNotContain"]),
+                "Compatibility table is invalid")
+        require(type(entry["callbacks"].get("setup_mcp_callback")) is str,
+                "Compatibility table is invalid")
+    return data
+
+
+COMPAT = load_compat()
+
+
+def compat_entry(pin: str, tree: str) -> dict | None:
+    for entry in COMPAT["entries"].values():
+        if entry["commit"] == pin and entry["tree"] == tree:
+            return entry
+    return None
+
+
+def entry_for_commit(commit: str) -> dict | None:
+    for entry in COMPAT["entries"].values():
+        if entry["commit"] == commit:
+            return entry
+    return None
 
 
 def has_git_metadata(root: Path) -> bool:
@@ -33,7 +91,7 @@ def has_git_metadata(root: Path) -> bool:
     return True
 
 
-def check_install(root: Path, home: Path) -> None:
+def check_install(root: Path, home: Path) -> dict:
     require(root.is_absolute() and root.is_dir(), "Install root is unavailable")
     require(home.is_absolute() and home.is_dir() and home != root, "Private home is required")
     require(root not in home.parents, "Private home overlaps the install")
@@ -45,7 +103,8 @@ def check_install(root: Path, home: Path) -> None:
             ["git", "-C", str(root), "rev-parse", "HEAD"],
             capture_output=True, text=True, check=True, timeout=5,
         ).stdout.strip()
-        require(revision == PIN, "Install revision changed")
+        entry = entry_for_commit(revision)
+        require(entry is not None, "Install revision changed")
     else:
         marker_path = root / ".ardur-install.json"
         require(marker_path.is_file(), "Install marker is missing")
@@ -53,27 +112,33 @@ def check_install(root: Path, home: Path) -> None:
             marker = json.loads(marker_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as error:
             raise RuntimeError("Install marker mismatch") from error
-        require(
-            isinstance(marker, dict) and marker.get("pin") == PIN and marker.get("tree") == TREE,
-            "Install marker mismatch",
-        )
-    for name, expected in SOURCES.items():
+        entry = compat_entry(marker.get("pin"), marker.get("tree")) if isinstance(marker, dict) else None
+        require(entry is not None, "Install marker mismatch")
+    for name, expected in entry["sources"].items():
         require(hashlib.sha256((root / name).read_bytes()).hexdigest() == expected, f"Install source changed: {name}")
+    return entry
 
 
-def check_hooks(session, server, run_agent) -> None:
+def check_hooks(session, server, run_agent, entry: dict) -> None:
     make = session.SessionManager._make_agent
     signature = inspect.signature(make)
-    require(list(signature.parameters) == [
-        "self", "session_id", "cwd", "model", "requested_provider", "base_url", "api_mode"
-    ], "Session hook signature changed")
+    parameters = entry["sessionHook"]["parameters"]
+    require([name for name, _kind in parameters] == list(signature.parameters), "Session hook signature changed")
     require(all(signature.parameters[name].kind is inspect.Parameter.KEYWORD_ONLY for name in list(signature.parameters)[1:]), "Session hook is no longer keyword-only")
+    require(all(signature.parameters[name].kind.name == kind for name, kind in parameters), "Session hook signature changed")
     source = inspect.getsource(make)
-    require('"hermes-acp"' in source and "disabled_toolsets" not in source, "Session hook behavior changed")
-    require(list(inspect.signature(session._expand_acp_enabled_toolsets).parameters) == ["toolsets", "mcp_server_names"], "Toolset helper changed")
-    require(list(inspect.signature(server.HermesACPAgent.__init__).parameters) == ["self", "session_manager"], "ACP injection changed")
-    parameters = inspect.signature(run_agent.AIAgent.__init__).parameters
-    require(len(parameters) == 81 and {"base_url", "api_key", "provider", "api_mode", "model", "max_iterations", "enabled_toolsets", "disabled_toolsets", "save_trajectories", "skip_context_files", "skip_memory", "skip_background_review", "run_budget_seconds", "fallback_model"} <= parameters.keys(), "Agent constructor changed")
+    require(all(needle in source for needle in entry["sourceGuard"]["mustContain"]) and
+            all(needle not in source for needle in entry["sourceGuard"]["mustNotContain"]),
+            "Session hook behavior changed")
+    require(list(inspect.signature(session._expand_acp_enabled_toolsets).parameters) ==
+            [name for name, _kind in entry["toolsetHelper"]["parameters"]], "Toolset helper changed")
+    require(list(inspect.signature(server.HermesACPAgent.__init__).parameters) ==
+            [name for name, _kind in entry["acpAgentInit"]["parameters"]], "ACP injection changed")
+    agent_parameters = inspect.signature(run_agent.AIAgent.__init__).parameters
+    require(len(agent_parameters) == entry["agentInit"]["parameterCount"] and
+            set(entry["agentInit"]["required"]) <= agent_parameters.keys(), "Agent constructor changed")
+    callback = entry["callbacks"]["setup_mcp_callback"]
+    require(callback in agent_parameters or hasattr(run_agent.AIAgent, callback), "Agent MCP callback changed")
 
 
 def main() -> None:
@@ -94,22 +159,27 @@ def main() -> None:
     require(os.environ.get("HERMES_DISABLE_LAZY_INSTALLS") == "1" and
             os.environ.get("PATH") == "/usr/bin:/bin", "Runtime code acquisition is forbidden")
     profile = validate(home, os.environ) if os.environ.get("ARDUR_HERMES_PROFILE") else None
-    check_install(root, home)
+    entry = check_install(root, home)
+    session_parameters = {name for name, _kind in entry["sessionHook"]["parameters"]} - {"self"}
     sys.path.insert(0, str(root))
     with contextlib.redirect_stdout(sys.stderr):
         import acp
-        from acp_adapter import entry, server, session
+        from acp_adapter import entry as acp_entry, server, session
         import run_agent
 
-        check_hooks(session, server, run_agent)
-        entry._setup_logging()
+        check_hooks(session, server, run_agent, entry)
+        acp_entry._setup_logging()
 
         class ArdurSessionManager(session.SessionManager):
-            def _make_agent(self, *, session_id, cwd, model=None, requested_provider=None, base_url=None, api_mode=None):
-                require(model in (None, expected_model), "ACP model override refused")
-                require(requested_provider in (None, "custom"), "ACP provider override refused")
-                require(base_url in (None, route), "ACP route override refused")
-                require(api_mode in (None, "chat_completions"), "ACP API override refused")
+            def _make_agent(self, **kwargs):
+                require(set(kwargs) <= session_parameters, "Session hook arguments changed")
+                require(kwargs.get("model") in (None, expected_model), "ACP model override refused")
+                require(kwargs.get("requested_provider") in (None, "custom"), "ACP provider override refused")
+                require(kwargs.get("base_url") in (None, route), "ACP route override refused")
+                require(kwargs.get("api_mode") in (None, "chat_completions"), "ACP API override refused")
+                if "enabled_toolsets" in session_parameters:
+                    require(kwargs.get("enabled_toolsets") in (None, ["mcp-ardur"]), "ACP toolset override refused")
+                    require(kwargs.get("disabled_toolsets") in (None, ["hermes-acp"]), "ACP toolset override refused")
                 agent = run_agent.AIAgent(
                     base_url=route, api_key=token, provider="custom", api_mode="chat_completions",
                     model=expected_model, max_iterations=max_iterations, run_budget_seconds=run_budget_seconds,
@@ -118,9 +188,9 @@ def main() -> None:
                     save_trajectories=False, skip_context_files=True, load_soul_identity=True,
                     skip_memory=True, skip_background_review=True, fallback_model=None,
                     checkpoints_enabled=False, quiet_mode=True, platform="acp",
-                    session_id=session_id, session_db=self._get_db(),
+                    session_id=kwargs["session_id"], session_db=self._get_db(),
                 )
-                agent.session_cwd = cwd
+                agent.session_cwd = kwargs["cwd"]
                 agent._print_fn = session._acp_stderr_print
                 if profile:
                     agent._skip_mcp_refresh = True

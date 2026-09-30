@@ -1,4 +1,4 @@
-"""Managed and checkout installs both have to match the pinned Hermes revision."""
+"""Managed and checkout installs both have to match a reviewed table entry."""
 
 from __future__ import annotations
 
@@ -14,6 +14,17 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import hermes_launcher
 from hermes_launcher import PIN, TREE
+
+
+def table_with(sources: dict[str, str], pin: str = PIN, tree: str = TREE) -> dict:
+    base = json.loads((Path(__file__).resolve().parents[1] / "hermes_compat.json").read_text())
+    for key, entry in base["entries"].items():
+        entry["sources"] = dict(sources)
+        entry["commit"] = pin
+        entry["tree"] = tree
+        base["entries"] = {tree: entry}
+        return base
+    raise AssertionError("table has no entries")
 
 
 class InstallTests(unittest.TestCase):
@@ -43,9 +54,9 @@ class InstallTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-    def check(self, sources: dict[str, str] | None = None) -> None:
+    def check(self, sources: dict[str, str] | None = None, pin: str = PIN, tree: str = TREE) -> None:
         mapped = {"hello.txt": self.digest} if sources is None else sources
-        with patch.object(hermes_launcher, "SOURCES", mapped):
+        with patch.object(hermes_launcher, "COMPAT", table_with(mapped, pin, tree)):
             hermes_launcher.check_install(self.root, self.home)
 
     def test_marker_accepted_without_git(self):
@@ -73,6 +84,26 @@ class InstallTests(unittest.TestCase):
         self.marker(tree="0" * 40)
         with self.assertRaises(RuntimeError):
             self.check()
+
+    def test_unknown_tree_refused_with_the_same_message(self):
+        self.marker(tree="0" * 40)
+        with patch.object(hermes_launcher, "COMPAT", table_with({"hello.txt": self.digest})):
+            with self.assertRaises(RuntimeError) as caught:
+                hermes_launcher.check_install(self.root, self.home)
+        self.assertEqual(str(caught.exception), "Install marker mismatch")
+
+    def test_git_unknown_commit_refused_with_the_same_message(self):
+        (self.root / ".git").mkdir()
+        self.marker()
+
+        def fake_run(args, **kwargs):
+            return SimpleNamespace(stdout="f" * 40 + "\n", returncode=0)
+
+        with patch.object(hermes_launcher.subprocess, "run", side_effect=fake_run):
+            with patch.object(hermes_launcher, "COMPAT", table_with({"hello.txt": self.digest})):
+                with self.assertRaises(RuntimeError) as caught:
+                    hermes_launcher.check_install(self.root, self.home)
+        self.assertEqual(str(caught.exception), "Install revision changed")
 
     def test_git_wrong_head_refused_even_with_a_matching_marker(self):
         (self.root / ".git").write_text("gitdir: /unused\n", encoding="utf-8")
