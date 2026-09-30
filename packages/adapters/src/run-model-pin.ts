@@ -8,7 +8,7 @@ import type {
 } from "@ardurbot/contracts";
 import {
   antigravityEffortForModel,
-  MODEL_LOCALITY_DENIED_MESSAGE,
+  failureCategoryMessage,
   nativeRuntimeProviders,
   RuntimePinError,
   RuntimePinSchema,
@@ -26,7 +26,7 @@ import { findDefaultModelCredential as findSpaceDefault } from "@ardurbot/db";
 import { compileHermesRuntimeConfig } from "@ardurbot/host-runtime/runtimes/hermes-config";
 
 import { hermesCompatibility, hermesConfigHash } from "./hermes-compatibility.js";
-import { modelLocalityAllowed } from "./model-locality.js";
+import { modelLocalityRefusedBy } from "./model-locality.js";
 import { listPiCatalog } from "./pi-models.js";
 import { AnthropicOAuthUnavailableError } from "./pi-oauth.js";
 import { catalogModels } from "./pi-runtime.js";
@@ -41,6 +41,21 @@ import {
 
 type Credential = Awaited<ReturnType<typeof findDefaultModelCredential>>;
 export type ResolvedRunPin = AgentRunModel & ResolvedPin;
+
+/**
+ * The locality refusal as its failure-category id and sentence. The registry does not know
+ * the bot's name, so {bot} is filled with "this bot"; the apps, which do, replace it when
+ * they translate the category.
+ */
+function localityProblem(pin: RuntimePin, refusedBy: "bot" | "space" | null): RuntimeProblem {
+  const id = refusedBy === "space" ? "destinations-space" : "destinations-bot";
+  return runtimePinProblem(
+    pin,
+    "locality-denied",
+    failureCategoryMessage(id, { bot: "this bot" }),
+    id,
+  );
+}
 
 export async function resolveRunModelPin(input: {
   prisma: PrismaClient;
@@ -175,13 +190,17 @@ export async function resolveRunModelPin(input: {
         "The pinned effort is unavailable in this runtime.",
       );
     const space = await input.prisma.space.findUnique({ where: { id: input.scope.spaceId } });
-    if (
-      !modelLocalityAllowed([bot?.allowedModelDestinations, space?.allowedModelDestinations], {
-        provider,
-        id: pin.modelId,
-      } as AgentRunModel)
-    )
-      return runtimePinProblem(pin, "locality-denied", MODEL_LOCALITY_DENIED_MESSAGE);
+    {
+      const refusedBy = modelLocalityRefusedBy(
+        bot?.allowedModelDestinations,
+        space?.allowedModelDestinations,
+        {
+          provider,
+          id: pin.modelId,
+        } as AgentRunModel,
+      );
+      if (refusedBy) return localityProblem(pin, refusedBy);
+    }
     return {
       kind: "resolved",
       pin,
@@ -262,13 +281,14 @@ export async function resolveRunModelPin(input: {
       thinkingLevel: selected.thinkingLevel,
     };
     const space = await input.prisma.space.findUnique({ where: { id: input.scope.spaceId } });
-    if (
-      !modelLocalityAllowed(
-        [bot?.allowedModelDestinations, space?.allowedModelDestinations],
+    {
+      const refusedBy = modelLocalityRefusedBy(
+        bot?.allowedModelDestinations,
+        space?.allowedModelDestinations,
         resolved,
-      )
-    )
-      return runtimePinProblem(pin, "locality-denied", MODEL_LOCALITY_DENIED_MESSAGE);
+      );
+      if (refusedBy) return localityProblem(pin, refusedBy);
+    }
     const problem = validateRuntimePin(resolved, pin);
     const compatibilityProblem = problem ?? hermesCompatibility(pin, resolved);
     if (compatibilityProblem) return compatibilityProblem;

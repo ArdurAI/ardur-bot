@@ -202,3 +202,125 @@ it("maps an older record's stored sentence back to its category for rendering", 
   );
   await act(async () => root.unmount());
 });
+
+function refusalPin() {
+  return {
+    runtimeKind: "codex-app-server" as const,
+    provider: "openai-codex",
+    modelId: "gpt-6-sol",
+    effort: "medium",
+    credentialId: "native:codex-app-server",
+    revision: 1,
+  };
+}
+
+it.each([
+  [
+    "experimental-off",
+    "Codex is experimental. Turn on Experimental for Reviewer to use it.",
+    ["Turn on Experimental", "Change pin"],
+  ],
+  [
+    "computer-unsupported",
+    "Codex runs on the host computer, not in a sandbox. Change Reviewer's computer to use it.",
+    ["Open bot settings", "Change pin"],
+  ],
+  [
+    "destinations-bot",
+    "Reviewer's allowed model destinations block this model. Change them in Reviewer's settings.",
+    ["Open bot settings", "Change pin"],
+  ],
+  [
+    "destinations-space",
+    "This space's model policy blocks this model. Change it in Settings, under Models.",
+    ["Open Settings", "Change pin"],
+  ],
+] as const)(
+  "shows the refusal's sentence and one button per action: %s",
+  async (reasonId, sentence, labels) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const element = document.createElement("div");
+    const root = createRoot(element);
+    const problem = runtimePinProblem(
+      refusalPin(),
+      reasonId === "experimental-off" ? "runtime-unavailable" : "locality-denied",
+      "recorded sentence",
+      reasonId,
+    );
+    const enableExperimental = vi.fn();
+    const openBotDestinations = vi.fn();
+    const openBotComputer = vi.fn();
+    const openSpaceModels = vi.fn();
+    await act(async () => {
+      root.render(
+        <ProviderErrorMessage
+          text=""
+          runtimeProblem={problem}
+          botName="Reviewer"
+          onChangeModel={vi.fn()}
+          onEnableExperimental={enableExperimental}
+          onOpenBotDestinations={openBotDestinations}
+          onOpenBotComputer={openBotComputer}
+          onOpenSpaceModels={openSpaceModels}
+        />,
+      );
+    });
+    expect(element.textContent).toContain(sentence);
+    const buttons = [...element.querySelectorAll("button")].map((button) => button.textContent);
+    expect(buttons).toEqual(labels);
+    await act(async () => root.unmount());
+  },
+);
+
+it("turns on Experimental for the named bot from the banner", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const element = document.createElement("div");
+  const root = createRoot(element);
+  const problem = runtimePinProblem(
+    refusalPin(),
+    "runtime-unavailable",
+    "Codex is experimental. Turn on Experimental for this bot to use it.",
+    "experimental-off",
+  );
+  const enableExperimental = vi.fn();
+  await act(async () => {
+    root.render(
+      <ProviderErrorMessage
+        text=""
+        runtimeProblem={problem}
+        botName="Reviewer"
+        onEnableExperimental={enableExperimental}
+      />,
+    );
+  });
+  const button = [...element.querySelectorAll("button")].find(
+    (item) => item.textContent === "Turn on Experimental",
+  );
+  expect(button).toBeTruthy();
+  await act(async () => button!.click());
+  expect(enableExperimental).toHaveBeenCalledOnce();
+  await act(async () => root.unmount());
+});
+
+it("keeps an unclassified refusal exactly as an older server wrote it", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const element = document.createElement("div");
+  const root = createRoot(element);
+  const problem = runtimePinProblem(
+    refusalPin(),
+    "locality-denied",
+    "This bot may only run locally — change the pin or the space policy",
+  );
+  const onChangeModel = vi.fn();
+  await act(async () => {
+    root.render(
+      <ProviderErrorMessage text="" runtimeProblem={problem} onChangeModel={onChangeModel} />,
+    );
+  });
+  expect(element.textContent).toContain(
+    "This bot may only run locally — change the pin or the space policy",
+  );
+  const buttons = [...element.querySelectorAll("button")].map((button) => button.textContent);
+  expect(buttons).toEqual(["Change pin"]);
+  await act(async () => root.unmount());
+});

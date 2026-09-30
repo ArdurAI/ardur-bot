@@ -133,7 +133,10 @@ function ActivityRow({
     run.status === "failed" && run.failureCategory
       ? i18n._({
           ...failureCategoryMessages[run.failureCategory],
-          values: { runtime: run.failureRuntime ?? i18n._(unknownRuntimeName) },
+          values: {
+            runtime: run.failureRuntime ?? i18n._(unknownRuntimeName),
+            bot: run.botName,
+          },
         })
       : null;
   const presenceUnknown =

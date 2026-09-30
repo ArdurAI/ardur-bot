@@ -1,15 +1,21 @@
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
 import type { TerminalOutput, TerminalProvider } from "@ardurbot/adapter-kit";
 import {
   decodeTerminalFrame,
   encodeTerminalFrame,
+  TERMINAL_FRAME_BYTES,
+  TERMINAL_HEADER_BYTES,
   TERMINAL_REPLAY_BYTES,
   TERMINAL_WINDOW_BYTES,
 } from "@ardurbot/contracts";
+import { FleetTerminal } from "@ardurbot/host-runtime/fleet/terminal";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TerminalGrant, TerminalSocket } from "./terminal-gateway.js";
 import { TerminalGateway } from "./terminal-gateway.js";
 
-function setup() {
+function setup(fleet?: TerminalProvider) {
   let live = true,
     now = 1_000,
     sequence = 0;
@@ -66,7 +72,7 @@ function setup() {
   } as TerminalGrant;
   const authorize = vi.fn(async (_grant: TerminalGrant) => {});
   const gateway = new TerminalGateway({
-    provider,
+    provider: fleet ?? provider,
     authorize,
     now: () => now,
     audit: async (type) => {
@@ -106,6 +112,75 @@ const tick = async () => {
 afterEach(() => vi.useRealTimers());
 
 describe("human terminal gateway", () => {
+  it("delivers real Fleet output from the first prompt and reconnects without replaying input", async () => {
+    const child = Object.assign(new EventEmitter(), {
+      stdin: new PassThrough(),
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+      exitCode: 0,
+      signalCode: null,
+    });
+    const cleanup = vi.fn(async () => {});
+    const fleet = new FleetTerminal(
+      async () => ({ child: child as unknown as ChildProcessWithoutNullStreams, cleanup }),
+      async () => "/workspace",
+    );
+    const write = vi.spyOn(child.stdin, "write");
+    const f = setup(fleet);
+    f.grant.context.expiresAt = Date.now() + 60_000;
+    f.grant.context.workingRoot = "/workspace";
+    try {
+      const issued = await f.gateway.request(f.grant, "https://app.example");
+      const bytes = [Buffer.from("你好 🧪 $ "), Buffer.from([0, 128, 255, 27])];
+      child.stdout.write(`${JSON.stringify({ bytes: bytes[0]!.toString("base64") })}\n`);
+      const first = await f.gateway.attach(issued.ticket, "https://app.example", 0, f.socket);
+      await vi.waitFor(() =>
+        expect(f.sent.filter((frame) => typeof frame !== "string")).toHaveLength(1),
+      );
+      child.stdout.write(`${JSON.stringify({ bytes: bytes[1]!.toString("base64") })}\n`);
+      await vi.waitFor(() =>
+        expect(f.sent.filter((frame) => typeof frame !== "string")).toHaveLength(2),
+      );
+      const frames = () =>
+        f.sent
+          .filter((frame): frame is Uint8Array => typeof frame !== "string")
+          .map(decodeTerminalFrame);
+      expect(frames()).toEqual(
+        bytes.map((value, index) => ({ seq: index + 1, bytes: Uint8Array.from(value) })),
+      );
+      for (const [index, value] of [...bytes, Buffer.alloc(TERMINAL_FRAME_BYTES, 255)].entries()) {
+        await first.receive(encodeTerminalFrame(index + 1, value));
+        expect(
+          Buffer.from(JSON.parse(String(write.mock.calls.at(-1)![0])).bytes, "base64"),
+        ).toEqual(value);
+      }
+      const oversized = new Uint8Array(TERMINAL_HEADER_BYTES + TERMINAL_FRAME_BYTES + 1);
+      oversized[0] = 1;
+      new DataView(oversized.buffer).setUint32(1, 4);
+      new DataView(oversized.buffer).setUint32(5, TERMINAL_FRAME_BYTES + 1);
+      await expect(first.receive(oversized)).rejects.toThrow("Invalid terminal frame.");
+      expect(write).toHaveBeenCalledTimes(3);
+      await first.receive('{"type":"ack","seq":1}');
+      first.detach();
+      const next = await f.gateway.request(f.grant, "https://app.example", issued.sessionId);
+      f.sent.length = 0;
+      const reconnected = await f.gateway.attach(next.ticket, "https://app.example", 1, f.socket);
+      await vi.waitFor(() =>
+        expect(frames()).toEqual([{ seq: 2, bytes: Uint8Array.from(bytes[1]!) }]),
+      );
+      expect(JSON.parse(f.sent[0] as string)).toEqual({ type: "ready", inputSeq: 3 });
+      await expect(reconnected.receive(encodeTerminalFrame(3, bytes[0]!))).rejects.toThrow(
+        "Duplicate",
+      );
+      expect(write).toHaveBeenCalledTimes(3);
+      expect(f.gateway.sessions.has(issued.sessionId)).toBe(true);
+      expect(f.socket.close).not.toHaveBeenCalled();
+    } finally {
+      await f.gateway.stop();
+      await fleet.closeAll();
+    }
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
   it("audits opening before input, keeps input out of bot records, and preserves bytes", async () => {
     const f = setup();
     const issued = await f.gateway.request(f.grant, "https://app.example");

@@ -454,7 +454,10 @@ function TeamStatus({ row, now }: { row: TeamRow; now: number }) {
           {row.reasonCategory
             ? i18n._({
                 ...failureCategoryMessages[row.reasonCategory],
-                values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName) },
+                values: {
+                  runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName),
+                  bot: row.botName,
+                },
               })
             : row.reason}
         </Trans>

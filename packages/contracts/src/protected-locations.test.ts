@@ -1,13 +1,20 @@
 import { describe, expect, it } from "vitest";
 import type { ProtectedLocation } from "./protected-locations.js";
 import {
+  applyProtectedLocationGrantsPatch,
+  applyProtectedLocationsPolicyPatch,
   deniedLocationIds,
   PROCESS_LOCATION_RULES,
   PROTECTED_LOCATIONS_DEFAULTS,
+  ProtectedLocationGrantsPatchSchema,
   ProtectedLocationSchema,
+  ProtectedLocationsPolicyPatchSchema,
   ProtectedLocationsPolicyV1Schema,
+  parseProtectedLocationGrants,
   parseProtectedLocationsPolicy,
+  protectedLocationGrantsAfterPolicyPatch,
   protectedLocations,
+  protectedLocationViews,
   unreadProtectedLocations,
 } from "./protected-locations.js";
 
@@ -344,6 +351,117 @@ describe("protected locations policy", () => {
 
   it("reads the default list when the policy is empty", () => {
     expect(protectedLocations({ version: 1, custom: [] })).toEqual(PROTECTED_LOCATIONS_DEFAULTS);
+  });
+});
+
+describe("stored grants and patches", () => {
+  it("reads no grants from anything other than a string list", () => {
+    for (const raw of [undefined, null, {}, "ssh", 7, ["ssh", null], ["ssh", 1]]) {
+      expect(parseProtectedLocationGrants(raw, PROTECTED_LOCATIONS_DEFAULTS)).toEqual([]);
+    }
+    expect(
+      parseProtectedLocationGrants(["ssh", "unknown", "ssh", "aws"], PROTECTED_LOCATIONS_DEFAULTS),
+    ).toEqual(["ssh", "aws"]);
+  });
+
+  it("grants, revokes and combines independent changes idempotently", () => {
+    const apply = (
+      stored: unknown,
+      patch: Parameters<typeof applyProtectedLocationGrantsPatch>[1],
+    ) => applyProtectedLocationGrantsPatch(stored, patch, PROTECTED_LOCATIONS_DEFAULTS);
+    expect(apply(null, { grant: ["ssh"] })).toEqual(["ssh"]);
+    expect(apply(["ssh", "aws"], { revoke: ["ssh"] })).toEqual(["aws"]);
+    expect(apply(["ssh"], { grant: ["aws"], revoke: ["ssh"] })).toEqual(["aws"]);
+    expect(apply(["ssh"], { grant: ["ssh", "ssh"], revoke: ["aws"] })).toEqual(["ssh"]);
+    expect(apply(["ssh"], {})).toEqual(["ssh"]);
+  });
+
+  it("refuses conflicting, unknown, oversized and non-strict grant patches", () => {
+    for (const patch of [
+      { grant: ["ssh"], revoke: ["ssh"] },
+      { grant: ["unknown"] },
+      { revoke: ["unknown"] },
+      { grant: Array(129).fill("ssh") },
+      { revoke: Array(129).fill("ssh") },
+    ])
+      expect(() =>
+        applyProtectedLocationGrantsPatch([], patch, PROTECTED_LOCATIONS_DEFAULTS),
+      ).toThrow();
+    expect(
+      ProtectedLocationGrantsPatchSchema.safeParse({ grant: ["ssh"], extra: true }).success,
+    ).toBe(false);
+    expect(
+      ProtectedLocationGrantsPatchSchema.safeParse({ grant: Array(128).fill("ssh") }).success,
+    ).toBe(true);
+  });
+});
+
+describe("policy patches and views", () => {
+  it("clears removed grants, including a replacement with the same id", () => {
+    const policy = { version: 1 as const, custom: [vpnLocation] };
+    expect(
+      protectedLocationGrantsAfterPolicyPatch(
+        [vpnLocation.id, "ssh", "unknown"],
+        { remove: [vpnLocation.id], add: [vpnLocation] },
+        policy,
+      ),
+    ).toEqual(["ssh"]);
+  });
+  it("adds and removes custom locations without changing unrelated entries", () => {
+    const policy = applyProtectedLocationsPolicyPatch(null, { add: [vpnLocation] });
+    expect(policy).toEqual({ version: 1, custom: [vpnLocation] });
+    expect(applyProtectedLocationsPolicyPatch(policy, {})).toEqual(policy);
+    expect(applyProtectedLocationsPolicyPatch(policy, { remove: [vpnLocation.id] })).toEqual({
+      version: 1,
+      custom: [],
+    });
+    expect(applyProtectedLocationsPolicyPatch(policy, { remove: ["unknown"] })).toEqual(policy);
+  });
+
+  it("refuses default removal, duplicate ids, overlaps, extra fields and a 65th location", () => {
+    expect(() => applyProtectedLocationsPolicyPatch(null, { remove: ["ssh"] })).toThrow();
+    expect(() =>
+      applyProtectedLocationsPolicyPatch(null, {
+        add: [{ ...vpnLocation, paths: ["~/.aws/keys"] }],
+      }),
+    ).toThrow();
+    expect(() =>
+      applyProtectedLocationsPolicyPatch(
+        { version: 1, custom: [vpnLocation] },
+        { add: [vpnLocation] },
+      ),
+    ).toThrow();
+    expect(() =>
+      applyProtectedLocationsPolicyPatch(null, { add: [{ ...vpnLocation, id: "ssh" }] }),
+    ).toThrow();
+    const custom = Array.from({ length: 64 }, (_, i) => ({
+      ...vpnLocation,
+      id: `place-${i}`,
+      paths: [`~/place-${i}`],
+    }));
+    expect(() =>
+      applyProtectedLocationsPolicyPatch({ version: 1, custom }, { add: [vpnLocation] }),
+    ).toThrow();
+    expect(ProtectedLocationsPolicyPatchSchema.safeParse({ extra: true }).success).toBe(false);
+  });
+
+  it("lists defaults first and marks custom locations and grants", () => {
+    const views = protectedLocationViews({
+      policy: { version: 1, custom: [vpnLocation] },
+      grants: ["ssh", vpnLocation.id, "unknown"],
+    });
+    expect(views.slice(0, PROTECTED_LOCATIONS_DEFAULTS.length).map(({ id }) => id)).toEqual(
+      allDefaultIds,
+    );
+    expect(views.slice(0, PROTECTED_LOCATIONS_DEFAULTS.length).every(({ custom }) => !custom)).toBe(
+      true,
+    );
+    expect(views.find(({ id }) => id === "ssh")?.granted).toBe(true);
+    expect(views.find(({ id }) => id === "aws")?.granted).toBe(false);
+    expect(views.at(-1)).toEqual({ ...vpnLocation, custom: true, granted: true });
+    expect(
+      protectedLocationViews({ policy: null, grants: null }).every(({ granted }) => !granted),
+    ).toBe(true);
   });
 });
 

@@ -11,10 +11,12 @@ export function failureCategoryText(
   id: FailureCategoryId,
   params: FailureCategoryParams = {},
 ): string {
-  // The table's default sentences name the runtime only.
+  // The table's sentences name the runtime and sometimes the bot; both get a readable
+  // stand-in when the caller does not know the name.
   return t(failureCategory(id).message, {
     ...params,
     runtime: params.runtime ?? t("This runtime"),
+    bot: params.bot ?? t("This bot"),
   });
 }
 
@@ -22,9 +24,12 @@ export function failureCategoryText(
  * What a failed run's notice says: the category's sentence in the active locale when the
  * failure was classified, else the reason as it was recorded.
  */
-export function runtimeProblemText(problem: RuntimeProblem): string {
+export function runtimeProblemText(problem: RuntimeProblem, botName?: string): string {
   const category = FailureCategoryIdSchema.safeParse(problem.reasonId);
   return category.success
-    ? failureCategoryText(category.data, { runtime: runtimeNames[problem.pin.runtimeKind] })
+    ? failureCategoryText(category.data, {
+        runtime: runtimeNames[problem.pin.runtimeKind],
+        ...(botName ? { bot: botName } : {}),
+      })
     : problem.reason;
 }

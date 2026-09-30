@@ -44,4 +44,14 @@ describe("activityRowPreview", () => {
     expect(preview).not.toContain("Failed");
     expect(preview).toContain("Claude Code");
   });
+
+  it("fills the bot's name in a refusal sentence", () => {
+    const preview = activityRowPreview({
+      ...run,
+      failureCategory: "destinations-bot",
+      failureRuntime: null,
+    });
+    expect(preview).toContain("Worker's allowed model destinations block this model.");
+    expect(preview).not.toContain("{bot}");
+  });
 });
