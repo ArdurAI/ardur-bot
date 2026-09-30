@@ -1,4 +1,6 @@
+import type { ConnectorCall } from "@ardurbot/adapter-kit";
 import type { ChiefActivity } from "@ardurbot/contracts";
+import { CHIEF_ACTIVITY_TEXT } from "@ardurbot/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { chiefActivityFeed } from "./chief-activity.js";
 
@@ -17,6 +19,74 @@ describe("chief tool feed", () => {
     });
     return { instance, writes };
   }
+  it.each([
+    ["notion-get-users", "notion", "Connecting to Notion"],
+    ["notion-create-pages", "notion", "Creating the Notion page"],
+    ["notion-fetch", "notion", "Checking the Notion page"],
+    ["__catalog_search", undefined, "Checking the missing tool"],
+    ["__catalog_load", undefined, "Checking the missing tool"],
+  ] as const)(
+    "projects the recorded %s tool through the production feed",
+    async (toolName, serviceId, phrase) => {
+      const { instance, writes } = feed();
+      const call: ConnectorCall = {
+        tool: toolName.startsWith("__catalog_")
+          ? "connector_search_tools"
+          : `mcp__workspace__${toolName}`,
+        executionId: "real-shaped-call",
+        args: { user_id: "self", content: "secret-token https://private.invalid" },
+        route: {
+          connectorId: "mcp",
+          resourceId: "connection",
+          resourceRevision: 1,
+          toolName,
+          serviceId,
+          catalogGroup: "workspace",
+        },
+      };
+      await instance.startTool(call);
+      expect(writes).toHaveLength(1);
+      expect(writes[0]).toMatchObject({ state: "active", executionId: call.executionId });
+      expect(CHIEF_ACTIVITY_TEXT[writes[0]!.key]).toBe(phrase);
+      expect(JSON.stringify(writes)).not.toMatch(/secret-token|private\.invalid|user_id|content/);
+      await instance.settle("completed");
+    },
+  );
+  it.each([
+    { tool: "shell" },
+    { tool: "mcp__notion__notion-get-users" },
+    {
+      tool: "mcp__notion__notion-get-users",
+      route: {
+        connectorId: "mcp",
+        toolName: "notion-get-users",
+        catalogGroup: "notion",
+        serviceId: "other",
+      },
+    },
+    {
+      tool: "mcp__notion__unknown",
+      route: { connectorId: "mcp", toolName: "unknown", serviceId: "notion" },
+    },
+  ])(
+    "does not infer service activity from untrusted names or arguments: $tool",
+    async (identity) => {
+      const { instance, writes } = feed();
+      await instance.startTool({
+        ...identity,
+        executionId: "hostile-call",
+        args: {
+          command: "notion-get-users secret-token https://private.invalid",
+          capability: "notion-connect",
+        },
+      });
+      expect(CHIEF_ACTIVITY_TEXT[writes[0]!.key]).toBe("Working on the task");
+      expect(JSON.stringify(writes)).not.toMatch(
+        /secret-token|private\.invalid|command|capability/,
+      );
+      await instance.settle("completed");
+    },
+  );
   it("deduplicates tool identities and retains the last genuine action between tools", async () => {
     const { instance, writes } = feed();
     await instance.start("call", "read-input");

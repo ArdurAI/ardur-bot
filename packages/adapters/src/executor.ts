@@ -72,7 +72,6 @@ import {
   botInstructionText,
   botMessageAllowsSilence,
   capabilityAllowsTool,
-  chiefToolActivity,
   connectorKindFromToolName,
   containsSecret,
   createStreamingRedactor,
@@ -3531,14 +3530,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
           const enforceCeiling = () => checkCeiling(name);
           if (!(await enforceCeiling())) return pauseForApproval();
-          if (!helperToolDelegations.has(executionId))
-            await chiefFeed?.start(
-              executionId,
-              chiefToolActivity({
-                name: connectorCall.route?.toolName ?? name,
-                serviceId: connectorCall.route?.serviceId,
-              }),
-            );
+          if (!helperToolDelegations.has(executionId)) await chiefFeed?.startTool(connectorCall);
           const integrationDetails = await integrationApprovalDetailsForCall(
             deps.prisma,
             connectorCall.route,

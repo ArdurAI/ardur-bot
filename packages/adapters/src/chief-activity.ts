@@ -1,5 +1,6 @@
+import type { ConnectorCall } from "@ardurbot/adapter-kit";
 import type { ChiefActivity, ChiefActivityKey } from "@ardurbot/contracts";
-import { CHIEF_TOOL_STALE_MS } from "@ardurbot/core";
+import { CHIEF_TOOL_STALE_MS, chiefToolActivity, chiefToolCapability } from "@ardurbot/core";
 
 /** Owns only this attempt's timer; the writer persists a scoped safe snapshot. */
 export function chiefActivityFeed(input: {
@@ -48,14 +49,25 @@ export function chiefActivityFeed(input: {
     }, CHIEF_TOOL_STALE_MS);
     timer.unref?.();
   };
+  const start = async (executionId: string, key: ChiefActivityKey) => {
+    if (closed || seen.has(executionId)) return;
+    seen.add(executionId);
+    active.set(executionId, key);
+    latestKey = key;
+    waitForLatest();
+    await emit(key, "active", executionId);
+  };
   return {
-    start: async (executionId: string, key: ChiefActivityKey) => {
-      if (closed || seen.has(executionId)) return;
-      seen.add(executionId);
-      active.set(executionId, key);
-      latestKey = key;
-      waitForLatest();
-      await emit(key, "active", executionId);
+    start,
+    startTool: async (call: ConnectorCall) => {
+      const identity = {
+        name: call.route?.toolName ?? call.tool,
+        serviceId: call.route?.serviceId,
+      };
+      await start(
+        call.executionId,
+        chiefToolActivity({ ...identity, capability: chiefToolCapability(identity) }),
+      );
     },
     finish: async (executionId: string) => {
       if (closed || !active.delete(executionId)) return;

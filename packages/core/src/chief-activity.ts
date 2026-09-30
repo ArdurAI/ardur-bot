@@ -20,17 +20,29 @@ export type ChiefActivityRule = {
 /** One place to add mappings. Unknown tools (including shell) stay deliberately opaque. */
 export const CHIEF_ACTIVITY_RULES: readonly ChiefActivityRule[] = [
   { tools: ["read_file"], activity: "read-input" },
-  { tools: ["notion-create-pages", "create_page"], serviceId: "notion", activity: "write-notion" },
+  {
+    tools: ["notion-create-pages", "create_page"],
+    serviceId: "notion",
+    capability: "notion-write",
+    activity: "write-notion",
+  },
   {
     tools: ["notion-fetch", "fetch_page", "retrieve_page"],
     serviceId: "notion",
+    capability: "notion-read-back",
     activity: "verify-notion",
   },
-  { tools: ["notion-get-self", "get_self"], serviceId: "notion", activity: "connect-notion" },
-  { tools: [], capability: "notion-connect", activity: "connect-notion" },
-  { tools: [], capability: "notion-write", activity: "write-notion" },
-  { tools: [], capability: "notion-read-back", activity: "verify-notion" },
-  { tools: [], capability: "package-check", activity: "check-tool" },
+  {
+    tools: ["notion-get-users", "notion-get-self", "get_self"],
+    serviceId: "notion",
+    capability: "notion-connect",
+    activity: "connect-notion",
+  },
+  {
+    tools: ["__catalog_search", "__catalog_load"],
+    capability: "package-check",
+    activity: "check-tool",
+  },
 ];
 export const CHIEF_ACTIVITY_TEXT: Readonly<Record<ChiefActivityKey, string>> = {
   "read-input": "Reading the document",
@@ -41,11 +53,18 @@ export const CHIEF_ACTIVITY_TEXT: Readonly<Record<ChiefActivityKey, string>> = {
   working: "Working on the task",
   "waiting-tool": "Waiting for the tool",
 };
+/** Resolve capabilities from exact recorded identities, not slugs, arguments or output. */
+export function chiefToolCapability(tool: ChiefToolIdentity): ChiefToolIdentity["capability"] {
+  return CHIEF_ACTIVITY_RULES.find(
+    (row) => row.serviceId === tool.serviceId && row.tools.includes(tool.name),
+  )?.capability;
+}
 export function chiefToolActivity(tool: ChiefToolIdentity): ChiefActivityKey {
+  const capability = tool.capability ?? chiefToolCapability(tool);
   return (
     CHIEF_ACTIVITY_RULES.find((row) =>
       row.capability
-        ? row.capability === tool.capability
+        ? row.capability === capability
         : row.serviceId === tool.serviceId && row.tools.includes(tool.name),
     )?.activity ?? "working"
   );

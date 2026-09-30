@@ -7,6 +7,7 @@ import {
   chiefActivityShouldPublish,
   chiefResult,
   chiefToolActivity,
+  chiefToolCapability,
   staleChiefActivity,
   withChiefActivity,
 } from "./chief-activity.js";
@@ -37,6 +38,13 @@ describe("chief activity policy", () => {
     expect(chiefToolActivity({ name: "create_page", serviceId: "notion" })).toBe("write-notion");
     expect(chiefToolActivity({ name: "retrieve_page", serviceId: "notion" })).toBe("verify-notion");
     expect(chiefToolActivity({ name: "get_self", serviceId: "notion" })).toBe("connect-notion");
+    expect(chiefToolCapability({ name: "notion-get-users", serviceId: "notion" })).toBe(
+      "notion-connect",
+    );
+    expect(chiefToolActivity({ name: "notion-get-users", serviceId: "notion" })).toBe(
+      "connect-notion",
+    );
+    expect(chiefToolCapability({ name: "notion-get-users", serviceId: "other" })).toBeUndefined();
     expect(chiefToolActivity({ name: "create_page", serviceId: "other" })).toBe("working");
     for (const [capability, key] of [
       ["notion-connect", "connect-notion"],
