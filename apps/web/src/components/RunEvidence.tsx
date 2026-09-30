@@ -1,4 +1,5 @@
 import type { EvidenceRunSummary } from "@ardurbot/contracts/evidence";
+import { EvidenceRunSummarySchema } from "@ardurbot/contracts/evidence";
 import { EVIDENCE_STATES } from "@ardurbot/contracts/evidence-states";
 import { DropdownMenuItem } from "@ardurbot/ui-web";
 import { msg } from "@lingui/core/macro";
@@ -92,11 +93,19 @@ export default function RunEvidence({
     let retries = 0;
     async function load() {
       try {
-        const summary = await rpc.evidence.runSummary(
+        const reply = await rpc.evidence.runSummary(
           { runId },
           { signal: controller.signal, context: { spaceId } },
         );
         if (controller.signal.aborted) return;
+        // A reply that is not a summary (an older server, a stub) shows nothing rather than
+        // crashing the message list around it.
+        const parsed = EvidenceRunSummarySchema.safeParse(reply);
+        if (!parsed.success) {
+          setResult(null);
+          return;
+        }
+        const summary: EvidenceRunSummary = parsed.data;
         setResult({ runId, spaceId, summary });
         if (
           action === "status" &&

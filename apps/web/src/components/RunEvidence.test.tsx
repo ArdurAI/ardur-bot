@@ -116,3 +116,23 @@ it("fetches the current summary when its menu is opened", async () => {
   expect(api.summary).toHaveBeenCalledTimes(1);
   expect(node.textContent).toContain("Download evidence");
 });
+it.each([
+  ["an empty list", []],
+  ["an unknown state", { ...summary("verified"), state: "unknown" }],
+])("shows nothing and keeps rendering when the reply is %s", async (_name, reply) => {
+  vi.stubGlobal("IntersectionObserver", undefined);
+  api.summary.mockResolvedValue(reply);
+  await act(async () =>
+    root.render(
+      <>
+        <RunEvidence runId="run" />
+        <RunEvidence runId="run" action="download" />
+        <p>message text</p>
+      </>,
+    ),
+  );
+  expect(api.summary).toHaveBeenCalledTimes(2);
+  expect(node.textContent).toBe("message text");
+  vi.unstubAllGlobals();
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+});
