@@ -13,22 +13,6 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: \n"
 
-#: src/lib/computer-state-labels.ts
-msgid "Paused for an update"
-msgstr "अपडेट के लिए रुका हुआ"
-
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Move to a container"
-msgstr "कंटेनर में ले जाएँ"
-
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Keep current location"
-msgstr "मौजूदा स्थान बनाए रखें"
-
-#: src/pages/shell/runtime-summary.tsx
-msgid "The last update was interrupted."
-msgstr "पिछला अपडेट बीच में रुक गया था।"
-
 #: src/pages/shell/model-pin-select.tsx
 msgid " — May not be available on your plan"
 msgstr ""
@@ -1165,10 +1149,6 @@ msgstr "{asked, plural, one {# बॉट} other {# बॉट}} से पूछ�
 msgid "asks first"
 msgstr ""
 
-#: src/pages/dashboard/ComputersPanel.tsx
-msgid "Asleep"
-msgstr ""
-
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
 msgid "Assignee"
@@ -1402,10 +1382,6 @@ msgstr "बोर्ड की स्थिति"
 msgid "Boards"
 msgstr "बोर्ड"
 
-#: src/pages/dashboard/ComputersPanel.tsx
-msgid "Booting"
-msgstr ""
-
 #: src/pages/Shell.tsx
 msgid "Booting live desktop…"
 msgstr "लाइव डेस्कटॉप बूट हो रहा है…"
@@ -1551,10 +1527,10 @@ msgstr "सर्वर तक नहीं पहुंचा जा सका�
 
 #: src/components/AskCard.tsx
 #: src/components/ComputerMaintenanceActions.tsx
-#: src/components/ComputerUpdateProgress.tsx
 #: src/components/Context.tsx
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/OllamaSettings.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -2574,6 +2550,7 @@ msgid "Could not clear conversation"
 msgstr "बातचीत साफ़ नहीं की जा सकी"
 
 #: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Could not complete action"
 msgstr "कार्रवाई पूरी नहीं हो सकी"
 
@@ -3120,7 +3097,7 @@ msgstr ""
 msgid "Could not show the menu bar item; try again."
 msgstr ""
 
-#: src/pages/shell/runtime-summary.tsx
+#: src/lib/computer-state-labels.ts
 msgid "Could not start"
 msgstr "शुरू नहीं हो सका"
 
@@ -4929,6 +4906,10 @@ msgstr "अभी-अभी"
 msgid "Keep computer awake"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Keep current location"
+msgstr "मौजूदा स्थान बनाए रखें"
+
 #: src/pages/LearningCurator.tsx
 msgid "Keep for recovery"
 msgstr ""
@@ -5297,7 +5278,6 @@ msgstr ""
 msgid "low — quick, with a little checking"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "macOS will not ask for extra permission if you let bots run on this Mac. They run as you."
 msgstr "यदि आप बॉट्स को इस Mac पर चलने देते हैं तो macOS अतिरिक्त अनुमति नहीं मांगेगा। वे आपके रूप में ही चलते हैं।"
@@ -5306,7 +5286,7 @@ msgstr "यदि आप बॉट्स को इस Mac पर चलने �
 msgid "Make default"
 msgstr "डिफ़ॉल्ट बनाएँ"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Make sure nothing is still running on this computer."
 msgstr "सुनिश्चित करें कि इस कंप्यूटर पर कुछ भी चल नहीं रहा है।"
 
@@ -5729,6 +5709,10 @@ msgstr ""
 #: src/pages/fleet/PlacementNotice.tsx
 msgid "Move to {name}?"
 msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Move to a container"
+msgstr "कंटेनर में ले जाएँ"
 
 #. placeholder {0}: value.minimumFreeGb
 #: src/pages/fleet/FleetSettings.tsx
@@ -6190,7 +6174,7 @@ msgstr ""
 msgid "Nothing installed yet"
 msgstr ""
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Nothing is still running"
 msgstr "कुछ भी नहीं चल रहा"
 
@@ -6601,6 +6585,10 @@ msgstr "टीम संदेश रोकें"
 #: src/pages/RoutineEditor.tsx
 msgid "Paused"
 msgstr "रुका हुआ"
+
+#: src/lib/computer-state-labels.ts
+msgid "Paused for an update"
+msgstr "अपडेट के लिए रुका हुआ"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Permission denied on the socket"
@@ -7075,11 +7063,11 @@ msgstr ""
 msgid "Release"
 msgstr "नियंत्रण छोड़ें"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Release computer"
 msgstr "कंप्यूटर मुक्त करें"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Release interrupted computer?"
 msgstr "बाधित कार्रवाई के बाद कंप्यूटर मुक्त करें?"
 
@@ -7613,13 +7601,12 @@ msgstr ""
 msgid "running"
 msgstr "चल रहा है"
 
+#: src/lib/computer-state-labels.ts
 #: src/lib/run-status-label.ts
 #: src/pages/ComparePanel.tsx
 #: src/pages/customize/McpDiagnostics.tsx
-#: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/fleet/FleetSettings.tsx
-#: src/pages/shell/runtime-summary.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Running"
 msgstr "चल रहा है"
@@ -8289,7 +8276,7 @@ msgstr ""
 msgid "Slash commands"
 msgstr ""
 
-#: src/pages/shell/runtime-summary.tsx
+#: src/lib/computer-state-labels.ts
 msgid "Sleeping"
 msgstr "स्लीप मोड में"
 
@@ -8450,8 +8437,8 @@ msgstr "रिकॉर्डिंग शुरू करें"
 msgid "Start the engine and press Test."
 msgstr "इंजन शुरू करें और टेस्ट दबाएँ।"
 
+#: src/lib/computer-state-labels.ts
 #: src/lib/run-status-label.ts
-#: src/pages/shell/runtime-summary.tsx
 msgid "Starting"
 msgstr "शुरू हो रहा है"
 
@@ -8522,10 +8509,9 @@ msgstr "रन रोकें"
 msgid "Stop work in this conversation"
 msgstr ""
 
+#: src/lib/computer-state-labels.ts
 #: src/pages/customize/McpDiagnostics.tsx
-#: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/GroupPanel.tsx
-#: src/pages/shell/runtime-summary.tsx
 msgid "Stopped"
 msgstr "बंद"
 
@@ -8768,6 +8754,10 @@ msgstr "समूह का मॉडल चयन फिर से लोड �
 msgid "The Hermes install on this computer failed its safety check."
 msgstr "इस कंप्यूटर पर Hermes की स्थापना सुरक्षा जाँच में विफल रही।"
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "The last update was interrupted."
+msgstr "पिछला अपडेट बीच में रुक गया था।"
+
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
@@ -8878,7 +8868,6 @@ msgstr "यह चैट केवल देखने के लिए है"
 msgid "This command is not available to this account."
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "यह कंप्यूटर"
@@ -8943,7 +8932,6 @@ msgstr "बॉट या स्पेस की सेटिंग इस सम
 msgid "This is a binary file. You cannot edit it here."
 msgstr "यह एक बाइनरी फ़ाइल है। आप इसे यहाँ संपादित नहीं कर सकते।"
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "यह Mac"
@@ -9806,7 +9794,6 @@ msgstr "आपका ईमेल पता"
 msgid "Your name"
 msgstr "आपका नाम"
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "Your OS will not ask for extra permission if you let bots run on {hostLabel}. They run as you."
 msgstr "यदि आप बॉट्स को {hostLabel} पर चलने देते हैं तो आपका OS अतिरिक्त अनुमति नहीं मांगेगा। वे आपके रूप में ही चलते हैं।"

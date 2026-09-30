@@ -13,22 +13,6 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: src/lib/computer-state-labels.ts
-msgid "Paused for an update"
-msgstr "En pausa para una actualización"
-
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Move to a container"
-msgstr "Mover a un contenedor"
-
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Keep current location"
-msgstr "Mantener la ubicación actual"
-
-#: src/pages/shell/runtime-summary.tsx
-msgid "The last update was interrupted."
-msgstr "La última actualización se interrumpió."
-
 #: src/pages/shell/model-pin-select.tsx
 msgid " — May not be available on your plan"
 msgstr ""
@@ -1165,10 +1149,6 @@ msgstr "Se preguntó a {asked, plural, one {# bot} other {# bots}} · {answered,
 msgid "asks first"
 msgstr ""
 
-#: src/pages/dashboard/ComputersPanel.tsx
-msgid "Asleep"
-msgstr ""
-
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
 msgid "Assignee"
@@ -1402,10 +1382,6 @@ msgstr "Estado del tablero"
 msgid "Boards"
 msgstr "Tableros"
 
-#: src/pages/dashboard/ComputersPanel.tsx
-msgid "Booting"
-msgstr ""
-
 #: src/pages/Shell.tsx
 msgid "Booting live desktop…"
 msgstr "Iniciando escritorio en vivo…"
@@ -1551,10 +1527,10 @@ msgstr "No se puede alcanzar el servidor."
 
 #: src/components/AskCard.tsx
 #: src/components/ComputerMaintenanceActions.tsx
-#: src/components/ComputerUpdateProgress.tsx
 #: src/components/Context.tsx
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/OllamaSettings.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -2574,6 +2550,7 @@ msgid "Could not clear conversation"
 msgstr "No se pudo borrar la conversación"
 
 #: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Could not complete action"
 msgstr "No se pudo completar la acción"
 
@@ -3120,7 +3097,7 @@ msgstr ""
 msgid "Could not show the menu bar item; try again."
 msgstr ""
 
-#: src/pages/shell/runtime-summary.tsx
+#: src/lib/computer-state-labels.ts
 msgid "Could not start"
 msgstr "No se pudo iniciar"
 
@@ -4929,6 +4906,10 @@ msgstr "ahora mismo"
 msgid "Keep computer awake"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Keep current location"
+msgstr "Mantener la ubicación actual"
+
 #: src/pages/LearningCurator.tsx
 msgid "Keep for recovery"
 msgstr ""
@@ -5297,7 +5278,6 @@ msgstr ""
 msgid "low — quick, with a little checking"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "macOS will not ask for extra permission if you let bots run on this Mac. They run as you."
 msgstr "MacOS no pedirá permisos extra si dejas que los bots se ejecuten en esta Mac: se ejecutan como tú."
@@ -5306,7 +5286,7 @@ msgstr "MacOS no pedirá permisos extra si dejas que los bots se ejecuten en est
 msgid "Make default"
 msgstr "Usar como predeterminado"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Make sure nothing is still running on this computer."
 msgstr "Asegúrate de que no quede nada en ejecución en este ordenador."
 
@@ -5729,6 +5709,10 @@ msgstr ""
 #: src/pages/fleet/PlacementNotice.tsx
 msgid "Move to {name}?"
 msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Move to a container"
+msgstr "Mover a un contenedor"
 
 #. placeholder {0}: value.minimumFreeGb
 #: src/pages/fleet/FleetSettings.tsx
@@ -6190,7 +6174,7 @@ msgstr ""
 msgid "Nothing installed yet"
 msgstr ""
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Nothing is still running"
 msgstr "No queda nada en ejecución"
 
@@ -6601,6 +6585,10 @@ msgstr "Pausar mensajes del equipo"
 #: src/pages/RoutineEditor.tsx
 msgid "Paused"
 msgstr "En pausa"
+
+#: src/lib/computer-state-labels.ts
+msgid "Paused for an update"
+msgstr "En pausa para una actualización"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Permission denied on the socket"
@@ -7075,11 +7063,11 @@ msgstr ""
 msgid "Release"
 msgstr "Liberar"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Release computer"
 msgstr "Liberar ordenador"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Release interrupted computer?"
 msgstr "¿Liberar el ordenador tras la interrupción?"
 
@@ -7613,13 +7601,12 @@ msgstr "La hora de ejecución debe ser en el futuro."
 msgid "running"
 msgstr "en ejecución"
 
+#: src/lib/computer-state-labels.ts
 #: src/lib/run-status-label.ts
 #: src/pages/ComparePanel.tsx
 #: src/pages/customize/McpDiagnostics.tsx
-#: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/fleet/FleetSettings.tsx
-#: src/pages/shell/runtime-summary.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Running"
 msgstr "En ejecución"
@@ -8289,7 +8276,7 @@ msgstr ""
 msgid "Slash commands"
 msgstr ""
 
-#: src/pages/shell/runtime-summary.tsx
+#: src/lib/computer-state-labels.ts
 msgid "Sleeping"
 msgstr "En reposo"
 
@@ -8450,8 +8437,8 @@ msgstr "Iniciar grabación"
 msgid "Start the engine and press Test."
 msgstr "Inicia el motor y pulsa Probar."
 
+#: src/lib/computer-state-labels.ts
 #: src/lib/run-status-label.ts
-#: src/pages/shell/runtime-summary.tsx
 msgid "Starting"
 msgstr "Iniciando"
 
@@ -8522,10 +8509,9 @@ msgstr "Detener la ejecución"
 msgid "Stop work in this conversation"
 msgstr ""
 
+#: src/lib/computer-state-labels.ts
 #: src/pages/customize/McpDiagnostics.tsx
-#: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/GroupPanel.tsx
-#: src/pages/shell/runtime-summary.tsx
 msgid "Stopped"
 msgstr "Detenido"
 
@@ -8768,6 +8754,10 @@ msgstr "Se volvió a cargar la selección de modelo del grupo. Elige de nuevo."
 msgid "The Hermes install on this computer failed its safety check."
 msgstr "La instalación de Hermes en este equipo no superó la comprobación de seguridad."
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "The last update was interrupted."
+msgstr "La última actualización se interrumpió."
+
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
@@ -8878,7 +8868,6 @@ msgstr "Este chat es de solo lectura"
 msgid "This command is not available to this account."
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "esta computadora"
@@ -8943,7 +8932,6 @@ msgstr "La configuración del bot o del espacio bloquea el modelo del grupo. Cam
 msgid "This is a binary file. You cannot edit it here."
 msgstr "Este es un archivo binario. No puedes editarlo aquí."
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "esta Mac"
@@ -9806,7 +9794,6 @@ msgstr "Tu dirección de correo"
 msgid "Your name"
 msgstr "Tu nombre"
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "Your OS will not ask for extra permission if you let bots run on {hostLabel}. They run as you."
 msgstr "Tu sistema operativo no pedirá permisos extra si dejas que los bots se ejecuten en {hostLabel}: se ejecutan como tú."
