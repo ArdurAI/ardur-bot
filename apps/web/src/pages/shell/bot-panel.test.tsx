@@ -3,12 +3,13 @@ import { modelPinOptionKey, parseModelPinOptionKey } from "@ardurbot/core";
 
 import type {
   Bot,
+  ComputerStatus,
   ModelCatalogEntry,
   ModelCredential,
   RuntimeAvailability,
 } from "@ardurbot/contracts";
 import type { ComponentProps, ReactNode } from "react";
-import { act } from "react";
+import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -19,6 +20,7 @@ const api = vi.hoisted(() => ({
   availability: vi.fn(),
   connections: vi.fn(),
   computers: vi.fn(),
+  status: vi.fn(),
 }));
 vi.mock("../../lib/rpc", () => ({
   rpc: {
@@ -26,7 +28,7 @@ vi.mock("../../lib/rpc", () => ({
     models: api,
     runtimes: { availability: api.availability },
     me: api.me,
-    computer: { connections: api.connections, list: api.computers },
+    computer: { connections: api.connections, list: api.computers, status: api.status },
     voice: { voices: async () => [] },
   },
 }));
@@ -154,6 +156,12 @@ beforeEach(() => {
   api.me.mockResolvedValue(me);
   api.connections.mockResolvedValue([]);
   api.computers.mockResolvedValue([]);
+  api.status.mockResolvedValue({
+    botId: bot.id,
+    kind: "desktop",
+    mode: "team",
+    state: "stopped",
+  } as ComputerStatus);
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -643,6 +651,77 @@ it("offers model recovery for a parsed provider error", async () => {
   expect(onChangeModel).toHaveBeenCalledOnce();
 });
 
+it("opens and focuses Model from the chip and recovery with the execution card loading", async () => {
+  let resolveStatus!: (status: ComputerStatus) => void;
+  api.status.mockReturnValue(
+    new Promise<ComputerStatus>((resolve) => {
+      resolveStatus = resolve;
+    }),
+  );
+  function ModelRecovery() {
+    const [open, setOpen] = useState(false);
+    const [focusRequest, setFocusRequest] = useState(0);
+    const openModel = () => {
+      setFocusRequest((request) => request + 1);
+      setOpen(true);
+    };
+    return (
+      <>
+        <BotModelChip bot={bot} settings={{ me, catalog, credentials }} onClick={openModel} />
+        <ProviderErrorMessage text="Model not supported" onChangeModel={openModel} />
+        {open ? (
+          <>
+            <button type="button" onClick={() => setOpen(false)}>
+              Close panel
+            </button>
+            <BotSettings
+              {...settings().props}
+              modelSettings={{ me, catalog, credentials }}
+              modelFocusRequest={focusRequest}
+            />
+          </>
+        ) : null}
+      </>
+    );
+  }
+  await act(async () => root.render(<ModelRecovery />));
+  expect(container.querySelector('[data-testid="bot-settings"]')).toBeNull();
+  const chip = container.querySelector<HTMLButtonElement>('button[aria-label^="Change model:"]')!;
+  await act(async () => chip.click());
+  expect(document.activeElement).toBe(modelSelect());
+  expect(container.textContent).toContain("Where this bot runs");
+  expect(api.status).toHaveBeenCalledWith({ botId: bot.id });
+  expect(container.querySelector('[data-testid="runtime-summary"]')).toBeNull();
+  expect(modelSelect().closest("details")).toBeNull();
+  expect(modelSelect().scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+  await act(async () =>
+    resolveStatus({
+      botId: bot.id,
+      kind: "desktop",
+      mode: "team",
+      state: "stopped",
+    } as ComputerStatus),
+  );
+  expect(container.querySelector('[data-testid="runtime-summary"]')?.textContent).toContain(
+    "Runs as you",
+  );
+  expect(document.activeElement).toBe(modelSelect());
+  const close = () =>
+    [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Close panel",
+    )!;
+  await act(async () => close().click());
+  await act(async () => chip.click());
+  expect(document.activeElement).toBe(modelSelect());
+  await act(async () => close().click());
+  const recovery = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Change model",
+  )!;
+  await act(async () => recovery.click());
+  expect(document.activeElement).toBe(modelSelect());
+  expect(onSave).not.toHaveBeenCalled();
+});
+
 it("does not show a model action for unrelated errors or a missing bot", async () => {
   await act(async () =>
     root.render(
@@ -713,7 +792,9 @@ it("uses Shell metadata for the panel without loading it again", async () => {
   );
   expect(modelSelect().options.length).toBeGreaterThan(1);
   expect(api.list).not.toHaveBeenCalled();
-  expect(api.me).not.toHaveBeenCalled();
+  // The execution card reads deployment metadata, not the model catalog.
+  expect(api.status).toHaveBeenCalledOnce();
+  expect(api.me).toHaveBeenCalledOnce();
   expect(api.credentials).not.toHaveBeenCalled();
 });
 
