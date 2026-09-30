@@ -39,6 +39,9 @@ Apache-2.0 attribution.
   machines you add, and E2B, Daytona or Box on a server, with a browser, terminal, files and a
   graphical desktop. Test, edit, and remove saved computer connections in Settings
   ([where bots run](/docs/self-host-guide/#where-bots-run)).
+- Ordinary bot settings show execution location, access and sharing on desktop and phone.
+  New isolated work chooses a dedicated container when configured, otherwise offers setup;
+  it never silently substitutes the host. Existing bots keep their computer pins.
 - Connectors: MCP servers, OpenAPI documents, Composio, Pipedream Connect
 - Approvals before consequential actions, voice mode, and web, Electron desktop and Expo
   mobile clients of the same API
