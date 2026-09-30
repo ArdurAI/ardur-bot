@@ -12,6 +12,7 @@ import {
   ProtectedLocationsPolicyV1Schema,
   parseProtectedLocationGrants,
   parseProtectedLocationsPolicy,
+  protectedLocationGrantsAfterPolicyPatch,
   protectedLocations,
   protectedLocationViews,
   unreadProtectedLocations,
@@ -396,6 +397,16 @@ describe("stored grants and patches", () => {
 });
 
 describe("policy patches and views", () => {
+  it("clears removed grants, including a replacement with the same id", () => {
+    const policy = { version: 1 as const, custom: [vpnLocation] };
+    expect(
+      protectedLocationGrantsAfterPolicyPatch(
+        [vpnLocation.id, "ssh", "unknown"],
+        { remove: [vpnLocation.id], add: [vpnLocation] },
+        policy,
+      ),
+    ).toEqual(["ssh"]);
+  });
   it("adds and removes custom locations without changing unrelated entries", () => {
     const policy = applyProtectedLocationsPolicyPatch(null, { add: [vpnLocation] });
     expect(policy).toEqual({ version: 1, custom: [vpnLocation] });

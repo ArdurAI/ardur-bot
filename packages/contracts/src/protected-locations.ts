@@ -363,6 +363,20 @@ export function applyProtectedLocationsPolicyPatch(
 
 export type ProtectedLocationView = ProtectedLocation & { custom: boolean; granted: boolean };
 
+/** Removal clears grants even when the same patch adds a replacement with that id. */
+export function protectedLocationGrantsAfterPolicyPatch(
+  stored: unknown,
+  patch: ProtectedLocationsPolicyPatch,
+  policy: ProtectedLocationsPolicyV1,
+): string[] {
+  const { remove = [] } = ProtectedLocationsPolicyPatchSchema.parse(patch);
+  const removed = new Set(remove);
+  return parseProtectedLocationGrants(
+    stored,
+    protectedLocations(policy).filter((location) => !removed.has(location.id)),
+  );
+}
+
 /** The shared app list: defaults first, with bot grants applied only to known locations. */
 export function protectedLocationViews(input: {
   policy: unknown;
