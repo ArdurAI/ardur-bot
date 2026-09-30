@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import type { Bot, ComputerStatus } from "@ardurbot/contracts";
+import type { Bot, ComputerStatus, WorkspaceContext } from "@ardurbot/contracts";
 import type { ReactNode } from "react";
-import { act } from "react";
+import { act, useLayoutEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkspacePane } from "./WorkspacePane";
@@ -300,6 +300,151 @@ describe("WorkspacePane tab selection and content rendering", () => {
     const activeTab = container.querySelector('[role="tab"][data-active]');
     expect(activeTab?.textContent).toBe("Files");
   });
+});
+
+describe("WorkspacePane Files availability loading", () => {
+  const props = {
+    bot,
+    computer: graphicalComputer,
+    tab: "files",
+    openViews: [{ type: "files" as const }],
+    terminal: null,
+    onTabChange: vi.fn(),
+    onOpenRun: vi.fn(),
+    routines: null,
+    screen: {
+      computer: graphicalComputer,
+      open: false,
+      url: null,
+      error: null,
+      onOpen: vi.fn(),
+    },
+  };
+  const context: WorkspaceContext = {
+    botId: bot.id,
+    computerId: graphicalComputer.computerId ?? null,
+    generation: 1,
+    files: "live",
+    observedAt: "2026-09-28T00:00:00.000Z",
+  };
+  function deferred() {
+    let resolve!: (value: WorkspaceContext) => void;
+    let reject!: (error: Error) => void;
+    const promise = new Promise<WorkspaceContext>((yes, no) => {
+      resolve = yes;
+      reject = no;
+    });
+    return { promise, resolve, reject };
+  }
+  function expectLoading() {
+    expect(container.querySelector('[role="status"]')?.textContent).toBe("Loading…");
+    expect(container.textContent).not.toContain("Files are unavailable on this computer.");
+    expect(
+      [...container.querySelectorAll("button")].some((button) => button.textContent === "Retry"),
+    ).toBe(false);
+    expect(container.querySelector('[data-testid="workspace-files"]')).toBeNull();
+  }
+
+  it.each(["live", "unavailable", "failed"] as const)(
+    "shows loading, not a reason or Retry, until describe settles as %s",
+    async (outcome) => {
+      const request = deferred();
+      describeCall.mockReturnValueOnce(request.promise);
+      await act(async () => root.render(<WorkspacePane {...props} />));
+      expectLoading();
+      await act(async () => {
+        if (outcome === "failed") request.reject(new Error("Describe failed"));
+        else request.resolve({ ...context, files: outcome });
+      });
+      expect(container.textContent).not.toContain("Loading…");
+      if (outcome === "live") {
+        expect(container.querySelector('[data-testid="workspace-files"]')).not.toBeNull();
+        expect(container.textContent).not.toContain("Files are unavailable on this computer.");
+      } else {
+        expect(container.textContent).toContain("Files are unavailable on this computer.");
+        expect(
+          [...container.querySelectorAll("button")].some(
+            (button) => button.textContent === "Retry",
+          ),
+        ).toBe(true);
+      }
+    },
+  );
+
+  it("returns to loading during Retry and applies only the new describe result", async () => {
+    await act(async () => root.render(<WorkspacePane {...props} />));
+    expect(container.textContent).toContain("Files are unavailable on this computer.");
+    const request = deferred();
+    describeCall.mockReturnValueOnce(request.promise);
+    await act(async () =>
+      [...container.querySelectorAll("button")]
+        .find((button) => button.textContent === "Retry")!
+        .click(),
+    );
+    expectLoading();
+    await act(async () => request.resolve(context));
+    expect(container.querySelector('[data-testid="workspace-files"]')).not.toBeNull();
+  });
+
+  it("never commits a stale unavailable reason when a settled context is invalidated", async () => {
+    const snapshots: (string | null)[] = [];
+    function Observe({ computer }: { computer: ComputerStatus }) {
+      useLayoutEffect(() => {
+        snapshots.push(container.textContent);
+      });
+      return <WorkspacePane {...props} computer={computer} />;
+    }
+    await act(async () => root.render(<Observe computer={graphicalComputer} />));
+    expect(container.textContent).toContain("Files are unavailable on this computer.");
+    snapshots.length = 0;
+    const request = deferred();
+    describeCall.mockReturnValueOnce(request.promise);
+    await act(async () =>
+      root.render(<Observe computer={{ ...graphicalComputer, homeRevision: "new-revision" }} />),
+    );
+    expectLoading();
+    expect(snapshots.length).toBeGreaterThan(0);
+    for (const snapshot of snapshots) {
+      expect(snapshot).toContain("Loading…");
+      expect(snapshot).not.toContain("Files are unavailable on this computer.");
+      expect(snapshot).not.toContain("Retry");
+    }
+    await act(async () => request.resolve(context));
+    expect(container.querySelector('[data-testid="workspace-files"]')).not.toBeNull();
+  });
+
+  it.each(["bot", "computer", "homeRevision", "state"] as const)(
+    "waits for the new context when %s changes and ignores an aborted response",
+    async (change) => {
+      const previous = deferred();
+      describeCall.mockReturnValueOnce(previous.promise);
+      await act(async () => root.render(<WorkspacePane {...props} />));
+      const request = deferred();
+      describeCall.mockReturnValueOnce(request.promise);
+      const nextBot = change === "bot" ? { ...bot, id: "bot-2" } : bot;
+      const nextComputer = {
+        ...graphicalComputer,
+        ...(change === "computer" ? { computerId: "computer-2" } : {}),
+        ...(change === "homeRevision" ? { homeRevision: "new-revision" } : {}),
+        ...(change === "state" ? { state: "stopped" as const } : {}),
+      };
+      await act(async () =>
+        root.render(<WorkspacePane {...props} bot={nextBot} computer={nextComputer} />),
+      );
+      expectLoading();
+      await act(async () => previous.resolve({ ...context, files: "unavailable" }));
+      expectLoading();
+      await act(async () =>
+        request.resolve({
+          ...context,
+          botId: nextBot.id,
+          computerId: nextComputer.computerId ?? null,
+        }),
+      );
+      expect(container.querySelector('[data-testid="workspace-files"]')).not.toBeNull();
+      expect(container.textContent).not.toContain("Files are unavailable on this computer.");
+    },
+  );
 });
 
 describe("WorkspacePane terminal tab", () => {

@@ -10,6 +10,7 @@ import { useLingui } from "@lingui/react/macro";
 import { ArrowLeft, Maximize2, Minimize2, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { Suspense, useEffect, useState } from "react";
+import { Shimmer } from "../../components/ai/primitives";
 import { rpc } from "../../lib/rpc";
 import { availableWorkspaceViews, isWorkspaceViewId, workspaceViews } from "./view-registry";
 
@@ -35,25 +36,38 @@ export function WorkspacePane({
   compact = false,
 }: WorkspacePaneProps) {
   const { t } = useLingui();
-  const [context, setContext] = useState<WorkspaceContext | null>(null);
+  const [context, setContext] = useState<{
+    key: string;
+    value: WorkspaceContext | null;
+  } | null>(null);
   const [controlsHost, setControlsHost] = useState<HTMLDivElement | null>(null);
   const [revision, setRevision] = useState(0);
+  const contextKey = JSON.stringify([
+    bot.id,
+    computer?.computerId,
+    computer?.state,
+    computer?.homeRevision,
+    revision,
+  ]);
   useEffect(() => {
     const abort = new AbortController();
     setContext(null);
     void rpc.workspace
       .describe({ botId: bot.id }, { signal: abort.signal })
       .then((result) => {
-        if (!abort.signal.aborted) setContext(result);
+        if (!abort.signal.aborted) setContext({ key: contextKey, value: result });
       })
       .catch(() => {
-        if (!abort.signal.aborted) setContext(null);
+        if (!abort.signal.aborted) setContext({ key: contextKey, value: null });
       });
     return () => abort.abort();
-  }, [bot.id, computer?.computerId, computer?.state, computer?.homeRevision, revision]);
+  }, [bot.id, contextKey]);
+  const contextLoading = context?.key !== contextKey;
   const currentContext =
-    context?.botId === bot.id && context.computerId === (computer?.computerId ?? null)
-      ? context
+    !contextLoading &&
+    context?.value?.botId === bot.id &&
+    context.value.computerId === (computer?.computerId ?? null)
+      ? context.value
       : null;
   const capabilities = { computer, context: currentContext, terminal: terminal !== null };
   const selected = isWorkspaceViewId(tab) ? tab : "tasks";
@@ -70,7 +84,14 @@ export function WorkspacePane({
       id: type,
       label: view.label(t),
       content:
-        type === "terminal" && view.available(capabilities) && !allowTerminalStart ? (
+        type === "files" && contextLoading ? (
+          <div
+            role="status"
+            className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground"
+          >
+            <Shimmer>{t`Loading…`}</Shimmer>
+          </div>
+        ) : type === "terminal" && view.available(capabilities) && !allowTerminalStart ? (
           <div className="flex h-full items-center justify-center p-6">
             <Button
               variant="outline"
