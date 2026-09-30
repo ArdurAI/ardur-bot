@@ -20,6 +20,7 @@ import {
   requestCancel,
   updateWorkerTask,
 } from "@ardurbot/db";
+import { chiefVerificationRead } from "./chief-control.js";
 import { grantedMcpTools, mcpGrantForBot } from "./integration-access.js";
 import { loadPeerBoundEffect } from "./peer-bound-effect.js";
 import { peerEffectBoundToolAllowed, peerReadOnlyRuntimeSupported } from "./peer-policy.js";
@@ -44,6 +45,7 @@ export async function checkDelegationExecution(
       consequential: Boolean(tool && classifyRemoteTool(tool) === "consequential"),
       remote: Boolean(route && route.connectorId !== "builtin"),
       tool,
+      verificationRead: await chiefVerificationRead(prisma, runId, route),
     });
     if (refusal) return refusal;
   }

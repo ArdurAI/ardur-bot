@@ -6,7 +6,7 @@ const viewports = [
   { name: "mobile-390x844", width: 390, height: 844 },
 ];
 
-for (const state of ["requested", "confirmed", "uncertain", "replacement"] as const) {
+for (const state of ["requested", "confirmed", "uncertain", "checking", "replacement"] as const) {
   test(`chief correction shows truthful ${state} state`, async ({ page }, testInfo) => {
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
@@ -22,7 +22,9 @@ for (const state of ["requested", "confirmed", "uncertain", "replacement"] as co
             ? "Member stood down"
             : state === "uncertain"
               ? "The previous action may have finished. I’ll check before retrying."
-              : "Messaged Replacement";
+              : state === "checking"
+                ? "Checking the earlier action"
+                : "Messaged Replacement";
       const activity =
         state === "requested"
           ? "Stopping Member"

@@ -1,4 +1,5 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "Checking the earlier action": "正在检查先前的操作",
   "Got it — I’ll keep {name} off this task.": "收到 — 我不会让 {name} 参与这项任务。",
   "Got it — I’ll check this change before the next action.":
     "收到 — 我会在下一步操作前检查这项变更。",

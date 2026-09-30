@@ -81,6 +81,20 @@ describe("mobile coordination line", () => {
     expect(chiefActivityText(dispatch)).toBe("Working on the task");
   });
 
+  it("shows the committed checking turn without stale activity", () => {
+    const dispatch: ChiefDispatch = {
+      requestMessageId: "request",
+      revision: 2,
+      memberId: "member",
+      memberName: "Member",
+      state: "messaged",
+      reason: "saved",
+      stop: { revision: 2, memberName: "Member", state: "checking" },
+    };
+    expect(chiefDispatchSummary(dispatch)).toBe("Checking the earlier action");
+    expect(chiefActivityText(dispatch)).toBeUndefined();
+  });
+
   it("shows genuine activity and removes it for waiting and terminal states", () => {
     const dispatch: ChiefDispatch = {
       requestMessageId: "request",

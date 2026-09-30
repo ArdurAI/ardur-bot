@@ -102,6 +102,24 @@ describe("CoordinationLine", () => {
     expect(line.querySelectorAll('[data-testid="coordination-line-summary"]')).toHaveLength(1);
   });
 
+  it("shows the committed checking turn without stale activity", () => {
+    const dispatch: ChiefDispatch = {
+      requestMessageId: "request",
+      revision: 2,
+      memberId: "member",
+      memberName: "Member",
+      state: "messaged",
+      reason: "saved",
+      stop: { revision: 2, memberName: "Member", state: "checking" },
+    };
+    act(() => root.render(<ChiefDispatchLine dispatch={dispatch} detail="Preparation request" />));
+    expect(container.querySelector("button")?.getAttribute("aria-label")).toBe(
+      "Checking the earlier action",
+    );
+    expect(container.querySelector('[data-testid="chief-activity"]')).toBeNull();
+    expect(container.textContent).not.toContain("Preparation request");
+  });
+
   it("renders correction receipts from the recorded member name with polite announcements", () => {
     act(() => root.render(<ChiefReceiptText receiptKey="exclude-member" memberName="Member" />));
     expect(container.textContent).toBe("Got it — I’ll keep Member off this task.");

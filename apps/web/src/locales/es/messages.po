@@ -4435,6 +4435,10 @@ msgid "{name} stood down"
 msgstr "{name} se detuvo"
 
 #: src/components/ai/CoordinationLine.tsx
+msgid "Checking the earlier action"
+msgstr "Comprobando la acción anterior"
+
+#: src/components/ai/CoordinationLine.tsx
 msgid "The previous action may have finished. I’ll check before retrying."
 msgstr "La acción anterior puede haber terminado. Lo comprobaré antes de reintentarlo."
 

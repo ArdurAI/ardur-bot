@@ -691,6 +691,7 @@ model ChiefActionAdmission {
   attempt Int
   executionId String
   consequential Boolean
+  tool String?
   effectId String?
   state String @default("admitted")
   admittedAt DateTime @default(now())

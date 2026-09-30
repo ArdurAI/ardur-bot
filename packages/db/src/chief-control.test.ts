@@ -85,6 +85,32 @@ describe("chief final tool admission fence", () => {
     expect((await admitChiefAction(f.prisma, call)).error).toContain("stand down");
     expect(f.tx.chiefActionAdmission.create).not.toHaveBeenCalled();
   });
+  it("refuses a replacement that repeats a kept or unknown effect, even with a new execution id", async () => {
+    const f = fixture();
+    f.plan.control = {
+      ...control,
+      revision: 1,
+      pendingReplan: false,
+      stoppingRunIds: [],
+      excludedIds: [],
+      reconciledActions: [{ runId: "old", effectId: "kept", outcome: "kept", revision: 1 }],
+    };
+    const effect = { kind: "fake-write", request: { target: "fake-page" } };
+    Object.assign(f.tx, {
+      externalEffect: {
+        findUnique: vi.fn(async () => effect),
+        findMany: vi.fn(async () => [effect]),
+      },
+    });
+    expect(
+      await admitChiefAction(f.prisma, {
+        ...call,
+        executionId: "replacement-effect",
+        effectId: "new",
+      }),
+    ).toMatchObject({ error: expect.stringContaining("Do not repeat") });
+    expect(f.tx.chiefActionAdmission.create).not.toHaveBeenCalled();
+  });
   it("refuses stale revision, lease and pending cancellation independently", async () => {
     const f = fixture();
     f.plan.revision = 2;

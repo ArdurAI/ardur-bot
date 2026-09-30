@@ -73,11 +73,13 @@ export function ChiefDispatchLine({
         ? t`${name} stood down`
         : dispatch.stop?.state === "uncertain"
           ? t`The previous action may have finished. I’ll check before retrying.`
-          : dispatch.state === "approval-held"
-            ? t`Waiting for approval`
-            : dispatch.state === "queued"
-              ? t`Queued for ${name}`
-              : t`Messaged ${name}`;
+          : dispatch.stop?.state === "checking"
+            ? t`Checking the earlier action`
+            : dispatch.state === "approval-held"
+              ? t`Waiting for approval`
+              : dispatch.state === "queued"
+                ? t`Queued for ${name}`
+                : t`Messaged ${name}`;
   const activityKey = chiefActivityKey(dispatch);
   const translatedActivity = useTranslatedChiefActivity(activityKey);
   const activity = dispatch.stop

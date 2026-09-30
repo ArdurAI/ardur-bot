@@ -22,7 +22,7 @@
       const i18n = setupI18n({ locale: "en", messages: { en: {} } });
       const failed = new URLSearchParams(location.search).get("failed") === "1";
       const stopState = new URLSearchParams(location.search).get("stop");
-      const correction = ["requested", "confirmed", "uncertain", "replacement"].includes(stopState);
+      const correction = ["requested", "confirmed", "uncertain", "checking", "replacement"].includes(stopState);
       const dispatch = {
         requestMessageId: "request",
         revision: 87,

@@ -37,6 +37,8 @@ export function chiefDispatchSummary(dispatch: ChiefDispatch): string {
         return t("{name} stood down", { name });
       case "uncertain":
         return t("The previous action may have finished. I’ll check before retrying.");
+      case "checking":
+        return t("Checking the earlier action");
     }
   }
   const name = dispatch.memberName;

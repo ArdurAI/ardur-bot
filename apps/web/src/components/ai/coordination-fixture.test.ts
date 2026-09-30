@@ -26,7 +26,7 @@ describe("coordination line fixture", () => {
   });
   it("exercises correction receipts and stop states through the production renderers", () => {
     const source = readFileSync(fixturePath, "utf8");
-    expect(source).toContain('["requested", "confirmed", "uncertain", "replacement"]');
+    expect(source).toContain('["requested", "confirmed", "uncertain", "checking", "replacement"]');
     expect(source).toContain('get("stop")');
     expect(source).toMatch(
       /h\(ChiefReceiptText,\s*\{\s*key: "receipt",\s*receiptKey: "exclude-member",\s*memberName: "Member",?\s*\}\)/,

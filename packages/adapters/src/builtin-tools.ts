@@ -3,6 +3,7 @@ import {
   BotSecretDestination,
   BotSecretName,
   ListBotsInputSchema,
+  ReconcileChiefActionInputSchema,
   SecretAskPurpose,
   SecretHttpRequest,
   TaskArtifactSchema,
@@ -31,6 +32,12 @@ export const DELEGATION_TOOL_NAMES = new Set([
 
 export const builtinAgentTools: ConnectorTool[] = [
   ...boardTools,
+  {
+    name: "reconcile_chief_action",
+    description:
+      "Only the current chief checking turn: record the earlier action as kept, undone or unknown after reading back its effect. This writes the plan only, never reverses or repeats an external action. End the checking turn when every outcome is recorded.",
+    inputSchema: z.toJSONSchema(ReconcileChiefActionInputSchema),
+  },
   {
     name: "list_bots",
     description:

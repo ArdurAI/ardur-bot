@@ -32,6 +32,7 @@ describe("lingui catalogs", () => {
         "Stopping {name}",
         "{name} stood down",
         "The previous action may have finished. I’ll check before retrying.",
+        "Checking the earlier action",
         "Messaged {name}",
         "Queued for {name}",
         "Waiting for approval",

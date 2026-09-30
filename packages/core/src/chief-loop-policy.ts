@@ -9,6 +9,11 @@ import type {
 } from "@ardurbot/contracts";
 
 export const CHIEF_POLICY_VERSION = 1;
+export const CHIEF_RECONCILIATION_POLICY: Readonly<{ orphanOutcomeAfterMs: number }> = {
+  // Five minutes lets late receipts settle. A missing/terminal run with no live lease
+  // cannot verify forever; retain unknown (never permission to repeat its effect).
+  orphanOutcomeAfterMs: 5 * 60_000,
+};
 /** Add templates here; surfaces translate these keys, never classify owner text. */
 export const CHIEF_RECEIPT_TEMPLATES: Readonly<Record<ChiefReceiptKey, string>> = {
   "document-to-service": "Got it — I’ll choose a team member to put this in Notion.",
@@ -262,6 +267,8 @@ export function reviseChiefControl(input: {
   if (previous?.ownerMessageIds.includes(input.ownerMessageId)) return previous;
   const unique = (ids: readonly string[]) => [...new Set(ids)];
   return {
+    ...(previous?.uncertaintySince ? { uncertaintySince: previous.uncertaintySince } : {}),
+    ...(previous?.reconciledActions ? { reconciledActions: previous.reconciledActions } : {}),
     revision: input.revision + 1,
     ownerMessageIds: [...(previous?.ownerMessageIds ?? []), input.ownerMessageId],
     excludedIds: unique([

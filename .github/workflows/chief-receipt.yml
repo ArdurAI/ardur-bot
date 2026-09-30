@@ -64,6 +64,7 @@ jobs:
       - run: pnpm --filter @ardurbot/web exec playwright install --with-deps chromium
       - run: pnpm test:e2e --workers=1 --spec=chief-receipt.spec.ts
       - run: pnpm test:e2e --workers=1 --spec=chief-activity.spec.ts
+      - run: pnpm test:e2e --workers=1 --spec=coordination-line.spec.ts
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:

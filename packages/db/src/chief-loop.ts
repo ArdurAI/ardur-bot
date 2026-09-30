@@ -8,6 +8,7 @@ import type {
 } from "@ardurbot/contracts";
 import {
   ChiefControlSchema,
+  ChiefDispatchSchema,
   IntegrationManifestSchema,
   MessageBlock,
   RuntimePinSchema,
@@ -330,6 +331,18 @@ export async function loadChiefSelectionContext(
   });
   if (!plan) return undefined;
   const control = ChiefControlSchema.safeParse(plan.control).data;
+  const earlierEffects = control?.uncertainRunIds.length
+    ? await prisma.externalEffect.findMany({
+        where: { runId: { in: control.uncertainRunIds }, spaceId: plan.spaceId },
+        select: { id: true, runId: true, kind: true, status: true, request: true, result: true },
+      })
+    : [];
+  const earlierActions = control?.uncertainRunIds.length
+    ? await prisma.chiefActionAdmission.findMany({
+        where: { runId: { in: control.uncertainRunIds }, consequential: true },
+        select: { runId: true, executionId: true, effectId: true, state: true },
+      })
+    : [];
   const corrections = control
     ? await prisma.message.findMany({
         where: { id: { in: control.ownerMessageIds }, threadId: plan.threadId },
@@ -338,13 +351,14 @@ export async function loadChiefSelectionContext(
       })
     : [];
   const decision = plan.decision as ChiefDecision;
-  const choice =
-    decision.kind === "delegate" || decision.kind === "queue"
+  const choice = control?.uncertainRunIds.length
+    ? `This is a checking turn only. Read back the exact earlier effect using existing granted read tools, then use reconcile_chief_action for each outcome. Earlier effects: ${JSON.stringify(earlierEffects)}. Earlier actions: ${JSON.stringify(earlierActions)}. A failed or unavailable check is unknown, not undone. Do not repeat, reverse or dispatch work. End this turn after recording the outcomes; the backend wakes the replacement planning turn once.`
+    : decision.kind === "delegate" || decision.kind === "queue"
       ? `Use handoff_to_bot with bot_id ${JSON.stringify(decision.memberId)}. Do not ask the owner to name a member.`
       : decision.kind === "self"
         ? "Prepare this work yourself; do not self-handoff."
         : "Plan the next step using the saved member facts; unknown capability is not a grant.";
-  return `System receipt already shown. Do not repeat the acknowledgement. Chief policy ${plan.policyVersion}, request ${plan.sourceMessageId}, revision ${plan.revision}. ${choice} Selection is preparation, not approval for a write or installation. The dispatch boundary rechecks eligibility. Fixed pins and existing budgets remain unchanged. ${control ? `Owner corrections supersede the previous steps: ${JSON.stringify(corrections.map((message) => message.blocks))}. Excluded member ids: ${JSON.stringify(control.excludedIds)}. Local only: ${control.localOnly}. Previous effect needs reconciliation: ${Boolean(control.uncertainRunIds.length)}. Never repeat a completed or uncertain external action.` : ""}`;
+  return `System receipt already shown. Do not repeat the acknowledgement. Chief policy ${plan.policyVersion}, request ${plan.sourceMessageId}, revision ${plan.revision}. ${choice} Selection is preparation, not approval for a write or installation. The dispatch boundary rechecks eligibility. Fixed pins and existing budgets remain unchanged. ${control ? `Owner corrections supersede the previous steps: ${JSON.stringify(corrections.map((message) => message.blocks))}. Excluded member ids: ${JSON.stringify(control.excludedIds)}. Local only: ${control.localOnly}. Previous effect needs reconciliation: ${Boolean(control.uncertainRunIds.length)}. Reconciled outcomes: ${JSON.stringify(control.reconciledActions ?? [])}. Never repeat a kept or unknown external action; the replacement must do only the remaining work.` : ""}`;
 }
 /** Called under the existing owned-group lock, immediately before shared delegation admission. */
 export async function validateChiefDispatch(
@@ -392,11 +406,18 @@ export async function validateChiefDispatch(
         error: "This member is still working on the task. Do not dispatch the same work again.",
       };
   }
-  if (!chiefControlAllowsDispatch(control) || control?.excludedIds.includes(memberId))
+  if (
+    !chiefControlAllowsDispatch(control) ||
+    control?.pendingReplan ||
+    control?.excludedIds.includes(memberId)
+  )
     return {
       error:
         "This task changed. Wait for owned teardown and reconcile the previous action before dispatching.",
     };
+  const committed = ChiefDispatchSchema.safeParse(plan.dispatch).data;
+  if (control && committed?.revision === plan.revision && committed.memberId === memberId)
+    return { error: "The replacement was already dispatched for this task revision." };
 
   if (assignment?.supersededAt || (assignment && assignment.revision !== plan.revision))
     return { error: "This chief turn belongs to an obsolete task revision." };

@@ -1,6 +1,24 @@
-import type { ChiefCorrection, ChiefDispatch, ChiefStop } from "@ardurbot/contracts";
-import { ChiefControlSchema, ChiefDispatchSchema, MessageBlock } from "@ardurbot/contracts";
-import { chiefControlAllowsDispatch, chooseChiefMember, reviseChiefControl } from "@ardurbot/core";
+import type {
+  ChiefActionReconciliation,
+  ChiefControl,
+  ChiefCorrection,
+  ChiefDispatch,
+  ChiefStop,
+} from "@ardurbot/contracts";
+import {
+  ChiefControlSchema,
+  ChiefDispatchSchema,
+  MessageBlock,
+  ReconcileChiefActionInputSchema,
+} from "@ardurbot/contracts";
+import {
+  CHIEF_RECONCILIATION_POLICY,
+  chiefControlAllowsDispatch,
+  chooseChiefMember,
+  integrationToolKind,
+  reviseChiefControl,
+} from "@ardurbot/core";
+import { stableJsonValue } from "@ardurbot/core/node/approval-effect-key";
 import { loadChiefMemberFacts } from "./chief-loop.js";
 import type { ChiefPlan, Prisma, PrismaClient } from "./client.js";
 import { requestSelectiveCancelInTransaction } from "./delegation.js";
@@ -165,6 +183,7 @@ export async function applyChiefCorrectionInTransaction(
     ],
   });
   const now = new Date();
+  if (control.uncertainRunIds.length) control.uncertaintySince = now.toISOString();
   await tx.chiefAssignment.updateMany({
     where: { runId: { in: affectedIds } },
     data: { supersededAt: now },
@@ -208,6 +227,7 @@ export async function chiefExecutionRefusal(
   runId: string,
   options: {
     consequential?: boolean;
+    verificationRead?: boolean;
     remote?: boolean;
     tool?: string;
   } = {},
@@ -240,10 +260,31 @@ export async function chiefExecutionRefusal(
     control?.localOnly &&
     (options.remote ||
       (options.consequential &&
-        !["write_file", "edit_file", "create_artifact"].includes(options.tool ?? "")))
+        !["write_file", "edit_file", "create_artifact", "reconcile_chief_action"].includes(
+          options.tool ?? "",
+        )))
   )
     return "This task must stay local. The previous destination is no longer allowed.";
-  if (control?.uncertainRunIds.length && options.consequential)
+  const reconciliationWrite =
+    assignment.coordinator &&
+    options.tool === "reconcile_chief_action" &&
+    !options.remote &&
+    control?.reconciliationRunId === runId &&
+    assignment.plan.sourceRunId === runId;
+  const verificationRead =
+    options.verificationRead &&
+    assignment.coordinator &&
+    control?.reconciliationRunId === runId &&
+    assignment.plan.sourceRunId === runId;
+  if (options.tool === "reconcile_chief_action" && !reconciliationWrite)
+    return "Only the current chief checking turn may reconcile the earlier action.";
+  if (
+    (control?.uncertainRunIds.length ||
+      (control?.pendingReplan && control.reconciliationRunId === runId)) &&
+    options.consequential &&
+    !reconciliationWrite &&
+    !verificationRead
+  )
     return "The previous action may have finished. I’ll check before retrying.";
   return undefined;
 }
@@ -256,6 +297,7 @@ export async function admitChiefAction(
     attempt: number;
     executionId: string;
     consequential: boolean;
+    verificationRead?: boolean;
     remote: boolean;
     tool?: string;
     effectId?: string;
@@ -287,13 +329,35 @@ export async function admitChiefAction(
       if (replay)
         return { error: "The previous action may have finished. I’ll check before retrying." };
       const current = await tx.chiefAssignment.findUniqueOrThrow({ where: { runId: input.runId } });
+      const control = ChiefControlSchema.safeParse(assignment.plan.control).data;
+      const retained =
+        control?.reconciledActions?.filter((row) => row.outcome !== "undone" && row.effectId) ?? [];
+      if (input.consequential && input.effectId && retained.length) {
+        const effect = await tx.externalEffect.findUnique({ where: { id: input.effectId } });
+        const prior = await tx.externalEffect.findMany({
+          where: {
+            id: { in: retained.map((row) => row.effectId!) },
+            spaceId: assignment.plan.spaceId,
+          },
+        });
+        if (
+          effect &&
+          prior.some(
+            (row) =>
+              row.kind === effect.kind &&
+              stableJsonValue(row.request) === stableJsonValue(effect.request),
+          )
+        )
+          return { error: "The earlier action was kept or is unknown. Do not repeat it." };
+      }
       const admitted = await tx.chiefActionAdmission.create({
         data: {
           runId: input.runId,
           revision: current.revision,
           attempt: input.attempt,
           executionId: input.executionId,
-          consequential: input.consequential,
+          consequential: input.verificationRead ? false : input.consequential,
+          ...(input.tool ? { tool: input.tool } : {}),
           effectId: input.effectId,
         },
       });
@@ -306,12 +370,213 @@ export async function settleChiefAction(
   prisma: PrismaClient,
   admissionId: string | undefined,
   uncertain: boolean,
+  failed = false,
 ) {
   if (!admissionId) return;
   await prisma.chiefActionAdmission.updateMany({
     where: { id: admissionId, state: "admitted" },
-    data: { state: uncertain ? "uncertain" : "settled", settledAt: new Date() },
+    data: { state: uncertain ? "uncertain" : failed ? "failed" : "settled", settledAt: new Date() },
   });
+}
+
+function sameReconciledAction(a: ChiefActionReconciliation, b: ChiefActionReconciliation) {
+  return a.runId === b.runId && a.effectId === b.effectId && a.executionId === b.executionId;
+}
+
+/** Terminal receipts resolve once; a lost executor gets unknown, never a retry grant. */
+async function resolveChiefUncertainty(
+  tx: Prisma.TransactionClient,
+  plan: ChiefPlan,
+  control: ChiefControl,
+  now: Date,
+) {
+  const records = [...(control.reconciledActions ?? [])];
+  const uncertain: string[] = [];
+  const added: ChiefActionReconciliation[] = [];
+  for (const runId of control.uncertainRunIds) {
+    const run = await tx.run.findUnique({ where: { id: runId } });
+    const leases = await tx.computerExecutionLease.count({
+      where: { runId, expiresAt: { gt: now } },
+    });
+    const orphan =
+      !leases &&
+      (!run ||
+        run.cancelConfirmedAt ||
+        ["completed", "failed", "cancelled"].includes(run.status)) &&
+      now.getTime() - new Date(control.uncertaintySince ?? plan.updatedAt).getTime() >=
+        CHIEF_RECONCILIATION_POLICY.orphanOutcomeAfterMs;
+    const actions = await tx.chiefActionAdmission.findMany({
+      where: { runId, consequential: true },
+    });
+    const effects = await tx.externalEffect.findMany({ where: { runId, spaceId: plan.spaceId } });
+    const inFlight = !orphan && actions.some((row) => row.state === "admitted");
+    let unresolved = leases > 0 || control.stoppingRunIds.includes(runId) || inFlight;
+    const entries: (ChiefActionReconciliation & { resolved: boolean })[] = [
+      ...effects.map((effect) => ({
+        runId,
+        effectId: effect.id,
+        revision: plan.revision,
+        outcome:
+          effect.status === "completed"
+            ? ("kept" as const)
+            : ["failed", "denied"].includes(effect.status)
+              ? ("undone" as const)
+              : ("unknown" as const),
+        resolved: ["completed", "failed", "denied"].includes(effect.status),
+      })),
+      ...actions
+        .filter((row) => !row.effectId || !effects.some((effect) => effect.id === row.effectId))
+        .map((action) => ({
+          runId,
+          effectId: action.effectId,
+          executionId: action.executionId,
+          revision: plan.revision,
+          outcome: "unknown" as const,
+          resolved: action.state === "settled" && !action.effectId,
+        })),
+    ];
+    if (!entries.length)
+      entries.push({
+        runId,
+        effectId: null,
+        revision: plan.revision,
+        outcome: "unknown",
+        resolved: Boolean(orphan),
+      });
+    for (const { resolved, ...entry } of entries) {
+      if (records.some((row) => sameReconciledAction(row, entry))) continue;
+      if ((!resolved && !orphan) || inFlight) {
+        unresolved = true;
+        continue;
+      }
+      records.push(entry);
+      added.push(entry);
+    }
+    if (unresolved) uncertain.push(runId);
+  }
+  const resolvedRunIds = control.uncertainRunIds.filter((id) => !uncertain.includes(id));
+  if (added.length || resolvedRunIds.length)
+    await appendEventInTransaction(tx, {
+      spaceId: plan.spaceId,
+      threadId: plan.threadId,
+      botId: plan.chiefBotId,
+      type: "chief.control",
+      payload: {
+        requestMessageId: plan.sourceMessageId,
+        revision: plan.revision,
+        state: "reconciled",
+        outcomes: added,
+        resolvedRunIds,
+      },
+    });
+  return {
+    ...control,
+    uncertainRunIds: uncertain,
+    ...(records.length ? { reconciledActions: records } : {}),
+  };
+}
+
+/** A plan-local verification write, not an external-effect approval or reversal. */
+export async function recordChiefActionReconciliation(
+  prisma: PrismaClient,
+  chiefRunId: string,
+  value: unknown,
+) {
+  const parsed = ReconcileChiefActionInputSchema.safeParse(value);
+  if (!parsed.success) return { error: "Provide the earlier run, effect and its checked outcome." };
+  const input = parsed.data;
+  return withTransactionRetry(() =>
+    prisma.$transaction(async (tx) => {
+      const assignment = await tx.chiefAssignment.findUnique({
+        where: { runId: chiefRunId },
+        include: { plan: true },
+      });
+      if (!assignment)
+        return { error: "Only the current chief checking turn may reconcile the earlier action." };
+      await tx.$queryRaw`SELECT id FROM threads WHERE id = ${assignment.plan.threadId} FOR UPDATE`;
+      const error = await chiefExecutionRefusal(tx, chiefRunId, {
+        consequential: true,
+        tool: "reconcile_chief_action",
+      });
+      if (error) return { error };
+      const plan = await tx.chiefPlan.findUniqueOrThrow({ where: { id: assignment.planId } });
+      const control = ChiefControlSchema.parse(plan.control);
+      const record: ChiefActionReconciliation = {
+        runId: input.runId,
+        effectId: input.effectId,
+        ...(!input.effectId && input.executionId ? { executionId: input.executionId } : {}),
+        outcome: input.outcome,
+        revision: plan.revision,
+      };
+      const prior = control.reconciledActions?.find((row) => sameReconciledAction(row, record));
+      if (prior)
+        return prior.outcome === input.outcome
+          ? { ok: true }
+          : { error: "The earlier action was already reconciled." };
+      if (
+        !control.uncertainRunIds.includes(input.runId) ||
+        control.stoppingRunIds.includes(input.runId)
+      )
+        return { error: "Wait for owned teardown before checking this action." };
+      const admissions = await tx.chiefActionAdmission.findMany({
+        where: { runId: input.runId, consequential: true },
+      });
+      if (admissions.some((row) => row.state === "admitted"))
+        return { error: "The earlier action is still in flight." };
+      const effect = input.effectId
+        ? await tx.externalEffect.findFirst({
+            where: { id: input.effectId, runId: input.runId, spaceId: plan.spaceId },
+          })
+        : null;
+      if (
+        input.effectId
+          ? !effect
+          : !admissions.some((row) => !row.effectId && row.executionId === input.executionId)
+      )
+        return { error: "This effect does not belong to the earlier action." };
+      if (effect?.status === "executing")
+        return { error: "The earlier action is still in flight." };
+      if (input.outcome !== "unknown") {
+        const verification = await tx.chiefActionAdmission.findFirst({
+          where: {
+            runId: chiefRunId,
+            ...(input.verificationExecutionId
+              ? { executionId: input.verificationExecutionId }
+              : {}),
+            revision: plan.revision,
+            consequential: false,
+            state: "settled",
+          },
+          orderBy: { settledAt: "desc" },
+        });
+        if (!verification?.tool || integrationToolKind(verification.tool, "") !== "read")
+          return { error: "Read back the earlier effect before recording its outcome." };
+      }
+      await tx.chiefPlan.update({
+        where: { id: plan.id },
+        data: {
+          control: {
+            ...control,
+            reconciledActions: [...(control.reconciledActions ?? []), record],
+          } as unknown as Prisma.InputJsonValue,
+        },
+      });
+      const event = await appendEventInTransaction(tx, {
+        spaceId: plan.spaceId,
+        threadId: plan.threadId,
+        botId: plan.chiefBotId,
+        runId: chiefRunId,
+        type: "chief.control",
+        payload: {
+          requestMessageId: plan.sourceMessageId,
+          revision: plan.revision,
+          state: "reconciled",
+          outcomes: [record],
+        },
+      });
+      return { ok: true, event };
+    }),
+  );
 }
 
 /** Teardown and settlement are prerequisites, not consequences of admitting a replacement. */
@@ -324,6 +589,9 @@ export async function reconcileChiefCorrection(prisma: PrismaClient, planId: str
       plan = await tx.chiefPlan.findUniqueOrThrow({ where: { id: planId } });
       let control = ChiefControlSchema.safeParse(plan.control).data;
       if (!control) return undefined;
+      const now = new Date();
+      if (control.uncertainRunIds.length && !control.uncertaintySince)
+        control = { ...control, uncertaintySince: plan.updatedAt.toISOString() };
       const stopping: string[] = [];
       for (const runId of control.stoppingRunIds) {
         const run = await tx.run.findUnique({ where: { id: runId } });
@@ -332,12 +600,15 @@ export async function reconcileChiefCorrection(prisma: PrismaClient, planId: str
         });
         if (
           leases ||
-          !run ||
-          (!run.cancelConfirmedAt && !["completed", "failed"].includes(run.status))
+          (!run
+            ? now.getTime() - new Date(control.uncertaintySince ?? plan.updatedAt).getTime() <
+              CHIEF_RECONCILIATION_POLICY.orphanOutcomeAfterMs
+            : !run.cancelConfirmedAt && !["completed", "failed"].includes(run.status))
         )
           stopping.push(runId);
       }
       control = { ...control, stoppingRunIds: stopping };
+      control = await resolveChiefUncertainty(tx, plan, control, now);
       await tx.chiefPlan.update({
         where: { id: planId },
         data: { control: control as unknown as Prisma.InputJsonValue },
@@ -347,7 +618,9 @@ export async function reconcileChiefCorrection(prisma: PrismaClient, planId: str
       if (
         dispatch?.runId &&
         !stopping.includes(dispatch.runId) &&
-        dispatch.stop?.state === "requested"
+        (dispatch.stop?.state === "requested" ||
+          (!control.uncertainRunIds.length &&
+            ["uncertain", "checking"].includes(dispatch.stop?.state ?? "")))
       )
         event = await publishChiefStopInTransaction(tx, plan, {
           revision: plan.revision,
@@ -356,6 +629,8 @@ export async function reconcileChiefCorrection(prisma: PrismaClient, planId: str
         });
       if (!control.pendingReplan || stopping.length || control.stopped)
         return event ? { event } : undefined;
+      const checking = control.uncertainRunIds.length > 0;
+      if (checking && control.reconciliationRunId) return event ? { event } : undefined;
       // Resolve the same pin/budget/authority as the superseded chief; no generic peer steering.
       const source = await tx.run.findUniqueOrThrow({ where: { id: plan.sourceRunId } });
       const facts = await loadChiefMemberFacts(tx, plan, plan.groupId);
@@ -402,7 +677,7 @@ export async function reconcileChiefCorrection(prisma: PrismaClient, planId: str
           taskId: plan.taskId,
           trigger: "user",
           status: "queued",
-          clientNonce: `chief-replan:${plan.id}:${plan.revision}`,
+          clientNonce: `chief-${checking ? "reconcile" : "replan"}:${plan.id}:${plan.revision}`,
           sourceMessageId: control.ownerMessageIds.at(-1),
           goalId: source.goalId,
           delegationRootTaskId: source.delegationRootTaskId ?? plan.taskId,
@@ -427,7 +702,11 @@ export async function reconcileChiefCorrection(prisma: PrismaClient, planId: str
         memberId: plan.chiefBotId,
         coordinator: true,
       });
-      control = { ...control, pendingReplan: false };
+      control = {
+        ...control,
+        pendingReplan: checking,
+        ...(checking ? { reconciliationRunId: run.id } : {}),
+      };
       await tx.chiefPlan.update({
         where: { id: planId },
         data: {
@@ -437,6 +716,12 @@ export async function reconcileChiefCorrection(prisma: PrismaClient, planId: str
           control: control as unknown as Prisma.InputJsonValue,
         },
       });
+      if (checking && dispatch)
+        await publishChiefStopInTransaction(tx, plan, {
+          revision: plan.revision,
+          memberName: dispatch.memberName,
+          state: "checking",
+        });
       const wake = await appendEventInTransaction(tx, {
         spaceId: plan.spaceId,
         threadId: plan.threadId,
@@ -446,7 +731,7 @@ export async function reconcileChiefCorrection(prisma: PrismaClient, planId: str
         payload: {
           requestMessageId: plan.sourceMessageId,
           revision: plan.revision,
-          state: "replan",
+          state: checking ? "checking" : "replan",
           ownerMessageIds: owner.map((message) => message.id),
           runId: run.id,
         },

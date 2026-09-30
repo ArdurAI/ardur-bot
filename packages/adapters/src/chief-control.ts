@@ -1,7 +1,53 @@
-import type { JobPublisher } from "@ardurbot/adapter-kit";
+import type { ConnectorRoute, JobPublisher } from "@ardurbot/adapter-kit";
 import { runContinueJob } from "@ardurbot/adapter-kit";
+import { ChiefControlSchema, IntegrationManifestSchema } from "@ardurbot/contracts";
+import { integrationToolKind } from "@ardurbot/core";
 import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { reconcileChiefCorrection } from "@ardurbot/db";
+import {
+  grantedMcpTools,
+  integrationApprovalForCall,
+  mcpGrantForBot,
+} from "./integration-access.js";
+
+/** Only fresh, granted connector reads qualify; readOnly hints never authorize a check. */
+export async function chiefVerificationRead(
+  prisma: PrismaClient,
+  runId: string,
+  route: ConnectorRoute | undefined,
+  args: Record<string, unknown> = {},
+) {
+  if (route?.connectorId !== "mcp" || !route.resourceId) return false;
+  if (!prisma.chiefAssignment) return false;
+  const assignment = await prisma.chiefAssignment.findUnique({
+    where: { runId },
+    include: { plan: true },
+  });
+  const control = ChiefControlSchema.safeParse(assignment?.plan.control).data;
+  if (
+    !assignment?.coordinator ||
+    assignment.supersededAt ||
+    assignment.revision !== assignment.plan.revision ||
+    assignment.plan.sourceRunId !== runId ||
+    control?.reconciliationRunId !== runId
+  )
+    return false;
+  const run = await prisma.run.findUniqueOrThrow({ where: { id: runId } });
+  const grant = await mcpGrantForBot(prisma, run, route.resourceId);
+  if (
+    !grant ||
+    route.resourceRevision !== grant.server.revision ||
+    !grantedMcpTools(grant, [route.toolName]).length
+  )
+    return false;
+  const manifest = IntegrationManifestSchema.safeParse(grant.server.manifest).data;
+  const tool = manifest?.tools.find((row) => row.id === route.toolName);
+  return Boolean(
+    tool &&
+      integrationToolKind(tool.id, tool.description) === "read" &&
+      (await integrationApprovalForCall(prisma, route, run, args)) === "allow",
+  );
+}
 
 /** Realtime control is the primary abort path; the heartbeat remains recovery. */
 export async function watchChiefControl(input: {

@@ -109,7 +109,7 @@ export type ChiefResult = z.infer<typeof ChiefResultSchema>;
 export const ChiefStopSchema = z.object({
   revision: z.number().int().positive(),
   memberName: z.string(),
-  state: z.enum(["requested", "confirmed", "uncertain"]),
+  state: z.enum(["requested", "confirmed", "uncertain", "checking"]),
 });
 export type ChiefStop = z.infer<typeof ChiefStopSchema>;
 export const ChiefDispatchSchema = z.object({
@@ -133,6 +133,21 @@ export const ChiefCorrectionSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("replan") }),
 ]);
 export type ChiefCorrection = z.infer<typeof ChiefCorrectionSchema>;
+export const ChiefActionReconciliationSchema = z.object({
+  runId: Id,
+  effectId: Id.nullable(),
+  executionId: z.string().optional(),
+  outcome: z.enum(["kept", "undone", "unknown"]),
+  revision: z.number().int().positive(),
+});
+export type ChiefActionReconciliation = z.infer<typeof ChiefActionReconciliationSchema>;
+export const ReconcileChiefActionInputSchema = z.object({
+  runId: Id,
+  effectId: Id.nullable(),
+  executionId: z.string().optional(),
+  outcome: z.enum(["kept", "undone", "unknown"]),
+  verificationExecutionId: z.string().optional(),
+});
 /** Control never carries a permission, connector grant, pin or increased budget. */
 export const ChiefControlSchema = z.object({
   revision: z.number().int().positive(),
@@ -143,5 +158,8 @@ export const ChiefControlSchema = z.object({
   pendingReplan: z.boolean(),
   stoppingRunIds: z.array(Id),
   uncertainRunIds: z.array(Id),
+  uncertaintySince: z.string().datetime().optional(),
+  reconciliationRunId: Id.optional(),
+  reconciledActions: z.array(ChiefActionReconciliationSchema).optional(),
 });
 export type ChiefControl = z.infer<typeof ChiefControlSchema>;

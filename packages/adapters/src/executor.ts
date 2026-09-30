@@ -154,6 +154,7 @@ import {
   projectChiefActivity,
   publishChiefDraftResult,
   quietHistoryDeliveryIds,
+  recordChiefActionReconciliation,
   recordDelegationFailure,
   refreshBoundBotMessageWakeRun,
   releaseQuietBotMessageClaims,
@@ -242,7 +243,11 @@ import {
 } from "./browser-tools.js";
 import { agentConnectionTools, builtinAgentTools } from "./builtin-tools.js";
 import { chiefActivityFeed } from "./chief-activity.js";
-import { wakeChiefAfterControl, watchChiefControl } from "./chief-control.js";
+import {
+  chiefVerificationRead,
+  wakeChiefAfterControl,
+  watchChiefControl,
+} from "./chief-control.js";
 import { archiveSpawnedBot, spawnBot } from "./child-bots.js";
 import { type CloudAgentConnection, cloudAgentsEnabled } from "./cloud-agent-factory.js";
 import { executeCloudAgentTool } from "./cloud-agent-service.js";
@@ -4043,6 +4048,12 @@ export function createRunExecutor(deps: ExecutorDeps) {
             attempt: fence,
             executionId,
             consequential: classifyRemoteTool(name) === "consequential",
+            verificationRead: await chiefVerificationRead(
+              deps.prisma,
+              runId,
+              connectorCall.route,
+              args,
+            ),
             tool: name,
             remote: Boolean(connectorCall.route && connectorCall.route.connectorId !== "builtin"),
             ...(applied ? { effectId: applied.effect.id } : {}),
@@ -5118,6 +5129,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
             return pauseForSecret();
           }
           if (name === "request_takeover") return { ok: true };
+          if (name === "reconcile_chief_action") {
+            const result = await recordChiefActionReconciliation(deps.prisma, runId, args);
+            if ("event" in result && result.event)
+              await deps.events.notify(result.event.threadId, result.event.seq);
+            await wakeChiefAfterControl(deps, runId);
+            return finish(result);
+          }
           if (["report_progress", "attach_artifact", "complete_task"].includes(name))
             return finish(
               await updateTaskCard(deps, {
@@ -6018,11 +6036,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
             const trace = { attempt: fence, operationId: executionId, requestId: resumes };
             tracePoint(runId, "tool.started", trace);
             let chiefUncertain = true;
+            let chiefFailed = false;
             try {
               const result = await commandRecording.invoke(name, args, executionId, applyTool);
               chiefUncertain = Boolean(
                 result && typeof result === "object" && "uncertain" in result && result.uncertain,
               );
+              chiefFailed = toolResultError(result) !== undefined;
               briefToolResults = appendBriefToolResult(briefToolResults, name, result, runSecrets);
               tracePoint(runId, "tool.finished", {
                 ...trace,
@@ -6042,6 +6062,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 deps.prisma,
                 chiefAdmissions.get(executionId),
                 chiefUncertain,
+                chiefFailed,
               );
               chiefAdmissions.delete(executionId);
               await chiefFeed?.finish(executionId);
