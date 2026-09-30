@@ -7,6 +7,7 @@ import {
   failureCategoryMessage,
   fillFailureCategoryMessage,
 } from "./failure-categories.js";
+import { RuntimeProblemSchema, runtimePinProblem } from "./runtime-pins.js";
 
 describe("failure categories table", () => {
   it("gives every category a sentence, an action and a schema-stable id", () => {
@@ -29,6 +30,44 @@ describe("failure categories table", () => {
       "Reviewer failed.",
     );
     expect(fillFailureCategoryMessage("{member} failed.", {})).toBe("{member} failed.");
+  });
+
+  it("fills a placeholder a sentence names more than once", () => {
+    expect(
+      failureCategoryMessage("destinations-bot", { bot: "Reviewer" }),
+    ).toBe("Reviewer's allowed model destinations block this model. Change them in Reviewer's settings.");
+  });
+
+  it.each([
+    [
+      "experimental-off",
+      "{runtime} is experimental. Turn on Experimental for {bot} to use it.",
+      { kind: "enable-experimental" },
+      [{ kind: "open-settings", target: "model-pin" }],
+    ],
+    [
+      "computer-unsupported",
+      "{runtime} runs on the host computer, not in a sandbox. Change {bot}'s computer to use it.",
+      { kind: "open-settings", target: "bot-computer" },
+      [{ kind: "open-settings", target: "model-pin" }],
+    ],
+    [
+      "destinations-bot",
+      "{bot}'s allowed model destinations block this model. Change them in {bot}'s settings.",
+      { kind: "open-settings", target: "bot-destinations" },
+      [{ kind: "open-settings", target: "model-pin" }],
+    ],
+    [
+      "destinations-space",
+      "This space's model policy blocks this model. Change it in Settings, under Models.",
+      { kind: "open-settings", target: "space-models" },
+      [{ kind: "open-settings", target: "model-pin" }],
+    ],
+  ] as const)("gives the runtime-refusal category %s its sentence and its actions", (id, message, action, more) => {
+    const entry = FAILURE_CATEGORIES.find((category) => category.id === id)!;
+    expect(entry.message).toBe(message);
+    expect(entry.action).toEqual(action);
+    expect(entry.more).toEqual(more);
   });
 
   it.each([
@@ -126,6 +165,43 @@ describe("failure categories table", () => {
     ).toEqual({ id: "usage-limit", params: { bot: "Bot v1.2 (test)" } });
   });
 
+  it("maps the refusal sentences a runtime can store, with every placeholder read back", () => {
+    expect(
+      failureCategoryFromText("Codex is experimental. Turn on Experimental for this bot to use it."),
+    ).toEqual({ id: "experimental-off", params: { runtime: "Codex", bot: "this bot" } });
+    expect(
+      failureCategoryFromText(
+        "Codex runs on the host computer, not in a sandbox. Change this bot's computer to use it.",
+      ),
+    ).toEqual({
+      id: "computer-unsupported",
+      params: { runtime: "Codex", bot: "this bot" },
+    });
+    expect(
+      failureCategoryFromText(
+        "Reviewer's allowed model destinations block this model. Change them in Reviewer's settings.",
+      ),
+    ).toEqual({ id: "destinations-bot", params: { bot: "Reviewer" } });
+    expect(
+      failureCategoryFromText(
+        "This space's model policy blocks this model. Change it in Settings, under Models.",
+      ),
+    ).toEqual({ id: "destinations-space", params: {} });
+  });
+
+  it("maps the older refusal sentences to the category that replaced them", () => {
+    expect(
+      failureCategoryFromText(
+        "Codex runs on host computers for now — change the bot's computer or its runtime.",
+      ),
+    ).toEqual({ id: "computer-unsupported", params: { runtime: "Codex" } });
+    // The old locality sentence named neither the bot's nor the space's policy; it maps
+    // to no category, so an older record keeps its recorded sentence.
+    expect(
+      failureCategoryFromText("This bot may only run locally — change the pin or the space policy"),
+    ).toBeUndefined();
+  });
+
   it("recognises a handoff line only for the member it was written for", () => {
     expect(failureCategoryFromMemberLine("Reviewer failed.", "Reviewer")).toBe("other");
     expect(failureCategoryFromMemberLine(" Reviewer stopped. ", "Reviewer")).toBe("stopped");
@@ -137,5 +213,36 @@ describe("failure categories table", () => {
       failureCategoryFromMemberLine("Reviewer failed: out of disk.", "Reviewer"),
     ).toBeUndefined();
     expect(failureCategoryFromMemberLine("", "Reviewer")).toBeUndefined();
+  });
+
+  it("still reads a refusal written by today's code, and one that names a new category", () => {
+    const pin = {
+      provider: "anthropic",
+      modelId: "claude-opus-5",
+      effort: "low",
+      credentialId: "native:claude-code",
+      runtimeKind: "claude-code" as const,
+      revision: 1,
+    };
+    const writtenToday = runtimePinProblem(
+      pin,
+      "locality-denied",
+      "This bot may only run locally — change the pin or the space policy",
+    );
+    expect(RuntimeProblemSchema.parse(writtenToday)).toEqual({
+      ...writtenToday,
+      actions: ["change-pin"],
+    });
+    const classified = runtimePinProblem(
+      pin,
+      "locality-denied",
+      "Reviewer's allowed model destinations block this model. Change them in Reviewer's settings.",
+      "destinations-bot",
+    );
+    expect(RuntimeProblemSchema.parse(classified)).toEqual({
+      ...classified,
+      actions: ["change-pin"],
+    });
+    expect(classified.reasonId).toBe("destinations-bot");
   });
 });

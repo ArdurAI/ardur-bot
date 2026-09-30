@@ -13,6 +13,10 @@ export const FailureCategoryIdSchema = z.enum([
   "model-unavailable",
   "configuration-invalid",
   "connection-missing",
+  "experimental-off",
+  "computer-unsupported",
+  "destinations-bot",
+  "destinations-space",
   "stopped",
   "other",
 ]);
@@ -23,7 +27,11 @@ export type FailureCategoryAction =
   | { kind: "none" }
   | { kind: "retry" }
   | { kind: "connect" }
-  | { kind: "open-settings"; target: "model-pin" | "group-model" };
+  | { kind: "enable-experimental" }
+  | {
+      kind: "open-settings";
+      target: "model-pin" | "group-model" | "bot-destinations" | "space-models" | "bot-computer";
+    };
 
 /** Named placeholders a category sentence may use. */
 export type FailureCategoryParams = {
@@ -41,6 +49,11 @@ export type FailureCategory = {
   /** Handoff sentence, when a handoff can end this way ({member}). */
   memberMessage?: string;
   action: FailureCategoryAction;
+  /**
+   * Further actions offered beside the first: the same setting may be reachable another
+   * way, or the pin may be worth changing instead. Absent when one action is enough.
+   */
+  more?: readonly FailureCategoryAction[];
   /**
    * Sentences older builds stored verbatim, as templates with the same named
    * placeholders. Readers map stored English text back to this id through them.
@@ -91,6 +104,36 @@ export const FAILURE_CATEGORIES: readonly FailureCategory[] = [
     groupMessage:
       "{bot} couldn't use the model set for this group. Reconnect it or change the group model.",
     action: { kind: "connect" },
+    legacy: [],
+  },
+  {
+    id: "experimental-off",
+    message: "{runtime} is experimental. Turn on Experimental for {bot} to use it.",
+    action: { kind: "enable-experimental" },
+    more: [{ kind: "open-settings", target: "model-pin" }],
+    legacy: [],
+  },
+  {
+    id: "computer-unsupported",
+    message: "{runtime} runs on the host computer, not in a sandbox. Change {bot}'s computer to use it.",
+    action: { kind: "open-settings", target: "bot-computer" },
+    more: [{ kind: "open-settings", target: "model-pin" }],
+    legacy: [
+      "{runtime} runs on host computers for now — change the bot's computer or its runtime.",
+    ],
+  },
+  {
+    id: "destinations-bot",
+    message: "{bot}'s allowed model destinations block this model. Change them in {bot}'s settings.",
+    action: { kind: "open-settings", target: "bot-destinations" },
+    more: [{ kind: "open-settings", target: "model-pin" }],
+    legacy: [],
+  },
+  {
+    id: "destinations-space",
+    message: "This space's model policy blocks this model. Change it in Settings, under Models.",
+    action: { kind: "open-settings", target: "space-models" },
+    more: [{ kind: "open-settings", target: "model-pin" }],
     legacy: [],
   },
   {
@@ -163,12 +206,16 @@ function plausibleName(value: string): boolean {
 
 function templateToPattern(template: string): RegExp {
   const escaped = template.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const seen = new Set<string>();
   const source = escaped.replace(
     /\\?\{(bot|runtime|member)\\?\}/g,
     (_, name: string) =>
       // Each placeholder captures its value back for the reader. Greedy is safe: the
       // surrounding literals anchor the match and names never contain sentence stops.
-      `(?<${name}>.+?)`,
+      // A sentence may name the same party twice ("{bot}'s … in {bot}'s …"); the second
+      // occurrence must repeat the first, so it becomes a backreference — a second
+      // capture group with the same name would be an invalid pattern.
+      seen.has(name) ? `\\k<${name}>` : (seen.add(name), `(?<${name}>.+?)`),
   );
   return new RegExp(`^${source}$`);
 }
