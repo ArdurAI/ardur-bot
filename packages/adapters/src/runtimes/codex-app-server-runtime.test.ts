@@ -25,7 +25,11 @@ vi.mock("@ardurbot/host-runtime/runtimes/native-process", async (original) => ({
 }));
 
 import { resolveRunModelPin } from "../run-model-pin.js";
-import { CodexAppServerRuntime, probeCodex } from "./codex-app-server-runtime.js";
+import {
+  CodexAppServerRuntime,
+  INSTRUCTION_CHANGE_SLACK_MS,
+  probeCodex,
+} from "./codex-app-server-runtime.js";
 
 type Message = {
   id?: number | string;
@@ -1000,8 +1004,8 @@ describe("instruction file grants", () => {
       await mkdir(home, { recursive: true });
       const file = path.join(home, "AGENTS.md");
       await writeFile(file, "the person's own rules");
-      // The disk's clock and the process's clock tick apart by a hair; let the file settle.
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      // A file changed within the clock's slack before the ask is refused; let it settle.
+      await new Promise((resolve) => setTimeout(resolve, INSTRUCTION_CHANGE_SLACK_MS + 50));
       return file;
     };
     it("starts the turn when the file is ordinary and unchanged", async () => {

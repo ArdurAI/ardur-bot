@@ -300,6 +300,15 @@ export async function loadProjectInstructions(
 }
 
 /**
+ * How far a file's change time may trail the clock. Linux stamps a change with a coarse
+ * clock that can lag real time by a scheduler tick (up to 10 ms), and some disks keep
+ * coarser times still. A file changed within this window before the session was asked for
+ * counts as changed after it: refused, never trusted. Without the window, a swap made
+ * right after the ask could carry a change time from just before it and pass.
+ */
+export const INSTRUCTION_CHANGE_SLACK_MS = 1_000;
+
+/**
  * Codex also loads an instruction file from its own folder, which Ardur cannot turn off. After
  * a session starts and before any turn is sent, every file Codex says it loaded must be an
  * ordinary file outside protected data and outside the project (whose files Ardur supplied),
@@ -312,7 +321,7 @@ export async function trustedInstructionSources(
 ): Promise<boolean> {
   // Codex always reports the list, empty when it loaded nothing. No list is no evidence.
   if (!Array.isArray(sources)) return false;
-  const asked = BigInt(Math.floor(check.askedAtMs)) * 1_000_000n;
+  const asked = BigInt(Math.floor(check.askedAtMs - INSTRUCTION_CHANGE_SLACK_MS)) * 1_000_000n;
   const fromProject = (file: string) =>
     check.directories.some(
       (directory) => within(directory, path.dirname(file)) && within(path.dirname(file), directory),
