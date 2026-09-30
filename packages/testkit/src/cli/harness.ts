@@ -106,6 +106,7 @@ async function main() {
         "packages/testkit/src/computer-approval.postgres.test.ts",
         "packages/testkit/src/eval-history.postgres.test.ts",
         "packages/testkit/src/eval-customer-support.postgres.test.ts",
+        "packages/testkit/src/context.postgres.test.ts",
         "packages/testkit/src/journeys.test.ts",
         "packages/testkit/src/authorization.test.ts",
         "packages/testkit/src/attachments.test.ts",
