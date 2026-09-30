@@ -320,7 +320,7 @@ test("workspace pane Terminal keeps its shell across views and releases explicit
     await dialog.dismiss();
   });
   await pane
-    .locator("[data-workspace-chrome]")
+    .getByRole("tablist", { name: "Views", exact: true })
     .getByRole("button", { name: "Close Terminal", exact: true })
     .click();
   await expect(pane).toHaveAttribute("aria-hidden", "false");
