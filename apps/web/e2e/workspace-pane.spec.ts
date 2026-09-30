@@ -1,4 +1,6 @@
-import { expect, type Page, test } from "@playwright/test";
+import { encodeTerminalFrame } from "@ardurbot/core";
+import type { Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { captureScreenshot } from "./helpers";
 import { bots, installPerformanceFixture } from "./performance-fixture";
 
@@ -156,7 +158,7 @@ test("workspace pane shows saved files that can be edited", async ({ page }, tes
   await captureScreenshot(page, testInfo, "workspace-files-saved");
 });
 
-test("workspace pane Terminal takes control explicitly and releases it when left", async ({
+test("workspace pane Terminal keeps its shell across views and releases explicitly", async ({
   page,
 }, testInfo) => {
   const botId = bots[0]!.id;
@@ -217,11 +219,17 @@ test("workspace pane Terminal takes control explicitly and releases it when left
         },
       });
     }
-    if (name === "terminal/close") return route.fulfill({ json: { json: { ok: true } } });
+    if (name === "terminal/close") {
+      calls.push(name);
+      return route.fulfill({ json: { json: { ok: true } } });
+    }
     if (name === "workspace/describe") return route.fulfill({ json: { json: context } });
     await route.fallback();
   });
+  let output = (_text: string) => {};
   await page.routeWebSocket("**/api/terminal/socket", (socket) => {
+    output = (text) =>
+      socket.send(Buffer.from(encodeTerminalFrame(1, new TextEncoder().encode(text))));
     socket.onMessage((message) => {
       if (typeof message === "string" && JSON.parse(message).type === "connect")
         socket.send(JSON.stringify({ type: "ready", inputSeq: 0 }));
@@ -243,9 +251,39 @@ test("workspace pane Terminal takes control explicitly and releases it when left
   await expect(pane.getByRole("region", { name: "Terminal", exact: true })).toBeVisible();
   expect(calls).toEqual(["computer/takeover", "terminal/ticket"]);
   await captureScreenshot(page, testInfo, "workspace-terminal-running");
-  // Leaving the tab releases the control it acquired and closes the session.
+  await pane.locator("[data-terminal-root]").evaluate((element) => {
+    element.setAttribute("data-session-proof", "original");
+  });
+  // Hidden output still reaches the same xterm, while authority stays beside chat.
   await pane.getByRole("tab", { name: "Tasks" }).click();
-  await expect.poll(() => calls).toContain("computer/release");
+  await expect(pane.getByText("You control the computer", { exact: true })).toBeVisible();
+  await expect(pane.getByRole("button", { name: "Release", exact: true })).toBeVisible();
+  output("Background job still running\r\n");
+  await captureScreenshot(page, testInfo, "workspace-terminal-hidden");
+  await tab.click();
+  await expect(pane.locator('[data-terminal-root][data-session-proof="original"]')).toBeVisible();
+  await expect(pane.locator(".xterm-accessibility-tree")).toContainText(
+    "Background job still running",
+  );
+  expect(calls).toEqual(["computer/takeover", "terminal/ticket"]);
+  await pane.getByRole("button", { name: "Expand workspace" }).click();
+  await expect(pane.locator('[data-terminal-root][data-session-proof="original"]')).toBeVisible();
+  await pane.getByRole("button", { name: "Return to conversation" }).click();
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toBe("End this terminal?");
+    await dialog.dismiss();
+  });
+  await pane.getByRole("button", { name: "Close panel", exact: true }).click();
+  await expect(pane).toHaveAttribute("aria-hidden", "false");
+  expect(calls).toEqual(["computer/takeover", "terminal/ticket"]);
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toBe("End this terminal?");
+    await dialog.accept();
+  });
+  await pane.getByRole("button", { name: "Release", exact: true }).click();
+  await expect.poll(() => calls.filter((name) => name === "computer/release").length).toBe(1);
+  await expect.poll(() => calls.filter((name) => name === "terminal/close").length).toBe(1);
+  await expect(pane.getByText("You control the computer", { exact: true })).toHaveCount(0);
 });
 
 test("workspace pane Terminal reports an ended session instead of a dead terminal", async ({

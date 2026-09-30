@@ -1,7 +1,8 @@
 import { mkdir, mkdtemp, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { expect, type Page, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { listPiCatalog } from "../../../packages/adapters/src/pi-models";
 import { dashboardFixture } from "./dashboard-fixture";
 import {
@@ -46,6 +47,7 @@ async function expectModelReady(page: Page) {
 }
 
 type DocsScenario = {
+  sandboxProvider?: string;
   botCount?: number;
   botNames?: string[];
   groups?: Record<string, unknown>[];
@@ -72,7 +74,7 @@ async function useDashboard(page: Page, scenario: DocsScenario = {}) {
       (entry) =>
         entry.provider === "openrouter" &&
         entry.auth !== "oauth" &&
-        entry.thinkingLevels.includes("medium"),
+        entry.thinkingLevels?.includes("medium"),
     );
   const unconnected = catalog.find(
     (entry) => entry.provider !== connected?.provider && entry.auth === "api-key",
@@ -88,6 +90,8 @@ async function useDashboard(page: Page, scenario: DocsScenario = {}) {
   };
   const me = {
     ...(base.me as Record<string, unknown>),
+    sandboxProvider:
+      scenario.sandboxProvider ?? (base.me as Record<string, unknown>).sandboxProvider,
     defaultProvider: connected.provider,
     defaultModel: connected.id,
   };
@@ -98,7 +102,7 @@ async function useDashboard(page: Page, scenario: DocsScenario = {}) {
     modelCredentialId: credential.id,
     thinkingLevel: "medium",
   };
-  const bots = [
+  const bots: Record<string, unknown>[] = [
     initialBot,
     ...(base.bots as Record<string, unknown>[]).slice(1).map((bot, index) => ({
       ...bot,
@@ -208,7 +212,7 @@ test("onboarding: prepare a required connection", async ({ page }) => {
 });
 
 test("bots-create: select a computer mode before creating", async ({ page }) => {
-  await useDashboard(page);
+  await useDashboard(page, { sandboxProvider: "docker" });
   await page.goto("/app/bot");
   await expectModelReady(page);
   const create = page.getByTestId("create-menu-trigger");
@@ -221,10 +225,10 @@ test("bots-create: select a computer mode before creating", async ({ page }) => 
   const form = page.getByTestId("create-bot-form");
   await expect(form).toBeVisible();
   await expect(form.getByRole("textbox", { name: "Name" })).toBeVisible();
-  await expect(form.getByRole("button", { name: "Private" })).toBeVisible();
+  await expect(form.getByRole("button", { name: "Only this bot", exact: true })).toBeVisible();
   await capture(page, "docs-bots-create-form");
   await form.getByRole("textbox", { name: "Name" }).fill("Planner");
-  const privateMode = form.getByRole("button", { name: "Private" });
+  const privateMode = form.getByRole("button", { name: "Only this bot", exact: true });
   await expect(privateMode).toBeVisible();
   await privateMode.click();
   await expect(privateMode).toHaveAttribute("aria-pressed", "true");

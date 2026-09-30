@@ -16,7 +16,7 @@
       "id": "team",
       "eyebrow": "TEAM",
       "title": "Named bots, together",
-      "body": "Give each bot its own conversation and history, bring bots together in group chats whose members answer at the same time — the owner sets how many bots answer at once (1-8) in group settings — and see current tasks and availability in Team. On web and desktop, inspect tasks and edit workspace files beside a conversation. Mobile reads those files in its own screens.",
+      "body": "Give each bot its own conversation and history, bring bots together in group chats whose members answer at the same time — the owner sets how many bots answer at once (1-8) in group settings — and see current tasks and availability in Team. On web and desktop, inspect tasks and edit workspace files beside a conversation. An opened workspace terminal keeps its shell and scrollback when switching views; control stays visible until released. Closing the pane or leaving the bot asks before ending the terminal. Mobile reads workspace files in its own screens; the native app has no interactive terminal.",
       "source": "README.md#What you get today"
     },
     {
@@ -37,7 +37,7 @@
       "id": "delegate",
       "eyebrow": "DELEGATION",
       "title": "Bots work together",
-      "body": "Accepted requests to a room's chief get a saved acknowledgement before execution; bare greetings start no work run. The chief preselects members for document transfer and installation preparation from approved capability, skill and capacity facts, and committed dispatch appears as one expandable line. A group's coordinator can also ask members for their answers in the room. A goal coordinator can send bounded requests to group members' desk threads. Receipts show delivery, confirmed reading and replies. Effect requests wait for owner approval: the owner can allow one exact action once or read-only preparation, and can pause group or space team messages. Bots can also hand off room work or use short-lived subagents.",
+      "body": "Accepted requests to a room's chief get a saved acknowledgement before execution; bare greetings start no work run. The chief preselects members for document transfer and installation preparation from approved capability, skill and capacity facts, and committed dispatch appears as one expandable line. Instrumented worker tools update a safe activity line in the room, including desk assignments; accepted local artifacts appear as draft links, not verified service completion. A group's coordinator can also ask members for their answers in the room. A goal coordinator can send bounded requests to group members' desk threads. Receipts show delivery, confirmed reading and replies. Effect requests wait for owner approval: the owner can allow one exact action once or read-only preparation, and can pause group or space team messages. Bots can also hand off room work or use short-lived subagents.",
       "source": "README.md#What you get today"
     },
     {
@@ -980,7 +980,7 @@
             "uiLabels": [
               "New bot",
               "Name",
-              "Private"
+              "Only this bot"
             ],
             "screenshotId": "docs-bots-create-form",
             "expected": "Name and computer mode controls are visible.",
@@ -991,13 +991,13 @@
             "aliases": [
               "private"
             ],
-            "text": "Name the bot and choose Private computer mode.",
+            "text": "Name the bot and choose Only this bot mode.",
             "uiLabels": [
               "Name",
-              "Private"
+              "Only this bot"
             ],
             "screenshotId": "docs-bots-create-private",
-            "expected": "Private is selected before creation.",
+            "expected": "Only this bot is selected before creation.",
             "availableSince": "0.1.0-alpha.2"
           },
           {

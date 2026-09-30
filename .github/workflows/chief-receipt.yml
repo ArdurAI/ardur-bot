@@ -43,7 +43,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:generate
       - run: pnpm db:migrate
-      - run: pnpm exec vitest run packages/testkit/src/chief-loop.postgres.test.ts --maxWorkers=2 --silent=false --reporter=verbose
+      - run: pnpm exec vitest run packages/testkit/src/chief-loop.postgres.test.ts packages/adapters/src/bot-comms.postgres.test.ts --maxWorkers=2 --silent=false --reporter=verbose
   browser:
     name: Chief receipt visible-paint journey
     runs-on: ubuntu-latest
@@ -62,6 +62,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @ardurbot/web exec playwright install --with-deps chromium
       - run: pnpm test:e2e --workers=1 --spec=chief-receipt.spec.ts
+      - run: pnpm test:e2e --workers=1 --spec=chief-activity.spec.ts
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:

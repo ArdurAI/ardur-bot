@@ -11,6 +11,7 @@ import type {
   ThreadSnapshot,
 } from "@ardurbot/contracts";
 import type { ReactNode } from "react";
+import { useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -86,6 +87,7 @@ const state = vi.hoisted(
       bootstrapBotId?: string;
       takeoverRejections: number;
       takeoverFailures: number;
+      terminalAvailable: boolean;
     },
 );
 state.bots = [botFor("bot-1", "Graphical"), botFor("bot-2", "Plain")];
@@ -278,7 +280,7 @@ vi.mock("../lib/rpc", () => {
       connectors: { summary: record("connectors.summary") },
       workspace: { describe: record("workspace.describe"), tasks: record("workspace.tasks") },
       terminal: {
-        available: record("terminal.available"),
+        available: async () => ({ available: state.terminalAvailable }),
         ticket: record("terminal.ticket"),
         close: record("terminal.close"),
       },
@@ -312,6 +314,17 @@ vi.mock("../lib/auth", () => ({
   },
 }));
 vi.mock("../lib/performance", () => ({ markOnce: vi.fn(), markAfterPaint: vi.fn() }));
+vi.mock("./shell/terminal-session", () => ({
+  default: () => {
+    useEffect(() => {
+      state.calls.push("session.mount");
+      return () => {
+        state.calls.push("session.close");
+      };
+    }, []);
+    return <div data-pane-session>Shell scrollback</div>;
+  },
+}));
 vi.mock("@lingui/react/macro", () => {
   const tag = (parts: TemplateStringsArray, ...values: unknown[]) =>
     parts.reduce((text, part, i) => text + part + (String(values[i - 1] ?? "") ?? ""), "");
@@ -402,6 +415,7 @@ beforeEach(() => {
   state.bootstrapBotId = undefined;
   state.takeoverRejections = 0;
   state.takeoverFailures = 0;
+  state.terminalAvailable = false;
   state.threads = {
     "bot-1": snapshotFor("bot-1", true),
     "bot-2": snapshotFor("bot-2", false),
@@ -670,6 +684,72 @@ it("entering the Screen tab neither boots the computer nor takes control", async
   expect(count("computer.takeover")).toBe(0);
   // The rendered tab fetches its screen instead.
   expect(count("computer.screenUrl")).toBeGreaterThan(0);
+}, 30_000);
+
+it("keeps the pane shell across views and expansion, and confirms explicit panel close", async () => {
+  state.bootstrapBotId = "bot-2";
+  state.terminalAvailable = true;
+  state.threads["bot-2"]!.computer = {
+    ...computerFor("bot-2", false),
+    controlHolder: "user",
+    controlBotId: "bot-2",
+  };
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  try {
+    await renderShell("/app/bot-2");
+    await openWorkspacePane();
+    expect(count("session.mount")).toBe(0);
+    click(paneTab("Terminal"));
+    await until(() => host.querySelector("[data-pane-session]") !== null);
+    const original = host.querySelector("[data-pane-session]");
+    click(paneTab("Tasks"));
+    await tick(100);
+    expect(host.querySelector("[data-pane-session]")).toBe(original);
+    expect(pane()?.textContent).toContain("You control the computer");
+    click(pane()?.querySelector('[aria-label="Expand workspace"]'));
+    await tick(100);
+    expect(host.querySelector("[data-pane-session]")).toBe(original);
+    expect(confirm).not.toHaveBeenCalled();
+    click(pane()?.querySelector('[aria-label="Close panel"]'));
+    await tick(100);
+    expect(confirm).toHaveBeenCalledExactlyOnceWith("End this terminal?");
+    expect(pane()?.getAttribute("aria-hidden")).toBe("false");
+    expect(count("session.close")).toBe(0);
+    confirm.mockReturnValue(true);
+    click(pane()?.querySelector('[aria-label="Close panel"]'));
+    await until(() => count("session.close") === 1);
+    expect(count("session.mount")).toBe(1);
+    expect(count("computer.release")).toBe(0);
+  } finally {
+    confirm.mockRestore();
+  }
+}, 30_000);
+
+it("confirms a bot switch before ending the pane shell", async () => {
+  state.bootstrapBotId = "bot-2";
+  state.terminalAvailable = true;
+  state.threads["bot-2"]!.computer = {
+    ...computerFor("bot-2", false),
+    controlHolder: "user",
+    controlBotId: "bot-2",
+  };
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  try {
+    await renderShell("/app/bot-2");
+    await openWorkspacePane();
+    click(paneTab("Terminal"));
+    await until(() => host.querySelector("[data-pane-session]") !== null);
+    click(host.querySelector('[data-roster-bot-id="bot-1"]'));
+    await tick(100);
+    expect(confirm).toHaveBeenCalledExactlyOnceWith("End this terminal?");
+    expect(count("session.close")).toBe(0);
+    confirm.mockReturnValue(true);
+    click(host.querySelector('[data-roster-bot-id="bot-1"]'));
+    await until(() => count("session.close") === 1);
+    expect(count("computer.release")).toBe(0);
+  } finally {
+    confirm.mockRestore();
+  }
 }, 30_000);
 
 it("does not request a screen for a background bot while the full-window view is open for another bot", async () => {

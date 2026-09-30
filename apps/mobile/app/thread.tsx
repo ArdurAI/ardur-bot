@@ -80,7 +80,11 @@ import { BotAvatar } from "../components/bot-avatar";
 import { BotRuntimeLabel } from "../components/bot-runtime-label";
 import { CompactWorkRecord } from "../components/compact-work-record";
 import { MobileRunContext } from "../components/context-section";
-import { ChiefDispatchLine, CoordinationLine } from "../components/coordination-line";
+import {
+  ChiefDispatchLine,
+  ChiefResultBubble,
+  CoordinationLine,
+} from "../components/coordination-line";
 import { DispatchStatus } from "../components/DispatchStatus";
 import {
   MarkdownArtifactPreview,
@@ -2612,6 +2616,8 @@ const MessageBubble = memo(function MessageBubble({
 
   const handoff = message.blocks.find((block) => block.kind === "handoff");
   const chiefReceipt = message.blocks.find((block) => block.kind === "chief_receipt");
+  const chiefResult = message.blocks.find((block) => block.kind === "chief_result");
+  if (chiefResult) return <ChiefResultBubble block={chiefResult} actionProps={actionProps} />;
   if (chiefReceipt)
     return (
       <Text style={{ color: tokens.foreground, fontSize: 15.5 }} accessibilityLiveRegion="polite">

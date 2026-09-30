@@ -73,6 +73,36 @@ export type ChiefDecision =
   | { kind: "needs-owner"; blocker: string }
   | { kind: "plan" };
 
+export const ChiefActivityKeySchema = z.enum([
+  "read-input",
+  "connect-notion",
+  "write-notion",
+  "verify-notion",
+  "check-tool",
+  "working",
+  "waiting-tool",
+]);
+export type ChiefActivityKey = z.infer<typeof ChiefActivityKeySchema>;
+export const ChiefActivitySchema = z.object({
+  revision: z.number().int().positive(),
+  runId: Id,
+  delegationId: Id,
+  attempt: z.number().int().nonnegative(),
+  sourceSeq: z.number().int().nonnegative(),
+  executionId: z.string().max(200).optional(),
+  key: ChiefActivityKeySchema,
+  state: z.enum(["active", "idle", "waiting", "completed", "failed", "stopped"]),
+  updatedAt: z.string(),
+});
+export type ChiefActivity = z.infer<typeof ChiefActivitySchema>;
+export const ChiefResultSchema = z.object({
+  requestMessageId: Id,
+  revision: z.number().int().positive(),
+  artifactId: Id,
+  href: z.string(),
+  state: z.enum(["draft", "verified-notion"]),
+});
+export type ChiefResult = z.infer<typeof ChiefResultSchema>;
 export const ChiefDispatchSchema = z.object({
   requestMessageId: Id,
   revision: z.number().int().positive(),
@@ -80,5 +110,8 @@ export const ChiefDispatchSchema = z.object({
   memberName: z.string(),
   state: z.enum(["messaged", "queued", "approval-held"]),
   reason: z.string(),
+  runId: Id.optional(),
+  delegationId: Id.optional(),
+  activity: ChiefActivitySchema.optional(),
 });
 export type ChiefDispatch = z.infer<typeof ChiefDispatchSchema>;

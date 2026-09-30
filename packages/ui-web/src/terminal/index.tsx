@@ -26,13 +26,17 @@ export interface TerminalProps {
   ticket(sessionId?: string): Promise<TerminalTicket>;
   labels: TerminalLabels;
   close(sessionId: string): Promise<unknown>;
+  visible?: boolean;
 }
 
 /** Imported only when the computer's Terminal tab is selected. */
-export default function ComputerTerminal({ ticket, labels, close }: TerminalProps) {
+export default function ComputerTerminal({ ticket, labels, close, visible = true }: TerminalProps) {
   const container = useRef<HTMLDivElement>(null);
   const currentSession = useRef<string | undefined>(undefined);
   const reconnect = useRef<() => void>(() => {});
+  const refit = useRef<() => void>(() => {});
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
   const closeRef = useRef(close);
   closeRef.current = close;
   const search = useRef<SearchAddon | null>(null);
@@ -86,7 +90,7 @@ export default function ComputerTerminal({ ticket, labels, close }: TerminalProp
     terminal.open(host);
     terminal.textarea?.setAttribute("aria-label", labels.terminal);
     const send = (data: string, binary = false) => {
-      if (!ready || !socket || socket.readyState !== WebSocket.OPEN) return;
+      if (!ready || !visibleRef.current || !socket || socket.readyState !== WebSocket.OPEN) return;
       const bytes = terminalInput(data, binary);
       // Input is never queued across a disconnect, including uncertain writes.
       if (socket.bufferedAmount > 64 * 1024) {
@@ -109,7 +113,7 @@ export default function ComputerTerminal({ ticket, labels, close }: TerminalProp
     const input = terminal.onData((data: string) => send(data));
     const binary = terminal.onBinary((data: string) => send(data, true));
     const fitNow = () => {
-      if (disposed || !host.clientWidth || !host.clientHeight) return;
+      if (disposed || !visibleRef.current || !host.clientWidth || !host.clientHeight) return;
       fit.fit();
       if (ready && socket?.readyState === WebSocket.OPEN)
         socket.send(
@@ -120,6 +124,7 @@ export default function ComputerTerminal({ ticket, labels, close }: TerminalProp
           }),
         );
     };
+    refit.current = fitNow;
     const observer = new ResizeObserver(() => {
       clearTimeout(resize);
       resize = setTimeout(fitNow, 50);
@@ -173,7 +178,7 @@ export default function ComputerTerminal({ ticket, labels, close }: TerminalProp
                 terminal.options.disableStdin = false;
                 setState("ready");
                 fitNow();
-                terminal.focus();
+                if (visibleRef.current) terminal.focus();
               }
               return;
             }
@@ -247,8 +252,12 @@ export default function ComputerTerminal({ ticket, labels, close }: TerminalProp
       for (const blocker of blockers) blocker.dispose();
       terminal.dispose();
       search.current = null;
+      refit.current = () => {};
     };
   }, [attempt, labels.terminal]);
+  useEffect(() => {
+    if (visible) refit.current();
+  }, [visible]);
   return (
     <section
       data-terminal-root

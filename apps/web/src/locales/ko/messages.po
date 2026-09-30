@@ -13,36 +13,6 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: \n"
 
-#. js-lingui-explicit-id
-#: src/components/RunEvidence.tsx
-#~ msgid "Check failed"
-#~ msgstr "검증 실패"
-
-#. js-lingui-explicit-id
-#: src/components/RunEvidence.tsx
-#~ msgid "Evidence gap"
-#~ msgstr "증거 누락"
-
-#. js-lingui-explicit-id
-#: src/components/RunEvidence.tsx
-#~ msgid "Evidence off"
-#~ msgstr "증거 기록 꺼짐"
-
-#. js-lingui-explicit-id
-#: src/components/RunEvidence.tsx
-#~ msgid "Not sealed"
-#~ msgstr "봉인 안 됨"
-
-#. js-lingui-explicit-id
-#: src/components/RunEvidence.tsx
-#~ msgid "Recording"
-#~ msgstr "기록 중"
-
-#. js-lingui-explicit-id
-#: src/components/RunEvidence.tsx
-#~ msgid "Verified"
-#~ msgstr "검증됨"
-
 #: src/pages/shell/model-pin-select.tsx
 msgid " — May not be available on your plan"
 msgstr ""
@@ -1508,6 +1478,11 @@ msgstr ""
 msgid "Bots on this computer: {0}"
 msgstr "이 컴퓨터의 봇: {0}"
 
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-summary.tsx
+msgid "Bots share files and installed tools"
+msgstr "봇이 파일과 설치된 도구를 공유합니다"
+
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
 msgstr ""
@@ -1657,6 +1632,10 @@ msgstr ""
 msgid "Change computer"
 msgstr ""
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Change location"
+msgstr "위치 변경"
+
 #: src/pages/LearningInsights.tsx
 #: src/pages/shell/provider-error-message.tsx
 msgid "Change model"
@@ -1762,6 +1741,14 @@ msgstr "확인 시간 {0}"
 #: src/pages/shell/runtime-settings.tsx
 msgid "Checking the download"
 msgstr "다운로드 확인 중"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Checking the missing tool"
+msgstr "없는 도구를 확인하는 중"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Checking the Notion page"
+msgstr "Notion 페이지를 확인하는 중"
 
 #: src/components/DesktopUpdates.tsx
 #: src/components/OllamaSettings.tsx
@@ -2102,7 +2089,6 @@ msgstr ""
 
 #: src/pages/ide/IdePage.tsx
 #: src/pages/Shell.tsx
-#: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
 #: src/pages/workspace/WorkspacePane.tsx
@@ -2140,6 +2126,14 @@ msgstr "컴퓨터가 절전 상태입니다"
 #: src/pages/Shell.tsx
 msgid "Computer is asleep. Open it to wake."
 msgstr "컴퓨터가 절전 모드입니다. 깨우려면 여세요."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Computer location unavailable. Choose a supported connection."
+msgstr "컴퓨터 위치를 확인할 수 없습니다. 지원되는 연결을 선택하세요."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Computer location unavailable. Try again."
+msgstr "컴퓨터 위치를 확인할 수 없습니다. 다시 시도하세요."
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -2323,6 +2317,10 @@ msgstr ""
 msgid "Connected. Review tools in MCP settings."
 msgstr ""
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Connecting to Notion"
+msgstr "Notion에 연결하는 중"
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
@@ -2368,6 +2366,10 @@ msgstr ""
 #: src/pages/LearningCurator.tsx
 msgid "Consolidation uses the review connection and may incur model charges. Approval is required."
 msgstr ""
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Container"
+msgstr "컨테이너"
 
 #: src/components/Context.tsx
 #: src/pages/fleet/FleetSettings.tsx
@@ -2882,6 +2884,10 @@ msgstr "음성 설정을 불러오지 못했습니다."
 msgid "Could not load your bots; reopen quick access."
 msgstr ""
 
+#: src/components/ai/ChiefResultBubble.tsx
+msgid "Could not open file"
+msgstr "파일을 열 수 없습니다"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Could not open setup. Try again."
 msgstr ""
@@ -3108,6 +3114,10 @@ msgstr ""
 msgid "Could not show the menu bar item; try again."
 msgstr ""
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Could not start"
+msgstr "시작하지 못함"
+
 #: src/components/composer/composer-actions.ts
 msgid "Could not start a new chat"
 msgstr ""
@@ -3316,6 +3326,10 @@ msgstr ""
 #: src/pages/board/BoardsSettings.tsx
 msgid "Creates .beads/ with config.yaml, metadata.json, .gitignore, README.md, interactions.jsonl, .local_version, and embeddeddolt/. Git files and hooks stay unchanged."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Creating the Notion page"
+msgstr "Notion 페이지를 만드는 중"
 
 #: src/pages/GroupPanel.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -3784,6 +3798,10 @@ msgstr "계정이 없나요?"
 msgid "Done"
 msgstr "완료"
 
+#: src/components/ai/ChiefResultBubble.tsx
+msgid "Done — added the document to Notion."
+msgstr "완료 — 문서를 Notion에 추가했습니다."
+
 #: src/pages/TeamBoard.tsx
 msgid "Done — waiting for your OK"
 msgstr ""
@@ -3911,6 +3929,10 @@ msgstr ""
 #: src/lib/mcp-sign-in.ts
 msgid "Enable this server first, then sign in."
 msgstr ""
+
+#: src/pages/workspace/WorkspaceTerminal.tsx
+msgid "End this terminal?"
+msgstr "이 터미널을 종료할까요?"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Engage when... Ignore..."
@@ -4308,6 +4330,10 @@ msgstr ""
 msgid "For {task}, {better} on this machine did as well as {other} in your runs."
 msgstr ""
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "For testing only; not an isolation boundary."
+msgstr "테스트 전용이며 격리 경계가 아닙니다."
+
 #: src/pages/Auth.tsx
 msgid "Forgot password?"
 msgstr "비밀번호를 잊으셨나요?"
@@ -4419,11 +4445,6 @@ msgstr "알겠습니다 — 이 문서를 Notion에 올릴 팀원을 선택하�
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
 msgstr ""
-
-#: src/pages/dashboard/GovernancePanel.tsx
-#: src/pages/dashboard/panels.ts
-#~ msgid "Governance and encryption are not part of this build yet."
-#~ msgstr ""
 
 #: src/pages/LearningTimeline.tsx
 msgid "Grant"
@@ -4564,6 +4585,10 @@ msgstr ""
 #: src/pages/shell/model-pin-select.tsx
 msgid "Hosted providers"
 msgstr ""
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Hosted sandbox"
+msgstr "호스팅된 샌드박스"
 
 #: src/pages/RoutineSchedule.tsx
 msgid "hour"
@@ -6292,6 +6317,11 @@ msgstr ""
 msgid "Only space-shared documents go to this repository."
 msgstr ""
 
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-summary.tsx
+msgid "Only this bot"
+msgstr "이 봇만 사용"
+
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/ScratchpadSection.tsx
@@ -6730,10 +6760,6 @@ msgstr ""
 msgid "Privacy"
 msgstr ""
 
-#: src/pages/shell/bot-panel.tsx
-msgid "Private"
-msgstr "Bot 전용"
-
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Private key"
 msgstr ""
@@ -6895,6 +6921,10 @@ msgstr "읽기 전용"
 #: src/pages/storage/StorageSettings.tsx
 msgid "Reading storage usage…"
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Reading the document"
+msgstr "문서를 읽는 중"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Reads can run without asking once you allow them. Writes always ask."
@@ -7079,6 +7109,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Remote base directory"
 msgstr ""
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Remote computer"
+msgstr "원격 컴퓨터"
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Remote MCP URL"
@@ -7418,10 +7452,11 @@ msgstr "팀 메시지 다시 시작"
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
+#: src/pages/shell/runtime-summary.tsx
 #: src/pages/system/SystemPage.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Retry"
-msgstr ""
+msgstr "다시 시도"
 
 #. placeholder {0}: failure.relativePath
 #: src/pages/import/LocalImportPage.tsx
@@ -7603,6 +7638,7 @@ msgstr "실행 중"
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/shell/runtime-summary.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Running"
 msgstr "실행 중"
@@ -7618,6 +7654,14 @@ msgstr "실행 중…"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?"
 msgstr "이 컴퓨터에서 실행 중인 작업이 있습니다. 연결을 바꾸면 중단될 수 있습니다. 그래도 저장할까요?"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Runs as you; can use your files and signed-in tools"
+msgstr "내 권한으로 실행되며 내 파일과 로그인된 도구를 사용할 수 있습니다"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Runs at the configured provider; can use granted credentials and network access."
+msgstr "설정된 제공업체에서 실행되며 부여된 자격 증명과 네트워크 접근을 사용할 수 있습니다."
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -7964,6 +8008,10 @@ msgstr "{peer}에게 보냄"
 msgid "Sentry alert"
 msgstr "Sentry 알림"
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Separate home; can reach allowed network services and granted credentials."
+msgstr "별도의 홈 폴더를 사용하며 허용된 네트워크 서비스와 부여된 자격 증명에 접근할 수 있습니다."
+
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Serif"
 msgstr ""
@@ -8025,6 +8073,14 @@ msgstr ""
 msgid "Set up a board"
 msgstr "보드 설정"
 
+#: src/pages/shell/bot-panel.tsx
+msgid "Set up a container for isolated work."
+msgstr "격리된 작업을 위해 컨테이너를 설정하세요."
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Set up computer"
+msgstr "컴퓨터 설정"
+
 #: src/pages/import/ImportedServerCredentials.tsx
 msgid "Set up credentials"
 msgstr ""
@@ -8083,6 +8139,11 @@ msgstr ""
 #: src/pages/GitMemorySettings.tsx
 msgid "Shared recall will use proposed facts after merge."
 msgstr ""
+
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-summary.tsx
+msgid "Shared with team"
+msgstr "팀과 공유"
 
 #: src/components/ShowAllModels.tsx
 msgid "Show all models"
@@ -8247,6 +8308,10 @@ msgstr ""
 msgid "Slash commands"
 msgstr ""
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Sleeping"
+msgstr "절전 중"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Socket missing"
 msgstr "소켓 없음"
@@ -8405,6 +8470,7 @@ msgid "Start the engine and press Test."
 msgstr "엔진을 시작하고 테스트를 누르세요."
 
 #: src/lib/run-status-label.ts
+#: src/pages/shell/runtime-summary.tsx
 msgid "Starting"
 msgstr "시작 중"
 
@@ -8478,6 +8544,7 @@ msgstr ""
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/GroupPanel.tsx
+#: src/pages/shell/runtime-summary.tsx
 msgid "Stopped"
 msgstr "중지됨"
 
@@ -8602,7 +8669,6 @@ msgid "Teaching in progress. Stop teaching before sending a new message."
 msgstr "작업을 가르치는 중입니다. 새 메시지를 보내려면 먼저 가르치기를 종료하세요."
 
 #: src/pages/Shell.tsx
-#: src/pages/shell/bot-panel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Team"
 msgstr "팀 공용"
@@ -8656,6 +8722,10 @@ msgstr ""
 msgid "Test"
 msgstr "시험 실행"
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Test computer"
+msgstr "테스트 컴퓨터"
+
 #: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
 msgid "Test connection"
 msgstr ""
@@ -8696,6 +8766,10 @@ msgstr "컴퓨터가 바쁩니다. 끝날 때까지 기다리세요."
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr ""
+
+#: src/components/ai/ChiefResultBubble.tsx
+msgid "The draft is ready."
+msgstr "초안이 준비되었습니다."
 
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "The file changed. Open it again before saving."
@@ -8836,8 +8910,9 @@ msgstr "이 컴퓨터"
 #: src/pages/fleet/target-name.ts
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
+#: src/pages/shell/runtime-summary.tsx
 msgid "This computer"
-msgstr ""
+msgstr "이 컴퓨터"
 
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "This configuration is too complex."
@@ -9418,6 +9493,10 @@ msgstr "정수 초를 사용하세요."
 msgid "User"
 msgstr ""
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Uses that account's permissions."
+msgstr "해당 계정의 권한을 사용합니다."
+
 #: src/pages/shell/bot-model-chip.tsx
 #: src/pages/shell/group-participants.tsx
 msgid "Using {currentId}"
@@ -9502,6 +9581,10 @@ msgstr "API가 다시 작동하기를 기다리는 중…"
 #: src/lib/working-indicator.ts
 msgid "Waiting for the model"
 msgstr "모델을 기다리는 중"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Waiting for the tool"
+msgstr "도구를 기다리는 중"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
@@ -9613,6 +9696,10 @@ msgstr "언제 사용할지"
 msgid "Where should bots run?"
 msgstr "Bot을 어디에서 실행할까요?"
 
+#: src/pages/shell/bot-panel.tsx
+msgid "Where this bot runs"
+msgstr "이 봇이 실행되는 곳"
+
 #: src/pages/memory/MemoryDocuments.tsx
 msgid "Who the user is and the professional domain"
 msgstr ""
@@ -9648,6 +9735,10 @@ msgstr "{task} 작업 중"
 #: src/pages/TeamBoard.tsx
 msgid "Working on {task} for {0}"
 msgstr "{0}님을 위해 {task} 작업 중"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Working on the task"
+msgstr "작업을 진행하는 중"
 
 #: src/components/ai/CompactWorkRecord.tsx
 msgid "Working: {title}"
@@ -9696,6 +9787,10 @@ msgstr "자동으로 이동하지 않으면 이 탭을 닫아도 됩니다."
 #: src/pages/McpOAuthCallback.tsx
 msgid "You can close this window."
 msgstr "이 창을 닫아도 됩니다."
+
+#: src/pages/workspace/WorkspaceTerminal.tsx
+msgid "You control the computer"
+msgstr "컴퓨터를 직접 제어 중입니다"
 
 #: src/pages/LearningInsights.tsx
 msgid "You gave {count} thumbs with reasons in {days} days, but Learning is off."

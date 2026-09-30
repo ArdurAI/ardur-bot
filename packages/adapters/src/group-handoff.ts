@@ -300,6 +300,15 @@ export async function handoffToGroupBot(
         data: { runId: nextRun.id },
       });
       if (chiefChoice.planId && chiefChoice.dispatch) {
+        const boundDispatch = {
+          ...chiefChoice.dispatch,
+          runId: nextRun.id,
+          delegationId: admitted.record.id,
+        };
+        await tx.message.update({
+          where: { id: message.id },
+          data: { blocks: [{ ...handoffBlock, chiefDispatch: boundDispatch }] },
+        });
         await tx.chiefPlan.update({
           where: { id: chiefChoice.planId },
           data: {
@@ -307,6 +316,7 @@ export async function handoffToGroupBot(
               ...chiefChoice.dispatch,
               runId: nextRun.id,
               delegationId: admitted.record.id,
+              messageId: message.id,
             },
             checkedFacts: (await loadChiefMemberFacts(
               tx,

@@ -59,6 +59,16 @@ describe("lingui catalogs", () => {
         "Messaged {name}",
         "Queued for {name}",
         "Waiting for approval",
+        "Reading the document",
+        "Connecting to Notion",
+        "Creating the Notion page",
+        "Checking the Notion page",
+        "Checking the missing tool",
+        "Working on the task",
+        "Waiting for the tool",
+        "Done — added the document to Notion.",
+        "The draft is ready.",
+        "Could not open file",
       ]) {
         const entry = Object.values(catalog).find((value) => value.message === message);
         expect(entry?.translation, `${locale}: ${message}`).toBeTruthy();

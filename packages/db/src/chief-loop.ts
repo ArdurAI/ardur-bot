@@ -18,6 +18,12 @@ import type { Prisma, PrismaClient } from "./client.js";
 import { appendEventInTransaction } from "./events.js";
 import { createThreadMessageInTransaction } from "./messages.js";
 
+export {
+  projectChiefActivity,
+  publishChiefDraftResult,
+  settleChiefActivity,
+} from "./chief-activity.js";
+
 type Scope = { spaceId: string; userId: string };
 /** No probes, private task prompts, connection values or credentials in this projection. */
 export async function loadChiefMemberFacts(

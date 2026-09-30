@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { JobPublisher } from "@ardurbot/adapter-kit";
-import { ALL_DEVICE_SCOPES } from "@ardurbot/contracts";
+import { ALL_DEVICE_SCOPES, TaskCardSchema } from "@ardurbot/contracts";
 import { botMessageReceiptKind, buildBotMessageWakePrompt, peerPairKey } from "@ardurbot/core";
 import { peerEffectArgsDigest } from "@ardurbot/core/node/peer-effect-digest";
 import {
+  acceptDelegation,
   acknowledgeBotMessageInput,
   appendBotMessageWakeInTransaction,
   checkPeerTrafficLimits,
@@ -28,9 +29,12 @@ import {
   lockPeerTrafficPolicy,
   noteBotMessageReadUnconfirmed,
   type PrismaClient,
+  projectChiefActivity,
+  publishChiefDraftResult,
   reconcileQuietBotMessageClaims,
   refreshBoundBotMessageWakeRun,
   setBotCommunicationPaused,
+  settleChiefActivity,
 } from "@ardurbot/db";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { completeExternalEffect } from "./approval-effect.js";
@@ -463,6 +467,181 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     });
   }
 
+  it("projects a desk tool into only its committed room dispatch and reloads a single accepted draft link", async () => {
+    const f = await fixture();
+    const other = await fixture();
+    const request = await createThreadMessage(prisma, {
+      threadId: f.room.id,
+      role: "user",
+      blocks: [{ kind: "text", text: "Prepare a local document" }],
+    });
+    const dispatch = {
+      requestMessageId: request.id,
+      revision: 1,
+      memberId: f.worker.id,
+      memberName: f.worker.name,
+      state: "messaged",
+      reason: "eligible",
+      runId: f.workerRun.id,
+      delegationId: f.parent.delegationId,
+    };
+    const outbound = await prisma.message.findUniqueOrThrow({
+      where: { id: f.parent.outboundMessageId! },
+    });
+    await prisma.message.update({
+      where: { id: outbound.id },
+      data: {
+        blocks: (outbound.blocks as any[]).map((block) => ({ ...block, chiefDispatch: dispatch })),
+      },
+    });
+    const plan = await prisma.chiefPlan.create({
+      data: {
+        spaceId,
+        userId,
+        groupId: f.room.groupId!,
+        threadId: f.room.id,
+        chiefBotId: f.coordinator.id,
+        sourceMessageId: request.id,
+        sourceRunId: f.coordinatorRun.id,
+        taskId: f.rootTask.id,
+        policyVersion: 1,
+        operation: { taskType: "writing", purpose: "general" },
+        decision: { kind: "plan" },
+        checkedFacts: [],
+        dispatch: { ...dispatch, messageId: outbound.id },
+      },
+    });
+    const before = await prisma.event.count({ where: { threadId: other.room.id } });
+    const activity = {
+      revision: 1,
+      runId: f.workerRun.id,
+      delegationId: f.parent.delegationId!,
+      attempt: 1,
+      sourceSeq: 1,
+      key: "read-input" as const,
+      state: "active" as const,
+      updatedAt: new Date().toISOString(),
+    };
+    const update = await projectChiefActivity(prisma, {
+      spaceId,
+      userId,
+      botId: f.worker.id,
+      planId: plan.id,
+      activity,
+    });
+    expect(update?.threadId).toBe(f.room.id);
+    expect(
+      await projectChiefActivity(prisma, {
+        spaceId,
+        userId,
+        botId: f.worker.id,
+        planId: plan.id,
+        activity,
+      }),
+    ).toBeUndefined();
+    expect(
+      await projectChiefActivity(prisma, {
+        spaceId,
+        userId,
+        botId: other.worker.id,
+        planId: plan.id,
+        activity,
+      }),
+    ).toBeUndefined();
+    expect(await prisma.event.count({ where: { threadId: other.room.id } })).toBe(before);
+    const reloaded = await prisma.message.findUniqueOrThrow({ where: { id: outbound.id } });
+    expect((reloaded.blocks as any[])[0].chiefDispatch.activity).toEqual(activity);
+    const replay = await prisma.event.findMany({
+      where: { threadId: f.room.id, seq: { gte: update!.seq }, type: "thread.message.updated" },
+    });
+    expect(replay).toHaveLength(1);
+    expect((replay[0]!.payload as any).blocks).toEqual(reloaded.blocks);
+    // A URL or worker prose does not establish an artifact or a verification pass.
+    expect(
+      await publishChiefDraftResult(prisma, {
+        spaceId,
+        userId,
+        chiefBotId: f.coordinator.id,
+        delegationId: f.parent.delegationId!,
+      }),
+    ).toBeUndefined();
+    const artifact = await prisma.artifact.create({
+      data: {
+        spaceId,
+        userId,
+        botId: f.worker.id,
+        runId: f.workerRun.id,
+        name: "document.md",
+        mimeType: "text/markdown",
+        size: 5,
+        hash: "a".repeat(64),
+        storageKey: `fixture-${randomUUID()}`,
+      },
+    });
+    const card = TaskCardSchema.parse({
+      goal: "Prepare a local document",
+      requesterBotId: f.coordinator.id,
+      workerBotId: f.worker.id,
+      approvalBoundaries: { scopes: [], connectors: [] },
+      snapshot: {
+        pin: {
+          runtimeKind: "pi",
+          provider: "fixture",
+          modelId: "fixed",
+          credentialId: "fake",
+          effort: "high",
+          revision: 1,
+        },
+        computer: { id: null, mode: "dedicated", kind: null },
+        destination: { host: null, local: true },
+      },
+      budget: { tokens: 1000, deadlineAt: f.goal.untilAt.toISOString() },
+      artifacts: [artifact.id],
+      timeline: [],
+    });
+    await prisma.delegation.update({ where: { id: f.parent.delegationId! }, data: { card } });
+    await completeWorker(f, "A draft exists; service completion has not been verified.");
+    await settleChiefActivity(prisma, f.parent.delegationId!);
+    await prisma.$transaction((tx) =>
+      acceptDelegation(tx, { spaceId, userId }, f.parent.delegationId!, f.coordinator.id),
+    );
+    expect(
+      await publishChiefDraftResult(prisma, {
+        spaceId,
+        userId,
+        chiefBotId: f.coordinator.id,
+        delegationId: f.parent.delegationId!,
+      }),
+    ).toMatchObject({ published: true });
+    await publishChiefDraftResult(prisma, {
+      spaceId,
+      userId,
+      chiefBotId: f.coordinator.id,
+      delegationId: f.parent.delegationId!,
+    });
+    const results = await prisma.message.findMany({
+      where: { threadId: f.room.id, clientNonce: `chief-result:${request.id}:1` },
+    });
+    expect(results).toHaveLength(1);
+    expect((results[0]!.blocks as any[])[0].result).toMatchObject({
+      state: "draft",
+      artifactId: artifact.id,
+      href: `artifact:${artifact.id}`,
+    });
+    expect(
+      (await prisma.message.findUniqueOrThrow({ where: { id: outbound.id } })).blocks,
+    ).toMatchObject([{ chiefDispatch: { activity: { state: "completed" } } }]);
+    expect(
+      await projectChiefActivity(prisma, {
+        spaceId,
+        userId,
+        botId: f.worker.id,
+        planId: plan.id,
+        activity: { ...activity, sourceSeq: 100 },
+      }),
+    ).toBeUndefined();
+  });
+
   it("scopes a two-room directory and rechecks a send after membership changes", async () => {
     const f = await fixture("compatible");
     await prisma.run.update({
@@ -621,7 +800,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
         leaseExpiresAt: new Date(Date.now() + 60_000),
       },
     });
-    const result = await loadBotPresence(
+    let result = await loadBotPresence(
       prisma,
       { spaceId, userId },
       {
@@ -631,7 +810,21 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
         limit: 50,
       },
     );
-    const row = result.bots.find((bot) => bot.botId === unrelated.id);
+    let row = result.bots.find((bot) => bot.botId === unrelated.id);
+    while (!row && result.nextCursor) {
+      result = await loadBotPresence(
+        prisma,
+        { spaceId, userId },
+        {
+          callerBotId: f.worker.id,
+          visibleGroupId: "__desk__",
+          canSend: true,
+          limit: 50,
+          cursor: result.nextCursor,
+        },
+      );
+      row = result.bots.find((bot) => bot.botId === unrelated.id);
+    }
     expect(row).toMatchObject({ availability: "busy", activeRunCount: 1, activeRunIds: [] });
     expect(row?.currentTaskTitle).toBeUndefined();
     expect(row?.goalId).toBeUndefined();

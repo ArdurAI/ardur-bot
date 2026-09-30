@@ -971,7 +971,22 @@ export async function messageBot(
           data: { runId: nextRun.id },
         });
         await tx.message.update({ where: { id: inbound.id }, data: { runId: nextRun.id } });
-        if (chiefChoice.planId && "chiefDispatch" in outboundBlock && outboundBlock.chiefDispatch)
+        if (chiefChoice.planId && "chiefDispatch" in outboundBlock && outboundBlock.chiefDispatch) {
+          await tx.message.update({
+            where: { id: outbound.id },
+            data: {
+              blocks: [
+                {
+                  ...outboundBlock,
+                  chiefDispatch: {
+                    ...outboundBlock.chiefDispatch,
+                    runId: nextRun.id,
+                    delegationId: admitted.record.id,
+                  },
+                },
+              ],
+            },
+          });
           await tx.chiefPlan.update({
             where: { id: chiefChoice.planId },
             data: {
@@ -979,9 +994,11 @@ export async function messageBot(
                 ...outboundBlock.chiefDispatch,
                 runId: nextRun.id,
                 delegationId: admitted.record.id,
+                messageId: outbound.id,
               },
             },
           });
+        }
         if (goal && deliveryId) {
           const now = new Date();
           const delivery = await tx.botMessageDelivery.create({

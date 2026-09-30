@@ -18,7 +18,6 @@ import {
   isActive,
   isCommandCardEvent,
   isRunTerminalEvent,
-  isToolActivityBlock,
   mergeCommandLinks,
   mergeThreadHistory,
   prependThreadHistoryPage,
@@ -562,12 +561,13 @@ export function reduceThreadSnapshot(
     };
   }
   if (event.type === "thread.message.created" || event.type === "thread.message.updated") {
+    if (event.type === "thread.message.updated" && event.seq <= prev.cursor) return prev;
     const role = (event.payload.role as ThreadMessage["role"]) ?? "bot";
     const blocks = (event.payload.blocks as ThreadMessage["blocks"]) ?? [];
     const next: ThreadMessage = {
       id: String(event.payload.messageId ?? event.id),
       threadId: event.threadId,
-      seq: event.seq,
+      seq: typeof event.payload.messageSeq === "number" ? event.payload.messageSeq : event.seq,
       role,
       blocks,
       botId: event.botId,
@@ -578,7 +578,8 @@ export function reduceThreadSnapshot(
           : undefined,
       replyQuote:
         typeof event.payload.replyQuote === "string" ? event.payload.replyQuote : undefined,
-      createdAt: event.createdAt,
+      createdAt:
+        typeof event.payload.createdAt === "string" ? event.payload.createdAt : event.createdAt,
     };
     const replacedSubagentIds = new Set(
       blocks.filter((block) => block.kind === "subagent").map((block) => block.agentId),

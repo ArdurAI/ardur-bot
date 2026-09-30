@@ -88,7 +88,8 @@
               h(CoordinationLine, {
                 block,
                 onOpenMemberSettings: (botId) => {
-                  window.location.assign(`/app/${botId}`);
+                  // Match the app's client-side navigation without loading its auth gate.
+                  window.history.pushState(null, "", `/app/${botId}`);
                 },
               }),
             ),

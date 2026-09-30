@@ -99,6 +99,143 @@ describe("terminalSupported", () => {
 });
 
 describe("useTerminalController", () => {
+  it("preserves an acquired grant while hidden when the pane opts in", async () => {
+    const props = baseProps({ keepControlWhileHidden: true });
+    await render(props);
+    await act(async () => state?.runAction());
+    await render({ ...props, hasControl: true, visible: false });
+    expect(calls.release).not.toHaveBeenCalled();
+    expect(state?.ready).toBe(true);
+    await act(async () => root.unmount());
+    expect(calls.release).toHaveBeenCalledExactlyOnceWith({ botId: "bot" });
+  });
+
+  it("returns a dismissed takeover even if the pane is shown again before it finishes", async () => {
+    let finish = () => {};
+    const props = baseProps({
+      keepControlWhileHidden: true,
+      onTakeControl: () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    });
+    await render(props);
+    await act(async () => state?.runAction());
+    await render({ ...props, visible: false });
+    await render(props);
+    await act(async () => finish());
+    expect(calls.release).toHaveBeenCalledExactlyOnceWith({ botId: "bot" });
+  });
+
+  it("does not release twice when closed during an explicit release", async () => {
+    let finish = () => {};
+    const props = baseProps();
+    await render(props);
+    await act(async () => state?.runAction());
+    calls.release.mockImplementationOnce(
+      () =>
+        new Promise<Record<string, never>>((resolve) => {
+          finish = () => resolve({});
+        }),
+    );
+    await act(async () => state?.release());
+    await act(async () => root.unmount());
+    await act(async () => finish());
+    expect(calls.release).toHaveBeenCalledExactlyOnceWith({ botId: "bot" });
+  });
+
+  it("returns a takeover that finishes while the retained surface is hidden", async () => {
+    let finish = () => {};
+    const props = baseProps({
+      onTakeControl: () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    });
+    await render(props);
+    await act(async () => state?.runAction());
+    await render({ ...props, visible: false });
+    await act(async () => finish());
+    expect(calls.release).toHaveBeenCalledExactlyOnceWith({ botId: "bot" });
+  });
+
+  it("does not connect to a stopped computer even with a stale control grant", async () => {
+    await render(
+      baseProps({
+        hasControl: true,
+        computer: computer({ state: "stopped" }),
+        onStart: async () => {},
+      }),
+    );
+    expect(state?.ready).toBe(false);
+  });
+
+  it("does not retarget a pending takeover after a same-bot computer switch", async () => {
+    let finish = () => {};
+    const onReleasedA = vi.fn();
+    const onReleasedB = vi.fn();
+    const props = baseProps({
+      onReleased: onReleasedA,
+      onTakeControl: () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    });
+    await render(props);
+    await act(async () => state?.runAction());
+    await render({
+      ...props,
+      computerId: "computer-b",
+      computer: computer({ computerId: "computer-b" }),
+      onReleased: onReleasedB,
+    });
+    await act(async () => finish());
+    expect(calls.release).toHaveBeenCalledExactlyOnceWith({ botId: "bot" });
+    expect(onReleasedA).toHaveBeenCalledOnce();
+    expect(onReleasedB).not.toHaveBeenCalled();
+    calls.release.mockClear();
+    await act(async () => root.unmount());
+    expect(calls.release).not.toHaveBeenCalled();
+  });
+
+  it("does not revive an old takeover after switching away and back", async () => {
+    let finish = () => {};
+    const props = baseProps({
+      keepControlWhileHidden: true,
+      onTakeControl: () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    });
+    await render(props);
+    await act(async () => state?.runAction());
+    await render({ ...props, botId: "bot-b" });
+    await render(props);
+    await act(async () => finish());
+    expect(calls.release).toHaveBeenCalledExactlyOnceWith({ botId: "bot" });
+    calls.release.mockClear();
+    await act(async () => root.unmount());
+    expect(calls.release).not.toHaveBeenCalled();
+  });
+
+  it("keeps a release completion bound to the original surface", async () => {
+    let finish = () => {};
+    calls.release.mockImplementationOnce(
+      () =>
+        new Promise<Record<string, never>>((resolve) => {
+          finish = () => resolve({});
+        }),
+    );
+    const onReleasedA = vi.fn();
+    const onReleasedB = vi.fn();
+    await render(baseProps({ hasControl: true, onReleased: onReleasedA }));
+    await act(async () => state?.release());
+    await render(baseProps({ botId: "bot-b", onReleased: onReleasedB }));
+    await act(async () => finish());
+    expect(onReleasedA).toHaveBeenCalledOnce();
+    expect(onReleasedB).not.toHaveBeenCalled();
+  });
+
   it("skips the availability probe when the kind does not support a terminal", async () => {
     await render(baseProps({ supported: false }));
     expect(calls.available).not.toHaveBeenCalled();

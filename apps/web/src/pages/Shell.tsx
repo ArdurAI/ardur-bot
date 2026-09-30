@@ -288,6 +288,11 @@ import { WindowChrome } from "./WindowChrome";
 import { terminalSupported } from "./workspace/terminal-controller";
 import { WorkspaceFileGuard } from "./workspace/WorkspaceFileGuard";
 
+const ChiefResultBubble = lazy(() =>
+  import("../components/ai/ChiefResultBubble").then((module) => ({
+    default: module.ChiefResultBubble,
+  })),
+);
 const BotSettings = lazy(() =>
   import("./shell/bot-panel").then((module) => ({ default: module.BotSettings })),
 );
@@ -510,7 +515,20 @@ export function ShellPage({
   const [sendError, setSendError] = useState<string | null>(null);
   const [attachmentNotice, setAttachmentNotice] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [panel, setPanel] = useState<Panel>(null);
+  const [panel, setPanelUnchecked] = useState<Panel>(null);
+  const terminalCloseGuard = useRef<(() => boolean) | null>(null);
+  const panelRef = useRef(panel);
+  panelRef.current = panel;
+  const registerTerminalCloseGuard = useCallback((guard: (() => boolean) | null) => {
+    terminalCloseGuard.current = guard;
+  }, []);
+  const setPanel = useCallback((next: Panel | ((current: Panel) => Panel)) => {
+    const target = typeof next === "function" ? next(panelRef.current) : next;
+    if (target !== panelRef.current && terminalCloseGuard.current && !terminalCloseGuard.current())
+      return false;
+    setPanelUnchecked(target);
+    return true;
+  }, []);
   const [workspaceTab, setWorkspaceTab] = useState("tasks");
   const [workspaceExpanded, setWorkspaceExpanded] = useState(false);
   const paneReturnFocus = useRef<HTMLElement | null>(null);
@@ -523,8 +541,8 @@ export function ShellPage({
         event.target.closest("[data-workspace-chrome]")
       ) {
         event.preventDefault();
+        if (!setPanel(null)) return;
         setWorkspaceExpanded(false);
-        setPanel(null);
         paneReturnFocus.current?.focus();
         return;
       }
@@ -545,8 +563,8 @@ export function ShellPage({
       if (!activeBotId.current) return;
       event.preventDefault();
       if (panel === "computer") {
+        if (!setPanel(null)) return;
         setWorkspaceExpanded(false);
-        setPanel(null);
         paneReturnFocus.current?.focus();
       } else {
         paneReturnFocus.current =
@@ -796,7 +814,6 @@ export function ShellPage({
   const computerBotIdRef = useRef<string | undefined>(undefined);
   const computerTabRef = useRef<"screen" | "terminal">("screen");
   // Latest panel/tab identity for guards that run before React re-renders.
-  const panelRef = useRef<Panel>(null);
   const workspaceTabRef = useRef(workspaceTab);
   const computerBootEpoch = useRef(0);
   const openComputerRef = useRef<(botId?: string) => Promise<void>>(async () => {});
@@ -2523,12 +2540,14 @@ export function ShellPage({
     title: string;
     description: string;
     computerMode: ComputerMode;
+    isolatedComputer?: { connectionId: string | null };
   }) {
     const isFirstBot = botsRef.current.length === 0;
     const bot = await rpc.bots.create({
       ...normalizeCreateBotProfile(input),
       notifyOnFinish: true,
       computerMode: input.computerMode,
+      isolatedComputer: input.isolatedComputer,
     });
     setBots((current) =>
       current.some((item) => item.id === bot.id) ? current : [bot, ...current],
@@ -3930,7 +3949,7 @@ export function ShellPage({
                     size="icon-sm"
                     aria-label={t`Close panel`}
                     onClick={() => {
-                      setPanel(null);
+                      if (!setPanel(null)) return;
                       setWorkspaceExpanded(false);
                     }}
                   >
@@ -3950,6 +3969,7 @@ export function ShellPage({
                     computer
                       ? {
                           working: composerRunning,
+                          registerCloseGuard: registerTerminalCloseGuard,
                           onTakeControl: async () => {
                             await rpc.computer.takeover({ botId: active.id });
                             await refreshComputerFor(active.id);
@@ -4106,6 +4126,7 @@ export function ShellPage({
                 <CreateBotForm
                   onCancel={() => setPanel(null)}
                   onCreate={(input) => createBot(input)}
+                  onSetupComputer={() => openSettings("computer")}
                 />
               </Suspense>
             ) : null}
@@ -6719,6 +6740,12 @@ const MessageView = memo(function MessageView({
             </div>
           );
         }
+        if (block.kind === "chief_result")
+          return (
+            <Suspense key={i} fallback={null}>
+              <ChiefResultBubble block={block} />
+            </Suspense>
+          );
         if (block.kind === "handoff") {
           if (block.chiefDispatch)
             return <ChiefDispatchLine key={i} dispatch={block.chiefDispatch} detail={block.text} />;
