@@ -8074,15 +8074,6 @@ msgid "Shared documents will be published directly."
 msgstr "Shared documents will be published directly."
 
 #: src/pages/GitMemorySettings.tsx
-msgid "Sharing"
-msgstr "Sharing"
-
-msgid "Change location on desktop."
-msgstr "Change location on desktop."
-
-msgid "Set up a container on desktop, then try again."
-msgstr "Set up a container on desktop, then try again."
-
 msgid "Shared recall will use proposed facts after merge."
 msgstr "Shared recall will use proposed facts after merge."
 
