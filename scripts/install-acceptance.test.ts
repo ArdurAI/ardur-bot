@@ -1,0 +1,61 @@
+import { spawnSync } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { describe, expect, it } from "vitest";
+
+const mac = new URL("./release/install-acceptance-mac.sh", import.meta.url);
+
+describe("macOS install verdict", () => {
+  it.each([
+    [false, 3, "Ardur.app: rejected\nsource=no usable signature\n", true],
+    [true, 0, "Ardur.app: accepted\nsource=Notarized Developer ID\n", true],
+    [false, 3, "Ardur.app: rejected\nsource=no resources\n", false],
+    [false, 3, "Ardur.app: rejected\nsource=no usable signature\ndamaged\n", false],
+    [true, 3, "Ardur.app: rejected\nsource=no usable signature\n", false],
+    [true, 0, "Ardur.app: accepted\nsource=Developer ID\n", false],
+    [false, 0, "Ardur.app: rejected\nsource=no usable signature\n", false],
+    [false, 3, "assessment unavailable\n", false],
+  ])("signed=%s, status=%s, output=%s", async (signed, status, output, accepted) => {
+    const script = await readFile(mac, "utf8");
+    const predicate = script.match(/verdict\(\) \{[\s\S]*?\n\}/)?.[0];
+    expect(predicate).toBeTruthy();
+    const dir = await mkdtemp(path.join(os.tmpdir(), "install-verdict-"));
+    try {
+      await writeFile(path.join(dir, "spctl.log"), output);
+      const result = spawnSync("bash", ["-c", `${predicate}\nverdict`], {
+        encoding: "utf8",
+        env: { ...process.env, logs: dir, signed: String(signed), spctl_status: String(status) },
+      });
+      expect(result.status === 0).toBe(accepted);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps the cask launcher in the staged directory and executes the bundle path", async () => {
+    const template = await readFile(new URL("../homebrew/Casks/ardur.rb", import.meta.url), "utf8");
+    const preflight = template.match(/ {2}preflight do\n([\s\S]*?)\n {2}end/)?.[1];
+    expect(preflight).toBeTruthy();
+    const dir = await mkdtemp(path.join(os.tmpdir(), "cask-launcher-"));
+    try {
+      const result = spawnSync(
+        "ruby",
+        [
+          "-e",
+          `require 'pathname'; def appdir; ENV.fetch('APPDIR'); end; def staged_path; Pathname.new(ENV.fetch('STAGE')); end; ${preflight}`,
+        ],
+        { env: { ...process.env, APPDIR: `${dir}/Applications with spaces`, STAGE: dir } },
+      );
+      expect(result.status).toBe(0);
+      const launcher = await readFile(path.join(dir, "ardur"), "utf8");
+      expect(launcher).toContain('/Ardur.app/Contents/MacOS/Ardur "$@"');
+      expect(launcher).toContain("Applications\\ with\\ spaces");
+      expect(spawnSync("bash", ["-n", path.join(dir, "ardur")]).status).toBe(0);
+      expect(template).toContain('binary "ardur"');
+      expect(template).not.toContain('binary "#{appdir}');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});

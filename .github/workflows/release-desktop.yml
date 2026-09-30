@@ -167,6 +167,12 @@ jobs:
       - name: Report unavailable optional ARM Linux toolchain
         if: failure() && matrix.optional
         run: echo "::warning title=Linux arm64::ARM Linux packaging failed; the preview will contain the required platforms only. Inspect this job before claiming ARM Linux support."
+      - name: Record the built artifact's signing mode
+        # A failed package step cannot produce a signing record.
+        shell: bash
+        env:
+          SIGNED: ${{ matrix.platform == 'mac' && needs.validate.outputs.signed == 'true' }}
+        run: printf '{"signed":%s}\n' "$SIGNED" > apps/desktop/out/install-build-${{ matrix.platform }}-${{ matrix.arch }}.json
       - name: Upload installers and channel metadata
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -180,6 +186,43 @@ jobs:
             apps/desktop/out/*.exe
             apps/desktop/out/*.blockmap
             apps/desktop/out/latest*.yml
+            apps/desktop/out/install-build-*.json
+
+  install-acceptance:
+    name: Install ${{ matrix.platform }} ${{ matrix.arch }}
+    needs: [validate, build]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    continue-on-error: ${{ matrix.optional || false }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-15, platform: mac, arch: arm64 }
+          - { os: macos-15, platform: mac, arch: x64 }
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: desktop-${{ matrix.platform }}-${{ matrix.arch }}
+          path: installers
+      - name: Install and open the quarantined DMG and Homebrew command
+        env:
+          ARDUR_INSTALL_LOG_DIR: ${{ runner.temp }}/install-acceptance
+        run: bash scripts/release/install-acceptance-mac.sh installers/ardur-${{ needs.validate.outputs.version }}-mac-${{ matrix.arch }}.dmg
+      - name: Upload install logs and screenshots
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: install-acceptance-${{ matrix.platform }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/install-acceptance
+          if-no-files-found: warn
 
   evidence:
     name: Require validated scoreboard evidence

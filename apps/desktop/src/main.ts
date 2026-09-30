@@ -50,6 +50,7 @@ import { serviceGuidedStep } from "./guided-setup/services.js";
 import { firstGuidedSteps, systemPrerequisites } from "./guided-setup/steps.js";
 import { SetupJournalStore } from "./guided-setup/store.js";
 import { installHostService } from "./host-service-ipc.js";
+import { installSmokeEnabled, runInstallSmoke } from "./install-smoke.js";
 import {
   focusIntegration,
   integrationReturnId,
@@ -133,6 +134,11 @@ if (versionOutput !== null) {
 const PERFORMANCE_USER_DATA =
   process.env.ARDURBOT_USER_DATA_DIR || process.env.ARDURBOT_PERFORMANCE_USER_DATA;
 const GUIDED_SETUP_ENABLED = process.env.ARDURBOT_GUIDED_SETUP === "1";
+const INSTALL_SMOKE = installSmokeEnabled(process.env);
+if (INSTALL_SMOKE && !process.env.ARDURBOT_USER_DATA_DIR) {
+  console.error("Install smoke requires an isolated user-data directory.");
+  process.exit(1);
+}
 // The Electron lifecycle spec drives a scripted setup engine inside the running main process, and
 // Playwright's evaluate cannot import modules there; expose the loaded ones only when asked.
 if (process.env.ARDURBOT_GUIDED_SETUP_TEST_HOOK === "1")
@@ -212,7 +218,7 @@ configureDesktopUserData(app, PERFORMANCE_USER_DATA);
 if (process.platform === "linux") app.setDesktopName("ardur");
 // Chromium ignores this switch once ready; it must be appended before that.
 capDiskCacheSize(app.commandLine);
-if (!app.requestSingleInstanceLock()) process.exit(0);
+if (!app.requestSingleInstanceLock()) process.exit(INSTALL_SMOKE ? 1 : 0);
 let pendingIntegrationReturn: string | null = null;
 function returnToIntegration(value: string) {
   const id = integrationReturnId(value);
@@ -2024,6 +2030,46 @@ app.whenReady().then(async () => {
     },
   });
   if (process.platform !== "darwin") setMenuBar(true);
+
+  if (INSTALL_SMOKE) {
+    const watchdog = setTimeout(() => {
+      console.error("Install smoke timed out.");
+      app.exit(1);
+    }, 150_000);
+    const fail = () => {
+      console.error("Install smoke detected a crashed child process.");
+      app.exit(1);
+    };
+    app.on("child-process-gone", (_event, details) => {
+      if (details.reason !== "clean-exit") fail();
+    });
+    app.on("render-process-gone", fail);
+    try {
+      if (legacyCompose) throw new Error("Install smoke requires a fresh local profile.");
+      await runInstallSmoke({
+        start: () => localMode.start(),
+        healthy: async () => (await probeServer(localMode.origin())).ok,
+        open: async () => {
+          currentSetup = { mode: "new", serverUrl: localMode.origin() };
+          return openApp(localMode.origin());
+        },
+        screenshot: async () => {
+          if (process.env.ARDUR_INSTALL_SMOKE_SCREENSHOT && mainWindow) {
+            const image = await mainWindow.webContents.capturePage();
+            await writeFile(process.env.ARDUR_INSTALL_SMOKE_SCREENSHOT, image.toPNG());
+          }
+        },
+        stop: () => localMode.quit(),
+        report: (message) => console.log(message),
+      });
+      clearTimeout(watchdog);
+      app.quit();
+    } catch (error) {
+      console.error("Install smoke failed.", error);
+      app.exit(1);
+    }
+    return;
+  }
 
   if (target.kind === "setup") {
     showSetupWindow();

@@ -20,7 +20,15 @@ cask "ardur" do
   depends_on :macos
 
   app "Ardur.app"
-  binary "#{appdir}/Ardur.app/Contents/MacOS/Ardur", target: "ardur"
+  # Execute the bundle path, not Homebrew's binary symlink: Electron locates helpers beside it.
+  preflight do
+    require "shellwords"
+    executable = "#{appdir}/Ardur.app/Contents/MacOS/Ardur".shellescape
+    launcher = staged_path.join("ardur")
+    File.write(launcher, "#!/bin/bash\nexec #{executable} \"$@\"\n")
+    File.chmod(0755, launcher)
+  end
+  binary "ardur"
 
 @MACOS_CAVEATS@
 end
