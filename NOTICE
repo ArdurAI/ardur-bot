@@ -11,3 +11,9 @@ scripts/rename-from-upstream.py (added in commit 55fc04a9).
 
 "Rakazo" is the name of the upstream project. Ardur is not affiliated
 with or endorsed by the Rakazo project.
+
+Workspace layout and split policy are adapted from opencode
+(https://github.com/sst/opencode), commit
+2fa3363c924c5c3e367b84a87ae478296a0ed59b.
+Copyright (c) 2025 opencode. Licensed under the MIT License;
+the complete notice accompanies the adapted source.

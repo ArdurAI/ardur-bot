@@ -4,6 +4,36 @@ import { IdeEntrySchema, IdePathSchema } from "./ide.js";
 import { Id } from "./ids.js";
 import { RunActivityRowSchema } from "./runs.js";
 
+/** Only backed workspace views belong here; preview and plan have no renderer yet. */
+export const WorkspaceViewIdSchema = z.enum([
+  "tasks",
+  "files",
+  "terminal",
+  "routines",
+  "screen",
+  "computer",
+]);
+export type WorkspaceViewId = z.infer<typeof WorkspaceViewIdSchema>;
+export const WorkspaceViewSchema = z.object({ type: WorkspaceViewIdSchema }).strict();
+export type WorkspaceView = z.infer<typeof WorkspaceViewSchema>;
+export const WorkspaceOpenIntentSchema = z.object({ view: WorkspaceViewSchema }).strict();
+export type WorkspaceOpenIntent = z.infer<typeof WorkspaceOpenIntentSchema>;
+
+/** Local presentation only: never persist output, credentials, drafts or session handles. */
+export const WorkspaceLayoutSchema = z
+  .object({
+    version: z.literal(1),
+    open: z.array(WorkspaceViewSchema).max(6),
+    active: WorkspaceViewIdSchema.nullable(),
+    visible: z.boolean(),
+    expanded: z.boolean(),
+    position: z.enum(["right", "left", "bottom"]),
+    width: z.number().int().min(360).max(800),
+    height: z.number().int().min(200).max(600),
+  })
+  .strict();
+export type WorkspaceLayout = z.infer<typeof WorkspaceLayoutSchema>;
+
 export const WorkspaceContextSchema = z.object({
   botId: Id,
   computerId: Id.nullable(),
