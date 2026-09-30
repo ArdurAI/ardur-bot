@@ -277,8 +277,9 @@ export class PostgresDocumentStore extends JournalDocumentStore {
     private readonly tx: Prisma.TransactionClient,
     clock?: () => Date,
     private readonly selectListIds?: ListIds,
+    onUnsafeDocument?: (path: string) => void,
   ) {
-    super(new PostgresMemoryJournal(tx), "postgres", clock);
+    super(new PostgresMemoryJournal(tx), "postgres", clock, onUnsafeDocument);
   }
 
   private async currentRevisions(rows: DocumentRow[]): Promise<Map<string, RevisionRow>> {
@@ -312,12 +313,13 @@ export class PostgresDocumentStore extends JournalDocumentStore {
     const byId = new Map(rows.map((row) => [row.id, row]));
     const ordered = ids.flatMap(({ id }) => (byId.has(id) ? [byId.get(id)!] : []));
     const latest = await this.currentRevisions(ordered);
-    const page = {
-      items: ordered.slice(0, limit).map((row) => rowHead(row, latest.get(row.id))),
+    return {
+      items: this.withoutUnsafe(
+        ordered.slice(0, limit).map((row) => rowHead(row, latest.get(row.id))),
+        access.knownSecrets,
+      ),
       nextCursor: ordered.length > limit ? ordered[limit - 1]!.id : null,
     };
-    assertMemorySafe(page, access.knownSecrets);
-    return page;
   }
 
   override async read(id: string, access: MemoryAccess) {

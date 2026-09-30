@@ -12,7 +12,7 @@ import type {
 import { MemoryAccessError, MemoryConflictError } from "@ardurbot/adapter-kit";
 import { DocumentRevisionSchema } from "@ardurbot/contracts";
 import { previewImport, requireImportReady } from "./portable.js";
-import { assertMemoryPath, assertMemorySafe } from "./redaction.js";
+import { assertMemoryPath, assertMemorySafe, MemoryRedactionError } from "./redaction.js";
 import { assertScope, canAccess, scopeKey } from "./scope.js";
 
 export interface JournalDocument {
@@ -45,7 +45,29 @@ export class JournalDocumentStore implements MemoryDocumentStore {
     protected readonly journal: MemoryJournal,
     private readonly id: string,
     private readonly clock: () => Date = () => new Date(),
+    /** Called with the path (never the content) of a stored document the credential check refused. */
+    private readonly onUnsafeDocument?: (path: string) => void,
   ) {}
+  /**
+   * A stored document that fails the credential check stays out of the page instead of
+   * failing the whole read: one refused note must never stop every bot in the space. Writes
+   * still refuse such content up front (see commit).
+   */
+  protected withoutUnsafe<T extends { path: string }>(
+    items: T[],
+    knownSecrets: readonly string[] = [],
+  ): T[] {
+    return items.filter((doc) => {
+      try {
+        assertMemorySafe(doc, knownSecrets);
+        return true;
+      } catch (error) {
+        if (!(error instanceof MemoryRedactionError)) throw error;
+        this.onUnsafeDocument?.(doc.path);
+        return false;
+      }
+    });
+  }
   describe(): ReturnType<MemoryDocumentStore["describe"]> {
     return {
       id: this.id,
@@ -71,12 +93,10 @@ export class JournalDocumentStore implements MemoryDocumentStore {
             (!input.cursor || doc.id > input.cursor),
         )
         .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-      const page = {
-        items: items.slice(0, limit),
+      return {
+        items: this.withoutUnsafe(items.slice(0, limit), access.knownSecrets),
         nextCursor: items.length > limit ? items[limit - 1]!.id : null,
       };
-      assertMemorySafe(page, access.knownSecrets);
-      return page;
     });
   }
   async read(id: string, access: MemoryAccess) {
