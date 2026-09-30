@@ -368,6 +368,7 @@ function fixture({
     cwd,
     evidence,
     deviceApprovalBinding: prisma.deviceApprovalBinding,
+    externalEffect,
     grant,
     effects,
     results,
@@ -501,7 +502,13 @@ describe("connector read-only metadata and approval enforcement", () => {
     it.each(["argv", "program", "identity", "workspace", "cwd", "legacy", "transport"])(
       "refuses a resumed approval after %s changes",
       async (changed) => {
-        const f = fixture({ name: "execute_command", catalog, integration: true, host: true });
+        const f = fixture({
+          name: "execute_command",
+          catalog,
+          integration: true,
+          host: true,
+          governance: true,
+        });
         await f.run();
         f.effects[0]!.status = "approved";
         if (changed === "argv")
@@ -522,6 +529,7 @@ describe("connector read-only metadata and approval enforcement", () => {
         expect(f.results.at(-1)).toEqual({
           error: "This command changed or has no bound approval. Review it again.",
         });
+        expect(f.evidence.records.some((row) => row.verdict === "compliant")).toBe(false);
       },
     );
   });
@@ -893,6 +901,20 @@ it.each(["bot-1", "different-bot"])(
 );
 
 describe("tool decision evidence in the executor", () => {
+  it("records only denial when a host command binding changes at claim time", async () => {
+    const f = fixture({ name: "execute_command", integration: true, host: true, governance: true });
+    await f.run();
+    f.effects[0]!.status = "approved";
+    const changed = structuredClone(f.effects[0]!);
+    approvalRequestRoute(changed.request)!.hostCommand!.cwd = "/changed-workspace";
+    f.externalEffect.findUnique.mockResolvedValue(changed);
+    await f.run();
+    expect(f.execute).not.toHaveBeenCalled();
+    expect(f.results.at(-1)).toEqual({
+      error: "This command changed or has no bound approval. Review it again.",
+    });
+    expect(f.evidence.records.map((row) => row.decisionKind)).toEqual(["asked", "denied_by_rule"]);
+  });
   it("records an auto-review allow and a matching rule id", async () => {
     reviewMock.mockResolvedValue({ decision: "pass", reason: "Allowed", model: "mock" });
     const auto = fixture({ governance: true, autoReview: true, name: "demo_send_message" });
@@ -958,7 +980,6 @@ describe("tool decision evidence in the executor", () => {
     expect(f.execute).not.toHaveBeenCalled();
     expect(f.evidence.records.map((row) => row.decisionKind)).toEqual([
       "asked",
-      "approved_by_owner",
       "approval_expired",
     ]);
   });

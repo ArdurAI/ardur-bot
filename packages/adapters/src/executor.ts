@@ -3807,16 +3807,20 @@ export function createRunExecutor(deps: ExecutorDeps) {
             from: "approved" | "intended",
           ): Promise<unknown | undefined> => {
             if (!(await enforceCeiling())) return pauseForApproval();
-            const recordingError = await recordEvidence(allowKind, allowRuleId, allowDecisionId);
-            if (recordingError) return recordingError;
             if (
               hostCommand &&
               !hostCommandApprovalMatches(
                 approvalRequestRoute(applied!.effect.request)?.hostCommand,
                 hostCommand,
               )
-            )
+            ) {
+              await recordEvidence(
+                "denied_by_rule",
+                "host_command_binding",
+                `effect:${applied!.effect.id}:denied_by_rule`,
+              );
               return { error: "This command changed or has no bound approval. Review it again." };
+            }
             if (from === "approved") {
               try {
                 await revalidateDeviceApprovalExecution(
@@ -3832,10 +3836,18 @@ export function createRunExecutor(deps: ExecutorDeps) {
                     undefined,
                     `effect:${applied!.effect.id}:approval_expired`,
                   );
+                } else {
+                  await recordEvidence(
+                    "denied_by_rule",
+                    "device_approval",
+                    `effect:${applied!.effect.id}:denied_by_rule`,
+                  );
                 }
                 throw error;
               }
             }
+            const recordingError = await recordEvidence(allowKind, allowRuleId, allowDecisionId);
+            if (recordingError) return recordingError;
             const claim = from === "approved" ? claimApprovedEffect : claimIntendedEffect;
             if (await claim(deps.prisma, applied!.effect.id)) {
               claimedEffect = true;
