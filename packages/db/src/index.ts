@@ -15,6 +15,7 @@ export * from "./delegation-rework.js";
 export * from "./device-grants.js";
 export * from "./dispatch.js";
 export * from "./events.js";
+export * from "./evidence.js";
 export * from "./external-conversations.js";
 export * from "./goals.js";
 export * from "./group-asks.js";
