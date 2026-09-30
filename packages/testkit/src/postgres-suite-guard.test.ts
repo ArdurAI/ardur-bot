@@ -23,7 +23,8 @@ async function postgresSuites(directory: string, relative = ""): Promise<string[
     entries.map(async (entry) => {
       if (entry.name === ".git" || entry.name === "node_modules") return [];
       const childRelative = path.join(relative, entry.name);
-      if (entry.isDirectory()) return postgresSuites(path.join(directory, entry.name), childRelative);
+      if (entry.isDirectory())
+        return postgresSuites(path.join(directory, entry.name), childRelative);
       return entry.isFile() && entry.name.endsWith(".postgres.test.ts") ? [childRelative] : [];
     }),
   );
@@ -35,9 +36,9 @@ it("accounts for every PostgreSQL test suite in integration CI or a documented o
     path.join(repositoryRoot, "packages/testkit/src/cli/harness.ts"),
     "utf8",
   );
-  const suiteBlock = harness.match(/const suites = \[([\s\S]*?)\n      \];/)?.[1];
+  const suiteBlock = harness.match(/const suites = \[([\s\S]*?)\n\s*\];/)?.[1];
   expect(suiteBlock, "integration harness suite list").toBeDefined();
-  const inHarness = [...suiteBlock!.matchAll(/"([^\"]+\.postgres\.test\.ts)"/g)].map(
+  const inHarness = [...suiteBlock!.matchAll(/"([^"]+\.postgres\.test\.ts)"/g)].map(
     (match) => match[1]!,
   );
   const files = await postgresSuites(repositoryRoot);
