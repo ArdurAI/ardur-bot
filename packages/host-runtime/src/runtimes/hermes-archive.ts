@@ -21,7 +21,7 @@ export class HermesArchiveError extends Error {
   }
 }
 
-type TarKind = "file" | "dir" | "symlink" | "skip" | "refuse";
+type TarKind = "file" | "dir" | "skip" | "refuse";
 
 type TarEntry = {
   kind: TarKind;
@@ -104,7 +104,7 @@ export async function gitTreeIdOfArchive(gzip: Buffer, inflated: number): Promis
   let files = 0;
   for (const entry of readTar(tar)) {
     if (entry.kind === "skip" || entry.kind === "dir") continue;
-    if (entry.kind === "refuse" || entry.kind === "symlink") throw new HermesArchiveError();
+    if (entry.kind === "refuse") throw new HermesArchiveError();
     const relative = stripTop(entry.path, entry.kind, (name) => {
       if (top === undefined) top = name;
       else if (top !== name) throw new HermesArchiveError();
