@@ -7,8 +7,9 @@ source_path: "docs/terminal/docker-terminal.md"
 > [Source: docs/terminal/docker-terminal.md](https://github.com/ArdurAI/ardur-bot/blob/__ARDUR_BOT_SOURCE_REF__/docs/terminal/docker-terminal.md). Edit the source file, then run `python3 site/scripts/sync_docs.py` to refresh this page.
 
 The computer overlay keeps Screen as its default. Terminal is a human shell in the selected
-Docker computer. It uses the existing takeover and Release controls. Other computer providers
-remain unavailable. Mobile does not load the terminal renderer.
+deployment Docker, saved Docker/Podman or SSH computer. Saved connections use Fleet directly
+or through the host bridge. It uses the existing takeover and Release controls. Other computer
+providers remain unavailable. Mobile does not load the terminal renderer.
 
 ```mermaid
 flowchart LR
@@ -31,7 +32,10 @@ flowchart LR
 - A ticket expires after at most 15 seconds and can be consumed once, only by its bound Origin.
   It travels in the first WebSocket message, not a URL or log. Each reconnect requests a new ticket.
 - Output is kept in memory, with 64 KiB payloads, a 256 KiB unacknowledged window and a 2 MiB replay
-  buffer. The renderer acknowledges after xterm consumes a frame. Input is never replayed.
+  buffer. Output sequences start at 1, including the first shell prompt. The renderer acknowledges
+  after xterm consumes a frame. Input payloads share the 64 KiB limit, including Fleet; oversize
+  input is refused before writing to the child. UTF-8 and binary bytes are preserved. Input is
+  never replayed.
 - Disconnect grace is at most 30 seconds and never exceeds the control lease. A lost history or
   process requires an explicit new session. Closing the view closes its session.
 - `terminal_audit` records lifecycle metadata in sequence order. It has no columns for terminal
@@ -86,4 +90,6 @@ The baseline file contains either `gzipBytes` or `initial.gzipBytes`.
 The offline suites cover protocol bounds, Unicode and binary data, ticket binding, cross-scope
 authorization, admission races, input fencing, cleanup ordering, replay, backpressure and audit
 order. The web Playwright spec captures the unavailable and active terminal surfaces for CI.
+Fake-child tests exercise real Fleet output through the gateway directly and through the host
+bridge, including the first two output frames, boundary input, oversize refusal and cleanup.
 A real Docker smoke test must also verify interactive job control and descendant cleanup.

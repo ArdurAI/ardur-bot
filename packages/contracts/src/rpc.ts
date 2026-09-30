@@ -1,3 +1,8 @@
+import {
+  ProtectedLocationsPatchInputSchema,
+  ProtectedLocationsReadInputSchema,
+  ProtectedLocationViewsSchema,
+} from "@ardurbot/contracts/protected-locations";
 import { eventIterator, oc } from "@orpc/contract";
 import * as z from "zod";
 import { accountContract } from "./account.js";
@@ -1494,7 +1499,15 @@ export const appContract = {
   search: {
     query: oc.input(z.object({ q: z.string().max(200) })).output(SearchQueryOutputSchema),
   },
-  delegations: delegationsContract,
+  delegations: {
+    ...delegationsContract,
+    protectedLocations: oc
+      .input(ProtectedLocationsReadInputSchema)
+      .output(ProtectedLocationViewsSchema),
+    patchProtectedLocations: oc
+      .input(ProtectedLocationsPatchInputSchema)
+      .output(ProtectedLocationViewsSchema),
+  },
   goals: goalsContract,
   botComms: botCommsContract,
   team: teamContract,

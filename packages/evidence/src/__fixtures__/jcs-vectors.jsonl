@@ -1,0 +1,5 @@
+{"input": {"b": 2, "a": 1, "c": {"z": null, "y": [3, 2, 1]}}, "jcs": "{\"a\":1,\"b\":2,\"c\":{\"y\":[3,2,1],\"z\":null}}"}
+{"input": {"\u20ac": "euro", "\r": "cr", "1": "one", "\u0080": "ctrl", "\ud83d\ude00": "emoji", "a": "a", "\ufb33": "hebrew"}, "jcs": "{\"\\r\":\"cr\",\"1\":\"one\",\"a\":\"a\",\"\u0080\":\"ctrl\",\"\u20ac\":\"euro\",\"\ud83d\ude00\":\"emoji\",\"\ufb33\":\"hebrew\"}"}
+{"input": {"numbers": [0, -0.0, 1, -1, 1.5, 0.1, 1e+21, 1e-07, 4.5, 0.002, 1e+30, 9007199254740991, 333333333.3333333, 1e-06, 5e-324]}, "jcs": "{\"numbers\":[0,0,1,-1,1.5,0.1,1e+21,1e-7,4.5,0.002,1e+30,9007199254740991,333333333.3333333,0.000001,5e-324]}"}
+{"input": {"s": "tab\there \"quoted\" back\\slash \u0007 bell \u001f unit \u2028 ls \u00e9 \u007f del / slash"}, "jcs": "{\"s\":\"tab\\there \\\"quoted\\\" back\\\\slash \\u0007 bell \\u001f unit \u2028 ls \u00e9 \u007f del / slash\"}"}
+{"input": {"nested": {"arr": [{"k": true}, {"k": false}, null, "x"]}, "empty": {}, "list": []}, "jcs": "{\"empty\":{},\"list\":[],\"nested\":{\"arr\":[{\"k\":true},{\"k\":false},null,\"x\"]}}"}
