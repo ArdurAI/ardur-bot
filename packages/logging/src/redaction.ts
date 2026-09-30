@@ -51,22 +51,40 @@ export function redactBindings(bindings: Record<string, unknown>): Record<string
 }
 
 const EMAIL = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
-const BEARER = /\bBearer\s+[^\s"',;&]+/gi;
-const SECRET_ASSIGNMENT =
-  /\b([A-Za-z0-9_]*(?:password|secret|token|authorization|apikey|api_key)[A-Za-z0-9_]*)\s*[:=]\s*\S+/gi;
-// Empty, redacted, elided and template values ("", "...", "<token>", "${TOKEN}") are placeholders.
-const JSON_SECRET_FIELD =
-  /"(password|passwd|secret|token|authorization|apikey|api_key|accesstoken|refreshtoken|email|cookie)"\s*:\s*"(?!(?:|\[Redacted\]|[.*…]+|<[^"<>]+>|\$\{[^"{}]+\}|\{\{[^"{}]+\}\})")(?:\\.|[^"\\])*"/gi;
-const BARE_SECRET =
-  /\b(?:sk-(?:or-v1-)?[A-Za-z0-9_-]{8,}|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|(?:ak_|ck_)[A-Za-z0-9]+)\b/g;
+// Quoted values must be consumed whole, before the unquoted assignment rule.
+// Empty, elided and template values are documentation placeholders, not secrets.
+const TEXT_REDACTIONS: readonly [RegExp, string][] = [
+  [
+    /(["'][^"'\r\n]*(?:password|passwd|secret|token|key|credential|authorization|cookie|email)[^"'\r\n]*["']\s*:\s*)"(?!(?:|\[Redacted\]|[.*…]+|<[^"<>]+>|\$\{[^"{}]+\}|\{\{[^"{}]+\}\})")(?:\\.|[^"\\])*"/gi,
+    `$1"${REDACTED}"`,
+  ],
+  [
+    /((?:["']?[A-Za-z0-9_-]*(?:password|passwd|secret|token|key|credential|authorization|cookie)[A-Za-z0-9_-]*["']?)\s*[:=]\s*)'(?!(?:|\[Redacted\]|[.*…]+|<[^'<>]+>)')(?:\\.|[^'\\])*'/gi,
+    `$1'${REDACTED}'`,
+  ],
+  [
+    /\b([A-Za-z0-9_-]*(?:password|passwd|secret|token|key|credential|authorization|cookie)[A-Za-z0-9_-]*)\s*=\s*"(?:\\.|[^"\\])*"/gi,
+    `$1="${REDACTED}"`,
+  ],
+  [/\b(Bearer\s+)[^\s"',;&}]+/gi, `$1${REDACTED}`],
+  [
+    /\b([A-Za-z0-9_-]*(?:password|passwd|secret|token|key|credential|authorization|cookie)[A-Za-z0-9_-]*)["']?\s*[:=]\s*(?!["'])[^\s,;}]+/gi,
+    `$1=${REDACTED}`,
+  ],
+  [/\bgh[pousr]_[A-Za-z0-9_]+\b/g, REDACTED],
+  [/\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g, REDACTED],
+  [/(?<![A-Za-z0-9/+=])[A-Za-z0-9/+]{40}(?:=)?(?![A-Za-z0-9/+=])/g, REDACTED],
+  [/\b(?:sk-|xai-)[A-Za-z0-9_-]{8,}\b/g, REDACTED],
+  [/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, REDACTED],
+  [/\b(?:ak_|ck_)[A-Za-z0-9]+\b/g, REDACTED],
+  [/(https?:\/\/)[^\s/@]+:[^\s/@]+@/gi, `$1${REDACTED}@`],
+];
 
 export function redactSensitiveText(text: string): string {
-  return text
-    .replace(EMAIL, REDACTED)
-    .replace(JSON_SECRET_FIELD, `"$1":"${REDACTED}"`)
-    .replace(BEARER, `Bearer ${REDACTED}`)
-    .replace(SECRET_ASSIGNMENT, (_match, key: string) => `${key}=${REDACTED}`)
-    .replace(BARE_SECRET, REDACTED);
+  let result = text.replace(EMAIL, REDACTED);
+  for (const [pattern, replacement] of TEXT_REDACTIONS)
+    result = result.replace(pattern, replacement);
+  return result;
 }
 
 function shouldRedactKey(key: string): boolean {

@@ -2,6 +2,20 @@ import { describe, expect, it } from "vitest";
 import { redactBindings, redactSensitiveText } from "./redaction.js";
 
 describe("redaction", () => {
+  it.each([
+    "PASSWORD",
+    "Secret",
+    "accessToken",
+    "Api_Key",
+    "CREDENTIAL",
+    "Authorization",
+    "Cookie",
+  ])("redacts a whole quoted %s value, including escaped quotes", (key) => {
+    const raw = JSON.stringify({ [key]: 'alpha "beta" gamma' });
+    const result = redactSensitiveText(raw);
+    expect(result).not.toMatch(/alpha|beta|gamma/);
+    expect(JSON.parse(result)).toEqual({ [key]: "[Redacted]" });
+  });
   it("redacts secrets, credentials, and message bodies", () => {
     const redacted = redactBindings({
       "user.id": "user-1",
@@ -112,7 +126,7 @@ describe("redaction", () => {
       '{"email": "[Redacted]", "password": "", "token": "...", "apiKey": "<key>", "secret": "${SECRET}"}';
     expect(redactSensitiveText(example)).toBe(example);
     expect(redactSensitiveText('{"email": "[Redacted]", "token": "abc"}')).toBe(
-      '{"email": "[Redacted]", "token":"[Redacted]"}',
+      '{"email": "[Redacted]", "token": "[Redacted]"}',
     );
   });
 });
