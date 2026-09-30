@@ -296,7 +296,7 @@ import { resolveDeploymentModel } from "./deployment-model.js";
 import type { DecisionKind } from "./evidence/decision-kinds.js";
 import { recordToolDecision } from "./evidence/executor.js";
 import type { EvidenceRecorder } from "./evidence/recorder.js";
-import { createEvidenceRecorder } from "./evidence/recorder.js";
+import { createNoopEvidenceRecorder } from "./evidence/recorder.js";
 import { createEvidenceSealer } from "./evidence/seal.js";
 import { startExecutionHeartbeat } from "./execution-heartbeat.js";
 import { beforeFileChange, fileChangeText, recordFileChange } from "./file-changes.js";
@@ -1063,13 +1063,7 @@ export function buildApprovalContinuation(
 }
 
 export function createRunExecutor(deps: ExecutorDeps) {
-  const evidenceRecorder =
-    deps.evidenceRecorder ??
-    createEvidenceRecorder({
-      store: createEvidenceStore(deps.prisma),
-      secretStore: deps.secretStore,
-      logFailure: (codes) => getLogger().warn("evidence verification failed", { codes }),
-    });
+  const evidenceRecorder = deps.evidenceRecorder ?? createNoopEvidenceRecorder();
   // Capture the injected runtime capability once for stable peer admission.
   const scriptedRuntimeAvailable = Boolean(deps.runtime?.describe().capabilities.scripted);
   const runtimeRegistry =
@@ -1529,11 +1523,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
       };
     },
     resolveConnectedModel,
-    sealRunEvidence: createEvidenceSealer({
-      prisma: deps.prisma,
-      store: createEvidenceStore(deps.prisma),
-      recorder: evidenceRecorder,
-    }),
+    sealRunEvidence: deps.evidenceRecorder
+      ? createEvidenceSealer({
+          prisma: deps.prisma,
+          store: createEvidenceStore(deps.prisma),
+          recorder: evidenceRecorder,
+        })
+      : evidenceRecorder.sealRunEvidence,
     async resolveModel(
       scope: { userId: string; spaceId: string; botId?: string },
       newAdmission = false,

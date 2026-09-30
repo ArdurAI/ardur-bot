@@ -1,8 +1,25 @@
 import { describe, expect, it, vi } from "vitest";
 import { EncryptedSecretStore } from "../secrets.js";
 import { EVIDENCE_RECORDING_ERROR, recordToolDecision } from "./executor.js";
-import { createEvidenceRecorder } from "./recorder.js";
+import { createEvidenceRecorder, createNoopEvidenceRecorder } from "./recorder.js";
 import { fakeEvidenceStore } from "./test-store.js";
+
+describe("optional recording", () => {
+  it("does not refuse state-changing tools when no recorder is configured", async () => {
+    const recorder = createNoopEvidenceRecorder();
+    const input = {
+      run: { id: "run-test", spaceId: "space-test", botId: "bot-test", userId: "user-test" },
+      toolName: "shell",
+      viaConnector: false,
+      args: { command: "fixture command" },
+      decisionKind: "allowed_by_default" as const,
+    };
+    expect(await recorder.recordDecision(input)).toEqual({ ok: true, recorded: false });
+    expect(await recordToolDecision(recorder, input)).toBeUndefined();
+    recorder.releaseRunState(input.run.id);
+    expect(await recorder.sealRunEvidence(input.run.id)).toEqual({ ok: true, recorded: false });
+  });
+});
 
 describe("recording failure policy", () => {
   it.each([

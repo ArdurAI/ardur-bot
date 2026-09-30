@@ -35,7 +35,7 @@ export interface RecordDecisionInput {
   decisionId?: string;
   secrets?: string[];
 }
-export type EvidenceResult = { ok: true } | { ok: false; reason: string };
+export type EvidenceResult = { ok: true; recorded?: boolean } | { ok: false; reason: string };
 interface RecorderDeps {
   store: EvidenceStore;
   secretStore: Pick<EncryptedSecretStore, "put" | "load">;
@@ -288,3 +288,15 @@ export function createEvidenceRecorder(deps: RecorderDeps) {
 }
 
 export type EvidenceRecorder = ReturnType<typeof createEvidenceRecorder>;
+
+export function createNoopEvidenceRecorder(): EvidenceRecorder {
+  return {
+    async recordDecision() {
+      return { ok: true, recorded: false };
+    },
+    async sealRunEvidence() {
+      return { ok: true, recorded: false };
+    },
+    releaseRunState() {},
+  };
+}

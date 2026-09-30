@@ -25,6 +25,7 @@ import {
   createMemoryLifecycle,
   createMessagingContextLoader,
   createPostgresReconciliationLeadership,
+  createRunEvidenceRecorder,
   createRunExecutor,
   createRunSandbox,
   createRunSecretWriter,
@@ -199,6 +200,7 @@ async function main() {
   const memoryLifecycleDeps = { prisma, secrets, jobs, dataDir };
   const { memory, service: memoryDocuments } = createMemoryLifecycle(memoryLifecycleDeps);
   const executor = createRunExecutor({
+    evidenceRecorder: createRunEvidenceRecorder({ prisma, secretStore: secrets }),
     prisma,
     lockPool,
     runtime,

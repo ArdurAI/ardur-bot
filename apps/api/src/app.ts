@@ -27,6 +27,7 @@ import {
   createMemoryLifecycle,
   createMessagingContextLoader,
   createMessagingTeamChatSender,
+  createRunEvidenceRecorder,
   createRunExecutor,
   createRunSandbox,
   createRunSecretWriter,
@@ -432,6 +433,7 @@ export async function createApp(
   });
   const shutdown = new AbortController();
   const executor = createRunExecutor({
+    evidenceRecorder: createRunEvidenceRecorder({ prisma, secretStore: secrets }),
     prisma,
     lockPool: created.lockPool,
     runtime,
