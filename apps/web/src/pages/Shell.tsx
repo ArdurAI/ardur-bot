@@ -3579,7 +3579,7 @@ export function ShellPage({
         className={`${team || board || dashboard ? "hidden" : "flex"} min-w-0 flex-1 flex-col bg-background`}
       >
         <div className="app-drag flex items-center justify-between border-b border-sidebar-border px-3 py-[17px] md:px-[22px]">
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             {/* Collapsed bots sidebar: this header is the leading edge for window chrome. */}
             {botsSidebarCollapsed && desktopBridge() ? <WindowChrome /> : null}
             <button
@@ -3610,7 +3610,7 @@ export function ShellPage({
                 setModelFocusRequest(0);
                 setPanel(inGroup ? "group-settings" : "settings");
               }}
-              className="app-no-drag flex min-w-0 items-center gap-3"
+              className="app-no-drag flex max-w-48 shrink-0 items-center gap-3"
             >
               {inGroup ? (
                 <GroupAvatar
@@ -3627,7 +3627,10 @@ export function ShellPage({
                 />
               ) : null}
               <span className="min-w-0">
-                <span className="block truncate text-[16px] font-medium text-foreground" dir="auto">
+                <span
+                  className="block break-words text-[16px] font-medium text-foreground"
+                  dir="auto"
+                >
                   {inGroup
                     ? (activeGroup?.name ?? activeSnapshot?.groupName ?? t`Group`)
                     : (active?.name ?? t`Select a bot`)}
@@ -3653,7 +3656,7 @@ export function ShellPage({
             ) : null}
             <RunContext run={activeSnapshot?.contextRun ?? activeSnapshot?.run} />
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1">
             {(inGroup ? activeGroup : active) ? (
               <ThreadSettingsButton
                 group={inGroup}

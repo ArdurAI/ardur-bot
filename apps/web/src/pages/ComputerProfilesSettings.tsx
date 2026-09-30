@@ -90,6 +90,7 @@ export function ComputerProfile({
   connections,
   deploymentDefault = "docker",
   onChanged,
+  choicesOnly = false,
 }: {
   botId: string;
   name: string;
@@ -97,13 +98,14 @@ export function ComputerProfile({
   connections: Connection[];
   deploymentDefault?: string | null;
   onChanged: () => Promise<void>;
+  choicesOnly?: boolean;
 }) {
   const { t } = useLingui();
-  const savedConnectionId = status.connectionId ?? "";
+  const savedConnectionId = status.kind === "desktop" ? "" : (status.connectionId ?? "");
   const [profile, setProfile] = useState<ComputerProfileId>(status.imageProfile ?? "base");
   const [selection, setSelection] = useState(savedConnectionId);
   useEffect(() => {
-    setSelection(status.connectionId ?? "");
+    setSelection(status.kind === "desktop" ? "" : (status.connectionId ?? ""));
   }, [status.connectionId, status.kind]);
   const [confirm, setConfirm] = useState(false);
   const [pending, setPending] = useState(false);
@@ -156,7 +158,7 @@ export function ComputerProfile({
       : (connection?.settings.engine ??
         (choosingDefault && deploymentDefault ? deploymentDefault : status.kind));
   const hostComputer = status.kind === "desktop";
-  const hostLabel = status.hostLabel === "This Mac" ? t`this Mac` : t`this computer`;
+
   const engineLabel = (kind: string) =>
     kind !== "desktop"
       ? (ENGINE_LABELS[kind] ?? kind)
@@ -205,23 +207,28 @@ export function ComputerProfile({
       setPending(false);
     }
   }
-  const label = engineLabel(engine);
+  const label = engineLabel(status.kind);
   return (
     <section className="space-y-3 rounded-xl border border-border p-4">
-      <h4>{status.mode === "team" ? t`Team Computer` : name}</h4>
-      <p className="text-sm text-muted-foreground">
-        <Trans>Engine: {label}</Trans>
-      </p>
-      <RuntimeSummary status={status} locationName={savedConnection?.name} />
-      {selection !== savedConnectionId && selectedKind && selectedFacts ? (
-        <RuntimeBoundary kind={selectedKind} locationName={connection?.name} />
+      {!choicesOnly ? (
+        <>
+          <h4>{status.mode === "team" ? t`Team Computer` : name}</h4>
+          <p className="text-sm text-muted-foreground">
+            <Trans>Engine: {label}</Trans>
+          </p>
+          <RuntimeSummary
+            status={status}
+            locationName={hostComputer ? undefined : savedConnection?.name}
+          />
+        </>
       ) : null}
-      {hostComputer ? (
-        <p className="text-xs text-muted-foreground/80">
-          {status.hostLabel === "This Mac"
-            ? t`macOS will not ask for extra permission if you let bots run on this Mac. They run as you.`
-            : t`Your OS will not ask for extra permission if you let bots run on ${hostLabel}. They run as you.`}
-        </p>
+      {selection !== savedConnectionId && selectedKind && selectedFacts ? (
+        <div className="space-y-2 text-sm">
+          <p>
+            {selectedFacts.boundary === "container" ? t`Move to a container` : t`Change computer`}
+          </p>
+          <RuntimeBoundary kind={selectedKind} locationName={connection?.name} />
+        </div>
       ) : null}
       {engineError ? (
         <div role="alert" className="text-sm text-destructive">
@@ -243,7 +250,9 @@ export function ComputerProfile({
             disabled={pending}
             onChange={(event) => setSelection(event.target.value)}
           >
-            <NativeSelectOption value={savedConnectionId}>{sourceLabel}</NativeSelectOption>
+            <NativeSelectOption value={savedConnectionId}>
+              {choicesOnly ? t`Keep current location` : sourceLabel}
+            </NativeSelectOption>
             {offerDeploymentDefault ? (
               <NativeSelectOption value={DEPLOYMENT_DEFAULT}>{defaultOption}</NativeSelectOption>
             ) : null}

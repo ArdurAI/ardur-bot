@@ -271,7 +271,7 @@ vi.mock("../lib/rpc", () => {
         sandboxProvider: "fake",
         avatarStyle: "robot",
       }),
-      models: { list: record("models.list"), credentials: record("models.credentials") },
+      models: { list: async () => [], credentials: async () => [] },
       runs: { list: record("runs.list") },
       team: { board: record("team.board") },
       search: { query: record("search.query") },
@@ -506,6 +506,35 @@ async function deliverCapabilityFlip(botId: string, graphical: boolean) {
   await until(() => count("threads.get") > seen);
   await tick(200);
 }
+
+it("keeps the full bot name while the long model label truncates first", async () => {
+  const original = state.bots;
+  state.bots = [
+    {
+      ...original[0]!,
+      name: "Graphical Reviewer",
+      runtimeKind: "claude-code",
+      modelId: "a-very-long-model-label-that-must-shrink-before-the-bot-name",
+      thinkingLevel: "high",
+    },
+    original[1]!,
+  ];
+  try {
+    await renderShell("/app/bot-1");
+    const identity = host.querySelector('[data-testid="bot-settings-trigger"]')!;
+    const name = [...identity.querySelectorAll("span")].find(
+      (entry) => entry.textContent === "Graphical Reviewer" && entry.classList.contains("block"),
+    )!;
+    expect(name.textContent).toBe("Graphical Reviewer");
+    expect(name.classList.contains("truncate")).toBe(false);
+    expect(identity.classList.contains("shrink-0")).toBe(true);
+    expect(identity.classList.contains("max-w-48")).toBe(true);
+    const model = host.querySelector('[aria-label^="Change model:"] .truncate')!;
+    expect(model.textContent).toContain("a-very-long-model-label");
+  } finally {
+    state.bots = original;
+  }
+});
 
 it("runs the heartbeat only while a screen surface is really rendered across capability transitions", async () => {
   await renderShell("/app/bot-1");

@@ -1,15 +1,49 @@
 import { describe, expect, it } from "vitest";
 import {
   COMPUTER_KINDS,
+  COMPUTER_STATES,
   computerCapabilities,
   computerKindFacts,
   computerRuntimeSummary,
+  interruptedComputerUpdate,
   recommendedContainer,
 } from "./computer-connections.js";
-import { CreateBotInput } from "./domain.js";
+import type { ComputerUpdate } from "./domain.js";
+import { ComputerStatusSchema, CreateBotInput } from "./domain.js";
 import { SandboxKind } from "./ids.js";
 
 describe("computer execution facts", () => {
+  it("matches interrupted updates to the actual computer, including shared bots", () => {
+    const update: ComputerUpdate = {
+      id: "update",
+      computerId: "team-computer",
+      botId: "other-bot",
+      name: "Builder",
+      mode: "team",
+      status: "interrupted",
+      stage: "saving",
+      action: "update",
+    };
+    expect(interruptedComputerUpdate({ botId: "bot", computerId: "team-computer" }, [update])).toBe(
+      update,
+    );
+    expect(
+      interruptedComputerUpdate({ botId: "other-bot", computerId: "different" }, [update]),
+    ).toBeUndefined();
+    expect(
+      interruptedComputerUpdate({ botId: "bot", computerId: "team-computer" }, [
+        { ...update, status: "running" },
+      ]),
+    ).toBeUndefined();
+  });
+  it("covers every computer state with an honest phrase", () => {
+    expect(Object.keys(COMPUTER_STATES).sort()).toEqual(
+      [...ComputerStatusSchema.shape.state.options].sort(),
+    );
+    expect(
+      computerRuntimeSummary({ kind: "desktop", mode: "team", state: "suspending" }),
+    ).toMatchObject({ location: "This computer", stateLabel: "Paused for an update" });
+  });
   it("covers every supported kind in one table, without offering a VM", () => {
     expect(Object.keys(COMPUTER_KINDS).sort()).toEqual([...SandboxKind.options].sort());
     expect(computerKindFacts("vm")).toBeNull();

@@ -1149,10 +1149,6 @@ msgstr "{asked, plural, one {#개 봇} other {#개 봇}}에게 질문 · {answer
 msgid "asks first"
 msgstr ""
 
-#: src/pages/dashboard/ComputersPanel.tsx
-msgid "Asleep"
-msgstr ""
-
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
 msgid "Assignee"
@@ -1386,10 +1382,6 @@ msgstr "보드 상태"
 msgid "Boards"
 msgstr "보드"
 
-#: src/pages/dashboard/ComputersPanel.tsx
-msgid "Booting"
-msgstr ""
-
 #: src/pages/Shell.tsx
 msgid "Booting live desktop…"
 msgstr "라이브 데스크톱 부팅 중…"
@@ -1535,10 +1527,10 @@ msgstr "서버에 연결할 수 없습니다."
 
 #: src/components/AskCard.tsx
 #: src/components/ComputerMaintenanceActions.tsx
-#: src/components/ComputerUpdateProgress.tsx
 #: src/components/Context.tsx
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/OllamaSettings.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -2558,8 +2550,9 @@ msgid "Could not clear conversation"
 msgstr "대화 내용을 비우지 못했습니다."
 
 #: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Could not complete action"
-msgstr ""
+msgstr "작업을 완료할 수 없습니다"
 
 #: src/pages/McpOAuthCallback.tsx
 msgid "Could not complete authorization. Try connecting again."
@@ -3104,7 +3097,7 @@ msgstr ""
 msgid "Could not show the menu bar item; try again."
 msgstr ""
 
-#: src/pages/shell/runtime-summary.tsx
+#: src/lib/computer-state-labels.ts
 msgid "Could not start"
 msgstr "시작하지 못함"
 
@@ -4913,6 +4906,10 @@ msgstr "방금"
 msgid "Keep computer awake"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Keep current location"
+msgstr "현재 위치 유지"
+
 #: src/pages/LearningCurator.tsx
 msgid "Keep for recovery"
 msgstr ""
@@ -5281,7 +5278,6 @@ msgstr ""
 msgid "low — quick, with a little checking"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "macOS will not ask for extra permission if you let bots run on this Mac. They run as you."
 msgstr "이 Mac에서 실행하면 Bot이 내 계정 권한으로 동작하며 macOS가 작업마다 별도 승인을 묻지 않습니다."
@@ -5290,7 +5286,7 @@ msgstr "이 Mac에서 실행하면 Bot이 내 계정 권한으로 동작하며 m
 msgid "Make default"
 msgstr "기본값으로 설정"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Make sure nothing is still running on this computer."
 msgstr "이 컴퓨터에서 실행 중인 작업이 없는지 확인하세요."
 
@@ -5713,6 +5709,10 @@ msgstr ""
 #: src/pages/fleet/PlacementNotice.tsx
 msgid "Move to {name}?"
 msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Move to a container"
+msgstr "컨테이너로 이동"
 
 #. placeholder {0}: value.minimumFreeGb
 #: src/pages/fleet/FleetSettings.tsx
@@ -6174,7 +6174,7 @@ msgstr ""
 msgid "Nothing installed yet"
 msgstr ""
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Nothing is still running"
 msgstr "실행 중인 작업 없음"
 
@@ -6585,6 +6585,10 @@ msgstr "팀 메시지 일시 중지"
 #: src/pages/RoutineEditor.tsx
 msgid "Paused"
 msgstr "일시 중지됨"
+
+#: src/lib/computer-state-labels.ts
+msgid "Paused for an update"
+msgstr "업데이트를 위해 일시 중지됨"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Permission denied on the socket"
@@ -7059,13 +7063,13 @@ msgstr ""
 msgid "Release"
 msgstr "제어권 돌려주기"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Release computer"
-msgstr ""
+msgstr "컴퓨터 잠금 해제"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Release interrupted computer?"
-msgstr ""
+msgstr "작업이 중단된 컴퓨터의 잠금을 해제할까요?"
 
 #: src/pages/account/AccountProfile.tsx
 msgid "Reload"
@@ -7597,13 +7601,12 @@ msgstr "실행 시간은 미래여야 합니다."
 msgid "running"
 msgstr "실행 중"
 
+#: src/lib/computer-state-labels.ts
 #: src/lib/run-status-label.ts
 #: src/pages/ComparePanel.tsx
 #: src/pages/customize/McpDiagnostics.tsx
-#: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/fleet/FleetSettings.tsx
-#: src/pages/shell/runtime-summary.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Running"
 msgstr "실행 중"
@@ -8273,7 +8276,7 @@ msgstr ""
 msgid "Slash commands"
 msgstr ""
 
-#: src/pages/shell/runtime-summary.tsx
+#: src/lib/computer-state-labels.ts
 msgid "Sleeping"
 msgstr "절전 중"
 
@@ -8434,8 +8437,8 @@ msgstr "작업 녹화 시작"
 msgid "Start the engine and press Test."
 msgstr "엔진을 시작하고 테스트를 누르세요."
 
+#: src/lib/computer-state-labels.ts
 #: src/lib/run-status-label.ts
-#: src/pages/shell/runtime-summary.tsx
 msgid "Starting"
 msgstr "시작 중"
 
@@ -8506,10 +8509,9 @@ msgstr "실행 중지"
 msgid "Stop work in this conversation"
 msgstr ""
 
+#: src/lib/computer-state-labels.ts
 #: src/pages/customize/McpDiagnostics.tsx
-#: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/GroupPanel.tsx
-#: src/pages/shell/runtime-summary.tsx
 msgid "Stopped"
 msgstr "중지됨"
 
@@ -8752,6 +8754,10 @@ msgstr "그룹의 모델 선택을 다시 불러왔습니다. 다시 선택하�
 msgid "The Hermes install on this computer failed its safety check."
 msgstr "이 컴퓨터의 Hermes 설치가 안전 검사를 통과하지 못했습니다."
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "The last update was interrupted."
+msgstr "마지막 업데이트가 중단되었습니다."
+
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
@@ -8862,7 +8868,6 @@ msgstr "이 채팅은 읽기 전용입니다"
 msgid "This command is not available to this account."
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "이 컴퓨터"
@@ -8927,7 +8932,6 @@ msgstr "봇 또는 공간 설정에서 이 그룹의 모델을 차단했습니�
 msgid "This is a binary file. You cannot edit it here."
 msgstr "바이너리 파일입니다. 여기에서 편집할 수 없습니다."
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "이 Mac"
@@ -9790,7 +9794,6 @@ msgstr "이메일 주소"
 msgid "Your name"
 msgstr "이름"
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "Your OS will not ask for extra permission if you let bots run on {hostLabel}. They run as you."
 msgstr "{hostLabel}에서 실행하면 Bot이 내 계정 권한으로 동작하며 운영체제가 작업마다 별도 승인을 묻지 않습니다."

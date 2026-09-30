@@ -1937,9 +1937,43 @@ describe("run failure cause", () => {
     expect(logged).toHaveLength(1);
     expect(logged[0]).toMatchObject({
       level: "error",
-      message: "run run-fails failed: Rate limit exceeded",
+      message: "run run-fails failed",
       providerErrorKind: "rate-limit",
     });
+  });
+
+  it("keeps a secret-bearing cause chain at debug and redacts every serialized string", async () => {
+    vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", "1");
+    const f = fixture("run-fails");
+    const secret = "opaque synthetic run credential";
+    f.secrets.push(secret);
+    const sink = createTestSink();
+    installLogger(createLogger({ service: "ardurbot-worker", level: "debug", sinks: [sink] }));
+    // biome-ignore lint/correctness/useYield: the runtime fails before its first event.
+    f.runtimeRun.mockImplementation(async function* (): AsyncGenerator<AgentRuntimeEvent> {
+      const cause = new Error(`fixture document contents ${secret}`, {
+        cause: { detail: secret, token: "ghp_fixtureSyntheticToken123456789" },
+      });
+      cause.name = secret;
+      throw new Error(`fixture prompt contents ${secret}`, { cause });
+    });
+    try {
+      await f.executor.continueRun(f.runRecord.id, "worker-1");
+    } finally {
+      installLogger(createLogger({ service: "ardurbot-worker", sinks: [] }));
+      vi.unstubAllEnvs();
+    }
+    const logged = sink.events.filter((event) => event.message.startsWith("run run-fails failed"));
+    expect(logged.filter((event) => event.level === "error")).toHaveLength(1);
+    expect(logged[0]?.error).toBeUndefined();
+    expect(JSON.stringify(logged.filter((event) => event.level === "error"))).not.toMatch(
+      /fixture document contents|fixture prompt contents/,
+    );
+    const diagnostics = sink.events.filter((event) => event.level === "debug");
+    expect(JSON.stringify(diagnostics)).toContain("fixture document contents");
+    expect(JSON.stringify(diagnostics)).toContain("fixture prompt contents");
+    expect(JSON.stringify(sink.events)).not.toContain(secret);
+    expect(JSON.stringify(sink.events)).not.toContain("ghp_fixtureSyntheticToken123456789");
   });
 
   it("records and logs a genuine failure reported while the run was stopping", async () => {

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { isComputerImageReference, MAX_COMPUTER_IMAGE_LENGTH } from "./computer-image.js";
 import { ComputerProfileSchema } from "./computer-profiles.js";
-import type { ComputerMode, ComputerStatus } from "./domain.js";
+import type { ComputerMode, ComputerStatus, ComputerUpdate } from "./domain.js";
 import { EngineEndpointSchema, SshSettingsSchema } from "./fleet.js";
 import type { SandboxKind } from "./ids.js";
 
@@ -206,6 +206,28 @@ export function computerModeFacts(mode: ComputerMode) {
   } as const;
 }
 
+export const COMPUTER_STATES = {
+  stopped: "Stopped",
+  booting: "Starting",
+  running: "Running",
+  suspending: "Paused for an update",
+  suspended: "Sleeping",
+  error: "Could not start",
+} as const satisfies Record<ComputerStatus["state"], string>;
+
+export function interruptedComputerUpdate(
+  status: Pick<ComputerStatus, "botId" | "computerId">,
+  updates: readonly ComputerUpdate[],
+) {
+  return updates.find(
+    (update) =>
+      update.status === "interrupted" &&
+      (status.computerId && update.computerId
+        ? status.computerId === update.computerId
+        : status.botId === update.botId),
+  );
+}
+
 export function computerRuntimeSummary(
   status: Pick<ComputerStatus, "kind" | "mode" | "state">,
   mode: ComputerMode = status.mode,
@@ -217,6 +239,7 @@ export function computerRuntimeSummary(
     reach: COMPUTER_BOUNDARY_MESSAGES[facts.boundary],
     ...computerModeFacts(mode),
     state: status.state,
+    stateLabel: COMPUTER_STATES[status.state],
   } as const;
 }
 

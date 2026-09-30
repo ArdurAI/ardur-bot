@@ -1143,8 +1143,9 @@ it("hides command output from the install error", async () => {
   const uv = uvArchive("#!/bin/sh\n");
   const spawn: HermesCommand = async () => ({
     code: 1,
-    stdout: "",
-    stderr: "SECRET_OUTPUT /tmp/hidden",
+    stdout: "fixture untrusted stdout credential",
+    stderr:
+      'SECRET_OUTPUT /fixture/hidden {"PASSWORD":"alpha beta gamma"} ghp_fixtureSyntheticToken123456789',
   });
   try {
     await expect(
@@ -1162,9 +1163,11 @@ it("hides command output from the install error", async () => {
     ).rejects.toThrow(HERMES_INSTALL_FAILED);
     expect(readHermesInstallStatus(root)?.message).toBe(HERMES_INSTALL_FAILED);
     expect(readHermesInstallStatus(root)?.message).not.toContain("SECRET_OUTPUT");
-    expect(await readFile(path.join(root, "runtimes", ".install.log"), "utf8")).toContain(
-      "SECRET_OUTPUT",
-    );
+    const log = await readFile(path.join(root, "runtimes", ".install.log"), "utf8");
+    expect(log).toContain("SECRET_OUTPUT");
+    expect(log).not.toContain("fixture untrusted stdout credential");
+    expect(log).not.toContain("alpha beta gamma");
+    expect(log).not.toContain("ghp_fixtureSyntheticToken123456789");
   } finally {
     await rm(root, { recursive: true, force: true });
   }

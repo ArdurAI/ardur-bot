@@ -1,6 +1,6 @@
 import { computerSupportsUpdate } from "@ardurbot/adapters";
 import type { ComputerStatus, HostLabel } from "@ardurbot/contracts";
-import { ComputerProfileSchema, computerCapabilities } from "@ardurbot/contracts";
+import { COMPUTER_STATES, ComputerProfileSchema, computerCapabilities } from "@ardurbot/contracts";
 import { ACTIVE_RUN_STATUSES, computerScreenSize } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 
@@ -69,16 +69,10 @@ export function toComputerStatus(
   hostLabel?: HostLabel,
 ): ComputerStatus {
   const state = computer?.maintenanceId
-    ? "booting"
-    : computer?.state === "suspending"
-      ? "running"
-      : computer?.state === "stopped" ||
-          computer?.state === "booting" ||
-          computer?.state === "running" ||
-          computer?.state === "suspended" ||
-          computer?.state === "error"
-        ? computer.state
-        : "stopped";
+    ? "suspending"
+    : computer && Object.hasOwn(COMPUTER_STATES, computer.state)
+      ? (computer.state as ComputerStatus["state"])
+      : "stopped";
   const screen = computerScreenSize(computer?.kind);
   const kind = (computer?.kind ?? "fake") as ComputerStatus["kind"];
   return {
