@@ -151,8 +151,7 @@ export function hostProbe(
     child.once("error", () => finish(null, "not started"));
     child.once("close", (code) => {
       if (captureOutput && !settled) output += decoder.end();
-      const tail = captured?.tail();
-      if (tail && code !== 0) output += `${output && !output.endsWith("\n") ? "\n" : ""}${tail}\n`;
+
       captured?.close();
       finish(code);
     });

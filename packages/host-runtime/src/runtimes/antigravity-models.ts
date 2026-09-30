@@ -89,6 +89,8 @@ export async function antigravityModels(
   child.stdin.end();
   let output = "";
   let overflow = false;
+  const startedAt = Date.now();
+  let exitCode: number | null | undefined;
   const timer = setTimeout(() => void stopNative(child), 5_000);
   const captured = captureChildOutput(child, {
     kind: "antigravity-models",
@@ -103,6 +105,7 @@ export async function antigravityModels(
       child.once("close", resolve);
       child.once("error", reject);
     });
+    exitCode = code;
     if (overflow || code !== 0) throw new Error("Model catalog unavailable.");
     const models = parseAntigravityModels(output);
     const checkedAt = new Date().toISOString();
@@ -113,15 +116,16 @@ export async function antigravityModels(
       catalogCheckedAt: checkedAt,
       catalogStale: false,
     };
-  } catch (error) {
+  } catch {
     // The catalog refresh degrades to the previous snapshot; the log carries why.
     const tail = captured.tail();
-    childProcessLogger().error?.(
-      "Antigravity model catalog refresh failed",
-      error instanceof Error
-        ? new Error(`${error.message}${tail ? `\nstderr tail:\n${tail}` : ""}`)
-        : error,
-    );
+    childProcessLogger().error?.("Antigravity model catalog refresh failed", {
+      kind: "catalog unavailable",
+      phase: "models",
+      exitCode,
+      durationMs: Date.now() - startedAt,
+    });
+    if (tail) childProcessLogger().debug(`Antigravity model catalog diagnostics: ${tail}`);
     return previous
       ? {
           models: previous.models,

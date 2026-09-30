@@ -17,6 +17,7 @@ import {
   RuntimePinError,
 } from "@ardurbot/contracts/runtime-pins";
 import type * as z from "zod";
+import { serializeError } from "../../../logging/src/serialize-error.js";
 import type { CapturedChildOutput, ChildOutputLogger } from "../child-output.js";
 import { captureChildOutput, childProcessLogger } from "../child-output.js";
 import { redactMcpText } from "../mcp-diagnostics.js";
@@ -283,6 +284,7 @@ interface ActiveTurn {
   captured?: CapturedChildOutput;
   /** Which kind of failure this was, when the runtime could tell (logged reason). */
   failureKind?: string;
+  secrets?: readonly string[];
 }
 
 /**
@@ -306,9 +308,8 @@ function classifyTurnFailure(
   return "runtime error";
 }
 
-/** Wraps a turn failure with the captured child output and exit facts. */
-function turnFailureContext(turn: ActiveTurn, underlying: unknown): Error {
-  const tail = turn.captured?.tail();
+/** Only safe process facts may cross the runtime's failure boundary. */
+function turnFailureContext(turn: ActiveTurn): Error {
   const detail = [
     turn.failureKind ? `kind: ${turn.failureKind}` : undefined,
     turn.phase ? `phase: ${turn.phase}` : undefined,
@@ -316,11 +317,8 @@ function turnFailureContext(turn: ActiveTurn, underlying: unknown): Error {
       ? `exit: ${turn.exitCode}${turn.exitSignal ? ` (signal ${turn.exitSignal})` : ""}`
       : undefined,
     turn.startedAt !== undefined ? `durationMs: ${Date.now() - turn.startedAt}` : undefined,
-    tail ? `stderr tail:\n${tail}` : undefined,
   ].filter(Boolean);
-  return new Error(detail.length ? detail.join("\n") : "No turn context was captured.", {
-    cause: underlying,
-  });
+  return new Error(detail.length ? detail.join("\n") : "No turn context was captured.");
 }
 
 /** One ephemeral ACP session per host turn; pinned launch is selected by the host agent. */
@@ -384,13 +382,21 @@ export class HermesRuntime implements AgentRuntime {
           }
         }
         if (finalReason === "failure" && finalError) {
-          // Keep the thrown message and class; the cause carries the captured
-          // child output, exit facts and the original error chain.
-          finalError.cause = turnFailureContext(turn, finalError.cause);
-          (this.options.logger ?? childProcessLogger()).error?.(
-            `Hermes turn failed: ${turn.failureKind ?? "unknown"}`,
-            finalError,
+          if (turn.child && turn.exited) await Promise.race([turn.exited, stopNative(turn.child)]);
+          const logger = this.options.logger ?? childProcessLogger();
+          const diagnostics = redactMcpText(
+            JSON.stringify({ error: serializeError(finalError), tail: turn.captured?.tail() }),
+            turn.secrets,
           );
+          finalError.cause = turnFailureContext(turn);
+          logger.error?.("Hermes turn failed", {
+            kind: turn.failureKind ?? "unknown",
+            phase: turn.phase,
+            exitCode: turn.exitCode,
+            signal: turn.exitSignal,
+            durationMs: turn.startedAt === undefined ? undefined : Date.now() - turn.startedAt,
+          });
+          logger.debug(`Hermes turn diagnostics: ${diagnostics}`, { runId });
         }
         turn.stopReason = finalReason;
         turn.queue.end(finalError);
@@ -509,12 +515,14 @@ export class HermesRuntime implements AgentRuntime {
       const pushEvent = (event: AgentRuntimeEvent) => {
         if (!turn.active) return;
         const failure = queue.push(event);
-        if (failure)
+        if (failure) {
+          turn.failureKind = "output overflow";
           void this.finishTurn(
             request.runId,
             "failure",
             new Error("Hermes could not complete this turn.", { cause: failure }),
           ).catch(() => {});
+        }
       };
       const flushPendingText = () => {
         textFlushScheduled = false;
@@ -542,6 +550,7 @@ export class HermesRuntime implements AgentRuntime {
       if (!turn.active) return;
       const relayKey = mcp.config.args.at(-1) ?? "";
       const secrets = [request.model.apiKey!, relayKey];
+      turn.secrets = secrets;
       const allowedToolTitles = new Set(
         Array.isArray(request.tools)
           ? request.tools

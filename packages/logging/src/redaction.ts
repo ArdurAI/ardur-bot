@@ -68,7 +68,7 @@ const TEXT_REDACTIONS: readonly [RegExp, string][] = [
   ],
   [/\b(Bearer\s+)[^\s"',;&}]+/gi, `$1${REDACTED}`],
   [
-    /\b([A-Za-z0-9_-]*(?:password|passwd|secret|token|key|credential|authorization|cookie)[A-Za-z0-9_-]*)["']?\s*[:=]\s*(?!["'])[^\s,;}]+/gi,
+    /(?<![A-Za-z0-9_"'])\b([A-Za-z0-9_-]*(?:password|passwd|secret|token|key|credential|authorization|cookie)[A-Za-z0-9_-]*)\s*[:=]\s*(?!["'])[^\s,;}]+/gi,
     `$1=${REDACTED}`,
   ],
   [/\bgh[pousr]_[A-Za-z0-9_]+\b/g, REDACTED],

@@ -128,6 +128,7 @@ async function handle(value) {
   if (scenario === "exit") process.exit(4);
   if (scenario === "stderr-failure") {
     process.stderr.write("fixture diagnostic before failure\n");
+    process.stderr.write("fixture prompt contents\nfixture document contents\n");
     process.stderr.write(`key=${process.env.ARDUR_HERMES_PROVIDER_KEY}\n`);
     process.exit(4);
   }

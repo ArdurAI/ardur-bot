@@ -102,7 +102,8 @@ export class CodexRpc {
   }
   private fail() {
     const tail = this.captured.tail();
-    const error = new Error(`Codex app-server unavailable${tail ? `\nstderr tail:\n${tail}` : ""}`);
+    if (tail) childProcessLogger().debug(`Codex app-server failure diagnostics: ${tail}`);
+    const error = new Error("Codex app-server unavailable");
     for (const entry of this.pending.values()) {
       clearTimeout(entry.timer);
       entry.reject(error);
