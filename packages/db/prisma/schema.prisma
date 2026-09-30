@@ -213,6 +213,7 @@ model Space {
   inlineVisualizations Boolean @default(true)
   comparisons Comparison[]
   allowedModelDestinations Json?
+  protectedLocations Json?
   learningConfig SpaceLearningConfig?
   learningInsights LearningInsight[]
   aiDataConsents AiDataConsent[]
@@ -397,6 +398,7 @@ model Bot {
   concurrentRuns Int?
   briefs BotBrief[]
   allowedModelDestinations Json?
+  protectedLocationGrants Json?
   screenGeneration Int @default(0)
   id                String            @id @default(cuid())
   spaceId           String
