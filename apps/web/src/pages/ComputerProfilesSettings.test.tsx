@@ -168,9 +168,8 @@ it("shows a desktop computer with the host label from the API and hides image pr
     ),
   );
   expect(element.textContent).toContain("Engine: This computer");
-  expect(element.textContent).toContain(
-    "Your OS will not ask for extra permission if you let bots run on this computer. They run as you.",
-  );
+  expect(element.textContent).toContain("Runs as you; can use your files and signed-in tools");
+  expect(element.textContent).not.toContain("They run as you.");
   expect(element.textContent).not.toContain("Deployment default");
   expect(element.querySelector('[aria-label="Connection"]')).toBeNull();
   expect(api.engine).not.toHaveBeenCalled();
@@ -769,6 +768,46 @@ it("never describes a desktop computer as Docker when a container is selected", 
     });
     expect(element.textContent).not.toContain("Engine: Docker");
     expect(element.textContent).toContain("Engine: This computer");
+    expect(api.configure).not.toHaveBeenCalled();
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+it("renders only destination choices and consequences inside Change location", async () => {
+  const element = document.createElement("div");
+  const root = createRoot(element);
+  try {
+    await act(async () =>
+      root.render(
+        <ComputerProfile
+          choicesOnly
+          botId="bot"
+          name="Builder"
+          status={{ ...status, kind: "desktop" }}
+          connections={[
+            { id: "container", name: "Container engine", settings: { engine: "docker" } as never },
+          ]}
+          deploymentDefault={null}
+          onChanged={async () => {}}
+        />,
+      ),
+    );
+    expect(element.querySelector('[data-testid="runtime-summary"]')).toBeNull();
+    expect(element.textContent).not.toContain("Engine:");
+    expect(element.textContent).not.toContain("Runs as you");
+    const select = element.querySelector<HTMLSelectElement>('[aria-label="Connection"]')!;
+    expect(select.options[0]?.textContent).toBe("Keep current location");
+    await act(async () => {
+      select.value = "container";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(element.textContent).toContain("Move to a container");
+    expect(element.textContent).toContain(
+      "Separate home; can reach allowed network services and granted credentials.",
+    );
+    expect(element.textContent).not.toContain("Shared with team");
+    expect(element.textContent).not.toContain("Stopped");
     expect(api.configure).not.toHaveBeenCalled();
   } finally {
     await act(async () => root.unmount());

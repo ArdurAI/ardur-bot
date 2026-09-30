@@ -39,10 +39,12 @@ export function RuntimeSummary({
   status,
   mode = status.mode,
   locationName,
+  sharingControl,
 }: {
   status: ComputerStatus;
   mode?: ComputerMode;
   locationName?: string;
+  sharingControl?: ReactNode;
 }) {
   const { t } = useI18n();
   const tokens = useMobileTokens();
@@ -52,7 +54,7 @@ export function RuntimeSummary({
   return (
     <View testID="runtime-summary" style={styles.lines}>
       <RuntimeBoundary kind={status.kind} locationName={locationName} />
-      <Text style={{ color: tokens.foreground }}>{t(facts.sharing)}</Text>
+      {sharingControl ?? <Text style={{ color: tokens.foreground }}>{t(facts.sharing)}</Text>}
       {facts.sharingWarning ? (
         <Text style={{ color: tokens.mutedForeground }}>{t(facts.sharingWarning)}</Text>
       ) : null}
@@ -74,7 +76,6 @@ export function BotRuntimeSettings({
   const [data, setData] = useState<{
     status: ComputerStatus;
     connections: Connection[];
-    teamStatus?: ComputerStatus;
   } | null>(null);
   const [error, setError] = useState(false);
   const [revision, setRevision] = useState(0);
@@ -85,14 +86,12 @@ export function BotRuntimeSettings({
     void Promise.all([
       rpc<ComputerStatus>("computer/status", { botId }),
       rpc<Connection[]>("computer/connections", {}),
-      rpc<{ status: ComputerStatus }[]>("computer/list", {}),
     ])
-      .then(([status, connections, computers]) => {
+      .then(([status, connections]) => {
         if (active)
           setData({
             status,
             connections,
-            teamStatus: computers.find((entry) => entry.status.mode === "team")?.status,
           });
       })
       .catch(() => {
@@ -112,21 +111,17 @@ export function BotRuntimeSettings({
       {data ? (
         <RuntimeSummary
           status={data.status}
+          mode={mode}
+          sharingControl={children}
           locationName={
-            data.connections.find((entry) => entry.id === data.status.connectionId)?.name ??
-            (data.status.kind === "desktop" ? undefined : data.status.kind)
+            data.status.kind === "desktop"
+              ? undefined
+              : (data.connections.find((entry) => entry.id === data.status.connectionId)?.name ??
+                data.status.kind)
           }
         />
       ) : null}
-      {children}
-      {data && mode === "team" && data.status.mode !== mode && data.teamStatus ? (
-        <RuntimeBoundary
-          kind={data.teamStatus.kind}
-          locationName={
-            data.connections.find((entry) => entry.id === data.teamStatus?.connectionId)?.name
-          }
-        />
-      ) : null}
+
       {error ? (
         <>
           <Text accessibilityRole="alert" style={{ color: tokens.destructive }}>

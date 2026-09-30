@@ -505,7 +505,11 @@ export default function BotSettingsScreen() {
           ))}
         </ScrollView>
         <BotRuntimeSettings botId={botId} mode={computerMode}>
-          <ComputerModePicker value={computerMode} onChange={setComputerMode} />
+          <ComputerModePicker
+            value={computerMode}
+            onChange={setComputerMode}
+            showConsequence={false}
+          />
         </BotRuntimeSettings>
         {runtimeKind === "hermes" ? (
           <Text style={{ color: tokens.mutedForeground, marginTop: 8 }}>

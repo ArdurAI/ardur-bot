@@ -110,9 +110,36 @@ it("reads the saved pin without booting or changing the computer", async () => {
   expect(request.mock.calls.map((call) => call[0])).toEqual([
     "computer/status",
     "computer/connections",
-    "computer/list",
   ]);
 });
+it("shows the location, sharing choice and consequence once in bot settings", async () => {
+  request.mockImplementation(async (procedure) =>
+    procedure === "computer/status" ? { ...status, mode: "team" } : [],
+  );
+  await act(async () =>
+    root.render(
+      createElement(
+        BotRuntimeSettings,
+        { botId: "bot", mode: "team" },
+        createElement(ComputerModePicker, {
+          value: "team",
+          onChange: vi.fn(),
+          showConsequence: false,
+        }),
+      ),
+    ),
+  );
+  for (const fact of [
+    "This computer",
+    "Runs as you; can use your files and signed-in tools",
+    "Shared with team",
+    "Bots share files and installed tools",
+    "Stopped",
+  ]) {
+    expect(container.textContent?.split(fact).length).toBe(2);
+  }
+});
+
 it("fails closed for an unknown kind", async () => {
   await act(async () =>
     root.render(

@@ -2,6 +2,7 @@ import type { ComputerConnectionSettings, ComputerMode, ComputerStatus } from "@
 import { COMPUTER_STATES, computerKindFacts, computerRuntimeSummary } from "@ardurbot/contracts";
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
+import type { ReactNode } from "react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { rpc } from "../../lib/rpc";
 
@@ -44,10 +45,12 @@ export function RuntimeSummary({
   status,
   mode = status.mode,
   locationName,
+  sharingControl,
 }: {
   status: ComputerStatus;
   mode?: ComputerMode;
   locationName?: string;
+  sharingControl?: ReactNode;
 }) {
   const { t } = useLingui();
   const summary = computerRuntimeSummary(status, mode);
@@ -63,7 +66,7 @@ export function RuntimeSummary({
   return (
     <div data-testid="runtime-summary" className="space-y-2 text-sm">
       <RuntimeBoundary kind={status.kind} locationName={locationName} />
-      <p>{summary.scope === "bot" ? t`Only this bot` : t`Shared with team`}</p>
+      {sharingControl ?? <p>{summary.scope === "bot" ? t`Only this bot` : t`Shared with team`}</p>}
       {summary.sharingWarning ? (
         <p className="text-muted-foreground">{t`Bots share files and installed tools`}</p>
       ) : null}
@@ -76,17 +79,18 @@ export function BotRuntimeSettings({
   botId,
   name,
   mode,
+  children,
 }: {
   botId: string;
   name: string;
   mode: ComputerMode;
+  children?: ReactNode;
 }) {
   const { t } = useLingui();
   const [data, setData] = useState<{
     status: ComputerStatus;
     connections: Connection[];
     deploymentDefault: string | null;
-    teamStatus?: ComputerStatus;
   } | null>(null);
   const [error, setError] = useState(false);
   const [revision, setRevision] = useState(0);
@@ -106,19 +110,14 @@ export function BotRuntimeSettings({
     setError(false);
     void Promise.resolve()
       .then(() =>
-        Promise.all([
-          rpc.computer.status({ botId }),
-          rpc.computer.connections(),
-          rpc.me(),
-          rpc.computer.list(),
-        ]),
+        Promise.all([rpc.computer.status({ botId }), rpc.computer.connections(), rpc.me()]),
       )
-      .then(([status, connections, me, computers]) => {
+      .then(([status, connections, me]) => {
         if (active)
           setData({
             status,
             connections,
-            teamStatus: computers.find((entry) => entry.status.mode === "team")?.status,
+
             deploymentDefault:
               me.sandboxProvider === "docker" && me.computerHost === "this-mac"
                 ? null
@@ -137,20 +136,17 @@ export function BotRuntimeSettings({
       {data ? (
         <RuntimeSummary
           status={data.status}
+          mode={mode}
+          sharingControl={children}
           locationName={
-            data.connections.find((entry) => entry.id === data.status.connectionId)?.name ??
-            (data.status.kind === "desktop" ? undefined : data.status.kind)
+            data.status.kind === "desktop"
+              ? undefined
+              : (data.connections.find((entry) => entry.id === data.status.connectionId)?.name ??
+                data.status.kind)
           }
         />
       ) : null}
-      {data && mode === "team" && data.status.mode !== mode && data.teamStatus ? (
-        <RuntimeBoundary
-          kind={data.teamStatus.kind}
-          locationName={
-            data.connections.find((entry) => entry.id === data.teamStatus?.connectionId)?.name
-          }
-        />
-      ) : null}
+
       {error ? (
         <div role="alert">
           <p>{t`Computer location unavailable. Try again.`}</p>
@@ -167,6 +163,7 @@ export function BotRuntimeSettings({
           {changing ? (
             <Suspense fallback={null}>
               <ComputerProfile
+                choicesOnly
                 botId={botId}
                 name={name}
                 status={data.status}

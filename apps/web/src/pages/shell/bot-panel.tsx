@@ -823,13 +823,9 @@ export function BotSettings({
       </SettingsGroup>
       <SettingsGroup label={t`Where this bot runs`}>
         <div ref={computerRef} className="space-y-3 py-4">
-          <BotRuntimeSettings botId={bot.id} name={bot.name} mode={computerMode} />
-          <ComputerModePicker value={computerMode} onChange={setComputerMode} />
-          {computerModeFacts(computerMode).sharingWarning ? (
-            <p className="text-sm text-muted-foreground">
-              <Trans>Bots share files and installed tools</Trans>
-            </p>
-          ) : null}
+          <BotRuntimeSettings botId={bot.id} name={bot.name} mode={computerMode}>
+            <ComputerModePicker value={computerMode} onChange={setComputerMode} />
+          </BotRuntimeSettings>
         </div>
       </SettingsGroup>
       <SettingsGroup label={t`Notifications`}>

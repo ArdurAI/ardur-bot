@@ -421,8 +421,9 @@ it("shows execution settings outside Advanced while keeping memory progressive",
   expect(advanced?.contains(card("Memory"))).toBe(true);
   expect(advanced?.contains(card("Where this bot runs"))).toBe(false);
   expect(advanced?.contains(card("Notifications"))).toBe(false);
-  expect(card("Where this bot runs").textContent).toContain("Shared with team");
-  expect(card("Where this bot runs").textContent).toContain("Bots share files and installed tools");
+  for (const fact of ["Shared with team", "Bots share files and installed tools"]) {
+    expect(card("Where this bot runs").textContent?.split(fact).length).toBe(2);
+  }
 });
 
 describe("new isolated work", () => {
