@@ -11,6 +11,11 @@ import type {
 import type { RuntimeAvailability } from "@ardurbot/contracts/runtime-pins";
 import { RuntimePinError, runtimePinProblem } from "@ardurbot/contracts/runtime-pins";
 import * as z from "zod";
+import {
+  type CapturedChildOutput,
+  captureChildOutput,
+  childProcessLogger,
+} from "../child-output.js";
 import type { HostGuardrailConfig } from "../host-guardrails.js";
 import {
   guardrailConfigFromEnv,
@@ -66,8 +71,13 @@ export class CodexRpc {
     }
   >();
   private reader: Promise<void>;
+  private readonly captured: CapturedChildOutput;
   constructor(readonly child: ChildProcessWithoutNullStreams) {
-    child.stderr.resume();
+    this.captured = captureChildOutput(child, {
+      kind: "codex-app-server",
+      logger: childProcessLogger(),
+    });
+    child.once("close", () => this.captured.close());
     child.once("error", () => this.fail());
     this.reader = (async () => {
       try {
@@ -91,7 +101,8 @@ export class CodexRpc {
     })();
   }
   private fail() {
-    const error = new Error("Codex app-server unavailable");
+    const tail = this.captured.tail();
+    const error = new Error(`Codex app-server unavailable${tail ? `\nstderr tail:\n${tail}` : ""}`);
     for (const entry of this.pending.values()) {
       clearTimeout(entry.timer);
       entry.reject(error);

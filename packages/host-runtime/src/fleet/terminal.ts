@@ -7,6 +7,7 @@ import type {
   TerminalOutput,
   TerminalProvider,
 } from "@ardurbot/adapter-kit";
+import { captureChildOutput, childProcessLogger } from "../child-output.js";
 import { RuntimeQueue, stopNative } from "../runtimes/native-process.js";
 import { fleetPath } from "./archive.js";
 import { LINUX_ROOT } from "./linux-scripts.js";
@@ -129,13 +130,17 @@ export class FleetTerminal implements TerminalProvider {
         void this.close(id, "invalid");
       }
     });
-    opened.child.stderr.resume();
+    const capturedStderr = captureChildOutput(opened.child, {
+      kind: "fleet-terminal",
+      logger: childProcessLogger(),
+    });
     opened.child.stdin.on("error", () => undefined);
     opened.child.once("error", () => {
       queue.end(new Error("Terminal could not start."));
       void this.close(id, "failed");
     });
     opened.child.once("close", () => {
+      capturedStderr.close();
       queue.end();
       void this.close(id, "closed");
     });

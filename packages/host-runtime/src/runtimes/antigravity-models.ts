@@ -1,5 +1,6 @@
 import type { RuntimeAvailability } from "@ardurbot/contracts";
 import { antigravityEffortForModel } from "@ardurbot/contracts";
+import { captureChildOutput, childProcessLogger } from "../child-output.js";
 import type { NativeSpawn } from "./native-process.js";
 import { spawnNative, stopNative } from "./native-process.js";
 
@@ -89,7 +90,10 @@ export async function antigravityModels(
   let output = "";
   let overflow = false;
   const timer = setTimeout(() => void stopNative(child), 5_000);
-  child.stderr.resume();
+  const captured = captureChildOutput(child, {
+    kind: "antigravity-models",
+    logger: childProcessLogger(),
+  });
   child.stdout.on("data", (chunk: Buffer) => {
     if (Buffer.byteLength(output) + chunk.length > 128 * 1024) overflow = true;
     else output += chunk.toString("utf8");
@@ -109,7 +113,15 @@ export async function antigravityModels(
       catalogCheckedAt: checkedAt,
       catalogStale: false,
     };
-  } catch {
+  } catch (error) {
+    // The catalog refresh degrades to the previous snapshot; the log carries why.
+    const tail = captured.tail();
+    childProcessLogger().error?.(
+      "Antigravity model catalog refresh failed",
+      error instanceof Error
+        ? new Error(`${error.message}${tail ? `\nstderr tail:\n${tail}` : ""}`)
+        : error,
+    );
     return previous
       ? {
           models: previous.models,
@@ -125,6 +137,7 @@ export async function antigravityModels(
         };
   } finally {
     clearTimeout(timer);
+    captured.close();
     await stopNative(child);
   }
 }

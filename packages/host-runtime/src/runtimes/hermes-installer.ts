@@ -699,6 +699,8 @@ async function defaultCommand(
     cwd: options.cwd,
     env: options.env,
     shell: false,
+    // stdin stays ignored: the installer commands read nothing, and both
+    // output pipes are captured into bounded buffers below.
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
   });
