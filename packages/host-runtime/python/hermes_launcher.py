@@ -18,59 +18,110 @@ from hermes_profile import acknowledge, check_catalog, check_constructed, valida
 PIN = "29112bef099274229cadff79cdff7bf7b99c4b77"
 TREE = "daaffc303ae437041b7f76be17c5f61b14f2ce99"
 
+ENTRY_FIELDS = {
+    "version", "commit", "tree", "sources", "sessionHook", "toolsetHelper",
+    "acpAgentInit", "agentInit", "sourceGuard", "callbacks",
+}
+OPTIONAL_ENTRY_FIELDS = {"constructedToolsets"}
+HOOK_FIELDS = {"parameters"}
+PARAMETER_KINDS = {
+    "POSITIONAL_ONLY", "POSITIONAL_OR_KEYWORD", "VAR_POSITIONAL",
+    "KEYWORD_ONLY", "VAR_KEYWORD",
+}
+
 
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise RuntimeError(message)
 
 
-def load_compat() -> dict:
-    """Load the reviewed per-tree compatibility table and check its shape."""
-    data = json.loads(Path(__file__).with_name("hermes_compat.json").read_text(encoding="utf-8"))
-    require(type(data) is dict and data.get("format") == 1 and type(data.get("entries")) is dict,
+def _is_hex(value: object, length: int) -> bool:
+    return (type(value) is str and len(value) == length and
+            all(character in "0123456789abcdef" for character in value))
+
+
+def _is_string_list(value: object, *, non_empty: bool = False) -> bool:
+    return (type(value) is list and (not non_empty or bool(value)) and
+            all(type(item) is str for item in value))
+
+
+def _check_hook(value: dict) -> None:
+    require(type(value) is dict and set(value) == HOOK_FIELDS,
             "Compatibility table is invalid")
-    for tree, entry in data["entries"].items():
-        require(type(entry) is dict and entry.get("tree") == tree and
-                type(entry.get("version")) is str and
-                type(entry.get("commit")) is str and len(entry["commit"]) == 40 and
-                type(entry.get("sources")) is dict and
-                all(type(name) is str and type(digest) is str and len(digest) == 64
-                    for name, digest in entry["sources"].items()) and
-                type(entry.get("sessionHook")) is dict and
-                type(entry.get("toolsetHelper")) is dict and
-                type(entry.get("acpAgentInit")) is dict and
-                type(entry.get("agentInit")) is dict and
-                type(entry.get("sourceGuard")) is dict and
-                type(entry.get("callbacks")) is dict,
+    parameters = value["parameters"]
+    require(type(parameters) is list and bool(parameters) and
+            all(type(pair) is list and len(pair) == 2 and type(pair[0]) is str and
+                type(pair[1]) is str and pair[1] in PARAMETER_KINDS for pair in parameters),
+            "Compatibility table is invalid")
+
+
+def validate_compat(data: dict) -> dict:
+    """Validate the reviewed per-tree compatibility table, refusing any defect.
+
+    Every entry must carry exactly the reviewed fields; sources must be
+    non-empty and cover the same reviewed files in every entry; and any
+    missing, extra or malformed field refuses the whole table.
+    """
+    require(type(data) is dict and set(data) == {"format", "entries"},
+            "Compatibility table is invalid")
+    require(type(data["format"]) is int and data["format"] == 1,
+            "Compatibility table is invalid")
+    entries = data["entries"]
+    require(type(entries) is dict and bool(entries), "Compatibility table is invalid")
+    source_paths: set | None = None
+    for tree, entry in entries.items():
+        require(type(tree) is str and _is_hex(tree, 40) and type(entry) is dict,
                 "Compatibility table is invalid")
+        fields = set(entry)
+        require(ENTRY_FIELDS <= fields and fields <= ENTRY_FIELDS | OPTIONAL_ENTRY_FIELDS,
+                "Compatibility table is invalid")
+        require(type(entry["version"]) is str and bool(entry["version"]) and
+                entry["tree"] == tree and _is_hex(entry["commit"], 40),
+                "Compatibility table is invalid")
+        sources = entry["sources"]
+        require(type(sources) is dict and bool(sources) and
+                all(type(name) is str and _is_hex(digest, 64)
+                    for name, digest in sources.items()),
+                "Compatibility table is invalid")
+        paths = set(sources)
+        require(source_paths is None or paths == source_paths,
+                "Compatibility table is invalid")
+        source_paths = paths
         for hook in ("sessionHook", "toolsetHelper", "acpAgentInit"):
-            parameters = entry[hook]["parameters"]
-            require(type(parameters) is list and parameters and
-                    all(type(pair) is list and len(pair) == 2 and type(pair[0]) is str and
-                        type(pair[1]) is str for pair in parameters),
-                    "Compatibility table is invalid")
+            _check_hook(entry[hook])
         require(entry["sessionHook"]["parameters"][0][0] == "self" and
                 entry["acpAgentInit"]["parameters"][0][0] == "self",
                 "Compatibility table is invalid")
         agent_init = entry["agentInit"]
-        require(type(agent_init.get("parameterCount")) is int and
-                type(agent_init.get("required")) is list and
-                all(type(name) is str for name in agent_init["required"]),
+        require(type(agent_init) is dict and set(agent_init) == {"parameterCount", "required"},
+                "Compatibility table is invalid")
+        require(type(agent_init["parameterCount"]) is int and agent_init["parameterCount"] >= 0 and
+                _is_string_list(agent_init["required"], non_empty=True) and
+                agent_init["parameterCount"] >= len(agent_init["required"]),
                 "Compatibility table is invalid")
         guard = entry["sourceGuard"]
-        require(type(guard.get("mustContain")) is list and type(guard.get("mustNotContain")) is list and
-                all(type(needle) is str for needle in guard["mustContain"] + guard["mustNotContain"]),
+        require(type(guard) is dict and set(guard) == {"mustContain", "mustNotContain"} and
+                _is_string_list(guard["mustContain"]) and
+                _is_string_list(guard["mustNotContain"]) and
+                bool(guard["mustContain"] + guard["mustNotContain"]),
                 "Compatibility table is invalid")
-        require(type(entry["callbacks"].get("setup_mcp_callback")) is str,
+        callbacks = entry["callbacks"]
+        require(type(callbacks) is dict and set(callbacks) == {"setup_mcp_callback"} and
+                type(callbacks["setup_mcp_callback"]) is str and callbacks["setup_mcp_callback"],
                 "Compatibility table is invalid")
-        constructed = entry.get("constructedToolsets")
-        require(constructed is None or (
-                type(constructed) is dict and
-                type(constructed.get("enabled")) is list and
-                type(constructed.get("disabled")) is list and
-                all(type(name) is str for name in constructed["enabled"] + constructed["disabled"])),
-                "Compatibility table is invalid")
+        if "constructedToolsets" in entry:
+            constructed = entry["constructedToolsets"]
+            require(type(constructed) is dict and set(constructed) == {"enabled", "disabled"} and
+                    _is_string_list(constructed["enabled"], non_empty=True) and
+                    _is_string_list(constructed["disabled"], non_empty=True),
+                    "Compatibility table is invalid")
     return data
+
+
+def load_compat() -> dict:
+    """Load the reviewed per-tree compatibility table and validate it strictly."""
+    return validate_compat(
+        json.loads(Path(__file__).with_name("hermes_compat.json").read_text(encoding="utf-8")))
 
 
 COMPAT = load_compat()
@@ -148,11 +199,31 @@ def check_hooks(session, server, run_agent, entry: dict) -> None:
     require(callback in agent_parameters or hasattr(run_agent.AIAgent, callback), "Agent MCP callback changed")
 
 
-def harden_constructed_agent(agent, entry: dict) -> None:
+def mcp_server_config(server: object) -> tuple | None:
+    """Canonical MCP server configuration: identity plus how it is reached.
+
+    A bare name is not a configuration, so anything that is not a full
+    server object can never match the server Ardur configured.
+    """
+    if server is None or isinstance(server, str):
+        return None
+    return (
+        getattr(server, "name", None),
+        getattr(server, "transport", None),
+        getattr(server, "command", None),
+        getattr(server, "url", None),
+        tuple(getattr(server, "args", None) or ()),
+    )
+
+
+def harden_constructed_agent(agent, entry: dict, session_manager=None) -> None:
     """Prove the constructed agent enforces Ardur's toolset restriction.
 
     Runs for every entry that declares the stronger expectations; entries
-    without them (the original pin) are untouched.
+    without them (the original pin) are untouched. ``session_manager`` must
+    expose the single MCP server Ardur accepted for this turn as
+    ``_ardur_mcp_server``; the attach guard compares the full configured
+    server (transport, command or URL, and arguments), never a name alone.
     """
     constructed = entry.get("constructedToolsets")
     if constructed:
@@ -165,8 +236,14 @@ def harden_constructed_agent(agent, entry: dict) -> None:
         require(original is None or callable(original), "MCP attach callback is invalid")
 
         def ardur_guarded_connect(*args, **kwargs):
-            server = kwargs.get("server") or kwargs.get("name") or (args[0] if args else None)
-            require(getattr(server, "name", server) == "ardur", "MCP server attachment refused")
+            accepted = getattr(session_manager, "_ardur_mcp_server", None)
+            server = kwargs["server"] if "server" in kwargs else (args[0] if args else None)
+            presented = mcp_server_config(server)
+            require(presented is not None and presented == mcp_server_config(accepted),
+                    "MCP server attachment refused")
+            if "server" in kwargs and args:
+                require(mcp_server_config(args[0]) == presented,
+                        "MCP server attachment refused")
             if original is None:
                 return None
             return original(*args, **kwargs)
@@ -225,7 +302,7 @@ def main() -> None:
                 )
                 agent.session_cwd = kwargs["cwd"]
                 agent._print_fn = session._acp_stderr_print
-                harden_constructed_agent(agent, entry)
+                harden_constructed_agent(agent, entry, self)
                 if profile:
                     agent._skip_mcp_refresh = True
                     check_constructed(agent, profile["manifest"])
@@ -243,6 +320,7 @@ def main() -> None:
             async def new_session(self, cwd, mcp_servers=None, **kwargs):
                 require(not self._session_created, "Only one ACP session is allowed")
                 require(len(mcp_servers or []) == 1 and mcp_servers[0].name == "ardur", "Only the Ardur MCP server is allowed")
+                self.session_manager._ardur_mcp_server = mcp_servers[0]
                 self._session_created = True
                 response = await super().new_session(cwd, mcp_servers=mcp_servers, **kwargs)
                 if profile:

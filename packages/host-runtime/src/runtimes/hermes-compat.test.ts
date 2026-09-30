@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import sourceHashes from "../../python/hermes_sources.json" with { type: "json" };
+import compatFixtures from "../../python/tests/compat_fixtures.json" with { type: "json" };
 import {
+  assertCompatTableValid,
   assertHermesCompatInStep,
   HERMES_COMPAT,
   HERMES_COMPAT_PINNED,
@@ -55,6 +57,18 @@ describe("hermes compatibility table", () => {
           expect(typeof name).toBe("string");
         }
       }
+    }
+  });
+
+  it("agrees with the Python validator on every shared fixture", () => {
+    for (const [index, table] of compatFixtures.valid.entries()) {
+      expect(() => assertCompatTableValid(table), `valid fixture ${index}`).not.toThrow();
+    }
+    for (const testCase of compatFixtures.invalid) {
+      expect(
+        () => assertCompatTableValid(testCase.table),
+        `invalid fixture: ${testCase.name}`,
+      ).toThrow("Compatibility table is invalid");
     }
   });
 

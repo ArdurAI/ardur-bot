@@ -58,6 +58,37 @@ const PARAMETER_KINDS = new Set([
   "VAR_KEYWORD",
 ]);
 
+const ENTRY_FIELDS = new Set([
+  "version",
+  "commit",
+  "tree",
+  "sources",
+  "sessionHook",
+  "toolsetHelper",
+  "acpAgentInit",
+  "agentInit",
+  "sourceGuard",
+  "callbacks",
+]);
+const OPTIONAL_ENTRY_FIELDS = new Set(["constructedToolsets"]);
+
+function sameKeys(value: object, expected: Set<string>): boolean {
+  const keys = Object.keys(value);
+  return keys.length === expected.size && keys.every((key) => expected.has(key));
+}
+
+function isHex(value: unknown, length: number): value is string {
+  return typeof value === "string" && new RegExp(`^[0-9a-f]{${length}}$`).test(value);
+}
+
+function isStringList(value: unknown, nonEmpty = false): value is string[] {
+  return (
+    Array.isArray(value) &&
+    (!nonEmpty || value.length > 0) &&
+    value.every((item) => typeof item === "string")
+  );
+}
+
 function isParameter(value: unknown): value is HermesCompatParameter {
   return (
     Array.isArray(value) &&
@@ -68,57 +99,126 @@ function isParameter(value: unknown): value is HermesCompatParameter {
   );
 }
 
-function checkHook(value: unknown): HermesCompatHook {
+function checkHook(value: unknown): void {
   if (
     !value ||
     typeof value !== "object" ||
-    !Array.isArray((value as HermesCompatHook).parameters) ||
-    !(value as HermesCompatHook).parameters.every(isParameter)
+    Array.isArray(value) ||
+    !sameKeys(value, new Set(["parameters"]))
   )
     throw new Error("Compatibility table is invalid");
-  return value as HermesCompatHook;
+  const parameters = (value as HermesCompatHook).parameters;
+  if (!Array.isArray(parameters) || parameters.length === 0 || !parameters.every(isParameter))
+    throw new Error("Compatibility table is invalid");
 }
 
-/** The typed compatibility table; loading validates the shape, so a bad entry fails closed. */
-export const HERMES_COMPAT: HermesCompatTable = (() => {
-  const table = compat as unknown as HermesCompatTable;
-  if (table?.format !== 1 || !table.entries || typeof table.entries !== "object")
+/**
+ * Validate the reviewed per-tree compatibility table, refusing any defect.
+ *
+ * Every entry must carry exactly the reviewed fields; sources must be
+ * non-empty and cover the same reviewed files in every entry; and any
+ * missing, extra or malformed field refuses the whole table. This must stay
+ * in step with `validate_compat` in `python/hermes_launcher.py`; the shared
+ * fixtures in `python/tests/compat_fixtures.json` prove both sides agree.
+ */
+export function assertCompatTableValid(table: unknown): HermesCompatTable {
+  if (
+    !table ||
+    typeof table !== "object" ||
+    Array.isArray(table) ||
+    !sameKeys(table, new Set(["format", "entries"]))
+  )
     throw new Error("Compatibility table is invalid");
-  for (const [tree, entry] of Object.entries(table.entries)) {
+  const compat = table as HermesCompatTable;
+  if (compat.format !== 1 || !compat.entries || typeof compat.entries !== "object")
+    throw new Error("Compatibility table is invalid");
+  const entries = Object.entries(compat.entries);
+  if (entries.length === 0) throw new Error("Compatibility table is invalid");
+  let sourcePaths: string[] | undefined;
+  for (const [tree, entry] of entries) {
+    if (!isHex(tree, 40) || !entry || typeof entry !== "object" || Array.isArray(entry))
+      throw new Error("Compatibility table is invalid");
+    const keys = new Set([...ENTRY_FIELDS, ...OPTIONAL_ENTRY_FIELDS]);
+    if (!sameKeys(entry, keys) && !sameKeys(entry, ENTRY_FIELDS))
+      throw new Error("Compatibility table is invalid");
     if (
-      !entry ||
-      entry.tree !== tree ||
       typeof entry.version !== "string" ||
-      typeof entry.commit !== "string" ||
-      entry.commit.length !== 40 ||
-      !entry.sources ||
-      typeof entry.sources !== "object" ||
-      Object.values(entry.sources).some(
-        (digest) => typeof digest !== "string" || !/^[0-9a-f]{64}$/.test(digest),
-      ) ||
-      !entry.agentInit ||
-      typeof entry.agentInit.parameterCount !== "number" ||
-      !Array.isArray(entry.agentInit.required) ||
-      entry.agentInit.required.some((name) => typeof name !== "string") ||
-      !entry.sourceGuard ||
-      !Array.isArray(entry.sourceGuard.mustContain) ||
-      !Array.isArray(entry.sourceGuard.mustNotContain) ||
-      !entry.callbacks ||
-      typeof entry.callbacks.setup_mcp_callback !== "string" ||
-      (entry.constructedToolsets !== undefined &&
-        (!entry.constructedToolsets ||
-          !Array.isArray(entry.constructedToolsets.enabled) ||
-          !Array.isArray(entry.constructedToolsets.disabled) ||
-          entry.constructedToolsets.enabled.some((name) => typeof name !== "string") ||
-          entry.constructedToolsets.disabled.some((name) => typeof name !== "string")))
+      entry.version.length === 0 ||
+      entry.tree !== tree ||
+      !isHex(entry.commit, 40)
     )
       throw new Error("Compatibility table is invalid");
+    if (
+      !entry.sources ||
+      typeof entry.sources !== "object" ||
+      Array.isArray(entry.sources) ||
+      Object.keys(entry.sources).length === 0 ||
+      Object.entries(entry.sources).some(
+        ([name, digest]) => typeof name !== "string" || !isHex(digest, 64),
+      )
+    )
+      throw new Error("Compatibility table is invalid");
+    const paths = Object.keys(entry.sources).sort();
+    if (sourcePaths && paths.join() !== sourcePaths.join())
+      throw new Error("Compatibility table is invalid");
+    sourcePaths = paths;
     checkHook(entry.sessionHook);
     checkHook(entry.toolsetHelper);
     checkHook(entry.acpAgentInit);
+    if (
+      entry.sessionHook.parameters[0]?.[0] !== "self" ||
+      entry.acpAgentInit.parameters[0]?.[0] !== "self"
+    )
+      throw new Error("Compatibility table is invalid");
+    if (
+      !entry.agentInit ||
+      typeof entry.agentInit !== "object" ||
+      Array.isArray(entry.agentInit) ||
+      !sameKeys(entry.agentInit, new Set(["parameterCount", "required"])) ||
+      typeof entry.agentInit.parameterCount !== "number" ||
+      !Number.isInteger(entry.agentInit.parameterCount) ||
+      entry.agentInit.parameterCount < 0 ||
+      !isStringList(entry.agentInit.required, true) ||
+      entry.agentInit.parameterCount < entry.agentInit.required.length
+    )
+      throw new Error("Compatibility table is invalid");
+    if (
+      !entry.sourceGuard ||
+      typeof entry.sourceGuard !== "object" ||
+      Array.isArray(entry.sourceGuard) ||
+      !sameKeys(entry.sourceGuard, new Set(["mustContain", "mustNotContain"])) ||
+      !isStringList(entry.sourceGuard.mustContain) ||
+      !isStringList(entry.sourceGuard.mustNotContain) ||
+      entry.sourceGuard.mustContain.length + entry.sourceGuard.mustNotContain.length === 0
+    )
+      throw new Error("Compatibility table is invalid");
+    if (
+      !entry.callbacks ||
+      typeof entry.callbacks !== "object" ||
+      Array.isArray(entry.callbacks) ||
+      !sameKeys(entry.callbacks, new Set(["setup_mcp_callback"])) ||
+      typeof entry.callbacks.setup_mcp_callback !== "string" ||
+      entry.callbacks.setup_mcp_callback.length === 0
+    )
+      throw new Error("Compatibility table is invalid");
+    if ("constructedToolsets" in entry) {
+      const constructed = entry.constructedToolsets;
+      if (
+        !constructed ||
+        typeof constructed !== "object" ||
+        Array.isArray(constructed) ||
+        !sameKeys(constructed, new Set(["enabled", "disabled"])) ||
+        !isStringList(constructed.enabled, true) ||
+        !isStringList(constructed.disabled, true)
+      )
+        throw new Error("Compatibility table is invalid");
+    }
   }
-  return table;
-})();
+  return compat;
+}
+
+/** The typed compatibility table; loading validates the shape, so a bad entry fails closed. */
+export const HERMES_COMPAT: HermesCompatTable = assertCompatTableValid(compat);
 
 /** The entry the pinned install must resolve to; absent entries are refused by both sides. */
 export const HERMES_COMPAT_PINNED: HermesCompatEntry | undefined =

@@ -204,6 +204,15 @@ class ConstructedAgentTests(unittest.TestCase):
         return SimpleNamespace(enabled_toolsets=enabled, disabled_toolsets=disabled,
                                connection_callback=callback)
 
+    def server(self, **overrides):
+        values = {"name": "ardur", "transport": "http", "command": None,
+                  "url": "http://127.0.0.1:9/mcp", "args": ["--relay"]}
+        values.update(overrides)
+        return SimpleNamespace(**values)
+
+    def manager(self, accepted=None):
+        return SimpleNamespace(_ardur_mcp_server=accepted)
+
     def test_new_entry_asserts_exact_toolsets(self):
         agent = self.agent(["mcp-ardur"], ["hermes-acp"])
         harden_constructed_agent(agent, NEW_ENTRY)
@@ -215,30 +224,65 @@ class ConstructedAgentTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "Constructed toolsets changed"):
             harden_constructed_agent(agent, NEW_ENTRY)
 
-    def test_callback_guard_refuses_servers_ardur_did_not_configure(self):
-        agent = self.agent(["mcp-ardur"], ["hermes-acp"])
-        harden_constructed_agent(agent, NEW_ENTRY)
-        self.assertIsNone(agent.connection_callback(server="ardur"))
-        self.assertIsNone(agent.connection_callback(SimpleNamespace(name="ardur")))
-        with self.assertRaisesRegex(RuntimeError, "MCP server attachment refused"):
-            agent.connection_callback(server="other")
-        with self.assertRaisesRegex(RuntimeError, "MCP server attachment refused"):
-            agent.connection_callback(SimpleNamespace(name="other"))
-
-    def test_callback_guard_delegates_to_an_installed_callback(self):
+    def test_callback_guard_delegates_the_configured_server(self):
         calls = []
 
         def original(*args, **kwargs):
             calls.append((args, kwargs))
             return "attached"
 
+        accepted = self.server()
         agent = self.agent(["mcp-ardur"], ["hermes-acp"], callback=original)
-        harden_constructed_agent(agent, NEW_ENTRY)
-        self.assertEqual(agent.connection_callback(name="ardur"), "attached")
-        self.assertEqual(len(calls), 1)
+        harden_constructed_agent(agent, NEW_ENTRY, self.manager(accepted))
+        self.assertEqual(agent.connection_callback(server=accepted), "attached")
+        self.assertEqual(agent.connection_callback(accepted), "attached")
+        self.assertEqual(len(calls), 2)
+
+    def test_callback_guard_is_inert_without_an_original_callback(self):
+        accepted = self.server()
+        agent = self.agent(["mcp-ardur"], ["hermes-acp"])
+        harden_constructed_agent(agent, NEW_ENTRY, self.manager(accepted))
+        self.assertIsNone(agent.connection_callback(server=accepted))
+
+    def test_callback_guard_refuses_a_server_ardur_did_not_configure(self):
+        accepted = self.server()
+        agent = self.agent(["mcp-ardur"], ["hermes-acp"])
+        harden_constructed_agent(agent, NEW_ENTRY, self.manager(accepted))
         with self.assertRaisesRegex(RuntimeError, "MCP server attachment refused"):
-            agent.connection_callback(name="other")
-        self.assertEqual(len(calls), 1)
+            agent.connection_callback(server=self.server(url="https://unconfigured.invalid/mcp"))
+        with self.assertRaisesRegex(RuntimeError, "MCP server attachment refused"):
+            agent.connection_callback(server=self.server(args=["--other"]))
+        with self.assertRaisesRegex(RuntimeError, "MCP server attachment refused"):
+            agent.connection_callback(server=self.server(command="unexpected"))
+        with self.assertRaisesRegex(RuntimeError, "MCP server attachment refused"):
+            agent.connection_callback(server=SimpleNamespace(name="ardur"))
+
+    def test_callback_guard_refuses_a_bare_name(self):
+        accepted = self.server()
+        agent = self.agent(["mcp-ardur"], ["hermes-acp"])
+        harden_constructed_agent(agent, NEW_ENTRY, self.manager(accepted))
+        with self.assertRaisesRegex(RuntimeError, "MCP server attachment refused"):
+            agent.connection_callback(server="ardur")
+        with self.assertRaisesRegex(RuntimeError, "MCP server attachment refused"):
+            agent.connection_callback("ardur")
+        with self.assertRaisesRegex(RuntimeError, "MCP server attachment refused"):
+            agent.connection_callback(name="ardur")
+
+    def test_callback_guard_refuses_conflicting_selectors(self):
+        accepted = self.server()
+        agent = self.agent(["mcp-ardur"], ["hermes-acp"])
+        harden_constructed_agent(agent, NEW_ENTRY, self.manager(accepted))
+        with self.assertRaisesRegex(RuntimeError, "MCP server attachment refused"):
+            agent.connection_callback(self.server(name="other"), server=accepted)
+
+    def test_callback_guard_refuses_without_an_accepted_server(self):
+        agent = self.agent(["mcp-ardur"], ["hermes-acp"])
+        harden_constructed_agent(agent, NEW_ENTRY)
+        with self.assertRaisesRegex(RuntimeError, "MCP server attachment refused"):
+            agent.connection_callback(server=self.server())
+        harden_constructed_agent(agent, NEW_ENTRY, SimpleNamespace())
+        with self.assertRaisesRegex(RuntimeError, "MCP server attachment refused"):
+            agent.connection_callback(server=self.server())
 
     def test_old_entry_leaves_the_constructed_agent_untouched(self):
         agent = SimpleNamespace(enabled_toolsets=None, disabled_toolsets=None)
