@@ -12,6 +12,8 @@ import {
   BOT_DESCRIPTION_MAX_LENGTH,
   BOT_NAME_MAX_LENGTH,
   BOT_TITLE_MAX_LENGTH,
+  ISOLATED_COMPUTER_UNAVAILABLE_CODE,
+  recommendedContainer,
 } from "@ardurbot/contracts";
 import type {
   HermesRuntimeConfigV2,
@@ -49,6 +51,7 @@ import { ModelDestinations } from "../ModelDestinations";
 import { AvatarStudioPopover } from "./avatar-studio-popover";
 import { ModelEffortSelect, ModelPinSelect } from "./model-pin-select";
 import { RuntimeSettings } from "./runtime-settings";
+import { BotRuntimeSettings, RuntimeBoundary } from "./runtime-summary";
 
 const ScratchpadSection = lazy(() =>
   import("../ScratchpadSection").then((module) => ({ default: module.ScratchpadSection })),
@@ -88,7 +91,7 @@ function ComputerModePicker({
           }}
           className="capitalize aria-pressed:border-foreground/40 aria-pressed:text-foreground"
         >
-          {mode === "team" ? <Trans>Team</Trans> : <Trans>Private</Trans>}
+          {mode === "team" ? <Trans>Shared with team</Trans> : <Trans>Only this bot</Trans>}
         </Toggle>
       ))}
     </div>
@@ -98,26 +101,66 @@ function ComputerModePicker({
 export function CreateBotForm({
   onCreate,
   onCancel,
+  onSetupComputer,
 }: {
   onCreate: (input: {
     name: string;
     title: string;
     description: string;
     computerMode: ComputerMode;
+    isolatedComputer?: { connectionId: string | null };
   }) => Promise<void>;
   onCancel: () => void;
+  onSetupComputer?: () => void;
 }) {
   const { t } = useLingui();
   const ids = useId();
   const [name, setName] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [computerMode, setComputerMode] = useState<ComputerMode>("team");
+  const [computerMode, setComputerMode] = useState<ComputerMode>("dedicated");
+  const [container, setContainer] = useState<{ connectionId: string | null } | null>(null);
+  const [locationReady, setLocationReady] = useState(false);
+  const [containerName, setContainerName] = useState("");
+  const [teamKind, setTeamKind] = useState("");
+  const [locationRevision, setLocationRevision] = useState(0);
+  useEffect(() => {
+    const reload = () => setLocationRevision((value) => value + 1);
+    window.addEventListener("fleet:changed", reload);
+    return () => window.removeEventListener("fleet:changed", reload);
+  }, []);
+  useEffect(() => {
+    let active = true;
+    setLocationReady(false);
+    setContainer(null);
+    void Promise.all([rpc.me(), rpc.computer.connections(), rpc.computer.list()])
+      .then(([me, connections, computers]) => {
+        if (active) {
+          const recommendation = recommendedContainer(me.sandboxProvider, connections);
+          setTeamKind(
+            computers.find((entry) => entry.status.mode === "team")?.status.kind ??
+              me.sandboxProvider,
+          );
+          setContainer(recommendation);
+          setContainerName(
+            connections.find((entry) => entry.id === recommendation?.connectionId)?.name ??
+              me.sandboxProvider,
+          );
+          setLocationReady(true);
+        }
+      })
+      .catch(() => {
+        if (active) setLocationReady(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [locationRevision]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit() {
-    if (!name.trim() || submitting) return;
+    if (!name.trim() || submitting || !locationReady || !container) return;
     setError(null);
     setSubmitting(true);
     try {
@@ -126,9 +169,21 @@ export function CreateBotForm({
         title: title.trim(),
         description: description.trim(),
         computerMode,
+        ...(computerMode === "dedicated" ? { isolatedComputer: container } : {}),
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : t`Could not create bot`);
+      const refusal =
+        err instanceof Error &&
+        (err as Error & { data?: { code?: string } }).data?.code ===
+          ISOLATED_COMPUTER_UNAVAILABLE_CODE;
+      setError(
+        refusal
+          ? t`Set up a container for isolated work.`
+          : err instanceof Error
+            ? err.message
+            : t`Could not create bot`,
+      );
+      if (refusal) setLocationRevision((value) => value + 1);
     } finally {
       setSubmitting(false);
     }
@@ -190,18 +245,43 @@ export function CreateBotForm({
       </label>
       <div data-testid="create-bot-computer" className="mt-4">
         <div className="mb-2 text-[14px] text-muted-foreground">
-          <Trans>Computer</Trans>
+          <Trans>Where this bot runs</Trans>
         </div>
+        {container && computerMode === "dedicated" ? (
+          <div className="mb-3 text-sm">
+            <RuntimeBoundary kind="docker" locationName={containerName} />
+          </div>
+        ) : null}
         <ComputerModePicker
           value={computerMode}
           onChange={setComputerMode}
           teamTestId="create-bot-team"
           privateTestId="create-bot-private"
         />
+        {computerMode === "team" ? (
+          <p className="mt-2 text-sm text-muted-foreground">
+            <Trans>Bots share files and installed tools</Trans>
+          </p>
+        ) : null}
+        {computerMode === "team" && teamKind ? (
+          <div className="mt-2 text-sm">
+            <RuntimeBoundary kind={teamKind} />
+          </div>
+        ) : null}
+        {locationReady && !container ? (
+          <div className="mt-2 text-sm">
+            <p>
+              <Trans>Set up a container for isolated work.</Trans>
+            </p>
+            <Button variant="outline" onClick={onSetupComputer}>
+              <Trans>Set up computer</Trans>
+            </Button>
+          </div>
+        ) : null}
       </div>
       <Button
         className="mt-5"
-        disabled={!name.trim() || submitting}
+        disabled={!name.trim() || submitting || !locationReady || !container}
         onClick={() => void handleSubmit()}
       >
         {submitting ? <Trans>Creating…</Trans> : <Trans>Create</Trans>}
@@ -278,10 +358,9 @@ export function BotSettings({
     destinationsRef.current?.querySelector("select")?.focus();
     destinationsRef.current?.scrollIntoView({ block: "nearest" });
   }, [destinationsFocusRequest]);
-  // The computer card sits inside Advanced; a computer refusal opens it on the way.
+  // Computer refusals point at the ordinary settings card.
   useEffect(() => {
     if (!computerFocusRequest) return;
-    if (advancedDetailsRef.current) advancedDetailsRef.current.open = true;
     computerRef.current?.scrollIntoView({ block: "nearest" });
   }, [computerFocusRequest]);
   // The model select exists only for the built-in runtime, and a focus request can arrive
@@ -739,6 +818,17 @@ export function BotSettings({
           <BotContext botId={bot.id} />
         </div>
       </SettingsGroup>
+      <SettingsGroup label={t`Where this bot runs`}>
+        <div ref={computerRef} className="space-y-3 py-4">
+          <BotRuntimeSettings botId={bot.id} name={bot.name} mode={computerMode} />
+          <ComputerModePicker value={computerMode} onChange={setComputerMode} />
+          {computerMode === "team" ? (
+            <p className="text-sm text-muted-foreground">
+              <Trans>Bots share files and installed tools</Trans>
+            </p>
+          ) : null}
+        </div>
+      </SettingsGroup>
       <SettingsGroup label={t`Notifications`}>
         <div className="flex items-center justify-between gap-4 py-4">
           <span id={`${ids}-notify-finish-label`} className="text-[14px] text-foreground">
@@ -845,11 +935,6 @@ export function BotSettings({
                   </div>
                 </div>
               ) : null}
-            </div>
-          </SettingsGroup>
-          <SettingsGroup label={t`Computer`}>
-            <div ref={computerRef} className="py-4">
-              <ComputerModePicker value={computerMode} onChange={setComputerMode} />
             </div>
           </SettingsGroup>
         </div>

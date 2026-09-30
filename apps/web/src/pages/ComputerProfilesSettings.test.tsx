@@ -274,7 +274,9 @@ it("labels a desktop computer with the host label the API returns, not the brows
     );
   expect(element.textContent).toContain("Engine: This Mac");
   expect(options()).toEqual(["This Mac", "Office"]);
-  expect(element.textContent).not.toContain("This computer");
+  expect(element.querySelector('[data-testid="runtime-summary"]')?.textContent).toContain(
+    "Runs as you; can use your files and signed-in tools",
+  );
   window.ardurbotDesktop = { platform: "darwin" } as NonNullable<Window["ardurbotDesktop"]>;
   await act(async () => render("This computer"));
   expect(element.textContent).toContain("Engine: This computer");

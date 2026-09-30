@@ -125,6 +125,8 @@ import {
   HostMoveUnavailableError,
   IntegrationManifestSchema,
   IntegrationProviderIdSchema,
+  ISOLATED_COMPUTER_UNAVAILABLE_CODE,
+  IsolatedComputerUnavailableError,
   nativeRuntimeHealthKeys,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   usableModelId,
@@ -1559,6 +1561,11 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         try {
           return await repos.createBot(context.actor, input);
         } catch (error) {
+          if (error instanceof IsolatedComputerUnavailableError)
+            throw new ORPCError("BAD_REQUEST", {
+              message: error.message,
+              data: { code: ISOLATED_COMPUTER_UNAVAILABLE_CODE },
+            });
           throw mapSpaceLifecycleError(error);
         }
       }),

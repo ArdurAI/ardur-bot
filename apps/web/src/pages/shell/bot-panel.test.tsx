@@ -17,6 +17,8 @@ const api = vi.hoisted(() => ({
   credentials: vi.fn(),
   me: vi.fn(),
   availability: vi.fn(),
+  connections: vi.fn(),
+  computers: vi.fn(),
 }));
 vi.mock("../../lib/rpc", () => ({
   rpc: {
@@ -24,6 +26,7 @@ vi.mock("../../lib/rpc", () => ({
     models: api,
     runtimes: { availability: api.availability },
     me: api.me,
+    computer: { connections: api.connections, list: api.computers },
     voice: { voices: async () => [] },
   },
 }));
@@ -54,13 +57,32 @@ vi.mock("@ardurbot/ui-web", () => ({
   Textarea: (props: ComponentProps<"textarea">) => <textarea {...props} />,
   NativeSelect: (props: ComponentProps<"select">) => <select {...props} />,
   NativeSelectOption: (props: ComponentProps<"option">) => <option {...props} />,
-  Toggle: ({ children }: { children: ReactNode }) => <button type="button">{children}</button>,
+  Toggle: ({
+    children,
+    pressed,
+    onPressedChange,
+    "data-testid": testId,
+  }: {
+    children: ReactNode;
+    pressed: boolean;
+    onPressedChange: (value: boolean) => void;
+    "data-testid"?: string;
+  }) => (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      data-testid={testId}
+      onClick={() => onPressedChange(!pressed)}
+    >
+      {children}
+    </button>
+  ),
   Switch: () => null,
 }));
 
 import { useModelSettings } from "../../lib/use-model-settings";
 import { BotModelChip, effectiveBotModel } from "./bot-model-chip";
-import { BotSettings } from "./bot-panel";
+import { BotSettings, CreateBotForm } from "./bot-panel";
 import { ProviderErrorMessage } from "./provider-error-message";
 import { RuntimeSettings } from "./runtime-settings";
 
@@ -130,6 +152,8 @@ beforeEach(() => {
   api.list.mockResolvedValue(catalog);
   api.credentials.mockResolvedValue(credentials);
   api.me.mockResolvedValue(me);
+  api.connections.mockResolvedValue([]);
+  api.computers.mockResolvedValue([]);
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -353,11 +377,17 @@ describe("bot model settings", () => {
   });
 });
 
-it("groups bot settings into cards and keeps memory and computer under Advanced", async () => {
+it("shows execution settings outside Advanced while keeping memory progressive", async () => {
   await act(async () => root.render(settings()));
   const cards = [...container.querySelectorAll("section[data-settings-group]")];
   const title = (card: Element) => card.querySelector("h3")?.textContent;
-  expect(cards.map(title)).toEqual(["Profile", "Model", "Notifications", "Memory", "Computer"]);
+  expect(cards.map(title)).toEqual([
+    "Profile",
+    "Model",
+    "Where this bot runs",
+    "Notifications",
+    "Memory",
+  ]);
   const card = (label: string) => cards.find((item) => title(item) === label)!;
   const profileFields = card("Profile").querySelector('input[id$="-name"]')?.closest(".grid");
   const defaultPaneWidth = 560;
@@ -381,9 +411,74 @@ it("groups bot settings into cards and keeps memory and computer under Advanced"
   expect(card("Notifications").textContent).toContain("Read replies aloud");
   const advanced = container.querySelector('[data-testid="bot-settings-advanced"]');
   expect(advanced?.contains(card("Memory"))).toBe(true);
-  expect(advanced?.contains(card("Computer"))).toBe(true);
+  expect(advanced?.contains(card("Where this bot runs"))).toBe(false);
   expect(advanced?.contains(card("Notifications"))).toBe(false);
-  expect(card("Computer").textContent).toBe("ComputerTeamPrivate");
+  expect(card("Where this bot runs").textContent).toContain("Shared with team");
+  expect(card("Where this bot runs").textContent).toContain("Bots share files and installed tools");
+});
+
+describe("new isolated work", () => {
+  async function enterName() {
+    const input = container.querySelector<HTMLInputElement>('input[id$="-name"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+        input,
+        "Builder",
+      );
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+  const createButton = () =>
+    [...container.querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.textContent === "Create",
+    )!;
+  it("defaults to a dedicated container and submits an explicit pin", async () => {
+    api.me.mockResolvedValue({ ...me, sandboxProvider: "docker", computerHost: "this-mac" });
+    const onCreate = vi.fn();
+    await act(async () => root.render(<CreateBotForm onCreate={onCreate} onCancel={() => {}} />));
+    expect(
+      container.querySelector('[data-testid="create-bot-private"]')?.getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(container.textContent).toContain("Container");
+    await enterName();
+    await act(async () => createButton().click());
+    expect(onCreate).toHaveBeenCalledWith({
+      name: "Builder",
+      title: "",
+      description: "",
+      computerMode: "dedicated",
+      isolatedComputer: { connectionId: null },
+    });
+  });
+  it("offers setup rather than silently creating on the host", async () => {
+    api.me.mockResolvedValue({ ...me, sandboxProvider: "desktop" });
+    const onCreate = vi.fn();
+    const onSetupComputer = vi.fn();
+    await act(async () =>
+      root.render(
+        <CreateBotForm onCreate={onCreate} onCancel={() => {}} onSetupComputer={onSetupComputer} />,
+      ),
+    );
+    await enterName();
+    expect(createButton().disabled).toBe(true);
+    const setup = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Set up computer",
+    )!;
+    await act(async () => setup.click());
+    expect(onSetupComputer).toHaveBeenCalledOnce();
+    expect(onCreate).not.toHaveBeenCalled();
+  });
+  it("uses a saved container on a host-only deployment", async () => {
+    api.me.mockResolvedValue({ ...me, sandboxProvider: "desktop" });
+    api.connections.mockResolvedValue([
+      { id: "saved", name: "Container engine", settings: { engine: "podman" } },
+    ]);
+    const onCreate = vi.fn();
+    await act(async () => root.render(<CreateBotForm onCreate={onCreate} onCancel={() => {}} />));
+    await enterName();
+    await act(async () => createButton().click());
+    expect(onCreate.mock.calls[0]?.[0].isolatedComputer).toEqual({ connectionId: "saved" });
+  });
 });
 
 describe("effective bot model", () => {
