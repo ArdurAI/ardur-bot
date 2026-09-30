@@ -321,4 +321,184 @@ export const EFFORT_EXAMPLES: readonly EffortExample[] = [
   { text: "嗯嗯", taskType: "unknown" },
   { text: "так, ладно", taskType: "unknown" },
   { text: "Friday works for me", taskType: "unknown" },
+
+  // Round 2 additions, written before the rules changed. They cover the six kinds of
+  // miss found on the fresh set and infrastructure and operations work, in several
+  // languages. None of them is copied from the fresh set.
+
+  // diagnosis that ends with a question mark
+  {
+    text: "The ingress returns 502 since the last deploy, the controller logs say upstream prematurely closed connection. Any idea?",
+    taskType: "debugging",
+    note: "round 2: the dangerous miss from the fresh set; a diagnosis, not a question",
+  },
+  {
+    text: "Why do the export jobs keep failing with OOMKilled? Any ideas?",
+    taskType: "debugging",
+    note: "round 2: question mark over a named failure",
+  },
+  {
+    text: "Ever since the upgrade the mobile app freezes for ten seconds after login, any suggestions?",
+    taskType: "debugging",
+  },
+  {
+    text: "since Friday every payment webhook returns 500, is that a config problem?",
+    taskType: "debugging",
+  },
+  {
+    text: "The cluster API server is timing out on the readiness endpoint, any clues before I dig in?",
+    taskType: "debugging",
+  },
+  {
+    text: "Checkout is broken, users see an ErrorBoundary after step two. Any clue what changed?",
+    taskType: "debugging",
+  },
+  {
+    text: "Le scheduler redis s'arrête toutes les nuits vers 3h, une idée ?",
+    taskType: "debugging",
+  },
+  {
+    text: "Der Export-Worker stirbt mit Exit Code 137, siehst du da ein Muster?",
+    taskType: "debugging",
+  },
+
+  // short factual questions that name something technical
+  { text: "what is the default timeout of the worker queue", taskType: "simple-question" },
+  { text: "what port does the exporter listen on?", taskType: "simple-question" },
+  { text: "does the gateway retry 429s by default?", taskType: "simple-question" },
+  { text: "is the staging database encrypted at rest?", taskType: "simple-question" },
+  { text: "Was ist die maximale Größe einer Kafka-Message?", taskType: "simple-question" },
+  { text: "Combien de répliques le cluster a-t-il par défaut ?", taskType: "simple-question" },
+  { text: "worker 队列的默认超时是多少？", taskType: "simple-question" },
+  { text: "what does the --dry-run flag do?", taskType: "simple-question" },
+
+  // imperatives about a system or a configuration, and code to write
+  {
+    text: "Raise the connection pool to 50 on the staging database and keep it after restarts",
+    taskType: "operations",
+    note: "round 2: run-config change, not code",
+  },
+  {
+    text: "Add a circuit breaker around the payment client",
+    taskType: "code-change",
+    note: "round 2: code to change, not a system to run",
+  },
+  {
+    text: "Write the Dockerfile for the exporter with a non-root user",
+    taskType: "code-change",
+    note: "round 2: the thing to write is code, not prose",
+  },
+  { text: "Bump the replicas in the staging values file to six", taskType: "operations" },
+  {
+    text: "Set the log level to debug on the ingress controller for an hour",
+    taskType: "operations",
+  },
+  { text: "Turn on slow query logging for the reporting database tonight", taskType: "operations" },
+  {
+    text: "Increase the pod limit on the build cluster before the release",
+    taskType: "operations",
+  },
+  { text: "Add a readiness probe to the web deployment", taskType: "code-change" },
+  { text: "Change the retry count in the sync worker from 3 to 5", taskType: "operations" },
+  { text: "Renew the staging certificate and restart the gateway", taskType: "operations" },
+
+  // prose to write that mentions a product or an incident
+  {
+    text: "Draft a status page note about this morning's delay",
+    taskType: "writing",
+    note: "round 2: an incident is mentioned but the ask is prose",
+  },
+  { text: "Write the release notes for version 2.4, keep them under a page", taskType: "writing" },
+  {
+    text: "Draft the incident summary for the queue backlog, plain language please",
+    taskType: "writing",
+  },
+  {
+    text: "Compose a two-line update for the customers affected by the outage",
+    taskType: "writing",
+  },
+  { text: "Schreibe eine kurze Ankündigung für das Wartungsfenster", taskType: "writing" },
+  { text: "Draft the onboarding email for new operators of the platform", taskType: "writing" },
+  { text: "帮我写一条关于这次故障的公告", taskType: "writing" },
+
+  // counts and comparisons over data, including data about failures
+  {
+    text: "How many jobs took longer than ten minutes yesterday? The export is attached",
+    taskType: "data",
+    note: "round 2: failures counted, not fixed",
+  },
+  {
+    text: "How often did the payments API 5xx last week compared to the week before?",
+    taskType: "data",
+  },
+  { text: "What was the p95 latency of the search endpoint per day last week?", taskType: "data" },
+  { text: "Which region had the most restarts last month?", taskType: "data" },
+  { text: "How much did the queue depth grow during the sale? Numbers attached", taskType: "data" },
+  { text: "Wie viele Deployments sind letzte Woche fehlgeschlagen?", taskType: "data" },
+  {
+    text: "Combien de pods redémarrent chaque nuit ? Les métriques sont jointes",
+    taskType: "data",
+  },
+  { text: "上次发布以来错误率涨了多少？日志在附件里", taskType: "data" },
+
+  // languages with no rule of their own
+  {
+    text: "నమస్కారం, రిపోర్ట్ తయారవుతుందా?",
+    taskType: "unknown",
+    note: "round 2: no Telugu rules; unknown is the honest answer",
+  },
+  { text: "नमस्ते, कैसे हैं आप?", taskType: "small-talk", note: "round 2: a greeting, not a question" },
+  { text: "مرحبا، كيف حالك؟", taskType: "small-talk", note: "round 2: a greeting, not a question" },
+  {
+    text: "La file d'attente est bloquée depuis la mise à jour, une idée ?",
+    taskType: "debugging",
+    note: "round 2: failure words with no French list of their own",
+  },
+  { text: "El despliegue de anoche falló, revisa los logs del worker", taskType: "debugging" },
+  {
+    text: "చెక్‌అవుట్ పేజీ క్రాష్ అవుతోంది, లాగ్స్ చూడం",
+    taskType: "debugging",
+    note: "round 2: a Telugu bug report; the structural reading must catch it",
+  },
+
+  // deployments, clusters, queues, databases, certificates, logs
+  { text: "Drain node worker-3 before the patch window", taskType: "operations" },
+  { text: "Cordon the canary nodes and hold the rollout", taskType: "operations" },
+  { text: "Scale the ingest deployment down to two replicas overnight", taskType: "operations" },
+  {
+    text: "Fail over the primary database to the standby and verify replication",
+    taskType: "operations",
+  },
+  { text: "Rotate the API signing keys this week and update the vault", taskType: "operations" },
+  { text: "Expand the persistent volume for the index to 500Gi", taskType: "operations" },
+  { text: "Unblock the stuck jobs in the export queue", taskType: "operations" },
+  { text: "Pause the nightly cron for the reconciliation worker", taskType: "operations" },
+  { text: "Provision a staging cluster in the new region", taskType: "operations" },
+  { text: "kubectl rollout status deployment/api-gateway", taskType: "operations" },
+  { text: "helm upgrade metrics ./charts/exporter --set replicas=3", taskType: "operations" },
+  { text: "Take a snapshot of the reporting database before the upgrade", taskType: "operations" },
+  { text: "Whitelist the office IPs on the staging load balancer", taskType: "operations" },
+  { text: "Retire the old canary ingress after the traffic shift", taskType: "operations" },
+  { text: "Riprova il deploy del worker, stamattina è fallito", taskType: "operations" },
+  { text: "搭建一套新的 staging 环境，用昨晚的备份", taskType: "operations" },
+
+  // looks like ops or chat but is not
+  {
+    text: "how do I rotate the certificates without downtime?",
+    taskType: "simple-question",
+    note: "round 2: asks how, does not ask for the rotation",
+  },
+  { text: "what does the readiness probe check?", taskType: "simple-question" },
+  { text: "when did the last deploy finish?", taskType: "simple-question" },
+  {
+    text: "The rollout finished, nicely done",
+    taskType: "small-talk",
+    note: "round 2: praise, not work",
+  },
+  { text: "quick one: is the queue worker horizontally scalable?", taskType: "simple-question" },
+  {
+    text: "Sube la retencion a 30 dias en el bucket de logs",
+    taskType: "operations",
+    note: "round 2: config imperative in Spanish",
+  },
 ];
