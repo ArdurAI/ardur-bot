@@ -1,4 +1,5 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -14,8 +15,11 @@ const SOURCE_ROOT = fileURLToPath(new URL(".", import.meta.url));
 
 const DISCARD_PATTERNS = [
   { kind: "stderr.resume()", regex: /stderr\.resume\(\)/ },
-  { kind: 'stdio: "ignore"', regex: /stdio:\s*"ignore"/ },
-  { kind: 'stdio: ["ignore", ...]', regex: /stdio:\s*\[\s*"ignore"/ },
+  { kind: 'stdio: "ignore"', regex: /["'`]?stdio["'`]?\s*:\s*["'`]ignore["'`]/g },
+  {
+    kind: "ignored stdio array stream",
+    regex: /["'`]?stdio["'`]?\s*:\s*\[[^\]]*["'`]ignore["'`][^\]]*\]/g,
+  },
 ] as const;
 
 /** File (relative to src/) -> why this site may keep ignoring a stream. */
@@ -42,19 +46,46 @@ function* sourceFiles(dir: string): Generator<string> {
   }
 }
 
-describe("child output discard guard", () => {
-  it("every discarded stream is either captured or allow-listed with a reason", () => {
-    const hits: { file: string; line: number; kind: string; text: string }[] = [];
-    for (const file of sourceFiles(SOURCE_ROOT)) {
-      const rel = relative(SOURCE_ROOT, file).split("\\").join("/");
-      const lines = readFileSync(file, "utf8").split("\n");
-      lines.forEach((text, index) => {
-        for (const pattern of DISCARD_PATTERNS) {
-          if (pattern.regex.test(text))
-            hits.push({ file: rel, line: index + 1, kind: pattern.kind, text: text.trim() });
-        }
-      });
+function discardHits(root: string) {
+  const hits: { file: string; line: number; kind: string; text: string }[] = [];
+  for (const file of sourceFiles(root)) {
+    const rel = relative(root, file).split("\\").join("/");
+    const text = readFileSync(file, "utf8");
+    for (const pattern of DISCARD_PATTERNS) {
+      for (const match of text.matchAll(new RegExp(pattern.regex.source, "g"))) {
+        hits.push({
+          file: rel,
+          line: text.slice(0, match.index).split("\n").length,
+          kind: pattern.kind,
+          text: match[0],
+        });
+      }
     }
+  }
+  return hits;
+}
+
+describe("child output discard guard", () => {
+  it.each([
+    'stdio: ["pipe", "ignore", "ignore"]',
+    "stdio: ['pipe', 'pipe', 'ignore']",
+    'stdio: [\n  "pipe",\n  "ignore",\n  "pipe"\n]',
+    '"stdio": "ignore"',
+    "stdio: 'ignore'",
+  ])("rejects a discarded stream in a scratch source: %s", (stdio) => {
+    const root = mkdtempSync(join(tmpdir(), "child-output-guard-"));
+    try {
+      writeFileSync(join(root, "scratch.ts"), `spawn("fixture", [], { ${stdio} });\n`);
+      const unlisted = discardHits(root).filter((hit) => !(hit.file in ALLOW_LIST));
+      expect(unlisted).toHaveLength(1);
+      expect(unlisted[0]?.file).toBe("scratch.ts");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("every discarded stream is either captured or allow-listed with a reason", () => {
+    const hits = discardHits(SOURCE_ROOT);
     const unlisted = hits.filter((hit) => !(hit.file in ALLOW_LIST));
     expect(
       unlisted.map(
@@ -65,11 +96,7 @@ describe("child output discard guard", () => {
 
   it("every allow-list entry still matches a real site", () => {
     const filesWithHits = new Set<string>();
-    for (const file of sourceFiles(SOURCE_ROOT)) {
-      const rel = relative(SOURCE_ROOT, file).split("\\").join("/");
-      const text = readFileSync(file, "utf8");
-      if (DISCARD_PATTERNS.some((pattern) => pattern.regex.test(text))) filesWithHits.add(rel);
-    }
+    for (const hit of discardHits(SOURCE_ROOT)) filesWithHits.add(hit.file);
     const stale = Object.keys(ALLOW_LIST).filter((file) => !filesWithHits.has(file));
     expect(stale).toEqual([]);
   });
