@@ -79,6 +79,13 @@ function fixture(status = "queued") {
   return { row, computer, computerUpdate, deps, jobs };
 }
 describe("background computer maintenance", () => {
+  it("includes the computer identity so shared bots can find their interrupted update", () => {
+    const { row } = fixture("interrupted");
+    expect(computerUpdateView(row, true)).toMatchObject({
+      computerId: row.computerId,
+      canReleaseReservation: true,
+    });
+  });
   it("persists stages and releases its reservation only after completion; redelivery is harmless", async () => {
     const { row, computer, deps } = fixture();
     replacement.mockImplementationOnce(async (_deps, _id, _mode, _ctx, _holder, progress) => {

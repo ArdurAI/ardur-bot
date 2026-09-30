@@ -14,6 +14,7 @@ import type { PrismaClient } from "./client.js";
 import { Prisma } from "./client.js";
 import type { ComputerMode } from "./computers.js";
 import { ensureComputerRecord, parseComputerMode } from "./computers.js";
+import { DELEGATION_ADMISSION_TRANSACTION } from "./delegation.js";
 import { createThreadMessageInTransaction } from "./messages.js";
 import { BotSectionNameConflictError, IsolationError } from "./scope.js";
 import { lockSpaceForContentCreation } from "./spaces.js";
@@ -615,7 +616,7 @@ export function createRepos(prisma: PrismaClient) {
             where: { id: created.id },
             include: { thread: true, computer: true },
           });
-        });
+        }, DELEGATION_ADMISSION_TRANSACTION);
 
       const findBySpawnKey = async () => {
         if (!input.spawnKey) return null;

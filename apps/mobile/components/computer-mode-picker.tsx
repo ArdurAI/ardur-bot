@@ -8,10 +8,12 @@ export function ComputerModePicker({
   value,
   onChange,
   disabled = false,
+  showConsequence = true,
 }: {
   value: ComputerMode | undefined;
   onChange: (mode: ComputerMode) => void;
   disabled?: boolean;
+  showConsequence?: boolean;
 }) {
   const { t } = useI18n();
   const tokens = useMobileTokens();
@@ -46,7 +48,7 @@ export function ComputerModePicker({
           </Pressable>
         ))}
       </View>
-      {sharingWarning ? (
+      {showConsequence && sharingWarning ? (
         <Text style={{ color: tokens.mutedForeground, marginTop: 8 }}>{t(sharingWarning)}</Text>
       ) : null}
     </View>

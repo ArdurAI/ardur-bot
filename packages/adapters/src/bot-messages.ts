@@ -27,6 +27,7 @@ import {
   BotInboxFullError,
   checkPeerTrafficLimits,
   createThreadMessageInTransaction,
+  DELEGATION_ADMISSION_TRANSACTION,
   deviceDigest,
   goalBotAuthorityFingerprint,
   lockPeerTrafficPolicy,
@@ -1142,7 +1143,7 @@ export async function messageBot(
           targetEventSeq: inboundEvent.seq,
           senderEventSeq: outboundEvent.seq,
         };
-      }),
+      }, DELEGATION_ADMISSION_TRANSACTION),
     );
   } catch (error) {
     if (error instanceof BotInboxFullError) {

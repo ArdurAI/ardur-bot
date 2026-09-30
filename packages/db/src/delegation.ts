@@ -50,6 +50,20 @@ export const ACTIVE_DELEGATIONS = ["queued", "running", "cancel-requested"];
 const PEER_RECEIPT_MAX_LENGTH = 2000;
 type Scope = Pick<Actor, "spaceId" | "userId">;
 
+/**
+ * Interactive-transaction budget for every transaction that takes the delegation-root
+ * lock (peer messages, handoffs, group asks, helpers, comparisons and child spawns).
+ * The flaky bot-comms receipt e2e showed the default 5 s Prisma cap is shorter than the
+ * wait these transactions legitimately see: the recipient's in-flight turn holds the
+ * thread and root-task row locks while the sender queues ("Waiting for a turn"), and on
+ * a loaded CI machine that wait expired the transaction at ~5 010 ms, failing the run
+ * and losing the receipt. The work after the lock is short (~20 indexed queries), so
+ * the wait itself must stay inside the transaction; the timeout only needs to outlive a
+ * busy recipient, not the whole turn. Sized at 6× the observed expiry; maxWait covers
+ * acquiring a pooled connection under burst.
+ */
+export const DELEGATION_ADMISSION_TRANSACTION = { maxWait: 10_000, timeout: 30_000 } as const;
+
 async function unresolvedBrokerTokens(
   tx: Prisma.TransactionClient,
   delegationId: string,

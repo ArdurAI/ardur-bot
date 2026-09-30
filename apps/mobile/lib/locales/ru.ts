@@ -1,4 +1,8 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "Move to a container": "Переместить в контейнер",
+  "Keep current location": "Оставить текущее расположение",
+  "Paused for an update": "Приостановлен для обновления",
+  "The last update was interrupted.": "Последнее обновление было прервано.",
   "Reading the document": "Читаю документ",
   "Connecting to Notion": "Подключаюсь к Notion",
   "Creating the Notion page": "Создаю страницу в Notion",

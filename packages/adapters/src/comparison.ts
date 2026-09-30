@@ -20,6 +20,7 @@ import { redactTaskValue, taskCardRequest } from "@ardurbot/core";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
 import {
   comparisonMergeInput,
+  DELEGATION_ADMISSION_TRANSACTION,
   deviceDigest,
   lockDelegationRoot,
   readComparison,
@@ -335,7 +336,7 @@ export async function startComparison(deps: ComparisonDeps, scope: Scope, raw: C
           ),
         );
       return { id: comparison.id, runIds };
-    }),
+    }, DELEGATION_ADMISSION_TRANSACTION),
   );
   await wake(deps, admitted.runIds);
   return readComparison(deps.prisma, scope, admitted.id);
@@ -423,7 +424,7 @@ export async function mergeComparison(deps: ComparisonDeps, scope: Scope, raw: C
         },
       });
       return [runId];
-    }),
+    }, DELEGATION_ADMISSION_TRANSACTION),
   );
   await wake(deps, runIds);
   return readComparison(deps.prisma, scope, input.id);
