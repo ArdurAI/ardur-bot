@@ -138,3 +138,19 @@ export const VERIFICATION_CODES = [
 export type VerificationCode = (typeof VERIFICATION_CODES)[number];
 export const isVerificationCode = (value: unknown): value is VerificationCode =>
   member(VERIFICATION_CODES, value);
+export const SEAL_REQUIRED_CLAIMS = [
+  "schema_version",
+  "type",
+  "iss",
+  "sub",
+  "aud",
+  "iat",
+  "exp",
+  "jti",
+  "passport_jti",
+  "receipt_chain_head",
+  "total_events",
+  "permits",
+  "denials",
+] as const;
+export const SEAL_LIFETIME_SECONDS = 7_776_000;
