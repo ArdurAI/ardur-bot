@@ -202,6 +202,7 @@ jobs:
           - { os: macos-15, platform: mac, arch: x64 }
           - { os: ubuntu-24.04, platform: linux, arch: x64, debArch: amd64, imageArch: x86_64 }
           - { os: ubuntu-24.04-arm, platform: linux, arch: arm64, debArch: arm64, imageArch: arm64, optional: true }
+          - { os: windows-2022, platform: win, arch: x64 }
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -229,6 +230,16 @@ jobs:
         env:
           ARDUR_INSTALL_LOG_DIR: ${{ runner.temp }}/install-acceptance
         run: bash scripts/release/install-acceptance-linux.sh installers/ardur-${{ needs.validate.outputs.version }}-linux-${{ matrix.imageArch }}.AppImage
+      - name: Check Windows script parsing and process failure assertions
+        if: matrix.platform == 'win'
+        shell: pwsh
+        run: ./scripts/release/install-acceptance-win.test.ps1
+      - name: Silently install, open, and uninstall NSIS on clean Windows
+        if: matrix.platform == 'win'
+        shell: pwsh
+        env:
+          ARDUR_INSTALL_LOG_DIR: ${{ runner.temp }}/install-acceptance
+        run: ./scripts/release/install-acceptance-win.ps1 installers/ardur-${{ needs.validate.outputs.version }}-win-${{ matrix.arch }}.exe
       - name: Upload install logs and screenshots
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

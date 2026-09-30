@@ -79,7 +79,7 @@ describe("Linux install launch verdict", () => {
     try {
       await writeFile(path.join(dir, "app.stdout.log"), stdout);
       await writeFile(path.join(dir, "app.stderr.log"), stderr);
-      const result = spawnSync("bash", ["-c", predicate!.replaceAll("/evidence", "${logs}")], {
+      const result = spawnSync("bash", ["-c", predicate!.replaceAll("/evidence", "$logs")], {
         env: { ...process.env, logs: dir, status: String(status) },
       });
       expect(result.status === 0).toBe(accepted);
