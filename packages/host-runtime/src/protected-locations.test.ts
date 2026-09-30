@@ -12,7 +12,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { ProtectedLocation } from "@ardurbot/contracts";
+import type { ProtectedLocation } from "@ardurbot/contracts/protected-locations";
 import { afterEach, describe, expect, it } from "vitest";
 import { seatbeltProfile } from "./host-guardrails.js";
 import {

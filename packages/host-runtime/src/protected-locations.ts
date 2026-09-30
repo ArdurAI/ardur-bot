@@ -1,6 +1,12 @@
 import { isAbsolute, join, normalize, sep } from "node:path";
-import type { ProcessLocationKind, ProtectedLocation } from "@ardurbot/contracts";
-import { deniedLocationIds, PROTECTED_LOCATIONS_DEFAULTS } from "@ardurbot/contracts";
+import type {
+  ProcessLocationKind,
+  ProtectedLocation,
+} from "@ardurbot/contracts/protected-locations";
+import {
+  deniedLocationIds,
+  PROTECTED_LOCATIONS_DEFAULTS,
+} from "@ardurbot/contracts/protected-locations";
 import {
   type HostGuardrailConfig,
   resolveGuardrailPathsSync,
