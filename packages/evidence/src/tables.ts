@@ -124,6 +124,7 @@ export const FORMAT_ERROR_CODES = [
 ] as const;
 export type FormatErrorCode = (typeof FORMAT_ERROR_CODES)[number];
 export const VERIFICATION_CODES = [
+  "empty_chain",
   "malformed_jws",
   "header_invalid",
   "kid_mismatch",

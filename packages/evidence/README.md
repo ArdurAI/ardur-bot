@@ -47,6 +47,15 @@ starting at 0; runId is recovered from record 0 before its final colon, so run
 IDs may contain colons. Identity or step inconsistencies fail with run_mismatch,
 even if all signatures and parent hashes are correct.
 
+Empty journals fail verification with empty_chain at index -1. verifySeal also
+retains receipt_chain_head_mismatch for an empty journal with a valid seal.
+
+Verification codes are defined in VERIFICATION_CODES in src/tables.ts:
+empty_chain, malformed_jws, header_invalid, kid_mismatch, signature_invalid,
+payload_not_canonical, claims_invalid, chain_broken, run_mismatch,
+seal_signature_invalid, seal_claims_invalid, seal_missing_chain_head and
+receipt_chain_head_mismatch.
+
 buildEvidenceBundle returns four { path, contents } files without filesystem
 side effects, after checking the seal against the supplied public key. The
 independent check command lives only in the exported EVIDENCE_CHECK_COMMAND in

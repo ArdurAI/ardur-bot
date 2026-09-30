@@ -47,6 +47,25 @@ function signedPayload(payload: unknown, typ = "application/ardur.er+jwt") {
 }
 
 describe("chain and seal verification", () => {
+  it("rejects an empty chain with a stable list-level failure", () => {
+    expect(verifyChain([], keys.publicKeyPem)).toEqual({
+      ok: false,
+      recordCount: 0,
+      headReceiptId: null,
+      failures: [expect.objectContaining({ index: -1, code: "empty_chain" })],
+    });
+  });
+  it("keeps empty sealed journals invalid", () => {
+    const { seal } = run();
+    const result = verifySeal(seal, [], keys.publicKeyPem);
+    expect(result.ok).toBe(false);
+    expect(result.recordCount).toBe(0);
+    expect(result.headReceiptId).toBeNull();
+    expect(result.failures).toEqual([
+      expect.objectContaining({ index: -1, code: "empty_chain" }),
+      expect.objectContaining({ index: 0, code: "receipt_chain_head_mismatch" }),
+    ]);
+  });
   it("accepts the full sealed run", () => {
     const { records, seal } = run();
     const last = decodeCompact(records[3]).payload as { receipt_id: string };

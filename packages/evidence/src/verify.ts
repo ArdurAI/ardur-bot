@@ -160,6 +160,10 @@ export function verifyChain(
     failures.push({ index: -1, code: "malformed_jws", message: "Expected a list of records" });
     return result;
   }
+  if (jwsList.length === 0) {
+    failures.push({ index: -1, code: "empty_chain", message: "Expected at least one record" });
+    return result;
+  }
   let key: KeyObject;
   try {
     key = verificationKey(publicKey);
