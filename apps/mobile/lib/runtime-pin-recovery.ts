@@ -135,3 +135,23 @@ export function runtimeRefusalActionLabel(action: FailureCategoryRecoveryAction)
       ? t("Open Settings")
       : t("Open bot settings");
 }
+
+/**
+ * Failed runs whose refusal the reader fixed by saving the setting it named. The phone
+ * hides such a run's refusal the way the web dismisses the composer error after the same
+ * save, and a newer run event takes the banner's place.
+ */
+export function dismissRefusalRun(
+  dismissed: ReadonlySet<string>,
+  runId: string,
+): ReadonlySet<string> {
+  return new Set(dismissed).add(runId);
+}
+
+/** True while the newest failed run is one the reader already fixed; a new run shows its own. */
+export function refusalRunDismissed(
+  dismissed: ReadonlySet<string>,
+  runId: string | null | undefined,
+): boolean {
+  return runId != null && dismissed.has(runId);
+}

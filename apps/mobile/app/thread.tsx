@@ -136,6 +136,8 @@ import { type PickedAttachment, pickDocuments, pickFromLibrary } from "../lib/pi
 import { threadRefreshDelayMs } from "../lib/refresh";
 import {
   antigravityProblemMessage,
+  dismissRefusalRun,
+  refusalRunDismissed,
   runtimePinRecovery,
   runtimeRefusalActionLabel,
   runtimeRefusalRecovery,
@@ -1425,8 +1427,14 @@ function Thread() {
 
   const answerableAskIds = useMemo(() => answerableAskMessageIds(snap), [snap]);
   const failedRunBotId = snap?.run?.runtimeProblem ? (snap.run.botId ?? botId ?? "") : "";
-  // Turn on Experimental saves the bot's setting the way the bot settings screen does; the
-  // banner leaves with the next snapshot, which reports the failed run as it was.
+  // Runs whose refusal the reader fixed by saving the setting it named; the banner hides
+  // that run's refusal until a newer run event takes its place, the way the web dismisses
+  // the composer error after the same save.
+  const [dismissedRefusalRunIds, setDismissedRefusalRunIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  // Turn on Experimental saves the bot's setting the way the bot settings screen does; on
+  // success the refusal it named leaves until the next run event.
   async function enableExperimental(targetBotId: string) {
     if (!targetBotId) return;
     try {
@@ -1436,7 +1444,11 @@ function Thread() {
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : t("Could not save changes. Try again."));
+      return;
     }
+    const refusedRunId = snap?.run?.id;
+    if (refusedRunId)
+      setDismissedRefusalRunIds((current) => dismissRefusalRun(current, refusedRunId));
   }
   const pinRecovery = snap?.run?.runtimeProblem
     ? runtimePinRecovery(snap.run.runtimeProblem, failedRunBotId)
@@ -1449,7 +1461,7 @@ function Thread() {
       ? (memberName(snap?.members, snap.run.botId) ?? name ?? t("This bot"))
       : null;
   const runError =
-    snap?.run?.status === "failed"
+    snap?.run?.status === "failed" && !refusalRunDismissed(dismissedRefusalRunIds, snap.run.id)
       ? snap.run.runtimeProblem
         ? refusalBotName
           ? runtimeProblemText(snap.run.runtimeProblem, refusalBotName)

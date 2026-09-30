@@ -3,6 +3,8 @@ import { expect, it } from "vitest";
 import { activateUiLocale } from "./i18n";
 import {
   antigravityProblemMessage,
+  dismissRefusalRun,
+  refusalRunDismissed,
   runtimePinRecovery,
   runtimeRefusalActionLabel,
   runtimeRefusalRecovery,
@@ -196,4 +198,15 @@ it("falls back to the bot's settings when a refusal carries no category", () => 
   expect(runtimeRefusalRecovery(problem, "bot")).toEqual({
     actions: [{ kind: "route", pathname: "/bot-settings", params: { botId: "bot" } }],
   });
+});
+
+it("hides a refusal the reader fixed until a newer run fails", () => {
+  const dismissed = dismissRefusalRun(new Set(), "run-1");
+  expect([...dismissed]).toEqual(["run-1"]);
+  // The fixed run's refusal stays hidden while it is the newest terminal run…
+  expect(refusalRunDismissed(dismissed, "run-1")).toBe(true);
+  // …and a newer run event shows its own refusal again.
+  expect(refusalRunDismissed(dismissed, "run-2")).toBe(false);
+  expect(refusalRunDismissed(dismissed, null)).toBe(false);
+  expect(refusalRunDismissed(dismissed, undefined)).toBe(false);
 });
