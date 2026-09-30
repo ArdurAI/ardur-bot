@@ -4,6 +4,8 @@ import { COMPUTER_BOUNDARY_MESSAGES, COMPUTER_KINDS } from "@ardurbot/contracts"
 import { formatter } from "@lingui/format-po";
 import { expect, it } from "vitest";
 
+// Only strings the web renders; phone-only wording ("Sharing", "Change location on desktop.",
+// "Set up a container on desktop, then try again.") is required by the phone's catalog test.
 const messages = [
   ...new Set([
     ...Object.values(COMPUTER_KINDS).map((kind) => kind.location),
@@ -19,9 +21,6 @@ const messages = [
     "Set up computer",
     "Starting",
     "Could not start",
-    "Sharing",
-    "Change location on desktop.",
-    "Set up a container on desktop, then try again.",
     "Stopped",
     "Running",
     "Sleeping",

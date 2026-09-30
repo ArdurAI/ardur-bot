@@ -110,3 +110,14 @@ it("shows the missing-engine sentence instead of the warning, and hides Recover"
     );
   });
 });
+
+it("keeps the banner clickable over the desktop window's title bar", async () => {
+  // The banner sits in the title bar's drag region; without no-drag the desktop app swallows
+  // the click and the dialog never opens (2026-09-30).
+  await mounted(base, async (container) => {
+    const banner = [...container.querySelectorAll("div")].find((element) =>
+      element.className.includes("fixed"),
+    );
+    expect(banner?.className).toContain("app-no-drag");
+  });
+});

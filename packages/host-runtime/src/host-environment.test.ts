@@ -13,6 +13,7 @@ vi.mock("node:child_process", () => ({ spawn: fake.spawn }));
 import {
   captureHostEnvironment,
   filterHostEnvironment,
+  hostProbe,
   inspectHostEnvironment,
   redactHostStatus,
   resolveHostBinary,
@@ -27,6 +28,33 @@ function launched(binary: string, args: readonly string[]) {
 }
 
 const roots: string[] = [];
+it("redacts bare bridge-shaped environment and argument credentials in probe stderr", async () => {
+  vi.stubEnv("LOG_LEVEL", "debug");
+  vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", "1");
+  const write = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+  const processChild = child();
+  processChild.stdin.on("finish", () =>
+    (processChild.stderr as PassThrough).end(`${"a1".repeat(32)}\n${"b2".repeat(32)}\n`),
+  );
+  fake.spawn.mockReturnValue(processChild);
+  try {
+    await hostProbe(
+      "fixture",
+      ["--token", "b2".repeat(32)],
+      { BRIDGE_KEY: "a1".repeat(32) },
+      false,
+      2000,
+      "linux",
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const logs = write.mock.calls.map(([line]) => String(line)).join("");
+    expect(logs).toContain("host-probe stderr: [redacted]");
+    expect(logs).not.toContain("a1".repeat(32));
+    expect(logs).not.toContain("b2".repeat(32));
+  } finally {
+    write.mockRestore();
+  }
+});
 function child(output = "", code: number | null = 0, error?: string) {
   const process = new EventEmitter() as ChildProcessWithoutNullStreams;
   const stdout = new PassThrough();

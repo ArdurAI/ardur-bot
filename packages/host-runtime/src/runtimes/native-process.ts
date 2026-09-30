@@ -196,6 +196,7 @@ export function terminateNative(
   if (process.platform === "win32") {
     const system = process.env.SystemRoot ?? process.env.WINDIR;
     if (system && isAbsolute(system)) {
+      // stdio stays ignored: a detached one-shot process-tree killer owns no output.
       const killer = spawn(
         join(system, "System32", "taskkill.exe"),
         ["/pid", String(child.pid), "/t", "/f"],
