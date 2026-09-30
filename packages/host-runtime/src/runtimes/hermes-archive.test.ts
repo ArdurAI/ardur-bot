@@ -246,6 +246,20 @@ it("still refuses link entries", async () => {
   }
 });
 
+/** True on a disk that cannot hold two names differing only by letter case (Mac, Windows). */
+async function diskIgnoresCase(dir: string): Promise<boolean> {
+  const probe = path.join(dir, ".Case-Probe");
+  await writeFile(probe, "");
+  try {
+    await readFile(path.join(dir, ".case-probe"));
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await rm(probe, { force: true });
+  }
+}
+
 it.skipIf(process.platform === "win32")(
   "keeps the first of two entries whose paths differ only by letter case",
   async () => {
@@ -264,8 +278,15 @@ it.skipIf(process.platform === "win32")(
         limits,
       );
       expect(await readFile(path.join(dest, "notes", "Team.txt"), "utf8")).toBe("first\n");
-      expect(logged.join("\n")).toContain("notes/team.txt");
-      expect(logged.join("\n")).toContain("letter case");
+      if (await diskIgnoresCase(dest)) {
+        // A Mac or Windows disk: the second entry cannot exist beside the first.
+        expect(logged.join("\n")).toContain("notes/team.txt");
+        expect(logged.join("\n")).toContain("letter case");
+      } else {
+        // A Linux disk holds both, and nothing is skipped.
+        expect(await readFile(path.join(dest, "notes", "team.txt"), "utf8")).toBe("second\n");
+        expect(logged.join("\n")).not.toContain("letter case");
+      }
     } finally {
       info.mockRestore();
       await rm(dest, { recursive: true, force: true });
@@ -295,7 +316,9 @@ it("refuses an entry over a file the archive did not write", async () => {
   const dest = await mkdtemp(path.join(tmpdir(), "hermes-planted-"));
   try {
     await mkdir(path.join(dest, "notes"), { recursive: true });
-    await writeFile(path.join(dest, "notes", "team.txt"), "planted\n");
+    // Planted under the exact name on every disk, and under a name that differs only by
+    // letter case on a disk that ignores case: neither counts as a case collision.
+    await writeFile(path.join(dest, "notes", "Team.txt"), "planted\n");
     await expect(
       extractSourceArchive(
         gzipTar([entry({ name: "pkg/notes/Team.txt", data: Buffer.from("first\n") })]),
@@ -303,7 +326,17 @@ it("refuses an entry over a file the archive did not write", async () => {
         limits,
       ),
     ).rejects.toThrow("archive refused");
-    expect(await readFile(path.join(dest, "notes", "team.txt"), "utf8")).toBe("planted\n");
+    expect(await readFile(path.join(dest, "notes", "Team.txt"), "utf8")).toBe("planted\n");
+    if (await diskIgnoresCase(dest)) {
+      await expect(
+        extractSourceArchive(
+          gzipTar([entry({ name: "pkg/notes/team.txt", data: Buffer.from("first\n") })]),
+          dest,
+          limits,
+        ),
+      ).rejects.toThrow("archive refused");
+      expect(await readFile(path.join(dest, "notes", "Team.txt"), "utf8")).toBe("planted\n");
+    }
   } finally {
     await rm(dest, { recursive: true, force: true });
   }
