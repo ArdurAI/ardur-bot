@@ -60,7 +60,9 @@ export function ComputerUpdateProgress({ onCompleted }: { onCompleted: () => voi
   const selected = updates.find((update) => update.id === openId);
   return (
     <>
-      <div className="fixed top-3 left-1/2 z-50 flex -translate-x-1/2 flex-col gap-2">
+      {/* The banner sits over the desktop window's title bar, a drag region that swallows clicks
+          unless the element opts out, so the dialog never opened in the desktop app. */}
+      <div className="app-no-drag fixed top-3 left-1/2 z-50 flex -translate-x-1/2 flex-col gap-2">
         {updates.map((update) => (
           <Button
             key={update.id}

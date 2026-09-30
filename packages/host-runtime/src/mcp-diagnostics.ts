@@ -1,6 +1,25 @@
 import type { McpDiagnostics } from "@ardurbot/contracts";
+import { redactSensitiveText } from "../../logging/src/redaction.js";
 
-const sensitiveFlag = /(?:password|passwd|secret|token|api[-_]?key|credential|authorization)/i;
+const sensitiveFlag = /(?:password|passwd|secret|token|key|credential|authorization|cookie)/i;
+
+export function environmentSecrets(env: NodeJS.ProcessEnv): string[] {
+  return Object.entries(env).flatMap(([key, value]) =>
+    sensitiveFlag.test(key) && value ? [value] : [],
+  );
+}
+
+/** The private Ardur relay passes its capability as the final positional argument. */
+export function mcpConfigSecrets(config: {
+  args: readonly string[];
+  env?: NodeJS.ProcessEnv;
+}): string[] {
+  return [
+    config.args.at(-1) ?? "",
+    ...argumentSecrets(config.args),
+    ...environmentSecrets(config.env ?? {}),
+  ].filter(Boolean);
+}
 export function argumentSecrets(args: readonly string[]): string[] {
   const values: string[] = [];
   for (let i = 0; i < args.length; i++) {
@@ -17,6 +36,13 @@ function secretSpellings(secret: string): Set<string> {
   return new Set([secret, encodeURIComponent(secret), JSON.stringify(secret).slice(1, -1)]);
 }
 
+export function mcpSecretSpellings(secrets: readonly string[]): string[] {
+  const active = secrets.flatMap((secret) => [secret, ...secret.split(/\r?\n/).filter(Boolean)]);
+  return [
+    ...new Set(active.filter(Boolean).flatMap((secret) => [...secretSpellings(secret)])),
+  ].sort((a, b) => b.length - a.length);
+}
+
 export function mcpTextContainsSecret(value: string, secret: string): boolean {
   return (
     Boolean(secret) && [...secretSpellings(secret)].some((spelling) => value.includes(spelling))
@@ -25,17 +51,10 @@ export function mcpTextContainsSecret(value: string, secret: string): boolean {
 
 export function redactMcpText(value: string, secrets: readonly string[] = []): string {
   let result = value;
-  for (const secret of [...new Set(secrets)].filter(Boolean).sort((a, b) => b.length - a.length)) {
-    for (const spelling of secretSpellings(secret))
-      result = result.split(spelling).join("[redacted]");
-  }
-  return result
-    .replace(/(Bearer\s+)[^\s,"'}]+/gi, "$1[redacted]")
-    .replace(
-      /((?:password|passwd|secret|token|api[-_]?key|credential|authorization)["']?\s*[:=]\s*)[^\s,;}]+/gi,
-      "$1[redacted]",
-    )
-    .replace(/(https?:\/\/)[^\s/@]+:[^\s/@]+@/gi, "$1[redacted]@")
+  for (const spelling of mcpSecretSpellings(secrets))
+    result = result.split(spelling).join("[redacted]");
+  return redactSensitiveText(result)
+    .replaceAll("[Redacted]", "[redacted]")
     .replace(new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*[A-Za-z]`, "g"), "");
 }
 

@@ -49,7 +49,11 @@ export abstract class LinuxFleetSandbox implements SandboxProvider {
     computer: ComputerRef,
     argv: string[],
     context: AdapterContext,
-  ): Promise<{ child: ChildProcessWithoutNullStreams; cleanup(): Promise<void> }>;
+  ): Promise<{
+    child: ChildProcessWithoutNullStreams;
+    secrets?: readonly string[];
+    cleanup(): Promise<void>;
+  }>;
   async prepare(computer: ComputerRef, context: AdapterContext) {
     await this.call(computer, ["python3", "-c", "import os; print(os.name)"], context);
   }

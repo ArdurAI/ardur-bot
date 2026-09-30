@@ -1038,6 +1038,7 @@ function runCommand(
 function killProcessTree(pid: number | undefined, env: NodeJS.ProcessEnv) {
   if (!pid) return;
   if (process.platform === "win32") {
+    // stdio stays ignored: a detached one-shot process-tree killer owns no output.
     const killer = spawn(
       path.join(env.SystemRoot ?? "C:\\Windows", "System32", "taskkill.exe"),
       ["/pid", String(pid), "/t", "/f"],

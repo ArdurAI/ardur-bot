@@ -77,14 +77,17 @@ export class SshSandboxProvider extends LinuxFleetSandbox {
     if (!this.privateKey) throw new Error("SSH key is unavailable.");
     const directory = await mkdtemp(path.join(tmpdir(), "ardurbot-key-"));
     const file = path.join(directory, "identity");
+    let key: string;
     try {
-      await writeFile(file, await this.privateKey(), { mode: 0o600 });
+      key = await this.privateKey();
+      await writeFile(file, key, { mode: 0o600 });
     } catch (error) {
       await rm(directory, { recursive: true, force: true });
       throw error;
     }
     return {
       options: sshOptions(this.settings, file),
+      secrets: [key],
       cleanup: () => rm(directory, { recursive: true, force: true }),
     };
   }
@@ -175,6 +178,7 @@ export class SshSandboxProvider extends LinuxFleetSandbox {
           remoteArgv(argv),
         ]),
         cleanup: identity.cleanup,
+        secrets: identity.secrets,
       };
     } catch (error) {
       await identity.cleanup();
