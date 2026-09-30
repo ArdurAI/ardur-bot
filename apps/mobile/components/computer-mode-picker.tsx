@@ -17,7 +17,7 @@ export function ComputerModePicker({
   return (
     <View style={{ marginTop: 16 }}>
       <Text style={{ color: tokens.mutedForeground, marginBottom: 8, fontSize: 14 }}>
-        {t("Computer")}
+        {t("Sharing")}
       </Text>
       <View style={{ flexDirection: "row", gap: 8 }}>
         {(["team", "dedicated"] as const).map((mode) => (
@@ -39,11 +39,14 @@ export function ComputerModePicker({
             }}
           >
             <Text style={{ color: value === mode ? tokens.foreground : tokens.mutedForeground }}>
-              {mode === "team" ? t("Team") : t("Private")}
+              {mode === "team" ? t("Shared with team") : t("Only this bot")}
             </Text>
           </Pressable>
         ))}
       </View>
+      <Text style={{ color: tokens.mutedForeground, marginTop: 8 }}>
+        {t("Bots share files and installed tools")}
+      </Text>
     </View>
   );
 }

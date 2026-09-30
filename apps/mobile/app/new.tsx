@@ -1,15 +1,20 @@
+import type { ComputerConnectionSettings, ComputerMode, Me } from "@ardurbot/contracts";
 import {
   BOT_DESCRIPTION_MAX_LENGTH,
   BOT_NAME_MAX_LENGTH,
   BOT_TITLE_MAX_LENGTH,
-  type ComputerMode,
+  errorDataCode,
+  ISOLATED_COMPUTER_UNAVAILABLE_CODE,
   normalizeCreateBotProfile,
+  recommendedContainer,
 } from "@ardurbot/contracts";
 import { Stack, useRouter } from "expo-router";
-import { useState } from "react";
-import { Pressable, ScrollView, Text, TextInput } from "react-native";
+import { useEffect, useState } from "react";
+import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { ComputerModePicker } from "../components/computer-mode-picker";
-import { type MobileBot, rpc } from "../lib/api";
+import { RuntimeBoundary } from "../components/runtime-summary";
+import type { MobileBot } from "../lib/api";
+import { rpc } from "../lib/api";
 import { allowFocusPrompt, scheduleFocusPrompt } from "../lib/focus-prompt";
 import { useI18n } from "../lib/i18n";
 import { useMobileTokens } from "../lib/native";
@@ -21,7 +26,40 @@ export default function NewBot() {
   const [name, setName] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [computerMode, setComputerMode] = useState<ComputerMode>("team");
+  const [computerMode, setComputerMode] = useState<ComputerMode>("dedicated");
+  const [container, setContainer] = useState<{ connectionId: string | null } | null>(null);
+  const [containerName, setContainerName] = useState("");
+  const [locationReady, setLocationReady] = useState(false);
+  const [locationRevision, setLocationRevision] = useState(0);
+  useEffect(() => {
+    let active = true;
+    setLocationReady(false);
+    setContainer(null);
+    void Promise.all([
+      rpc<Me>("me"),
+      rpc<{ id: string; name: string; settings: ComputerConnectionSettings }[]>(
+        "computer/connections",
+        {},
+      ),
+    ])
+      .then(([me, connections]) => {
+        if (active) {
+          const recommendation = recommendedContainer(me.sandboxProvider, connections);
+          setContainer(recommendation);
+          setContainerName(
+            connections.find((entry) => entry.id === recommendation?.connectionId)?.name ??
+              me.sandboxProvider,
+          );
+          setLocationReady(true);
+        }
+      })
+      .catch(() => {
+        if (active) setLocationReady(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [locationRevision]);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -38,7 +76,7 @@ export default function NewBot() {
   }
 
   async function create() {
-    if (!name.trim() || pending) return;
+    if (!name.trim() || pending || !locationReady || !container) return;
     setPending(true);
     setError(null);
     try {
@@ -49,6 +87,7 @@ export default function NewBot() {
         ...normalizeCreateBotProfile({ name, title, description }),
         notifyOnFinish: true,
         computerMode,
+        ...(computerMode === "dedicated" ? { isolatedComputer: container } : {}),
       });
       allowFocusPrompt(bot.id);
       router.replace({ pathname: "/thread", params: { botId: bot.id, name: bot.name } });
@@ -60,7 +99,15 @@ export default function NewBot() {
         scheduleFocusPrompt(bot.id, isFirstBot);
       })();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("Could not create bot"));
+      const refusal = errorDataCode(err) === ISOLATED_COMPUTER_UNAVAILABLE_CODE;
+      setError(
+        refusal
+          ? t("Set up a container for isolated work.")
+          : err instanceof Error
+            ? err.message
+            : t("Could not create bot"),
+      );
+      if (refusal) setLocationRevision((value) => value + 1);
     } finally {
       setPending(false);
     }
@@ -141,11 +188,43 @@ export default function NewBot() {
             textAlignVertical: "top",
           }}
         />
-        <ComputerModePicker value={computerMode} onChange={setComputerMode} />
+        <View style={{ marginTop: 16, gap: 8 }}>
+          <Text style={{ color: tokens.foreground, fontWeight: "600" }}>
+            {t("Where this bot runs")}
+          </Text>
+          {container && computerMode === "dedicated" ? (
+            <RuntimeBoundary kind="docker" locationName={containerName} />
+          ) : null}
+          <ComputerModePicker value={computerMode} onChange={setComputerMode} />
+          {locationReady && !container ? (
+            <>
+              <Text style={{ color: tokens.mutedForeground }}>
+                {t("Set up a container for isolated work.")}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() =>
+                  Alert.alert(
+                    t("Set up computer"),
+                    t("Set up a container on desktop, then try again."),
+                  )
+                }
+              >
+                <Text style={{ color: tokens.foreground }}>{t("Set up computer")}</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setLocationRevision((value) => value + 1)}
+              >
+                <Text style={{ color: tokens.foreground }}>{t("Retry")}</Text>
+              </Pressable>
+            </>
+          ) : null}
+        </View>
         {error ? <Text style={{ color: tokens.destructive, marginTop: 16 }}>{error}</Text> : null}
         <Pressable
           onPress={() => void create()}
-          disabled={!name.trim() || pending}
+          disabled={!name.trim() || pending || !locationReady || !container}
           style={{
             marginTop: 24,
             backgroundColor: tokens.primary,
