@@ -151,6 +151,8 @@ export async function traceRpc(
         messageId: accepted.id,
         seq: accepted.seq,
       });
+      // An event-first receipt may already be painted, so no new React commit is required.
+      if (painting?.snapshot.threadId === accepted.threadId) paintThreadTrace(painting.snapshot);
     }
     return receipt;
   }

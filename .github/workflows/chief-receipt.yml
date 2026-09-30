@@ -44,3 +44,59 @@ jobs:
       - run: pnpm db:generate
       - run: pnpm db:migrate
       - run: pnpm exec vitest run packages/testkit/src/chief-loop.postgres.test.ts --maxWorkers=2 --silent=false --reporter=verbose
+  browser:
+    name: Chief receipt visible-paint journey
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TESTKIT_SKIP_ROOT_ENV: '1'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @ardurbot/web exec playwright install --with-deps chromium
+      - run: pnpm test:e2e --workers=1 --spec=chief-receipt.spec.ts
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: chief-receipt-screenshots
+          path: apps/web/test-results
+          if-no-files-found: ignore
+  bundle:
+    name: Chief receipt initial bundle budget
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: baseline
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir baseline install --frozen-lockfile
+      - run: pnpm --dir baseline --filter @ardurbot/web build
+      - run: pnpm --filter @ardurbot/web build
+      - name: Compare initial gzip against the exact dev base
+        run: |
+          node --input-type=module -e '
+          import { measureBundle } from "./scripts/bundle-budget.mjs";
+          const base = await measureBundle("baseline/apps/web/dist");
+          const candidate = await measureBundle("apps/web/dist");
+          const increase = candidate.initial.gzipBytes - base.initial.gzipBytes;
+          console.log(JSON.stringify({ baseInitialGzipBytes: base.initial.gzipBytes, candidateInitialGzipBytes: candidate.initial.gzipBytes, increaseBytes: increase, allowedIncreaseBytes: 1024 }));
+          if (increase > 1024) process.exitCode = 1;
+          '
