@@ -16,6 +16,7 @@ import type { ProtectedLocation } from "@ardurbot/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import { seatbeltProfile } from "./host-guardrails.js";
 import {
+  broadProtectedLocations,
   protectedLocationHint,
   protectedLocationOf,
   protectedPaths,
@@ -194,6 +195,64 @@ describe("protectedPaths", () => {
   });
 });
 
+describe("a location that would deny too much", () => {
+  const place = (paths: string[]): ProtectedLocation[] => [
+    { id: "place", label: "Place", paths, kind: "credentials" },
+  ];
+
+  it.each(["~//", "~///", "~/a/..", "~/a/..//", "~/./"])(
+    "never names the home folder itself: %j",
+    async (entry) => {
+      // The schema refuses these before they are stored. Built by hand, they are refused
+      // here too, so the home folder can never reach the deny list.
+      const home = await scratchHome();
+      expect(() =>
+        protectedPaths({ process: "bot-command", grants: [], locations: place([entry]), home }),
+      ).toThrow();
+    },
+  );
+
+  it("names a path with a separator at its end as the folder it means", async () => {
+    const home = await realpath(await scratchHome());
+    await mkdir(path.join(home, ".keys"));
+    expect(
+      protectedPaths({
+        process: "bot-command",
+        grants: [],
+        locations: place(["~/.keys/"]),
+        home,
+      }),
+    ).toEqual([path.join(home, ".keys")]);
+  });
+
+  it("denies the link and not its target when the target is the home folder, a folder above it or the root", async () => {
+    const home = await realpath(await scratchHome());
+    for (const [name, target] of [
+      ["to-home", home],
+      ["to-parent", path.dirname(home)],
+      ["to-root", path.parse(home).root],
+    ] as const) {
+      await symlink(target, path.join(home, name));
+      const locations = place([`~/${name}`]);
+      const denied = protectedPaths({ process: "bot-command", grants: [], locations, home });
+      expect(denied, name).toEqual([path.join(home, name)]);
+      expect(broadProtectedLocations({ locations, home }), name).toEqual(["place"]);
+    }
+  });
+
+  it("denies a link's target anywhere else, such as keys kept on another disk", async () => {
+    const home = await realpath(await scratchHome());
+    const disk = await realpath(await scratchHome());
+    await mkdir(path.join(disk, "keys"));
+    await symlink(path.join(disk, "keys"), path.join(home, ".keys"));
+    const locations = place(["~/.keys"]);
+    expect(protectedPaths({ process: "bot-command", grants: [], locations, home }).sort()).toEqual(
+      [path.join(disk, "keys"), path.join(home, ".keys")].sort(),
+    );
+    expect(broadProtectedLocations({ locations, home })).toEqual([]);
+  });
+});
+
 describe("withProtectedLocations", () => {
   it("adds the paths without changing the guard it was given", () => {
     const guard = { paths: ["/srv/stack/.env"], ports: [5432], sockets: ["/var/run/docker.sock"] };
@@ -243,6 +302,17 @@ describe("protectedLocationHint", () => {
     const output = `cat: ${path.join(home, ".aws", "credentials")}: Operation not permitted`;
     expect(protectedLocationHint(output, scratchLocations, home)).toBe(
       "Amazon Web Services credentials is protected on this computer. The owner can grant this bot access in the bot's settings.",
+    );
+  });
+
+  it("stays silent for a command that succeeded, whatever it printed", async () => {
+    const home = await scratchHome();
+    const output = `cat: ${path.join(home, ".aws", "credentials")}: Operation not permitted`;
+    expect(
+      protectedLocationHint(output, scratchLocations, home, process.platform, 0),
+    ).toBeUndefined();
+    expect(protectedLocationHint(output, scratchLocations, home, process.platform, 1)).toContain(
+      "Amazon Web Services credentials",
     );
   });
 
@@ -419,6 +489,50 @@ describe.skipIf(process.platform !== "darwin")(
       expect((await lstat(folder)).isDirectory()).toBe(true);
       expect(await readFile(path.join(folder, "AGENTS.md"), "utf8")).toBe("tool instructions\n");
       await expect(access(`${folder}.kept`)).rejects.toThrow();
+    });
+
+    it("keeps a command out of a location that did not exist when protection began", async () => {
+      // A machine without `~/.aws` today may get one tomorrow. The profile is built from
+      // the path as spelled, so the folder is protected from the moment it appears.
+      const home = await protectedHome();
+      await rm(path.join(home, ".aws"), { recursive: true });
+      const profile = guardFor(home);
+      await mkdir(path.join(home, ".aws"));
+      await writeFile(path.join(home, ".aws", "credentials"), "[default]\nkey = FAKE\n");
+      const read = await sandboxed(profile, ["/bin/cat", path.join(home, ".aws", "credentials")]);
+      expect(read.code).not.toBe(0);
+      expect(read.stdout).not.toContain("FAKE");
+      const write = await sandboxed(profile, [
+        "/bin/sh",
+        "-c",
+        `echo planted > ${JSON.stringify(path.join(home, ".aws", "config"))}`,
+      ]);
+      expect(write.code).not.toBe(0);
+    });
+
+    it("keeps a command out of a location that is a single file", async () => {
+      const home = await protectedHome();
+      await writeFile(path.join(home, ".tool.json"), '{"token":"FAKE"}\n');
+      await writeFile(path.join(home, ".tool.json.notes"), "beside it\n");
+      const profile = seatbeltProfile(
+        withProtectedLocations(
+          { paths: [], ports: [], sockets: [] },
+          protectedPaths({
+            process: "bot-command",
+            grants: [],
+            locations: [
+              { id: "tool", label: "Tool sign-in", paths: ["~/.tool.json"], kind: "credentials" },
+            ],
+            home,
+          }),
+        ),
+      );
+      const read = await sandboxed(profile, ["/bin/cat", path.join(home, ".tool.json")]);
+      expect(read.code).not.toBe(0);
+      expect(read.stdout).not.toContain("FAKE");
+      // A file whose name only starts the same way is not part of the location.
+      const beside = await sandboxed(profile, ["/bin/cat", path.join(home, ".tool.json.notes")]);
+      expect(beside.code).toBe(0);
     });
 
     it("lets an agent runtime read its own tool folder", async () => {

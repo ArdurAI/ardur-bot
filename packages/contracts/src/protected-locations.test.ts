@@ -8,6 +8,7 @@ import {
   ProtectedLocationsPolicyV1Schema,
   parseProtectedLocationsPolicy,
   protectedLocations,
+  unreadProtectedLocations,
 } from "./protected-locations.js";
 
 const vpnLocation: ProtectedLocation = {
@@ -38,6 +39,50 @@ describe("protected location schema", () => {
         tool: "codex-app-server",
       }).success,
     ).toBe(true);
+  });
+
+  it("refuses a path that names the home folder itself or a place outside it", () => {
+    // An empty part or a separator at the end would read as the home folder; `.` and `..`
+    // would let a path walk out of it.
+    for (const paths of [
+      ["~//"],
+      ["~///"],
+      ["~/.ssh/"],
+      ["~/a//b"],
+      ["~/a/.."],
+      ["~/a/../.."],
+      ["~/../x"],
+      ["~/./a"],
+      ["~/."],
+      ["~/.."],
+      // A path is plain text.
+      ["~/.keys\nmore"],
+      ["~/.keys\u0000"],
+      ["~/.keys\u0001"],
+      ["~/.ke\tys"],
+      ["~/.keys\u007f"],
+    ]) {
+      expect(
+        ProtectedLocationSchema.safeParse({
+          id: "custom",
+          label: "Custom",
+          paths,
+          kind: "credentials",
+        }).success,
+        paths[0],
+      ).toBe(false);
+    }
+    for (const paths of [["~/.ssh"], ["~/.config/gcloud"], ["~/.claude.json"], ["~/a.b/c..d"]]) {
+      expect(
+        ProtectedLocationSchema.safeParse({
+          id: "custom",
+          label: "Custom",
+          paths,
+          kind: "credentials",
+        }).success,
+        paths[0],
+      ).toBe(true);
+    }
   });
 
   it("refuses a path not written from the home folder", () => {
@@ -136,15 +181,30 @@ describe("default protected locations", () => {
       "npmrc",
       "git-credentials",
       "terraform",
+      "pypi",
+      "cargo",
+      "maven",
+      "gradle",
       "codex",
       "claude-code",
       "hermes",
+      "gemini",
     ])
       expect(allDefaultIds).toContain(id);
     // Every entry Ardur names a tool for is one Ardur can run as a runtime.
     expect(
       PROTECTED_LOCATIONS_DEFAULTS.filter((l) => l.kind === "agent-tool").map((l) => l.tool),
-    ).toEqual(["codex-app-server", "claude-code", "hermes"]);
+    ).toEqual(["codex-app-server", "claude-code", "hermes", "antigravity"]);
+  });
+
+  it("gives no place to two locations, so a grant always opens what it names", () => {
+    const paths = PROTECTED_LOCATIONS_DEFAULTS.flatMap((location) => location.paths);
+    for (const path of paths)
+      for (const other of paths)
+        if (path !== other) {
+          expect(path.startsWith(`${other}/`), `${path} inside ${other}`).toBe(false);
+        }
+    expect(new Set(paths).size).toBe(paths.length);
   });
 });
 
@@ -158,21 +218,70 @@ describe("protected locations policy", () => {
       7,
       [],
       {},
-      { version: 2, custom: [] },
+      { version: 2, custom: [vpnLocation] },
       { version: 1 },
       { version: 1, custom: "none" },
       { version: 1, custom: [null] },
       { version: 1, custom: [{ id: "aws", label: "AWS", paths: ["~/.aws"], kind: "credentials" }] },
       { version: 1, custom: [{ id: "x", label: "X", paths: ["/etc"], kind: "credentials" }] },
-      {
-        version: 1,
-        custom: [
-          { id: "x", label: "X", paths: ["~/.x"], kind: "credentials" },
-          { id: "x", label: "X", paths: ["~/.x2"], kind: "credentials" },
-        ],
-      },
     ])
       expect(parseProtectedLocationsPolicy(bad)).toEqual(empty);
+  });
+
+  it("keeps every custom location it can read when one entry is bad", () => {
+    const second = { id: "lab", label: "Lab keys", paths: ["~/.lab"], kind: "credentials" };
+    const stored = {
+      version: 1,
+      custom: [
+        vpnLocation,
+        { id: "broken", label: "Broken", paths: ["~//"], kind: "credentials" },
+        null,
+        // The same id again, and a place that is already protected: left out.
+        { ...second, id: "company-vpn" },
+        { id: "my-aws", label: "My AWS", paths: ["~/.aws"], kind: "credentials" },
+        { id: "inside", label: "Inside SSH", paths: ["~/.ssh/work"], kind: "credentials" },
+        { id: "around", label: "Around gcloud", paths: ["~/.config"], kind: "credentials" },
+        second,
+      ],
+    };
+    expect(parseProtectedLocationsPolicy(stored)).toEqual({
+      version: 1,
+      custom: [vpnLocation, second],
+    });
+    expect(unreadProtectedLocations(stored)).toBe(6);
+    expect(unreadProtectedLocations({ version: 1, custom: [vpnLocation] })).toBe(0);
+    expect(unreadProtectedLocations("not json")).toBe(0);
+  });
+
+  it("reads at most the number of custom locations an owner can add", () => {
+    const many = Array.from({ length: 70 }, (_, index) => ({
+      id: `place-${index}`,
+      label: `Place ${index}`,
+      paths: [`~/.place-${index}`],
+      kind: "credentials",
+    }));
+    const read = parseProtectedLocationsPolicy({ version: 1, custom: many });
+    expect(read.custom).toHaveLength(64);
+    expect(read.custom[0]?.id).toBe("place-0");
+    expect(unreadProtectedLocations({ version: 1, custom: many })).toBe(6);
+  });
+
+  it("refuses a custom location over a place that is already protected, at the schema", () => {
+    for (const paths of [["~/.aws"], ["~/.ssh/work"], ["~/.config"]])
+      expect(
+        ProtectedLocationsPolicyV1Schema.safeParse({
+          version: 1,
+          custom: [{ id: "mine", label: "Mine", paths, kind: "credentials" }],
+        }).success,
+        paths[0],
+      ).toBe(false);
+    // Beside a protected place, not over it.
+    expect(
+      ProtectedLocationsPolicyV1Schema.safeParse({
+        version: 1,
+        custom: [{ id: "mine", label: "Mine", paths: ["~/.config/mine"], kind: "credentials" }],
+      }).success,
+    ).toBe(true);
   });
 
   it("refuses a custom id that repeats a default id, at the schema", () => {
