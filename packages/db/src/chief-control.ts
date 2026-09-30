@@ -369,8 +369,10 @@ export async function reconcileChiefCorrection(prisma: PrismaClient, planId: str
             },
             members: facts,
             excludedIds: control.excludedIds,
-            requiredComputerId: facts.find((member) => member.id === plan!.chiefBotId)?.computer
-              ?.id,
+            requiredComputerId:
+              (plan.operation as { purpose: string }).purpose === "install-tool"
+                ? facts.find((member) => member.id === plan!.chiefBotId)?.computer?.id
+                : undefined,
           });
       if (
         !facts.some((member) => member.id === plan!.chiefBotId && member.authorized) ||
