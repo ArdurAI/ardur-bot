@@ -7,6 +7,8 @@ export interface GroupAvatarMember {
   name?: string;
   color: string;
   status?: string;
+  /** The member's run is waiting out a provider's rate limit before it tries again. */
+  retrying?: boolean;
 }
 
 export interface GroupAvatarProps {

@@ -852,6 +852,8 @@ export type MobileSnapshot = {
     botId?: string;
     status: string;
     error?: string | null;
+    /** When a run queued to retry a provider's rate limit wakes again; only while it waits. */
+    providerRetryAt?: string | null;
     runtimeProblem?: RuntimeProblem;
     runtimePin?: RuntimePin | null;
     runtimeInfo?: RuntimeInfo | null;
@@ -859,7 +861,7 @@ export type MobileSnapshot = {
     routingRule?: string | null;
   } | null;
   contextRun?: MobileSnapshot["run"];
-  activeRuns?: Array<{ id: string; botId?: string; status: string }>;
+  activeRuns?: Array<{ id: string; botId?: string; status: string; providerRetryAt?: string | null }>;
   members?: MobileGroup["members"];
   computer?: {
     state: string;
@@ -1061,7 +1063,9 @@ export function isMobileThreadSnapshotEvent(event: ThreadEvent): boolean {
     event.type === "thread.subagent" ||
     event.type === "thread.cloud_agent" ||
     event.type === "thread.cleared" ||
+    event.type === "run.started" ||
     event.type === "run.waiting_input" ||
+    event.type === "run.retry_scheduled" ||
     event.type === "computer.takeover.requested" ||
     isRunTerminalEvent(event)
   );
@@ -1169,6 +1173,39 @@ export function applyMobileThreadEvent(
         )
       : prev.activeRuns;
     return { ...prev, cursor, run, activeRuns, messages, computer };
+  }
+  if (event.type === "run.retry_scheduled") {
+    const runId = event.runId;
+    if (!runId) return prev;
+    const waitMs = typeof event.payload?.waitMs === "number" ? event.payload.waitMs : 0;
+    const providerRetryAt = new Date(
+      Date.parse(event.createdAt ?? new Date().toISOString()) + waitMs,
+    ).toISOString();
+    // The run waits out the provider's "not now" as queued, carrying the moment it wakes.
+    const run =
+      prev.run && prev.run.id === runId
+        ? { ...prev.run, status: "queued", providerRetryAt }
+        : prev.run;
+    const activeRuns = prev.activeRuns?.map((candidate) =>
+      candidate.id === runId ? { ...candidate, status: "queued", providerRetryAt } : candidate,
+    );
+    return { ...prev, cursor: event.seq ?? prev.cursor, run, activeRuns };
+  }
+  if (event.type === "run.started") {
+    const runId = event.runId;
+    if (!runId) return prev;
+    const known =
+      prev.run?.id === runId || Boolean(prev.activeRuns?.some((run) => run.id === runId));
+    // A run the snapshot does not know still arrives with the next refresh, as before.
+    if (!known) return prev;
+    const run =
+      prev.run && prev.run.id === runId
+        ? { ...prev.run, status: "running", providerRetryAt: null }
+        : prev.run;
+    const activeRuns = prev.activeRuns?.map((candidate) =>
+      candidate.id === runId ? { ...candidate, status: "running", providerRetryAt: null } : candidate,
+    );
+    return { ...prev, cursor: event.seq ?? prev.cursor, run, activeRuns };
   }
   if (isRunTerminalEvent(event)) {
     const activeRuns = prev.activeRuns?.filter((candidate) => candidate.id !== event.runId);

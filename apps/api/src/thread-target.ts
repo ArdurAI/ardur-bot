@@ -670,6 +670,7 @@ function mapRun(run: {
   contextSnapshot?: unknown;
   routingRule?: unknown;
   error: string | null;
+  providerRetryAt: Date | null;
   startedAt: Date | null;
   completedAt: Date | null;
   createdAt: Date;
@@ -703,6 +704,7 @@ function mapRun(run: {
       run.status === "failed"
         ? runFailureError({ type: "run.failed", payload: { error: run.error } })
         : run.error,
+    providerRetryAt: run.providerRetryAt?.toISOString() ?? null,
     startedAt: run.startedAt?.toISOString() ?? null,
     completedAt: run.completedAt?.toISOString() ?? null,
     createdAt: run.createdAt.toISOString(),
