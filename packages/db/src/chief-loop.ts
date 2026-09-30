@@ -436,7 +436,10 @@ export async function validateChiefDispatch(
   }
   const member = facts.find((candidate) => candidate.id === memberId);
   if (!member?.authorized) return { error: "The target is no longer an authorized room member." };
-  if (!member.runtimeSupported || !member.computer?.local)
+  if (
+    (control || operation.purpose !== "general") &&
+    (!member.runtimeSupported || !member.computer?.local)
+  )
     return { error: "This connection cannot run this peer task safely." };
   // General planning retains the existing runtime/boot admission checks; local preparation
   // constraints apply only to a saved operation-specific choice, checked above.

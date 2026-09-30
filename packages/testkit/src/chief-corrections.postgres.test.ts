@@ -268,7 +268,7 @@ describe.skipIf(!enabled).sequential("chief correction cross-run Postgres journe
         revision: 1,
       }),
     );
-    const otherThread = await db.prisma.thread.create({ data: f.scope });
+    const otherThread = desk;
     const unrelatedTask = await db.prisma.task.create({
       data: {
         ...f.scope,

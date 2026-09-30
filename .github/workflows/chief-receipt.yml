@@ -44,6 +44,7 @@ jobs:
       - run: pnpm db:generate
       - run: pnpm db:migrate
       - run: pnpm exec vitest run packages/testkit/src/chief-loop.postgres.test.ts packages/adapters/src/bot-comms.postgres.test.ts --maxWorkers=2 --silent=false --reporter=verbose
+      - run: pnpm exec vitest run packages/testkit/src/chief-corrections.postgres.test.ts --maxWorkers=2 --silent=false --reporter=verbose
   browser:
     name: Chief receipt visible-paint journey
     runs-on: ubuntu-latest

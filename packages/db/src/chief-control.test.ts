@@ -138,9 +138,16 @@ describe("chief final tool admission fence", () => {
       externalEffect: { updateMany: updateMany() },
       botMessageDelivery: { updateMany: updateMany() },
     };
-    await requestSelectiveCancelInTransaction(tx as never, { spaceId: "space", userId: "owner" }, [
-      "run",
-    ]);
+    const correctionInput = {
+      spaceId: "space",
+      userId: "owner",
+      plan: { id: "plan" },
+      ownerMessageId: "message",
+    };
+    await requestSelectiveCancelInTransaction(tx as never, correctionInput, ["run"]);
+    expect(tx.run.findMany).toHaveBeenCalledWith({
+      where: { spaceId: "space", userId: "owner", id: { in: ["run"] } },
+    });
     expect(tx.run.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ id: { in: ["run"] } }) }),
     );

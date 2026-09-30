@@ -1,4 +1,4 @@
-import type { ThreadMessage, ThreadSendResult } from "@ardurbot/contracts";
+import type { ThreadSendResult, ThreadSnapshot } from "@ardurbot/contracts";
 import { expect, test } from "@playwright/test";
 import { activeBotId, captureScreenshot, completeOnboarding, rpc, signup } from "./helpers";
 
@@ -114,15 +114,11 @@ test("the real room renders a scripted corrected dispatch after reload", async (
     botIds: [chiefId, worker.id],
   });
   await rpc(page, "groups/update", { groupId: group.id, coordinatorBotId: chiefId });
-  const snapshot = await rpc<{ threadId: string; messages: ThreadMessage[] }>(
-    page,
-    "threads/messages",
-    { groupId: group.id },
-  );
+  const snapshot = await rpc<ThreadSnapshot>(page, "threads/get", { groupId: group.id });
   const createdAt = new Date().toISOString();
   let confirmed = false;
   // Script only the saved projection; exercise Shell and the actual room, not a duplicate renderer.
-  await page.route("**/rpc/threads/messages", (route) =>
+  await page.route("**/rpc/threads/get", (route) =>
     route.fulfill({
       json: {
         json: {

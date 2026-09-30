@@ -469,10 +469,11 @@ export async function requestCancel(
 /** Exact owned attempts only. A member exclusion must never revoke the delegation root. */
 export async function requestSelectiveCancelInTransaction(
   tx: Prisma.TransactionClient,
-  scope: Scope,
+  { spaceId, userId }: Scope,
   runIds: readonly string[],
   now = new Date(),
 ) {
+  const scope = { spaceId, userId };
   const runs = await tx.run.findMany({ where: { ...scope, id: { in: [...runIds] } } });
   const ids = runs.map((run) => run.id);
   const delegationIds = runs.flatMap((run) => (run.delegationId ? [run.delegationId] : []));
