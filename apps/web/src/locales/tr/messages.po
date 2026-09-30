@@ -180,6 +180,10 @@ msgstr ""
 msgid "{after} corrections in {0} exposed runs; before: {before} in {1} comparable runs"
 msgstr ""
 
+#: src/lib/failure-category-copy.ts
+msgid "{bot}'s allowed model destinations block this model. Change them in {bot}'s settings."
+msgstr "{bot} izin verilen model hedefleri bu modeli engelliyor. Bunları {bot} ayarlarında değiştirin."
+
 #: src/pages/LearningInsights.tsx
 msgid "{bot}'s last {count} runs on {model} failed because it cannot use tools; {suggested} used tools in your runs."
 msgstr ""
@@ -331,6 +335,10 @@ msgstr "{remaining} kaldı · bot yalnızca izliyor"
 msgid "{runtime} could not finish this run. Check the runtime or change the pin."
 msgstr "{runtime} bu çalıştırmayı tamamlayamadı. Çalışma zamanını kontrol edin veya sabitlemeyi değiştirin."
 
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} is experimental. Turn on Experimental for {bot} to use it."
+msgstr "{runtime} deneyseldir. Kullanmak için {bot} için Deneysel'i açın."
+
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "{runtime} loads all connected tools because deferred loading is unavailable."
 msgstr ""
@@ -338,6 +346,10 @@ msgstr ""
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} reached this run's turn limit. Narrow the task and try again."
 msgstr "{runtime}, bu çalıştırmanın adım sınırına ulaştı. Görevi daraltın ve tekrar deneyin."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} runs on the host computer, not in a sandbox. Change {bot}'s computer to use it."
+msgstr "{runtime}, bir korumalı alanda değil ana bilgisayarda çalışır. Kullanmak için {bot} bilgisayarını değiştirin."
 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} stopped before finishing this run."
@@ -1335,7 +1347,7 @@ msgstr ""
 msgid "Blocked"
 msgstr "Engellendi"
 
-#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName) }, }) : row.reason
+#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, }, }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
 msgstr "Engellendi — {0}"
@@ -3028,6 +3040,7 @@ msgid "Could not save this file. Try again."
 msgstr "Bu dosya kaydedilemedi. Yeniden deneyin."
 
 #: src/pages/customize/McpCredentialFix.tsx
+#: src/pages/Shell.tsx
 msgid "Could not save. Try again."
 msgstr ""
 
@@ -6223,8 +6236,9 @@ msgid "Open Ardur"
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/shell/provider-error-message.tsx
 msgid "Open bot settings"
-msgstr ""
+msgstr "Bot ayarlarını aç"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open chat links in the desktop app."
@@ -6287,8 +6301,9 @@ msgid "Open screen to view this computer."
 msgstr "Bu bilgisayarı görüntülemek için ekranı açın."
 
 #: src/components/composer/command-description.ts
+#: src/pages/shell/provider-error-message.tsx
 msgid "Open Settings"
-msgstr ""
+msgstr "Ayarları aç"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open System Settings"
@@ -8864,6 +8879,10 @@ msgstr ""
 msgid "This signs out every other session and keeps this one signed in."
 msgstr ""
 
+#: src/lib/failure-category-copy.ts
+msgid "This space's model policy blocks this model. Change it in Settings, under Models."
+msgstr "Bu alanın model ilkesi bu modeli engelliyor. Ayarlar'daki Modeller bölümünden değiştirin."
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "This subscription sign-in is not available in Ardur yet. Use a deployment credential or choose another provider."
 msgstr "Bu abonelik girişi Ardur'da henüz kullanılamıyor. Bir dağıtım kimlik bilgisi kullan veya başka bir sağlayıcı seç."
@@ -9017,6 +9036,10 @@ msgstr "Tekrar dene"
 #: src/pages/LearningInbox.tsx
 msgid "Turn on"
 msgstr ""
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Turn on Experimental"
+msgstr "Deneysel'i aç"
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
@@ -9376,6 +9399,10 @@ msgstr "Oturum açma bekleniyor…"
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Waiting for the API to come back…"
 msgstr ""
+
+#: src/lib/working-indicator.ts
+msgid "Waiting for the model"
+msgstr "Model bekleniyor"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts

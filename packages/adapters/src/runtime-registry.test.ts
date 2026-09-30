@@ -66,9 +66,16 @@ describe("Hermes registry admission", () => {
     });
     expect(await f.registry.resolve(pin, "docker", true, connection)).toMatchObject({
       code: "runtime-unsupported-computer",
+      reasonId: "computer-unsupported",
+      reason:
+        "Hermes runs on the host computer, not in a sandbox. Change this bot's computer to use it.",
+      actions: ["change-pin"],
     });
     expect(await f.registry.resolve(pin, "desktop", false, connection)).toMatchObject({
       code: "runtime-unavailable",
+      reasonId: "experimental-off",
+      reason: "Hermes is experimental. Turn on Experimental for this bot to use it.",
+      actions: ["change-pin"],
     });
     expect(f.factory).not.toHaveBeenCalled();
   });

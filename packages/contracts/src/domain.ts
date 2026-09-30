@@ -992,6 +992,8 @@ export const RunSchema = z.object({
   modelId: z.string().nullable(),
   error: z.string().nullable(),
   providerErrorKind: ProviderErrorKindSchema.optional(),
+  /** When a run queued to retry a provider's rate limit wakes again; only while it waits. */
+  providerRetryAt: z.string().nullable().optional(),
   runtimeProblem: RuntimeProblemSchema.optional(),
   runtimeInfo: RuntimeInfoSchema.nullable().optional(),
   runtimePin: RuntimePinSchema.nullable().optional(),

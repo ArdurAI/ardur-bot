@@ -26,14 +26,16 @@ const pin = {
   runtimeKind: "pi" as const,
   revision: 2,
 };
-function fixture() {
+function fixture(overrides?: { spacePolicy?: unknown }) {
   const findCredential = vi.fn(async () => credential);
   const findPreference = vi.fn(async () => ({ credential, modelId: "grok-4.6", isDefault: true }));
   const loadKey = vi.fn(
     async (): Promise<AgentRunModel> => ({ provider: "xai", id: "grok-4.6", apiKey: "test-key" }),
   );
   const prisma = {
-    space: { findUnique: vi.fn(async () => ({ allowedModelDestinations: null })) },
+    space: {
+      findUnique: vi.fn(async () => ({ allowedModelDestinations: overrides?.spacePolicy ?? null })),
+    },
     userModelCredential: { findFirst: findCredential },
     spaceModelPreference: { findFirst: findPreference },
   } as unknown as PrismaClient;
@@ -489,7 +491,14 @@ it("checks root locality against the resolved endpoint before returning an execu
       snapshot: pin,
       bot: { allowedModelDestinations: { mode: "local" } },
     }),
-  ).toMatchObject({ kind: "problem", code: "locality-denied" });
+  ).toMatchObject({
+    kind: "problem",
+    code: "locality-denied",
+    reasonId: "destinations-bot",
+    reason:
+      "this bot's allowed model destinations block this model. Change them in this bot's settings.",
+    actions: ["change-pin"],
+  });
   f.findCredential.mockResolvedValue({ ...credential, provider: "openai-compatible" });
   f.loadKey.mockResolvedValue({
     provider: "openai-compatible",
@@ -505,6 +514,34 @@ it("checks root locality against the resolved endpoint before returning an execu
       bot: { allowedModelDestinations: { mode: "local" } },
     }),
   ).toMatchObject({ kind: "resolved", runtimePin: custom });
+});
+
+it("names the space policy when the bot's allows but the space's blocks", async () => {
+  const f = fixture({ spacePolicy: { mode: "local" } });
+  expect(
+    await resolveRunModelPin({
+      ...f,
+      snapshot: pin,
+      bot: { allowedModelDestinations: { mode: "any" } },
+    }),
+  ).toMatchObject({
+    kind: "problem",
+    code: "locality-denied",
+    reasonId: "destinations-space",
+    reason: "This space's model policy blocks this model. Change it in Settings, under Models.",
+    actions: ["change-pin"],
+  });
+  // Both block: the bot's policy is named first.
+  expect(
+    await resolveRunModelPin({
+      ...f,
+      snapshot: pin,
+      bot: { allowedModelDestinations: { mode: "local" } },
+    }),
+  ).toMatchObject({
+    kind: "problem",
+    reasonId: "destinations-bot",
+  });
 });
 
 it.each(["low", "medium", "high", "xhigh", "max"])(

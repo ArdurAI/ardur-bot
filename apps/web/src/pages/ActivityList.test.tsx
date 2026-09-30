@@ -25,8 +25,11 @@ vi.mock("@lingui/react/macro", () => ({
     t: (parts: TemplateStringsArray | { id: string }) =>
       "id" in parts ? parts.id : parts.join(""),
     i18n: {
-      _: (descriptor: { id: string }, values?: Record<string, string>) =>
-        Object.entries(values ?? {}).reduce(
+      _: (
+        descriptor: { id: string; values?: Record<string, string> },
+        values?: Record<string, string>,
+      ) =>
+        Object.entries({ ...descriptor.values, ...values }).reduce(
           (text, [key, value]) => text.replaceAll(`{${key}}`, value),
           descriptor.id,
         ),
@@ -108,6 +111,33 @@ it("shows the recorded failure reason next to a failed run's label", async () =>
     await act(async () => root.render(createElement(ActivityList, { onOpenRun: vi.fn() })));
     expect(node.textContent).toContain("usage limit is reached");
     expect(node.textContent).toContain("failed");
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});
+
+it("fills the bot's name in a refusal sentence", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  calls.list.mockImplementation(async ({ filter }: { filter: string }) => ({
+    runs:
+      filter === "active"
+        ? []
+        : [
+            {
+              ...makeRun("refused-run", "failed", "Draft documentation"),
+              failureCategory: "destinations-bot" as const,
+              failureRuntime: null,
+            },
+          ],
+  }));
+  calls.board.mockResolvedValue({ rows: [] });
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  try {
+    await act(async () => root.render(createElement(ActivityList, { onOpenRun: vi.fn() })));
+    expect(node.textContent).toContain("allowed model destinations block this model");
+    expect(node.textContent).not.toContain("{bot}");
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();

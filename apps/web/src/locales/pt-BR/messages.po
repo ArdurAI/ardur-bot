@@ -180,6 +180,10 @@ msgstr ""
 msgid "{after} corrections in {0} exposed runs; before: {before} in {1} comparable runs"
 msgstr ""
 
+#: src/lib/failure-category-copy.ts
+msgid "{bot}'s allowed model destinations block this model. Change them in {bot}'s settings."
+msgstr "Os destinos de modelo permitidos de {bot} bloqueiam este modelo. Altere-os nas configurações de {bot}."
+
 #: src/pages/LearningInsights.tsx
 msgid "{bot}'s last {count} runs on {model} failed because it cannot use tools; {suggested} used tools in your runs."
 msgstr ""
@@ -331,6 +335,10 @@ msgstr "{remaining} restantes · o bot está observando, não agindo"
 msgid "{runtime} could not finish this run. Check the runtime or change the pin."
 msgstr "{runtime} não conseguiu concluir esta execução. Verifique o runtime ou altere o modelo fixado."
 
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} is experimental. Turn on Experimental for {bot} to use it."
+msgstr "{runtime} é experimental. Ative Experimental para {bot} usá-lo."
+
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "{runtime} loads all connected tools because deferred loading is unavailable."
 msgstr ""
@@ -338,6 +346,10 @@ msgstr ""
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} reached this run's turn limit. Narrow the task and try again."
 msgstr "{runtime} atingiu o limite de turnos desta execução. Restrinja a tarefa e tente novamente."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} runs on the host computer, not in a sandbox. Change {bot}'s computer to use it."
+msgstr "{runtime} roda no computador host, não em uma sandbox. Altere o computador de {bot} para usá-lo."
 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} stopped before finishing this run."
@@ -1335,7 +1347,7 @@ msgstr ""
 msgid "Blocked"
 msgstr "Bloqueado"
 
-#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName) }, }) : row.reason
+#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, }, }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
 msgstr "Bloqueado — {0}"
@@ -3028,6 +3040,7 @@ msgid "Could not save this file. Try again."
 msgstr "Não foi possível salvar este arquivo. Tente novamente."
 
 #: src/pages/customize/McpCredentialFix.tsx
+#: src/pages/Shell.tsx
 msgid "Could not save. Try again."
 msgstr ""
 
@@ -6223,8 +6236,9 @@ msgid "Open Ardur"
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/shell/provider-error-message.tsx
 msgid "Open bot settings"
-msgstr ""
+msgstr "Abrir configurações do bot"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open chat links in the desktop app."
@@ -6287,8 +6301,9 @@ msgid "Open screen to view this computer."
 msgstr "Abra a tela para ver este computador."
 
 #: src/components/composer/command-description.ts
+#: src/pages/shell/provider-error-message.tsx
 msgid "Open Settings"
-msgstr ""
+msgstr "Abrir Configurações"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open System Settings"
@@ -8864,6 +8879,10 @@ msgstr ""
 msgid "This signs out every other session and keeps this one signed in."
 msgstr ""
 
+#: src/lib/failure-category-copy.ts
+msgid "This space's model policy blocks this model. Change it in Settings, under Models."
+msgstr "A política de modelos deste espaço bloqueia este modelo. Altere-a nas Configurações, em Modelos."
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "This subscription sign-in is not available in Ardur yet. Use a deployment credential or choose another provider."
 msgstr "Este login de assinatura ainda não está disponível no Ardur. Use uma credencial de implantação ou escolha outro provedor."
@@ -9017,6 +9036,10 @@ msgstr "Tentar novamente"
 #: src/pages/LearningInbox.tsx
 msgid "Turn on"
 msgstr ""
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Turn on Experimental"
+msgstr "Ativar Experimental"
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
@@ -9376,6 +9399,10 @@ msgstr "Aguardando login..."
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Waiting for the API to come back…"
 msgstr ""
+
+#: src/lib/working-indicator.ts
+msgid "Waiting for the model"
+msgstr "Aguardando o modelo"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts

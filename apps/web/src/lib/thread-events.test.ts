@@ -25,6 +25,7 @@ import {
   reconcileRefreshedThread,
   reduceComputerStatus,
   reduceThreadSnapshot,
+  refusalRunBotName,
   threadRunError,
   userHoldsComputerControl,
 } from "./thread-events.js";
@@ -539,6 +540,41 @@ describe("thread event reduction", () => {
     expect(started?.run?.trigger).toBe("bot_message");
   });
 
+  it("queues the run with its retry wake moment only while it waits for the model", () => {
+    const run = threadRun("run-1");
+    const initial: ThreadSnapshot = { ...snapshot([]), run, activeRuns: [run] };
+    const waiting = reduceThreadSnapshot(
+      initial,
+      event({
+        type: "run.retry_scheduled",
+        seq: 4,
+        runId: "run-1",
+        createdAt: "2026-08-16T00:00:10.000Z",
+        payload: { providerErrorKind: "rate-limit", attempt: 1, waitMs: 2_000 },
+      }),
+    );
+
+    expect(waiting?.run).toMatchObject({
+      id: "run-1",
+      status: "queued",
+      providerRetryAt: "2026-08-16T00:00:12.000Z",
+    });
+    expect(waiting?.activeRuns?.[0]).toMatchObject({
+      id: "run-1",
+      status: "queued",
+      providerRetryAt: "2026-08-16T00:00:12.000Z",
+    });
+    expect(isThreadSnapshotEvent(event({ type: "run.retry_scheduled" }))).toBe(true);
+
+    // The retry's start clears the wait: the row reads as working again.
+    const restarted = reduceThreadSnapshot(
+      waiting,
+      event({ type: "run.started", seq: 5, runId: "run-1", payload: { trigger: "user" } }),
+    );
+    expect(restarted?.run).toMatchObject({ id: "run-1", status: "running" });
+    expect(restarted?.run?.providerRetryAt ?? null).toBeNull();
+  });
+
   it("preserves webhook when event-sourcing an inbound wake", () => {
     const started = reduceThreadSnapshot(
       snapshot([]),
@@ -1013,6 +1049,23 @@ describe("thread event reduction", () => {
     expect(threadRunError(completed)).toBeNull();
     expect(blank?.run).toBeNull();
     expect(threadRunError(blank)).toBeNull();
+  });
+
+  it("names the refusing run's bot from the list, the snapshot's members, or no one", () => {
+    const failed = { ...threadRun("run-a"), status: "failed" as const };
+    const snapshotWith = (botId: string): Pick<ThreadSnapshot, "run"> => ({
+      run: { ...failed, botId },
+    });
+    const bots = [{ id: "bot-1", name: "Reviewer" }];
+    const members = [{ botId: "bot-2", name: "Departed", color: "slate" }];
+    expect(refusalRunBotName(snapshotWith("bot-1"), bots, members)).toBe("Reviewer");
+    // A bot the list no longer carries is still named from the snapshot's members.
+    expect(refusalRunBotName(snapshotWith("bot-2"), bots, members)).toBe("Departed");
+    // Gone from both: no name to fill, so the banner shows the recorded sentence — the
+    // thread's own name (a group's, say) is never used for the bot's sentence.
+    expect(refusalRunBotName(snapshotWith("bot-gone"), bots, members)).toBeUndefined();
+    expect(refusalRunBotName({ run: null }, bots, members)).toBeUndefined();
+    expect(refusalRunBotName(null, bots, members)).toBeUndefined();
   });
 
   it("applies the durable waiting-input run transition without a refresh", () => {

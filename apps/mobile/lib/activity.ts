@@ -55,6 +55,9 @@ export function activityStatusLabel(status: RunActivityRow["status"]): string {
 export function activityRowPreview(run: RunActivityRow): string {
   const status = activityStatusLabel(run.status);
   if (run.status === "failed" && run.failureCategory)
-    return `${failureCategoryText(run.failureCategory, { runtime: run.failureRuntime ?? undefined })} · ${status}`;
+    return `${failureCategoryText(run.failureCategory, {
+      runtime: run.failureRuntime ?? undefined,
+      bot: run.botName,
+    })} · ${status}`;
   return run.promptSnippet ? `${run.promptSnippet} · ${status}` : status;
 }

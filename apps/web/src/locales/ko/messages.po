@@ -180,6 +180,10 @@ msgstr ""
 msgid "{after} corrections in {0} exposed runs; before: {before} in {1} comparable runs"
 msgstr ""
 
+#: src/lib/failure-category-copy.ts
+msgid "{bot}'s allowed model destinations block this model. Change them in {bot}'s settings."
+msgstr "{bot}의 허용된 모델 대상이 이 모델을 차단합니다. {bot} 설정에서 변경하세요."
+
 #: src/pages/LearningInsights.tsx
 msgid "{bot}'s last {count} runs on {model} failed because it cannot use tools; {suggested} used tools in your runs."
 msgstr ""
@@ -331,6 +335,10 @@ msgstr "남은 시간 {remaining} · Bot은 화면만 보고 직접 조작하지
 msgid "{runtime} could not finish this run. Check the runtime or change the pin."
 msgstr "{runtime}이(가) 이 실행을 완료하지 못했습니다. 런타임을 확인하거나 고정을 변경하세요."
 
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} is experimental. Turn on Experimental for {bot} to use it."
+msgstr "{runtime}은(는) 실험적입니다. 사용하려면 {bot}에 대해 실험 기능을 켜세요."
+
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "{runtime} loads all connected tools because deferred loading is unavailable."
 msgstr ""
@@ -338,6 +346,10 @@ msgstr ""
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} reached this run's turn limit. Narrow the task and try again."
 msgstr "{runtime}이(가) 이 실행의 턴 한도에 도달했습니다. 작업 범위를 좁히고 다시 시도하세요."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} runs on the host computer, not in a sandbox. Change {bot}'s computer to use it."
+msgstr "{runtime}은(는) 샌드박스가 아닌 호스트 컴퓨터에서 실행됩니다. 사용하려면 {bot}의 컴퓨터를 변경하세요."
 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} stopped before finishing this run."
@@ -1335,7 +1347,7 @@ msgstr ""
 msgid "Blocked"
 msgstr "차단됨"
 
-#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName) }, }) : row.reason
+#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, }, }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
 msgstr "차단됨 — {0}"
@@ -3028,6 +3040,7 @@ msgid "Could not save this file. Try again."
 msgstr "이 파일을 저장하지 못했습니다. 다시 시도하세요."
 
 #: src/pages/customize/McpCredentialFix.tsx
+#: src/pages/Shell.tsx
 msgid "Could not save. Try again."
 msgstr ""
 
@@ -6223,8 +6236,9 @@ msgid "Open Ardur"
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/shell/provider-error-message.tsx
 msgid "Open bot settings"
-msgstr ""
+msgstr "봇 설정 열기"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open chat links in the desktop app."
@@ -6287,8 +6301,9 @@ msgid "Open screen to view this computer."
 msgstr "이 컴퓨터를 보려면 화면을 여세요."
 
 #: src/components/composer/command-description.ts
+#: src/pages/shell/provider-error-message.tsx
 msgid "Open Settings"
-msgstr ""
+msgstr "설정 열기"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open System Settings"
@@ -8864,6 +8879,10 @@ msgstr ""
 msgid "This signs out every other session and keeps this one signed in."
 msgstr ""
 
+#: src/lib/failure-category-copy.ts
+msgid "This space's model policy blocks this model. Change it in Settings, under Models."
+msgstr "이 스페이스의 모델 정책이 이 모델을 차단합니다. 설정의 모델에서 변경하세요."
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "This subscription sign-in is not available in Ardur yet. Use a deployment credential or choose another provider."
 msgstr "이 구독 로그인 방식은 아직 Ardur에서 지원되지 않습니다. 서버에 설정된 인증 정보를 사용하거나 다른 서비스를 선택하세요."
@@ -9017,6 +9036,10 @@ msgstr "다시 시도"
 #: src/pages/LearningInbox.tsx
 msgid "Turn on"
 msgstr ""
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Turn on Experimental"
+msgstr "실험 기능 켜기"
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
@@ -9376,6 +9399,10 @@ msgstr "로그인 완료를 기다리는 중…"
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Waiting for the API to come back…"
 msgstr "API가 다시 작동하기를 기다리는 중…"
+
+#: src/lib/working-indicator.ts
+msgid "Waiting for the model"
+msgstr "모델을 기다리는 중"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
