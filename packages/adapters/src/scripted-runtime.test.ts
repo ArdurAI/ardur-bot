@@ -16,10 +16,12 @@ it("refuses the first call with a rate limit and answers the retry", async () =>
     script: [{ assistant: "here is the reply.", complete: true }],
   };
   const first = runtime.run({ ...request, runId: "run-rate-limited" });
-  const refusal = await first[Symbol.asyncIterator]().next().then(
-    () => null,
-    (error: unknown) => error,
-  );
+  const refusal = await first[Symbol.asyncIterator]()
+    .next()
+    .then(
+      () => null,
+      (error: unknown) => error,
+    );
   expect(refusal).toBeInstanceOf(ProviderError);
   expect(refusal).toMatchObject({ providerErrorKind: "rate-limit" });
   const events: AgentRuntimeEvent[] = [];

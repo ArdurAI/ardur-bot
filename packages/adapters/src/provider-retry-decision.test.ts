@@ -38,9 +38,7 @@ describe("shouldRetryProviderFailure", () => {
 
   it("does not retry a refusal whose kind has no retries", () => {
     expect(decision({ error: new ProviderError("Unauthorized", "auth") })).toBeNull();
-    expect(
-      decision({ error: new ProviderError("Unknown model", "model-unavailable") }),
-    ).toBeNull();
+    expect(decision({ error: new ProviderError("Unknown model", "model-unavailable") })).toBeNull();
     expect(decision({ error: new ProviderError("Boom", "other") })).toBeNull();
   });
 

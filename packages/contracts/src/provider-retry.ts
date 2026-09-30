@@ -62,10 +62,7 @@ export function providerRetryWaitMs(input: {
   if (!Number.isInteger(input.attempt) || input.attempt < 1 || input.attempt > rule.retries) {
     return null;
   }
-  const backoff = Math.min(
-    rule.firstWaitMs * rule.factor ** (input.attempt - 1),
-    rule.maxWaitMs,
-  );
+  const backoff = Math.min(rule.firstWaitMs * rule.factor ** (input.attempt - 1), rule.maxWaitMs);
   const base =
     input.providerWaitMs != null
       ? Math.min(Math.max(input.providerWaitMs, 0), rule.honourProviderWaitUpToMs)

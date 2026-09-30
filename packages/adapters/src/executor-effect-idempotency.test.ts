@@ -1187,9 +1187,7 @@ it("fails a rate-limited run at once once it has shown text", async () => {
 it("does not retry a rate-limited run that was asked to stop", async () => {
   const f = fixture();
   const findUnique = f.prisma.run.findUnique as unknown as {
-    mockImplementation(
-      fn: (args?: { select?: Record<string, unknown> }) => Promise<unknown>,
-    ): void;
+    mockImplementation(fn: (args?: { select?: Record<string, unknown> }) => Promise<unknown>): void;
   };
   findUnique.mockImplementation(async (args) =>
     args?.select && Object.keys(args.select).join(",") === "cancelRequestedAt"
@@ -1230,9 +1228,11 @@ it("never retries an auth refusal", async () => {
 
 /** Continue jobs enqueued for one run; other scheduled work (computer sleep) is not the run's. */
 function continueJobsFor(f: ReturnType<typeof fixture>, runId: string) {
-  return (f.jobs.enqueue.mock.calls as unknown as Array<
-    [{ name: string; payload?: { runId?: string }; availableAt?: Date }]
-  >)
+  return (
+    f.jobs.enqueue.mock.calls as unknown as Array<
+      [{ name: string; payload?: { runId?: string }; availableAt?: Date }]
+    >
+  )
     .map(([job]) => job)
     .filter((job) => job.name === "run.continue" && job.payload?.runId === runId);
 }

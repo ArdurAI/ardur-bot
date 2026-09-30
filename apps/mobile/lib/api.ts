@@ -861,7 +861,12 @@ export type MobileSnapshot = {
     routingRule?: string | null;
   } | null;
   contextRun?: MobileSnapshot["run"];
-  activeRuns?: Array<{ id: string; botId?: string; status: string; providerRetryAt?: string | null }>;
+  activeRuns?: Array<{
+    id: string;
+    botId?: string;
+    status: string;
+    providerRetryAt?: string | null;
+  }>;
   members?: MobileGroup["members"];
   computer?: {
     state: string;
@@ -1203,7 +1208,9 @@ export function applyMobileThreadEvent(
         ? { ...prev.run, status: "running", providerRetryAt: null }
         : prev.run;
     const activeRuns = prev.activeRuns?.map((candidate) =>
-      candidate.id === runId ? { ...candidate, status: "running", providerRetryAt: null } : candidate,
+      candidate.id === runId
+        ? { ...candidate, status: "running", providerRetryAt: null }
+        : candidate,
     );
     return { ...prev, cursor: event.seq ?? prev.cursor, run, activeRuns };
   }

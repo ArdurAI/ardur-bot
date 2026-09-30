@@ -20,9 +20,7 @@ describe("provider retry policy", () => {
   it("retries a rate limit three times with a growing wait, then stops", () => {
     expect(providerRetryWaitMs({ kind: "rate-limit", attempt: 1, random: NO_JITTER })).toBe(2_000);
     expect(providerRetryWaitMs({ kind: "rate-limit", attempt: 2, random: NO_JITTER })).toBe(6_000);
-    expect(providerRetryWaitMs({ kind: "rate-limit", attempt: 3, random: NO_JITTER })).toBe(
-      18_000,
-    );
+    expect(providerRetryWaitMs({ kind: "rate-limit", attempt: 3, random: NO_JITTER })).toBe(18_000);
     expect(providerRetryWaitMs({ kind: "rate-limit", attempt: 4, random: NO_JITTER })).toBeNull();
   });
 
@@ -47,7 +45,12 @@ describe("provider retry policy", () => {
 
   it("uses the wait the provider asks for, capped at the honour bound", () => {
     expect(
-      providerRetryWaitMs({ kind: "rate-limit", attempt: 1, providerWaitMs: 5_000, random: NO_JITTER }),
+      providerRetryWaitMs({
+        kind: "rate-limit",
+        attempt: 1,
+        providerWaitMs: 5_000,
+        random: NO_JITTER,
+      }),
     ).toBe(5_000);
     expect(
       providerRetryWaitMs({
@@ -59,7 +62,12 @@ describe("provider retry policy", () => {
     ).toBe(60_000);
     // A provider wait still counts against the retries.
     expect(
-      providerRetryWaitMs({ kind: "rate-limit", attempt: 4, providerWaitMs: 5_000, random: NO_JITTER }),
+      providerRetryWaitMs({
+        kind: "rate-limit",
+        attempt: 4,
+        providerWaitMs: 5_000,
+        random: NO_JITTER,
+      }),
     ).toBeNull();
   });
 
