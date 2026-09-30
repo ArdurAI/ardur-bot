@@ -200,28 +200,31 @@ Hermes installer) has its stderr read line by line by one capture helper,
 `captureChildOutput` in `packages/host-runtime/src/child-output.ts`; stdout is
 captured too where the protocol does not already own it.
 
-- Each redacted line is streamed to the debug log, tagged with the process kind,
-  pid and run id. Run the service with `LOG_LEVEL=debug` to see them.
+- Each redacted line is offered to the debug log, tagged with the process kind,
+  pid and run id. Run the service with `LOG_LEVEL=debug` to see them. The fallback
+  logger uses a bounded queue; a slow sink drops debug lines instead of blocking
+  the child, and reports the dropped count when the sink recovers.
 - Every line is redacted with the run's secrets and the shared text redaction
-  (bearer tokens, `token=`/`password=` assignments, credentials in URLs, bare
-  token shapes such as JWTs and `sk-` keys, and email addresses) before it is
-  stored or logged. Nothing captured leaves the helper unredacted.
-- The helper keeps a bounded ring buffer of the last 64 KB of output. When a run
-  fails, the runtime attaches that tail, the exit code or signal, the protocol
-  phase and the duration to the thrown error's cause, and the worker log records
-  the full cause chain — so "Hermes could not complete this turn." always has a
-  logged reason (provider refused, ACP handshake failed, pin check failed,
-  timeout, …) instead of a dead end.
+  (bearer tokens, `token=`/`password=` assignments, credentials in URLs, whole
+  quoted credential values, GitHub and AWS credentials, JWTs, `sk-` and `xai-`
+  keys, and email addresses) before it is stored or logged. Nothing captured
+  leaves the helper unredacted.
+- The helper keeps a bounded ring buffer of the last 64 KiB of output. Lines over
+  8 KiB are replaced with a size-limit marker, not a potentially secret-bearing
+  fragment. Failure tails and serialized diagnostics are redacted and logged
+  only at debug. Hermes failures propagate only the kind, exit code or signal,
+  protocol phase and duration; the worker's error-level record is a content-free
+  summary, not the original failure message or cause chain.
 - Message and file contents never appear at info level. Info and above carry
-  outcomes only; process output is debug-level detail plus the failure tail.
+  outcomes only; process output and failure tails are debug-level detail.
 
 Three sites keep ignoring a stream on purpose, each with a reason in source and
 in the guard test's allow list: the two Windows `taskkill` helpers own no
 output, and the Hermes installer's stdin is ignored because its commands read
 nothing while both output pipes are captured. The guard test
 (`child-output.guard.test.ts`) scans the package for `stderr.resume()` and
-`stdio: "ignore"` and fails on any new site outside the helper and the allow
-list.
+`stdio: "ignore"`, including ignored streams anywhere in a stdio array, and
+fails on any new site outside the helper and the allow list.
 
 ## Owner environment and tool inventory
 

@@ -63,6 +63,15 @@ describe("redaction", () => {
     expect(JSON.stringify(redacted.detail)).not.toMatch(/inner-secret|outer-secret/);
   });
 
+  it("redacts custom Error names nested in bindings", () => {
+    const secret = `xai-${"synthetic".repeat(3)}`;
+    const error = new Error("Safe failure");
+    error.name = secret;
+    const redacted = redactBindings({ detail: error });
+    expect(redacted.detail).toMatchObject({ name: "[Redacted]", message: "Safe failure" });
+    expect(JSON.stringify(redacted)).not.toContain(secret);
+  });
+
   it("redacts string Error causes", () => {
     const error = new Error("request failed", { cause: "token=cause-secret" });
 
