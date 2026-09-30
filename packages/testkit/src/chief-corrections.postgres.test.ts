@@ -3,21 +3,28 @@ import { handoffToGroupBot, stopRemoteComputerWork } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
 import { ChiefControlSchema, ChiefDispatchSchema } from "@ardurbot/contracts";
 import {
+  acceptDelegation,
   admitChiefAction,
   answerWaitingRunWithTextInTransaction,
   bindChiefAssignment,
   confirmDispatchStop,
   createDb,
   expireComputerExecutionLeases,
+  finalizeRun,
+  findChiefCorrectionPlan,
+  finishDelegation,
+  IsolationError,
   projectChiefActivity,
   provisionMessagingIdentity,
   publishChiefDraftResult,
   reconcileChiefCorrection,
+  recordChiefActionReconciliation,
   settleChiefAction,
   validateChiefDispatch,
 } from "@ardurbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { resolveThreadTarget, sendThreadMessage } from "../../../apps/api/src/thread-target.js";
+import { chiefVerificationRead } from "../../adapters/src/chief-control.js";
 import { checkDelegationExecution } from "../../adapters/src/delegation-execution.js";
 
 const enabled = process.env.VERIFY_DATABASE === "1" && Boolean(process.env.DATABASE_URL);
@@ -98,7 +105,7 @@ describe.skipIf(!enabled).sequential("chief correction cross-run Postgres journe
       },
       include: { thread: true },
     });
-    await db.prisma.mcpServer.create({
+    const server = await db.prisma.mcpServer.create({
       data: {
         ...scope,
         slug: "fake-notion",
@@ -116,7 +123,7 @@ describe.skipIf(!enabled).sequential("chief correction cross-run Postgres journe
         },
         spaceAllowedTools: ["fetch_page"],
         assignments: {
-          create: [worker, replacement].map((bot) => ({
+          create: [worker, replacement, chief].map((bot) => ({
             ...scope,
             botId: bot.id,
             access: "custom",
@@ -180,6 +187,7 @@ describe.skipIf(!enabled).sequential("chief correction cross-run Postgres journe
       worker,
       replacement,
       computer,
+      server,
       group,
       target,
       deps,
@@ -507,7 +515,7 @@ describe.skipIf(!enabled).sequential("chief correction cross-run Postgres journe
     });
     await reconcileChiefCorrection(db.prisma, f.plan.id);
     const reload = await db.prisma.chiefPlan.findUniqueOrThrow({ where: { id: f.plan.id } });
-    expect(ChiefDispatchSchema.parse(reload.dispatch).stop?.state).toBe("uncertain");
+    expect(ChiefDispatchSchema.parse(reload.dispatch).stop?.state).toBe("checking");
     await db.prisma.run.update({
       where: { id: reload.sourceRunId },
       data: { status: "running", runtimePin: pin },
@@ -522,5 +530,297 @@ describe.skipIf(!enabled).sequential("chief correction cross-run Postgres journe
         ),
       ),
     ).toMatchObject({ error: expect.stringContaining("reconcile") });
+  });
+
+  async function finishTurn(runId: string, text: string) {
+    const run = await db.prisma.run.update({
+      where: { id: runId },
+      data: { status: "running", leaseOwner: "fixture-turn", leaseFence: 1 },
+    });
+    const attempt = await db.prisma.attempt.create({
+      data: { runId, fence: 1, status: "running" },
+    });
+    expect(
+      await finalizeRun(db.prisma, {
+        spaceId: run.spaceId,
+        threadId: run.threadId,
+        botId: run.botId,
+        runId,
+        taskId: run.taskId,
+        attemptId: attempt.id,
+        leaseOwner: "fixture-turn",
+        leaseFence: 1,
+        outcome: "completed",
+        blocks: [{ kind: "text", text }],
+      }),
+    ).not.toBe(false);
+  }
+
+  it("resumes the task goal after uncertain settlement, scoped verification and exactly one non-repeating replacement", async () => {
+    const f = await fixture();
+    const effect = await db.prisma.externalEffect.create({
+      data: {
+        spaceId: f.scope.spaceId,
+        runId: f.run.id,
+        kind: "fake-notion-write",
+        status: "executing",
+        request: { pageId: "fake-earlier-page", body: "Earlier document" },
+        idempotencyKey: randomUUID(),
+      },
+    });
+    const admission = await admitChiefAction(db.prisma, {
+      runId: f.run.id,
+      attempt: 1,
+      executionId: "held-upload",
+      consequential: true,
+      remote: true,
+      tool: "create_page",
+      effectId: effect.id,
+    });
+    expect(admission.admissionId).toBeTruthy();
+    await sendThreadMessage(f.deps, f.actor, f.target, {
+      text: `dont send to ${f.worker.name}`,
+      clientNonce: "mid-upload",
+    });
+    await db.prisma.externalEffect.update({
+      where: { id: effect.id },
+      data: { status: "uncertain" },
+    });
+    await settleChiefAction(db.prisma, admission.admissionId, true);
+    await db.prisma.run.update({
+      where: { id: f.run.id },
+      data: {
+        status: "cancelled",
+        cancelConfirmedAt: new Date(),
+      },
+    });
+    await db.prisma.$transaction((tx) =>
+      // Same settlement used by owned teardown, with no computer process to stop in this fixture.
+      finishDelegation(
+        tx,
+        f.run.delegationId!,
+        "cancelled",
+        "Owned fixture teardown confirmed",
+        f.run.id,
+      ),
+    );
+    const checking = await reconcileChiefCorrection(db.prisma, f.plan.id);
+    expect(checking).toMatchObject({ runId: expect.any(String) });
+    if (!checking?.runId) throw new Error("Expected checking turn");
+    expect(await reconcileChiefCorrection(db.prisma, f.plan.id)).toBeUndefined();
+    await db.prisma.run.update({
+      where: { id: checking.runId },
+      data: { status: "running", leaseFence: 1 },
+    });
+    const dispatch = (runId: string) =>
+      db.prisma.$transaction((tx) =>
+        validateChiefDispatch(
+          tx,
+          { ...f.scope, id: runId, botId: f.chief.id, threadId: f.target.threadId },
+          f.group.id,
+          f.replacement.id,
+        ),
+      );
+    const refusal =
+      "This task changed. Wait for owned teardown and reconcile the previous action before dispatching.";
+    expect(await dispatch(checking.runId)).toMatchObject({ error: refusal });
+    expect(
+      await recordChiefActionReconciliation(db.prisma, checking.runId, {
+        runId: f.run.id,
+        effectId: effect.id,
+        outcome: "kept",
+      }),
+    ).toMatchObject({ error: expect.stringContaining("Read back") });
+    // Script the granted connector's read-back; the durable admission proves a successful read.
+    const read = await admitChiefAction(db.prisma, {
+      runId: checking.runId,
+      attempt: 1,
+      executionId: "read-back",
+      consequential: true,
+      remote: true,
+      tool: "fetch_page",
+      verificationRead: await chiefVerificationRead(db.prisma, checking.runId, {
+        connectorId: "mcp",
+        resourceId: f.server.id,
+        resourceRevision: f.server.revision,
+        toolName: "fetch_page",
+      }),
+    });
+    expect(read.admissionId).toBeTruthy();
+    await settleChiefAction(db.prisma, read.admissionId, false);
+    const verified = {
+      runId: f.run.id,
+      effectId: effect.id,
+      outcome: "kept",
+      verificationExecutionId: "read-back",
+    };
+    expect(
+      await recordChiefActionReconciliation(db.prisma, checking.runId, verified),
+    ).toMatchObject({ ok: true });
+    expect(await recordChiefActionReconciliation(db.prisma, checking.runId, verified)).toEqual({
+      ok: true,
+    });
+    await finishTurn(
+      checking.runId,
+      "The earlier page exists; keep it and prepare only the remaining work.",
+    );
+    const replanned = await reconcileChiefCorrection(db.prisma, f.plan.id);
+    expect(replanned).toMatchObject({ runId: expect.any(String) });
+    if (!replanned?.runId) throw new Error("Expected replacement planning turn");
+    expect(await reconcileChiefCorrection(db.prisma, f.plan.id)).toBeUndefined();
+    const plan = await db.prisma.chiefPlan.findUniqueOrThrow({ where: { id: f.plan.id } });
+    expect(ChiefControlSchema.parse(plan.control)).toMatchObject({
+      uncertainRunIds: [],
+      pendingReplan: false,
+      reconciledActions: [{ runId: f.run.id, effectId: effect.id, outcome: "kept", revision: 2 }],
+    });
+    await db.prisma.run.update({ where: { id: replanned.runId }, data: { status: "running" } });
+    expect(await dispatch(replanned.runId)).not.toHaveProperty("error");
+    const source = {
+      ...f.scope,
+      id: replanned.runId,
+      botId: f.chief.id,
+      threadId: f.target.threadId,
+    };
+    const input = {
+      bot_id: f.replacement.id,
+      message: "Prepare remaining work locally; do not repeat the kept upload.",
+    };
+    const replacement = await handoffToGroupBot(f.deps, source, f.group.id, input);
+    expect(replacement).toMatchObject({ ok: true, botId: f.replacement.id });
+    if (!("runId" in replacement) || !replacement.runId || !replacement.delegationId)
+      throw new Error(JSON.stringify(replacement));
+    const repeatedDispatch = await handoffToGroupBot(f.deps, source, f.group.id, input);
+    expect(repeatedDispatch).toHaveProperty("error");
+    expect(repeatedDispatch).not.toMatchObject({ error: refusal });
+    expect(
+      await db.prisma.run.count({
+        where: { botId: f.replacement.id, delegationRootTaskId: f.sent.taskId },
+      }),
+    ).toBe(1);
+    expect(await dispatch(replanned.runId)).not.toMatchObject({ error: refusal });
+    await db.prisma.run.update({
+      where: { id: replacement.runId },
+      data: { status: "running", leaseFence: 1 },
+    });
+    const repeatedEffect = await db.prisma.externalEffect.create({
+      data: {
+        spaceId: f.scope.spaceId,
+        runId: replacement.runId,
+        kind: effect.kind,
+        status: "pending",
+        request: effect.request!,
+        idempotencyKey: randomUUID(),
+      },
+    });
+    expect(
+      await admitChiefAction(db.prisma, {
+        runId: replacement.runId,
+        attempt: 1,
+        executionId: "repeat-upload",
+        consequential: true,
+        remote: true,
+        tool: "create_page",
+        effectId: repeatedEffect.id,
+      }),
+    ).toMatchObject({ error: expect.stringContaining("Do not repeat") });
+    const remaining = await admitChiefAction(db.prisma, {
+      runId: replacement.runId,
+      attempt: 1,
+      executionId: "remaining-draft",
+      consequential: true,
+      remote: false,
+      tool: "write_file",
+    });
+    expect(remaining).not.toHaveProperty("error");
+    await settleChiefAction(db.prisma, remaining.admissionId, false);
+    await finishTurn(
+      replacement.runId,
+      "Remaining draft complete; earlier upload was not repeated.",
+    );
+    await db.prisma.$transaction((tx) =>
+      acceptDelegation(tx, f.scope, replacement.delegationId!, f.chief.id),
+    );
+    await finishTurn(replanned.runId, "The corrected task goal is complete.");
+    expect((await db.prisma.task.findUniqueOrThrow({ where: { id: f.sent.taskId } })).status).toBe(
+      "completed",
+    );
+    expect(
+      await findChiefCorrectionPlan(db.prisma, { ...f.scope, threadId: f.target.threadId }),
+    ).toBeUndefined();
+    const events = await db.prisma.event.findMany({
+      where: { threadId: f.target.threadId, type: "chief.control" },
+      orderBy: { seq: "asc" },
+    });
+    expect(
+      events.filter((event) => (event.payload as { state?: string }).state === "checking"),
+    ).toHaveLength(1);
+    expect(
+      events.filter((event) => (event.payload as { state?: string }).state === "replan"),
+    ).toHaveLength(1);
+  });
+
+  it("does not let another human in the space correct the owner's room or stop its worker", async () => {
+    const f = await fixture();
+    const other = await provisionMessagingIdentity(
+      db.prisma,
+      { provider: "sendblue", address: `fixture-${randomUUID()}` },
+      { signupsEnabled: undefined, signupAllowlist: undefined },
+    );
+    const space = await db.prisma.space.findUniqueOrThrow({ where: { id: f.scope.spaceId } });
+    await db.prisma.member.create({
+      data: {
+        id: randomUUID(),
+        organizationId: space.organizationId,
+        userId: other.userId,
+        role: "member",
+        createdAt: new Date(),
+      },
+    });
+    await db.prisma.spaceMember.create({
+      data: {
+        id: randomUUID(),
+        spaceId: space.id,
+        organizationId: space.organizationId,
+        userId: other.userId,
+        role: "member",
+        createdAt: new Date(),
+      },
+    });
+    const actor = { spaceId: space.id, userId: other.userId } as Actor;
+    const before = await db.prisma.chiefPlan.findUniqueOrThrow({ where: { id: f.plan.id } });
+    const eventsBefore = await db.prisma.event.count({ where: { threadId: f.target.threadId } });
+    // Rooms are owner-scoped. Even a stale target supplied by a caller is rejected on send.
+    await expect(
+      resolveThreadTarget(db.prisma, actor, { groupId: f.group.id }),
+    ).rejects.toBeInstanceOf(IsolationError);
+    await expect(
+      sendThreadMessage(f.deps, actor, f.target, {
+        text: `dont send to ${f.worker.name}`,
+        clientNonce: "non-owner-exclusion",
+      }),
+    ).rejects.toBeInstanceOf(IsolationError);
+    const after = await db.prisma.chiefPlan.findUniqueOrThrow({ where: { id: f.plan.id } });
+    expect(after.control).toEqual(before.control);
+    expect(after.revision).toBe(before.revision);
+    expect(after.dispatch).toEqual(before.dispatch);
+    expect(await db.prisma.event.count({ where: { threadId: f.target.threadId } })).toBe(
+      eventsBefore,
+    );
+    expect(await checkDelegationExecution(db.prisma, f.run.id, "write_file")).toBeUndefined();
+    const admitted = await admitChiefAction(db.prisma, {
+      runId: f.run.id,
+      attempt: 1,
+      executionId: "owner-worker-continues",
+      consequential: true,
+      remote: false,
+      tool: "write_file",
+    });
+    expect(admitted.admissionId).toBeTruthy();
+    expect(
+      (await db.prisma.run.findUniqueOrThrow({ where: { id: f.run.id } })).cancelRequestedAt,
+    ).toBeNull();
+    await settleChiefAction(db.prisma, admitted.admissionId, false);
+    await finishTurn(f.run.id, "Owner's work completed without non-owner steering.");
   });
 });
