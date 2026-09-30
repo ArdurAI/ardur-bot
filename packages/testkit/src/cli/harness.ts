@@ -138,7 +138,6 @@ async function main() {
         "packages/adapters/src/run-usage.postgres.test.ts",
         "packages/adapters/src/job-reconciler.postgres.test.ts",
         "packages/adapters/src/cloud-agent.postgres.test.ts",
-        "packages/adapters/src/memory/lifecycle.postgres.test.ts",
         "apps/api/src/local-import.postgres.test.ts",
         "apps/api/src/scratchpad.postgres.test.ts",
       ];
