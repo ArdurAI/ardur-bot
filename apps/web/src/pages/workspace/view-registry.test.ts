@@ -3,7 +3,10 @@ import { WorkspaceViewIdSchema } from "@ardurbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { availableWorkspaceViews, isWorkspaceViewId, workspaceViews } from "./view-registry";
 
-vi.mock("@lingui/core/macro", () => ({ t: (parts: TemplateStringsArray) => parts.join("") }));
+vi.mock("@lingui/core/macro", () => ({
+  t: (parts: TemplateStringsArray) => parts.join(""),
+  msg: (parts: TemplateStringsArray) => parts,
+}));
 
 const computer = {
   computerId: "computer",

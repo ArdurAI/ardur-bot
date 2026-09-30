@@ -327,7 +327,9 @@ vi.mock("./shell/terminal-session", () => ({
 }));
 vi.mock("@lingui/react/macro", () => {
   const tag = (parts: TemplateStringsArray, ...values: unknown[]) =>
-    parts.reduce((text, part, i) => text + part + (String(values[i - 1] ?? "") ?? ""), "");
+    typeof parts === "string"
+      ? parts
+      : parts.reduce((text, part, i) => text + part + (String(values[i - 1] ?? "") ?? ""), "");
   return {
     Trans: ({ children }: { children: ReactNode }) => children,
     useLingui: () => ({ t: tag }),
@@ -373,11 +375,26 @@ let liveIntervals: Map<number, { fn: () => void; delay: number }>;
 let intervalSeq = 0;
 const realSetInterval = window.setInterval;
 const realClearInterval = window.clearInterval;
+let savedLayouts: Map<string, string>;
+let narrowWindow = false;
 
 beforeEach(() => {
+  savedLayouts = new Map();
+  narrowWindow = false;
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key: string) => savedLayouts.get(key) ?? null,
+      setItem: (key: string, value: string) => savedLayouts.set(key, value),
+      removeItem: (key: string) => savedLayouts.delete(key),
+      clear: () => savedLayouts.clear(),
+    },
+  });
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
   window.matchMedia = ((query: string) => ({
-    matches: query.includes("min-width"),
+    matches: query.includes("min-width")
+      ? !narrowWindow
+      : query.includes("max-width") && narrowWindow,
     media: query,
     addEventListener: () => {},
     removeEventListener: () => {},
@@ -509,6 +526,87 @@ async function deliverCapabilityFlip(botId: string, graphical: boolean) {
   await until(() => count("threads.get") > seen);
   await tick(200);
 }
+
+it("remembers distinct A/B layouts and restores focus when a view closes", async () => {
+  await renderShell("/app/bot-1");
+  await openWorkspacePane();
+  click(paneTab("Screen"));
+  await until(() => paneTab("Screen")?.getAttribute("aria-selected") === "true");
+  const slider = pane()?.querySelector("hr");
+  slider?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
+  await tick(100);
+  expect(pane()?.querySelector("hr")?.getAttribute("aria-valuenow")).toBe("500");
+  click(host.querySelector('[data-roster-bot-id="bot-2"]'));
+  await until(
+    () =>
+      savedLayouts.has('ardurbot:workspace-layout:["user-1","space-1","bot-2"]') &&
+      pane()?.getAttribute("data-panel") === "closed",
+  );
+  await tick(300);
+  await openWorkspacePane();
+  expect(pane()?.querySelector("hr")?.getAttribute("aria-valuenow")).toBe("480");
+  expect(pane()?.querySelector('[role="tablist"]')?.textContent).toBe("Tasks");
+  click(paneTab("Computer"));
+  await until(() => paneTab("Computer")?.getAttribute("aria-selected") === "true");
+  click(host.querySelector('[data-roster-bot-id="bot-1"]'));
+  await until(() => paneTab("Screen")?.getAttribute("aria-selected") === "true");
+  expect(pane()?.querySelector("hr")?.getAttribute("aria-valuenow")).toBe("500");
+  click(pane()?.querySelector('[aria-label="Close Screen"]'));
+  await until(() => paneTab("Tasks")?.getAttribute("aria-selected") === "true");
+  await tick(100);
+  expect(document.activeElement).toBe(paneTab("Tasks"));
+  click(pane()?.querySelector('[aria-label="Close Tasks"]'));
+  await until(() => pane()?.getAttribute("aria-hidden") === "true");
+  await tick(100);
+  expect(document.activeElement).toBe(host.querySelector("[data-workspace-toggle]"));
+  const layouts = [...savedLayouts.entries()].filter(([key]) =>
+    key.startsWith("ardurbot:workspace-layout:"),
+  );
+  expect(layouts).toHaveLength(2);
+}, 30_000);
+
+it.each([true, false])(
+  "hiding a terminal retains it and desktop width (narrow: %s)",
+  async (narrow) => {
+    narrowWindow = narrow;
+    state.bootstrapBotId = "bot-2";
+    state.terminalAvailable = true;
+    state.threads["bot-2"]!.computer = {
+      ...computerFor("bot-2", false),
+      controlHolder: "user",
+      controlBotId: "bot-2",
+    };
+    await renderShell("/app/bot-2");
+    await openWorkspacePane();
+    click(paneTab("Terminal"));
+    await until(() => host.querySelector("[data-pane-session]") !== null);
+    const original = host.querySelector("[data-pane-session]");
+    expect(pane()?.getAttribute("data-overlay")).toBe(String(narrow));
+    const back = [...(pane()?.querySelectorAll("button") ?? [])].find(
+      (button) => button.textContent === "Back to chat",
+    );
+    if (narrow) {
+      expect(back).toBeDefined();
+      click(back);
+    } else click(host.querySelector("[data-workspace-toggle]"));
+    await until(() => pane()?.getAttribute("aria-hidden") === "true");
+    expect(host.querySelector("[data-pane-session]")).toBe(original);
+    expect(count("session.close")).toBe(0);
+    const authority = [...host.querySelectorAll("span")].find(
+      (span) => span.textContent === "You control the computer",
+    );
+    expect(authority?.closest("aside")).toBeNull();
+    click(host.querySelector("[data-workspace-toggle]"));
+    await until(() => pane()?.getAttribute("aria-hidden") === "false");
+    await until(() => document.activeElement === paneTab("Terminal"));
+    expect(host.querySelector("[data-pane-session]")).toBe(original);
+    const layout = JSON.parse(
+      [...savedLayouts.entries()].find(([key]) => key.startsWith("ardurbot:workspace-layout:"))![1],
+    );
+    expect(layout.width).toBe(480);
+  },
+  30_000,
+);
 
 it("runs the heartbeat only while a screen surface is really rendered across capability transitions", async () => {
   await renderShell("/app/bot-1");

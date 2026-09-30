@@ -7,7 +7,7 @@ import type {
 } from "@ardurbot/contracts";
 import { Button, WorkspaceTabs } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
-import { Maximize2, Minimize2, X } from "lucide-react";
+import { ArrowLeft, Maximize2, Minimize2, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { Suspense, useEffect, useState } from "react";
 import { rpc } from "../../lib/rpc";
@@ -30,6 +30,9 @@ export function WorkspacePane({
   visible = true,
   headerActions,
   allowTerminalStart = true,
+  onBackToChat,
+  hiddenControlsHost,
+  compact = false,
 }: WorkspacePaneProps) {
   const { t } = useLingui();
   const [context, setContext] = useState<WorkspaceContext | null>(null);
@@ -85,7 +88,8 @@ export function WorkspacePane({
               terminal,
               onOpenRun,
               visible: visible && selected === type,
-              controlsHost,
+              controlsHost: !visible && hiddenControlsHost ? hiddenControlsHost : controlsHost,
+              compact,
             })}
           </Suspense>
         ) : (
@@ -109,6 +113,12 @@ export function WorkspacePane({
         className="flex shrink-0 items-center gap-1 border-b border-border px-3 py-2"
       >
         <h2 className="mr-auto text-sm font-medium">{name}</h2>
+        {onBackToChat ? (
+          <Button variant="ghost" size="sm" onClick={onBackToChat}>
+            <ArrowLeft size={16} className="rtl:rotate-180" />
+            {t`Back to chat`}
+          </Button>
+        ) : null}
         {headerActions}
         {onExpand ? (
           <Button
@@ -177,4 +187,7 @@ export type WorkspacePaneProps = {
   onRetry?(): void;
   headerActions?: ReactNode;
   allowTerminalStart?: boolean;
+  onBackToChat?(): void;
+  hiddenControlsHost?: HTMLElement | null;
+  compact?: boolean;
 };

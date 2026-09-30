@@ -17,10 +17,12 @@ import {
   sessionRetryDelayMs,
   showSessionUnavailable,
 } from "./lib/session-gate";
-import { ShellPage } from "./pages/Shell";
 import { useOpenTo } from "./pages/shell/open-to";
 
 const IdePage = lazy(() => import("./pages/ide/IdePage"));
+const ShellPage = lazy(() =>
+  import("./pages/Shell").then((module) => ({ default: module.ShellPage })),
+);
 
 // Pages for their own routes load with the route; nothing else needs them at startup.
 const IntegrationSetupPage = lazy(() =>

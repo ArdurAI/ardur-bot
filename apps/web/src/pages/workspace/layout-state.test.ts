@@ -10,7 +10,10 @@ import {
   writeWorkspaceLayout,
 } from "./layout-state";
 
-vi.mock("@lingui/core/macro", () => ({ t: (parts: TemplateStringsArray) => parts.join("") }));
+vi.mock("@lingui/core/macro", () => ({
+  t: (parts: TemplateStringsArray) => parts.join(""),
+  msg: (parts: TemplateStringsArray) => parts,
+}));
 
 beforeEach(() => {
   const saved = new Map<string, string>();

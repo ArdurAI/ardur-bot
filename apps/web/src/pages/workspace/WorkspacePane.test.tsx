@@ -16,6 +16,7 @@ vi.mock("../../lib/rpc", () => ({
 }));
 
 vi.mock("@lingui/core/macro", () => ({
+  msg: (parts: TemplateStringsArray) => parts,
   t: (parts: TemplateStringsArray, ...values: unknown[]) =>
     parts.reduce((text, part, i) => text + part + (values[i] ?? ""), ""),
 }));
