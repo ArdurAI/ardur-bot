@@ -37,10 +37,12 @@ describe("LocalAgentHomeStore export cancellation", () => {
     await writeFile(path.join(home, "a.txt"), "first");
     await writeFile(path.join(home, "b.txt"), "second");
     const controller = new AbortController();
-    const files = store.streamHome("bot-1", { ...context, signal: controller.signal }, (file) => {
-      if (file === "b.txt") controller.abort();
-      return false;
-    });
+    const files = store
+      .streamHome("bot-1", { ...context, signal: controller.signal }, (file) => {
+        if (file === "b.txt") controller.abort();
+        return false;
+      })
+      [Symbol.asyncIterator]();
     const first = await files.next();
     expect(first.done).toBe(false);
     const chunks: Buffer[] = [];
