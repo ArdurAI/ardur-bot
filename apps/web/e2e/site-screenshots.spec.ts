@@ -76,9 +76,9 @@ function showcaseData() {
     sectionId: null,
     archivedAt: null,
     members: [0, 1, 3].map((index) => ({
-      botId: bots[index].id,
-      name: bots[index].name,
-      color: bots[index].color,
+      botId: bots[index]!.id,
+      name: bots[index]!.name,
+      color: bots[index]!.color,
       status: "idle",
     })),
     threadId: "operations-thread",

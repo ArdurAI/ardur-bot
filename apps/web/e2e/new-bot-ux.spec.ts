@@ -37,6 +37,7 @@ test("create opens form, then empty chat; picker lists bots; sidebar collapses",
   await captureScreenshot(page, testInfo, "create-bot-form");
 
   await form.locator("label:has-text('Name') input").fill("New Bot");
+  await form.getByTestId("create-bot-team").click();
   await form.getByRole("button", { name: "Create", exact: true }).click();
   await page.waitForURL(/\/app\/[^/]+$/);
   await expect(page.getByPlaceholder("Message New Bot")).toBeVisible();
@@ -146,19 +147,26 @@ test("later bot waits before showing the focus card; sending cancels it", async 
   await expect(page.getByText("What do you want me on first?", { exact: true })).toHaveCount(0);
 });
 
-test("plus picker can create a Private computer bot", async ({ page }, testInfo) => {
+test("plus picker offers setup instead of treating the fake engine as isolated", async ({
+  page,
+}, testInfo) => {
   const stamp = Date.now();
   await signup(page, `new-bot-private-${stamp}@example.test`, "password12", "New Bot Private");
   await completeOnboarding(page);
   await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 
-  await createBotFromPicker(page, { computerMode: "dedicated" });
-  await expect(page.getByPlaceholder("Message New Bot")).toBeVisible();
+  await openNewBot(page);
+  const form = page.getByTestId("create-bot-form");
+  await form.locator("label:has-text('Name') input").fill("New Bot");
+  await expect(form.getByTestId("create-bot-private")).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    form.getByText("Set up a container for isolated work.", { exact: true }),
+  ).toBeVisible();
+  await expect(form.getByRole("button", { name: "Create", exact: true })).toBeDisabled();
   await captureScreenshot(page, testInfo, "create-private-computer-bot");
 
-  const botId = page.url().split("/").pop()!;
   const bots = await rpc<Array<{ id: string; computerMode: string }>>(page, "bots/list", {});
-  expect(bots.find((bot) => bot.id === botId)?.computerMode).toBe("dedicated");
+  expect(bots).toHaveLength(1);
 });
 
 test("second bot from plus opens create form before persist", async ({ page }, testInfo) => {
@@ -173,6 +181,7 @@ test("second bot from plus opens create form before persist", async ({ page }, t
   await form.locator("label:has-text('Name') input").fill("Researcher");
   await form.locator("label:has-text('Title') input").fill("Finds sources");
   await form.locator("label:has-text('Description') textarea").fill("Briefs from the web.");
+  await form.getByTestId("create-bot-team").click();
   await captureScreenshot(page, testInfo, "second-bot-create-form");
 
   const create = page.waitForResponse(
