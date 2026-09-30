@@ -278,7 +278,10 @@ export async function saveChiefSelection(
     chiefId: input.chiefBotId,
     operation: input.operation,
     members: facts,
-    requiredComputerId: facts.find((member) => member.id === input.chiefBotId)?.computer?.id,
+    requiredComputerId:
+      input.operation.purpose === "install-tool"
+        ? facts.find((member) => member.id === input.chiefBotId)?.computer?.id
+        : undefined,
   });
   return tx.chiefPlan.create({
     data: {
@@ -340,7 +343,10 @@ export async function validateChiefDispatch(
       chiefId: scope.botId,
       operation,
       members: facts.filter((member) => member.id === memberId),
-      requiredComputerId: facts.find((member) => member.id === scope.botId)?.computer?.id,
+      requiredComputerId:
+        operation.purpose === "install-tool"
+          ? facts.find((member) => member.id === scope.botId)?.computer?.id
+          : undefined,
     });
     if (current.kind !== "delegate" && current.kind !== "queue")
       return {
