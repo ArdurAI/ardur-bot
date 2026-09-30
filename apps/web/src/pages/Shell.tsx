@@ -288,6 +288,11 @@ import { WindowChrome } from "./WindowChrome";
 import { terminalSupported } from "./workspace/terminal-controller";
 import { WorkspaceFileGuard } from "./workspace/WorkspaceFileGuard";
 
+const ChiefResultBubble = lazy(() =>
+  import("../components/ai/ChiefResultBubble").then((module) => ({
+    default: module.ChiefResultBubble,
+  })),
+);
 const BotSettings = lazy(() =>
   import("./shell/bot-panel").then((module) => ({ default: module.BotSettings })),
 );
@@ -2531,12 +2536,14 @@ export function ShellPage({
     title: string;
     description: string;
     computerMode: ComputerMode;
+    isolatedComputer?: { connectionId: string | null };
   }) {
     const isFirstBot = botsRef.current.length === 0;
     const bot = await rpc.bots.create({
       ...normalizeCreateBotProfile(input),
       notifyOnFinish: true,
       computerMode: input.computerMode,
+      isolatedComputer: input.isolatedComputer,
     });
     setBots((current) =>
       current.some((item) => item.id === bot.id) ? current : [bot, ...current],
@@ -4115,6 +4122,7 @@ export function ShellPage({
                 <CreateBotForm
                   onCancel={() => setPanel(null)}
                   onCreate={(input) => createBot(input)}
+                  onSetupComputer={() => openSettings("computer")}
                 />
               </Suspense>
             ) : null}
@@ -6711,6 +6719,12 @@ const MessageView = memo(function MessageView({
             </div>
           );
         }
+        if (block.kind === "chief_result")
+          return (
+            <Suspense key={i} fallback={null}>
+              <ChiefResultBubble block={block} />
+            </Suspense>
+          );
         if (block.kind === "handoff") {
           if (block.chiefDispatch)
             return <ChiefDispatchLine key={i} dispatch={block.chiefDispatch} detail={block.text} />;

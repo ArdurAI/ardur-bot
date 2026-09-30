@@ -228,6 +228,8 @@ export interface ConnectorRoute {
   resourceRevision?: string | number;
   /** Source label for lazy catalog name indexes. Never exposed as a model schema field. */
   catalogGroup?: string;
+  /** Trusted catalog identity, never a user-selected slug or tool argument. */
+  serviceId?: string;
 }
 
 export interface ConnectorCall {

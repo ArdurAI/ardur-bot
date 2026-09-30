@@ -190,7 +190,8 @@ export async function createBotFromPicker(
   }
   if (options.computerMode === "dedicated") {
     await form.getByTestId("create-bot-private").click();
-  } else if (options.computerMode === "team") {
+  } else {
+    // Live test deployments use the fake engine, not an isolated container.
     await form.getByTestId("create-bot-team").click();
   }
   await form.getByRole("button", { name: "Create", exact: true }).click();

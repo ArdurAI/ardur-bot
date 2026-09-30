@@ -76,6 +76,74 @@ function frames() {
 }
 
 describe("client trace", () => {
+  it("counts scoped activity and result paint without retaining tool details", () => {
+    globalThis.__ardurTrace = { capacity: 20 };
+    const frame = frames();
+    const dispatch = {
+      requestMessageId: "request",
+      revision: 1,
+      memberId: "worker",
+      memberName: "Member",
+      state: "messaged",
+      reason: "eligible",
+      runId: "run",
+      delegationId: "assignment",
+      activity: {
+        revision: 1,
+        runId: "run",
+        delegationId: "assignment",
+        attempt: 1,
+        sourceSeq: 1,
+        key: "read-input",
+        state: "active",
+        updatedAt: "2026-01-01T00:00:00Z",
+      },
+    };
+    const blocks = [{ kind: "handoff", text: "private detail", chiefDispatch: dispatch }];
+    receiveTraceEvent({
+      ...event("thread.message.updated", 2, { messageId: "message-a", blocks }),
+      runId: undefined,
+    });
+    const current = snapshot(2);
+    current.messages[0]!.blocks = blocks as ThreadSnapshot["messages"][number]["blocks"];
+    const cancel = paintThreadTrace(current)!;
+    frame();
+    frame();
+    expect(clientTraceSnapshot()?.points.map((p) => p.boundary)).toEqual([
+      "client.activity.painted",
+    ]);
+    const resultBlocks = [
+      {
+        kind: "chief_result",
+        name: "Draft",
+        botId: "worker",
+        mimeType: "text/plain",
+        result: {
+          requestMessageId: "request",
+          revision: 1,
+          artifactId: "file",
+          href: "artifact:file",
+          state: "draft",
+        },
+      },
+    ];
+    receiveTraceEvent({
+      ...event("thread.message.created", 3, { messageId: "message-a", blocks: resultBlocks }),
+      runId: undefined,
+    });
+    const result = snapshot(3);
+    result.messages[0]!.blocks = resultBlocks as ThreadSnapshot["messages"][number]["blocks"];
+    paintThreadTrace(result);
+    frame();
+    frame();
+    expect(clientTraceSnapshot()?.points.map((p) => p.boundary)).toEqual([
+      "client.activity.painted",
+      "client.result.painted",
+    ]);
+    expect(JSON.stringify(clientTraceSnapshot())).not.toContain("private detail");
+    expect(JSON.stringify(clientTraceSnapshot())).not.toContain("artifact:file");
+    cancel();
+  });
   it.each([false, true])(
     "counts receipt-only paint without a run, including event-first=%s",
     async (eventFirst) => {

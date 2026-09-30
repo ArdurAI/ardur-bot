@@ -1317,6 +1317,8 @@ export function applyMobileThreadEvent(
     };
   }
   if (event.type === "thread.message.created" || event.type === "thread.message.updated") {
+    if (event.type === "thread.message.updated" && (event.seq ?? -1) <= (prev.cursor ?? -1))
+      return prev;
     const liveId = progressMessageId(event);
     const next: MobileMessage = {
       id: String(event.payload?.messageId ?? event.id ?? `msg:${event.seq ?? 0}`),

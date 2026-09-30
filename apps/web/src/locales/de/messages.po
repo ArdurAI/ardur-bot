@@ -1470,6 +1470,11 @@ msgstr ""
 msgid "Bots on this computer: {0}"
 msgstr "Bots auf diesem Computer: {0}"
 
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-summary.tsx
+msgid "Bots share files and installed tools"
+msgstr "Bots teilen Dateien und installierte Werkzeuge"
+
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
 msgstr ""
@@ -1619,6 +1624,10 @@ msgstr ""
 msgid "Change computer"
 msgstr ""
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Change location"
+msgstr "Standort ändern"
+
 #: src/pages/LearningInsights.tsx
 #: src/pages/shell/provider-error-message.tsx
 msgid "Change model"
@@ -1723,6 +1732,14 @@ msgstr "Geprüft {0}"
 #: src/pages/shell/runtime-settings.tsx
 msgid "Checking the download"
 msgstr "Download wird geprüft"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Checking the missing tool"
+msgstr "Fehlendes Werkzeug wird geprüft"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Checking the Notion page"
+msgstr "Notion-Seite wird geprüft"
 
 #: src/components/DesktopUpdates.tsx
 #: src/components/OllamaSettings.tsx
@@ -2063,7 +2080,6 @@ msgstr ""
 
 #: src/pages/ide/IdePage.tsx
 #: src/pages/Shell.tsx
-#: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
 #: src/pages/workspace/WorkspacePane.tsx
@@ -2101,6 +2117,14 @@ msgstr "Computer ist im Ruhezustand"
 #: src/pages/Shell.tsx
 msgid "Computer is asleep. Open it to wake."
 msgstr "Computer ist im Ruhezustand. Zum Aufwecken öffnen."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Computer location unavailable. Choose a supported connection."
+msgstr "Computerstandort nicht verfügbar. Wähle eine unterstützte Verbindung."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Computer location unavailable. Try again."
+msgstr "Computerstandort nicht verfügbar. Versuche es erneut."
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -2284,6 +2308,10 @@ msgstr ""
 msgid "Connected. Review tools in MCP settings."
 msgstr ""
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Connecting to Notion"
+msgstr "Verbindung zu Notion wird hergestellt"
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
@@ -2329,6 +2357,10 @@ msgstr ""
 #: src/pages/LearningCurator.tsx
 msgid "Consolidation uses the review connection and may incur model charges. Approval is required."
 msgstr ""
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Container"
+msgstr "Container"
 
 #: src/components/Context.tsx
 #: src/pages/fleet/FleetSettings.tsx
@@ -2843,6 +2875,10 @@ msgstr "Stimmeinstellungen konnten nicht geladen werden"
 msgid "Could not load your bots; reopen quick access."
 msgstr ""
 
+#: src/components/ai/ChiefResultBubble.tsx
+msgid "Could not open file"
+msgstr "Datei konnte nicht geöffnet werden"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Could not open setup. Try again."
 msgstr ""
@@ -3068,6 +3104,10 @@ msgstr ""
 msgid "Could not show the menu bar item; try again."
 msgstr ""
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Could not start"
+msgstr "Start fehlgeschlagen"
+
 #: src/components/composer/composer-actions.ts
 msgid "Could not start a new chat"
 msgstr ""
@@ -3276,6 +3316,10 @@ msgstr ""
 #: src/pages/board/BoardsSettings.tsx
 msgid "Creates .beads/ with config.yaml, metadata.json, .gitignore, README.md, interactions.jsonl, .local_version, and embeddeddolt/. Git files and hooks stay unchanged."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Creating the Notion page"
+msgstr "Notion-Seite wird erstellt"
 
 #: src/pages/GroupPanel.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -3743,6 +3787,10 @@ msgstr "Du hast noch kein Konto?"
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Done"
 msgstr "Fertig"
+
+#: src/components/ai/ChiefResultBubble.tsx
+msgid "Done — added the document to Notion."
+msgstr "Erledigt — das Dokument wurde zu Notion hinzugefügt."
 
 #: src/pages/TeamBoard.tsx
 msgid "Done — waiting for your OK"
@@ -4254,6 +4302,10 @@ msgstr ""
 msgid "For {task}, {better} on this machine did as well as {other} in your runs."
 msgstr ""
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "For testing only; not an isolation boundary."
+msgstr "Nur zum Testen; keine Isolationsgrenze."
+
 #: src/pages/Auth.tsx
 msgid "Forgot password?"
 msgstr "Passwort vergessen?"
@@ -4510,6 +4562,10 @@ msgstr ""
 #: src/pages/shell/model-pin-select.tsx
 msgid "Hosted providers"
 msgstr ""
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Hosted sandbox"
+msgstr "Gehostete Sandbox"
 
 #: src/pages/RoutineSchedule.tsx
 msgid "hour"
@@ -6234,6 +6290,11 @@ msgstr ""
 msgid "Only space-shared documents go to this repository."
 msgstr ""
 
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-summary.tsx
+msgid "Only this bot"
+msgstr "Nur dieser Bot"
+
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/ScratchpadSection.tsx
@@ -6672,10 +6733,6 @@ msgstr ""
 msgid "Privacy"
 msgstr ""
 
-#: src/pages/shell/bot-panel.tsx
-msgid "Private"
-msgstr "Privat"
-
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Private key"
 msgstr ""
@@ -6837,6 +6894,10 @@ msgstr "schreibgeschützt"
 #: src/pages/storage/StorageSettings.tsx
 msgid "Reading storage usage…"
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Reading the document"
+msgstr "Dokument wird gelesen"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Reads can run without asking once you allow them. Writes always ask."
@@ -7013,6 +7074,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Remote base directory"
 msgstr ""
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Remote computer"
+msgstr "Entfernter Computer"
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Remote MCP URL"
@@ -7352,10 +7417,11 @@ msgstr "Teamnachrichten fortsetzen"
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
+#: src/pages/shell/runtime-summary.tsx
 #: src/pages/system/SystemPage.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Retry"
-msgstr ""
+msgstr "Erneut versuchen"
 
 #. placeholder {0}: failure.relativePath
 #: src/pages/import/LocalImportPage.tsx
@@ -7537,6 +7603,7 @@ msgstr "läuft"
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/shell/runtime-summary.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Running"
 msgstr "Läuft"
@@ -7552,6 +7619,14 @@ msgstr "Wird ausgeführt…"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?"
 msgstr "Auf diesem Computer laufen Ausführungen. Eine Änderung der Verbindung kann sie unterbrechen. Trotzdem speichern?"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Runs as you; can use your files and signed-in tools"
+msgstr "Läuft mit deinen Rechten; kann deine Dateien und angemeldeten Werkzeuge nutzen"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Runs at the configured provider; can use granted credentials and network access."
+msgstr "Läuft beim konfigurierten Anbieter; kann freigegebene Zugangsdaten und Netzwerkzugriff nutzen."
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -7898,6 +7973,10 @@ msgstr "An {peer} gesendet"
 msgid "Sentry alert"
 msgstr ""
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Separate home; can reach allowed network services and granted credentials."
+msgstr "Separates Home-Verzeichnis; kann erlaubte Netzwerkdienste und freigegebene Zugangsdaten nutzen."
+
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Serif"
 msgstr ""
@@ -7959,6 +8038,14 @@ msgstr ""
 msgid "Set up a board"
 msgstr "Board einrichten"
 
+#: src/pages/shell/bot-panel.tsx
+msgid "Set up a container for isolated work."
+msgstr "Richte einen Container für isolierte Arbeit ein."
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Set up computer"
+msgstr "Computer einrichten"
+
 #: src/pages/import/ImportedServerCredentials.tsx
 msgid "Set up credentials"
 msgstr ""
@@ -8017,6 +8104,11 @@ msgstr ""
 #: src/pages/GitMemorySettings.tsx
 msgid "Shared recall will use proposed facts after merge."
 msgstr ""
+
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-summary.tsx
+msgid "Shared with team"
+msgstr "Mit dem Team geteilt"
 
 #: src/components/ShowAllModels.tsx
 msgid "Show all models"
@@ -8181,6 +8273,10 @@ msgstr ""
 msgid "Slash commands"
 msgstr ""
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Sleeping"
+msgstr "Ruht"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Socket missing"
 msgstr "Socket fehlt"
@@ -8339,6 +8435,7 @@ msgid "Start the engine and press Test."
 msgstr "Starte die Engine und drücke Test."
 
 #: src/lib/run-status-label.ts
+#: src/pages/shell/runtime-summary.tsx
 msgid "Starting"
 msgstr "Startet"
 
@@ -8412,6 +8509,7 @@ msgstr ""
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/GroupPanel.tsx
+#: src/pages/shell/runtime-summary.tsx
 msgid "Stopped"
 msgstr "Gestoppt"
 
@@ -8536,7 +8634,6 @@ msgid "Teaching in progress. Stop teaching before sending a new message."
 msgstr "Aufgabe wird angelernt. Beende das Anlernen, bevor du eine neue Nachricht sendest."
 
 #: src/pages/Shell.tsx
-#: src/pages/shell/bot-panel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Team"
 msgstr "Team"
@@ -8590,6 +8687,10 @@ msgstr ""
 msgid "Test"
 msgstr "Test"
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Test computer"
+msgstr "Testcomputer"
+
 #: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
 msgid "Test connection"
 msgstr ""
@@ -8630,6 +8731,10 @@ msgstr "Der Computer ist beschäftigt. Warte, bis er fertig ist."
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr ""
+
+#: src/components/ai/ChiefResultBubble.tsx
+msgid "The draft is ready."
+msgstr "Der Entwurf ist fertig."
 
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "The file changed. Open it again before saving."
@@ -8770,8 +8875,9 @@ msgstr "dieser Computer"
 #: src/pages/fleet/target-name.ts
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
+#: src/pages/shell/runtime-summary.tsx
 msgid "This computer"
-msgstr ""
+msgstr "Dieser Computer"
 
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "This configuration is too complex."
@@ -9352,6 +9458,10 @@ msgstr "Verwenden Sie ganze Sekunden."
 msgid "User"
 msgstr ""
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Uses that account's permissions."
+msgstr "Nutzt die Berechtigungen dieses Kontos."
+
 #: src/pages/shell/bot-model-chip.tsx
 #: src/pages/shell/group-participants.tsx
 msgid "Using {currentId}"
@@ -9432,6 +9542,10 @@ msgstr ""
 #: src/lib/working-indicator.ts
 msgid "Waiting for the model"
 msgstr "Wartet auf das Modell"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Waiting for the tool"
+msgstr "Warten auf das Werkzeug"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
@@ -9543,6 +9657,10 @@ msgstr "Einsatzzeitpunkt"
 msgid "Where should bots run?"
 msgstr "Wo sollen Bots ausgeführt werden?"
 
+#: src/pages/shell/bot-panel.tsx
+msgid "Where this bot runs"
+msgstr "Wo dieser Bot läuft"
+
 #: src/pages/memory/MemoryDocuments.tsx
 msgid "Who the user is and the professional domain"
 msgstr ""
@@ -9578,6 +9696,10 @@ msgstr "Arbeitet an {task}"
 #: src/pages/TeamBoard.tsx
 msgid "Working on {task} for {0}"
 msgstr "Arbeitet an {task} für {0}"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Working on the task"
+msgstr "Aufgabe wird bearbeitet"
 
 #: src/components/ai/CompactWorkRecord.tsx
 msgid "Working: {title}"

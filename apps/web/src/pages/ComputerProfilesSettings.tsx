@@ -4,7 +4,7 @@ import type {
   ComputerStatus,
   Me,
 } from "@ardurbot/contracts";
-import { COMPUTER_PROFILES } from "@ardurbot/contracts";
+import { COMPUTER_PROFILES, computerKindFacts } from "@ardurbot/contracts";
 import { ENGINE_LABELS } from "@ardurbot/contracts/fleet";
 import { computerRefusalMessage, sandboxKindForBot } from "@ardurbot/core";
 import {
@@ -23,6 +23,7 @@ import {
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
 import { rpc } from "../lib/rpc";
+import { RuntimeBoundary, RuntimeSummary } from "./shell/runtime-summary";
 
 type Connection = { id: string; name: string; settings: ComputerConnectionSettings };
 
@@ -168,6 +169,14 @@ export function ComputerProfile({
     defaultLabel !== undefined && (!!status.connectionId || status.kind !== deploymentDefault);
   const defaultOption = t`Deployment default (${defaultLabel})`;
   const supported = ["docker", "podman", "kubernetes", "remote-docker"].includes(engine);
+  const selectedKind = connection
+    ? connection.settings.engine === "docker" || connection.settings.engine === "podman"
+      ? "remote-docker"
+      : connection.settings.engine
+    : choosingDefault
+      ? deploymentDefault
+      : status.kind;
+  const selectedFacts = selectedKind ? computerKindFacts(selectedKind) : null;
   const savedConnection = connections.find((entry) => entry.id === savedConnectionId);
   const sourceLabel = savedConnection?.name ?? engineLabel(status.kind);
   const destinationLabel = choosingDefault ? defaultOption : (connection?.name ?? "");
@@ -203,6 +212,10 @@ export function ComputerProfile({
       <p className="text-sm text-muted-foreground">
         <Trans>Engine: {label}</Trans>
       </p>
+      <RuntimeSummary status={status} locationName={savedConnection?.name} />
+      {selection !== savedConnectionId && selectedKind && selectedFacts ? (
+        <RuntimeBoundary kind={selectedKind} locationName={connection?.name} />
+      ) : null}
       {hostComputer ? (
         <p className="text-xs text-muted-foreground/80">
           {status.hostLabel === "This Mac"
@@ -280,6 +293,7 @@ export function ComputerProfile({
       <Button
         disabled={
           pending ||
+          !selectedFacts ||
           status.state === "booting" ||
           (profile === (status.imageProfile ?? "base") && selection === savedConnectionId)
         }

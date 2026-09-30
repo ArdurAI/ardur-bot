@@ -255,6 +255,7 @@ export class McpConnector implements ConnectorProvider {
                   resourceRevision: assignment.server.revision,
                   toolName: tool.name,
                   catalogGroup: assignment.server.slug,
+                  serviceId: assignment.server.catalogId ?? undefined,
                 },
               }));
           }
@@ -295,6 +296,7 @@ export class McpConnector implements ConnectorProvider {
                 resourceRevision: assignment.server.revision,
                 toolName: tool.name,
                 catalogGroup: assignment.server.slug,
+                serviceId: assignment.server.catalogId ?? undefined,
               },
             }));
         } catch (error) {

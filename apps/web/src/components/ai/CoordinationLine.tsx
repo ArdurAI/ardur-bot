@@ -1,10 +1,31 @@
-import type { ChiefDispatch, ChiefReceiptKey } from "@ardurbot/contracts";
+import type { ChiefActivityKey, ChiefDispatch, ChiefReceiptKey } from "@ardurbot/contracts";
 import type { CoordinationBlock, CoordinationMember } from "@ardurbot/core";
-import { coordinationMemberFailureCode, fixableFailure } from "@ardurbot/core";
+import { chiefActivityKey, coordinationMemberFailureCode, fixableFailure } from "@ardurbot/core";
 import { Button } from "@ardurbot/ui-web";
 import { Plural, Trans, useLingui } from "@lingui/react/macro";
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
+
+function useTranslatedChiefActivity(key: ChiefActivityKey | undefined) {
+  const { t } = useLingui();
+  if (!key) return undefined;
+  switch (key) {
+    case "read-input":
+      return t`Reading the document`;
+    case "connect-notion":
+      return t`Connecting to Notion`;
+    case "write-notion":
+      return t`Creating the Notion page`;
+    case "verify-notion":
+      return t`Checking the Notion page`;
+    case "check-tool":
+      return t`Checking the missing tool`;
+    case "waiting-tool":
+      return t`Waiting for the tool`;
+    default:
+      return t`Working on the task`;
+  }
+}
 
 export function ChiefReceiptText({ receiptKey }: { receiptKey: ChiefReceiptKey }) {
   const { t } = useLingui();
@@ -40,12 +61,14 @@ export function ChiefDispatchLine({
       : dispatch.state === "queued"
         ? t`Queued for ${name}`
         : t`Messaged ${name}`;
+  const activityKey = chiefActivityKey(dispatch);
+  const activity = useTranslatedChiefActivity(activityKey);
   return (
     <div className="my-1 text-[13px] text-muted-foreground" data-testid="chief-dispatch">
       <button
         type="button"
         className="flex w-full items-center gap-2 text-left"
-        aria-label={label}
+        aria-label={[label, activity].filter(Boolean).join(" · ")}
         aria-expanded={expanded}
         onClick={() => setExpanded(!expanded)}
       >
@@ -58,6 +81,11 @@ export function ChiefDispatchLine({
           <ChevronRight className="h-3.5 w-3.5" />
         )}
       </button>
+      {activity ? (
+        <div className="truncate" data-testid="chief-activity" aria-live="polite">
+          {activity}
+        </div>
+      ) : null}
       {expanded ? (
         <div className="mt-2 border-l-2 border-border pl-4" dir="auto">
           {detail}

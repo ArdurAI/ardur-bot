@@ -19,4 +19,9 @@ describe("coordination line fixture", () => {
     expect(source).toContain('"data-testid": "message-user-bubble"');
     expect(source).toContain('"data-testid": "message-bot-bubble"');
   });
+  it("uses client-side member navigation without an unauthenticated document reload", () => {
+    const source = readFileSync(fixturePath, "utf8");
+    expect(source).toMatch(/window\.history\.pushState\(null, "", `\/app\/\$\{botId\}`\)/);
+    expect(source).not.toContain("window.location.assign");
+  });
 });
