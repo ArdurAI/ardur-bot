@@ -1,10 +1,16 @@
+import { spawnSync } from "node:child_process";
 import { lstatSync, statSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
 import { expect, it } from "vitest";
-import { extractSourceArchive, extractUvBinary } from "./hermes-archive.js";
+import {
+  extractSourceArchive,
+  extractUvBinary,
+  gitTreeHash,
+  gitTreeIdOfArchive,
+} from "./hermes-archive.js";
 
 function writeOctal(header: Buffer, offset: number, length: number, value: number): void {
   const text = value.toString(8).padStart(length - 1, "0");
@@ -71,6 +77,101 @@ function gzipTar(parts: Buffer[]): Buffer {
 }
 
 const limits = { files: 100, bytes: 1024 * 1024, inflated: 2 * 1024 * 1024 };
+
+const treeFiles = [
+  { path: "notes/readme.txt", data: Buffer.from("readme\n"), mode: 0o644 },
+  { path: "notes/inner/deep.txt", data: Buffer.from("deep\n"), mode: 0o644 },
+  { path: "run.sh", data: Buffer.from("#!/bin/sh\n"), mode: 0o755 },
+  { path: "top.txt", data: Buffer.from("top\n"), mode: 0o644 },
+];
+
+function treeArchive(files = treeFiles): Buffer {
+  return gzipTar([
+    entry({ name: "rel/", type: "5", mode: 0o755 }),
+    ...files.map((file) => entry({ name: `rel/${file.path}`, data: file.data, mode: file.mode })),
+    // An empty folder is omitted, the same way git omits it from a tree.
+    entry({ name: "rel/notes/inner/empty/", type: "5", mode: 0o755 }),
+  ]);
+}
+
+const gitWorks = spawnSync("git", ["--version"], { encoding: "utf8" }).status === 0;
+
+/** The tree id of the same files on disk: git itself when present, else gitTreeHash. */
+async function expectedTreeId(
+  files: { path: string; data: Buffer; mode: number }[],
+): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "hermes-archive-tree-"));
+  try {
+    for (const file of files) {
+      const full = path.join(dir, file.path);
+      await mkdir(path.dirname(full), { recursive: true });
+      await writeFile(full, file.data);
+      await chmod(full, file.mode);
+    }
+    if (gitWorks) {
+      const git = (...args: string[]) => {
+        const result = spawnSync("git", ["-c", "safe.directory=*", ...args], {
+          cwd: dir,
+          encoding: "utf8",
+        });
+        if (result.status !== 0) throw new Error(result.stderr || result.stdout);
+        return result.stdout.trim();
+      };
+      git("init");
+      git("config", "core.filemode", "true");
+      git("config", "core.autocrlf", "false");
+      git("add", "-A");
+      return git("write-tree");
+    }
+    return await gitTreeHash(dir);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+it("computes the tree id of an archive before anything is written", async () => {
+  expect(await gitTreeIdOfArchive(treeArchive(), limits.inflated)).toBe(
+    await expectedTreeId(treeFiles),
+  );
+});
+
+it("a changed byte changes the archive tree id", async () => {
+  const base = await gitTreeIdOfArchive(treeArchive(), limits.inflated);
+  const changed = treeFiles.map((file) =>
+    file.path === "notes/readme.txt" ? { ...file, data: Buffer.from("tampered\n") } : file,
+  );
+  expect(await gitTreeIdOfArchive(treeArchive(changed), limits.inflated)).not.toBe(base);
+});
+
+it("an added file changes the archive tree id", async () => {
+  const base = await gitTreeIdOfArchive(treeArchive(), limits.inflated);
+  const extended = [...treeFiles, { path: "extra.txt", data: Buffer.from("extra\n"), mode: 0o644 }];
+  const added = await gitTreeIdOfArchive(treeArchive(extended), limits.inflated);
+  expect(added).not.toBe(base);
+  expect(added).toBe(await expectedTreeId(extended));
+});
+
+it("hashes an executable archive entry as git mode 100755", async () => {
+  const tool = [{ path: "tool", data: Buffer.from("#!/bin/sh\n"), mode: 0o755 }];
+  const expected = await expectedTreeId(tool);
+  expect(await gitTreeIdOfArchive(treeArchive(tool), limits.inflated)).toBe(expected);
+  const plain = tool.map((file) => ({ ...file, mode: 0o644 }));
+  const plainId = await gitTreeIdOfArchive(treeArchive(plain), limits.inflated);
+  expect(plainId).not.toBe(expected);
+  expect(plainId).toBe(await expectedTreeId(plain));
+});
+
+it("refuses a symbolic link entry when computing the tree id", async () => {
+  await expect(
+    gitTreeIdOfArchive(
+      gzipTar([
+        entry({ name: "rel/top.txt", data: Buffer.from("top\n"), mode: 0o644 }),
+        entry({ name: "rel/link", type: "2", link: "rel/top.txt", mode: 0o777 }),
+      ]),
+      limits.inflated,
+    ),
+  ).rejects.toThrow("archive refused");
+});
 
 it.skipIf(process.platform === "win32")(
   "normalizes git archive modes instead of refusing them",

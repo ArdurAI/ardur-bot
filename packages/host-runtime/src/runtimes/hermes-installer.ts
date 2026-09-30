@@ -16,7 +16,12 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { extractSourceArchive, extractUvBinary, gitTreeHash } from "./hermes-archive.js";
+import {
+  extractSourceArchive,
+  extractUvBinary,
+  gitTreeHash,
+  gitTreeIdOfArchive,
+} from "./hermes-archive.js";
 import {
   HERMES_SOURCE_PIN,
   HERMES_SOURCE_TREE,
@@ -204,10 +209,16 @@ export async function installHermes(deps: {
     await writeStatus(root, phaseStatus(phase, clock));
     const extractBytes = deps.extractBytes ?? EXTRACT_BYTES;
     const extractFiles = deps.extractFiles ?? EXTRACT_FILES;
+    const inflated = extractBytes + extractFiles * 512 + 1024;
+    // Verify the archive in memory before anything is written: a disk that ignores
+    // letter case cannot hold two paths that differ only by case, so the tree of the
+    // extracted folder can never equal the approved tree there.
+    const archiveTree = await gitTreeIdOfArchive(source, inflated);
+    if (archiveTree !== verifiedTree) throw new HermesInstallError(HERMES_DOWNLOAD_MISMATCH);
     await extractSourceArchive(source, versionDir, {
       files: extractFiles,
       bytes: extractBytes,
-      inflated: extractBytes + extractFiles * 512 + 1024,
+      inflated,
     });
     const actualTree = await gitTreeHash(versionDir);
     if (actualTree !== verifiedTree) {

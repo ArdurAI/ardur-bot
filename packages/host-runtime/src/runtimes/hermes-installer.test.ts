@@ -1,7 +1,17 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { lstatSync, readdirSync, readlinkSync, realpathSync, statSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, rm, symlink, utimes, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  symlink,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
@@ -419,6 +429,52 @@ it("refuses a tree that is not the approved revision and deletes it", async () =
     await expect(
       readFile(path.join(root, "runtimes", hermesVersionDirName(), "script.sh")),
     ).rejects.toThrow();
+    expect(readHermesInstallStatus(root)).toMatchObject({
+      state: "failed",
+      message: HERMES_DOWNLOAD_MISMATCH,
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("refuses a tampered archive before anything is written", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "hermes-memory-verify-"));
+  const expectedTree = await gitWriteTree();
+  const [alpha, beta, plain, script] = files;
+  if (!alpha || !beta || !plain || !script) throw new Error("fixture files missing");
+  // One byte differs from the approved archive, so the in-memory tree id differs.
+  const tampered = gzipTar([
+    pax("g", { comment: "fixture" }),
+    pax("x", { path: "pkg/dir/a.txt" }),
+    entry({
+      name: "short-name",
+      data: Buffer.from("alphX\n"),
+      mode: alpha.mode,
+    }),
+    entry({ name: "b.txt", prefix: "pkg/dir", data: beta.data, mode: beta.mode }),
+    entry({ name: "pkg/dir.txt", data: plain.data, mode: plain.mode }),
+    entry({ name: "pkg/script.sh", data: script.data, mode: script.mode }),
+    entry({ name: "pkg/dir/", type: "5", mode: 0o755 }),
+  ]);
+  const fetchImpl: HermesFetch = async (input) => {
+    if (input === HERMES_SOURCE_URL) return new Response(tampered);
+    return new Response(uvArchive("#!/bin/sh\n").gzip);
+  };
+  try {
+    await expect(
+      installHermes({
+        root,
+        fetch: fetchImpl,
+        platform: "linux",
+        arch: "x64",
+        expectedTree,
+        sources: sourceMap(),
+        uvSha256: "ignored",
+      }),
+    ).rejects.toThrow(HERMES_DOWNLOAD_MISMATCH);
+    // Nothing was extracted: the version directory is gone entirely.
+    await expect(readdir(path.join(root, "runtimes", hermesVersionDirName()))).rejects.toThrow();
     expect(readHermesInstallStatus(root)).toMatchObject({
       state: "failed",
       message: HERMES_DOWNLOAD_MISMATCH,
