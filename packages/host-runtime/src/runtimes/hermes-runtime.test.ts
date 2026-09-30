@@ -683,10 +683,40 @@ describe("HermesRuntime M0 ACP seam", () => {
     it(`ends cleanly when the agent sends ${scenario}`, async () => {
       await expect(collect(runtime(scenario), request())).rejects.toMatchObject({
         message: "Hermes could not complete this turn.",
-        cause: { message: cause },
+        cause: { cause: { message: cause } },
       });
     });
   }
+
+  it("attaches the captured stderr tail and exit code to a failed turn and logs the reason", async () => {
+    const errors: { message: string; error: unknown }[] = [];
+    const debugLines: string[] = [];
+    const adapter = new HermesRuntime({
+      command: process.execPath,
+      args: [fixture, "stderr-failure"],
+      launch: launchUnconfinedProcess,
+      logger: {
+        debug: (message) => debugLines.push(message),
+        error: (message, error) => errors.push({ message, error }),
+      },
+    });
+    const failure = (await collect(adapter, request()).catch((error: unknown) => error)) as Error;
+    expect(failure.message).toBe("Hermes could not complete this turn.");
+    const cause = failure.cause as Error;
+    expect(cause.message).toContain("stderr tail:\nfixture diagnostic before failure");
+    expect(cause.message).toContain("key=[redacted]");
+    expect(cause.message).not.toContain("fixtu...23");
+    expect(cause.message).toContain("exit: 4");
+    expect(cause.message).toContain("phase: prompt");
+    expect(cause.cause).toMatchObject({ message: "ACP closed before the turn completed." });
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.message).toContain("Hermes turn failed:");
+    expect(errors[0]?.error).toBe(failure);
+    expect(
+      debugLines.some((line) => line.includes("hermes stderr: fixture diagnostic before failure")),
+    ).toBe(true);
+    expect(debugLines.some((line) => line.includes("key=[redacted]"))).toBe(true);
+  });
 
   describe("provider failure classification", () => {
     const pinnedRequest = () => {
@@ -791,7 +821,7 @@ describe("HermesRuntime M0 ACP seam", () => {
       };
       await expect(drain()).rejects.toMatchObject({
         message: "Hermes could not complete this turn.",
-        cause: { message: "ACP sent malformed JSON." },
+        cause: { cause: { message: "ACP sent malformed JSON." } },
       });
       expect(executeTool).not.toHaveBeenCalled();
     } finally {
@@ -991,7 +1021,7 @@ describe("HermesRuntime M0 ACP seam", () => {
       };
       await expect(drain()).rejects.toMatchObject({
         message: "Hermes could not complete this turn.",
-        cause: { message: "Runtime output exceeded its limit." },
+        cause: { cause: { message: "Runtime output exceeded its limit." } },
       });
       expect(executeTool).not.toHaveBeenCalled();
       expect(finishSignal.calls).toEqual(["failure"]);

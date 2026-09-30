@@ -23,6 +23,10 @@ export function mcpTextContainsSecret(value: string, secret: string): boolean {
   );
 }
 
+const EMAIL = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
+const BARE_TOKEN =
+  /\b(?:sk-(?:or-v1-)?[A-Za-z0-9_-]{8,}|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|(?:ak_|ck_)[A-Za-z0-9]+)\b/g;
+
 export function redactMcpText(value: string, secrets: readonly string[] = []): string {
   let result = value;
   for (const secret of [...new Set(secrets)].filter(Boolean).sort((a, b) => b.length - a.length)) {
@@ -30,6 +34,8 @@ export function redactMcpText(value: string, secrets: readonly string[] = []): s
       result = result.split(spelling).join("[redacted]");
   }
   return result
+    .replace(EMAIL, "[redacted]")
+    .replace(BARE_TOKEN, "[redacted]")
     .replace(/(Bearer\s+)[^\s,"'}]+/gi, "$1[redacted]")
     .replace(
       /((?:password|passwd|secret|token|api[-_]?key|credential|authorization)["']?\s*[:=]\s*)[^\s,;}]+/gi,

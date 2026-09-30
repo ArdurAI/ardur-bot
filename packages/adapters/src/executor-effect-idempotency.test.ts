@@ -1709,6 +1709,31 @@ describe("run failure cause", () => {
     });
   });
 
+  it("logs the failure's full cause chain, not only the message", async () => {
+    const f = fixture("run-fails");
+    const sink = createTestSink();
+    installLogger(createLogger({ service: "ardurbot-worker", sinks: [sink] }));
+    // biome-ignore lint/correctness/useYield: the runtime fails before its first event.
+    f.runtimeRun.mockImplementation(async function* (): AsyncGenerator<AgentRuntimeEvent> {
+      throw new Error("Hermes could not complete this turn.", {
+        cause: new Error(
+          "kind: ACP protocol failed\nphase: prompt\nexit: 4\nstderr tail:\nchild died",
+        ),
+      });
+    });
+    try {
+      await f.executor.continueRun(f.runRecord.id, "worker-1");
+    } finally {
+      installLogger(createLogger({ service: "ardurbot-worker", sinks: [] }));
+    }
+    const logged = sink.events.filter((event) => event.message.startsWith("run run-fails failed"));
+    expect(logged).toHaveLength(1);
+    expect(logged[0]?.error).toMatchObject({
+      message: "Hermes could not complete this turn.",
+      cause: { message: expect.stringContaining("stderr tail") },
+    });
+  });
+
   it("records and logs a genuine failure reported while the run was stopping", async () => {
     const f = fixture("run-stops");
     f.runRecord.delegationId = "delegation-1";

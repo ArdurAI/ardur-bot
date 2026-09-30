@@ -126,6 +126,11 @@ async function handle(value) {
     return;
   }
   if (scenario === "exit") process.exit(4);
+  if (scenario === "stderr-failure") {
+    process.stderr.write("fixture diagnostic before failure\n");
+    process.stderr.write(`key=${process.env.ARDUR_HERMES_PROVIDER_KEY}\n`);
+    process.exit(4);
+  }
   if (
     scenario === "provider-usage-limit" ||
     scenario === "provider-signed-out" ||

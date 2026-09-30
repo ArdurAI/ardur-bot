@@ -6920,7 +6920,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           });
           if (!failed) return;
           // Every run failure leaves its classified cause in the worker log, once.
-          getLogger().error(`run ${runId} failed: ${message}`, {
+          getLogger().error(`run ${runId} failed: ${message}`, error, {
             providerErrorKind,
             ...(error instanceof RuntimePinError ? { runtimeProblem: error.problem.code } : {}),
           });
@@ -6983,7 +6983,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           });
           // Pin and computer failures never reached the runtime's own error path; log the cause.
           if (finalized)
-            getLogger().error(`run ${runId} failed: ${setupError.message}`, {
+            getLogger().error(`run ${runId} failed: ${setupError.message}`, setupError, {
               ...(setupError instanceof RuntimePinError
                 ? { runtimeProblem: setupError.problem.code }
                 : {}),

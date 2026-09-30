@@ -17,6 +17,8 @@ import {
   RuntimePinError,
 } from "@ardurbot/contracts/runtime-pins";
 import type * as z from "zod";
+import type { CapturedChildOutput, ChildOutputLogger } from "../child-output.js";
+import { captureChildOutput, childProcessLogger } from "../child-output.js";
 import { redactMcpText } from "../mcp-diagnostics.js";
 import { AcpClient, AcpClientError } from "./acp-client.js";
 import { startArdurMcpServer } from "./ardur-mcp-server.js";
@@ -271,6 +273,54 @@ interface ActiveTurn {
   sessionId?: string;
   queue: RuntimeQueue<AgentRuntimeEvent>;
   teardown?: () => Promise<void>;
+  /** Where the ACP conversation was when the turn ended, for failure reports. */
+  phase?: string;
+  startedAt?: number;
+  exitCode?: number | null;
+  exitSignal?: string | null;
+  /** Resolves once the child has fully exited, with the exit facts recorded. */
+  exited?: Promise<void>;
+  captured?: CapturedChildOutput;
+  /** Which kind of failure this was, when the runtime could tell (logged reason). */
+  failureKind?: string;
+}
+
+/**
+ * The one-line reason a Hermes turn failed, for the log record. The thrown
+ * message stays generic; this names what actually happened.
+ */
+function classifyTurnFailure(
+  error: unknown,
+  phase: string | undefined,
+  category: string | undefined,
+): string {
+  if (category) return `provider refused (${category})`;
+  const message = error instanceof Error ? error.message : String(error);
+  const detail = error instanceof AcpClientError ? error.detail : undefined;
+  if (/timed out/i.test(message)) return "timeout";
+  const status = detail?.match(/\b([45]\d\d)\b/)?.[1];
+  if (status) return `provider refused (HTTP ${status})`;
+  if (phase === "initialize" || phase === "session/new") return "ACP handshake failed";
+  if (phase === "profile-ack") return "pin check failed";
+  if (error instanceof AcpClientError) return "ACP protocol failed";
+  return "runtime error";
+}
+
+/** Wraps a turn failure with the captured child output and exit facts. */
+function turnFailureContext(turn: ActiveTurn, underlying: unknown): Error {
+  const tail = turn.captured?.tail();
+  const detail = [
+    turn.failureKind ? `kind: ${turn.failureKind}` : undefined,
+    turn.phase ? `phase: ${turn.phase}` : undefined,
+    turn.exitCode !== undefined
+      ? `exit: ${turn.exitCode}${turn.exitSignal ? ` (signal ${turn.exitSignal})` : ""}`
+      : undefined,
+    turn.startedAt !== undefined ? `durationMs: ${Date.now() - turn.startedAt}` : undefined,
+    tail ? `stderr tail:\n${tail}` : undefined,
+  ].filter(Boolean);
+  return new Error(detail.length ? detail.join("\n") : "No turn context was captured.", {
+    cause: underlying,
+  });
 }
 
 /** One ephemeral ACP session per host turn; pinned launch is selected by the host agent. */
@@ -290,6 +340,8 @@ export class HermesRuntime implements AgentRuntime {
       onProfileAcknowledged?: () => void;
       /** Test and observability hook, called once after the turn is fenced and its queue has ended. */
       onTurnFinished?: (runId: string, reason: "done" | "pause" | "failure" | "cancel") => void;
+      /** Where the runtime reports turn failures; defaults to the process fallback. */
+      logger?: ChildOutputLogger;
     },
   ) {
     if (typeof options.launch !== "function") throw new Error("Hermes needs an explicit launcher.");
@@ -328,7 +380,17 @@ export class HermesRuntime implements AgentRuntime {
           if (overflow) {
             finalReason = "failure";
             finalError = new Error("Hermes could not complete this turn.", { cause: overflow });
+            turn.failureKind ??= "output overflow";
           }
+        }
+        if (finalReason === "failure" && finalError) {
+          // Keep the thrown message and class; the cause carries the captured
+          // child output, exit facts and the original error chain.
+          finalError.cause = turnFailureContext(turn, finalError.cause);
+          (this.options.logger ?? childProcessLogger()).error?.(
+            `Hermes turn failed: ${turn.failureKind ?? "unknown"}`,
+            finalError,
+          );
         }
         turn.stopReason = finalReason;
         turn.queue.end(finalError);
@@ -358,6 +420,7 @@ export class HermesRuntime implements AgentRuntime {
           await teardown?.();
         } finally {
           await stopNative(child);
+          turn.captured?.close();
         }
       })();
     }
@@ -578,9 +641,23 @@ export class HermesRuntime implements AgentRuntime {
         },
       });
       turn.client = client;
-      child.stderr.resume();
+      turn.startedAt = Date.now();
+      turn.captured = captureChildOutput(child, {
+        kind: "hermes",
+        runId: request.runId,
+        secrets,
+        logger: this.options.logger ?? childProcessLogger(),
+      });
+      turn.exited = new Promise<void>((resolve) => {
+        child.once("close", (code, signal) => {
+          turn.exitCode = code;
+          turn.exitSignal = signal;
+          resolve();
+        });
+      });
       const runProtocol = async () => {
         try {
+          turn.phase = "initialize";
           const initialized = await client.request("initialize", {
             protocolVersion: 1,
             clientCapabilities: {
@@ -592,6 +669,7 @@ export class HermesRuntime implements AgentRuntime {
           if (initialized.protocolVersion !== 1)
             throw new AcpClientError("ACP protocol version changed.");
           if (!turn.active) return;
+          turn.phase = "session/new";
           const mcpConfig = result.mcpConfig ?? mcp!.config;
           const created = await client.request("session/new", {
             cwd: result.sessionCwd ?? workspace,
@@ -609,6 +687,7 @@ export class HermesRuntime implements AgentRuntime {
           if (!turn.active) return;
           turn.sessionId = created.sessionId;
           if (profile) {
+            turn.phase = "profile-ack";
             const ackPath = join(home!, "runtime-ack.json");
             const stat = await lstat(ackPath);
             if (
@@ -637,6 +716,7 @@ export class HermesRuntime implements AgentRuntime {
             effortAttestationReason: "ACP does not attest the effort applied to provider requests.",
           });
           if (!turn.active) return;
+          turn.phase = "prompt";
           const prompt = [
             { type: "text", text: request.prompt },
             ...(request.currentTurnImages ?? []).map((image) => ({
@@ -686,13 +766,19 @@ export class HermesRuntime implements AgentRuntime {
                 error instanceof Error ? error.cause : undefined,
               ),
             );
+            turn.failureKind = classifyTurnFailure(error, turn.phase, category);
+            // Stdout ends a tick before the process 'close', so the exit code
+            // is often still unknown here; stop the child and settle the exit
+            // facts before the failure is recorded.
+            if (turn.child && turn.exited)
+              await Promise.race([turn.exited, stopNative(turn.child)]);
             void this.finishTurn(
               request.runId,
               "failure",
               category && pin
                 ? new RuntimePinError(nativeFailureProblem(pin, category))
                 : new Error("Hermes could not complete this turn.", {
-                    cause: error instanceof AcpClientError ? error : undefined,
+                    cause: error,
                   }),
             ).catch(() => {});
           }
