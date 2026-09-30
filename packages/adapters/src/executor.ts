@@ -6966,7 +6966,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   },
                 })
                 .catch((recordError) => getLogger().error("provider retry record", recordError));
-              await deps.jobs.enqueue({ ...runContinueJob(runId), availableAt: resumeAt });
+              // preserveRunAt: the reconciler's periodic run.continue for the same key
+              // must not pull this wake earlier than the provider retry wait.
+              await deps.jobs.enqueue({
+                ...runContinueJob(runId),
+                availableAt: resumeAt,
+                preserveRunAt: true,
+              });
               return;
             }
           }
