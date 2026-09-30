@@ -26,14 +26,16 @@ const pin = {
   runtimeKind: "pi" as const,
   revision: 2,
 };
-function fixture() {
+function fixture(overrides?: { spacePolicy?: unknown }) {
   const findCredential = vi.fn(async () => credential);
   const findPreference = vi.fn(async () => ({ credential, modelId: "grok-4.6", isDefault: true }));
   const loadKey = vi.fn(
     async (): Promise<AgentRunModel> => ({ provider: "xai", id: "grok-4.6", apiKey: "test-key" }),
   );
   const prisma = {
-    space: { findUnique: vi.fn(async () => ({ allowedModelDestinations: null })) },
+    space: {
+      findUnique: vi.fn(async () => ({ allowedModelDestinations: overrides?.spacePolicy ?? null })),
+    },
     userModelCredential: { findFirst: findCredential },
     spaceModelPreference: { findFirst: findPreference },
   } as unknown as PrismaClient;
@@ -515,9 +517,7 @@ it("checks root locality against the resolved endpoint before returning an execu
 });
 
 it("names the space policy when the bot's allows but the space's blocks", async () => {
-  const f = fixture();
-  const space = { allowedModelDestinations: { mode: "local" } };
-  f.prisma.space.findUnique = vi.fn(async () => space);
+  const f = fixture({ spacePolicy: { mode: "local" } });
   expect(
     await resolveRunModelPin({
       ...f,

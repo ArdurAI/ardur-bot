@@ -115,7 +115,8 @@ export const FAILURE_CATEGORIES: readonly FailureCategory[] = [
   },
   {
     id: "computer-unsupported",
-    message: "{runtime} runs on the host computer, not in a sandbox. Change {bot}'s computer to use it.",
+    message:
+      "{runtime} runs on the host computer, not in a sandbox. Change {bot}'s computer to use it.",
     action: { kind: "open-settings", target: "bot-computer" },
     more: [{ kind: "open-settings", target: "model-pin" }],
     legacy: [
@@ -124,7 +125,8 @@ export const FAILURE_CATEGORIES: readonly FailureCategory[] = [
   },
   {
     id: "destinations-bot",
-    message: "{bot}'s allowed model destinations block this model. Change them in {bot}'s settings.",
+    message:
+      "{bot}'s allowed model destinations block this model. Change them in {bot}'s settings.",
     action: { kind: "open-settings", target: "bot-destinations" },
     more: [{ kind: "open-settings", target: "model-pin" }],
     legacy: [],
@@ -207,15 +209,13 @@ function plausibleName(value: string): boolean {
 function templateToPattern(template: string): RegExp {
   const escaped = template.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const seen = new Set<string>();
-  const source = escaped.replace(
-    /\\?\{(bot|runtime|member)\\?\}/g,
-    (_, name: string) =>
-      // Each placeholder captures its value back for the reader. Greedy is safe: the
-      // surrounding literals anchor the match and names never contain sentence stops.
-      // A sentence may name the same party twice ("{bot}'s … in {bot}'s …"); the second
-      // occurrence must repeat the first, so it becomes a backreference — a second
-      // capture group with the same name would be an invalid pattern.
-      seen.has(name) ? `\\k<${name}>` : (seen.add(name), `(?<${name}>.+?)`),
+  const source = escaped.replace(/\\?\{(bot|runtime|member)\\?\}/g, (_, name: string) =>
+    // Each placeholder captures its value back for the reader. Greedy is safe: the
+    // surrounding literals anchor the match and names never contain sentence stops.
+    // A sentence may name the same party twice ("{bot}'s … in {bot}'s …"); the second
+    // occurrence must repeat the first, so it becomes a backreference — a second
+    // capture group with the same name would be an invalid pattern.
+    seen.has(name) ? `\\k<${name}>` : (seen.add(name), `(?<${name}>.+?)`),
   );
   return new RegExp(`^${source}$`);
 }

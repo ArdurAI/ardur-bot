@@ -33,9 +33,9 @@ describe("failure categories table", () => {
   });
 
   it("fills a placeholder a sentence names more than once", () => {
-    expect(
-      failureCategoryMessage("destinations-bot", { bot: "Reviewer" }),
-    ).toBe("Reviewer's allowed model destinations block this model. Change them in Reviewer's settings.");
+    expect(failureCategoryMessage("destinations-bot", { bot: "Reviewer" })).toBe(
+      "Reviewer's allowed model destinations block this model. Change them in Reviewer's settings.",
+    );
   });
 
   it.each([
@@ -63,12 +63,15 @@ describe("failure categories table", () => {
       { kind: "open-settings", target: "space-models" },
       [{ kind: "open-settings", target: "model-pin" }],
     ],
-  ] as const)("gives the runtime-refusal category %s its sentence and its actions", (id, message, action, more) => {
-    const entry = FAILURE_CATEGORIES.find((category) => category.id === id)!;
-    expect(entry.message).toBe(message);
-    expect(entry.action).toEqual(action);
-    expect(entry.more).toEqual(more);
-  });
+  ] as const)(
+    "gives the runtime-refusal category %s its sentence and its actions",
+    (id, message, action, more) => {
+      const entry = FAILURE_CATEGORIES.find((category) => category.id === id)!;
+      expect(entry.message).toBe(message);
+      expect(entry.action).toEqual(action);
+      expect(entry.more).toEqual(more);
+    },
+  );
 
   it.each([
     [
@@ -167,7 +170,9 @@ describe("failure categories table", () => {
 
   it("maps the refusal sentences a runtime can store, with every placeholder read back", () => {
     expect(
-      failureCategoryFromText("Codex is experimental. Turn on Experimental for this bot to use it."),
+      failureCategoryFromText(
+        "Codex is experimental. Turn on Experimental for this bot to use it.",
+      ),
     ).toEqual({ id: "experimental-off", params: { runtime: "Codex", bot: "this bot" } });
     expect(
       failureCategoryFromText(
