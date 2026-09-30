@@ -30,6 +30,7 @@ import { customizationContract } from "./customization.js";
 import { dashboardContract, RoutineOverviewSchema, UsageSummarySchema } from "./dashboard.js";
 import { delegationsContract } from "./delegation.js";
 import { devicesContract, pairingContract } from "./dispatch.js";
+import type { ThreadSnapshot } from "./domain.js";
 import {
   ActionApprovalRuleSchema,
   ActionAutoReviewSettingsSchema,
@@ -346,6 +347,52 @@ export const groupsContract = {
   remove: oc.input(groupId).output(z.object({ ok: z.literal(true) })),
 };
 export type GroupsContract = typeof groupsContract;
+export const threadsSendContract = oc.input(threadSendInput).output(ThreadSendResultSchema);
+export type ThreadsSendContract = typeof threadsSendContract;
+
+export const threadsContract = {
+  head: oc.input(threadTarget).output(z.object({ threadId: Id, cursor: z.number().int().min(-1) })),
+  get: oc.input(threadTarget).output(ThreadSnapshotSchema as z.ZodType<ThreadSnapshot>),
+  messages: oc
+    .input(
+      threadTarget.safeExtend({
+        before: z.number().int().nonnegative().optional(),
+        includePeerRuns: z.boolean().optional(),
+        includePeerReceipts: z.boolean().optional(),
+        around: z
+          .object({ messageId: Id.optional(), seq: z.number().int().nonnegative().optional() })
+          .optional(),
+      }),
+    )
+    .output(ThreadMessagePageSchema),
+  subscribe: oc
+    .input(threadTarget.safeExtend({ cursor: z.number().int().min(-1) }))
+    .output(eventIterator(ProductEventSchema)),
+  send: threadsSendContract as ThreadsSendContract,
+  react: oc
+    .input(
+      threadTarget.safeExtend({
+        messageId: Id,
+        reaction: MessageReactionSchema,
+        reason: FeedbackReasonSchema.optional(),
+        retract: z.boolean().optional(),
+        clientNonce: z.string().min(1).max(200),
+      }),
+    )
+    .output(z.object({ ok: z.literal(true) })),
+  stop: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
+  followUp: oc
+    .input(threadTarget.safeExtend({ text: z.string().min(1) }))
+    .output(z.object({ ok: z.literal(true) })),
+  clear: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
+  restart: oc.input(botId).output(z.object({ ok: z.literal(true) })),
+  answer: oc
+    .input(threadTarget.safeExtend({ runId: Id, messageId: Id, answer: z.string().min(1) }))
+    .output(z.object({ ok: z.literal(true) })),
+  markRead: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
+  markUnread: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
+};
+export type ThreadsContract = typeof threadsContract;
 
 export const appContract = {
   features: featuresContract,
@@ -613,62 +660,7 @@ export const appContract = {
       .input(z.object({ sectionId: Id, name: z.string().trim().min(1).max(60) }))
       .output(BotSectionSchema),
   },
-  threads: {
-    head: oc.input(threadTarget).output(
-      z.object({
-        threadId: Id,
-        cursor: z.number().int().min(-1),
-      }),
-    ),
-    get: oc.input(threadTarget).output(ThreadSnapshotSchema),
-    messages: oc
-      .input(
-        threadTarget.safeExtend({
-          before: z.number().int().nonnegative().optional(),
-          includePeerRuns: z.boolean().optional(),
-          includePeerReceipts: z.boolean().optional(),
-          around: z
-            .object({
-              messageId: Id.optional(),
-              seq: z.number().int().nonnegative().optional(),
-            })
-            .optional(),
-        }),
-      )
-      .output(ThreadMessagePageSchema),
-    subscribe: oc
-      .input(threadTarget.safeExtend({ cursor: z.number().int().min(-1) }))
-      .output(eventIterator(ProductEventSchema)),
-    send: oc.input(threadSendInput).output(ThreadSendResultSchema),
-    react: oc
-      .input(
-        threadTarget.safeExtend({
-          messageId: Id,
-          reaction: MessageReactionSchema,
-          reason: FeedbackReasonSchema.optional(),
-          retract: z.boolean().optional(),
-          clientNonce: z.string().min(1).max(200),
-        }),
-      )
-      .output(z.object({ ok: z.literal(true) })),
-    stop: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
-    followUp: oc
-      .input(threadTarget.safeExtend({ text: z.string().min(1) }))
-      .output(z.object({ ok: z.literal(true) })),
-    clear: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
-    restart: oc.input(botId).output(z.object({ ok: z.literal(true) })),
-    answer: oc
-      .input(
-        threadTarget.safeExtend({
-          runId: Id,
-          messageId: Id,
-          answer: z.string().min(1),
-        }),
-      )
-      .output(z.object({ ok: z.literal(true) })),
-    markRead: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
-    markUnread: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
-  },
+  threads: threadsContract as ThreadsContract,
   ide: ideContract,
   workspace: {
     describe: oc.input(botId).output(WorkspaceContextSchema),

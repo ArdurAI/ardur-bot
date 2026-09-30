@@ -11,6 +11,18 @@ import {
 } from "./attachments.js";
 
 describe("attachment helpers", () => {
+  it("never feeds deterministic chief receipts into task or peer history", () => {
+    expect(
+      blocksToAgentHistoryText([
+        {
+          kind: "chief_receipt",
+          key: "general",
+          requestMessageId: "request",
+          text: "Got it — I’ll check the request and choose the next step.",
+        },
+      ]),
+    ).toBe("");
+  });
   it("rejects unsupported mime types and empty payloads", () => {
     expect(() => validateAttachmentMimeType("application/zip")).toThrow(AttachmentValidationError);
     expect(() => decodeAttachmentBase64("")).toThrow(AttachmentValidationError);

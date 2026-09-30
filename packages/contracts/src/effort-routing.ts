@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ThinkingLevel } from "./domain.js";
 import { ThinkingLevelSchema } from "./domain.js";
-import type { TaskType } from "./task-types.js";
+
 import { TASK_TYPES } from "./task-types.js";
 
 export type { TaskType } from "./task-types.js";

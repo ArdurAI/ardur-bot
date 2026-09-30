@@ -31,6 +31,7 @@ import {
   goalBotAuthorityFingerprint,
   lockPeerTrafficPolicy,
   recordPeerTrafficBlock,
+  validateChiefDispatch,
   withTransactionRetry,
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
@@ -575,6 +576,10 @@ export async function messageBot(
           });
           if (!liveGoal || !liveGroup || senderStillRunning.id !== parentRun?.id)
             return { ok: false as const, error: "The goal request is no longer available." };
+          if (intent === "request" || intent === "question") {
+            const choice = await validateChiefDispatch(tx, run, goal.groupId, target.id);
+            if ("error" in choice) return { ok: false as const, error: choice.error };
+          }
           const now = new Date();
           const base = { rootTaskId: goal.rootTaskId, kind: "message" as const };
           const turnCount = await tx.delegation.count({

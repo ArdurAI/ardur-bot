@@ -101,6 +101,12 @@ const INTENT_TEMPLATES: readonly {
     pattern: /^(?:please\s+)?install\s+(?:the\s+)?(?:missing\s+)?tool[.!]?$/iu,
   },
 ];
+export const CHIEF_INDIVIDUAL_REPLY_RULES: readonly RegExp[] = [
+  /^everyone,?\s+each of you\s+(?:say hello|reply|answer)[.!]?$/iu,
+];
+export function chiefWantsIndividualReplies(text: string): boolean {
+  return text.length <= 200 && CHIEF_INDIVIDUAL_REPLY_RULES.some((rule) => rule.test(text.trim()));
+}
 export function chiefIntent(input: {
   text: string;
   taskType: TaskType;

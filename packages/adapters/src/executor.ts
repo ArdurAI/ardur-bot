@@ -141,6 +141,7 @@ import {
   isTooManyDatabaseConnections,
   listDelegations,
   loadBotPresence,
+  loadChiefSelectionContext,
   loadRunHistoryMessages,
   type McpServer,
   noteBotMessageReadUnconfirmed,
@@ -5567,7 +5568,16 @@ export function createRunExecutor(deps: ExecutorDeps) {
           : askResults
             ? { id: `ask-results:${run.id}`, role: "user" as const, content: askResults }
             : undefined;
-        const prompt = [replyContext, basePrompt, takeoverResume?.promptNote, approvalContinuation]
+        const chiefSelection = roomCoordinator
+          ? await loadChiefSelectionContext(deps.prisma, run.id)
+          : undefined;
+        const prompt = [
+          chiefSelection,
+          replyContext,
+          basePrompt,
+          takeoverResume?.promptNote,
+          approvalContinuation,
+        ]
           .filter(Boolean)
           .join("\n\n");
         const botDirectory =

@@ -1,0 +1,46 @@
+name: Chief receipt acceptance
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'packages/**'
+      - 'apps/api/**'
+      - 'apps/web/**'
+      - '.github/workflows/chief-receipt.yml'
+permissions:
+  contents: read
+jobs:
+  journey:
+    name: Chief receipt Postgres journey
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: fixture
+          POSTGRES_PASSWORD: fixture
+          POSTGRES_DB: chief_receipt_fixture
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TESTKIT_SKIP_ROOT_ENV: '1'
+      DATABASE_URL: postgres://fixture:fixture@127.0.0.1:5432/chief_receipt_fixture
+      VERIFY_DATABASE: '1'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      - run: pnpm db:migrate
+      - run: pnpm exec vitest run packages/testkit/src/chief-loop.postgres.test.ts --maxWorkers=2 --silent=false --reporter=verbose
