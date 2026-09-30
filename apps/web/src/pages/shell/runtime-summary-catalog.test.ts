@@ -19,7 +19,6 @@ const messages = [
     "Set up computer",
     "Starting",
     "Could not start",
-    "Sharing",
     "Change location on desktop.",
     "Set up a container on desktop, then try again.",
     "Stopped",
