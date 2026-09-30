@@ -3868,6 +3868,10 @@ msgstr ""
 msgid "Enable this server first, then sign in."
 msgstr "Сначала включите этот сервер, затем войдите."
 
+#: src/pages/workspace/WorkspaceTerminal.tsx
+msgid "End this terminal?"
+msgstr "Закрыть этот терминал?"
+
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Engage when... Ignore..."
 msgstr "Включайтесь, когда... Игнорируйте..."
@@ -9623,6 +9627,10 @@ msgstr "Вы можете закрыть эту вкладку, если она 
 msgid "You can close this window."
 msgstr "Вы можете закрыть это окно."
 
+#: src/pages/workspace/WorkspaceTerminal.tsx
+msgid "You control the computer"
+msgstr "Вы управляете компьютером"
+
 #: src/pages/LearningInsights.tsx
 msgid "You gave {count} thumbs with reasons in {days} days, but Learning is off."
 msgstr "За {days} дн. вы оставили оценок с причиной: {count}, но обучение выключено."
@@ -9630,14 +9638,6 @@ msgstr "За {days} дн. вы оставили оценок с причиной
 #: src/pages/Shell.tsx
 msgid "You have control"
 msgstr "Вы управляете"
-
-#: src/pages/workspace/WorkspaceTerminal.tsx
-msgid "You control the computer"
-msgstr "Вы управляете компьютером"
-
-#: src/pages/workspace/WorkspaceTerminal.tsx
-msgid "End this terminal?"
-msgstr "Закрыть этот терминал?"
 
 #: src/pages/LearningInsights.tsx
 msgid "You sent {bot} the same request {count} times in {days} days."

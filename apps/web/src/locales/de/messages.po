@@ -3868,6 +3868,10 @@ msgstr ""
 msgid "Enable this server first, then sign in."
 msgstr ""
 
+#: src/pages/workspace/WorkspaceTerminal.tsx
+msgid "End this terminal?"
+msgstr "Dieses Terminal beenden?"
+
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Engage when... Ignore..."
 msgstr ""
@@ -9623,6 +9627,10 @@ msgstr "Du kannst diesen Tab schließen, wenn du nicht automatisch weitergeleite
 msgid "You can close this window."
 msgstr "Du kannst dieses Fenster schließen."
 
+#: src/pages/workspace/WorkspaceTerminal.tsx
+msgid "You control the computer"
+msgstr "Du steuerst den Computer"
+
 #: src/pages/LearningInsights.tsx
 msgid "You gave {count} thumbs with reasons in {days} days, but Learning is off."
 msgstr ""
@@ -9630,14 +9638,6 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "You have control"
 msgstr "Du hast die Kontrolle"
-
-#: src/pages/workspace/WorkspaceTerminal.tsx
-msgid "You control the computer"
-msgstr "Du steuerst den Computer"
-
-#: src/pages/workspace/WorkspaceTerminal.tsx
-msgid "End this terminal?"
-msgstr "Dieses Terminal beenden?"
 
 #: src/pages/LearningInsights.tsx
 msgid "You sent {bot} the same request {count} times in {days} days."
