@@ -200,6 +200,8 @@ jobs:
         include:
           - { os: macos-15, platform: mac, arch: arm64 }
           - { os: macos-15, platform: mac, arch: x64 }
+          - { os: ubuntu-24.04, platform: linux, arch: x64, debArch: amd64, imageArch: x86_64 }
+          - { os: ubuntu-24.04-arm, platform: linux, arch: arm64, debArch: arm64, imageArch: arm64, optional: true }
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -213,9 +215,20 @@ jobs:
           name: desktop-${{ matrix.platform }}-${{ matrix.arch }}
           path: installers
       - name: Install and open the quarantined DMG and Homebrew command
+        if: matrix.platform == 'mac'
         env:
           ARDUR_INSTALL_LOG_DIR: ${{ runner.temp }}/install-acceptance
         run: bash scripts/release/install-acceptance-mac.sh installers/ardur-${{ needs.validate.outputs.version }}-mac-${{ matrix.arch }}.dmg
+      - name: Install deb on clean Ubuntu and open under Xvfb
+        if: matrix.platform == 'linux'
+        env:
+          ARDUR_INSTALL_LOG_DIR: ${{ runner.temp }}/install-acceptance
+        run: bash scripts/release/install-acceptance-linux.sh installers/ardur-${{ needs.validate.outputs.version }}-linux-${{ matrix.debArch }}.deb
+      - name: Install AppImage on clean Ubuntu and open under Xvfb
+        if: ${{ !cancelled() && matrix.platform == 'linux' }}
+        env:
+          ARDUR_INSTALL_LOG_DIR: ${{ runner.temp }}/install-acceptance
+        run: bash scripts/release/install-acceptance-linux.sh installers/ardur-${{ needs.validate.outputs.version }}-linux-${{ matrix.imageArch }}.AppImage
       - name: Upload install logs and screenshots
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

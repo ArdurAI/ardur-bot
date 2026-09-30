@@ -59,3 +59,32 @@ describe("macOS install verdict", () => {
     }
   });
 });
+
+describe("Linux install launch verdict", () => {
+  it.each([
+    [0, "ARDUR_INSTALL_SMOKE_PASS\n", "", true],
+    [0, "", "", false],
+    [1, "ARDUR_INSTALL_SMOKE_PASS\n", "", false],
+    [0, "ARDUR_INSTALL_SMOKE_PASS\n", "FATAL: renderer crashed\n", false],
+    [0, "ARDUR_INSTALL_SMOKE_PASS\n", "Unable to find helper app\n", false],
+    [0, "ARDUR_INSTALL_SMOKE_PASS\nFATAL\n", "", false],
+  ])("checks status %s and both output streams", async (status, stdout, stderr, accepted) => {
+    const script = await readFile(
+      new URL("./release/install-acceptance-linux.sh", import.meta.url),
+      "utf8",
+    );
+    const predicate = script.match(/if \[\[ "\$status" != 0 \]\][\s\S]*?\nfi/)?.[0];
+    expect(predicate).toBeTruthy();
+    const dir = await mkdtemp(path.join(os.tmpdir(), "linux-install-verdict-"));
+    try {
+      await writeFile(path.join(dir, "app.stdout.log"), stdout);
+      await writeFile(path.join(dir, "app.stderr.log"), stderr);
+      const result = spawnSync("bash", ["-c", predicate!.replaceAll("/evidence", "${logs}")], {
+        env: { ...process.env, logs: dir, status: String(status) },
+      });
+      expect(result.status === 0).toBe(accepted);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
