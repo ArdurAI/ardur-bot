@@ -387,10 +387,23 @@ function realpathAncestorSync(entry: string): string | undefined {
   }
 }
 
+/**
+ * A path as a string in a Seatbelt profile. The profile's reader knows `\"`, `\\` and
+ * `\xNN`. It does not know JSON's `\u0001`, `\b` or `\f`: it reads those as the letters
+ * themselves, so a rule written that way names another path and denies nothing (measured
+ * with sandbox-exec on macOS 26). Control characters are written as `\xNN` for that reason.
+ */
 function quotePath(value: string): string {
   if (!path.isAbsolute(value) || /[\n\r\0]/.test(value))
     throw new Error("Invalid host guardrail path.");
-  return JSON.stringify(value);
+  let quoted = "";
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+    if (character === '"' || character === "\\") quoted += `\\${character}`;
+    else if (code < 0x20 || code === 0x7f) quoted += `\\x${code.toString(16).padStart(2, "0")}`;
+    else quoted += character;
+  }
+  return `"${quoted}"`;
 }
 
 function quotePort(port: number): string {
