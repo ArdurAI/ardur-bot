@@ -6716,6 +6716,8 @@ const MessageView = memo(function MessageView({
           );
         }
         if (block.kind === "bot_message_sent" || block.kind === "bot_message_received") {
+          if (block.kind === "bot_message_sent" && block.chiefDispatch)
+            return <ChiefDispatchLine key={i} dispatch={block.chiefDispatch} detail={block.text} />;
           return (
             <PeerMessageReceipt
               key={i}

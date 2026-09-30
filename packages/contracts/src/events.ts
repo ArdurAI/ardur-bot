@@ -324,6 +324,7 @@ export const MessageBlock = z.discriminatedUnion("kind", [
   z.object({
     /** Shown in the sending bot's own chat, so the user can see what it sent. */
     kind: z.literal("bot_message_sent"),
+    chiefDispatch: ChiefDispatchSchema.optional(),
     toBotId: Id,
     toBotName: z.string(),
     text: z.string(),

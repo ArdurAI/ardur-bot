@@ -367,6 +367,8 @@ export async function validateChiefDispatch(
   }
   const member = facts.find((candidate) => candidate.id === memberId);
   if (!member?.authorized) return { error: "The target is no longer an authorized room member." };
+  if (!member.runtimeSupported || member.inputAccess !== "known" || !member.computer?.local)
+    return { error: "The target's runtime or input access cannot be verified. Plan again." };
   return {
     planId: plan.id,
     dispatch: {

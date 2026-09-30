@@ -22,6 +22,8 @@ import type { MobileSnapshot } from "./api";
 import { applyMobileThreadEvent } from "./api";
 import { chiefDispatchSummary, chiefReceiptText } from "./coordination";
 import { activateUiLocale } from "./i18n";
+import { RU_MESSAGES } from "./locales/ru";
+import { ZH_MESSAGES } from "./locales/zh";
 
 const receipt: ChiefReceipt = {
   id: "receipt",
@@ -34,6 +36,23 @@ const receipt: ChiefReceipt = {
   createdAt: "2026-01-01T00:00:00Z",
 };
 describe("phone chief receipts", () => {
+  it.each([RU_MESSAGES, ZH_MESSAGES])(
+    "translates all new receipt and dispatch strings",
+    (catalog) => {
+      for (const message of [
+        "Got it — I’ll choose a team member to put this in Notion.",
+        "Got it — I’ll check what’s missing and ask before installing it.",
+        "Got it — I’ll check the request and choose the next step.",
+        "Hi everyone.",
+        "Messaged {name}",
+        "Queued for {name}",
+        "Waiting for approval",
+      ]) {
+        expect(catalog[message]).toBeTruthy();
+        if (message.includes("{name}")) expect(catalog[message]).toContain("{name}");
+      }
+    },
+  );
   it("merges a receipt-only response and replay event once without changing pending work", () => {
     const sent: ThreadSendResult = ThreadSendResultSchema.parse({
       kind: "receipt-only",

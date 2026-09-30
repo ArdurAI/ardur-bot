@@ -129,7 +129,6 @@ describe.skipIf(!enabled).sequential("chief receipt Postgres journey", () => {
       where: { sourceMessageId: queued.sourceMessageId! },
     });
     expect(plan.decision).toMatchObject({ kind: "delegate", memberId: f.worker.id });
-    await db.prisma.run.update({ where: { id: queued.id }, data: { status: "running" } });
     const pin = {
       runtimeKind: "pi" as const,
       provider: "fixture",
@@ -138,6 +137,11 @@ describe.skipIf(!enabled).sequential("chief receipt Postgres journey", () => {
       effort: "high" as const,
       revision: 3,
     };
+    // Emulate the existing runtime admission's pinned-parent snapshot, not a model call.
+    await db.prisma.run.update({
+      where: { id: queued.id },
+      data: { status: "running", runtimePin: pin },
+    });
     const deps = {
       ...f.deps,
       resolveDelegationPin: async () =>

@@ -4346,6 +4346,18 @@ msgstr ""
 msgid "Goal"
 msgstr "Ziel"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check the request and choose the next step."
+msgstr "Verstanden — ich prüfe die Anfrage und wähle den nächsten Schritt."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check what’s missing and ask before installing it."
+msgstr "Verstanden — ich prüfe, was fehlt, und frage vor der Installation nach."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll choose a team member to put this in Notion."
+msgstr "Verstanden — ich wähle ein Teammitglied aus, das dies in Notion ablegt."
+
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
 msgstr ""
@@ -4440,6 +4452,10 @@ msgstr "Hermes ist unter Windows noch nicht verfügbar."
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."
 msgstr "Hermes läuft mit den Zugriffsrechten dieses Computers."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Hi everyone."
+msgstr "Hallo zusammen."
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Hi, this is how I'll sound when I read replies out loud."
@@ -5455,6 +5471,10 @@ msgstr ""
 #: src/pages/system/QuickComposer.tsx
 msgid "Message…"
 msgstr "Nachricht…"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Messaged {name}"
+msgstr "Nachricht an {name} gesendet"
 
 #: src/pages/account/AccountMore.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -6758,6 +6778,10 @@ msgstr "Wartezeit"
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Queued"
 msgstr "In Warteschlange"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Queued for {name}"
+msgstr "In der Warteschlange für {name}"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Quick access shortcut"
@@ -9378,10 +9402,11 @@ msgstr "Wartet auf einen freien Platz"
 msgid "Waiting for a turn"
 msgstr "Wartet auf eine Ausführung"
 
+#: src/components/ai/CoordinationLine.tsx
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Waiting for approval"
-msgstr ""
+msgstr "Warten auf Genehmigung"
 
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/DirectMcpSearch.tsx

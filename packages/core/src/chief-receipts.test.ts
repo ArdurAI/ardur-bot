@@ -24,7 +24,7 @@ describe("shared chief receipt response handling", () => {
     expect(after.run).toBe(before.run);
     expect(after.cursor).toBe(1);
     expect(after.messages).toHaveLength(1);
-    expect(after.messages[0].runId).toBeUndefined();
+    expect(after.messages[0]!.runId).toBeUndefined();
     expect(applyChiefReceipt(after, receipt)).toBe(after);
   });
   it("ignores old servers, unloaded or other rooms", () => {

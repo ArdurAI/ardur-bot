@@ -4346,6 +4346,18 @@ msgstr ""
 msgid "Goal"
 msgstr "Objetivo"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check the request and choose the next step."
+msgstr "Entendido — revisaré la solicitud y elegiré el siguiente paso."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check what’s missing and ask before installing it."
+msgstr "Entendido — comprobaré qué falta y preguntaré antes de instalarlo."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll choose a team member to put this in Notion."
+msgstr "Entendido — elegiré a un miembro del equipo para poner esto en Notion."
+
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
 msgstr ""
@@ -4440,6 +4452,10 @@ msgstr "Hermes todavía no está disponible en Windows."
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."
 msgstr "Hermes se ejecuta con los permisos de este equipo."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Hi everyone."
+msgstr "Hola a todos."
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Hi, this is how I'll sound when I read replies out loud."
@@ -5455,6 +5471,10 @@ msgstr ""
 #: src/pages/system/QuickComposer.tsx
 msgid "Message…"
 msgstr "Mensaje…"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Messaged {name}"
+msgstr "Mensaje enviado a {name}"
 
 #: src/pages/account/AccountMore.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -6758,6 +6778,10 @@ msgstr "Espera en cola"
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Queued"
 msgstr "En cola"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Queued for {name}"
+msgstr "En cola para {name}"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Quick access shortcut"
@@ -9378,10 +9402,11 @@ msgstr "Esperando un lugar libre"
 msgid "Waiting for a turn"
 msgstr "Esperando un turno"
 
+#: src/components/ai/CoordinationLine.tsx
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Waiting for approval"
-msgstr ""
+msgstr "Esperando aprobación"
 
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/DirectMcpSearch.tsx

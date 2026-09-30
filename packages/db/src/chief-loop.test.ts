@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { loadChiefMemberFacts } from "./chief-loop";
-import type { Prisma } from "./client";
+import { loadChiefMemberFacts } from "./chief-loop.js";
+import type { Prisma } from "./client.js";
 
 describe("chief fact projection", () => {
   it("projects only authorized scope keys even when passed a run or plan object", async () => {

@@ -2643,6 +2643,14 @@ const MessageBubble = memo(function MessageBubble({
       block.kind === "bot_message_sent" || block.kind === "bot_message_received",
   );
   if (peerMessage) {
+    if (peerMessage.kind === "bot_message_sent" && peerMessage.chiefDispatch)
+      return (
+        <ChiefDispatchLine
+          dispatch={peerMessage.chiefDispatch}
+          detail={peerMessage.text}
+          actionProps={actionProps}
+        />
+      );
     const sent = peerMessage.kind === "bot_message_sent";
     const peerBotId = sent ? peerMessage.toBotId : peerMessage.fromBotId;
     const peerColor =
