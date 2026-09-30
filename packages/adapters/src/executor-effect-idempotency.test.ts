@@ -249,12 +249,18 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
           },
         },
       })),
+      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+        id: "event-1",
+        seq: 1,
+        ...data,
+      })),
     },
     run: {
       findFirst: vi.fn(async () => run),
       findMany: vi.fn(async () => []),
       findUnique: vi.fn(async () => run),
       findUniqueOrThrow: vi.fn(async () => run),
+      count: vi.fn(async () => 0),
       update: vi.fn(async ({ data }: { data: Record<string, unknown> }) =>
         Object.assign(run, data),
       ),
@@ -289,6 +295,7 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
         historyCompactionSummary: "",
         historyCompactedUpToSeq: null as number | null,
       })),
+      update: vi.fn(async () => ({ nextEventSeq: 1 })),
     },
     message: {
       findFirst: vi.fn(async () => null),
@@ -297,6 +304,7 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
     },
     task: {
       findUniqueOrThrow: vi.fn(async () => ({ id: run.taskId, prompt: "Update shared state" })),
+      update: vi.fn(async () => ({})),
     },
     connection: { findMany: vi.fn(async () => []) },
     spaceModelPreference: {
@@ -1260,6 +1268,44 @@ it("never retries an auth refusal", async () => {
     expect.objectContaining({ type: "run.retry_scheduled" }),
   );
   expect(continueJobsFor(f, "run-1")).toEqual([]);
+});
+
+it("finalizes as cancelled, without a provider call, a stopped run whose wait has ended", async () => {
+  const f = fixture();
+  // A retried run has started before; the stop landed while it waited out a refusal,
+  // and the wait has since passed. The continue job must not re-lease and re-run it.
+  Object.assign(f.runRecord, {
+    status: "queued",
+    startedAt: new Date("2026-09-24T12:00:00Z"),
+    cancelRequestedAt: new Date(),
+    providerRetryAt: new Date(Date.now() - 1_000),
+  });
+  // confirmDispatchStop re-reads the run inside its transaction.
+  (f.prisma.run.findUnique as ReturnType<typeof vi.fn>).mockImplementation(
+    async (args?: { select?: Record<string, unknown> }) => {
+      if (args?.select && "cancelRequestedAt" in args.select) return f.runRecord;
+      return f.runRecord;
+    },
+  );
+  await f.executor.continueRun("run-1", "worker-1");
+  expect(f.runtimeRun).not.toHaveBeenCalled();
+  expect(f.events.append).not.toHaveBeenCalledWith(
+    expect.objectContaining({ type: "run.started" }),
+  );
+  expect(f.runRecord.status).toBe("cancelled");
+  expect(f.runRecord.cancelConfirmedAt).toBeInstanceOf(Date);
+  expect(f.prisma.task.update).toHaveBeenCalledWith(
+    expect.objectContaining({ data: { status: "cancelled" } }),
+  );
+  // The stop event itself is the only run-scoped event appended through the executor.
+  const runEvents = (f.events.append.mock.calls as unknown as Array<[{ type: string }]>).map(
+    ([input]) => input.type,
+  );
+  expect(runEvents).toEqual([]);
+  const appendedThroughExecutor = (
+    f.events.append.mock.calls as unknown as Array<[{ type: string }]>
+  ).filter(([input]) => input.type === "run.started");
+  expect(appendedThroughExecutor).toEqual([]);
 });
 
 /** Continue jobs enqueued for one run; other scheduled work (computer sleep) is not the run's. */

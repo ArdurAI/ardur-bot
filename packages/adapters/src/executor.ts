@@ -1728,7 +1728,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
         }
       }
-      if (run.cancelRequestedAt && run.status === "queued" && !run.startedAt) {
+      // A stop that lands while the run waits must hold, whatever startedAt says:
+      // a retried run has started before, and claiming it again would re-lease it,
+      // emit run.started and reach a provider call before the stop is confirmed.
+      if (run.cancelRequestedAt && run.status === "queued") {
         if (await confirmDispatchStop(deps.prisma, runId)) {
           tracePoint(runId, "terminal.committed", { outcome: "cancelled" });
           await wakeGoalAfterDelegation(deps, run.delegationId).catch((error) =>
