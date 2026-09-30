@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { isComputerImageReference, MAX_COMPUTER_IMAGE_LENGTH } from "./computer-image.js";
 import { ComputerProfileSchema } from "./computer-profiles.js";
+import type { ComputerMode, ComputerStatus } from "./domain.js";
 import { EngineEndpointSchema, SshSettingsSchema } from "./fleet.js";
+import type { SandboxKind } from "./ids.js";
 
 export const ComputerEngineUnavailableSchema = z.object({
   error: z.literal("engine-unavailable"),
@@ -98,11 +100,123 @@ export const ComputerConfigurationSchema = ComputerConfigurationFieldsSchema.ref
     configuration.imageProfile !== undefined || configuration.connectionId !== undefined,
   { message: "Choose an image profile or a connection to change." },
 );
+type ComputerKindFacts = {
+  location: "Container" | "This computer" | "Remote computer" | "Hosted sandbox" | "Test computer";
+  boundary: "container" | "host" | "account" | "hosted" | "test";
+  isolated: boolean;
+  capabilities: { graphical: boolean; interactiveTerminal: boolean };
+  policyFields: readonly ("cpu" | "memory" | "disk" | "network")[];
+};
+
+/** Describes execution boundaries, not proof that a requested limit was applied. */
+export const COMPUTER_KINDS = {
+  docker: {
+    location: "Container",
+    boundary: "container",
+    isolated: true,
+    capabilities: { graphical: true, interactiveTerminal: true },
+    policyFields: ["cpu", "memory", "network"],
+  },
+  "remote-docker": {
+    location: "Container",
+    boundary: "container",
+    isolated: true,
+    capabilities: { graphical: false, interactiveTerminal: true },
+    policyFields: ["cpu", "memory", "network"],
+  },
+  kubernetes: {
+    location: "Container",
+    boundary: "container",
+    isolated: true,
+    capabilities: { graphical: false, interactiveTerminal: false },
+    policyFields: ["cpu", "memory", "disk", "network"],
+  },
+  desktop: {
+    location: "This computer",
+    boundary: "host",
+    isolated: false,
+    capabilities: { graphical: false, interactiveTerminal: false },
+    policyFields: [],
+  },
+  ssh: {
+    location: "Remote computer",
+    boundary: "account",
+    isolated: false,
+    capabilities: { graphical: false, interactiveTerminal: true },
+    policyFields: [],
+  },
+  e2b: {
+    location: "Hosted sandbox",
+    boundary: "hosted",
+    isolated: true,
+    capabilities: { graphical: true, interactiveTerminal: false },
+    policyFields: [],
+  },
+  daytona: {
+    location: "Hosted sandbox",
+    boundary: "hosted",
+    isolated: true,
+    capabilities: { graphical: true, interactiveTerminal: false },
+    policyFields: [],
+  },
+  box: {
+    location: "Hosted sandbox",
+    boundary: "hosted",
+    isolated: true,
+    capabilities: { graphical: true, interactiveTerminal: false },
+    policyFields: [],
+  },
+  fake: {
+    location: "Test computer",
+    boundary: "test",
+    isolated: false,
+    capabilities: { graphical: true, interactiveTerminal: false },
+    policyFields: [],
+  },
+} as const satisfies Record<SandboxKind, ComputerKindFacts>;
+
+export function computerKindFacts(kind: string): ComputerKindFacts | null {
+  return Object.hasOwn(COMPUTER_KINDS, kind) ? COMPUTER_KINDS[kind as SandboxKind] : null;
+}
+
 export function computerCapabilities(kind: string) {
+  return computerKindFacts(kind)?.capabilities ?? { graphical: false, interactiveTerminal: false };
+}
+
+export const COMPUTER_BOUNDARY_MESSAGES = {
+  container: "Separate home; can reach allowed network services and granted credentials.",
+  host: "Runs as you; can use your files and signed-in tools",
+  account: "Uses that account's permissions.",
+  hosted: "Runs at the configured provider; can use granted credentials and network access.",
+  test: "For testing only; not an isolation boundary.",
+} as const;
+
+export function computerRuntimeSummary(
+  status: Pick<ComputerStatus, "kind" | "mode" | "state">,
+  mode: ComputerMode = status.mode,
+) {
+  const facts = computerKindFacts(status.kind);
+  if (!facts) return null;
   return {
-    graphical: !["desktop", "kubernetes", "ssh", "remote-docker"].includes(kind),
-    interactiveTerminal: ["docker", "ssh", "remote-docker"].includes(kind),
-  };
+    ...facts,
+    reach: COMPUTER_BOUNDARY_MESSAGES[facts.boundary],
+    sharing: mode === "dedicated" ? "Only this bot" : "Shared with team",
+    sharingWarning: mode === "team" ? "Bots share files and installed tools" : null,
+    scope: mode === "team" ? "team" : "bot",
+    state: status.state,
+  } as const;
+}
+
+/** Configuration availability is not engine health; provisioning still validates the pin. */
+export function recommendedContainer(
+  deploymentKind: string,
+  connections: readonly { id: string; settings: Pick<ComputerConnectionSettings, "engine"> }[],
+): { connectionId: string | null } | null {
+  if (computerKindFacts(deploymentKind)?.boundary === "container") return { connectionId: null };
+  const connection = connections.find((entry) =>
+    ["docker", "podman", "kubernetes"].includes(entry.settings.engine),
+  );
+  return connection ? { connectionId: connection.id } : null;
 }
 
 export const ComputerReplacementConfigurationSchema = ComputerConfigurationFieldsSchema.omit({
