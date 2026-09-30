@@ -6238,7 +6238,7 @@ msgstr ""
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/provider-error-message.tsx
 msgid "Open bot settings"
-msgstr ""
+msgstr "बॉट की सेटिंग खोलें"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open chat links in the desktop app."

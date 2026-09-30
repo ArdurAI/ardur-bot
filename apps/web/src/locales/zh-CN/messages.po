@@ -6238,7 +6238,7 @@ msgstr "打开 Ardur"
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/provider-error-message.tsx
 msgid "Open bot settings"
-msgstr ""
+msgstr "打开 Bot 设置"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open chat links in the desktop app."

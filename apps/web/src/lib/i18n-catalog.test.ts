@@ -715,6 +715,24 @@ describe("lingui catalogs", () => {
     }
   });
 
+  it("translates the refusal banner's \"Open bot settings\" action in every shipped catalog", () => {
+    // The banner's first button for the computer-unsupported and destinations-bot
+    // refusals; an empty translation would fall back to English on the banner.
+    const message = "Open bot settings";
+    for (const locale of ["de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      const key = `msgid ${JSON.stringify(message)}\nmsgstr "`;
+      const at = catalog.indexOf(key);
+      expect(at, `${locale}: ${message} missing from catalog`).toBeGreaterThanOrEqual(0);
+      const translated = catalog.slice(at + key.length, catalog.indexOf('"', at + key.length));
+      expect(translated.trim(), `${locale}: ${message} must not be empty`).toBeTruthy();
+      expect(translated, `${locale}: ${message} must be translated`).not.toEqual(message);
+    }
+  });
+
   it("translates open-work board links in every shipped catalog", () => {
     const sentences = ["Add from board", "New work item", "Open in board"];
     for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {
