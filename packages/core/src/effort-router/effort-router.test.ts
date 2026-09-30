@@ -282,6 +282,25 @@ describe("round 2 holdout messages (never in the example set)", () => {
   }
 });
 
+describe("round 3: huge and odd inputs", () => {
+  it("never throws, whatever the string", () => {
+    const cases: readonly [string, string][] = [
+      ["a 375 KB run of two-letter words", "aa ".repeat(125000)],
+      ["a 300 KB run of slashes", "/a".repeat(150000)],
+      ["the empty string", ""],
+      ["one emoji", "🙂"],
+      ["100,000 newlines", "\n".repeat(100000)],
+      ["a 2 MB message of repeated words", "the quick brown fox jumps over the lazy dog ".repeat(45000)],
+    ];
+    for (const [name, text] of cases) {
+      const got = localTaskClassifier.classify({ text });
+      expect(got.taskType, name).toBeDefined();
+      expect(got.confidence, name).toBeGreaterThanOrEqual(0);
+      expect(got.confidence, name).toBeLessThanOrEqual(1);
+    }
+  });
+});
+
 describe("classifier interface", () => {
   it("reports signals for every answer and clamps confidence", () => {
     for (const text of ["hi", "deploy now", "", "what?"]) {

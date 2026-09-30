@@ -215,7 +215,11 @@ function words(text: string): string[] {
       tokens.push(piece);
       continue;
     }
-    tokens.push(...piece.split(/[^\p{L}\p{N}']+/u).filter(Boolean));
+    // Push in a loop, never with a spread: a huge paste splits into more pieces than
+    // a call stack takes arguments.
+    for (const word of piece.split(/[^\p{L}\p{N}']+/u)) {
+      if (word) tokens.push(word);
+    }
   }
   return tokens;
 }
