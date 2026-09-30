@@ -504,7 +504,7 @@
           ]
         }
       ],
-      "note": "“This computer” starts the app's own database and services, so the first launch doesn't need Docker. Homebrew's ardur command launches the installed app bundle. Previews don't update themselves; download each new version by hand."
+      "note": "“This computer” starts its own database and services, without Docker. Homebrew's ardur command opens the installed bundle. Previews update by manual download. Branch installers can be checked in CI without publishing a release."
     },
     "installScript": {
       "platforms": [

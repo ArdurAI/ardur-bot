@@ -19,6 +19,23 @@ export function parseSigned(value = "false") {
   return value === "true";
 }
 
+export function branchPreviewVersion(sha) {
+  if (typeof sha !== "string" || sha.length !== 40 || !/^[0-9a-f]{40}$/.test(sha)) {
+    throw new Error("Expected a full commit SHA.");
+  }
+  return `0.0.0-branch.${sha.slice(0, 12)}`;
+}
+
+/** Changes only a disposable CI checkout; the committed version remains the release input. */
+export async function stageBranchPreview(sha, base = new URL("../", import.meta.url)) {
+  const version = branchPreviewVersion(sha);
+  const manifest = new URL("package.json", base);
+  const source = JSON.parse(await readFile(manifest, "utf8"));
+  source.version = version;
+  await writeFile(manifest, `${JSON.stringify(source, null, 2)}\n`);
+  return version;
+}
+
 // Only fixed labels and counts leave this process. Subjects, scopes, author identities,
 // and file names cannot leak into public release notes.
 export async function releaseNotes(subjects, gate, signed = false) {
@@ -112,6 +129,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (command === "validate") {
     const { version } = JSON.parse(await readFile("package.json", "utf8"));
     console.log(releaseVersion(args[0], version));
+  } else if (command === "branch-version") {
+    console.log(branchPreviewVersion(args[0]));
+  } else if (command === "stage-branch") {
+    console.log(await stageBranchPreview(args[0]));
   } else if (command === "notes") {
     const tag = args[0];
     const evidencePath = args[1];
@@ -154,5 +175,5 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     }
   } else if (command === "cask") {
     await generateCask(args[0], args[1], args[2], parseSigned(args[3]));
-  } else throw new Error("Expected validate, notes, or cask.");
+  } else throw new Error("Expected validate, branch-version, stage-branch, notes, or cask.");
 }

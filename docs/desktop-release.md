@@ -42,12 +42,30 @@ selected model and effort to be returned by the installed CLI.
 
 ## Build contract
 
-A `v*` tag push runs `.github/workflows/release-desktop.yml`. Manual dispatch accepts an existing
-`tag` input and an optional `evidence_waiver` reason. Both routes validate that the tag matches the
-**root** `package.json` version and points to a commit on `dev`. They never move `main` or overwrite
-an existing release. Publication requires validated
+A `v*` tag push runs `.github/workflows/release-desktop.yml` with publication enabled, as before.
+Manual dispatch uses the selected branch or tag and defaults `publish` to **false**. A branch gets
+`0.0.0-branch.<short sha>` in the disposable build checkout, without changing its committed version
+or requiring ancestry on `dev`. A tag must still match the **root** `package.json` version and point
+to a commit on `dev`. Manual publication requires both `publish=true` and a selected tag; a branch
+never publishes, even when that input is true. Neither route moves `main` or overwrites an existing
+release. Publication requires validated
 [performance evidence](performance.md#evidence-index); only a dispatch with a waiver reason can
-publish without it, and a tag push cannot.
+publish without it, and a tag push cannot. Non-publishing dispatches skip performance evidence and
+publication, not packaging or install acceptance.
+
+### Check a branch without publishing
+
+Open **Actions → release-desktop → Run workflow → this branch**, leave **publish** unchecked, and
+run the workflow. For this change select `fix/install-acceptance`. The equivalent command is:
+
+```sh
+gh workflow run release-desktop.yml --ref fix/install-acceptance -f publish=false
+```
+
+All platform build and install-acceptance jobs run with the same scripts and matrix as a tag.
+Download installers from `desktop-<platform>-<arch>` and logs/screenshots from
+`install-acceptance-<platform>-<arch>` on the run page. Diagnostic uploads run even after acceptance
+fails. Successful acceptance also uploads the hash-bound receipts. No release or tag is created.
 
 | Platform | Architecture | Release assets |
 | --- | --- | --- |
@@ -151,12 +169,12 @@ Enabling signed builds does not change this update policy.
    A tag push publishes only with validated performance evidence. No job produces that evidence
    yet, so this run currently stops at the evidence gate.
 
-3. Until the physical evidence runner exists, dispatch the workflow on `dev` with the existing tag
-   and a waiver reason. The reason is recorded with the dispatching account and printed in the
+3. Until the physical evidence runner exists, dispatch the workflow on the existing tag with
+   `publish=true` and a waiver reason. The reason is recorded with the dispatching account and printed in the
    release notes:
 
    ```sh
-   gh workflow run release-desktop.yml --ref dev -f tag=v0.1.0-alpha.1 \
+   gh workflow run release-desktop.yml --ref v0.1.0-alpha.1 -f publish=true \
      -f evidence_waiver="Physical release runners are not provisioned"
    ```
 
@@ -201,7 +219,7 @@ An evidence waiver cannot bypass installation checks.
 - **macOS (`macos-15`)**: quarantine a copy of the DMG as a Safari download, mount it, copy the
   app into temporary Applications, and verify the quarantine attribute. The bundle must pass
   deep, strict codesign verification. Gatekeeper must accept a signed, notarized build; an
-  ad-hoc preview must return `rejected` with `source=no usable signature`, never damaged or
+  ad-hoc preview must return `rejected` (some macOS versions omit the source line), never damaged or
   missing resources. The signing decision comes from the build's `install-build-mac-<arch>.json`.
   Remove quarantine to model Open Anyway, then open the installed bundle. Render the shipped
   cask template with the local DMG URL and real checksum, install it into temporary Applications,
@@ -220,10 +238,16 @@ An evidence waiver cannot bypass installation checks.
   of replacing them. Windows desktop acceptance runs on the fresh runner, not in a container.
 
 Every launch sets `ARDUR_INSTALL_SMOKE=1`, disables update discovery and uses a fresh
-`ARDURBOT_USER_DATA_DIR`. Only this opt-in path starts the app-managed local stack, requires its
+`ARDURBOT_USER_DATA_DIR`. The app sets Electron's user-data path before requesting the single-instance
+lock, so the fresh profile has its own lock rather than activating a running normal instance. A
+refused smoke lock exits nonzero and explains why on stderr. Only this opt-in path starts the app-managed local stack, requires its
 real health response and a loaded main window, captures a screenshot, stops its owned services,
 and prints `ARDUR_INSTALL_SMOKE_PASS` before quitting. A zero exit without that marker does not
-pass. The app watchdog is 150 seconds; the script's launch bound is 180 seconds. This is stricter
+pass. A small JavaScript entry installs the 150-second watchdog before loading the main module;
+import failures exit nonzero without waiting for a native error dialog. Stages are written to stderr
+through runtime installation, service startup, health, window loading, screenshot capture and
+cleanup. A timeout names the current stage, including a stalled quit. The script's launch bound is
+180 seconds. This is stricter
 than merely surviving 15 seconds. Crash lines in either output stream fail acceptance.
 Normal startup is unchanged; no hosted service or model credentials are needed.
 

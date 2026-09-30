@@ -5,10 +5,11 @@ on:
     tags: ["v*"]
   workflow_dispatch:
     inputs:
-      tag:
-        description: Existing v-prefixed tag to package from dev
-        required: true
-        type: string
+      publish:
+        description: Publish only when running on an existing v-prefixed tag
+        required: false
+        type: boolean
+        default: false
       evidence_waiver:
         description: >-
           Reason to publish this preview without measured performance evidence. One plain
@@ -28,7 +29,7 @@ concurrency:
 
 jobs:
   validate:
-    name: Validate preview tag
+    name: Validate preview ref
     runs-on: ubuntu-24.04
     outputs:
       tag: ${{ steps.release.outputs.tag }}
@@ -58,18 +59,27 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Resolve an existing tag on dev
+      - name: Resolve a tag on dev or a branch preview
         id: release
         env:
-          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_REF: ${{ github.ref }}
+          RELEASE_EVENT: ${{ github.event_name }}
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]
-          sha="$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")"
-          git merge-base --is-ancestor "$sha" origin/dev
-          git checkout --detach "$sha"
-          version="$(node scripts/desktop-release.mjs validate "$RELEASE_TAG")"
+          if [[ "$RELEASE_EVENT" == workflow_dispatch && "$RELEASE_REF" == refs/heads/* ]]; then
+            sha="$(git rev-parse HEAD)"
+            version="$(node scripts/desktop-release.mjs branch-version "$sha")"
+            RELEASE_TAG=""
+          else
+            [[ "$RELEASE_REF" == refs/tags/* ]]
+            [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]
+            sha="$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")"
+            git merge-base --is-ancestor "$sha" origin/dev
+            git checkout --detach "$sha"
+            version="$(node scripts/desktop-release.mjs validate "$RELEASE_TAG")"
+          fi
           parent="$(git rev-parse "${sha}^" 2>/dev/null || true)"
           if [[ ! "$parent" =~ ^[0-9a-f]{40}$ ]]; then parent=""; fi
           fixed_sha=""
@@ -124,6 +134,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Generate the Prisma client
         run: pnpm db:generate
+      - name: Set the branch preview version in the disposable checkout
+        if: github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/')
+        shell: bash
+        env:
+          PREVIEW_SHA: ${{ needs.validate.outputs.sha }}
+        run: node scripts/desktop-release.mjs stage-branch "$PREVIEW_SHA"
       # The desktop build also bundles the API, worker, and SQL migrator.
       - name: Build renderer and main process
         run: pnpm --filter @ardurbot/web build && pnpm --filter @ardurbot/desktop build
@@ -270,6 +286,7 @@ jobs:
 
   evidence:
     name: Require validated scoreboard evidence
+    if: startsWith(github.ref, 'refs/tags/') && (github.event_name == 'push' || inputs.publish == true)
     needs: [validate, build, install-acceptance]
     uses: ./.github/workflows/performance.yml
     with:
@@ -284,6 +301,7 @@ jobs:
 
   publish:
     name: Publish ${{ needs.validate.outputs.signed == 'true' && 'signed macOS' || 'unsigned' }} pre-release
+    if: startsWith(github.ref, 'refs/tags/') && (github.event_name == 'push' || inputs.publish == true)
     needs: [validate, build, evidence, install-acceptance]
     runs-on: ubuntu-24.04
     permissions:
