@@ -707,6 +707,7 @@ export interface BackgroundJobPayloads {
     generation: number;
   };
   "run.continue": { runId: string };
+  "evidence.seal": { runId: string };
   "routine.wakeup": { routineId: string; scheduledFor: string };
   "computer.sleep": { computerId: string };
   "computer.update": { updateId: string };

@@ -6,13 +6,16 @@ export default function ComputerTerminalSession({
   botId,
   computerId,
   workspace,
+  visible = true,
 }: {
   botId: string;
   computerId: string;
   workspace?: "computer";
+  visible?: boolean;
 }) {
   return (
     <Terminal
+      visible={visible}
       key={`${computerId}:${botId}`}
       close={(sessionId) => rpc.terminal.close({ botId, computerId, sessionId })}
       ticket={(sessionId) => rpc.terminal.ticket({ botId, computerId, sessionId, workspace })}

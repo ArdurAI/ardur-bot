@@ -668,6 +668,9 @@ importers:
       '@ardurbot/memory':
         specifier: workspace:*
         version: link:../memory
+      '@ardurbot/evidence':
+        specifier: workspace:*
+        version: link:../evidence
       '@asciidev/box-sdk':
         specifier: 0.0.34
         version: 0.0.34

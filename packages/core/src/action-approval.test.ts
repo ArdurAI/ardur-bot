@@ -148,6 +148,31 @@ describe("connectorKindFromToolName", () => {
 });
 
 describe("resolveActionApproval", () => {
+  it("names the winning rule rather than the first matching rule", () => {
+    const broad: ActionApprovalRule = {
+      id: "broad",
+      effect: "require_approval",
+      matchKind: "connector",
+      matchValue: "gmail",
+    };
+    const specific: ActionApprovalRule = {
+      id: "specific",
+      effect: "always_allow",
+      matchKind: "tool",
+      matchValue: "gmail_send_email",
+    };
+    const input = { toolName: "gmail_send_email", rules: [broad, specific] };
+    expect(resolveActionApprovalDetail(input)).toMatchObject({
+      decision: "allow",
+      matchedRuleId: "specific",
+    });
+    expect(
+      resolveActionApprovalDetail({
+        ...input,
+        rules: [specific, { ...specific, id: "requiring", effect: "require_approval" }],
+      }),
+    ).toMatchObject({ decision: "ask", matchedRuleId: "requiring" });
+  });
   it("never applies a rule from another goal", () => {
     const rule: ActionApprovalRule = {
       effect: "always_allow",

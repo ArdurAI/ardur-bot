@@ -27,6 +27,7 @@ export function fixtureHandlers(overrides: Partial<BackgroundJobHandlers>): Back
   const ignored = async () => undefined;
   return {
     "run.continue": ignored,
+    "evidence.seal": ignored,
     "board.run": ignored,
     "briefs.maintain": ignored,
     "learning.curate": ignored,
