@@ -116,8 +116,11 @@ jobs:
           - { os: windows-2022, platform: win, arch: x64, nodePlatform: win32 }
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
-      CSC_KEYCHAIN: ${{ matrix.platform == 'mac' && needs.validate.outputs.signed == 'true' && format('{0}/ardur-signing-{1}-{2}-{3}.keychain-db', runner.temp, github.run_id, github.run_attempt, matrix.arch) || '' }}
     steps:
+      - name: Set temporary signing keychain path
+        if: matrix.platform == 'mac' && needs.validate.outputs.signed == 'true'
+        shell: bash
+        run: printf 'CSC_KEYCHAIN=%s/ardur-signing-%s-%s-%s.keychain-db\n' "$RUNNER_TEMP" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "${{ matrix.arch }}" >> "$GITHUB_ENV"
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ needs.validate.outputs.sha }}
