@@ -58,6 +58,51 @@ describe("chain and seal verification", () => {
     });
     expect(verifySeal(seal, records, keys.publicKeyPem).ok).toBe(true);
   });
+  it.each([
+    ["runId", { runId: "run-other" }],
+    ["grant_id", { grantId: "grant-other" }],
+    ["trace_id", { traceId: "trace-other" }],
+    ["run_nonce", { runNonce: "YWJjZGVmMDEyMzQ1Njc4OQ" }],
+    ["actor", { actor: "actor-other" }],
+    ["verifier_id and iss", { verifierId: "verifier-other" }],
+    ["verifier_id and iss default", { spaceId: "space-other" }],
+  ] as const)("rejects a linked same-key record differing in %s", (_field, overrides) => {
+    const first = signedPayload(buildReceiptClaims(receiptInput(), null));
+    const foreign = buildReceiptClaims(receiptInput({ ...overrides, step: 1 }), first);
+    const result = verifyChain([first, signedPayload(foreign)], keys.publicKeyPem);
+    expect(foreign.parent_receipt_hash).toBe(sha256(first));
+    expect(result.ok).toBe(false);
+    expect(result.failures).toEqual([expect.objectContaining({ index: 1, code: "run_mismatch" })]);
+  });
+  it.each(["run-test:0", "run-test:2", "run-test:01", "run-other:1", "invalid"])(
+    "rejects a correctly linked second record with step_id %s",
+    (step_id) => {
+      const first = signedPayload(buildReceiptClaims(receiptInput(), null));
+      const second = buildReceiptClaims(receiptInput({ step: 1 }), first);
+      const result = verifyChain([first, signedPayload({ ...second, step_id })], keys.publicKeyPem);
+      expect(result.ok).toBe(false);
+      expect(result.failures).toEqual([
+        expect.objectContaining({ index: 1, code: "run_mismatch" }),
+      ]);
+    },
+  );
+  it.each(["run-test:1", "run-test:00", "invalid", ":0", " :0"])(
+    "rejects an invalid first step_id %s",
+    (step_id) => {
+      const first = signedPayload({ ...buildReceiptClaims(receiptInput(), null), step_id });
+      const result = verifyChain([first], keys.publicKeyPem);
+      expect(result.ok).toBe(false);
+      expect(result.failures).toEqual([
+        expect.objectContaining({ index: 0, code: "run_mismatch" }),
+      ]);
+    },
+  );
+  it("accepts exact steps when the run ID contains colons", () => {
+    const chain = createEvidenceChain(privateKey, keys.kid);
+    const input = receiptInput({ runId: "run:with:colons" });
+    const records = [chain.append(input).jws, chain.append(input).jws];
+    expect(verifyChain(records, keys.publicKeyPem).ok).toBe(true);
+  });
   it("rejects an edit retaining the old signature", () => {
     const { records } = run();
     const parts = (records[1] ?? "").split(".");

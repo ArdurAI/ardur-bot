@@ -131,6 +131,7 @@ export const VERIFICATION_CODES = [
   "payload_not_canonical",
   "claims_invalid",
   "chain_broken",
+  "run_mismatch",
   "seal_signature_invalid",
   "seal_claims_invalid",
   "seal_missing_chain_head",

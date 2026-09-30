@@ -41,6 +41,12 @@ error, and records.length means the seal. recordCount counts supplied entries;
 headReceiptId is null if the tail could not be verified and validated. Historical
 verification checks format and integrity, not current-time JWT validity.
 
+verifyChain also requires every record's grant_id, trace_id, run_nonce, actor,
+verifier_id and iss to match record 0. step_id must be exactly <runId>:<index>,
+starting at 0; runId is recovered from record 0 before its final colon, so run
+IDs may contain colons. Identity or step inconsistencies fail with run_mismatch,
+even if all signatures and parent hashes are correct.
+
 buildEvidenceBundle returns four { path, contents } files without filesystem
 side effects, after checking the seal against the supplied public key. The
 independent check command lives only in the exported EVIDENCE_CHECK_COMMAND in

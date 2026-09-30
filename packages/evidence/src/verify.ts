@@ -171,6 +171,8 @@ export function verifyChain(
     });
     return result;
   }
+  let firstClaims: ReceiptClaims | null = null;
+  let runId: string | null = null;
   for (let index = 0; index < jwsList.length; index++) {
     let decoded: ReturnType<typeof decodeCompact> | null;
     try {
@@ -204,6 +206,25 @@ export function verifyChain(
       continue;
     }
     const claims = decoded.payload;
+    if (index === 0) {
+      firstClaims = claims;
+      runId = claims.step_id.slice(0, claims.step_id.lastIndexOf(":"));
+    }
+    const identity = firstClaims;
+    if (
+      identity &&
+      (!isNonemptyString(runId) ||
+        claims.step_id !== `${runId}:${index}` ||
+        (["grant_id", "trace_id", "run_nonce", "actor", "verifier_id", "iss"] as const).some(
+          (claim) => claims[claim] !== identity[claim],
+        ))
+    ) {
+      failures.push({
+        index,
+        code: "run_mismatch",
+        message: "Receipt identity or step does not match the first record's run",
+      });
+    }
     if (index === jwsList.length - 1) result.headReceiptId = claims.receipt_id;
   }
   result.ok = failures.length === 0;
