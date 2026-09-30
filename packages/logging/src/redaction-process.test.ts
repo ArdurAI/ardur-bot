@@ -18,6 +18,10 @@ const sensitiveKeys = [
   "CLIENT_KEY",
   "client-key",
   "client key",
+  "authKey",
+  "auth_key",
+  "AUTH-KEY",
+  "auth key",
   "password",
   "passwd",
   "secret",
@@ -28,6 +32,38 @@ const sensitiveKeys = [
 ];
 
 describe("process diagnostic redaction", () => {
+  it.each(["dGVzdDp0ZXN0==", "user:pass-part"])(
+    "redacts punctuation inside a scheme credential: %s",
+    (credential) => {
+      for (const scheme of ["Bearer", "Basic", "Token", "Fixture.Scheme"]) {
+        for (const [input, expected] of [
+          [`Authorization: ${scheme} ${credential}`, "Authorization: [Redacted]"],
+          [`access_token=${scheme} ${credential}`, "access_token=[Redacted]"],
+          [
+            `?access_token=${scheme} ${credential}&scope=read`,
+            "?access_token=[Redacted]&scope=read",
+          ],
+        ]) {
+          const redacted = redactSensitiveText(input!);
+          expect(redacted).toBe(expected);
+          expect(redactSensitiveText(redacted)).toBe(redacted);
+        }
+      }
+    },
+  );
+
+  it.each(["authKey", "auth_key"])("redacts the review auth-key assignment: %s", (key) => {
+    const credential = "madeup-authKey-value";
+    expect(redactSensitiveText(`${key}=${credential}`)).toBe(`${key}=[Redacted]`);
+    expect(redactBindings({ [key]: credential })).toEqual({ [key]: "[Redacted]" });
+  });
+
+  it("preserves an ordinary spaced assignment after a sensitive value", () => {
+    expect(redactSensitiveText("password=fixture-value status = ready")).toBe(
+      "password=[Redacted] status = ready",
+    );
+  });
+
   it.each(sensitiveKeys)(
     "uses the same sensitive-key policy for text and nested bindings: %s",
     (key) => {

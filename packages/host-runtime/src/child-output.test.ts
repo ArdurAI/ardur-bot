@@ -83,6 +83,11 @@ describe("captureChildOutput", () => {
 
   it.each([
     "access_token=Basic fixture-scheme-credential",
+    "Authorization: Bearer dGVzdDp0ZXN0==",
+    "access_token=Bearer dGVzdDp0ZXN0==",
+    "Authorization: Bearer user:pass-part",
+    "authKey=madeup-authKey-value",
+    "auth_key=madeup-authKey-value",
     `github_pat_${"fixture123".repeat(10)}_fixture456`,
   ])("redacts detailed process output for the review reproduction %s", async (line) => {
     const { logger, debug } = fakeLogger();
@@ -94,7 +99,70 @@ describe("captureChildOutput", () => {
     expect(diagnostics).not.toContain("fixture-scheme-credential");
     expect(diagnostics).not.toContain("fixture123");
     expect(diagnostics).not.toContain("Basic");
+    expect(diagnostics).not.toContain("dGVzdDp0ZXN0==");
+    expect(diagnostics).not.toContain("user:pass-part");
+    expect(diagnostics).not.toContain("madeup-authKey-value");
     captured.close();
+  });
+
+  it.each(["running", "ended", "closed"])(
+    "re-redacts the whole detailed tail when a credential is acquired after output (%s)",
+    async (state) => {
+      const { logger } = fakeLogger();
+      const stderr = new PassThrough();
+      const stdout = new PassThrough();
+      const child = { stderr, stdout, pid: 123 } as unknown as ChildProcess;
+      const secrets: string[] = [];
+      const credential = "late-acquired-bridge-key-112233";
+      const captured = captureChildOutput(child, {
+        kind: "fixture",
+        logger,
+        secrets,
+        captureStdout: true,
+      });
+      stderr.write(`${credential}\n`);
+      stdout.write(`${credential.slice(0, 15)}\r\n${credential.slice(15)}\n`);
+      if (state === "ended") {
+        const ended = Promise.all(
+          [stderr, stdout].map(
+            (stream) => new Promise<void>((resolve) => stream.once("end", resolve)),
+          ),
+        );
+        stderr.end();
+        stdout.end();
+        await ended;
+      } else if (state === "closed") captured.close();
+      expect(captured.tail()).toContain(credential);
+      const facts = captured.facts();
+      secrets.push(credential);
+      expect(captured.tail()).toContain("[redacted]");
+      expect(captured.tail()).not.toContain(credential);
+      expect(captured.tail()).not.toContain(credential.slice(0, 15));
+      expect(captured.tail()).not.toContain(credential.slice(15));
+      expect(captured.facts()).toEqual(facts);
+      secrets.length = 0;
+      expect(captured.tail()).not.toContain(credential);
+      captured.close();
+      stderr.destroy();
+      stdout.destroy();
+    },
+  );
+
+  it("refreshes the tail for same-length secret-list changes and keeps its byte bounds", () => {
+    const { logger } = fakeLogger();
+    const stderr = new PassThrough();
+    const secrets = ["old-fixture-credential"];
+    const captured = captureChildOutput({ stderr } as unknown as ChildProcess, {
+      kind: "fixture",
+      logger,
+      secrets,
+    });
+    stderr.write(`${"~".repeat(4000)}\n`.repeat(20));
+    captured.close();
+    secrets[0] = "~";
+    expect(captured.tail()).not.toContain("~");
+    expect(Buffer.byteLength(captured.tail())).toBeLessThanOrEqual(64 * 1024);
+    stderr.destroy();
   });
 
   it.each(["", "\n", "\r\n"])(

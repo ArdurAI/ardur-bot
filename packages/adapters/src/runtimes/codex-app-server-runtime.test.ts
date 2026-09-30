@@ -315,6 +315,7 @@ function fixture(
 }
 describe("Codex app-server protocol", () => {
   it("redacts bridge credentials registered after the app-server starts", async () => {
+    vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", "1");
     vi.stubEnv("LOG_LEVEL", "debug");
     const write = vi.spyOn(process.stderr, "write").mockReturnValue(true);
     try {
@@ -328,6 +329,24 @@ describe("Codex app-server protocol", () => {
       expect(logs).toContain("codex-app-server stderr: [redacted]");
       expect(logs).not.toContain("a1".repeat(32));
       expect(logs).not.toContain("b2".repeat(32));
+    } finally {
+      write.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("keeps stderr out of debug logs without detailed opt-in", async () => {
+    vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", undefined);
+    vi.stubEnv("LOG_LEVEL", "debug");
+    const write = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    try {
+      const f = fixture();
+      f.loaded.whileStarting = () => {
+        (f.child.stderr as PassThrough).write(`${"a1".repeat(32)}\n${"b2".repeat(32)}\n`);
+      };
+      expect(await f.collect()).toContainEqual({ type: "done" });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(write).not.toHaveBeenCalled();
     } finally {
       write.mockRestore();
       vi.unstubAllEnvs();

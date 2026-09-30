@@ -11,7 +11,7 @@ const REDACT_KEYS = new Set([
 ]);
 // Bindings and text assignments must recognize the same credential families.
 const SENSITIVE_KEY =
-  /password|passwd|secret|token|credential|authorization|cookie|(?:api|private|access|client)key/i;
+  /password|passwd|secret|token|credential|authorization|cookie|(?:api|private|access|client|auth)key/i;
 // References, counts and presence flags describe credentials without containing them.
 const METADATA_KEY = /(?:secret|token|credential)(?:id|count|absent|present)$/i;
 
@@ -121,14 +121,14 @@ function redactAssignments(text: string): string {
       } else {
         while (end < text.length && !/[\s"',;}&\]]/.test(text[end]!)) end++;
         // A scheme and credential can occur under any sensitive key. Preserve
-        // the following ordinary assignment (e.g. status=ready).
+        // a following spaced assignment, not '=' or ':' within the credential.
         let credential = end;
         while (text[credential] === " " || text[credential] === "\t") credential++;
         if (
           end > start &&
           credential > end &&
           /^[A-Za-z][A-Za-z0-9._+-]*$/.test(text.slice(start, end)) &&
-          !/^[A-Za-z0-9_-]+\s*[:=]/.test(text.slice(credential))
+          !/^[A-Za-z0-9_-]+\s+[:=]/.test(text.slice(credential))
         ) {
           end = credential;
           if (text[end] === '"' || text[end] === "'") {

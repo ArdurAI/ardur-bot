@@ -127,16 +127,39 @@ export function captureChildOutput(
   let byteCount = 0;
   let lineCount = 0;
   let partialLines = 0;
-  const emit = (stream: "stdout" | "stderr", raw: string) => {
-    const redacted = detailed ? redactMcpText(raw.replace(/\r+$/, ""), secrets) : raw;
+  let tailSecrets = [...secrets];
+  const storeLine = (redacted: string) => {
     const line =
       Buffer.byteLength(redacted, "utf8") > PENDING_LIMIT_BYTES ? OVERSIZED_LINE : redacted;
-    if (!line) return;
+    if (!line) return "";
     lines.push(line);
     bytes += Buffer.byteLength(line, "utf8") + 1;
     while (bytes > TAIL_LIMIT_BYTES && lines.length > 0) {
       bytes -= Buffer.byteLength(lines.shift()!, "utf8") + 1;
     }
+    return line;
+  };
+  const refreshTail = () => {
+    if (
+      !detailed ||
+      (secrets.length === tailSecrets.length &&
+        secrets.every((secret, index) => secret === tailSecrets[index]))
+    )
+      return;
+    tailSecrets = [...secrets];
+    // Already released text must be scanned again, including wrapped spellings.
+    const parts: string[] = [];
+    knownSecretStream(secrets, (text) => parts.push(text))(lines.join("\n"), true);
+    const redacted = redactMcpText(parts.join(""), secrets);
+    lines.length = 0;
+    bytes = 0;
+    for (const line of redacted.split("\n")) storeLine(line);
+  };
+  const emit = (stream: "stdout" | "stderr", raw: string) => {
+    refreshTail();
+    const redacted = detailed ? redactMcpText(raw.replace(/\r+$/, ""), secrets) : raw;
+    const line = storeLine(redacted);
+    if (!line) return;
     if (detailed && detailedProcessLogsEnabled()) {
       options.logger.debug(`${options.kind} ${stream}: ${line}`, {
         kind: options.kind,
@@ -222,7 +245,11 @@ export function captureChildOutput(
   watch(child.stderr, "stderr");
   if (options.captureStdout) watch(child.stdout, "stdout");
   return {
-    tail: () => (detailed && detailedProcessLogsEnabled() ? lines.join("\n") : ""),
+    tail: () => {
+      if (!detailed || !detailedProcessLogsEnabled()) return "";
+      refreshTail();
+      return lines.join("\n");
+    },
     facts: () => ({
       kind: options.kind,
       processKind: options.kind,
