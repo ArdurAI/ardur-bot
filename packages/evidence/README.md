@@ -81,7 +81,8 @@ budgets and policy decisions, and denial metadata on compliant receipts. Other
 verdicts require both denial fields. Signing emits only self_signed evidence.
 Optional metadata without a specified wire constraint must still be JSON.
 
-The canonicalizer sorts keys by UTF-16 code units and never calls toJSON. It
+The canonicalizer sorts keys by UTF-16 code units and never calls toJSON or
+getters. Object properties and array items must be data properties. It
 rejects lone surrogates, non-finite numbers, unsupported objects/values, array
 holes and cycles. Integer-valued numbers outside the safe range are rejected
 unless JSON.stringify emits exponent notation, matching the supplied checker

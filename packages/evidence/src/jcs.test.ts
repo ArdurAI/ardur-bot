@@ -67,4 +67,24 @@ describe("canonicalize", () => {
     const obj = Object.assign(Object.create(null), { x: "😀" });
     expect(canonicalize([obj, obj])).toBe('[{"x":"😀"},{"x":"😀"}]');
   });
+  it.each([true, false])("rejects array getters without calls (enumerable=%s)", (enumerable) => {
+    let calls = 0;
+    const value = [0];
+    Object.defineProperty(value, "0", {
+      enumerable,
+      get() {
+        calls++;
+        return 1;
+      },
+    });
+    let error: unknown;
+    try {
+      canonicalize(value);
+    } catch (caught) {
+      error = caught;
+    }
+    expect(calls).toBe(0);
+    expect(error).toBeInstanceOf(TypeError);
+    expect(error).toMatchObject({ message: "Accessor property" });
+  });
 });

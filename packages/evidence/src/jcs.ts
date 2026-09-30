@@ -38,8 +38,10 @@ export function canonicalize(value: unknown): string {
       if (Array.isArray(value)) {
         const entries: string[] = [];
         for (let i = 0; i < value.length; i++) {
-          if (!Object.hasOwn(value, i)) throw new TypeError("Array hole");
-          entries.push(encode(value[i]));
+          const descriptor = Object.getOwnPropertyDescriptor(value, i);
+          if (!descriptor) throw new TypeError("Array hole");
+          if (!("value" in descriptor)) throw new TypeError("Accessor property");
+          entries.push(encode(descriptor.value));
         }
         return `[${entries.join(",")}]`;
       }
