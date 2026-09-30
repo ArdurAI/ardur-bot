@@ -27,6 +27,30 @@ async function fixture() {
   return { root, store, home };
 }
 
+describe("LocalAgentHomeStore export cancellation", () => {
+  it("survives a download cancelled while a file was being opened", async () => {
+    // The API process died this way on 2026-09-29: the cancel arrived after the loop's
+    // check and before the file's stream was created. A stream created under a signal
+    // that is already aborted destroys itself with an error nobody listens to, and Node
+    // takes the whole process down. The exclude callback runs exactly in that window.
+    const { store, home } = await fixture();
+    await writeFile(path.join(home, "a.txt"), "first");
+    await writeFile(path.join(home, "b.txt"), "second");
+    const controller = new AbortController();
+    const files = store.streamHome("bot-1", { ...context, signal: controller.signal }, (file) => {
+      if (file === "b.txt") controller.abort();
+      return false;
+    });
+    const first = await files.next();
+    expect(first.done).toBe(false);
+    const chunks: Buffer[] = [];
+    for await (const chunk of first.value!.content) chunks.push(Buffer.from(chunk));
+    expect(Buffer.concat(chunks).toString()).toBe("first");
+    await expect(files.next()).rejects.toMatchObject({ name: "AbortError" });
+    await new Promise((resolve) => setImmediate(resolve));
+  });
+});
+
 describe("LocalAgentHomeStore path containment", () => {
   it.skipIf(process.platform === "win32")(
     "streams regular files beside a listening Unix socket",
