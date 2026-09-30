@@ -559,7 +559,7 @@ async function readPythonVersion(
   );
   await appendLog(
     options.log,
-    `$ python -c platform.python_version\n${result.stdout}\n${result.stderr}\n`,
+    `$ python -c platform.python_version\n${result.stderr}\n`,
     environmentSecrets(options.env),
   );
   const version = result.stdout.trim();
@@ -601,7 +601,7 @@ async function runChecked(
     env: options.env,
     timeoutMs: options.timeoutMs,
   });
-  await appendLog(options.log, `$ uv ${args.join(" ")}\n${result.stdout}\n${result.stderr}\n`, [
+  await appendLog(options.log, `$ uv ${args.join(" ")}\n${result.stderr}\n`, [
     ...argumentSecrets(args),
     ...environmentSecrets(options.env),
   ]);

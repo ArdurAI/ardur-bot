@@ -1,5 +1,6 @@
 import type { ChildProcess } from "node:child_process";
 import type { Writable } from "node:stream";
+import { redactBindings } from "../../logging/src/redaction.js";
 import { serializeError } from "../../logging/src/serialize-error.js";
 import { redactMcpText } from "./mcp-diagnostics.js";
 
@@ -180,7 +181,11 @@ export function createChildProcessLogger(sink: Writable = process.stderr): Child
   return {
     debug: (message, bindings) => {
       if (process.env.LOG_LEVEL?.trim().toLowerCase() !== "debug") return;
-      enqueue({ level: "debug", message: redactMcpText(message), ...bindings });
+      enqueue({
+        ...redactBindings(bindings ?? {}),
+        level: "debug",
+        message: redactMcpText(message),
+      });
     },
     error: (message, error) => {
       const reason = error === undefined ? undefined : serializeError(error);

@@ -23,6 +23,28 @@ function closed(child: ChildProcess): Promise<number | null> {
 }
 
 describe("captureChildOutput", () => {
+  it("redacts fallback bindings and does not let them override the record", async () => {
+    vi.stubEnv("LOG_LEVEL", "debug");
+    const write = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    try {
+      createChildProcessLogger().debug("Safe diagnostic", {
+        token: "opaque fixture credential",
+        nested: { password: "alpha beta gamma" },
+        message: "unsafe binding",
+        level: "error",
+      });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      const record = JSON.parse(String(write.mock.calls[0]?.[0]));
+      expect(record.message).toBe("Safe diagnostic");
+      expect(record.level).toBe("debug");
+      expect(JSON.stringify(record)).not.toMatch(
+        /opaque fixture credential|alpha beta gamma|unsafe binding/,
+      );
+    } finally {
+      write.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
   it("drains a real child even when the fallback sink never drains", async () => {
     vi.stubEnv("LOG_LEVEL", "debug");
     const sink = new Writable({ highWaterMark: 1, write() {} });
