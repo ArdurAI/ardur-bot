@@ -118,4 +118,9 @@ export function createEvidenceStore(prisma: PrismaClient) {
   };
 }
 
-export type EvidenceStore = ReturnType<typeof createEvidenceStore>;
+type StoreFunctions = ReturnType<typeof createEvidenceStore>;
+export type EvidenceStore = {
+  [K in keyof StoreFunctions]: (
+    ...args: Parameters<StoreFunctions[K]>
+  ) => Promise<Awaited<ReturnType<StoreFunctions[K]>>>;
+};
