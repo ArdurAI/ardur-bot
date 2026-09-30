@@ -98,3 +98,8 @@ export function toolEvidenceClass(name: string, viaConnector: boolean): ToolEvid
   if (!known) throw new Error("Unclassified builtin tool");
   return known;
 }
+
+export function toolChangesState(name: string, viaConnector: boolean): boolean {
+  const { sideEffectClass } = toolEvidenceClass(name, viaConnector);
+  return sideEffectClass !== "none" && sideEffectClass !== "network_read";
+}
