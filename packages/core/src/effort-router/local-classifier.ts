@@ -57,6 +57,7 @@ type MessageContext = {
   readonly hasAttachments: boolean;
   readonly answersBotQuestion: boolean;
   readonly opensWithOpsVerb: boolean;
+  readonly bareAck: boolean;
   readonly hits: Readonly<Record<keyof typeof WORD_LISTS, number>>;
 };
 
@@ -86,6 +87,22 @@ function readContext(text: string, input: TaskClassifierInput): MessageContext {
     hits[name] = countHits(masked, WORD_LISTS[name]);
   }
   const firstWords = lower.split(FIRST_WORD_SPLIT).filter(Boolean).slice(0, 6);
+  const codeContext = fenceMarkers >= 2 || shell || filePaths > 0;
+  // An acknowledgement is bare when no word of action or work shares the message: "ok"
+  // and "thanks, the rollout finished" are bare, "ok deploy it" is not.
+  const bareAck =
+    hits.ack > 0 &&
+    hits.approval === 0 &&
+    WORK_VERB_LISTS.reduce((sum, name) => sum + hits[name], 0) === 0 &&
+    hits.debugWord === 0 &&
+    hits.evidence === 0 &&
+    hits.fix === 0 &&
+    hits.dataNoun === 0 &&
+    hits.codeArtifact === 0 &&
+    hits.proseArtifact === 0 &&
+    hits.reviewObject === 0 &&
+    !codeContext &&
+    !window.includes("?");
   return {
     text: window,
     lower,
@@ -97,7 +114,7 @@ function readContext(text: string, input: TaskClassifierInput): MessageContext {
     diff: DIFF_MARKER.test(window) || HUNK_MARKER.test(window),
     shell,
     filePaths,
-    codeContext: fenceMarkers >= 2 || shell || filePaths > 0,
+    codeContext,
     urls: window.match(URL.g.source)?.length ?? 0,
     numberDensity: tokens.length === 0 ? 0 : numeric / tokens.length,
     tableRows: tableLineCount >= 2 ? tableLineCount : 0,
@@ -117,6 +134,7 @@ function readContext(text: string, input: TaskClassifierInput): MessageContext {
     opensWithOpsVerb:
       firstWords.some((word) => countHits(word, WORD_LISTS.opsVerb) > 0) &&
       firstWords.every((word) => countHits(word, WORD_LISTS.debugWord) === 0),
+    bareAck,
     scriptCovered: scriptCovered(window),
     hits,
   };
@@ -641,6 +659,18 @@ const SIGNAL_TABLE: readonly SignalSpec[] = [
     weights: { "small-talk": 0.45 },
   },
   {
+    name: "approval of proposed work",
+    test: (c) => c.hits.approval > 0,
+    weights: { unknown: 0.55 },
+    rulesOut: ["small-talk", "simple-question"],
+    overrides: ["compose ask with no competing reading", "review verb"],
+  },
+  {
+    name: "bare acknowledgement",
+    test: (c) => c.bareAck,
+    weights: { "small-talk": 0.5, unknown: 0.5 },
+  },
+  {
     name: "farewell word",
     test: (c) => c.hits.farewell > 0,
     weights: { "small-talk": 0.4 },
@@ -812,7 +842,9 @@ function decide(ctx: MessageContext): TaskClassification {
     scores.set(taskType, Math.min(0.97, value));
   }
 
-  // Light is earned: no sign of work may appear anywhere in the message.
+  // Light is earned: no sign of work may appear anywhere in the message. Approving
+  // proposed work is the one exception to "short means light": an imperative approval
+  // carries no content of its own but releases real work.
   const lightBlocked =
     ctx.hasAttachments ||
     ctx.answersBotQuestion ||
@@ -821,7 +853,9 @@ function decide(ctx: MessageContext): TaskClassification {
     ctx.hits.debugWord > 0 ||
     ctx.hits.fix > 0 ||
     ctx.hits.remediationPhrase > 0 ||
-    ctx.hits.evidence > 0;
+    ctx.hits.evidence > 0 ||
+    ctx.hits.approval > 0 ||
+    (ctx.bareAck && ctx.answersBotQuestion);
   const candidates = [...scores.entries()].filter(([taskType]) => {
     if (ruledOut.has(taskType)) return false;
     if (taskType === "small-talk") {

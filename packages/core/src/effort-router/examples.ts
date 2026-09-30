@@ -319,7 +319,11 @@ export const EFFORT_EXAMPLES: readonly EffortExample[] = [
   { text: "看这个", taskType: "unknown" },
   { text: "water the plants", taskType: "unknown" },
   { text: "嗯嗯", taskType: "unknown" },
-  { text: "так, ладно", taskType: "unknown" },
+  {
+    text: "так, ладно",
+    taskType: "small-talk",
+    note: "round 3: relabelled — a bare acknowledgement is chat",
+  },
   { text: "Friday works for me", taskType: "unknown" },
 
   // Round 2 additions, written before the rules changed. They cover the six kinds of
@@ -500,5 +504,44 @@ export const EFFORT_EXAMPLES: readonly EffortExample[] = [
     text: "Sube la retencion a 30 dias en el bucket de logs",
     taskType: "operations",
     note: "round 2: config imperative in Spanish",
+  },
+
+  // Round 3 additions: approvals of proposed work and bare acknowledgements. An approval
+  // has no content of its own but releases work a bot proposed, so it is never light.
+  {
+    text: "ok do it",
+    taskType: "unknown",
+    note: "round 3: filler plus an approval; the approval carries no content but releases work",
+  },
+  { text: "yes, go ahead", taskType: "unknown", note: "round 3: approves proposed work" },
+  { text: "make it so", taskType: "unknown", note: "round 3: approves proposed work" },
+  { text: "just ship it", taskType: "unknown", note: "round 3: approves proposed work" },
+  { text: "hazlo", taskType: "unknown", note: "round 3: Spanish approval" },
+  { text: "делай", taskType: "unknown", note: "round 3: Russian approval" },
+  { text: "vas-y", taskType: "unknown", note: "round 3: French approval" },
+  {
+    text: "ok",
+    taskType: "small-talk",
+    note: "round 3: bare acknowledgement, chat",
+  },
+  {
+    text: "got it, thanks",
+    taskType: "small-talk",
+    note: "round 3: bare acknowledgement, chat",
+  },
+  {
+    text: "了解",
+    taskType: "small-talk",
+    note: "round 3: bare acknowledgement in Japanese, chat",
+  },
+  {
+    text: "it throws on the second call",
+    taskType: "debugging",
+    note: "round 3: throw belongs with the failure words",
+  },
+  {
+    text: "the nightly job hangs after the second retry",
+    taskType: "debugging",
+    note: "round 3: hang belongs with the failure words",
   },
 ];

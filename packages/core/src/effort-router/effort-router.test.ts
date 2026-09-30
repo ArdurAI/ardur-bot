@@ -352,6 +352,51 @@ describe("round 3: failure vocabulary", () => {
   );
 });
 
+describe("round 3: approvals and acknowledgements", () => {
+  const approvals: readonly string[] = [
+    "do it",
+    "do it now",
+    "go ahead",
+    "proceed",
+    "ship it",
+    "make it so",
+    "run it",
+    "fix it",
+    "just do it",
+    "ok do it",
+    "yes do it",
+    "sure, go ahead",
+  ];
+
+  it.each(approvals)("%s approves proposed work: unknown, with or without the bot flag", (text) => {
+    for (const answersBotQuestion of [false, true]) {
+      const got = localTaskClassifier.classify({ text, answersBotQuestion });
+      expect(got.taskType, `got ${got.taskType} at ${got.confidence}`).toBe("unknown");
+    }
+  });
+
+  it.each(["ok", "yes", "sure", "thanks", "got it"])(
+    "%s is a bare acknowledgement: small-talk, unknown when it answers the bot",
+    (text) => {
+      expect(localTaskClassifier.classify({ text }).taskType).toBe("small-talk");
+      expect(localTaskClassifier.classify({ text, answersBotQuestion: true }).taskType).toBe(
+        "unknown",
+      );
+    },
+  );
+
+  it.each([
+    "what does it do?",
+    "how do I restart postgres?",
+    "Do penguins fly?",
+    "okay, what is the timeout?",
+    "yes, what does 404 mean?",
+    "got it, one more thing: is the cache warm?",
+  ])("%s keeps its question reading", (text) => {
+    expect(localTaskClassifier.classify({ text }).taskType).toBe("simple-question");
+  });
+});
+
 describe("classifier interface", () => {
   it("reports signals for every answer and clamps confidence", () => {
     for (const text of ["hi", "deploy now", "", "what?"]) {
