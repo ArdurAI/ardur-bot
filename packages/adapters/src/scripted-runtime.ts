@@ -6,8 +6,11 @@ import type {
 } from "@ardurbot/adapter-kit";
 import { abortableDelay, inferHandoffTargetName } from "@ardurbot/core";
 import { peerEffectArgsDigest } from "@ardurbot/core/node/peer-effect-digest";
+import { ProviderError } from "./provider-error.js";
 
 const running = new Map<string, AbortController>();
+/** Runs whose first call the scripted provider already refused; the retry answers. */
+const refusedRateLimitOnce = new Set<string>();
 
 export class ScriptedAgentRuntime implements AgentRuntime {
   constructor(
@@ -46,6 +49,12 @@ export class ScriptedAgentRuntime implements AgentRuntime {
         await abortableDelay(2_000, signal);
       if (shouldFail(request.prompt)) {
         throw new Error("Scripted run failure");
+      }
+      if (shouldRefuseWithRateLimit(request.prompt) && !refusedRateLimitOnce.has(request.runId)) {
+        // The first call is refused the way a busy provider refuses it; the run's retry
+        // gets through, so a journey can watch the wait-and-try-again path end to end.
+        refusedRateLimitOnce.add(request.runId);
+        throw new ProviderError("Scripted provider rate limit: too many requests", "rate-limit");
       }
       if (shouldHang(request.prompt)) {
         yield { type: "progress", text: "still working…", activity: true };
@@ -778,6 +787,10 @@ code-b
 
 function shouldFail(prompt: string): boolean {
   return prompt.toLowerCase().includes("fail this run");
+}
+
+function shouldRefuseWithRateLimit(prompt: string): boolean {
+  return prompt.toLowerCase().includes("refuse the first call with a rate limit");
 }
 
 function shouldHang(prompt: string): boolean {

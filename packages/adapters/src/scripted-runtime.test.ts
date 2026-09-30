@@ -1,6 +1,35 @@
 import type { AgentRuntimeEvent } from "@ardurbot/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
+import { ProviderError } from "./provider-error.js";
 import { inferScript, ScriptedAgentRuntime } from "./scripted-runtime.js";
+
+it("refuses the first call with a rate limit and answers the retry", async () => {
+  const runtime = new ScriptedAgentRuntime();
+  const request = {
+    botId: "bot",
+    threadId: "thread",
+    prompt: "refuse the first call with a rate limit, then answer",
+    instructions: "",
+    history: [],
+    tools: [],
+    model: { provider: "scripted", id: "scripted" },
+    script: [{ assistant: "here is the reply.", complete: true }],
+  };
+  const first = runtime.run({ ...request, runId: "run-rate-limited" });
+  const refusal = await first[Symbol.asyncIterator]()
+    .next()
+    .then(
+      () => null,
+      (error: unknown) => error,
+    );
+  expect(refusal).toBeInstanceOf(ProviderError);
+  expect(refusal).toMatchObject({ providerErrorKind: "rate-limit" });
+  const events: AgentRuntimeEvent[] = [];
+  for await (const event of runtime.run({ ...request, runId: "run-rate-limited" })) {
+    events.push(event);
+  }
+  expect(events.at(-1)).toMatchObject({ type: "done", text: "here is the reply." });
+});
 
 it("acknowledges a scripted turn after input acceptance and before output", async () => {
   const stages: string[] = [];

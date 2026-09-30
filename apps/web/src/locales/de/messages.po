@@ -180,6 +180,10 @@ msgstr ""
 msgid "{after} corrections in {0} exposed runs; before: {before} in {1} comparable runs"
 msgstr ""
 
+#: src/lib/failure-category-copy.ts
+msgid "{bot}'s allowed model destinations block this model. Change them in {bot}'s settings."
+msgstr "Die erlaubten Modellziele von {bot} blockieren dieses Modell. Ändere sie in {bot}s Einstellungen."
+
 #: src/pages/LearningInsights.tsx
 msgid "{bot}'s last {count} runs on {model} failed because it cannot use tools; {suggested} used tools in your runs."
 msgstr ""
@@ -331,6 +335,10 @@ msgstr "Noch {remaining} · Bot beobachtet nur"
 msgid "{runtime} could not finish this run. Check the runtime or change the pin."
 msgstr "{runtime} konnte diesen Lauf nicht abschließen. Prüfen Sie die Laufzeitumgebung oder ändern Sie die Festlegung."
 
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} is experimental. Turn on Experimental for {bot} to use it."
+msgstr "{runtime} ist experimentell. Aktiviere „Experimentell“ für {bot}, um es zu nutzen."
+
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "{runtime} loads all connected tools because deferred loading is unavailable."
 msgstr ""
@@ -338,6 +346,10 @@ msgstr ""
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} reached this run's turn limit. Narrow the task and try again."
 msgstr "{runtime} hat das Schrittlimit dieses Laufs erreicht. Grenze die Aufgabe ein und versuche es erneut."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} runs on the host computer, not in a sandbox. Change {bot}'s computer to use it."
+msgstr "{runtime} läuft auf dem Host-Computer, nicht in einer Sandbox. Ändere {bot}s Computer, um es zu nutzen."
 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} stopped before finishing this run."
@@ -1335,7 +1347,7 @@ msgstr ""
 msgid "Blocked"
 msgstr "Blockiert"
 
-#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName) }, }) : row.reason
+#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, }, }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
 msgstr "Blockiert — {0}"
@@ -3028,6 +3040,7 @@ msgid "Could not save this file. Try again."
 msgstr "Diese Datei konnte nicht gespeichert werden. Versuche es erneut."
 
 #: src/pages/customize/McpCredentialFix.tsx
+#: src/pages/Shell.tsx
 msgid "Could not save. Try again."
 msgstr ""
 
@@ -6223,8 +6236,9 @@ msgid "Open Ardur"
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/shell/provider-error-message.tsx
 msgid "Open bot settings"
-msgstr ""
+msgstr "Bot-Einstellungen öffnen"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open chat links in the desktop app."
@@ -6287,8 +6301,9 @@ msgid "Open screen to view this computer."
 msgstr "Öffnen Sie den Bildschirm, um diesen Computer anzuzeigen."
 
 #: src/components/composer/command-description.ts
+#: src/pages/shell/provider-error-message.tsx
 msgid "Open Settings"
-msgstr ""
+msgstr "Einstellungen öffnen"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open System Settings"
@@ -8864,6 +8879,10 @@ msgstr ""
 msgid "This signs out every other session and keeps this one signed in."
 msgstr ""
 
+#: src/lib/failure-category-copy.ts
+msgid "This space's model policy blocks this model. Change it in Settings, under Models."
+msgstr "Die Modellrichtlinie dieses Bereichs blockiert dieses Modell. Ändere sie in den Einstellungen unter „Modelle“."
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "This subscription sign-in is not available in Ardur yet. Use a deployment credential or choose another provider."
 msgstr "Diese Abonnementanmeldung ist in Ardur noch nicht verfügbar. Verwende Zugangsdaten der Bereitstellung oder wähle einen anderen Anbieter."
@@ -9017,6 +9036,10 @@ msgstr "Erneut versuchen"
 #: src/pages/LearningInbox.tsx
 msgid "Turn on"
 msgstr ""
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Turn on Experimental"
+msgstr "Experimentell aktivieren"
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
@@ -9376,6 +9399,10 @@ msgstr "Warten auf Anmeldung…"
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Waiting for the API to come back…"
 msgstr ""
+
+#: src/lib/working-indicator.ts
+msgid "Waiting for the model"
+msgstr "Wartet auf das Modell"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts

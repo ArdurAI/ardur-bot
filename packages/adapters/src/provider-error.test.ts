@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { classifyProviderError, ProviderError } from "./provider-error.js";
+import { classifyProviderError, ProviderError, providerRetryAfterMs } from "./provider-error.js";
 
 it.each([
   ["Model gpt-6-astra is not available", "model-unavailable"],
@@ -32,3 +32,28 @@ it("bounds malformed cyclic error payloads", () => {
   error.error = error;
   expect(classifyProviderError(error)).toBe("other");
 });
+
+it.each([
+  ["a retry-after-ms header", { headers: new Headers({ "retry-after-ms": "1200" }) }, 1_200],
+  ["a retry-after header in seconds", { headers: new Headers({ "retry-after": "2.5" }) }, 2_500],
+  [
+    "a retry-after HTTP date",
+    { headers: new Headers({ "retry-after": "2030-01-01T00:00:00.500Z" }) },
+    500,
+    new Date("2030-01-01T00:00:00.000Z").getTime(),
+  ],
+  ["plain header maps", { headers: { "Retry-After": "3" } }, 3_000],
+  ["a retryAfterMs field", { retryAfterMs: 7_000 }, 7_000],
+  ["a numeric retryAfter field", { retryAfter: 4 }, 4_000],
+  ["a string retryAfter field", { retryAfter: "1.5" }, 1_500],
+  ["a nested provider error body", { error: { retryAfterMs: 900 } }, 900],
+  ["a carried ProviderError", new ProviderError("Too many requests", "rate-limit", 2_100), 2_100],
+  ["no wait the provider exposed", { status: 429, message: "Too many requests" }, undefined],
+  ["a non-numeric header", { headers: new Headers({ "retry-after": "soon" }) }, undefined],
+  ["a negative field", { retryAfterMs: -5 }, -5],
+])(
+  "reads the provider's own wait from %s",
+  (_name, error, expected, now = new Date("2030-01-01T00:00:00.000Z").getTime()) => {
+    expect(providerRetryAfterMs(error, now)).toBe(expected);
+  },
+);

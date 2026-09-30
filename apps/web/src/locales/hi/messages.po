@@ -180,6 +180,10 @@ msgstr ""
 msgid "{after} corrections in {0} exposed runs; before: {before} in {1} comparable runs"
 msgstr ""
 
+#: src/lib/failure-category-copy.ts
+msgid "{bot}'s allowed model destinations block this model. Change them in {bot}'s settings."
+msgstr "{bot} के अनुमत मॉडल गंतव्य इस मॉडल को रोकते हैं। इन्हें {bot} की सेटिंग में बदलें।"
+
 #: src/pages/LearningInsights.tsx
 msgid "{bot}'s last {count} runs on {model} failed because it cannot use tools; {suggested} used tools in your runs."
 msgstr ""
@@ -331,6 +335,10 @@ msgstr "{remaining} शेष · बॉट देख रहा है, कार
 msgid "{runtime} could not finish this run. Check the runtime or change the pin."
 msgstr "{runtime} इस रन को पूरा नहीं कर सका। रनटाइम जांचें या पिन बदलें।"
 
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} is experimental. Turn on Experimental for {bot} to use it."
+msgstr "{runtime} प्रायोगिक है। इसका उपयोग करने के लिए {bot} के लिए Experimental चालू करें।"
+
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "{runtime} loads all connected tools because deferred loading is unavailable."
 msgstr ""
@@ -338,6 +346,10 @@ msgstr ""
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} reached this run's turn limit. Narrow the task and try again."
 msgstr "{runtime} इस रन की टर्न सीमा तक पहुँच गया। काम को सीमित करें और फिर कोशिश करें।"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} runs on the host computer, not in a sandbox. Change {bot}'s computer to use it."
+msgstr "{runtime} होस्ट कंप्यूटर पर चलता है, सैंडबॉक्स में नहीं। इसका उपयोग करने के लिए {bot} का कंप्यूटर बदलें।"
 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} stopped before finishing this run."
@@ -1335,7 +1347,7 @@ msgstr ""
 msgid "Blocked"
 msgstr "अवरुद्ध"
 
-#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName) }, }) : row.reason
+#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, }, }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
 msgstr "अवरुद्ध — {0}"
@@ -3028,6 +3040,7 @@ msgid "Could not save this file. Try again."
 msgstr "यह फ़ाइल सहेजी नहीं जा सकी। पुनः प्रयास करें।"
 
 #: src/pages/customize/McpCredentialFix.tsx
+#: src/pages/Shell.tsx
 msgid "Could not save. Try again."
 msgstr ""
 
@@ -6223,8 +6236,9 @@ msgid "Open Ardur"
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/shell/provider-error-message.tsx
 msgid "Open bot settings"
-msgstr ""
+msgstr "बॉट की सेटिंग खोलें"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open chat links in the desktop app."
@@ -6287,8 +6301,9 @@ msgid "Open screen to view this computer."
 msgstr "इस कंप्यूटर को देखने के लिए स्क्रीन खोलें।"
 
 #: src/components/composer/command-description.ts
+#: src/pages/shell/provider-error-message.tsx
 msgid "Open Settings"
-msgstr ""
+msgstr "सेटिंग खोलें"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open System Settings"
@@ -8864,6 +8879,10 @@ msgstr ""
 msgid "This signs out every other session and keeps this one signed in."
 msgstr ""
 
+#: src/lib/failure-category-copy.ts
+msgid "This space's model policy blocks this model. Change it in Settings, under Models."
+msgstr "इस स्पेस की मॉडल नीति इस मॉडल को रोकती है। इसे सेटिंग में, Models के अंतर्गत बदलें।"
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "This subscription sign-in is not available in Ardur yet. Use a deployment credential or choose another provider."
 msgstr "यह सब्सक्रिप्शन साइन-इन अभी Ardur में उपलब्ध नहीं है। किसी डिप्लॉयमेंट क्रेडेंशियल का उपयोग करें या दूसरा प्रोवाइडर चुनें।"
@@ -9017,6 +9036,10 @@ msgstr "फिर से कोशिश करें"
 #: src/pages/LearningInbox.tsx
 msgid "Turn on"
 msgstr ""
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Turn on Experimental"
+msgstr "Experimental चालू करें"
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
@@ -9376,6 +9399,10 @@ msgstr "साइन-इन की प्रतीक्षा…"
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Waiting for the API to come back…"
 msgstr ""
+
+#: src/lib/working-indicator.ts
+msgid "Waiting for the model"
+msgstr "मॉडल का इंतज़ार"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts

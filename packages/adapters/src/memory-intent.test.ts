@@ -1,6 +1,7 @@
 import type { AgentUsage } from "@ardurbot/adapter-kit";
 import { RequestUsageCollector } from "@ardurbot/adapter-kit";
 import type { Actor } from "@ardurbot/contracts";
+import { failureCategoryMessage } from "@ardurbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { resolveReviewerPin } from "./learning-pin.js";
 import { proposeMemoryIntent } from "./memory-intent.js";
@@ -174,7 +175,9 @@ describe("explicit memory intents", () => {
         name: "RuntimePinError",
         problem: {
           code: "locality-denied",
-          reason: "This bot may only run locally — change the pin or the space policy",
+          // The bot's own destinations said no, so the refusal names that setting.
+          reasonId: "destinations-bot",
+          reason: failureCategoryMessage("destinations-bot", { bot: "this bot" }),
         },
       });
       expect(await resolvePin.mock.results[0]!.value).toMatchObject({
