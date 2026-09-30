@@ -1,7 +1,40 @@
+import { performance } from "node:perf_hooks";
 import { describe, expect, it } from "vitest";
 import { redactBindings, redactSensitiveText } from "./redaction.js";
 
 describe("redaction", () => {
+  it.each([
+    ["review filler", () => "x".repeat(1024 * 1024)],
+    ["email local part", () => "a.".repeat(512 * 1024)],
+    ["unterminated quoted value", () => `password="${"token='".repeat(150000)}`],
+    ["quoted key", () => `"${"password ".repeat(120000)}"`],
+    ["URL colons", () => `https://fixture:${":".repeat(1024 * 1024)}`],
+    ["JWT prefixes", () => "eyJ-".repeat(256 * 1024)],
+    ["key prefixes", () => "sk-".repeat(350000)],
+  ])("redacts a 1 MiB adversarial line in under 50 ms: %s", (_name, input) => {
+    // Compile the matchers before measuring; construction and assertions are not timed.
+    redactSensitiveText("Safe diagnostic");
+    const line = `${input()} token=fixture-credential`;
+    const start = performance.now();
+    const redacted = redactSensitiveText(line);
+    const elapsed = performance.now() - start;
+    expect(redacted).not.toContain("fixture-credential");
+    expect(elapsed).toBeLessThan(50);
+  });
+
+  it.each([
+    ["cookie='alpha \\'beta\\' gamma'", "cookie='[Redacted]'"],
+    ['API_KEY="alpha \\"beta\\" gamma"', 'API_KEY="[Redacted]"'],
+    ['{"password hint": "alpha beta gamma"}', '{"password hint": "[Redacted]"}'],
+    ["token:fixture-value", "token:[Redacted]"],
+    ['secret="unterminated token=fixture', 'secret="[Redacted]'],
+    ["https://fixture:alpha:beta@gateway.example", "https://[Redacted]@gateway.example"],
+    ["prefix-eyJfixture.payload.signature", "[Redacted]"],
+    ["ordinary.version.string", "ordinary.version.string"],
+  ])("preserves redaction semantics for %s", (input, expected) => {
+    expect(redactSensitiveText(input)).toBe(expected);
+  });
+
   it.each([
     "PASSWORD",
     "Secret",
