@@ -44,7 +44,9 @@ export async function releaseNotes(subjects, gate, signed = false) {
   const summary = [
     "# Ardur desktop preview",
     "",
-    signed ? "Signed and notarized for macOS." : "Unsigned preview. Signed builds come later.",
+    signed
+      ? "Signed and notarized for macOS."
+      : "This preview is not signed by an identified developer. On macOS the first open is refused: open System Settings > Privacy & Security, scroll to the message about Ardur, and choose Open Anyway. Or remove the download flag in Terminal: `xattr -dr com.apple.quarantine /Applications/Ardur.app`.",
     "",
     "macOS updates require downloading and installing the new build manually.",
     "",
@@ -93,7 +95,13 @@ export async function generateCask(version, assets, output, signed = false) {
     "@MACOS_CAVEATS@",
     signed
       ? ""
-      : '  caveats "Unsigned and not notarized. Approve the app in Privacy & Security. Signed builds come later."',
+      : [
+          "  caveats <<~EOS",
+          "    This preview is not signed by an identified developer.",
+          "    After the first refused open, choose System Settings > Privacy & Security > Open Anyway.",
+          "    Or install with: brew install --cask --no-quarantine ArdurAI/tap/ardur",
+          "  EOS",
+        ].join("\n"),
   );
   await mkdir(path.dirname(output), { recursive: true });
   await writeFile(output, template);

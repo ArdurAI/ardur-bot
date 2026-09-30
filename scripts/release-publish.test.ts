@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { releaseNotes } from "./desktop-release.mjs";
 
 const repo = fileURLToPath(new URL("..", import.meta.url));
 const script = path.join(repo, "scripts/release-publish.mjs");
@@ -130,9 +131,15 @@ describe("release publication retry", () => {
     const record = path.join(fixture.root, "signing.json");
     try {
       await writeFile(record, JSON.stringify({ signed }));
+      await writeFile(fixture.notes, await releaseNotes([], undefined, signed));
       const result = publish(fixture, ["--signed", String(signed), "--signing-record", record]);
       expect(result.status).toBe(0);
       expect((await calls(fixture.log)).find((call) => call[1] === "upload")).toContain(record);
+      expect(await readFile(fixture.notesCapture, "utf8")).toContain(
+        signed
+          ? "Signed and notarized for macOS."
+          : "This preview is not signed by an identified developer.",
+      );
     } finally {
       await rm(fixture.root, { recursive: true, force: true });
     }

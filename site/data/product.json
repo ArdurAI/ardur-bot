@@ -5,7 +5,7 @@
     "tagline": "Your own AI team, on your own subscriptions.",
     "summary": "Open-source desktop bots that run on your own AI subscriptions and keys.",
     "status": "alpha",
-    "statusLine": "Alpha. Unsigned desktop previews; build from source or self-host.",
+    "statusLine": "Alpha. Desktop previews; build from source or self-host.",
     "license": "Apache-2.0",
     "repoUrl": "https://github.com/ArdurAI/ardur-bot",
     "docsUrl": "https://ardur.ai/docs/features/",
@@ -457,17 +457,17 @@
           "os": "macOS",
           "steps": [
             {
-              "text": "In Finder, right-click the app, choose “Open”, then choose “Open” again."
+              "text": "For a release marked “Signed and notarized for macOS”, open the app normally."
             },
             {
-              "text": "If macOS doesn't offer “Open”, try to open the app once, then go to “System Settings”, then “Privacy & Security”, and choose “Open Anyway”."
+              "text": "Otherwise, try to open the app once. Open System Settings > Privacy & Security, scroll to the message about Ardur, and choose Open Anyway."
             },
             {
               "text": "Enter your password when asked, then choose “Open”."
             },
             {
               "text": "Or remove the download's quarantine flag in Terminal.",
-              "command": "xattr -d com.apple.quarantine \"/Applications/Ardur.app\""
+              "command": "xattr -dr com.apple.quarantine /Applications/Ardur.app"
             },
             {
               "text": "Then open the app.",
