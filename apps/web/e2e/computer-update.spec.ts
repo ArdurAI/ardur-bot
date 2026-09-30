@@ -1,6 +1,7 @@
 import type { ComputerUpdate } from "@ardurbot/contracts";
 import { expect, test } from "@playwright/test";
 import { activeBotId, captureScreenshot, completeOnboarding, signup } from "./helpers";
+import { openWorkspaceView } from "./workspace-view";
 
 test("computer maintenance shows durable background progress and failure recovery", async ({
   page,
@@ -40,7 +41,7 @@ test("computer maintenance shows durable background progress and failure recover
     return route.fulfill({ json: { json: { ok: true } } });
   });
   await page.getByTitle("Agent computer").click();
-  await page.getByTestId("side-panel").getByRole("tab", { name: "Screen", exact: true }).click();
+  await openWorkspaceView(page, "Screen");
   await expect(page.getByTestId("computer-preview")).toBeVisible();
   await page.getByTestId("computer-preview").hover();
   await page.getByTestId("computer-preview-open").click();

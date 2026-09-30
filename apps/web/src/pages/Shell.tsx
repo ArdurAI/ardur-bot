@@ -979,6 +979,7 @@ export function ShellPage({
     if (!workspaceShown || (requested && !workspaceFocusRequest?.view)) {
       if (paneReturnFocus.current?.isConnected) paneReturnFocus.current.focus();
       else document.querySelector<HTMLElement>("[data-workspace-toggle]")?.focus();
+      setWorkspaceFocusRequest(null);
       return;
     }
     const pane = document.querySelector<HTMLElement>('[data-panel="computer"]');
@@ -987,6 +988,7 @@ export function ShellPage({
       const selected = pane?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
       if (!selected) return false;
       selected.focus();
+      if (requested) setWorkspaceFocusRequest(null);
       return true;
     };
     if (focus() || !pane) return;

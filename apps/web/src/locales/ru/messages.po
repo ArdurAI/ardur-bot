@@ -1260,6 +1260,10 @@ msgstr "Назад"
 msgid "Back to capabilities"
 msgstr ""
 
+#: src/pages/workspace/WorkspacePane.tsx
+msgid "Back to chat"
+msgstr "Вернуться в чат"
+
 #: src/pages/NotFound.tsx
 msgid "Back to home"
 msgstr ""
@@ -1890,6 +1894,10 @@ msgstr "Закрыть"
 msgid "Close {0}"
 msgstr ""
 
+#: src/pages/workspace/WorkspacePane.tsx
+msgid "Close {name}"
+msgstr "Закрыть {name}"
+
 #: src/pages/shell/message-cards.tsx
 msgid "Close chart"
 msgstr "Закрыть график"
@@ -2066,7 +2074,7 @@ msgstr ""
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
-#: src/pages/workspace/WorkspacePane.tsx
+#: src/pages/workspace/view-registry.ts
 msgid "Computer"
 msgstr "Компьютер"
 
@@ -4013,6 +4021,7 @@ msgid "Existing documents keep their scope."
 msgstr ""
 
 #: src/pages/shell/message-cards.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Expand"
 msgstr "Развернуть"
 
@@ -4022,8 +4031,8 @@ msgid "Expand {0}"
 msgstr "Развернуть {0}"
 
 #: src/pages/Shell.tsx
-msgid "Expand workspace"
-msgstr "Развернуть рабочую область"
+#~ msgid "Expand workspace"
+#~ msgstr "Развернуть рабочую область"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
@@ -4136,15 +4145,15 @@ msgstr ""
 msgid "Filed by {name}"
 msgstr "Создал бот {name}"
 
-#: src/pages/Shell.tsx
+#: src/pages/workspace/view-registry.ts
 #: src/pages/workspace/WorkspaceFiles.tsx
-#: src/pages/workspace/WorkspacePane.tsx
 msgid "Files"
 msgstr "Файлы"
 
+#: src/pages/workspace/view-registry.ts
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Files are unavailable on this computer."
-msgstr ""
+msgstr "Файлы недоступны на этом компьютере."
 
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Filter"
@@ -5641,6 +5650,18 @@ msgstr ""
 msgid "Move bots first: {0}"
 msgstr "Сначала переместите этих ботов: {0}"
 
+#: src/pages/workspace/ViewControls.tsx
+msgid "Move split view down"
+msgstr "Переместить разделённую панель вниз"
+
+#: src/pages/workspace/ViewControls.tsx
+msgid "Move split view left"
+msgstr "Переместить разделённую панель влево"
+
+#: src/pages/workspace/ViewControls.tsx
+msgid "Move split view right"
+msgstr "Переместить разделённую панель вправо"
+
 #: src/pages/shell/dialogs.tsx
 msgid "Move them to your shared memory."
 msgstr "Переместите их в свою общую память."
@@ -6324,6 +6345,10 @@ msgstr ""
 msgid "Open screen to view this computer."
 msgstr "Откройте экран для просмотра этого компьютера."
 
+#: src/pages/workspace/view-registry.ts
+msgid "Open Screen to view this computer."
+msgstr "Откройте «Экран», чтобы увидеть этот компьютер."
+
 #: src/components/composer/command-description.ts
 #: src/pages/shell/provider-error-message.tsx
 msgid "Open Settings"
@@ -6334,8 +6359,9 @@ msgid "Open System Settings"
 msgstr ""
 
 #: src/pages/shell/command-palette.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Open terminal"
-msgstr ""
+msgstr "Открыть терминал"
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Open the desktop app to check this computer."
@@ -7353,6 +7379,7 @@ msgstr "Возобновить сообщения команды"
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/system/SystemPage.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Retry"
 msgstr "Повторить"
@@ -7376,8 +7403,8 @@ msgid "Return to Ardur"
 msgstr "Вернуться в Ardur"
 
 #: src/pages/Shell.tsx
-msgid "Return to conversation"
-msgstr "Вернуться к беседе"
+#~ msgid "Return to conversation"
+#~ msgstr "Вернуться к беседе"
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "Return to setup"
@@ -7489,8 +7516,7 @@ msgstr "Задача"
 #: src/pages/dashboard/panels.ts
 #: src/pages/RoutineEditor.tsx
 #: src/pages/settings/GeneralSettings.tsx
-#: src/pages/Shell.tsx
-#: src/pages/workspace/WorkspacePane.tsx
+#: src/pages/workspace/view-registry.ts
 msgid "Routines"
 msgstr "Задачи"
 
@@ -7732,15 +7758,18 @@ msgstr "Скажите «да» или «нет» или ответьте пре
 msgid "Scopes"
 msgstr ""
 
-#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
-#: src/pages/workspace/WorkspacePane.tsx
+#: src/pages/workspace/view-registry.ts
 msgid "Screen"
 msgstr "Экран"
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Screen and terminal: Not available on this computer"
 msgstr ""
+
+#: src/pages/workspace/view-registry.ts
+msgid "Screen is unavailable on this computer."
+msgstr "Экран недоступен на этом компьютере."
 
 #: src/pages/system/SystemPage.tsx
 msgid "Screen recording"
@@ -8518,8 +8547,7 @@ msgid "Task contracts"
 msgstr ""
 
 #: src/pages/settings/GeneralSettings.tsx
-#: src/pages/Shell.tsx
-#: src/pages/workspace/WorkspacePane.tsx
+#: src/pages/workspace/view-registry.ts
 msgid "Tasks"
 msgstr "Задачи"
 
@@ -8568,12 +8596,11 @@ msgid "Tell your bot what to change or remove"
 msgstr ""
 
 #: src/pages/ide/IdePage.tsx
-#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
-#: src/pages/workspace/WorkspacePane.tsx
+#: src/pages/workspace/view-registry.ts
 msgid "Terminal"
-msgstr ""
+msgstr "Терминал"
 
 #: src/pages/shell/computer-terminal.tsx
 msgid "Terminal could not open; try again"
@@ -8582,6 +8609,10 @@ msgstr ""
 #: src/pages/workspace/terminal-controller.ts
 msgid "Terminal is not available on this computer"
 msgstr ""
+
+#: src/pages/workspace/view-registry.ts
+msgid "Terminal is unavailable on this computer."
+msgstr "Терминал недоступен на этом компьютере."
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/components/OllamaSettings.tsx
@@ -9376,6 +9407,11 @@ msgstr ""
 #: src/pages/customize/McpDiagnostics.tsx
 msgid "View logs"
 msgstr ""
+
+#: src/pages/workspace/ViewControls.tsx
+#: src/pages/workspace/WorkspacePane.tsx
+msgid "Views"
+msgstr "Представления"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Visuals"

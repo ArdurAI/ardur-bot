@@ -6,6 +6,7 @@ import {
   openNewBot,
   signup,
 } from "./helpers";
+import { openWorkspaceView } from "./workspace-view";
 
 test("bot creation, editing, and deletion persist", async ({ page }, testInfo) => {
   const stamp = Date.now();
@@ -120,7 +121,7 @@ test("bot creation, editing, and deletion persist", async ({ page }, testInfo) =
   await page.getByRole("button", { name: "Show computer" }).click();
   const sidePanel = page.getByTestId("side-panel");
   await expect(sidePanel).toHaveAttribute("data-panel", "computer");
-  await sidePanel.getByRole("tab", { name: "Screen", exact: true }).click();
+  await openWorkspaceView(page, "Screen");
   await expect(page.getByRole("button", { name: "Show settings" })).toBeVisible();
   // Overlay may flash during boot or never appear (already ready/asleep/stopped). Assert panel
   // chrome, then wait until any overlay has cleared — avoid Locator.or() strict-mode multi-hits.

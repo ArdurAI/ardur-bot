@@ -115,7 +115,15 @@ function SessionApp() {
   const user = session.data?.user;
   const content = (
     <div className="h-full" data-ardur-app-state="ready">
-      <Suspense fallback={<div className="h-full bg-background" />}>
+      <Suspense
+        fallback={
+          user && window.location.pathname.startsWith("/app") ? (
+            <ShellSkeleton />
+          ) : (
+            <div className="h-full bg-background" />
+          )
+        }
+      >
         <Routes>
           <Route
             path="/desktop/quick-access"
