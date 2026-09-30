@@ -45,6 +45,7 @@
       "!node_modules/@embedded-postgres/**"
     ],
     "beforePack": "./scripts/stage-embedded-postgres.mjs",
+    "afterSign": "./scripts/sign-mac-preview.mjs",
     "extraResources": [
       {
         "from": "../web/dist",
@@ -121,7 +122,8 @@
         "zip"
       ],
       "notarize": false,
-      "identity": null
+      "identity": "-",
+      "hardenedRuntime": false
     },
     "win": {
       "icon": "assets/icon.ico",
