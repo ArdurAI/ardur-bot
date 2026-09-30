@@ -25,6 +25,7 @@ import {
   reconcileRefreshedThread,
   reduceComputerStatus,
   reduceThreadSnapshot,
+  refusalRunBotName,
   threadRunError,
   userHoldsComputerControl,
 } from "./thread-events.js";
@@ -1013,6 +1014,23 @@ describe("thread event reduction", () => {
     expect(threadRunError(completed)).toBeNull();
     expect(blank?.run).toBeNull();
     expect(threadRunError(blank)).toBeNull();
+  });
+
+  it("names the refusing run's bot from the list, the snapshot's members, or no one", () => {
+    const failed = { ...threadRun("run-a"), status: "failed" as const };
+    const snapshotWith = (botId: string): Pick<ThreadSnapshot, "run"> => ({
+      run: { ...failed, botId },
+    });
+    const bots = [{ id: "bot-1", name: "Reviewer" }];
+    const members = [{ botId: "bot-2", name: "Departed", color: "slate" }];
+    expect(refusalRunBotName(snapshotWith("bot-1"), bots, members)).toBe("Reviewer");
+    // A bot the list no longer carries is still named from the snapshot's members.
+    expect(refusalRunBotName(snapshotWith("bot-2"), bots, members)).toBe("Departed");
+    // Gone from both: no name to fill, so the banner shows the recorded sentence — the
+    // thread's own name (a group's, say) is never used for the bot's sentence.
+    expect(refusalRunBotName(snapshotWith("bot-gone"), bots, members)).toBeUndefined();
+    expect(refusalRunBotName({ run: null }, bots, members)).toBeUndefined();
+    expect(refusalRunBotName(null, bots, members)).toBeUndefined();
   });
 
   it("applies the durable waiting-input run transition without a refresh", () => {

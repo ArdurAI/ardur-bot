@@ -214,6 +214,7 @@ import {
   reconcileRefreshedThread,
   reduceComputerStatus,
   reduceThreadSnapshot,
+  refusalRunBotName,
   threadRunError,
   userHoldsComputerControl,
 } from "../lib/thread-events";
@@ -3734,10 +3735,7 @@ export function ShellPage({
             key={inGroup ? `group:${groupId}` : `bot:${active?.id}`}
             comparisonBotId={!inGroup && bots.length >= 2 ? active?.id : undefined}
             activeName={inGroup ? (activeGroup?.name ?? activeSnapshot?.groupName) : active?.name}
-            refusalBotName={
-              resolveTranscriptBot(activeSnapshot?.run?.botId ?? active?.id ?? "")?.name ??
-              active?.name
-            }
+            refusalBotName={refusalRunBotName(activeSnapshot, bots, transcriptMembers)}
             running={composerRunning}
             disabled={Boolean(recordingSkill)}
             pendingAttachments={activePendingAttachments}
@@ -3753,7 +3751,12 @@ export function ShellPage({
             onEnableExperimental={() => {
               const botId = activeSnapshot?.run?.botId ?? active?.id;
               const bot = botId ? bots.find((candidate) => candidate.id === botId) : undefined;
-              if (!botId || !bot) return;
+              if (!botId || !bot) {
+                // The refusing bot is gone, so the save has nothing to land on; say so
+                // instead of dropping the click silently.
+                setSendError(t`Could not save. Try again.`);
+                return;
+              }
               void (async () => {
                 try {
                   await rpc.bots.update({ botId, runtimeExperimental: true });
@@ -5902,7 +5905,7 @@ export const Composer = memo(function Composer({
             providerErrorKind={providerErrorKind}
             runtimeProblem={runtimeProblem}
             catalog={modelCatalog}
-            botName={refusalBotName ?? activeName}
+            botName={refusalBotName}
             onConnect={onConnectPin}
             onChangeModel={onChangeModel}
             onEnableExperimental={onEnableExperimental}

@@ -1,5 +1,6 @@
 import type {
   ComputerStatus,
+  GroupMember,
   ProductEvent,
   Run,
   RunStatus,
@@ -133,6 +134,25 @@ export function threadRunError(
   const run = snapshot?.run;
   if (run?.status !== "failed" || dismissedRunIds?.has(run.id)) return null;
   return run.error ?? null;
+}
+
+/**
+ * The refusing run's bot name for the refusal banner: the bot list first, then the
+ * snapshot's members. When the bot is in neither there is no name to fill — the banner
+ * shows the recorded sentence — and the thread's own name (a group's, say) is never
+ * used, because the sentence names the bot whose run refused, not the thread it ran in.
+ */
+export function refusalRunBotName(
+  snapshot: Pick<ThreadSnapshot, "run"> | null,
+  bots: ReadonlyArray<{ id: string; name: string }>,
+  members: ReadonlyArray<GroupMember> | undefined,
+): string | undefined {
+  const botId = snapshot?.run?.botId;
+  if (!botId) return undefined;
+  return (
+    bots.find((bot) => bot.id === botId)?.name ??
+    members?.find((member) => member.botId === botId)?.name
+  );
 }
 
 export function clearActiveThreadRuns(snapshot: ThreadSnapshot): ThreadSnapshot {
