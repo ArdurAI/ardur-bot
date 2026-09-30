@@ -160,7 +160,7 @@ import {
 } from "../components/composer/folders";
 import { useComposerCommands } from "../components/composer/use-composer-commands";
 import type { FeedbackEdit } from "../components/MessageFeedback";
-import { MessageFeedback } from "../components/MessageFeedback";
+
 import { MessageHoverMetadata } from "../components/MessageHoverMetadata";
 import { PeerMessageReceipt } from "../components/PeerMessageReceipt";
 import { SkillDraftCard } from "../components/teach/SkillDraftCard";
@@ -302,6 +302,10 @@ const CreateBotForm = lazy(() =>
 
 const TeamBoard = lazy(() =>
   import("./TeamBoard").then((module) => ({ default: module.TeamBoard })),
+);
+const RunEvidence = lazy(() => import("../components/RunEvidence"));
+const MessageFeedback = lazy(() =>
+  import("../components/MessageFeedback").then((module) => ({ default: module.MessageFeedback })),
 );
 
 const ActivityList = lazy(() =>
@@ -3579,7 +3583,7 @@ export function ShellPage({
         className={`${team || board || dashboard ? "hidden" : "flex"} min-w-0 flex-1 flex-col bg-background`}
       >
         <div className="app-drag flex items-center justify-between border-b border-sidebar-border px-3 py-[17px] md:px-[22px]">
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             {/* Collapsed bots sidebar: this header is the leading edge for window chrome. */}
             {botsSidebarCollapsed && desktopBridge() ? <WindowChrome /> : null}
             <button
@@ -3610,7 +3614,7 @@ export function ShellPage({
                 setModelFocusRequest(0);
                 setPanel(inGroup ? "group-settings" : "settings");
               }}
-              className="app-no-drag flex min-w-0 items-center gap-3"
+              className="app-no-drag flex max-w-48 shrink-0 items-center gap-3"
             >
               {inGroup ? (
                 <GroupAvatar
@@ -3627,7 +3631,10 @@ export function ShellPage({
                 />
               ) : null}
               <span className="min-w-0">
-                <span className="block truncate text-[16px] font-medium text-foreground" dir="auto">
+                <span
+                  className="block break-words text-[16px] font-medium text-foreground"
+                  dir="auto"
+                >
                   {inGroup
                     ? (activeGroup?.name ?? activeSnapshot?.groupName ?? t`Group`)
                     : (active?.name ?? t`Select a bot`)}
@@ -3653,7 +3660,7 @@ export function ShellPage({
             ) : null}
             <RunContext run={activeSnapshot?.contextRun ?? activeSnapshot?.run} />
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1">
             {(inGroup ? activeGroup : active) ? (
               <ThreadSettingsButton
                 group={inGroup}
@@ -5445,6 +5452,16 @@ const Transcript = memo(function Transcript({
                   </div>
                 </div>
               )}
+              {message.role === "bot" &&
+              message.runId &&
+              message ===
+                reactionView.visibleMessages.findLast(
+                  (entry) => entry.role === "bot" && entry.runId === message.runId,
+                ) ? (
+                <Suspense fallback={null}>
+                  <RunEvidence runId={message.runId} live={message.id.startsWith("progress:")} />
+                </Suspense>
+              ) : null}
               {!peerReceipt && messageReactions ? (
                 <div
                   data-testid="message-reactions"
@@ -6436,7 +6453,9 @@ function MessageHoverActions({
     <MessageHoverMetadata pinned={moreOpen || reactionsOpen} side={side}>
       <div data-testid="message-hover-actions" className="flex items-center gap-0.5">
         {message.role === "bot" && message.runId && canReactToThreadMessage(message) ? (
-          <MessageFeedback onFeedback={(reaction, edit) => onReact(message, reaction, edit)} />
+          <Suspense fallback={null}>
+            <MessageFeedback onFeedback={(reaction, edit) => onReact(message, reaction, edit)} />
+          </Suspense>
         ) : null}
         {canReactToThreadMessage(message) ? (
           <Popover open={reactionsOpen} onOpenChange={setReactionsOpen}>
@@ -6504,6 +6523,11 @@ function MessageHoverActions({
               <Copy size={14} strokeWidth={1.7} />
               <Trans>Copy</Trans>
             </DropdownMenuItem>
+            {moreOpen && message.role === "bot" && message.runId ? (
+              <Suspense fallback={null}>
+                <RunEvidence runId={message.runId} action="download" />
+              </Suspense>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

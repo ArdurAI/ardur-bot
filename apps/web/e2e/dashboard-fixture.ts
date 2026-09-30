@@ -303,7 +303,14 @@ export function dashboardFixture(botCount = 1) {
           botNames: {},
         },
         "learning/summary": { pendingCount: 0, appliedThisWeek: 0 },
-        "features/list": [{ feature: "governance", state: "unavailable" }],
+        "features/list": [{ feature: "governance", state: "disabled", canManage: false }],
+        "evidence/runSummary": {
+          sessionId: "run",
+          state: "off",
+          sealed: false,
+          gapCount: 0,
+          failureCodes: [],
+        },
         "threads/get": snapshot(),
         "threads/head": snapshot(),
         "runs/list": {

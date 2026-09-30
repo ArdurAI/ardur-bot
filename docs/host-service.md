@@ -192,6 +192,43 @@ sequenceDiagram
   a container home store, and a host checkpoint does not overwrite that store with
   an empty export. Registered folders are not deleted by computer destruction.
 
+## What Ardur logs about the processes it starts
+
+Every child process the host runtime spawns (Hermes, Claude Code, Codex, the
+Antigravity model catalog probe, host environment probes, fleet terminals and the
+Hermes installer) has its stderr read line by line by one capture helper,
+`captureChildOutput` in `packages/host-runtime/src/child-output.ts`; stdout is
+captured too where the protocol does not already own it.
+
+- By default, child output never reaches a log sink, even with `LOG_LEVEL=debug`.
+  It stays in private bounded memory until the process ends. Failure logs contain
+  only structured facts: process kind, pid, run id, exit code or signal, phase,
+  duration, byte and line counts, and whether output was produced. Failure causes
+  never include output tails.
+- Detailed process logging requires `ARDUR_DETAILED_PROCESS_LOGS=1` and a debug
+  logger. A Settings switch comes later. Known credentials are redacted on each
+  stream before line framing, including credentials split across chunks or
+  physical lines. Shared text redaction also covers sensitive assignments,
+  scheme-prefixed credentials, credentialed URLs, GitHub tokens (including
+  `github_pat_`), AWS credentials, JWTs, `sk-` and `xai-` keys, and emails.
+- Detailed mode is best-effort, not a guarantee that arbitrary text contains no
+  secrets: unknown credential formats and transformations may evade recognition.
+  Leave it off for private workloads. Message and file contents never appear at
+  info or above, even with detailed mode enabled.
+- Tails stay within 64 KiB and lines within 8 KiB. Oversized lines are replaced
+  entirely by a size-limit marker. A credential or carry window too large to
+  redact safely suppresses the rest of that stream. The fallback logger's bounded
+  debug queue drops excess lines under backpressure without blocking child reads;
+  error records are never evicted, and recovery reports the dropped debug count.
+
+Three sites keep ignoring a stream on purpose, each with a reason in source and
+in the guard test's allow list: the two Windows `taskkill` helpers own no
+output, and the Hermes installer's stdin is ignored because its commands read
+nothing while both output pipes are captured. The guard test
+(`child-output.guard.test.ts`) scans the package for `stderr.resume()` and
+`stdio: "ignore"`, including ignored streams anywhere in a stdio array, and
+fails on any new site outside the helper and the allow list.
+
 ## Owner environment and tool inventory
 
 `packages/contracts/src/host-environment.js` defines one OS-variable allowlist for

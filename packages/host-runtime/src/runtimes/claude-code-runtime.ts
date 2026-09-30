@@ -10,7 +10,10 @@ import type {
 import { RequestUsageCollector, usageEvent } from "@ardurbot/adapter-kit";
 import type { RuntimeAvailability, RuntimePin } from "@ardurbot/contracts/runtime-pins";
 import { RuntimePinError, runtimePinProblem } from "@ardurbot/contracts/runtime-pins";
+import { captureChildOutput, childProcessLogger } from "../child-output.js";
+import { nativeEnvironment } from "../host-environment.js";
 import { guardrailConfigFromEnv } from "../host-guardrails.js";
+import { environmentSecrets, mcpConfigSecrets } from "../mcp-diagnostics.js";
 import { startArdurMcpServer } from "./ardur-mcp-server.js";
 import { createArdurToolBridge } from "./claude-mcp-bridge.js";
 import {
@@ -520,11 +523,17 @@ export class ClaudeCodeRuntime implements AgentRuntime {
       );
       this.running.set(request.runId, child);
       queue.push(parser.startUsage());
-      child.stderr.resume();
+      const capturedStderr = captureChildOutput(child, {
+        kind: "claude-code",
+        runId: request.runId,
+        secrets: [...mcpConfigSecrets(mcp.config), ...environmentSecrets(nativeEnvironment())],
+        logger: childProcessLogger(),
+      });
       const exited = new Promise<number | null>((resolve) => {
         child!.once("close", resolve);
         child!.once("error", () => resolve(-1));
       });
+      void exited.then(() => capturedStderr.close());
       child.once("error", () => {
         for (const event of parser.finishUsage("failed")) queue.push(event);
         queue.end(

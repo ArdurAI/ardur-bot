@@ -10,12 +10,18 @@ import { HOST_TOOLS } from "@ardurbot/contracts/host-bridge";
 import { filterHostEnvironment } from "@ardurbot/contracts/host-environment";
 import { stripCommandControls } from "@ardurbot/core/command-limits";
 import {
+  type CapturedChildOutput,
+  captureChildOutput,
+  childProcessLogger,
+} from "./child-output.js";
+import {
   guardrailConfigFromEnv,
   type HostGuardrailConfig,
   resolveGuardrailPathsSync,
   seatbeltArgv,
   seatbeltProfile,
 } from "./host-guardrails.js";
+import { argumentSecrets, environmentSecrets } from "./mcp-diagnostics.js";
 
 export { filterHostEnvironment } from "@ardurbot/contracts/host-environment";
 
@@ -146,6 +152,8 @@ export function hostProbe(
     child.once("error", () => finish(null, "not started"));
     child.once("close", (code) => {
       if (captureOutput && !settled) output += decoder.end();
+
+      captured?.close();
       finish(code);
     });
     child.stdin.on("error", () => stop("not started"));
@@ -156,8 +164,16 @@ export function hostProbe(
       else output += decoder.write(chunk);
     };
     child.stdout.on("data", consume);
-    if (captureStderr) child.stderr.on("data", consume);
-    else child.stderr.resume();
+    let captured: CapturedChildOutput | undefined;
+    if (captureStderr) {
+      child.stderr.on("data", consume);
+    } else {
+      captured = captureChildOutput(child, {
+        kind: "host-probe",
+        secrets: [...argumentSecrets(commandArgs), ...environmentSecrets(env)],
+        logger: childProcessLogger(),
+      });
+    }
     timer = setTimeout(() => stop("timeout"), timeoutMs);
     child.stdin.end();
   });

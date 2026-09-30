@@ -1,13 +1,24 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { COMPUTER_BOUNDARY_MESSAGES, COMPUTER_KINDS } from "@ardurbot/contracts";
+import { COMPUTER_BOUNDARY_MESSAGES, COMPUTER_KINDS, COMPUTER_STATES } from "@ardurbot/contracts";
 import { formatter } from "@lingui/format-po";
 import { expect, it } from "vitest";
 
+// Only strings the web renders; phone-only wording ("Sharing", "Change location on desktop.",
+// "Set up a container on desktop, then try again.") is required by the phone's catalog test.
 const messages = [
   ...new Set([
     ...Object.values(COMPUTER_KINDS).map((kind) => kind.location),
     ...Object.values(COMPUTER_BOUNDARY_MESSAGES),
+    ...Object.values(COMPUTER_STATES),
+    "Move to a container",
+    "Keep current location",
+    "The last update was interrupted.",
+    "Release computer",
+    "Release interrupted computer?",
+    "Make sure nothing is still running on this computer.",
+    "Nothing is still running",
+    "Could not complete action",
     "Where this bot runs",
     "Only this bot",
     "Shared with team",
@@ -19,9 +30,6 @@ const messages = [
     "Set up computer",
     "Starting",
     "Could not start",
-    "Sharing",
-    "Change location on desktop.",
-    "Set up a container on desktop, then try again.",
     "Stopped",
     "Running",
     "Sleeping",
