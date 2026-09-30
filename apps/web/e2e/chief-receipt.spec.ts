@@ -42,6 +42,10 @@ test("chief receipts paint from accepted sends and survive reload without duplic
     const times: number[] = [];
     for (let sample = 0; sample < 10; sample++) {
       await composer.fill(fixture.text);
+      // A visible receipt can precede completion of the previous send's snapshot refresh.
+      await expect(
+        page.getByTestId("composer-bar").getByRole("button", { name: "Send", exact: true }),
+      ).toBeEnabled();
       const start = await page.evaluate(() => performance.now());
       const response = page.waitForResponse((response) =>
         response.url().endsWith("/rpc/threads/send"),
