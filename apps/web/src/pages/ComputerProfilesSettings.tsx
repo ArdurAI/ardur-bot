@@ -205,7 +205,7 @@ export function ComputerProfile({
       setPending(false);
     }
   }
-  const label = engineLabel(engine);
+  const label = engineLabel(status.kind);
   return (
     <section className="space-y-3 rounded-xl border border-border p-4">
       <h4>{status.mode === "team" ? t`Team Computer` : name}</h4>

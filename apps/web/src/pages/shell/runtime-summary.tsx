@@ -1,5 +1,5 @@
 import type { ComputerConnectionSettings, ComputerMode, ComputerStatus } from "@ardurbot/contracts";
-import { computerKindFacts, computerRuntimeSummary } from "@ardurbot/contracts";
+import { COMPUTER_STATES, computerKindFacts, computerRuntimeSummary } from "@ardurbot/contracts";
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { lazy, Suspense, useEffect, useState } from "react";
@@ -53,11 +53,12 @@ export function RuntimeSummary({
   const summary = computerRuntimeSummary(status, mode);
   if (!summary) return <RuntimeBoundary kind={status.kind} />;
   const states = {
-    stopped: t`Stopped`,
-    booting: t`Starting`,
-    running: t`Running`,
-    suspended: t`Sleeping`,
-    error: t`Could not start`,
+    [COMPUTER_STATES.stopped]: t`Stopped`,
+    [COMPUTER_STATES.booting]: t`Starting`,
+    [COMPUTER_STATES.running]: t`Running`,
+    [COMPUTER_STATES.suspending]: t`Paused for an update`,
+    [COMPUTER_STATES.suspended]: t`Sleeping`,
+    [COMPUTER_STATES.error]: t`Could not start`,
   };
   return (
     <div data-testid="runtime-summary" className="space-y-2 text-sm">
@@ -66,7 +67,7 @@ export function RuntimeSummary({
       {summary.sharingWarning ? (
         <p className="text-muted-foreground">{t`Bots share files and installed tools`}</p>
       ) : null}
-      <p className="text-muted-foreground">{states[summary.state]}</p>
+      <p className="text-muted-foreground">{states[summary.stateLabel]}</p>
     </div>
   );
 }

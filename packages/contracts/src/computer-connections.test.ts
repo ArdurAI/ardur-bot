@@ -1,15 +1,24 @@
 import { describe, expect, it } from "vitest";
 import {
   COMPUTER_KINDS,
+  COMPUTER_STATES,
   computerCapabilities,
   computerKindFacts,
   computerRuntimeSummary,
   recommendedContainer,
 } from "./computer-connections.js";
-import { CreateBotInput } from "./domain.js";
+import { ComputerStatusSchema, CreateBotInput } from "./domain.js";
 import { SandboxKind } from "./ids.js";
 
 describe("computer execution facts", () => {
+  it("covers every computer state with an honest phrase", () => {
+    expect(Object.keys(COMPUTER_STATES).sort()).toEqual(
+      [...ComputerStatusSchema.shape.state.options].sort(),
+    );
+    expect(
+      computerRuntimeSummary({ kind: "desktop", mode: "team", state: "suspending" }),
+    ).toMatchObject({ location: "This computer", stateLabel: "Paused for an update" });
+  });
   it("covers every supported kind in one table, without offering a VM", () => {
     expect(Object.keys(COMPUTER_KINDS).sort()).toEqual([...SandboxKind.options].sort());
     expect(computerKindFacts("vm")).toBeNull();

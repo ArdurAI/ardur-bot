@@ -365,7 +365,7 @@ it("moves a connectionless Docker computer to an E2B deployment default and name
     select.value = select.options[1]!.value;
     select.dispatchEvent(new Event("change", { bubbles: true }));
   });
-  expect(element.textContent).toContain("Engine: E2B");
+  expect(element.textContent).toContain("Engine: Docker");
   // Only the Docker engine it runs on was checked; E2B is named, not probed.
   expect(api.engine).toHaveBeenCalledExactlyOnceWith({ connectionId: null });
   await act(async () => button("Apply").click());
@@ -738,6 +738,37 @@ it("shows the selected remote-account boundary before Apply, without saving", as
     });
     expect(element.textContent).toContain("Uses that account's permissions.");
     expect(element.textContent).toContain("Bots share files and installed tools");
+    expect(api.configure).not.toHaveBeenCalled();
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+it("never describes a desktop computer as Docker when a container is selected", async () => {
+  const element = document.createElement("div");
+  const root = createRoot(element);
+  try {
+    await act(async () =>
+      root.render(
+        <ComputerProfile
+          botId="bot"
+          name="Builder"
+          status={{ ...status, kind: "desktop" }}
+          connections={[
+            { id: "container", name: "Container engine", settings: { engine: "docker" } as never },
+          ]}
+          deploymentDefault={null}
+          onChanged={async () => {}}
+        />,
+      ),
+    );
+    const select = element.querySelector<HTMLSelectElement>('[aria-label="Connection"]')!;
+    await act(async () => {
+      select.value = "container";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(element.textContent).not.toContain("Engine: Docker");
+    expect(element.textContent).toContain("Engine: This computer");
     expect(api.configure).not.toHaveBeenCalled();
   } finally {
     await act(async () => root.unmount());

@@ -48,13 +48,7 @@ export function RuntimeSummary({
   const tokens = useMobileTokens();
   const facts = computerRuntimeSummary(status, mode);
   if (!facts) return <RuntimeBoundary kind={status.kind} />;
-  const states = {
-    stopped: "Stopped",
-    booting: "Starting",
-    running: "Running",
-    suspended: "Sleeping",
-    error: "Could not start",
-  };
+
   return (
     <View testID="runtime-summary" style={styles.lines}>
       <RuntimeBoundary kind={status.kind} locationName={locationName} />
@@ -62,7 +56,7 @@ export function RuntimeSummary({
       {facts.sharingWarning ? (
         <Text style={{ color: tokens.mutedForeground }}>{t(facts.sharingWarning)}</Text>
       ) : null}
-      <Text style={{ color: tokens.mutedForeground }}>{t(states[facts.state])}</Text>
+      <Text style={{ color: tokens.mutedForeground }}>{t(facts.stateLabel)}</Text>
     </View>
   );
 }

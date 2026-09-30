@@ -918,7 +918,7 @@ export const ComputerStatusSchema = z.object({
   botId: Id,
   mode: ComputerModeSchema,
   kind: SandboxKind,
-  state: z.enum(["stopped", "booting", "running", "suspended", "error"]),
+  state: z.enum(["stopped", "booting", "running", "suspending", "suspended", "error"]),
   imagePulling: z.boolean().optional(),
   imagePullPercent: z.number().int().min(0).max(100).nullable().optional(),
   controlHolder: z.enum(["bot", "user", "none"]),
