@@ -252,7 +252,10 @@ vi.mock("../lib/rpc", () => {
       notifications: { activity: record("notifications.activity") },
       voice: {
         status: record("voice.status"),
-        voices: record("voice.voices"),
+        voices: async () => {
+          state.calls.push("voice.voices");
+          return [];
+        },
         catalog: record("voice.catalog"),
       },
       messaging: { status: record("messaging.status") },
@@ -271,7 +274,16 @@ vi.mock("../lib/rpc", () => {
         sandboxProvider: "fake",
         avatarStyle: "robot",
       }),
-      models: { list: record("models.list"), credentials: record("models.credentials") },
+      models: {
+        list: async () => {
+          state.calls.push("models.list");
+          return [];
+        },
+        credentials: async () => {
+          state.calls.push("models.credentials");
+          return [];
+        },
+      },
       runs: { list: record("runs.list") },
       team: { board: record("team.board") },
       search: { query: record("search.query") },
@@ -285,6 +297,7 @@ vi.mock("../lib/rpc", () => {
         close: record("terminal.close"),
       },
       goals: { get: record("goals.get") },
+      delegations: { policy: async () => ({ mode: "any" }) },
       onboarding: { promptFocus: record("onboarding.promptFocus") },
       agentSkills: { list: async () => [] },
       connections: {
@@ -314,6 +327,8 @@ vi.mock("../lib/auth", () => ({
   },
 }));
 vi.mock("../lib/performance", () => ({ markOnce: vi.fn(), markAfterPaint: vi.fn() }));
+vi.mock("./ScratchpadSection", () => ({ ScratchpadSection: () => null }));
+vi.mock("./KnowledgeSection", () => ({ KnowledgeSection: () => null }));
 vi.mock("./shell/terminal-session", () => ({
   default: () => {
     useEffect(() => {
@@ -561,6 +576,38 @@ it("keeps Show settings in the workspace header and Show computer returns to the
   await until(() => pane()?.getAttribute("data-panel") === "computer");
   expect(paneTab("Screen")?.getAttribute("aria-selected")).toBe("true");
 });
+
+it.each([false, true])(
+  "preserves context-menu settings intent across a bot layout change (restored workspace: %s)",
+  async (visible) => {
+    savedLayouts.set(
+      'ardurbot:workspace-layout:["user-1","space-1","bot-2"]',
+      JSON.stringify({
+        version: 1,
+        open: [{ type: "routines" }],
+        active: "routines",
+        visible,
+        expanded: false,
+        position: "right",
+        width: 480,
+        height: 280,
+      }),
+    );
+    await renderShell("/app/bot-1");
+    const target = host.querySelector('[data-roster-bot-id="bot-2"]')!;
+    target.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+    await until(() => document.querySelector('[role="menuitem"]') !== null);
+    const settings = [...document.querySelectorAll('[role="menuitem"]')].find(
+      (item) => item.textContent?.trim() === "Bot settings",
+    );
+    expect(settings).toBeDefined();
+    click(settings);
+    await until(() => pane()?.getAttribute("data-panel") === "settings");
+    await tick(200);
+    expect(pane()?.getAttribute("data-panel")).toBe("settings");
+    expect(pane()?.querySelector("input")?.value).toBe("Plain");
+  },
+);
 
 it("offers Tasks and Routines tabs on first open without overriding remembered closures", async () => {
   await renderShell("/app/bot-1");

@@ -958,7 +958,8 @@ export function ShellPage({
   const [workspacePanelKey, setWorkspacePanelKey] = useState(workspaceKey);
   if (workspacePanelKey !== workspaceKey) {
     setWorkspacePanelKey(workspaceKey);
-    setPanelUnchecked(workspaceLayout.visible ? "computer" : null);
+    if (panel === null || panel === "computer")
+      setPanelUnchecked(workspaceLayout.visible ? "computer" : null);
     setTerminalRequestedKey(null);
   }
   const openWorkspace = (tab: string) => {
