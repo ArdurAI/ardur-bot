@@ -3,7 +3,8 @@
 macOS previews have two paths: **Open Anyway** without an identified developer, or a signed and
 notarized release when credentials exist. Windows previews remain unsigned.
 Work lands on `dev`; `main` moves only after a human verifies a build. CI quality
-and performance checks are advisory. Packaging must still finish before an artifact can be published.
+and performance checks are advisory. Packaging and installed-app acceptance must finish before
+an artifact can be published.
 
 ## Development phone pairing
 
@@ -190,6 +191,72 @@ so an installed build reads the same setup, database, and files after upgrading.
 NSIS installation, or deb dependencies. The desktop Playwright suite belongs in CI, where it
 runs in a virtual display.
 
+## Install acceptance
+
+`install-acceptance` downloads each build on a fresh runner before publication. Required entries
+are macOS arm64 and x64, Linux x64, and Windows x64. Linux arm64 retains the build matrix's
+optional status: if it fails installation, its installers and update feed are omitted, not published.
+An evidence waiver cannot bypass installation checks.
+
+- **macOS (`macos-15`)**: quarantine a copy of the DMG as a Safari download, mount it, copy the
+  app into temporary Applications, and verify the quarantine attribute. The bundle must pass
+  deep, strict codesign verification. Gatekeeper must accept a signed, notarized build; an
+  ad-hoc preview must return `rejected` with `source=no usable signature`, never damaged or
+  missing resources. The signing decision comes from the build's `install-build-mac-<arch>.json`.
+  Remove quarantine to model Open Anyway, then open the installed bundle. Render the shipped
+  cask template with the local DMG URL and real checksum, install it into temporary Applications,
+  run the Homebrew `ardur` wrapper, and uninstall. The wrapper executes the bundle's real path
+  rather than a symlink, so Electron can locate its helpers. No real tap is changed.
+  The x64 lane uses Rosetta if its runner is Apple silicon; this is not native Intel hardware evidence.
+- **Linux (`ubuntu-24.04`, native ARM runner when available)**: each format runs in its own
+  fresh `ubuntu:24.04` container. Install the deb with apt, including dependencies; install the
+  AppImage as an executable. Launch as a non-root user under Xvfb and a session bus. Probe user
+  namespaces: use `--no-sandbox` only if the container denies them and record that reason.
+  Use `--appimage-extract-and-run` only when FUSE is unavailable, also recording why.
+- **Windows (`windows-2022`)**: silently install NSIS with `/S /D=<temporary directory>`;
+  `/D=` is last and unquoted, including when the path has spaces. Open the installed `Ardur.exe`,
+  reject crashes/nonzero exits or blocking dialogs, and run the generated uninstaller silently.
+  Existing Ardur processes or registered installations cause a hand-run check to refuse instead
+  of replacing them. Windows desktop acceptance runs on the fresh runner, not in a container.
+
+Every launch sets `ARDUR_INSTALL_SMOKE=1`, disables update discovery and uses a fresh
+`ARDURBOT_USER_DATA_DIR`. Only this opt-in path starts the app-managed local stack, requires its
+real health response and a loaded main window, captures a screenshot, stops its owned services,
+and prints `ARDUR_INSTALL_SMOKE_PASS` before quitting. A zero exit without that marker does not
+pass. The app watchdog is 150 seconds; the script's launch bound is 180 seconds. This is stricter
+than merely surviving 15 seconds. Crash lines in either output stream fail acceptance.
+Normal startup is unchanged; no hosted service or model credentials are needed.
+
+Successful jobs upload hash-bound `install-approved-*` receipts. Before performance gating,
+the publication assembly checks their commit, version, signing decision and exact installer
+hashes. Required missing or mismatched receipts fail closed. Optional missing ARM receipts
+remove that build's files. The publication artifact retains `install-acceptance.json`; each
+platform separately uploads stdout, stderr, PASS/FAIL summaries and any screenshots as
+`install-acceptance-<platform>-<arch>`.
+
+From this repository checkout, against files already downloaded:
+
+```sh
+bash scripts/release/install-acceptance-mac.sh /path/to/ardur-<version>-mac-arm64.dmg
+bash scripts/release/install-acceptance-linux.sh /path/to/ardur-<version>-linux-amd64.deb
+bash scripts/release/install-acceptance-linux.sh /path/to/ardur-<version>-linux-x86_64.AppImage
+pwsh -File scripts/release/install-acceptance-win.ps1 C:\path\to\ardur-<version>-win-x64.exe
+```
+
+The Mac script needs Python 3, Homebrew, and the shipped cask template in this checkout. It
+refuses an existing Homebrew Ardur cask or command. Linux needs a running Docker daemon and
+network access for the public base image and Ubuntu packages. Windows needs PowerShell 7.
+Set `ARDUR_INSTALL_LOG_DIR` to retain diagnostics in a chosen directory; otherwise each script
+prints its temporary log location. Temporary installs/profiles are removed, not the source artifact.
+On a manual Mac run without a build record, the signature is inspected and that limitation is
+reported. CI requires the record. An older unsealed download must fail, not become an exception.
+
+The Mac script also accepts an unpacked `Ardur.app` from `pack:dir`. This checks the seal,
+Gatekeeper and bundle launch, but explicitly skips DMG and Homebrew checks; it is only a
+directory-build diagnostic, not full install acceptance. A local run that forbids databases,
+desktop launches or downloads cannot verify this health-based path; use CI or a permitted clean
+machine and report the unrun checks rather than claiming success.
+
 ## Homebrew tap handoff
 
 The tap is [`ArdurAI/homebrew-tap`](https://github.com/ArdurAI/homebrew-tap) (tap name
@@ -232,8 +299,8 @@ running instance. macOS uses native traffic lights and the dock. A missing tray 
 normal last-window exit. Some Linux desktop environments need an AppIndicator extension; tray
 visibility must be checked on the actual desktop.
 
-Unit tests stub the platform and Electron tray boundary. No real Windows or Linux installer,
-tray integration, DPI behavior, or window manager was exercised during this implementation.
+Unit tests stub the platform and Electron tray boundary. Release install acceptance above checks
+installed startup, not interactive tray integration, DPI behavior, or window-manager usability.
 The local macOS arm64 directory build passed deep, strict codesign verification; all 128
 Mach-O files had valid ad-hoc signatures. Gatekeeper assessment returned `rejected`, not a damaged
 resource-seal error, as expected without Developer ID. This is not a quarantined DMG first-open

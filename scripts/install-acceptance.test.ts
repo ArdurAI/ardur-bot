@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -54,6 +54,55 @@ describe("macOS install verdict", () => {
       expect(spawnSync("bash", ["-n", path.join(dir, "ardur")]).status).toBe(0);
       expect(template).toContain('binary "ardur"');
       expect(template).not.toContain('binary "#{appdir}');
+      const bundleDirectory = path.join(dir, "Applications with spaces/Ardur.app/Contents/MacOS");
+      await mkdir(bundleDirectory, { recursive: true });
+      await writeFile(path.join(bundleDirectory, "Ardur"), '#!/bin/sh\nprintf "%s\\n" "$@"\n', {
+        mode: 0o755,
+      });
+      await symlink(path.join(dir, "ardur"), path.join(dir, "command"));
+      const opened = spawnSync(path.join(dir, "command"), ["argument with spaces", "--flag"], {
+        encoding: "utf8",
+      });
+      expect(opened.status).toBe(0);
+      expect(opened.stdout).toBe("argument with spaces\n--flag\n");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("macOS install launch verdict", () => {
+  it.each([
+    [0, "ARDUR_INSTALL_SMOKE_PASS\n", "", true],
+    [0, "", "", false],
+    [1, "ARDUR_INSTALL_SMOKE_PASS\n", "", false],
+    [0, "ARDUR_INSTALL_SMOKE_PASS\n", "FATAL: renderer crashed\n", false],
+    [0, "ARDUR_INSTALL_SMOKE_PASS\n", "Unable to find helper app\n", false],
+    [0, "ARDUR_INSTALL_SMOKE_PASS\nFATAL\n", "", false],
+  ])("checks status %s and both output streams", async (status, stdout, stderr, accepted) => {
+    const script = await readFile(mac, "utf8");
+    const smoke = script.match(/smoke\(\) \{[\s\S]*?\n\}/)?.[0];
+    expect(smoke).toBeTruthy();
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mac-install-launch-"));
+    try {
+      const executable = path.join(dir, "fixture-app");
+      await writeFile(
+        executable,
+        '#!/bin/sh\nprintf "%s" "$FIXTURE_STDOUT"\nprintf "%s" "$FIXTURE_STDERR" >&2\nexit "$FIXTURE_STATUS"\n',
+        { mode: 0o755 },
+      );
+      const result = spawnSync("bash", ["-c", `${smoke}\nsmoke fixture "$executable"`], {
+        env: {
+          ...process.env,
+          logs: dir,
+          work: dir,
+          executable,
+          FIXTURE_STATUS: String(status),
+          FIXTURE_STDOUT: stdout,
+          FIXTURE_STDERR: stderr,
+        },
+      });
+      expect(result.status === 0).toBe(accepted);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

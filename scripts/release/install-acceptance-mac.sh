@@ -30,6 +30,8 @@ cleanup() {
   if [[ "$mounted" == 1 ]]; then hdiutil detach "$work/mount" -quiet || status=1; fi
   # Logs survive; delete only the installation/profile this script created.
   rm -rf "$work/Applications" "$work/BrewApplications" "$work/profiles" "$work/tap" "$work/mount" "$work/input.dmg"
+  if [[ "$status" != 0 ]]; then printf 'FAIL macOS install acceptance\n' | tee -a "$logs/summary.log"; fi
+  if [[ -f "$logs/summary.log" ]]; then cat "$logs/summary.log"; fi
   printf 'Logs: %s\n' "$logs"
   exit "$status"
 }

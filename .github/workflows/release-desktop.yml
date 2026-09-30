@@ -215,6 +215,13 @@ jobs:
         with:
           name: desktop-${{ matrix.platform }}-${{ matrix.arch }}
           path: installers
+      - name: Enable x64 execution on an Apple silicon runner
+        if: matrix.platform == 'mac' && matrix.arch == 'x64'
+        shell: bash
+        run: |
+          if [[ "$(uname -m)" == arm64 ]]; then
+            softwareupdate --install-rosetta --agree-to-license
+          fi
       - name: Install and open the quarantined DMG and Homebrew command
         if: matrix.platform == 'mac'
         env:
@@ -240,6 +247,19 @@ jobs:
         env:
           ARDUR_INSTALL_LOG_DIR: ${{ runner.temp }}/install-acceptance
         run: ./scripts/release/install-acceptance-win.ps1 installers/ardur-${{ needs.validate.outputs.version }}-win-${{ matrix.arch }}.exe
+      - name: Record accepted installer hashes
+        shell: bash
+        run: node scripts/release/install-acceptance-record.mjs record installers accepted/${{ matrix.platform }}-${{ matrix.arch }}.json ${{ matrix.platform }} ${{ matrix.arch }} ${{ needs.validate.outputs.sha }} ${{ needs.validate.outputs.version }}
+      - name: Upload successful install receipt
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: install-approved-${{ matrix.platform }}-${{ matrix.arch }}
+          path: accepted/*.json
+          if-no-files-found: error
+      - name: Report optional install failure
+        if: failure() && matrix.optional
+        shell: bash
+        run: echo "::warning title=Linux arm64::Optional install acceptance failed; these installers must not be published."
       - name: Upload install logs and screenshots
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -250,7 +270,7 @@ jobs:
 
   evidence:
     name: Require validated scoreboard evidence
-    needs: [validate, build]
+    needs: [validate, build, install-acceptance]
     uses: ./.github/workflows/performance.yml
     with:
       candidate_sha: ${{ needs.validate.outputs.sha }}
@@ -264,7 +284,7 @@ jobs:
 
   publish:
     name: Publish ${{ needs.validate.outputs.signed == 'true' && 'signed macOS' || 'unsigned' }} pre-release
-    needs: [validate, build, evidence]
+    needs: [validate, build, evidence, install-acceptance]
     runs-on: ubuntu-24.04
     permissions:
       actions: read

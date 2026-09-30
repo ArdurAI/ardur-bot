@@ -28,6 +28,7 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 1' INT TERM
 printf 'Clean image: ubuntu:24.04; non-root desktop launch\n' | tee "$logs/summary.log"
+chmod 0666 "$logs/summary.log"
 status=0
 docker run --rm --cidfile "$work/container-id" \
   --mount "type=bind,source=$artifact,target=/input/ardur.$kind,readonly" \
