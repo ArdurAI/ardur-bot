@@ -1,7 +1,7 @@
 import type { ChildProcess } from "node:child_process";
 import { spawn } from "node:child_process";
 import { describe, expect, it, vi } from "vitest";
-import { type ChildOutputLogger, captureChildOutput } from "./child-output.js";
+import { type ChildOutputLogger, captureChildOutput, childProcessLogger } from "./child-output.js";
 
 function fakeChild(script: string): ChildProcess {
   return spawn(process.execPath, ["-e", script], { stdio: "pipe" });
@@ -18,6 +18,26 @@ function closed(child: ChildProcess): Promise<number | null> {
 }
 
 describe("captureChildOutput", () => {
+  it("serializes real Error causes through the production fallback", () => {
+    const write = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    try {
+      childProcessLogger().error?.(
+        "Fixture process failed",
+        new Error("Outer failure", {
+          cause: new Error("phase: prompt; exit: 4; durationMs: 12", {
+            cause: new Error("token=synthetic-secret"),
+          }),
+        }),
+      );
+      const record = JSON.parse(String(write.mock.calls[0]?.[0]));
+      expect(record.error.cause.message).toContain("phase: prompt; exit: 4; durationMs: 12");
+      expect(record.error.cause.cause.message).toBe("token=[Redacted]");
+      expect(JSON.stringify(record)).not.toContain("synthetic-secret");
+    } finally {
+      write.mockRestore();
+    }
+  });
+
   it.each([
     ['{"PASSWORD":"alpha beta gamma"}', "alpha beta gamma"],
     ['{"aPi_KeY":"alpha beta gamma"}', "alpha beta gamma"],

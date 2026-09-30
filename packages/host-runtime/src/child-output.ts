@@ -1,4 +1,5 @@
 import type { ChildProcess } from "node:child_process";
+import { serializeError } from "../../logging/src/serialize-error.js";
 import { redactMcpText } from "./mcp-diagnostics.js";
 
 /**
@@ -128,10 +129,7 @@ export function childProcessLogger(): ChildOutputLogger {
       process.stderr.write(`${JSON.stringify({ level: "debug", message, ...bindings })}\n`);
     },
     error: (message, error) => {
-      const reason =
-        error instanceof Error
-          ? { name: error.name, message: error.message, cause: error.cause }
-          : error;
+      const reason = error === undefined ? undefined : serializeError(error);
       process.stderr.write(`${JSON.stringify({ level: "error", message, error: reason })}\n`);
     },
   };
