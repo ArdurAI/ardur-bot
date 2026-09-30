@@ -28,6 +28,7 @@
     "@ardurbot/contracts": "workspace:*",
     "@ardurbot/core": "workspace:*",
     "@ardurbot/db": "workspace:*",
+    "@ardurbot/evidence": "workspace:*",
     "@ardurbot/logging": "workspace:*",
     "chat": "4.40.0",
     "chat-adapter-lark": "0.3.1",

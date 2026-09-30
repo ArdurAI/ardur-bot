@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   dispatchBackgroundJob,
+  evidenceSealJob,
   hermesInstallJob,
   historyCompactJob,
   historyCompactJobKey,
@@ -19,6 +20,7 @@ function handlers(): BackgroundJobHandlers {
     "memory.git-push": async () => undefined,
     "memory.deliver": async () => undefined,
     "run.continue": vi.fn(async () => undefined),
+    "evidence.seal": vi.fn(async () => undefined),
     "routine.wakeup": vi.fn(async () => undefined),
     "computer.update": vi.fn(async () => undefined),
     "computer.sleep": vi.fn(async () => undefined),
@@ -32,6 +34,18 @@ function handlers(): BackgroundJobHandlers {
 }
 
 describe("background job contracts", () => {
+  it("validates and dispatches evidence sealing with the run id as key", async () => {
+    const target = handlers();
+    await dispatchBackgroundJob(target, "evidence.seal", { runId: "run-1" });
+    expect(target["evidence.seal"]).toHaveBeenCalledWith({ runId: "run-1" });
+    expect(evidenceSealJob("run-1")).toEqual({
+      name: "evidence.seal",
+      payload: { runId: "run-1" },
+      replaceKey: "run-1",
+    });
+    expect(() => parseBackgroundJob("evidence.seal", { runId: "" })).toThrow();
+    expect(() => parseBackgroundJob("evidence.seal", { runId: "run", args: "private" })).toThrow();
+  });
   it("validates and dispatches messaging.deliver", async () => {
     const target = handlers();
     await dispatchBackgroundJob(target, "messaging.deliver", { runId: "run-1" });

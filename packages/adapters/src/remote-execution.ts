@@ -279,9 +279,9 @@ export async function revalidateDeviceApprovalExecution(
 ) {
   const binding = await prisma.deviceApprovalBinding.findUnique({ where: { effectId } });
   if (!binding?.answeredByGrantId) return;
+  if (binding.expiresAt <= new Date()) throw new ApprovalExpiredError();
   const effect = await prisma.externalEffect.findUniqueOrThrow({ where: { id: effectId } });
   if (
-    binding.expiresAt <= new Date() ||
     binding.executedAt ||
     binding.runId !== runId ||
     binding.requestFingerprint !== deviceDigest(canonicalDispatchJson(effect.request))
@@ -295,6 +295,13 @@ export async function revalidateDeviceApprovalExecution(
   });
   if (used.count !== 1)
     throw new DeviceRequestError("This approval was already used; review it again at home.", 409);
+}
+
+/** Distinguish expiry from other authority failures without parsing user-facing text. */
+export class ApprovalExpiredError extends DeviceRequestError {
+  constructor() {
+    super("This approval changed or expired; review it again at home.", 409);
+  }
 }
 
 /** Keep transport decisions out of the executor's tool implementations. */

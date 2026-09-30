@@ -447,6 +447,7 @@ export async function deleteEmptySpaceForMember(
         });
         if (!claim) throw new SpaceDeletionInProgressError();
         const planned = await assertEmptySpaceDeletable(tx, input);
+        await tx.$executeRaw`SET LOCAL ardur.evidence_delete = 'on'`;
         await tx.space.delete({ where: { id: input.spaceId } });
         if (input.spaceId !== input.currentSpaceId) {
           return { id: input.currentSpaceId };
