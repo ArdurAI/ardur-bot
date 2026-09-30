@@ -13,6 +13,22 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: \n"
 
+#: src/lib/computer-state-labels.ts
+msgid "Paused for an update"
+msgstr "अपडेट के लिए रुका हुआ"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Move to a container"
+msgstr "कंटेनर में ले जाएँ"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Keep current location"
+msgstr "मौजूदा स्थान बनाए रखें"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "The last update was interrupted."
+msgstr "पिछला अपडेट बीच में रुक गया था।"
+
 #: src/pages/shell/model-pin-select.tsx
 msgid " — May not be available on your plan"
 msgstr ""
@@ -2559,7 +2575,7 @@ msgstr "बातचीत साफ़ नहीं की जा सकी"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Could not complete action"
-msgstr ""
+msgstr "कार्रवाई पूरी नहीं हो सकी"
 
 #: src/pages/McpOAuthCallback.tsx
 msgid "Could not complete authorization. Try connecting again."
@@ -7061,11 +7077,11 @@ msgstr "नियंत्रण छोड़ें"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Release computer"
-msgstr ""
+msgstr "कंप्यूटर मुक्त करें"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Release interrupted computer?"
-msgstr ""
+msgstr "बाधित कार्रवाई के बाद कंप्यूटर मुक्त करें?"
 
 #: src/pages/account/AccountProfile.tsx
 msgid "Reload"

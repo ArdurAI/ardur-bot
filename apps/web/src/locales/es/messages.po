@@ -13,6 +13,22 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+#: src/lib/computer-state-labels.ts
+msgid "Paused for an update"
+msgstr "En pausa para una actualización"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Move to a container"
+msgstr "Mover a un contenedor"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Keep current location"
+msgstr "Mantener la ubicación actual"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "The last update was interrupted."
+msgstr "La última actualización se interrumpió."
+
 #: src/pages/shell/model-pin-select.tsx
 msgid " — May not be available on your plan"
 msgstr ""
@@ -2559,7 +2575,7 @@ msgstr "No se pudo borrar la conversación"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Could not complete action"
-msgstr ""
+msgstr "No se pudo completar la acción"
 
 #: src/pages/McpOAuthCallback.tsx
 msgid "Could not complete authorization. Try connecting again."
@@ -7061,11 +7077,11 @@ msgstr "Liberar"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Release computer"
-msgstr ""
+msgstr "Liberar ordenador"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Release interrupted computer?"
-msgstr ""
+msgstr "¿Liberar el ordenador tras la interrupción?"
 
 #: src/pages/account/AccountProfile.tsx
 msgid "Reload"

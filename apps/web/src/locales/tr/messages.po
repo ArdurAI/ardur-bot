@@ -13,6 +13,22 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: \n"
 
+#: src/lib/computer-state-labels.ts
+msgid "Paused for an update"
+msgstr "Güncelleme için duraklatıldı"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Move to a container"
+msgstr "Bir kapsayıcıya taşı"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Keep current location"
+msgstr "Mevcut konumu koru"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "The last update was interrupted."
+msgstr "Son güncelleme kesintiye uğradı."
+
 #: src/pages/shell/model-pin-select.tsx
 msgid " — May not be available on your plan"
 msgstr ""
@@ -2559,7 +2575,7 @@ msgstr "Sohbet temizlenemedi"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Could not complete action"
-msgstr ""
+msgstr "İşlem tamamlanamadı"
 
 #: src/pages/McpOAuthCallback.tsx
 msgid "Could not complete authorization. Try connecting again."
@@ -7061,11 +7077,11 @@ msgstr "Bırak"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Release computer"
-msgstr ""
+msgstr "Bilgisayarı serbest bırak"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Release interrupted computer?"
-msgstr ""
+msgstr "Kesintiye uğrayan bilgisayar serbest bırakılsın mı?"
 
 #: src/pages/account/AccountProfile.tsx
 msgid "Reload"

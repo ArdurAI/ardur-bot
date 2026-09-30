@@ -1,6 +1,7 @@
-import type { ComputerStatus } from "@ardurbot/contracts";
+import { COMPUTER_STATES } from "@ardurbot/contracts";
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
+import { useComputerStateLabels } from "../../lib/computer-state-labels";
 import { rpc } from "../../lib/rpc";
 import type { PanelActions, PanelContext } from "./panels";
 
@@ -23,13 +24,7 @@ export default function ComputersPanel({
   openSettings,
 }: { data: Awaited<ReturnType<typeof load>> } & PanelActions) {
   const { t } = useLingui();
-  const states: Record<ComputerStatus["state"], string> = {
-    stopped: t`Stopped`,
-    booting: t`Booting`,
-    running: t`Running`,
-    suspended: t`Asleep`,
-    error: t`Error`,
-  };
+  const states = useComputerStateLabels();
   const count = data.host.roots.length;
   const seen = new Set<string>();
   return (
@@ -63,7 +58,9 @@ export default function ComputersPanel({
             onClick={() => openSettings("computer")}
           >
             <span>{computer.name}</span>
-            <span className="text-muted-foreground">{states[computer.status.state]}</span>
+            <span className="text-muted-foreground">
+              {states[COMPUTER_STATES[computer.status.state]]}
+            </span>
           </Button>
         ))}
       {data.engines.map((engine) => (

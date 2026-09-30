@@ -13,6 +13,22 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
 
+#: src/lib/computer-state-labels.ts
+msgid "Paused for an update"
+msgstr "Приостановлен для обновления"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Move to a container"
+msgstr "Переместить в контейнер"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Keep current location"
+msgstr "Оставить текущее расположение"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "The last update was interrupted."
+msgstr "Последнее обновление было прервано."
+
 #: src/pages/shell/model-pin-select.tsx
 msgid " — May not be available on your plan"
 msgstr ""
@@ -5292,7 +5308,7 @@ msgstr "Сделать по умолчанию"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Make sure nothing is still running on this computer."
-msgstr ""
+msgstr "Убедитесь, что на этом компьютере больше ничего не выполняется."
 
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
@@ -6176,7 +6192,7 @@ msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Nothing is still running"
-msgstr ""
+msgstr "Ничего больше не выполняется"
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Nothing remembered yet"

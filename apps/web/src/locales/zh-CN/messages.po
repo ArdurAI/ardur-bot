@@ -13,6 +13,22 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: \n"
 
+#: src/lib/computer-state-labels.ts
+msgid "Paused for an update"
+msgstr "已暂停以进行更新"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Move to a container"
+msgstr "迁移到容器"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Keep current location"
+msgstr "保留当前位置"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "The last update was interrupted."
+msgstr "上次更新已中断。"
+
 #: src/pages/shell/model-pin-select.tsx
 msgid " — May not be available on your plan"
 msgstr ""
@@ -2559,7 +2575,7 @@ msgstr "无法清空对话"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Could not complete action"
-msgstr ""
+msgstr "无法完成操作"
 
 #: src/pages/McpOAuthCallback.tsx
 msgid "Could not complete authorization. Try connecting again."
@@ -7061,11 +7077,11 @@ msgstr "释放"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Release computer"
-msgstr ""
+msgstr "释放电脑"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Release interrupted computer?"
-msgstr ""
+msgstr "释放更新中断的电脑？"
 
 #: src/pages/account/AccountProfile.tsx
 msgid "Reload"

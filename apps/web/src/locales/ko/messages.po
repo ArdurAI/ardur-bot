@@ -13,6 +13,22 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: \n"
 
+#: src/lib/computer-state-labels.ts
+msgid "Paused for an update"
+msgstr "업데이트를 위해 일시 중지됨"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Move to a container"
+msgstr "컨테이너로 이동"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Keep current location"
+msgstr "현재 위치 유지"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "The last update was interrupted."
+msgstr "마지막 업데이트가 중단되었습니다."
+
 #: src/pages/shell/model-pin-select.tsx
 msgid " — May not be available on your plan"
 msgstr ""
@@ -2559,7 +2575,7 @@ msgstr "대화 내용을 비우지 못했습니다."
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Could not complete action"
-msgstr ""
+msgstr "작업을 완료할 수 없습니다"
 
 #: src/pages/McpOAuthCallback.tsx
 msgid "Could not complete authorization. Try connecting again."
@@ -7061,11 +7077,11 @@ msgstr "제어권 돌려주기"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Release computer"
-msgstr ""
+msgstr "컴퓨터 잠금 해제"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Release interrupted computer?"
-msgstr ""
+msgstr "작업이 중단된 컴퓨터의 잠금을 해제할까요?"
 
 #: src/pages/account/AccountProfile.tsx
 msgid "Reload"

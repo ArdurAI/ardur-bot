@@ -5,7 +5,6 @@ import type {
   ComputerUpdate,
 } from "@ardurbot/contracts";
 import {
-  COMPUTER_STATES,
   computerKindFacts,
   computerRuntimeSummary,
   interruptedComputerUpdate,
@@ -15,6 +14,7 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import type { ReactNode } from "react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { ReleaseInterruptedComputer } from "../../components/ReleaseInterruptedComputer";
+import { useComputerStateLabels } from "../../lib/computer-state-labels";
 import { rpc } from "../../lib/rpc";
 
 const ComputerProfile = lazy(() =>
@@ -65,15 +65,8 @@ export function RuntimeSummary({
 }) {
   const { t } = useLingui();
   const summary = computerRuntimeSummary(status, mode);
+  const states = useComputerStateLabels();
   if (!summary) return <RuntimeBoundary kind={status.kind} />;
-  const states = {
-    [COMPUTER_STATES.stopped]: t`Stopped`,
-    [COMPUTER_STATES.booting]: t`Starting`,
-    [COMPUTER_STATES.running]: t`Running`,
-    [COMPUTER_STATES.suspending]: t`Paused for an update`,
-    [COMPUTER_STATES.suspended]: t`Sleeping`,
-    [COMPUTER_STATES.error]: t`Could not start`,
-  };
   return (
     <div data-testid="runtime-summary" className="space-y-2 text-sm">
       <RuntimeBoundary kind={status.kind} locationName={locationName} />

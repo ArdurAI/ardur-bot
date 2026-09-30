@@ -101,11 +101,11 @@ export function ComputerProfile({
   choicesOnly?: boolean;
 }) {
   const { t } = useLingui();
-  const savedConnectionId = status.connectionId ?? "";
+  const savedConnectionId = status.kind === "desktop" ? "" : (status.connectionId ?? "");
   const [profile, setProfile] = useState<ComputerProfileId>(status.imageProfile ?? "base");
   const [selection, setSelection] = useState(savedConnectionId);
   useEffect(() => {
-    setSelection(status.connectionId ?? "");
+    setSelection(status.kind === "desktop" ? "" : (status.connectionId ?? ""));
   }, [status.connectionId, status.kind]);
   const [confirm, setConfirm] = useState(false);
   const [pending, setPending] = useState(false);
