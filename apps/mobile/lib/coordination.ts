@@ -1,6 +1,12 @@
-import type { ChiefDispatch, ChiefReceiptKey } from "@ardurbot/contracts";
+import type { ChiefDispatch, ChiefReceiptKey, ChiefResult } from "@ardurbot/contracts";
 import type { CoordinationBlock, CoordinationMember } from "@ardurbot/core";
-import { coordinationMemberFailureCode, fixableFailure } from "@ardurbot/core";
+import {
+  CHIEF_ACTIVITY_TEXT,
+  chiefActivityKey,
+  chiefResult,
+  coordinationMemberFailureCode,
+  fixableFailure,
+} from "@ardurbot/core";
 import { t } from "./i18n";
 
 export function chiefReceiptText(key: ChiefReceiptKey): string {
@@ -22,6 +28,17 @@ export function chiefDispatchSummary(dispatch: ChiefDispatch): string {
     : dispatch.state === "queued"
       ? t("Queued for {name}", { name })
       : t("Messaged {name}", { name });
+}
+
+export function chiefActivityText(dispatch: ChiefDispatch): string | undefined {
+  const key = chiefActivityKey(dispatch);
+  return key ? t(CHIEF_ACTIVITY_TEXT[key]) : undefined;
+}
+export function chiefResultText(result: ChiefResult): string | undefined {
+  if (!chiefResult(result)) return undefined;
+  return result.state === "verified-notion"
+    ? t("Done — added the document to Notion.")
+    : t("The draft is ready.");
 }
 
 /** The one-line summary for a collapsed coordination round. */
