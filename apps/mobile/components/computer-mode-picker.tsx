@@ -1,4 +1,5 @@
 import type { ComputerMode } from "@ardurbot/contracts";
+import { computerModeFacts } from "@ardurbot/contracts";
 import { Pressable, Text, View } from "react-native";
 import { useI18n } from "../lib/i18n";
 import { useMobileTokens } from "../lib/native";
@@ -14,6 +15,7 @@ export function ComputerModePicker({
 }) {
   const { t } = useI18n();
   const tokens = useMobileTokens();
+  const { sharingWarning } = computerModeFacts(value ?? "team");
   return (
     <View style={{ marginTop: 16 }}>
       <Text style={{ color: tokens.mutedForeground, marginBottom: 8, fontSize: 14 }}>
@@ -44,9 +46,9 @@ export function ComputerModePicker({
           </Pressable>
         ))}
       </View>
-      <Text style={{ color: tokens.mutedForeground, marginTop: 8 }}>
-        {t("Bots share files and installed tools")}
-      </Text>
+      {sharingWarning ? (
+        <Text style={{ color: tokens.mutedForeground, marginTop: 8 }}>{t(sharingWarning)}</Text>
+      ) : null}
     </View>
   );
 }

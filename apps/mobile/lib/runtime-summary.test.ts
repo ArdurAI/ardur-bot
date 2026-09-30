@@ -89,15 +89,16 @@ it.each(Object.keys(COMPUTER_KINDS) as ComputerStatus["kind"][])(
     expect(container.textContent).toContain("Bots share files and installed tools");
   },
 );
-it("keeps the warning visible before a sharing choice can save", async () => {
-  const change = vi.fn();
+it.each([
+  ["team", "Shared with team", "Bots share files and installed tools"],
+  ["dedicated", "Only this bot", null],
+] as const)("shows only the %s choice's sharing facts", async (mode, label, warning) => {
   await act(async () =>
-    root.render(createElement(ComputerModePicker, { value: "dedicated", onChange: change })),
+    root.render(createElement(ComputerModePicker, { value: mode, onChange: vi.fn() })),
   );
-  expect(container.textContent).toContain("Bots share files and installed tools");
-  expect(change).not.toHaveBeenCalled();
-  await act(async () => container.querySelector<HTMLButtonElement>("button")!.click());
-  expect(change).toHaveBeenCalledWith("team");
+  expect(container.textContent).toContain(label);
+  if (warning) expect(container.textContent).toContain(warning);
+  else expect(container.textContent).not.toContain("Bots share files and installed tools");
 });
 it("reads the saved pin without booting or changing the computer", async () => {
   request.mockImplementation(async (procedure) => (procedure === "computer/status" ? status : []));

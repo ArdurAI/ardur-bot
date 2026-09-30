@@ -198,6 +198,14 @@ export const COMPUTER_BOUNDARY_MESSAGES = {
   test: "For testing only; not an isolation boundary.",
 } as const;
 
+export function computerModeFacts(mode: ComputerMode) {
+  return {
+    sharing: mode === "dedicated" ? "Only this bot" : "Shared with team",
+    sharingWarning: mode === "team" ? "Bots share files and installed tools" : null,
+    scope: mode === "team" ? "team" : "bot",
+  } as const;
+}
+
 export function computerRuntimeSummary(
   status: Pick<ComputerStatus, "kind" | "mode" | "state">,
   mode: ComputerMode = status.mode,
@@ -207,9 +215,7 @@ export function computerRuntimeSummary(
   return {
     ...facts,
     reach: COMPUTER_BOUNDARY_MESSAGES[facts.boundary],
-    sharing: mode === "dedicated" ? "Only this bot" : "Shared with team",
-    sharingWarning: mode === "team" ? "Bots share files and installed tools" : null,
-    scope: mode === "team" ? "team" : "bot",
+    ...computerModeFacts(mode),
     state: status.state,
   } as const;
 }

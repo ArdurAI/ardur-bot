@@ -13,6 +13,7 @@ import {
   BOT_NAME_MAX_LENGTH,
   BOT_TITLE_MAX_LENGTH,
   computerKindFacts,
+  computerModeFacts,
   errorDataCode,
   ISOLATED_COMPUTER_UNAVAILABLE_CODE,
   recommendedContainer,
@@ -260,7 +261,7 @@ export function CreateBotForm({
           teamTestId="create-bot-team"
           privateTestId="create-bot-private"
         />
-        {computerMode === "team" ? (
+        {computerModeFacts(computerMode).sharingWarning ? (
           <p className="mt-2 text-sm text-muted-foreground">
             <Trans>Bots share files and installed tools</Trans>
           </p>
@@ -824,7 +825,7 @@ export function BotSettings({
         <div ref={computerRef} className="space-y-3 py-4">
           <BotRuntimeSettings botId={bot.id} name={bot.name} mode={computerMode} />
           <ComputerModePicker value={computerMode} onChange={setComputerMode} />
-          {computerMode === "team" ? (
+          {computerModeFacts(computerMode).sharingWarning ? (
             <p className="text-sm text-muted-foreground">
               <Trans>Bots share files and installed tools</Trans>
             </p>
