@@ -104,9 +104,22 @@ export function runtimeRefusalRecovery(
   if (!category.success)
     return { actions: [{ kind: "route", pathname: "/bot-settings", params: { botId } }] };
   const entry = failureCategory(category.data);
+  const seenDestinations = new Set<string>();
   const actions = [entry.action, ...(entry.more ?? [])]
     .map(toAction)
-    .filter((action): action is FailureCategoryRecoveryAction => action !== null);
+    .filter((action): action is FailureCategoryRecoveryAction => action !== null)
+    .filter((action) => {
+      // The phone maps several table targets to one screen (bot-destinations, bot-computer
+      // and model-pin all open the bot's settings); a destination already offered is dropped
+      // so the banner never shows the same button twice.
+      const destination =
+        action.kind === "enable-experimental"
+          ? `enable-experimental:${action.botId}`
+          : `${action.pathname}:${JSON.stringify(action.params)}`;
+      if (seenDestinations.has(destination)) return false;
+      seenDestinations.add(destination);
+      return true;
+    });
   return {
     actions: actions.length
       ? actions
