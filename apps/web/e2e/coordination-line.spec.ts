@@ -51,7 +51,7 @@ test("a member that could not answer shows one plain line with a fix link", asyn
   );
   // The fix link goes to the failed member's own chat.
   await Promise.all([
-    page.waitForNavigation(),
+    page.waitForURL(/\/app\/radiant$/),
     failure.getByRole("button", { name: "Fix" }).click(),
   ]);
   await expect(page).toHaveURL(/\/app\/radiant$/);

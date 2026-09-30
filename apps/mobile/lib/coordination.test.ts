@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+
+import type { ChiefDispatch } from "@ardurbot/contracts";
 import type { CoordinationBlock } from "@ardurbot/core";
 import { describe, expect, it, vi } from "vitest";
 
@@ -12,6 +14,8 @@ vi.mock("./i18n", () => ({
 }));
 
 import {
+  chiefActivityText,
+  chiefResultText,
   coordinationAccessibilityLabel,
   coordinationFailureFixable,
   coordinationFailureLine,
@@ -36,6 +40,42 @@ function block(patch: Partial<CoordinationBlock> = {}): CoordinationBlock {
 }
 
 describe("mobile coordination line", () => {
+  it("shows genuine activity and removes it for waiting and terminal states", () => {
+    const dispatch: ChiefDispatch = {
+      requestMessageId: "request",
+      revision: 1,
+      memberId: "worker",
+      memberName: "Member",
+      state: "messaged",
+      reason: "eligible",
+    };
+    expect(chiefActivityText(dispatch)).toBe("Working on the task");
+    const activity = {
+      revision: 1,
+      runId: "run",
+      delegationId: "assignment",
+      attempt: 1,
+      sourceSeq: 1,
+      key: "connect-notion" as const,
+      state: "active" as const,
+      updatedAt: "2026-01-01T00:00:00Z",
+    };
+    expect(chiefActivityText({ ...dispatch, activity })).toBe("Connecting to Notion");
+    for (const state of ["completed", "failed", "stopped", "waiting"] as const)
+      expect(chiefActivityText({ ...dispatch, activity: { ...activity, state } })).toBeUndefined();
+    expect(chiefActivityText({ ...dispatch, state: "approval-held", activity })).toBeUndefined();
+  });
+  it("keeps the draft result to one sentence without a follow-up or unverified success", () => {
+    const result = {
+      requestMessageId: "request",
+      revision: 1,
+      artifactId: "file",
+      href: "artifact:file",
+      state: "draft" as const,
+    };
+    expect(chiefResultText(result)).toBe("The draft is ready.");
+    expect(chiefResultText({ ...result, href: "https://private.example/file" })).toBeUndefined();
+  });
   it("summarizes a finished round as one line with counts", () => {
     expect(coordinationSummary(block())).toBe("Asked 3 bots · 3 answered");
     expect(coordinationSummary(block({ members: block().members.slice(0, 1) }))).toBe(

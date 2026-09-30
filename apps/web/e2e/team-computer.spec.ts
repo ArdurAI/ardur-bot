@@ -1,4 +1,5 @@
-import { expect, type Page, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import {
   activeBotId,
   captureScreenshot,
@@ -262,7 +263,10 @@ async function setComputerMode(
     (element as HTMLDetailsElement).open = true;
   });
   await settings
-    .getByRole("button", { name: mode === "team" ? "Team" : "Private", exact: true })
+    .getByRole("button", {
+      name: mode === "team" ? "Shared with team" : "Only this bot",
+      exact: true,
+    })
     .click();
   await settings.getByRole("button", { name: "Save", exact: true }).click();
   await expect

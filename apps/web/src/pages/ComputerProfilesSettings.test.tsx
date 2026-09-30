@@ -274,7 +274,9 @@ it("labels a desktop computer with the host label the API returns, not the brows
     );
   expect(element.textContent).toContain("Engine: This Mac");
   expect(options()).toEqual(["This Mac", "Office"]);
-  expect(element.textContent).not.toContain("This computer");
+  expect(element.querySelector('[data-testid="runtime-summary"]')?.textContent).toContain(
+    "Runs as you; can use your files and signed-in tools",
+  );
   window.ardurbotDesktop = { platform: "darwin" } as NonNullable<Window["ardurbotDesktop"]>;
   await act(async () => render("This computer"));
   expect(element.textContent).toContain("Engine: This computer");
@@ -709,5 +711,63 @@ it("keeps a stopped engine quiet until Retry and clears its reason after recover
   } finally {
     await act(async () => root.unmount());
     vi.useRealTimers();
+  }
+});
+
+it("shows the selected remote-account boundary before Apply, without saving", async () => {
+  const element = document.createElement("div");
+  const root = createRoot(element);
+  try {
+    await act(async () =>
+      root.render(
+        <ComputerProfile
+          botId="bot"
+          name="Builder"
+          status={status}
+          connections={[
+            { id: "remote", name: "Remote account", settings: { engine: "ssh" } as never },
+          ]}
+          onChanged={async () => {}}
+        />,
+      ),
+    );
+    const select = element.querySelector<HTMLSelectElement>('[aria-label="Connection"]')!;
+    await act(async () => {
+      select.value = "remote";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(element.textContent).toContain("Uses that account's permissions.");
+    expect(element.textContent).toContain("Bots share files and installed tools");
+    expect(api.configure).not.toHaveBeenCalled();
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+it("refuses configuration on an unknown computer kind", async () => {
+  const element = document.createElement("div");
+  const root = createRoot(element);
+  try {
+    await act(async () =>
+      root.render(
+        <ComputerProfile
+          botId="bot"
+          name="Builder"
+          status={{ ...status, kind: "vm" as ComputerStatus["kind"] }}
+          connections={[]}
+          deploymentDefault={null}
+          onChanged={async () => {}}
+        />,
+      ),
+    );
+    expect(element.textContent).toContain("Choose a supported connection.");
+    expect(
+      [...element.querySelectorAll<HTMLButtonElement>("button")].find(
+        (button) => button.textContent === "Apply",
+      )?.disabled,
+    ).toBe(true);
+    expect(api.configure).not.toHaveBeenCalled();
+  } finally {
+    await act(async () => root.unmount());
   }
 });

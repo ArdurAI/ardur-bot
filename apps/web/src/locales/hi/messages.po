@@ -1,3 +1,12 @@
+#~ msgid "Private"
+#~ msgstr "निजी"
+
+#~ msgid "Expand workspace"
+#~ msgstr "कार्यक्षेत्र का विस्तार करें"
+
+#~ msgid "Return to conversation"
+#~ msgstr "बातचीत पर लौटें"
+
 msgid ""
 msgstr ""
 "POT-Creation-Date: 2026-08-26 00:00+0000\n"
@@ -1474,6 +1483,11 @@ msgstr ""
 msgid "Bots on this computer: {0}"
 msgstr "इस कंप्यूटर पर बॉट: {0}"
 
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-summary.tsx
+msgid "Bots share files and installed tools"
+msgstr "बॉट फ़ाइलें और इंस्टॉल किए गए टूल साझा करते हैं"
+
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
 msgstr ""
@@ -1623,6 +1637,10 @@ msgstr ""
 msgid "Change computer"
 msgstr ""
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Change location"
+msgstr "स्थान बदलें"
+
 #: src/pages/LearningInsights.tsx
 #: src/pages/shell/provider-error-message.tsx
 msgid "Change model"
@@ -1727,6 +1745,14 @@ msgstr "जाँच की गई {0}"
 #: src/pages/shell/runtime-settings.tsx
 msgid "Checking the download"
 msgstr "डाउनलोड की जाँच हो रही है"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Checking the missing tool"
+msgstr "गुम टूल की जाँच हो रही है"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Checking the Notion page"
+msgstr "Notion पेज की जाँच हो रही है"
 
 #: src/components/DesktopUpdates.tsx
 #: src/components/OllamaSettings.tsx
@@ -2071,7 +2097,6 @@ msgstr ""
 
 #: src/pages/ide/IdePage.tsx
 #: src/pages/Shell.tsx
-#: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
 #: src/pages/workspace/view-registry.ts
@@ -2109,6 +2134,14 @@ msgstr "कंप्यूटर निष्क्रिय है"
 #: src/pages/Shell.tsx
 msgid "Computer is asleep. Open it to wake."
 msgstr "कंप्यूटर स्लीप मोड में है। जगाने के लिए इसे खोलें।"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Computer location unavailable. Choose a supported connection."
+msgstr "कंप्यूटर का स्थान उपलब्ध नहीं है। समर्थित कनेक्शन चुनें।"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Computer location unavailable. Try again."
+msgstr "कंप्यूटर का स्थान उपलब्ध नहीं है। फिर से कोशिश करें।"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -2292,6 +2325,10 @@ msgstr ""
 msgid "Connected. Review tools in MCP settings."
 msgstr ""
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Connecting to Notion"
+msgstr "Notion से कनेक्ट हो रहा है"
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
@@ -2337,6 +2374,10 @@ msgstr ""
 #: src/pages/LearningCurator.tsx
 msgid "Consolidation uses the review connection and may incur model charges. Approval is required."
 msgstr ""
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Container"
+msgstr "कंटेनर"
 
 #: src/components/Context.tsx
 #: src/pages/fleet/FleetSettings.tsx
@@ -2851,6 +2892,10 @@ msgstr "आवाज़ सेटिंग्स लोड नहीं हो �
 msgid "Could not load your bots; reopen quick access."
 msgstr ""
 
+#: src/components/ai/ChiefResultBubble.tsx
+msgid "Could not open file"
+msgstr "फ़ाइल नहीं खोली जा सकी"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Could not open setup. Try again."
 msgstr ""
@@ -3076,6 +3121,10 @@ msgstr ""
 msgid "Could not show the menu bar item; try again."
 msgstr ""
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Could not start"
+msgstr "शुरू नहीं हो सका"
+
 #: src/components/composer/composer-actions.ts
 msgid "Could not start a new chat"
 msgstr ""
@@ -3284,6 +3333,10 @@ msgstr ""
 #: src/pages/board/BoardsSettings.tsx
 msgid "Creates .beads/ with config.yaml, metadata.json, .gitignore, README.md, interactions.jsonl, .local_version, and embeddeddolt/. Git files and hooks stay unchanged."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Creating the Notion page"
+msgstr "Notion पेज बनाया जा रहा है"
 
 #: src/pages/GroupPanel.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -3752,6 +3805,10 @@ msgstr "खाता नहीं है?"
 msgid "Done"
 msgstr "पूर्ण"
 
+#: src/components/ai/ChiefResultBubble.tsx
+msgid "Done — added the document to Notion."
+msgstr "हो गया — दस्तावेज़ Notion में जोड़ दिया गया।"
+
 #: src/pages/TeamBoard.tsx
 msgid "Done — waiting for your OK"
 msgstr ""
@@ -4030,10 +4087,6 @@ msgstr "विस्तृत करें"
 msgid "Expand {0}"
 msgstr ""
 
-#: src/pages/Shell.tsx
-#~ msgid "Expand workspace"
-#~ msgstr "कार्यक्षेत्र का विस्तार करें"
-
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
 msgstr ""
@@ -4262,6 +4315,10 @@ msgstr ""
 #: src/pages/LearningInsights.tsx
 msgid "For {task}, {better} on this machine did as well as {other} in your runs."
 msgstr ""
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "For testing only; not an isolation boundary."
+msgstr "केवल परीक्षण के लिए; यह अलगाव की सीमा नहीं है।"
 
 #: src/pages/Auth.tsx
 msgid "Forgot password?"
@@ -4519,6 +4576,10 @@ msgstr ""
 #: src/pages/shell/model-pin-select.tsx
 msgid "Hosted providers"
 msgstr ""
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Hosted sandbox"
+msgstr "होस्ट किया गया सैंडबॉक्स"
 
 #: src/pages/RoutineSchedule.tsx
 msgid "hour"
@@ -6255,6 +6316,11 @@ msgstr ""
 msgid "Only space-shared documents go to this repository."
 msgstr ""
 
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-summary.tsx
+msgid "Only this bot"
+msgstr "केवल यह बॉट"
+
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/ScratchpadSection.tsx
@@ -6698,10 +6764,6 @@ msgstr ""
 msgid "Privacy"
 msgstr ""
 
-#: src/pages/shell/bot-panel.tsx
-msgid "Private"
-msgstr "निजी"
-
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Private key"
 msgstr ""
@@ -6863,6 +6925,10 @@ msgstr "केवल पढ़ने योग्य"
 #: src/pages/storage/StorageSettings.tsx
 msgid "Reading storage usage…"
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Reading the document"
+msgstr "दस्तावेज़ पढ़ा जा रहा है"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Reads can run without asking once you allow them. Writes always ask."
@@ -7039,6 +7105,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Remote base directory"
 msgstr ""
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Remote computer"
+msgstr "रिमोट कंप्यूटर"
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Remote MCP URL"
@@ -7378,11 +7448,12 @@ msgstr "टीम संदेश फिर शुरू करें"
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
+#: src/pages/shell/runtime-summary.tsx
 #: src/pages/system/SystemPage.tsx
 #: src/pages/workspace/WorkspacePane.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Retry"
-msgstr "फिर से प्रयास करें"
+msgstr "फिर से कोशिश करें"
 
 #. placeholder {0}: failure.relativePath
 #: src/pages/import/LocalImportPage.tsx
@@ -7401,10 +7472,6 @@ msgstr ""
 #: src/pages/McpOAuthCallback.tsx
 msgid "Return to Ardur"
 msgstr "Ardur पर लौटें"
-
-#: src/pages/Shell.tsx
-#~ msgid "Return to conversation"
-#~ msgstr "बातचीत पर लौटें"
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "Return to setup"
@@ -7563,6 +7630,7 @@ msgstr "चल रहा है"
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/shell/runtime-summary.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Running"
 msgstr "चल रहा है"
@@ -7578,6 +7646,14 @@ msgstr "चल रहा है…"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?"
 msgstr "इस कंप्यूटर पर रन सक्रिय हैं। कनेक्शन बदलने से वे रुक सकते हैं। फिर भी सहेजें?"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Runs as you; can use your files and signed-in tools"
+msgstr "आपकी अनुमतियों से चलता है; आपकी फ़ाइलें और साइन-इन किए हुए टूल इस्तेमाल कर सकता है"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Runs at the configured provider; can use granted credentials and network access."
+msgstr "कॉन्फ़िगर किए गए प्रदाता पर चलता है; दिए गए क्रेडेंशियल और नेटवर्क पहुँच का उपयोग कर सकता है।"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -7927,6 +8003,10 @@ msgstr "{peer} को भेजा गया"
 msgid "Sentry alert"
 msgstr ""
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Separate home; can reach allowed network services and granted credentials."
+msgstr "अलग होम फ़ोल्डर; अनुमत नेटवर्क सेवाओं और दिए गए क्रेडेंशियल तक पहुँच सकता है।"
+
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Serif"
 msgstr ""
@@ -7988,6 +8068,14 @@ msgstr ""
 msgid "Set up a board"
 msgstr "बोर्ड सेट अप करें"
 
+#: src/pages/shell/bot-panel.tsx
+msgid "Set up a container for isolated work."
+msgstr "अलग वातावरण में काम करने के लिए कंटेनर सेट अप करें।"
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Set up computer"
+msgstr "कंप्यूटर सेट अप करें"
+
 #: src/pages/import/ImportedServerCredentials.tsx
 msgid "Set up credentials"
 msgstr ""
@@ -8046,6 +8134,11 @@ msgstr ""
 #: src/pages/GitMemorySettings.tsx
 msgid "Shared recall will use proposed facts after merge."
 msgstr ""
+
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-summary.tsx
+msgid "Shared with team"
+msgstr "टीम के साथ साझा"
 
 #: src/components/ShowAllModels.tsx
 msgid "Show all models"
@@ -8210,6 +8303,10 @@ msgstr ""
 msgid "Slash commands"
 msgstr ""
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Sleeping"
+msgstr "स्लीप मोड में"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Socket missing"
 msgstr "सॉकेट नहीं मिला"
@@ -8368,6 +8465,7 @@ msgid "Start the engine and press Test."
 msgstr "इंजन शुरू करें और टेस्ट दबाएँ।"
 
 #: src/lib/run-status-label.ts
+#: src/pages/shell/runtime-summary.tsx
 msgid "Starting"
 msgstr "शुरू हो रहा है"
 
@@ -8441,6 +8539,7 @@ msgstr ""
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/GroupPanel.tsx
+#: src/pages/shell/runtime-summary.tsx
 msgid "Stopped"
 msgstr "बंद"
 
@@ -8564,7 +8663,6 @@ msgid "Teaching in progress. Stop teaching before sending a new message."
 msgstr "सिखाना जारी है। नया संदेश भेजने से पहले सिखाना रोकें।"
 
 #: src/pages/Shell.tsx
-#: src/pages/shell/bot-panel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Team"
 msgstr "टीम"
@@ -8621,6 +8719,10 @@ msgstr "इस कंप्यूटर पर टर्मिनल उपल�
 msgid "Test"
 msgstr "टेस्ट करें"
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Test computer"
+msgstr "टेस्ट कंप्यूटर"
+
 #: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
 msgid "Test connection"
 msgstr ""
@@ -8661,6 +8763,10 @@ msgstr "कंप्यूटर व्यस्त है। इसके प�
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr ""
+
+#: src/components/ai/ChiefResultBubble.tsx
+msgid "The draft is ready."
+msgstr "ड्राफ़्ट तैयार है।"
 
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "The file changed. Open it again before saving."
@@ -8801,8 +8907,9 @@ msgstr "यह कंप्यूटर"
 #: src/pages/fleet/target-name.ts
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
+#: src/pages/shell/runtime-summary.tsx
 msgid "This computer"
-msgstr ""
+msgstr "यह कंप्यूटर"
 
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "This configuration is too complex."
@@ -9383,6 +9490,10 @@ msgstr "पूर्ण सेकंड डालें।"
 msgid "User"
 msgstr ""
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Uses that account's permissions."
+msgstr "उस खाते की अनुमतियों का उपयोग करता है।"
+
 #: src/pages/shell/bot-model-chip.tsx
 #: src/pages/shell/group-participants.tsx
 msgid "Using {currentId}"
@@ -9468,6 +9579,10 @@ msgstr ""
 #: src/lib/working-indicator.ts
 msgid "Waiting for the model"
 msgstr "मॉडल का इंतज़ार"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Waiting for the tool"
+msgstr "टूल का इंतज़ार है"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
@@ -9579,6 +9694,10 @@ msgstr "कब उपयोग करें"
 msgid "Where should bots run?"
 msgstr "बॉट कहां चलने चाहिए?"
 
+#: src/pages/shell/bot-panel.tsx
+msgid "Where this bot runs"
+msgstr "यह बॉट कहाँ चलता है"
+
 #: src/pages/memory/MemoryDocuments.tsx
 msgid "Who the user is and the professional domain"
 msgstr ""
@@ -9614,6 +9733,10 @@ msgstr "{task} पर काम कर रहा है"
 #: src/pages/TeamBoard.tsx
 msgid "Working on {task} for {0}"
 msgstr "{0} के लिए {task} पर काम कर रहा है"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Working on the task"
+msgstr "कार्य पर काम हो रहा है"
 
 #: src/components/ai/CompactWorkRecord.tsx
 msgid "Working: {title}"

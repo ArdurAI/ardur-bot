@@ -7,6 +7,7 @@ import type {
   TraceOutcome,
   TracePoint,
 } from "@ardurbot/contracts";
+import { chiefActivityKey } from "@ardurbot/core";
 
 interface PendingPaint {
   traceId: string;
@@ -23,6 +24,8 @@ interface ClientTrace {
   text?: Map<string, PendingPaint>;
   terminal?: Map<string, PendingPaint>;
   receipt?: Map<string, PendingPaint>;
+  activity?: Map<string, PendingPaint>;
+  result?: Map<string, PendingPaint>;
   dropped?: number;
 }
 declare global {
@@ -45,6 +48,8 @@ function state() {
   trace.text ??= new Map();
   trace.terminal ??= new Map();
   trace.receipt ??= new Map();
+  trace.activity ??= new Map();
+  trace.result ??= new Map();
   trace.dropped ??= 0;
   return trace as Required<ClientTrace>;
 }
@@ -94,6 +99,38 @@ export function clientTraceSnapshot(): TraceBatch | null {
 /** Only primitive event metadata is retained; content is inspected for eligibility, never copied. */
 export function receiveTraceEvent(event: ProductEvent) {
   const trace = state();
+  if (
+    trace &&
+    (event.type === "thread.message.updated" || event.type === "thread.message.created")
+  ) {
+    const blocks = Array.isArray(event.payload.blocks) ? event.payload.blocks : [];
+    for (const block of blocks) {
+      const dispatch =
+        block.kind === "handoff" || block.kind === "bot_message_sent"
+          ? block.chiefDispatch
+          : undefined;
+      const result = block.kind === "chief_result" ? block.result : undefined;
+      const id = dispatch?.requestMessageId ?? result?.requestMessageId;
+      const pending =
+        dispatch?.activity && chiefActivityKey(dispatch)
+          ? trace.activity
+          : result
+            ? trace.result
+            : undefined;
+      if (!id || !pending || pending.has(id)) continue;
+      if (pending.size >= trace.capacity) {
+        trace.dropped++;
+        continue;
+      }
+      pending.set(id, {
+        traceId: id,
+        threadId: event.threadId,
+        seq: event.seq,
+        messageId:
+          typeof event.payload.messageId === "string" ? event.payload.messageId : undefined,
+      });
+    }
+  }
   if (!trace || !event.runId) return;
   point(event.runId, "client.received");
   const outcome =
@@ -237,6 +274,8 @@ export function paintThreadTrace(snapshot: ThreadSnapshot | null): (() => void) 
       [trace.text, "client.text.painted"],
       [trace.terminal, "client.terminal.painted"],
       [trace.receipt, "client.receipt.painted"],
+      [trace.activity, "client.activity.painted"],
+      [trace.result, "client.result.painted"],
     ] as const) {
       for (const [id, pending] of pendingMap) {
         if (
@@ -275,6 +314,33 @@ export function paintThreadTrace(snapshot: ThreadSnapshot | null): (() => void) 
                     !visible(
                       document.querySelector(
                         `[data-message-id="${CSS.escape(message.id)}"] [data-testid="chief-receipt"]`,
+                      ),
+                    )
+                  )
+                    return;
+                }
+                if (
+                  boundary === "client.activity.painted" ||
+                  boundary === "client.result.painted"
+                ) {
+                  const testId =
+                    boundary === "client.activity.painted" ? "chief-activity" : "chief-result";
+                  const message = latest.messages.find(
+                    (m) =>
+                      m.id === pending.messageId &&
+                      m.blocks.some((b) =>
+                        boundary === "client.result.painted"
+                          ? b.kind === "chief_result"
+                          : (b.kind === "handoff" || b.kind === "bot_message_sent") &&
+                            b.chiefDispatch?.activity &&
+                            chiefActivityKey(b.chiefDispatch),
+                      ),
+                  );
+                  if (
+                    !message ||
+                    !visible(
+                      document.querySelector(
+                        `[data-message-id="${CSS.escape(message.id)}"] [data-testid="${testId}"]`,
                       ),
                     )
                   )

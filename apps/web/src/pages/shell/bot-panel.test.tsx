@@ -3,12 +3,13 @@ import { modelPinOptionKey, parseModelPinOptionKey } from "@ardurbot/core";
 
 import type {
   Bot,
+  ComputerStatus,
   ModelCatalogEntry,
   ModelCredential,
   RuntimeAvailability,
 } from "@ardurbot/contracts";
 import type { ComponentProps, ReactNode } from "react";
-import { act } from "react";
+import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -17,6 +18,9 @@ const api = vi.hoisted(() => ({
   credentials: vi.fn(),
   me: vi.fn(),
   availability: vi.fn(),
+  connections: vi.fn(),
+  computers: vi.fn(),
+  status: vi.fn(),
 }));
 vi.mock("../../lib/rpc", () => ({
   rpc: {
@@ -24,6 +28,7 @@ vi.mock("../../lib/rpc", () => ({
     models: api,
     runtimes: { availability: api.availability },
     me: api.me,
+    computer: { connections: api.connections, list: api.computers, status: api.status },
     voice: { voices: async () => [] },
   },
 }));
@@ -54,13 +59,32 @@ vi.mock("@ardurbot/ui-web", () => ({
   Textarea: (props: ComponentProps<"textarea">) => <textarea {...props} />,
   NativeSelect: (props: ComponentProps<"select">) => <select {...props} />,
   NativeSelectOption: (props: ComponentProps<"option">) => <option {...props} />,
-  Toggle: ({ children }: { children: ReactNode }) => <button type="button">{children}</button>,
+  Toggle: ({
+    children,
+    pressed,
+    onPressedChange,
+    "data-testid": testId,
+  }: {
+    children: ReactNode;
+    pressed: boolean;
+    onPressedChange: (value: boolean) => void;
+    "data-testid"?: string;
+  }) => (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      data-testid={testId}
+      onClick={() => onPressedChange(!pressed)}
+    >
+      {children}
+    </button>
+  ),
   Switch: () => null,
 }));
 
 import { useModelSettings } from "../../lib/use-model-settings";
 import { BotModelChip, effectiveBotModel } from "./bot-model-chip";
-import { BotSettings } from "./bot-panel";
+import { BotSettings, CreateBotForm } from "./bot-panel";
 import { ProviderErrorMessage } from "./provider-error-message";
 import { RuntimeSettings } from "./runtime-settings";
 
@@ -130,6 +154,14 @@ beforeEach(() => {
   api.list.mockResolvedValue(catalog);
   api.credentials.mockResolvedValue(credentials);
   api.me.mockResolvedValue(me);
+  api.connections.mockResolvedValue([]);
+  api.computers.mockResolvedValue([]);
+  api.status.mockResolvedValue({
+    botId: bot.id,
+    kind: "desktop",
+    mode: "team",
+    state: "stopped",
+  } as ComputerStatus);
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -353,11 +385,17 @@ describe("bot model settings", () => {
   });
 });
 
-it("groups bot settings into cards and keeps memory and computer under Advanced", async () => {
+it("shows execution settings outside Advanced while keeping memory progressive", async () => {
   await act(async () => root.render(settings()));
   const cards = [...container.querySelectorAll("section[data-settings-group]")];
   const title = (card: Element) => card.querySelector("h3")?.textContent;
-  expect(cards.map(title)).toEqual(["Profile", "Model", "Notifications", "Memory", "Computer"]);
+  expect(cards.map(title)).toEqual([
+    "Profile",
+    "Model",
+    "Where this bot runs",
+    "Notifications",
+    "Memory",
+  ]);
   const card = (label: string) => cards.find((item) => title(item) === label)!;
   const profileFields = card("Profile").querySelector('input[id$="-name"]')?.closest(".grid");
   const defaultPaneWidth = 560;
@@ -381,9 +419,93 @@ it("groups bot settings into cards and keeps memory and computer under Advanced"
   expect(card("Notifications").textContent).toContain("Read replies aloud");
   const advanced = container.querySelector('[data-testid="bot-settings-advanced"]');
   expect(advanced?.contains(card("Memory"))).toBe(true);
-  expect(advanced?.contains(card("Computer"))).toBe(true);
+  expect(advanced?.contains(card("Where this bot runs"))).toBe(false);
   expect(advanced?.contains(card("Notifications"))).toBe(false);
-  expect(card("Computer").textContent).toBe("ComputerTeamPrivate");
+  expect(card("Where this bot runs").textContent).toContain("Shared with team");
+  expect(card("Where this bot runs").textContent).toContain("Bots share files and installed tools");
+});
+
+describe("new isolated work", () => {
+  async function enterName() {
+    const input = container.querySelector<HTMLInputElement>('input[id$="-name"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+        input,
+        "Builder",
+      );
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+  const createButton = () =>
+    [...container.querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.textContent === "Create",
+    )!;
+  it("defaults to a dedicated container and submits an explicit pin", async () => {
+    api.me.mockResolvedValue({ ...me, sandboxProvider: "docker", computerHost: "this-mac" });
+    const onCreate = vi.fn();
+    await act(async () => root.render(<CreateBotForm onCreate={onCreate} onCancel={() => {}} />));
+    expect(
+      container.querySelector('[data-testid="create-bot-private"]')?.getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(container.textContent).toContain("Container");
+    await enterName();
+    await act(async () => createButton().click());
+    expect(onCreate).toHaveBeenCalledWith({
+      name: "Builder",
+      title: "",
+      description: "",
+      computerMode: "dedicated",
+      isolatedComputer: { connectionId: null },
+    });
+  });
+  it("offers setup rather than silently creating on the host", async () => {
+    api.me.mockResolvedValue({ ...me, sandboxProvider: "desktop" });
+    const onCreate = vi.fn();
+    const onSetupComputer = vi.fn();
+    await act(async () =>
+      root.render(
+        <CreateBotForm onCreate={onCreate} onCancel={() => {}} onSetupComputer={onSetupComputer} />,
+      ),
+    );
+    await enterName();
+    expect(createButton().disabled).toBe(true);
+    const setup = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Set up computer",
+    )!;
+    await act(async () => setup.click());
+    expect(onSetupComputer).toHaveBeenCalledOnce();
+    expect(onCreate).not.toHaveBeenCalled();
+  });
+  it("allows an explicit team choice with the host warning and no isolated claim", async () => {
+    api.me.mockResolvedValue({ ...me, sandboxProvider: "desktop" });
+    const onCreate = vi.fn();
+    await act(async () => root.render(<CreateBotForm onCreate={onCreate} onCancel={() => {}} />));
+    await enterName();
+    expect(createButton().disabled).toBe(true);
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[data-testid="create-bot-team"]')!.click(),
+    );
+    expect(container.textContent).toContain("Runs as you; can use your files and signed-in tools");
+    expect(container.textContent).toContain("Bots share files and installed tools");
+    await act(async () => createButton().click());
+    expect(onCreate).toHaveBeenCalledWith({
+      name: "Builder",
+      title: "",
+      description: "",
+      computerMode: "team",
+    });
+  });
+  it("uses a saved container on a host-only deployment", async () => {
+    api.me.mockResolvedValue({ ...me, sandboxProvider: "desktop" });
+    api.connections.mockResolvedValue([
+      { id: "saved", name: "Container engine", settings: { engine: "podman" } },
+    ]);
+    const onCreate = vi.fn();
+    await act(async () => root.render(<CreateBotForm onCreate={onCreate} onCancel={() => {}} />));
+    await enterName();
+    await act(async () => createButton().click());
+    expect(onCreate.mock.calls[0]?.[0].isolatedComputer).toEqual({ connectionId: "saved" });
+  });
 });
 
 describe("effective bot model", () => {
@@ -529,6 +651,77 @@ it("offers model recovery for a parsed provider error", async () => {
   expect(onChangeModel).toHaveBeenCalledOnce();
 });
 
+it("opens and focuses Model from the chip and recovery with the execution card loading", async () => {
+  let resolveStatus!: (status: ComputerStatus) => void;
+  api.status.mockReturnValue(
+    new Promise<ComputerStatus>((resolve) => {
+      resolveStatus = resolve;
+    }),
+  );
+  function ModelRecovery() {
+    const [open, setOpen] = useState(false);
+    const [focusRequest, setFocusRequest] = useState(0);
+    const openModel = () => {
+      setFocusRequest((request) => request + 1);
+      setOpen(true);
+    };
+    return (
+      <>
+        <BotModelChip bot={bot} settings={{ me, catalog, credentials }} onClick={openModel} />
+        <ProviderErrorMessage text="Model not supported" onChangeModel={openModel} />
+        {open ? (
+          <>
+            <button type="button" onClick={() => setOpen(false)}>
+              Close panel
+            </button>
+            <BotSettings
+              {...settings().props}
+              modelSettings={{ me, catalog, credentials }}
+              modelFocusRequest={focusRequest}
+            />
+          </>
+        ) : null}
+      </>
+    );
+  }
+  await act(async () => root.render(<ModelRecovery />));
+  expect(container.querySelector('[data-testid="bot-settings"]')).toBeNull();
+  const chip = container.querySelector<HTMLButtonElement>('button[aria-label^="Change model:"]')!;
+  await act(async () => chip.click());
+  expect(document.activeElement).toBe(modelSelect());
+  expect(container.textContent).toContain("Where this bot runs");
+  expect(api.status).toHaveBeenCalledWith({ botId: bot.id });
+  expect(container.querySelector('[data-testid="runtime-summary"]')).toBeNull();
+  expect(modelSelect().closest("details")).toBeNull();
+  expect(modelSelect().scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+  await act(async () =>
+    resolveStatus({
+      botId: bot.id,
+      kind: "desktop",
+      mode: "team",
+      state: "stopped",
+    } as ComputerStatus),
+  );
+  expect(container.querySelector('[data-testid="runtime-summary"]')?.textContent).toContain(
+    "Runs as you",
+  );
+  expect(document.activeElement).toBe(modelSelect());
+  const close = () =>
+    [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Close panel",
+    )!;
+  await act(async () => close().click());
+  await act(async () => chip.click());
+  expect(document.activeElement).toBe(modelSelect());
+  await act(async () => close().click());
+  const recovery = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Change model",
+  )!;
+  await act(async () => recovery.click());
+  expect(document.activeElement).toBe(modelSelect());
+  expect(onSave).not.toHaveBeenCalled();
+});
+
 it("does not show a model action for unrelated errors or a missing bot", async () => {
   await act(async () =>
     root.render(
@@ -599,7 +792,9 @@ it("uses Shell metadata for the panel without loading it again", async () => {
   );
   expect(modelSelect().options.length).toBeGreaterThan(1);
   expect(api.list).not.toHaveBeenCalled();
-  expect(api.me).not.toHaveBeenCalled();
+  // The execution card reads deployment metadata, not the model catalog.
+  expect(api.status).toHaveBeenCalledOnce();
+  expect(api.me).toHaveBeenCalledOnce();
   expect(api.credentials).not.toHaveBeenCalled();
 });
 

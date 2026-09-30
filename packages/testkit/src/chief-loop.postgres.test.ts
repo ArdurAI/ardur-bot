@@ -1,8 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { handoffToGroupBot } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
-import { DELEGATION_LIMITS } from "@ardurbot/contracts";
-import { createDb, lockOwnedGroup, provisionMessagingIdentity } from "@ardurbot/db";
+import { ChiefDispatchSchema, DELEGATION_LIMITS } from "@ardurbot/contracts";
+import { chiefActivityKey } from "@ardurbot/core";
+import {
+  createDb,
+  lockOwnedGroup,
+  projectChiefActivity,
+  provisionMessagingIdentity,
+  settleChiefActivity,
+} from "@ardurbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { resolveThreadTarget, sendThreadMessage } from "../../../apps/api/src/thread-target.js";
 
@@ -196,6 +203,49 @@ describe.skipIf(!enabled).sequential("chief receipt Postgres journey", () => {
       where: { id: "runId" in dispatch ? dispatch.runId : "missing" },
     });
     expect(admittedRun.botId).toBe(f.worker.id);
+    const savedDispatch = ChiefDispatchSchema.parse(
+      (await db.prisma.chiefPlan.findUniqueOrThrow({ where: { id: plan.id } })).dispatch,
+    );
+    expect(chiefActivityKey(savedDispatch)).toBe("working");
+    await db.prisma.run.update({
+      where: { id: admittedRun.id },
+      data: { status: "running", leaseFence: 1 },
+    });
+    const toolActivity = {
+      revision: plan.revision,
+      runId: admittedRun.id,
+      delegationId: admittedRun.delegationId!,
+      attempt: 1,
+      sourceSeq: 1,
+      key: "read-input" as const,
+      state: "active" as const,
+      updatedAt: new Date().toISOString(),
+    };
+    expect(
+      await projectChiefActivity(db.prisma, {
+        ...f.scope,
+        planId: plan.id,
+        botId: f.worker.id,
+        activity: toolActivity,
+      }),
+    ).toMatchObject({ threadId: f.target.threadId, type: "thread.message.updated" });
+    expect(
+      await projectChiefActivity(db.prisma, {
+        ...f.scope,
+        planId: plan.id,
+        botId: f.worker.id,
+        activity: toolActivity,
+      }),
+    ).toBeUndefined();
+    await db.prisma.run.update({ where: { id: admittedRun.id }, data: { status: "completed" } });
+    await settleChiefActivity(db.prisma, admittedRun.delegationId!);
+    expect(
+      chiefActivityKey(
+        ChiefDispatchSchema.parse(
+          (await db.prisma.chiefPlan.findUniqueOrThrow({ where: { id: plan.id } })).dispatch,
+        ),
+      ),
+    ).toBeUndefined();
     expect(admittedRun.runtimePin).toMatchObject({ effort: "high", modelId: "fixed" });
     expect(
       (await db.prisma.bot.findUniqueOrThrow({ where: { id: f.worker.id } })).thinkingLevel,

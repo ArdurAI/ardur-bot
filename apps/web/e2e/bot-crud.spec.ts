@@ -30,6 +30,7 @@ test("bot creation, editing, and deletion persist", async ({ page }, testInfo) =
   await openNewBot(page);
   const form = page.getByTestId("create-bot-form");
   await form.locator("label:has-text('Name') input").fill("New Bot");
+  await form.getByTestId("create-bot-team").click();
   await form.getByRole("button", { name: "Create", exact: true }).click();
   await createAborted;
   // Failed create keeps the form open on the current bot chat.
@@ -102,9 +103,9 @@ test("bot creation, editing, and deletion persist", async ({ page }, testInfo) =
   await expect(studio.getByRole("button", { name: "Color #7F621B" })).toHaveClass(/ring-2/);
   await studio.getByRole("button", { name: "Done", exact: true }).click();
   const modelSelect = settings.locator("label:has-text('Model') select");
-  const teamComputer = settings.getByRole("button", { name: "Team" });
+  const teamComputer = settings.getByRole("button", { name: "Shared with team", exact: true });
   const openWork = settings.getByTestId("bot-scratchpad");
-  await expect(teamComputer).toBeHidden();
+  await expect(teamComputer).toBeVisible();
   await expect(modelSelect).toBeVisible();
   await expect(openWork).toBeHidden();
   await expect(settings.getByRole("button", { name: "Save", exact: true })).toBeVisible();

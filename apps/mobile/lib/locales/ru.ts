@@ -1,4 +1,13 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "Reading the document": "Читаю документ",
+  "Connecting to Notion": "Подключаюсь к Notion",
+  "Creating the Notion page": "Создаю страницу в Notion",
+  "Checking the Notion page": "Проверяю страницу в Notion",
+  "Checking the missing tool": "Проверяю недостающий инструмент",
+  "Working on the task": "Работаю над задачей",
+  "Waiting for the tool": "Ожидаю инструмент",
+  "Done — added the document to Notion.": "Готово — документ добавлен в Notion.",
+  "The draft is ready.": "Черновик готов.",
   "Got it — I’ll choose a team member to put this in Notion.":
     "Понял — выберу участника команды, который разместит это в Notion.",
   "Got it — I’ll check what’s missing and ask before installing it.":
@@ -1408,4 +1417,35 @@ export const RU_MESSAGES: Record<string, string> = {
   "is waiting for you": "ждёт вас",
   "has not answered yet": "пока не ответил",
   "This runtime": "Эта среда выполнения",
+  "Where this bot runs": "Где работает этот бот",
+  "Only this bot": "Только этот бот",
+  "Shared with team": "Общий с командой",
+  "Bots share files and installed tools":
+    "Боты совместно используют файлы и установленные инструменты",
+  "Runs as you; can use your files and signed-in tools":
+    "Работает с вашими правами; может использовать ваши файлы и инструменты, в которых вы вошли в аккаунт",
+  Container: "Контейнер",
+  "Remote computer": "Удалённый компьютер",
+  "Hosted sandbox": "Облачная песочница",
+  "Test computer": "Тестовый компьютер",
+  "Separate home; can reach allowed network services and granted credentials.":
+    "Отдельная домашняя папка; доступны разрешённые сетевые службы и предоставленные учётные данные.",
+  "Uses that account's permissions.": "Использует права этой учётной записи.",
+  "Runs at the configured provider; can use granted credentials and network access.":
+    "Работает у настроенного провайдера; может использовать предоставленные учётные данные и доступ к сети.",
+  "For testing only; not an isolation boundary.":
+    "Только для тестирования; не обеспечивает изоляцию.",
+  "Computer location unavailable. Choose a supported connection.":
+    "Местоположение компьютера недоступно. Выберите поддерживаемое подключение.",
+  "Computer location unavailable. Try again.":
+    "Местоположение компьютера недоступно. Попробуйте снова.",
+  "Change location": "Изменить местоположение",
+  "Set up a container for isolated work.": "Настройте контейнер для изолированной работы.",
+  "Set up computer": "Настроить компьютер",
+  "Could not start": "Не удалось запустить",
+  Sharing: "Совместное использование",
+  "Change location on desktop.": "Измените местоположение в настольном приложении.",
+  "Set up a container on desktop, then try again.":
+    "Настройте контейнер в настольном приложении, затем попробуйте снова.",
+  Sleeping: "Спит",
 };

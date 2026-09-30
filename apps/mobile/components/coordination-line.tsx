@@ -1,10 +1,13 @@
-import type { ChiefDispatch } from "@ardurbot/contracts";
+import type { ChiefDispatch, MessageBlock } from "@ardurbot/contracts";
 import type { CoordinationBlock } from "@ardurbot/core";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Pressable, Text, View } from "react-native";
+import { Alert, Animated, Linking, Pressable, Text, View } from "react-native";
 import { mobileTokens } from "../lib/appearance";
+import { openMobileArtifact } from "../lib/artifact-open";
 import {
+  chiefActivityText,
   chiefDispatchSummary,
+  chiefResultText,
   coordinationAccessibilityLabel,
   coordinationFailureFixable,
   coordinationFailureLine,
@@ -14,6 +17,53 @@ import {
 import { useI18n } from "../lib/i18n";
 import { watchMotionAllowed, workRecordShouldPulse } from "../lib/work-record";
 import { NativeSymbol } from "./native-symbol";
+
+export function ChiefResultBubble({
+  block,
+  actionProps,
+}: {
+  block: Extract<MessageBlock, { kind: "chief_result" }>;
+  actionProps: Record<string, unknown>;
+}) {
+  const tokens = mobileTokens();
+  const { t } = useI18n();
+  const text = chiefResultText(block.result);
+  if (!text) return null;
+  return (
+    <View
+      style={{
+        backgroundColor: tokens.muted,
+        borderRadius: 20,
+        paddingHorizontal: 18,
+        paddingVertical: 12,
+      }}
+    >
+      <Text style={{ color: tokens.foreground, fontSize: 15.5 }}>{text}</Text>
+      <Pressable
+        {...actionProps}
+        accessibilityRole="link"
+        accessibilityLabel={block.name}
+        style={{ minHeight: 44, justifyContent: "center" }}
+        onPress={() => {
+          const opening =
+            block.result.state === "draft"
+              ? openMobileArtifact(
+                  block.groupId ? { groupId: block.groupId } : { botId: block.botId },
+                  block.result.artifactId,
+                  block.name,
+                  block.mimeType,
+                )
+              : Linking.openURL(block.result.href);
+          void opening.catch(() => Alert.alert(t("Could not open file"), t("Try again.")));
+        }}
+      >
+        <Text style={{ color: tokens.foreground, fontSize: 15.5, textDecorationLine: "underline" }}>
+          {block.name}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
 
 export function ChiefDispatchLine({
   dispatch,
@@ -27,13 +77,14 @@ export function ChiefDispatchLine({
   const tokens = mobileTokens();
   const [expanded, setExpanded] = useState(false);
   const label = chiefDispatchSummary(dispatch);
+  const activity = chiefActivityText(dispatch);
   return (
     <View style={{ width: "100%", paddingVertical: 4 }}>
       <Pressable
         {...actionProps}
         onPress={() => setExpanded(!expanded)}
         accessibilityRole="button"
-        accessibilityLabel={label}
+        accessibilityLabel={[label, activity].filter(Boolean).join(" · ")}
         accessibilityState={{ expanded }}
         style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8 }}
       >
@@ -46,6 +97,15 @@ export function ChiefDispatchLine({
         </Text>
         <Text style={{ color: tokens.mutedForeground }}>{expanded ? "▾" : "▸"}</Text>
       </Pressable>
+      {activity ? (
+        <Text
+          style={{ color: tokens.mutedForeground, fontSize: 13.5 }}
+          numberOfLines={1}
+          accessibilityLiveRegion="polite"
+        >
+          {activity}
+        </Text>
+      ) : null}
       {expanded ? (
         <Text style={{ color: tokens.mutedForeground, fontSize: 13.5 }}>{detail}</Text>
       ) : null}

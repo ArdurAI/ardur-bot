@@ -22,6 +22,7 @@ import { ComputerModePicker } from "../components/computer-mode-picker";
 import { ContextSection } from "../components/context-section";
 import { RuntimeConfigPanel } from "../components/runtime-config-panel";
 import { RuntimeSettings } from "../components/runtime-settings";
+import { BotRuntimeSettings } from "../components/runtime-summary";
 import type { MobileBot, MobileMe, MobileModel, MobileModelCredential } from "../lib/api";
 import { rpc } from "../lib/api";
 import { COMPUTER_LIFECYCLE_TIMEOUT_MS } from "../lib/computer";
@@ -503,7 +504,9 @@ export default function BotSettingsScreen() {
             />
           ))}
         </ScrollView>
-        <ComputerModePicker value={computerMode} onChange={setComputerMode} />
+        <BotRuntimeSettings botId={botId} mode={computerMode}>
+          <ComputerModePicker value={computerMode} onChange={setComputerMode} />
+        </BotRuntimeSettings>
         {runtimeKind === "hermes" ? (
           <Text style={{ color: tokens.mutedForeground, marginTop: 8 }}>
             {t("Hermes runs with this computer's access.")}

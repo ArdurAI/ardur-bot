@@ -27,6 +27,8 @@ export const TRACE_BOUNDARIES = [
   "client.submitted",
   "client.acknowledged",
   "client.receipt.painted",
+  "client.activity.painted",
+  "client.result.painted",
   "client.received",
   "client.text.painted",
   "client.terminal.painted",
