@@ -12,7 +12,7 @@ function isUniqueConflict(error: unknown): boolean {
 }
 
 async function lockRun(tx: Prisma.TransactionClient, runId: string) {
-  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`evidence:${runId}`}, 0))`;
+  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`evidence:${runId}`}, 0))::text AS "lock"`;
 }
 
 export async function insertRecord(
