@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import type { Bot, ComputerStatus } from "@ardurbot/contracts";
 import type { ReactNode } from "react";
-import { act } from "react";
+import { act, useEffect } from "react";
 import { createRoot } from "react-dom/client";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const calls = vi.hoisted(() => ({
@@ -66,7 +67,13 @@ let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 
 async function render(props: Props) {
-  await act(async () => root.render(<WorkspaceTerminal {...props} />));
+  await act(async () =>
+    root.render(
+      <MemoryRouter>
+        <WorkspaceTerminal {...props} />
+      </MemoryRouter>,
+    ),
+  );
 }
 
 beforeEach(() => {
@@ -74,16 +81,61 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
+  vi.spyOn(window, "confirm").mockReturnValue(true);
 });
 
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 describe("WorkspaceTerminal", () => {
+  it("keeps authority and Release reachable outside the hidden tab", async () => {
+    const controlsHost = document.createElement("div");
+    document.body.append(controlsHost);
+    try {
+      const props = baseProps({
+        controlsHost,
+        computer: computer({ controlHolder: "user", controlBotId: "bot" }),
+      });
+      await render(props);
+      await render({ ...props, visible: false });
+      expect(controlsHost.textContent).toContain("You control the computer");
+      expect(controlsHost.textContent).toContain("Release");
+      vi.mocked(window.confirm).mockReturnValueOnce(false);
+      await act(async () => controlsHost.querySelector("button")!.click());
+      expect(calls.release).not.toHaveBeenCalled();
+      await act(async () => controlsHost.querySelector("button")!.click());
+      expect(calls.release).toHaveBeenCalledExactlyOnceWith({ botId: "bot" });
+      expect(controlsHost.textContent).not.toContain("You control the computer");
+    } finally {
+      controlsHost.remove();
+    }
+  });
+
+  it("guards explicit close and clears the guard when the computer stops", async () => {
+    const registerCloseGuard = vi.fn();
+    const props = baseProps({
+      registerCloseGuard,
+      computer: computer({ controlHolder: "user", controlBotId: "bot" }),
+    });
+    await render(props);
+    const guard = registerCloseGuard.mock.lastCall?.[0] as () => boolean;
+    vi.mocked(window.confirm).mockReturnValueOnce(false);
+    expect(guard()).toBe(false);
+    expect(guard()).toBe(true);
+    expect(window.confirm).toHaveBeenCalledWith("End this terminal?");
+    await render({
+      ...props,
+      computer: computer({ state: "stopped", controlHolder: "user", controlBotId: "bot" }),
+    });
+    expect(registerCloseGuard.mock.lastCall?.[0]).toBeNull();
+    expect(container.textContent).not.toContain("You control the computer");
+  });
+
   it("connects the shared session only once available, running and under user control", async () => {
     await render(baseProps({ computer: computer({ controlHolder: "user", controlBotId: "bot" }) }));
     expect(calls.session).toHaveBeenCalledTimes(1);
@@ -156,7 +208,17 @@ describe("WorkspaceTerminal", () => {
     expect(calls.session).not.toHaveBeenCalled();
   });
 
-  it("releases the control it took when the tab is left", async () => {
+  it("retains the shell identity and acquired control across hide and reveal", async () => {
+    const mounted = vi.fn();
+    const closed = vi.fn();
+    function Session() {
+      useEffect(() => {
+        mounted();
+        return closed;
+      }, []);
+      return <div data-session>scrollback</div>;
+    }
+    calls.session.mockImplementation(Session);
     const onTakeControl = vi.fn(async () => {});
     const props = baseProps({ onTakeControl });
     await render(props);
@@ -173,7 +235,15 @@ describe("WorkspaceTerminal", () => {
       computer: computer({ controlHolder: "user", controlBotId: "bot" }),
       visible: false,
     });
-    expect(calls.release).toHaveBeenCalledWith({ botId: "bot" });
+    expect(calls.release).not.toHaveBeenCalled();
+    expect(closed).not.toHaveBeenCalled();
+    await render({ ...props, computer: computer({ controlHolder: "user", controlBotId: "bot" }) });
+    expect(mounted).toHaveBeenCalledOnce();
+    expect(container.querySelector("[data-session]")?.textContent).toBe("scrollback");
+    await act(async () => root.unmount());
+    expect(closed).toHaveBeenCalledOnce();
+    expect(calls.release).toHaveBeenCalledExactlyOnceWith({ botId: "bot" });
+    calls.session.mockImplementation(() => null);
   });
 
   it("releases control from the Release action and reports it", async () => {
@@ -190,5 +260,6 @@ describe("WorkspaceTerminal", () => {
     await act(async () => button!.click());
     expect(calls.release).toHaveBeenCalledWith({ botId: "bot" });
     expect(onReleased).toHaveBeenCalledTimes(1);
+    expect(window.confirm).toHaveBeenCalledWith("End this terminal?");
   });
 });

@@ -3892,6 +3892,10 @@ msgstr "启用"
 msgid "Enable this server first, then sign in."
 msgstr "请先启用此服务器，然后登录。"
 
+#: src/pages/workspace/WorkspaceTerminal.tsx
+msgid "End this terminal?"
+msgstr "结束此终端？"
+
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Engage when... Ignore..."
 msgstr ""
@@ -9662,6 +9666,10 @@ msgstr "如果没有自动跳转，可以关闭此标签页。"
 #: src/pages/McpOAuthCallback.tsx
 msgid "You can close this window."
 msgstr "可以关闭此窗口。"
+
+#: src/pages/workspace/WorkspaceTerminal.tsx
+msgid "You control the computer"
+msgstr "你正在控制电脑"
 
 #: src/pages/LearningInsights.tsx
 msgid "You gave {count} thumbs with reasons in {days} days, but Learning is off."

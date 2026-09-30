@@ -16,7 +16,7 @@
       "id": "team",
       "eyebrow": "TEAM",
       "title": "Named bots, together",
-      "body": "Give each bot its own conversation and history, bring bots together in group chats whose members answer at the same time — the owner sets how many bots answer at once (1-8) in group settings — and see current tasks and availability in Team. On web and desktop, inspect tasks and edit workspace files beside a conversation. Mobile reads those files in its own screens.",
+      "body": "Give each bot its own conversation and history, bring bots together in group chats whose members answer at the same time — the owner sets how many bots answer at once (1-8) in group settings — and see current tasks and availability in Team. On web and desktop, inspect tasks and edit workspace files beside a conversation. An opened workspace terminal keeps its shell and scrollback when switching views; control stays visible until released. Closing the pane or leaving the bot asks before ending the terminal. Mobile reads workspace files in its own screens; the native app has no interactive terminal.",
       "source": "README.md#What you get today"
     },
     {

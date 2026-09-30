@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { RealtimeFanout } from "@ardurbot/adapter-kit";
+import type { JobPublisher, RealtimeFanout } from "@ardurbot/adapter-kit";
+import { evidenceSealJob } from "@ardurbot/adapter-kit";
 import type { RunFailurePayload } from "@ardurbot/contracts";
 import {
   type BotSecretDestination,
@@ -330,7 +331,7 @@ export interface RunSecretWriter {
 export function createThreadEvents(
   prisma: PrismaClient,
   realtime?: RealtimeFanout,
-  options: { catchUpMs?: number; runSecretWriter?: RunSecretWriter } = {},
+  options: { catchUpMs?: number; runSecretWriter?: RunSecretWriter; jobs?: JobPublisher } = {},
 ): ThreadEvents {
   return {
     answerRunInput: (input) => answerRunInput(prisma, input, realtime, options.runSecretWriter),
@@ -340,7 +341,7 @@ export function createThreadEvents(
     clearThread: (input) => clearThread(prisma, input, realtime),
     finalizeComputerControlRelease: (input) =>
       finalizeComputerControlRelease(prisma, input, realtime),
-    finalizeRun: (input) => finalizeRun(prisma, input, realtime),
+    finalizeRun: (input) => finalizeRun(prisma, input, realtime, options.jobs),
     notify: (threadId, seq) => notifyRealtime(realtime, threadId, seq),
     pauseRunForInput: (input) => pauseRunForInput(prisma, input, realtime),
     pauseRunForTakeover: (input) => pauseRunForTakeover(prisma, input, realtime),
@@ -1569,9 +1570,14 @@ export async function finalizeRun(
   prisma: PrismaClient,
   input: FinalizeRunInput,
   realtime?: RealtimeFanout,
+  jobs?: JobPublisher,
 ): Promise<FinalizeRunResult | false> {
   const committed = await withTransactionRetry(() => finalizeRunOnce(prisma, input));
   if (!committed) return false;
+  if (jobs)
+    await jobs.enqueue(evidenceSealJob(input.runId)).catch(() => {
+      getLogger().warn("evidence seal enqueue failed");
+    });
   let continuationRunId = committed.continuationRunId;
   if (input.outcome === "completed" && !continuationRunId) {
     const run = await prisma.run.findUnique({

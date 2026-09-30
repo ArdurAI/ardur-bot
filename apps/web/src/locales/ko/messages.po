@@ -3892,6 +3892,10 @@ msgstr ""
 msgid "Enable this server first, then sign in."
 msgstr ""
 
+#: src/pages/workspace/WorkspaceTerminal.tsx
+msgid "End this terminal?"
+msgstr "이 터미널을 종료할까요?"
+
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Engage when... Ignore..."
 msgstr ""
@@ -9662,6 +9666,10 @@ msgstr "자동으로 이동하지 않으면 이 탭을 닫아도 됩니다."
 #: src/pages/McpOAuthCallback.tsx
 msgid "You can close this window."
 msgstr "이 창을 닫아도 됩니다."
+
+#: src/pages/workspace/WorkspaceTerminal.tsx
+msgid "You control the computer"
+msgstr "컴퓨터를 직접 제어 중입니다"
 
 #: src/pages/LearningInsights.tsx
 msgid "You gave {count} thumbs with reasons in {days} days, but Learning is off."

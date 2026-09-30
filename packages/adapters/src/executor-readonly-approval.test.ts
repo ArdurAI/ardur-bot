@@ -20,9 +20,13 @@ import {
   approvalEffectKey,
   toolEffectIdempotencyKey,
 } from "@ardurbot/core/node/approval-effect-key";
+import { verifyChain } from "@ardurbot/evidence";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { isApprovalPausedResult } from "./approval-effect.js";
 import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
+import { EVIDENCE_RECORDING_ERROR } from "./evidence/executor.js";
+import { createEvidenceRecorder } from "./evidence/recorder.js";
+import { fakeEvidenceStore } from "./evidence/test-store.js";
 import { createRunExecutor } from "./executor.js";
 import { catalogEntries, resolveCatalogCall } from "./lazy-tool-catalog.js";
 import { approvalRequestRoute } from "./remote-execution.js";
@@ -81,6 +85,8 @@ function fixture({
   shutdownSignal,
   integration = false,
   host = false,
+  governance = false,
+  evidenceFailure = false,
 }: {
   name?: string;
   catalog?: boolean;
@@ -93,6 +99,8 @@ function fixture({
   shutdownSignal?: AbortSignal;
   integration?: boolean;
   host?: boolean;
+  governance?: boolean;
+  evidenceFailure?: boolean;
 } = {}) {
   const tool: ConnectorTool = {
     name,
@@ -226,7 +234,7 @@ function fixture({
       })),
     },
     instanceIdentity: { findUnique: vi.fn(async () => null) },
-    deviceApprovalBinding: { findUnique: vi.fn(async () => null) },
+    deviceApprovalBinding: { findUnique: vi.fn(async (): Promise<unknown> => null) },
     botMcpServer: { findFirst: vi.fn(async () => grant) },
     run: {
       findUnique: vi.fn(async () => run),
@@ -318,7 +326,13 @@ function fixture({
     }
     yield { type: "done" as const, text: "Done" };
   });
+  const evidence = fakeEvidenceStore();
+  vi.mocked(evidence.store.governanceEnabled).mockResolvedValue(governance);
+  if (evidenceFailure)
+    vi.mocked(evidence.store.insertRecord).mockRejectedValue(new Error("Storage unavailable"));
+  const evidenceRecorder = createEvidenceRecorder({ store: evidence.store, secretStore: digests });
   const executor = createRunExecutor({
+    evidenceRecorder,
     prisma,
     secretStore: { load: () => "test-key", digest: testDigest },
     runtime: { describe: () => ({ capabilities: { scripted: false } }), run: runtimeRun },
@@ -352,6 +366,9 @@ function fixture({
   } as unknown as Parameters<typeof createRunExecutor>[0]);
   return {
     cwd,
+    evidence,
+    deviceApprovalBinding: prisma.deviceApprovalBinding,
+    externalEffect,
     grant,
     effects,
     results,
@@ -360,12 +377,16 @@ function fixture({
     setCalls(next: typeof calls) {
       calls = next;
     },
-    async run() {
+    async run(expectedFailure = false) {
       vi.mocked(recordRunUsage).mockClear();
       run.status = "queued";
       await executor.continueRun(run.id, "worker-1");
       expect(runtimeRun).toHaveBeenCalled();
       expect(prisma.attempt.update).not.toHaveBeenCalled();
+      if (expectedFailure) {
+        expect(finalizeRun).toHaveBeenCalledWith(expect.objectContaining({ outcome: "failed" }));
+        return;
+      }
       expect(finalizeRun).not.toHaveBeenCalledWith(expect.objectContaining({ outcome: "failed" }));
       expect(recordRunUsage).toHaveBeenCalledWith(
         expect.anything(),
@@ -481,7 +502,13 @@ describe("connector read-only metadata and approval enforcement", () => {
     it.each(["argv", "program", "identity", "workspace", "cwd", "legacy", "transport"])(
       "refuses a resumed approval after %s changes",
       async (changed) => {
-        const f = fixture({ name: "execute_command", catalog, integration: true, host: true });
+        const f = fixture({
+          name: "execute_command",
+          catalog,
+          integration: true,
+          host: true,
+          governance: true,
+        });
         await f.run();
         f.effects[0]!.status = "approved";
         if (changed === "argv")
@@ -502,6 +529,7 @@ describe("connector read-only metadata and approval enforcement", () => {
         expect(f.results.at(-1)).toEqual({
           error: "This command changed or has no bound approval. Review it again.",
         });
+        expect(f.evidence.records.some((row) => row.verdict === "compliant")).toBe(false);
       },
     );
   });
@@ -871,3 +899,166 @@ it.each(["bot-1", "different-bot"])(
     }
   },
 );
+
+describe("tool decision evidence in the executor", () => {
+  it("records only denial when a host command binding changes at claim time", async () => {
+    const f = fixture({ name: "execute_command", integration: true, host: true, governance: true });
+    await f.run();
+    f.effects[0]!.status = "approved";
+    const changed = structuredClone(f.effects[0]!);
+    approvalRequestRoute(changed.request)!.hostCommand!.cwd = "/changed-workspace";
+    f.externalEffect.findUnique.mockResolvedValue(changed);
+    await f.run();
+    expect(f.execute).not.toHaveBeenCalled();
+    expect(f.results.at(-1)).toEqual({
+      error: "This command changed or has no bound approval. Review it again.",
+    });
+    expect(f.evidence.records.map((row) => row.decisionKind)).toEqual(["asked", "denied_by_rule"]);
+  });
+  it("records an auto-review allow and a matching rule id", async () => {
+    reviewMock.mockResolvedValue({ decision: "pass", reason: "Allowed", model: "mock" });
+    const auto = fixture({ governance: true, autoReview: true, name: "demo_send_message" });
+    await auto.run();
+    expect(auto.evidence.records.map((row) => row.decisionKind)).toEqual([
+      "allowed_by_auto_review",
+    ]);
+    const ruled = fixture({
+      governance: true,
+      name: "demo_send_message",
+      rules: [
+        {
+          id: "broader-rule",
+          effect: "require_approval",
+          matchKind: "connector",
+          matchValue: "demo",
+        },
+        {
+          id: "rule-allow",
+          effect: "always_allow",
+          matchKind: "tool",
+          matchValue: "demo_send_message",
+        },
+      ],
+    });
+    await ruled.run();
+    const payload = JSON.parse(
+      Buffer.from(ruled.evidence.records[0]!.jws.split(".")[1]!, "base64url").toString(),
+    );
+    expect(payload.policy_decisions[0].rule_id).toBe("rule-allow");
+  });
+  it.each(["ask", "error"] as const)(
+    "records review %s as pending, not a denial",
+    async (decision) => {
+      reviewMock.mockResolvedValue({ decision, reason: "Needs owner review", model: "mock" });
+      const f = fixture({ governance: true, autoReview: true, name: "demo_send_message" });
+      await f.run();
+      expect(f.execute).not.toHaveBeenCalled();
+      expect(f.evidence.records.map((row) => row.decisionKind)).toEqual(["asked"]);
+      expect(f.evidence.records[0]?.verdict).toBe("insufficient_evidence");
+    },
+  );
+  it("records a disabled integration policy as a denial", async () => {
+    const f = fixture({ governance: true, integration: true });
+    f.grant.server.spaceAllowedTools = [];
+    await f.run();
+    expect(f.execute).not.toHaveBeenCalled();
+    expect(f.evidence.records.map((row) => row.decisionKind)).toEqual(["denied_by_rule"]);
+    expect(f.evidence.records[0]?.verdict).toBe("violation");
+  });
+  it("records an expired bound approval and does not execute", async () => {
+    const f = fixture({
+      governance: true,
+      rules: [{ effect: "require_approval", matchKind: "tool", matchValue: "demo_get_item" }],
+    });
+    await f.run();
+    f.effects[0]!.status = "approved";
+    f.deviceApprovalBinding.findUnique.mockResolvedValue({
+      answeredByGrantId: "grant-test",
+      expiresAt: new Date(0),
+    });
+    await f.run(true);
+    expect(f.execute).not.toHaveBeenCalled();
+    expect(f.evidence.records.map((row) => row.decisionKind)).toEqual([
+      "asked",
+      "approval_expired",
+    ]);
+  });
+  it("records an allowed call once before it runs", async () => {
+    const f = fixture({ governance: true });
+    f.execute.mockImplementation(async function* () {
+      expect(f.evidence.records).toHaveLength(1);
+      yield { type: "result", data: { item: "item-1" } };
+    });
+    await f.run();
+    expect(f.execute).toHaveBeenCalledOnce();
+    expect(f.evidence.records.map((row) => row.decisionKind)).toEqual(["allowed_by_default"]);
+  });
+  it.each([false, true])(
+    "records asked then owner-approved once, including catalog=%s",
+    async (catalog) => {
+      const f = fixture({
+        governance: true,
+        catalog,
+        rules: [
+          {
+            id: "rule-1",
+            effect: "require_approval",
+            matchKind: "tool",
+            matchValue: "demo_get_item",
+          },
+        ],
+      });
+      await f.run();
+      expect(f.execute).not.toHaveBeenCalled();
+      expect(f.evidence.records.map((row) => row.decisionKind)).toEqual(["asked"]);
+      f.effects[0]!.status = "approved";
+      await f.run();
+      expect(f.execute).toHaveBeenCalledOnce();
+      expect(f.evidence.records.map((row) => row.decisionKind)).toEqual([
+        "asked",
+        "approved_by_owner",
+      ]);
+      expect(
+        verifyChain(
+          f.evidence.records.map((row) => row.jws),
+          f.evidence.keys[0]!.publicKeyPem,
+        ).ok,
+      ).toBe(true);
+      await f.run();
+      expect(f.evidence.records).toHaveLength(2);
+    },
+  );
+  it("records owner denial without needing a replay and does not repeat it", async () => {
+    const f = fixture({
+      governance: true,
+      rules: [{ effect: "require_approval", matchKind: "tool", matchValue: "demo_get_item" }],
+    });
+    await f.run();
+    f.effects[0]!.status = "denied";
+    f.setCalls([]);
+    await f.run();
+    await f.run();
+    expect(f.execute).not.toHaveBeenCalled();
+    expect(f.evidence.records.map((row) => row.decisionKind)).toEqual(["asked", "denied_by_owner"]);
+  });
+  it("blocks a changing tool if recording fails", async () => {
+    const f = fixture({ governance: true, evidenceFailure: true, name: "demo_send_message" });
+    await f.run();
+    expect(f.execute).not.toHaveBeenCalled();
+    expect(f.results.at(-1)).toEqual({ error: EVIDENCE_RECORDING_ERROR });
+    expect(await f.evidence.store.gapCount("run-1")).toBe(1);
+  });
+  it("lets a read continue on recording failure and counts a gap", async () => {
+    const f = fixture({ governance: true, evidenceFailure: true });
+    await f.run();
+    expect(f.execute).toHaveBeenCalledOnce();
+    expect(await f.evidence.store.gapCount("run-1")).toBe(1);
+  });
+  it("keeps behaviour unchanged and records nothing with governance off", async () => {
+    const f = fixture({ name: "demo_send_message" });
+    await f.run();
+    expect(f.execute).toHaveBeenCalledOnce();
+    expect(f.evidence.records).toEqual([]);
+    expect(f.evidence.keys).toEqual([]);
+  });
+});

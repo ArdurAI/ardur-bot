@@ -84,6 +84,7 @@ export function approvedReplayArgs(
 }
 
 export const DIRECT_APPROVAL_TAG = "direct";
+export const CATALOG_APPROVAL_TOOL = "__ardurbotCatalogTool";
 
 export type BoundApprovalRoute = {
   connectorId: string;

@@ -822,6 +822,8 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Work stopped, but the thread could not refresh: {detail}":
     "工作已停止，但线程无法刷新：{detail}",
   "You have control": "你已接管控制",
+  "You control the computer": "你正在控制电脑",
+  "End this terminal?": "结束此终端？",
   "Your account": "你的账户",
   "Stored securely. Never shown here.": "已安全存储。不会显示在这里。",
   Actions: "操作",

@@ -20,10 +20,12 @@ import {
   createBoardNotificationDelivery,
   createCloudAgentConnection,
   createConnectorStack,
+  createEvidenceSealRecovery,
   createJobReconciler,
   createMemoryLifecycle,
   createMessagingContextLoader,
   createPostgresReconciliationLeadership,
+  createRunEvidenceRecorder,
   createRunExecutor,
   createRunSandbox,
   createRunSecretWriter,
@@ -95,9 +97,13 @@ async function main() {
   });
   const secrets = new EncryptedSecretStore(resolveEncryptionKey(env));
   await backfillRuntimePins({ prisma, secrets, logger });
+  const inMemoryJobs = env.WAKEUP_DRIVER === "memory" ? new InMemoryJobQueue() : undefined;
+  const jobs: JobPublisher = inMemoryJobs ?? new GraphileJobPublisher(pool);
   const events = createThreadEvents(prisma, realtime, {
     runSecretWriter: createRunSecretWriter(secrets),
+    jobs,
   });
+
   const dataDir = env.DATA_DIR ?? "./data";
   const runtime =
     env.AGENT_RUNTIME === "scripted"
@@ -184,8 +190,6 @@ async function main() {
     sandbox,
   );
   const artifacts = new LocalArtifactStore(dataDir);
-  const inMemoryJobs = env.WAKEUP_DRIVER === "memory" ? new InMemoryJobQueue() : undefined;
-  const jobs: JobPublisher = inMemoryJobs ?? new GraphileJobPublisher(pool);
   const jobHost: JobWorkerHost =
     inMemoryJobs ??
     new GraphileJobWorkerHost(pool, {
@@ -196,6 +200,7 @@ async function main() {
   const memoryLifecycleDeps = { prisma, secrets, jobs, dataDir };
   const { memory, service: memoryDocuments } = createMemoryLifecycle(memoryLifecycleDeps);
   const executor = createRunExecutor({
+    evidenceRecorder: createRunEvidenceRecorder({ prisma, secretStore: secrets }),
     prisma,
     lockPool,
     runtime,
@@ -290,6 +295,7 @@ async function main() {
     jobs,
     events,
     leadership: createPostgresReconciliationLeadership(pool),
+    reconcileEvidence: createEvidenceSealRecovery({ prisma, jobs }),
     reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
     reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
     reconcileMemory: () => reconcileMemoryDelivery(memoryLifecycleDeps, memoryDocuments),

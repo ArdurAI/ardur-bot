@@ -1,7 +1,7 @@
 import type { ComputerStatus } from "@ardurbot/contracts";
 import { computerCapabilities } from "@ardurbot/contracts";
 import { t } from "@lingui/core/macro";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { rpc } from "../../lib/rpc";
 
 /**
@@ -45,6 +45,7 @@ export function useTerminalController({
   onReleased,
   releaseOnLeave,
   bootWithTakeover = false,
+  keepControlWhileHidden = false,
 }: {
   botId: string | undefined;
   computerId: string | undefined;
@@ -53,38 +54,66 @@ export function useTerminalController({
   supported?: boolean;
   working: boolean;
   hasControl: boolean;
-  /** Surfaces that stay mounted while hidden pass their visibility so leaving releases control. */
+  /** Visibility dismisses pending takeovers; acquired grants follow the hidden-control policy. */
   visible?: boolean;
   onTakeControl(): Promise<unknown>;
   onStop(): Promise<unknown>;
   onStart?(): Promise<unknown>;
   onReleased?(): void;
   releaseOnLeave: boolean;
+  /** Preserve an acquired grant across view changes, but not explicit close. */
+  keepControlWhileHidden?: boolean;
   /** Set when the surface's take-control action boots a stopped computer first. */
   bootWithTakeover?: boolean;
 }) {
-  const [available, setAvailable] = useState(false);
+  const [availability, setAvailability] = useState<{
+    botId: string;
+    computerId: string;
+    available: boolean;
+  } | null>(null);
+  const available = Boolean(
+    supported &&
+      availability &&
+      availability.botId === botId &&
+      availability.computerId === computerId &&
+      availability.available,
+  );
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  // The bot whose control this surface took; only this grant is ever released.
-  const acquired = useRef<string | null>(null);
-  const alive = useRef(true);
-  const activeBot = useRef(botId);
-  activeBot.current = botId;
-  const releaseOnLeaveRef = useRef(releaseOnLeave);
-  releaseOnLeaveRef.current = releaseOnLeave;
-  const onReleasedRef = useRef(onReleased);
-  onReleasedRef.current = onReleased;
+  const [releasing, setReleasing] = useState(false);
+  // Old completions retain their own lifetime and callbacks, even on an A/B/A switch.
+  const lifetime = useMemo(
+    () => ({
+      botId,
+      computerId,
+      alive: true,
+      visible: true,
+      hidden: 0,
+      held: false,
+      acquired: null as null | (() => void),
+    }),
+    [botId, computerId],
+  );
+  useLayoutEffect(() => {
+    if (!visible && lifetime.visible) lifetime.hidden++;
+    lifetime.visible = visible;
+    if (hasControl) lifetime.held = true;
+    else if (lifetime.held) {
+      lifetime.acquired = null;
+      lifetime.held = false;
+      setReleasing(false);
+    }
+  }, [lifetime, visible, hasControl]);
 
   useEffect(() => {
     let cancelled = false;
-    setAvailable(false);
+    setAvailability(null);
     setError(null);
     if (botId && computerId && supported)
       void rpc.terminal
         .available({ botId, computerId })
         .then((result) => {
-          if (!cancelled) setAvailable(result.available);
+          if (!cancelled) setAvailability({ botId, computerId, available: result.available });
         })
         .catch(() => {});
     return () => {
@@ -93,32 +122,32 @@ export function useTerminalController({
   }, [botId, computerId, supported]);
 
   useEffect(() => {
-    alive.current = true;
+    lifetime.alive = true;
+    setPending(false);
+    setReleasing(false);
     return () => {
-      alive.current = false;
-      const id = acquired.current;
-      acquired.current = null;
-      if (releaseOnLeaveRef.current && id)
-        void rpc.computer
-          .release({ botId: id })
-          .catch(() => {})
-          .then(() => onReleasedRef.current?.());
+      lifetime.alive = false;
+      const releaseAcquired = lifetime.acquired;
+      lifetime.acquired = null;
+      if (releaseOnLeave) releaseAcquired?.();
     };
-  }, [botId, computerId]);
+  }, [lifetime, releaseOnLeave]);
 
   useEffect(() => {
-    if (visible) return;
-    const id = acquired.current;
-    acquired.current = null;
-    if (releaseOnLeaveRef.current && id)
-      void rpc.computer
-        .release({ botId: id })
-        .catch(() => {})
-        .then(() => onReleasedRef.current?.());
-  }, [visible]);
+    if (visible || keepControlWhileHidden || !releaseOnLeave) return;
+    const releaseAcquired = lifetime.acquired;
+    lifetime.acquired = null;
+    releaseAcquired?.();
+  }, [lifetime, visible, keepControlWhileHidden, releaseOnLeave]);
 
   const busy = working && !computer?.takeoverRequested;
-  const ready = Boolean(botId && computerId) && available && hasControl && !busy;
+  const ready =
+    Boolean(botId && computerId) &&
+    available &&
+    hasControl &&
+    !busy &&
+    computer?.state === "running" &&
+    !releasing;
   const state: TerminalControllerState = !available
     ? "unavailable"
     : busy
@@ -148,26 +177,35 @@ export function useTerminalController({
             : t`Take control`;
 
   const runAction = () => {
-    if (pending) return;
+    if (pending || !visible) return;
     const work = state === "working" ? onStop : state === "start" ? onStart : onTakeControl;
     if (!work) return;
     setError(null);
     setPending(true);
+    const hidden = lifetime.hidden;
+    const returnGrant = () => {
+      if (!botId) return;
+      void rpc.computer
+        .release({ botId })
+        .then(() => onReleased?.())
+        .catch(() => {});
+    };
     void work()
       .then(() => {
-        if (state !== "take-control" || !botId) return;
+        if (state !== "take-control" || !botId || hasControl) return;
         // The surface went away mid-takeover: hand the grant straight back.
-        if (alive.current && activeBot.current === botId) acquired.current = botId;
-        else void rpc.computer.release({ botId }).catch(() => {});
+        if (lifetime.alive && lifetime.visible && lifetime.hidden === hidden)
+          lifetime.acquired = returnGrant;
+        else returnGrant();
       })
       .catch((cause) => {
-        if (alive.current)
+        if (lifetime.alive)
           setError(
             cause instanceof Error ? cause.message : t`This action could not finish; try again.`,
           );
       })
       .finally(() => {
-        if (alive.current) setPending(false);
+        if (lifetime.alive) setPending(false);
       });
   };
 
@@ -175,21 +213,27 @@ export function useTerminalController({
     if (pending || !botId) return;
     setError(null);
     setPending(true);
+    const releaseAcquired = lifetime.acquired;
+    lifetime.acquired = null;
     const id = botId;
     void rpc.computer
       .release({ botId: id })
       .then(() => {
-        if (acquired.current === id) acquired.current = null;
-        onReleasedRef.current?.();
+        lifetime.acquired = null;
+        if (lifetime.alive) setReleasing(true);
+        onReleased?.();
       })
       .catch((cause) => {
-        if (alive.current)
+        if (lifetime.alive) {
+          lifetime.acquired = releaseAcquired;
+          setReleasing(false);
           setError(
             cause instanceof Error ? cause.message : t`This action could not finish; try again.`,
           );
+        }
       })
       .finally(() => {
-        if (alive.current) setPending(false);
+        if (lifetime.alive) setPending(false);
       });
   };
 

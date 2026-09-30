@@ -119,6 +119,11 @@ export function createBackgroundJobHandlers(deps: {
         { prisma: deps.prisma, dataDir: deps.dataDir ?? "./data", lockPool: deps.lockPool },
         requestId,
       ),
+    "evidence.seal": async ({ runId }) => {
+      const result = await deps.executor.sealRunEvidence(runId);
+      if (!result.ok && result.reason !== "chain_invalid")
+        throw new Error("Evidence sealing failed");
+    },
     ...(deps.localImport && deps.memoryDocuments
       ? createLocalImportJobs(deps.prisma, deps.memoryDocuments, deps.localImport)
       : {}),
