@@ -1,4 +1,6 @@
 import type {
+  ChiefControl,
+  ChiefCorrection,
   ChiefDecision,
   ChiefMemberFacts,
   ChiefOperation,
@@ -13,6 +15,8 @@ export const CHIEF_RECEIPT_TEMPLATES: Readonly<Record<ChiefReceiptKey, string>> 
   "install-tool": "Got it — I’ll check what’s missing and ask before installing it.",
   general: "Got it — I’ll check the request and choose the next step.",
   greeting: "Hi everyone.",
+  "exclude-member": "Got it — I’ll keep X off this task.",
+  "change-task": "Got it — I’ll check this change before the next action.",
 };
 
 type RankingKey = "skill" | "role" | "slot" | "active" | "queued" | "id";
@@ -207,4 +211,77 @@ export function chooseChiefMember(input: {
     memberId: best.id,
     reason: `${input.operation.purpose}: saved capability, skill, role and capacity`,
   };
+}
+
+/** Whole command envelopes only. A pasted document or positive address is not control. */
+export function parseChiefCorrection(input: {
+  text: string;
+  members: readonly { id: string; name: string }[];
+}): ChiefCorrection | undefined {
+  const text = input.text.trim();
+  if (!text || text.length > 400 || /[\r\n]/u.test(text)) return undefined;
+  const exclusion =
+    /^(?:please\s+)?(?:don['’]?t|do not|never)\s+(?:send(?:\s+(?:it|this|the document))?\s+to|use|delegate(?:\s+(?:it|this))?\s+to)\s+(.+?)[.!]?$/iu.exec(
+      text,
+    );
+  const standDown = /^(?:please\s+)?(?:stop|stand down)\s+(.+?)[.!]?$/iu.exec(text);
+  const name = (exclusion?.[1] ?? standDown?.[1])?.replace(/^@/u, "").toLocaleLowerCase();
+  if (name) {
+    const matches = input.members.filter((member) => member.name.toLocaleLowerCase() === name);
+    if (matches.length === 1)
+      return { kind: "exclude", memberId: matches[0]!.id, memberName: matches[0]!.name };
+    if (exclusion) return { kind: "replan" };
+  }
+  if (
+    /^(?:please\s+)?(?:keep it local(?: instead)?|don['’]?t upload(?: it)?|do not upload(?: it)?)[.!]?$/iu.test(
+      text,
+    )
+  )
+    return { kind: "local-only" };
+  if (/^(?:please\s+)?(?:stop|cancel)(?:\s+(?:this|the)\s+task)?[.!]?$/iu.test(text))
+    return { kind: "stop" };
+  if (
+    /^(?:actually[, ]|instead[, ]|change (?:this|the) task|send it (?:to|into) |put it (?:in|into) )/iu.test(
+      text,
+    )
+  )
+    return { kind: "replan" };
+  return undefined;
+}
+
+/** Replay is a no-op; every new owner correction is retained even when planning coalesces. */
+export function reviseChiefControl(input: {
+  previous?: ChiefControl;
+  revision: number;
+  ownerMessageId: string;
+  correction: ChiefCorrection;
+  affectedRunIds: readonly string[];
+  uncertainRunIds?: readonly string[];
+}): ChiefControl {
+  const previous = input.previous;
+  if (previous?.ownerMessageIds.includes(input.ownerMessageId)) return previous;
+  const unique = (ids: readonly string[]) => [...new Set(ids)];
+  return {
+    revision: input.revision + 1,
+    ownerMessageIds: [...(previous?.ownerMessageIds ?? []), input.ownerMessageId],
+    excludedIds: unique([
+      ...(previous?.excludedIds ?? []),
+      ...(input.correction.kind === "exclude" ? [input.correction.memberId] : []),
+    ]),
+    localOnly: Boolean(previous?.localOnly || input.correction.kind === "local-only"),
+    stopped: Boolean(previous?.stopped || input.correction.kind === "stop"),
+    pendingReplan: input.correction.kind !== "stop" && !previous?.stopped,
+    stoppingRunIds: unique([...(previous?.stoppingRunIds ?? []), ...input.affectedRunIds]),
+    uncertainRunIds: unique([
+      ...(previous?.uncertainRunIds ?? []),
+      ...(input.uncertainRunIds ?? []),
+    ]),
+  };
+}
+
+export function chiefControlAllowsDispatch(control: ChiefControl | undefined): boolean {
+  return (
+    !control ||
+    (!control.stopped && !control.stoppingRunIds.length && !control.uncertainRunIds.length)
+  );
 }

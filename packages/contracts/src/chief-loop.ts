@@ -7,6 +7,8 @@ export const ChiefReceiptKeySchema = z.enum([
   "install-tool",
   "general",
   "greeting",
+  "exclude-member",
+  "change-task",
 ]);
 export type ChiefReceiptKey = z.infer<typeof ChiefReceiptKeySchema>;
 export const ChiefOperationSchema = z.object({
@@ -22,6 +24,7 @@ export const ChiefReceiptSchema = z.object({
   botId: Id,
   requestMessageId: Id,
   key: ChiefReceiptKeySchema,
+  memberName: z.string().optional(),
   text: z.string(),
   createdAt: z.string(),
 });
@@ -115,3 +118,29 @@ export const ChiefDispatchSchema = z.object({
   activity: ChiefActivitySchema.optional(),
 });
 export type ChiefDispatch = z.infer<typeof ChiefDispatchSchema>;
+
+export const ChiefCorrectionSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("exclude"), memberId: Id, memberName: z.string() }),
+  z.object({ kind: z.literal("local-only") }),
+  z.object({ kind: z.literal("stop") }),
+  z.object({ kind: z.literal("replan") }),
+]);
+export type ChiefCorrection = z.infer<typeof ChiefCorrectionSchema>;
+/** Control never carries a permission, connector grant, pin or increased budget. */
+export const ChiefControlSchema = z.object({
+  revision: z.number().int().positive(),
+  ownerMessageIds: z.array(Id),
+  excludedIds: z.array(Id),
+  localOnly: z.boolean(),
+  stopped: z.boolean(),
+  pendingReplan: z.boolean(),
+  stoppingRunIds: z.array(Id),
+  uncertainRunIds: z.array(Id),
+});
+export type ChiefControl = z.infer<typeof ChiefControlSchema>;
+export const ChiefStopSchema = z.object({
+  revision: z.number().int().positive(),
+  memberName: z.string(),
+  state: z.enum(["requested", "confirmed", "uncertain"]),
+});
+export type ChiefStop = z.infer<typeof ChiefStopSchema>;
