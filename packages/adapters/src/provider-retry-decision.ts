@@ -37,6 +37,7 @@ export function shouldRetryProviderFailure(
   const waitMs = providerRetryWaitMs({
     kind: input.error.providerErrorKind,
     attempt,
+    providerWaitMs: input.error.retryAfterMs,
     random: input.random,
   });
   if (waitMs === null) return null;

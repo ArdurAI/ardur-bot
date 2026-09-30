@@ -62,4 +62,27 @@ describe("shouldRetryProviderFailure", () => {
   it("adds up to a quarter of randomness so refused bots do not return together", () => {
     expect(decision({ random: () => 1 })).toEqual({ waitMs: 2_500, attempt: 1 });
   });
+
+  it("uses the wait the provider itself asked for, capped at the honour bound", () => {
+    expect(
+      decision({
+        error: new ProviderError("Too many requests", "rate-limit", 5_000),
+        random: NO_JITTER,
+      }),
+    ).toEqual({ waitMs: 5_000, attempt: 1 });
+    // 90 s is capped at the policy's 60 s honour bound.
+    expect(
+      decision({
+        error: new ProviderError("Too many requests", "rate-limit", 90_000),
+        random: NO_JITTER,
+      }),
+    ).toEqual({ waitMs: 60_000, attempt: 1 });
+    // A refusal with no carried wait keeps the backoff.
+    expect(
+      decision({
+        error: new ProviderError("Too many requests", "rate-limit"),
+        random: NO_JITTER,
+      }),
+    ).toEqual({ waitMs: 2_000, attempt: 1 });
+  });
 });

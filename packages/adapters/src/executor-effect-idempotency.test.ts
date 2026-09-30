@@ -1143,6 +1143,42 @@ it("puts back a rate-limited run that has shown nothing instead of failing it", 
   );
 });
 
+it("honours a Retry-After the provider carried on its refusal", async () => {
+  const f = fixture();
+  // biome-ignore lint/correctness/useYield: the provider refuses before its first event.
+  f.runtimeRun.mockImplementation(async function* (): AsyncGenerator<AgentRuntimeEvent> {
+    throw new ProviderError("Too many requests", "rate-limit", 5_000);
+  });
+  await f.executor.continueRun("run-1", "worker-1");
+  const retryEvent = (
+    f.events.append.mock.calls as unknown as Array<
+      [{ type: string; payload: Record<string, unknown> }]
+    >
+  ).find(([input]) => input.type === "run.retry_scheduled")?.[0];
+  // The provider's own 5 s wait replaces the 2 s backoff (jitter still applies).
+  expect(retryEvent?.payload.waitMs).toBeGreaterThanOrEqual(5_000);
+  expect(retryEvent?.payload.waitMs).toBeLessThanOrEqual(6_250);
+  const job = continueJobsFor(f, "run-1")[0];
+  expect(job?.availableAt?.getTime()).toBeGreaterThan(Date.now() + 4_000);
+});
+
+it("caps a Retry-After the provider carried at the policy's honour bound", async () => {
+  const f = fixture();
+  // biome-ignore lint/correctness/useYield: the provider refuses before its first event.
+  f.runtimeRun.mockImplementation(async function* (): AsyncGenerator<AgentRuntimeEvent> {
+    throw new ProviderError("Too many requests", "rate-limit", 90_000);
+  });
+  await f.executor.continueRun("run-1", "worker-1");
+  const retryEvent = (
+    f.events.append.mock.calls as unknown as Array<
+      [{ type: string; payload: Record<string, unknown> }]
+    >
+  ).find(([input]) => input.type === "run.retry_scheduled")?.[0];
+  // 90 s is capped at 60 s, plus jitter.
+  expect(retryEvent?.payload.waitMs).toBeGreaterThanOrEqual(60_000);
+  expect(retryEvent?.payload.waitMs).toBeLessThanOrEqual(75_000);
+});
+
 it("fails a rate-limited run with the provider's reason after its last retry", async () => {
   const f = fixture();
   f.prisma.attempt.count.mockResolvedValue(3);
