@@ -10,6 +10,8 @@ describe("macOS install verdict", () => {
   it("installs the standalone local cask without a fully-qualified tap trust call", async () => {
     const script = await readFile(mac, "utf8");
     expect(script).not.toContain("brew trust --cask");
+    expect(script).not.toContain("brew install --cask --no-quarantine");
+    expect(script).toContain('xattr -dr com.apple.quarantine "$work/BrewApplications/Ardur.app"');
     expect(script).toContain('"$work/tap/Casks/ardur.rb"');
     expect(script).toContain('cp -R "$profile/logs"');
   });

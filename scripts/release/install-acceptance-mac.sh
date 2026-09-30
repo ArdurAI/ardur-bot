@@ -153,9 +153,14 @@ PY
 # This file is outside Homebrew's taps; tap trust does not apply to local cask paths.
 # Mark ownership before install so a partially installed cask is removed on failure too.
 brew_owned=1
-check 'Homebrew local cask install' brew install --cask --no-quarantine --appdir="$work/BrewApplications" "$work/tap/Casks/ardur.rb" > "$logs/brew-install.log" 2>&1
+check 'Homebrew local cask install' brew install --cask --appdir="$work/BrewApplications" "$work/tap/Casks/ardur.rb" > "$logs/brew-install.log" 2>&1
 cat "$logs/brew-install.log"
-if [[ "$failed" == 0 ]]; then check 'Homebrew ardur wrapper opens, health answers, clean exit' smoke brew "$(brew --prefix)/bin/ardur"; fi
+if [[ "$failed" == 0 ]]; then
+  # New Homebrew versions removed --no-quarantine. The policy verdict was checked above;
+  # remove quarantine only from this run's installed copy before testing its launcher.
+  check 'Homebrew installed-copy quarantine removal' xattr -dr com.apple.quarantine "$work/BrewApplications/Ardur.app"
+  if [[ "$failed" == 0 ]]; then check 'Homebrew ardur wrapper opens, health answers, clean exit' smoke brew "$(brew --prefix)/bin/ardur"; fi
+fi
 check 'Homebrew silent cleanup' brew uninstall --cask ardur > "$logs/brew-uninstall.log" 2>&1
 if [[ "$failed" == 0 ]]; then brew_owned=0; fi
 exit "$failed"
