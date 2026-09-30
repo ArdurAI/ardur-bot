@@ -8,6 +8,7 @@ describe("chief fact projection", () => {
       id: "plan",
       sourceMessageId: "request",
       revision: 1,
+      control: null,
       operation: { purpose: "general", taskType: "unknown" },
       decision: { kind: "plan" },
       checkedFacts: [],
