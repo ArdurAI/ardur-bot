@@ -2570,10 +2570,18 @@ ${script}`,
         {
           cwd: work,
           encoding: "utf8",
-          env: { ...process.env, RELEASE_VERSION: "0.1.0" },
+          env: { ...process.env, RELEASE_VERSION: "0.1.0", RELEASE_SIGNED: "false" },
         },
       );
       expect(assembled.status).toBe(0);
+      expect(
+        JSON.parse(
+          await readFile(
+            path.join(work, "publication/scoreboard-publication/signing.json"),
+            "utf8",
+          ),
+        ),
+      ).toEqual({ signed: false });
       const ready = path.join(work, "publication", "release-ready");
       const listed = spawnSync(
         process.execPath,

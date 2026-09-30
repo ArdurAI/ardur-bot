@@ -22,5 +22,5 @@ cask "ardur" do
   app "Ardur.app"
   binary "#{appdir}/Ardur.app/Contents/MacOS/Ardur", target: "ardur"
 
-  caveats "Unsigned and not notarized. Approve the app in Privacy & Security. Signed builds come later."
+@MACOS_CAVEATS@
 end

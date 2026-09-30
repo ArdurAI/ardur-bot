@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { appendFileSync, existsSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { parseSigned } from "./desktop-release.mjs";
 
 // Every draft and release this workflow creates carries this marker in its body, so a later run
 // can tell its own leftover draft apart from one a maintainer wrote by hand.
@@ -40,8 +41,21 @@ function propagate(result) {
 const args = parse(process.argv.slice(2));
 const { tag, target, notes, files } = args;
 const waiver = args["waiver-record"];
+const signing = args["signing-record"];
 if (!tag || !/^[a-f0-9]{40}$/.test(target ?? "") || !notes || files.length === 0)
   fail("invalid-argument");
+
+if (args.signed !== undefined || signing !== undefined) {
+  if (args.signed === undefined || signing === undefined) fail("Missing signing evidence.");
+  let record;
+  try {
+    record = JSON.parse(readFileSync(signing, "utf8"));
+    if (Object.keys(record).join(",") !== "signed" || record.signed !== parseSigned(args.signed))
+      fail("Signing evidence does not match the release.");
+  } catch {
+    fail("Missing or invalid signing evidence.");
+  }
+}
 
 const view = gh(["release", "view", tag, "--json", "isDraft,body"]);
 if (view.status === 0) {
@@ -86,6 +100,7 @@ if (created.status !== 0) propagate(created);
 
 const uploadArgs = ["release", "upload", tag, ...files];
 if (typeof waiver === "string" && waiver !== "" && existsSync(waiver)) uploadArgs.push(waiver);
+if (signing) uploadArgs.push(signing);
 const uploaded = gh(uploadArgs);
 if (uploaded.status !== 0) {
   gh(["release", "delete", tag, "--yes", "--cleanup-tag=false"]);

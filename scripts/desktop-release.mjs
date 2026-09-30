@@ -14,9 +14,14 @@ export function releaseVersion(tag, version) {
   return version;
 }
 
+export function parseSigned(value = "false") {
+  if (value !== "true" && value !== "false") throw new Error("Expected signed=true or false.");
+  return value === "true";
+}
+
 // Only fixed labels and counts leave this process. Subjects, scopes, author identities,
 // and file names cannot leak into public release notes.
-export async function releaseNotes(subjects, gate) {
+export async function releaseNotes(subjects, gate, signed = false) {
   const labels = {
     feat: "Features",
     fix: "Fixes",
@@ -39,7 +44,7 @@ export async function releaseNotes(subjects, gate) {
   const summary = [
     "# Ardur desktop preview",
     "",
-    "Unsigned preview. Signed builds come later.",
+    signed ? "Signed and notarized for macOS." : "Unsigned preview. Signed builds come later.",
     "",
     "macOS updates require downloading and installing the new build manually.",
     "",
@@ -71,7 +76,7 @@ export async function generateWinget(version, assets, outputDir) {
   }
 }
 
-export async function generateCask(version, assets, output) {
+export async function generateCask(version, assets, output, signed = false) {
   releaseVersion(`v${version}`, version);
   let template = await readFile(new URL("../homebrew/Casks/ardur.rb", import.meta.url), "utf8");
   // The template's leading comment documents its placeholders; the published cask starts at the stanza.
@@ -84,6 +89,12 @@ export async function generateCask(version, assets, output) {
     );
   }
   template = template.replace("@VERSION@", version);
+  template = template.replace(
+    "@MACOS_CAVEATS@",
+    signed
+      ? ""
+      : '  caveats "Unsigned and not notarized. Approve the app in Privacy & Security. Signed builds come later."',
+  );
   await mkdir(path.dirname(output), { recursive: true });
   await writeFile(output, template);
 }
@@ -130,10 +141,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         const subjects = git(["log", "--format=%s", previous ? `${previous}..${tag}` : tag])
           .split("\n")
           .filter(Boolean);
-        process.stdout.write(await releaseNotes(subjects, gate));
+        process.stdout.write(await releaseNotes(subjects, gate, parseSigned(args[2])));
       }
     }
   } else if (command === "cask") {
-    await generateCask(args[0], args[1], args[2]);
+    await generateCask(args[0], args[1], args[2], parseSigned(args[3]));
   } else throw new Error("Expected validate, notes, or cask.");
 }
