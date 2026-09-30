@@ -16,7 +16,7 @@ import type { ProtectedLocation } from "@ardurbot/contracts/protected-locations"
 import { afterEach, describe, expect, it } from "vitest";
 import { seatbeltProfile } from "./host-guardrails.js";
 import {
-  broadProtectedLocations,
+  linkedProtectedLocations,
   protectedLocationHint,
   protectedLocationOf,
   protectedPaths,
@@ -236,7 +236,9 @@ describe("a location that would deny too much", () => {
       const locations = place([`~/${name}`]);
       const denied = protectedPaths({ process: "bot-command", grants: [], locations, home });
       expect(denied, name).toEqual([path.join(home, name)]);
-      expect(broadProtectedLocations({ locations, home }), name).toEqual(["place"]);
+      expect(linkedProtectedLocations({ locations, home }), name).toEqual([
+        { id: "place", path: `~/${name}`, target, targetDenied: false },
+      ]);
     }
   });
 
@@ -249,7 +251,57 @@ describe("a location that would deny too much", () => {
     expect(protectedPaths({ process: "bot-command", grants: [], locations, home }).sort()).toEqual(
       [path.join(disk, "keys"), path.join(home, ".keys")].sort(),
     );
-    expect(broadProtectedLocations({ locations, home })).toEqual([]);
+    // A screen can show where the location leads.
+    expect(linkedProtectedLocations({ locations, home })).toEqual([
+      { id: "place", path: "~/.keys", target: path.join(disk, "keys"), targetDenied: true },
+    ]);
+  });
+
+  it("names no location that is an ordinary folder, a file, or not there yet", async () => {
+    const home = await scratchHome();
+    await mkdir(path.join(home, ".keys"));
+    await writeFile(path.join(home, ".token"), "FAKE\n");
+    expect(
+      linkedProtectedLocations({ locations: place(["~/.keys", "~/.token", "~/.later"]), home }),
+    ).toEqual([]);
+  });
+
+  it("denies a location under both spellings of a home folder that is reached through a link", async () => {
+    // The home folder can itself be a link, for example to another disk. A location that is
+    // a link then lives at `<real home>/.keys`: that spelling is denied too, or a command
+    // could remove the link and put a folder of its own in its place.
+    const realHome = await realpath(await scratchHome());
+    const outer = await realpath(await scratchHome());
+    const home = path.join(outer, "home");
+    await symlink(realHome, home);
+    const disk = await realpath(await scratchHome());
+    await mkdir(path.join(disk, "keys"));
+    await symlink(path.join(disk, "keys"), path.join(realHome, ".keys"));
+    expect(
+      protectedPaths({
+        process: "bot-command",
+        grants: [],
+        locations: place(["~/.keys"]),
+        home,
+      }).sort(),
+    ).toEqual(
+      [path.join(home, ".keys"), path.join(realHome, ".keys"), path.join(disk, "keys")].sort(),
+    );
+    // A link to the home folder is too broad under either spelling of the home folder.
+    for (const [name, target] of [
+      ["to-home", home],
+      ["to-real-home", realHome],
+    ] as const) {
+      await symlink(target, path.join(realHome, name));
+      const locations = place([`~/${name}`]);
+      expect(
+        protectedPaths({ process: "bot-command", grants: [], locations, home }).sort(),
+        name,
+      ).toEqual([path.join(home, name), path.join(realHome, name)].sort());
+      expect(linkedProtectedLocations({ locations, home }), name).toEqual([
+        { id: "place", path: `~/${name}`, target: realHome, targetDenied: false },
+      ]);
+    }
   });
 });
 
@@ -533,6 +585,38 @@ describe.skipIf(process.platform !== "darwin")(
       // A file whose name only starts the same way is not part of the location.
       const beside = await sandboxed(profile, ["/bin/cat", path.join(home, ".tool.json.notes")]);
       expect(beside.code).toBe(0);
+    });
+
+    it("keeps a command from swapping a protected link when the home folder is reached through a link", async () => {
+      const realHome = await realpath(await protectedHome());
+      const outer = await realpath(await mkdtemp(path.join(tmpdir(), "protected-outer-")));
+      cleanup.push(outer);
+      const home = path.join(outer, "home");
+      await symlink(realHome, home);
+      const disk = await realpath(await mkdtemp(path.join(tmpdir(), "protected-disk-")));
+      cleanup.push(disk);
+      await mkdir(path.join(disk, "keys"));
+      await writeFile(path.join(disk, "keys", "secret"), "FAKE\n");
+      await symlink(path.join(disk, "keys"), path.join(realHome, ".keys"));
+      const profile = seatbeltProfile(
+        withProtectedLocations(
+          { paths: [], ports: [], sockets: [] },
+          protectedPaths({
+            process: "bot-command",
+            grants: [],
+            locations: [{ id: "keys", label: "Keys", paths: ["~/.keys"], kind: "credentials" }],
+            home,
+          }),
+        ),
+      );
+      for (const spelled of [path.join(home, ".keys"), path.join(realHome, ".keys")]) {
+        await sandboxed(profile, ["/bin/rm", "-f", spelled]);
+        await sandboxed(profile, ["/bin/mv", spelled, `${spelled}.moved`]);
+        expect((await lstat(path.join(realHome, ".keys"))).isSymbolicLink(), spelled).toBe(true);
+        const read = await sandboxed(profile, ["/bin/cat", path.join(spelled, "secret")]);
+        expect(read.code, spelled).not.toBe(0);
+        expect(read.stdout, spelled).not.toContain("FAKE");
+      }
     });
 
     it("lets an agent runtime read its own tool folder", async () => {

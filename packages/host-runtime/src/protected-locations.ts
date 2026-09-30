@@ -21,7 +21,8 @@ import {
  * is kept out of, ready for the Seatbelt profile and the in-process file tools.
  * `~/` becomes the owner's home, and each path contributes its real path and its
  * spelled path, as resolveGuardrailPathsSync does, so a location reached through
- * a link is denied at its target too. Nothing here stores grants or starts
+ * a link is denied at its target too, under both spellings of a home folder that
+ * is itself reached through a link. Nothing here stores grants or starts
  * processes — that is step 1b.
  */
 
@@ -45,12 +46,18 @@ export function protectedPaths(input: {
       locations,
     }),
   );
+  // The home folder can itself be reached through a link. A location is denied under both
+  // spellings of the home folder, and at its target: a location that is a link lives at
+  // `<real home>/name`, and a command that could remove it there could put its own folder
+  // in its place.
+  const homes = [...new Set([input.home, resolveRealPathSync(input.home)])];
   const paths: string[] = [];
   for (const location of locations) {
     if (!denied.has(location.id)) continue;
     for (const entry of location.paths)
-      for (const resolved of resolveGuardrailPathsSync([homePath(entry, input.home)]))
-        if (!tooBroad(resolved, input.home)) paths.push(resolved);
+      for (const home of homes)
+        for (const resolved of resolveGuardrailPathsSync([homePath(entry, home)]))
+          if (!tooBroad(resolved, input.home)) paths.push(resolved);
   }
   return [...new Set(paths)];
 }
@@ -59,28 +66,53 @@ export function protectedPaths(input: {
  * A location can be a link, and a link can point anywhere. Its target is denied too,
  * unless that target is the home folder, a folder above it, or the root of the disk:
  * denying one of those would keep every command out of everything. The link itself stays
- * denied. `broadProtectedLocations` names such locations so a screen can say so.
+ * denied. `linkedProtectedLocations` names such locations so a screen can say so.
  */
 function tooBroad(resolved: string, home: string): boolean {
   const homes = resolveGuardrailPathsSync([home]);
   return homes.some((base) => isInside(base, resolved, process.platform));
 }
 
-/** The ids of locations whose target is too broad to deny (see `protectedPaths`). */
-export function broadProtectedLocations(input: {
+/** A protected path that leads somewhere else on this disk. */
+export type LinkedProtectedLocation = {
+  id: string;
+  /** The path as the table writes it, from the home folder. */
+  path: string;
+  /** Where it leads. */
+  target: string;
+  /** False when the target is too broad to deny. The link itself is denied either way. */
+  targetDenied: boolean;
+};
+
+/**
+ * The protected paths that are links, with where each one leads, so a screen can show
+ * it: a location that leads to a system folder keeps commands out of that whole folder,
+ * and one that leads to the home folder protects nothing behind the link.
+ */
+export function linkedProtectedLocations(input: {
   locations?: ProtectedLocation[];
   home: string;
-}): string[] {
+}): LinkedProtectedLocation[] {
   const locations = input.locations ?? PROTECTED_LOCATIONS_DEFAULTS;
-  return locations
-    .filter((location) =>
-      location.paths.some((entry) =>
-        resolveGuardrailPathsSync([homePath(entry, input.home)]).some((resolved) =>
-          tooBroad(resolved, input.home),
-        ),
-      ),
-    )
-    .map((location) => location.id);
+  const realHome = resolveRealPathSync(input.home);
+  const linked: LinkedProtectedLocation[] = [];
+  for (const location of locations)
+    for (const entry of location.paths) {
+      const target = resolveRealPathSync(homePath(entry, input.home));
+      const unlinked = homePath(entry, realHome);
+      if (
+        isInside(target, unlinked, process.platform) &&
+        isInside(unlinked, target, process.platform)
+      )
+        continue;
+      linked.push({
+        id: location.id,
+        path: entry,
+        target,
+        targetDenied: !tooBroad(target, input.home),
+      });
+    }
+  return linked;
 }
 
 /**
