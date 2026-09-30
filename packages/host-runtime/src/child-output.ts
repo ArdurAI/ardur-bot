@@ -1,4 +1,5 @@
 import type { ChildProcess } from "node:child_process";
+import type { Writable } from "node:stream";
 import { serializeError } from "../../logging/src/serialize-error.js";
 import { redactMcpText } from "./mcp-diagnostics.js";
 
@@ -126,21 +127,74 @@ export function captureChildOutput(
 
 let fallbackLogger: ChildOutputLogger | undefined;
 
+/** A bounded, non-blocking handoff to the host's writable log sink. */
+export function createChildProcessLogger(sink: Writable = process.stderr): ChildOutputLogger {
+  const queue: string[] = [];
+  let queuedBytes = 0;
+  let dropped = 0;
+  let scheduled = false;
+  let blocked = false;
+  const schedule = () => {
+    if (scheduled || blocked || sink.destroyed) return;
+    scheduled = true;
+    setImmediate(pump);
+  };
+  const pump = () => {
+    scheduled = false;
+    if (sink.destroyed || blocked) return;
+    while (queue.length || dropped) {
+      const line = queue.shift();
+      const output =
+        line ??
+        `${JSON.stringify({ level: "debug", message: "Child debug lines dropped", droppedLines: dropped })}\n`;
+      if (line !== undefined) queuedBytes -= Buffer.byteLength(line);
+      else dropped = 0;
+      try {
+        if (!sink.write(output)) {
+          blocked = true;
+          sink.once("drain", () => {
+            blocked = false;
+            schedule();
+          });
+          return;
+        }
+      } catch {
+        queue.length = 0;
+        queuedBytes = 0;
+        dropped = 0;
+        return;
+      }
+    }
+  };
+  const enqueue = (record: Record<string, unknown>) => {
+    const line = `${JSON.stringify(record)}\n`;
+    const size = Buffer.byteLength(line);
+    if (queue.length >= 128 || queuedBytes + size > TAIL_LIMIT_BYTES) {
+      dropped++;
+      return;
+    }
+    queue.push(line);
+    queuedBytes += size;
+    schedule();
+  };
+  return {
+    debug: (message, bindings) => {
+      if (process.env.LOG_LEVEL?.trim().toLowerCase() !== "debug") return;
+      enqueue({ level: "debug", message: redactMcpText(message), ...bindings });
+    },
+    error: (message, error) => {
+      const reason = error === undefined ? undefined : serializeError(error);
+      enqueue({ level: "error", message: redactMcpText(message), error: reason });
+    },
+  };
+}
+
 /**
  * Shared fallback for call sites no service logger reaches yet. Debug lines
  * stream only when LOG_LEVEL=debug, so the tail on failure carries the detail
  * even where nothing has injected the real logger.
  */
 export function childProcessLogger(): ChildOutputLogger {
-  fallbackLogger ??= {
-    debug: (message, bindings) => {
-      if (process.env.LOG_LEVEL?.trim().toLowerCase() !== "debug") return;
-      process.stderr.write(`${JSON.stringify({ level: "debug", message, ...bindings })}\n`);
-    },
-    error: (message, error) => {
-      const reason = error === undefined ? undefined : serializeError(error);
-      process.stderr.write(`${JSON.stringify({ level: "error", message, error: reason })}\n`);
-    },
-  };
+  fallbackLogger ??= createChildProcessLogger();
   return fallbackLogger;
 }

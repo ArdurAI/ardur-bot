@@ -1,8 +1,12 @@
 import type { ChildProcess } from "node:child_process";
 import { spawn } from "node:child_process";
-import { Readable } from "node:stream";
+import { Readable, Writable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
-import { type ChildOutputLogger, captureChildOutput, childProcessLogger } from "./child-output.js";
+import {
+  type ChildOutputLogger,
+  captureChildOutput,
+  createChildProcessLogger,
+} from "./child-output.js";
 
 function fakeChild(script: string): ChildProcess {
   return spawn(process.execPath, ["-e", script], { stdio: "pipe" });
@@ -19,6 +23,54 @@ function closed(child: ChildProcess): Promise<number | null> {
 }
 
 describe("captureChildOutput", () => {
+  it("drains a real child even when the fallback sink never drains", async () => {
+    vi.stubEnv("LOG_LEVEL", "debug");
+    const sink = new Writable({ highWaterMark: 1, write() {} });
+    const logger = createChildProcessLogger(sink);
+    const child = fakeChild(
+      'for (let i = 0; i < 100000; i++) process.stderr.write("fixture line\\n");',
+    );
+    const captured = captureChildOutput(child, { kind: "fixture", logger });
+    try {
+      expect(await closed(child)).toBe(0);
+      expect(sink.writableLength).toBeLessThan(1024);
+      expect(Buffer.byteLength(captured.tail())).toBeLessThanOrEqual(64 * 1024);
+    } finally {
+      captured.close();
+      sink.destroy();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("reports the bounded queue's dropped count once after recovery", async () => {
+    vi.stubEnv("LOG_LEVEL", "debug");
+    const sink = new Writable({
+      write(_chunk, _encoding, callback) {
+        callback();
+      },
+    });
+    const write = vi.spyOn(sink, "write").mockReturnValue(false);
+    const logger = createChildProcessLogger(sink);
+    try {
+      logger.debug("first");
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      for (let i = 0; i < 1000; i++) logger.debug("fixture line");
+      expect(write).toHaveBeenCalledTimes(1);
+      write.mockReturnValue(true);
+      sink.emit("drain");
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      const records = write.mock.calls.map(([line]) => JSON.parse(String(line)));
+      const summaries = records.filter((record) => record.droppedLines !== undefined);
+      expect(summaries).toHaveLength(1);
+      expect(summaries[0].droppedLines).toBe(872);
+      expect(records).toHaveLength(130);
+    } finally {
+      write.mockRestore();
+      sink.destroy();
+      vi.unstubAllEnvs();
+    }
+  });
+
   it.each([true, false])(
     "bounds a lazily generated 100 MiB line (newline: %s)",
     async (newline) => {
@@ -57,10 +109,10 @@ describe("captureChildOutput", () => {
     captured.close();
   });
 
-  it("serializes real Error causes through the production fallback", () => {
+  it("serializes real Error causes through the production fallback", async () => {
     const write = vi.spyOn(process.stderr, "write").mockReturnValue(true);
     try {
-      childProcessLogger().error?.(
+      createChildProcessLogger().error?.(
         "Fixture process failed",
         new Error("Outer failure", {
           cause: new Error("phase: prompt; exit: 4; durationMs: 12", {
@@ -68,6 +120,7 @@ describe("captureChildOutput", () => {
           }),
         }),
       );
+      await new Promise<void>((resolve) => setImmediate(resolve));
       const record = JSON.parse(String(write.mock.calls[0]?.[0]));
       expect(record.error.cause.message).toContain("phase: prompt; exit: 4; durationMs: 12");
       expect(record.error.cause.cause.message).toBe("token=[Redacted]");
