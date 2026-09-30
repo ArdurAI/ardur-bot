@@ -92,7 +92,8 @@ verdict() {
   if [[ "$signed" == true ]]; then
     [[ "$spctl_status" == 0 ]] && grep -Eq ': accepted$' "$logs/spctl.log" && grep -q '^source=Notarized Developer ID$' "$logs/spctl.log"
   else
-    [[ "$spctl_status" != 0 ]] && grep -Eq ': rejected$' "$logs/spctl.log" && grep -q '^source=no usable signature$' "$logs/spctl.log"
+    # Some macOS versions print only the verdict for a self-signed app, no "source=" line.
+    [[ "$spctl_status" != 0 ]] && grep -Eq ': rejected$' "$logs/spctl.log"
   fi
 }
 check "Gatekeeper verdict (signed=$signed)" verdict
