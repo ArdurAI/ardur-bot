@@ -25,6 +25,7 @@ import {
   appendBotMessageAuditInTransaction,
   appendEventInTransaction,
   BotInboxFullError,
+  bindChiefAssignment,
   checkPeerTrafficLimits,
   createThreadMessageInTransaction,
   deviceDigest,
@@ -972,6 +973,12 @@ export async function messageBot(
         });
         await tx.message.update({ where: { id: inbound.id }, data: { runId: nextRun.id } });
         if (chiefChoice.planId && "chiefDispatch" in outboundBlock && outboundBlock.chiefDispatch) {
+          await bindChiefAssignment(tx, {
+            planId: chiefChoice.planId,
+            runId: nextRun.id,
+            memberId: target.id,
+            revision: outboundBlock.chiefDispatch.revision,
+          });
           await tx.message.update({
             where: { id: outbound.id },
             data: {

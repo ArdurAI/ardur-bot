@@ -106,6 +106,12 @@ export const ChiefResultSchema = z.object({
   state: z.enum(["draft", "verified-notion"]),
 });
 export type ChiefResult = z.infer<typeof ChiefResultSchema>;
+export const ChiefStopSchema = z.object({
+  revision: z.number().int().positive(),
+  memberName: z.string(),
+  state: z.enum(["requested", "confirmed", "uncertain"]),
+});
+export type ChiefStop = z.infer<typeof ChiefStopSchema>;
 export const ChiefDispatchSchema = z.object({
   requestMessageId: Id,
   revision: z.number().int().positive(),
@@ -116,6 +122,7 @@ export const ChiefDispatchSchema = z.object({
   runId: Id.optional(),
   delegationId: Id.optional(),
   activity: ChiefActivitySchema.optional(),
+  stop: ChiefStopSchema.optional(),
 });
 export type ChiefDispatch = z.infer<typeof ChiefDispatchSchema>;
 
@@ -138,9 +145,3 @@ export const ChiefControlSchema = z.object({
   uncertainRunIds: z.array(Id),
 });
 export type ChiefControl = z.infer<typeof ChiefControlSchema>;
-export const ChiefStopSchema = z.object({
-  revision: z.number().int().positive(),
-  memberName: z.string(),
-  state: z.enum(["requested", "confirmed", "uncertain"]),
-});
-export type ChiefStop = z.infer<typeof ChiefStopSchema>;

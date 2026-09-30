@@ -32,6 +32,7 @@ import {
   chiefWantsIndividualReplies,
   hasMentionToken,
   isActive,
+  parseChiefCorrection,
   progressMessageId,
   projectMessages,
   resolveAddressedBotIds,
@@ -42,11 +43,13 @@ import { deriveMessageQuote } from "@ardurbot/core/message-quote";
 import {
   answerWaitingRunWithTextInTransaction,
   appendEventInTransaction,
+  applyChiefCorrectionInTransaction,
   createChiefReceipt,
   createGroupRepos,
   createRepos,
   createThreadMessageInTransaction,
   expireComputerExecutionLeases,
+  findChiefCorrectionPlan,
   goalExhaustionReason,
   IsolationError,
   lockOwnedGroup,
@@ -1029,6 +1032,18 @@ export async function sendThreadMessage(
         candidateGoal && root && !goalExhaustionReason(candidateGoal, root, new Date())
           ? candidateGoal
           : null;
+      const correction = parseChiefCorrection({
+        text: input.text ?? "",
+        members: members.map((member) => ({ id: member.botId, name: member.name })),
+      });
+      const correctionPlan =
+        correction && !input.board && !input.artifactIds?.length
+          ? await findChiefCorrectionPlan(tx, {
+              ...actor,
+              threadId: target.threadId,
+              replyToMessageId: input.replyToMessageId,
+            })
+          : undefined;
       const addressedBotIds = resolveAddressedBotIds({
         text: input.text ?? "",
         members: members.map((member) => ({ id: member.botId, name: member.name })),
@@ -1057,9 +1072,12 @@ export async function sendThreadMessage(
         spaceCoordinatorId: spaceRouting?.coordinatorBotId,
       });
       if (!routed) throw new IsolationError("Group send did not resolve a target");
-      const targetBotIds = explicit.length
-        ? explicit.map((member) => member.botId)
-        : [routed.botId];
+      const targetBotIds =
+        correction && groupRouting?.coordinatorBotId
+          ? [groupRouting.coordinatorBotId]
+          : explicit.length
+            ? explicit.map((member) => member.botId)
+            : [routed.botId];
       const { blocks: attachmentBlocks, artifacts } = await resolveGroupSendAttachments(
         { prisma: tx },
         actor,
@@ -1087,6 +1105,45 @@ export async function sendThreadMessage(
         clientNonce: input.clientNonce,
       });
       const chiefBotId = groupRouting?.coordinatorBotId;
+      if (correction && correctionPlan && chiefBotId === correctionPlan.chiefBotId) {
+        const applied = await applyChiefCorrectionInTransaction(tx, {
+          ...actor,
+          plan: correctionPlan,
+          correction,
+          ownerMessageId: message.id,
+        });
+        await appendEventInTransaction(tx, {
+          spaceId: actor.spaceId,
+          threadId: target.threadId,
+          botId: chiefBotId,
+          type: "thread.message.created",
+          payload: {
+            messageId: message.id,
+            role: "user",
+            origin: "human-typed",
+            actorId: actor.userId,
+            blocks,
+            runIds: [],
+          },
+        });
+        const { receipt, eventSeq } = await createChiefReceipt(tx, {
+          ...actor,
+          threadId: target.threadId,
+          chiefBotId,
+          requestMessageId: message.id,
+          key: correction.kind === "exclude" ? "exclude-member" : "change-task",
+          ...(correction.kind === "exclude" ? { memberName: correction.memberName } : {}),
+        });
+        await touchGroupUpdatedAt(tx, target.groupId);
+        return {
+          message,
+          runs: [],
+          eventSeq,
+          receipt,
+          correctionRunIds: applied.runIds,
+          correctionPlanId: correctionPlan.id,
+        };
+      }
       const chiefSend = Boolean(
         chiefBotId &&
           memberBotIds.includes(chiefBotId) &&
@@ -1328,6 +1385,15 @@ export async function sendThreadMessage(
     getLogger().error("thread send realtime notification", error);
   });
   const receipt = "receipt" in committed ? committed.receipt : undefined;
+  if ("correctionRunIds" in committed && committed.correctionRunIds && committed.correctionPlanId) {
+    tracePoint(committed.correctionPlanId, "correction.committed");
+    for (const runId of committed.correctionRunIds) {
+      tracePoint(runId, "correction.stop-requested");
+      void deps.jobs
+        .enqueue(runContinueJob(runId))
+        .catch((error) => getLogger().error("chief selective stop enqueue", error));
+    }
+  }
   // Durable runs and events are reconciled after a missed publication; a slow wake
   // must not hold the accepted chief receipt behind runtime scheduling.
   if (receipt) {

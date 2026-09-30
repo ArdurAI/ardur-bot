@@ -5,6 +5,7 @@ export * from "./bot-comms-policy.js";
 export * from "./bot-presence.js";
 export * from "./cancel-runs.js";
 export * from "./channel-grants.js";
+export * from "./chief-control.js";
 export * from "./chief-loop.js";
 export * from "./client.js";
 export * from "./command-blocks.js";

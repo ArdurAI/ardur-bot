@@ -894,8 +894,14 @@ async function commitAnswerRunInput(
       status: "waiting_input",
     },
     select: { botId: true, userId: true, taskId: true, checkpoint: true },
+    // A superseded ask cannot revive its cancelled attempt or approve an old effect.
   });
-  if (!run) return null;
+  if (
+    !run ||
+    (await tx.run.findUnique({ where: { id: input.runId }, select: { cancelRequestedAt: true } }))
+      ?.cancelRequestedAt
+  )
+    return null;
   const message = await tx.message.findFirst({
     where: {
       id: input.messageId,

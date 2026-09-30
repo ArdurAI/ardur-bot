@@ -23,6 +23,7 @@ export function applyChiefReceipt<
         kind: "chief_receipt",
         requestMessageId: receipt.requestMessageId,
         key: receipt.key,
+        ...(receipt.memberName ? { memberName: receipt.memberName } : {}),
         text: receipt.text,
       },
     ],

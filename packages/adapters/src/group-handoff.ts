@@ -12,6 +12,7 @@ import {
 import type { Prisma, PrismaClient } from "@ardurbot/db";
 import {
   appendEventInTransaction,
+  bindChiefAssignment,
   createThreadMessageInTransaction,
   IsolationError,
   loadChiefMemberFacts,
@@ -305,6 +306,12 @@ export async function handoffToGroupBot(
           runId: nextRun.id,
           delegationId: admitted.record.id,
         };
+        await bindChiefAssignment(tx, {
+          planId: chiefChoice.planId,
+          runId: nextRun.id,
+          memberId: targetId,
+          revision: chiefChoice.dispatch.revision,
+        });
         await tx.message.update({
           where: { id: message.id },
           data: { blocks: [{ ...handoffBlock, chiefDispatch: boundDispatch }] },

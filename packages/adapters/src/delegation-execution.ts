@@ -13,6 +13,7 @@ import {
 } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import {
+  chiefExecutionRefusal,
   delegationStopReason,
   peerTrafficPaused,
   reconcileGoalExhaustion,
@@ -21,11 +22,7 @@ import {
 } from "@ardurbot/db";
 import { grantedMcpTools, mcpGrantForBot } from "./integration-access.js";
 import { loadPeerBoundEffect } from "./peer-bound-effect.js";
-import {
-  peerEffectBoundToolAllowed,
-  peerReadOnlyRuntimeSupported,
-  peerReadOnlyToolAllowed,
-} from "./peer-policy.js";
+import { peerEffectBoundToolAllowed, peerReadOnlyRuntimeSupported } from "./peer-policy.js";
 
 /**
  * The recorded ceiling also applies to connector routes resolved after catalog lookup. A worker
@@ -42,6 +39,14 @@ export async function checkDelegationExecution(
   options: { reservation?: boolean } = {},
 ): Promise<string | undefined> {
   const run = await prisma.run.findUniqueOrThrow({ where: { id: runId } });
+  if (prisma.chiefAssignment) {
+    const refusal = await chiefExecutionRefusal(prisma, runId, {
+      consequential: Boolean(tool && classifyRemoteTool(tool) === "consequential"),
+      remote: Boolean(route && route.connectorId !== "builtin"),
+      tool,
+    });
+    if (refusal) return refusal;
+  }
   if (run.goalId) {
     const peerDelegation = run.delegationId
       ? await prisma.delegation.findFirst({
