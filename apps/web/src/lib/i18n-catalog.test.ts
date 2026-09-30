@@ -12,6 +12,30 @@ import tr from "../../scripts/translations-tr.json";
 import zhCN from "../../scripts/translations-zh-CN.json";
 
 describe("lingui catalogs", () => {
+  it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+    "translates bounded chief receipts and dispatch in %s",
+    async (locale) => {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const catalog = await formatter().parse(readFileSync(filename, "utf8"), {
+        locale,
+        sourceLocale: "en",
+        filename,
+      });
+      for (const message of [
+        "Got it — I’ll choose a team member to put this in Notion.",
+        "Got it — I’ll check what’s missing and ask before installing it.",
+        "Got it — I’ll check the request and choose the next step.",
+        "Hi everyone.",
+        "Messaged {name}",
+        "Queued for {name}",
+        "Waiting for approval",
+      ]) {
+        const entry = Object.values(catalog).find((value) => value.message === message);
+        expect(entry?.translation, `${locale}: ${message}`).toBeTruthy();
+        if (message.includes("{name}")) expect(entry?.translation).toContain("{name}");
+      }
+    },
+  );
   beforeEach(() => {
     i18n.load("en", {});
     i18n.activate("en");
@@ -687,6 +711,10 @@ describe("lingui catalogs", () => {
       "{runtime}'s pinned model is unavailable. Change the pin and try again.",
       "{runtime}'s configuration is invalid. Check this bot's settings.",
       "{runtime}'s model connection is missing. Connect it or change the pin.",
+      "{runtime} is experimental. Turn on Experimental for {bot} to use it.",
+      "{runtime} runs on the host computer, not in a sandbox. Change {bot}'s computer to use it.",
+      "{bot}'s allowed model destinations block this model. Change them in {bot}'s settings.",
+      "This space's model policy blocks this model. Change it in Settings, under Models.",
       "{runtime} stopped before finishing this run.",
       "{runtime} could not finish this run. Check the runtime or change the pin.",
       "{member} stopped.",
@@ -708,6 +736,24 @@ describe("lingui catalogs", () => {
         expect(translated.trim(), `${locale}: ${sentence} must not be empty`).toBeTruthy();
         expect(translated, `${locale}: ${sentence} must be translated`).not.toEqual(sentence);
       }
+    }
+  });
+
+  it('translates the refusal banner\'s "Open bot settings" action in every shipped catalog', () => {
+    // The banner's first button for the computer-unsupported and destinations-bot
+    // refusals; an empty translation would fall back to English on the banner.
+    const message = "Open bot settings";
+    for (const locale of ["de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      const key = `msgid ${JSON.stringify(message)}\nmsgstr "`;
+      const at = catalog.indexOf(key);
+      expect(at, `${locale}: ${message} missing from catalog`).toBeGreaterThanOrEqual(0);
+      const translated = catalog.slice(at + key.length, catalog.indexOf('"', at + key.length));
+      expect(translated.trim(), `${locale}: ${message} must not be empty`).toBeTruthy();
+      expect(translated, `${locale}: ${message} must be translated`).not.toEqual(message);
     }
   });
 

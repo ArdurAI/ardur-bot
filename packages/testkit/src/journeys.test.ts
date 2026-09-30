@@ -2248,6 +2248,39 @@ describeJourneys("required product journeys", () => {
     expect(connector.records.length).toBe(afterFirst);
   });
 
+  it("8b: a run the provider refuses for too many requests waits, retries, and answers", async () => {
+    const cookie = await signup(app, `provider-retry-${stamp}@example.test`, "Retry");
+    const bot = await rpc<Bot>(app, cookie, "bots/create", {
+      name: "Retrier",
+      title: "",
+      description: "",
+      instructions: "",
+    });
+    const { runId } = await rpc<{ runId: string }>(app, cookie, "threads/send", {
+      botId: bot.id,
+      text: "refuse the first call with a rate limit, then answer",
+    });
+    let terminal: { status: string; error: string | null } | null = null;
+    await waitForDatabase(async () => {
+      terminal = await prisma.run.findUnique({
+        where: { id: runId },
+        select: { status: true, error: true },
+      });
+      return Boolean(terminal && ["completed", "failed", "cancelled"].includes(terminal.status));
+    });
+    // The first refusal waited and tried again; the reply arrived instead of a failure.
+    expect(terminal?.status).toBe("completed");
+    const retryEvents = await prisma.event.findMany({
+      where: { runId, type: "run.retry_scheduled" },
+      select: { payload: true },
+    });
+    expect(retryEvents).toHaveLength(1);
+    expect(retryEvents[0]?.payload).toMatchObject({ providerErrorKind: "rate-limit", attempt: 1 });
+    expect(await prisma.attempt.count({ where: { runId, status: "provider_retry" } })).toBe(1);
+    const snap = await rpc<Snap>(app, cookie, "threads/get", { botId: bot.id });
+    expect(JSON.stringify(snap)).toContain("done. i handled:");
+  });
+
   it("9: export includes memory and files but not secrets or browser sessions", async () => {
     const cookie = await signup(app, `export-j-${stamp}@example.test`, "Export");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {

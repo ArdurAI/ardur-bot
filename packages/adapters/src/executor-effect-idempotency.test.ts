@@ -112,6 +112,8 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
     boardCloseWhenDone: false,
     boardCommentedAt: null as Date | null,
     cancelRequestedAt: null as Date | null,
+    cancelConfirmedAt: null as Date | null,
+    providerRetryAt: null as Date | null,
     delegationId: null as string | null,
   };
   const memoryCommit = vi.fn(async () => ({ revision: "rev-1" }));
@@ -249,12 +251,18 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
           },
         },
       })),
+      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+        id: "event-1",
+        seq: 1,
+        ...data,
+      })),
     },
     run: {
       findFirst: vi.fn(async () => run),
       findMany: vi.fn(async () => []),
       findUnique: vi.fn(async () => run),
       findUniqueOrThrow: vi.fn(async () => run),
+      count: vi.fn(async () => 0),
       update: vi.fn(async ({ data }: { data: Record<string, unknown> }) =>
         Object.assign(run, data),
       ),
@@ -289,6 +297,7 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
         historyCompactionSummary: "",
         historyCompactedUpToSeq: null as number | null,
       })),
+      update: vi.fn(async () => ({ nextEventSeq: 1 })),
     },
     message: {
       findFirst: vi.fn(async () => null),
@@ -297,6 +306,7 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
     },
     task: {
       findUniqueOrThrow: vi.fn(async () => ({ id: run.taskId, prompt: "Update shared state" })),
+      update: vi.fn(async () => ({})),
     },
     connection: { findMany: vi.fn(async () => []) },
     spaceModelPreference: {
@@ -388,6 +398,7 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
   const resolveCommandCwd = vi.fn(async () => "/workspace");
   const sandboxDescription = { capabilities: { graphical: false } };
   const events = { append: vi.fn(async () => undefined), pauseRunForInput, finalizeRun };
+  const jobs = { enqueue: vi.fn(async () => undefined) };
   const secrets: string[] = [];
   const memoryRead = vi.fn(async () => ({ documents: [] }));
   const memorySearch = vi.fn(async () => []);
@@ -417,7 +428,7 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
     memoryProviders: { resolve: async () => null },
     memoryDocuments,
     events,
-    jobs: { enqueue: vi.fn(async () => undefined) },
+    jobs,
     secrets,
   } as unknown as Parameters<typeof createRunExecutor>[0]);
 
@@ -433,6 +444,7 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
     replayRequest,
     computer,
     events,
+    jobs,
     runRecord: run,
     runtimeRun,
     finalizeRun,
@@ -1101,6 +1113,213 @@ it("persists a sanitized typed provider failure through the executor", async () 
     }),
   );
 });
+
+it("puts back a rate-limited run that has shown nothing instead of failing it", async () => {
+  const f = fixture();
+  // biome-ignore lint/correctness/useYield: the provider refuses before its first event.
+  f.runtimeRun.mockImplementation(async function* (): AsyncGenerator<AgentRuntimeEvent> {
+    throw new ProviderError("Too many requests", "rate-limit");
+  });
+  await f.executor.continueRun("run-1", "worker-1");
+  expect(f.finalizeRun).not.toHaveBeenCalled();
+  expect(f.prisma.attempt.update).toHaveBeenCalledWith({
+    where: { id: "attempt-1" },
+    data: expect.objectContaining({ status: "provider_retry", error: "Too many requests" }),
+  });
+  const retryEvent = (
+    f.events.append.mock.calls as unknown as Array<
+      [{ type: string; payload: Record<string, unknown> }]
+    >
+  ).find(([input]) => input.type === "run.retry_scheduled")?.[0];
+  expect(retryEvent).toMatchObject({
+    runId: "run-1",
+    payload: { providerErrorKind: "rate-limit", attempt: 1 },
+  });
+  const waitMs = retryEvent?.payload.waitMs as number;
+  expect(waitMs).toBeGreaterThanOrEqual(2_000);
+  expect(waitMs).toBeLessThanOrEqual(2_500);
+  const job = continueJobsFor(f, "run-1")[0];
+  expect(continueJobsFor(f, "run-1")).toHaveLength(1);
+  expect(job?.availableAt?.getTime()).toBeGreaterThan(Date.now());
+  // The run gives its lease back while it waits and carries the moment it wakes again.
+  expect(f.prisma.run.updateMany).toHaveBeenCalledWith(
+    expect.objectContaining({
+      data: expect.objectContaining({
+        status: "queued",
+        leaseOwner: null,
+        providerRetryAt: expect.any(Date),
+      }),
+    }),
+  );
+});
+
+it("honours a Retry-After the provider carried on its refusal", async () => {
+  const f = fixture();
+  // biome-ignore lint/correctness/useYield: the provider refuses before its first event.
+  f.runtimeRun.mockImplementation(async function* (): AsyncGenerator<AgentRuntimeEvent> {
+    throw new ProviderError("Too many requests", "rate-limit", 5_000);
+  });
+  await f.executor.continueRun("run-1", "worker-1");
+  const retryEvent = (
+    f.events.append.mock.calls as unknown as Array<
+      [{ type: string; payload: Record<string, unknown> }]
+    >
+  ).find(([input]) => input.type === "run.retry_scheduled")?.[0];
+  // The provider's own 5 s wait replaces the 2 s backoff (jitter still applies).
+  expect(retryEvent?.payload.waitMs).toBeGreaterThanOrEqual(5_000);
+  expect(retryEvent?.payload.waitMs).toBeLessThanOrEqual(6_250);
+  const job = continueJobsFor(f, "run-1")[0];
+  expect(job?.availableAt?.getTime()).toBeGreaterThan(Date.now() + 4_000);
+});
+
+it("caps a Retry-After the provider carried at the policy's honour bound", async () => {
+  const f = fixture();
+  // biome-ignore lint/correctness/useYield: the provider refuses before its first event.
+  f.runtimeRun.mockImplementation(async function* (): AsyncGenerator<AgentRuntimeEvent> {
+    throw new ProviderError("Too many requests", "rate-limit", 90_000);
+  });
+  await f.executor.continueRun("run-1", "worker-1");
+  const retryEvent = (
+    f.events.append.mock.calls as unknown as Array<
+      [{ type: string; payload: Record<string, unknown> }]
+    >
+  ).find(([input]) => input.type === "run.retry_scheduled")?.[0];
+  // 90 s is capped at 60 s, plus jitter.
+  expect(retryEvent?.payload.waitMs).toBeGreaterThanOrEqual(60_000);
+  expect(retryEvent?.payload.waitMs).toBeLessThanOrEqual(75_000);
+});
+
+it("fails a rate-limited run with the provider's reason after its last retry", async () => {
+  const f = fixture();
+  f.prisma.attempt.count.mockResolvedValue(3);
+  // biome-ignore lint/correctness/useYield: the provider refuses before its first event.
+  f.runtimeRun.mockImplementation(async function* (): AsyncGenerator<AgentRuntimeEvent> {
+    throw new ProviderError("Too many requests", "rate-limit");
+  });
+  await f.executor.continueRun("run-1", "worker-1");
+  expect(f.finalizeRun).toHaveBeenCalledWith(
+    expect.objectContaining({
+      outcome: "failed",
+      error: "Too many requests",
+      providerErrorKind: "rate-limit",
+    }),
+  );
+  expect(f.events.append).not.toHaveBeenCalledWith(
+    expect.objectContaining({ type: "run.retry_scheduled" }),
+  );
+  expect(continueJobsFor(f, "run-1")).toEqual([]);
+});
+
+it("fails a rate-limited run at once once it has shown text", async () => {
+  const f = fixture();
+  f.runtimeRun.mockImplementation(async function* (): AsyncGenerator<AgentRuntimeEvent> {
+    yield { type: "text" as const, text: "Half an answer" };
+    throw new ProviderError("Too many requests", "rate-limit");
+  });
+  await f.executor.continueRun("run-1", "worker-1");
+  expect(f.finalizeRun).toHaveBeenCalledWith(
+    expect.objectContaining({
+      outcome: "failed",
+      error: "Too many requests",
+      providerErrorKind: "rate-limit",
+    }),
+  );
+  expect(f.events.append).not.toHaveBeenCalledWith(
+    expect.objectContaining({ type: "run.retry_scheduled" }),
+  );
+  expect(continueJobsFor(f, "run-1")).toEqual([]);
+});
+
+it("does not retry a rate-limited run that was asked to stop", async () => {
+  const f = fixture();
+  const findUnique = f.prisma.run.findUnique as unknown as {
+    mockImplementation(fn: (args?: { select?: Record<string, unknown> }) => Promise<unknown>): void;
+  };
+  findUnique.mockImplementation(async (args) =>
+    args?.select && Object.keys(args.select).join(",") === "cancelRequestedAt"
+      ? { cancelRequestedAt: new Date() }
+      : f.runRecord,
+  );
+  // biome-ignore lint/correctness/useYield: the provider refuses before its first event.
+  f.runtimeRun.mockImplementation(async function* (): AsyncGenerator<AgentRuntimeEvent> {
+    throw new ProviderError("Too many requests", "rate-limit");
+  });
+  await f.executor.continueRun("run-1", "worker-1");
+  expect(f.finalizeRun).not.toHaveBeenCalledWith(expect.objectContaining({ outcome: "failed" }));
+  expect(f.events.append).not.toHaveBeenCalledWith(
+    expect.objectContaining({ type: "run.retry_scheduled" }),
+  );
+  expect(continueJobsFor(f, "run-1")).toEqual([]);
+});
+
+it("never retries an auth refusal", async () => {
+  const f = fixture();
+  // biome-ignore lint/correctness/useYield: the provider refuses before its first event.
+  f.runtimeRun.mockImplementation(async function* (): AsyncGenerator<AgentRuntimeEvent> {
+    throw new ProviderError("Invalid API key", "auth");
+  });
+  await f.executor.continueRun("run-1", "worker-1");
+  expect(f.finalizeRun).toHaveBeenCalledWith(
+    expect.objectContaining({
+      outcome: "failed",
+      error: "Invalid API key",
+      providerErrorKind: "auth",
+    }),
+  );
+  expect(f.events.append).not.toHaveBeenCalledWith(
+    expect.objectContaining({ type: "run.retry_scheduled" }),
+  );
+  expect(continueJobsFor(f, "run-1")).toEqual([]);
+});
+
+it("finalizes as cancelled, without a provider call, a stopped run whose wait has ended", async () => {
+  const f = fixture();
+  // A retried run has started before; the stop landed while it waited out a refusal,
+  // and the wait has since passed. The continue job must not re-lease and re-run it.
+  Object.assign(f.runRecord, {
+    status: "queued",
+    startedAt: new Date("2026-09-24T12:00:00Z"),
+    cancelRequestedAt: new Date(),
+    providerRetryAt: new Date(Date.now() - 1_000),
+  });
+  // confirmDispatchStop re-reads the run inside its transaction.
+  (f.prisma.run.findUnique as ReturnType<typeof vi.fn>).mockImplementation(
+    async (args?: { select?: Record<string, unknown> }) => {
+      if (args?.select && "cancelRequestedAt" in args.select) return f.runRecord;
+      return f.runRecord;
+    },
+  );
+  await f.executor.continueRun("run-1", "worker-1");
+  expect(f.runtimeRun).not.toHaveBeenCalled();
+  expect(f.events.append).not.toHaveBeenCalledWith(
+    expect.objectContaining({ type: "run.started" }),
+  );
+  expect(f.runRecord.status).toBe("cancelled");
+  expect(f.runRecord.cancelConfirmedAt).toBeInstanceOf(Date);
+  expect(f.prisma.task.update).toHaveBeenCalledWith(
+    expect.objectContaining({ data: { status: "cancelled" } }),
+  );
+  // The stop event itself is the only run-scoped event appended through the executor.
+  const runEvents = (f.events.append.mock.calls as unknown as Array<[{ type: string }]>).map(
+    ([input]) => input.type,
+  );
+  expect(runEvents).toEqual([]);
+  const appendedThroughExecutor = (
+    f.events.append.mock.calls as unknown as Array<[{ type: string }]>
+  ).filter(([input]) => input.type === "run.started");
+  expect(appendedThroughExecutor).toEqual([]);
+});
+
+/** Continue jobs enqueued for one run; other scheduled work (computer sleep) is not the run's. */
+function continueJobsFor(f: ReturnType<typeof fixture>, runId: string) {
+  return (
+    f.jobs.enqueue.mock.calls as unknown as Array<
+      [{ name: string; payload?: { runId?: string }; availableAt?: Date }]
+    >
+  )
+    .map(([job]) => job)
+    .filter((job) => job.name === "run.continue" && job.payload?.runId === runId);
+}
 
 it.each(["deleted-connection", "missing-secret", "unsupported-effort", "partial-pin"])(
   "stops %s before model or tool work without retry",

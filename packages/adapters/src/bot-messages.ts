@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { runContinueJob } from "@ardurbot/adapter-kit";
-import type { BotMessageIntent, MessageBlock } from "@ardurbot/contracts";
+import type { BotMessageIntent, ChiefDispatch, MessageBlock } from "@ardurbot/contracts";
 import {
   canonicalDispatchJson,
   PeerEffectDescriptorsSchema,
@@ -31,6 +31,7 @@ import {
   goalBotAuthorityFingerprint,
   lockPeerTrafficPolicy,
   recordPeerTrafficBlock,
+  validateChiefDispatch,
   withTransactionRetry,
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
@@ -552,6 +553,7 @@ export async function messageBot(
         });
         if (!stillAddressable)
           return { ok: false as const, error: `${target.name} is no longer available` };
+        let chiefChoice: { planId?: string; dispatch?: ChiefDispatch } = {};
         if (goal) {
           const liveGoal = await tx.teamGoal.findFirst({
             where: {
@@ -575,6 +577,11 @@ export async function messageBot(
           });
           if (!liveGoal || !liveGroup || senderStillRunning.id !== parentRun?.id)
             return { ok: false as const, error: "The goal request is no longer available." };
+          if (intent === "request" || intent === "question") {
+            const choice = await validateChiefDispatch(tx, run, goal.groupId, target.id);
+            if ("error" in choice) return { ok: false as const, error: choice.error };
+            chiefChoice = choice;
+          }
           const now = new Date();
           const base = { rootTaskId: goal.rootTaskId, kind: "message" as const };
           const turnCount = await tx.delegation.count({
@@ -869,6 +876,18 @@ export async function messageBot(
           : false;
         const outboundBlock: MessageBlock = {
           ...outboundBase,
+          ...(chiefChoice.dispatch
+            ? {
+                chiefDispatch: {
+                  ...chiefChoice.dispatch,
+                  state: held
+                    ? ("approval-held" as const)
+                    : busyRecipient
+                      ? ("queued" as const)
+                      : ("messaged" as const),
+                },
+              }
+            : {}),
           ...(goal
             ? {
                 delegationId: admitted.record.id,
@@ -952,6 +971,17 @@ export async function messageBot(
           data: { runId: nextRun.id },
         });
         await tx.message.update({ where: { id: inbound.id }, data: { runId: nextRun.id } });
+        if (chiefChoice.planId && "chiefDispatch" in outboundBlock && outboundBlock.chiefDispatch)
+          await tx.chiefPlan.update({
+            where: { id: chiefChoice.planId },
+            data: {
+              dispatch: {
+                ...outboundBlock.chiefDispatch,
+                runId: nextRun.id,
+                delegationId: admitted.record.id,
+              },
+            },
+          });
         if (goal && deliveryId) {
           const now = new Date();
           const delivery = await tx.botMessageDelivery.create({

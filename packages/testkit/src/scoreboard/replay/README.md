@@ -15,6 +15,14 @@ T0 has no services and no timing claim. T1 provisions one disposable PostgreSQL 
 
 Docker must already be available locally, through a Unix socket or a local Windows named pipe such as `npipe:////./pipe/docker_engine`. Remote Docker endpoints remain refused. When the engine exposes a different socket inside its virtual machine, set `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock`. Container provisioning happens before the offline boundary. The CLI removes inherited provider credentials and blocks external Node TCP connections during each trial. This is an in-process egress assertion, not an operating-system firewall. No installed native provider command is launched by T0 or T1.
 
+The production and service PostgreSQL test files are not ordinary integration-harness suites: they require a dedicated, migrated disposable `scoreboard_trial_1` database. Set `SCOREBOARD_TEST_DATABASE_URL` to that database and run them directly; never point this variable at product data:
+
+```sh
+SCOREBOARD_TEST_DATABASE_URL=<disposable-scoreboard-trial-1-url> pnpm exec vitest run \
+  packages/testkit/src/scoreboard/replay/production.postgres.test.ts \
+  packages/testkit/src/scoreboard/replay/services.postgres.test.ts
+```
+
 `--task=task-01,task-04` selects tasks. `--history=long` seeds 204 archived messages, including one attachment-sized message exceeding 40,000 characters, through the database's message writer before the ordinary send path. It requires a separately reviewed `task-XX-long.json` fixture: a missing fixture fails explicitly. `--capacity=16000`, `128000`, or `1000000` runs an estimate-labeled budget simulation over every fully assembled request, including tools and history. These values never change or assert the actual provider context window. The declared output reservation is 4,096 tokens. Capacity simulation is evidence, not provider admission control.
 
 Long fixtures cover one task in each department: 01, 05, 09, 13, 17, and 21. They include three actual compaction requests; the oversized next message remains uncompacted under the existing transcript cap. This proves request construction and transport, not summary quality. The remaining task variants have deterministic material contracts but need their own reviewed long tapes before T1 execution.

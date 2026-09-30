@@ -6,6 +6,7 @@ import type {
   MessageBlock,
   Routine,
   TaughtSkill,
+  ThreadSendResult,
 } from "@ardurbot/contracts";
 import {
   canReactToThreadMessage,
@@ -17,6 +18,7 @@ import type { ComposerActionId, ComposerCommand, ComposerSkill } from "@ardurbot
 import {
   abortableDelay,
   answerableAskMessageIds,
+  applyChiefReceipt,
   attachmentsForThread,
   buildComposerMentionOptions,
   type ComposerMention,
@@ -78,7 +80,7 @@ import { BotAvatar } from "../components/bot-avatar";
 import { BotRuntimeLabel } from "../components/bot-runtime-label";
 import { CompactWorkRecord } from "../components/compact-work-record";
 import { MobileRunContext } from "../components/context-section";
-import { CoordinationLine } from "../components/coordination-line";
+import { ChiefDispatchLine, CoordinationLine } from "../components/coordination-line";
 import { DispatchStatus } from "../components/DispatchStatus";
 import {
   MarkdownArtifactPreview,
@@ -113,6 +115,7 @@ import { type MobileArtifactTarget, openMobileArtifact } from "../lib/artifact-o
 import { confirmDeleteBot } from "../lib/bot-lifecycle";
 import type { ComposerMenuOption } from "../lib/composer-menu";
 import { COMPOSER_MENU_OPTIONS } from "../lib/composer-menu";
+import { chiefReceiptText } from "../lib/coordination";
 import { runtimeProblemText } from "../lib/failure-categories";
 import { cancelFocusPrompt, focusPromptThreadActive } from "../lib/focus-prompt";
 import { groupModelNoticeText } from "../lib/group-model-notice";
@@ -134,7 +137,14 @@ import {
 import { native, useMobileTokens, useResolvedAppearance } from "../lib/native";
 import { type PickedAttachment, pickDocuments, pickFromLibrary } from "../lib/pick-attachments";
 import { threadRefreshDelayMs } from "../lib/refresh";
-import { antigravityProblemMessage, runtimePinRecovery } from "../lib/runtime-pin-recovery";
+import {
+  antigravityProblemMessage,
+  dismissRefusalRun,
+  refusalRunDismissed,
+  runtimePinRecovery,
+  runtimeRefusalActionLabel,
+  runtimeRefusalRecovery,
+} from "../lib/runtime-pin-recovery";
 import {
   type ThreadScrollAction,
   ThreadScrollBehavior,
@@ -200,6 +210,17 @@ function isWorkingStatus(status: string | undefined): boolean {
 }
 
 type NotificationRouteState = "loading" | "ready" | "failed";
+
+/**
+ * The refusal categories whose sentence the thread renders from the failure-category
+ * table, with the refusing bot's name filled in.
+ */
+const RUNTIME_REFUSAL_IDS: ReadonlySet<string> = new Set([
+  "experimental-off",
+  "computer-unsupported",
+  "destinations-bot",
+  "destinations-space",
+]);
 
 export default function ThreadRoute() {
   const tokens = useMobileTokens();
@@ -428,6 +449,7 @@ function Thread() {
   const notificationThreadId = snap?.threadId ?? currentBot?.threadId;
   activeThreadId.current = notificationThreadId;
   const currentBotStatus = snap ? snap.run?.status : currentBot?.status;
+  const currentBotRetrying = snap?.run?.providerRetryAt != null;
   const hasLiveProgress = visibleMessages.some((message) => message.id.startsWith("progress:"));
   const workingGroupBots = useMemo(() => {
     if (!inGroup) return [];
@@ -438,7 +460,7 @@ function Thread() {
       const member = snap?.members?.find((candidate) => candidate.botId === run.botId);
       if (!member) return [];
       seen.add(run.botId);
-      return [{ ...member, status: run.status }];
+      return [{ ...member, status: run.status, retrying: run.providerRetryAt != null }];
     });
     return workingBotsWithoutVisibleActivity(bots, visibleMessages);
   }, [inGroup, snap?.activeRuns, snap?.members, snap?.run, visibleMessages]);
@@ -1214,7 +1236,7 @@ function Thread() {
         artifactIds.push(artifact.id);
       }
       const clientNonce = newClientNonce();
-      await rpc(
+      const sent = await rpc<ThreadSendResult>(
         "threads/send",
         groupTarget
           ? {
@@ -1234,6 +1256,8 @@ function Thread() {
               replyToMessageId: replyTarget?.id,
             },
       );
+      if (isCurrentTarget(botTarget, groupTarget))
+        setSnap((current) => applyChiefReceipt(current, sent.receipt));
       dropDelayedSetup();
       void loadSessionToken()
         .then((token) => resumeLiveNotifications(currentApiBase(), token, selectedSpaceId() ?? ""))
@@ -1408,22 +1432,55 @@ function Thread() {
   }
 
   const answerableAskIds = useMemo(() => answerableAskMessageIds(snap), [snap]);
+  const failedRunBotId = snap?.run?.runtimeProblem ? (snap.run.botId ?? botId ?? "") : "";
+  // Runs whose refusal the reader fixed by saving the setting it named; the banner hides
+  // that run's refusal until a newer run event takes its place, the way the web dismisses
+  // the composer error after the same save.
+  const [dismissedRefusalRunIds, setDismissedRefusalRunIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  // Turn on Experimental saves the bot's setting the way the bot settings screen does; on
+  // success the refusal it named leaves until the next run event.
+  async function enableExperimental(targetBotId: string) {
+    if (!targetBotId) return;
+    try {
+      await rpc("bots/update", {
+        botId: targetBotId,
+        runtimeExperimental: true,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("Could not save changes. Try again."));
+      return;
+    }
+    const refusedRunId = snap?.run?.id;
+    if (refusedRunId)
+      setDismissedRefusalRunIds((current) => dismissRefusalRun(current, refusedRunId));
+  }
   const pinRecovery = snap?.run?.runtimeProblem
-    ? runtimePinRecovery(snap.run.runtimeProblem, snap.run.botId ?? botId ?? "")
+    ? runtimePinRecovery(snap.run.runtimeProblem, failedRunBotId)
     : null;
+  const refusalRecovery = snap?.run?.runtimeProblem
+    ? runtimeRefusalRecovery(snap.run.runtimeProblem, failedRunBotId)
+    : null;
+  const refusalBotName =
+    snap?.run?.runtimeProblem && RUNTIME_REFUSAL_IDS.has(snap.run.runtimeProblem.reasonId ?? "")
+      ? (memberName(snap?.members, snap.run.botId) ?? name ?? t("This bot"))
+      : null;
   const runError =
-    snap?.run?.status === "failed"
+    snap?.run?.status === "failed" && !refusalRunDismissed(dismissedRefusalRunIds, snap.run.id)
       ? snap.run.runtimeProblem
-        ? pinRecovery?.message
-          ? snap.run.runtimeProblem.pin.runtimeKind === "antigravity"
-            ? `${antigravityProblemMessage(snap.run.runtimeProblem)} ${t(pinRecovery.message)}`
-            : t(pinRecovery.message)
-          : snap.run.runtimeProblem.pin.runtimeKind !== "pi" ||
-              snap.run.runtimeProblem.code !== "pin-credential-missing"
+        ? refusalBotName
+          ? runtimeProblemText(snap.run.runtimeProblem, refusalBotName)
+          : pinRecovery?.message
             ? snap.run.runtimeProblem.pin.runtimeKind === "antigravity"
-              ? antigravityProblemMessage(snap.run.runtimeProblem)
-              : runtimeProblemText(snap.run.runtimeProblem)
-            : runtimePinMessage(snap.run.runtimeProblem.pin)
+              ? `${antigravityProblemMessage(snap.run.runtimeProblem)} ${t(pinRecovery.message)}`
+              : t(pinRecovery.message)
+            : snap.run.runtimeProblem.pin.runtimeKind !== "pi" ||
+                snap.run.runtimeProblem.code !== "pin-credential-missing"
+              ? snap.run.runtimeProblem.pin.runtimeKind === "antigravity"
+                ? antigravityProblemMessage(snap.run.runtimeProblem)
+                : runtimeProblemText(snap.run.runtimeProblem)
+              : runtimePinMessage(snap.run.runtimeProblem.pin)
         : (snap.run.error ?? null)
       : null;
   const liveMessages = useMemo(() => [...visibleMessages].reverse(), [visibleMessages]);
@@ -1663,7 +1720,11 @@ function Thread() {
   const workingFooter =
     !inGroup && currentBot && isWorkingStatus(currentBotStatus) && !hasLiveProgress ? (
       <View
-        accessibilityLabel={t("{name} is working", { name: currentBot.name })}
+        accessibilityLabel={
+          currentBotRetrying
+            ? t("Waiting for the model")
+            : t("{name} is working", { name: currentBot.name })
+        }
         accessibilityRole="text"
         style={{
           flexDirection: "row",
@@ -1683,11 +1744,13 @@ function Thread() {
     ) : inGroup && workingGroupBots.length > 0 ? (
       <View
         accessibilityLabel={
-          workingGroupBots.every((bot) => bot.status === "queued")
-            ? t("Waiting for a free place")
-            : workingGroupBots.length === 1
-              ? t("{name} is working", { name: workingGroupBots[0]?.name ?? t("Agent") })
-              : t("{count} agents working", { count: workingGroupBots.length })
+          workingGroupBots.every((bot) => bot.retrying)
+            ? t("Waiting for the model")
+            : workingGroupBots.every((bot) => bot.status === "queued" && !bot.retrying)
+              ? t("Waiting for a free place")
+              : workingGroupBots.length === 1
+                ? t("{name} is working", { name: workingGroupBots[0]?.name ?? t("Agent") })
+                : t("{count} agents working", { count: workingGroupBots.length })
         }
         accessibilityRole="text"
         style={{
@@ -1716,7 +1779,11 @@ function Thread() {
             </View>
           ))}
         </View>
-        {workingGroupBots.every((bot) => bot.status === "queued") ? (
+        {workingGroupBots.every((bot) => bot.retrying) ? (
+          <Text style={{ color: tokens.mutedForeground, fontSize: 13 }}>
+            {t("Waiting for the model")}
+          </Text>
+        ) : workingGroupBots.every((bot) => bot.status === "queued" && !bot.retrying) ? (
           <Text style={{ color: tokens.mutedForeground, fontSize: 13 }}>
             {t("Waiting for a free place")}
           </Text>
@@ -1753,7 +1820,30 @@ function Thread() {
         <View style={{ marginTop: 12 }}>
           <Text style={{ color: tokens.destructive }}>{runError}</Text>
           {snap?.run?.runtimeProblem ? (
-            <View style={{ flexDirection: "row", gap: 16, marginTop: 8 }}>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 16, marginTop: 8 }}>
+              {refusalRecovery && refusalBotName
+                ? refusalRecovery.actions.map((action, index) =>
+                    action.kind === "enable-experimental" ? (
+                      <Text
+                        key="enable-experimental"
+                        accessibilityRole="button"
+                        style={{ color: tokens.destructive }}
+                        onPress={() => void enableExperimental(action.botId)}
+                      >
+                        {t("Turn on Experimental")}
+                      </Text>
+                    ) : (
+                      <Text
+                        key={`${action.pathname}:${index}`}
+                        accessibilityRole="button"
+                        style={{ color: tokens.destructive }}
+                        onPress={() => router.push(action)}
+                      >
+                        {runtimeRefusalActionLabel(action)}
+                      </Text>
+                    ),
+                  )
+                : null}
               {snap.run.runtimeProblem.pin.runtimeKind === "pi" &&
               snap.run.runtimeProblem.code === "pin-credential-missing" ? (
                 <Text
@@ -1764,17 +1854,19 @@ function Thread() {
                   {t("Connect")}
                 </Text>
               ) : null}
-              <Text
-                accessibilityRole="button"
-                style={{ color: tokens.destructive }}
-                onPress={() => pinRecovery && router.push(pinRecovery.changePin)}
-              >
-                {t(
-                  snap.run.runtimeProblem.source?.kind === "group-member"
-                    ? "Group settings"
-                    : "Change pin",
-                )}
-              </Text>
+              {!(refusalRecovery && refusalBotName) ? (
+                <Text
+                  accessibilityRole="button"
+                  style={{ color: tokens.destructive }}
+                  onPress={() => pinRecovery && router.push(pinRecovery.changePin)}
+                >
+                  {t(
+                    snap.run.runtimeProblem.source?.kind === "group-member"
+                      ? "Group settings"
+                      : "Change pin",
+                  )}
+                </Text>
+              ) : null}
             </View>
           ) : null}
         </View>
@@ -2506,7 +2598,22 @@ const MessageBubble = memo(function MessageBubble({
   }
 
   const handoff = message.blocks.find((block) => block.kind === "handoff");
+  const chiefReceipt = message.blocks.find((block) => block.kind === "chief_receipt");
+  if (chiefReceipt)
+    return (
+      <Text style={{ color: tokens.foreground, fontSize: 15.5 }} accessibilityLiveRegion="polite">
+        {chiefReceiptText(chiefReceipt.key)}
+      </Text>
+    );
   if (handoff) {
+    if (handoff.chiefDispatch)
+      return (
+        <ChiefDispatchLine
+          dispatch={handoff.chiefDispatch}
+          detail={handoff.text}
+          actionProps={actionProps}
+        />
+      );
     const from = memberName(members, handoff.fromBotId) ?? t("bot");
     const to = memberName(members, handoff.toBotId) ?? t("bot");
     return (
@@ -2536,6 +2643,14 @@ const MessageBubble = memo(function MessageBubble({
       block.kind === "bot_message_sent" || block.kind === "bot_message_received",
   );
   if (peerMessage) {
+    if (peerMessage.kind === "bot_message_sent" && peerMessage.chiefDispatch)
+      return (
+        <ChiefDispatchLine
+          dispatch={peerMessage.chiefDispatch}
+          detail={peerMessage.text}
+          actionProps={actionProps}
+        />
+      );
     const sent = peerMessage.kind === "bot_message_sent";
     const peerBotId = sent ? peerMessage.toBotId : peerMessage.fromBotId;
     const peerColor =

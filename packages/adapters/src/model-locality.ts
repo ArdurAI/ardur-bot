@@ -30,6 +30,28 @@ export function modelLocalityAllowed(policies: unknown[], model: AgentRunModel):
   });
 }
 
+/**
+ * Which policy refused the model — the bot's own or the space's — with the bot's checked
+ * first, or null when both allow it. A policy that cannot be read counts as a refusal by
+ * whoever owns it: admission fails closed.
+ */
+export function modelLocalityRefusedBy(
+  botPolicy: unknown,
+  spacePolicy: unknown,
+  model: AgentRunModel,
+): "bot" | "space" | null {
+  const destination = destinationForModel(model);
+  const refused = (value: unknown): boolean => {
+    const policy = LocalityPolicySchema.safeParse(
+      value ?? ({ mode: "any" } satisfies LocalityPolicy),
+    );
+    return !policy.success || !allowsModelDestination(policy.data, destination);
+  };
+  if (refused(botPolicy)) return "bot";
+  if (refused(spacePolicy)) return "space";
+  return null;
+}
+
 /** Validate the admitted endpoint and return the remaining completion allowance. */
 export async function enforceDelegationDestination(
   prisma: PrismaClient,

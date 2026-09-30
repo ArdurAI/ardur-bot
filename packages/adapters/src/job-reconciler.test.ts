@@ -1,10 +1,11 @@
-import type { BackgroundJob, JobPublisher } from "@ardurbot/adapter-kit";
+import type { BackgroundJob, BackgroundJobHandlers, JobPublisher } from "@ardurbot/adapter-kit";
 import type { Pool, PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { returnBotMessageOutcome } from "./bot-messages.js";
 import { wakeCoordinatorAfterAsk } from "./group-ask.js";
 import type { ReconciliationLeadership } from "./job-reconciler.js";
 import { createJobReconciler, createPostgresReconciliationLeadership } from "./job-reconciler.js";
+import { InMemoryJobQueue } from "./wakeup.js";
 
 vi.mock("./bot-messages.js", () => ({ returnBotMessageOutcome: vi.fn() }));
 vi.mock("./group-ask.js", () => ({ wakeCoordinatorAfterAsk: vi.fn(async () => undefined) }));
@@ -24,7 +25,7 @@ function publisher() {
 }
 
 function fakePrisma(
-  runs: Array<{ id: string; updatedAt: Date }> = [],
+  runs: Array<{ id: string; updatedAt: Date; providerRetryAt?: Date | null }> = [],
   routines: Array<{ id: string; nextRunAt: Date | null }> = [],
   controls: Array<{
     id: string;
@@ -125,7 +126,7 @@ describe("createJobReconciler", () => {
   it("recovers runs and routines first, never waits on a hung board pass, and stops it on stop", async () => {
     const scheduledFor = new Date(Date.now() + 30_000);
     const prisma = fakePrisma(
-      [{ id: "run-1", updatedAt: new Date() }],
+      [{ id: "run-1", updatedAt: new Date(), providerRetryAt: null }],
       [{ id: "routine-1", nextRunAt: scheduledFor }],
     );
     const { jobs, enqueue } = publisher();
@@ -225,7 +226,7 @@ describe("createJobReconciler", () => {
     const scheduledFor = new Date(Date.now() + 30_000);
     const controlExpiresAt = new Date(Date.now() + 15_000);
     const prisma = fakePrisma(
-      [{ id: "run-1", updatedAt: new Date() }],
+      [{ id: "run-1", updatedAt: new Date(), providerRetryAt: null }],
       [{ id: "routine-1", nextRunAt: scheduledFor }],
       [
         {
@@ -275,6 +276,89 @@ describe("createJobReconciler", () => {
         orderBy: [{ controlLeaseExpiresAt: "asc" }, { id: "asc" }],
       }),
     );
+  });
+
+  it("keeps a provider-refused run waiting until its retry moment", async () => {
+    const retryAt = new Date(Date.now() + 6_000);
+    const prisma = fakePrisma([
+      { id: "run-waiting", updatedAt: new Date(), providerRetryAt: retryAt },
+    ]);
+    const { jobs, enqueue } = publisher();
+
+    await createJobReconciler({ prisma, jobs }).reconcileOnce();
+
+    expect(enqueue).toHaveBeenCalledWith({
+      name: "run.continue",
+      payload: { runId: "run-waiting" },
+      replaceKey: "run:run-waiting",
+      availableAt: retryAt,
+      preserveRunAt: true,
+    });
+  });
+
+  it("wakes a run whose provider retry moment has passed", async () => {
+    const prisma = fakePrisma([
+      { id: "run-due", updatedAt: new Date(), providerRetryAt: new Date(Date.now() - 1_000) },
+    ]);
+    const { jobs, enqueue } = publisher();
+
+    await createJobReconciler({ prisma, jobs }).reconcileOnce();
+
+    expect(enqueue).toHaveBeenCalledWith({
+      name: "run.continue",
+      payload: { runId: "run-due" },
+      replaceKey: "run:run-due",
+    });
+    expect(enqueue).not.toHaveBeenCalledWith(
+      expect.objectContaining({ payload: { runId: "run-due" }, preserveRunAt: true }),
+    );
+  });
+
+  it("leaves the wait intact when a reconciler pass lands inside it", async () => {
+    vi.useFakeTimers();
+    try {
+      const queue = new InMemoryJobQueue();
+      const seen: string[] = [];
+      const handlers: BackgroundJobHandlers = {
+        "run.continue": async (payload: { runId: string }) => {
+          seen.push(payload.runId);
+        },
+      } as unknown as BackgroundJobHandlers;
+      await queue.start(handlers);
+      // The executor's retry enqueue: a delayed keyed job six seconds out.
+      await queue.enqueue({
+        name: "run.continue",
+        payload: { runId: "run-1" },
+        replaceKey: "run:run-1",
+        availableAt: new Date(Date.now() + 6_000),
+        preserveRunAt: true,
+      });
+      const runs = [
+        { id: "run-1", updatedAt: new Date(), providerRetryAt: new Date(Date.now() + 6_000) },
+      ];
+      const prisma = { ...fakePrisma(runs) } as unknown as PrismaClient;
+      // The reconciler's jobs publisher and the executor's must be the same queue
+      // for the replacement to matter; drive it through the real InMemoryJobQueue.
+      const jobs: JobPublisher = {
+        enqueue: (job: BackgroundJob) => queue.enqueue(job),
+        cancel: async () => undefined,
+        close: async () => undefined,
+      };
+      const reconciler = createJobReconciler({ prisma, jobs });
+
+      // A pass at three seconds must not wake the run.
+      await vi.advanceTimersByTimeAsync(3_000);
+      await reconciler.reconcileOnce();
+      expect(seen).toEqual([]);
+
+      // The wake fires at the retry moment, not before.
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(seen).toEqual(["run-1"]);
+      await reconciler.stop();
+      await queue.close();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("restores expiry for orphaned user-control leases without a control bot", async () => {

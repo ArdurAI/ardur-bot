@@ -1,8 +1,10 @@
+import type { ChiefDispatch } from "@ardurbot/contracts";
 import type { CoordinationBlock } from "@ardurbot/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Pressable, Text, View } from "react-native";
 import { mobileTokens } from "../lib/appearance";
 import {
+  chiefDispatchSummary,
   coordinationAccessibilityLabel,
   coordinationFailureFixable,
   coordinationFailureLine,
@@ -12,6 +14,44 @@ import {
 import { useI18n } from "../lib/i18n";
 import { watchMotionAllowed, workRecordShouldPulse } from "../lib/work-record";
 import { NativeSymbol } from "./native-symbol";
+
+export function ChiefDispatchLine({
+  dispatch,
+  detail,
+  actionProps,
+}: {
+  dispatch: ChiefDispatch;
+  detail: string;
+  actionProps: Record<string, unknown>;
+}) {
+  const tokens = mobileTokens();
+  const [expanded, setExpanded] = useState(false);
+  const label = chiefDispatchSummary(dispatch);
+  return (
+    <View style={{ width: "100%", paddingVertical: 4 }}>
+      <Pressable
+        {...actionProps}
+        onPress={() => setExpanded(!expanded)}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        accessibilityState={{ expanded }}
+        style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8 }}
+      >
+        <Text
+          style={{ color: tokens.mutedForeground, fontSize: 13.5, flex: 1 }}
+          numberOfLines={1}
+          accessibilityLiveRegion="polite"
+        >
+          {label}
+        </Text>
+        <Text style={{ color: tokens.mutedForeground }}>{expanded ? "▾" : "▸"}</Text>
+      </Pressable>
+      {expanded ? (
+        <Text style={{ color: tokens.mutedForeground, fontSize: 13.5 }}>{detail}</Text>
+      ) : null}
+    </View>
+  );
+}
 
 /**
  * One coordination round, collapsed to a single line in the mobile thread. The

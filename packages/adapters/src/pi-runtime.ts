@@ -64,7 +64,7 @@ import {
   type PiSessionHandle,
   type PiSessionRecorder,
 } from "./pi-session.js";
-import { classifyProviderError, ProviderError } from "./provider-error.js";
+import { classifyProviderError, ProviderError, providerRetryAfterMs } from "./provider-error.js";
 import { ObservedUsageTotals } from "./runtime-usage.js";
 import { promptWithInitialSteering, withoutSteeringMessages } from "./steering-input.js";
 import { textContentArg } from "./tool-text.js";
@@ -508,6 +508,9 @@ export class PiAgentRuntime implements AgentRuntime {
           throw new ProviderError(
             sanitizeProviderError(model.provider, error),
             classifyProviderError(error),
+            // The agent core collapses SDK errors to their message string, so a
+            // Retry-After header rarely survives to here; extract when it does.
+            providerRetryAfterMs(error),
           );
         }
         if (budgetExceeded) {
@@ -552,7 +555,7 @@ export class PiAgentRuntime implements AgentRuntime {
         queue.fail(
           error instanceof RuntimePinError
             ? error
-            : new ProviderError(message, classifyProviderError(error)),
+            : new ProviderError(message, classifyProviderError(error), providerRetryAfterMs(error)),
         );
       } finally {
         queue.close();

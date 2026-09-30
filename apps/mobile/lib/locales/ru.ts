@@ -1,4 +1,13 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "Got it — I’ll choose a team member to put this in Notion.":
+    "Понял — выберу участника команды, который разместит это в Notion.",
+  "Got it — I’ll check what’s missing and ask before installing it.":
+    "Понял — проверю, чего не хватает, и спрошу перед установкой.",
+  "Got it — I’ll check the request and choose the next step.":
+    "Понял — проверю запрос и выберу следующий шаг.",
+  "Hi everyone.": "Всем привет.",
+  "Messaged {name}": "Сообщение отправлено {name}",
+  "Queued for {name}": "В очереди для {name}",
   "Allow preparation": "Разрешить подготовку",
   "Preparation allowed": "Подготовка разрешена",
   "Request expired": "Срок запроса истёк",
@@ -58,6 +67,17 @@ export const RU_MESSAGES: Record<string, string> = {
   "{runtime} stopped before finishing this run.": "{runtime} остановился, не завершив этот запуск.",
   "{runtime} could not finish this run. Check the runtime or change the pin.":
     "{runtime} не смог завершить этот запуск. Проверьте среду выполнения или измените закрепление.",
+  "{runtime} is experimental. Turn on Experimental for {bot} to use it.":
+    "{runtime} — экспериментальная среда. Включите «Экспериментально» для {bot}, чтобы использовать её.",
+  "{runtime} runs on the host computer, not in a sandbox. Change {bot}'s computer to use it.":
+    "{runtime} работает на компьютере-хосте, а не в песочнице. Измените компьютер {bot}, чтобы использовать её.",
+  "{bot}'s allowed model destinations block this model. Change them in {bot}'s settings.":
+    "Разрешённые направления моделей {bot} блокируют эту модель. Измените их в настройках {bot}.",
+  "This space's model policy blocks this model. Change it in Settings, under Models.":
+    "Политика моделей этого пространства блокирует эту модель. Измените её в настройках, в разделе «Модели».",
+  "This bot": "Этот бот",
+  "Turn on Experimental": "Включить «Экспериментально»",
+  "Open Settings": "Открыть настройки",
   Antigravity: "Antigravity",
   Hermes: "Hermes",
   "Ardur (built-in)": "Ardur (встроенная)",
@@ -190,6 +210,7 @@ export const RU_MESSAGES: Record<string, string> = {
   Replied: "Получен ответ",
   "Waiting for a turn": "Ожидает очереди",
   "Waiting for a free place": "Ждёт свободного места",
+  "Waiting for the model": "Ждёт модель",
   Expired: "Срок истёк",
   "Could not update learning. Try again.": "Не удалось обновить обучение. Повторите попытку.",
   "Could not update this task; try again.": "Не удалось обновить задачу. Повторите попытку.",

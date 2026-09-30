@@ -18,7 +18,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { captureChildOutput, childProcessLogger } from "../child-output.js";
 import { argumentSecrets, environmentSecrets, redactMcpText } from "../mcp-diagnostics.js";
-import { extractSourceArchive, extractUvBinary, gitTreeHash } from "./hermes-archive.js";
+import {
+  extractSourceArchive,
+  extractUvBinary,
+  gitTreeHash,
+  gitTreeIdOfArchive,
+} from "./hermes-archive.js";
 import {
   HERMES_SOURCE_PIN,
   HERMES_SOURCE_TREE,
@@ -206,15 +211,24 @@ export async function installHermes(deps: {
     await writeStatus(root, phaseStatus(phase, clock));
     const extractBytes = deps.extractBytes ?? EXTRACT_BYTES;
     const extractFiles = deps.extractFiles ?? EXTRACT_FILES;
+    const inflated = extractBytes + extractFiles * 512 + 1024;
+    // Verify the archive in memory before anything is written: a disk that ignores
+    // letter case cannot hold two paths that differ only by case, so the tree of the
+    // extracted folder can never equal the approved tree there.
+    const archiveTree = await gitTreeIdOfArchive(source, inflated);
+    if (archiveTree !== verifiedTree) throw new HermesInstallError(HERMES_DOWNLOAD_MISMATCH);
     await extractSourceArchive(source, versionDir, {
       files: extractFiles,
       bytes: extractBytes,
-      inflated: extractBytes + extractFiles * 512 + 1024,
+      inflated,
     });
-    const actualTree = await gitTreeHash(versionDir);
-    if (actualTree !== verifiedTree) {
-      await rm(versionDir, { recursive: true, force: true });
-      throw new HermesInstallError(HERMES_DOWNLOAD_MISMATCH);
+    // The archive was verified in memory above; on a disk that ignores letter case
+    // the extracted folder can be missing skipped case-colliding entries, so its
+    // tree id is only logged here for diagnosis, never compared.
+    try {
+      console.info(`hermes install: extracted tree ${await gitTreeHash(versionDir)}`);
+    } catch {
+      // Diagnosis only; the verified archive is the gate.
     }
 
     const uvArchive = await download(

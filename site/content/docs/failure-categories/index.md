@@ -23,6 +23,10 @@ mobile through its own catalogs (English source plus ru and zh).
 | `model-unavailable` | the pinned model no longer exists or is not offered | open the model pin settings |
 | `configuration-invalid` | the pin or runtime configuration is invalid | open the model pin settings |
 | `connection-missing` | the model connection is missing | connect |
+| `experimental-off` | the runtime is experimental and the bot has Experimental off | turn on Experimental (or open the model pin settings) |
+| `computer-unsupported` | the runtime runs on the host computer, not in the bot's sandbox | open the bot's computer settings (or the model pin settings) |
+| `destinations-bot` | the bot's allowed model destinations block the model | open the bot's destinations settings (or the model pin settings) |
+| `destinations-space` | the space's model policy blocks the model | open Settings at Models (or the model pin settings) |
 | `stopped` | the run or worker was stopped before finishing | none |
 | `other` | any failure the signals above do not name | none |
 

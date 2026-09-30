@@ -213,6 +213,7 @@ model Space {
   inlineVisualizations Boolean @default(true)
   comparisons Comparison[]
   allowedModelDestinations Json?
+  protectedLocations Json?
   learningConfig SpaceLearningConfig?
   learningInsights LearningInsight[]
   aiDataConsents AiDataConsent[]
@@ -397,6 +398,7 @@ model Bot {
   concurrentRuns Int?
   briefs BotBrief[]
   allowedModelDestinations Json?
+  protectedLocationGrants Json?
   screenGeneration Int @default(0)
   id                String            @id @default(cuid())
   spaceId           String
@@ -631,9 +633,36 @@ model Task {
   updatedAt DateTime @updatedAt
   runs      Run[]
   goal      TeamGoal?
+  chiefPlans ChiefPlan[]
 
   @@index([spaceId, botId])
   @@map("tasks")
+}
+
+/// Turn-level selection attached to existing work; never a separate budget root.
+model ChiefPlan {
+  id String @id @default(cuid())
+  spaceId String
+  userId String
+  groupId String
+  threadId String
+  chiefBotId String
+  sourceMessageId String @unique
+  sourceRunId String
+  taskId String
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  revision Int @default(1)
+  policyVersion Int
+  operation Json
+  decision Json
+  checkedFacts Json
+  dependencies Json @default("[]")
+  dispatch Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sourceRunId, createdAt])
+  @@map("chief_plans")
 }
 
 model Run {
@@ -686,6 +715,9 @@ model Run {
   leaseFence           Int              @default(0)
   screenLeaseId        String?
   leaseExpiresAt       DateTime?
+  /// When a run queued to retry a provider's rate limit wakes again; null while the
+  /// run holds a lease. Display only: the continue job's own availableAt schedules it.
+  providerRetryAt      DateTime?
   checkpoint           String?
   clientNonce          String?
   /// Thread position held for this run's reply from its first visible text, so a

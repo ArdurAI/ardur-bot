@@ -1,5 +1,6 @@
 import type {
   ComputerStatus,
+  GroupMember,
   ProductEvent,
   Run,
   RunStatus,
@@ -135,6 +136,25 @@ export function threadRunError(
   return run.error ?? null;
 }
 
+/**
+ * The refusing run's bot name for the refusal banner: the bot list first, then the
+ * snapshot's members. When the bot is in neither there is no name to fill — the banner
+ * shows the recorded sentence — and the thread's own name (a group's, say) is never
+ * used, because the sentence names the bot whose run refused, not the thread it ran in.
+ */
+export function refusalRunBotName(
+  snapshot: Pick<ThreadSnapshot, "run"> | null,
+  bots: ReadonlyArray<{ id: string; name: string }>,
+  members: ReadonlyArray<GroupMember> | undefined,
+): string | undefined {
+  const botId = snapshot?.run?.botId;
+  if (!botId) return undefined;
+  return (
+    bots.find((bot) => bot.id === botId)?.name ??
+    members?.find((member) => member.botId === botId)?.name
+  );
+}
+
 export function clearActiveThreadRuns(snapshot: ThreadSnapshot): ThreadSnapshot {
   const runIds = new Set(activeThreadRuns(snapshot).map((run) => run.id));
   const computer = snapshot.computer?.busyBotName
@@ -268,6 +288,7 @@ export function isThreadSnapshotEvent(event: ProductEvent): boolean {
     event.type === "run.started" ||
     event.type === "run.context" ||
     event.type === "run.waiting_input" ||
+    event.type === "run.retry_scheduled" ||
     event.type === "computer.takeover.requested" ||
     isRunTerminalEvent(event)
   );
@@ -409,6 +430,21 @@ export function reduceThreadSnapshot(
             candidate.id === runId ? { ...candidate, status } : candidate,
           )
         : prev.activeRuns,
+    };
+  }
+  if (event.type === "run.retry_scheduled") {
+    const retryRunId = event.runId;
+    if (!retryRunId) return { ...prev, cursor: event.seq };
+    const waitMs = typeof event.payload.waitMs === "number" ? event.payload.waitMs : 0;
+    const providerRetryAt = new Date(Date.parse(event.createdAt) + waitMs).toISOString();
+    const markWaiting = (run: Run): Run =>
+      run.id === retryRunId ? { ...run, status: "queued", providerRetryAt } : run;
+    return {
+      ...prev,
+      cursor: event.seq,
+      members: updateMemberStatus(prev.members, event.botId, "queued"),
+      run: prev.run ? markWaiting(prev.run) : prev.run,
+      activeRuns: prev.activeRuns?.map(markWaiting),
     };
   }
   if (isRunTerminalEvent(event)) {

@@ -36,6 +36,7 @@ import {
 import type { ComposerActionId, ComposerMention, ComposerSkill } from "@ardurbot/core";
 import {
   answerableAskMessageIds,
+  applyChiefReceipt,
   attachmentsForThread,
   buildComposerMentionOptions,
   canAddComposerFolder,
@@ -134,7 +135,11 @@ import { ArtifactFileCard } from "../components/ArtifactFileCard";
 import { AskCard } from "../components/AskCard";
 import { ActiveBotGlyph } from "../components/ai/CollaborationMarker";
 import { CompactWorkRecord } from "../components/ai/CompactWorkRecord";
-import { CoordinationLine } from "../components/ai/CoordinationLine";
+import {
+  ChiefDispatchLine,
+  ChiefReceiptText,
+  CoordinationLine,
+} from "../components/ai/CoordinationLine";
 import { NarrationBlocks } from "../components/ai/NarrationBlocks";
 import { CloudAgentCard } from "../components/CloudAgentCard";
 import { ComputerMaintenanceActions } from "../components/ComputerMaintenanceActions";
@@ -214,6 +219,7 @@ import {
   reconcileRefreshedThread,
   reduceComputerStatus,
   reduceThreadSnapshot,
+  refusalRunBotName,
   threadRunError,
   userHoldsComputerControl,
 } from "../lib/thread-events";
@@ -556,11 +562,21 @@ export function ShellPage({
   }, [panel]);
   const [modelFocusRequest, setModelFocusRequest] = useState(0);
   const [runtimeFocusRequest, setRuntimeFocusRequest] = useState(0);
+  const [destinationsFocusRequest, setDestinationsFocusRequest] = useState(0);
+  const [computerFocusRequest, setComputerFocusRequest] = useState(0);
   useEffect(() => {
     if (panel !== "settings") setModelFocusRequest(0);
   }, [panel]);
   function openBotModelSettings() {
     setModelFocusRequest((request) => request + 1);
+    setPanel("settings");
+  }
+  function openBotDestinationsSettings() {
+    setDestinationsFocusRequest((request) => request + 1);
+    setPanel("settings");
+  }
+  function openBotComputerSettings() {
+    setComputerFocusRequest((request) => request + 1);
     setPanel("settings");
   }
   const [peerConversation, setPeerConversation] = useState<{
@@ -1925,6 +1941,7 @@ export function ShellPage({
       color: bot?.color ?? FALLBACK_BOT_COLOR,
       name: bot?.name,
       status: run.status,
+      retrying: run.providerRetryAt != null,
     };
   });
   const resolveTranscriptMemberName = useCallback(
@@ -2238,7 +2255,7 @@ export function ShellPage({
         }
         const clientNonce = newClientNonce();
         if (groupTarget) {
-          await rpc.threads.send({
+          const sent = await rpc.threads.send({
             groupId: groupTarget,
             clientNonce,
             text: trimmed || undefined,
@@ -2247,6 +2264,9 @@ export function ShellPage({
             replyToMessageId: reroutedToGroup ? undefined : activeReplyTarget?.id,
             replyQuote: reroutedToGroup ? undefined : (activeReplyQuote ?? undefined),
           });
+          if (activeGroupId.current === groupTarget) {
+            updateSnapshot((current) => applyChiefReceipt(current, sent.receipt));
+          }
         } else if (botTarget) {
           const sent = await rpc.threads.send({
             botId: botTarget,
@@ -2257,7 +2277,7 @@ export function ShellPage({
             replyToMessageId: activeReplyTarget?.id,
             replyQuote: activeReplyQuote ?? undefined,
           });
-          if (activeBotId.current === botTarget) {
+          if (activeBotId.current === botTarget && sent.kind !== "receipt-only") {
             updateSnapshot((current) =>
               applyThreadSendReceipt(
                 current,
@@ -3724,6 +3744,7 @@ export function ShellPage({
             key={inGroup ? `group:${groupId}` : `bot:${active?.id}`}
             comparisonBotId={!inGroup && bots.length >= 2 ? active?.id : undefined}
             activeName={inGroup ? (activeGroup?.name ?? activeSnapshot?.groupName) : active?.name}
+            refusalBotName={refusalRunBotName(activeSnapshot, bots, transcriptMembers)}
             running={composerRunning}
             disabled={Boolean(recordingSkill)}
             pendingAttachments={activePendingAttachments}
@@ -3736,6 +3757,38 @@ export function ShellPage({
             onConnectPin={() =>
               openSettings("models", activeSnapshot?.run?.runtimeProblem?.pin.provider ?? undefined)
             }
+            onEnableExperimental={() => {
+              const botId = activeSnapshot?.run?.botId ?? active?.id;
+              const bot = botId ? bots.find((candidate) => candidate.id === botId) : undefined;
+              if (!botId || !bot) {
+                // The refusing bot is gone, so the save has nothing to land on; say so
+                // instead of dropping the click silently.
+                setSendError(t`Could not save. Try again.`);
+                return;
+              }
+              void (async () => {
+                try {
+                  await rpc.bots.update({ botId, runtimeExperimental: true });
+                  await refreshBots();
+                } catch {
+                  setSendError(t`Could not save. Try again.`);
+                  return;
+                }
+                // The banner leaves with the setting it named; a fresh run needs a fresh send.
+                dismissComposerError();
+              })();
+            }}
+            onOpenBotDestinations={() => {
+              const botId = activeSnapshot?.run?.botId ?? active?.id;
+              if (botId && botId !== active?.id) navigate(`/app/${botId}`);
+              openBotDestinationsSettings();
+            }}
+            onOpenBotComputer={() => {
+              const botId = activeSnapshot?.run?.botId ?? active?.id;
+              if (botId && botId !== active?.id) navigate(`/app/${botId}`);
+              openBotComputerSettings();
+            }}
+            onOpenSpaceModels={() => openSettings("models")}
             runErrorId={displayedRunErrorId}
             onRunErrorPresented={handleRunErrorPresented}
             onDismissError={dismissComposerError}
@@ -4059,6 +4112,8 @@ export function ShellPage({
                   bot={active}
                   modelFocusRequest={modelFocusRequest}
                   runtimeFocusRequest={runtimeFocusRequest}
+                  destinationsFocusRequest={destinationsFocusRequest}
+                  computerFocusRequest={computerFocusRequest}
                   modelSettings={modelSettings}
                   overrideGroups={groups}
                   onOpenGroup={(id) => {
@@ -5509,6 +5564,11 @@ export const Composer = memo(function Composer({
   runtimeProblem,
   modelCatalog,
   onConnectPin,
+  refusalBotName,
+  onEnableExperimental,
+  onOpenBotDestinations,
+  onOpenBotComputer,
+  onOpenSpaceModels,
   runErrorId,
   onRunErrorPresented,
   onDismissError,
@@ -5547,6 +5607,12 @@ export const Composer = memo(function Composer({
   runtimeProblem?: RuntimeProblem;
   modelCatalog?: ModelCatalogEntry[];
   onConnectPin?: () => void;
+  /** The bot whose run the refusal named, for sentences that name the bot. */
+  refusalBotName?: string;
+  onEnableExperimental?: () => void;
+  onOpenBotDestinations?: () => void;
+  onOpenBotComputer?: () => void;
+  onOpenSpaceModels?: () => void;
   runErrorId: string | null;
   onRunErrorPresented: (runId: string) => void;
   onDismissError: () => void;
@@ -5848,8 +5914,13 @@ export const Composer = memo(function Composer({
             providerErrorKind={providerErrorKind}
             runtimeProblem={runtimeProblem}
             catalog={modelCatalog}
+            botName={refusalBotName}
             onConnect={onConnectPin}
             onChangeModel={onChangeModel}
+            onEnableExperimental={onEnableExperimental}
+            onOpenBotDestinations={onOpenBotDestinations}
+            onOpenBotComputer={onOpenBotComputer}
+            onOpenSpaceModels={onOpenSpaceModels}
           />
           <button
             type="button"
@@ -6615,7 +6686,21 @@ const MessageView = memo(function MessageView({
             </div>
           );
         }
+        if (block.kind === "chief_receipt") {
+          return (
+            <div
+              key={i}
+              data-testid="message-bot-bubble"
+              className="rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
+              dir="auto"
+            >
+              <ChiefReceiptText receiptKey={block.key} />
+            </div>
+          );
+        }
         if (block.kind === "handoff") {
+          if (block.chiefDispatch)
+            return <ChiefDispatchLine key={i} dispatch={block.chiefDispatch} detail={block.text} />;
           const from = memberName?.(block.fromBotId) ?? t`bot`;
           const to = memberName?.(block.toBotId) ?? t`bot`;
           return (
@@ -6631,6 +6716,8 @@ const MessageView = memo(function MessageView({
           );
         }
         if (block.kind === "bot_message_sent" || block.kind === "bot_message_received") {
+          if (block.kind === "bot_message_sent" && block.chiefDispatch)
+            return <ChiefDispatchLine key={i} dispatch={block.chiefDispatch} detail={block.text} />;
           return (
             <PeerMessageReceipt
               key={i}

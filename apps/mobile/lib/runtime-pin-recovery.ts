@@ -1,4 +1,5 @@
-import type { RuntimeProblem } from "@ardurbot/contracts";
+import type { FailureCategoryAction, RuntimeProblem } from "@ardurbot/contracts";
+import { FailureCategoryIdSchema, failureCategory } from "@ardurbot/contracts";
 import { t } from "./i18n";
 
 export function antigravityProblemMessage(problem: RuntimeProblem): string {
@@ -70,4 +71,87 @@ export function runtimePinRecovery(problem: RuntimeProblem, botId: string) {
       ? { pathname: "/group-settings" as const, params: { groupId } }
       : { pathname: "/bot-settings" as const, params: { botId } },
   };
+}
+
+/** Where a failure-category action leads on the phone: a route to push, or the one setting it saves. */
+export type FailureCategoryRecoveryAction =
+  | {
+      kind: "enable-experimental";
+      /** Saves runtimeExperimental for this bot the way the bot settings screen does. */
+      botId: string;
+    }
+  | { kind: "route"; pathname: "/bot-settings" | "/models"; params: Record<string, string> };
+
+/**
+ * A classified runtime refusal's actions, from the failure-category table, first action
+ * first: turn on Experimental, open the bot's settings (the phone has no destinations or
+ * computer controls; the pin lives there), open Settings at Models, or change the pin.
+ */
+export function runtimeRefusalRecovery(
+  problem: RuntimeProblem,
+  botId: string,
+): {
+  actions: FailureCategoryRecoveryAction[];
+} {
+  const category = FailureCategoryIdSchema.safeParse(problem.reasonId);
+  const toAction = (action: FailureCategoryAction): FailureCategoryRecoveryAction | null => {
+    if (action.kind === "enable-experimental") return { kind: "enable-experimental", botId };
+    if (action.kind !== "open-settings") return null;
+    return action.target === "space-models"
+      ? { kind: "route", pathname: "/models", params: {} }
+      : { kind: "route", pathname: "/bot-settings", params: { botId } };
+  };
+  if (!category.success)
+    return { actions: [{ kind: "route", pathname: "/bot-settings", params: { botId } }] };
+  const entry = failureCategory(category.data);
+  const seenDestinations = new Set<string>();
+  const actions = [entry.action, ...(entry.more ?? [])]
+    .map(toAction)
+    .filter((action): action is FailureCategoryRecoveryAction => action !== null)
+    .filter((action) => {
+      // The phone maps several table targets to one screen (bot-destinations, bot-computer
+      // and model-pin all open the bot's settings); a destination already offered is dropped
+      // so the banner never shows the same button twice.
+      const destination =
+        action.kind === "enable-experimental"
+          ? `enable-experimental:${action.botId}`
+          : `${action.pathname}:${JSON.stringify(action.params)}`;
+      if (seenDestinations.has(destination)) return false;
+      seenDestinations.add(destination);
+      return true;
+    });
+  return {
+    actions: actions.length
+      ? actions
+      : [{ kind: "route", pathname: "/bot-settings", params: { botId } }],
+  };
+}
+
+/** The phone's label for a refusal action. */
+export function runtimeRefusalActionLabel(action: FailureCategoryRecoveryAction): string {
+  return action.kind === "enable-experimental"
+    ? t("Turn on Experimental")
+    : action.pathname === "/models"
+      ? t("Open Settings")
+      : t("Open bot settings");
+}
+
+/**
+ * Failed runs whose refusal the reader fixed by saving the setting it named. The phone
+ * hides such a run's refusal the way the web dismisses the composer error after the same
+ * save, and a newer run event takes the banner's place.
+ */
+export function dismissRefusalRun(
+  dismissed: ReadonlySet<string>,
+  runId: string,
+): ReadonlySet<string> {
+  return new Set(dismissed).add(runId);
+}
+
+/** True while the newest failed run is one the reader already fixed; a new run shows its own. */
+export function refusalRunDismissed(
+  dismissed: ReadonlySet<string>,
+  runId: string | null | undefined,
+): boolean {
+  return runId != null && dismissed.has(runId);
 }

@@ -7,6 +7,7 @@ import type {
   TerminalOutput,
   TerminalProvider,
 } from "@ardurbot/adapter-kit";
+import { TERMINAL_FRAME_BYTES } from "@ardurbot/contracts";
 import { captureChildOutput, childProcessLogger } from "../child-output.js";
 import { RuntimeQueue, stopNative } from "../runtimes/native-process.js";
 import { fleetPath } from "./archive.js";
@@ -127,7 +128,7 @@ export class FleetTerminal implements TerminalProvider {
           const frame = JSON.parse(pending.slice(0, index)) as { bytes: string };
           pending = pending.slice(index + 1);
           if (typeof frame.bytes !== "string" || frame.bytes.length > 32768) throw new Error();
-          queue.push({ seq: sequence++, bytes: Buffer.from(frame.bytes, "base64") });
+          queue.push({ seq: ++sequence, bytes: Buffer.from(frame.bytes, "base64") });
         }
       } catch {
         queue.end(new Error("Terminal output is invalid."));
@@ -162,7 +163,7 @@ export class FleetTerminal implements TerminalProvider {
       throw new Error("Invalid terminal size.");
   }
   async write(id: string, bytes: Uint8Array) {
-    if (bytes.length > 32768) throw new Error("Terminal input exceeds limit.");
+    if (bytes.length > TERMINAL_FRAME_BYTES) throw new Error("Terminal input exceeds limit.");
     this.session(id).child.stdin.write(
       `${JSON.stringify({ bytes: Buffer.from(bytes).toString("base64") })}\n`,
     );

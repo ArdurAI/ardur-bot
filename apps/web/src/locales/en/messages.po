@@ -180,6 +180,10 @@ msgstr "{0}m ago"
 msgid "{after} corrections in {0} exposed runs; before: {before} in {1} comparable runs"
 msgstr "{after} corrections in {0} exposed runs; before: {before} in {1} comparable runs"
 
+#: src/lib/failure-category-copy.ts
+msgid "{bot}'s allowed model destinations block this model. Change them in {bot}'s settings."
+msgstr "{bot}'s allowed model destinations block this model. Change them in {bot}'s settings."
+
 #: src/pages/LearningInsights.tsx
 msgid "{bot}'s last {count} runs on {model} failed because it cannot use tools; {suggested} used tools in your runs."
 msgstr "{bot}'s last {count} runs on {model} failed because it cannot use tools; {suggested} used tools in your runs."
@@ -331,6 +335,10 @@ msgstr "{remaining} left · bot is watching, not acting"
 msgid "{runtime} could not finish this run. Check the runtime or change the pin."
 msgstr "{runtime} could not finish this run. Check the runtime or change the pin."
 
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} is experimental. Turn on Experimental for {bot} to use it."
+msgstr "{runtime} is experimental. Turn on Experimental for {bot} to use it."
+
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "{runtime} loads all connected tools because deferred loading is unavailable."
 msgstr "{runtime} loads all connected tools because deferred loading is unavailable."
@@ -338,6 +346,10 @@ msgstr "{runtime} loads all connected tools because deferred loading is unavaila
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} reached this run's turn limit. Narrow the task and try again."
 msgstr "{runtime} reached this run's turn limit. Narrow the task and try again."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} runs on the host computer, not in a sandbox. Change {bot}'s computer to use it."
+msgstr "{runtime} runs on the host computer, not in a sandbox. Change {bot}'s computer to use it."
 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} stopped before finishing this run."
@@ -1335,7 +1347,7 @@ msgstr "Block link copied."
 msgid "Blocked"
 msgstr "Blocked"
 
-#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName) }, }) : row.reason
+#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, }, }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
 msgstr "Blocked — {0}"
@@ -3028,6 +3040,7 @@ msgid "Could not save this file. Try again."
 msgstr "Could not save this file. Try again."
 
 #: src/pages/customize/McpCredentialFix.tsx
+#: src/pages/Shell.tsx
 msgid "Could not save. Try again."
 msgstr "Could not save. Try again."
 
@@ -4333,6 +4346,18 @@ msgstr "GitLab host"
 msgid "Goal"
 msgstr "Goal"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check the request and choose the next step."
+msgstr "Got it — I’ll check the request and choose the next step."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check what’s missing and ask before installing it."
+msgstr "Got it — I’ll check what’s missing and ask before installing it."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll choose a team member to put this in Notion."
+msgstr "Got it — I’ll choose a team member to put this in Notion."
+
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
 msgstr "Governance"
@@ -4427,6 +4452,10 @@ msgstr "Hermes isn't available on Windows yet."
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."
 msgstr "Hermes runs with this computer's access."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Hi everyone."
+msgstr "Hi everyone."
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Hi, this is how I'll sound when I read replies out loud."
@@ -5443,6 +5472,10 @@ msgstr "Message from anywhere on your desktop."
 msgid "Message…"
 msgstr "Message…"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Messaged {name}"
+msgstr "Messaged {name}"
+
 #: src/pages/account/AccountMore.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Messaging"
@@ -6223,6 +6256,7 @@ msgid "Open Ardur"
 msgstr "Open Ardur"
 
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/shell/provider-error-message.tsx
 msgid "Open bot settings"
 msgstr "Open bot settings"
 
@@ -6287,6 +6321,7 @@ msgid "Open screen to view this computer."
 msgstr "Open screen to view this computer."
 
 #: src/components/composer/command-description.ts
+#: src/pages/shell/provider-error-message.tsx
 msgid "Open Settings"
 msgstr "Open Settings"
 
@@ -6743,6 +6778,10 @@ msgstr "Queue wait"
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Queued"
 msgstr "Queued"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Queued for {name}"
+msgstr "Queued for {name}"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Quick access shortcut"
@@ -8864,6 +8903,10 @@ msgstr "This sign-in window was replaced by a newer one. Finish signing in there
 msgid "This signs out every other session and keeps this one signed in."
 msgstr "This signs out every other session and keeps this one signed in."
 
+#: src/lib/failure-category-copy.ts
+msgid "This space's model policy blocks this model. Change it in Settings, under Models."
+msgstr "This space's model policy blocks this model. Change it in Settings, under Models."
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "This subscription sign-in is not available in Ardur yet. Use a deployment credential or choose another provider."
 msgstr "This subscription sign-in is not available in Ardur yet. Use a deployment credential or choose another provider."
@@ -9017,6 +9060,10 @@ msgstr "Try again"
 #: src/pages/LearningInbox.tsx
 msgid "Turn on"
 msgstr "Turn on"
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Turn on Experimental"
+msgstr "Turn on Experimental"
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
@@ -9355,6 +9402,7 @@ msgstr "Waiting for a free place"
 msgid "Waiting for a turn"
 msgstr "Waiting for a turn"
 
+#: src/components/ai/CoordinationLine.tsx
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Waiting for approval"
@@ -9376,6 +9424,10 @@ msgstr "Waiting for sign-in…"
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Waiting for the API to come back…"
 msgstr "Waiting for the API to come back…"
+
+#: src/lib/working-indicator.ts
+msgid "Waiting for the model"
+msgstr "Waiting for the model"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts

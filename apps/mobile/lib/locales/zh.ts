@@ -1,4 +1,12 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "Got it — I’ll choose a team member to put this in Notion.":
+    "收到 — 我会选择一位团队成员把它放到 Notion。",
+  "Got it — I’ll check what’s missing and ask before installing it.":
+    "收到 — 我会检查缺少什么，并在安装前征求同意。",
+  "Got it — I’ll check the request and choose the next step.": "收到 — 我会检查请求并选择下一步。",
+  "Hi everyone.": "大家好。",
+  "Messaged {name}": "已向 {name} 发送消息",
+  "Queued for {name}": "已排队等待 {name}",
   "Allow preparation": "允许准备",
   "Preparation allowed": "已允许准备",
   "Request expired": "请求已过期",
@@ -58,6 +66,17 @@ export const ZH_MESSAGES: Record<string, string> = {
   "{runtime} stopped before finishing this run.": "{runtime} 在完成此次运行前已停止。",
   "{runtime} could not finish this run. Check the runtime or change the pin.":
     "{runtime} 无法完成此次运行。请检查运行时或更改固定模型。",
+  "{runtime} is experimental. Turn on Experimental for {bot} to use it.":
+    "{runtime} 是实验性运行时。为 {bot} 启用「实验性」后才能使用。",
+  "{runtime} runs on the host computer, not in a sandbox. Change {bot}'s computer to use it.":
+    "{runtime} 运行在主机电脑上，而不是沙盒中。请更改 {bot} 的电脑后再使用。",
+  "{bot}'s allowed model destinations block this model. Change them in {bot}'s settings.":
+    "{bot} 允许的模型目的地阻止了此模型。请在 {bot} 的设置中更改。",
+  "This space's model policy blocks this model. Change it in Settings, under Models.":
+    "此空间的模型策略阻止了此模型。请在设置的「模型」中更改。",
+  "This bot": "此 Bot",
+  "Turn on Experimental": "启用「实验性」",
+  "Open Settings": "打开设置",
   Antigravity: "Antigravity",
   Hermes: "Hermes",
   "Ardur (built-in)": "Ardur（内置）",
@@ -183,6 +202,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   Replied: "已回复",
   "Waiting for a turn": "等待轮次",
   "Waiting for a free place": "正在等待空位",
+  "Waiting for the model": "正在等待模型",
   Expired: "已过期",
   "Could not update learning. Try again.": "无法更新学习设置。请重试。",
   "Could not update this task; try again.": "无法更新此任务，请重试。",

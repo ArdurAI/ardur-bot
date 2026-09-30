@@ -1,9 +1,71 @@
+import type { ChiefDispatch, ChiefReceiptKey } from "@ardurbot/contracts";
 import type { CoordinationBlock, CoordinationMember } from "@ardurbot/core";
 import { coordinationMemberFailureCode, fixableFailure } from "@ardurbot/core";
 import { Button } from "@ardurbot/ui-web";
 import { Plural, Trans, useLingui } from "@lingui/react/macro";
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
+
+export function ChiefReceiptText({ receiptKey }: { receiptKey: ChiefReceiptKey }) {
+  const { t } = useLingui();
+  const text =
+    receiptKey === "document-to-service"
+      ? t`Got it — I’ll choose a team member to put this in Notion.`
+      : receiptKey === "install-tool"
+        ? t`Got it — I’ll check what’s missing and ask before installing it.`
+        : receiptKey === "greeting"
+          ? t`Hi everyone.`
+          : t`Got it — I’ll check the request and choose the next step.`;
+  return (
+    <span data-testid="chief-receipt" aria-live="polite">
+      {text}
+    </span>
+  );
+}
+
+/** Only committed dispatch metadata may produce the compact headline. */
+export function ChiefDispatchLine({
+  dispatch,
+  detail,
+}: {
+  dispatch: ChiefDispatch;
+  detail: string;
+}) {
+  const { t } = useLingui();
+  const [expanded, setExpanded] = useState(false);
+  const name = dispatch.memberName;
+  const label =
+    dispatch.state === "approval-held"
+      ? t`Waiting for approval`
+      : dispatch.state === "queued"
+        ? t`Queued for ${name}`
+        : t`Messaged ${name}`;
+  return (
+    <div className="my-1 text-[13px] text-muted-foreground" data-testid="chief-dispatch">
+      <button
+        type="button"
+        className="flex w-full items-center gap-2 text-left"
+        aria-label={label}
+        aria-expanded={expanded}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <span className="truncate" aria-live="polite">
+          {label}
+        </span>
+        {expanded ? (
+          <ChevronDown className="h-3.5 w-3.5" />
+        ) : (
+          <ChevronRight className="h-3.5 w-3.5" />
+        )}
+      </button>
+      {expanded ? (
+        <div className="mt-2 border-l-2 border-border pl-4" dir="auto">
+          {detail}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 /**
  * One coordination round, collapsed to a single line. The request, progress

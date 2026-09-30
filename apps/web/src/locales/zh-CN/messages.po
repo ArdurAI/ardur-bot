@@ -180,6 +180,10 @@ msgstr ""
 msgid "{after} corrections in {0} exposed runs; before: {before} in {1} comparable runs"
 msgstr ""
 
+#: src/lib/failure-category-copy.ts
+msgid "{bot}'s allowed model destinations block this model. Change them in {bot}'s settings."
+msgstr "{bot} 允许的模型目的地阻止了此模型。请在 {bot} 的设置中更改。"
+
 #: src/pages/LearningInsights.tsx
 msgid "{bot}'s last {count} runs on {model} failed because it cannot use tools; {suggested} used tools in your runs."
 msgstr "{bot} 最近在 {model} 上的 {count} 次运行失败，因为它无法使用工具；{suggested} 在你的运行中使用过工具。"
@@ -331,6 +335,10 @@ msgstr "剩余 {remaining} · Bot 只看不操作"
 msgid "{runtime} could not finish this run. Check the runtime or change the pin."
 msgstr "{runtime} 无法完成此次运行。请检查运行时或更改固定模型。"
 
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} is experimental. Turn on Experimental for {bot} to use it."
+msgstr "{runtime} 是实验性运行时。为 {bot} 启用「实验性」后才能使用。"
+
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "{runtime} loads all connected tools because deferred loading is unavailable."
 msgstr ""
@@ -338,6 +346,10 @@ msgstr ""
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} reached this run's turn limit. Narrow the task and try again."
 msgstr "{runtime} 已达到此次运行的轮次上限。请缩小任务范围后重试。"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} runs on the host computer, not in a sandbox. Change {bot}'s computer to use it."
+msgstr "{runtime} 运行在主机电脑上，而不是沙盒中。请更改 {bot} 的电脑后再使用。"
 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} stopped before finishing this run."
@@ -1335,7 +1347,7 @@ msgstr ""
 msgid "Blocked"
 msgstr "已阻止"
 
-#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName) }, }) : row.reason
+#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, }, }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
 msgstr "已阻塞 — {0}"
@@ -3028,6 +3040,7 @@ msgid "Could not save this file. Try again."
 msgstr "无法保存此文件。请重试。"
 
 #: src/pages/customize/McpCredentialFix.tsx
+#: src/pages/Shell.tsx
 msgid "Could not save. Try again."
 msgstr ""
 
@@ -4333,6 +4346,18 @@ msgstr ""
 msgid "Goal"
 msgstr "目标"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check the request and choose the next step."
+msgstr "收到 — 我会检查请求并选择下一步。"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check what’s missing and ask before installing it."
+msgstr "收到 — 我会检查缺少什么，并在安装前征求同意。"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll choose a team member to put this in Notion."
+msgstr "收到 — 我会选择一位团队成员把它放到 Notion。"
+
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
 msgstr ""
@@ -4427,6 +4452,10 @@ msgstr "Hermes 暂不支持 Windows。"
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."
 msgstr "Hermes 使用此计算机的访问权限运行。"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Hi everyone."
+msgstr "大家好。"
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Hi, this is how I'll sound when I read replies out loud."
@@ -5443,6 +5472,10 @@ msgstr ""
 msgid "Message…"
 msgstr "消息…"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Messaged {name}"
+msgstr "已向 {name} 发送消息"
+
 #: src/pages/account/AccountMore.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Messaging"
@@ -6223,8 +6256,9 @@ msgid "Open Ardur"
 msgstr "打开 Ardur"
 
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/shell/provider-error-message.tsx
 msgid "Open bot settings"
-msgstr ""
+msgstr "打开 Bot 设置"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open chat links in the desktop app."
@@ -6287,8 +6321,9 @@ msgid "Open screen to view this computer."
 msgstr "打开屏幕以查看此计算机。"
 
 #: src/components/composer/command-description.ts
+#: src/pages/shell/provider-error-message.tsx
 msgid "Open Settings"
-msgstr ""
+msgstr "打开设置"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open System Settings"
@@ -6743,6 +6778,10 @@ msgstr "排队等待"
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Queued"
 msgstr "排队中"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Queued for {name}"
+msgstr "已排队等待 {name}"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Quick access shortcut"
@@ -8864,6 +8903,10 @@ msgstr "此登录窗口已被新的登录窗口替换。请在新窗口中完成
 msgid "This signs out every other session and keeps this one signed in."
 msgstr ""
 
+#: src/lib/failure-category-copy.ts
+msgid "This space's model policy blocks this model. Change it in Settings, under Models."
+msgstr "此空间的模型策略阻止了此模型。请在设置的「模型」中更改。"
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "This subscription sign-in is not available in Ardur yet. Use a deployment credential or choose another provider."
 msgstr "此订阅登录在 Ardur 中尚不可用。请使用部署凭据或选择其他提供方。"
@@ -9017,6 +9060,10 @@ msgstr "重试"
 #: src/pages/LearningInbox.tsx
 msgid "Turn on"
 msgstr ""
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Turn on Experimental"
+msgstr "启用「实验性」"
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
@@ -9355,10 +9402,11 @@ msgstr "正在等待空位"
 msgid "Waiting for a turn"
 msgstr "等待轮次"
 
+#: src/components/ai/CoordinationLine.tsx
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Waiting for approval"
-msgstr ""
+msgstr "等待批准"
 
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
@@ -9376,6 +9424,10 @@ msgstr "等待登录…"
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Waiting for the API to come back…"
 msgstr "正在等待 API 恢复…"
+
+#: src/lib/working-indicator.ts
+msgid "Waiting for the model"
+msgstr "正在等待模型"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts

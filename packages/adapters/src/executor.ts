@@ -141,6 +141,7 @@ import {
   isTooManyDatabaseConnections,
   listDelegations,
   loadBotPresence,
+  loadChiefSelectionContext,
   loadRunHistoryMessages,
   type McpServer,
   noteBotMessageReadUnconfirmed,
@@ -381,6 +382,7 @@ import {
   searchChartCatalog,
 } from "./plot-tool.js";
 import { classifyProviderError, ProviderError } from "./provider-error.js";
+import { shouldRetryProviderFailure } from "./provider-retry-decision.js";
 import {
   approvalRequestRoute,
   bindDeviceApproval,
@@ -1728,7 +1730,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
         }
       }
-      if (run.cancelRequestedAt && run.status === "queued" && !run.startedAt) {
+      // A stop that lands while the run waits must hold, whatever startedAt says:
+      // a retried run has started before, and claiming it again would re-lease it,
+      // emit run.started and reach a provider call before the stop is confirmed.
+      if (run.cancelRequestedAt && run.status === "queued") {
         if (await confirmDispatchStop(deps.prisma, runId)) {
           tracePoint(runId, "terminal.committed", { outcome: "cancelled" });
           await wakeGoalAfterDelegation(deps, run.delegationId).catch((error) =>
@@ -1797,6 +1802,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               leaseExpiresAt: new Date(Date.now() + 5 * 60_000),
               error: null,
               checkpoint: null,
+              providerRetryAt: null,
             },
           }),
       });
@@ -5563,7 +5569,16 @@ export function createRunExecutor(deps: ExecutorDeps) {
           : askResults
             ? { id: `ask-results:${run.id}`, role: "user" as const, content: askResults }
             : undefined;
-        const prompt = [replyContext, basePrompt, takeoverResume?.promptNote, approvalContinuation]
+        const chiefSelection = roomCoordinator
+          ? await loadChiefSelectionContext(deps.prisma, run.id)
+          : undefined;
+        const prompt = [
+          chiefSelection,
+          replyContext,
+          basePrompt,
+          takeoverResume?.promptNote,
+          approvalContinuation,
+        ]
           .filter(Boolean)
           .join("\n\n");
         const botDirectory =
@@ -6903,6 +6918,78 @@ export function createRunExecutor(deps: ExecutorDeps) {
             runSecrets,
           );
           const providerErrorKind = classifyProviderError(error);
+          if (error instanceof ProviderError) {
+            // A rate limit is the provider saying "not now": a run it refused before it
+            // showed anything waits and tries again instead of failing. It gives its
+            // lease and its place in the room back while it waits, so the other bots
+            // are not blocked.
+            const shownAnything =
+              approvalPausePending ||
+              publishedMidTurnUserMessage ||
+              assembled.trim() !== "" ||
+              messageSegments.length > 0 ||
+              pendingToolNames.length > 0;
+            const attemptsSoFar = await deps.prisma.attempt.count({
+              where: { runId, status: "provider_retry" },
+            });
+            const deadlineAt = run.delegationRootTaskId
+              ? ((
+                  await deps.prisma.delegationRoot.findUnique({
+                    where: { rootTaskId: run.delegationRootTaskId },
+                    select: { deadlineAt: true },
+                  })
+                )?.deadlineAt ?? null)
+              : null;
+            const retry = shouldRetryProviderFailure({
+              error,
+              shown: shownAnything,
+              cancelRequested: Boolean(stopping?.cancelRequestedAt),
+              attemptsSoFar,
+              deadlineAt,
+              now: new Date(),
+              random: Math.random,
+            });
+            if (retry) {
+              const resumeAt = new Date(Date.now() + retry.waitMs);
+              const released = await writeComputerRunRequeue(
+                deps,
+                runId,
+                workerId,
+                fence,
+                resumeCheckpoint,
+                heldForTakeover,
+                null,
+                resumeAt,
+              );
+              if (!released) return;
+              await deps.prisma.attempt.update({
+                where: { id: attempt.id },
+                data: { status: "provider_retry", error: message, finishedAt: new Date() },
+              });
+              await deps.events
+                .append({
+                  spaceId: run.spaceId,
+                  threadId: thread.id,
+                  botId: bot.id,
+                  type: "run.retry_scheduled",
+                  runId,
+                  payload: {
+                    providerErrorKind,
+                    attempt: retry.attempt,
+                    waitMs: retry.waitMs,
+                  },
+                })
+                .catch((recordError) => getLogger().error("provider retry record", recordError));
+              // preserveRunAt: the reconciler's periodic run.continue for the same key
+              // must not pull this wake earlier than the provider retry wait.
+              await deps.jobs.enqueue({
+                ...runContinueJob(runId),
+                availableAt: resumeAt,
+                preserveRunAt: true,
+              });
+              return;
+            }
+          }
           const failed = await deps.events.finalizeRun({
             onCommitted: () =>
               tracePoint(runId, "terminal.committed", { attempt: fence, outcome: "failed" }),
@@ -7546,6 +7633,7 @@ async function writeComputerRunRequeue(
   resumeCheckpoint: TakeoverResumeCheckpoint | null,
   heldForTakeover = false,
   error: string | null = null,
+  providerRetryAt?: Date,
 ): Promise<boolean> {
   const whereLease = {
     id: runId,
@@ -7558,6 +7646,7 @@ async function writeComputerRunRequeue(
     error,
     leaseOwner: null,
     leaseExpiresAt: null,
+    ...(providerRetryAt ? { providerRetryAt } : {}),
   };
   const preserve = await deps.prisma.run.updateMany({
     where: {
@@ -7572,7 +7661,10 @@ async function writeComputerRunRequeue(
   }
   const planned = await deps.prisma.run.updateMany({
     where: { ...whereLease, checkpoint: null },
-    data: computerRunRequeueData(resumeCheckpoint, error, heldForTakeover),
+    data: {
+      ...computerRunRequeueData(resumeCheckpoint, error, heldForTakeover),
+      ...(providerRetryAt ? { providerRetryAt } : {}),
+    },
   });
   if (planned.count === 1) {
     await releaseQuietBotMessageClaims(deps.prisma, runId, fence);

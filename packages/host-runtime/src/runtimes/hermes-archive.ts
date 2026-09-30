@@ -63,6 +63,11 @@ function sortKey(entry: { mode: string; name: string }): Buffer {
   return Buffer.from(name, "utf8");
 }
 
+/** Git file mode: any execute bit means 100755, anything else 100644. */
+function gitFileMode(mode: number): string {
+  return (mode & 0o111) !== 0 ? "100755" : "100644";
+}
+
 /** Hash a directory the way git hashes a tree. Empty directories are omitted. */
 export async function gitTreeHash(directory: string): Promise<string> {
   const id = await hashTree(directory);
@@ -85,8 +90,67 @@ async function hashTree(directory: string): Promise<string | null> {
     }
     if (!stat.isFile()) throw new HermesArchiveError();
     const data = await readFile(full);
-    const mode = (stat.mode & 0o111) !== 0 ? "100755" : "100644";
-    entries.push({ mode, name, id: gitBlobId(data) });
+    entries.push({ mode: gitFileMode(stat.mode), name, id: gitBlobId(data) });
+  }
+  if (entries.length === 0) return null;
+  return gitTreeObject(entries);
+}
+
+export async function gitTreeIdOfArchive(gzip: Buffer, inflated: number): Promise<string> {
+  const tar = gunzipLimited(gzip, inflated);
+  // One source tree per archive: entries below two different top folders are refused.
+  let top: string | undefined;
+  const root: TreeNode = { dirs: new Map(), files: new Map() };
+  let files = 0;
+  for (const entry of readTar(tar)) {
+    if (entry.kind === "skip" || entry.kind === "dir") continue;
+    if (entry.kind === "refuse") throw new HermesArchiveError();
+    const relative = stripTop(entry.path, entry.kind, (name) => {
+      if (top === undefined) top = name;
+      else if (top !== name) throw new HermesArchiveError();
+    });
+    if (relative === null) continue;
+    files += 1;
+    addTreeNode(root, relative.split("/"), entry);
+  }
+  if (files === 0) throw new HermesArchiveError();
+  const id = treeIdOfNode(root);
+  if (!id) throw new HermesArchiveError();
+  return id;
+}
+
+type TreeNode = {
+  dirs: Map<string, TreeNode>;
+  files: Map<string, { mode: string; id: string }>;
+};
+
+/** A repeated or clashing path is a malformed archive, never a merge. */
+function addTreeNode(node: TreeNode, parts: string[], entry: TarEntry): void {
+  const name = parts[0];
+  if (name === undefined) throw new HermesArchiveError();
+  const rest = parts.slice(1);
+  if (rest.length === 0) {
+    if (entry.kind !== "file") throw new HermesArchiveError();
+    if (node.dirs.has(name) || node.files.has(name)) throw new HermesArchiveError();
+    node.files.set(name, { mode: gitFileMode(entry.mode), id: gitBlobId(entry.data) });
+    return;
+  }
+  if (node.files.has(name)) throw new HermesArchiveError();
+  let child = node.dirs.get(name);
+  if (!child) {
+    child = { dirs: new Map(), files: new Map() };
+    node.dirs.set(name, child);
+  }
+  addTreeNode(child, rest, entry);
+}
+
+/** Tree objects nested from the deepest folder up; a folder with no files is omitted. */
+function treeIdOfNode(node: TreeNode): string | null {
+  const entries: { mode: string; name: string; id: string }[] = [];
+  for (const [name, file] of node.files) entries.push({ mode: file.mode, name, id: file.id });
+  for (const [name, child] of node.dirs) {
+    const id = treeIdOfNode(child);
+    if (id) entries.push({ mode: "40000", name, id });
   }
   if (entries.length === 0) return null;
   return gitTreeObject(entries);
@@ -102,6 +166,12 @@ export async function extractSourceArchive(
   let files = 0;
   let bytes = 0;
   let top: string | undefined;
+  // Relative paths this run wrote, exactly and case-folded. A disk that ignores
+  // letter case cannot hold two paths that differ only by case, so a later such
+  // entry is skipped; every other EEXIST (a real duplicate path, or a file this
+  // run never wrote) means a malformed archive.
+  const written = new Set<string>();
+  const writtenFolded = new Set<string>();
   for (const entry of readTar(tar)) {
     if (entry.kind === "skip") continue;
     if (entry.kind === "refuse") throw new HermesArchiveError();
@@ -116,7 +186,19 @@ export async function extractSourceArchive(
       if (files > limits.files || bytes > limits.bytes) throw new HermesArchiveError();
       const target = inside(dest, relative);
       await mkdir(path.dirname(target), { recursive: true, mode: 0o755 });
-      await writeFile(target, entry.data, { mode: entry.mode, flag: "wx" });
+      try {
+        await writeFile(target, entry.data, { mode: entry.mode, flag: "wx" });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        if (written.has(relative) || !writtenFolded.has(foldCase(relative)))
+          throw new HermesArchiveError();
+        console.info(
+          `hermes install: skipped ${relative}: this disk cannot hold it beside an extracted file whose path differs only by letter case`,
+        );
+        continue;
+      }
+      written.add(relative);
+      writtenFolded.add(foldCase(relative));
       await chmod(target, entry.mode);
       continue;
     }
@@ -179,6 +261,11 @@ function safeParts(entryPath: string): string[] {
   if (parts.some((part) => part === "" || part === "." || part === ".."))
     throw new HermesArchiveError();
   return parts;
+}
+
+/** Case-fold a relative path the way macOS and Windows compare file names. */
+function foldCase(relative: string): string {
+  return relative.toLocaleLowerCase("en-US");
 }
 
 function inside(dest: string, relative: string): string {

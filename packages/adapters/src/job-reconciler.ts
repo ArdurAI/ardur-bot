@@ -239,7 +239,7 @@ export function createJobReconciler(
         },
         orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
         take: batchSize,
-        select: { id: true, updatedAt: true },
+        select: { id: true, updatedAt: true, providerRetryAt: true },
       }),
       deps.prisma.routine.findMany({
         where: {
@@ -469,7 +469,19 @@ export function createJobReconciler(
     }
 
     await Promise.all([
-      ...runs.map((run) => deps.jobs.enqueue(runContinueJob(run.id))),
+      // A run waiting out a provider refusal keeps its wake moment: a duplicate
+      // run.continue key must not replace the pending delayed job with an immediate one.
+      ...runs.flatMap((run) =>
+        run.providerRetryAt && run.providerRetryAt > now
+          ? [
+              deps.jobs.enqueue({
+                ...runContinueJob(run.id),
+                availableAt: run.providerRetryAt,
+                preserveRunAt: true,
+              }),
+            ]
+          : [deps.jobs.enqueue(runContinueJob(run.id))],
+      ),
       ...routines.flatMap((routine) =>
         routine.nextRunAt
           ? [deps.jobs.enqueue(routineWakeupJob(routine.id, routine.nextRunAt))]

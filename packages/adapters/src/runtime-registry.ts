@@ -6,6 +6,7 @@ import type {
   RuntimeProblem,
 } from "@ardurbot/contracts";
 import {
+  failureCategoryMessage,
   nativeRuntimeHealthKeys,
   runtimeNames,
   runtimePinProblem,
@@ -40,13 +41,21 @@ export class RuntimeRegistry {
       return runtimePinProblem(
         pin,
         "runtime-unsupported-computer",
-        `${runtimeNames[pin.runtimeKind]} runs on host computers for now — change the bot's computer or its runtime.`,
+        failureCategoryMessage("computer-unsupported", {
+          runtime: runtimeNames[pin.runtimeKind],
+          bot: "this bot",
+        }),
+        "computer-unsupported",
       );
     if (pin.runtimeKind !== "pi" && !experimental)
       return runtimePinProblem(
         pin,
         "runtime-unavailable",
-        "This runtime is experimental — enable Experimental in the bot's settings or change the pin.",
+        failureCategoryMessage("experimental-off", {
+          runtime: runtimeNames[pin.runtimeKind],
+          bot: "this bot",
+        }),
+        "experimental-off",
       );
     const availability = await entry.probe().catch(
       (): RuntimeAvailability => ({

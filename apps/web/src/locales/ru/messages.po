@@ -180,6 +180,10 @@ msgstr ""
 msgid "{after} corrections in {0} exposed runs; before: {before} in {1} comparable runs"
 msgstr ""
 
+#: src/lib/failure-category-copy.ts
+msgid "{bot}'s allowed model destinations block this model. Change them in {bot}'s settings."
+msgstr "Разрешённые направления моделей {bot} блокируют эту модель. Измените их в настройках {bot}."
+
 #: src/pages/LearningInsights.tsx
 msgid "{bot}'s last {count} runs on {model} failed because it cannot use tools; {suggested} used tools in your runs."
 msgstr "Последние запуски {bot} на {model} ({count}) не удались: модель не умеет вызывать инструменты; {suggested} использовала инструменты в ваших запусках."
@@ -331,6 +335,10 @@ msgstr "Осталось: {remaining} · бот наблюдает, но не д
 msgid "{runtime} could not finish this run. Check the runtime or change the pin."
 msgstr "{runtime} не смог завершить этот запуск. Проверьте среду выполнения или измените закрепление."
 
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} is experimental. Turn on Experimental for {bot} to use it."
+msgstr "{runtime} — экспериментальная среда. Включите «Экспериментально» для {bot}, чтобы использовать её."
+
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "{runtime} loads all connected tools because deferred loading is unavailable."
 msgstr ""
@@ -338,6 +346,10 @@ msgstr ""
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} reached this run's turn limit. Narrow the task and try again."
 msgstr "{runtime} достиг лимита шагов этого запуска. Сузьте задачу и повторите попытку."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} runs on the host computer, not in a sandbox. Change {bot}'s computer to use it."
+msgstr "{runtime} работает на компьютере-хосте, а не в песочнице. Измените компьютер {bot}, чтобы использовать её."
 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} stopped before finishing this run."
@@ -1335,7 +1347,7 @@ msgstr ""
 msgid "Blocked"
 msgstr "Заблокировано"
 
-#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName) }, }) : row.reason
+#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, }, }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
 msgstr "Заблокировано — {0}"
@@ -3028,6 +3040,7 @@ msgid "Could not save this file. Try again."
 msgstr "Не удалось сохранить этот файл. Повторите попытку."
 
 #: src/pages/customize/McpCredentialFix.tsx
+#: src/pages/Shell.tsx
 msgid "Could not save. Try again."
 msgstr ""
 
@@ -4333,6 +4346,18 @@ msgstr ""
 msgid "Goal"
 msgstr "Цель"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check the request and choose the next step."
+msgstr "Понял — проверю запрос и выберу следующий шаг."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check what’s missing and ask before installing it."
+msgstr "Понял — проверю, чего не хватает, и спрошу перед установкой."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll choose a team member to put this in Notion."
+msgstr "Понял — выберу участника команды, который разместит это в Notion."
+
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
 msgstr ""
@@ -4427,6 +4452,10 @@ msgstr "Hermes пока недоступен в Windows."
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."
 msgstr "Hermes работает с правами доступа этого компьютера."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Hi everyone."
+msgstr "Всем привет."
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Hi, this is how I'll sound when I read replies out loud."
@@ -5443,6 +5472,10 @@ msgstr ""
 msgid "Message…"
 msgstr "Сообщение…"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Messaged {name}"
+msgstr "Сообщение отправлено {name}"
+
 #: src/pages/account/AccountMore.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Messaging"
@@ -6223,8 +6256,9 @@ msgid "Open Ardur"
 msgstr "Открыть Ardur"
 
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/shell/provider-error-message.tsx
 msgid "Open bot settings"
-msgstr ""
+msgstr "Открыть настройки бота"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open chat links in the desktop app."
@@ -6287,8 +6321,9 @@ msgid "Open screen to view this computer."
 msgstr "Откройте экран для просмотра этого компьютера."
 
 #: src/components/composer/command-description.ts
+#: src/pages/shell/provider-error-message.tsx
 msgid "Open Settings"
-msgstr ""
+msgstr "Открыть настройки"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open System Settings"
@@ -6743,6 +6778,10 @@ msgstr "Ожидание в очереди"
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Queued"
 msgstr "В очереди"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Queued for {name}"
+msgstr "В очереди для {name}"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Quick access shortcut"
@@ -8864,6 +8903,10 @@ msgstr "Это окно входа заменено более новым. За�
 msgid "This signs out every other session and keeps this one signed in."
 msgstr ""
 
+#: src/lib/failure-category-copy.ts
+msgid "This space's model policy blocks this model. Change it in Settings, under Models."
+msgstr "Политика моделей этого пространства блокирует эту модель. Измените её в настройках, в разделе «Модели»."
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "This subscription sign-in is not available in Ardur yet. Use a deployment credential or choose another provider."
 msgstr "Вход по этой подписке пока недоступен в Ardur. Используйте учетные данные развертывания или выберите другого поставщика."
@@ -9017,6 +9060,10 @@ msgstr "Попробовать ещё раз"
 #: src/pages/LearningInbox.tsx
 msgid "Turn on"
 msgstr ""
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Turn on Experimental"
+msgstr "Включить «Экспериментально»"
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
@@ -9355,10 +9402,11 @@ msgstr "Ждёт свободного места"
 msgid "Waiting for a turn"
 msgstr "Ожидает очереди"
 
+#: src/components/ai/CoordinationLine.tsx
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Waiting for approval"
-msgstr ""
+msgstr "Ожидает одобрения"
 
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
@@ -9376,6 +9424,10 @@ msgstr "Ожидание входа в систему…"
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Waiting for the API to come back…"
 msgstr "Ждём возвращения API…"
+
+#: src/lib/working-indicator.ts
+msgid "Waiting for the model"
+msgstr "Ждёт модель"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
