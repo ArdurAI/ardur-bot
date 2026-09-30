@@ -22,6 +22,7 @@ export * from "./desktop-extensions.js";
 export * from "./desktop-setup.js";
 export * from "./dispatch.js";
 export * from "./domain.js";
+export * from "./effort-routing.js";
 export * from "./events.js";
 export * from "./failure-categories.js";
 export type * from "./features.js";
