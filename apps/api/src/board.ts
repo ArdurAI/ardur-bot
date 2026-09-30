@@ -282,6 +282,7 @@ export function createBoard(deps: RouterDeps) {
               closeWhenDone: item.closeWhenDone,
             },
           });
+          if (result.kind === "receipt-only") throw new ORPCError("INTERNAL_SERVER_ERROR");
           return { runId: result.runId, botId: input.botId };
         } catch (error) {
           // Queue delivery may fail after the transaction commits; the reconciler owns that run.

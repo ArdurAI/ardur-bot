@@ -4346,6 +4346,18 @@ msgstr ""
 msgid "Goal"
 msgstr "Цель"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check the request and choose the next step."
+msgstr "Понял — проверю запрос и выберу следующий шаг."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check what’s missing and ask before installing it."
+msgstr "Понял — проверю, чего не хватает, и спрошу перед установкой."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll choose a team member to put this in Notion."
+msgstr "Понял — выберу участника команды, который разместит это в Notion."
+
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
 msgstr ""
@@ -4440,6 +4452,10 @@ msgstr "Hermes пока недоступен в Windows."
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."
 msgstr "Hermes работает с правами доступа этого компьютера."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Hi everyone."
+msgstr "Всем привет."
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Hi, this is how I'll sound when I read replies out loud."
@@ -5455,6 +5471,10 @@ msgstr ""
 #: src/pages/system/QuickComposer.tsx
 msgid "Message…"
 msgstr "Сообщение…"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Messaged {name}"
+msgstr "Сообщение отправлено {name}"
 
 #: src/pages/account/AccountMore.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -6758,6 +6778,10 @@ msgstr "Ожидание в очереди"
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Queued"
 msgstr "В очереди"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Queued for {name}"
+msgstr "В очереди для {name}"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Quick access shortcut"
@@ -9378,10 +9402,11 @@ msgstr "Ждёт свободного места"
 msgid "Waiting for a turn"
 msgstr "Ожидает очереди"
 
+#: src/components/ai/CoordinationLine.tsx
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Waiting for approval"
-msgstr ""
+msgstr "Ожидает одобрения"
 
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/DirectMcpSearch.tsx

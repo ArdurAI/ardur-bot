@@ -46,7 +46,7 @@ test("Chief of Staff settings show two group briefs and a default-routed run", a
   await captureScreenshot(page, testInfo, "context-two-group-briefs");
   const sent = await rpc<{ runId: string }>(page, "threads/send", {
     groupId: groups[0]!.id,
-    text: "Hello",
+    text: "Explain how the room routes requests.",
   });
   await expect
     .poll(

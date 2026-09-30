@@ -4346,6 +4346,18 @@ msgstr ""
 msgid "Goal"
 msgstr "Hedef"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check the request and choose the next step."
+msgstr "Anladım — isteği kontrol edip sonraki adımı seçeceğim."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check what’s missing and ask before installing it."
+msgstr "Anladım — neyin eksik olduğunu kontrol edip yüklemeden önce soracağım."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll choose a team member to put this in Notion."
+msgstr "Anladım — bunu Notion’a koyacak bir ekip üyesi seçeceğim."
+
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
 msgstr ""
@@ -4440,6 +4452,10 @@ msgstr "Hermes henüz Windows'ta kullanılamıyor."
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."
 msgstr "Hermes bu bilgisayarın erişim yetkileriyle çalışır."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Hi everyone."
+msgstr "Herkese merhaba."
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Hi, this is how I'll sound when I read replies out loud."
@@ -5455,6 +5471,10 @@ msgstr ""
 #: src/pages/system/QuickComposer.tsx
 msgid "Message…"
 msgstr "Mesaj…"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Messaged {name}"
+msgstr "{name} kişisine mesaj gönderildi"
 
 #: src/pages/account/AccountMore.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -6758,6 +6778,10 @@ msgstr "Kuyruk bekleme süresi"
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Queued"
 msgstr "Kuyrukta"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Queued for {name}"
+msgstr "{name} için sırada"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Quick access shortcut"
@@ -9378,10 +9402,11 @@ msgstr "Boş yer bekleniyor"
 msgid "Waiting for a turn"
 msgstr "Sıra bekliyor"
 
+#: src/components/ai/CoordinationLine.tsx
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Waiting for approval"
-msgstr ""
+msgstr "Onay bekleniyor"
 
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/DirectMcpSearch.tsx

@@ -69,6 +69,7 @@ it("runs and cleans every isolated suite and reports all test failures", async (
         DATABASE_URL: `postgresql://fixture:fixture@localhost:5432/integration_${index}`,
         REALTIME_DATABASE_URL: `postgresql://fixture:fixture@localhost:5432/integration_${index}`,
         USAGE_LEDGER_TEST_DATABASE_URL: `postgresql://fixture:fixture@localhost:5432/integration_${index}`,
+        CUSTOMIZATION_TEST_DATABASE_URL: `postgresql://fixture:fixture@localhost:5432/integration_${index}`,
         OPENROUTER_API_KEY: "",
         MODEL_API_KEY: "",
       },

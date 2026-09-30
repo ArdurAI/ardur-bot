@@ -9,13 +9,15 @@ import {
   taskCardGoal,
   taskCardPrompt,
 } from "@ardurbot/core";
-import type { PrismaClient } from "@ardurbot/db";
+import type { Prisma, PrismaClient } from "@ardurbot/db";
 import {
   appendEventInTransaction,
   createThreadMessageInTransaction,
   IsolationError,
+  loadChiefMemberFacts,
   lockOwnedGroup,
   touchGroupUpdatedAt,
+  validateChiefDispatch,
   withTransactionRetry,
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
@@ -104,6 +106,8 @@ export async function handoffToGroupBot(
       if (!group.members.some((member) => member.bot.id === targetId)) {
         return { error: "handoff target is not a group member" } as const;
       }
+      const chiefChoice = await validateChiefDispatch(tx, run, groupId, targetId);
+      if ("error" in chiefChoice) return chiefChoice;
       const goal =
         input.mode === "assign"
           ? await tx.teamGoal.findFirst({
@@ -222,6 +226,7 @@ export async function handoffToGroupBot(
       const handoffText = visibleMessage || taskCardGoal(admitted.record.card) || "";
       const handoffBlock: MessageBlock = {
         kind: "handoff",
+        ...(chiefChoice.dispatch ? { chiefDispatch: chiefChoice.dispatch } : {}),
         fromBotId: run.botId,
         toBotId: targetId,
         text: handoffText,
@@ -294,6 +299,23 @@ export async function handoffToGroupBot(
         where: { id: admitted.record.id },
         data: { runId: nextRun.id },
       });
+      if (chiefChoice.planId && chiefChoice.dispatch) {
+        await tx.chiefPlan.update({
+          where: { id: chiefChoice.planId },
+          data: {
+            dispatch: {
+              ...chiefChoice.dispatch,
+              runId: nextRun.id,
+              delegationId: admitted.record.id,
+            },
+            checkedFacts: (await loadChiefMemberFacts(
+              tx,
+              run,
+              groupId,
+            )) as unknown as Prisma.InputJsonValue,
+          },
+        });
+      }
       await touchGroupUpdatedAt(tx, groupId);
       return {
         ok: true,

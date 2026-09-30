@@ -1,4 +1,13 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "Got it — I’ll choose a team member to put this in Notion.":
+    "Понял — выберу участника команды, который разместит это в Notion.",
+  "Got it — I’ll check what’s missing and ask before installing it.":
+    "Понял — проверю, чего не хватает, и спрошу перед установкой.",
+  "Got it — I’ll check the request and choose the next step.":
+    "Понял — проверю запрос и выберу следующий шаг.",
+  "Hi everyone.": "Всем привет.",
+  "Messaged {name}": "Сообщение отправлено {name}",
+  "Queued for {name}": "В очереди для {name}",
   "Allow preparation": "Разрешить подготовку",
   "Preparation allowed": "Подготовка разрешена",
   "Request expired": "Срок запроса истёк",

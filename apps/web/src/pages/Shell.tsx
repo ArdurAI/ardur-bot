@@ -36,6 +36,7 @@ import {
 import type { ComposerActionId, ComposerMention, ComposerSkill } from "@ardurbot/core";
 import {
   answerableAskMessageIds,
+  applyChiefReceipt,
   attachmentsForThread,
   buildComposerMentionOptions,
   canAddComposerFolder,
@@ -134,7 +135,11 @@ import { ArtifactFileCard } from "../components/ArtifactFileCard";
 import { AskCard } from "../components/AskCard";
 import { ActiveBotGlyph } from "../components/ai/CollaborationMarker";
 import { CompactWorkRecord } from "../components/ai/CompactWorkRecord";
-import { CoordinationLine } from "../components/ai/CoordinationLine";
+import {
+  ChiefDispatchLine,
+  ChiefReceiptText,
+  CoordinationLine,
+} from "../components/ai/CoordinationLine";
 import { NarrationBlocks } from "../components/ai/NarrationBlocks";
 import { CloudAgentCard } from "../components/CloudAgentCard";
 import { ComputerMaintenanceActions } from "../components/ComputerMaintenanceActions";
@@ -2250,7 +2255,7 @@ export function ShellPage({
         }
         const clientNonce = newClientNonce();
         if (groupTarget) {
-          await rpc.threads.send({
+          const sent = await rpc.threads.send({
             groupId: groupTarget,
             clientNonce,
             text: trimmed || undefined,
@@ -2259,6 +2264,9 @@ export function ShellPage({
             replyToMessageId: reroutedToGroup ? undefined : activeReplyTarget?.id,
             replyQuote: reroutedToGroup ? undefined : (activeReplyQuote ?? undefined),
           });
+          if (activeGroupId.current === groupTarget) {
+            updateSnapshot((current) => applyChiefReceipt(current, sent.receipt));
+          }
         } else if (botTarget) {
           const sent = await rpc.threads.send({
             botId: botTarget,
@@ -2269,7 +2277,7 @@ export function ShellPage({
             replyToMessageId: activeReplyTarget?.id,
             replyQuote: activeReplyQuote ?? undefined,
           });
-          if (activeBotId.current === botTarget) {
+          if (activeBotId.current === botTarget && sent.kind !== "receipt-only") {
             updateSnapshot((current) =>
               applyThreadSendReceipt(
                 current,
@@ -6678,7 +6686,21 @@ const MessageView = memo(function MessageView({
             </div>
           );
         }
+        if (block.kind === "chief_receipt") {
+          return (
+            <div
+              key={i}
+              data-testid="message-bot-bubble"
+              className="rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
+              dir="auto"
+            >
+              <ChiefReceiptText receiptKey={block.key} />
+            </div>
+          );
+        }
         if (block.kind === "handoff") {
+          if (block.chiefDispatch)
+            return <ChiefDispatchLine key={i} dispatch={block.chiefDispatch} detail={block.text} />;
           const from = memberName?.(block.fromBotId) ?? t`bot`;
           const to = memberName?.(block.toBotId) ?? t`bot`;
           return (
@@ -6694,6 +6716,8 @@ const MessageView = memo(function MessageView({
           );
         }
         if (block.kind === "bot_message_sent" || block.kind === "bot_message_received") {
+          if (block.kind === "bot_message_sent" && block.chiefDispatch)
+            return <ChiefDispatchLine key={i} dispatch={block.chiefDispatch} detail={block.text} />;
           return (
             <PeerMessageReceipt
               key={i}

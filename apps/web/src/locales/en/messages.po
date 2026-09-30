@@ -4346,6 +4346,18 @@ msgstr "GitLab host"
 msgid "Goal"
 msgstr "Goal"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check the request and choose the next step."
+msgstr "Got it — I’ll check the request and choose the next step."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check what’s missing and ask before installing it."
+msgstr "Got it — I’ll check what’s missing and ask before installing it."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll choose a team member to put this in Notion."
+msgstr "Got it — I’ll choose a team member to put this in Notion."
+
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
 msgstr "Governance"
@@ -4440,6 +4452,10 @@ msgstr "Hermes isn't available on Windows yet."
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."
 msgstr "Hermes runs with this computer's access."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Hi everyone."
+msgstr "Hi everyone."
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Hi, this is how I'll sound when I read replies out loud."
@@ -5455,6 +5471,10 @@ msgstr "Message from anywhere on your desktop."
 #: src/pages/system/QuickComposer.tsx
 msgid "Message…"
 msgstr "Message…"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Messaged {name}"
+msgstr "Messaged {name}"
 
 #: src/pages/account/AccountMore.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -6758,6 +6778,10 @@ msgstr "Queue wait"
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Queued"
 msgstr "Queued"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Queued for {name}"
+msgstr "Queued for {name}"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Quick access shortcut"
@@ -9378,6 +9402,7 @@ msgstr "Waiting for a free place"
 msgid "Waiting for a turn"
 msgstr "Waiting for a turn"
 
+#: src/components/ai/CoordinationLine.tsx
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Waiting for approval"

@@ -1,4 +1,12 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "Got it — I’ll choose a team member to put this in Notion.":
+    "收到 — 我会选择一位团队成员把它放到 Notion。",
+  "Got it — I’ll check what’s missing and ask before installing it.":
+    "收到 — 我会检查缺少什么，并在安装前征求同意。",
+  "Got it — I’ll check the request and choose the next step.": "收到 — 我会检查请求并选择下一步。",
+  "Hi everyone.": "大家好。",
+  "Messaged {name}": "已向 {name} 发送消息",
+  "Queued for {name}": "已排队等待 {name}",
   "Allow preparation": "允许准备",
   "Preparation allowed": "已允许准备",
   "Request expired": "请求已过期",

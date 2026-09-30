@@ -1,6 +1,28 @@
+import type { ChiefDispatch, ChiefReceiptKey } from "@ardurbot/contracts";
 import type { CoordinationBlock, CoordinationMember } from "@ardurbot/core";
 import { coordinationMemberFailureCode, fixableFailure } from "@ardurbot/core";
 import { t } from "./i18n";
+
+export function chiefReceiptText(key: ChiefReceiptKey): string {
+  switch (key) {
+    case "document-to-service":
+      return t("Got it — I’ll choose a team member to put this in Notion.");
+    case "install-tool":
+      return t("Got it — I’ll check what’s missing and ask before installing it.");
+    case "greeting":
+      return t("Hi everyone.");
+    default:
+      return t("Got it — I’ll check the request and choose the next step.");
+  }
+}
+export function chiefDispatchSummary(dispatch: ChiefDispatch): string {
+  const name = dispatch.memberName;
+  return dispatch.state === "approval-held"
+    ? t("Waiting for approval")
+    : dispatch.state === "queued"
+      ? t("Queued for {name}", { name })
+      : t("Messaged {name}", { name });
+}
 
 /** The one-line summary for a collapsed coordination round. */
 export function coordinationSummary(block: CoordinationBlock): string {
