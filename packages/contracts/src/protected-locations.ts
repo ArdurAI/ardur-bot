@@ -80,6 +80,8 @@ function overlaps(left: string, right: string): boolean {
 const protectedLocationId = z.string().min(1).max(64);
 const GRANTS_PATCH_MAX = 128;
 
+export class ProtectedLocationsPatchError extends Error {}
+
 export const ProtectedLocationSchema = z
   .object({
     id: protectedLocationId,
@@ -324,10 +326,12 @@ export function applyProtectedLocationGrantsPatch(
   const known = new Set(locations.map((location) => location.id));
   const revoked = new Set(revoke);
   for (const id of [...grant, ...revoke]) {
-    if (!known.has(id)) throw new Error(`Unknown protected location "${id}".`);
+    if (!known.has(id))
+      throw new ProtectedLocationsPatchError(`Unknown protected location "${id}".`);
   }
   for (const id of grant) {
-    if (revoked.has(id)) throw new Error(`Cannot grant and revoke protected location "${id}".`);
+    if (revoked.has(id))
+      throw new ProtectedLocationsPatchError(`Cannot grant and revoke protected location "${id}".`);
   }
   return [...new Set([...parseProtectedLocationGrants(stored, locations), ...grant])].filter(
     (id) => !revoked.has(id),
@@ -348,7 +352,7 @@ export function applyProtectedLocationsPolicyPatch(
   const removed = new Set(remove);
   for (const location of PROTECTED_LOCATIONS_DEFAULTS) {
     if (removed.has(location.id))
-      throw new Error(`Cannot remove default location "${location.id}".`);
+      throw new ProtectedLocationsPatchError(`Cannot remove default location "${location.id}".`);
   }
   return ProtectedLocationsPolicyV1Schema.parse({
     version: 1,
@@ -362,6 +366,18 @@ export function applyProtectedLocationsPolicyPatch(
 }
 
 export type ProtectedLocationView = ProtectedLocation & { custom: boolean; granted: boolean };
+
+export const ProtectedLocationViewsSchema = z.array(
+  ProtectedLocationSchema.safeExtend({ custom: z.boolean(), granted: z.boolean() }),
+);
+export const ProtectedLocationsReadInputSchema = z.strictObject({
+  botId: z.string().min(1).optional(),
+});
+export const ProtectedLocationsPatchInputSchema = z.union([
+  z.strictObject({ botId: z.string().min(1), patch: ProtectedLocationGrantsPatchSchema }),
+  z.strictObject({ patch: ProtectedLocationsPolicyPatchSchema }),
+]);
+export type ProtectedLocationsPatchInput = z.infer<typeof ProtectedLocationsPatchInputSchema>;
 
 /** Removal clears grants even when the same patch adds a replacement with that id. */
 export function protectedLocationGrantsAfterPolicyPatch(
