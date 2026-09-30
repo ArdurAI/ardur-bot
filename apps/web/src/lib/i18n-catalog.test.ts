@@ -12,6 +12,30 @@ import tr from "../../scripts/translations-tr.json";
 import zhCN from "../../scripts/translations-zh-CN.json";
 
 describe("lingui catalogs", () => {
+  it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+    "translates bounded chief receipts and dispatch in %s",
+    async (locale) => {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const catalog = await formatter().parse(readFileSync(filename, "utf8"), {
+        locale,
+        sourceLocale: "en",
+        filename,
+      });
+      for (const message of [
+        "Got it — I’ll choose a team member to put this in Notion.",
+        "Got it — I’ll check what’s missing and ask before installing it.",
+        "Got it — I’ll check the request and choose the next step.",
+        "Hi everyone.",
+        "Messaged {name}",
+        "Queued for {name}",
+        "Waiting for approval",
+      ]) {
+        const entry = Object.values(catalog).find((value) => value.message === message);
+        expect(entry?.translation, `${locale}: ${message}`).toBeTruthy();
+        if (message.includes("{name}")) expect(entry?.translation).toContain("{name}");
+      }
+    },
+  );
   beforeEach(() => {
     i18n.load("en", {});
     i18n.activate("en");

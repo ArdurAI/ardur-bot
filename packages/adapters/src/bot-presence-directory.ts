@@ -10,6 +10,8 @@ import {
 import type { PrismaClient } from "@ardurbot/db";
 import { loadBotPresence } from "@ardurbot/db";
 
+export { loadChiefMemberFacts } from "@ardurbot/db";
+
 const DESK_DIRECTORY_LIMIT = 40;
 
 /** Select a whole room before bounding the broader desk directory. */

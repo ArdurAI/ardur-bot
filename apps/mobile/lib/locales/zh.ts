@@ -1,31 +1,12 @@
 export const ZH_MESSAGES: Record<string, string> = {
-  "Where this bot runs": "此 Bot 的运行位置",
-  "Only this bot": "仅此 Bot 使用",
-  "Shared with team": "与团队共享",
-  "Bots share files and installed tools": "Bot 共享文件和已安装的工具",
-  "Runs as you; can use your files and signed-in tools":
-    "以你的身份运行；可以使用你的文件和已登录的工具",
-  Container: "容器",
-  "Remote computer": "远程计算机",
-  "Hosted sandbox": "托管沙箱",
-  "Test computer": "测试计算机",
-  "Separate home; can reach allowed network services and granted credentials.":
-    "独立的主目录；可以访问获准的网络服务和授予的凭据。",
-  "Uses that account's permissions.": "使用该账户的权限。",
-  "Runs at the configured provider; can use granted credentials and network access.":
-    "在已配置的服务商处运行；可以使用授予的凭据和网络访问权限。",
-  "For testing only; not an isolation boundary.": "仅用于测试；不构成隔离边界。",
-  "Computer location unavailable. Choose a supported connection.":
-    "无法获取计算机位置。请选择受支持的连接。",
-  "Computer location unavailable. Try again.": "无法获取计算机位置。请重试。",
-  "Change location": "更改位置",
-  "Set up a container for isolated work.": "请设置容器以进行隔离工作。",
-  "Set up computer": "设置计算机",
-  "Could not start": "无法启动",
-  Sharing: "共享方式",
-  "Change location on desktop.": "请在桌面端更改位置。",
-  "Set up a container on desktop, then try again.": "请在桌面端设置容器，然后重试。",
-  Sleeping: "休眠中",
+  "Got it — I’ll choose a team member to put this in Notion.":
+    "收到 — 我会选择一位团队成员把它放到 Notion。",
+  "Got it — I’ll check what’s missing and ask before installing it.":
+    "收到 — 我会检查缺少什么，并在安装前征求同意。",
+  "Got it — I’ll check the request and choose the next step.": "收到 — 我会检查请求并选择下一步。",
+  "Hi everyone.": "大家好。",
+  "Messaged {name}": "已向 {name} 发送消息",
+  "Queued for {name}": "已排队等待 {name}",
   "Allow preparation": "允许准备",
   "Preparation allowed": "已允许准备",
   "Request expired": "请求已过期",
@@ -1370,4 +1351,31 @@ export const ZH_MESSAGES: Record<string, string> = {
   "is waiting for you": "正在等你",
   "has not answered yet": "尚未回答",
   "This runtime": "此运行时",
+  "Where this bot runs": "此 Bot 的运行位置",
+  "Only this bot": "仅此 Bot 使用",
+  "Shared with team": "与团队共享",
+  "Bots share files and installed tools": "Bot 共享文件和已安装的工具",
+  "Runs as you; can use your files and signed-in tools":
+    "以你的身份运行；可以使用你的文件和已登录的工具",
+  Container: "容器",
+  "Remote computer": "远程计算机",
+  "Hosted sandbox": "托管沙箱",
+  "Test computer": "测试计算机",
+  "Separate home; can reach allowed network services and granted credentials.":
+    "独立的主目录；可以访问获准的网络服务和授予的凭据。",
+  "Uses that account's permissions.": "使用该账户的权限。",
+  "Runs at the configured provider; can use granted credentials and network access.":
+    "在已配置的服务商处运行；可以使用授予的凭据和网络访问权限。",
+  "For testing only; not an isolation boundary.": "仅用于测试；不构成隔离边界。",
+  "Computer location unavailable. Choose a supported connection.":
+    "无法获取计算机位置。请选择受支持的连接。",
+  "Computer location unavailable. Try again.": "无法获取计算机位置。请重试。",
+  "Change location": "更改位置",
+  "Set up a container for isolated work.": "请设置容器以进行隔离工作。",
+  "Set up computer": "设置计算机",
+  "Could not start": "无法启动",
+  Sharing: "共享方式",
+  "Change location on desktop.": "请在桌面端更改位置。",
+  "Set up a container on desktop, then try again.": "请在桌面端设置容器，然后重试。",
+  Sleeping: "休眠中",
 };

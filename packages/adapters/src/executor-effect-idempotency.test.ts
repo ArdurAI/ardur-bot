@@ -467,6 +467,20 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
   };
 }
 
+it("does not access evidence storage or count gaps without an injected recorder", async () => {
+  const f = fixture();
+  f.setCalls([{ name: "shell", args: { command: "fixture command" }, executionId: "call-1" }]);
+  await f.run();
+  expect(f.sandboxExecute).toHaveBeenCalledOnce();
+  expect(f.prisma.run.update).not.toHaveBeenCalledWith(
+    expect.objectContaining({
+      data: expect.objectContaining({ evidenceGapCount: expect.anything() }),
+    }),
+  );
+  // The fixture has no evidence models: terminal sealing must be a no-op too.
+  expect(await f.executor.sealRunEvidence(f.runRecord.id)).toEqual({ ok: true, recorded: false });
+});
+
 describe("screen lease persistence through the executor", () => {
   function screenRun() {
     const f = fixture("screen-run");

@@ -2684,7 +2684,16 @@ describe("group routing", () => {
           blocks: [{ kind: "text", text: "Gamma's note" }],
         }),
         update: vi.fn(),
-        create: vi.fn().mockResolvedValue({ id: "msg-1", seq: 1 }),
+        create: vi.fn(
+          async ({ data }: { data: { threadId: string; blocks: unknown; botId?: string } }) => ({
+            id: `msg-${messageSeq}`,
+            seq: messageSeq,
+            threadId: data.threadId,
+            blocks: data.blocks,
+            botId: data.botId,
+            createdAt: new Date(),
+          }),
+        ),
       },
       run: {
         // Beta ran last in this room.
@@ -2702,6 +2711,11 @@ describe("group routing", () => {
         create: vi.fn().mockResolvedValue({ id: "event-1", seq: 1, createdAt: new Date() }),
       },
       steeringMessage: { create: vi.fn() },
+      chiefPlan: { create: vi.fn() },
+      bot: { findMany: vi.fn(async () => []) },
+      mcpServer: { findMany: vi.fn(async () => []) },
+      computerExecutionLease: { findMany: vi.fn(async () => []) },
+      botBrief: { findMany: vi.fn(async () => []) },
       space: { findUnique: vi.fn().mockResolvedValue({ coordinatorBotId: "bot-c" }) },
       chatGroup: {
         findUnique: vi.fn().mockResolvedValue({ coordinatorBotId: "bot-a" }),

@@ -16,7 +16,7 @@ vi.mock("@lingui/react/macro", () => ({
 }));
 
 import type { CoordinationBlock } from "@ardurbot/core";
-import { CoordinationLine } from "./CoordinationLine";
+import { ChiefDispatchLine, ChiefReceiptText, CoordinationLine } from "./CoordinationLine";
 
 function block(patch: Partial<CoordinationBlock> = {}): CoordinationBlock {
   return {
@@ -52,6 +52,32 @@ describe("CoordinationLine", () => {
   });
 
   it("collapses a finished round to one line with the counts", () => {
+    act(() =>
+      root.render(
+        <>
+          <ChiefReceiptText receiptKey="greeting" />
+          <ChiefDispatchLine
+            dispatch={{
+              requestMessageId: "request",
+              revision: 1,
+              memberId: "renamed",
+              memberName: "Renamed",
+              state: "messaged",
+              reason: "saved facts",
+            }}
+            detail="Preparation request"
+          />
+        </>,
+      ),
+    );
+    expect(container.querySelector('[data-testid="chief-receipt"]')?.textContent).toBe(
+      "Hi everyone.",
+    );
+    const button = container.querySelector("button")!;
+    expect(button.getAttribute("aria-label")).toBe("Messaged Renamed");
+    expect(container.textContent).not.toContain("Preparation request");
+    act(() => button.click());
+    expect(container.textContent).toContain("Preparation request");
     act(() => {
       root.render(<CoordinationLine block={block()} />);
     });

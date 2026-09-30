@@ -61,6 +61,8 @@ export * from "./e2b-emulator.js";
 export * from "./e2b-sandbox.js";
 export * from "./elevenlabs-voice.js";
 export * from "./email-emulator.js";
+export { createRunEvidenceRecorder } from "./evidence/factory.js";
+export { createEvidenceSealRecovery } from "./evidence/recovery.js";
 export * from "./executor.js";
 export * from "./expo-push.js";
 export * from "./fake-browser.js";

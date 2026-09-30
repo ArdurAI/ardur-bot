@@ -1470,6 +1470,11 @@ msgstr "Bots keep the board and memory current"
 msgid "Bots on this computer: {0}"
 msgstr "Bots on this computer: {0}"
 
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-summary.tsx
+msgid "Bots share files and installed tools"
+msgstr "Bots share files and installed tools"
+
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
 msgstr "Brain label"
@@ -1618,6 +1623,10 @@ msgstr "Change"
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Change computer"
 msgstr "Change computer"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Change location"
+msgstr "Change location"
 
 #: src/pages/LearningInsights.tsx
 #: src/pages/shell/provider-error-message.tsx
@@ -2063,7 +2072,6 @@ msgstr "computer"
 
 #: src/pages/ide/IdePage.tsx
 #: src/pages/Shell.tsx
-#: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
 #: src/pages/workspace/WorkspacePane.tsx
@@ -2101,6 +2109,14 @@ msgstr "Computer is asleep"
 #: src/pages/Shell.tsx
 msgid "Computer is asleep. Open it to wake."
 msgstr "Computer is asleep. Open it to wake."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Computer location unavailable. Choose a supported connection."
+msgstr "Computer location unavailable. Choose a supported connection."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Computer location unavailable. Try again."
+msgstr "Computer location unavailable. Try again."
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -2329,6 +2345,10 @@ msgstr "Connectors"
 #: src/pages/LearningCurator.tsx
 msgid "Consolidation uses the review connection and may incur model charges. Approval is required."
 msgstr "Consolidation uses the review connection and may incur model charges. Approval is required."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Container"
+msgstr "Container"
 
 #: src/components/Context.tsx
 #: src/pages/fleet/FleetSettings.tsx
@@ -3067,6 +3087,10 @@ msgstr "Could not send your message; try again."
 #: src/pages/system/SystemPage.tsx
 msgid "Could not show the menu bar item; try again."
 msgstr "Could not show the menu bar item; try again."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Could not start"
+msgstr "Could not start"
 
 #: src/components/composer/composer-actions.ts
 msgid "Could not start a new chat"
@@ -4250,6 +4274,10 @@ msgstr "For {task}, {better} finished as often as {other} in your runs with {per
 msgid "For {task}, {better} on this machine did as well as {other} in your runs."
 msgstr "For {task}, {better} on this machine did as well as {other} in your runs."
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "For testing only; not an isolation boundary."
+msgstr "For testing only; not an isolation boundary."
+
 #: src/pages/Auth.tsx
 msgid "Forgot password?"
 msgstr "Forgot password?"
@@ -4346,6 +4374,18 @@ msgstr "GitLab host"
 msgid "Goal"
 msgstr "Goal"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check the request and choose the next step."
+msgstr "Got it — I’ll check the request and choose the next step."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check what’s missing and ask before installing it."
+msgstr "Got it — I’ll check what’s missing and ask before installing it."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll choose a team member to put this in Notion."
+msgstr "Got it — I’ll choose a team member to put this in Notion."
+
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
 msgstr "Governance"
@@ -4441,6 +4481,10 @@ msgstr "Hermes isn't available on Windows yet."
 msgid "Hermes runs with this computer's access."
 msgstr "Hermes runs with this computer's access."
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Hi everyone."
+msgstr "Hi everyone."
+
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Hi, this is how I'll sound when I read replies out loud."
 msgstr "Hi, this is how I'll sound when I read replies out loud."
@@ -4490,6 +4534,10 @@ msgstr "Host service:"
 #: src/pages/shell/model-pin-select.tsx
 msgid "Hosted providers"
 msgstr "Hosted providers"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Hosted sandbox"
+msgstr "Hosted sandbox"
 
 #: src/pages/RoutineSchedule.tsx
 msgid "hour"
@@ -5456,6 +5504,10 @@ msgstr "Message from anywhere on your desktop."
 msgid "Message…"
 msgstr "Message…"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Messaged {name}"
+msgstr "Messaged {name}"
+
 #: src/pages/account/AccountMore.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Messaging"
@@ -6210,6 +6262,11 @@ msgstr "Only space owners and admins can edit these instructions."
 msgid "Only space-shared documents go to this repository."
 msgstr "Only space-shared documents go to this repository."
 
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-summary.tsx
+msgid "Only this bot"
+msgstr "Only this bot"
+
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/ScratchpadSection.tsx
@@ -6648,10 +6705,6 @@ msgstr "Priority"
 msgid "Privacy"
 msgstr "Privacy"
 
-#: src/pages/shell/bot-panel.tsx
-msgid "Private"
-msgstr "Private"
-
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Private key"
 msgstr "Private key"
@@ -6758,6 +6811,10 @@ msgstr "Queue wait"
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Queued"
 msgstr "Queued"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Queued for {name}"
+msgstr "Queued for {name}"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Quick access shortcut"
@@ -6985,6 +7042,10 @@ msgstr "Reload"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Remote base directory"
 msgstr "Remote base directory"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Remote computer"
+msgstr "Remote computer"
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Remote MCP URL"
@@ -7324,6 +7385,7 @@ msgstr "Resume team messages"
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
+#: src/pages/shell/runtime-summary.tsx
 #: src/pages/system/SystemPage.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Retry"
@@ -7509,6 +7571,7 @@ msgstr "running"
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/shell/runtime-summary.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Running"
 msgstr "Running"
@@ -7524,6 +7587,14 @@ msgstr "Running…"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?"
 msgstr "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Runs as you; can use your files and signed-in tools"
+msgstr "Runs as you; can use your files and signed-in tools"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Runs at the configured provider; can use granted credentials and network access."
+msgstr "Runs at the configured provider; can use granted credentials and network access."
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -7870,6 +7941,10 @@ msgstr "Sent to {peer}"
 msgid "Sentry alert"
 msgstr "Sentry alert"
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Separate home; can reach allowed network services and granted credentials."
+msgstr "Separate home; can reach allowed network services and granted credentials."
+
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Serif"
 msgstr "Serif"
@@ -7931,6 +8006,14 @@ msgstr "Set up"
 msgid "Set up a board"
 msgstr "Set up a board"
 
+#: src/pages/shell/bot-panel.tsx
+msgid "Set up a container for isolated work."
+msgstr "Set up a container for isolated work."
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Set up computer"
+msgstr "Set up computer"
+
 #: src/pages/import/ImportedServerCredentials.tsx
 msgid "Set up credentials"
 msgstr "Set up credentials"
@@ -7989,6 +8072,11 @@ msgstr "Shared documents will be published directly."
 #: src/pages/GitMemorySettings.tsx
 msgid "Shared recall will use proposed facts after merge."
 msgstr "Shared recall will use proposed facts after merge."
+
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-summary.tsx
+msgid "Shared with team"
+msgstr "Shared with team"
 
 #: src/components/ShowAllModels.tsx
 msgid "Show all models"
@@ -8153,6 +8241,10 @@ msgstr "Slack not enabled"
 msgid "Slash commands"
 msgstr "Slash commands"
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Sleeping"
+msgstr "Sleeping"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Socket missing"
 msgstr "Socket missing"
@@ -8311,6 +8403,7 @@ msgid "Start the engine and press Test."
 msgstr "Start the engine and press Test."
 
 #: src/lib/run-status-label.ts
+#: src/pages/shell/runtime-summary.tsx
 msgid "Starting"
 msgstr "Starting"
 
@@ -8384,6 +8477,7 @@ msgstr "Stop work in this conversation"
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/GroupPanel.tsx
+#: src/pages/shell/runtime-summary.tsx
 msgid "Stopped"
 msgstr "Stopped"
 
@@ -8508,7 +8602,6 @@ msgid "Teaching in progress. Stop teaching before sending a new message."
 msgstr "Teaching in progress. Stop teaching before sending a new message."
 
 #: src/pages/Shell.tsx
-#: src/pages/shell/bot-panel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Team"
 msgstr "Team"
@@ -8561,6 +8654,10 @@ msgstr "Terminal is not available on this computer"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Test"
 msgstr "Test"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Test computer"
+msgstr "Test computer"
 
 #: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
 msgid "Test connection"
@@ -8742,6 +8839,7 @@ msgstr "this computer"
 #: src/pages/fleet/target-name.ts
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
+#: src/pages/shell/runtime-summary.tsx
 msgid "This computer"
 msgstr "This computer"
 
@@ -9324,6 +9422,10 @@ msgstr "Use whole seconds."
 msgid "User"
 msgstr "User"
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Uses that account's permissions."
+msgstr "Uses that account's permissions."
+
 #: src/pages/shell/bot-model-chip.tsx
 #: src/pages/shell/group-participants.tsx
 msgid "Using {currentId}"
@@ -9378,6 +9480,7 @@ msgstr "Waiting for a free place"
 msgid "Waiting for a turn"
 msgstr "Waiting for a turn"
 
+#: src/components/ai/CoordinationLine.tsx
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Waiting for approval"
@@ -9513,6 +9616,10 @@ msgstr "When to use"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Where should bots run?"
 msgstr "Where should bots run?"
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Where this bot runs"
+msgstr "Where this bot runs"
 
 #: src/pages/memory/MemoryDocuments.tsx
 msgid "Who the user is and the professional domain"
@@ -9655,95 +9762,3 @@ msgstr "Your team of always-on agents<0/>that you can give real work to."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr "Yours"
-
-#: src/pages/shell/runtime-summary.tsx
-msgid "Where this bot runs"
-msgstr "Where this bot runs"
-
-#: src/pages/shell/runtime-summary.tsx
-msgid "Only this bot"
-msgstr "Only this bot"
-
-#: src/pages/shell/runtime-summary.tsx
-msgid "Shared with team"
-msgstr "Shared with team"
-
-#: src/pages/shell/runtime-summary.tsx
-msgid "Bots share files and installed tools"
-msgstr "Bots share files and installed tools"
-
-#: src/pages/shell/runtime-summary.tsx
-msgid "Runs as you; can use your files and signed-in tools"
-msgstr "Runs as you; can use your files and signed-in tools"
-
-#: src/pages/shell/runtime-summary.tsx
-msgid "Container"
-msgstr "Container"
-
-#: src/pages/shell/runtime-summary.tsx
-msgid "Remote computer"
-msgstr "Remote computer"
-
-#: src/pages/shell/runtime-summary.tsx
-msgid "Hosted sandbox"
-msgstr "Hosted sandbox"
-
-#: src/pages/shell/runtime-summary.tsx
-msgid "Test computer"
-msgstr "Test computer"
-
-#: src/pages/shell/runtime-summary.tsx
-msgid "Separate home; can reach allowed network services and granted credentials."
-msgstr "Separate home; can reach allowed network services and granted credentials."
-
-#: src/pages/shell/runtime-summary.tsx
-msgid "Uses that account's permissions."
-msgstr "Uses that account's permissions."
-
-#: src/pages/shell/runtime-summary.tsx
-msgid "Runs at the configured provider; can use granted credentials and network access."
-msgstr "Runs at the configured provider; can use granted credentials and network access."
-
-#: src/pages/shell/runtime-summary.tsx
-msgid "For testing only; not an isolation boundary."
-msgstr "For testing only; not an isolation boundary."
-
-#: src/pages/shell/runtime-summary.tsx
-msgid "Computer location unavailable. Choose a supported connection."
-msgstr "Computer location unavailable. Choose a supported connection."
-
-#: src/pages/shell/runtime-summary.tsx
-msgid "Computer location unavailable. Try again."
-msgstr "Computer location unavailable. Try again."
-
-#: src/pages/shell/runtime-summary.tsx
-msgid "Change location"
-msgstr "Change location"
-
-#: src/pages/shell/runtime-summary.tsx
-msgid "Set up a container for isolated work."
-msgstr "Set up a container for isolated work."
-
-#: src/pages/shell/runtime-summary.tsx
-msgid "Set up computer"
-msgstr "Set up computer"
-
-#: src/pages/shell/runtime-summary.tsx
-msgid "Could not start"
-msgstr "Could not start"
-
-#: src/pages/shell/runtime-summary.tsx
-msgid "Sharing"
-msgstr "Sharing"
-
-#: src/pages/shell/runtime-summary.tsx
-msgid "Change location on desktop."
-msgstr "Change location on desktop."
-
-#: src/pages/shell/runtime-summary.tsx
-msgid "Set up a container on desktop, then try again."
-msgstr "Set up a container on desktop, then try again."
-
-#: src/pages/shell/runtime-summary.tsx
-msgid "Sleeping"
-msgstr "Sleeping"

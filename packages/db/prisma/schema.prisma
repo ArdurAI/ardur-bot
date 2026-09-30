@@ -190,6 +190,9 @@ model Member {
 }
 
 model Space {
+  evidenceKeys EvidenceKey[]
+  evidenceRecords EvidenceRecord[]
+  evidenceSeals EvidenceSeal[]
   botMessageDeliveries BotMessageDelivery[]
   botMessageWakes BotMessageWake[]
   placement Json?
@@ -213,6 +216,7 @@ model Space {
   inlineVisualizations Boolean @default(true)
   comparisons Comparison[]
   allowedModelDestinations Json?
+  protectedLocations Json?
   learningConfig SpaceLearningConfig?
   learningInsights LearningInsight[]
   aiDataConsents AiDataConsent[]
@@ -397,6 +401,7 @@ model Bot {
   concurrentRuns Int?
   briefs BotBrief[]
   allowedModelDestinations Json?
+  protectedLocationGrants Json?
   screenGeneration Int @default(0)
   id                String            @id @default(cuid())
   spaceId           String
@@ -631,12 +636,40 @@ model Task {
   updatedAt DateTime @updatedAt
   runs      Run[]
   goal      TeamGoal?
+  chiefPlans ChiefPlan[]
 
   @@index([spaceId, botId])
   @@map("tasks")
 }
 
+/// Turn-level selection attached to existing work; never a separate budget root.
+model ChiefPlan {
+  id String @id @default(cuid())
+  spaceId String
+  userId String
+  groupId String
+  threadId String
+  chiefBotId String
+  sourceMessageId String @unique
+  sourceRunId String
+  taskId String
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  revision Int @default(1)
+  policyVersion Int
+  operation Json
+  decision Json
+  checkedFacts Json
+  dependencies Json @default("[]")
+  dispatch Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sourceRunId, createdAt])
+  @@map("chief_plans")
+}
+
 model Run {
+  evidenceGapCount Int @default(0)
   placement Json?
   boardWorkspaceId String?
   boardWorkspace BoardWorkspace? @relation(fields: [boardWorkspaceId], references: [id], onDelete: SetNull)
@@ -2401,6 +2434,58 @@ model SpaceFeature {
 
   @@id([spaceId, feature])
   @@map("space_features")
+}
+
+model EvidenceKey {
+  id String @id @default(cuid())
+  spaceId String
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  kid String @unique
+  publicKeyPem String
+  privateKeyCiphertext String
+  secretRecordId String
+  createdAt DateTime @default(now())
+  revokedAt DateTime?
+
+  @@index([spaceId])
+  @@map("evidence_keys")
+}
+
+model EvidenceRecord {
+  id String @id @default(cuid())
+  spaceId String
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  runId String
+  seq Int
+  receiptId String @unique
+  kid String
+  jws String @db.Text
+  sha256 String
+  parentSha256 String?
+  verdict String
+  decisionKind String
+  toolName String
+  createdAt DateTime @default(now())
+
+  @@unique([runId, seq])
+  @@index([runId])
+  @@index([spaceId])
+  @@map("evidence_records")
+}
+
+model EvidenceSeal {
+  id String @id @default(cuid())
+  spaceId String
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  runId String @unique
+  jws String @db.Text
+  headSha256 String
+  recordCount Int
+  gapCount Int
+  createdAt DateTime @default(now())
+
+  @@index([spaceId])
+  @@map("evidence_seals")
 }
 
 model BoardWorkspace {

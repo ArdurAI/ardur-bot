@@ -296,6 +296,7 @@ import {
   promptFocus,
   startOnboarding,
 } from "./onboarding.js";
+import { getProtectedLocations, patchProtectedLocations } from "./protected-locations.js";
 import { createRemoteDevices } from "./remote-devices.js";
 import { routineHistory } from "./routine-history.js";
 import { listSpaceRuns } from "./runs.js";
@@ -6175,6 +6176,12 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       ),
       setPolicy: authed.delegations.setPolicy.handler(({ context, input }) =>
         setModelDestinations(deps.prisma, context.actor, input),
+      ),
+      protectedLocations: authed.delegations.protectedLocations.handler(({ context, input }) =>
+        getProtectedLocations(deps.prisma, context.actor, input.botId),
+      ),
+      patchProtectedLocations: authed.delegations.patchProtectedLocations.handler(
+        ({ context, input }) => patchProtectedLocations(deps.prisma, context.actor, input),
       ),
     },
     runs: {

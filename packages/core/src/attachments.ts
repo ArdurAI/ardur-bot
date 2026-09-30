@@ -115,6 +115,8 @@ export function blocksToAgentHistoryText(
         excludedDeliveryIds.has(block.deliveryId)
       )
         return "";
+      // System receipts are presentation, never reasoning or peer input.
+      if (block.kind === "chief_receipt") return "";
       // A reasoning summary is work-record detail, never something the bot said.
       if (isReasoningSummaryBlock(block)) return "";
       if (block.kind === "text") return block.text;

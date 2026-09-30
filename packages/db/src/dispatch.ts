@@ -1,3 +1,5 @@
+import type { JobPublisher } from "@ardurbot/adapter-kit";
+import { evidenceSealJob } from "@ardurbot/adapter-kit";
 import type { DispatchInput, DispatchState, DispatchReceipt as Receipt } from "@ardurbot/contracts";
 import {
   ALL_DEVICE_SCOPES,
@@ -8,6 +10,7 @@ import {
 } from "@ardurbot/contracts";
 import type { RemoteAuthority } from "@ardurbot/core";
 import { checkRemoteTool, effectiveRemoteAuthority } from "@ardurbot/core";
+import { getLogger } from "@ardurbot/logging";
 import { settleBotMessageWakesInTransaction } from "./bot-comms.js";
 import type { DeviceGrant, Prisma, PrismaClient } from "./client.js";
 import {
@@ -476,8 +479,9 @@ export async function confirmDispatchStop(
   prisma: PrismaClient,
   runId: string,
   now = new Date(),
+  jobs?: JobPublisher,
 ): Promise<boolean> {
-  return prisma.$transaction(async (tx) => {
+  const confirmed = await prisma.$transaction(async (tx) => {
     const run = await tx.run.findUnique({ where: { id: runId } });
     if (!run?.cancelRequestedAt || !ACTIVE.includes(run.status)) return false;
     if (
@@ -561,6 +565,11 @@ export async function confirmDispatchStop(
     await persistDispatchSummary(tx, run, "stopped", null);
     return true;
   });
+  if (confirmed && jobs)
+    await jobs.enqueue(evidenceSealJob(runId)).catch(() => {
+      getLogger().warn("evidence seal enqueue failed");
+    });
+  return confirmed;
 }
 export async function persistDispatchSummary(
   tx: Prisma.TransactionClient,

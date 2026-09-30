@@ -6,6 +6,7 @@ import type {
   MessageBlock,
   Routine,
   TaughtSkill,
+  ThreadSendResult,
 } from "@ardurbot/contracts";
 import {
   canReactToThreadMessage,
@@ -17,6 +18,7 @@ import type { ComposerActionId, ComposerCommand, ComposerSkill } from "@ardurbot
 import {
   abortableDelay,
   answerableAskMessageIds,
+  applyChiefReceipt,
   attachmentsForThread,
   buildComposerMentionOptions,
   type ComposerMention,
@@ -78,7 +80,7 @@ import { BotAvatar } from "../components/bot-avatar";
 import { BotRuntimeLabel } from "../components/bot-runtime-label";
 import { CompactWorkRecord } from "../components/compact-work-record";
 import { MobileRunContext } from "../components/context-section";
-import { CoordinationLine } from "../components/coordination-line";
+import { ChiefDispatchLine, CoordinationLine } from "../components/coordination-line";
 import { DispatchStatus } from "../components/DispatchStatus";
 import {
   MarkdownArtifactPreview,
@@ -113,6 +115,7 @@ import { type MobileArtifactTarget, openMobileArtifact } from "../lib/artifact-o
 import { confirmDeleteBot } from "../lib/bot-lifecycle";
 import type { ComposerMenuOption } from "../lib/composer-menu";
 import { COMPOSER_MENU_OPTIONS } from "../lib/composer-menu";
+import { chiefReceiptText } from "../lib/coordination";
 import { runtimeProblemText } from "../lib/failure-categories";
 import { cancelFocusPrompt, focusPromptThreadActive } from "../lib/focus-prompt";
 import { groupModelNoticeText } from "../lib/group-model-notice";
@@ -1233,7 +1236,7 @@ function Thread() {
         artifactIds.push(artifact.id);
       }
       const clientNonce = newClientNonce();
-      await rpc(
+      const sent = await rpc<ThreadSendResult>(
         "threads/send",
         groupTarget
           ? {
@@ -1253,6 +1256,8 @@ function Thread() {
               replyToMessageId: replyTarget?.id,
             },
       );
+      if (isCurrentTarget(botTarget, groupTarget))
+        setSnap((current) => applyChiefReceipt(current, sent.receipt));
       dropDelayedSetup();
       void loadSessionToken()
         .then((token) => resumeLiveNotifications(currentApiBase(), token, selectedSpaceId() ?? ""))
@@ -2593,7 +2598,22 @@ const MessageBubble = memo(function MessageBubble({
   }
 
   const handoff = message.blocks.find((block) => block.kind === "handoff");
+  const chiefReceipt = message.blocks.find((block) => block.kind === "chief_receipt");
+  if (chiefReceipt)
+    return (
+      <Text style={{ color: tokens.foreground, fontSize: 15.5 }} accessibilityLiveRegion="polite">
+        {chiefReceiptText(chiefReceipt.key)}
+      </Text>
+    );
   if (handoff) {
+    if (handoff.chiefDispatch)
+      return (
+        <ChiefDispatchLine
+          dispatch={handoff.chiefDispatch}
+          detail={handoff.text}
+          actionProps={actionProps}
+        />
+      );
     const from = memberName(members, handoff.fromBotId) ?? t("bot");
     const to = memberName(members, handoff.toBotId) ?? t("bot");
     return (
@@ -2623,6 +2643,14 @@ const MessageBubble = memo(function MessageBubble({
       block.kind === "bot_message_sent" || block.kind === "bot_message_received",
   );
   if (peerMessage) {
+    if (peerMessage.kind === "bot_message_sent" && peerMessage.chiefDispatch)
+      return (
+        <ChiefDispatchLine
+          dispatch={peerMessage.chiefDispatch}
+          detail={peerMessage.text}
+          actionProps={actionProps}
+        />
+      );
     const sent = peerMessage.kind === "bot_message_sent";
     const peerBotId = sent ? peerMessage.toBotId : peerMessage.fromBotId;
     const peerColor =

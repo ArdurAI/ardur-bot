@@ -1,5 +1,6 @@
 import type {
   ProductEvent,
+  ThreadSendResult,
   ThreadSnapshot,
   TraceBatch,
   TraceBoundary,
@@ -21,6 +22,7 @@ interface ClientTrace {
   seen?: Set<string>;
   text?: Map<string, PendingPaint>;
   terminal?: Map<string, PendingPaint>;
+  receipt?: Map<string, PendingPaint>;
   dropped?: number;
 }
 declare global {
@@ -42,6 +44,7 @@ function state() {
   trace.seen ??= new Set();
   trace.text ??= new Map();
   trace.terminal ??= new Map();
+  trace.receipt ??= new Map();
   trace.dropped ??= 0;
   return trace as Required<ClientTrace>;
 }
@@ -132,10 +135,24 @@ export async function traceRpc(
 ): Promise<unknown> {
   if (path[0] !== "threads") return next();
   if (path[1] === "send") {
-    const receipt = (await next()) as { runId: string; runIds?: string[] };
-    for (const id of receipt.runIds ?? [receipt.runId]) {
+    const receipt = (await next()) as ThreadSendResult;
+    for (const id of receipt.kind === "receipt-only" ? [] : (receipt.runIds ?? [receipt.runId])) {
       point(id, "client.submitted", submittedAt);
       point(id, "client.acknowledged");
+    }
+    if (receipt.receipt) {
+      const accepted = receipt.receipt;
+      const id = accepted.requestMessageId;
+      point(id, "client.submitted", submittedAt);
+      point(id, "client.acknowledged");
+      state()?.receipt.set(id, {
+        traceId: id,
+        threadId: accepted.threadId,
+        messageId: accepted.id,
+        seq: accepted.seq,
+      });
+      // An event-first receipt may already be painted, so no new React commit is required.
+      if (painting?.snapshot.threadId === accepted.threadId) paintThreadTrace(painting.snapshot);
     }
     return receipt;
   }
@@ -219,11 +236,12 @@ export function paintThreadTrace(snapshot: ThreadSnapshot | null): (() => void) 
     for (const [pendingMap, boundary] of [
       [trace.text, "client.text.painted"],
       [trace.terminal, "client.terminal.painted"],
+      [trace.receipt, "client.receipt.painted"],
     ] as const) {
       for (const [id, pending] of pendingMap) {
         if (
           pending.threadId !== snapshot.threadId ||
-          pending.seq > snapshot.cursor ||
+          (boundary !== "client.receipt.painted" && pending.seq > snapshot.cursor) ||
           observation.frames.has(pending)
         )
           continue;
@@ -241,7 +259,27 @@ export function paintThreadTrace(snapshot: ThreadSnapshot | null): (() => void) 
                 )
                   return;
                 const latest = observation.snapshot;
-                if (pending.threadId !== latest.threadId || pending.seq > latest.cursor) return;
+                if (
+                  pending.threadId !== latest.threadId ||
+                  (boundary !== "client.receipt.painted" && pending.seq > latest.cursor)
+                )
+                  return;
+                if (boundary === "client.receipt.painted") {
+                  const message = latest.messages.find(
+                    (m) =>
+                      m.id === pending.messageId &&
+                      m.blocks.some((b) => b.kind === "chief_receipt"),
+                  );
+                  if (
+                    !message ||
+                    !visible(
+                      document.querySelector(
+                        `[data-message-id="${CSS.escape(message.id)}"] [data-testid="chief-receipt"]`,
+                      ),
+                    )
+                  )
+                    return;
+                }
                 if (boundary === "client.text.painted") {
                   const message = latest.messages.find((m) => {
                     if (m.runId !== id || m.role !== "bot") return false;

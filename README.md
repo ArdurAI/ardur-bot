@@ -21,6 +21,7 @@ Apache-2.0 attribution.
 - Persistent bots with their own conversation, memory, routines and history
 - Group chats whose members answer at the same time — the owner sets how many bots answer at
   once (1-8) in group settings — and delegation between bots, plus short-lived subagents
+- [Chief room receipts](docs/chief-receipts.md): accepted requests get a saved acknowledgement before execution; bare greetings do not start work. Member choices use approved facts and committed dispatch stays compact.
 - A provider, model and thinking level per bot, with a separate model and thinking choice for each bot in a group room
 <!-- site-facts:providers:start -->
 <!-- Generated from site/data/product.json by pnpm site:facts; edit that file. -->
