@@ -78,19 +78,14 @@ function readContext(text: string, input: TaskClassifierInput): MessageContext {
     window.includes("Exception in thread");
   const filePaths = window.match(FILE_PATH.g.source)?.length ?? 0;
   const shell =
-    SHELL_PROMPT.test(window) ||
-    SHELL_PROMPT_GT.test(window) ||
-    OPS_COMMAND.test(window);
+    SHELL_PROMPT.test(window) || SHELL_PROMPT_GT.test(window) || OPS_COMMAND.test(window);
   const lower = window.toLowerCase();
   const masked = maskShorterSynonyms(lower);
   const hits = {} as Record<keyof typeof WORD_LISTS, number>;
   for (const name of Object.keys(WORD_LISTS) as (keyof typeof WORD_LISTS)[]) {
     hits[name] = countHits(masked, WORD_LISTS[name]);
   }
-  const firstWords = lower
-    .split(FIRST_WORD_SPLIT)
-    .filter(Boolean)
-    .slice(0, 6);
+  const firstWords = lower.split(FIRST_WORD_SPLIT).filter(Boolean).slice(0, 6);
   return {
     text: window,
     lower,

@@ -290,7 +290,10 @@ describe("round 3: huge and odd inputs", () => {
       ["the empty string", ""],
       ["one emoji", "🙂"],
       ["100,000 newlines", "\n".repeat(100000)],
-      ["a 2 MB message of repeated words", "the quick brown fox jumps over the lazy dog ".repeat(45000)],
+      [
+        "a 2 MB message of repeated words",
+        "the quick brown fox jumps over the lazy dog ".repeat(45000),
+      ],
     ];
     for (const [name, text] of cases) {
       const got = localTaskClassifier.classify({ text });
@@ -309,7 +312,10 @@ describe("round 3: large inputs classify fast", () => {
       '{"id":1234,"name":"widget","tags":["alpha","beta"],"price":19.99,"active":true,"nested":{"key":"value","count":42}},';
     const cases: readonly [string, string][] = [
       ["a 300 KB single line of repeated 'at '", "at ".repeat(100000)],
-      ["a 2 MB message of repeated words", "the quick brown fox jumps over the lazy dog ".repeat(45000)],
+      [
+        "a 2 MB message of repeated words",
+        "the quick brown fox jumps over the lazy dog ".repeat(45000),
+      ],
       ["a 300 KB pasted JSON blob", `[${jsonEntry.repeat(3400).slice(0, -1)}]`],
       [
         "a 300 KB log",
