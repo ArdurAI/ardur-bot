@@ -138,6 +138,7 @@ import { CompactWorkRecord } from "../components/ai/CompactWorkRecord";
 import {
   ChiefDispatchLine,
   ChiefReceiptText,
+  ChiefResultBubble,
   CoordinationLine,
 } from "../components/ai/CoordinationLine";
 import { NarrationBlocks } from "../components/ai/NarrationBlocks";
@@ -6698,6 +6699,7 @@ const MessageView = memo(function MessageView({
             </div>
           );
         }
+        if (block.kind === "chief_result") return <ChiefResultBubble key={i} block={block} />;
         if (block.kind === "handoff") {
           if (block.chiefDispatch)
             return <ChiefDispatchLine key={i} dispatch={block.chiefDispatch} detail={block.text} />;

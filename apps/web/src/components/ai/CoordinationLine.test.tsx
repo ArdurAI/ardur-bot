@@ -15,8 +15,18 @@ vi.mock("@lingui/react/macro", () => ({
   ),
 }));
 
+import type { ChiefDispatch, MessageBlock } from "@ardurbot/contracts";
 import type { CoordinationBlock } from "@ardurbot/core";
-import { ChiefDispatchLine, ChiefReceiptText, CoordinationLine } from "./CoordinationLine";
+import {
+  ChiefDispatchLine,
+  ChiefReceiptText,
+  ChiefResultBubble,
+  CoordinationLine,
+} from "./CoordinationLine";
+
+vi.mock("../../lib/artifact-open", () => ({ downloadArtifact: vi.fn(async () => {}) }));
+
+import { downloadArtifact } from "../../lib/artifact-open";
 
 function block(patch: Partial<CoordinationBlock> = {}): CoordinationBlock {
   return {
@@ -74,7 +84,7 @@ describe("CoordinationLine", () => {
       "Hi everyone.",
     );
     const button = container.querySelector("button")!;
-    expect(button.getAttribute("aria-label")).toBe("Messaged Renamed");
+    expect(button.getAttribute("aria-label")).toBe("Messaged Renamed · Working on the task");
     expect(container.textContent).not.toContain("Preparation request");
     act(() => button.click());
     expect(container.textContent).toContain("Preparation request");
@@ -111,6 +121,94 @@ describe("CoordinationLine", () => {
     expect(members).toHaveLength(3);
     expect(members[0]?.textContent).toContain("Radiant");
     expect(members[0]?.textContent).toContain("answered");
+  });
+
+  it("updates one collapsed safe activity line and clears it at termination", () => {
+    const dispatch: ChiefDispatch = {
+      requestMessageId: "request",
+      revision: 1,
+      memberId: "worker",
+      memberName: "Member",
+      state: "messaged",
+      reason: "eligible",
+      runId: "run",
+      delegationId: "assignment",
+    };
+    const activity = {
+      revision: 1,
+      runId: "run",
+      delegationId: "assignment",
+      attempt: 1,
+      sourceSeq: 1,
+      key: "connect-notion" as const,
+      state: "active" as const,
+      updatedAt: "2026-01-01T00:00:00Z",
+    };
+    act(() =>
+      root.render(
+        <ChiefDispatchLine dispatch={{ ...dispatch, activity }} detail="Private tool arguments" />,
+      ),
+    );
+    expect(container.querySelectorAll('[data-testid="chief-activity"]')).toHaveLength(1);
+    expect(container.textContent).toContain("Connecting to Notion");
+    expect(container.textContent).not.toContain("Private tool arguments");
+    expect(container.querySelector("button")?.getAttribute("aria-label")).toContain(
+      "Connecting to Notion",
+    );
+    act(() =>
+      root.render(
+        <ChiefDispatchLine
+          dispatch={{ ...dispatch, activity: { ...activity, key: "write-notion", sourceSeq: 2 } }}
+          detail="Private tool arguments"
+        />,
+      ),
+    );
+    expect(container.querySelectorAll('[data-testid="chief-activity"]')).toHaveLength(1);
+    expect(container.textContent).toContain("Creating the Notion page");
+    act(() =>
+      root.render(
+        <ChiefDispatchLine
+          dispatch={{ ...dispatch, activity: { ...activity, state: "completed", sourceSeq: 3 } }}
+          detail="Private tool arguments"
+        />,
+      ),
+    );
+    expect(container.querySelector('[data-testid="chief-activity"]')).toBeNull();
+  });
+
+  it("renders one draft sentence and opens its scoped file without claiming success", async () => {
+    const block: Extract<MessageBlock, { kind: "chief_result" }> = {
+      kind: "chief_result",
+      name: "Draft",
+      mimeType: "text/plain",
+      botId: "worker",
+      result: {
+        requestMessageId: "request",
+        revision: 1,
+        artifactId: "file",
+        href: "artifact:file",
+        state: "draft",
+      },
+    };
+    act(() => root.render(<ChiefResultBubble block={block} />));
+    expect(container.textContent).toBe("The draft is ready. Draft");
+    expect(container.textContent).not.toContain("Done");
+    expect(container.querySelectorAll("a")).toHaveLength(1);
+    await act(async () => container.querySelector("a")!.click());
+    expect(downloadArtifact).toHaveBeenCalledWith(
+      { botId: "worker" },
+      "file",
+      "Draft",
+      "text/plain",
+    );
+    act(() =>
+      root.render(
+        <ChiefResultBubble
+          block={{ ...block, result: { ...block.result, href: "https://private.example/file" } }}
+        />,
+      ),
+    );
+    expect(container.textContent).toBe("");
   });
 
   it("shows one plain failure line with a fix link for a member that could not answer", () => {

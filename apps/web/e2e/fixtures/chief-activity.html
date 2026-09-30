@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Chief activity</title></head>
+  <body>
+    <div id="root"></div>
+    <script type="module">
+      import { setupI18n } from "@lingui/core";
+      import { I18nProvider } from "@lingui/react";
+      import { createElement as h } from "react";
+      import { createRoot } from "react-dom/client";
+      import { ChiefDispatchLine, ChiefResultBubble } from "../../src/components/ai/CoordinationLine";
+      import "../../src/styles.css";
+      const i18n = setupI18n({ locale: "en", messages: { en: {} } });
+      const finished = new URLSearchParams(location.search).has("finished");
+      const dispatch = { requestMessageId: "request", revision: 1, memberId: "worker", memberName: "Writer", reason: "eligible", state: "messaged", runId: "run", delegationId: "assignment", activity: { revision: 1, runId: "run", delegationId: "assignment", attempt: 1, sourceSeq: 1, key: "connect-notion", state: finished ? "completed" : "active", updatedAt: "2026-01-01T00:00:00Z" } };
+      createRoot(document.getElementById("root")).render(h(I18nProvider, { i18n }, h("main", { className: "flex min-h-screen flex-col justify-end gap-2 bg-background px-4 py-6 text-foreground" },
+        h(ChiefDispatchLine, { dispatch, detail: "Prepare the document using approved access." }),
+        finished ? h(ChiefResultBubble, { block: { kind: "chief_result", name: "Document draft", mimeType: "text/plain", botId: "worker", result: { requestMessageId: "request", revision: 1, artifactId: "draft", href: "artifact:draft", state: "draft" } } }) : null
+      )));
+    </script>
+  </body>
+</html>
