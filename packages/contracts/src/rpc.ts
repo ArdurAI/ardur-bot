@@ -11,6 +11,7 @@ import {
   CapabilitySettingsSchema,
   ComputerNetworkInputSchema,
 } from "./capability-settings.js";
+import { ThreadSendResultSchema } from "./chief-loop.js";
 import { CommandBlockSchema } from "./command-blocks.js";
 import { ComparisonExportSchema, comparisonsContract } from "./comparison.js";
 import {
@@ -638,14 +639,7 @@ export const appContract = {
     subscribe: oc
       .input(threadTarget.safeExtend({ cursor: z.number().int().min(-1) }))
       .output(eventIterator(ProductEventSchema)),
-    send: oc.input(threadSendInput).output(
-      z.object({
-        taskId: Id,
-        runId: Id,
-        seq: z.number().int(),
-        runIds: z.array(Id).optional(),
-      }),
-    ),
+    send: oc.input(threadSendInput).output(ThreadSendResultSchema),
     react: oc
       .input(
         threadTarget.safeExtend({

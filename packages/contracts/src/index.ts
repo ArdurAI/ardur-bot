@@ -8,6 +8,7 @@ export * from "./bot-comms.js";
 export * from "./bot-presence.js";
 export * from "./bot-secrets.js";
 export * from "./capability-settings.js";
+export * from "./chief-loop.js";
 export * from "./command-blocks.js";
 export * from "./comparison.js";
 export * from "./computer-connections.js";

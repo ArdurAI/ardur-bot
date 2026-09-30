@@ -1,29 +1,14 @@
 import { z } from "zod";
 import type { ThinkingLevel } from "./domain.js";
 import { ThinkingLevelSchema } from "./domain.js";
+import type { TaskType } from "./task-types.js";
+import { TASK_TYPES } from "./task-types.js";
+
+export type { TaskType } from "./task-types.js";
+export { TASK_TYPES, TaskTypeSchema } from "./task-types.js";
 
 /** The thinking selector value that means "decide the effort per message from its task type". */
 export const AUTO_EFFORT = "auto";
-
-/** The kinds of work a message can ask for. To add one, add it here and give it a route below. */
-export const TaskTypeSchema = z.enum([
-  "small-talk",
-  "simple-question",
-  "writing",
-  "summary",
-  "code-change",
-  "debugging",
-  "review",
-  "planning",
-  "research",
-  "data",
-  "operations",
-  "unknown",
-]);
-export type TaskType = z.infer<typeof TaskTypeSchema>;
-
-/** Every task type, in table order. */
-export const TASK_TYPES: readonly TaskType[] = TaskTypeSchema.options;
 
 /** How much thinking a task gets, and how long the bot's turn may run. */
 export const EffortRouteSchema = z.object({

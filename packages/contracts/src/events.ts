@@ -1,5 +1,6 @@
 import * as z from "zod";
 import { BotSecretDestination } from "./bot-secrets.js";
+import { ChiefDispatchSchema, ChiefReceiptKeySchema } from "./chief-loop.js";
 import {
   CommandAuditPayloadSchema,
   CommandBlockSchema,
@@ -141,6 +142,12 @@ export const GroupModelFailureNotice = z.object({
 export type GroupModelFailureNotice = z.infer<typeof GroupModelFailureNotice>;
 
 export const MessageBlock = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("chief_receipt"),
+    requestMessageId: Id,
+    key: ChiefReceiptKeySchema,
+    text: z.string(),
+  }),
   z.object({ kind: z.literal("command"), command: CommandBlockSchema }),
   z.object({
     kind: z.literal("text"),
@@ -295,6 +302,7 @@ export const MessageBlock = z.discriminatedUnion("kind", [
   }),
   z.object({
     kind: z.literal("handoff"),
+    chiefDispatch: ChiefDispatchSchema.optional(),
     fromBotId: Id,
     toBotId: Id,
     text: z.string(),
