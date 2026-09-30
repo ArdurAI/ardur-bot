@@ -118,6 +118,7 @@ async function main() {
         "packages/db/src/group-model-pins.postgres.test.ts",
         "packages/db/src/hermes-runtime-config.postgres.test.ts",
         "packages/testkit/src/group-model-visible.postgres.test.ts",
+        "packages/testkit/src/chief-loop.postgres.test.ts",
         "packages/db/src/messaging.postgres.test.ts",
         "packages/db/src/bot-presence.postgres.test.ts",
         "packages/db/src/learning.postgres.test.ts",
