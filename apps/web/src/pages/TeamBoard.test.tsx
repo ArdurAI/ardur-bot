@@ -42,6 +42,16 @@ vi.mock("@lingui/react/macro", () => ({
         "",
       );
     },
+    i18n: {
+      _: (
+        descriptor: { id: string; values?: Record<string, string> },
+        values?: Record<string, string>,
+      ) =>
+        Object.entries({ ...descriptor.values, ...values }).reduce(
+          (text, [key, value]) => text.replaceAll(`{${key}}`, value),
+          descriptor.id,
+        ),
+    },
   }),
 }));
 vi.mock("@lingui/core/macro", () => ({
@@ -268,6 +278,34 @@ it.each([
   );
   expect(node.textContent).toContain(expected);
   expect(node.textContent).not.toContain(absent);
+  await act(async () => root.unmount());
+});
+
+it("fills the bot's name in a blocked card's refusal sentence", async () => {
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  await act(async () =>
+    root.render(
+      <MemoryRouter>
+        <TeamBoardRow
+          row={{
+            ...row,
+            state: "blocked",
+            sentence: null,
+            requesterName: null,
+            reason: null,
+            reasonCategory: "destinations-bot",
+            reasonRuntime: null,
+            availability: "busy",
+            observedAt: new Date().toISOString(),
+          }}
+          refresh={async () => {}}
+        />
+      </MemoryRouter>,
+    ),
+  );
+  expect(node.textContent).toContain("Reviewer's allowed model destinations block this model");
+  expect(node.textContent).not.toContain("{bot}");
   await act(async () => root.unmount());
 });
 
