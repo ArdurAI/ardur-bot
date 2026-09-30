@@ -1,4 +1,12 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "Evidence off": "证据记录已关闭",
+  Recording: "记录中",
+  Verified: "已验证",
+  "Not sealed": "未封存",
+  "Evidence gap": "证据缺失",
+  "Check failed": "验证失败",
+  "Download evidence": "下载证据",
+  "{gapCount} evidence gaps": "{gapCount} 处证据缺失",
   "Got it — I’ll choose a team member to put this in Notion.":
     "收到 — 我会选择一位团队成员把它放到 Notion。",
   "Got it — I’ll check what’s missing and ask before installing it.":

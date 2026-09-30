@@ -1,4 +1,12 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "Evidence off": "Запись выключена",
+  Recording: "Запись",
+  Verified: "Проверено",
+  "Not sealed": "Без печати",
+  "Evidence gap": "Пробел в записи",
+  "Check failed": "Проверка не пройдена",
+  "Download evidence": "Скачать свидетельства",
+  "{gapCount} evidence gaps": "Пробелов в записи: {gapCount}",
   "Got it — I’ll choose a team member to put this in Notion.":
     "Понял — выберу участника команды, который разместит это в Notion.",
   "Got it — I’ll check what’s missing and ask before installing it.":
