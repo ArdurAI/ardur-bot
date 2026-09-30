@@ -351,8 +351,9 @@ function isCapsFailure(ctx: MessageContext): boolean {
 }
 
 /**
- * The signal table. Weight units are rough confidence: a lone weak signal cannot clear
- * the 0.6 floor, two independent ones usually can, and the failure signals stand alone.
+ * The signal table. Weight units are rough confidence: the failure signals stand alone
+ * (a lone failure word clears the floor), every other lone signal stays below it, and
+ * two independent ones usually clear it together.
  */
 const SIGNAL_TABLE: readonly SignalSpec[] = [
   {

@@ -342,6 +342,16 @@ describe("round 3: large inputs classify fast", () => {
   });
 });
 
+describe("round 3: failure vocabulary", () => {
+  it.each(["it throws", "it threw again", "the job hangs", "it hangs on start", "broken"])(
+    "%s reads as debugging, never light",
+    (text) => {
+      const got = localTaskClassifier.classify({ text });
+      expect(got.taskType, `got ${got.taskType} at ${got.confidence}`).toBe("debugging");
+    },
+  );
+});
+
 describe("classifier interface", () => {
   it("reports signals for every answer and clamps confidence", () => {
     for (const text of ["hi", "deploy now", "", "what?"]) {
