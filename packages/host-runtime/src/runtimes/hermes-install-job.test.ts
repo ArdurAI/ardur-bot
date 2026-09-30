@@ -1,11 +1,21 @@
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { gzipSync } from "node:zlib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { HERMES_SOURCE_PIN, HERMES_SOURCE_TREE } from "./hermes-install.js";
+import { gitTreeIdOfArchive } from "./hermes-archive.js";
+import {
+  HERMES_SOURCE_PIN,
+  HERMES_SOURCE_TREE,
+  readHermesInstallStatus,
+} from "./hermes-install.js";
 import {
   HERMES_INSTALL_RUNNING,
+  HERMES_SOURCE_URL,
+  type HermesCommand,
   HermesInstallError,
+  installHermes,
   runHermesInstallJob,
 } from "./hermes-installer.js";
 
@@ -87,6 +97,104 @@ describe("Hermes install job", () => {
     const install = vi.fn(async () => undefined);
     await runHermesInstallJob(install);
     expect(install).toHaveBeenCalledOnce();
+  });
+
+  it("takes a case-colliding install from downloading to done", async () => {
+    // The status a real installer would have published before the download began.
+    await mkdir(hermesRoot(), { recursive: true });
+    await writeFile(
+      path.join(hermesRoot(), "install-status.json"),
+      JSON.stringify({
+        state: "installing",
+        phase: "downloading",
+        message: "Downloading.",
+        updatedAt: "2026-01-02T03:04:05.000Z",
+      }),
+    );
+    // An in-memory archive whose two notes entries differ only by letter case.
+    const top = "rel";
+    const parts = [
+      { name: `${top}/notes/Team.txt`, data: Buffer.from("first\n"), mode: 0o644 },
+      { name: `${top}/notes/team.txt`, data: Buffer.from("second\n"), mode: 0o644 },
+      { name: `${top}/pyproject.toml`, data: Buffer.from("[project]\n"), mode: 0o644 },
+    ];
+    const uvParts = [{ name: `${top}/uv`, data: Buffer.from("#!/bin/sh\n"), mode: 0o755 }];
+    const header = (name: string, size: number, mode: number): Buffer => {
+      const block = Buffer.alloc(512, 0);
+      Buffer.from(name, "utf8").copy(block, 0);
+      block.write(mode.toString(8).padStart(7, "0"), 100, "ascii");
+      block[107] = 0;
+      block.write(size.toString(8).padStart(11, "0"), 124, "ascii");
+      block[135] = 0;
+      block.fill(0x20, 148, 156);
+      block[156] = 0x30;
+      block.write("ustar", 257, "ascii");
+      block[262] = 0;
+      block.write("00", 263, "ascii");
+      let sum = 0;
+      for (const byte of block) sum += byte;
+      block.write(sum.toString(8).padStart(6, "0"), 148, "ascii");
+      block[154] = 0;
+      block[155] = 0x20;
+      return block;
+    };
+    const entryBlock = (part: { name: string; data: Buffer; mode: number }): Buffer => {
+      const extra = (512 - (part.data.length % 512)) % 512;
+      return Buffer.concat([
+        header(part.name, part.data.length, part.mode),
+        part.data,
+        Buffer.alloc(extra),
+      ]);
+    };
+    const tarOf = (entries: { name: string; data: Buffer; mode: number }[]) =>
+      gzipSync(Buffer.concat([...entries.map(entryBlock), Buffer.alloc(1024)]));
+    const archive = tarOf(parts);
+    const uvArchive = tarOf(uvParts);
+    const uvSha256 = createHash("sha256").update(uvArchive).digest("hex");
+    const expectedTree = await gitTreeIdOfArchive(archive, 2 * 1024 * 1024);
+    // A command stub that stands up the environment the marker is drawn from.
+    const spawn: HermesCommand = async (_command, args, options) => {
+      if (args[0] === "sync") {
+        const venv = options.env.UV_PROJECT_ENVIRONMENT;
+        if (!venv) return { code: 1, stdout: "", stderr: "no environment" };
+        await mkdir(path.join(venv, "bin"), { recursive: true });
+        await writeFile(path.join(venv, "bin", "python"), "#!/bin/sh\n");
+        await writeFile(path.join(venv, "pyvenv.cfg"), "version_info = 3.13.2\n");
+      }
+      return { code: 0, stdout: "", stderr: "" };
+    };
+    const install = async () => {
+      await installHermes({
+        root: hermesRoot(),
+        fetch: async (input) => new Response(input === HERMES_SOURCE_URL ? archive : uvArchive),
+        platform: "linux",
+        arch: "x64",
+        expectedTree,
+        uvSha256,
+        spawn,
+        now: () => new Date("2026-01-02T03:04:05.000Z"),
+        env: {},
+      });
+    };
+    await runHermesInstallJob(install);
+    expect(readHermesInstallStatus(hermesRoot())).toMatchObject({
+      state: "ready",
+      message: "Ready.",
+    });
+    // The first of the colliding pair is kept on this disk.
+    expect(
+      await readFile(
+        path.join(hermesRoot(), "runtimes", "hermes-agent", "notes", "Team.txt"),
+        "utf8",
+      ),
+    ).toBe("first\n");
+    const marker = JSON.parse(
+      await readFile(
+        path.join(hermesRoot(), "runtimes", "hermes-agent", ".ardur-install.json"),
+        "utf8",
+      ),
+    );
+    expect(marker.tree).toBe(expectedTree);
   });
 
   it("starts an install when the lock belongs to a dead process", async () => {
