@@ -510,7 +510,7 @@ export async function requestSelectiveCancelInTransaction(
     data: { cancelRequestedAt: now },
   });
   await tx.externalEffect.updateMany({
-    where: { ...scope, runId: { in: ids }, status: { in: ["intended", "approved"] } },
+    where: { spaceId: scope.spaceId, runId: { in: ids }, status: { in: ["intended", "approved"] } },
     data: { status: "denied" },
   });
   await tx.botMessageDelivery.updateMany({

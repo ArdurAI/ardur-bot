@@ -186,7 +186,8 @@ async function replayExistingSend(
   const message = await findSendReceipt(deps.prisma, threadId, clientNonce);
   if (!message) return null;
   const chiefReceipt = await readChiefReceipt(deps.prisma, threadId, message.id);
-  if (chiefReceipt?.key === "greeting") return sendResult(message, [], chiefReceipt);
+  if (chiefReceipt && ["greeting", "exclude-member", "change-task"].includes(chiefReceipt.key))
+    return sendResult(message, [], chiefReceipt);
   const receiptEvent = await deps.prisma.event.findFirst({
     where: {
       threadId,
