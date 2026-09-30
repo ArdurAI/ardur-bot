@@ -800,7 +800,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
         leaseExpiresAt: new Date(Date.now() + 60_000),
       },
     });
-    const result = await loadBotPresence(
+    let result = await loadBotPresence(
       prisma,
       { spaceId, userId },
       {
@@ -810,7 +810,21 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
         limit: 50,
       },
     );
-    const row = result.bots.find((bot) => bot.botId === unrelated.id);
+    let row = result.bots.find((bot) => bot.botId === unrelated.id);
+    while (!row && result.nextCursor) {
+      result = await loadBotPresence(
+        prisma,
+        { spaceId, userId },
+        {
+          callerBotId: f.worker.id,
+          visibleGroupId: "__desk__",
+          canSend: true,
+          limit: 50,
+          cursor: result.nextCursor,
+        },
+      );
+      row = result.bots.find((bot) => bot.botId === unrelated.id);
+    }
     expect(row).toMatchObject({ availability: "busy", activeRunCount: 1, activeRunIds: [] });
     expect(row?.currentTaskTitle).toBeUndefined();
     expect(row?.goalId).toBeUndefined();
