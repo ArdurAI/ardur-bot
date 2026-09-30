@@ -1157,10 +1157,6 @@ msgstr "Asked {asked, plural, one {# bot} other {# bots}} · {answered, plural, 
 msgid "asks first"
 msgstr "asks first"
 
-#: src/pages/dashboard/ComputersPanel.tsx
-msgid "Asleep"
-msgstr "Asleep"
-
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
 msgid "Assignee"
@@ -1394,10 +1390,6 @@ msgstr "Board status"
 msgid "Boards"
 msgstr "Boards"
 
-#: src/pages/dashboard/ComputersPanel.tsx
-msgid "Booting"
-msgstr "Booting"
-
 #: src/pages/Shell.tsx
 msgid "Booting live desktop…"
 msgstr "Booting live desktop…"
@@ -1543,10 +1535,10 @@ msgstr "Can't reach the server."
 
 #: src/components/AskCard.tsx
 #: src/components/ComputerMaintenanceActions.tsx
-#: src/components/ComputerUpdateProgress.tsx
 #: src/components/Context.tsx
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/OllamaSettings.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -2567,6 +2559,7 @@ msgid "Could not clear conversation"
 msgstr "Could not clear conversation"
 
 #: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Could not complete action"
 msgstr "Could not complete action"
 
@@ -3114,7 +3107,7 @@ msgstr "Could not send your message; try again."
 msgid "Could not show the menu bar item; try again."
 msgstr "Could not show the menu bar item; try again."
 
-#: src/pages/shell/runtime-summary.tsx
+#: src/lib/computer-state-labels.ts
 msgid "Could not start"
 msgstr "Could not start"
 
@@ -4936,6 +4929,10 @@ msgstr "just now"
 msgid "Keep computer awake"
 msgstr "Keep computer awake"
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Keep current location"
+msgstr "Keep current location"
+
 #: src/pages/LearningCurator.tsx
 msgid "Keep for recovery"
 msgstr "Keep for recovery"
@@ -5304,7 +5301,6 @@ msgstr "Looks like it contains a credential. Remove it from the file, then re-sc
 msgid "low — quick, with a little checking"
 msgstr "low — quick, with a little checking"
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "macOS will not ask for extra permission if you let bots run on this Mac. They run as you."
 msgstr "macOS will not ask for extra permission if you let bots run on this Mac. They run as you."
@@ -5313,7 +5309,7 @@ msgstr "macOS will not ask for extra permission if you let bots run on this Mac.
 msgid "Make default"
 msgstr "Make default"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Make sure nothing is still running on this computer."
 msgstr "Make sure nothing is still running on this computer."
 
@@ -5736,6 +5732,10 @@ msgstr "Move to {0}?"
 #: src/pages/fleet/PlacementNotice.tsx
 msgid "Move to {name}?"
 msgstr "Move to {name}?"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Move to a container"
+msgstr "Move to a container"
 
 #. placeholder {0}: value.minimumFreeGb
 #: src/pages/fleet/FleetSettings.tsx
@@ -6201,7 +6201,7 @@ msgstr "Not used"
 msgid "Nothing installed yet"
 msgstr "Nothing installed yet"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Nothing is still running"
 msgstr "Nothing is still running"
 
@@ -6612,6 +6612,10 @@ msgstr "Pause team messages"
 #: src/pages/RoutineEditor.tsx
 msgid "Paused"
 msgstr "Paused"
+
+#: src/lib/computer-state-labels.ts
+msgid "Paused for an update"
+msgstr "Paused for an update"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Permission denied on the socket"
@@ -7094,11 +7098,11 @@ msgstr "Rejected"
 msgid "Release"
 msgstr "Release"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Release computer"
 msgstr "Release computer"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Release interrupted computer?"
 msgstr "Release interrupted computer?"
 
@@ -7632,13 +7636,12 @@ msgstr "Run time must be in the future."
 msgid "running"
 msgstr "running"
 
+#: src/lib/computer-state-labels.ts
 #: src/lib/run-status-label.ts
 #: src/pages/ComparePanel.tsx
 #: src/pages/customize/McpDiagnostics.tsx
-#: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/fleet/FleetSettings.tsx
-#: src/pages/shell/runtime-summary.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Running"
 msgstr "Running"
@@ -8308,7 +8311,7 @@ msgstr "Slack not enabled"
 msgid "Slash commands"
 msgstr "Slash commands"
 
-#: src/pages/shell/runtime-summary.tsx
+#: src/lib/computer-state-labels.ts
 msgid "Sleeping"
 msgstr "Sleeping"
 
@@ -8469,8 +8472,8 @@ msgstr "Start recording"
 msgid "Start the engine and press Test."
 msgstr "Start the engine and press Test."
 
+#: src/lib/computer-state-labels.ts
 #: src/lib/run-status-label.ts
-#: src/pages/shell/runtime-summary.tsx
 msgid "Starting"
 msgstr "Starting"
 
@@ -8541,10 +8544,9 @@ msgstr "Stop the run"
 msgid "Stop work in this conversation"
 msgstr "Stop work in this conversation"
 
+#: src/lib/computer-state-labels.ts
 #: src/pages/customize/McpDiagnostics.tsx
-#: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/GroupPanel.tsx
-#: src/pages/shell/runtime-summary.tsx
 msgid "Stopped"
 msgstr "Stopped"
 
@@ -8787,6 +8789,10 @@ msgstr "The group model choice was reloaded. Pick again."
 msgid "The Hermes install on this computer failed its safety check."
 msgstr "The Hermes install on this computer failed its safety check."
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "The last update was interrupted."
+msgstr "The last update was interrupted."
+
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr "The memory changed since this suggestion. Open History before trying again."
@@ -8897,7 +8903,6 @@ msgstr "This chat is view-only"
 msgid "This command is not available to this account."
 msgstr "This command is not available to this account."
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "this computer"
@@ -8962,7 +8967,6 @@ msgstr "This group's model is blocked by the bot or space settings. Change the d
 msgid "This is a binary file. You cannot edit it here."
 msgstr "This is a binary file. You cannot edit it here."
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "this Mac"
@@ -9829,7 +9833,6 @@ msgstr "Your email address"
 msgid "Your name"
 msgstr "Your name"
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "Your OS will not ask for extra permission if you let bots run on {hostLabel}. They run as you."
 msgstr "Your OS will not ask for extra permission if you let bots run on {hostLabel}. They run as you."

@@ -1157,10 +1157,6 @@ msgstr "{asked, plural, one {# bota} other {# bota}} soruldu · {answered, plura
 msgid "asks first"
 msgstr ""
 
-#: src/pages/dashboard/ComputersPanel.tsx
-msgid "Asleep"
-msgstr ""
-
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
 msgid "Assignee"
@@ -1394,10 +1390,6 @@ msgstr "Pano durumu"
 msgid "Boards"
 msgstr "Panolar"
 
-#: src/pages/dashboard/ComputersPanel.tsx
-msgid "Booting"
-msgstr ""
-
 #: src/pages/Shell.tsx
 msgid "Booting live desktop…"
 msgstr "Canlı masaüstü başlatılıyor…"
@@ -1543,10 +1535,10 @@ msgstr "Sunucuya ulaşılamıyor."
 
 #: src/components/AskCard.tsx
 #: src/components/ComputerMaintenanceActions.tsx
-#: src/components/ComputerUpdateProgress.tsx
 #: src/components/Context.tsx
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/OllamaSettings.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -2567,8 +2559,9 @@ msgid "Could not clear conversation"
 msgstr "Sohbet temizlenemedi"
 
 #: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Could not complete action"
-msgstr ""
+msgstr "İşlem tamamlanamadı"
 
 #: src/pages/McpOAuthCallback.tsx
 msgid "Could not complete authorization. Try connecting again."
@@ -3114,7 +3107,7 @@ msgstr ""
 msgid "Could not show the menu bar item; try again."
 msgstr ""
 
-#: src/pages/shell/runtime-summary.tsx
+#: src/lib/computer-state-labels.ts
 msgid "Could not start"
 msgstr "Başlatılamadı"
 
@@ -4936,6 +4929,10 @@ msgstr "az önce"
 msgid "Keep computer awake"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Keep current location"
+msgstr "Mevcut konumu koru"
+
 #: src/pages/LearningCurator.tsx
 msgid "Keep for recovery"
 msgstr ""
@@ -5304,7 +5301,6 @@ msgstr ""
 msgid "low — quick, with a little checking"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "macOS will not ask for extra permission if you let bots run on this Mac. They run as you."
 msgstr "Botların bu Mac'te çalışmasına izin verirsen macOS ek izin istemez. Botlar senin adına çalışır."
@@ -5313,7 +5309,7 @@ msgstr "Botların bu Mac'te çalışmasına izin verirsen macOS ek izin istemez.
 msgid "Make default"
 msgstr "Varsayılan yap"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Make sure nothing is still running on this computer."
 msgstr "Bu bilgisayarda hâlâ çalışan bir şey olmadığından emin ol."
 
@@ -5736,6 +5732,10 @@ msgstr ""
 #: src/pages/fleet/PlacementNotice.tsx
 msgid "Move to {name}?"
 msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Move to a container"
+msgstr "Bir kapsayıcıya taşı"
 
 #. placeholder {0}: value.minimumFreeGb
 #: src/pages/fleet/FleetSettings.tsx
@@ -6201,7 +6201,7 @@ msgstr ""
 msgid "Nothing installed yet"
 msgstr ""
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Nothing is still running"
 msgstr "Hâlâ çalışan bir şey yok"
 
@@ -6612,6 +6612,10 @@ msgstr "Ekip mesajlarını duraklat"
 #: src/pages/RoutineEditor.tsx
 msgid "Paused"
 msgstr "Duraklatıldı"
+
+#: src/lib/computer-state-labels.ts
+msgid "Paused for an update"
+msgstr "Güncelleme için duraklatıldı"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Permission denied on the socket"
@@ -7094,13 +7098,13 @@ msgstr ""
 msgid "Release"
 msgstr "Bırak"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Release computer"
-msgstr ""
+msgstr "Bilgisayarı serbest bırak"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Release interrupted computer?"
-msgstr ""
+msgstr "Kesintiye uğrayan bilgisayar serbest bırakılsın mı?"
 
 #: src/pages/account/AccountProfile.tsx
 msgid "Reload"
@@ -7632,13 +7636,12 @@ msgstr ""
 msgid "running"
 msgstr "çalışıyor"
 
+#: src/lib/computer-state-labels.ts
 #: src/lib/run-status-label.ts
 #: src/pages/ComparePanel.tsx
 #: src/pages/customize/McpDiagnostics.tsx
-#: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/fleet/FleetSettings.tsx
-#: src/pages/shell/runtime-summary.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Running"
 msgstr "Çalışıyor"
@@ -8308,7 +8311,7 @@ msgstr ""
 msgid "Slash commands"
 msgstr ""
 
-#: src/pages/shell/runtime-summary.tsx
+#: src/lib/computer-state-labels.ts
 msgid "Sleeping"
 msgstr "Uykuda"
 
@@ -8469,8 +8472,8 @@ msgstr "Kaydı başlat"
 msgid "Start the engine and press Test."
 msgstr "Motoru başlatıp Test düğmesine basın."
 
+#: src/lib/computer-state-labels.ts
 #: src/lib/run-status-label.ts
-#: src/pages/shell/runtime-summary.tsx
 msgid "Starting"
 msgstr "Başlıyor"
 
@@ -8541,10 +8544,9 @@ msgstr "Çalışmayı durdur"
 msgid "Stop work in this conversation"
 msgstr ""
 
+#: src/lib/computer-state-labels.ts
 #: src/pages/customize/McpDiagnostics.tsx
-#: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/GroupPanel.tsx
-#: src/pages/shell/runtime-summary.tsx
 msgid "Stopped"
 msgstr "Durduruldu"
 
@@ -8787,6 +8789,10 @@ msgstr "Grubun model seçimi yeniden yüklendi. Tekrar seçin."
 msgid "The Hermes install on this computer failed its safety check."
 msgstr "Bu bilgisayardaki Hermes kurulumu güvenlik denetimini geçemedi."
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "The last update was interrupted."
+msgstr "Son güncelleme kesintiye uğradı."
+
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
@@ -8897,7 +8903,6 @@ msgstr "Bu sohbet yalnızca görüntülenebilir"
 msgid "This command is not available to this account."
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "bu bilgisayar"
@@ -8962,7 +8967,6 @@ msgstr "Grup modeli bot veya alan ayarları tarafından engelleniyor. Hedef ilke
 msgid "This is a binary file. You cannot edit it here."
 msgstr "Bu bir ikili dosya. Burada düzenleyemezsiniz."
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "bu Mac"
@@ -9829,7 +9833,6 @@ msgstr "E-posta adresin"
 msgid "Your name"
 msgstr "Adın"
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "Your OS will not ask for extra permission if you let bots run on {hostLabel}. They run as you."
 msgstr "Botların {hostLabel} üzerinde çalışmasına izin verirsen işletim sistemin ek izin istemez. Botlar senin adına çalışır."

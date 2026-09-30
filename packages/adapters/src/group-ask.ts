@@ -16,6 +16,7 @@ import {
 import {
   appendEventInTransaction,
   createThreadMessageInTransaction,
+  DELEGATION_ADMISSION_TRANSACTION,
   DelegationAdmissionError,
   IsolationError,
   loadGroupAskResults,
@@ -325,7 +326,7 @@ export async function askGroupMembers(
         runIds,
         eventSeq,
       };
-    }),
+    }, DELEGATION_ADMISSION_TRANSACTION),
   );
   if ("error" in committed)
     return committed.notAsked?.length

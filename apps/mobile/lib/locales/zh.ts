@@ -1,4 +1,8 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "Move to a container": "移至容器",
+  "Keep current location": "保留当前位置",
+  "Paused for an update": "已暂停以进行更新",
+  "The last update was interrupted.": "上次更新已中断。",
   "Reading the document": "正在读取文档",
   "Connecting to Notion": "正在连接 Notion",
   "Creating the Notion page": "正在创建 Notion 页面",

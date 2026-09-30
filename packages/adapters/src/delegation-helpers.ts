@@ -1,6 +1,10 @@
 import { taskCardPrompt } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
-import { startDelegation, withTransactionRetry } from "@ardurbot/db";
+import {
+  DELEGATION_ADMISSION_TRANSACTION,
+  startDelegation,
+  withTransactionRetry,
+} from "@ardurbot/db";
 import type { DelegationModelLimits } from "./delegation.js";
 import { delegationFailure, prepareDelegation } from "./delegation.js";
 
@@ -41,7 +45,7 @@ export async function admitRunHelper(
         tokens: admitted.record.reservedTokens,
         deadlineAt: admitted.record.deadlineAt.toISOString(),
       };
-    }),
+    }, DELEGATION_ADMISSION_TRANSACTION),
   ).catch(delegationFailure);
   return result;
 }

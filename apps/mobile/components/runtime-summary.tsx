@@ -1,13 +1,20 @@
-import type { ComputerConnectionSettings, ComputerMode, ComputerStatus } from "@ardurbot/contracts";
+import type {
+  ComputerConnectionSettings,
+  ComputerMode,
+  ComputerStatus,
+  ComputerUpdate,
+} from "@ardurbot/contracts";
 import {
   COMPUTER_BOUNDARY_MESSAGES,
   computerKindFacts,
   computerRuntimeSummary,
+  interruptedComputerUpdate,
 } from "@ardurbot/contracts";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { rpc } from "../lib/api";
+import { computerUpdates } from "../lib/computer-updates";
 import { useI18n } from "../lib/i18n";
 import { useMobileTokens } from "../lib/native";
 
@@ -39,30 +46,26 @@ export function RuntimeSummary({
   status,
   mode = status.mode,
   locationName,
+  sharingControl,
 }: {
   status: ComputerStatus;
   mode?: ComputerMode;
   locationName?: string;
+  sharingControl?: ReactNode;
 }) {
   const { t } = useI18n();
   const tokens = useMobileTokens();
   const facts = computerRuntimeSummary(status, mode);
   if (!facts) return <RuntimeBoundary kind={status.kind} />;
-  const states = {
-    stopped: "Stopped",
-    booting: "Starting",
-    running: "Running",
-    suspended: "Sleeping",
-    error: "Could not start",
-  };
+
   return (
     <View testID="runtime-summary" style={styles.lines}>
       <RuntimeBoundary kind={status.kind} locationName={locationName} />
-      <Text style={{ color: tokens.foreground }}>{t(facts.sharing)}</Text>
+      {sharingControl ?? <Text style={{ color: tokens.foreground }}>{t(facts.sharing)}</Text>}
       {facts.sharingWarning ? (
         <Text style={{ color: tokens.mutedForeground }}>{t(facts.sharingWarning)}</Text>
       ) : null}
-      <Text style={{ color: tokens.mutedForeground }}>{t(states[facts.state])}</Text>
+      <Text style={{ color: tokens.mutedForeground }}>{t(facts.stateLabel)}</Text>
     </View>
   );
 }
@@ -80,10 +83,12 @@ export function BotRuntimeSettings({
   const [data, setData] = useState<{
     status: ComputerStatus;
     connections: Connection[];
-    teamStatus?: ComputerStatus;
+    updates: ComputerUpdate[];
   } | null>(null);
   const [error, setError] = useState(false);
   const [revision, setRevision] = useState(0);
+  const [releasing, setReleasing] = useState(false);
+  const [releaseError, setReleaseError] = useState(false);
   useEffect(() => {
     let active = true;
     setData((current) => (current?.status.botId === botId ? current : null));
@@ -91,14 +96,14 @@ export function BotRuntimeSettings({
     void Promise.all([
       rpc<ComputerStatus>("computer/status", { botId }),
       rpc<Connection[]>("computer/connections", {}),
-      rpc<{ status: ComputerStatus }[]>("computer/list", {}),
+      rpc<ComputerUpdate[]>("computer/updates"),
     ])
-      .then(([status, connections, computers]) => {
+      .then(([status, connections, updates]) => {
         if (active)
           setData({
             status,
             connections,
-            teamStatus: computers.find((entry) => entry.status.mode === "team")?.status,
+            updates,
           });
       })
       .catch(() => {
@@ -110,6 +115,7 @@ export function BotRuntimeSettings({
       clearInterval(timer);
     };
   }, [botId, mode, revision]);
+  const interrupted = data ? interruptedComputerUpdate(data.status, data.updates) : undefined;
   return (
     <View style={[styles.card, { borderColor: tokens.border }]}>
       <Text style={{ color: tokens.foreground, fontWeight: "600" }}>
@@ -118,20 +124,57 @@ export function BotRuntimeSettings({
       {data ? (
         <RuntimeSummary
           status={data.status}
+          mode={mode}
+          sharingControl={children}
           locationName={
-            data.connections.find((entry) => entry.id === data.status.connectionId)?.name ??
-            (data.status.kind === "desktop" ? undefined : data.status.kind)
+            data.status.kind === "desktop"
+              ? undefined
+              : (data.connections.find((entry) => entry.id === data.status.connectionId)?.name ??
+                data.status.kind)
           }
         />
       ) : null}
-      {children}
-      {data && mode === "team" && data.status.mode !== mode && data.teamStatus ? (
-        <RuntimeBoundary
-          kind={data.teamStatus.kind}
-          locationName={
-            data.connections.find((entry) => entry.id === data.teamStatus?.connectionId)?.name
-          }
-        />
+
+      {interrupted ? (
+        <>
+          <Text accessibilityRole="alert" style={{ color: tokens.mutedForeground }}>
+            {t("The last update was interrupted.")}
+          </Text>
+          {interrupted.canReleaseReservation ? (
+            <Pressable
+              accessibilityRole="button"
+              disabled={releasing}
+              onPress={() =>
+                Alert.alert(
+                  t("Release interrupted computer?"),
+                  t("Make sure nothing is still running on this computer."),
+                  [
+                    { text: t("Cancel"), style: "cancel" },
+                    {
+                      text: t("Nothing is still running"),
+                      onPress: () => {
+                        setReleasing(true);
+                        setReleaseError(false);
+                        void computerUpdates
+                          .releaseInterrupted(interrupted.id)
+                          .then(() => setRevision((value) => value + 1))
+                          .catch(() => setReleaseError(true))
+                          .finally(() => setReleasing(false));
+                      },
+                    },
+                  ],
+                )
+              }
+            >
+              <Text style={{ color: tokens.foreground }}>{t("Release computer")}</Text>
+            </Pressable>
+          ) : null}
+        </>
+      ) : null}
+      {releaseError ? (
+        <Text accessibilityRole="alert" style={{ color: tokens.destructive }}>
+          {t("Could not complete action")}
+        </Text>
       ) : null}
       {error ? (
         <>

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { COMPUTER_BOUNDARY_MESSAGES, COMPUTER_KINDS } from "@ardurbot/contracts";
+import { COMPUTER_BOUNDARY_MESSAGES, COMPUTER_KINDS, COMPUTER_STATES } from "@ardurbot/contracts";
 import { formatter } from "@lingui/format-po";
 import { expect, it } from "vitest";
 
@@ -10,6 +10,15 @@ const messages = [
   ...new Set([
     ...Object.values(COMPUTER_KINDS).map((kind) => kind.location),
     ...Object.values(COMPUTER_BOUNDARY_MESSAGES),
+    ...Object.values(COMPUTER_STATES),
+    "Move to a container",
+    "Keep current location",
+    "The last update was interrupted.",
+    "Release computer",
+    "Release interrupted computer?",
+    "Make sure nothing is still running on this computer.",
+    "Nothing is still running",
+    "Could not complete action",
     "Where this bot runs",
     "Only this bot",
     "Shared with team",
