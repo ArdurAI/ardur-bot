@@ -489,7 +489,14 @@ it("checks root locality against the resolved endpoint before returning an execu
       snapshot: pin,
       bot: { allowedModelDestinations: { mode: "local" } },
     }),
-  ).toMatchObject({ kind: "problem", code: "locality-denied" });
+  ).toMatchObject({
+    kind: "problem",
+    code: "locality-denied",
+    reasonId: "destinations-bot",
+    reason:
+      "this bot's allowed model destinations block this model. Change them in this bot's settings.",
+    actions: ["change-pin"],
+  });
   f.findCredential.mockResolvedValue({ ...credential, provider: "openai-compatible" });
   f.loadKey.mockResolvedValue({
     provider: "openai-compatible",
@@ -505,6 +512,36 @@ it("checks root locality against the resolved endpoint before returning an execu
       bot: { allowedModelDestinations: { mode: "local" } },
     }),
   ).toMatchObject({ kind: "resolved", runtimePin: custom });
+});
+
+it("names the space policy when the bot's allows but the space's blocks", async () => {
+  const f = fixture();
+  const space = { allowedModelDestinations: { mode: "local" } };
+  f.prisma.space.findUnique = vi.fn(async () => space);
+  expect(
+    await resolveRunModelPin({
+      ...f,
+      snapshot: pin,
+      bot: { allowedModelDestinations: { mode: "any" } },
+    }),
+  ).toMatchObject({
+    kind: "problem",
+    code: "locality-denied",
+    reasonId: "destinations-space",
+    reason: "This space's model policy blocks this model. Change it in Settings, under Models.",
+    actions: ["change-pin"],
+  });
+  // Both block: the bot's policy is named first.
+  expect(
+    await resolveRunModelPin({
+      ...f,
+      snapshot: pin,
+      bot: { allowedModelDestinations: { mode: "local" } },
+    }),
+  ).toMatchObject({
+    kind: "problem",
+    reasonId: "destinations-bot",
+  });
 });
 
 it.each(["low", "medium", "high", "xhigh", "max"])(

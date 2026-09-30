@@ -1,6 +1,10 @@
 import type { PrismaClient } from "@ardurbot/db";
 import { expect, it, vi } from "vitest";
-import { destinationForModel, enforceDelegationDestination } from "./model-locality.js";
+import {
+  destinationForModel,
+  enforceDelegationDestination,
+  modelLocalityRefusedBy,
+} from "./model-locality.js";
 
 it("uses endpoint metadata and does not treat a missing destination as local", () => {
   expect(destinationForModel({ provider: "unknown", id: "unknown" })).toEqual({
@@ -55,4 +59,20 @@ it("refuses an endpoint edit after admission and a tightened requester policy", 
   await expect(enforceDelegationDestination(prisma, "handoff", model)).rejects.toMatchObject({
     problem: { code: "locality-denied" },
   });
+});
+
+it("names the policy that refused the model, checking the bot's first", () => {
+  const remote = { provider: "xai", id: "grok-4.6" };
+  // Both allow: nobody refused.
+  expect(modelLocalityRefusedBy({ mode: "any" }, { mode: "any" }, remote)).toBeNull();
+  expect(modelLocalityRefusedBy(null, undefined, remote)).toBeNull();
+  // The bot's policy blocks: destinations-bot.
+  expect(modelLocalityRefusedBy({ mode: "local" }, { mode: "any" }, remote)).toBe("bot");
+  // The space's policy blocks while the bot's allows: destinations-space.
+  expect(modelLocalityRefusedBy({ mode: "any" }, { mode: "local" }, remote)).toBe("space");
+  // Both block: the bot's is named first.
+  expect(modelLocalityRefusedBy({ mode: "local" }, { mode: "local" }, remote)).toBe("bot");
+  // An unreadable policy fails closed as a refusal by its owner.
+  expect(modelLocalityRefusedBy({ mode: "nope" }, { mode: "any" }, remote)).toBe("bot");
+  expect(modelLocalityRefusedBy({ mode: "any" }, { mode: "nope" }, remote)).toBe("space");
 });
