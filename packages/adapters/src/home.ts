@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
+import type { FileHandle } from "node:fs/promises";
 import {
   access,
   lstat,
@@ -558,6 +559,22 @@ async function* walkFiles(
   }
 }
 
+/**
+ * A read stream that stops with the download and never crashes the process: a cancel
+ * between the stream's creation and its first read would otherwise emit an error with no
+ * listener. The error still reaches whoever reads the stream.
+ */
+function abortSafeReadStream(handle: FileHandle, size: number, signal: AbortSignal) {
+  const stream = handle.createReadStream({
+    autoClose: false,
+    highWaterMark: 64 * 1024,
+    end: size - 1,
+    signal,
+  });
+  stream.on("error", () => {});
+  return stream;
+}
+
 async function* streamHomeFiles(
   root: string,
   current: string,
@@ -589,17 +606,16 @@ async function* streamHomeFiles(
       const info = await handle.stat();
       if (!info.isFile()) continue;
       assertContained(root, await fileHandlePath(handle.fd));
+      // The download can be cancelled while the file was being opened. A stream created
+      // under a signal that is already aborted destroys itself with an error at once, and
+      // an error on a stream nobody listens to yet takes the whole process down.
+      signal.throwIfAborted();
       yield {
         path: portablePath,
         size: info.size,
         executable: Boolean(info.mode & 0o100),
         content: info.size
-          ? handle.createReadStream({
-              autoClose: false,
-              highWaterMark: 64 * 1024,
-              end: info.size - 1,
-              signal,
-            })
+          ? abortSafeReadStream(handle, info.size, signal)
           : (async function* () {})(),
       };
     } finally {

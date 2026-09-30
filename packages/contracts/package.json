@@ -18,6 +18,7 @@
     "./local-settings": "./src/local-settings.js",
     "./runtime-pins": "./src/runtime-pins.ts",
     "./failure-categories": "./src/failure-categories.ts",
+    "./protected-locations": "./src/protected-locations.ts",
     "./runtime-config": "./src/runtime-config.ts",
     "./runtime-config-v1": "./src/runtime-config-v1.ts",
     "./runtime-config-editor": "./src/runtime-config-editor.ts",
