@@ -715,7 +715,7 @@ describe("lingui catalogs", () => {
     }
   });
 
-  it("translates the refusal banner's \"Open bot settings\" action in every shipped catalog", () => {
+  it('translates the refusal banner\'s "Open bot settings" action in every shipped catalog', () => {
     // The banner's first button for the computer-unsupported and destinations-bot
     // refusals; an empty translation would fall back to English on the banner.
     const message = "Open bot settings";

@@ -153,10 +153,7 @@ it.each([
     "computer-unsupported",
     [{ kind: "route", pathname: "/bot-settings", params: { botId: "bot" } }],
   ],
-  [
-    "destinations-bot",
-    [{ kind: "route", pathname: "/bot-settings", params: { botId: "bot" } }],
-  ],
+  ["destinations-bot", [{ kind: "route", pathname: "/bot-settings", params: { botId: "bot" } }]],
   [
     "destinations-space",
     [
