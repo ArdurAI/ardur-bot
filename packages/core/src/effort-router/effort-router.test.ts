@@ -301,6 +301,41 @@ describe("round 3: huge and odd inputs", () => {
   });
 });
 
+describe("round 3: large inputs classify fast", () => {
+  // The bounds are generous: these all classify in a few milliseconds, and 50 ms leaves
+  // room for a slow machine. Nothing here may grow with the size of the paste.
+  it("bounds the work on hostile and realistic pastes", () => {
+    const jsonEntry =
+      '{"id":1234,"name":"widget","tags":["alpha","beta"],"price":19.99,"active":true,"nested":{"key":"value","count":42}},';
+    const cases: readonly [string, string][] = [
+      ["a 300 KB single line of repeated 'at '", "at ".repeat(100000)],
+      ["a 2 MB message of repeated words", "the quick brown fox jumps over the lazy dog ".repeat(45000)],
+      ["a 300 KB pasted JSON blob", `[${jsonEntry.repeat(3400).slice(0, -1)}]`],
+      [
+        "a 300 KB log",
+        "2026-09-29T12:00:00Z ERROR worker-7 OOMKilled at fetchUser (services/user.ts:88:12) retry 3/5\n".repeat(
+          3600,
+        ),
+      ],
+    ];
+    for (const [name, text] of cases) {
+      const start = performance.now();
+      localTaskClassifier.classify({ text });
+      const elapsed = performance.now() - start;
+      expect(elapsed, `${name} took ${elapsed.toFixed(1)} ms`).toBeLessThan(50);
+    }
+  });
+
+  it("keeps reading a realistic paste past the window", () => {
+    const log =
+      "2026-09-29T12:00:00Z ERROR worker-7 OOMKilled at fetchUser (services/user.ts:88:12) retry 3/5\n".repeat(
+        3600,
+      );
+    const got = localTaskClassifier.classify({ text: log });
+    expect(got.taskType).toBe("debugging");
+  });
+});
+
 describe("classifier interface", () => {
   it("reports signals for every answer and clamps confidence", () => {
     for (const text of ["hi", "deploy now", "", "what?"]) {

@@ -4,6 +4,15 @@ import type { TaskClassification, TaskClassifier, TaskClassifierInput } from "./
 import { WORD_LISTS } from "./word-lists.js";
 
 /**
+ * The only bound in the classifier: patterns read at most this many characters of the
+ * trimmed text, and a longer message counts the rest as length alone (the "very long"
+ * signal). A message this long is never light, so nothing past the window can change a
+ * light route into a heavier one — only which work type wins, and that is settled by
+ * the first screens of any real paste.
+ */
+const CLASSIFY_WINDOW_CHARS = 16384;
+
+/**
  * The local, deterministic task classifier as a signal table. Each signal is one row: a
  * name, a test over the message, and the weight it adds to the task types it supports
  * (or subtracts through `rulesOut`). `decide` folds the table into scores, gates the
@@ -27,6 +36,7 @@ type MessageContext = {
   readonly lower: string;
   readonly wordCount: number;
   readonly tokenCount: number;
+  readonly veryLong: boolean;
   readonly fences: number;
   readonly stackTrace: boolean;
   readonly diff: boolean;
@@ -53,76 +63,112 @@ type MessageContext = {
 /** Reading a message: structure first (it survives translation), then the word lists. */
 function readContext(text: string, input: TaskClassifierInput): MessageContext {
   const trimmed = text.trim();
-  const tokens = trimmed.split(/\s+/).filter(Boolean);
-  const numeric = tokens.filter((token) => /^[+-]?[\d.,]+%?$/.test(token)).length;
-  const fenceMarkers = trimmed.match(/^[ \t]*(```|~~~)/gm)?.length ?? 0;
-  const tableLineCount = trimmed.split("\n").filter((line) => /^\s*\|.*\|\s*$/.test(line)).length;
+  // Every pattern below runs on this window, never on the whole message: one long line
+  // must not turn classification into a scan of the entire paste.
+  const window = trimmed.slice(0, CLASSIFY_WINDOW_CHARS);
+  const tokens = window.split(/\s+/).filter(Boolean);
+  const numeric = tokens.filter((token) => NUMERIC_TOKEN.test(token)).length;
+  const fenceMarkers = window.match(/^[ \t]*(```|~~~)/gm)?.length ?? 0;
+  const tableLineCount = window.split("\n").filter((line) => TABLE_ROW.test(line)).length;
   const stackTrace =
-    /\bat\s+.+\([^)]+:\d+:\d+\)/m.test(trimmed) ||
-    trimmed.includes("Traceback (most recent call last)") ||
-    /^\s*File "[^"]+", line \d+/m.test(trimmed) ||
-    trimmed.includes("Caused by: ") ||
-    trimmed.includes("Exception in thread");
-  const filePaths = trimmed.match(/(^|\s|[([])(\/[\w.@-]+\/)+[\w.-]+\.[a-zA-Z]{1,5}/g)?.length ?? 0;
+    STACK_FRAME.test(window) ||
+    window.includes("Traceback (most recent call last)") ||
+    PY_FRAME.test(window) ||
+    window.includes("Caused by: ") ||
+    window.includes("Exception in thread");
+  const filePaths = window.match(FILE_PATH.g.source)?.length ?? 0;
   const shell =
-    /^\s*\$\s+\S+/m.test(trimmed) ||
-    /^\s*>\s+\S+/m.test(trimmed) ||
-    /\b(sudo|apt|apt-get|yum|brew|pip|pip3|kubectl|helm|systemctl|docker|terraform|aws|gcloud|curl|wget|chmod|mkdir)\s+\S+/.test(
-      trimmed,
-    );
-  const lower = trimmed.toLowerCase();
+    SHELL_PROMPT.test(window) ||
+    SHELL_PROMPT_GT.test(window) ||
+    OPS_COMMAND.test(window);
+  const lower = window.toLowerCase();
   const masked = maskShorterSynonyms(lower);
   const hits = {} as Record<keyof typeof WORD_LISTS, number>;
   for (const name of Object.keys(WORD_LISTS) as (keyof typeof WORD_LISTS)[]) {
     hits[name] = countHits(masked, WORD_LISTS[name]);
   }
   const firstWords = lower
-    .split(/[\s,:;]+/)
+    .split(FIRST_WORD_SPLIT)
     .filter(Boolean)
     .slice(0, 6);
   return {
-    text: trimmed,
+    text: window,
     lower,
-    wordCount: words(trimmed).length,
+    wordCount: words(window).length,
     tokenCount: tokens.length,
+    veryLong: trimmed.length > CLASSIFY_WINDOW_CHARS,
     fences: Math.floor(fenceMarkers / 2),
     stackTrace,
-    diff: /^[-+]{3} /m.test(trimmed) || /^@@ /m.test(trimmed),
+    diff: DIFF_MARKER.test(window) || HUNK_MARKER.test(window),
     shell,
     filePaths,
     codeContext: fenceMarkers >= 2 || shell || filePaths > 0,
-    urls: trimmed.match(/https?:\/\/\S+/g)?.length ?? 0,
+    urls: window.match(URL.g.source)?.length ?? 0,
     numberDensity: tokens.length === 0 ? 0 : numeric / tokens.length,
     tableRows: tableLineCount >= 2 ? tableLineCount : 0,
-    sql: /^select\s+.+\s+from\s+/im.test(trimmed),
+    sql: SQL_SELECT.test(window),
     question:
-      trimmed.includes("?") ||
-      trimmed.includes("？") ||
-      trimmed.includes("吗") ||
-      trimmed.includes("क्या"),
-    questionOpener: QUESTION_OPENERS.test(trimmed),
-    httpErrorStatus: /(?:\b|: )(4\d\d|5\d\d)(?:\b|s\b)/.test(trimmed),
-    httpErrorStatusVerbGated:
-      /(?:\b|: )(4\d\d|5\d\d)(?:\b|s\b)/.test(trimmed) &&
-      /\b(return|returns|returning|threw|throws|throwing|fail|fails|failing|failed|error|errors|crash|crashes|crashed|respond|responds|5xx|4xx|since|until|stopped|broke|broken)\b/i.test(
-        trimmed,
-      ),
-    exceptionName: EXCEPTION_WORD.test(trimmed),
-    capsStatus: CAPS_FAILURE.test(trimmed),
+      window.includes("?") ||
+      window.includes("？") ||
+      window.includes("吗") ||
+      window.includes("क्या"),
+    questionOpener: QUESTION_OPENERS.test(window),
+    httpErrorStatus: HTTP_STATUS.test(window),
+    httpErrorStatusVerbGated: HTTP_STATUS.test(window) && FAILURE_VERB.test(window),
+    exceptionName: EXCEPTION_WORD.test(window),
+    capsStatus: CAPS_FAILURE.test(window),
     hasAttachments: input.hasAttachments === true,
     answersBotQuestion: input.answersBotQuestion === true,
     opensWithOpsVerb:
       firstWords.some((word) => countHits(word, WORD_LISTS.opsVerb) > 0) &&
       firstWords.every((word) => countHits(word, WORD_LISTS.debugWord) === 0),
-    scriptCovered: scriptCovered(trimmed),
+    scriptCovered: scriptCovered(window),
     hits,
   };
 }
 
-const QUESTION_OPENERS =
-  /^(¿?\s*["'“(]?)(what|when|where|who|why|how|which|whose|is|are|do|does|did|was|wie|wer|wo|wann|warum|welche|was|que|qué|cómo|dónde|cuándo|quién|cuál|comment|combien|où|qui|почему|что|как|где|когда|кто|сколько|什么|怎么|为什么|几|哪|何|なぜ|どう|누구|무엇|어떻게|언제|어디|몇|क्या|कैसे|क्यों|कहाँ|ఎందుకు|ఎలా|ఏమిటి)\b/i;
+const NUMERIC_TOKEN = /^[+-]?[\d.,]+%?$/;
 
-const EXCEPTION_WORD = /\b\p{Lu}\w*(Exception|Error|Fault|Failure)\b/u;
+const TABLE_ROW = /^\s*\|.*\|\s*$/;
+
+/**
+ * A stack frame whose middle cannot run past its line: `at some.function (file.ts:12:9)`.
+ * Both runs are bounded, so a 300 KB single line costs at most one bounded backtrack.
+ */
+const STACK_FRAME = /\bat\s+[^\n(]{1,200}\([^)\n]{1,300}:\d+:\d+\)/m;
+
+const PY_FRAME = /^\s*File "[^"\n]{1,300}", line \d+/m;
+
+const FILE_PATH = {
+  g: /(^|\s|[([])(\/[\w.@-]+\/)+[\w.-]+\.[a-zA-Z]{1,5}/g,
+} as const;
+
+const SHELL_PROMPT = /^\s*\$\s+\S+/m;
+
+const SHELL_PROMPT_GT = /^\s*>\s+\S+/m;
+
+const OPS_COMMAND =
+  /\b(sudo|apt|apt-get|yum|brew|pip|pip3|kubectl|helm|systemctl|docker|terraform|aws|gcloud|curl|wget|chmod|mkdir)\s+\S+/;
+
+const DIFF_MARKER = /^[-+]{3} /m;
+
+const HUNK_MARKER = /^@@ /m;
+
+const URL = { g: /https?:\/\/\S+/g } as const;
+
+const SQL_SELECT = /^select\s+[\s\S]{0,600}?\sfrom\s+/im;
+
+const FIRST_WORD_SPLIT = /[\s,:;]+/;
+
+const HTTP_STATUS = /(?:\b|: )(4\d\d|5\d\d)(?:\b|s\b)/;
+
+const FAILURE_VERB =
+  /\b(return|returns|returning|threw|throws|throwing|fail|fails|failing|failed|error|errors|crash|crashes|crashed|respond|responds|5xx|4xx|since|until|stopped|broke|broken)\b/i;
+
+const QUESTION_OPENERS =
+  /^(¿?\s*["'“]?)(what|when|where|who|why|how|which|whose|is|are|do|does|did|was|wie|wer|wo|wann|warum|welche|was|que|qué|cómo|dónde|cuándo|quién|cuál|comment|combien|où|qui|почему|что|как|где|когда|кто|сколько|什么|怎么|为什么|几|哪|何|なぜ|どう|누구|무엇|어떻게|언제|어디|몇|क्या|कैसे|क्यों|कहाँ|ఎందుకు|ఎలా|ఏమిటి)\b/i;
+
+const EXCEPTION_WORD = /\b\p{Lu}\w{0,80}(Exception|Error|Fault|Failure)\b/u;
 
 /** ECONNREFUSED, OOMKilled, ETIMEDOUT, SIGKILL: an all-caps token about failure. */
 const CAPS_FAILURE = /\b([A-Z]{2,}[A-Za-z-]*|[A-Z][a-z]+[A-Z][A-Za-z]*)\b/;
@@ -189,6 +235,24 @@ function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/** The compiled form of one Latin needle: word-bounded, with an optional plural suffix. */
+function needlePattern(needle: string): RegExp {
+  const suffix = needle.endsWith("s") ? "" : "(?:es|s)?";
+  return new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRegExp(needle)}${suffix}([^\\p{L}\\p{N}]|$)`, "u");
+}
+
+/** Every needle compiles exactly once, at first use, never per classification. */
+const NEEDLE_PATTERNS = new Map<string, RegExp>();
+
+function compiledNeedle(needle: string): RegExp {
+  let pattern = NEEDLE_PATTERNS.get(needle);
+  if (pattern === undefined) {
+    pattern = needlePattern(needle);
+    NEEDLE_PATTERNS.set(needle, pattern);
+  }
+  return pattern;
+}
+
 function countHits(haystack: string, needles: readonly string[]): number {
   let count = 0;
   for (const needle of needles) {
@@ -196,12 +260,7 @@ function countHits(haystack: string, needles: readonly string[]): number {
       if (haystack.includes(needle)) count += 1;
       continue;
     }
-    const suffix = needle.endsWith("s") ? "" : "(?:es|s)?";
-    const pattern = new RegExp(
-      `(^|[^\\p{L}\\p{N}])${escapeRegExp(needle)}${suffix}([^\\p{L}\\p{N}]|$)`,
-      "u",
-    );
-    if (pattern.test(haystack)) count += 1;
+    if (compiledNeedle(needle).test(haystack)) count += 1;
   }
   return count;
 }
@@ -658,6 +717,12 @@ const SIGNAL_TABLE: readonly SignalSpec[] = [
     name: "long message",
     test: (c) => c.wordCount > 25,
     weights: { research: 0.1, planning: 0.1 },
+  },
+  {
+    name: "very long message (past the reading window)",
+    test: (c) => c.veryLong,
+    weights: { research: 0.2, planning: 0.2 },
+    rulesOut: ["small-talk", "simple-question"],
   },
 ];
 
