@@ -388,6 +388,7 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
   const resolveCommandCwd = vi.fn(async () => "/workspace");
   const sandboxDescription = { capabilities: { graphical: false } };
   const events = { append: vi.fn(async () => undefined), pauseRunForInput, finalizeRun };
+  const jobs = { enqueue: vi.fn(async () => undefined) };
   const secrets: string[] = [];
   const memoryRead = vi.fn(async () => ({ documents: [] }));
   const memorySearch = vi.fn(async () => []);
@@ -417,7 +418,7 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
     memoryProviders: { resolve: async () => null },
     memoryDocuments,
     events,
-    jobs: { enqueue: vi.fn(async () => undefined) },
+    jobs,
     secrets,
   } as unknown as Parameters<typeof createRunExecutor>[0]);
 
@@ -433,6 +434,7 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
     replayRequest,
     computer,
     events,
+    jobs,
     runRecord: run,
     runtimeRun,
     finalizeRun,
@@ -1101,6 +1103,139 @@ it("persists a sanitized typed provider failure through the executor", async () 
     }),
   );
 });
+
+it("puts back a rate-limited run that has shown nothing instead of failing it", async () => {
+  const f = fixture();
+  // biome-ignore lint/correctness/useYield: the provider refuses before its first event.
+  f.runtimeRun.mockImplementation(async function* (): AsyncGenerator<AgentRuntimeEvent> {
+    throw new ProviderError("Too many requests", "rate-limit");
+  });
+  await f.executor.continueRun("run-1", "worker-1");
+  expect(f.finalizeRun).not.toHaveBeenCalled();
+  expect(f.prisma.attempt.update).toHaveBeenCalledWith({
+    where: { id: "attempt-1" },
+    data: expect.objectContaining({ status: "provider_retry", error: "Too many requests" }),
+  });
+  const retryEvent = (
+    f.events.append.mock.calls as unknown as Array<
+      [{ type: string; payload: Record<string, unknown> }]
+    >
+  ).find(([input]) => input.type === "run.retry_scheduled")?.[0];
+  expect(retryEvent).toMatchObject({
+    runId: "run-1",
+    payload: { providerErrorKind: "rate-limit", attempt: 1 },
+  });
+  const waitMs = retryEvent?.payload.waitMs as number;
+  expect(waitMs).toBeGreaterThanOrEqual(2_000);
+  expect(waitMs).toBeLessThanOrEqual(2_500);
+  const job = continueJobsFor(f, "run-1")[0];
+  expect(continueJobsFor(f, "run-1")).toHaveLength(1);
+  expect(job?.availableAt?.getTime()).toBeGreaterThan(Date.now());
+  // The run gives its lease back while it waits and carries the moment it wakes again.
+  expect(f.prisma.run.updateMany).toHaveBeenCalledWith(
+    expect.objectContaining({
+      data: expect.objectContaining({
+        status: "queued",
+        leaseOwner: null,
+        providerRetryAt: expect.any(Date),
+      }),
+    }),
+  );
+});
+
+it("fails a rate-limited run with the provider's reason after its last retry", async () => {
+  const f = fixture();
+  f.prisma.attempt.count.mockResolvedValue(3);
+  // biome-ignore lint/correctness/useYield: the provider refuses before its first event.
+  f.runtimeRun.mockImplementation(async function* (): AsyncGenerator<AgentRuntimeEvent> {
+    throw new ProviderError("Too many requests", "rate-limit");
+  });
+  await f.executor.continueRun("run-1", "worker-1");
+  expect(f.finalizeRun).toHaveBeenCalledWith(
+    expect.objectContaining({
+      outcome: "failed",
+      error: "Too many requests",
+      providerErrorKind: "rate-limit",
+    }),
+  );
+  expect(f.events.append).not.toHaveBeenCalledWith(
+    expect.objectContaining({ type: "run.retry_scheduled" }),
+  );
+  expect(continueJobsFor(f, "run-1")).toEqual([]);
+});
+
+it("fails a rate-limited run at once once it has shown text", async () => {
+  const f = fixture();
+  f.runtimeRun.mockImplementation(async function* (): AsyncGenerator<AgentRuntimeEvent> {
+    yield { type: "text" as const, text: "Half an answer" };
+    throw new ProviderError("Too many requests", "rate-limit");
+  });
+  await f.executor.continueRun("run-1", "worker-1");
+  expect(f.finalizeRun).toHaveBeenCalledWith(
+    expect.objectContaining({
+      outcome: "failed",
+      error: "Too many requests",
+      providerErrorKind: "rate-limit",
+    }),
+  );
+  expect(f.events.append).not.toHaveBeenCalledWith(
+    expect.objectContaining({ type: "run.retry_scheduled" }),
+  );
+  expect(continueJobsFor(f, "run-1")).toEqual([]);
+});
+
+it("does not retry a rate-limited run that was asked to stop", async () => {
+  const f = fixture();
+  const findUnique = f.prisma.run.findUnique as unknown as {
+    mockImplementation(
+      fn: (args?: { select?: Record<string, unknown> }) => Promise<unknown>,
+    ): void;
+  };
+  findUnique.mockImplementation(async (args) =>
+    args?.select && Object.keys(args.select).join(",") === "cancelRequestedAt"
+      ? { cancelRequestedAt: new Date() }
+      : f.runRecord,
+  );
+  // biome-ignore lint/correctness/useYield: the provider refuses before its first event.
+  f.runtimeRun.mockImplementation(async function* (): AsyncGenerator<AgentRuntimeEvent> {
+    throw new ProviderError("Too many requests", "rate-limit");
+  });
+  await f.executor.continueRun("run-1", "worker-1");
+  expect(f.finalizeRun).not.toHaveBeenCalledWith(expect.objectContaining({ outcome: "failed" }));
+  expect(f.events.append).not.toHaveBeenCalledWith(
+    expect.objectContaining({ type: "run.retry_scheduled" }),
+  );
+  expect(continueJobsFor(f, "run-1")).toEqual([]);
+});
+
+it("never retries an auth refusal", async () => {
+  const f = fixture();
+  // biome-ignore lint/correctness/useYield: the provider refuses before its first event.
+  f.runtimeRun.mockImplementation(async function* (): AsyncGenerator<AgentRuntimeEvent> {
+    throw new ProviderError("Invalid API key", "auth");
+  });
+  await f.executor.continueRun("run-1", "worker-1");
+  expect(f.finalizeRun).toHaveBeenCalledWith(
+    expect.objectContaining({
+      outcome: "failed",
+      error: "Invalid API key",
+      providerErrorKind: "auth",
+    }),
+  );
+  expect(f.events.append).not.toHaveBeenCalledWith(
+    expect.objectContaining({ type: "run.retry_scheduled" }),
+  );
+  expect(continueJobsFor(f, "run-1")).toEqual([]);
+});
+
+/** Continue jobs enqueued for one run; other scheduled work (computer sleep) is not the run's. */
+function continueJobsFor(f: ReturnType<typeof fixture>, runId: string) {
+  return (f.jobs.enqueue.mock.calls as unknown as Array<
+    [{ name: string; payload?: { runId?: string }; availableAt?: Date }]
+  >)
+    .map(([job]) => job)
+    .filter((job) => job.name === "run.continue" && job.payload?.runId === runId);
+}
 
 it.each(["deleted-connection", "missing-secret", "unsupported-effort", "partial-pin"])(
   "stops %s before model or tool work without retry",

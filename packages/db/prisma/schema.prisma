@@ -686,6 +686,9 @@ model Run {
   leaseFence           Int              @default(0)
   screenLeaseId        String?
   leaseExpiresAt       DateTime?
+  /// When a run queued to retry a provider's rate limit wakes again; null while the
+  /// run holds a lease. Display only: the continue job's own availableAt schedules it.
+  providerRetryAt      DateTime?
   checkpoint           String?
   clientNonce          String?
   /// Thread position held for this run's reply from its first visible text, so a
