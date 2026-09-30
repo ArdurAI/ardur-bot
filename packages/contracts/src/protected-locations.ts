@@ -62,9 +62,14 @@ const locationPath = z
     "A location path names a folder or file inside the home folder, written from it.",
   );
 
-/** True when one path is the other or sits inside it. */
+/**
+ * True when one path is the other or sits inside it. Letter case and the two ways of
+ * writing an accented letter are ignored: on a Mac `~/.AWS` and `~/.aws` are one folder.
+ */
 function overlaps(left: string, right: string): boolean {
-  return left === right || left.startsWith(`${right}/`) || right.startsWith(`${left}/`);
+  const a = left.normalize("NFC").toLowerCase();
+  const b = right.normalize("NFC").toLowerCase();
+  return a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
 }
 
 /**

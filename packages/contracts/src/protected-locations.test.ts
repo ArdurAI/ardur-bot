@@ -267,7 +267,15 @@ describe("protected locations policy", () => {
   });
 
   it("refuses a custom location over a place that is already protected, at the schema", () => {
-    for (const paths of [["~/.aws"], ["~/.ssh/work"], ["~/.config"]])
+    for (const paths of [
+      ["~/.aws"],
+      ["~/.ssh/work"],
+      ["~/.config"],
+      // On a Mac these name the same folders as `~/.aws` and `~/.ssh`.
+      ["~/.AWS"],
+      ["~/.Ssh/work"],
+      ["~/.CONFIG"],
+    ])
       expect(
         ProtectedLocationsPolicyV1Schema.safeParse({
           version: 1,
@@ -282,6 +290,30 @@ describe("protected locations policy", () => {
         custom: [{ id: "mine", label: "Mine", paths: ["~/.config/mine"], kind: "credentials" }],
       }).success,
     ).toBe(true);
+  });
+
+  it("treats two spellings of one folder as the same place", () => {
+    // The same accented name, written as one character and as a letter plus a mark.
+    const composed = "~/caf\u00e9";
+    const decomposed = "~/cafe\u0301";
+    expect(
+      ProtectedLocationsPolicyV1Schema.safeParse({
+        version: 1,
+        custom: [
+          { id: "first", label: "First", paths: [composed], kind: "credentials" },
+          { id: "second", label: "Second", paths: [decomposed], kind: "credentials" },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      ProtectedLocationsPolicyV1Schema.safeParse({
+        version: 1,
+        custom: [
+          { id: "first", label: "First", paths: ["~/Keys"], kind: "credentials" },
+          { id: "second", label: "Second", paths: ["~/keys/work"], kind: "credentials" },
+        ],
+      }).success,
+    ).toBe(false);
   });
 
   it("refuses a custom id that repeats a default id, at the schema", () => {
