@@ -49,6 +49,7 @@ export * from "./openai-compatible-ui.js";
 export * from "./preferences.js";
 export * from "./privacy.js";
 export * from "./provider-errors.js";
+export * from "./provider-retry.js";
 export * from "./reactions.js";
 export * from "./request-usage.js";
 export * from "./room-policy.js";
