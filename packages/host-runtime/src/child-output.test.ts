@@ -1,5 +1,6 @@
 import type { ChildProcess } from "node:child_process";
 import { spawn } from "node:child_process";
+import { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 import { type ChildOutputLogger, captureChildOutput, childProcessLogger } from "./child-output.js";
 
@@ -18,6 +19,44 @@ function closed(child: ChildProcess): Promise<number | null> {
 }
 
 describe("captureChildOutput", () => {
+  it.each([true, false])(
+    "bounds a lazily generated 100 MiB line (newline: %s)",
+    async (newline) => {
+      const stderr = Readable.from(
+        (function* () {
+          const chunk = Buffer.alloc(100 * 1024 * 1024, "x");
+          if (newline) chunk[chunk.length - 1] = 10;
+          yield chunk;
+        })(),
+      );
+      const child = { stderr, stdout: null, pid: 123 } as unknown as ChildProcess;
+      let maxLoggedBytes = 0;
+      const captured = captureChildOutput(child, {
+        kind: "fixture",
+        logger: {
+          debug: (line) => {
+            maxLoggedBytes = Math.max(maxLoggedBytes, Buffer.byteLength(line));
+          },
+        },
+      });
+      await new Promise<void>((resolve) => stderr.once("end", resolve));
+      expect(captured.tail()).toBe("Output line exceeded the size limit.");
+      expect(Buffer.byteLength(captured.tail())).toBeLessThanOrEqual(64 * 1024);
+      expect(maxLoggedBytes).toBeLessThanOrEqual(8 * 1024);
+      captured.close();
+    },
+  );
+
+  it("enforces byte limits for multibyte lines too", async () => {
+    const { logger, debug } = fakeLogger();
+    const child = fakeChild('process.stderr.write("界".repeat(4000) + "\\nlast\\n");');
+    const captured = captureChildOutput(child, { kind: "fixture", logger });
+    await closed(child);
+    expect(captured.tail()).toBe("Output line exceeded the size limit.\nlast");
+    expect(JSON.stringify(debug.mock.calls)).not.toContain("界");
+    captured.close();
+  });
+
   it("serializes real Error causes through the production fallback", () => {
     const write = vi.spyOn(process.stderr, "write").mockReturnValue(true);
     try {
@@ -116,7 +155,7 @@ describe("captureChildOutput", () => {
     const captured = captureChildOutput(child, { kind: "fixture", logger });
     await closed(child);
     const tail = captured.tail();
-    expect(Buffer.byteLength(tail, "utf8")).toBeLessThanOrEqual(64 * 1024 + 1100);
+    expect(Buffer.byteLength(tail, "utf8")).toBeLessThanOrEqual(64 * 1024);
     expect(tail).toContain("0199");
     expect(tail).not.toContain("0000 ");
     captured.close();

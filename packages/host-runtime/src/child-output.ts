@@ -31,6 +31,7 @@ export interface CapturedChildOutput {
 
 const TAIL_LIMIT_BYTES = 64 * 1024;
 const PENDING_LIMIT_BYTES = 8 * 1024;
+const OVERSIZED_LINE = "Output line exceeded the size limit.";
 
 /**
  * One capture point for every child process Ardur starts. Replaces bare
@@ -47,11 +48,13 @@ export function captureChildOutput(
   const lines: string[] = [];
   let bytes = 0;
   const emit = (stream: "stdout" | "stderr", raw: string) => {
-    const line = redactMcpText(raw.replace(/\r+$/, ""), secrets);
+    const redacted = redactMcpText(raw.replace(/\r+$/, ""), secrets);
+    const line =
+      Buffer.byteLength(redacted, "utf8") > PENDING_LIMIT_BYTES ? OVERSIZED_LINE : redacted;
     if (!line) return;
     lines.push(line);
     bytes += Buffer.byteLength(line, "utf8") + 1;
-    while (bytes > TAIL_LIMIT_BYTES && lines.length > 1) {
+    while (bytes > TAIL_LIMIT_BYTES && lines.length > 0) {
       bytes -= Buffer.byteLength(lines.shift()!, "utf8") + 1;
     }
     options.logger.debug(`${options.kind} ${stream}: ${line}`, {
@@ -70,33 +73,39 @@ export function captureChildOutput(
     const decoder = new TextDecoder();
     let pending = "";
     let dropped = false;
-    const onData = (chunk: Buffer | string) => {
-      pending += typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true });
-      let newline = pending.indexOf("\n");
-      while (newline >= 0) {
-        const line = pending.slice(0, newline);
-        pending = pending.slice(newline + 1);
-        if (dropped) {
-          emit(name, "Output line exceeded the size limit.");
-          dropped = false;
-        } else {
-          emit(name, line);
+    const append = (text: string) => {
+      let start = 0;
+      while (start < text.length) {
+        const newline = text.indexOf("\n", start);
+        const end = newline < 0 ? text.length : newline;
+        if (!dropped) {
+          pending += text.slice(start, end);
+          if (Buffer.byteLength(pending, "utf8") > PENDING_LIMIT_BYTES) {
+            pending = "";
+            dropped = true;
+          }
         }
-        newline = pending.indexOf("\n");
-      }
-      if (pending.length > PENDING_LIMIT_BYTES) {
+        if (newline < 0) break;
+        emit(name, dropped ? OVERSIZED_LINE : pending);
         pending = "";
-        dropped = true;
+        dropped = false;
+        start = newline + 1;
+      }
+    };
+    const onData = (chunk: Buffer | string) => {
+      // Decode bounded slices even when a custom stream hands us one huge chunk.
+      for (let offset = 0; offset < chunk.length; offset += 4096) {
+        const part = chunk.slice(offset, offset + 4096);
+        append(typeof part === "string" ? part : decoder.decode(part, { stream: true }));
       }
     };
     const onEnd = () => {
-      pending += decoder.decode();
-      if (pending) {
-        if (dropped) emit(name, "Output line exceeded the size limit.");
+      append(decoder.decode());
+      if (pending || dropped) {
+        if (dropped) emit(name, OVERSIZED_LINE);
         else emit(name, pending);
         pending = "";
       }
-      decoder.decode();
     };
     stream.on("data", onData);
     stream.on("end", onEnd);
