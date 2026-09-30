@@ -28,6 +28,8 @@
     "./local-import": "./src/local-import.ts",
     "./dashboard": "./src/dashboard.ts",
     "./features": "./src/features.ts",
+    "./evidence": "./src/evidence.ts",
+    "./evidence-states": "./src/evidence-states.ts",
     "./rpc": "./src/rpc.ts",
     "./mcp": "./src/mcp.ts",
     "./host-environment": "./src/host-environment.js",

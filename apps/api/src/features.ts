@@ -7,7 +7,7 @@ import type {
 import type { PrismaClient } from "@ardurbot/db";
 import { ORPCError } from "@orpc/server";
 
-const availability: Record<SpaceFeature, boolean> = { governance: false };
+const availability: Record<SpaceFeature, boolean> = { governance: true };
 
 async function membership(prisma: PrismaClient, actor: Actor) {
   const member = await prisma.spaceMember.findUnique({

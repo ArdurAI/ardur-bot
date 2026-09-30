@@ -243,6 +243,7 @@ import type { RouterContext } from "./customization-routes.js";
 import { createCustomizationRoutes } from "./customization-routes.js";
 import { dashboardNow, routineOverview, usageSummary } from "./dashboard.js";
 import { getModelDestinations, setModelDestinations } from "./delegation-policy.js";
+import { runEvidenceSummary } from "./evidence.js";
 import { listSpaceFeatures, setSpaceFeature } from "./features.js";
 import {
   fleetBotPreference,
@@ -5999,6 +6000,11 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       ),
       set: authed.features.set.handler(({ context, input }) =>
         setSpaceFeature(deps.prisma, context.actor, input),
+      ),
+    },
+    evidence: {
+      runSummary: authed.evidence.runSummary.handler(({ context, input }) =>
+        runEvidenceSummary(deps.prisma, context.actor, input.runId),
       ),
     },
     board: {

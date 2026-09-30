@@ -17,7 +17,7 @@ export const featuresContract = {
     .output(SpaceFeatureEntrySchema),
 };
 
-/** Future projection only. No governance producer or summary RPC exists in this build. */
+/** Browser-safe projection of a run's decision evidence. */
 export type GovernanceSummary = {
   sessionId: string;
   recordedAt: string;
