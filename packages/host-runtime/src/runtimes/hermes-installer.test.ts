@@ -16,7 +16,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
 import { expect, it, vi } from "vitest";
-import { gitTreeHash } from "./hermes-archive.js";
+import { gitTreeHash, gitTreeIdOfArchive } from "./hermes-archive.js";
 import {
   HERMES_SOURCE_PIN,
   HERMES_SOURCE_TREE,
@@ -147,10 +147,10 @@ function gzipTar(parts: Buffer[]): Buffer {
   return gzipSync(Buffer.concat([...parts, Buffer.alloc(1024)]));
 }
 
-function sourceArchive(): Buffer {
+function sourceArchiveEntries(): Buffer[] {
   const [alpha, beta, plain, script] = files;
   if (!alpha || !beta || !plain || !script) throw new Error("fixture files missing");
-  return gzipTar([
+  return [
     pax("g", { comment: "fixture" }),
     pax("x", { path: "pkg/dir/a.txt" }),
     entry({ name: "short-name", data: alpha.data, mode: alpha.mode }),
@@ -158,7 +158,28 @@ function sourceArchive(): Buffer {
     entry({ name: "pkg/dir.txt", data: plain.data, mode: plain.mode }),
     entry({ name: "pkg/script.sh", data: script.data, mode: script.mode }),
     entry({ name: "pkg/dir/", type: "5", mode: 0o755 }),
+  ];
+}
+
+function sourceArchive(): Buffer {
+  return gzipTar(sourceArchiveEntries());
+}
+
+/**
+ * The same verified archive plus two entries whose paths differ only by letter
+ * case: a disk that ignores case cannot hold both, so extraction keeps the first.
+ * The tree id still matches, because both files are part of the verified tree.
+ */
+function collidingArchive(): Buffer {
+  return gzipTar([
+    ...sourceArchiveEntries(),
+    entry({ name: "pkg/notes/Team.txt", data: Buffer.from("first\n") }),
+    entry({ name: "pkg/notes/team.txt", data: Buffer.from("second\n") }),
   ]);
+}
+
+function collidingTreeId(): Promise<string> {
+  return gitTreeIdOfArchive(collidingArchive(), 2 * 1024 * 1024);
 }
 
 function uvScript(report: string, statusPath: string): string {
@@ -479,6 +500,36 @@ it("refuses a tampered archive before anything is written", async () => {
       state: "failed",
       message: HERMES_DOWNLOAD_MISMATCH,
     });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("installs a verified archive whose paths collide only by letter case", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "hermes-case-install-"));
+  const report = path.join(root, "uv-report.ndjson");
+  const expectedTree = await collidingTreeId();
+  const uv = uvArchive(uvScript(report, path.join(root, "install-status.json")));
+  const fetchImpl: HermesFetch = async (input) => {
+    if (input === HERMES_SOURCE_URL) return new Response(collidingArchive());
+    return new Response(uv.gzip);
+  };
+  try {
+    await installHermes({
+      root,
+      fetch: fetchImpl,
+      platform: "linux",
+      arch: "x64",
+      expectedTree,
+      sources: sourceMap(),
+      uvSha256: uv.sha256,
+    });
+    const versionDir = path.join(root, "runtimes", hermesVersionDirName());
+    // The first of the colliding pair is kept; the disk cannot hold the second.
+    expect(await readFile(path.join(versionDir, "notes", "Team.txt"), "utf8")).toBe("first\n");
+    const marker = JSON.parse(await readFile(path.join(versionDir, ".ardur-install.json"), "utf8"));
+    expect(marker.tree).toBe(expectedTree);
+    expect(readHermesInstallStatus(root)?.state).toBe("ready");
   } finally {
     await rm(root, { recursive: true, force: true });
   }

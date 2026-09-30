@@ -166,6 +166,12 @@ export async function extractSourceArchive(
   let files = 0;
   let bytes = 0;
   let top: string | undefined;
+  // Relative paths this run wrote, exactly and case-folded. A disk that ignores
+  // letter case cannot hold two paths that differ only by case, so a later such
+  // entry is skipped; every other EEXIST (a real duplicate path, or a file this
+  // run never wrote) means a malformed archive.
+  const written = new Set<string>();
+  const writtenFolded = new Set<string>();
   for (const entry of readTar(tar)) {
     if (entry.kind === "skip") continue;
     if (entry.kind === "refuse") throw new HermesArchiveError();
@@ -180,7 +186,19 @@ export async function extractSourceArchive(
       if (files > limits.files || bytes > limits.bytes) throw new HermesArchiveError();
       const target = inside(dest, relative);
       await mkdir(path.dirname(target), { recursive: true, mode: 0o755 });
-      await writeFile(target, entry.data, { mode: entry.mode, flag: "wx" });
+      try {
+        await writeFile(target, entry.data, { mode: entry.mode, flag: "wx" });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        if (written.has(relative) || !writtenFolded.has(foldCase(relative)))
+          throw new HermesArchiveError();
+        console.info(
+          `hermes install: skipped ${relative}: this disk cannot hold it beside an extracted file whose path differs only by letter case`,
+        );
+        continue;
+      }
+      written.add(relative);
+      writtenFolded.add(foldCase(relative));
       await chmod(target, entry.mode);
       continue;
     }
@@ -243,6 +261,11 @@ function safeParts(entryPath: string): string[] {
   if (parts.some((part) => part === "" || part === "." || part === ".."))
     throw new HermesArchiveError();
   return parts;
+}
+
+/** Case-fold a relative path the way macOS and Windows compare file names. */
+function foldCase(relative: string): string {
+  return relative.toLocaleLowerCase("en-US");
 }
 
 function inside(dest: string, relative: string): string {

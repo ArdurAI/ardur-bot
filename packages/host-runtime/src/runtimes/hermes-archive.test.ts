@@ -4,7 +4,7 @@ import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import {
   extractSourceArchive,
   extractUvBinary,
@@ -241,6 +241,69 @@ it("still refuses link entries", async () => {
         limits,
       ),
     ).rejects.toThrow("archive refused");
+  } finally {
+    await rm(dest, { recursive: true, force: true });
+  }
+});
+
+it.skipIf(process.platform === "win32")(
+  "keeps the first of two entries whose paths differ only by letter case",
+  async () => {
+    const dest = await mkdtemp(path.join(tmpdir(), "hermes-case-pair-"));
+    const logged: string[] = [];
+    const info = vi.spyOn(console, "info").mockImplementation((...args) => {
+      logged.push(args.join(" "));
+    });
+    try {
+      await extractSourceArchive(
+        gzipTar([
+          entry({ name: "pkg/notes/Team.txt", data: Buffer.from("first\n") }),
+          entry({ name: "pkg/notes/team.txt", data: Buffer.from("second\n") }),
+        ]),
+        dest,
+        limits,
+      );
+      expect(await readFile(path.join(dest, "notes", "Team.txt"), "utf8")).toBe("first\n");
+      expect(logged.join("\n")).toContain("notes/team.txt");
+      expect(logged.join("\n")).toContain("letter case");
+    } finally {
+      info.mockRestore();
+      await rm(dest, { recursive: true, force: true });
+    }
+  },
+);
+
+it("refuses an exact duplicate path", async () => {
+  const dest = await mkdtemp(path.join(tmpdir(), "hermes-dupe-"));
+  try {
+    await expect(
+      extractSourceArchive(
+        gzipTar([
+          entry({ name: "pkg/plain.txt", data: Buffer.from("one\n") }),
+          entry({ name: "pkg/plain.txt", data: Buffer.from("two\n") }),
+        ]),
+        dest,
+        limits,
+      ),
+    ).rejects.toThrow("archive refused");
+  } finally {
+    await rm(dest, { recursive: true, force: true });
+  }
+});
+
+it("refuses an entry over a file the archive did not write", async () => {
+  const dest = await mkdtemp(path.join(tmpdir(), "hermes-planted-"));
+  try {
+    await mkdir(path.join(dest, "notes"), { recursive: true });
+    await writeFile(path.join(dest, "notes", "team.txt"), "planted\n");
+    await expect(
+      extractSourceArchive(
+        gzipTar([entry({ name: "pkg/notes/Team.txt", data: Buffer.from("first\n") })]),
+        dest,
+        limits,
+      ),
+    ).rejects.toThrow("archive refused");
+    expect(await readFile(path.join(dest, "notes", "team.txt"), "utf8")).toBe("planted\n");
   } finally {
     await rm(dest, { recursive: true, force: true });
   }
