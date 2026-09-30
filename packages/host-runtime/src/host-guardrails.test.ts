@@ -72,6 +72,20 @@ describe("seatbeltProfile", () => {
     expect(profile).toContain('(subpath "/data/back\\\\slash")');
   });
 
+  it("writes a control character the way the profile reads it", () => {
+    const profile = seatbeltProfile({
+      paths: ["/data/odd\u0001name", "/data/bell\bname", "/data/tab\tname", "/data/del\u007fname"],
+      ports: [],
+      sockets: ["/run/odd\u001bengine.sock"],
+    });
+    expect(profile).toContain('(subpath "/data/odd\\x01name")');
+    expect(profile).toContain('(subpath "/data/bell\\x08name")');
+    expect(profile).toContain('(subpath "/data/tab\\x09name")');
+    expect(profile).toContain('(subpath "/data/del\\x7fname")');
+    expect(profile).toContain('(literal "/run/odd\\x1bengine.sock")');
+    expect(profile).not.toContain("\\u00");
+  });
+
   it("fails closed on paths and ports it cannot express", () => {
     expect(() => seatbeltProfile({ paths: ["relative/.env"], ports: [], sockets: [] })).toThrow(
       "Invalid host guardrail path.",
@@ -447,6 +461,26 @@ describe.skipIf(process.platform !== "darwin")("seatbelt profile under real sand
     const allowedRun = await sandboxed(profile, ["/bin/cat", allowed]);
     expect(allowedRun.code).toBe(0);
     expect(allowedRun.stdout).toBe("ordinary work\n");
+  });
+
+  it("fails reading a denied folder whose name has a control character", async () => {
+    // JSON writes such a character as `\u0001` or `\b`. The profile reads those as the
+    // letters themselves, so the rule names another path and denies nothing.
+    const root = await mkdtemp(path.join(tmpdir(), "guard-exec-name-"));
+    cleanup.push(root);
+    for (const character of ["\u0001", "\b", "\t", "\u000b", "\f", "\u001b", "\u001f", "\u007f"]) {
+      const deniedDir = path.join(root, `odd${character}name`);
+      await mkdir(deniedDir);
+      await writeFile(path.join(deniedDir, "secrets.env"), "FAKE=1\n");
+      const profile = seatbeltProfile({
+        paths: await resolveGuardrailPaths([deniedDir]),
+        ports: [],
+        sockets: [],
+      });
+      const denied = await sandboxed(profile, ["/bin/cat", path.join(deniedDir, "secrets.env")]);
+      expect(denied.code, JSON.stringify(character)).not.toBe(0);
+      expect(denied.stdout, JSON.stringify(character)).not.toContain("FAKE=1");
+    }
   });
 
   it("fails connecting to a denied loopback port while another local port still connects", async () => {
