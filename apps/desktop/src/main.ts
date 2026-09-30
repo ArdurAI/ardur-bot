@@ -107,6 +107,7 @@ import {
   sessionPartitionForServerUrl,
 } from "./setup-config.js";
 import { clearSetup, readSetup, writeSetup } from "./setup-store.js";
+import { installSmokeProgress } from "./startup.js";
 import { collectStorageUsage } from "./storage-usage.js";
 import { systemSenderAllowed } from "./system/install.js";
 import { setStartup, startupEnabled, startupSupported } from "./system/native-controls.js";
@@ -213,12 +214,17 @@ const remoteListener = new RemoteListener();
 
 markOnce("rk:main:module-evaluated");
 configureDesktopUserData(app, PERFORMANCE_USER_DATA);
+installSmokeProgress?.stage("isolated profile configured");
 // Match the installed ardur.desktop entry for Wayland/X11 grouping while
 // retaining the legacy internal name used by encrypted storage.
 if (process.platform === "linux") app.setDesktopName("ardur");
 // Chromium ignores this switch once ready; it must be appended before that.
 capDiskCacheSize(app.commandLine);
-if (!app.requestSingleInstanceLock()) process.exit(INSTALL_SMOKE ? 1 : 0);
+if (!app.requestSingleInstanceLock()) {
+  if (INSTALL_SMOKE) console.error("smoke: isolated profile instance lock refused");
+  process.exit(INSTALL_SMOKE ? 1 : 0);
+}
+installSmokeProgress?.stage("instance lock acquired; waiting for Electron ready");
 let pendingIntegrationReturn: string | null = null;
 function returnToIntegration(value: string) {
   const id = integrationReturnId(value);
@@ -1419,7 +1425,8 @@ function safeOrigin(targetUrl: string) {
   }
 }
 
-app.whenReady().then(async () => {
+const startup = app.whenReady().then(async () => {
+  installSmokeProgress?.stage("Electron ready; IPC installing");
   registerIntegrationProtocol(app);
   const initialLink = process.argv.find((arg) => arg.startsWith("ardurbot:"));
   if (initialLink) pendingIntegrationReturn = integrationReturnId(initialLink);
@@ -1463,6 +1470,7 @@ app.whenReady().then(async () => {
     },
   });
   legacyCompose = await legacyStackEnvExists(userDataDir);
+  installSmokeProgress?.stage("local controllers configuring");
   let binaries: Awaited<ReturnType<typeof loadEmbeddedPostgres>> | undefined;
   // Loaded when local mode first starts: a Compose launch never needs these binaries,
   // and a missing package becomes one sentence in a window whose handlers exist.
@@ -1647,6 +1655,7 @@ app.whenReady().then(async () => {
     });
   }
   const boot = new BootSnapshotStore(userDataDir);
+  installSmokeProgress?.stage("profile loading");
   bootSnapshot = boot;
   await boot.load();
   ipcMain.handle("desktop.boot.save", async (event, snapshot: unknown) => {
@@ -1675,6 +1684,7 @@ app.whenReady().then(async () => {
   const icon = developmentIcon();
   if (process.platform === "darwin" && icon) app.dock?.setIcon(icon);
   installApplicationMenu();
+  installSmokeProgress?.stage("application menu installed");
   const browserAuthAttempts = new Map<string, AbortController>();
   const cancelBrowserAuth = () => {
     for (const attempt of browserAuthAttempts.values()) attempt.abort();
@@ -1984,6 +1994,7 @@ app.whenReady().then(async () => {
     });
     dockBadge?.sync();
   };
+  installSmokeProgress?.stage("runtime installing");
   desktopSystem = await installSystemRuntime({
     window: () => mainWindow,
     target: () => currentTargetUrl,
@@ -2029,21 +2040,11 @@ app.whenReady().then(async () => {
       return mainWindow;
     },
   });
+  installSmokeProgress?.stage("runtime installed");
   if (process.platform !== "darwin") setMenuBar(true);
+  installSmokeProgress?.stage("tray configured");
 
   if (INSTALL_SMOKE) {
-    const watchdog = setTimeout(() => {
-      console.error("Install smoke timed out.");
-      app.exit(1);
-    }, 150_000);
-    const fail = () => {
-      console.error("Install smoke detected a crashed child process.");
-      app.exit(1);
-    };
-    app.on("child-process-gone", (_event, details) => {
-      if (details.reason !== "clean-exit") fail();
-    });
-    app.on("render-process-gone", fail);
     try {
       if (legacyCompose) throw new Error("Install smoke requires a fresh local profile.");
       await runInstallSmoke({
@@ -2061,12 +2062,12 @@ app.whenReady().then(async () => {
         },
         stop: () => localMode.quit(),
         report: (message) => console.log(message),
+        stage: (message) => installSmokeProgress?.stage(message),
       });
-      clearTimeout(watchdog);
+      installSmokeProgress?.stage("quit requested");
       app.quit();
     } catch (error) {
-      console.error("Install smoke failed.", error);
-      app.exit(1);
+      installSmokeProgress?.fail(error);
     }
     return;
   }
@@ -2121,6 +2122,10 @@ app.whenReady().then(async () => {
     if (launchAppSession !== null) cacheSessions.push(launchAppSession.value);
     scheduleLaunchCacheMaintenance(cacheSessions);
   }
+});
+void startup.catch((error: unknown) => {
+  if (installSmokeProgress) installSmokeProgress.fail(error);
+  else throw error;
 });
 
 // A normal quit has already stopped them; this covers SIGTERM and crashes.

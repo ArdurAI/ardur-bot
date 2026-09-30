@@ -9,6 +9,8 @@ const mac = new URL("./release/install-acceptance-mac.sh", import.meta.url);
 describe("macOS install verdict", () => {
   it.each([
     [false, 3, "Ardur.app: rejected\nsource=no usable signature\n", true],
+    [false, 3, "Ardur.app: rejected\n", true],
+    [true, 3, "Ardur.app: rejected\n", false],
     [true, 0, "Ardur.app: accepted\nsource=Notarized Developer ID\n", true],
     [false, 3, "Ardur.app: rejected\nsource=no resources\n", false],
     [false, 3, "Ardur.app: rejected\nsource=no usable signature\ndamaged\n", false],

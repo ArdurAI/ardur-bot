@@ -1,5 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
-import { installSmokeEnabled, runInstallSmoke } from "./install-smoke.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  installSmokeEnabled,
+  runInstallSmoke,
+  startInstallSmokeWatchdog,
+} from "./install-smoke.js";
 
 function boundary() {
   return {
@@ -9,6 +13,7 @@ function boundary() {
     screenshot: vi.fn(async () => undefined),
     stop: vi.fn(async () => undefined),
     report: vi.fn(),
+    stage: vi.fn(),
   };
 }
 
@@ -33,6 +38,15 @@ describe("install acceptance smoke", () => {
       deps.report,
     ].map((call) => call.mock.invocationCallOrder[0]);
     expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(deps.stage.mock.calls.map(([stage]) => stage)).toEqual([
+      "services starting",
+      "health ok",
+      "window loading",
+      "window loaded",
+      "screenshot capturing",
+      "services stopping",
+      "services stopped",
+    ]);
   });
 
   it.each(["stack", "health", "window", "capture", "cleanup"])(
@@ -49,4 +63,36 @@ describe("install acceptance smoke", () => {
       expect(deps.report).not.toHaveBeenCalled();
     },
   );
+});
+
+describe("install smoke startup watchdog", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it.each(["main module loading", "runtime installing", "services stopping", "quit requested"])(
+    "bounds a hang at %s, including before services start and after success",
+    (stage) => {
+      vi.useFakeTimers();
+      const deps = { report: vi.fn(), exit: vi.fn() };
+      const progress = startInstallSmokeWatchdog(deps);
+      expect(deps.report).toHaveBeenCalledWith("smoke: main module loading");
+      progress.stage(stage);
+      vi.advanceTimersByTime(149_999);
+      expect(deps.exit).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(deps.report).toHaveBeenLastCalledWith(`smoke: timed out at ${stage}`);
+      expect(deps.exit).toHaveBeenCalledWith(1);
+      progress.dispose();
+    },
+  );
+
+  it("reports an import failure with the stage and exits nonzero", () => {
+    const deps = { report: vi.fn(), exit: vi.fn() };
+    const progress = startInstallSmokeWatchdog(deps);
+    progress.fail(new Error("unsupported module"));
+    expect(deps.report).toHaveBeenLastCalledWith(
+      "smoke: failed at main module loading: Error: unsupported module",
+    );
+    expect(deps.exit).toHaveBeenCalledWith(1);
+    progress.dispose();
+  });
 });

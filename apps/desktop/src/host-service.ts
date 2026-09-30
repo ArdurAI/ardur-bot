@@ -5,7 +5,7 @@ import { mkdir, realpath, rm } from "node:fs/promises";
 import path from "node:path";
 import { filterHostEnvironment } from "@ardurbot/contracts/host-environment";
 import { hostRegistrationIdentityText } from "@ardurbot/contracts/host-registration-identity";
-import { GUARDED_DATA_DIR_CHILDREN } from "@ardurbot/host-runtime/host-guardrails";
+import { GUARDED_DATA_DIR_CHILDREN } from "./host-guardrails.js";
 import { readPrivateFile, writePrivateFile } from "./setup-store.js";
 
 export interface HostServiceConfig {
