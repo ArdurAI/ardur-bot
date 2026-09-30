@@ -9,6 +9,7 @@ import {
 
 it("redacts a bridge-shaped credential handed to the model probe's environment", async () => {
   vi.stubEnv("LOG_LEVEL", "debug");
+  vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", "1");
   const secret = "a1".repeat(32);
   const env = vi
     .spyOn(hostEnvironment, "nativeEnvironment")

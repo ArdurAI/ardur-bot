@@ -30,6 +30,7 @@ function launched(binary: string, args: readonly string[]) {
 const roots: string[] = [];
 it("redacts bare bridge-shaped environment and argument credentials in probe stderr", async () => {
   vi.stubEnv("LOG_LEVEL", "debug");
+  vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", "1");
   const write = vi.spyOn(process.stderr, "write").mockReturnValue(true);
   const processChild = child();
   processChild.stdin.on("finish", () =>

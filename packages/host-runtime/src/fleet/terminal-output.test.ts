@@ -14,6 +14,7 @@ it.each(["supplied", "ssh", "tls"])(
   "redacts %s transport credentials from terminal stderr",
   async (kind) => {
     vi.stubEnv("LOG_LEVEL", "debug");
+    vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", "1");
     const write = vi.spyOn(process.stderr, "write").mockReturnValue(true);
     const secret = "a1".repeat(32);
     const multiline = `fixture-private-header\n${secret}\nfixture-private-footer`;

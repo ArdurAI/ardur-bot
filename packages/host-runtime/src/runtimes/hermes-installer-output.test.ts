@@ -3,6 +3,7 @@ import { defaultCommand } from "./hermes-installer.js";
 
 it("redacts bridge-shaped installer environment and argument credentials before diagnostics", async () => {
   vi.stubEnv("LOG_LEVEL", "debug");
+  vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", "1");
   const write = vi.spyOn(process.stderr, "write").mockReturnValue(true);
   const environmentKey = "a1".repeat(32);
   const argumentKey = "b2".repeat(32);

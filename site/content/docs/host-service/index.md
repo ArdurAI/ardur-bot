@@ -206,23 +206,26 @@ Hermes installer) has its stderr read line by line by one capture helper,
 `captureChildOutput` in `packages/host-runtime/src/child-output.ts`; stdout is
 captured too where the protocol does not already own it.
 
-- Each redacted line is offered to the debug log, tagged with the process kind,
-  pid and run id. Run the service with `LOG_LEVEL=debug` to see them. The fallback
-  logger uses a bounded queue; a slow sink drops debug lines instead of blocking
-  the child, and reports the dropped count when the sink recovers.
-- Every line is redacted with the run's secrets and the shared text redaction
-  (bearer tokens, `token=`/`password=` assignments, credentials in URLs, whole
-  quoted credential values, GitHub and AWS credentials, JWTs, `sk-` and `xai-`
-  keys, and email addresses) before it is stored or logged. Nothing captured
-  leaves the helper unredacted.
-- The helper keeps a bounded ring buffer of the last 64 KiB of output. Lines over
-  8 KiB are replaced with a size-limit marker, not a potentially secret-bearing
-  fragment. Failure tails and serialized diagnostics are redacted and logged
-  only at debug. Hermes failures propagate only the kind, exit code or signal,
-  protocol phase and duration; the worker's error-level record is a content-free
-  summary, not the original failure message or cause chain.
-- Message and file contents never appear at info level. Info and above carry
-  outcomes only; process output and failure tails are debug-level detail.
+- By default, child output never reaches a log sink, even with `LOG_LEVEL=debug`.
+  It stays in private bounded memory until the process ends. Failure logs contain
+  only structured facts: process kind, pid, run id, exit code or signal, phase,
+  duration, byte and line counts, and whether output was produced. Failure causes
+  never include output tails.
+- Detailed process logging requires `ARDUR_DETAILED_PROCESS_LOGS=1` and a debug
+  logger. A Settings switch comes later. Known credentials are redacted on each
+  stream before line framing, including credentials split across chunks or
+  physical lines. Shared text redaction also covers sensitive assignments,
+  scheme-prefixed credentials, credentialed URLs, GitHub tokens (including
+  `github_pat_`), AWS credentials, JWTs, `sk-` and `xai-` keys, and emails.
+- Detailed mode is best-effort, not a guarantee that arbitrary text contains no
+  secrets: unknown credential formats and transformations may evade recognition.
+  Leave it off for private workloads. Message and file contents never appear at
+  info or above, even with detailed mode enabled.
+- Tails stay within 64 KiB and lines within 8 KiB. Oversized lines are replaced
+  entirely by a size-limit marker. A credential or carry window too large to
+  redact safely suppresses the rest of that stream. The fallback logger's bounded
+  debug queue drops excess lines under backpressure without blocking child reads;
+  error records are never evicted, and recovery reports the dropped debug count.
 
 Three sites keep ignoring a stream on purpose, each with a reason in source and
 in the guard test's allow list: the two Windows `taskkill` helpers own no

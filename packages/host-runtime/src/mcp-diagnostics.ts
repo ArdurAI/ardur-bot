@@ -36,6 +36,13 @@ function secretSpellings(secret: string): Set<string> {
   return new Set([secret, encodeURIComponent(secret), JSON.stringify(secret).slice(1, -1)]);
 }
 
+export function mcpSecretSpellings(secrets: readonly string[]): string[] {
+  const active = secrets.flatMap((secret) => [secret, ...secret.split(/\r?\n/).filter(Boolean)]);
+  return [
+    ...new Set(active.filter(Boolean).flatMap((secret) => [...secretSpellings(secret)])),
+  ].sort((a, b) => b.length - a.length);
+}
+
 export function mcpTextContainsSecret(value: string, secret: string): boolean {
   return (
     Boolean(secret) && [...secretSpellings(secret)].some((spelling) => value.includes(spelling))
@@ -44,11 +51,8 @@ export function mcpTextContainsSecret(value: string, secret: string): boolean {
 
 export function redactMcpText(value: string, secrets: readonly string[] = []): string {
   let result = value;
-  const active = secrets.flatMap((secret) => [secret, ...secret.split(/\r?\n/).filter(Boolean)]);
-  for (const secret of [...new Set(active)].filter(Boolean).sort((a, b) => b.length - a.length)) {
-    for (const spelling of secretSpellings(secret))
-      result = result.split(spelling).join("[redacted]");
-  }
+  for (const spelling of mcpSecretSpellings(secrets))
+    result = result.split(spelling).join("[redacted]");
   return redactSensitiveText(result)
     .replaceAll("[Redacted]", "[redacted]")
     .replace(new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*[A-Za-z]`, "g"), "");

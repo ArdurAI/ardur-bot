@@ -8,7 +8,7 @@ import { PassThrough, Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import type { AgentRunRequest, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
 import { HermesExecutionEnvelopeSchema } from "@ardurbot/contracts/runtime-config";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createLogger } from "../../../logging/src/logger.js";
 import { createTestSink } from "../../../logging/src/test-sink.js";
 import profileFixture from "../../python/tests/valid_profile.json" with { type: "json" };
@@ -80,7 +80,9 @@ function turnFinishSignal(runId: string) {
 }
 
 describe("HermesRuntime M0 ACP seam", () => {
+  afterEach(() => vi.unstubAllEnvs());
   it("redacts provider and overridden bridge credentials from child stderr", async () => {
+    vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", "1");
     const debug: string[] = [];
     const adapter = new HermesRuntime({
       command: process.execPath,
@@ -106,46 +108,58 @@ describe("HermesRuntime M0 ACP seam", () => {
     expect(debug.join("\n")).not.toContain(request().model.apiKey!);
   });
 
-  it("keeps prompt/file content out of production fallback and worker logs at info", async () => {
-    vi.stubEnv("LOG_LEVEL", "info");
-    const records: string[] = [];
-    const sink = new Writable({
-      write(chunk, _encoding, done) {
-        records.push(String(chunk));
-        done();
-      },
-    });
-    const adapter = new HermesRuntime({
-      command: process.execPath,
-      args: [fixture, "stderr-failure"],
-      launch: launchUnconfinedProcess,
-      logger: createChildProcessLogger(sink),
-    });
-    try {
-      const failure = await collect(adapter, request()).catch((error: unknown) => error);
-      const workerSink = createTestSink();
-      createLogger({ service: "fixture-worker", level: "info", sinks: [workerSink] }).error(
-        "Run failed",
-        failure,
-      );
-      await new Promise<void>((resolve) => setImmediate(resolve));
-      const combined = records.join("") + JSON.stringify(workerSink.events);
-      expect(combined).not.toMatch(
-        /fixture diagnostic before failure|fixture prompt contents|fixture document contents|fixture-key-123/,
-      );
-      expect(combined).toContain("prompt");
-      expect(combined).toContain("durationMs");
-      const host = JSON.parse(records[0]!);
-      expect(JSON.parse(host.error.message)).toMatchObject({
-        phase: "prompt",
-        exitCode: 4,
-        durationMs: expect.any(Number),
+  it.each(["info", "debug"] as const)(
+    "keeps all child content out of fallback and worker logs by default at %s",
+    async (level) => {
+      vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", undefined);
+      vi.stubEnv("LOG_LEVEL", level);
+      const records: string[] = [];
+      const sink = new Writable({
+        write(chunk, _encoding, done) {
+          records.push(String(chunk));
+          done();
+        },
       });
-    } finally {
-      sink.destroy();
-      vi.unstubAllEnvs();
-    }
-  });
+      const fallback = createChildProcessLogger(sink);
+      const debug = vi.fn((message: string, bindings?: Record<string, unknown>) =>
+        fallback.debug(message, bindings),
+      );
+      const adapter = new HermesRuntime({
+        command: process.execPath,
+        args: [fixture, "stderr-failure"],
+        launch: launchUnconfinedProcess,
+        logger: { ...fallback, debug },
+      });
+      try {
+        const failure = await collect(adapter, request()).catch((error: unknown) => error);
+        const workerSink = createTestSink();
+        createLogger({ service: "fixture-worker", level, sinks: [workerSink] }).error(
+          "Run failed",
+          failure,
+        );
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        const combined = records.join("") + JSON.stringify(workerSink.events);
+        expect(debug).not.toHaveBeenCalled();
+        expect(combined).not.toMatch(
+          /fixture diagnostic before failure|fixture prompt contents|fixture document contents|fixture-key-123/,
+        );
+        expect(combined).toContain("prompt");
+        expect(combined).toContain("durationMs");
+        const host = JSON.parse(records[0]!);
+        expect(JSON.parse(host.error.message)).toMatchObject({
+          phase: "prompt",
+          exitCode: 4,
+          durationMs: expect.any(Number),
+          byteCount: expect.any(Number),
+          lineCount: expect.any(Number),
+          outputProduced: true,
+        });
+      } finally {
+        sink.destroy();
+        vi.unstubAllEnvs();
+      }
+    },
+  );
 
   const profile = HermesExecutionEnvelopeSchema.parse(profileFixture);
   const profileRequest = () => {
@@ -759,6 +773,7 @@ describe("HermesRuntime M0 ACP seam", () => {
   }
 
   it("keeps the stderr tail at debug and only safe facts in failure causes", async () => {
+    vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", "1");
     const errors: { message: string; error: unknown }[] = [];
     const debugLines: string[] = [];
     const adapter = new HermesRuntime({

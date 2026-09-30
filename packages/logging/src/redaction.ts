@@ -8,10 +8,17 @@ const REDACT_KEYS = new Set([
   "query",
   "rawheaders",
   "headers",
-  "passwd",
-  "api_key",
 ]);
-const SECRET_KEY = /password|secret|token|authorization|cookie|credential|apikey/;
+// Bindings and text assignments must recognize the same credential families.
+const SENSITIVE_KEY =
+  /password|passwd|secret|token|credential|authorization|cookie|(?:api|private|access|client)key/i;
+// References, counts and presence flags describe credentials without containing them.
+const METADATA_KEY = /(?:secret|token|credential)(?:id|count|absent|present)$/i;
+
+function isSensitiveKey(key: string): boolean {
+  const normalized = key.replace(/[^a-z0-9]/gi, "");
+  return !METADATA_KEY.test(normalized) && SENSITIVE_KEY.test(normalized);
+}
 
 function redactValue(value: unknown, seen = new WeakSet<object>()): unknown {
   if (value === null || value === undefined) return value;
@@ -55,10 +62,6 @@ const EMAIL = /(?<![A-Z0-9._%+-])[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const CREDENTIAL_URL = /(https?:\/\/)[^\s/:@]+:[^\s/@]+@/gi;
 const ASSIGNMENT_KEY =
   /(["'])([^"'\r\n]*)\1\s*[:=]\s*|(?<![A-Za-z0-9_-])([A-Za-z0-9_-]+)["']?\s*[:=]\s*/g;
-const TEXT_SECRET_KEY =
-  /password|passwd|secret|token|credential|authorization|cookie|(?:api|private|access|client)[_\s-]?key/i;
-// References, counts and presence flags describe credentials without containing them.
-const TEXT_METADATA_KEY = /(?:secret|token|credential)(?:id|count|absent|present)$/i;
 // Empty, elided and template values are documentation placeholders, not secrets.
 const PLACEHOLDER = /^(?:|\[Redacted\]|[.*…]+|<[^<>]+>|\$\{[^{}]+\}|\{\{[^{}]+\}\})$/i;
 
@@ -98,11 +101,7 @@ function redactAssignments(text: string): string {
   let copied = 0;
   for (let match = keys.exec(text); match; match = keys.exec(text)) {
     const key = match[2] ?? match[3]!;
-    if (TEXT_METADATA_KEY.test(key.replace(/[^a-z0-9]/gi, ""))) continue;
-    if (
-      !TEXT_SECRET_KEY.test(key) &&
-      !(match[2] !== undefined ? /email/i.test(key) : /^key$/i.test(key))
-    )
+    if (!isSensitiveKey(key) && !(match[2] !== undefined ? /email/i.test(key) : /^key$/i.test(key)))
       continue;
     const start = keys.lastIndex;
     const quote = text[start];
@@ -121,9 +120,17 @@ function redactAssignments(text: string): string {
         end = containerEnd(text, start);
       } else {
         while (end < text.length && !/[\s"',;}&\]]/.test(text[end]!)) end++;
-        // An auth value includes its scheme and credential, not just the first word.
-        if (end > start && /authorization/i.test(key)) {
-          while (text[end] === " " || text[end] === "\t") end++;
+        // A scheme and credential can occur under any sensitive key. Preserve
+        // the following ordinary assignment (e.g. status=ready).
+        let credential = end;
+        while (text[credential] === " " || text[credential] === "\t") credential++;
+        if (
+          end > start &&
+          credential > end &&
+          /^[A-Za-z][A-Za-z0-9._+-]*$/.test(text.slice(start, end)) &&
+          !/^[A-Za-z0-9_-]+\s*[:=]/.test(text.slice(credential))
+        ) {
+          end = credential;
           if (text[end] === '"' || text[end] === "'") {
             const credentialQuote = text[end];
             end = quotedEnd(text, end);
@@ -149,7 +156,7 @@ function redactAssignments(text: string): string {
 // restart at every colon, and JWT segments cannot restart inside another segment.
 const TEXT_REDACTIONS: readonly [RegExp, string][] = [
   [/\b(Bearer\s+)[^\s"',;&}]+/gi, `$1${REDACTED}`],
-  [/\bgh[pousr]_[A-Za-z0-9_]+\b/g, REDACTED],
+  [/\b(?:gh[pousr]_|github_pat_)[A-Za-z0-9_]+\b/g, REDACTED],
   [/\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g, REDACTED],
   [/\b(?:sk-|xai-)[A-Za-z0-9_-]{8,}\b/g, REDACTED],
   [/\b(?:ak_|ck_)[A-Za-z0-9]+\b/g, REDACTED],
@@ -178,6 +185,6 @@ export function redactSensitiveText(text: string): string {
 }
 
 function shouldRedactKey(key: string): boolean {
-  const normalized = key.toLowerCase().replace(/[^a-z0-9_]/g, "");
-  return REDACT_KEYS.has(normalized) || SECRET_KEY.test(normalized);
+  const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return REDACT_KEYS.has(normalized) || isSensitiveKey(key);
 }

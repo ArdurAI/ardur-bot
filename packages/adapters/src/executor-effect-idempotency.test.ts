@@ -1943,6 +1943,7 @@ describe("run failure cause", () => {
   });
 
   it("keeps a secret-bearing cause chain at debug and redacts every serialized string", async () => {
+    vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", "1");
     const f = fixture("run-fails");
     const secret = "opaque synthetic run credential";
     f.secrets.push(secret);
@@ -1960,6 +1961,7 @@ describe("run failure cause", () => {
       await f.executor.continueRun(f.runRecord.id, "worker-1");
     } finally {
       installLogger(createLogger({ service: "ardurbot-worker", sinks: [] }));
+      vi.unstubAllEnvs();
     }
     const logged = sink.events.filter((event) => event.message.startsWith("run run-fails failed"));
     expect(logged.filter((event) => event.level === "error")).toHaveLength(1);

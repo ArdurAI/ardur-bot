@@ -19,7 +19,11 @@ import {
 import type * as z from "zod";
 import { serializeError } from "../../../logging/src/serialize-error.js";
 import type { CapturedChildOutput, ChildOutputLogger } from "../child-output.js";
-import { captureChildOutput, childProcessLogger } from "../child-output.js";
+import {
+  captureChildOutput,
+  childProcessLogger,
+  detailedProcessLogsEnabled,
+} from "../child-output.js";
 import { argumentSecrets, mcpConfigSecrets, redactMcpText } from "../mcp-diagnostics.js";
 import { AcpClient, AcpClientError } from "./acp-client.js";
 import { startArdurMcpServer } from "./ardur-mcp-server.js";
@@ -384,19 +388,22 @@ export class HermesRuntime implements AgentRuntime {
         if (finalReason === "failure" && finalError) {
           if (turn.child && turn.exited) await Promise.race([turn.exited, stopNative(turn.child)]);
           const logger = this.options.logger ?? childProcessLogger();
-          const diagnostics = redactMcpText(
-            JSON.stringify({ error: serializeError(finalError), tail: turn.captured?.tail() }),
-            turn.secrets,
-          );
+          if (detailedProcessLogsEnabled()) {
+            const diagnostics = redactMcpText(
+              JSON.stringify({ error: serializeError(finalError), tail: turn.captured?.tail() }),
+              turn.secrets,
+            );
+            logger.debug(`Hermes turn diagnostics: ${diagnostics}`, { runId });
+          }
           finalError.cause = turnFailureContext(turn);
           logger.error?.("Hermes turn failed", {
+            ...turn.captured?.facts(),
             kind: turn.failureKind ?? "unknown",
             phase: turn.phase,
             exitCode: turn.exitCode,
             signal: turn.exitSignal,
             durationMs: turn.startedAt === undefined ? undefined : Date.now() - turn.startedAt,
           });
-          logger.debug(`Hermes turn diagnostics: ${diagnostics}`, { runId });
         }
         turn.stopReason = finalReason;
         turn.queue.end(finalError);

@@ -1,12 +1,11 @@
 import type { ChildProcess } from "node:child_process";
 import { spawn } from "node:child_process";
-import { Readable, Writable } from "node:stream";
-import { describe, expect, it, vi } from "vitest";
-import {
-  type ChildOutputLogger,
-  captureChildOutput,
-  createChildProcessLogger,
-} from "./child-output.js";
+import { PassThrough, Readable, Writable } from "node:stream";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createLogger } from "../../logging/src/logger.js";
+import { createTestSink } from "../../logging/src/test-sink.js";
+import type { ChildOutputLogger } from "./child-output.js";
+import { captureChildOutput, createChildProcessLogger } from "./child-output.js";
 
 function fakeChild(script: string): ChildProcess {
   return spawn(process.execPath, ["-e", script], { stdio: "pipe" });
@@ -23,6 +22,141 @@ function closed(child: ChildProcess): Promise<number | null> {
 }
 
 describe("captureChildOutput", () => {
+  beforeEach(() => vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", "1"));
+  afterEach(() => vi.unstubAllEnvs());
+
+  it.each([undefined, "0", "true"])(
+    "keeps both output streams and tails out of every sink without explicit opt-in (%s)",
+    async (optIn) => {
+      vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", optIn);
+      vi.stubEnv("LOG_LEVEL", "debug");
+      const secret = "made-up-unrecognized-credential";
+      const prompt = "Please summarize the imaginary quarterly plan.";
+      const file = "Imaginary document line: the launch is next week.";
+      const output = `${secret}\n${prompt}\n${file}`;
+      const sink = createTestSink();
+      const logger = createLogger({ service: "fixture", level: "debug", sinks: [sink] });
+      const fallbackRecords: string[] = [];
+      const writable = new Writable({
+        write(chunk, _encoding, done) {
+          fallbackRecords.push(String(chunk));
+          done();
+        },
+      });
+      const fallback = createChildProcessLogger(writable);
+      fallback.debug(output, { private_key: secret });
+      const child = fakeChild(
+        `process.stdout.write(${JSON.stringify(output)}); process.stderr.write(${JSON.stringify(output)}); process.exitCode = 4;`,
+      );
+      const debug = vi.fn((message: string, bindings?: Record<string, unknown>) => {
+        logger.debug(message, bindings);
+        fallback.debug(message, bindings);
+      });
+      const captured = captureChildOutput(child, {
+        kind: "fixture",
+        runId: "run-1",
+        logger: { debug },
+        captureStdout: true,
+      });
+      expect(await closed(child)).toBe(4);
+      expect(captured.facts()).toMatchObject({
+        kind: "fixture",
+        pid: child.pid,
+        runId: "run-1",
+        byteCount: Buffer.byteLength(output) * 2,
+        lineCount: 6,
+        outputProduced: true,
+      });
+      const failure = new Error("Fixture process failed", { cause: captured.facts() });
+      logger.error("Fixture process failed", failure);
+      fallback.error?.("Fixture process failed", failure);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      const records = JSON.stringify(sink.events) + fallbackRecords.join("");
+      for (const content of [secret, prompt, file]) expect(records).not.toContain(content);
+      expect(debug).not.toHaveBeenCalled();
+      expect(captured.tail()).toBe("");
+      captured.close();
+      expect(captured.tail()).toBe("");
+      writable.destroy();
+    },
+  );
+
+  it.each([
+    "access_token=Basic fixture-scheme-credential",
+    `github_pat_${"fixture123".repeat(10)}_fixture456`,
+  ])("redacts detailed process output for the review reproduction %s", async (line) => {
+    const { logger, debug } = fakeLogger();
+    const child = fakeChild(`process.stderr.write(${JSON.stringify(`${line}\n`)});`);
+    const captured = captureChildOutput(child, { kind: "fixture", logger });
+    await closed(child);
+    const diagnostics = captured.tail() + JSON.stringify(debug.mock.calls);
+    expect(diagnostics).toContain("[redacted]");
+    expect(diagnostics).not.toContain("fixture-scheme-credential");
+    expect(diagnostics).not.toContain("fixture123");
+    expect(diagnostics).not.toContain("Basic");
+    captured.close();
+  });
+
+  it.each(["", "\n", "\r\n"])(
+    "redacts known credentials across chunks and physical lines (%j)",
+    async (separator) => {
+      const { logger, debug } = fakeLogger();
+      const stderr = new PassThrough();
+      const child = { stderr, stdout: null, pid: 123 } as unknown as ChildProcess;
+      const secret = "opaque-first-half-second-half";
+      const first = secret.slice(0, 17);
+      const second = secret.slice(17);
+      const captured = captureChildOutput(child, { kind: "fixture", logger, secrets: [secret] });
+      stderr.write(`before\n${first}${separator}`);
+      expect(JSON.stringify(debug.mock.calls)).not.toContain(first);
+      stderr.end(`${second}\nafter\n`);
+      await new Promise<void>((resolve) => stderr.once("end", resolve));
+      const records = captured.tail() + JSON.stringify(debug.mock.calls);
+      expect(records).toContain("[redacted]");
+      expect(records).toContain("after");
+      for (const fragment of [secret, first, second]) expect(records).not.toContain(fragment);
+      captured.close();
+    },
+  );
+
+  it("redacts encoded multiline credentials before line framing", async () => {
+    const { logger, debug } = fakeLogger();
+    const secret = "fixture-part-one\nfixture-part-two";
+    const spellings = [secret, encodeURIComponent(secret), JSON.stringify(secret).slice(1, -1)];
+    const stderr = Readable.from(
+      spellings.flatMap((spelling) => [
+        Buffer.from(spelling.slice(0, 10)),
+        Buffer.from(`${spelling.slice(10)}\n`),
+      ]),
+    );
+    const captured = captureChildOutput({ stderr, stdout: null } as unknown as ChildProcess, {
+      kind: "fixture",
+      logger,
+      secrets: [secret],
+    });
+    await new Promise<void>((resolve) => stderr.once("end", resolve));
+    const records = captured.tail() + JSON.stringify(debug.mock.calls);
+    for (const fragment of ["fixture-part-one", "fixture-part-two", ...spellings])
+      expect(records).not.toContain(fragment);
+    expect(records).toContain("[redacted]");
+    captured.close();
+  });
+
+  it("suppresses rather than cuts a credential larger than the carry bound", async () => {
+    const { logger, debug } = fakeLogger();
+    const secret = `fixture-${"x".repeat(9000)}-credential-suffix`;
+    const stderr = Readable.from([secret.slice(0, 4096), secret.slice(4096)]);
+    const captured = captureChildOutput({ stderr, stdout: null } as unknown as ChildProcess, {
+      kind: "fixture",
+      logger,
+      secrets: [secret],
+    });
+    await new Promise<void>((resolve) => stderr.once("end", resolve));
+    expect(captured.tail()).toBe("Output line exceeded the size limit.");
+    expect(JSON.stringify(debug.mock.calls)).not.toContain("credential-suffix");
+    captured.close();
+  });
+
   it("redacts fallback bindings and does not let them override the record", async () => {
     vi.stubEnv("LOG_LEVEL", "debug");
     const write = vi.spyOn(process.stderr, "write").mockReturnValue(true);
@@ -30,6 +164,10 @@ describe("captureChildOutput", () => {
       createChildProcessLogger().debug("Safe diagnostic", {
         token: "opaque fixture credential",
         nested: { password: "alpha beta gamma" },
+        private_key: "fixture-private-credential",
+        accessKey: "fixture-access-credential",
+        "api-key": "fixture-api-credential",
+        clientKey: "fixture-client-credential",
         message: "unsafe binding",
         level: "error",
       });
@@ -37,6 +175,8 @@ describe("captureChildOutput", () => {
       const record = JSON.parse(String(write.mock.calls[0]?.[0]));
       expect(record.message).toBe("Safe diagnostic");
       expect(record.level).toBe("debug");
+      for (const key of ["private_key", "accessKey", "api-key", "clientKey"])
+        expect(record[key]).toBe("[Redacted]");
       expect(JSON.stringify(record)).not.toMatch(
         /opaque fixture credential|alpha beta gamma|unsafe binding/,
       );

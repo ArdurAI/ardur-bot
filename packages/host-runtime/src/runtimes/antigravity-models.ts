@@ -123,6 +123,7 @@ export async function antigravityModels(
     // The catalog refresh degrades to the previous snapshot; the log carries why.
     const tail = captured.tail();
     childProcessLogger().error?.("Antigravity model catalog refresh failed", {
+      ...captured.facts(),
       kind: "catalog unavailable",
       phase: "models",
       exitCode,
