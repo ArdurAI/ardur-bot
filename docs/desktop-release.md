@@ -198,6 +198,9 @@ there. `homebrew/Casks/ardur.rb` in this repository stays the template: the rele
 fills its version, architecture-specific DMG URLs, and SHA-256 values from the built files and
 attaches `ardur.rb` to the pre-release. It never contacts a tap or makes a repository commit.
 
+The cask uses `command_wrapper` because a symlink to the Electron binary breaks helper lookup,
+and requires Homebrew from 2026-09-20 or later (run `brew update` first on older installs).
+
 Each release updates the cask through a reviewed pull request. In a checkout of
 `ArdurAI/homebrew-tap`:
 

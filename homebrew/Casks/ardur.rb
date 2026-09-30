@@ -20,7 +20,9 @@ cask "ardur" do
   depends_on :macos
 
   app "Ardur.app"
-  binary "#{appdir}/Ardur.app/Contents/MacOS/Ardur", target: "ardur"
+  # Electron resolves its helper apps from the path it was launched with, so a symlink straight to
+  # Contents/MacOS/Ardur aborts with "Unable to find helper app". The wrapper keeps the bundle path.
+  command_wrapper "ardur", executable: "#{appdir}/Ardur.app/Contents/MacOS/Ardur"
 
 @MACOS_CAVEATS@
 end
