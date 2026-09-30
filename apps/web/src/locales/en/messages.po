@@ -1347,7 +1347,7 @@ msgstr "Block link copied."
 msgid "Blocked"
 msgstr "Blocked"
 
-#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName) }, }) : row.reason
+#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, }, }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
 msgstr "Blocked — {0}"
