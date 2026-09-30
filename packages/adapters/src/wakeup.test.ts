@@ -12,6 +12,7 @@ function handlers(): BackgroundJobHandlers {
     "memory.git-push": async () => undefined,
     "memory.deliver": async () => undefined,
     "run.continue": vi.fn(async () => undefined),
+    "evidence.seal": vi.fn(async () => undefined),
     "routine.wakeup": vi.fn(async () => undefined),
     "computer.update": vi.fn(async () => undefined),
     "computer.sleep": vi.fn(async () => undefined),

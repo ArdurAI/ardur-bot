@@ -121,6 +121,36 @@ describe("evidence recorder", () => {
       ).ok,
     ).toBe(true);
   });
+  it("deduplicates the same durable decision across concurrent writers and restarts", async () => {
+    const { recorder, deps, records, keys } = setup();
+    const decision = { ...input, decisionId: "call-1:allowed_by_default" };
+    const competing = createEvidenceRecorder(deps);
+    expect(
+      await Promise.all([recorder.recordDecision(decision), competing.recordDecision(decision)]),
+    ).toEqual([{ ok: true }, { ok: true }]);
+    expect(await createEvidenceRecorder(deps).recordDecision(decision)).toEqual({ ok: true });
+    expect(records).toHaveLength(1);
+    expect(
+      verifyChain(
+        records.map((row) => row.jws),
+        keys[0]!.publicKeyPem,
+      ).ok,
+    ).toBe(true);
+  });
+  it("flushes a gap after storage recovers before sealing", async () => {
+    const { recorder, store, records, seals } = setup();
+    await recorder.recordDecision(input);
+    const noteGap = store.noteGap;
+    store.noteGap = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Storage unavailable"))
+      .mockImplementation(noteGap);
+    vi.mocked(store.insertRecord).mockRejectedValueOnce(new Error("Storage unavailable"));
+    expect((await recorder.recordDecision(input)).ok).toBe(false);
+    expect(await recorder.sealRunEvidence(input.run.id)).toEqual({ ok: true });
+    expect(records).toHaveLength(1);
+    expect(seals[0]?.gapCount).toBe(1);
+  });
   it("never stores arguments, message bodies, query strings or secret targets", async () => {
     const { recorder, records } = setup();
     const secret = "sk-test-only-sensitive-value";

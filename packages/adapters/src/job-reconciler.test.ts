@@ -43,6 +43,18 @@ function fakePrisma(
 }
 
 describe("createJobReconciler", () => {
+  it("includes evidence recovery on each scan and isolates its failures", async () => {
+    const prisma = fakePrisma();
+    const { jobs } = publisher();
+    const reconcileEvidence = vi
+      .fn(async () => undefined)
+      .mockRejectedValueOnce(new Error("Queue unavailable"));
+    const reconciler = createJobReconciler({ prisma, jobs, reconcileEvidence });
+    await reconciler.reconcileOnce();
+    await reconciler.reconcileOnce();
+    expect(reconcileEvidence).toHaveBeenCalledTimes(2);
+    expect(prisma.routine.findMany).toHaveBeenCalledTimes(2);
+  });
   it("replays each unsettled room ask once so a busy or missed coordinator is woken later", async () => {
     const findMany = vi.fn(async () => [
       { id: "ada-ask", admissionKey: "group-ask:1:chief-run:call-1:ada" },

@@ -36,6 +36,7 @@ const payloadSchemas = {
     generation: z.number().int().nonnegative(),
   }),
   "run.continue": z.object({ runId: z.string().min(1) }),
+  "evidence.seal": z.strictObject({ runId: z.string().min(1) }),
   "routine.wakeup": z.object({
     routineId: z.string().min(1),
     scheduledFor: z.string().datetime({ offset: true }),
@@ -81,6 +82,10 @@ export async function dispatchBackgroundJob(
 
 export function runJobKey(runId: string): string {
   return `run:${runId}`;
+}
+
+export function evidenceSealJob(runId: string): BackgroundJob {
+  return { name: "evidence.seal", payload: { runId }, replaceKey: runId };
 }
 
 export function routineJobKey(routineId: string): string {

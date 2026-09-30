@@ -905,6 +905,12 @@ describe("tool decision evidence in the executor", () => {
       name: "demo_send_message",
       rules: [
         {
+          id: "broader-rule",
+          effect: "require_approval",
+          matchKind: "connector",
+          matchValue: "demo",
+        },
+        {
           id: "rule-allow",
           effect: "always_allow",
           matchKind: "tool",
@@ -917,6 +923,25 @@ describe("tool decision evidence in the executor", () => {
       Buffer.from(ruled.evidence.records[0]!.jws.split(".")[1]!, "base64url").toString(),
     );
     expect(payload.policy_decisions[0].rule_id).toBe("rule-allow");
+  });
+  it.each(["ask", "error"] as const)(
+    "records review %s as pending, not a denial",
+    async (decision) => {
+      reviewMock.mockResolvedValue({ decision, reason: "Needs owner review", model: "mock" });
+      const f = fixture({ governance: true, autoReview: true, name: "demo_send_message" });
+      await f.run();
+      expect(f.execute).not.toHaveBeenCalled();
+      expect(f.evidence.records.map((row) => row.decisionKind)).toEqual(["asked"]);
+      expect(f.evidence.records[0]?.verdict).toBe("insufficient_evidence");
+    },
+  );
+  it("records a disabled integration policy as a denial", async () => {
+    const f = fixture({ governance: true, integration: true });
+    f.grant.server.spaceAllowedTools = [];
+    await f.run();
+    expect(f.execute).not.toHaveBeenCalled();
+    expect(f.evidence.records.map((row) => row.decisionKind)).toEqual(["denied_by_rule"]);
+    expect(f.evidence.records[0]?.verdict).toBe("violation");
   });
   it("records an expired bound approval and does not execute", async () => {
     const f = fixture({

@@ -1743,7 +1743,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         }
       }
       if (run.cancelRequestedAt && run.status === "queued" && !run.startedAt) {
-        if (await confirmDispatchStop(deps.prisma, runId)) {
+        if (await confirmDispatchStop(deps.prisma, runId, undefined, deps.jobs)) {
           tracePoint(runId, "terminal.committed", { outcome: "cancelled" });
           await wakeGoalAfterDelegation(deps, run.delegationId).catch((error) =>
             getLogger().error("goal wake", error),
@@ -1775,7 +1775,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               runId,
               stopTarget.context,
             )) &&
-            (await confirmDispatchStop(deps.prisma, runId))
+            (await confirmDispatchStop(deps.prisma, runId, undefined, deps.jobs))
           )
             tracePoint(runId, "terminal.committed", { outcome: "cancelled" });
         }
@@ -1979,7 +1979,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
       const runSecrets = [...deps.secrets];
       try {
         if (current.cancelRequestedAt || (await checkDelegationExecution(deps.prisma, runId))) {
-          if (!run.startedAt) await confirmDispatchStop(deps.prisma, runId);
+          if (!run.startedAt) await confirmDispatchStop(deps.prisma, runId, undefined, deps.jobs);
           else screenRelease = await stoppedRunComputer(deps.prisma, run, leaseTarget.computerId);
           return;
         }
@@ -3497,12 +3497,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
           );
           if (integrationDetails?.secrets) runSecrets.push(...integrationDetails.secrets);
           const integrationApproval = integrationDetails?.approval;
-          if (integrationApproval === "disabled")
+          if (integrationApproval === "disabled") {
+            await recordEvidence("denied_by_rule", "space_policy");
             return {
               error:
                 integrationDetails?.denial ??
                 "This tool is no longer granted. Review tools in Settings.",
             };
+          }
           const hostCommand = integrationDetails?.integration?.hostCommand;
           if (
             !hostCommand &&
@@ -3788,7 +3790,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               ? `effect:${applied.effect.id}:approved_by_owner`
               : `${executionId}:${allowKind}`;
           const allowRuleId =
-            approvalResolved.matchingRules[0]?.id ??
+            approvalResolved.matchedRuleId ??
             (allowKind === "allowed_by_rule" ? approvalResolved.source : undefined);
 
           const claimOrReturn = async (
@@ -3879,7 +3881,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             }
             await recordEvidence(
               "asked",
-              approvalResolved.matchingRules[0]?.id ?? approvalResolved.source,
+              approvalResolved.matchedRuleId ?? approvalResolved.source,
               `effect:${applied!.effect.id}:asked`,
             );
             await notifyRun(deps, run, {
@@ -7228,7 +7230,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
           await releaseComputerExecutionLease(deps.prisma, computerLease).catch(() => undefined);
         }
-        if (stopConfirmed && (await confirmDispatchStop(deps.prisma, runId)))
+        if (stopConfirmed && (await confirmDispatchStop(deps.prisma, runId, undefined, deps.jobs)))
           tracePoint(runId, "terminal.committed", { attempt: fence, outcome: "cancelled" });
         await wakeGoalAfterDelegation(deps, run.delegationId).catch((error) =>
           getLogger().error("goal wake", error),

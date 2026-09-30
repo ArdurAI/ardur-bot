@@ -22,6 +22,7 @@ import {
   createBackgroundJobHandlers,
   createCloudAgentConnection,
   createConnectorStack,
+  createEvidenceSealRecovery,
   createJobReconciler,
   createMemoryLifecycle,
   createMessagingContextLoader,
@@ -203,9 +204,7 @@ export async function createApp(
   const secrets = new EncryptedSecretStore(env.encryptionKey);
   const instance = await ensureInstanceIdentity(prisma, secrets);
   await backfillRuntimePins({ prisma, secrets, logger });
-  const events = createThreadEvents(prisma, realtime, {
-    runSecretWriter: createRunSecretWriter(secrets),
-  });
+
   const environmentSignupPolicy = signupPolicyFromEnv(env);
   const deploymentSettings = await prisma.deploymentSettings.upsert({
     where: { id: "default" },
@@ -253,6 +252,10 @@ export async function createApp(
           })(),
       );
   const hostBridge = new HostBridge(prisma, env.encryptionKey);
+  const events = createThreadEvents(prisma, realtime, {
+    runSecretWriter: createRunSecretWriter(secrets),
+    jobs,
+  });
   const sandbox: SandboxProvider =
     sandboxOverride ??
     createRunSandbox(env.sandboxProvider, {
@@ -511,6 +514,7 @@ export async function createApp(
         reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
         reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
         reconcileMemory: () => reconcileMemoryDelivery(memoryLifecycleDeps, memoryDocuments),
+        reconcileEvidence: createEvidenceSealRecovery({ prisma, jobs }),
         // No worker runs beside the in-memory queue, so this reconciler also sweeps board closes.
         reconcileBoardOutcomes: (signal) =>
           reconcileBoardOutcomes(

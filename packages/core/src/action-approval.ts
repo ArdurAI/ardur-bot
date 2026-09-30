@@ -157,6 +157,7 @@ export type ActionApprovalResolved = {
   decision: "ask" | "allow";
   source: ActionApprovalSource;
   matchingRules: ActionApprovalRule[];
+  matchedRuleId?: string;
 };
 
 /** Deterministic rule resolution. Always-allow and require-approval both beat the default. */
@@ -192,10 +193,21 @@ export function resolveActionApprovalDetail(input: {
 
   const highestSpecificity = Math.max(...matchingRules.map(ruleSpecificity));
   const winners = matchingRules.filter((rule) => ruleSpecificity(rule) === highestSpecificity);
-  if (winners.some((rule) => rule.effect === "require_approval")) {
-    return { decision: "ask", source: "require_approval", matchingRules };
+  const requiringRule = winners.find((rule) => rule.effect === "require_approval");
+  if (requiringRule) {
+    return {
+      decision: "ask",
+      source: "require_approval",
+      matchingRules,
+      ...(requiringRule.id ? { matchedRuleId: requiringRule.id } : {}),
+    };
   }
-  return { decision: "allow", source: "always_allow", matchingRules };
+  return {
+    decision: "allow",
+    source: "always_allow",
+    matchingRules,
+    ...(winners[0]?.id ? { matchedRuleId: winners[0].id } : {}),
+  };
 }
 
 export function resolveActionApproval(input: {

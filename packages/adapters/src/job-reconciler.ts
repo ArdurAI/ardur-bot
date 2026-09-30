@@ -119,6 +119,7 @@ export function createJobReconciler(
     reconcileComputerUpdates?: () => Promise<void>;
     reconcileCloudAgents?: () => Promise<void>;
     reconcileMemory?: () => Promise<void>;
+    reconcileEvidence?: () => Promise<void>;
     /** Board work reaches a host, so it runs after recovery and never holds it up. */
     reconcileBoardOutcomes?: (signal: AbortSignal) => Promise<void>;
     reconcileLocalImport?: () => Promise<void>;
@@ -172,6 +173,7 @@ export function createJobReconciler(
         deps.reconcileCloudAgents,
         deps.reconcileComputerUpdates,
         deps.reconcileMemory,
+        deps.reconcileEvidence,
         deps.reconcileLocalImport,
         async () => {
           if (!deps.reconcileBriefs || Date.now() < nextBriefMaintenanceAt) return;
