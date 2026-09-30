@@ -194,6 +194,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   Replied: "已回复",
   "Waiting for a turn": "等待轮次",
   "Waiting for a free place": "正在等待空位",
+  "Waiting for the model": "正在等待模型",
   Expired: "已过期",
   "Could not update learning. Try again.": "无法更新学习设置。请重试。",
   "Could not update this task; try again.": "无法更新此任务，请重试。",

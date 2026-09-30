@@ -9400,6 +9400,10 @@ msgstr "等待登录…"
 msgid "Waiting for the API to come back…"
 msgstr "正在等待 API 恢复…"
 
+#: src/lib/working-indicator.ts
+msgid "Waiting for the model"
+msgstr "正在等待模型"
+
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
 #: src/pages/dashboard/NowPanel.tsx

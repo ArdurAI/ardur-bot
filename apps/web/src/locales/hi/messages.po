@@ -9400,6 +9400,10 @@ msgstr "साइन-इन की प्रतीक्षा…"
 msgid "Waiting for the API to come back…"
 msgstr ""
 
+#: src/lib/working-indicator.ts
+msgid "Waiting for the model"
+msgstr "मॉडल का इंतज़ार"
+
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
 #: src/pages/dashboard/NowPanel.tsx

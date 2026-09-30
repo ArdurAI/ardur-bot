@@ -2419,6 +2419,44 @@ describe("mobile thread event reduction", () => {
     expect(applyMobileThreadEvent(null, { type: "thread.progress" })).toBeNull();
   });
 
+  it("queues the run with its retry wake moment only while it waits for the model", () => {
+    const initial: MobileSnapshot = {
+      ...snapshot(),
+      run: { id: "run-1", botId: "bot-1", status: "running" },
+      activeRuns: [{ id: "run-1", botId: "bot-1", status: "running" }],
+    };
+    const waiting = applyMobileThreadEvent(initial, {
+      type: "run.retry_scheduled",
+      seq: 4,
+      runId: "run-1",
+      createdAt: "2026-08-16T00:00:10.000Z",
+      payload: { providerErrorKind: "rate-limit", attempt: 1, waitMs: 2_000 },
+    });
+    expect(waiting?.run).toMatchObject({
+      id: "run-1",
+      status: "queued",
+      providerRetryAt: "2026-08-16T00:00:12.000Z",
+    });
+    expect(waiting?.activeRuns?.[0]).toMatchObject({
+      id: "run-1",
+      status: "queued",
+      providerRetryAt: "2026-08-16T00:00:12.000Z",
+    });
+
+    // The retry's start clears the wait: the row reads as working again.
+    const restarted = applyMobileThreadEvent(waiting, {
+      type: "run.started",
+      seq: 5,
+      runId: "run-1",
+    });
+    expect(restarted?.run).toMatchObject({ id: "run-1", status: "running" });
+    expect(restarted?.run?.providerRetryAt).toBeNull();
+    expect(restarted?.activeRuns?.[0]).toMatchObject({ id: "run-1", status: "running" });
+
+    // A start for a run the snapshot does not know changes nothing, as before.
+    expect(applyMobileThreadEvent(initial, { type: "run.started", runId: "other" })).toBe(initial);
+  });
+
   it("keeps a streamed reply above the follow-up the owner sent before the run ended", () => {
     const initial = snapshot([mobileMessage("m-0", [{ kind: "text", text: "earlier" }], 0)]);
     const streamed = applyMobileThreadEvent(initial, {

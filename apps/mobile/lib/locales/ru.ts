@@ -201,6 +201,7 @@ export const RU_MESSAGES: Record<string, string> = {
   Replied: "Получен ответ",
   "Waiting for a turn": "Ожидает очереди",
   "Waiting for a free place": "Ждёт свободного места",
+  "Waiting for the model": "Ждёт модель",
   Expired: "Срок истёк",
   "Could not update learning. Try again.": "Не удалось обновить обучение. Повторите попытку.",
   "Could not update this task; try again.": "Не удалось обновить задачу. Повторите попытку.",

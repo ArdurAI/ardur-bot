@@ -288,6 +288,7 @@ export function isThreadSnapshotEvent(event: ProductEvent): boolean {
     event.type === "run.started" ||
     event.type === "run.context" ||
     event.type === "run.waiting_input" ||
+    event.type === "run.retry_scheduled" ||
     event.type === "computer.takeover.requested" ||
     isRunTerminalEvent(event)
   );
@@ -429,6 +430,21 @@ export function reduceThreadSnapshot(
             candidate.id === runId ? { ...candidate, status } : candidate,
           )
         : prev.activeRuns,
+    };
+  }
+  if (event.type === "run.retry_scheduled") {
+    const retryRunId = event.runId;
+    if (!retryRunId) return { ...prev, cursor: event.seq };
+    const waitMs = typeof event.payload.waitMs === "number" ? event.payload.waitMs : 0;
+    const providerRetryAt = new Date(Date.parse(event.createdAt) + waitMs).toISOString();
+    const markWaiting = (run: Run): Run =>
+      run.id === retryRunId ? { ...run, status: "queued", providerRetryAt } : run;
+    return {
+      ...prev,
+      cursor: event.seq,
+      members: updateMemberStatus(prev.members, event.botId, "queued"),
+      run: prev.run ? markWaiting(prev.run) : prev.run,
+      activeRuns: prev.activeRuns?.map(markWaiting),
     };
   }
   if (isRunTerminalEvent(event)) {

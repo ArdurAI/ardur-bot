@@ -31,6 +31,7 @@ export const ProductEventType = z.enum([
   "run.configurationApplied",
   "run.checkpointed",
   "run.waiting_input",
+  "run.retry_scheduled",
   "run.completed",
   "run.failed",
   "run.cancelled",

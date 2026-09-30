@@ -540,6 +540,41 @@ describe("thread event reduction", () => {
     expect(started?.run?.trigger).toBe("bot_message");
   });
 
+  it("queues the run with its retry wake moment only while it waits for the model", () => {
+    const run = threadRun("run-1");
+    const initial: ThreadSnapshot = { ...snapshot([]), run, activeRuns: [run] };
+    const waiting = reduceThreadSnapshot(
+      initial,
+      event({
+        type: "run.retry_scheduled",
+        seq: 4,
+        runId: "run-1",
+        createdAt: "2026-08-16T00:00:10.000Z",
+        payload: { providerErrorKind: "rate-limit", attempt: 1, waitMs: 2_000 },
+      }),
+    );
+
+    expect(waiting?.run).toMatchObject({
+      id: "run-1",
+      status: "queued",
+      providerRetryAt: "2026-08-16T00:00:12.000Z",
+    });
+    expect(waiting?.activeRuns?.[0]).toMatchObject({
+      id: "run-1",
+      status: "queued",
+      providerRetryAt: "2026-08-16T00:00:12.000Z",
+    });
+    expect(isThreadSnapshotEvent(event({ type: "run.retry_scheduled" }))).toBe(true);
+
+    // The retry's start clears the wait: the row reads as working again.
+    const restarted = reduceThreadSnapshot(
+      waiting,
+      event({ type: "run.started", seq: 5, runId: "run-1", payload: { trigger: "user" } }),
+    );
+    expect(restarted?.run).toMatchObject({ id: "run-1", status: "running" });
+    expect(restarted?.run?.providerRetryAt ?? null).toBeNull();
+  });
+
   it("preserves webhook when event-sourcing an inbound wake", () => {
     const started = reduceThreadSnapshot(
       snapshot([]),

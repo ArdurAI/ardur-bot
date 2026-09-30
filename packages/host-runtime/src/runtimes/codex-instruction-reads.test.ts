@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  INSTRUCTION_CHANGE_SLACK_MS,
   loadProjectInstructions,
   trustedInstructionSources,
   UnsafeInstructionFileError,
@@ -252,6 +253,18 @@ describe("what Codex says it loaded", () => {
     const asked = Date.now() - minute;
     await settled(file);
     expect(await trustedInstructionSources([file], check([], [], asked))).toBe(false);
+  });
+
+  it("refuses a file that changed within the clock's slack before the session was asked for", async () => {
+    // Linux stamps a change with a coarse clock that can trail real time by a tick, so a
+    // change stamped just before the ask may have happened just after it.
+    const home = path.join(await scratch(), "codex-home");
+    const file = await settled(path.join(home, "AGENTS.md"));
+    const changed = Date.now();
+    const justAfter = changed + Math.floor(INSTRUCTION_CHANGE_SLACK_MS / 2);
+    expect(await trustedInstructionSources([file], check([], [], justAfter))).toBe(false);
+    const wellAfter = changed + INSTRUCTION_CHANGE_SLACK_MS + minute;
+    expect(await trustedInstructionSources([file], check([], [], wellAfter))).toBe(true);
   });
 
   it("refuses a file that was swapped for a link and put back, even with its times reset", async () => {

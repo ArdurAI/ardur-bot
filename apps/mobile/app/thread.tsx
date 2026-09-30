@@ -446,6 +446,7 @@ function Thread() {
   const notificationThreadId = snap?.threadId ?? currentBot?.threadId;
   activeThreadId.current = notificationThreadId;
   const currentBotStatus = snap ? snap.run?.status : currentBot?.status;
+  const currentBotRetrying = snap?.run?.providerRetryAt != null;
   const hasLiveProgress = visibleMessages.some((message) => message.id.startsWith("progress:"));
   const workingGroupBots = useMemo(() => {
     if (!inGroup) return [];
@@ -456,7 +457,7 @@ function Thread() {
       const member = snap?.members?.find((candidate) => candidate.botId === run.botId);
       if (!member) return [];
       seen.add(run.botId);
-      return [{ ...member, status: run.status }];
+      return [{ ...member, status: run.status, retrying: run.providerRetryAt != null }];
     });
     return workingBotsWithoutVisibleActivity(bots, visibleMessages);
   }, [inGroup, snap?.activeRuns, snap?.members, snap?.run, visibleMessages]);
@@ -1714,7 +1715,11 @@ function Thread() {
   const workingFooter =
     !inGroup && currentBot && isWorkingStatus(currentBotStatus) && !hasLiveProgress ? (
       <View
-        accessibilityLabel={t("{name} is working", { name: currentBot.name })}
+        accessibilityLabel={
+          currentBotRetrying
+            ? t("Waiting for the model")
+            : t("{name} is working", { name: currentBot.name })
+        }
         accessibilityRole="text"
         style={{
           flexDirection: "row",
@@ -1734,11 +1739,13 @@ function Thread() {
     ) : inGroup && workingGroupBots.length > 0 ? (
       <View
         accessibilityLabel={
-          workingGroupBots.every((bot) => bot.status === "queued")
-            ? t("Waiting for a free place")
-            : workingGroupBots.length === 1
-              ? t("{name} is working", { name: workingGroupBots[0]?.name ?? t("Agent") })
-              : t("{count} agents working", { count: workingGroupBots.length })
+          workingGroupBots.every((bot) => bot.retrying)
+            ? t("Waiting for the model")
+            : workingGroupBots.every((bot) => bot.status === "queued" && !bot.retrying)
+              ? t("Waiting for a free place")
+              : workingGroupBots.length === 1
+                ? t("{name} is working", { name: workingGroupBots[0]?.name ?? t("Agent") })
+                : t("{count} agents working", { count: workingGroupBots.length })
         }
         accessibilityRole="text"
         style={{
@@ -1767,7 +1774,11 @@ function Thread() {
             </View>
           ))}
         </View>
-        {workingGroupBots.every((bot) => bot.status === "queued") ? (
+        {workingGroupBots.every((bot) => bot.retrying) ? (
+          <Text style={{ color: tokens.mutedForeground, fontSize: 13 }}>
+            {t("Waiting for the model")}
+          </Text>
+        ) : workingGroupBots.every((bot) => bot.status === "queued" && !bot.retrying) ? (
           <Text style={{ color: tokens.mutedForeground, fontSize: 13 }}>
             {t("Waiting for a free place")}
           </Text>

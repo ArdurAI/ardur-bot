@@ -9400,6 +9400,10 @@ msgstr "로그인 완료를 기다리는 중…"
 msgid "Waiting for the API to come back…"
 msgstr "API가 다시 작동하기를 기다리는 중…"
 
+#: src/lib/working-indicator.ts
+msgid "Waiting for the model"
+msgstr "모델을 기다리는 중"
+
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
 #: src/pages/dashboard/NowPanel.tsx

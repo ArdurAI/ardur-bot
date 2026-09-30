@@ -55,6 +55,7 @@
       "default": "./src/node/screen-capability.ts"
     },
     "./command-limits": "./src/command-limits.ts",
+    "./effort-router": "./src/effort-router/index.ts",
     "./runtime-config": "./src/runtime-config.ts",
     "./node/runtime-config-hash": "./src/node/runtime-config-hash.ts"
   },

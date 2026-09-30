@@ -1,10 +1,16 @@
+import { spawnSync } from "node:child_process";
 import { lstatSync, statSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
-import { expect, it } from "vitest";
-import { extractSourceArchive, extractUvBinary } from "./hermes-archive.js";
+import { expect, it, vi } from "vitest";
+import {
+  extractSourceArchive,
+  extractUvBinary,
+  gitTreeHash,
+  gitTreeIdOfArchive,
+} from "./hermes-archive.js";
 
 function writeOctal(header: Buffer, offset: number, length: number, value: number): void {
   const text = value.toString(8).padStart(length - 1, "0");
@@ -71,6 +77,101 @@ function gzipTar(parts: Buffer[]): Buffer {
 }
 
 const limits = { files: 100, bytes: 1024 * 1024, inflated: 2 * 1024 * 1024 };
+
+const treeFiles = [
+  { path: "notes/readme.txt", data: Buffer.from("readme\n"), mode: 0o644 },
+  { path: "notes/inner/deep.txt", data: Buffer.from("deep\n"), mode: 0o644 },
+  { path: "run.sh", data: Buffer.from("#!/bin/sh\n"), mode: 0o755 },
+  { path: "top.txt", data: Buffer.from("top\n"), mode: 0o644 },
+];
+
+function treeArchive(files = treeFiles): Buffer {
+  return gzipTar([
+    entry({ name: "rel/", type: "5", mode: 0o755 }),
+    ...files.map((file) => entry({ name: `rel/${file.path}`, data: file.data, mode: file.mode })),
+    // An empty folder is omitted, the same way git omits it from a tree.
+    entry({ name: "rel/notes/inner/empty/", type: "5", mode: 0o755 }),
+  ]);
+}
+
+const gitWorks = spawnSync("git", ["--version"], { encoding: "utf8" }).status === 0;
+
+/** The tree id of the same files on disk: git itself when present, else gitTreeHash. */
+async function expectedTreeId(
+  files: { path: string; data: Buffer; mode: number }[],
+): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "hermes-archive-tree-"));
+  try {
+    for (const file of files) {
+      const full = path.join(dir, file.path);
+      await mkdir(path.dirname(full), { recursive: true });
+      await writeFile(full, file.data);
+      await chmod(full, file.mode);
+    }
+    if (gitWorks) {
+      const git = (...args: string[]) => {
+        const result = spawnSync("git", ["-c", "safe.directory=*", ...args], {
+          cwd: dir,
+          encoding: "utf8",
+        });
+        if (result.status !== 0) throw new Error(result.stderr || result.stdout);
+        return result.stdout.trim();
+      };
+      git("init");
+      git("config", "core.filemode", "true");
+      git("config", "core.autocrlf", "false");
+      git("add", "-A");
+      return git("write-tree");
+    }
+    return await gitTreeHash(dir);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+it("computes the tree id of an archive before anything is written", async () => {
+  expect(await gitTreeIdOfArchive(treeArchive(), limits.inflated)).toBe(
+    await expectedTreeId(treeFiles),
+  );
+});
+
+it("a changed byte changes the archive tree id", async () => {
+  const base = await gitTreeIdOfArchive(treeArchive(), limits.inflated);
+  const changed = treeFiles.map((file) =>
+    file.path === "notes/readme.txt" ? { ...file, data: Buffer.from("tampered\n") } : file,
+  );
+  expect(await gitTreeIdOfArchive(treeArchive(changed), limits.inflated)).not.toBe(base);
+});
+
+it("an added file changes the archive tree id", async () => {
+  const base = await gitTreeIdOfArchive(treeArchive(), limits.inflated);
+  const extended = [...treeFiles, { path: "extra.txt", data: Buffer.from("extra\n"), mode: 0o644 }];
+  const added = await gitTreeIdOfArchive(treeArchive(extended), limits.inflated);
+  expect(added).not.toBe(base);
+  expect(added).toBe(await expectedTreeId(extended));
+});
+
+it("hashes an executable archive entry as git mode 100755", async () => {
+  const tool = [{ path: "tool", data: Buffer.from("#!/bin/sh\n"), mode: 0o755 }];
+  const expected = await expectedTreeId(tool);
+  expect(await gitTreeIdOfArchive(treeArchive(tool), limits.inflated)).toBe(expected);
+  const plain = tool.map((file) => ({ ...file, mode: 0o644 }));
+  const plainId = await gitTreeIdOfArchive(treeArchive(plain), limits.inflated);
+  expect(plainId).not.toBe(expected);
+  expect(plainId).toBe(await expectedTreeId(plain));
+});
+
+it("refuses a symbolic link entry when computing the tree id", async () => {
+  await expect(
+    gitTreeIdOfArchive(
+      gzipTar([
+        entry({ name: "rel/top.txt", data: Buffer.from("top\n"), mode: 0o644 }),
+        entry({ name: "rel/link", type: "2", link: "rel/top.txt", mode: 0o777 }),
+      ]),
+      limits.inflated,
+    ),
+  ).rejects.toThrow("archive refused");
+});
 
 it.skipIf(process.platform === "win32")(
   "normalizes git archive modes instead of refusing them",
@@ -140,6 +241,102 @@ it("still refuses link entries", async () => {
         limits,
       ),
     ).rejects.toThrow("archive refused");
+  } finally {
+    await rm(dest, { recursive: true, force: true });
+  }
+});
+
+/** True on a disk that cannot hold two names differing only by letter case (Mac, Windows). */
+async function diskIgnoresCase(dir: string): Promise<boolean> {
+  const probe = path.join(dir, ".Case-Probe");
+  await writeFile(probe, "");
+  try {
+    await readFile(path.join(dir, ".case-probe"));
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await rm(probe, { force: true });
+  }
+}
+
+it.skipIf(process.platform === "win32")(
+  "keeps the first of two entries whose paths differ only by letter case",
+  async () => {
+    const dest = await mkdtemp(path.join(tmpdir(), "hermes-case-pair-"));
+    const logged: string[] = [];
+    const info = vi.spyOn(console, "info").mockImplementation((...args) => {
+      logged.push(args.join(" "));
+    });
+    try {
+      await extractSourceArchive(
+        gzipTar([
+          entry({ name: "pkg/notes/Team.txt", data: Buffer.from("first\n") }),
+          entry({ name: "pkg/notes/team.txt", data: Buffer.from("second\n") }),
+        ]),
+        dest,
+        limits,
+      );
+      expect(await readFile(path.join(dest, "notes", "Team.txt"), "utf8")).toBe("first\n");
+      if (await diskIgnoresCase(dest)) {
+        // A Mac or Windows disk: the second entry cannot exist beside the first.
+        expect(logged.join("\n")).toContain("notes/team.txt");
+        expect(logged.join("\n")).toContain("letter case");
+      } else {
+        // A Linux disk holds both, and nothing is skipped.
+        expect(await readFile(path.join(dest, "notes", "team.txt"), "utf8")).toBe("second\n");
+        expect(logged.join("\n")).not.toContain("letter case");
+      }
+    } finally {
+      info.mockRestore();
+      await rm(dest, { recursive: true, force: true });
+    }
+  },
+);
+
+it("refuses an exact duplicate path", async () => {
+  const dest = await mkdtemp(path.join(tmpdir(), "hermes-dupe-"));
+  try {
+    await expect(
+      extractSourceArchive(
+        gzipTar([
+          entry({ name: "pkg/plain.txt", data: Buffer.from("one\n") }),
+          entry({ name: "pkg/plain.txt", data: Buffer.from("two\n") }),
+        ]),
+        dest,
+        limits,
+      ),
+    ).rejects.toThrow("archive refused");
+  } finally {
+    await rm(dest, { recursive: true, force: true });
+  }
+});
+
+it("refuses an entry over a file the archive did not write", async () => {
+  const dest = await mkdtemp(path.join(tmpdir(), "hermes-planted-"));
+  try {
+    await mkdir(path.join(dest, "notes"), { recursive: true });
+    // Planted under the exact name on every disk, and under a name that differs only by
+    // letter case on a disk that ignores case: neither counts as a case collision.
+    await writeFile(path.join(dest, "notes", "Team.txt"), "planted\n");
+    await expect(
+      extractSourceArchive(
+        gzipTar([entry({ name: "pkg/notes/Team.txt", data: Buffer.from("first\n") })]),
+        dest,
+        limits,
+      ),
+    ).rejects.toThrow("archive refused");
+    expect(await readFile(path.join(dest, "notes", "Team.txt"), "utf8")).toBe("planted\n");
+    if (await diskIgnoresCase(dest)) {
+      await expect(
+        extractSourceArchive(
+          gzipTar([entry({ name: "pkg/notes/team.txt", data: Buffer.from("first\n") })]),
+          dest,
+          limits,
+        ),
+      ).rejects.toThrow("archive refused");
+      expect(await readFile(path.join(dest, "notes", "Team.txt"), "utf8")).toBe("planted\n");
+    }
   } finally {
     await rm(dest, { recursive: true, force: true });
   }

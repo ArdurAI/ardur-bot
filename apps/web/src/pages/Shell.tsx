@@ -1936,6 +1936,7 @@ export function ShellPage({
       color: bot?.color ?? FALLBACK_BOT_COLOR,
       name: bot?.name,
       status: run.status,
+      retrying: run.providerRetryAt != null,
     };
   });
   const resolveTranscriptMemberName = useCallback(
