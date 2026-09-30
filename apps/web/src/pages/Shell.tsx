@@ -556,11 +556,21 @@ export function ShellPage({
   }, [panel]);
   const [modelFocusRequest, setModelFocusRequest] = useState(0);
   const [runtimeFocusRequest, setRuntimeFocusRequest] = useState(0);
+  const [destinationsFocusRequest, setDestinationsFocusRequest] = useState(0);
+  const [computerFocusRequest, setComputerFocusRequest] = useState(0);
   useEffect(() => {
     if (panel !== "settings") setModelFocusRequest(0);
   }, [panel]);
   function openBotModelSettings() {
     setModelFocusRequest((request) => request + 1);
+    setPanel("settings");
+  }
+  function openBotDestinationsSettings() {
+    setDestinationsFocusRequest((request) => request + 1);
+    setPanel("settings");
+  }
+  function openBotComputerSettings() {
+    setComputerFocusRequest((request) => request + 1);
     setPanel("settings");
   }
   const [peerConversation, setPeerConversation] = useState<{
@@ -3724,6 +3734,10 @@ export function ShellPage({
             key={inGroup ? `group:${groupId}` : `bot:${active?.id}`}
             comparisonBotId={!inGroup && bots.length >= 2 ? active?.id : undefined}
             activeName={inGroup ? (activeGroup?.name ?? activeSnapshot?.groupName) : active?.name}
+            refusalBotName={
+              resolveTranscriptBot(activeSnapshot?.run?.botId ?? active?.id ?? "")?.name ??
+              active?.name
+            }
             running={composerRunning}
             disabled={Boolean(recordingSkill)}
             pendingAttachments={activePendingAttachments}
@@ -3736,6 +3750,33 @@ export function ShellPage({
             onConnectPin={() =>
               openSettings("models", activeSnapshot?.run?.runtimeProblem?.pin.provider ?? undefined)
             }
+            onEnableExperimental={() => {
+              const botId = activeSnapshot?.run?.botId ?? active?.id;
+              const bot = botId ? bots.find((candidate) => candidate.id === botId) : undefined;
+              if (!botId || !bot) return;
+              void (async () => {
+                try {
+                  await rpc.bots.update({ botId, runtimeExperimental: true });
+                  await refreshBots();
+                } catch {
+                  setSendError(t`Could not save. Try again.`);
+                  return;
+                }
+                // The banner leaves with the setting it named; a fresh run needs a fresh send.
+                dismissComposerError();
+              })();
+            }}
+            onOpenBotDestinations={() => {
+              const botId = activeSnapshot?.run?.botId ?? active?.id;
+              if (botId && botId !== active?.id) navigate(`/app/${botId}`);
+              openBotDestinationsSettings();
+            }}
+            onOpenBotComputer={() => {
+              const botId = activeSnapshot?.run?.botId ?? active?.id;
+              if (botId && botId !== active?.id) navigate(`/app/${botId}`);
+              openBotComputerSettings();
+            }}
+            onOpenSpaceModels={() => openSettings("models")}
             runErrorId={displayedRunErrorId}
             onRunErrorPresented={handleRunErrorPresented}
             onDismissError={dismissComposerError}
@@ -4059,6 +4100,8 @@ export function ShellPage({
                   bot={active}
                   modelFocusRequest={modelFocusRequest}
                   runtimeFocusRequest={runtimeFocusRequest}
+                  destinationsFocusRequest={destinationsFocusRequest}
+                  computerFocusRequest={computerFocusRequest}
                   modelSettings={modelSettings}
                   overrideGroups={groups}
                   onOpenGroup={(id) => {
@@ -5509,6 +5552,11 @@ export const Composer = memo(function Composer({
   runtimeProblem,
   modelCatalog,
   onConnectPin,
+  refusalBotName,
+  onEnableExperimental,
+  onOpenBotDestinations,
+  onOpenBotComputer,
+  onOpenSpaceModels,
   runErrorId,
   onRunErrorPresented,
   onDismissError,
@@ -5547,6 +5595,12 @@ export const Composer = memo(function Composer({
   runtimeProblem?: RuntimeProblem;
   modelCatalog?: ModelCatalogEntry[];
   onConnectPin?: () => void;
+  /** The bot whose run the refusal named, for sentences that name the bot. */
+  refusalBotName?: string;
+  onEnableExperimental?: () => void;
+  onOpenBotDestinations?: () => void;
+  onOpenBotComputer?: () => void;
+  onOpenSpaceModels?: () => void;
   runErrorId: string | null;
   onRunErrorPresented: (runId: string) => void;
   onDismissError: () => void;
@@ -5848,8 +5902,13 @@ export const Composer = memo(function Composer({
             providerErrorKind={providerErrorKind}
             runtimeProblem={runtimeProblem}
             catalog={modelCatalog}
+            botName={refusalBotName ?? activeName}
             onConnect={onConnectPin}
             onChangeModel={onChangeModel}
+            onEnableExperimental={onEnableExperimental}
+            onOpenBotDestinations={onOpenBotDestinations}
+            onOpenBotComputer={onOpenBotComputer}
+            onOpenSpaceModels={onOpenSpaceModels}
           />
           <button
             type="button"
