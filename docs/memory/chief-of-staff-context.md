@@ -45,16 +45,16 @@ The deterministic cost fixture in `packages/adapters/src/context/brief-maintenan
 
 `routeIncoming` in `packages/adapters/src/routing/route.ts` uses no model:
 
-1. Explicit mention.
+1. Explicit mention. A message that opens by addressing a member by name counts too, with or without "@" — `resolveAddressedBotIds` in `packages/core/src/group-mentions.ts` matches whole names at the message start (optional opener word, punctuation- or opener-closed), so a name used mid-sentence as a subject does not reroute.
 2. Reply target.
 3. Group coordinator.
 4. Sender's last active thread.
 5. Space coordinator.
 6. Default coordinator, or the first eligible member when none is configured. This records `default` and displays "Routed by default".
 
-Group mentions retain existing explicit multiple-bot and `@everyone` behavior. `admitRoutedDispatch` runs inside dispatch admission after nonce replay. Existing grant limits, reply authorization and external room binding still apply.
+Group mentions retain existing explicit multiple-bot and `@everyone` behavior; several members addressed by name at the start each answer, the same as several @mentions. `admitRoutedDispatch` runs inside dispatch admission after nonce replay. Existing grant limits, reply authorization and external room binding still apply.
 
-`claimBotRun` serializes admission with database locks in bot-then-thread order. Active run leases and brief-maintenance leases consume the same capacity. Defaults allow three concurrent runs per bot across threads, with one run per thread. The bot owner can set 1–16 concurrent runs in bot settings; a null bot override inherits the space default. Queued runs remain in the runs table and use the existing job retry path. Thread compaction is scheduled immediately after eligible turns through the existing compaction job.
+`claimBotRun` serializes admission with database locks in bot-then-thread order. A bot's active run leases and its own brief-maintenance leases consume the same capacity. Defaults allow three concurrent runs per bot across threads. A direct thread admits one run at a time. A group room admits several bots at the same time, up to the room's "Bots answering at once" setting (1–8, four when the room never set it, stored as the group's room policy in `packages/contracts/src/room-policy.ts`); a bot never holds two runs in the same room, and only its own brief refresh holds its next run there. The bot owner can set 1–16 concurrent runs in bot settings; a null bot override inherits the space default. Queued runs remain in the runs table and use the existing job retry path. Thread compaction is scheduled immediately after eligible turns through the existing compaction job.
 
 ## Metrics and surfaces
 

@@ -278,7 +278,11 @@ export async function installPerformanceFixture(
     else if (name === "threads/send") {
       sent = true;
       result = { runId: "fixture-run", taskId: "fixture-task", seq: 101 };
-    } else if (name === "voice/status") result = { ready: false };
+    } else if (name === "workspace/tasks")
+      // The pane mounts the Tasks tab on open; the contract object shape is not the
+      // catch-all empty list, or WorkspaceTasks crashes and takes the pane down with it.
+      result = { runs: [], delegations: [], routines: [], observedAt: createdAt };
+    else if (name === "voice/status") result = { ready: false };
     else if (name === "agentSkills/list") result = [];
     else if (name === "memory/list") result = [];
     else if (name === "runtimes/availability") result = [];

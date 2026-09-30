@@ -10,16 +10,19 @@ const states = [
   { name: "complete", live: false },
 ];
 
-test("chat shows only the bot response", async ({ page }, testInfo) => {
+test("chat shows the compact work record", async ({ page }, testInfo) => {
   for (const viewport of viewports) {
     await page.setViewportSize(viewport);
     for (const state of states) {
       await page.goto(`/e2e/fixtures/tool-activity-disclosure.html?live=${state.live ? 1 : 0}`);
       await expect(page.getByTestId("response")).toBeVisible();
-      await expect(page.getByTestId("tool-activity")).toHaveCount(0);
-      await expect(page.getByText("Working…")).toHaveCount(0);
-      await expect(page.getByText("Done")).toHaveCount(0);
-      await expect(page.getByText("Shell", { exact: false })).toHaveCount(0);
+
+      if (state.live) {
+        await expect(page.getByText("Checking calendar...")).toBeVisible();
+      } else {
+        await expect(page.getByText("Google Calendar (1)")).toBeVisible();
+      }
+
       await expect(page.locator("body")).toHaveJSProperty("scrollWidth", viewport.width);
       await captureScreenshot(page, testInfo, `${state.name}-${viewport.name}`);
     }

@@ -18,11 +18,18 @@ describe("memory store contract shape", () => {
 
   it("reads the most recently updated documents first", async () => {
     const updatedAt = new Date("2026-08-16T10:00:00.000Z");
-    const findMany = vi
-      .fn()
-      .mockResolvedValue([
-        { id: "memory-1", path: "facts.md", content: "A fact", revision: 3, updatedAt },
-      ]);
+    const findMany = vi.fn().mockResolvedValue([
+      {
+        id: "memory-1",
+        path: "facts.md",
+        content: "A fact",
+        revision: 3,
+        updatedAt,
+        scope: "bot",
+        botId: "bot-1",
+        userId: "user-1",
+      },
+    ]);
     const store = new MarkdownMemoryStore({ memoryDocument: { findMany } } as never);
 
     await expect(store.read({ scope: "bot", botId: "bot-1" }, context)).resolves.toEqual({
@@ -33,6 +40,8 @@ describe("memory store contract shape", () => {
           content: "A fact",
           revision: 3,
           updatedAt: updatedAt.toISOString(),
+          scope: "bot",
+          owner: "bot-1",
         },
       ],
     });

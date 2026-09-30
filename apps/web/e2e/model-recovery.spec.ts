@@ -6,7 +6,7 @@ import type {
   SpaceNavigation,
 } from "@ardurbot/contracts";
 import { expect, type Page, test } from "@playwright/test";
-import { captureScreenshot, completeOnboarding, signup } from "./helpers";
+import { captureScreenshot, completeOnboarding, rpc, signup } from "./helpers";
 
 async function patchBotNavigation(page: Page, patch: Partial<Bot>) {
   const update = (bots: Bot[]) => bots.map((bot) => ({ ...bot, ...patch }));
@@ -25,7 +25,7 @@ async function patchBotNavigation(page: Page, patch: Partial<Bot>) {
 }
 
 test("an unbound legacy pin asks which connection to use", async ({ page }, testInfo) => {
-  await signup(page, `legacy-pin-${Date.now()}@ardurbot.test`, "password12", "Legacy Pin");
+  await signup(page, `legacy-pin-${Date.now()}@example.test`, "password12", "Legacy Pin");
   await completeOnboarding(page);
   await patchBotNavigation(page, {
     modelProvider: "xai",
@@ -97,7 +97,7 @@ test("an unbound legacy pin asks which connection to use", async ({ page }, test
 });
 
 test("the model chip and provider error open the bot model control", async ({ page }, testInfo) => {
-  await signup(page, `model-recovery-${Date.now()}@ardurbot.test`, "password12", "Model Recovery");
+  await signup(page, `model-recovery-${Date.now()}@example.test`, "password12", "Model Recovery");
   await completeOnboarding(page);
 
   const catalog: ModelCatalogEntry[] = [
@@ -130,20 +130,20 @@ test("the model chip and provider error open the bot model control", async ({ pa
       },
     }),
   );
-  await page.route("**/rpc/me", async (route) => {
-    const response = await route.fetch();
-    const body = (await response.json()) as { json: Me };
-    await route.fulfill({
-      response,
+  const me = await rpc<Me>(page, "me", {});
+  // Settings can finish focusing before their account reads finish; keep the fixture
+  // independent of live fetches that would outlast the test during context teardown.
+  await page.route("**/rpc/me", (route) =>
+    route.fulfill({
       json: {
         json: {
-          ...body.json,
+          ...me,
           defaultProvider: "openai-codex",
           defaultModel: "gpt-6-astra",
         },
       },
-    });
-  });
+    }),
+  );
   await page.reload();
   const chip = page.getByRole("button", {
     name: "Change model: Ardur · Codex · GPT-6 Astra · medium",
@@ -220,7 +220,7 @@ test("the model chip and provider error open the bot model control", async ({ pa
 test("a pin failure opens its provider settings and the bot model control", async ({
   page,
 }, testInfo) => {
-  await signup(page, `pin-recovery-${Date.now()}@ardurbot.test`, "password12", "Pin Recovery");
+  await signup(page, `pin-recovery-${Date.now()}@example.test`, "password12", "Pin Recovery");
   await completeOnboarding(page);
   await page.route("**/rpc/models/list", (route) =>
     route.fulfill({
@@ -309,7 +309,7 @@ test("a pin failure opens its provider settings and the bot model control", asyn
 test("native runtime settings show unavailable sign-in without replacing the pin", async ({
   page,
 }, testInfo) => {
-  await signup(page, `native-runtime-${Date.now()}@ardurbot.test`, "password12", "Runtime Test");
+  await signup(page, `native-runtime-${Date.now()}@example.test`, "password12", "Runtime Test");
   await completeOnboarding(page);
   await patchBotNavigation(page, {
     runtimeKind: "claude-code",
@@ -377,7 +377,7 @@ test("native runtime settings show unavailable sign-in without replacing the pin
 test("Hermes picker keeps the Ardur connection and shows only its limits", async ({
   page,
 }, testInfo) => {
-  await signup(page, `hermes-picker-${Date.now()}@ardurbot.test`, "password12", "Runtime Test");
+  await signup(page, `hermes-picker-${Date.now()}@example.test`, "password12", "Runtime Test");
   await completeOnboarding(page);
   await patchBotNavigation(page, {
     runtimeKind: "pi",
@@ -447,7 +447,8 @@ test("Hermes picker keeps the Ardur connection and shows only its limits", async
   await expect(model).toHaveValue(original);
   await expect(settings.getByText("Hermes is not installed on this computer.")).toBeVisible();
   await expect(settings.getByLabel("Model calls per turn")).toHaveValue("16");
-  await expect(settings.getByLabel("Time limit")).toHaveValue("180");
+  await expect(settings.getByLabel("Time limit (seconds)")).toHaveValue("180");
+  await expect(settings.getByLabel("Context limit (KiB)")).toHaveValue("16");
   await expect(settings.getByText("Connect Hermes")).toHaveCount(0);
   await captureScreenshot(page, testInfo, "hermes-runtime-picker");
 });

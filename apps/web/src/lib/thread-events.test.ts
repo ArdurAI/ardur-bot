@@ -3,6 +3,7 @@ import type {
   CommandBlock as FixtureCommandBlock,
   ProductEvent as FixtureProductEvent,
   ProductEvent,
+  Run,
   ThreadMessage,
   ThreadSnapshot,
 } from "@ardurbot/contracts";
@@ -24,11 +25,74 @@ import {
   reconcileRefreshedThread,
   reduceComputerStatus,
   reduceThreadSnapshot,
+  refusalRunBotName,
   threadRunError,
   userHoldsComputerControl,
 } from "./thread-events.js";
 
 describe("thread event reduction", () => {
+  it("replays chief activity in place and matches reload without accepting older updates", () => {
+    const blocks: ThreadMessage["blocks"] = [
+      {
+        kind: "handoff",
+        fromBotId: "chief",
+        toBotId: "worker",
+        text: "Details",
+        chiefDispatch: {
+          requestMessageId: "request",
+          revision: 1,
+          memberId: "worker",
+          memberName: "Member",
+          state: "messaged",
+          reason: "eligible",
+          runId: "run",
+          delegationId: "assignment",
+          activity: {
+            revision: 1,
+            runId: "run",
+            delegationId: "assignment",
+            attempt: 1,
+            sourceSeq: 2,
+            key: "connect-notion",
+            state: "active",
+            updatedAt: "2026-01-01T00:00:00Z",
+          },
+        },
+      },
+    ];
+    const original = message("dispatch", [], 1);
+    const initial = snapshot([original]);
+    const update = event({
+      type: "thread.message.updated",
+      seq: 10,
+      payload: {
+        messageId: original.id,
+        role: original.role,
+        blocks,
+        messageSeq: original.seq,
+        createdAt: original.createdAt,
+      },
+    });
+    const live = reduceThreadSnapshot(initial, update)!;
+    expect(live.messages).toEqual([
+      {
+        ...original,
+        blocks,
+        threadId: update.threadId,
+        botId: update.botId,
+        runId: update.runId,
+        replyQuote: undefined,
+        replyToMessageId: undefined,
+      },
+    ]);
+    expect(reduceThreadSnapshot(live, update)).toBe(live);
+    expect(
+      reduceThreadSnapshot(live, { ...update, seq: 9, payload: { ...update.payload, blocks: [] } }),
+    ).toBe(live);
+    expect(
+      mergeThreadSnapshot(live, { ...live, messages: structuredClone(live.messages) })?.messages,
+    ).toEqual(live.messages);
+  });
   it("recognizes either member pin event for a group refresh", () => {
     expect(isGroupMemberModelPinEvent(event({ type: "group.memberModelPin.set" }))).toBe(true);
     expect(isGroupMemberModelPinEvent(event({ type: "group.memberModelPin.cleared" }))).toBe(true);
@@ -374,7 +438,7 @@ describe("thread event reduction", () => {
     });
   });
 
-  it("replaces transient progress and a matching live subagent with the durable message", () => {
+  it("replaces a matching live subagent with the durable message and keeps the reply draft", () => {
     const initial = snapshot([
       message("durable", [{ kind: "text", text: "old value" }]),
       message("subagent:research", [
@@ -416,7 +480,13 @@ describe("thread event reduction", () => {
       }),
     );
 
-    expect(next?.messages.map((item) => item.id)).toEqual(["durable", "subagent:other"]);
+    // The card saves no reply text, so the run's draft keeps the place its text holds for
+    // the reply still to come.
+    expect(next?.messages.map((item) => item.id)).toEqual([
+      "durable",
+      "subagent:other",
+      "progress:run-1",
+    ]);
     expect(next?.messages[0]?.blocks).toEqual([completedBlock]);
   });
 
@@ -532,6 +602,41 @@ describe("thread event reduction", () => {
     expect(started?.run?.trigger).toBe("bot_message");
   });
 
+  it("queues the run with its retry wake moment only while it waits for the model", () => {
+    const run = threadRun("run-1");
+    const initial: ThreadSnapshot = { ...snapshot([]), run, activeRuns: [run] };
+    const waiting = reduceThreadSnapshot(
+      initial,
+      event({
+        type: "run.retry_scheduled",
+        seq: 4,
+        runId: "run-1",
+        createdAt: "2026-08-16T00:00:10.000Z",
+        payload: { providerErrorKind: "rate-limit", attempt: 1, waitMs: 2_000 },
+      }),
+    );
+
+    expect(waiting?.run).toMatchObject({
+      id: "run-1",
+      status: "queued",
+      providerRetryAt: "2026-08-16T00:00:12.000Z",
+    });
+    expect(waiting?.activeRuns?.[0]).toMatchObject({
+      id: "run-1",
+      status: "queued",
+      providerRetryAt: "2026-08-16T00:00:12.000Z",
+    });
+    expect(isThreadSnapshotEvent(event({ type: "run.retry_scheduled" }))).toBe(true);
+
+    // The retry's start clears the wait: the row reads as working again.
+    const restarted = reduceThreadSnapshot(
+      waiting,
+      event({ type: "run.started", seq: 5, runId: "run-1", payload: { trigger: "user" } }),
+    );
+    expect(restarted?.run).toMatchObject({ id: "run-1", status: "running" });
+    expect(restarted?.run?.providerRetryAt ?? null).toBeNull();
+  });
+
   it("preserves webhook when event-sourcing an inbound wake", () => {
     const started = reduceThreadSnapshot(
       snapshot([]),
@@ -616,9 +721,9 @@ describe("thread event reduction", () => {
 
     expect(reconciled.snapshot.run?.status).toBe("waiting_takeover");
     expect(reconciled.computer?.busyBotName).toBeNull();
-    expect(computerTakeoverBlocked(reconciled.computer, reconciled.snapshot.run?.status)).toBe(
-      false,
-    );
+    expect(
+      computerTakeoverBlocked(reconciled.computer, activeThreadRuns(reconciled.snapshot), "bot-1"),
+    ).toBe(false);
   });
 
   it("ignores a refresh whose cursor is behind the event-sourced snapshot", () => {
@@ -704,6 +809,68 @@ describe("thread event reduction", () => {
     expect(stopped.computer?.busyBotName).toBeNull();
   });
 
+  it("keeps two room bots' drafts independent and stops every run together", () => {
+    const room: ThreadSnapshot = {
+      ...snapshot([]),
+      groupId: "group-1",
+      members: [
+        { botId: "bot-a", name: "Ada", color: "#111" },
+        { botId: "bot-b", name: "Beck", color: "#222" },
+      ],
+    };
+    const started = [
+      event({ type: "run.started", seq: 4, runId: "run-a", botId: "bot-a" }),
+      event({ type: "run.started", seq: 5, runId: "run-b", botId: "bot-b" }),
+    ].reduce<ThreadSnapshot | null>((current, e) => reduceThreadSnapshot(current, e), room);
+    expect(started?.activeRuns?.map((run) => run.id).sort()).toEqual(["run-a", "run-b"]);
+
+    const streaming = [
+      event({
+        type: "thread.progress",
+        seq: 6,
+        runId: "run-a",
+        botId: "bot-a",
+        payload: { delta: "Ada says hel" },
+      }),
+      event({
+        type: "thread.progress",
+        seq: 7,
+        runId: "run-b",
+        botId: "bot-b",
+        payload: { delta: "Beck says hi" },
+      }),
+      event({
+        type: "thread.progress",
+        seq: 8,
+        runId: "run-a",
+        botId: "bot-a",
+        payload: { delta: "lo" },
+      }),
+    ].reduce<ThreadSnapshot | null>((current, e) => reduceThreadSnapshot(current, e), started);
+    const draftA = streaming?.messages.find((message) => message.id === "progress:run-a");
+    const draftB = streaming?.messages.find((message) => message.id === "progress:run-b");
+    // Each draft accumulates only its own run's deltas.
+    expect(draftA?.blocks).toEqual([{ kind: "progress", text: "Ada says hello" }]);
+    expect(draftB?.blocks).toEqual([{ kind: "progress", text: "Beck says hi" }]);
+    expect(draftA?.botId).toBe("bot-a");
+    expect(draftB?.botId).toBe("bot-b");
+
+    // One run finishing drops only its own draft.
+    const oneDone = reduceThreadSnapshot(
+      streaming,
+      event({ type: "run.completed", seq: 9, runId: "run-a", botId: "bot-a" }),
+    );
+    expect(oneDone?.messages.some((message) => message.id === "progress:run-a")).toBe(false);
+    expect(oneDone?.messages.some((message) => message.id === "progress:run-b")).toBe(true);
+    expect(oneDone?.activeRuns?.map((run) => run.id)).toEqual(["run-b"]);
+
+    // Stop clears every active run and every remaining draft at once.
+    const stopped = clearActiveThreadRuns(oneDone!);
+    expect(stopped.activeRuns).toEqual([]);
+    expect(stopped.run).toBeNull();
+    expect(stopped.messages.some((message) => message.id.startsWith("progress:"))).toBe(false);
+  });
+
   it("keeps an optimistic stop clear when an older cursor refresh still looks busy", () => {
     // Stop has no terminal event, so progress can leave the local cursor ahead of threads.get.
     // After the shell clears run/busy locally, that older get must not restore Stop / Take control block.
@@ -729,9 +896,9 @@ describe("thread event reduction", () => {
     expect(reconciled.snapshot.run).toBeNull();
     expect(reconciled.snapshot.activeRuns).toEqual([]);
     expect(reconciled.computer?.busyBotName).toBeNull();
-    expect(computerTakeoverBlocked(reconciled.computer, reconciled.snapshot.run?.status)).toBe(
-      false,
-    );
+    expect(
+      computerTakeoverBlocked(reconciled.computer, activeThreadRuns(reconciled.snapshot), "bot-1"),
+    ).toBe(false);
   });
 
   it("always replaces the snapshot when switching to a different thread", () => {
@@ -944,6 +1111,23 @@ describe("thread event reduction", () => {
     expect(threadRunError(completed)).toBeNull();
     expect(blank?.run).toBeNull();
     expect(threadRunError(blank)).toBeNull();
+  });
+
+  it("names the refusing run's bot from the list, the snapshot's members, or no one", () => {
+    const failed = { ...threadRun("run-a"), status: "failed" as const };
+    const snapshotWith = (botId: string): Pick<ThreadSnapshot, "run"> => ({
+      run: { ...failed, botId },
+    });
+    const bots = [{ id: "bot-1", name: "Reviewer" }];
+    const members = [{ botId: "bot-2", name: "Departed", color: "slate" }];
+    expect(refusalRunBotName(snapshotWith("bot-1"), bots, members)).toBe("Reviewer");
+    // A bot the list no longer carries is still named from the snapshot's members.
+    expect(refusalRunBotName(snapshotWith("bot-2"), bots, members)).toBe("Departed");
+    // Gone from both: no name to fill, so the banner shows the recorded sentence — the
+    // thread's own name (a group's, say) is never used for the bot's sentence.
+    expect(refusalRunBotName(snapshotWith("bot-gone"), bots, members)).toBeUndefined();
+    expect(refusalRunBotName({ run: null }, bots, members)).toBeUndefined();
+    expect(refusalRunBotName(null, bots, members)).toBeUndefined();
   });
 
   it("applies the durable waiting-input run transition without a refresh", () => {
@@ -1213,7 +1397,7 @@ describe("thread event reduction", () => {
     );
 
     // No sentence terminator has streamed in yet, so the tool call is still hidden and
-    // everything so far renders as one continuous progress block.
+    // everything so far renders as one continuous progress block, still streaming.
     expect(afterMore?.messages).toEqual([
       expect.objectContaining({
         id: "progress:run-1",
@@ -1221,6 +1405,7 @@ describe("thread event reduction", () => {
           {
             kind: "progress",
             text: "Let me check Slack Found it, now sanding",
+            streaming: true,
             pendingToolNames: ["SLACK_FIND_CHANNELS"],
           },
         ],
@@ -1392,6 +1577,518 @@ describe("thread event reduction", () => {
     expect(next?.messages.map((item) => item.id)).toEqual(["final"]);
   });
 
+  it("keeps a streamed reply above the follow-up the owner sent before the run ended", () => {
+    const initial = snapshot([message("m-0", [{ kind: "text", text: "earlier" }], 0)]);
+    const streamed = reduceThreadSnapshot(
+      initial,
+      event({
+        type: "thread.progress",
+        seq: 1,
+        runId: "run-1",
+        payload: { text: "Chief's summary", streaming: true },
+      }),
+    );
+    expect(streamed?.messages.map((item) => item.id)).toEqual(["m-0", "progress:run-1"]);
+
+    // The owner sends a follow-up while the run is still active; the draft keeps its place.
+    const withQuestion = reduceThreadSnapshot(
+      streamed!,
+      event({
+        type: "thread.message.created",
+        seq: 2,
+        runId: "run-1",
+        payload: {
+          messageId: "q-1",
+          role: "user",
+          blocks: [{ kind: "text", text: "any pending PRs left?" }],
+        },
+      }),
+    );
+    expect(withQuestion?.messages.map((item) => item.id)).toEqual(["m-0", "progress:run-1", "q-1"]);
+
+    // When the run ends, the saved reply fills the draft's slot, above the follow-up.
+    const finished = reduceThreadSnapshot(
+      withQuestion!,
+      event({
+        type: "thread.message.created",
+        seq: 3,
+        runId: "run-1",
+        payload: {
+          messageId: "reply-1",
+          role: "bot",
+          blocks: [{ kind: "text", text: "Chief's summary" }],
+        },
+      }),
+    );
+    expect(finished?.messages.map((item) => item.id)).toEqual(["m-0", "reply-1", "q-1"]);
+  });
+
+  it("keeps a streaming draft in its place through every later update", () => {
+    const initial = snapshot([message("m-0", [{ kind: "text", text: "earlier" }], 0)]);
+    const updates = [
+      event({
+        type: "thread.progress",
+        seq: 1,
+        payload: { text: "Chief's summary", streaming: true },
+      }),
+      event({
+        type: "thread.message.created",
+        seq: 2,
+        payload: {
+          messageId: "q-1",
+          role: "user",
+          blocks: [{ kind: "text", text: "any pending PRs left?" }],
+        },
+      }),
+      // The owner's follow-up lands under the draft; nothing after it moves the draft.
+      event({
+        type: "thread.progress",
+        seq: 3,
+        payload: { delta: " continues.", streaming: true },
+      }),
+      event({ type: "agent.tool.called", seq: 4, payload: { name: "run_command" } }),
+      event({
+        type: "thread.progress",
+        seq: 5,
+        payload: { text: "Running gh pr list", activity: true },
+      }),
+      event({
+        type: "thread.subagent",
+        seq: 6,
+        payload: { agentId: "research", name: "Research", task: "Check", status: "running" },
+      }),
+    ];
+    let state: ThreadSnapshot | null = initial;
+    for (const update of updates.slice(0, 2)) state = reduceThreadSnapshot(state, update);
+    for (const update of updates.slice(2)) {
+      state = reduceThreadSnapshot(state, update);
+      expect(state?.messages.slice(0, 3).map((item) => item.id)).toEqual([
+        "m-0",
+        "progress:run-1",
+        "q-1",
+      ]);
+    }
+    expect(state?.messages.map((item) => item.id)).toEqual([
+      "m-0",
+      "progress:run-1",
+      "q-1",
+      "subagent:research",
+    ]);
+
+    // The saved reply fills the draft's place, above the follow-up, as a reload shows it.
+    const saved = reduceThreadSnapshot(
+      state,
+      event({
+        type: "thread.message.created",
+        seq: 7,
+        payload: {
+          messageId: "reply-1",
+          role: "bot",
+          blocks: [{ kind: "text", text: "Chief's summary continues." }],
+        },
+      }),
+    );
+    expect(saved?.messages.map((item) => item.id)).toEqual([
+      "m-0",
+      "reply-1",
+      "q-1",
+      "subagent:research",
+    ]);
+  });
+
+  it("gives a draft its place only once its reply text streams", () => {
+    const initial = snapshot([message("m-0", [{ kind: "text", text: "earlier" }], 0)]);
+    // A tool call starts before any reply text: the draft has no place of its own yet.
+    const working = reduceThreadSnapshot(
+      initial,
+      event({ type: "agent.tool.called", seq: 1, payload: { name: "run_command" } }),
+    );
+    const withQuestion = reduceThreadSnapshot(
+      working,
+      event({
+        type: "thread.message.created",
+        seq: 2,
+        payload: {
+          messageId: "q-1",
+          role: "user",
+          blocks: [{ kind: "text", text: "use weekly buckets" }],
+        },
+      }),
+    );
+    // Its text streams after the follow-up, so that is where the reply's place is held.
+    const streamed = reduceThreadSnapshot(
+      withQuestion,
+      event({
+        type: "thread.progress",
+        seq: 3,
+        payload: { text: "Here are the weekly numbers.", streaming: true },
+      }),
+    );
+    expect(streamed?.messages.map((item) => item.id)).toEqual(["m-0", "q-1", "progress:run-1"]);
+    const saved = reduceThreadSnapshot(
+      streamed,
+      event({
+        type: "thread.message.created",
+        seq: 4,
+        payload: {
+          messageId: "reply-1",
+          role: "bot",
+          blocks: [{ kind: "text", text: "Here are the weekly numbers." }],
+        },
+      }),
+    );
+    expect(saved?.messages.map((item) => item.id)).toEqual(["m-0", "q-1", "reply-1"]);
+  });
+
+  it("puts a card the run posts after the owner's message below that message", () => {
+    const chart = { kind: "chart", name: "Weekly", spec: {}, data: [] };
+    const updates = [
+      event({
+        type: "thread.progress",
+        seq: 1,
+        payload: { text: "Let me chart it.", streaming: true },
+      }),
+      // The narration is saved before the tool starts, leaving a steps-only draft.
+      event({
+        type: "thread.message.created",
+        seq: 2,
+        payload: {
+          messageId: "narration-1",
+          role: "bot",
+          blocks: [{ kind: "text", text: "Let me chart it." }],
+        },
+      }),
+      event({ type: "agent.tool.called", seq: 3, payload: { name: "render_plot" } }),
+      event({
+        type: "thread.message.created",
+        seq: 4,
+        payload: {
+          messageId: "q-1",
+          role: "user",
+          blocks: [{ kind: "text", text: "use weekly buckets" }],
+        },
+      }),
+      event({
+        type: "thread.message.created",
+        seq: 5,
+        payload: { messageId: "chart-1", role: "bot", blocks: [chart] },
+      }),
+    ];
+    let state: ThreadSnapshot | null = snapshot([
+      message("m-0", [{ kind: "text", text: "earlier" }], 0),
+    ]);
+    for (const update of updates) state = reduceThreadSnapshot(state, update);
+    const durable = (messages: readonly ThreadMessage[] | undefined) =>
+      messages?.filter((item) => !item.id.startsWith("progress:")).map((item) => item.id);
+    expect(durable(state?.messages)).toEqual(["m-0", "narration-1", "q-1", "chart-1"]);
+
+    // The final reply streams after the card and is saved below it.
+    state = reduceThreadSnapshot(
+      state,
+      event({ type: "thread.progress", seq: 6, payload: { text: "Done.", streaming: true } }),
+    );
+    state = reduceThreadSnapshot(
+      state,
+      event({
+        type: "thread.message.created",
+        seq: 7,
+        payload: { messageId: "reply-1", role: "bot", blocks: [{ kind: "text", text: "Done." }] },
+      }),
+    );
+    expect(state?.messages.map((item) => item.id)).toEqual([
+      "m-0",
+      "narration-1",
+      "q-1",
+      "chart-1",
+      "reply-1",
+    ]);
+  });
+
+  it("keeps the reply's place when the run posts a card while its text streams", () => {
+    const chart = { kind: "chart", name: "Weekly", spec: {}, data: [] };
+    let state = reduceThreadSnapshot(
+      snapshot([message("m-0", [{ kind: "text", text: "earlier" }], 0)]),
+      event({
+        type: "thread.progress",
+        seq: 1,
+        payload: { text: "Weekly numbers", streaming: true },
+      }),
+    );
+    state = reduceThreadSnapshot(
+      state,
+      event({
+        type: "thread.message.created",
+        seq: 2,
+        payload: { messageId: "chart-1", role: "bot", blocks: [chart] },
+      }),
+    );
+    // The card saves no reply text: it lands after the newest message, and the draft keeps
+    // the place its text holds.
+    expect(state?.messages.map((item) => item.id)).toEqual(["m-0", "progress:run-1", "chart-1"]);
+    expect(state?.messages[1]?.blocks).toEqual([
+      { kind: "progress", text: "Weekly numbers", streaming: true },
+    ]);
+    state = reduceThreadSnapshot(
+      state,
+      event({ type: "thread.progress", seq: 3, payload: { delta: " are up.", streaming: true } }),
+    );
+    state = reduceThreadSnapshot(
+      state,
+      event({
+        type: "thread.message.created",
+        seq: 4,
+        payload: {
+          messageId: "reply-1",
+          role: "bot",
+          blocks: [{ kind: "text", text: "Weekly numbers are up." }],
+        },
+      }),
+    );
+    expect(state?.messages.map((item) => item.id)).toEqual(["m-0", "reply-1", "chart-1"]);
+  });
+
+  it("keeps the streamed reply above the follow-up when tool activity arrives before the narration is saved", () => {
+    // Pi posts the activity line, then the executor saves the narration, then the tool call.
+    let state = reduceThreadSnapshot(
+      snapshot([message("m-0", [{ kind: "text", text: "earlier" }], 0)]),
+      event({
+        type: "thread.progress",
+        seq: 1,
+        payload: { text: "Chief's summary", streaming: true },
+      }),
+    );
+    state = reduceThreadSnapshot(
+      state,
+      event({
+        type: "thread.message.created",
+        seq: 2,
+        payload: {
+          messageId: "q-1",
+          role: "user",
+          blocks: [{ kind: "text", text: "any pending PRs left?" }],
+        },
+      }),
+    );
+    state = reduceThreadSnapshot(
+      state,
+      event({
+        type: "thread.progress",
+        seq: 3,
+        payload: { text: "Running gh pr list", activity: true },
+      }),
+    );
+    expect(state?.messages.map((item) => item.id)).toEqual(["m-0", "progress:run-1", "q-1"]);
+    expect(state?.messages[1]?.blocks).toEqual([
+      { kind: "text", text: "Chief's summary" },
+      { kind: "progress", text: "Running gh pr list", activity: true },
+    ]);
+    state = reduceThreadSnapshot(
+      state,
+      event({
+        type: "thread.message.created",
+        seq: 4,
+        payload: {
+          messageId: "narr-1",
+          role: "bot",
+          blocks: [{ kind: "text", text: "Chief's summary" }],
+        },
+      }),
+    );
+    state = reduceThreadSnapshot(
+      state,
+      event({ type: "agent.tool.called", seq: 5, payload: { name: "shell" } }),
+    );
+    // The narration filled the draft's place. The tool call after that is a new
+    // activity draft at the end, and it does not move the saved reply.
+    expect(state?.messages.map((item) => item.id)).toEqual([
+      "m-0",
+      "narr-1",
+      "q-1",
+      "progress:run-1",
+    ]);
+    expect(state?.messages.at(-1)?.blocks).toEqual([
+      { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+    ]);
+  });
+
+  it("keeps each bot's narration in the place it streamed when another bot is also replying", () => {
+    const user = {
+      ...message("q-0", [{ kind: "text", text: "status please" }], 0),
+      role: "user" as const,
+    };
+    let state = reduceThreadSnapshot(
+      snapshot([user]),
+      event({
+        type: "thread.progress",
+        seq: 1,
+        runId: "run-a",
+        botId: "bot-a",
+        payload: { text: "Alpha answer", streaming: true },
+      }),
+    );
+    state = reduceThreadSnapshot(
+      state,
+      event({
+        type: "thread.progress",
+        seq: 2,
+        runId: "run-b",
+        botId: "bot-b",
+        payload: { text: "Beta answer", streaming: true },
+      }),
+    );
+    state = reduceThreadSnapshot(
+      state,
+      event({
+        type: "thread.progress",
+        seq: 3,
+        runId: "run-a",
+        botId: "bot-a",
+        payload: { text: "Running gh pr list", activity: true },
+      }),
+    );
+    expect(state?.messages.map((item) => item.id)).toEqual([
+      "q-0",
+      "progress:run-a",
+      "progress:run-b",
+    ]);
+    state = reduceThreadSnapshot(
+      state,
+      event({
+        type: "thread.message.created",
+        seq: 4,
+        runId: "run-a",
+        botId: "bot-a",
+        payload: {
+          messageId: "a-narr",
+          role: "bot",
+          blocks: [{ kind: "text", text: "Alpha answer" }],
+        },
+      }),
+    );
+    state = reduceThreadSnapshot(
+      state,
+      event({
+        type: "thread.message.created",
+        seq: 5,
+        runId: "run-b",
+        botId: "bot-b",
+        payload: {
+          messageId: "b-reply",
+          role: "bot",
+          blocks: [{ kind: "text", text: "Beta answer" }],
+        },
+      }),
+    );
+    expect(state?.messages.map((item) => item.id)).toEqual(["q-0", "a-narr", "b-reply"]);
+  });
+
+  it("keeps a routine summary above the card when activity arrives before the narration is saved", () => {
+    const chart = { kind: "chart" as const, name: "Weekly", spec: {}, data: [] };
+    let state = reduceThreadSnapshot(
+      snapshot([message("m-0", [{ kind: "text", text: "earlier" }], 0)]),
+      event({
+        type: "thread.progress",
+        seq: 1,
+        payload: { text: "Let me chart it.", streaming: true },
+      }),
+    );
+    state = reduceThreadSnapshot(
+      state,
+      event({
+        type: "thread.progress",
+        seq: 2,
+        payload: { text: "Rendering a chart", activity: true },
+      }),
+    );
+    state = reduceThreadSnapshot(
+      state,
+      event({
+        type: "thread.message.created",
+        seq: 3,
+        payload: { messageId: "chart-1", role: "bot", blocks: [chart] },
+      }),
+    );
+    state = reduceThreadSnapshot(
+      state,
+      event({
+        type: "thread.progress",
+        seq: 4,
+        payload: { text: "Weekly numbers.", streaming: true },
+      }),
+    );
+    expect(state?.messages.map((item) => item.id)).toEqual(["m-0", "progress:run-1", "chart-1"]);
+    expect(state?.messages[1]?.blocks).toEqual([
+      { kind: "progress", text: "Weekly numbers.", streaming: true },
+    ]);
+    state = reduceThreadSnapshot(
+      state,
+      event({
+        type: "thread.message.created",
+        seq: 5,
+        payload: {
+          messageId: "summary-1",
+          role: "bot",
+          blocks: [{ kind: "text", text: "Weekly numbers." }],
+        },
+      }),
+    );
+    expect(state?.messages.map((item) => item.id)).toEqual(["m-0", "summary-1", "chart-1"]);
+  });
+
+  it("marks the live reply as streaming only while its text is growing", () => {
+    const initial = snapshot([]);
+    const growing = reduceThreadSnapshot(
+      initial,
+      event({
+        type: "thread.progress",
+        seq: 1,
+        runId: "run-1",
+        payload: { text: "Chief's summary", streaming: true },
+      }),
+    );
+    expect(growing?.messages.at(-1)?.blocks.at(-1)).toMatchObject({
+      kind: "progress",
+      streaming: true,
+    });
+
+    // The text stops and the bot moves on to a command; the cursor must go away.
+    const working = reduceThreadSnapshot(
+      growing!,
+      event({
+        type: "agent.tool.called",
+        seq: 2,
+        runId: "run-1",
+        payload: { name: "run_command" },
+      }),
+    );
+    const tail = working?.messages.at(-1)?.blocks.at(-1);
+    expect(tail).toMatchObject({ kind: "progress" });
+    expect(tail).not.toHaveProperty("streaming");
+
+    // Text growing again brings the cursor back. A delta without a sentence end keeps
+    // the draft as one progress block, still streaming.
+    const resumed = reduceThreadSnapshot(
+      working!,
+      event({
+        type: "thread.progress",
+        seq: 3,
+        runId: "run-1",
+        payload: { delta: " and more", streaming: true },
+      }),
+    );
+    expect(resumed?.messages.at(-1)?.blocks.at(-1)).toMatchObject({
+      kind: "progress",
+      streaming: true,
+    });
+
+    // The run ends; no live draft remains.
+    const done = reduceThreadSnapshot(
+      resumed!,
+      event({ type: "run.completed", seq: 4, runId: "run-1", payload: {} }),
+    );
+    expect(done?.messages).toEqual([]);
+  });
+
   it("updates a waiting group run without replacing the newer active run", () => {
     const newerRun = {
       id: "run-newer",
@@ -1457,6 +2154,59 @@ describe("thread event reduction", () => {
 
     expect(next?.messages).toHaveLength(1);
     expect(next?.messages[0]?.blocks[0]).toMatchObject({ status: "answered", answer: "Paris" });
+  });
+
+  it("replaces a coordination line in place when a member outcome lands", () => {
+    const initial = snapshot([
+      message("ask-1", [
+        {
+          kind: "coordination",
+          nonce: "group-ask:1:run-1:call-1",
+          round: 1,
+          text: "Say hello.",
+          updates: [],
+          members: [
+            { botId: "ada", name: "Ada", outcome: "pending" },
+            { botId: "ben", name: "Ben", outcome: "pending" },
+          ],
+        },
+      ]),
+    ]);
+    const next = reduceThreadSnapshot(
+      initial,
+      event({
+        type: "thread.message.updated",
+        seq: 7,
+        payload: {
+          messageId: "ask-1",
+          role: "bot",
+          blocks: [
+            {
+              kind: "coordination",
+              nonce: "group-ask:1:run-1:call-1",
+              round: 1,
+              text: "Say hello.",
+              updates: [],
+              members: [
+                { botId: "ada", name: "Ada", outcome: "answered" },
+                { botId: "ben", name: "Ben", outcome: "pending" },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(next?.messages).toHaveLength(1);
+    expect(next?.messages[0]?.id).toBe("ask-1");
+    expect(next?.cursor).toBe(7);
+    expect(next?.messages[0]?.blocks[0]).toMatchObject({
+      kind: "coordination",
+      members: [
+        { botId: "ada", outcome: "answered" },
+        { botId: "ben", outcome: "pending" },
+      ],
+    });
   });
 
   it("preserves botId on durable bot messages", () => {
@@ -1565,14 +2315,36 @@ describe("computer event reduction", () => {
   });
 
   it("treats a busy bot name as a blocked takeover", () => {
-    expect(computerTakeoverBlocked(computer({ busyBotName: "Writer" }), "running")).toBe(true);
-    expect(computerTakeoverBlocked(computer({ busyBotName: "Writer" }))).toBe(false);
-    expect(computerTakeoverBlocked(computer({ busyBotName: null }), "running")).toBe(false);
-    expect(computerTakeoverBlocked(null, "running")).toBe(false);
-    expect(computerTakeoverBlocked(computer({ busyBotName: "Writer" }), "waiting_takeover")).toBe(
+    const busy = computer({ busyBotName: "Writer" });
+    const runs = (status: Run["status"]) => [{ ...threadRun("run-1"), status }];
+    expect(computerTakeoverBlocked(busy, runs("running"), "bot-1")).toBe(true);
+    expect(computerTakeoverBlocked(busy, [], "bot-1")).toBe(false);
+    expect(computerTakeoverBlocked(computer({ busyBotName: null }), runs("running"), "bot-1")).toBe(
       false,
     );
-    expect(computerTakeoverBlocked(computer({ busyBotName: "Writer" }), "completed")).toBe(false);
+    expect(computerTakeoverBlocked(null, runs("running"), "bot-1")).toBe(false);
+    expect(computerTakeoverBlocked(busy, runs("waiting_takeover"), "bot-1")).toBe(false);
+    expect(computerTakeoverBlocked(busy, runs("completed"), "bot-1")).toBe(false);
+  });
+
+  it("blocks a group member's takeover on that member's own run, not the headline run", () => {
+    // The headline run is Writer's failed or waiting run while Chief still works on its computer.
+    const chief = threadRun("run-chief", "bot-chief");
+    const writer = threadRun("run-writer", "bot-writer");
+    const busyChief = computer({ botId: "bot-chief", busyBotName: "Chief" });
+    for (const headline of [
+      { ...writer, status: "failed" as const },
+      { ...writer, status: "waiting_takeover" as const },
+    ]) {
+      const group: ThreadSnapshot = {
+        ...snapshot([]),
+        botId: undefined,
+        groupId: "group-1",
+        run: headline,
+        activeRuns: headline.status === "failed" ? [chief] : [headline, chief],
+      };
+      expect(computerTakeoverBlocked(busyChief, activeThreadRuns(group), "bot-chief")).toBe(true);
+    }
   });
 
   it("ignores computer events that belong to a different bot", () => {
@@ -1681,19 +2453,22 @@ describe("computer event reduction", () => {
     expect(computerPanelAutoUsesBoot("wait")).toBe(false);
   });
 
-  it("shows maintenance only after a stopped or errored computer finishes booting", () => {
-    expect(computerPanelNeedsMaintenance("error", false)).toBe(true);
-    expect(computerPanelNeedsMaintenance("stopped", false)).toBe(true);
-    expect(computerPanelNeedsMaintenance("error", true)).toBe(false);
-    expect(computerPanelNeedsMaintenance("running", false)).toBe(false);
-    expect(computerPanelNeedsMaintenance(undefined, false)).toBe(false);
+  it("shows maintenance for an errored computer or a stopped one whose boot failed", () => {
+    expect(computerPanelNeedsMaintenance("error", false, false)).toBe(true);
+    expect(computerPanelNeedsMaintenance("stopped", false, true)).toBe(true);
+    expect(computerPanelNeedsMaintenance("stopped", false, false)).toBe(false);
+    expect(computerPanelNeedsMaintenance("error", true, false)).toBe(false);
+    expect(computerPanelNeedsMaintenance("running", false, true)).toBe(false);
+    expect(computerPanelNeedsMaintenance(undefined, false, false)).toBe(false);
   });
 
   it("hides side-panel maintenance while the computer overlay is open", () => {
     const panel = "computer";
     const booting = false;
     const showInSidePanel = (computerOpen: boolean) =>
-      panel === "computer" && !computerOpen && computerPanelNeedsMaintenance("stopped", booting);
+      panel === "computer" &&
+      !computerOpen &&
+      computerPanelNeedsMaintenance("error", booting, false);
 
     expect(showInSidePanel(false)).toBe(true);
     expect(showInSidePanel(true)).toBe(false);

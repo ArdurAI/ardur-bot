@@ -1,4 +1,22 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "Reading the document": "Читаю документ",
+  "Connecting to Notion": "Подключаюсь к Notion",
+  "Creating the Notion page": "Создаю страницу в Notion",
+  "Checking the Notion page": "Проверяю страницу в Notion",
+  "Checking the missing tool": "Проверяю недостающий инструмент",
+  "Working on the task": "Работаю над задачей",
+  "Waiting for the tool": "Ожидаю инструмент",
+  "Done — added the document to Notion.": "Готово — документ добавлен в Notion.",
+  "The draft is ready.": "Черновик готов.",
+  "Got it — I’ll choose a team member to put this in Notion.":
+    "Понял — выберу участника команды, который разместит это в Notion.",
+  "Got it — I’ll check what’s missing and ask before installing it.":
+    "Понял — проверю, чего не хватает, и спрошу перед установкой.",
+  "Got it — I’ll check the request and choose the next step.":
+    "Понял — проверю запрос и выберу следующий шаг.",
+  "Hi everyone.": "Всем привет.",
+  "Messaged {name}": "Сообщение отправлено {name}",
+  "Queued for {name}": "В очереди для {name}",
   "Allow preparation": "Разрешить подготовку",
   "Preparation allowed": "Подготовка разрешена",
   "Request expired": "Срок запроса истёк",
@@ -37,8 +55,38 @@ export const RU_MESSAGES: Record<string, string> = {
     "Модель группы заблокирована настройками бота или пространства. Измените правила для места назначения или выберите другую модель группы.",
   "{botName} couldn't use the model set for this group. Reconnect it or change the group model.":
     "{botName} не смог использовать модель, выбранную для этой группы. Восстановите подключение или измените модель группы.",
+  "{botName} hit the group model's usage limit. Try again after it resets, or change the group model.":
+    "{botName} достиг лимита использования модели группы. Повторите попытку после его сброса или измените модель группы.",
+  "{botName}'s sign-in for the group model expired. Reconnect it or change the group model.":
+    "Срок входа {botName} для модели группы истёк. Восстановите подключение или измените модель группы.",
   "{botName} couldn't use the model set for this group. Change the group model or check this bot's settings.":
     "{botName} не смог использовать модель, выбранную для этой группы. Измените модель группы или проверьте настройки бота.",
+  "{runtime}'s usage limit is reached. Try again after it resets.":
+    "Лимит использования {runtime} исчерпан. Повторите попытку после его сброса.",
+  "Sign in to {runtime} on this computer, then try again.":
+    "Войдите в {runtime} на этом компьютере и повторите попытку.",
+  "{runtime} reached this run's turn limit. Narrow the task and try again.":
+    "{runtime} достиг лимита шагов этого запуска. Сузьте задачу и повторите попытку.",
+  "{runtime}'s pinned model is unavailable. Change the pin and try again.":
+    "Закреплённая модель {runtime} недоступна. Измените закреплённую модель и повторите попытку.",
+  "{runtime}'s configuration is invalid. Check this bot's settings.":
+    "Недействительная конфигурация {runtime}. Проверьте настройки этого бота.",
+  "{runtime}'s model connection is missing. Connect it or change the pin.":
+    "Подключение модели {runtime} отсутствует. Подключите его или измените закрепление.",
+  "{runtime} stopped before finishing this run.": "{runtime} остановился, не завершив этот запуск.",
+  "{runtime} could not finish this run. Check the runtime or change the pin.":
+    "{runtime} не смог завершить этот запуск. Проверьте среду выполнения или измените закрепление.",
+  "{runtime} is experimental. Turn on Experimental for {bot} to use it.":
+    "{runtime} — экспериментальная среда. Включите «Экспериментально» для {bot}, чтобы использовать её.",
+  "{runtime} runs on the host computer, not in a sandbox. Change {bot}'s computer to use it.":
+    "{runtime} работает на компьютере-хосте, а не в песочнице. Измените компьютер {bot}, чтобы использовать её.",
+  "{bot}'s allowed model destinations block this model. Change them in {bot}'s settings.":
+    "Разрешённые направления моделей {bot} блокируют эту модель. Измените их в настройках {bot}.",
+  "This space's model policy blocks this model. Change it in Settings, under Models.":
+    "Политика моделей этого пространства блокирует эту модель. Измените её в настройках, в разделе «Модели».",
+  "This bot": "Этот бот",
+  "Turn on Experimental": "Включить «Экспериментально»",
+  "Open Settings": "Открыть настройки",
   Antigravity: "Antigravity",
   Hermes: "Hermes",
   "Ardur (built-in)": "Ardur (встроенная)",
@@ -48,9 +96,15 @@ export const RU_MESSAGES: Record<string, string> = {
   "Model calls per turn": "Вызовы модели за ход",
   "Time limit": "Ограничение времени",
   "Hermes is not installed on this computer.": "Hermes не установлен на этом компьютере.",
-  "Hermes does not yet support Anthropic connections.":
-    "Hermes пока не поддерживает подключения Anthropic.",
-  "Hermes does not yet support this connection.": "Hermes пока не поддерживает это подключение.",
+  "The Hermes install on this computer failed its safety check.":
+    "Установка Hermes на этом компьютере не прошла проверку безопасности.",
+  "Hermes isn't available on Windows yet.": "Hermes пока недоступен в Windows.",
+  "Claude subscriptions only work in Anthropic's own apps; add an Anthropic API key to use Claude with Hermes.":
+    "Подписки Claude работают только в собственных приложениях Anthropic; добавьте API-ключ Anthropic, чтобы использовать Claude с Hermes.",
+  "ChatGPT sign-ins only work inside Codex; add an OpenAI API key to use GPT models with Hermes.":
+    "Вход через ChatGPT работает только внутри Codex; добавьте API-ключ OpenAI, чтобы использовать модели GPT с Hermes.",
+  "Add an API key connection to use this provider with Hermes.":
+    "Добавьте подключение с API-ключом, чтобы использовать этого поставщика с Hermes.",
   "Hermes runs with this computer's access.": "Hermes работает с правами доступа этого компьютера.",
   "Antigravity did not finish in time. Try again.":
     "Antigravity не завершил запрос вовремя. Повторите попытку.",
@@ -73,6 +127,7 @@ export const RU_MESSAGES: Record<string, string> = {
   "Antigravity could not run this turn: {reason}.":
     "Antigravity не смог выполнить этот запрос: {reason}.",
   "Cost unavailable": "Стоимость недоступна",
+  "Partially reported": "Частично зафиксировано",
   "Antigravity is installed (version {version})": "Antigravity установлен (версия {version})",
   "Sign-in unknown until the first run": "Статус входа неизвестен до первого запуска",
   "Antigravity is not installed on this computer. Install it and sign in there, then check again.":
@@ -163,6 +218,8 @@ export const RU_MESSAGES: Record<string, string> = {
   Read: "Прочитано",
   Replied: "Получен ответ",
   "Waiting for a turn": "Ожидает очереди",
+  "Waiting for a free place": "Ждёт свободного места",
+  "Waiting for the model": "Ждёт модель",
   Expired: "Срок истёк",
   "Could not update learning. Try again.": "Не удалось обновить обучение. Повторите попытку.",
   "Could not update this task; try again.": "Не удалось обновить задачу. Повторите попытку.",
@@ -799,6 +856,8 @@ export const RU_MESSAGES: Record<string, string> = {
   "Work stopped, but the thread could not refresh: {detail}":
     "Работа остановлена, но диалог не удалось обновить: {detail}",
   "You have control": "Вы управляете",
+  "You control the computer": "Вы управляете компьютером",
+  "End this terminal?": "Закрыть этот терминал?",
   "Your account": "Ваш аккаунт",
   "Your key or subscription token is stored securely and is never shown here.":
     "Ваш ключ или токен подписки надежно хранится и никогда не отображается здесь.",
@@ -1158,9 +1217,16 @@ export const RU_MESSAGES: Record<string, string> = {
   "All bots": "Все боты",
   "Bots keep the board and memory current":
     "Боты поддерживают доску и память в актуальном состоянии",
+  "Bots answering at once": "Боты, отвечающие одновременно",
   "Learning review is off": "Проверка обучения выключена",
   "Learning review is on": "Проверка обучения включена",
   "Reviewer: {model}": "Проверяющая модель: {model}",
+  "Learning review": "Проверка обучения",
+  "Learning reviewer": "Проверяющая модель обучения",
+  "Thinking: {level}": "Рассуждение: {level}",
+  "Connect a model": "Подключить модель",
+  "Reviews use this connection and may incur model charges.":
+    "Проверки используют это подключение, за вызовы модели может взиматься плата.",
   Enable: "Включить",
   "Filed by {name}": "Создал бот {name}",
   "No reviewer model yet.": "Проверяющая модель ещё не выбрана.",
@@ -1275,4 +1341,111 @@ export const RU_MESSAGES: Record<string, string> = {
   "Could not save group model.": "Не удалось сохранить модель группы.",
   "This member's model changed. Reload the group.":
     "Модель этого участника изменилась. Перезагрузите группу.",
+  "Time limit (seconds)": "Лимит времени (секунды)",
+  "Context limit (KiB)": "Лимит контекста (КиБ)",
+  "Enter valid JSON.": "Введите корректный JSON.",
+  "Remove the duplicate field.": "Удалите повторяющееся поле.",
+  "Configuration must be 16 KiB or smaller.": "Конфигурация должна быть не больше 16 КиБ.",
+  "This configuration is too complex.": "Эта конфигурация слишком сложная.",
+  "This configuration version is not supported.": "Эта версия конфигурации не поддерживается.",
+  "This field is not supported.": "Это поле не поддерживается.",
+  "Ardur sets the model and thinking level. Change them in bot settings.":
+    "Ardur задаёт модель и уровень размышлений. Измените их в настройках бота.",
+  "Use Ardur Connections for provider settings.":
+    "Используйте Ardur «Подключения» для настроек провайдера.",
+  "Use Ardur settings for tools, integrations, MCP servers, skills, and plugins.":
+    "Используйте настройки Ardur для инструментов, интеграций, MCP-серверов, навыков и плагинов.",
+  "Ardur manages paths, hooks, permissions, and network access.":
+    "Ardur управляет путями, хуками, разрешениями и доступом к сети.",
+  "Runtime settings cannot install or load code.":
+    "Настройки среды выполнения не могут устанавливать или загружать код.",
+  "Use Ardur Learning settings.": "Используйте настройки обучения Ardur.",
+  "Native child agents are not available with Hermes.": "Вложенные агенты недоступны в Hermes.",
+  "Native compression is not available with Hermes.": "Встроенное сжатие недоступно в Hermes.",
+  "Use a whole number from 1 to 64.": "Введите целое число от 1 до 64.",
+  "Use whole seconds.": "Указывайте целые секунды.",
+  "Use whole KiB.": "Указывайте целые КиБ.",
+  "Choose Trim older context or Stop the run.":
+    "Выберите «Сокращать старый контекст» или «Остановить запуск».",
+  "Use a whole number from 1 to 600.": "Введите целое число от 1 до 600.",
+  "Use a whole number from 4 to 64.": "Введите целое число от 4 до 64.",
+  "Use a whole number from 1 to 3.": "Введите целое число от 1 до 3.",
+  "Bot settings changed. Reload before saving.":
+    "Настройки бота изменились. Перезагрузите перед сохранением.",
+  "Could not preview the configuration. Try again.":
+    "Не удалось показать конфигурацию. Попробуйте ещё раз.",
+  "Configuration (JSON)": "Конфигурация (JSON)",
+  "Effective configuration": "Действующая конфигурация",
+  "Your settings": "Ваши настройки",
+  "Ardur manages": "Ardur управляет",
+  "Model, thinking, connections, tools, and permissions come from Ardur.":
+    "Модель, размышления, подключения, инструменты и разрешения задаются Ardur.",
+  "When context is full": "Когда контекст заполнен",
+  "Trim older context": "Сокращать старый контекст",
+  "Stop the run": "Остановить запуск",
+  "API attempts": "Попытки API",
+  "Child agents": "Вложенные агенты",
+  "Unavailable with Hermes.": "Недоступно в Hermes.",
+  "Native compression": "Встроенное сжатие",
+  "Reset to defaults": "Сбросить к стандартным",
+  "Fix the configuration JSON to edit these settings.":
+    "Исправьте JSON конфигурации, чтобы изменять эти настройки.",
+  Reload: "Перезагрузить",
+  "Done: {title}": "Готово: {title}",
+  "Failed: {title}": "Ошибка: {title}",
+  "Working: {title}": "Выполняется: {title}",
+  Interrupted: "Прервано",
+  "Interrupted: {title}": "Прервано: {title}",
+  "Unknown: {title}": "Неизвестно: {title}",
+  Command: "Команда",
+  "1 bot": "1 бот",
+  "{count} bots": "{count} бота",
+  "{count} answered": "{count} ответили",
+  "Asked {asked} · {answered}": "Спрошено: {asked} · {answered}",
+  "{name} couldn't answer": "{name} не смог ответить",
+  "{name} couldn't answer: its model account needs attention":
+    "{name} не смог ответить: аккаунт его модели требует внимания",
+  "{name} couldn't answer: its model account hit a rate limit":
+    "{name} не смог ответить: аккаунт его модели достиг лимита запросов",
+  "{name} couldn't answer: its model is unavailable":
+    "{name} не смог ответить: его модель недоступна",
+  "{name} stopped before answering": "{name} остановился до ответа",
+  Fix: "Исправить",
+  answered: "ответил",
+  "couldn't answer": "не смог ответить",
+  "stopped before answering": "остановился до ответа",
+  "is waiting for you": "ждёт вас",
+  "has not answered yet": "пока не ответил",
+  "This runtime": "Эта среда выполнения",
+  "Where this bot runs": "Где работает этот бот",
+  "Only this bot": "Только этот бот",
+  "Shared with team": "Общий с командой",
+  "Bots share files and installed tools":
+    "Боты совместно используют файлы и установленные инструменты",
+  "Runs as you; can use your files and signed-in tools":
+    "Работает с вашими правами; может использовать ваши файлы и инструменты, в которых вы вошли в аккаунт",
+  Container: "Контейнер",
+  "Remote computer": "Удалённый компьютер",
+  "Hosted sandbox": "Облачная песочница",
+  "Test computer": "Тестовый компьютер",
+  "Separate home; can reach allowed network services and granted credentials.":
+    "Отдельная домашняя папка; доступны разрешённые сетевые службы и предоставленные учётные данные.",
+  "Uses that account's permissions.": "Использует права этой учётной записи.",
+  "Runs at the configured provider; can use granted credentials and network access.":
+    "Работает у настроенного провайдера; может использовать предоставленные учётные данные и доступ к сети.",
+  "For testing only; not an isolation boundary.":
+    "Только для тестирования; не обеспечивает изоляцию.",
+  "Computer location unavailable. Choose a supported connection.":
+    "Местоположение компьютера недоступно. Выберите поддерживаемое подключение.",
+  "Computer location unavailable. Try again.":
+    "Местоположение компьютера недоступно. Попробуйте снова.",
+  "Change location": "Изменить местоположение",
+  "Set up a container for isolated work.": "Настройте контейнер для изолированной работы.",
+  "Set up computer": "Настроить компьютер",
+  "Could not start": "Не удалось запустить",
+  Sharing: "Совместное использование",
+  "Change location on desktop.": "Измените местоположение в настольном приложении.",
+  "Set up a container on desktop, then try again.":
+    "Настройте контейнер в настольном приложении, затем попробуйте снова.",
+  Sleeping: "Спит",
 };

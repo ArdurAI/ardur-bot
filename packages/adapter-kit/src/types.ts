@@ -228,6 +228,8 @@ export interface ConnectorRoute {
   resourceRevision?: string | number;
   /** Source label for lazy catalog name indexes. Never exposed as a model schema field. */
   catalogGroup?: string;
+  /** Trusted catalog identity, never a user-selected slug or tool argument. */
+  serviceId?: string;
 }
 
 export interface ConnectorCall {
@@ -264,6 +266,9 @@ export interface MemorySnapshot {
     content: string;
     revision: number;
     updatedAt?: string;
+    /** Durable scope and owner when the store knows them; the recall index filters by them. */
+    scope?: "bot" | "user" | "shared";
+    owner?: string;
   }>;
 }
 
@@ -526,6 +531,10 @@ export interface AgentRunRequest {
   instructions: string;
   stablePrefix?: string;
   history: Array<{ id?: string; role: "user" | "assistant" | "system"; content: string }>;
+  /** Leading history entries expected to repeat unchanged next turn; a prompt cache may end there. */
+  stableHistory?: number;
+  /** Sent once and never repeated, so runtimes should not pay to write it to a prompt cache. */
+  singleRequest?: boolean;
   currentTurnImages?: AgentInputImage[];
   /** Explicit model-only mode; an empty array retains legacy built-in tools. */
   tools: ConnectorTool[] | "none";
@@ -599,6 +608,8 @@ export type AgentRuntimeEvent =
       text: string;
       /** Provider-generated tool status rather than assistant-authored narration. */
       activity?: true;
+      /** Supplied reasoning summary; collapses into the work record. */
+      reasoning?: true;
     }
   | {
       type: "tool";
@@ -633,6 +644,8 @@ export interface AgentRuntimeCapabilities {
   compaction: boolean;
   tools: boolean;
   scripted: boolean;
+  /** False when this runtime rejects every image, whatever the model accepts. */
+  images?: boolean;
   /** Brokered provider calls persist their own receipts; runtime aggregates are informational. */
   usageAccounting?: "runtime" | "external";
 }
@@ -696,6 +709,7 @@ export interface BackgroundJobPayloads {
     generation: number;
   };
   "run.continue": { runId: string };
+  "evidence.seal": { runId: string };
   "routine.wakeup": { routineId: string; scheduledFor: string };
   "computer.sleep": { computerId: string };
   "computer.update": { updateId: string };
@@ -705,6 +719,8 @@ export interface BackgroundJobPayloads {
   "messaging.deliver": { runId?: string };
   /** Reconcile durable remote-agent intent; scope is loaded from the database. */
   "cloud_agent.poll": { agentId: string };
+  /** Install the pinned Hermes runtime on this computer. No path, URL, or version. */
+  "hermes.install": Record<string, never>;
 }
 
 export type BackgroundJobName = keyof BackgroundJobPayloads;

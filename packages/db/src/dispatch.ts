@@ -1,15 +1,23 @@
+import type { JobPublisher } from "@ardurbot/adapter-kit";
+import { evidenceSealJob } from "@ardurbot/adapter-kit";
 import type { DispatchInput, DispatchState, DispatchReceipt as Receipt } from "@ardurbot/contracts";
 import {
   ALL_DEVICE_SCOPES,
   CHANNEL_SCOPES,
   CHAT_COPY,
   canonicalDispatchJson,
+  delegationStopLine,
 } from "@ardurbot/contracts";
 import type { RemoteAuthority } from "@ardurbot/core";
 import { checkRemoteTool, effectiveRemoteAuthority } from "@ardurbot/core";
+import { getLogger } from "@ardurbot/logging";
 import { settleBotMessageWakesInTransaction } from "./bot-comms.js";
 import type { DeviceGrant, Prisma, PrismaClient } from "./client.js";
-import { finishDelegation } from "./delegation.js";
+import {
+  ACTIVE_DELEGATIONS,
+  delegationEffectiveStopReason,
+  finishDelegation,
+} from "./delegation.js";
 import {
   assertDeviceTrusted,
   auditDevice,
@@ -17,6 +25,7 @@ import {
   deviceDigest,
 } from "./device-grants.js";
 import { appendEventInTransaction, steerRunInTransaction } from "./events.js";
+import { recordGroupAskOutcomeInTransaction } from "./group-asks.js";
 import { createThreadMessageInTransaction } from "./messages.js";
 import type { ChannelDispatchOrigin } from "./messaging-routes.js";
 import { answerChannelQuestion, enqueueChat } from "./messaging-routes.js";
@@ -440,6 +449,18 @@ export async function requestDispatchStop(
       },
       data: { status: "cancel-requested", cancelRequestedAt: now },
     });
+    // A device stop is an explicit owner action; record it so later usage flushed at
+    // shutdown cannot make the stop look like a budget or deadline stop.
+    await tx.delegation.updateMany({
+      where: {
+        rootTaskId: taskId,
+        spaceId: grant.spaceId,
+        userId: grant.userId,
+        status: { in: ACTIVE_DELEGATIONS },
+        cancelReason: null,
+      },
+      data: { cancelReason: "stopped" },
+    });
     await tx.run.updateMany({
       where: {
         OR: [{ taskId }, { remoteRootTaskId: taskId }, { delegationRootTaskId: taskId }],
@@ -458,8 +479,9 @@ export async function confirmDispatchStop(
   prisma: PrismaClient,
   runId: string,
   now = new Date(),
+  jobs?: JobPublisher,
 ): Promise<boolean> {
-  return prisma.$transaction(async (tx) => {
+  const confirmed = await prisma.$transaction(async (tx) => {
     const run = await tx.run.findUnique({ where: { id: runId } });
     if (!run?.cancelRequestedAt || !ACTIVE.includes(run.status)) return false;
     if (
@@ -482,8 +504,33 @@ export async function confirmDispatchStop(
       type: "run.cancelled",
       payload: {},
     });
-    if (run.delegationId)
-      await finishDelegation(tx, run.delegationId, "cancelled", "Worker stopped.");
+    if (run.delegationId) {
+      const delegation = await tx.delegation.findUnique({ where: { id: run.delegationId } });
+      // A worker that reported a genuine failure while stopping finishes failed with that
+      // reason, not "cancelled. Worker stopped."
+      const reason = delegation ? delegationEffectiveStopReason(delegation, now) : "stopped";
+      await finishDelegation(
+        tx,
+        run.delegationId,
+        reason === "failed" ? "failed" : "cancelled",
+        delegation
+          ? reason === "failed" && delegation.result?.trim()
+            ? delegation.result
+            : delegationStopLine(reason, delegation.actingName)
+          : delegationStopLine("stopped", "Worker"),
+      );
+      // A stopped room member marks its coordination round instead of leaving
+      // the line pending.
+      if (delegation)
+        await recordGroupAskOutcomeInTransaction(tx, {
+          spaceId: run.spaceId,
+          threadId: run.threadId,
+          delegation,
+          delegationStatus: "cancelled",
+          runStatus: "cancelled",
+          now,
+        });
+    }
     const stopped = await tx.run.updateMany({
       where: { id: runId, cancelRequestedAt: { not: null }, status: { in: ACTIVE } },
       data: {
@@ -509,10 +556,20 @@ export async function confirmDispatchStop(
       },
     });
     for (const helper of helpers)
-      await finishDelegation(tx, helper.id, "cancelled", "Worker stopped.");
+      await finishDelegation(
+        tx,
+        helper.id,
+        "cancelled",
+        delegationStopLine(delegationEffectiveStopReason(helper, now), helper.actingName),
+      );
     await persistDispatchSummary(tx, run, "stopped", null);
     return true;
   });
+  if (confirmed && jobs)
+    await jobs.enqueue(evidenceSealJob(runId)).catch(() => {
+      getLogger().warn("evidence seal enqueue failed");
+    });
+  return confirmed;
 }
 export async function persistDispatchSummary(
   tx: Prisma.TransactionClient,

@@ -23,6 +23,7 @@ export function hasIncompleteUsage(
         "stream-ended-without-usage",
         "consumer-stopped",
         "late-usage-unverified",
+        "usage-not-final",
       ].includes(reason),
     ) ?? false
   );
@@ -108,6 +109,8 @@ export class RequestUsageCollector {
   private raw: RawUsageCounts = {};
   private outcome: UsageOutcome = "started";
   private limitations: UsageLimitation[];
+  /** True once the provider's final usage object, not an interim snapshot, has arrived. */
+  private finalUsage = false;
   readonly requestId: string;
   readonly attemptId: string;
   constructor(
@@ -146,7 +149,12 @@ export class RequestUsageCollector {
     this.raw = sourceRaw ? normalizeUsageCounts(sourceRaw, "unknown", "unknown").raw : mapped.raw;
     if (mapped.invalid) this.limit("invalid-provider-usage");
     else this.categories = mapped.categories;
+    this.bindUnsettledUsage();
     return this.event();
+  }
+  /** The provider sent the usage object that closes this attempt, such as Anthropic message_delta. */
+  acceptFinalUsage() {
+    this.finalUsage = true;
   }
   limit(reason: UsageLimitation) {
     if (!this.limitations.includes(reason)) this.limitations.push(reason);
@@ -155,7 +163,22 @@ export class RequestUsageCollector {
     this.outcome = outcome;
     if (Object.values(this.categories).every((value) => value === null))
       this.limit("provider-omitted");
+    this.bindUnsettledUsage();
     return this.event();
+  }
+  /**
+   * A failed, cancelled, timed-out or otherwise unsettled finish before final usage
+   * has only a lower bound. Known input counts from that snapshot are included.
+   */
+  private bindUnsettledUsage() {
+    const unsettled =
+      this.outcome === "failed" ||
+      this.outcome === "cancelled" ||
+      this.outcome === "timed-out" ||
+      this.outcome === "unknown";
+    const known = Object.values(this.categories).some((value) => value !== null);
+    if (unsettled && known && !this.finalUsage) this.limit("usage-not-final");
+    else this.limitations = this.limitations.filter((reason) => reason !== "usage-not-final");
   }
   private event(): AgentUsage {
     const reasoningSemantics = this.options.reasoningSemantics ?? "subset-of-output";

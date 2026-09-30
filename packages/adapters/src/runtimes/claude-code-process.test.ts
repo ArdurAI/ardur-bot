@@ -5,7 +5,14 @@ import type { AgentRunRequest, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@ardurbot/host-runtime/runtimes/ardur-mcp-server", () => ({
-  startArdurMcpServer: async () => ({ config: { command: "node", args: [] }, close: vi.fn() }),
+  startArdurMcpServer: async () => ({
+    config: {
+      command: "node",
+      args: ["bridge", "a1".repeat(32)],
+      env: { BRIDGE_TOKEN: "b2".repeat(32) },
+    },
+    close: vi.fn(),
+  }),
 }));
 vi.mock("@ardurbot/host-runtime/runtimes/native-process", async (original) => ({
   ...(await original<object>()),
@@ -43,6 +50,7 @@ function fixture(
     init?: Record<string, unknown>;
     result?: Record<string, unknown>;
     hold?: boolean;
+    stderr?: string;
   } = {},
 ) {
   const child = new EventEmitter() as ChildProcessWithoutNullStreams;
@@ -55,6 +63,7 @@ function fixture(
       done();
     },
     final(done) {
+      if (options.stderr) stderr.end(options.stderr);
       const events = [
         {
           type: "system",
@@ -154,6 +163,39 @@ function fixture(
   };
 }
 describe("Claude subprocess lifecycle", () => {
+  it("redacts the positional bridge capability and bridge environment credential from stderr", async () => {
+    vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", "1");
+    vi.stubEnv("LOG_LEVEL", "debug");
+    const write = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    try {
+      const f = fixture(0, false, { stderr: `${"a1".repeat(32)}\n${"b2".repeat(32)}\n` });
+      await f.run();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      const logs = write.mock.calls.map(([line]) => String(line)).join("");
+      expect(logs).toContain("claude-code stderr: [redacted]");
+      expect(logs).not.toContain("a1".repeat(32));
+      expect(logs).not.toContain("b2".repeat(32));
+    } finally {
+      write.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("keeps stderr out of debug logs without detailed opt-in", async () => {
+    vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", undefined);
+    vi.stubEnv("LOG_LEVEL", "debug");
+    const write = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    try {
+      const f = fixture(0, false, { stderr: `${"a1".repeat(32)}\n${"b2".repeat(32)}\n` });
+      expect(await f.run()).toContainEqual({ type: "done" });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(write).not.toHaveBeenCalled();
+    } finally {
+      write.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("stops a held turn after cancellation", async () => {
     const f = fixture(0, false, { hold: true });
     const controller = new AbortController();

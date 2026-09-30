@@ -6,12 +6,13 @@ import http from "node:http";
 import { cpus, freemem, loadavg, totalmem } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { ComputerProfileId } from "@ardurbot/contracts";
 import {
   COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE,
   ComputerImageDownloadError,
   ComputerProfileSchema,
-  computerImage,
 } from "@ardurbot/contracts";
+import { localComputerImage } from "@ardurbot/contracts/computer-image";
 import {
   boundedSandboxCommandTimeoutMs,
   COMMAND_OUTPUT_LIMIT,
@@ -46,7 +47,6 @@ import {
   controlPortPublicationMatches,
   homeVolumeMatches,
   hostComputerUser,
-  LOCAL_COMPUTER_IMAGE,
   legacyNetworkOwnedSolelyBy,
   publishedLoopbackControlHostPort,
   resolveComputerControlEndpoint,
@@ -67,6 +67,7 @@ import {
   engineUser,
   socketPath,
 } from "./container-engine.js";
+import { CONTAINER_FILE_SCRIPT } from "./container-files.js";
 import { assertComputerHomeWritable } from "./home-ownership.js";
 import { screenRelay } from "./screen-relay.js";
 import {
@@ -131,24 +132,28 @@ const appVersion = (
 ).version;
 let lastResolvedComputerImage = COMPUTER_IMAGE;
 async function resolvedComputerImage(
+  profile: ComputerProfileId = "base",
   engine = engineScope.getStore() ?? defaultDocker,
 ): Promise<string> {
+  // ARDURBOT_COMPUTER_IMAGE names the Standard image; Developer has no deployment override.
+  const override = profile === "base" ? process.env.ARDURBOT_COMPUTER_IMAGE : undefined;
   let localPresent = false;
-  if (!process.env.ARDURBOT_COMPUTER_IMAGE) {
+  if (!override) {
     try {
-      await engine.getImage(LOCAL_COMPUTER_IMAGE).inspect();
+      await engine.getImage(localComputerImage(profile)).inspect();
       localPresent = true;
     } catch (error) {
       if ((error as { statusCode?: number }).statusCode !== 404) throw error;
     }
   }
   const image = resolveComputerImage({
-    override: process.env.ARDURBOT_COMPUTER_IMAGE,
+    profile,
+    override,
     localPresent,
     appVersion,
     channel: process.env.ARDURBOT_COMPUTER_CHANNEL,
   });
-  lastResolvedComputerImage = image;
+  if (profile === "base") lastResolvedComputerImage = image;
   return image;
 }
 
@@ -287,10 +292,7 @@ app.post("/computers", async (c) => {
         },
       );
       return await withBotLifecycleLock(body.botId, async () => {
-        const image =
-          body.imageProfile === "base"
-            ? await resolvedComputerImage()
-            : computerImage(body.imageProfile);
+        const image = await resolvedComputerImage(body.imageProfile);
         const engine = engineFromResponses(await docker.version(), await docker.info());
         const expectedEngine = c.req.header("x-ardurbot-engine");
         if (expectedEngine && expectedEngine !== engine.name)
@@ -684,27 +686,20 @@ app.get("/computers/:id/files", async (c) => {
       c.req.header("x-ardurbot-space-id"),
     );
     const relative = normalizeWorkspaceRelative(c.req.query("path") ?? "");
-    const target = workspaceTarget(relative);
+    const root = workspaceTarget("");
     if (c.req.query("mode") === "read") {
       const maxBytesRaw = c.req.query("maxBytes");
       const maxBytes = maxBytesRaw === undefined ? undefined : Number(maxBytesRaw);
       if (maxBytes !== undefined && (!Number.isSafeInteger(maxBytes) || maxBytes < 0)) {
         return c.json({ error: "invalid maxBytes" }, 400);
       }
-      const script = [
-        "import base64, sys",
-        "target, limit = sys.argv[1], int(sys.argv[2])",
-        "with open(target, 'rb') as source:",
-        "  content = source.read() if limit < 0 else source.read(limit + 1)",
-        "if limit >= 0 and len(content) > limit and sys.argv[3] != 'preview': sys.exit(42)",
-        "if limit >= 0: content = content[:limit]",
-        "sys.stdout.write(base64.b64encode(content).decode())",
-      ].join("\n");
       const result = await runContainerCommand(container, [
         "python3",
         "-c",
-        script,
-        target,
+        CONTAINER_FILE_SCRIPT,
+        "read",
+        root,
+        relative,
         String(maxBytes ?? -1),
         c.req.query("preview") === "1" ? "preview" : "read",
       ]);
@@ -714,22 +709,12 @@ app.get("/computers/:id/files", async (c) => {
       if (result.code !== 0) return c.json({ error: result.stderr || "file not found" }, 404);
       return c.json({ content: result.stdout.trim() });
     }
-    const script = [
-      "import json, os, stat, sys",
-      "root, rel = sys.argv[1], sys.argv[2]",
-      "out = []",
-      "for item in os.scandir(root):",
-      "  if item.is_symlink(): continue",
-      "  info = item.stat(follow_symlinks=False)",
-      "  child = '/'.join(x for x in (rel, item.name) if x)",
-      "  out.append({'path': child, 'kind': 'dir' if item.is_dir(follow_symlinks=False) else 'file', 'size': info.st_size, **({'executable': True} if item.is_file(follow_symlinks=False) and bool(info.st_mode & stat.S_IXUSR) else {})})",
-      "print(json.dumps(sorted(out, key=lambda x: x['path'])))",
-    ].join("\n");
     const result = await runContainerCommand(container, [
       "python3",
       "-c",
-      script,
-      target,
+      CONTAINER_FILE_SCRIPT,
+      "list",
+      root,
       relative,
     ]);
     if (result.code !== 0) return c.json({ error: result.stderr || "directory not found" }, 404);
@@ -754,10 +739,10 @@ app.post("/computers/:id/files", async (c) => {
       c.req.header("x-ardurbot-bot-id"),
       c.req.header("x-ardurbot-space-id"),
     );
-    const target = workspaceTarget(normalizeWorkspaceRelative(body.path));
+    const relative = normalizeWorkspaceRelative(body.path);
     await writeContainerFile(
       container,
-      target,
+      relative,
       Buffer.from(body.content, "base64"),
       body.executable,
     );
@@ -1023,8 +1008,8 @@ async function ensureComputerImage(
 ) {
   if (
     engineName === "docker" &&
-    image !== LOCAL_COMPUTER_IMAGE &&
-    image !== computerImage("developer")
+    image !== localComputerImage("base") &&
+    image !== localComputerImage("developer")
   ) {
     await ensureDockerComputerImage(engineScope.getStore() ?? defaultDocker, image, onProgress);
     return;
@@ -1595,19 +1580,20 @@ async function observeContainer(container: Docker.Container, display = ":1") {
 
 async function writeContainerFile(
   container: Docker.Container,
-  target: string,
+  relative: string,
   content: Buffer,
   executable = false,
 ) {
-  const script = [
-    "import os, sys",
-    "target = sys.argv[1]",
-    "os.makedirs(os.path.dirname(target), exist_ok=True)",
-    "with open(target, 'wb') as f: f.write(sys.stdin.buffer.read())",
-    `os.chmod(target, ${executable ? "0o700" : "0o600"})`,
-  ].join("\n");
   const exec = await container.exec({
-    Cmd: ["python3", "-c", script, target],
+    Cmd: [
+      "python3",
+      "-c",
+      CONTAINER_FILE_SCRIPT,
+      "write",
+      workspaceTarget(""),
+      relative,
+      executable ? "true" : "false",
+    ],
     AttachStdin: true,
     AttachStdout: true,
     AttachStderr: true,

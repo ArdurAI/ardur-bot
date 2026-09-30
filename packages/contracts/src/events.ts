@@ -1,5 +1,6 @@
 import * as z from "zod";
 import { BotSecretDestination } from "./bot-secrets.js";
+import { ChiefDispatchSchema, ChiefReceiptKeySchema, ChiefResultSchema } from "./chief-loop.js";
 import {
   CommandAuditPayloadSchema,
   CommandBlockSchema,
@@ -31,6 +32,7 @@ export const ProductEventType = z.enum([
   "run.configurationApplied",
   "run.checkpointed",
   "run.waiting_input",
+  "run.retry_scheduled",
   "run.completed",
   "run.failed",
   "run.cancelled",
@@ -131,6 +133,8 @@ export const GroupModelFailureNotice = z.object({
   id: z.enum([
     "group-model-locality-denied",
     "group-model-credential-missing",
+    "group-model-usage-limit",
+    "group-model-sign-in-expired",
     "group-model-unavailable",
   ]),
   botName: z.string(),
@@ -138,6 +142,20 @@ export const GroupModelFailureNotice = z.object({
 export type GroupModelFailureNotice = z.infer<typeof GroupModelFailureNotice>;
 
 export const MessageBlock = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("chief_result"),
+    result: ChiefResultSchema,
+    name: z.string(),
+    mimeType: z.string(),
+    botId: Id,
+    groupId: Id.optional(),
+  }),
+  z.object({
+    kind: z.literal("chief_receipt"),
+    requestMessageId: Id,
+    key: ChiefReceiptKeySchema,
+    text: z.string(),
+  }),
   z.object({ kind: z.literal("command"), command: CommandBlockSchema }),
   z.object({
     kind: z.literal("text"),
@@ -153,6 +171,8 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     text: z.string(),
     approvalEffectId: Id.optional(),
     peerHold: z.boolean().optional(),
+    /** A held desk request whose approval binds one exact effect, not preparation. */
+    peerEffectBound: z.boolean().optional(),
     detail: z.string().optional(),
     /** Exact approval text: render verbatim, with expandable full contents. */
     preformatted: z.boolean().optional(),
@@ -209,6 +229,10 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     text: z.string(),
     /** Provider-generated tool status rather than assistant-authored narration. */
     activity: z.literal(true).optional(),
+    /** Supplied reasoning summary; without it a plain progress block is narration. */
+    reasoning: z.literal(true).optional(),
+    /** The reply's text is still growing; drives the typewriter cursor. */
+    streaming: z.literal(true).optional(),
     pendingToolNames: z.array(z.string()).optional(),
   }),
   z.object({
@@ -286,6 +310,7 @@ export const MessageBlock = z.discriminatedUnion("kind", [
   }),
   z.object({
     kind: z.literal("handoff"),
+    chiefDispatch: ChiefDispatchSchema.optional(),
     fromBotId: Id,
     toBotId: Id,
     text: z.string(),
@@ -307,6 +332,7 @@ export const MessageBlock = z.discriminatedUnion("kind", [
   z.object({
     /** Shown in the sending bot's own chat, so the user can see what it sent. */
     kind: z.literal("bot_message_sent"),
+    chiefDispatch: ChiefDispatchSchema.optional(),
     toBotId: Id,
     toBotName: z.string(),
     text: z.string(),
@@ -359,6 +385,37 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     returnToMessageId: Id.optional(),
     /** Links in a bot-started chain; absent when a person started it. */
     hop: z.number().int().nonnegative().optional(),
+  }),
+  z.object({
+    /**
+     * One group-coordination round: the coordinator's request to room members and
+     * how each asked member fared. This is coordination, not a reply — surfaces
+     * collapse it to a single line and show the details only when expanded.
+     */
+    kind: z.literal("coordination"),
+    /** The ask's idempotency key (`group-ask:<round>:<run>:<callId>`); identifies the round. */
+    nonce: z.string(),
+    /** Ask round within the coordinator's turn chain, 1-based. */
+    round: z.number().int().positive(),
+    /** The request exactly as the asked members received it. */
+    text: z.string(),
+    /** Short progress notes the coordinator posted while the round was open. */
+    updates: z.array(z.string()),
+    members: z.array(
+      z.object({
+        botId: Id,
+        name: z.string(),
+        outcome: z.enum(["pending", "answered", "failed", "stopped", "waiting"]),
+        /** Why a failed member could not answer, as a code each screen translates. */
+        reasonCode: z
+          .enum(["auth", "rate-limit", "model-unavailable", "stopped", "other"])
+          .optional(),
+        /** Legacy plain cause; early rounds stored an English sentence here. */
+        reason: z.string().optional(),
+      }),
+    ),
+    /** Wall-clock of the latest edit, for readers that order the line by activity. */
+    updatedAt: z.string().optional(),
   }),
 ]);
 export type MessageBlock = z.infer<typeof MessageBlock>;

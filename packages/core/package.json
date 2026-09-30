@@ -19,10 +19,20 @@
       "development": "./src/node/load-root-env.ts",
       "default": "./src/node/load-root-env.ts"
     },
+    "./node/service-secrets": {
+      "types": "./src/node/service-secrets.ts",
+      "development": "./src/node/service-secrets.ts",
+      "default": "./src/node/service-secrets.ts"
+    },
     "./node/approval-effect-key": {
       "types": "./src/approval-effect-key.ts",
       "development": "./src/approval-effect-key.ts",
       "default": "./src/approval-effect-key.ts"
+    },
+    "./node/peer-effect-digest": {
+      "types": "./src/node/peer-effect-digest.ts",
+      "development": "./src/node/peer-effect-digest.ts",
+      "default": "./src/node/peer-effect-digest.ts"
     },
     "./node/screen-proxy-response": {
       "types": "./src/node/screen-proxy-response.ts",
@@ -45,6 +55,7 @@
       "default": "./src/node/screen-capability.ts"
     },
     "./command-limits": "./src/command-limits.ts",
+    "./effort-router": "./src/effort-router/index.ts",
     "./runtime-config": "./src/runtime-config.ts",
     "./node/runtime-config-hash": "./src/node/runtime-config-hash.ts"
   },

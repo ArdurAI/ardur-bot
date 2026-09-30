@@ -19,27 +19,34 @@ export function ModelPinSelect({
   inputRef,
   unavailableSelection = false,
   needsConnection = false,
-  allowedProviders,
+  isCredentialDisabled,
 }: {
   settings: ModelSettings | null;
   showAll: boolean;
   value: string;
   onChange: (value: string) => void;
-  defaultLabel: string;
+  defaultLabel?: string;
   id: string;
   disabled?: boolean;
   inputRef?: Ref<HTMLSelectElement>;
   unavailableSelection?: boolean;
   needsConnection?: boolean;
-  allowedProviders?: readonly string[];
+  /** Connections that stay visible but cannot be picked (e.g. sign-ins for Hermes). */
+  isCredentialDisabled?: (credential: ModelSettings["credentials"][number]) => boolean;
 }) {
   const { t } = useLingui();
   const catalog = settings?.catalog ?? [];
   const credentials = settings?.credentials ?? [];
-  const options: Array<{ key: string; provider: string; modelId: string; label: string }> = [];
+  const options: Array<{
+    key: string;
+    provider: string;
+    modelId: string;
+    label: string;
+    disabled?: boolean;
+  }> = [];
   const seen = new Set<string>();
   for (const credential of credentials) {
-    if (allowedProviders && !allowedProviders.includes(credential.provider)) continue;
+    const credentialDisabled = isCredentialDisabled?.(credential) ?? false;
     const providerModels = availableProviderModels(catalog, credential.provider, showAll).filter(
       (entry) =>
         !entry.placeholder && (!entry.credentialId || entry.credentialId === credential.id),
@@ -64,6 +71,7 @@ export function ModelPinSelect({
               provider: credential.provider,
               modelId: credential.modelId,
               label: `${credential.label} · ${credential.modelId}`,
+              disabled: credentialDisabled,
             },
           ]
         : providerModels.map((entry) => ({
@@ -75,6 +83,7 @@ export function ModelPinSelect({
                 ? credential.label
                 : (entry.providerName ?? entry.provider)
             } · ${entry.label}`,
+            disabled: credentialDisabled,
           }));
     for (const option of candidates) {
       if (seen.has(option.key)) continue;
@@ -92,7 +101,13 @@ export function ModelPinSelect({
       disabled={disabled}
       onChange={(event) => onChange(event.target.value)}
     >
-      <NativeSelectOption value="">{defaultLabel}</NativeSelectOption>
+      {defaultLabel !== undefined ? (
+        <NativeSelectOption value="">{defaultLabel}</NativeSelectOption>
+      ) : !value ? (
+        <NativeSelectOption value="" disabled hidden>
+          {t`Choose a model`}
+        </NativeSelectOption>
+      ) : null}
       {value && !options.some((option) => option.key === value) ? (
         <NativeSelectOption
           value={value}
@@ -110,7 +125,7 @@ export function ModelPinSelect({
               (option) => (option.provider === "ollama" || option.provider === "local") === local,
             )
             .map((option) => (
-              <NativeSelectOption key={option.key} value={option.key}>
+              <NativeSelectOption key={option.key} value={option.key} disabled={option.disabled}>
                 {option.label}
                 {unavailableSubscriptionModel(catalog, option.provider, option.modelId)
                   ? t` — May not be available on your plan`
@@ -133,6 +148,8 @@ export function ModelEffortSelect({
   defaultLevel,
   disabled,
   notApplicable = false,
+  allowDefault = true,
+  hideLabel = false,
 }: {
   id: string;
   value: string;
@@ -142,6 +159,8 @@ export function ModelEffortSelect({
   defaultLevel: ThinkingLevel;
   disabled?: boolean;
   notApplicable?: boolean;
+  allowDefault?: boolean;
+  hideLabel?: boolean;
 }) {
   const { t } = useLingui();
   const options = supported.filter((level) =>
@@ -156,7 +175,13 @@ export function ModelEffortSelect({
   if (!options.length && !value) return null;
   return (
     <label htmlFor={id} className="mt-4 block text-[14px] text-muted-foreground">
-      <Trans>Thinking</Trans>
+      {!hideLabel ? (
+        <Trans>Thinking</Trans>
+      ) : (
+        <span className="sr-only">
+          <Trans>Thinking</Trans>
+        </span>
+      )}
       <NativeSelect
         id={id}
         className="mt-2 w-full"
@@ -164,7 +189,7 @@ export function ModelEffortSelect({
         onChange={(event) => onChange(event.target.value)}
         disabled={disabled}
       >
-        {!isOllama ? (
+        {!isOllama && allowDefault ? (
           <NativeSelectOption value="">
             {t`Default (${thinkingLevelDescription(defaultLevel)})`}
           </NativeSelectOption>

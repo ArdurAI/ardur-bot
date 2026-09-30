@@ -11,6 +11,18 @@ import {
 } from "./attachments.js";
 
 describe("attachment helpers", () => {
+  it("never feeds deterministic chief receipts into task or peer history", () => {
+    expect(
+      blocksToAgentHistoryText([
+        {
+          kind: "chief_receipt",
+          key: "general",
+          requestMessageId: "request",
+          text: "Got it — I’ll check the request and choose the next step.",
+        },
+      ]),
+    ).toBe("");
+  });
   it("rejects unsupported mime types and empty payloads", () => {
     expect(() => validateAttachmentMimeType("application/zip")).toThrow(AttachmentValidationError);
     expect(() => decodeAttachmentBase64("")).toThrow(AttachmentValidationError);
@@ -60,6 +72,16 @@ describe("attachment helpers", () => {
         },
       ]),
     ).toBe("hello\n[image: shot.png]\n[file: brief.pdf (application/pdf, 99 bytes)]");
+  });
+
+  it("leaves reasoning summaries out of agent history", () => {
+    expect(
+      blocksToAgentHistoryText([
+        { kind: "progress", text: "Weighing options.", reasoning: true },
+        { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+        { kind: "text", text: "The answer is four." },
+      ]),
+    ).toBe("The answer is four.");
   });
 
   it("infers attachment mime types from extensions", () => {

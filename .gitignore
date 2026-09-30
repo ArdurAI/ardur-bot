@@ -1,5 +1,6 @@
 .ardur/
 .deepsec/
+.kimi/
 node_modules
 __pycache__/
 *.py[cod]
@@ -57,3 +58,6 @@ playwright-report-www
 site/public/
 site/resources/
 site/.hugo_build.lock
+
+# Local test run output
+test_output.txt

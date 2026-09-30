@@ -132,6 +132,9 @@ export function modelCredentialDto(
   if (row.provider === "anthropic" && (!plaintext || isSerializedModelCredential(plaintext))) {
     return { ...credential, hasKey: false, connectionIssue: "api-key-required" };
   }
+  if (plaintext && parseModelSecret(plaintext).kind === "oauth") {
+    return { ...credential, oauth: true };
+  }
   if (row.provider !== CONTRACT_OPENAI_COMPAT) return credential;
   const compatibleCredential = {
     ...credential,

@@ -1,7 +1,14 @@
 import { runtimePinMessage, runtimePinProblem } from "@ardurbot/contracts";
 import { expect, it } from "vitest";
 import { activateUiLocale } from "./i18n";
-import { antigravityProblemMessage, runtimePinRecovery } from "./runtime-pin-recovery";
+import {
+  antigravityProblemMessage,
+  dismissRefusalRun,
+  refusalRunDismissed,
+  runtimePinRecovery,
+  runtimeRefusalActionLabel,
+  runtimeRefusalRecovery,
+} from "./runtime-pin-recovery";
 
 it("shows the pin and directs recovery to its provider and failed bot", () => {
   const pin = {
@@ -123,4 +130,80 @@ it("translates the registry's model error without a reason identifier", () => {
   } finally {
     activateUiLocale("en");
   }
+});
+
+const refusalPin = {
+  runtimeKind: "codex-app-server" as const,
+  provider: "openai-codex",
+  modelId: "gpt-6-sol",
+  effort: "medium",
+  credentialId: "native:codex-app-server",
+  revision: 1,
+};
+
+it.each([
+  [
+    "experimental-off",
+    [
+      { kind: "enable-experimental", botId: "bot" },
+      { kind: "route", pathname: "/bot-settings", params: { botId: "bot" } },
+    ],
+  ],
+  [
+    "computer-unsupported",
+    [{ kind: "route", pathname: "/bot-settings", params: { botId: "bot" } }],
+  ],
+  ["destinations-bot", [{ kind: "route", pathname: "/bot-settings", params: { botId: "bot" } }]],
+  [
+    "destinations-space",
+    [
+      { kind: "route", pathname: "/models", params: {} },
+      { kind: "route", pathname: "/bot-settings", params: { botId: "bot" } },
+    ],
+  ],
+] as const)("offers the refusal %s's actions from the table", (reasonId, actions) => {
+  const problem = runtimePinProblem(refusalPin, "locality-denied", "recorded sentence", reasonId);
+  expect(runtimeRefusalRecovery(problem, "bot")).toEqual({ actions });
+});
+
+it("labels each refusal action", () => {
+  expect(runtimeRefusalActionLabel({ kind: "enable-experimental", botId: "bot" })).toBe(
+    "Turn on Experimental",
+  );
+  expect(runtimeRefusalActionLabel({ kind: "route", pathname: "/models", params: {} })).toBe(
+    "Open Settings",
+  );
+  expect(
+    runtimeRefusalActionLabel({
+      kind: "route",
+      pathname: "/bot-settings",
+      params: { botId: "bot" },
+    }),
+  ).toBe("Open bot settings");
+  activateUiLocale("ru");
+  try {
+    expect(runtimeRefusalActionLabel({ kind: "enable-experimental", botId: "bot" })).toBe(
+      "Включить «Экспериментально»",
+    );
+  } finally {
+    activateUiLocale("en");
+  }
+});
+
+it("falls back to the bot's settings when a refusal carries no category", () => {
+  const problem = runtimePinProblem(refusalPin, "locality-denied", "recorded sentence");
+  expect(runtimeRefusalRecovery(problem, "bot")).toEqual({
+    actions: [{ kind: "route", pathname: "/bot-settings", params: { botId: "bot" } }],
+  });
+});
+
+it("hides a refusal the reader fixed until a newer run fails", () => {
+  const dismissed = dismissRefusalRun(new Set(), "run-1");
+  expect([...dismissed]).toEqual(["run-1"]);
+  // The fixed run's refusal stays hidden while it is the newest terminal run…
+  expect(refusalRunDismissed(dismissed, "run-1")).toBe(true);
+  // …and a newer run event shows its own refusal again.
+  expect(refusalRunDismissed(dismissed, "run-2")).toBe(false);
+  expect(refusalRunDismissed(dismissed, null)).toBe(false);
+  expect(refusalRunDismissed(dismissed, undefined)).toBe(false);
 });

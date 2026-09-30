@@ -1,11 +1,13 @@
 import type {
   ProductEvent,
+  ThreadSendResult,
   ThreadSnapshot,
   TraceBatch,
   TraceBoundary,
   TraceOutcome,
   TracePoint,
 } from "@ardurbot/contracts";
+import { chiefActivityKey } from "@ardurbot/core";
 
 interface PendingPaint {
   traceId: string;
@@ -21,6 +23,9 @@ interface ClientTrace {
   seen?: Set<string>;
   text?: Map<string, PendingPaint>;
   terminal?: Map<string, PendingPaint>;
+  receipt?: Map<string, PendingPaint>;
+  activity?: Map<string, PendingPaint>;
+  result?: Map<string, PendingPaint>;
   dropped?: number;
 }
 declare global {
@@ -42,6 +47,9 @@ function state() {
   trace.seen ??= new Set();
   trace.text ??= new Map();
   trace.terminal ??= new Map();
+  trace.receipt ??= new Map();
+  trace.activity ??= new Map();
+  trace.result ??= new Map();
   trace.dropped ??= 0;
   return trace as Required<ClientTrace>;
 }
@@ -91,6 +99,38 @@ export function clientTraceSnapshot(): TraceBatch | null {
 /** Only primitive event metadata is retained; content is inspected for eligibility, never copied. */
 export function receiveTraceEvent(event: ProductEvent) {
   const trace = state();
+  if (
+    trace &&
+    (event.type === "thread.message.updated" || event.type === "thread.message.created")
+  ) {
+    const blocks = Array.isArray(event.payload.blocks) ? event.payload.blocks : [];
+    for (const block of blocks) {
+      const dispatch =
+        block.kind === "handoff" || block.kind === "bot_message_sent"
+          ? block.chiefDispatch
+          : undefined;
+      const result = block.kind === "chief_result" ? block.result : undefined;
+      const id = dispatch?.requestMessageId ?? result?.requestMessageId;
+      const pending =
+        dispatch?.activity && chiefActivityKey(dispatch)
+          ? trace.activity
+          : result
+            ? trace.result
+            : undefined;
+      if (!id || !pending || pending.has(id)) continue;
+      if (pending.size >= trace.capacity) {
+        trace.dropped++;
+        continue;
+      }
+      pending.set(id, {
+        traceId: id,
+        threadId: event.threadId,
+        seq: event.seq,
+        messageId:
+          typeof event.payload.messageId === "string" ? event.payload.messageId : undefined,
+      });
+    }
+  }
   if (!trace || !event.runId) return;
   point(event.runId, "client.received");
   const outcome =
@@ -132,10 +172,24 @@ export async function traceRpc(
 ): Promise<unknown> {
   if (path[0] !== "threads") return next();
   if (path[1] === "send") {
-    const receipt = (await next()) as { runId: string; runIds?: string[] };
-    for (const id of receipt.runIds ?? [receipt.runId]) {
+    const receipt = (await next()) as ThreadSendResult;
+    for (const id of receipt.kind === "receipt-only" ? [] : (receipt.runIds ?? [receipt.runId])) {
       point(id, "client.submitted", submittedAt);
       point(id, "client.acknowledged");
+    }
+    if (receipt.receipt) {
+      const accepted = receipt.receipt;
+      const id = accepted.requestMessageId;
+      point(id, "client.submitted", submittedAt);
+      point(id, "client.acknowledged");
+      state()?.receipt.set(id, {
+        traceId: id,
+        threadId: accepted.threadId,
+        messageId: accepted.id,
+        seq: accepted.seq,
+      });
+      // An event-first receipt may already be painted, so no new React commit is required.
+      if (painting?.snapshot.threadId === accepted.threadId) paintThreadTrace(painting.snapshot);
     }
     return receipt;
   }
@@ -219,11 +273,14 @@ export function paintThreadTrace(snapshot: ThreadSnapshot | null): (() => void) 
     for (const [pendingMap, boundary] of [
       [trace.text, "client.text.painted"],
       [trace.terminal, "client.terminal.painted"],
+      [trace.receipt, "client.receipt.painted"],
+      [trace.activity, "client.activity.painted"],
+      [trace.result, "client.result.painted"],
     ] as const) {
       for (const [id, pending] of pendingMap) {
         if (
           pending.threadId !== snapshot.threadId ||
-          pending.seq > snapshot.cursor ||
+          (boundary !== "client.receipt.painted" && pending.seq > snapshot.cursor) ||
           observation.frames.has(pending)
         )
           continue;
@@ -241,7 +298,54 @@ export function paintThreadTrace(snapshot: ThreadSnapshot | null): (() => void) 
                 )
                   return;
                 const latest = observation.snapshot;
-                if (pending.threadId !== latest.threadId || pending.seq > latest.cursor) return;
+                if (
+                  pending.threadId !== latest.threadId ||
+                  (boundary !== "client.receipt.painted" && pending.seq > latest.cursor)
+                )
+                  return;
+                if (boundary === "client.receipt.painted") {
+                  const message = latest.messages.find(
+                    (m) =>
+                      m.id === pending.messageId &&
+                      m.blocks.some((b) => b.kind === "chief_receipt"),
+                  );
+                  if (
+                    !message ||
+                    !visible(
+                      document.querySelector(
+                        `[data-message-id="${CSS.escape(message.id)}"] [data-testid="chief-receipt"]`,
+                      ),
+                    )
+                  )
+                    return;
+                }
+                if (
+                  boundary === "client.activity.painted" ||
+                  boundary === "client.result.painted"
+                ) {
+                  const testId =
+                    boundary === "client.activity.painted" ? "chief-activity" : "chief-result";
+                  const message = latest.messages.find(
+                    (m) =>
+                      m.id === pending.messageId &&
+                      m.blocks.some((b) =>
+                        boundary === "client.result.painted"
+                          ? b.kind === "chief_result"
+                          : (b.kind === "handoff" || b.kind === "bot_message_sent") &&
+                            b.chiefDispatch?.activity &&
+                            chiefActivityKey(b.chiefDispatch),
+                      ),
+                  );
+                  if (
+                    !message ||
+                    !visible(
+                      document.querySelector(
+                        `[data-message-id="${CSS.escape(message.id)}"] [data-testid="${testId}"]`,
+                      ),
+                    )
+                  )
+                    return;
+                }
                 if (boundary === "client.text.painted") {
                   const message = latest.messages.find((m) => {
                     if (m.runId !== id || m.role !== "bot") return false;

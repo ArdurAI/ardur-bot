@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { gunzipSync } from "node:zlib";
-import type { AgentRuntime } from "@ardurbot/adapter-kit";
+import type { AgentRunRequest, AgentRuntime, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
 import {
   archiveBot,
   ComposioEmulator,
@@ -27,14 +27,17 @@ import {
   ONCE_ROUTINE_CRON,
   RECEIPT_FILTERED_SUMMARY_MARKER,
 } from "@ardurbot/core";
+import type { Prisma } from "@ardurbot/db";
 import {
   admitDelegation,
   appendEvent,
   claimSteering,
   createThreadEvents,
   createThreadMessage,
+  createThreadMessageInTransaction,
   expireQuietBotMessages,
   finalizeRun,
+  pauseRunForInput,
   RunHistoryWriteError,
   sendUserMessage,
   updateWorkerTask,
@@ -46,8 +49,10 @@ import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from "v
 import type { createApp } from "../../../apps/api/src/app.ts";
 import * as turnContext from "../../adapters/src/context/assemble.js";
 import { checkDelegationExecution } from "../../adapters/src/delegation-execution.js";
+import { compactHistory } from "../../adapters/src/history-compaction.js";
 import { integrationApprovalForCall } from "../../adapters/src/integration-access.js";
-import { promptWithInitialSteering, toHistory } from "../../adapters/src/pi-runtime.js";
+import { toHistory } from "../../adapters/src/pi-runtime.js";
+import { promptWithInitialSteering } from "../../adapters/src/steering-input.js";
 import { sessionCookieHeader } from "./index.js";
 
 type App = { request: (input: string, init?: RequestInit) => Promise<Response> };
@@ -180,10 +185,10 @@ describeJourneys("required product journeys", () => {
   });
 
   it("new bots inherit a connected tool while an explicit removal survives saves and review", async () => {
-    const cookie = await signup(app, `integration-access-${stamp}@ardurbot.test`, "Workspace");
+    const cookie = await signup(app, `integration-access-${stamp}@example.test`, "Workspace");
     const otherCookie = await signup(
       app,
-      `integration-access-other-${stamp}@ardurbot.test`,
+      `integration-access-other-${stamp}@example.test`,
       "Other workspace",
     );
     const owner = await rpc<Me>(app, cookie, "me");
@@ -291,7 +296,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("keeps a custom MCP override below the space Block after a partial update", async () => {
-    const cookie = await signup(app, `custom-ceiling-${stamp}@ardurbot.test`, "Workspace");
+    const cookie = await signup(app, `custom-ceiling-${stamp}@example.test`, "Workspace");
     const owner = await rpc<Me>(app, cookie, "me");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Worker",
@@ -377,7 +382,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("admits and executes an inherited integration call through delegation", async () => {
-    const cookie = await signup(app, `inherited-delegation-${stamp}@ardurbot.test`, "Workspace");
+    const cookie = await signup(app, `inherited-delegation-${stamp}@example.test`, "Workspace");
     const owner = await rpc<Me>(app, cookie, "me");
     const requester = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Requester",
@@ -510,10 +515,10 @@ describeJourneys("required product journeys", () => {
   });
 
   it("computer updates preserve the workspace and reserve the shared computer until completion", async () => {
-    const cookie = await signup(app, `maintenance-${stamp}@ardurbot.test`, "Maintenance");
+    const cookie = await signup(app, `maintenance-${stamp}@example.test`, "Maintenance");
     const outsider = await signup(
       app,
-      `maintenance-other-${stamp}@ardurbot.test`,
+      `maintenance-other-${stamp}@example.test`,
       "Other workspace",
     );
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
@@ -615,8 +620,8 @@ describeJourneys("required product journeys", () => {
   });
 
   it("1+2: users are isolated and workspace bots share the Team Computer", async () => {
-    const ada = await signup(app, `ada-j-${stamp}@ardurbot.test`, "Ada Journey");
-    const bob = await signup(app, `bob-j-${stamp}@ardurbot.test`, "Bob Journey");
+    const ada = await signup(app, `ada-j-${stamp}@example.test`, "Ada Journey");
+    const bob = await signup(app, `bob-j-${stamp}@example.test`, "Bob Journey");
 
     const adaMe = await rpc<Me>(app, ada, "me");
     const bobMe = await rpc<Me>(app, bob, "me");
@@ -783,7 +788,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("clears a conversation without removing the bot, computer, memory, or routines", async () => {
-    const cookie = await signup(app, `clear-j-${stamp}@ardurbot.test`, "Clear Journey");
+    const cookie = await signup(app, `clear-j-${stamp}@example.test`, "Clear Journey");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Keeper",
       title: "Keeps its setup",
@@ -917,8 +922,425 @@ describeJourneys("required product journeys", () => {
     expect(await prisma.message.count({ where: { threadId: thread.id } })).toBeGreaterThan(0);
   });
 
+  // The owner's 2026-09-28 group chat: the bot's summary was on screen while its run
+  // was still active, the owner sent a follow-up, and the reply saved only at run end —
+  // landing below the follow-up after a refresh. The reply's place is now held from its
+  // first visible text, so the saved reply stays above the follow-up.
+  it("keeps a streamed reply above the follow-up sent before the run ended", async () => {
+    const cookie = await signup(app, `reply-order-${stamp}@ardurbot.test`, "Reply Order");
+    const me = await rpc<Me>(app, cookie, "me");
+    const bot = await rpc<Bot>(app, cookie, "bots/create", {
+      name: "Chief",
+      title: "",
+      description: "",
+      instructions: "",
+      notifyOnFinish: true,
+    });
+    const thread = await prisma.thread.findUniqueOrThrow({ where: { botId: bot.id } });
+    const task = await prisma.task.create({
+      data: {
+        spaceId: me.spaceId,
+        userId: me.userId,
+        botId: bot.id,
+        threadId: thread.id,
+        prompt: "what did rad get right?",
+        status: "running",
+      },
+    });
+    const run = await prisma.run.create({
+      data: {
+        spaceId: me.spaceId,
+        userId: me.userId,
+        botId: bot.id,
+        threadId: thread.id,
+        taskId: task.id,
+        trigger: "user",
+        status: "running",
+        leaseOwner: "reply-order-fixture",
+        leaseFence: 1,
+        startedAt: new Date(),
+      },
+    });
+    const attempt = await prisma.attempt.create({
+      data: { runId: run.id, fence: 1, status: "running" },
+    });
+
+    // The reply's summary text becomes visible while the run is still working.
+    const summary = "Rad shipped the release and closed the blockers.";
+    await appendEvent(prisma, {
+      spaceId: me.spaceId,
+      threadId: thread.id,
+      botId: bot.id,
+      type: "thread.progress",
+      runId: run.id,
+      payload: { text: summary, streaming: true },
+    });
+    const streaming = await prisma.run.findUniqueOrThrow({ where: { id: run.id } });
+    expect(streaming.replySeq).toBe(0);
+
+    // The owner reads the summary and asks a follow-up before the run ends.
+    const followUpText = "does the 90.0 release have any pending PRs left?";
+    await rpc(app, cookie, "threads/send", { botId: bot.id, text: followUpText });
+    const followUp = await prisma.message.findFirstOrThrow({
+      where: { threadId: thread.id, role: "user" },
+    });
+    expect(followUp.seq).toBe(1);
+
+    // Reloading while the run is still active shows the draft where the reply will land.
+    const midRun = await rpc<Snap>(app, cookie, "threads/get", { botId: bot.id });
+    const midRunIds = midRun.messages.map((message) => message.id);
+    expect(midRunIds.indexOf(`progress:${run.id}`)).toBeGreaterThanOrEqual(0);
+    expect(midRunIds.indexOf(`progress:${run.id}`)).toBeLessThan(midRunIds.indexOf(followUp.id));
+
+    // Only when the run finishes does the reply become a durable message.
+    const finished = await finalizeRun(prisma, {
+      spaceId: me.spaceId,
+      threadId: thread.id,
+      botId: bot.id,
+      runId: run.id,
+      taskId: task.id,
+      attemptId: attempt.id,
+      leaseOwner: "reply-order-fixture",
+      leaseFence: 1,
+      outcome: "completed",
+      blocks: [{ kind: "text", text: summary }],
+    });
+    expect(finished).not.toBe(false);
+
+    const reply = await prisma.message.findFirstOrThrow({
+      where: { threadId: thread.id, runId: run.id, role: "bot" },
+    });
+    expect(reply.seq).toBe(0);
+    expect(reply.seq).toBeLessThan(followUp.seq);
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: run.id } })).replySeq).toBeNull();
+
+    // A refreshed transcript keeps the order the owner saw: reply, then follow-up.
+    const snap = await rpc<Snap>(app, cookie, "threads/get", { botId: bot.id });
+    const ids = snap.messages.map((message) => message.id);
+    expect(ids.indexOf(reply.id)).toBeGreaterThanOrEqual(0);
+    expect(ids.indexOf(reply.id)).toBeLessThan(ids.indexOf(followUp.id));
+    expect(snap.messages.find((message) => message.id === reply.id)?.seq).toBe(0);
+    await settleFixtureWork([bot.id]);
+  });
+
+  // A streamed reply holds its place only while its run is running. Every exit from
+  // running releases it. Compaction counts real messages, keeps the newest window word
+  // for word, and never moves past a place a running reply still holds.
+  it("releases a streamed reply's place when its run stops running and compacts past it", async () => {
+    const cookie = await signup(app, `reply-release-${stamp}@ardurbot.test`, "Reply Release");
+    const me = await rpc<Me>(app, cookie, "me");
+    const bot = await rpc<Bot>(app, cookie, "bots/create", {
+      name: "Chief",
+      title: "",
+      description: "",
+      instructions: "",
+      notifyOnFinish: true,
+    });
+    const thread = await prisma.thread.findUniqueOrThrow({ where: { botId: bot.id } });
+    const scope = { spaceId: me.spaceId, threadId: thread.id, botId: bot.id };
+    const startRun = async () => {
+      const task = await prisma.task.create({
+        data: { ...scope, userId: me.userId, prompt: "status please", status: "running" },
+      });
+      const run = await prisma.run.create({
+        data: {
+          ...scope,
+          userId: me.userId,
+          taskId: task.id,
+          trigger: "user",
+          status: "running",
+          leaseOwner: "reply-release-fixture",
+          leaseFence: 1,
+          startedAt: new Date(),
+        },
+      });
+      const attempt = await prisma.attempt.create({
+        data: { runId: run.id, fence: 1, status: "running" },
+      });
+      const finish = { ...scope, runId: run.id, taskId: task.id, attemptId: attempt.id };
+      return {
+        stream: (text: string) =>
+          appendEvent(prisma, {
+            ...scope,
+            type: "thread.progress",
+            runId: run.id,
+            payload: { text, streaming: true },
+          }),
+        complete: (blocks: Array<{ kind: "text"; text: string }>) =>
+          finalizeRun(prisma, {
+            ...finish,
+            leaseOwner: "reply-release-fixture",
+            leaseFence: 1,
+            outcome: "completed",
+            blocks,
+          }),
+        fail: () =>
+          finalizeRun(prisma, {
+            ...finish,
+            leaseOwner: "reply-release-fixture",
+            leaseFence: 1,
+            outcome: "failed",
+            error: "The model provider is unavailable.",
+          }),
+        replySeq: async () =>
+          (await prisma.run.findUniqueOrThrow({ where: { id: run.id } })).replySeq,
+        run,
+      };
+    };
+    const ownerSays = (text: string) =>
+      createThreadMessage(prisma, {
+        threadId: thread.id,
+        role: "user",
+        origin: "human",
+        actorId: me.userId,
+        blocks: [{ kind: "text", text }],
+      });
+
+    // Stop while the reply streams: the draft is gone, and so is its place.
+    const stopped = await startRun();
+    await stopped.stream("Looking at the open PRs");
+    expect(await stopped.replySeq()).toBe(0);
+    await rpc(app, cookie, "threads/stop", { botId: bot.id });
+    expect(await stopped.replySeq()).toBeNull();
+
+    // A run that fails after streaming, and a routine-style run that streams and then
+    // saves nothing, release their places too.
+    const failed = await startRun();
+    await failed.stream("Checking the release");
+    expect(await failed.replySeq()).toBe(1);
+    await failed.fail();
+    expect(await failed.replySeq()).toBeNull();
+    const silent = await startRun();
+    await silent.stream("NO_RESPONSE");
+    expect(await silent.replySeq()).toBe(2);
+    await silent.complete([]);
+    expect(await silent.replySeq()).toBeNull();
+
+    // Any other write that moves a run out of running releases its place, and a run
+    // that is not running cannot take one.
+    const recovered = await startRun();
+    await recovered.stream("Half a reply");
+    expect(await recovered.replySeq()).toBe(3);
+    await prisma.run.update({ where: { id: recovered.run.id }, data: { status: "leased" } });
+    expect(await recovered.replySeq()).toBeNull();
+    await prisma.run.update({ where: { id: recovered.run.id }, data: { replySeq: 3 } });
+    expect(await recovered.replySeq()).toBeNull();
+    await settleFixtureWork([bot.id]);
+
+    const first = await ownerSays("first question");
+    const second = await ownerSays("second question");
+    expect([first.seq, second.seq]).toEqual([4, 5]);
+
+    // A reply that is still streaming holds seq 6 while the owner's next message takes 7.
+    const streaming = await startRun();
+    await streaming.stream("Rad shipped the release.");
+    expect(await streaming.replySeq()).toBe(6);
+    const third = await ownerSays("third question");
+    expect(third.seq).toBe(7);
+
+    const summarize = vi.fn(async function* () {
+      yield { type: "done" as const, text: "Summary so far." };
+    });
+    const compactionDeps = {
+      prisma,
+      runtime: {
+        describe: () => ({
+          id: "summary-fixture",
+          contractVersion: "1",
+          adapterVersion: "1",
+          capabilities: { streaming: true, compaction: true, tools: false, scripted: false },
+        }),
+        run: summarize,
+      } as unknown as AgentRuntime,
+      jobs: { enqueue: async () => undefined },
+      memoryProviders: { resolve: async () => null },
+      resolveModel: async () => ({ provider: "openrouter", id: "summary-model", apiKey: "k" }),
+    };
+    const cursor = async () =>
+      (await prisma.thread.findUniqueOrThrow({ where: { id: thread.id } })).historyCompactedUpToSeq;
+
+    // Released places 0-3 stay empty. Later messages do not let compaction pass the
+    // place the reply still holds.
+    const later = [];
+    for (let index = 0; index < 58; index += 1) {
+      later.push(await ownerSays(`verbatim ${index}`));
+    }
+    expect(later[0]?.seq).toBe(8);
+    expect(later[57]?.seq).toBe(65);
+    await compactHistory(compactionDeps, thread.id);
+    expect(await cursor()).toBeNull();
+    expect(summarize).not.toHaveBeenCalled();
+
+    // Once the reply saves into its place and the oldest real messages age out,
+    // those rows are summarized and the newest window stays word for word.
+    await streaming.complete([{ kind: "text", text: "Rad shipped the release." }]);
+    const reply = await prisma.message.findFirstOrThrow({
+      where: { threadId: thread.id, runId: streaming.run.id, role: "bot" },
+    });
+    expect(reply.seq).toBe(6);
+    await compactHistory(compactionDeps, thread.id);
+    expect(await cursor()).toBe(15);
+    expect(summarize).toHaveBeenCalledTimes(1);
+    const prompt = (summarize.mock.calls[0]![0] as { prompt: string }).prompt;
+    expect(prompt).toContain("first question");
+    expect(prompt).toContain("Rad shipped the release.");
+    expect(prompt).toContain("verbatim 0");
+    expect(prompt).not.toContain("verbatim 8");
+    expect(prompt).not.toContain("verbatim 57");
+    await compactHistory(compactionDeps, thread.id);
+    expect(await cursor()).toBe(15);
+    expect(summarize).toHaveBeenCalledTimes(1);
+    await settleFixtureWork([bot.id]);
+  });
+
+  it("gives two text messages of one run that save at once separate places", async () => {
+    const cookie = await signup(app, `reply-race-${stamp}@ardurbot.test`, "Reply Race");
+    const me = await rpc<Me>(app, cookie, "me");
+    const bot = await rpc<Bot>(app, cookie, "bots/create", {
+      name: "Chief",
+      title: "",
+      description: "",
+      instructions: "",
+      notifyOnFinish: true,
+    });
+    const thread = await prisma.thread.findUniqueOrThrow({ where: { botId: bot.id } });
+    const task = await prisma.task.create({
+      data: {
+        spaceId: me.spaceId,
+        userId: me.userId,
+        botId: bot.id,
+        threadId: thread.id,
+        prompt: "two updates",
+        status: "running",
+      },
+    });
+    const run = await prisma.run.create({
+      data: {
+        spaceId: me.spaceId,
+        userId: me.userId,
+        botId: bot.id,
+        threadId: thread.id,
+        taskId: task.id,
+        trigger: "user",
+        status: "running",
+        leaseOwner: "reply-race-fixture",
+        leaseFence: 1,
+        startedAt: new Date(),
+      },
+    });
+    await appendEvent(prisma, {
+      spaceId: me.spaceId,
+      threadId: thread.id,
+      botId: bot.id,
+      type: "thread.progress",
+      runId: run.id,
+      payload: { text: "Two updates coming", streaming: true },
+    });
+    const save = (tx: Prisma.TransactionClient, text: string) =>
+      createThreadMessageInTransaction(tx, {
+        threadId: thread.id,
+        role: "bot",
+        botId: bot.id,
+        runId: run.id,
+        blocks: [{ kind: "text", text }],
+      });
+    // Parallel tool calls can save two messages of one run at once. The first keeps its
+    // transaction open for a moment after saving, so the second starts while the first
+    // has not committed yet.
+    let firstSaved!: () => void;
+    const saved = new Promise<void>((resolve) => {
+      firstSaved = resolve;
+    });
+    const first = prisma.$transaction(async (tx) => {
+      const message = await save(tx, "update one");
+      firstSaved();
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      return message;
+    });
+    await saved;
+    const second = prisma.$transaction((tx) => save(tx, "update two"));
+    const seqs = (await Promise.all([first, second])).map((message) => message.seq).sort();
+
+    expect(seqs).toEqual([0, 1]);
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: run.id } })).replySeq).toBeNull();
+    await settleFixtureWork([bot.id]);
+  });
+
+  it("keeps a streamed reply's place when its run pauses for input", async () => {
+    const cookie = await signup(app, `pause-order-${stamp}@ardurbot.test`, "Pause Order");
+    const me = await rpc<Me>(app, cookie, "me");
+    const bot = await rpc<Bot>(app, cookie, "bots/create", {
+      name: "Chief",
+      title: "",
+      description: "",
+      instructions: "",
+      notifyOnFinish: true,
+    });
+    const thread = await prisma.thread.findUniqueOrThrow({ where: { botId: bot.id } });
+    const scope = { spaceId: me.spaceId, threadId: thread.id, botId: bot.id };
+    const task = await prisma.task.create({
+      data: { ...scope, userId: me.userId, prompt: "status report", status: "running" },
+    });
+    const run = await prisma.run.create({
+      data: {
+        ...scope,
+        userId: me.userId,
+        taskId: task.id,
+        trigger: "user",
+        status: "running",
+        leaseOwner: "pause-order-fixture",
+        leaseFence: 1,
+        startedAt: new Date(),
+      },
+    });
+    const attempt = await prisma.attempt.create({
+      data: { runId: run.id, fence: 1, status: "running" },
+    });
+
+    // A streaming reply holds seq 0 while the owner's mid-run message takes seq 1.
+    await appendEvent(prisma, {
+      ...scope,
+      type: "thread.progress",
+      runId: run.id,
+      payload: { text: "Before I run that command, I need to ask.", streaming: true },
+    });
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: run.id } })).replySeq).toBe(0);
+    const followUp = await createThreadMessage(prisma, {
+      threadId: thread.id,
+      role: "user",
+      origin: "human",
+      actorId: me.userId,
+      blocks: [{ kind: "text", text: "which environment did you mean?" }],
+    });
+    expect(followUp.seq).toBe(1);
+
+    // The run pauses for input; its ask card must save into the held place.
+    const paused = await pauseRunForInput(prisma, {
+      ...scope,
+      runId: run.id,
+      attemptId: attempt.id,
+      leaseOwner: "pause-order-fixture",
+      leaseFence: 1,
+      blocks: [{ kind: "ask", text: "Which environment?", status: "pending" }],
+    });
+    expect(paused).toBe(true);
+    const askCard = await prisma.message.findFirstOrThrow({
+      where: { threadId: thread.id, runId: run.id, role: "bot" },
+    });
+    expect(askCard.seq).toBe(0);
+    expect(askCard.seq).toBeLessThan(followUp.seq);
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: run.id } })).replySeq).toBeNull();
+
+    // A refreshed transcript shows the ask card above the owner's mid-run message.
+    const snap = await rpc<Snap>(app, cookie, "threads/get", { botId: bot.id });
+    const ids = snap.messages.map((message) => message.id);
+    expect(ids.indexOf(askCard.id)).toBeGreaterThanOrEqual(0);
+    expect(ids.indexOf(askCard.id)).toBeLessThan(ids.indexOf(followUp.id));
+    await settleFixtureWork([bot.id]);
+  });
+
   it("starts a new chat without sending retained history to the next turn", async () => {
-    const cookie = await signup(app, `restart-j-${stamp}@ardurbot.test`, "Restart Journey");
+    const cookie = await signup(app, `restart-j-${stamp}@example.test`, "Restart Journey");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Fresh Start",
       title: "",
@@ -973,7 +1395,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("2b: two Team bots send at once on distinct screens", async () => {
-    const cookie = await signup(app, `parallel-j-${stamp}@ardurbot.test`, "Parallel");
+    const cookie = await signup(app, `parallel-j-${stamp}@example.test`, "Parallel");
     const writer = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Writer",
       title: "",
@@ -1020,7 +1442,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("3: disconnect and reconnect from a cursor reconstructs the thread", async () => {
-    const cookie = await signup(app, `cursor-j-${stamp}@ardurbot.test`, "Cursor");
+    const cookie = await signup(app, `cursor-j-${stamp}@example.test`, "Cursor");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -1044,7 +1466,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("4: takeover login then resume without exposing credentials", async () => {
-    const cookie = await signup(app, `takeover-j-${stamp}@ardurbot.test`, "Takeover");
+    const cookie = await signup(app, `takeover-j-${stamp}@example.test`, "Takeover");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -1087,7 +1509,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("4d: skipping takeover resumes without treating login as done", async () => {
-    const cookie = await signup(app, `takeover-skip-j-${stamp}@ardurbot.test`, "Skip Takeover");
+    const cookie = await signup(app, `takeover-skip-j-${stamp}@example.test`, "Skip Takeover");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -1131,7 +1553,7 @@ describeJourneys("required product journeys", () => {
     const previousTakeoverTtl = process.env.COMPUTER_TAKEOVER_TTL_MS;
     process.env.COMPUTER_TAKEOVER_TTL_MS = "1000";
     try {
-      const cookie = await signup(app, `takeover-expiry-j-${stamp}@ardurbot.test`, "Expiry");
+      const cookie = await signup(app, `takeover-expiry-j-${stamp}@example.test`, "Expiry");
       const bot = await rpc<Bot>(app, cookie, "bots/create", {
         name: "Chief",
         title: "",
@@ -1215,7 +1637,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("4c: a takeover authorizes input only on the controlled bot screen", async () => {
-    const cookie = await signup(app, `takeover-scope-j-${stamp}@ardurbot.test`, "Takeover Scope");
+    const cookie = await signup(app, `takeover-scope-j-${stamp}@example.test`, "Takeover Scope");
     const writer = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Writer",
       title: "",
@@ -1248,7 +1670,7 @@ describeJourneys("required product journeys", () => {
   it("4d: a stale Team release cannot clear a newer bot takeover", async () => {
     const cookie = await signup(
       app,
-      `takeover-release-fence-j-${stamp}@ardurbot.test`,
+      `takeover-release-fence-j-${stamp}@example.test`,
       "Release Fence",
     );
     const writer = await rpc<Bot>(app, cookie, "bots/create", {
@@ -1415,7 +1837,7 @@ describeJourneys("required product journeys", () => {
   it("4e: concurrent Team takeovers never return another bot's lease", async () => {
     const cookie = await signup(
       app,
-      `takeover-owner-race-j-${stamp}@ardurbot.test`,
+      `takeover-owner-race-j-${stamp}@example.test`,
       "Takeover Owner Race",
     );
     const writer = await rpc<Bot>(app, cookie, "bots/create", {
@@ -1496,7 +1918,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("5: a routine wakes the bot and posts into the existing thread", async () => {
-    const cookie = await signup(app, `routine-j-${stamp}@ardurbot.test`, "Routine");
+    const cookie = await signup(app, `routine-j-${stamp}@example.test`, "Routine");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -1579,7 +2001,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("5b: tool-created schedules wake in the creating group or 1:1 thread", async () => {
-    const cookie = await signup(app, `schedule-dest-j-${stamp}@ardurbot.test`, "Schedule Dest");
+    const cookie = await signup(app, `schedule-dest-j-${stamp}@example.test`, "Schedule Dest");
     const me = await rpc<Me>(app, cookie, "me");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Scheduler",
@@ -1701,7 +2123,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("allocates event and message cursors atomically under concurrent writes", async () => {
-    const cookie = await signup(app, `sequence-j-${stamp}@ardurbot.test`, "Sequence");
+    const cookie = await signup(app, `sequence-j-${stamp}@example.test`, "Sequence");
     const actor = await rpc<Me>(app, cookie, "me");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Sequencer",
@@ -1770,7 +2192,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("7: destination write is independently inspectable and credentials stay out of the thread", async () => {
-    const cookie = await signup(app, `dest-j-${stamp}@ardurbot.test`, "Dest");
+    const cookie = await signup(app, `dest-j-${stamp}@example.test`, "Dest");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -1797,7 +2219,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("8: retrying a completed effect does not duplicate the destination write", async () => {
-    const cookie = await signup(app, `crash-j-${stamp}@ardurbot.test`, "Crash");
+    const cookie = await signup(app, `crash-j-${stamp}@example.test`, "Crash");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -1826,8 +2248,41 @@ describeJourneys("required product journeys", () => {
     expect(connector.records.length).toBe(afterFirst);
   });
 
+  it("8b: a run the provider refuses for too many requests waits, retries, and answers", async () => {
+    const cookie = await signup(app, `provider-retry-${stamp}@example.test`, "Retry");
+    const bot = await rpc<Bot>(app, cookie, "bots/create", {
+      name: "Retrier",
+      title: "",
+      description: "",
+      instructions: "",
+    });
+    const { runId } = await rpc<{ runId: string }>(app, cookie, "threads/send", {
+      botId: bot.id,
+      text: "refuse the first call with a rate limit, then answer",
+    });
+    let terminal: { status: string; error: string | null } | null = null;
+    await waitForDatabase(async () => {
+      terminal = await prisma.run.findUnique({
+        where: { id: runId },
+        select: { status: true, error: true },
+      });
+      return Boolean(terminal && ["completed", "failed", "cancelled"].includes(terminal.status));
+    });
+    // The first refusal waited and tried again; the reply arrived instead of a failure.
+    expect(terminal?.status).toBe("completed");
+    const retryEvents = await prisma.event.findMany({
+      where: { runId, type: "run.retry_scheduled" },
+      select: { payload: true },
+    });
+    expect(retryEvents).toHaveLength(1);
+    expect(retryEvents[0]?.payload).toMatchObject({ providerErrorKind: "rate-limit", attempt: 1 });
+    expect(await prisma.attempt.count({ where: { runId, status: "provider_retry" } })).toBe(1);
+    const snap = await rpc<Snap>(app, cookie, "threads/get", { botId: bot.id });
+    expect(JSON.stringify(snap)).toContain("done. i handled:");
+  });
+
   it("9: export includes memory and files but not secrets or browser sessions", async () => {
-    const cookie = await signup(app, `export-j-${stamp}@ardurbot.test`, "Export");
+    const cookie = await signup(app, `export-j-${stamp}@example.test`, "Export");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -1863,8 +2318,8 @@ describeJourneys("required product journeys", () => {
   });
 
   it("10: bots can be archived safely and deleted with or without their memories", async () => {
-    const ada = await signup(app, `delete-j-${stamp}@ardurbot.test`, "Delete Ada");
-    const bob = await signup(app, `delete-bob-j-${stamp}@ardurbot.test`, "Delete Bob");
+    const ada = await signup(app, `delete-j-${stamp}@example.test`, "Delete Ada");
+    const bob = await signup(app, `delete-bob-j-${stamp}@example.test`, "Delete Bob");
     const keep = await rpc<Bot>(app, ada, "bots/create", {
       name: "Keep",
       title: "",
@@ -1975,7 +2430,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("11: deleting an account removes the user and personal workspace data", async () => {
-    const email = `account-delete-j-${stamp}@ardurbot.test`;
+    const email = `account-delete-j-${stamp}@example.test`;
     const cookie = await signup(app, email, "Delete Account");
     const me = await rpc<Me>(app, cookie, "me");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
@@ -2004,7 +2459,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("12: a bot can spawn a regular bot and must confirm the name to delete it", async () => {
-    const cookie = await signup(app, `spawn-j-${stamp}@ardurbot.test`, "Spawn");
+    const cookie = await signup(app, `spawn-j-${stamp}@example.test`, "Spawn");
     const parent = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -2058,7 +2513,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("12b: a bot can silence and resume its own finish notifications", async () => {
-    const cookie = await signup(app, `notify-finish-j-${stamp}@ardurbot.test`, "Notify");
+    const cookie = await signup(app, `notify-finish-j-${stamp}@example.test`, "Notify");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -2081,7 +2536,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("13: a subagent shows up in the parent thread without creating a bot", async () => {
-    const cookie = await signup(app, `subagent-j-${stamp}@ardurbot.test`, "Subagent");
+    const cookie = await signup(app, `subagent-j-${stamp}@example.test`, "Subagent");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -2106,7 +2561,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("14: this-mac is refused unless the sandbox is docker", async () => {
-    const cookie = await signup(app, `host-j-${stamp}@ardurbot.test`, "Host");
+    const cookie = await signup(app, `host-j-${stamp}@example.test`, "Host");
     const me = await rpc<Me>(app, cookie, "me");
     expect(me.canChooseHostComputer).toBe(false);
     await prisma.deploymentSettings.update({
@@ -2121,7 +2576,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("15: ask, answer, stop, follow-up, and clientNonce stay consistent", async () => {
-    const cookie = await signup(app, `ask-j-${stamp}@ardurbot.test`, "Ask");
+    const cookie = await signup(app, `ask-j-${stamp}@example.test`, "Ask");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -2225,7 +2680,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("15b: a free-text chat message answers a waiting ask", async () => {
-    const cookie = await signup(app, `ask-freetext-j-${stamp}@ardurbot.test`, "Ask Free");
+    const cookie = await signup(app, `ask-freetext-j-${stamp}@example.test`, "Ask Free");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -2276,8 +2731,8 @@ describeJourneys("required product journeys", () => {
   });
 
   it("16: routine test-run and plugin connect/revoke", async () => {
-    const ada = await signup(app, `plug-j-${stamp}@ardurbot.test`, "Plug Ada");
-    const bob = await signup(app, `plug-bob-j-${stamp}@ardurbot.test`, "Plug Bob");
+    const ada = await signup(app, `plug-j-${stamp}@example.test`, "Plug Ada");
+    const bob = await signup(app, `plug-bob-j-${stamp}@example.test`, "Plug Bob");
     const bot = await rpc<Bot>(app, ada, "bots/create", {
       name: "Chief",
       title: "",
@@ -2336,12 +2791,15 @@ describeJourneys("required product journeys", () => {
   });
 
   it("54: a coordinator assigns two members and receives one wake per finished assignment", async () => {
-    const instructionsByRun = new Map<string, string>();
+    const inputsByRun = new Map<string, { instructions: string; prompt: string }>();
     const originalRun = ScriptedAgentRuntime.prototype.run;
     const runtimeSpy = vi
       .spyOn(ScriptedAgentRuntime.prototype, "run")
       .mockImplementation((request, context) => {
-        instructionsByRun.set(request.runId, request.instructions);
+        inputsByRun.set(request.runId, {
+          instructions: request.instructions,
+          prompt: request.prompt,
+        });
         return originalRun.call(new ScriptedAgentRuntime(), request, context);
       });
     onTestFinished(() => runtimeSpy.mockRestore());
@@ -2398,7 +2856,9 @@ describeJourneys("required product journeys", () => {
         (await prisma.run.findUnique({ where: { id: startRun.id }, select: { status: true } }))
           ?.status === "completed",
     );
-    expect(instructionsByRun.get(startRun.id)).toContain("Both reviews are posted");
+    // Goal state changes every turn, so it travels with the turn, not the cached instructions.
+    expect(inputsByRun.get(startRun.id)?.prompt).toContain("Both reviews are posted");
+    expect(inputsByRun.get(startRun.id)?.instructions).not.toContain("Both reviews are posted");
     expect(
       await prisma.message.count({
         where: { threadId: group.threadId, runId: startRun.id, role: "bot" },
@@ -2585,7 +3045,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("S1: a goal desk request returns through a distinct reviewer and one coordinator wake per card", async () => {
-    const owner = await signup(app, `desk-loop-${stamp}@ardurbot.test`, "Desk loop owner");
+    const owner = await signup(app, `desk-loop-${stamp}@example.test`, "Desk loop owner");
     const ownerMe = await rpc<Me>(app, owner, "me");
     await prisma.deploymentSettings.update({
       where: { id: "default" },
@@ -3249,7 +3709,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("S1: archiving a desk recipient closes its card and wakes the coordinator once", async () => {
-    const owner = await signup(app, `desk-archive-${stamp}@ardurbot.test`, "Desk archive owner");
+    const owner = await signup(app, `desk-archive-${stamp}@example.test`, "Desk archive owner");
     const ownerMe = await rpc<Me>(app, owner, "me");
     await prisma.deploymentSettings.update({
       where: { id: "default" },
@@ -3385,7 +3845,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("S1: clearing a queued desk request settles its card and wakes the coordinator once", async () => {
-    const owner = await signup(app, `desk-clear-${stamp}@ardurbot.test`, "Desk clear owner");
+    const owner = await signup(app, `desk-clear-${stamp}@example.test`, "Desk clear owner");
     const ownerMe = await rpc<Me>(app, owner, "me");
     await prisma.deploymentSettings.update({
       where: { id: "default" },
@@ -3533,7 +3993,7 @@ describeJourneys("required product journeys", () => {
       credentialId: "scripted",
       revision: 0,
     };
-    const owner = await signup(app, `peer-steering-${stamp}@ardurbot.test`, "Peer steering owner");
+    const owner = await signup(app, `peer-steering-${stamp}@example.test`, "Peer steering owner");
     const ownerMe = await rpc<Me>(app, owner, "me");
     await prisma.deploymentSettings.update({
       where: { id: "default" },
@@ -3801,7 +4261,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("sends only claimed quiet deliveries after selection and through context assembly", async () => {
-    const owner = await signup(app, `quiet-executor-${stamp}@ardurbot.test`, "Quiet owner");
+    const owner = await signup(app, `quiet-executor-${stamp}@example.test`, "Quiet owner");
     const actor = await rpc<Me>(app, owner, "me");
     await prisma.deploymentSettings.update({
       where: { id: "default" },
@@ -4186,7 +4646,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("omits an expired private quiet receipt on a direct turn without a goal", async () => {
-    const owner = await signup(app, `private-quiet-${stamp}@ardurbot.test`, "Private owner");
+    const owner = await signup(app, `private-quiet-${stamp}@example.test`, "Private owner");
     const actor = await rpc<Me>(app, owner, "me");
     await prisma.deploymentSettings.update({
       where: { id: "default" },
@@ -4334,7 +4794,7 @@ describeJourneys("required product journeys", () => {
       credentialId: "scripted",
       revision: 0,
     };
-    const owner = await signup(app, `wake-budget-${stamp}@ardurbot.test`, "Wake owner");
+    const owner = await signup(app, `wake-budget-${stamp}@example.test`, "Wake owner");
     const ownerMe = await rpc<Me>(app, owner, "me");
     await prisma.deploymentSettings.update({
       where: { id: "default" },
@@ -4546,7 +5006,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("delivers a non-goal message beside an owner send without a deadlock or lost send", async () => {
-    const owner = await signup(app, `delivery-send-${stamp}@ardurbot.test`, "Delivery owner");
+    const owner = await signup(app, `delivery-send-${stamp}@example.test`, "Delivery owner");
     const ownerMe = await rpc<Me>(app, owner, "me");
     const sender = await rpc<Bot>(app, owner, "bots/create", {
       name: "Sender",
@@ -4699,7 +5159,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("submits steering while finalization waits without a database deadlock", async () => {
-    const owner = await signup(app, `finalize-send-${stamp}@ardurbot.test`, "Concurrent owner");
+    const owner = await signup(app, `finalize-send-${stamp}@example.test`, "Concurrent owner");
     const ownerMe = await rpc<Me>(app, owner, "me");
     const bot = await rpc<Bot>(app, owner, "bots/create", {
       name: "Concurrent worker",
@@ -4809,7 +5269,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("a spent goal cancels a waiting coordinator and releases new room messages", async () => {
-    const owner = await signup(app, `budget-j-${stamp}@ardurbot.test`, "Budget owner");
+    const owner = await signup(app, `budget-j-${stamp}@example.test`, "Budget owner");
     const ownerMe = await rpc<Me>(app, owner, "me");
     await prisma.deploymentSettings.update({
       where: { id: "default" },
@@ -4992,7 +5452,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("55: group chats share one transcript with mentions and handoffs", async () => {
-    const ada = await signup(app, `ada-g-${stamp}@ardurbot.test`, "Ada Groups");
+    const ada = await signup(app, `ada-g-${stamp}@example.test`, "Ada Groups");
     const adaMe = await rpc<Me>(app, ada, "me");
     const botA = await rpc<Bot>(app, ada, "bots/create", {
       name: "BotA",
@@ -5415,8 +5875,401 @@ describeJourneys("required product journeys", () => {
     expect(remainingBotIds).not.toContain(artifactOwnerId);
   });
 
+  it("55b: a room's four bots answer @everyone at the same time", async () => {
+    const para = await signup(app, `para-${stamp}@example.test`, "Para Rooms");
+    const makeBot = (name: string) =>
+      rpc<Bot>(app, para, "bots/create", {
+        name,
+        title: "",
+        description: "",
+        instructions: "",
+        notifyOnFinish: false,
+      });
+    const paraBots = await Promise.all([
+      makeBot("ParaA"),
+      makeBot("ParaB"),
+      makeBot("ParaC"),
+      makeBot("ParaD"),
+    ]);
+    const group = await rpc<{ id: string; threadId: string }>(app, para, "groups/create", {
+      name: "Parallel room",
+      botIds: paraBots.map((bot) => bot.id),
+    });
+
+    // The scripted slow turn keeps every run busy long enough that serial admission
+    // cannot fake overlap.
+    const snap = await sendGroupAndWait(
+      app,
+      para,
+      group.id,
+      "@everyone scripted slow review: say hello",
+    );
+
+    const runs = await prisma.run.findMany({
+      where: { threadId: group.threadId, trigger: "user" },
+      select: { id: true, botId: true, status: true, startedAt: true, completedAt: true },
+    });
+    expect(runs).toHaveLength(4);
+    expect(runs.every((run) => run.status === "completed")).toBe(true);
+    for (const run of runs) {
+      expect(run.startedAt).not.toBeNull();
+      expect(run.completedAt).not.toBeNull();
+    }
+    // All four intervals share a point: the last start precedes the first finish.
+    const lastStart = Math.max(...runs.map((run) => run.startedAt!.getTime()));
+    const firstFinish = Math.min(...runs.map((run) => run.completedAt!.getTime()));
+    expect(lastStart).toBeLessThan(firstFinish);
+
+    // All four replied under their own names, each reply in its reserved place.
+    const replies = snap.messages.filter((message) => message.role === "bot");
+    expect(new Set(replies.map((message) => message.botId))).toEqual(
+      new Set(paraBots.map((bot) => bot.id)),
+    );
+    const replySeqs = replies.map((message) => message.seq);
+    expect(new Set(replySeqs).size).toBe(4);
+
+    // A reload reads the same transcript in the same order.
+    const reloaded = await rpc<Snap>(app, para, "threads/get", { groupId: group.id });
+    expect(reloaded.messages.map((message) => message.id)).toEqual(
+      snap.messages.map((message) => message.id),
+    );
+    expect(reloaded.messages.map((message) => message.seq)).toEqual(
+      snap.messages.map((message) => message.seq),
+    );
+  });
+
+  it("55c: a room narrowed to one bot at a time answers in turn and keeps the setting", async () => {
+    const turn = await signup(app, `turn-${stamp}@example.test`, "Turn Rooms");
+    const makeBot = (name: string) =>
+      rpc<Bot>(app, turn, "bots/create", {
+        name,
+        title: "",
+        description: "",
+        instructions: "",
+        notifyOnFinish: false,
+      });
+    const turnBots = await Promise.all([makeBot("TurnA"), makeBot("TurnB")]);
+    type Room = { id: string; threadId: string; roomPolicy?: unknown };
+    const group = await rpc<Room>(app, turn, "groups/create", {
+      name: "Turn room",
+      botIds: turnBots.map((bot) => bot.id),
+    });
+    expect(group.roomPolicy).toEqual({ version: 1, maxConcurrentRuns: 4 });
+
+    const narrowed = await rpc<Room>(app, turn, "groups/update", {
+      groupId: group.id,
+      roomPolicy: { maxConcurrentRuns: 1 },
+    });
+    expect(narrowed.roomPolicy).toEqual({ version: 1, maxConcurrentRuns: 1 });
+    // A change to something else, or a change that names no setting, keeps the room's setting.
+    const renamed = await rpc<Room>(app, turn, "groups/update", {
+      groupId: group.id,
+      name: "One at a time",
+      roomPolicy: {},
+    });
+    expect(renamed.roomPolicy).toEqual({ version: 1, maxConcurrentRuns: 1 });
+    for (const roomPolicy of [{ maxConcurrentRuns: 9 }, { maxConcurrentRuns: 0 }, { other: 1 }]) {
+      await expect(
+        rpc(app, turn, "groups/update", { groupId: group.id, roomPolicy }),
+      ).rejects.toThrow();
+    }
+    const reread = await rpc<Room>(app, turn, "groups/get", { groupId: group.id });
+    expect(reread.roomPolicy).toEqual({ version: 1, maxConcurrentRuns: 1 });
+
+    await sendGroupAndWait(app, turn, group.id, "@everyone scripted slow review: say hello");
+    const runs = await prisma.run.findMany({
+      where: { threadId: group.threadId, trigger: "user" },
+      select: { status: true, startedAt: true, completedAt: true },
+    });
+    expect(runs).toHaveLength(2);
+    expect(runs.every((run) => run.status === "completed")).toBe(true);
+    // The second bot starts when the first has finished. The slow turn holds each run for
+    // two seconds, so half a second of clock slack still tells in-turn from at-once.
+    const [first, second] = runs.sort(
+      (a, b) => a.startedAt!.getTime() - b.startedAt!.getTime(),
+    ) as [(typeof runs)[number], (typeof runs)[number]];
+    expect(second.startedAt!.getTime()).toBeGreaterThan(first.completedAt!.getTime() - 500);
+  });
+
+  // A coordinator on a native runtime reports its whole turn's usage, cache reads included, as
+  // the turn ends: well past the default task budget, just before its room workers can start.
+  async function* heavyTurn(events: AsyncIterable<AgentRuntimeEvent>) {
+    for await (const event of events)
+      yield event.type === "usage" ? { ...event, inputTokens: 200_000 } : event;
+  }
+  function scriptCoordinator(
+    marker: string,
+    tool: string,
+    call: { name: string; args: Record<string, unknown> },
+  ) {
+    const requests = new Map<string, AgentRunRequest>();
+    const originalRun = ScriptedAgentRuntime.prototype.run;
+    const runtimeSpy = vi
+      .spyOn(ScriptedAgentRuntime.prototype, "run")
+      .mockImplementation((request, context) => {
+        requests.set(request.runId, request);
+        const coordinatorTurn =
+          request.prompt.includes(marker) &&
+          Array.isArray(request.tools) &&
+          request.tools.some((candidate) => candidate.name === tool);
+        const events = originalRun.call(
+          new ScriptedAgentRuntime(),
+          coordinatorTurn
+            ? { ...request, script: [{ toolCalls: [call], complete: true }] }
+            : request,
+          context,
+        );
+        return coordinatorTurn ? heavyTurn(events) : events;
+      });
+    onTestFinished(() => runtimeSpy.mockRestore());
+    return requests;
+  }
+
+  it("56: a room coordinator answers status from records and asks every member once", async () => {
+    const requests = scriptCoordinator("introduce each other", "ask_members", {
+      name: "ask_members",
+      args: { members: ["all"], request: "Introduce yourself to the room in one sentence." },
+    });
+    const owner = await signup(app, `room-ask-${stamp}@ardurbot.test`, "Room ask owner");
+    const bots: Bot[] = [];
+    for (const [name, title] of [
+      ["Chief", "Coordinator"],
+      ["Ada", "Researcher"],
+      ["Ben", "Writer"],
+      ["Cy", "Analyst"],
+    ])
+      bots.push(
+        await rpc<Bot>(app, owner, "bots/create", {
+          name,
+          title,
+          description: "",
+          instructions: "",
+          notifyOnFinish: true,
+        }),
+      );
+    const [chief, ada, ben, cy] = bots as [Bot, Bot, Bot, Bot];
+    const group = await rpc<{ id: string; threadId: string }>(app, owner, "groups/create", {
+      name: "Intro room",
+      botIds: [chief.id, ada.id, ben.id, cy.id],
+    });
+    await rpc(app, owner, "groups/update", { groupId: group.id, coordinatorBotId: chief.id });
+    const finished = (runId: string) =>
+      waitForDatabase(
+        async () =>
+          (await prisma.run.findUnique({ where: { id: runId }, select: { status: true } }))
+            ?.status === "completed",
+      );
+
+    // A status question is answered from the member list; no member is started.
+    const statusRequestAt = new Date();
+    const status = await rpc<{ runId: string; runIds?: string[] }>(app, owner, "threads/send", {
+      groupId: group.id,
+      text: "what is the status",
+    });
+    expect(status.runIds ?? [status.runId]).toHaveLength(1);
+    await finished(status.runId);
+    const statusRequest = requests.get(status.runId)!;
+    expect(statusRequest.instructions).toContain("You coordinate this group chat");
+    const directory = statusRequest.history.map((message) => message.content).join("\n");
+    expect(directory).toContain("Room members and what their run records show");
+    expect(directory).toContain(`- Ada (id: ${ada.id}) — Researcher. Now: free.`);
+    expect(directory).toContain(`- Ben (id: ${ben.id}) — Writer. Now: free.`);
+    expect(await prisma.delegation.count({ where: { parentRunId: status.runId } })).toBe(0);
+    expect(
+      await prisma.run.count({
+        where: { threadId: group.threadId, botId: { in: [ada.id, ben.id, cy.id] } },
+      }),
+    ).toBe(0);
+
+    // "Introduce each other" asks every other member exactly once and fans back in.
+    const intro = await rpc<{ runId: string; runIds?: string[] }>(app, owner, "threads/send", {
+      groupId: group.id,
+      text: "tell the bots to introduce each other, do not mention individually",
+    });
+    expect(intro.runIds ?? [intro.runId]).toHaveLength(1);
+    const wakeNonce = `ask-wake:1:${intro.runId}`;
+    // Three members answer one at a time in the room before the coordinator's follow-up runs.
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        await waitForDatabase(
+          async () =>
+            (
+              await prisma.run.findFirst({
+                where: { clientNonce: wakeNonce },
+                select: { status: true },
+              })
+            )?.status === "completed",
+        );
+        break;
+      } catch (error) {
+        if (attempt < 3) continue;
+        const state = await prisma.run.findMany({
+          where: { threadId: group.threadId, createdAt: { gte: statusRequestAt } },
+          orderBy: { createdAt: "asc" },
+          select: { botId: true, status: true, error: true, clientNonce: true, trigger: true },
+        });
+        throw new Error(`${(error as Error).message}: ${JSON.stringify(state)}`);
+      }
+    }
+    const asked = await prisma.delegation.findMany({
+      where: { parentRunId: intro.runId },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(asked.map((row) => row.actingBotId).sort()).toEqual([ada.id, ben.id, cy.id].sort());
+    // The coordinator's end-of-turn usage overspent the task; its admitted members still ran.
+    const askRoot = await prisma.delegationRoot.findUniqueOrThrow({
+      where: { rootTaskId: asked[0]!.rootTaskId },
+    });
+    expect(askRoot.usedTokens).toBeGreaterThan(askRoot.tokenLimit);
+    expect(askRoot.cancelRequestedAt).toBeNull();
+    for (const row of asked)
+      expect(row).toMatchObject({
+        kind: "group-handoff",
+        status: "accepted",
+        admissionKey: expect.stringMatching(new RegExp(`^group-ask:1:${intro.runId}:`)),
+        coordinatorWokenAt: expect.any(Date),
+      });
+    // The ask stores as one coordination block the room collapses to a line;
+    // every asked member ends recorded as answered on it. Outcomes land as
+    // each member's run settles, which can trail the coordinator's follow-up.
+    let askBlock: Record<string, unknown> | undefined;
+    let askMessageMeta: { botId: string; runId: string | null } | undefined;
+    let askMessages: unknown[] = [];
+    await waitForDatabase(async () => {
+      const rows = await prisma.message.findMany({
+        where: { threadId: group.threadId, role: "bot" },
+        orderBy: { seq: "asc" },
+        select: { botId: true, runId: true, blocks: true },
+      });
+      const found = rows.filter((message) =>
+        JSON.stringify(message.blocks).includes("Introduce yourself to the room"),
+      );
+      askMessages = found;
+      askMessageMeta = found[0] ? { botId: found[0].botId, runId: found[0].runId } : undefined;
+      askBlock = (found[0]?.blocks as Array<Record<string, unknown>> | undefined)?.[0];
+      const members = (askBlock?.members as Array<{ outcome: string }> | undefined) ?? [];
+      return (
+        found.length === 1 &&
+        members.length === 3 &&
+        members.every((member) => member.outcome === "answered")
+      );
+    });
+    expect(askMessages).toHaveLength(1);
+    expect(askMessageMeta).toEqual({ botId: chief.id, runId: intro.runId });
+    expect(askBlock).toMatchObject({
+      kind: "coordination",
+      round: 1,
+      text: "Introduce yourself to the room in one sentence.",
+    });
+    const askedMembers = (askBlock?.members ?? []) as Array<{ botId: string; outcome: string }>;
+    expect(askedMembers.map((member) => member.botId).sort()).toEqual(
+      [ada.id, ben.id, cy.id].sort(),
+    );
+    expect(askedMembers.map((member) => member.outcome)).toEqual([
+      "answered",
+      "answered",
+      "answered",
+    ]);
+    const roomMessages = await prisma.message.findMany({
+      where: { threadId: group.threadId, role: "bot" },
+      orderBy: { seq: "asc" },
+      select: { botId: true, runId: true, blocks: true },
+    });
+    for (const row of asked)
+      expect(
+        roomMessages.some(
+          (message) => message.botId === row.actingBotId && message.runId === row.runId,
+        ),
+      ).toBe(true);
+    expect(
+      roomMessages.some((message) =>
+        JSON.stringify(message.blocks).includes("completed, awaiting acceptance"),
+      ),
+    ).toBe(false);
+    const wake = await prisma.run.findFirstOrThrow({ where: { clientNonce: wakeNonce } });
+    expect(wake).toMatchObject({
+      botId: chief.id,
+      threadId: group.threadId,
+      trigger: "follow_up",
+    });
+    const results = requests
+      .get(wake.id)!
+      .history.map((message) => message.content)
+      .join("\n");
+    expect(results).toContain("<ask_results>");
+    expect(results).toContain(`- Ada (id: ${ada.id}), asked "Introduce yourself`);
+    expect(results).toContain(`- Ben (id: ${ben.id}), asked "Introduce yourself`);
+    expect(results).toContain(`- Cy (id: ${cy.id}), asked "Introduce yourself`);
+
+    await createJobReconciler({ prisma, jobs }, { batchSize: 100 }).reconcileOnce();
+    expect(await prisma.run.count({ where: { clientNonce: wakeNonce } })).toBe(1);
+    expect(
+      await prisma.run.count({ where: { delegationId: { in: asked.map((row) => row.id) } } }),
+    ).toBe(3);
+  }, 90_000);
+
+  it("57: a room handoff outlives its coordinator's heavy turn and posts its result", async () => {
+    scriptCoordinator("pass the intro to Ben", "handoff_to_bot", {
+      name: "handoff_to_bot",
+      args: { confirm_name: "Ben", message: "Introduce yourself to the room." },
+    });
+    const owner = await signup(app, `room-handoff-${stamp}@ardurbot.test`, "Room handoff owner");
+    const bots: Bot[] = [];
+    for (const [name, title] of [
+      ["Chief", "Coordinator"],
+      ["Ada", "Researcher"],
+      ["Ben", "Writer"],
+    ])
+      bots.push(
+        await rpc<Bot>(app, owner, "bots/create", {
+          name,
+          title,
+          description: "",
+          instructions: "",
+          notifyOnFinish: true,
+        }),
+      );
+    const [chief, ada, ben] = bots as [Bot, Bot, Bot];
+    const group = await rpc<{ id: string; threadId: string }>(app, owner, "groups/create", {
+      name: "Handoff room",
+      botIds: [chief.id, ada.id, ben.id],
+    });
+    await rpc(app, owner, "groups/update", { groupId: group.id, coordinatorBotId: chief.id });
+    const sent = await rpc<{ runId: string }>(app, owner, "threads/send", {
+      groupId: group.id,
+      text: "pass the intro to Ben",
+    });
+    await waitForDatabase(
+      async () =>
+        (await prisma.run.findUnique({ where: { id: sent.runId }, select: { status: true } }))
+          ?.status === "completed",
+    );
+    const handoff = await prisma.delegation.findFirstOrThrow({
+      where: { parentRunId: sent.runId, actingBotId: ben.id },
+    });
+    const root = await prisma.delegationRoot.findUniqueOrThrow({
+      where: { rootTaskId: handoff.rootTaskId },
+    });
+    expect(root.usedTokens).toBeGreaterThan(root.tokenLimit);
+    await waitForDatabase(
+      async () =>
+        (await prisma.delegation.findUnique({ where: { id: handoff.id } }))?.status === "completed",
+    );
+    expect(await prisma.run.findUnique({ where: { id: handoff.runId! } })).toMatchObject({
+      status: "completed",
+      cancelRequestedAt: null,
+    });
+    const summary = await prisma.message.findFirstOrThrow({
+      where: { threadId: group.threadId, clientNonce: `delegation-summary:${handoff.id}` },
+    });
+    expect(JSON.stringify(summary.blocks)).toContain(
+      "Chief → Ben: completed, awaiting acceptance.",
+    );
+    expect(JSON.stringify(summary.blocks)).not.toContain("Worker stopped.");
+  });
+
   it("17: teach a task end to end", async () => {
-    const cookie = await signup(app, `teach-j-${stamp}@ardurbot.test`, "Teach Ada");
+    const cookie = await signup(app, `teach-j-${stamp}@example.test`, "Teach Ada");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Teacher",
       title: "",
@@ -5507,7 +6360,7 @@ describeJourneys("required product journeys", () => {
     const previousTtl = process.env.TEACH_RECORDING_TTL_MS;
     process.env.TEACH_RECORDING_TTL_MS = "1000";
     try {
-      const cookie = await signup(app, `teach-exp-j-${stamp}@ardurbot.test`, "Teach Exp Ada");
+      const cookie = await signup(app, `teach-exp-j-${stamp}@example.test`, "Teach Exp Ada");
       const bot = await rpc<Bot>(app, cookie, "bots/create", {
         name: "Timer",
         title: "",
@@ -5533,7 +6386,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("19: destination writes pause for approval before side effects", async () => {
-    const cookie = await signup(app, `approval-j-${stamp}@ardurbot.test`, "Approval");
+    const cookie = await signup(app, `approval-j-${stamp}@example.test`, "Approval");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -5601,7 +6454,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("20: actions run by default and specific exceptions override broad review rules", async () => {
-    const cookie = await signup(app, `always-j-${stamp}@ardurbot.test`, "Always");
+    const cookie = await signup(app, `always-j-${stamp}@example.test`, "Always");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -5672,7 +6525,7 @@ describeJourneys("required product journeys", () => {
   it("21: routine destination writes pause on the same approval card", async () => {
     const cookie = await signup(
       app,
-      `routine-approval-j-${stamp}@ardurbot.test`,
+      `routine-approval-j-${stamp}@example.test`,
       "Routine Approval",
     );
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
@@ -5718,7 +6571,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("22: a routine schedule with any malformed or mixed one-shot cron is rejected", async () => {
-    const cookie = await signup(app, `routine-crons-j-${stamp}@ardurbot.test`, "Routine Crons");
+    const cookie = await signup(app, `routine-crons-j-${stamp}@example.test`, "Routine Crons");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Scheduler",
       title: "",
@@ -5749,7 +6602,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("23: never-run one-shot templates can be armed with a future runAt", async () => {
-    const cookie = await signup(app, `once-arm-j-${stamp}@ardurbot.test`, "Once Arm");
+    const cookie = await signup(app, `once-arm-j-${stamp}@example.test`, "Once Arm");
     const me = await rpc<Me>(app, cookie, "me");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Once Bot",
@@ -5806,7 +6659,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("24: chat creates a space only after explicit approval", async () => {
-    const cookie = await signup(app, `space-chat-j-${stamp}@ardurbot.test`, "Space Chat");
+    const cookie = await signup(app, `space-chat-j-${stamp}@example.test`, "Space Chat");
     const me = await rpc<Me>(app, cookie, "me");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
@@ -5890,6 +6743,8 @@ type Snap = {
   messages: Array<{
     id: string;
     seq: number;
+    role?: string;
+    botId?: string | null;
     runId?: string | null;
     blocks: Array<{ kind?: string; status?: string; answer?: string; actions?: unknown[] }>;
   }>;

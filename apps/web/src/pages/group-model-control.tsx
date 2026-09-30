@@ -5,11 +5,21 @@ import type {
   SetGroupMemberModelPinInput,
   ThinkingLevel,
 } from "@ardurbot/contracts";
-import { modelPinOptionKey, parseModelPinOptionKey, spaceDefaultEffort } from "@ardurbot/core";
+import {
+  hermesConnectionRefusal,
+  modelPinOptionKey,
+  parseModelPinOptionKey,
+  spaceDefaultEffort,
+} from "@ardurbot/core";
+import {
+  canonicalRuntimeJson,
+  effectiveHermesRuntimeConfigV2,
+} from "@ardurbot/core/runtime-config";
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { ShowAllModels } from "../components/ShowAllModels";
+import { hermesRefusalMessage } from "../lib/hermes-refusal";
 import { actionMessage } from "../lib/orpc-action-message";
 import type { ModelSettings } from "../lib/use-model-settings";
 import { ModelEffortSelect, ModelPinSelect } from "./shell/model-pin-select";
@@ -25,7 +35,11 @@ export function GroupModelControl({
   member?: GroupMember;
   bot: Bot;
   settings: ModelSettings | null;
-  onSave: (member: GroupMember, pin: SetGroupMemberModelPinInput["pin"] | null) => Promise<void>;
+  onSave: (
+    member: GroupMember,
+    pin: SetGroupMemberModelPinInput["pin"] | null,
+    expectedBotModelPinRevision?: number,
+  ) => Promise<void>;
   onReload?: (member: GroupMember) => Promise<GroupMember | undefined>;
 }) {
   const { t } = useLingui();
@@ -43,15 +57,33 @@ export function GroupModelControl({
   const [showAll, setShowAll] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const botConfig = useMemo(() => {
+    try {
+      return effectiveHermesRuntimeConfigV2(bot.runtimeConfig);
+    } catch {
+      return effectiveHermesRuntimeConfigV2(null);
+    }
+  }, [bot.runtimeConfig]);
+  const groupConfig = useMemo(() => {
+    try {
+      return effectiveHermesRuntimeConfigV2(confirmed?.runtimeConfig);
+    } catch {
+      return effectiveHermesRuntimeConfigV2(null);
+    }
+  }, [confirmed?.runtimeConfig]);
+  const isCapturedDifferentFromBot =
+    confirmed?.runtimeKind === "hermes" &&
+    canonicalRuntimeJson(botConfig) !== canonicalRuntimeJson(groupConfig);
+
   const selectedModel = parseModelPinOptionKey(key);
-  const incompatibleHermes =
-    kind === "hermes" &&
-    Boolean(
-      selectedModel?.provider && !["openai-compatible", "ollama"].includes(selectedModel.provider),
-    );
   const selectedCredential = settings?.credentials.find(
     (item) => item.id === selectedModel?.credentialId,
   );
+  const hermesRefusal =
+    kind === "hermes"
+      ? hermesConnectionRefusal(selectedModel?.provider, selectedCredential)
+      : undefined;
+  const incompatibleHermes = Boolean(hermesRefusal);
   const selectedEntry = settings?.catalog.find(
     (item) => item.provider === selectedModel?.provider && item.id === selectedModel.modelId,
   );
@@ -138,6 +170,47 @@ export function GroupModelControl({
     }
   }
 
+  async function handleUseBotRuntimeSettings() {
+    if (!activeMember?.memberId || saving || !confirmed) return;
+    if (!confirmed.provider || !confirmed.modelId || !confirmed.credentialId) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave(
+        activeMember,
+        {
+          runtimeKind: confirmed.runtimeKind,
+          provider: confirmed.provider,
+          modelId: confirmed.modelId,
+          credentialId: confirmed.credentialId,
+          effort: confirmed.effort,
+        },
+        bot.modelPinRevision ?? 0,
+      );
+    } catch (cause) {
+      const conflict =
+        typeof cause === "object" && cause !== null && "code" in cause && cause.code === "CONFLICT";
+      const reloaded = conflict ? await onReload?.(activeMember).catch(() => undefined) : undefined;
+      if (reloaded) {
+        setActiveMember(reloaded);
+        const restored = reloaded.runtimePin ?? null;
+        setInherit(!restored);
+        setKind(restored?.runtimeKind ?? "pi");
+        setKey(
+          restored?.provider && restored.modelId
+            ? modelPinOptionKey(restored.provider, restored.modelId, restored.credentialId)
+            : "",
+        );
+        setEffort(restored?.effort ?? "");
+        setError(t`The group model choice was reloaded. Pick again.`);
+        return;
+      }
+      setError(actionMessage(cause, t`Could not save group model.`));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="mt-2 rounded-lg border border-border p-2" data-testid={`group-model-${bot.id}`}>
       <label htmlFor={`${id}-model`} className="text-xs text-muted-foreground">
@@ -151,7 +224,11 @@ export function GroupModelControl({
           value={inherit ? "" : key}
           disabled={!member?.memberId || saving}
           defaultLabel={kind === "hermes" && !inherit && !key ? t`Choose a model` : t`Same as bot`}
-          allowedProviders={kind === "hermes" ? ["openai-compatible", "ollama"] : undefined}
+          isCredentialDisabled={
+            kind === "hermes"
+              ? (credential) => Boolean(hermesConnectionRefusal(credential.provider, credential))
+              : undefined
+          }
           onChange={(value) => {
             const nextInherit = !value;
             setInherit(nextInherit);
@@ -193,11 +270,9 @@ export function GroupModelControl({
           />
         </>
       ) : null}
-      {incompatibleHermes ? (
+      {hermesRefusal ? (
         <p role="status" className="mt-2 text-sm text-muted-foreground">
-          {selectedModel?.provider === "anthropic"
-            ? t`Hermes does not yet support Anthropic connections.`
-            : t`Hermes does not yet support this connection.`}
+          {hermesRefusalMessage(hermesRefusal)}
         </p>
       ) : null}
       {activeMember?.memberId ? (
@@ -222,6 +297,40 @@ export function GroupModelControl({
             onExperimental={() => undefined}
             experimentalReadOnly
           />
+        </details>
+      ) : null}
+      {confirmed?.runtimeKind === "hermes" ? (
+        <details className="mt-2 text-xs text-muted-foreground">
+          <summary className="cursor-pointer">
+            <Trans>Runtime settings</Trans>
+          </summary>
+          <div className="mt-2 space-y-1 rounded border border-border p-2">
+            <div>
+              <Trans>Model calls per turn</Trans>: {groupConfig.limits.maxProviderRequests}
+            </div>
+            <div>
+              <Trans>Time limit (seconds)</Trans>: {Math.round(groupConfig.limits.timeoutMs / 1000)}
+            </div>
+            <div>
+              <Trans>Context limit (KiB)</Trans>:{" "}
+              {Math.round(groupConfig.context.maxInputBytes / 1024)}
+            </div>
+            {isCapturedDifferentFromBot ? (
+              <div className="mt-2 flex items-center justify-between gap-2 border-t border-border pt-2">
+                <span>
+                  <Trans>Captured for this group.</Trans>
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={saving || !activeMember?.memberId}
+                  onClick={() => void handleUseBotRuntimeSettings()}
+                >
+                  <Trans>Use bot runtime settings</Trans>
+                </Button>
+              </div>
+            ) : null}
+          </div>
         </details>
       ) : null}
       {error ? (

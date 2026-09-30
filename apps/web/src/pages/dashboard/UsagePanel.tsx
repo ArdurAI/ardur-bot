@@ -1,6 +1,6 @@
 import type { UsagePeriod, UsageSummary } from "@ardurbot/contracts";
 import { sparklinePoints } from "@ardurbot/core";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { Plural, Trans, useLingui } from "@lingui/react/macro";
 import { rpc } from "../../lib/rpc";
 import type { PanelContext } from "./panels";
 
@@ -47,14 +47,13 @@ export default function UsagePanel({ data }: { data: UsageSummary }) {
   );
 }
 function Period({ value, provider }: { value: UsagePeriod; provider: string }) {
-  const { t } = useLingui();
   const records = value.records;
   const tokens = value.inputTokens + value.outputTokens;
   return (
     <p className="tabular-nums">
-      {t`${records} usage records`}
+      <Plural value={records} one="# usage record" other="# usage records" />
       {" · "}
-      {t`${tokens} tokens`}
+      <Plural value={tokens} one="# token" other="# tokens" />
       {value.cost !== null ? (
         <>
           {" "}
@@ -65,6 +64,12 @@ function Period({ value, provider }: { value: UsagePeriod; provider: string }) {
         <>
           {" "}
           · <Trans>Cost unavailable</Trans>
+        </>
+      ) : null}
+      {value.incomplete ? (
+        <>
+          {" "}
+          · <Trans>Partially reported</Trans>
         </>
       ) : null}
     </p>

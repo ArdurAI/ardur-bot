@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { closeUnterminatedFence, sanitizeMarkdownUrl } from "./markdown";
+import { closeUnterminatedFence, nativeCursorProps, sanitizeMarkdownUrl } from "./markdown";
 
 describe("sanitizeMarkdownUrl", () => {
   it("allows normal external links and optionally allows local links", () => {
@@ -26,5 +26,23 @@ describe("closeUnterminatedFence", () => {
   it("leaves complete markdown unchanged", () => {
     const markdown = "```ts\nconst value = 1;\n```\n\nDone";
     expect(closeUnterminatedFence(markdown)).toBe(markdown);
+  });
+});
+
+describe("nativeCursorProps", () => {
+  it("shows the cursor in the given color while the reply text grows", () => {
+    expect(nativeCursorProps({ streaming: true }, "muted-foreground")).toEqual({
+      cursorColor: "muted-foreground",
+    });
+    expect(nativeCursorProps({ streaming: true, cursor: true }, "muted-foreground")).toEqual({
+      cursorColor: "muted-foreground",
+    });
+  });
+
+  it("hides a paused cursor by color only, so its box keeps its space", () => {
+    // No size or style override: the cursor keeps its layout box, drawn transparent.
+    expect(nativeCursorProps({ streaming: true, cursor: false }, "muted-foreground")).toEqual({
+      cursorColor: "transparent",
+    });
   });
 });

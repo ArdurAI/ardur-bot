@@ -154,11 +154,6 @@ msgstr "{0} 次运行 · {1} tokens"
 msgid "{0} runs at these pins; hosted providers may bill per run"
 msgstr ""
 
-#. placeholder {0}: counts.pendingCount
-#: src/pages/LearningInbox.tsx
-msgid "{0} suggestions to review"
-msgstr ""
-
 #. placeholder {0}: bot.name
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} will still respond to direct mentions."
@@ -184,6 +179,10 @@ msgstr ""
 #: src/pages/LearningObservation.tsx
 msgid "{after} corrections in {0} exposed runs; before: {before} in {1} comparable runs"
 msgstr ""
+
+#: src/lib/failure-category-copy.ts
+msgid "{bot}'s allowed model destinations block this model. Change them in {bot}'s settings."
+msgstr "{bot} 允许的模型目的地阻止了此模型。请在 {bot} 的设置中更改。"
 
 #: src/pages/LearningInsights.tsx
 msgid "{bot}'s last {count} runs on {model} failed because it cannot use tools; {suggested} used tools in your runs."
@@ -222,8 +221,16 @@ msgid "{botName} couldn't use the model set for this group. Reconnect it or chan
 msgstr "{botName} 无法使用为此群组设置的模型。请重新连接，或更改群组模型。"
 
 #: src/pages/Shell.tsx
+msgid "{botName} hit the group model's usage limit. Try again after it resets, or change the group model."
+msgstr "{botName} 已达到群组模型的用量上限。请在限额重置后重试，或更改群组模型。"
+
+#: src/pages/Shell.tsx
 msgid "{botName}’s computer"
 msgstr "{botName} 的电脑"
+
+#: src/pages/Shell.tsx
+msgid "{botName}'s sign-in for the group model expired. Reconnect it or change the group model."
+msgstr "{botName} 的群组模型登录已过期。请重新连接，或更改群组模型。"
 
 #: src/pages/LearningInsights.tsx
 msgid "{connection} rejected its sign-in; {count} runs could not use it."
@@ -253,13 +260,41 @@ msgstr ""
 msgid "{hours}h ago"
 msgstr "{hours} 小时前"
 
+#: src/pages/LearningInbox.tsx
+msgid "{learned, plural, one {learned # thing this week} other {learned # things this week}}"
+msgstr "{learned, plural, other {本周学习了 # 件事}}"
+
 #: src/pages/storage/StorageSettings.tsx
 msgid "{location} · Docker not running"
 msgstr "{location} · Docker 未运行"
 
+#: src/lib/failure-category-copy.ts
+msgid "{member} failed."
+msgstr "{member} 失败了。"
+
+#: src/lib/failure-category-copy.ts
+msgid "{member} stopped."
+msgstr "{member} 已停止。"
+
 #: src/pages/ActivityList.tsx
 msgid "{minutes}m ago"
 msgstr "{minutes} 分钟前"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer"
+msgstr "{name} 无法回答"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model account hit a rate limit"
+msgstr "{name} 无法回答：其模型账户已达到速率限制"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model account needs attention"
+msgstr "{name} 无法回答：其模型账户需要处理"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model is unavailable"
+msgstr "{name} 无法回答：其模型不可用"
 
 #. js-lingui-explicit-id
 #: src/lib/use-notifications.ts
@@ -276,21 +311,65 @@ msgstr "{name} 已完成"
 msgid "{name} needs your input"
 msgstr ""
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} stopped before answering"
+msgstr "{name} 在回答前已停止"
+
+#: src/pages/LearningInbox.tsx
+msgid "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
+msgstr "{pending, plural, other {# 条建议待审}}"
+
 #: src/components/composer/ComposerMenu.tsx
 msgid "{reconnectCount} need reconnection"
 msgstr ""
 
 #: src/pages/dashboard/UsagePanel.tsx
-msgid "{records} usage records"
-msgstr "{records} 条用量记录"
+msgid "{records, plural, one {# usage record} other {# usage records}}"
+msgstr "{records, plural, other {# 条用量记录}}"
 
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "剩余 {remaining} · Bot 只看不操作"
 
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} could not finish this run. Check the runtime or change the pin."
+msgstr "{runtime} 无法完成此次运行。请检查运行时或更改固定模型。"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} is experimental. Turn on Experimental for {bot} to use it."
+msgstr "{runtime} 是实验性运行时。为 {bot} 启用「实验性」后才能使用。"
+
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "{runtime} loads all connected tools because deferred loading is unavailable."
 msgstr ""
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} reached this run's turn limit. Narrow the task and try again."
+msgstr "{runtime} 已达到此次运行的轮次上限。请缩小任务范围后重试。"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} runs on the host computer, not in a sandbox. Change {bot}'s computer to use it."
+msgstr "{runtime} 运行在主机电脑上，而不是沙盒中。请更改 {bot} 的电脑后再使用。"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} stopped before finishing this run."
+msgstr "{runtime} 在完成此次运行前已停止。"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s configuration is invalid. Check this bot's settings."
+msgstr "{runtime} 的配置无效。请检查此 Bot 的设置。"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model connection is missing. Connect it or change the pin."
+msgstr "{runtime} 的模型连接缺失。请连接或更改固定模型。"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s pinned model is unavailable. Change the pin and try again."
+msgstr "{runtime} 固定的模型不可用。请更改固定模型后重试。"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s usage limit is reached. Try again after it resets."
+msgstr "{runtime} 的用量已达上限。请在限额重置后重试。"
 
 #: src/pages/dashboard/NowPanel.tsx
 msgid "{seconds}s"
@@ -309,14 +388,14 @@ msgid "{title}, {label}"
 msgstr "{title}，{label}"
 
 #: src/pages/dashboard/UsagePanel.tsx
-msgid "{tokens} tokens"
-msgstr ""
+msgid "{tokens, plural, one {# token} other {# tokens}}"
+msgstr "{tokens, plural, other {# 个令牌}}"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "{toolCount, plural, one {# tool} other {# tools}}"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/lib/working-indicator.ts
 msgid "{workingBotName} is working"
 msgstr "{workingBotName} 正在工作"
 
@@ -490,6 +569,10 @@ msgstr "请填写服务器名称。"
 msgid "Add a stdio command."
 msgstr "请填写 stdio 命令。"
 
+#: src/lib/hermes-refusal.ts
+msgid "Add an API key connection to use this provider with Hermes."
+msgstr "添加 API 密钥连接，即可在 Hermes 中使用此提供商。"
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Add an HTTPS server URL."
 msgstr "请填写 HTTPS 服务器 URL。"
@@ -519,6 +602,10 @@ msgstr ""
 #: src/pages/HostComputerSettings.tsx
 msgid "Add folder"
 msgstr ""
+
+#: src/pages/ScratchpadSection.tsx
+msgid "Add from board"
+msgstr "从看板添加"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Add GraphQL"
@@ -594,6 +681,7 @@ msgstr "正在添加…"
 #: src/pages/RoutineSchedule.tsx
 #: src/pages/settings-sections.ts
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-config-panel.tsx
 msgid "Advanced"
 msgstr "高级"
 
@@ -774,6 +862,10 @@ msgstr ""
 msgid "Answer"
 msgstr "回答"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "answered"
+msgstr "已回答"
+
 #: src/components/AskCard.tsx
 msgid "Answered"
 msgstr "已回答"
@@ -787,6 +879,7 @@ msgstr "已回答：{0}"
 msgid "Answered: {answer}"
 msgstr "已回答：{answer}"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Antigravity"
 msgstr "Antigravity"
@@ -841,6 +934,10 @@ msgstr "无法检查 Antigravity 的实时模型列表。请重新检查。"
 #: src/pages/ModelDestinations.tsx
 msgid "Any"
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "API attempts"
+msgstr "API 尝试次数"
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "API is back, but the update did not finish. Check the host logs."
@@ -960,13 +1057,26 @@ msgstr "已归档"
 msgid "Archived. Chat, memory, and files kept."
 msgstr "已归档。对话、记忆和文件保留。"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Ardur (built-in)"
 msgstr "Ardur（内置）"
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Ardur manages"
+msgstr "由 Ardur 管理"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Ardur manages paths, hooks, permissions, and network access."
+msgstr "Ardur 管理路径、钩子、权限和网络访问。"
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Ardur reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
 msgstr "Ardur 会读取此电脑上这些工具的指令、记忆、技能和服务器列表，但不会读取登录信息、令牌或聊天记录。"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Ardur sets the model and thinking level. Change them in bot settings."
+msgstr "模型和思考级别由 Ardur 设置。请在机器人设置中更改。"
 
 #: src/lib/board-close-copy.ts
 msgid "Ardur tried five times. Close it on the Board, or check that this computer is connected."
@@ -986,8 +1096,8 @@ msgstr ""
 msgid "Ask"
 msgstr ""
 
-#: src/pages/ide/dialogs.tsx
 #: src/pages/ide/IdePage.tsx
+#: src/pages/workspace/dialogs.tsx
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Ask a bot"
 msgstr ""
@@ -1031,6 +1141,10 @@ msgstr ""
 msgid "Ask the server owner to configure this provider."
 msgstr ""
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Asked {asked, plural, one {# bot} other {# bots}} · {answered, plural, one {# answered} other {# answered}}"
+msgstr "已询问 {asked, plural, one {# 个机器人} other {# 个机器人}} · {answered, plural, one {# 个已回答} other {# 个已回答}}"
+
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "asks first"
 msgstr ""
@@ -1052,6 +1166,11 @@ msgstr "{0}"
 #: src/pages/RoutineSchedule.tsx
 msgid "at {timeSelect}"
 msgstr "{timeSelect}"
+
+#. placeholder {0}: row.usage.tokens
+#: src/pages/TeamBoard.tsx
+msgid "at least {0}"
+msgstr "至少 {0}"
 
 #: src/pages/storage/StorageSettings.tsx
 msgid "at least {size}"
@@ -1133,6 +1252,7 @@ msgstr ""
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
+#: src/pages/Shell.tsx
 msgid "Back"
 msgstr "返回"
 
@@ -1227,10 +1347,10 @@ msgstr ""
 msgid "Blocked"
 msgstr "已阻止"
 
-#. placeholder {0}: row.reason
+#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, }, }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
-msgstr ""
+msgstr "已阻塞 — {0}"
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
@@ -1244,6 +1364,7 @@ msgstr ""
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/DashboardPage.tsx
+#: src/pages/ScratchpadSection.tsx
 #: src/pages/shell/TopNav.tsx
 msgid "Board"
 msgstr ""
@@ -1300,8 +1421,9 @@ msgid "Bot screen preview"
 msgstr "Bot 屏幕预览"
 
 #: src/pages/BotContextMenu.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Bot settings"
-msgstr ""
+msgstr "Bot 设置"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Bot to link"
@@ -1320,9 +1442,9 @@ msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
-#: src/pages/ide/dialogs.tsx
 #: src/pages/shell/OpenToSetting.tsx
 #: src/pages/shell/top-nav.ts
+#: src/pages/workspace/dialogs.tsx
 msgid "Bots"
 msgstr ""
 
@@ -1330,7 +1452,11 @@ msgstr ""
 msgid "Bots act without asking by default. Add an exception only when you want to review a type of action first."
 msgstr "默认情况下 Bot 会直接执行。只有当你想先审核某类操作时，才添加例外。"
 
-#: src/pages/Shell.tsx
+#: src/pages/GroupPanel.tsx
+msgid "Bots answering at once"
+msgstr "同时应答的机器人"
+
+#: src/lib/working-indicator.ts
 msgid "Bots are working"
 msgstr "Bot 正在工作"
 
@@ -1343,6 +1469,11 @@ msgstr "机器人会保持看板和记忆为最新"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Bots on this computer: {0}"
 msgstr "此计算机上的机器人：{0}"
+
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-summary.tsx
+msgid "Bots share files and installed tools"
+msgstr "Bot 共享文件和已安装的工具"
 
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
@@ -1426,6 +1557,7 @@ msgstr "无法连接服务器。"
 #: src/pages/memory/MemoryImport.tsx
 #: src/pages/MemoryImportExport.tsx
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/ScratchpadSection.tsx
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
@@ -1474,6 +1606,10 @@ msgstr "已取消"
 msgid "Capabilities"
 msgstr ""
 
+#: src/pages/group-model-control.tsx
+msgid "Captured for this group."
+msgstr "已为此群组捕获。"
+
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Catalog"
 msgstr ""
@@ -1487,6 +1623,10 @@ msgstr ""
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Change computer"
 msgstr ""
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Change location"
+msgstr "更改位置"
 
 #: src/pages/LearningInsights.tsx
 #: src/pages/shell/provider-error-message.tsx
@@ -1551,6 +1691,10 @@ msgstr ""
 msgid "Chat Settings"
 msgstr "聊天设置"
 
+#: src/lib/hermes-refusal.ts
+msgid "ChatGPT sign-ins only work inside Codex; add an OpenAI API key to use GPT models with Hermes."
+msgstr "ChatGPT 登录只能在 Codex 内使用；添加 OpenAI API 密钥即可在 Hermes 中使用 GPT 模型。"
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Check"
 msgstr "检查"
@@ -1585,6 +1729,18 @@ msgstr ""
 msgid "Checked {0}"
 msgstr "检查于 {0}"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Checking the download"
+msgstr "正在检查下载"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Checking the missing tool"
+msgstr "正在检查缺少的工具"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Checking the Notion page"
+msgstr "正在检查 Notion 页面"
+
 #: src/components/DesktopUpdates.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/SoftwareUpdateSection.tsx
@@ -1598,6 +1754,10 @@ msgstr "工作副本有本地更改。请先清理再更新。"
 #: src/pages/storage/StorageSettings.tsx
 msgid "Checkpoints"
 msgstr "检查点"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Child agents"
+msgstr "子代理"
 
 #: src/pages/customize/ConfigureExtension.tsx
 msgid "Choose"
@@ -1623,8 +1783,10 @@ msgstr ""
 msgid "Choose a folder inside your home folder."
 msgstr "选择主文件夹内的一个文件夹。"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/group-model-control.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose a model"
 msgstr ""
@@ -1657,6 +1819,10 @@ msgstr ""
 msgid "Choose one credential: a token or a header."
 msgstr "请只选择一种凭据：令牌或请求头。"
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Choose Trim older context or Stop the run."
+msgstr "请选择“裁剪较早的上下文”或“停止运行”。"
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Choose which connected model Ardur uses."
 msgstr "选择 Ardur 使用的已连接模型。"
@@ -1670,6 +1836,7 @@ msgstr ""
 msgid "Claim"
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Claude Code (your claude sign-in)"
 msgstr ""
@@ -1677,6 +1844,10 @@ msgstr ""
 #: src/pages/shell/runtime-settings.tsx
 msgid "Claude Code runs on host computers for now — change the bot's computer or its runtime."
 msgstr ""
+
+#: src/lib/hermes-refusal.ts
+msgid "Claude subscriptions only work in Anthropic's own apps; add an Anthropic API key to use Claude with Hermes."
+msgstr "Claude 订阅只能在 Anthropic 自家的应用中使用；添加 Anthropic API 密钥即可在 Hermes 中使用 Claude。"
 
 #: src/pages/shell/dialogs.tsx
 msgid "Clear"
@@ -1812,6 +1983,7 @@ msgstr "代码"
 msgid "Code execution on computers"
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Codex (your ChatGPT sign-in)"
 msgstr ""
@@ -1863,6 +2035,7 @@ msgstr "颜色 {color}"
 msgid "Coming soon"
 msgstr "即将推出"
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Command"
@@ -1880,10 +2053,10 @@ msgstr ""
 msgid "Compare bots"
 msgstr ""
 
+#: src/components/composer/ComposerMenu.tsx
 #: src/pages/CompareStart.tsx
-#: src/pages/Shell.tsx
 msgid "Compare with…"
-msgstr ""
+msgstr "对比…"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Complete"
@@ -1907,7 +2080,6 @@ msgstr ""
 
 #: src/pages/ide/IdePage.tsx
 #: src/pages/Shell.tsx
-#: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
 #: src/pages/workspace/WorkspacePane.tsx
@@ -1921,6 +2093,10 @@ msgstr ""
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Computer change pending."
 msgstr ""
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Computer changed. Refresh files."
+msgstr "电脑已更改。请刷新文件。"
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Computer engine is unavailable."
@@ -1941,6 +2117,14 @@ msgstr "电脑已休眠"
 #: src/pages/Shell.tsx
 msgid "Computer is asleep. Open it to wake."
 msgstr "计算机处于睡眠状态。打开以唤醒。"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Computer location unavailable. Choose a supported connection."
+msgstr "无法获取计算机位置。请选择受支持的连接。"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Computer location unavailable. Try again."
+msgstr "无法获取计算机位置。请重试。"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -1971,6 +2155,14 @@ msgstr ""
 #: src/components/Context.tsx
 msgid "Concurrent runs"
 msgstr "并发运行"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Configuration (JSON)"
+msgstr "配置 (JSON)"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Configuration must be 16 KiB or smaller."
+msgstr "配置必须为 16 KiB 或更小。"
 
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Configure"
@@ -2042,6 +2234,7 @@ msgstr ""
 msgid "Connect a desktop app to approve new devices."
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/GuidedOnboarding.tsx
 #: src/pages/Onboarding.tsx
 msgid "Connect a model"
@@ -2115,6 +2308,10 @@ msgstr ""
 msgid "Connected. Review tools in MCP settings."
 msgstr ""
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Connecting to Notion"
+msgstr "正在连接 Notion"
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
@@ -2161,6 +2358,10 @@ msgstr ""
 msgid "Consolidation uses the review connection and may incur model charges. Approval is required."
 msgstr ""
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Container"
+msgstr "容器"
+
 #: src/components/Context.tsx
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/GroupPanel.tsx
@@ -2171,6 +2372,12 @@ msgstr "上下文"
 #: src/pages/Onboarding.tsx
 msgid "Context limit"
 msgstr "上下文限制"
+
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Context limit (KiB)"
+msgstr "上下文限制 (KiB)"
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/capabilities/CapabilitiesPage.tsx
@@ -2203,6 +2410,10 @@ msgstr "对话"
 #: src/pages/TeamBoard.tsx
 msgid "Conversation with {0}"
 msgstr "与 {0} 的对话"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Coordination round: {asked} asked, {answered} answered"
+msgstr "协调轮次：已询问 {asked} 个，{answered} 个已回答"
 
 #: src/pages/GroupPanel.tsx
 msgid "Coordinator"
@@ -2664,6 +2875,10 @@ msgstr "无法加载语音设置"
 msgid "Could not load your bots; reopen quick access."
 msgstr ""
 
+#: src/components/ai/ChiefResultBubble.tsx
+msgid "Could not open file"
+msgstr "无法打开文件"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Could not open setup. Try again."
 msgstr ""
@@ -2679,6 +2894,10 @@ msgstr "无法播放测试片段"
 #: src/pages/memory/MemoryImport.tsx
 msgid "Could not prepare the import. Try again."
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Could not preview the configuration. Try again."
+msgstr "无法预览配置。请重试。"
 
 #: src/pages/LocalSettings.tsx
 msgid "Could not reach the local server. Start it and try again."
@@ -2852,7 +3071,12 @@ msgstr "无法保存此选择"
 msgid "Could not save this credential. Check it and try again."
 msgstr "无法保存此凭据。请检查后重试。"
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Could not save this file. Try again."
+msgstr "无法保存此文件。请重试。"
+
 #: src/pages/customize/McpCredentialFix.tsx
+#: src/pages/Shell.tsx
 msgid "Could not save. Try again."
 msgstr ""
 
@@ -2880,13 +3104,17 @@ msgstr ""
 msgid "Could not show the menu bar item; try again."
 msgstr ""
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Could not start"
+msgstr "无法启动"
+
 #: src/components/composer/composer-actions.ts
 msgid "Could not start a new chat"
 msgstr ""
 
 #: src/pages/CompareStart.tsx
 msgid "Could not start comparison; retry."
-msgstr ""
+msgstr "无法开始对比；请重试。"
 
 #: src/pages/CompareStart.tsx
 msgid "Could not start comparison; review the pins and retry."
@@ -2999,6 +3227,14 @@ msgstr ""
 msgid "Could not update uploaded files."
 msgstr ""
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "couldn't answer"
+msgstr "无法回答"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Couldn't install Hermes. Try again."
+msgstr "无法安装 Hermes。请重试。"
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't load messaging settings"
 msgstr "无法加载消息设置"
@@ -3080,6 +3316,10 @@ msgstr ""
 #: src/pages/board/BoardsSettings.tsx
 msgid "Creates .beads/ with config.yaml, metadata.json, .gitignore, README.md, interactions.jsonl, .local_version, and embeddeddolt/. Git files and hooks stay unchanged."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Creating the Notion page"
+msgstr "正在创建 Notion 页面"
 
 #: src/pages/GroupPanel.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -3375,6 +3615,10 @@ msgstr ""
 msgid "Developer (git, GitHub and GitLab CLIs, node, jq)"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Developer image"
+msgstr ""
+
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Developer is a larger download and uses more disk space."
 msgstr ""
@@ -3536,12 +3780,17 @@ msgstr ""
 msgid "Don’t have an account?"
 msgstr "还没有账户？"
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/lib/run-status-label.ts
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardColumns.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Done"
 msgstr "完成"
+
+#: src/components/ai/ChiefResultBubble.tsx
+msgid "Done — added the document to Notion."
+msgstr "已完成 — 文档已添加到 Notion。"
 
 #: src/pages/TeamBoard.tsx
 msgid "Done — waiting for your OK"
@@ -3550,6 +3799,10 @@ msgstr ""
 #: src/pages/GoalForm.tsx
 msgid "Done when (one per line)"
 msgstr "完成条件（每行一项）"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Done: {title}"
+msgstr "完成：{title}"
 
 #. placeholder {0}: props.name
 #: src/components/ArtifactFileCard.tsx
@@ -3568,9 +3821,17 @@ msgstr "下载为 Markdown"
 msgid "Download Executor"
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Downloading"
+msgstr "正在下载"
+
 #: src/components/DesktopUpdates.tsx
 msgid "Downloading…"
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Downloads Hermes 0.21.0 from GitHub and about 200 MB of Python packages."
+msgstr "从 GitHub 下载 Hermes 0.21.0 以及大约 200 MB 的 Python 软件包。"
 
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Draft skill"
@@ -3628,6 +3889,10 @@ msgstr "先编辑"
 msgid "Education"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Effective configuration"
+msgstr "生效配置"
+
 #: src/pages/TeamBoard.tsx
 msgid "Effort"
 msgstr ""
@@ -3640,7 +3905,6 @@ msgstr ""
 msgid "Email"
 msgstr "邮箱"
 
-#: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/McpDefaults.tsx
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/LearningInsights.tsx
@@ -3651,6 +3915,10 @@ msgstr "启用"
 #: src/lib/mcp-sign-in.ts
 msgid "Enable this server first, then sign in."
 msgstr "请先启用此服务器，然后登录。"
+
+#: src/pages/workspace/WorkspaceTerminal.tsx
+msgid "End this terminal?"
+msgstr "结束此终端？"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Engage when... Ignore..."
@@ -3688,14 +3956,6 @@ msgstr ""
 msgid "Enter a valid token."
 msgstr "请输入有效的令牌。"
 
-#: src/pages/shell/hermes-limits.tsx
-msgid "Enter a whole number between 1 and 600 for the time limit."
-msgstr ""
-
-#: src/pages/shell/hermes-limits.tsx
-msgid "Enter a whole number between 1 and 64 for model calls per turn."
-msgstr ""
-
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Enter a whole number from 1 to {MAX_MODEL_CONTEXT_WINDOW} for the context limit."
@@ -3716,6 +3976,10 @@ msgstr "请输入 1 到 1000 之间的整数作为图像限制。"
 #: src/pages/Onboarding.tsx
 msgid "Enter this code at <0>{0}</0>"
 msgstr "在 <0>{0}</0> 输入此代码"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Enter valid JSON."
+msgstr "请输入有效的 JSON。"
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Environment values are requested when you connect this server."
@@ -3874,6 +4138,7 @@ msgstr ""
 msgid "failed"
 msgstr "失败"
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/run-status-label.ts
 #: src/lib/team-delivery-text.ts
@@ -3898,6 +4163,10 @@ msgstr "发送消息失败"
 #: src/pages/Shell.tsx
 msgid "Failed to stop"
 msgstr "停止失败"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Failed: {title}"
+msgstr "失败：{title}"
 
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Failure handling"
@@ -3977,6 +4246,10 @@ msgstr "已完成"
 msgid "Finished"
 msgstr "完成"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Finishing"
+msgstr "正在完成"
+
 #: src/pages/McpOAuthCallback.tsx
 msgid "Finishing MCP connection…"
 msgstr "正在完成 MCP 连接…"
@@ -3984,6 +4257,14 @@ msgstr "正在完成 MCP 连接…"
 #: src/pages/GuidedOnboarding.tsx
 msgid "First bot not created"
 msgstr "尚未创建第一个机器人"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Fix"
+msgstr "修复"
+
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Fix the configuration JSON to edit these settings."
+msgstr "请先修复配置 JSON，再编辑这些设置。"
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Flag unexpected actions"
@@ -4021,9 +4302,17 @@ msgstr "在你的{task}运行中，{better} 的完成率与 {other} 相当，令
 msgid "For {task}, {better} on this machine did as well as {other} in your runs."
 msgstr "在你的{task}运行中，本机上的 {better} 表现与 {other} 一样好。"
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "For testing only; not an isolation boundary."
+msgstr "仅用于测试；不构成隔离边界。"
+
 #: src/pages/Auth.tsx
 msgid "Forgot password?"
 msgstr "忘记密码？"
+
+#: src/pages/Shell.tsx
+msgid "Forward"
+msgstr "前进"
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Found on this computer"
@@ -4113,6 +4402,18 @@ msgstr ""
 msgid "Goal"
 msgstr "目标"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check the request and choose the next step."
+msgstr "收到 — 我会检查请求并选择下一步。"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check what’s missing and ask before installing it."
+msgstr "收到 — 我会检查缺少什么，并在安装前征求同意。"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll choose a team member to put this in Notion."
+msgstr "收到 — 我会选择一位团队成员把它放到 Notion。"
+
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
 msgstr ""
@@ -4132,6 +4433,7 @@ msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group"
 msgstr "群组"
 
@@ -4139,7 +4441,7 @@ msgstr "群组"
 msgid "Group brief"
 msgstr "群组简报"
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group settings"
 msgstr "群组设置"
 
@@ -4162,6 +4464,10 @@ msgstr "请先挂断，然后输入屏幕上的代码。"
 #: src/pages/CallView.tsx
 msgid "Hang up, then enter the code on screen."
 msgstr "请挂断，然后输入屏幕上的代码。"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "has not answered yet"
+msgstr "尚未回答"
 
 #: src/pages/RoutineEditor.tsx
 msgid "header"
@@ -4186,27 +4492,26 @@ msgstr "请求头值"
 msgid "Hear a sample"
 msgstr "试听"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes"
 msgstr "Hermes"
-
-#: src/pages/group-model-control.tsx
-#: src/pages/shell/bot-panel.tsx
-msgid "Hermes does not yet support Anthropic connections."
-msgstr "Hermes 尚不支持 Anthropic 连接。"
-
-#: src/pages/group-model-control.tsx
-#: src/pages/shell/bot-panel.tsx
-msgid "Hermes does not yet support this connection."
-msgstr "Hermes 尚不支持此连接。"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes is not installed on this computer."
 msgstr "此计算机上未安装 Hermes。"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Hermes isn't available on Windows yet."
+msgstr "Hermes 暂不支持 Windows。"
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."
 msgstr "Hermes 使用此计算机的访问权限运行。"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Hi everyone."
+msgstr "大家好。"
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Hi, this is how I'll sound when I read replies out loud."
@@ -4214,7 +4519,7 @@ msgstr "你好，这是我朗读回复时的声音。"
 
 #: src/pages/Shell.tsx
 msgid "Hide bots"
-msgstr ""
+msgstr "隐藏 Bot"
 
 #: src/pages/customize/McpDiagnostics.tsx
 msgid "Hide logs"
@@ -4257,6 +4562,10 @@ msgstr ""
 #: src/pages/shell/model-pin-select.tsx
 msgid "Hosted providers"
 msgstr ""
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Hosted sandbox"
+msgstr "托管沙箱"
 
 #: src/pages/RoutineSchedule.tsx
 msgid "hour"
@@ -4302,6 +4611,10 @@ msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Image profile"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Image pull secret"
 msgstr ""
 
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -4444,6 +4757,10 @@ msgstr ""
 msgid "Install Beads"
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Install Hermes"
+msgstr "安装 Hermes"
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Installed"
 msgstr ""
@@ -4463,6 +4780,10 @@ msgstr "已安装，未运行"
 #: src/pages/customize/PluginsPage.tsx
 msgid "Installing"
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Installing packages"
+msgstr "正在安装软件包"
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Instance API key"
@@ -4518,6 +4839,14 @@ msgstr ""
 msgid "Interrupt"
 msgstr "打断"
 
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Interrupted"
+msgstr "已中断"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Interrupted: {title}"
+msgstr "已中断: {title}"
+
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineSchedule.tsx
 msgid "Interval"
@@ -4530,6 +4859,10 @@ msgstr "间隔数量"
 #: src/pages/RoutineSchedule.tsx
 msgid "Interval unit"
 msgstr "间隔单位"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "is waiting for you"
+msgstr "正在等你"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Isolated"
@@ -4692,11 +5025,6 @@ msgstr "了解更多"
 msgid "Learn more about {title}"
 msgstr "了解有关{title}的更多信息"
 
-#. placeholder {0}: counts.appliedThisWeek
-#: src/pages/LearningInbox.tsx
-msgid "learned {0} things this week"
-msgstr ""
-
 #: src/pages/customize/SkillsPage.tsx
 msgid "Learned skills"
 msgstr ""
@@ -4704,8 +5032,8 @@ msgstr ""
 #: src/pages/dashboard/LearningDialog.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/KnowledgeSection.tsx
-#: src/pages/LearningInbox.tsx
 #: src/pages/settings-sections.ts
+#: src/pages/shell/runtime-config-panel.tsx
 msgid "Learning"
 msgstr ""
 
@@ -4713,6 +5041,10 @@ msgstr ""
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Learning consent"
 msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Learning for this space"
+msgstr "此空间的学习"
 
 #: src/pages/MemoryHistory.tsx
 msgid "Learning grant"
@@ -4732,12 +5064,9 @@ msgid "Learning review"
 msgstr "学习复查"
 
 #: src/pages/board/BoardsSettings.tsx
-msgid "Learning review is off"
-msgstr "学习复查已关闭"
-
-#: src/pages/board/BoardsSettings.tsx
-msgid "Learning review is on"
-msgstr "学习复查已开启"
+#: src/pages/settings-sections.ts
+msgid "Learning reviewer"
+msgstr "学习复查模型"
 
 #: src/pages/LearningInbox.tsx
 msgid "Learning views"
@@ -4900,6 +5229,7 @@ msgstr ""
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/SharedCommand.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
 msgid "Loading…"
 msgstr "加载中…"
 
@@ -4950,6 +5280,11 @@ msgstr "其中似乎包含凭据。请从文件中删除后重新扫描。"
 #: src/lib/thinking-level-options.ts
 msgid "low — quick, with a little checking"
 msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/HostComputerPrompt.tsx
+msgid "macOS will not ask for extra permission if you let bots run on this Mac. They run as you."
+msgstr "若让 Bot 在这台 Mac 上运行，它们会使用你的账户权限，macOS 不会再逐项询问。"
 
 #: src/pages/board/BoardsSettings.tsx
 msgid "Make default"
@@ -5076,6 +5411,7 @@ msgstr ""
 #: src/pages/memory/MemoryProposals.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/settings-sections.ts
+#: src/pages/shell/bot-panel.tsx
 msgid "Memory"
 msgstr "记忆"
 
@@ -5196,6 +5532,10 @@ msgstr ""
 msgid "Message…"
 msgstr "消息…"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Messaged {name}"
+msgstr "已向 {name} 发送消息"
+
 #: src/pages/account/AccountMore.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Messaging"
@@ -5225,6 +5565,7 @@ msgstr "分钟"
 msgid "minutes"
 msgstr "分钟"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/LearningInsights.tsx
 #: src/pages/MemoryHistory.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -5239,7 +5580,9 @@ msgstr "模型"
 msgid "Model & effort"
 msgstr ""
 
-#: src/pages/shell/hermes-limits.tsx
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
 msgid "Model calls per turn"
 msgstr "每轮模型调用次数"
 
@@ -5287,6 +5630,10 @@ msgstr "模型已更新。"
 #: src/pages/ComparePanel.tsx
 msgid "Model version"
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Model, thinking, connections, tools, and permissions come from Ardur."
+msgstr "模型、思考、连接、工具和权限均由 Ardur 提供。"
 
 #: src/pages/LocalSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -5404,6 +5751,18 @@ msgstr "给这个例行任务命名"
 msgid "Namespace"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Native child agents are not available with Hermes."
+msgstr "Hermes 不支持原生子代理。"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Native compression"
+msgstr "原生压缩"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Native compression is not available with Hermes."
+msgstr "Hermes 不支持原生压缩。"
+
 #: src/pages/shell/TopNav.tsx
 msgid "Navigation"
 msgstr ""
@@ -5457,6 +5816,7 @@ msgstr ""
 msgid "New access token"
 msgstr "新的访问令牌"
 
+#: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "New bot"
 msgstr "新建 Bot"
@@ -5496,6 +5856,10 @@ msgstr "新建技能"
 #: src/pages/shell/dialogs.tsx
 msgid "New space"
 msgstr "新建工作区"
+
+#: src/pages/ScratchpadSection.tsx
+msgid "New work item"
+msgstr "新工作项"
 
 #: src/pages/account/AccountTables.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
@@ -5880,6 +6244,7 @@ msgid "Obsidian vault"
 msgstr ""
 
 #: src/pages/shell/model-pin-select.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Off"
 msgstr ""
@@ -5925,11 +6290,16 @@ msgstr ""
 msgid "Only space-shared documents go to this repository."
 msgstr ""
 
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-summary.tsx
+msgid "Only this bot"
+msgstr "仅此 Bot 使用"
+
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/ide/IdePage.tsx
-#: src/pages/ide/terminal.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Open"
 msgstr "打开"
 
@@ -5951,8 +6321,9 @@ msgid "Open Ardur"
 msgstr "打开 Ardur"
 
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/shell/provider-error-message.tsx
 msgid "Open bot settings"
-msgstr ""
+msgstr "打开 Bot 设置"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open chat links in the desktop app."
@@ -5969,6 +6340,10 @@ msgstr ""
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Open files"
 msgstr ""
+
+#: src/pages/ScratchpadSection.tsx
+msgid "Open in board"
+msgstr "在看板中打开"
 
 #: src/pages/workspace/WorkspaceScreen.tsx
 msgid "Open in full window"
@@ -6011,8 +6386,9 @@ msgid "Open screen to view this computer."
 msgstr "打开屏幕以查看此计算机。"
 
 #: src/components/composer/command-description.ts
+#: src/pages/shell/provider-error-message.tsx
 msgid "Open Settings"
-msgstr ""
+msgstr "打开设置"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open System Settings"
@@ -6054,6 +6430,7 @@ msgstr "正在打开聊天…"
 
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
+#: src/pages/workspace/WorkspaceTerminal.tsx
 msgid "Opening terminal"
 msgstr ""
 
@@ -6154,6 +6531,10 @@ msgstr ""
 #: src/pages/ScratchpadSection.tsx
 msgid "Park"
 msgstr "搁置"
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Partially reported"
+msgstr "部分已报告"
 
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountSignIn.tsx
@@ -6270,6 +6651,7 @@ msgstr ""
 msgid "Port"
 msgstr ""
 
+#: src/pages/dashboard/LearningPanel.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Possible regression — review undo"
 msgstr ""
@@ -6351,10 +6733,6 @@ msgstr ""
 msgid "Privacy"
 msgstr ""
 
-#: src/pages/shell/bot-panel.tsx
-msgid "Private"
-msgstr "私有"
-
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Private key"
 msgstr ""
@@ -6374,8 +6752,9 @@ msgstr ""
 #: src/pages/account/AccountProfile.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/memory/MemoryProposals.tsx
+#: src/pages/shell/bot-panel.tsx
 msgid "Profile"
-msgstr ""
+msgstr "资料"
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Project ID"
@@ -6401,6 +6780,7 @@ msgstr ""
 msgid "Propose on a branch"
 msgstr ""
 
+#: src/pages/dashboard/LearningPanel.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Proposed consolidation"
 msgstr ""
@@ -6460,11 +6840,15 @@ msgstr "排队等待"
 msgid "Queued"
 msgstr "排队中"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Queued for {name}"
+msgstr "已排队等待 {name}"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Quick access shortcut"
 msgstr ""
 
-#: src/pages/ide/dialogs.tsx
+#: src/pages/workspace/dialogs.tsx
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Quick open"
 msgstr ""
@@ -6495,10 +6879,6 @@ msgstr "已读"
 msgid "Read by {recipient}"
 msgstr "已由 {recipient} 阅读"
 
-#: src/pages/workspace/WorkspaceFiles.tsx
-msgid "Read only in this pane. Open IDE to edit."
-msgstr ""
-
 #: src/pages/ide/IdePage.tsx
 msgid "Read only: file is larger than 2 MB"
 msgstr ""
@@ -6515,6 +6895,10 @@ msgstr "只读"
 msgid "Reading storage usage…"
 msgstr "正在读取存储使用情况…"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Reading the document"
+msgstr "正在读取文档"
+
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Reads can run without asking once you allow them. Writes always ask."
 msgstr ""
@@ -6525,6 +6909,10 @@ msgstr ""
 #: src/pages/dashboard/WorkPanel.tsx
 msgid "Ready"
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Ready. The bot can use Hermes."
+msgstr "已就绪。此机器人可以使用 Hermes。"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -6667,6 +7055,7 @@ msgstr ""
 
 #: src/pages/ide/terminal.tsx
 #: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspaceTerminal.tsx
 msgid "Release"
 msgstr "释放"
 
@@ -6685,6 +7074,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Remote base directory"
 msgstr ""
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Remote computer"
+msgstr "远程计算机"
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Remote MCP URL"
@@ -6756,6 +7149,10 @@ msgstr "移除计划"
 #: src/pages/Shell.tsx
 msgid "Remove skill {0}"
 msgstr "移除技能 {0}"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Remove the duplicate field."
+msgstr "请移除重复字段。"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Remove webhook"
@@ -6932,6 +7329,10 @@ msgstr ""
 msgid "Reset password"
 msgstr "重置密码"
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Reset to defaults"
+msgstr "重置为默认值"
+
 #: src/pages/Auth.tsx
 msgid "Reset your password"
 msgstr "重置你的密码"
@@ -6939,6 +7340,10 @@ msgstr "重置你的密码"
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Resetting…"
 msgstr "正在重置…"
+
+#: src/pages/Shell.tsx
+msgid "Resize pane"
+msgstr "调整面板大小"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Resources"
@@ -7012,6 +7417,7 @@ msgstr "恢复团队消息"
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
+#: src/pages/shell/runtime-summary.tsx
 #: src/pages/system/SystemPage.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Retry"
@@ -7094,9 +7500,6 @@ msgid "Reviewer"
 msgstr ""
 
 #: src/pages/board/BoardsSettings.tsx
-msgid "Reviewer: {reviewer}"
-msgstr "复查模型：{reviewer}"
-
 #: src/pages/LearningInbox.tsx
 msgid "Reviews use this connection and may incur model charges."
 msgstr ""
@@ -7189,6 +7592,7 @@ msgstr ""
 msgid "Run time must be in the future."
 msgstr "运行时间必须是将来的时间。"
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/components/CloudAgentCard.tsx
 msgid "running"
 msgstr "运行中"
@@ -7199,6 +7603,7 @@ msgstr "运行中"
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/shell/runtime-summary.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Running"
 msgstr "运行中"
@@ -7215,7 +7620,16 @@ msgstr "正在运行…"
 msgid "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?"
 msgstr "此计算机上有正在进行的运行。更改连接可能中断它们。仍要保存吗？"
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Runs as you; can use your files and signed-in tools"
+msgstr "以你的身份运行；可以使用你的文件和已登录的工具"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Runs at the configured provider; can use granted credentials and network access."
+msgstr "在已配置的服务商处运行；可以使用授予的凭据和网络访问权限。"
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Runs on"
 msgstr ""
@@ -7232,6 +7646,14 @@ msgstr ""
 #: src/pages/shell/runtime-settings.tsx
 msgid "Runtime availability could not be checked."
 msgstr ""
+
+#: src/pages/group-model-control.tsx
+msgid "Runtime settings"
+msgstr "运行时设置"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Runtime settings cannot install or load code."
+msgstr "运行时设置无法安装或加载代码。"
 
 #: src/pages/LearningObservation.tsx
 msgid "safety"
@@ -7279,6 +7701,7 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/dialogs.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Save"
 msgstr "保存"
 
@@ -7305,10 +7728,12 @@ msgstr "保存模型"
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/account/AccountProfile.tsx
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/MemoryHistory.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Saved"
 msgstr "已保存"
 
@@ -7401,6 +7826,7 @@ msgstr ""
 #: src/pages/board/Board.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-picker.tsx
 #: src/pages/shell/command-palette.tsx
@@ -7482,7 +7908,7 @@ msgstr ""
 msgid "Selected bots"
 msgstr "选定的机器人"
 
-#: src/pages/ide/dialogs.tsx
+#: src/pages/workspace/dialogs.tsx
 msgid "Selection shortened to 32,000 characters."
 msgstr "所选内容已缩短至 32,000 个字符。"
 
@@ -7547,6 +7973,10 @@ msgstr "已发送给 {peer}"
 msgid "Sentry alert"
 msgstr "Sentry 告警"
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Separate home; can reach allowed network services and granted credentials."
+msgstr "独立的主目录；可以访问获准的网络服务和授予的凭据。"
+
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Serif"
 msgstr ""
@@ -7608,6 +8038,14 @@ msgstr ""
 msgid "Set up a board"
 msgstr "设置看板"
 
+#: src/pages/shell/bot-panel.tsx
+msgid "Set up a container for isolated work."
+msgstr "请设置容器以进行隔离工作。"
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Set up computer"
+msgstr "设置计算机"
+
 #: src/pages/import/ImportedServerCredentials.tsx
 msgid "Set up credentials"
 msgstr ""
@@ -7620,11 +8058,16 @@ msgstr "设置记忆搜索"
 msgid "Set up servers"
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Setting up Python"
+msgstr "正在设置 Python"
+
 #: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Settings"
 msgstr "设置"
 
@@ -7662,17 +8105,22 @@ msgstr ""
 msgid "Shared recall will use proposed facts after merge."
 msgstr ""
 
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-summary.tsx
+msgid "Shared with team"
+msgstr "与团队共享"
+
 #: src/components/ShowAllModels.tsx
 msgid "Show all models"
 msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Show bots"
-msgstr ""
+msgstr "显示 Bot"
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show computer"
-msgstr ""
+msgstr "显示电脑"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Show in the menu bar."
@@ -7690,7 +8138,7 @@ msgstr "显示更多"
 msgid "Show password"
 msgstr "显示密码"
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show settings"
 msgstr "显示设置"
 
@@ -7713,6 +8161,10 @@ msgstr "登录"
 #: src/pages/account/AccountSettings.tsx
 msgid "Sign in again to manage sessions."
 msgstr ""
+
+#: src/lib/failure-category-copy.ts
+msgid "Sign in to {runtime} on this computer, then try again."
+msgstr "请在这台电脑上登录 {runtime}，然后重试。"
 
 #: src/pages/shell/provider-error-message.tsx
 #: src/pages/shell/runtime-settings.tsx
@@ -7820,6 +8272,10 @@ msgstr ""
 #: src/components/composer/SlashPicker.tsx
 msgid "Slash commands"
 msgstr ""
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Sleeping"
+msgstr "休眠中"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Socket missing"
@@ -7930,6 +8386,10 @@ msgstr ""
 msgid "Standard"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Standard image"
+msgstr ""
+
 #: src/components/composer/command-description.ts
 msgid "Start a new chat"
 msgstr ""
@@ -7945,6 +8405,14 @@ msgstr "初始化看板？"
 #: src/pages/CompareStart.tsx
 msgid "Start comparison"
 msgstr ""
+
+#: src/pages/workspace/terminal-controller.ts
+msgid "Start computer"
+msgstr "启动计算机"
+
+#: src/pages/workspace/terminal-controller.ts
+msgid "Start computer to open a terminal"
+msgstr "启动计算机以打开终端"
 
 #: src/pages/GoalForm.tsx
 msgid "Start goal"
@@ -7967,6 +8435,7 @@ msgid "Start the engine and press Test."
 msgstr "启动引擎后点击“测试”。"
 
 #: src/lib/run-status-label.ts
+#: src/pages/shell/runtime-summary.tsx
 msgid "Starting"
 msgstr "正在开始"
 
@@ -8008,8 +8477,8 @@ msgstr "步骤"
 #: src/pages/DelegationLines.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/Shell.tsx
-#: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Stop"
 msgstr "停止"
 
@@ -8029,6 +8498,10 @@ msgstr "停止示范"
 msgid "Stop the current run"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Stop the run"
+msgstr "停止运行"
+
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Stop work in this conversation"
 msgstr ""
@@ -8036,8 +8509,13 @@ msgstr ""
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/GroupPanel.tsx
+#: src/pages/shell/runtime-summary.tsx
 msgid "Stopped"
 msgstr "已停止"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "stopped before answering"
+msgstr "回答前已停止"
 
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
@@ -8116,14 +8594,12 @@ msgstr ""
 msgid "System"
 msgstr "系统"
 
-#: src/pages/ide/terminal.tsx
-#: src/pages/Shell.tsx
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/take-control-button.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Take control"
 msgstr "接管控制"
 
-#: src/pages/ide/terminal.tsx
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Take control to open a terminal"
 msgstr ""
 
@@ -8158,7 +8634,6 @@ msgid "Teaching in progress. Stop teaching before sending a new message."
 msgstr "正在示范，发送新消息前请先停止示范。"
 
 #: src/pages/Shell.tsx
-#: src/pages/shell/bot-panel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Team"
 msgstr "团队"
@@ -8190,8 +8665,10 @@ msgid "Tell your bot what to change or remove"
 msgstr ""
 
 #: src/pages/ide/IdePage.tsx
+#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Terminal"
 msgstr ""
 
@@ -8199,8 +8676,7 @@ msgstr ""
 msgid "Terminal could not open; try again"
 msgstr ""
 
-#: src/pages/ide/terminal.tsx
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Terminal is not available on this computer"
 msgstr ""
 
@@ -8210,6 +8686,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Test"
 msgstr "测试"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Test computer"
+msgstr "测试计算机"
 
 #: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
 msgid "Test connection"
@@ -8240,13 +8720,25 @@ msgstr "该令牌未被接受。请检查后再试。"
 msgid "The API did not come back. Refresh this page."
 msgstr "API 未恢复。请刷新此页面。"
 
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "The bot is working — wait or stop it"
 msgstr ""
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "The computer is busy. Wait for it to finish."
+msgstr "计算机正忙。请等待它完成。"
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr ""
+
+#: src/components/ai/ChiefResultBubble.tsx
+msgid "The draft is ready."
+msgstr "草稿已准备好。"
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "The file changed. Open it again before saving."
+msgstr "文件已更改。保存前请重新打开。"
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "The first bot could not be created. Try again."
@@ -8256,9 +8748,17 @@ msgstr "无法创建第一个机器人。请重试。"
 msgid "The group model choice was reloaded. Pick again."
 msgstr "已重新加载群组的模型选择。请重新选择。"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "The Hermes install on this computer failed its safety check."
+msgstr "此计算机上的 Hermes 安装未通过安全检查。"
+
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "The reviewer was changed in another window."
+msgstr "复查模型已在另一个窗口中被更改。"
 
 #: src/lib/mcp-sign-in.ts
 msgid "The saved sign-in expired. Sign in again."
@@ -8277,15 +8777,17 @@ msgstr ""
 msgid "Theme"
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Thinking"
 msgstr "思考"
 
 #: src/components/ThreadCommandBlock.tsx
-#: src/pages/ide/dialogs.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/ide/terminal.tsx
+#: src/pages/workspace/dialogs.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "This action could not finish; try again."
 msgstr ""
 
@@ -8360,6 +8862,7 @@ msgstr "此对话为只读"
 msgid "This command is not available to this account."
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "这台电脑"
@@ -8372,14 +8875,39 @@ msgstr "这台电脑"
 #: src/pages/fleet/target-name.ts
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
+#: src/pages/shell/runtime-summary.tsx
 msgid "This computer"
 msgstr "这台电脑"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "This configuration is too complex."
+msgstr "此配置过于复杂。"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "This configuration version is not supported."
+msgstr "不支持此配置版本。"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "This field is not supported."
+msgstr "不支持此字段。"
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This file is larger than 2 MB. Open a copy to edit it."
+msgstr "此文件大于 2 MB。打开副本以进行编辑。"
 
 #: src/components/ArtifactFileCard.tsx
 msgid "This file is not valid UTF-8 Markdown."
 msgstr "此文件不是有效的 UTF-8 Markdown。"
 
-#: src/pages/ide/file-tree.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This file is read-only. Open a copy to edit it."
+msgstr "此文件为只读。打开副本以进行编辑。"
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This file no longer exists. Save it as a new file or close it."
+msgstr "此文件已不存在。将其另存为新文件或关闭它。"
+
+#: src/pages/workspace/file-tree.tsx
 msgid "This folder is empty."
 msgstr ""
 
@@ -8395,6 +8923,11 @@ msgstr ""
 msgid "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model."
 msgstr "群组模型被 Bot 或空间设置阻止。请更改目标位置策略，或选择其他群组模型。"
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This is a binary file. You cannot edit it here."
+msgstr "这是一个二进制文件。无法在此处编辑。"
+
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "这台 Mac"
@@ -8429,6 +8962,10 @@ msgstr ""
 #: src/pages/Auth.tsx
 msgid "This reset link is invalid or expired"
 msgstr "此重置链接无效或已过期"
+
+#: src/lib/failure-category-copy.ts
+msgid "This runtime"
+msgstr "此运行时"
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "This scan is out of date. Re-scan, then try again."
@@ -8476,6 +9013,10 @@ msgstr "此登录窗口已被新的登录窗口替换。请在新窗口中完成
 msgid "This signs out every other session and keeps this one signed in."
 msgstr ""
 
+#: src/lib/failure-category-copy.ts
+msgid "This space's model policy blocks this model. Change it in Settings, under Models."
+msgstr "此空间的模型策略阻止了此模型。请在设置的「模型」中更改。"
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "This subscription sign-in is not available in Ardur yet. Use a deployment credential or choose another provider."
 msgstr "此订阅登录在 Ardur 中尚不可用。请使用部署凭据或选择其他提供方。"
@@ -8492,9 +9033,11 @@ msgstr ""
 msgid "Thumbs"
 msgstr "评价"
 
-#: src/pages/shell/hermes-limits.tsx
-msgid "Time limit"
-msgstr "时间限制"
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Time limit (seconds)"
+msgstr "时间限制（秒）"
 
 #: src/pages/RoutineSchedule.tsx
 msgid "Time of day"
@@ -8602,6 +9145,10 @@ msgstr ""
 msgid "Treg token"
 msgstr "Treg token"
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Trim older context"
+msgstr "裁剪较早的上下文"
+
 #: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Trusted folders"
@@ -8615,12 +9162,18 @@ msgstr ""
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/computer-screen-error.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-settings.tsx
 msgid "Try again"
 msgstr "重试"
 
 #: src/pages/LearningInbox.tsx
 msgid "Turn on"
 msgstr ""
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Turn on Experimental"
+msgstr "启用「实验性」"
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
@@ -8638,8 +9191,13 @@ msgstr "未分配"
 
 #: src/components/SoftwareUpdateSection.tsx
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Unavailable"
 msgstr "不可用"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Unavailable with Hermes."
+msgstr "Hermes 下不可用。"
 
 #: src/pages/LearningObservation.tsx
 msgid "unclassified"
@@ -8666,14 +9224,19 @@ msgstr "取消关注"
 msgid "Uninstall"
 msgstr ""
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/pages/LearningCurator.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Unknown"
-msgstr ""
+msgstr "未知"
 
 #: src/pages/account/AccountTables.tsx
 msgid "Unknown device"
 msgstr ""
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Unknown: {title}"
+msgstr "未知: {title}"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Unlink"
@@ -8684,6 +9247,8 @@ msgid "Unpin"
 msgstr "取消置顶"
 
 #: src/pages/ide/IdePage.tsx
+#: src/pages/workspace/WorkspaceFileGuard.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Unsaved changes"
 msgstr ""
 
@@ -8811,6 +9376,23 @@ msgstr "使用找到的模型"
 msgid "Use a token"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Use a whole number from 1 to 3."
+msgstr "请输入 1 到 3 的整数。"
+
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use a whole number from 1 to 600."
+msgstr "请输入 1 到 600 的整数。"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use a whole number from 1 to 64."
+msgstr "请输入 1 到 64 的整数。"
+
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use a whole number from 4 to 64."
+msgstr "请输入 4 到 64 的整数。"
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Use all selected tools"
@@ -8819,6 +9401,22 @@ msgstr "使用所有选定工具"
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Use all selected tools, or choose a subset for this bot."
 msgstr "使用所有选定工具，或为此机器人选择部分工具。"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Use Ardur Connections for provider settings."
+msgstr "提供商设置请使用 Ardur 连接。"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Use Ardur Learning settings."
+msgstr "请使用 Ardur 学习设置。"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Use Ardur settings for tools, integrations, MCP servers, skills, and plugins."
+msgstr "工具、集成、MCP 服务器、技能和插件请使用 Ardur 设置。"
+
+#: src/pages/group-model-control.tsx
+msgid "Use bot runtime settings"
+msgstr "使用机器人的运行时设置"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Use default guidance"
@@ -8846,9 +9444,23 @@ msgstr ""
 msgid "Use this model"
 msgstr "使用此模型"
 
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use whole KiB."
+msgstr "请输入整数 KiB。"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use whole seconds."
+msgstr "请输入整数秒。"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "User"
 msgstr ""
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Uses that account's permissions."
+msgstr "使用该账户的权限。"
 
 #: src/pages/shell/bot-model-chip.tsx
 #: src/pages/shell/group-participants.tsx
@@ -8895,15 +9507,20 @@ msgstr "语音失败"
 msgid "Voice shortcut"
 msgstr ""
 
+#: src/lib/working-indicator.ts
+msgid "Waiting for a free place"
+msgstr "正在等待空位"
+
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
 msgid "Waiting for a turn"
 msgstr "等待轮次"
 
+#: src/components/ai/CoordinationLine.tsx
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Waiting for approval"
-msgstr ""
+msgstr "等待批准"
 
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
@@ -8921,6 +9538,14 @@ msgstr "等待登录…"
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Waiting for the API to come back…"
 msgstr "正在等待 API 恢复…"
+
+#: src/lib/working-indicator.ts
+msgid "Waiting for the model"
+msgstr "正在等待模型"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Waiting for the tool"
+msgstr "正在等待工具"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
@@ -9012,6 +9637,10 @@ msgstr ""
 msgid "When a webhook fires"
 msgstr "当 Webhook 触发时"
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "When context is full"
+msgstr "当上下文已满时"
+
 #: src/pages/settings/GeneralSettings.tsx
 msgid "When routines finish, cannot run, or need your input."
 msgstr ""
@@ -9027,6 +9656,10 @@ msgstr "何时使用"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Where should bots run?"
 msgstr "Bot 应在哪里运行？"
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Where this bot runs"
+msgstr "此 Bot 的运行位置"
 
 #: src/pages/memory/MemoryDocuments.tsx
 msgid "Who the user is and the professional domain"
@@ -9044,6 +9677,7 @@ msgstr "工作"
 msgid "Work items"
 msgstr "工作事项"
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/TeamBoard.tsx
@@ -9063,6 +9697,14 @@ msgstr "正在处理 {task}"
 msgid "Working on {task} for {0}"
 msgstr "正在为 {0} 处理 {task}"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Working on the task"
+msgstr "正在处理任务"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Working: {title}"
+msgstr "进行中：{title}"
+
 #: src/pages/Auth.tsx
 #: src/pages/CallView.tsx
 #: src/pages/import/LocalImportPage.tsx
@@ -9070,7 +9712,7 @@ msgid "Working…"
 msgstr "处理中…"
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Workspace"
 msgstr "工作区"
 
@@ -9106,6 +9748,10 @@ msgstr "如果没有自动跳转，可以关闭此标签页。"
 #: src/pages/McpOAuthCallback.tsx
 msgid "You can close this window."
 msgstr "可以关闭此窗口。"
+
+#: src/pages/workspace/WorkspaceTerminal.tsx
+msgid "You control the computer"
+msgstr "你正在控制电脑"
 
 #: src/pages/LearningInsights.tsx
 msgid "You gave {count} thumbs with reasons in {days} days, but Learning is off."
@@ -9144,9 +9790,18 @@ msgstr "你的邮箱"
 msgid "Your name"
 msgstr "你的名字"
 
+#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/HostComputerPrompt.tsx
+msgid "Your OS will not ask for extra permission if you let bots run on {hostLabel}. They run as you."
+msgstr "若让 Bot 在 {hostLabel} 上运行，它们会使用你的账户权限，系统不会再逐项询问。"
+
 #: src/pages/DevicesSettings.tsx
 msgid "Your phone can reach this Mac on your network."
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Your settings"
+msgstr "您的设置"
 
 #: src/pages/Welcome.tsx
 msgid "Your team of always-on agents<0/>that you can give real work to."

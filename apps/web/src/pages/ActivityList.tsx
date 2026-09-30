@@ -4,6 +4,7 @@ import { i18n } from "@lingui/core";
 import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
+import { failureCategoryMessages, unknownRuntimeName } from "../lib/failure-category-copy";
 import { rpc } from "../lib/rpc";
 import { statusLabel } from "../lib/run-status-label";
 import { localizedTeamDeliveryText } from "../lib/team-delivery-text";
@@ -126,8 +127,18 @@ function ActivityRow({
   now: number;
   onOpen: () => void;
 }) {
-  const { t } = useLingui();
+  const { t, i18n } = useLingui();
   const title = run.groupName ? `${run.botName} · ${run.groupName}` : run.botName;
+  const failureReason =
+    run.status === "failed" && run.failureCategory
+      ? i18n._({
+          ...failureCategoryMessages[run.failureCategory],
+          values: {
+            runtime: run.failureRuntime ?? i18n._(unknownRuntimeName),
+            bot: run.botName,
+          },
+        })
+      : null;
   const presenceUnknown =
     !["completed", "failed", "cancelled", "waiting_input", "waiting_takeover"].includes(
       run.status,
@@ -158,7 +169,11 @@ function ActivityRow({
             </span>
           </div>
           <div className="mt-0.5 flex items-baseline gap-2">
-            {run.promptSnippet ? (
+            {failureReason ? (
+              <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">
+                {failureReason}
+              </span>
+            ) : run.promptSnippet ? (
               <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">
                 {run.promptSnippet}
               </span>

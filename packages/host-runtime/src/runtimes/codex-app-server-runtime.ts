@@ -1,5 +1,6 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
-import { access } from "node:fs/promises";
+import { constants } from "node:fs";
+import { access, lstat, open, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import type {
   AdapterContext,
@@ -10,15 +11,36 @@ import type {
 import type { RuntimeAvailability } from "@ardurbot/contracts/runtime-pins";
 import { RuntimePinError, runtimePinProblem } from "@ardurbot/contracts/runtime-pins";
 import * as z from "zod";
+import {
+  type CapturedChildOutput,
+  captureChildOutput,
+  childProcessLogger,
+} from "../child-output.js";
+import { nativeEnvironment } from "../host-environment.js";
+import type { HostGuardrailConfig } from "../host-guardrails.js";
+import {
+  guardrailConfigFromEnv,
+  isGuardedPath,
+  resolveGuardrailPathsSync,
+  resolveRealPathSync,
+} from "../host-guardrails.js";
+import { environmentSecrets, mcpConfigSecrets } from "../mcp-diagnostics.js";
 import { startArdurMcpServer } from "./ardur-mcp-server.js";
 import { createArdurToolBridge } from "./claude-mcp-bridge.js";
 import { CodexUsageCollector } from "./codex-usage.js";
+import {
+  nativeFailureCategory,
+  nativeFailureDetail,
+  nativeFailureProblem,
+} from "./native-failure-signals.js";
 import type { NativeSpawn } from "./native-process.js";
 import {
   findNativeBinary,
+  guardedSpawn,
   jsonLines,
   probeCommand,
   RuntimeQueue,
+  sessionSpawnFor,
   spawnNative,
   stopNative,
 } from "./native-process.js";
@@ -51,8 +73,15 @@ export class CodexRpc {
     }
   >();
   private reader: Promise<void>;
+  private readonly captured: CapturedChildOutput;
+  private readonly secrets: string[] = environmentSecrets(nativeEnvironment());
   constructor(readonly child: ChildProcessWithoutNullStreams) {
-    child.stderr.resume();
+    this.captured = captureChildOutput(child, {
+      kind: "codex-app-server",
+      secrets: this.secrets,
+      logger: childProcessLogger(),
+    });
+    child.once("close", () => this.captured.close());
     child.once("error", () => this.fail());
     this.reader = (async () => {
       try {
@@ -76,6 +105,8 @@ export class CodexRpc {
     })();
   }
   private fail() {
+    const tail = this.captured.tail();
+    if (tail) childProcessLogger().debug(`Codex app-server failure diagnostics: ${tail}`);
     const error = new Error("Codex app-server unavailable");
     for (const entry of this.pending.values()) {
       clearTimeout(entry.timer);
@@ -86,6 +117,9 @@ export class CodexRpc {
   }
   send(message: RpcMessage) {
     this.child.stdin.write(`${JSON.stringify(message)}\n`);
+  }
+  addSecrets(secrets: readonly string[]) {
+    this.secrets.push(...secrets);
   }
   request<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
     const id = this.nextId++;
@@ -132,10 +166,19 @@ export function codexArguments() {
     "features.view_image=false",
   ];
 }
-/** Codex's instruction-discovery settings, as returned by config/read. */
-export type InstructionDiscovery = { rootMarkers?: unknown; fallbackFilenames?: unknown };
+/** Codex's instruction settings, as returned by config/read. */
+export type InstructionDiscovery = {
+  rootMarkers?: unknown;
+  fallbackFilenames?: unknown;
+  maxBytes?: unknown;
+};
 const DEFAULT_ROOT_MARKERS = [".git"];
-const INSTRUCTION_FILENAMES = ["AGENTS.md", "AGENTS.override.md"];
+/** In the order Codex prefers them: a folder's override stands in for its AGENTS.md. */
+const INSTRUCTION_FILENAMES = ["AGENTS.override.md", "AGENTS.md"];
+/** Codex's own default limit for project instructions, and the most Ardur will load. */
+const INSTRUCTION_BYTES_DEFAULT = 32 * 1024;
+const INSTRUCTION_BYTES_LIMIT = 256 * 1024;
+const PROJECT_INSTRUCTIONS_HEADING = "Project instructions (from the folder's instruction files):";
 function plainNames(value: unknown, fallback: string[]): string[] {
   const names = Array.isArray(value)
     ? value.filter(
@@ -145,24 +188,93 @@ function plainNames(value: unknown, fallback: string[]): string[] {
     : [];
   return names.length ? names : fallback;
 }
+function instructionBytes(value: unknown): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)
+    return INSTRUCTION_BYTES_DEFAULT;
+  return Math.min(value, INSTRUCTION_BYTES_LIMIT);
+}
+/** True when `candidate` is `base` or sits inside it, ignoring case where the disk does. */
+const within = (base: string, candidate: string) => isGuardedPath([base], candidate);
+
+/** An instruction file Ardur will not read: it would bring in a file from somewhere else. */
+export class UnsafeInstructionFileError extends Error {
+  constructor(readonly filename: string) {
+    super(`Unsafe instruction file: ${filename}`);
+    this.name = "UnsafeInstructionFileError";
+  }
+}
+
+export type ProjectInstructions = {
+  /** The instruction files' text, outermost folder first. Empty when there is none. */
+  text: string;
+  /** The files it came from, as the disk spells them. */
+  sources: string[];
+  /** The folders that were searched, from the project root down to the bot's folder. */
+  directories: string[];
+};
 
 /**
- * Instruction files Codex loads for a folder: AGENTS.md, its override and any configured
- * fallback names, from the folder's project root (the nearest ancestor holding a configured root
- * marker) down to the folder itself, or only the folder's own when no root is found. The read
- * profile confines the run to its folder, so these files are granted explicitly; otherwise
- * Codex refuses to create the session when an ancestor holds instructions it cannot read.
+ * One instruction file, read through a file that is opened first and checked second, so
+ * what is checked is what is read. The file must be an ordinary file with one name, inside
+ * the project, outside protected data, and still where it was found once it is open.
  */
-export async function instructionFileReads(
+async function readInstructionFile(
+  file: string,
+  project: string,
+  guarded: string[],
+  limit: number,
+): Promise<{ real: string; text: string }> {
+  const real = await realpath(file);
+  if (!within(project, real) || isGuardedPath(guarded, real)) throw new Error("outside");
+  // Without waiting: a named pipe with no writer would hold a plain open forever.
+  const handle = await open(real, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const [held, named, still] = await Promise.all([
+      handle.stat({ bigint: true }),
+      stat(real, { bigint: true }),
+      realpath(real),
+    ]);
+    if (
+      !held.isFile() ||
+      held.nlink > 1n ||
+      still !== real ||
+      named.dev !== held.dev ||
+      named.ino !== held.ino
+    )
+      throw new Error("changed");
+    const size = Number(held.size < BigInt(limit) ? held.size : BigInt(limit));
+    const buffer = Buffer.alloc(size);
+    const { bytesRead } = await handle.read(buffer, 0, size, 0);
+    return { real, text: buffer.subarray(0, bytesRead).toString("utf8") };
+  } finally {
+    await handle.close();
+  }
+}
+
+/**
+ * The project instructions for a folder: AGENTS.md, its override or a configured fallback
+ * name, one per folder, from the folder's project root (the nearest ancestor holding a
+ * configured root marker) down to the folder itself, or only the folder's own when no root is
+ * found. It follows Codex's own rules and limit.
+ *
+ * Ardur reads these files and hands Codex the text, and Codex's own loading is turned off.
+ * Codex follows links in what it reads, with no way to check the file it ends up with; read
+ * here, each file is checked after it is opened. One that cannot be read safely refuses the
+ * session: a link out of the project, a second name for a file elsewhere, a folder, a broken
+ * link or protected data.
+ */
+export async function loadProjectInstructions(
   cwd: string,
   discovery: InstructionDiscovery = {},
-): Promise<Record<string, "read">> {
+  guarded: string[] = [],
+): Promise<ProjectInstructions> {
   const markers = plainNames(discovery.rootMarkers, DEFAULT_ROOT_MARKERS);
   const filenames = [
     ...new Set([...INSTRUCTION_FILENAMES, ...plainNames(discovery.fallbackFilenames, [])]),
   ];
+  const folder = resolveRealPathSync(path.resolve(cwd));
   const chain: string[] = [];
-  let directory = path.resolve(cwd);
+  let directory = folder;
   let root: string | undefined;
   for (let depth = 0; depth < 64 && !root; depth++) {
     chain.push(directory);
@@ -181,12 +293,76 @@ export async function instructionFileReads(
     if (parent === directory) break;
     directory = parent;
   }
-  const directories = root ? chain : chain.slice(0, 1);
-  return Object.fromEntries(
-    directories.flatMap((entry) =>
-      filenames.map((name) => [path.join(entry, name), "read" as const]),
-    ),
-  );
+  const directories = (root ? chain : chain.slice(0, 1)).reverse();
+  const project = directories[0] ?? folder;
+  const parts: string[] = [];
+  const sources: string[] = [];
+  let remaining = instructionBytes(discovery.maxBytes);
+  for (const entry of directories) {
+    if (remaining <= 0) break;
+    for (const name of filenames) {
+      const file = path.join(entry, name);
+      if (!(await lstat(file).catch(() => undefined))) continue;
+      const loaded = await readInstructionFile(file, project, guarded, remaining).catch(() => {
+        throw new UnsafeInstructionFileError(name);
+      });
+      remaining -= Buffer.byteLength(loaded.text);
+      if (loaded.text.trim()) {
+        parts.push(loaded.text.trim());
+        sources.push(loaded.real);
+      }
+      // The first name a folder holds is the one Codex would load for it.
+      break;
+    }
+  }
+  return { text: parts.join("\n\n"), sources, directories };
+}
+
+/**
+ * How far a file's change time may trail the clock. Linux stamps a change with a coarse
+ * clock that can lag real time by a scheduler tick (up to 10 ms), and some disks keep
+ * coarser times still. A file changed within this window before the session was asked for
+ * counts as changed after it: refused, never trusted. Without the window, a swap made
+ * right after the ask could carry a change time from just before it and pass.
+ */
+export const INSTRUCTION_CHANGE_SLACK_MS = 1_000;
+
+/**
+ * Codex also loads an instruction file from its own folder, which Ardur cannot turn off. After
+ * a session starts and before any turn is sent, every file Codex says it loaded must be an
+ * ordinary file outside protected data and outside the project (whose files Ardur supplied),
+ * and neither its name nor its content may have changed since just before the session was
+ * asked for. A file swapped for a link and put back leaves its change time behind.
+ */
+export async function trustedInstructionSources(
+  sources: unknown,
+  check: { directories: string[]; guarded: string[]; askedAtMs: number },
+): Promise<boolean> {
+  // Codex always reports the list, empty when it loaded nothing. No list is no evidence.
+  if (!Array.isArray(sources)) return false;
+  const asked = BigInt(Math.floor(check.askedAtMs - INSTRUCTION_CHANGE_SLACK_MS)) * 1_000_000n;
+  const fromProject = (file: string) =>
+    check.directories.some(
+      (directory) => within(directory, path.dirname(file)) && within(path.dirname(file), directory),
+    );
+  for (const source of sources) {
+    if (typeof source !== "string" || !path.isAbsolute(source)) return false;
+    const entry = await lstat(source, { bigint: true }).catch(() => undefined);
+    const real = await realpath(source).catch(() => undefined);
+    const target = real ? await stat(real, { bigint: true }).catch(() => undefined) : undefined;
+    if (
+      !entry ||
+      !real ||
+      !target?.isFile() ||
+      entry.ctimeNs >= asked ||
+      target.ctimeNs >= asked ||
+      isGuardedPath(check.guarded, real) ||
+      fromProject(source) ||
+      fromProject(real)
+    )
+      return false;
+  }
+  return true;
 }
 
 export async function openCodex(start: NativeSpawn = spawnNative) {
@@ -232,7 +408,8 @@ export async function codexModels(rpc: CodexRpc): Promise<RuntimeAvailability["m
   return models;
 }
 
-export async function probeCodex(start: NativeSpawn = spawnNative): Promise<RuntimeAvailability> {
+export async function probeCodex(start?: NativeSpawn): Promise<RuntimeAvailability> {
+  const launch = start ?? guardedSpawn();
   const base = { runtimeKind: "codex-app-server" as const, models: [] };
   let rpc: CodexRpc | undefined;
   let version: string | undefined;
@@ -240,10 +417,10 @@ export async function probeCodex(start: NativeSpawn = spawnNative): Promise<Runt
   try {
     const binary = await findNativeBinary("codex");
     if (!binary) return { ...base, available: false, reason: "Codex is not installed." };
-    const result = await probeCommand(binary, ["--version"], true, start);
+    const result = await probeCommand(binary, ["--version"], true, launch);
     version = result.version;
     if (result.code !== 0) throw new Error("version probe failed");
-    rpc = await openCodex(start);
+    rpc = await openCodex(launch);
     const { account } = await rpc.request<{ account: { type: string } | null }>("account/read", {
       refreshToken: false,
     });
@@ -277,7 +454,12 @@ export async function probeCodex(start: NativeSpawn = spawnNative): Promise<Runt
 
 export class CodexAppServerRuntime implements AgentRuntime {
   private running = new Map<string, () => Promise<void>>();
-  constructor(private readonly start: NativeSpawn = spawnNative) {}
+  constructor(
+    // Codex applies its own sandbox, so its session runs outside the Seatbelt wrap
+    // (NATIVE_SESSION_GUARD). The guard's paths are still enforced on Codex's own profile.
+    private readonly start: NativeSpawn = sessionSpawnFor("codex-app-server"),
+    private readonly guard: HostGuardrailConfig = guardrailConfigFromEnv(),
+  ) {}
   describe() {
     return {
       id: "codex-app-server",
@@ -307,9 +489,24 @@ export class CodexAppServerRuntime implements AgentRuntime {
         "runtime-unavailable",
         "Codex uses its own ChatGPT sign-in. Remove the pinned connection or change the runtime.",
       );
-    const rpc = await openCodex((binary, args) =>
-      this.start(binary, args, request.nativeCwd),
-    ).catch(() => {
+    // Codex runs under its own sandbox, so Ardur's protected paths are enforced on its
+    // profile here: the bot's folder may not sit inside them or contain them, and no
+    // instruction file from them is granted. Codex follows links in its folder and in what
+    // it is granted, so the folder is checked, granted and handed to Codex as the disk
+    // spells it. (Codex's own sandbox cannot even enter a folder reached through a link.)
+    const guarded = resolveGuardrailPathsSync(this.guard.paths);
+    const folder = request.nativeCwd
+      ? resolveRealPathSync(path.resolve(request.nativeCwd))
+      : undefined;
+    if (
+      folder &&
+      (isGuardedPath(guarded, folder) || guarded.some((entry) => isGuardedPath([folder], entry)))
+    )
+      throw problem(
+        "runtime-unavailable",
+        "Codex could not start a session in this bot's folder — change the bot's computer or the pin.",
+      );
+    const rpc = await openCodex((binary, args) => this.start(binary, args, folder)).catch(() => {
       throw problem("runtime-unavailable", "Codex app-server unavailable");
     });
     const queue = new RuntimeQueue<AgentRuntimeEvent>();
@@ -378,6 +575,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
       this.running.delete(request.runId);
       throw problem("runtime-unavailable", "Codex tools could not start — change the pin.");
     });
+    rpc.addSecrets(mcpConfigSecrets(mcp.config));
     try {
       const { account } = await rpc.request<{ account: { type: string } | null }>("account/read", {
         refreshToken: false,
@@ -396,8 +594,9 @@ export class CodexAppServerRuntime implements AgentRuntime {
           permissions?: Record<string, unknown>;
           project_root_markers?: unknown;
           project_doc_fallback_filenames?: unknown;
+          project_doc_max_bytes?: unknown;
         };
-      }>("config/read", { includeLayers: false, cwd: request.nativeCwd });
+      }>("config/read", { includeLayers: false, cwd: folder });
       if (Object.hasOwn(config.mcp_servers ?? {}, "ardur"))
         throw problem(
           "runtime-unavailable",
@@ -438,7 +637,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
           })
           .safeParse(
             await rpc.request("skills/list", {
-              ...(request.nativeCwd ? { cwds: [request.nativeCwd] } : {}),
+              ...(folder ? { cwds: [folder] } : {}),
               forceReload: true,
             }),
           );
@@ -450,16 +649,42 @@ export class CodexAppServerRuntime implements AgentRuntime {
         for (const entry of inventory.data.data)
           for (const { path } of entry.skills) comparisonSkills.push({ path, enabled: false });
       }
+      // Ardur reads the project's instruction files and hands Codex the text; a controlled
+      // comparison runs without them.
+      const project: ProjectInstructions =
+        folder && !request.controlledComparison
+          ? await loadProjectInstructions(
+              folder,
+              {
+                rootMarkers: config.project_root_markers,
+                fallbackFilenames: config.project_doc_fallback_filenames,
+                maxBytes: config.project_doc_max_bytes,
+              },
+              guarded,
+            ).catch((error: unknown) => {
+              if (error instanceof UnsafeInstructionFileError)
+                throw problem(
+                  "runtime-unavailable",
+                  `Codex can't start: Ardur can't safely read ${error.filename} for this bot. Replace it with a plain file.`,
+                );
+              throw error;
+            })
+          : { text: "", sources: [], directories: [] };
       const options = {
         model: pin.modelId,
         modelProvider: "openai",
-        cwd: request.nativeCwd,
+        cwd: folder,
         approvalPolicy: "on-request",
-        baseInstructions: request.instructions,
+        baseInstructions: project.text
+          ? [request.instructions, PROJECT_INSTRUCTIONS_HEADING, project.text]
+              .filter(Boolean)
+              .join("\n\n")
+          : request.instructions,
         config: {
+          // Codex opens no file for project instructions: a file it opens is a file it follows.
+          project_doc_max_bytes: 0,
           ...(request.controlledComparison
             ? {
-                project_doc_max_bytes: 0,
                 developer_instructions: "",
                 personality: "none",
                 skills: { config: comparisonSkills },
@@ -477,15 +702,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
             "ardur-read": {
               filesystem: {
                 ":minimal": "read",
-                ...(request.nativeCwd
-                  ? {
-                      [request.nativeCwd]: "read",
-                      ...(await instructionFileReads(request.nativeCwd, {
-                        rootMarkers: config.project_root_markers,
-                        fallbackFilenames: config.project_doc_fallback_filenames,
-                      })),
-                    }
-                  : {}),
+                ...(folder ? { [folder]: "read" } : {}),
               },
               network: { enabled: false },
             },
@@ -493,6 +710,13 @@ export class CodexAppServerRuntime implements AgentRuntime {
           model_reasoning_effort: pin.effort,
         },
       };
+      // The folder is looked at once more, as late as it can be.
+      if (folder && resolveRealPathSync(folder) !== folder)
+        throw problem(
+          "runtime-unavailable",
+          "Codex could not start a session in this bot's folder — change the bot's computer or the pin.",
+        );
+      const askedAtMs = Date.now();
       const session = await rpc
         .request<{
           thread: { id: string };
@@ -501,6 +725,8 @@ export class CodexAppServerRuntime implements AgentRuntime {
           reasoningEffort: string;
           sandbox?: { type: string; networkAccess?: boolean };
           activePermissionProfile?: { id: string } | null;
+          cwd?: unknown;
+          instructionSources?: unknown;
         }>(request.nativeSession?.sessionId ? "thread/resume" : "thread/start", {
           ...options,
           ...(request.nativeSession?.sessionId
@@ -527,6 +753,31 @@ export class CodexAppServerRuntime implements AgentRuntime {
         throw problem(
           "runtime-unavailable",
           "Codex cannot enforce the requested sandbox — change the pin.",
+        );
+      // Codex answers with the folder it was asked to use, as it was spelled. The folder is
+      // looked at once more now that the session exists, before any turn is sent: a swap
+      // that is still in place shows here.
+      if (
+        folder &&
+        (typeof session.cwd !== "string" ||
+          !within(folder, session.cwd) ||
+          !within(session.cwd, folder) ||
+          resolveRealPathSync(folder) !== folder)
+      )
+        throw problem(
+          "runtime-unavailable",
+          "Codex could not start a session in this bot's folder — change the bot's computer or the pin.",
+        );
+      if (
+        !(await trustedInstructionSources(session.instructionSources, {
+          directories: project.directories,
+          guarded,
+          askedAtMs,
+        }))
+      )
+        throw problem(
+          "runtime-unavailable",
+          "Codex can't start: an instructions file it loaded changed or points at protected data. Check the file in Codex's folder and try again.",
         );
       threadId = session.thread.id;
       pinValid = true;
@@ -601,7 +852,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
             if (event.method === "item/agentMessage/delta" && typeof params.delta === "string")
               queue.push({ type: "text", text: params.delta });
             if (event.method === "turn/completed") {
-              const turn = params.turn as { id?: string; status: string };
+              const turn = params.turn as { id?: string; status: string; error?: unknown };
               if (turn.id && turn.id !== turnId) continue;
               if (completionHandled) continue;
               completionHandled = true;
@@ -613,7 +864,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
                   () => true,
                   () => false,
                 );
-              usageBarrier = { params: { status: turn.status, verified } };
+              usageBarrier = { params: { status: turn.status, verified, error: turn.error } };
               rpc.events.push(usageBarrier);
               continue;
             }
@@ -630,21 +881,32 @@ export class CodexAppServerRuntime implements AgentRuntime {
                 ),
               );
               usageFinished = true;
-              if (status !== "completed" && !paused && !context?.signal?.aborted)
-                throw problem(
-                  "runtime-unavailable",
-                  "Codex stopped before completing this run — connect it or change the pin.",
-                );
+              if (status !== "completed" && !paused && !context?.signal?.aborted) {
+                // The failed turn's error text names only the category; it is never echoed.
+                const reasonId = nativeFailureCategory(nativeFailureDetail(params.error));
+                throw reasonId
+                  ? new RuntimePinError(nativeFailureProblem(pin, reasonId))
+                  : problem(
+                      "runtime-unavailable",
+                      "Codex stopped before completing this run — connect it or change the pin.",
+                    );
+              }
               finished = true;
               if (!paused && status === "completed") queue.push({ type: "done" });
               queue.end();
               break;
             }
-            if (event.method === "error")
-              throw problem(
-                "runtime-unavailable",
-                "Codex could not finish this run — connect it or change the pin.",
+            if (event.method === "error") {
+              const reasonId = nativeFailureCategory(
+                nativeFailureDetail(params.message, params.error),
               );
+              throw reasonId
+                ? new RuntimePinError(nativeFailureProblem(pin, reasonId))
+                : problem(
+                    "runtime-unavailable",
+                    "Codex could not finish this run — connect it or change the pin.",
+                  );
+            }
           }
         } catch (error) {
           pinValid = false;

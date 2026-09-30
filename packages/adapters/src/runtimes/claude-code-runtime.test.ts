@@ -136,6 +136,47 @@ describe("Claude stream-json boundary", () => {
       }),
     ).toThrow("Claude Code could not finish");
   });
+  it.each([
+    [
+      {
+        type: "result",
+        subtype: "error_during_execution",
+        is_error: true,
+        result: "Claude usage limit reached",
+      },
+      "usage-limit",
+      "usage limit is reached",
+    ],
+    [
+      { type: "result", subtype: "error_max_budget_usd", is_error: true },
+      "usage-limit",
+      "usage limit is reached",
+    ],
+    [{ type: "result", subtype: "error_max_turns", is_error: true }, "max-turns", "turn limit"],
+    [
+      {
+        type: "result",
+        subtype: "error_during_execution",
+        is_error: true,
+        errors: ["Not logged in · Please run /login"],
+      },
+      "signed-out",
+      "Sign in to Claude Code",
+    ],
+  ] as const)("names the real cause of a failed result: %j", (event, reasonId, sentence) => {
+    const parser = new ClaudeStreamParser(pin);
+    parser.parse(init);
+    let failure: unknown;
+    try {
+      parser.parse(event as unknown as Record<string, unknown>);
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toMatchObject({ problem: { code: "runtime-unavailable", reasonId } });
+    expect((failure as Error).message).toContain(sentence);
+    // The category sentence never echoes the runtime's raw text.
+    expect((failure as Error).message).not.toMatch(/private-output|Please run \/login/);
+  });
   it("uses documented tool isolation and a scoped resume id without passing credentials", () => {
     const args = claudeArguments(request, { command: "node", args: [] }, "session");
     expect(args).toContain("--restricted");
@@ -319,4 +360,85 @@ it("retains reported token usage without inventing cost", () => {
     }),
     { type: "done" },
   ]);
+});
+
+it("counts each Claude request as it finishes and keeps the higher mid-run total", () => {
+  const parser = new ClaudeStreamParser(pin);
+  parser.parse(init);
+  expect(
+    parser.parse({
+      type: "stream_event",
+      event: {
+        type: "message_start",
+        message: {
+          id: "msg-1",
+          model: pin.modelId,
+          usage: { input_tokens: 100, output_tokens: 1 },
+        },
+      },
+    }),
+  ).toEqual([expect.objectContaining({ type: "usage", inputTokens: 100, outputTokens: 1 })]);
+  expect(
+    parser.parse({
+      type: "stream_event",
+      event: { type: "message_delta", usage: { output_tokens: 20 } },
+    }),
+  ).toEqual([expect.objectContaining({ type: "usage", inputTokens: 100, outputTokens: 20 })]);
+  // A repeated assistant message for the same id replaces fields; it does not add them again.
+  expect(
+    parser.parse({
+      type: "assistant",
+      message: {
+        id: "msg-1",
+        model: pin.modelId,
+        usage: {
+          input_tokens: 100,
+          output_tokens: 20,
+          cache_read_input_tokens: 5,
+          cache_creation_input_tokens: 1,
+        },
+      },
+    }),
+  ).toEqual([expect.objectContaining({ type: "usage", inputTokens: 106, outputTokens: 20 })]);
+  expect(
+    parser.parse({
+      type: "assistant",
+      message: {
+        id: "msg-1",
+        model: pin.modelId,
+        usage: { input_tokens: 100, output_tokens: 25 },
+      },
+    }),
+  ).toEqual([expect.objectContaining({ type: "usage", inputTokens: 106, outputTokens: 25 })]);
+  expect(
+    parser.parse({
+      type: "assistant",
+      message: {
+        id: "msg-2",
+        model: pin.modelId,
+        usage: { input_tokens: 40, output_tokens: 10 },
+      },
+    }),
+  ).toEqual([expect.objectContaining({ type: "usage", inputTokens: 146, outputTokens: 35 })]);
+  const finished = parser.parse({
+    type: "result",
+    subtype: "success",
+    modelUsage: {
+      [pin.modelId!]: {
+        inputTokens: 10,
+        outputTokens: 1,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
+      },
+    },
+  });
+  expect(finished[0]).toMatchObject({
+    type: "usage",
+    inputTokens: 146,
+    outputTokens: 35,
+    request: {
+      collection: { limitations: expect.arrayContaining(["counter-discontinuity"]) },
+    },
+  });
+  expect(finished[1]).toEqual({ type: "done" });
 });

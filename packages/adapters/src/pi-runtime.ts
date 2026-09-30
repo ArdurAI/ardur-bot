@@ -4,7 +4,6 @@ import type {
   AgentRunRequest,
   AgentRuntime,
   AgentRuntimeEvent,
-  AgentSteeringMessage,
   AgentToolCompletion,
   AgentToolExecutionResult,
   ConnectorTool,
@@ -65,20 +64,12 @@ import {
   type PiSessionHandle,
   type PiSessionRecorder,
 } from "./pi-session.js";
-import { classifyProviderError, ProviderError } from "./provider-error.js";
+import { classifyProviderError, ProviderError, providerRetryAfterMs } from "./provider-error.js";
 import { ObservedUsageTotals } from "./runtime-usage.js";
+import { promptWithInitialSteering, withoutSteeringMessages } from "./steering-input.js";
 import { textContentArg } from "./tool-text.js";
 
 const running = new Map<string, { controller: AbortController; work: Promise<void> }>();
-
-export function promptWithInitialSteering(
-  prompt: string,
-  steering: AgentSteeringMessage[],
-): string {
-  return steering.length
-    ? `${prompt}\n\nAdditional user context:\n${steering.map((item) => item.text).join("\n")}`
-    : prompt;
-}
 
 interface ToolCallBudget {
   count: number;
@@ -92,7 +83,8 @@ const toolCallBudgetsByRun = new Map<string, ToolCallBudget>();
 // their imports, and ESM hoists those imports, so module-level env reads here
 // would run before .env is loaded and miss the local provider entirely.
 let catalogModelsCache: Models | undefined;
-function catalogModels(): Models {
+/** The composed built-in + local + OpenAI-compatible registry, built on first use. */
+export function catalogModels(): Models {
   catalogModelsCache ??= registerOpenAiCompatibleCatalog(registerLocalProvider(builtinModels()));
   return catalogModelsCache;
 }
@@ -289,11 +281,9 @@ export class PiAgentRuntime implements AgentRuntime {
         seenSteeringIds.push(...initialSteering.map((item) => item.id));
         let initialInputPending = true;
         let pendingSteeringDeliveryIds = initialSteering.flatMap((item) => item.deliveryIds ?? []);
-        const history = toHistory(
-          withoutSteeringMessages(request.history, initialSteering),
-          request.prompt,
-          request.sourceMessageId,
-        );
+        const keptHistory = withoutSteeringMessages(request.history, initialSteering);
+        const history = toHistory(keptHistory, request.prompt, request.sourceMessageId);
+        const historyEnd = stableHistoryEnd(request, keptHistory);
         const initialPrompt = promptWithInitialSteering(request.prompt, initialSteering);
         const systemPrompt =
           request.instructions ||
@@ -335,15 +325,7 @@ export class PiAgentRuntime implements AgentRuntime {
               m,
               {
                 ...reliableStreamOptions(m, options, request.model.maxTokens),
-                ...(m.api === "anthropic-messages" && request.stablePrefix
-                  ? {
-                      onPayload: async (payload: unknown) =>
-                        markStablePrefix(
-                          (await options?.onPayload?.(payload, m)) ?? payload,
-                          request.stablePrefix!,
-                        ),
-                    }
-                  : {}),
+                ...promptCacheOptions(m, options, request, historyEnd),
               },
               (next) => models.streamSimple(m, ctx, next),
               (usage) => {
@@ -526,6 +508,9 @@ export class PiAgentRuntime implements AgentRuntime {
           throw new ProviderError(
             sanitizeProviderError(model.provider, error),
             classifyProviderError(error),
+            // The agent core collapses SDK errors to their message string, so a
+            // Retry-After header rarely survives to here; extract when it does.
+            providerRetryAfterMs(error),
           );
         }
         if (budgetExceeded) {
@@ -570,7 +555,7 @@ export class PiAgentRuntime implements AgentRuntime {
         queue.fail(
           error instanceof RuntimePinError
             ? error
-            : new ProviderError(message, classifyProviderError(error)),
+            : new ProviderError(message, classifyProviderError(error), providerRetryAfterMs(error)),
         );
       } finally {
         queue.close();
@@ -846,6 +831,44 @@ function stableToolNameHash(name: string): string {
   return (hash >>> 0).toString(36);
 }
 
+/**
+ * One-shot requests skip the cache-write premium; nothing ever reads them back. Conversational
+ * Anthropic turns mark the system prompt and the end of the history that repeats next turn.
+ */
+export function promptCacheOptions(
+  model: Pick<Model<Api>, "api">,
+  options: SimpleStreamOptions | undefined,
+  request: Pick<AgentRunRequest, "singleRequest" | "stablePrefix">,
+  historyEnd?: { index: number; text: string },
+): SimpleStreamOptions {
+  if (request.singleRequest) return { cacheRetention: "none" };
+  if (model.api !== "anthropic-messages" || (!request.stablePrefix && !historyEnd)) return {};
+  return {
+    onPayload: async (payload, payloadModel) =>
+      markStablePrefix(
+        (await options?.onPayload?.(payload, payloadModel)) ?? payload,
+        request.stablePrefix,
+        historyEnd,
+      ),
+  };
+}
+
+/** Where the history the assembler marked stable ends among the messages a provider receives. */
+export function stableHistoryEnd(
+  request: Pick<AgentRunRequest, "history" | "stableHistory" | "prompt" | "sourceMessageId">,
+  keptHistory: AgentRunRequest["history"],
+): { index: number; text: string } | undefined {
+  const stable = new Set(request.history.slice(0, request.stableHistory ?? 0));
+  // Providers drop blank messages, so they do not count toward the position.
+  const sent = toHistory(
+    keptHistory.filter((message) => stable.has(message)),
+    request.prompt,
+    request.sourceMessageId,
+  ).filter((message) => message.content.trim());
+  const last = sent.at(-1);
+  return last ? { index: sent.length - 1, text: last.content } : undefined;
+}
+
 export function toHistory(
   history: AgentRunRequest["history"],
   prompt: string,
@@ -873,33 +896,6 @@ export function toHistory(
         ? { role: "user" as const, content: `Assistant: ${m.content}`, timestamp: Date.now() }
         : { role: "user" as const, content: m.content, timestamp: Date.now() },
     );
-}
-
-function withoutSteeringMessages(
-  history: AgentRunRequest["history"],
-  steering: AgentSteeringMessage[],
-): AgentRunRequest["history"] {
-  if (steering.length === 0) return history;
-  const result = [...history];
-  let beforeIndex = result.length - 1;
-  for (let steeringIndex = steering.length - 1; steeringIndex >= 0; steeringIndex -= 1) {
-    const steeringMessage = steering[steeringIndex];
-    for (let index = beforeIndex; index >= 0; index -= 1) {
-      const message = result[index];
-      if (
-        message?.role !== "user" ||
-        (message.id
-          ? message.id !== steeringMessage?.messageId
-          : message.content !== (steeringMessage?.historyText ?? steeringMessage?.text))
-      ) {
-        continue;
-      }
-      result.splice(index, 1);
-      beforeIndex = index - 1;
-      break;
-    }
-  }
-  return result;
 }
 
 /**

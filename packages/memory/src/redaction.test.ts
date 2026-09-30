@@ -34,6 +34,25 @@ describe("memory credential gate", () => {
       expect(safe(`{\n  "email": "${value}",\n  "password": "${value}"\n}`)).not.toThrow();
   });
 
+  it("allows typed settings, scope metadata and credential references", () => {
+    expect(safe('{"key":"bot.autoSpeak","value":true}')).not.toThrow();
+    expect(() =>
+      assertMemorySafe({
+        scopeKey: { kind: "bot", botId: "fixture" },
+        learning: { originatingPin: { credentialId: "fixture-connection" } },
+        commitId: "0123456789abcdef".repeat(3).slice(0, 40),
+      }),
+    ).not.toThrow();
+  });
+
+  it.each([123456, true, null, [], { safe: "fixture-value" }])(
+    "refuses non-string credentials: %j",
+    (password) => {
+      expect(safe(JSON.stringify({ password }))).toThrow(MemoryRedactionError);
+      expect(() => assertMemorySafe({ password })).toThrow(MemoryRedactionError);
+    },
+  );
+
   it("still refuses real-looking credentials", () => {
     const github = ["gh", "p_", "a1B2".repeat(9)].join("");
     const aws = ["AKIA", "Q3EXAMPLEKEY7ABC"].join("");

@@ -2,6 +2,7 @@ import { oc } from "@orpc/contract";
 import * as z from "zod";
 import { BotAvailabilitySchema } from "./bot-presence.js";
 import { DelegationRecordSchema, DelegationSnapshotSchema } from "./delegation.js";
+import { FailureCategoryIdSchema } from "./failure-categories.js";
 import { HostLabelSchema } from "./fleet.js";
 import { RuntimeInfoSchema } from "./runtime-pins.js";
 export const TeamStateSchema = z.enum([
@@ -44,6 +45,10 @@ export const TeamRowSchema = z.object({
   sentence: z.string().nullable(),
   requesterName: z.string().nullable(),
   reason: z.string().nullable(),
+  /** The failure category of a blocked card's reason, when it is a known one. */
+  reasonCategory: FailureCategoryIdSchema.optional(),
+  /** The runtime display name a categorized reason sentence names, when it names one. */
+  reasonRuntime: z.string().nullable().optional(),
   action: z.string().nullable(),
   rootTaskId: z.string().nullable(),
   delegationId: z.string().nullable(),
@@ -61,7 +66,13 @@ export const TeamRowSchema = z.object({
     runtimeInfo: RuntimeInfoSchema.nullable().optional(),
   }).nullable(),
   usage: z.object({
-    tokens: z.number().int(),
+    /** Measured token total; null when recorded consumption is unavailable, never a fake zero. */
+    tokens: z.number().int().nullable(),
+    /**
+     * True when the total is a lower bound: some recorded consumption is unavailable
+     * or only partially counted. Older payloads omit it; missing means a firm total.
+     */
+    partial: z.boolean().default(false),
     costs: z.array(z.object({ amount: z.number(), provenance: z.string() })),
   }),
 });

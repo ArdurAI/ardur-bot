@@ -44,6 +44,12 @@ function fixture() {
         space: { concurrentRuns: 3 },
       })),
     },
+    thread: {
+      findUniqueOrThrow: vi.fn(async () => ({
+        groupId: "group",
+        group: { policy: null },
+      })),
+    },
     chatGroupMember: {
       findUnique: vi.fn(async () => ({ id: "membership" }) as { id: string } | null),
     },
@@ -148,6 +154,7 @@ it("marks a changed group pending and rewrites after the turn with the selected 
   await refreshRunBrief(f.deps, "run");
   expect(f.requests[0]).toMatchObject({
     tools: "none",
+    singleRequest: true,
     providerRunMaxOutputTokens: 4_096,
     model: { id: "pinned", thinkingLevel: "high", maxTokens: 2000 },
   });
@@ -161,6 +168,36 @@ it("marks a changed group pending and rewrites after the turn with the selected 
   f.run.thread.nextMessageSeq++;
   await refreshRunBrief(f.deps, "run");
   expect(f.requests).toHaveLength(attempts + 1);
+  expect(f.state.lastMessageSeq).toBe(2);
+});
+it("does not mark a place another running reply still holds as covered", async () => {
+  const f = fixture();
+  f.run.thread.nextMessageSeq = 3;
+  f.tx.run.findMany.mockImplementation(async (args?: { select?: { replySeq?: boolean } }) => {
+    if (args?.select?.replySeq) return [{ replySeq: 1 }] as never;
+    return [f.run];
+  });
+  await refreshRunBrief(f.deps, "run");
+  expect(f.state.lastMessageSeq).toBe(0);
+
+  f.tx.run.findMany.mockImplementation(async (args?: { select?: { replySeq?: boolean } }) => {
+    if (args?.select?.replySeq) return [] as never;
+    return [f.run];
+  });
+  const reads: Array<{ gt?: number; lte?: number }> = [];
+  f.tx.message.findMany.mockImplementation(
+    async (args?: { where?: { seq?: { gt?: number; lte?: number } } }) => {
+      if (args?.where?.seq) reads.push(args.where.seq);
+      return [
+        {
+          role: "assistant",
+          blocks: [{ kind: "text", text: "The other bot answered." }],
+        },
+      ];
+    },
+  );
+  await refreshRunBrief(f.deps, "run");
+  expect(reads.some((seq) => (seq.gt ?? -1) < 1 && (seq.lte ?? 0) >= 1)).toBe(true);
   expect(f.state.lastMessageSeq).toBe(2);
 });
 it("carries the shared desktop home in the maintenance request", async () => {
@@ -547,6 +584,11 @@ it("bounds idle maintenance to five changed briefs", async () => {
   const query = vi.fn(async (sql: TemplateStringsArray) => {
     expect(sql.join("")).toContain("LIMIT 5");
     expect(sql.join("")).toContain('b."lastMessageSeq" < t."nextMessageSeq" - 1');
+    // Only the brief's own bot working in the thread postpones it; another room
+    // member's run must not freeze every member's brief.
+    const busy = /NOT EXISTS \(SELECT 1 FROM runs active WHERE ([^)]*)\)/.exec(sql.join(""))?.[1];
+    expect(busy).toContain('active."threadId" = t.id');
+    expect(busy).toContain('active."botId" = b."botId"');
     return Array.from({ length: 5 }, (_, index) => ({ pendingRunId: `run-${index}` }));
   });
   const refresh = vi.fn(async () => undefined);

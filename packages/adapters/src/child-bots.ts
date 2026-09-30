@@ -18,6 +18,7 @@ import {
   DelegationAdmissionError,
   expireComputerExecutionLeases,
   finishDelegation,
+  recordStoppedGroupAskOutcomesInTransaction,
   withTransactionRetry,
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
@@ -596,6 +597,9 @@ async function detachBotFromGroups(
           id: true,
           taskId: true,
           botId: true,
+          delegationId: true,
+          threadId: true,
+          spaceId: true,
           bot: {
             select: {
               computer: { select: { homeKey: true, kind: true, providerRef: true } },
@@ -608,6 +612,7 @@ async function detachBotFromGroups(
     const now = new Date();
     const runIds = activeRuns.map((run) => run.id);
     await cancelRunsInTransaction(tx, activeRuns, now);
+    await recordStoppedGroupAskOutcomesInTransaction(tx, activeRuns, now);
     await expireComputerExecutionLeases(tx, { runId: { in: runIds } });
     await tx.computer.updateMany({
       where: { executionRunId: { in: runIds } },

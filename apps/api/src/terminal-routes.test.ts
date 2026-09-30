@@ -1,11 +1,23 @@
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
 import type { SandboxProvider, TerminalProvider } from "@ardurbot/adapter-kit";
 import { ComputerConnections, ConnectedSandboxProvider } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
-import { TERMINAL_ENDED } from "@ardurbot/contracts";
-import type { HostOperation } from "@ardurbot/contracts/host-bridge";
-import { encodeHostFrame } from "@ardurbot/contracts/host-bridge";
+import {
+  decodeTerminalFrame,
+  encodeTerminalFrame,
+  TERMINAL_ENDED,
+  TERMINAL_FRAME_BYTES,
+  TERMINAL_HEADER_BYTES,
+} from "@ardurbot/contracts";
+import type { HostFrame, HostOperation } from "@ardurbot/contracts/host-bridge";
+import { decodeHostFrame, encodeHostFrame } from "@ardurbot/contracts/host-bridge";
 import type * as Db from "@ardurbot/db";
 import type { PrismaClient } from "@ardurbot/db";
+import { FleetService } from "@ardurbot/host-runtime/fleet/service";
+import { FleetTerminal } from "@ardurbot/host-runtime/fleet/terminal";
+import { RuntimeQueue } from "@ardurbot/host-runtime/runtimes/native-process";
 import { describe, expect, it, vi } from "vitest";
 import { createTerminalRoutes } from "./terminal-routes.js";
 
@@ -105,10 +117,25 @@ describe("terminal authorization", () => {
       f.computer.connectionId = "saved-connection";
       const root = kind === "ssh" ? "/remote/computers/home" : "/home/ardurbot";
       const requests: HostOperation[] = [];
-      let finishOutput = () => {};
-      const output = new Promise<void>((resolve) => {
-        finishOutput = resolve;
+      const child = Object.assign(new EventEmitter(), {
+        stdin: new PassThrough(),
+        stdout: new PassThrough(),
+        stderr: new PassThrough(),
+        exitCode: 0,
+        signalCode: null,
       });
+      const cleanup = vi.fn(async () => {});
+      const fleet = new FleetTerminal(
+        async () => ({ child: child as unknown as ChildProcessWithoutNullStreams, cleanup }),
+        async () => root,
+      );
+      const write = vi.spyOn(child.stdin, "write");
+      const service = new FleetService("/unused", "fixture-encryption-material");
+      vi.spyOn(service, "provider").mockReturnValue({
+        describe: () => ({ id: kind === "ssh" ? "ssh" : "remote-docker" }),
+        terminal: fleet,
+        resolveCommandCwd: async (_computer, cwd) => `${root}/${cwd}`,
+      } as SandboxProvider);
       const connections = new ComputerConnections(
         {
           connection: {
@@ -125,44 +152,49 @@ describe("terminal authorization", () => {
           hostClient: {
             health: async () => null,
             result: async () => undefined,
-            async *request(operation) {
-              encodeHostFrame({
-                v: 1,
-                type: "request",
-                id: "request",
-                scope: {
-                  userId: "user",
-                  spaceId: "space",
-                  botId: "bot",
-                  runId: "terminal",
-                },
-                operation,
-              });
+            async *request(operation, context) {
+              const request = decodeHostFrame(
+                encodeHostFrame({
+                  v: 1,
+                  type: "request",
+                  id: "request",
+                  scope: {
+                    userId: "user",
+                    spaceId: "space",
+                    botId: "bot",
+                    runId: "terminal",
+                  },
+                  operation,
+                }),
+              );
+              if (request.type !== "request") throw new Error("Unexpected frame");
+              operation = request.operation;
               requests.push(operation);
               if (operation.op !== "computer.remote.call") throw new Error("Unexpected operation");
-              const action = operation.action;
-              if (action.type === "terminal.output") {
-                await output;
-                return;
+              const output = new RuntimeQueue<HostFrame>();
+              let sequence = 0;
+              const call = service.call(operation, context, async (channel, data) => {
+                output.push(
+                  decodeHostFrame(
+                    encodeHostFrame({
+                      v: 1,
+                      type: "stream",
+                      id: "request",
+                      seq: sequence++,
+                      channel,
+                      data,
+                    }),
+                  ),
+                );
+              });
+              void call.then(
+                () => output.end(),
+                (error) => output.end(error),
+              );
+              for await (const frame of output) {
+                if (frame.type !== "stream") throw new Error("Unexpected frame");
+                yield frame;
               }
-              if (action.type === "terminal.close") {
-                finishOutput();
-                return;
-              }
-              yield {
-                v: 1,
-                type: "stream",
-                id: "request",
-                seq: 0,
-                channel: "result",
-                data:
-                  action.type === "cwd"
-                    ? `${root}/${action.cwd}`
-                    : {
-                        id: "11111111-1111-4111-8111-111111111111",
-                        generation: "container",
-                      },
-              };
             },
           },
         },
@@ -191,11 +223,63 @@ describe("terminal authorization", () => {
             }),
           ]),
         );
+        const sent: Array<string | Uint8Array> = [];
+        const socket = {
+          send: async (data: string | Uint8Array) => {
+            sent.push(data);
+          },
+          close: vi.fn(),
+        };
+        const attached = await routes.gateway!.attach(
+          ticket.ticket,
+          "https://app.example",
+          0,
+          socket,
+        );
+        const bytes = [Buffer.from("你好 🧪 $ "), Buffer.from([0, 128, 255, 27])];
+        child.stdout.write(
+          bytes.map((value) => `${JSON.stringify({ bytes: value.toString("base64") })}\n`).join(""),
+        );
+        const frames = () =>
+          sent
+            .filter((frame): frame is Uint8Array => typeof frame !== "string")
+            .map(decodeTerminalFrame);
+        await vi.waitFor(() =>
+          expect(frames()).toEqual(
+            bytes.map((value, index) => ({ seq: index + 1, bytes: Uint8Array.from(value) })),
+          ),
+        );
+        for (const [index, value] of [
+          ...bytes,
+          Buffer.alloc(TERMINAL_FRAME_BYTES, 255),
+        ].entries()) {
+          await attached.receive(encodeTerminalFrame(index + 1, value));
+          expect(
+            Buffer.from(JSON.parse(String(write.mock.calls.at(-1)![0])).bytes, "base64"),
+          ).toEqual(value);
+        }
+        const oversized = new Uint8Array(TERMINAL_HEADER_BYTES + TERMINAL_FRAME_BYTES + 1);
+        oversized[0] = 1;
+        new DataView(oversized.buffer).setUint32(1, 4);
+        new DataView(oversized.buffer).setUint32(5, TERMINAL_FRAME_BYTES + 1);
+        await expect(attached.receive(oversized)).rejects.toThrow("Invalid terminal frame.");
+        expect(write).toHaveBeenCalledTimes(3);
+        expect(
+          requests.filter(
+            (operation) =>
+              operation.op === "computer.remote.call" && operation.action.type === "terminal.write",
+          ),
+        ).toHaveLength(3);
+        expect(routes.gateway!.sessions.has(ticket.sessionId)).toBe(true);
+        expect(socket.close).not.toHaveBeenCalled();
       } finally {
-        finishOutput();
         if (sessionId) await routes.close(f.actor, { ...input, sessionId });
+        await fleet.closeAll();
+        await service.close();
+        vi.restoreAllMocks();
         vi.unstubAllEnvs();
       }
+      expect(cleanup).toHaveBeenCalledOnce();
     },
   );
   it.each(["ssh", "remote-docker"])(

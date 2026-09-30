@@ -6,6 +6,7 @@ import type {
   MessageBlock,
   Routine,
   TaughtSkill,
+  ThreadSendResult,
 } from "@ardurbot/contracts";
 import {
   canReactToThreadMessage,
@@ -16,22 +17,25 @@ import {
 import type { ComposerActionId, ComposerCommand, ComposerSkill } from "@ardurbot/core";
 import {
   abortableDelay,
+  answerableAskMessageIds,
+  applyChiefReceipt,
   attachmentsForThread,
   buildComposerMentionOptions,
   type ComposerMention,
   cloudAgentHttpsUrl,
   composerCommands,
   composerSkills,
+  coordinationBlock,
   isApprovalAskBlock,
   isRunTerminalEvent,
   isSecretAskBlock,
-  latestAnswerableAskMessageId,
   mentionChipKey,
   projectMessageReactions,
   resolveComposerSendPlan,
   selectedAskActionLabel,
   serializeComposerPrompt,
   userVisibleMessages,
+  workingBotsWithoutVisibleActivity,
 } from "@ardurbot/core";
 import * as Clipboard from "expo-clipboard";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
@@ -74,8 +78,13 @@ import { ApprovalPreview } from "../components/ApprovalPreview";
 import { AskActions } from "../components/AskActions";
 import { BotAvatar } from "../components/bot-avatar";
 import { BotRuntimeLabel } from "../components/bot-runtime-label";
-import { NativeCommandBlock } from "../components/command-block";
+import { CompactWorkRecord } from "../components/compact-work-record";
 import { MobileRunContext } from "../components/context-section";
+import {
+  ChiefDispatchLine,
+  ChiefResultBubble,
+  CoordinationLine,
+} from "../components/coordination-line";
 import { DispatchStatus } from "../components/DispatchStatus";
 import {
   MarkdownArtifactPreview,
@@ -110,6 +119,8 @@ import { type MobileArtifactTarget, openMobileArtifact } from "../lib/artifact-o
 import { confirmDeleteBot } from "../lib/bot-lifecycle";
 import type { ComposerMenuOption } from "../lib/composer-menu";
 import { COMPOSER_MENU_OPTIONS } from "../lib/composer-menu";
+import { chiefReceiptText } from "../lib/coordination";
+import { runtimeProblemText } from "../lib/failure-categories";
 import { cancelFocusPrompt, focusPromptThreadActive } from "../lib/focus-prompt";
 import { groupModelNoticeText } from "../lib/group-model-notice";
 import { dateLocaleForUi, t, useI18n } from "../lib/i18n";
@@ -120,15 +131,24 @@ import {
   setOpenNotificationThread,
 } from "../lib/live-notifications";
 import { presentMessageActionSheet } from "../lib/message-action-sheet";
+import { shouldRenderSpeakerContext } from "../lib/message-context";
 import {
   hasVisibleMessagePresentation,
   isCenteredAgentEvent,
+  liveReplyTextStreaming,
   messagePresentationSegments,
 } from "../lib/message-presentation";
 import { native, useMobileTokens, useResolvedAppearance } from "../lib/native";
 import { type PickedAttachment, pickDocuments, pickFromLibrary } from "../lib/pick-attachments";
 import { threadRefreshDelayMs } from "../lib/refresh";
-import { antigravityProblemMessage, runtimePinRecovery } from "../lib/runtime-pin-recovery";
+import {
+  antigravityProblemMessage,
+  dismissRefusalRun,
+  refusalRunDismissed,
+  runtimePinRecovery,
+  runtimeRefusalActionLabel,
+  runtimeRefusalRecovery,
+} from "../lib/runtime-pin-recovery";
 import {
   type ThreadScrollAction,
   ThreadScrollBehavior,
@@ -156,6 +176,7 @@ function formatApprovalAnswer(
   actions: AskAction[] | undefined,
   approval: boolean,
   peerHold?: boolean,
+  peerEffectBound?: boolean,
 ): string {
   if (!answer) return t("Answered");
   const selectedAction = actions?.find((action) => action.id === answer);
@@ -163,7 +184,7 @@ function formatApprovalAnswer(
   if (approval && outcome === "created") return t("Created");
   if (approval && outcome === "cancelled") return t("Cancelled");
   if (peerHold && answer === "expired") return t("Request expired");
-  if (peerHold && answer === "allow") return t("Preparation allowed");
+  if (peerHold && !peerEffectBound && answer === "allow") return t("Preparation allowed");
   if (approval && answer === "allow") return t("Allowed once");
   if (approval && answer === "always") return t("Always allowed");
   if (approval && answer === "deny") return t("Denied");
@@ -193,6 +214,17 @@ function isWorkingStatus(status: string | undefined): boolean {
 }
 
 type NotificationRouteState = "loading" | "ready" | "failed";
+
+/**
+ * The refusal categories whose sentence the thread renders from the failure-category
+ * table, with the refusing bot's name filled in.
+ */
+const RUNTIME_REFUSAL_IDS: ReadonlySet<string> = new Set([
+  "experimental-off",
+  "computer-unsupported",
+  "destinations-bot",
+  "destinations-space",
+]);
 
 export default function ThreadRoute() {
   const tokens = useMobileTokens();
@@ -421,19 +453,21 @@ function Thread() {
   const notificationThreadId = snap?.threadId ?? currentBot?.threadId;
   activeThreadId.current = notificationThreadId;
   const currentBotStatus = snap ? snap.run?.status : currentBot?.status;
+  const currentBotRetrying = snap?.run?.providerRetryAt != null;
   const hasLiveProgress = visibleMessages.some((message) => message.id.startsWith("progress:"));
   const workingGroupBots = useMemo(() => {
     if (!inGroup) return [];
     const seen = new Set<string>();
     const working = snap?.activeRuns ?? (snap?.run ? [snap.run] : []);
-    return working.flatMap((run) => {
+    const bots = working.flatMap((run) => {
       if (!run.botId || seen.has(run.botId) || !isWorkingStatus(run.status)) return [];
       const member = snap?.members?.find((candidate) => candidate.botId === run.botId);
       if (!member) return [];
       seen.add(run.botId);
-      return [{ ...member, status: run.status }];
+      return [{ ...member, status: run.status, retrying: run.providerRetryAt != null }];
     });
-  }, [inGroup, snap?.activeRuns, snap?.members, snap?.run]);
+    return workingBotsWithoutVisibleActivity(bots, visibleMessages);
+  }, [inGroup, snap?.activeRuns, snap?.members, snap?.run, visibleMessages]);
   const working = inGroup ? workingGroupBots.length > 0 : isWorkingStatus(currentBotStatus);
 
   useEffect(() => {
@@ -1206,7 +1240,7 @@ function Thread() {
         artifactIds.push(artifact.id);
       }
       const clientNonce = newClientNonce();
-      await rpc(
+      const sent = await rpc<ThreadSendResult>(
         "threads/send",
         groupTarget
           ? {
@@ -1226,6 +1260,8 @@ function Thread() {
               replyToMessageId: replyTarget?.id,
             },
       );
+      if (isCurrentTarget(botTarget, groupTarget))
+        setSnap((current) => applyChiefReceipt(current, sent.receipt));
       dropDelayedSetup();
       void loadSessionToken()
         .then((token) => resumeLiveNotifications(currentApiBase(), token, selectedSpaceId() ?? ""))
@@ -1399,23 +1435,56 @@ function Thread() {
     );
   }
 
-  const answerableAskMessageId = latestAnswerableAskMessageId(snap);
+  const answerableAskIds = useMemo(() => answerableAskMessageIds(snap), [snap]);
+  const failedRunBotId = snap?.run?.runtimeProblem ? (snap.run.botId ?? botId ?? "") : "";
+  // Runs whose refusal the reader fixed by saving the setting it named; the banner hides
+  // that run's refusal until a newer run event takes its place, the way the web dismisses
+  // the composer error after the same save.
+  const [dismissedRefusalRunIds, setDismissedRefusalRunIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  // Turn on Experimental saves the bot's setting the way the bot settings screen does; on
+  // success the refusal it named leaves until the next run event.
+  async function enableExperimental(targetBotId: string) {
+    if (!targetBotId) return;
+    try {
+      await rpc("bots/update", {
+        botId: targetBotId,
+        runtimeExperimental: true,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("Could not save changes. Try again."));
+      return;
+    }
+    const refusedRunId = snap?.run?.id;
+    if (refusedRunId)
+      setDismissedRefusalRunIds((current) => dismissRefusalRun(current, refusedRunId));
+  }
   const pinRecovery = snap?.run?.runtimeProblem
-    ? runtimePinRecovery(snap.run.runtimeProblem, snap.run.botId ?? botId ?? "")
+    ? runtimePinRecovery(snap.run.runtimeProblem, failedRunBotId)
     : null;
+  const refusalRecovery = snap?.run?.runtimeProblem
+    ? runtimeRefusalRecovery(snap.run.runtimeProblem, failedRunBotId)
+    : null;
+  const refusalBotName =
+    snap?.run?.runtimeProblem && RUNTIME_REFUSAL_IDS.has(snap.run.runtimeProblem.reasonId ?? "")
+      ? (memberName(snap?.members, snap.run.botId) ?? name ?? t("This bot"))
+      : null;
   const runError =
-    snap?.run?.status === "failed"
+    snap?.run?.status === "failed" && !refusalRunDismissed(dismissedRefusalRunIds, snap.run.id)
       ? snap.run.runtimeProblem
-        ? pinRecovery?.message
-          ? snap.run.runtimeProblem.pin.runtimeKind === "antigravity"
-            ? `${antigravityProblemMessage(snap.run.runtimeProblem)} ${t(pinRecovery.message)}`
-            : t(pinRecovery.message)
-          : snap.run.runtimeProblem.pin.runtimeKind !== "pi" ||
-              snap.run.runtimeProblem.code !== "pin-credential-missing"
+        ? refusalBotName
+          ? runtimeProblemText(snap.run.runtimeProblem, refusalBotName)
+          : pinRecovery?.message
             ? snap.run.runtimeProblem.pin.runtimeKind === "antigravity"
-              ? antigravityProblemMessage(snap.run.runtimeProblem)
-              : snap.run.runtimeProblem.reason
-            : runtimePinMessage(snap.run.runtimeProblem.pin)
+              ? `${antigravityProblemMessage(snap.run.runtimeProblem)} ${t(pinRecovery.message)}`
+              : t(pinRecovery.message)
+            : snap.run.runtimeProblem.pin.runtimeKind !== "pi" ||
+                snap.run.runtimeProblem.code !== "pin-credential-missing"
+              ? snap.run.runtimeProblem.pin.runtimeKind === "antigravity"
+                ? antigravityProblemMessage(snap.run.runtimeProblem)
+                : runtimeProblemText(snap.run.runtimeProblem)
+              : runtimePinMessage(snap.run.runtimeProblem.pin)
         : (snap.run.error ?? null)
       : null;
   const liveMessages = useMemo(() => [...visibleMessages].reverse(), [visibleMessages]);
@@ -1598,13 +1667,16 @@ function Thread() {
                 message.replyToMessageId ? messagesById.get(message.replyToMessageId) : undefined
               }
               canAnswer={
-                message.id === answerableAskMessageId ||
+                answerableAskIds.has(message.id) ||
                 message.blocks.some(
                   (block) => block.kind === "ask" && block.peerHold && block.status === "pending",
                 )
               }
               onAnswer={answerMessage}
               onOpenBot={openBot}
+              onOpenMemberModelSettings={(botId: string) =>
+                router.push({ pathname: "/bot-settings", params: { botId, focus: "model" } })
+              }
               onPreviewMarkdown={setMarkdownPreview}
               actionProps={actionProps}
             />
@@ -1652,7 +1724,11 @@ function Thread() {
   const workingFooter =
     !inGroup && currentBot && isWorkingStatus(currentBotStatus) && !hasLiveProgress ? (
       <View
-        accessibilityLabel={t("{name} is working", { name: currentBot.name })}
+        accessibilityLabel={
+          currentBotRetrying
+            ? t("Waiting for the model")
+            : t("{name} is working", { name: currentBot.name })
+        }
         accessibilityRole="text"
         style={{
           flexDirection: "row",
@@ -1672,9 +1748,13 @@ function Thread() {
     ) : inGroup && workingGroupBots.length > 0 ? (
       <View
         accessibilityLabel={
-          workingGroupBots.length === 1
-            ? t("{name} is working", { name: workingGroupBots[0]?.name ?? t("Agent") })
-            : t("{count} agents working", { count: workingGroupBots.length })
+          workingGroupBots.every((bot) => bot.retrying)
+            ? t("Waiting for the model")
+            : workingGroupBots.every((bot) => bot.status === "queued" && !bot.retrying)
+              ? t("Waiting for a free place")
+              : workingGroupBots.length === 1
+                ? t("{name} is working", { name: workingGroupBots[0]?.name ?? t("Agent") })
+                : t("{count} agents working", { count: workingGroupBots.length })
         }
         accessibilityRole="text"
         style={{
@@ -1703,6 +1783,15 @@ function Thread() {
             </View>
           ))}
         </View>
+        {workingGroupBots.every((bot) => bot.retrying) ? (
+          <Text style={{ color: tokens.mutedForeground, fontSize: 13 }}>
+            {t("Waiting for the model")}
+          </Text>
+        ) : workingGroupBots.every((bot) => bot.status === "queued" && !bot.retrying) ? (
+          <Text style={{ color: tokens.mutedForeground, fontSize: 13 }}>
+            {t("Waiting for a free place")}
+          </Text>
+        ) : null}
       </View>
     ) : null;
 
@@ -1735,7 +1824,30 @@ function Thread() {
         <View style={{ marginTop: 12 }}>
           <Text style={{ color: tokens.destructive }}>{runError}</Text>
           {snap?.run?.runtimeProblem ? (
-            <View style={{ flexDirection: "row", gap: 16, marginTop: 8 }}>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 16, marginTop: 8 }}>
+              {refusalRecovery && refusalBotName
+                ? refusalRecovery.actions.map((action, index) =>
+                    action.kind === "enable-experimental" ? (
+                      <Text
+                        key="enable-experimental"
+                        accessibilityRole="button"
+                        style={{ color: tokens.destructive }}
+                        onPress={() => void enableExperimental(action.botId)}
+                      >
+                        {t("Turn on Experimental")}
+                      </Text>
+                    ) : (
+                      <Text
+                        key={`${action.pathname}:${index}`}
+                        accessibilityRole="button"
+                        style={{ color: tokens.destructive }}
+                        onPress={() => router.push(action)}
+                      >
+                        {runtimeRefusalActionLabel(action)}
+                      </Text>
+                    ),
+                  )
+                : null}
               {snap.run.runtimeProblem.pin.runtimeKind === "pi" &&
               snap.run.runtimeProblem.code === "pin-credential-missing" ? (
                 <Text
@@ -1746,17 +1858,19 @@ function Thread() {
                   {t("Connect")}
                 </Text>
               ) : null}
-              <Text
-                accessibilityRole="button"
-                style={{ color: tokens.destructive }}
-                onPress={() => pinRecovery && router.push(pinRecovery.changePin)}
-              >
-                {t(
-                  snap.run.runtimeProblem.source?.kind === "group-member"
-                    ? "Group settings"
-                    : "Change pin",
-                )}
-              </Text>
+              {!(refusalRecovery && refusalBotName) ? (
+                <Text
+                  accessibilityRole="button"
+                  style={{ color: tokens.destructive }}
+                  onPress={() => pinRecovery && router.push(pinRecovery.changePin)}
+                >
+                  {t(
+                    snap.run.runtimeProblem.source?.kind === "group-member"
+                      ? "Group settings"
+                      : "Change pin",
+                  )}
+                </Text>
+              ) : null}
             </View>
           ) : null}
         </View>
@@ -1780,7 +1894,7 @@ function Thread() {
             data={liveMessages}
             inverted
             keyExtractor={(message) => message.id}
-            extraData={answerableAskMessageId}
+            extraData={answerableAskIds}
             style={{ flex: 1, marginTop: 8 }}
             maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
             scrollEventThrottle={16}
@@ -2432,6 +2546,7 @@ const MessageBubble = memo(function MessageBubble({
   canAnswer,
   onAnswer,
   onOpenBot,
+  onOpenMemberModelSettings,
   onPreviewMarkdown,
   actionProps,
 }: {
@@ -2445,6 +2560,7 @@ const MessageBubble = memo(function MessageBubble({
   canAnswer: boolean;
   onAnswer: (message: MobileMessage, answer: string) => Promise<void>;
   onOpenBot: (botId: string, name: string) => void;
+  onOpenMemberModelSettings: (botId: string) => void;
   onPreviewMarkdown: (target: MarkdownArtifactPreviewTarget) => void;
   actionProps: MessageActionProps;
 }) {
@@ -2462,17 +2578,7 @@ const MessageBubble = memo(function MessageBubble({
     (block): block is Extract<MessageBlock, { kind: "ask" }> =>
       block.kind === "ask" && !isApprovalAskBlock(block) && !block.actions?.length,
   );
-  if (message.blocks.some((block) => block.kind === "command")) {
-    return (
-      <View style={{ width: "100%", gap: 8 }}>
-        {message.blocks.map((block) =>
-          block.kind === "command" ? (
-            <NativeCommandBlock key={block.command.commandId} block={block.command} />
-          ) : null,
-        )}
-      </View>
-    );
-  }
+
   if (ask) {
     return (
       <View style={{ gap: 8, width: "100%" }}>
@@ -2494,8 +2600,26 @@ const MessageBubble = memo(function MessageBubble({
       </View>
     );
   }
+
   const handoff = message.blocks.find((block) => block.kind === "handoff");
+  const chiefReceipt = message.blocks.find((block) => block.kind === "chief_receipt");
+  const chiefResult = message.blocks.find((block) => block.kind === "chief_result");
+  if (chiefResult) return <ChiefResultBubble block={chiefResult} actionProps={actionProps} />;
+  if (chiefReceipt)
+    return (
+      <Text style={{ color: tokens.foreground, fontSize: 15.5 }} accessibilityLiveRegion="polite">
+        {chiefReceiptText(chiefReceipt.key)}
+      </Text>
+    );
   if (handoff) {
+    if (handoff.chiefDispatch)
+      return (
+        <ChiefDispatchLine
+          dispatch={handoff.chiefDispatch}
+          detail={handoff.text}
+          actionProps={actionProps}
+        />
+      );
     const from = memberName(members, handoff.fromBotId) ?? t("bot");
     const to = memberName(members, handoff.toBotId) ?? t("bot");
     return (
@@ -2508,6 +2632,16 @@ const MessageBubble = memo(function MessageBubble({
       />
     );
   }
+  const coordination = coordinationBlock(message.blocks);
+  if (coordination) {
+    return (
+      <CoordinationLine
+        block={coordination}
+        actionProps={actionProps}
+        onOpenMemberSettings={onOpenMemberModelSettings}
+      />
+    );
+  }
   const peerMessage = message.blocks.find(
     (
       block,
@@ -2515,6 +2649,14 @@ const MessageBubble = memo(function MessageBubble({
       block.kind === "bot_message_sent" || block.kind === "bot_message_received",
   );
   if (peerMessage) {
+    if (peerMessage.kind === "bot_message_sent" && peerMessage.chiefDispatch)
+      return (
+        <ChiefDispatchLine
+          dispatch={peerMessage.chiefDispatch}
+          detail={peerMessage.text}
+          actionProps={actionProps}
+        />
+      );
     const sent = peerMessage.kind === "bot_message_sent";
     const peerBotId = sent ? peerMessage.toBotId : peerMessage.fromBotId;
     const peerColor =
@@ -2554,6 +2696,7 @@ const MessageBubble = memo(function MessageBubble({
     (block) =>
       block.kind === "subagent" || block.kind === "child_bot" || block.kind === "cloud_agent",
   );
+
   if (special?.kind === "subagent") {
     const running = special.status === "running";
     const failed = special.status === "failed";
@@ -2794,12 +2937,14 @@ const MessageBubble = memo(function MessageBubble({
                 askBlock.actions,
                 isApprovalAskBlock(askBlock),
                 askBlock.peerHold,
+                askBlock.peerEffectBound,
               )}
             </Text>
           ) : canAnswer && onAnswer ? (
             <AskActions
               actions={askBlock.actions}
               peerHold={askBlock.peerHold}
+              peerEffectBound={askBlock.peerEffectBound}
               accessibilityActions={actionProps.accessibilityActions}
               onAccessibilityAction={actionProps.onAccessibilityAction}
               onAnswer={(answer) => onAnswer(message, answer)}
@@ -2979,8 +3124,32 @@ const MessageBubble = memo(function MessageBubble({
   const speaker =
     message.role === "bot" ? (memberName(members, message.botId) ?? botName) : undefined;
   const firstContent = segments.findIndex((segment) => segment.kind === "content");
+  // Only a group row with no reply bubble needs its own header; otherwise the bubble names the bot.
+  const showContext = firstContent === -1 && shouldRenderSpeakerContext(message, members);
+  const contextBot =
+    showContext && message.botId ? bots.find((b) => b.id === message.botId) : undefined;
+
   return (
     <View style={{ gap: 8, width: "100%" }}>
+      {showContext && speaker ? (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: -4 }}>
+          <BotAvatar
+            color={contextBot?.color ?? tokens.mutedForeground}
+            identity={message.botId}
+            size={22}
+          />
+          <Text
+            style={{
+              color: contextBot?.color ?? tokens.mutedForeground,
+              fontSize: 13,
+              fontWeight: "600",
+            }}
+          >
+            {speaker}
+          </Text>
+        </View>
+      ) : null}
+      <CompactWorkRecord blocks={message.blocks} live={message.id.startsWith("progress:")} />
       {segments.map((segment, index) => (
         <MessageTextCard
           key={`${message.id}-content-${index}`}
@@ -3068,59 +3237,11 @@ function MessageTextCard({
           palette={tokens}
           colorScheme={colorScheme}
           streaming={message.id.startsWith("progress:")}
+          cursor={liveReplyTextStreaming(message.blocks)}
         >
           {contentText}
         </ChatMarkdown>
       )}
-    </Pressable>
-  );
-}
-
-function AgentEventLabel({
-  label,
-  detail,
-  expanded,
-  onToggle,
-  actionProps,
-}: {
-  label: string;
-  detail?: string;
-  expanded: boolean;
-  onToggle: () => void;
-  actionProps: MessageActionProps;
-}) {
-  const colorScheme = useResolvedAppearance();
-  const tokens = mobileTokens();
-  const { t } = useI18n();
-  return (
-    <Pressable
-      {...actionProps}
-      onPress={onToggle}
-      accessibilityRole="button"
-      accessibilityLabel={expanded ? t("Hide {label}", { label }) : t("Show {label}", { label })}
-      style={{ width: "100%", paddingVertical: 4, alignItems: "center" }}
-    >
-      <Text style={{ color: tokens.mutedForeground, fontSize: 13.5, textAlign: "center" }}>
-        ↔ {label}
-      </Text>
-      {expanded && detail ? (
-        <View
-          style={{
-            width: "100%",
-            marginTop: 6,
-            borderRadius: 14,
-            borderWidth: 1,
-            borderColor: tokens.border,
-            backgroundColor: tokens.card,
-            paddingHorizontal: 14,
-            paddingVertical: 10,
-          }}
-        >
-          <ChatMarkdown palette={tokens} colorScheme={colorScheme}>
-            {detail}
-          </ChatMarkdown>
-        </View>
-      ) : null}
     </Pressable>
   );
 }
@@ -3249,5 +3370,54 @@ function AskBlock({
       )}
       {error ? <Text style={{ color: tokens.destructive, fontSize: 13 }}>{error}</Text> : null}
     </View>
+  );
+}
+
+function AgentEventLabel({
+  label,
+  detail,
+  expanded,
+  onToggle,
+  actionProps,
+}: {
+  label: string;
+  detail?: string;
+  expanded: boolean;
+  onToggle: () => void;
+  actionProps: MessageActionProps;
+}) {
+  const colorScheme = useResolvedAppearance();
+  const tokens = mobileTokens();
+  const { t } = useI18n();
+  return (
+    <Pressable
+      {...actionProps}
+      onPress={onToggle}
+      accessibilityRole="button"
+      accessibilityLabel={expanded ? t("Hide {label}", { label }) : t("Show {label}", { label })}
+      style={{ width: "100%", paddingVertical: 4, alignItems: "center" }}
+    >
+      <Text style={{ color: tokens.mutedForeground, fontSize: 13.5, textAlign: "center" }}>
+        ↔ {label}
+      </Text>
+      {expanded && detail ? (
+        <View
+          style={{
+            width: "100%",
+            marginTop: 6,
+            borderRadius: 14,
+            borderWidth: 1,
+            borderColor: tokens.border,
+            backgroundColor: tokens.card,
+            paddingHorizontal: 14,
+            paddingVertical: 10,
+          }}
+        >
+          <ChatMarkdown palette={tokens} colorScheme={colorScheme}>
+            {detail}
+          </ChatMarkdown>
+        </View>
+      ) : null}
+    </Pressable>
   );
 }

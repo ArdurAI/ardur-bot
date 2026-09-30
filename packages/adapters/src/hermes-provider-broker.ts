@@ -5,6 +5,19 @@ import { RequestUsageCollector } from "@ardurbot/adapter-kit";
 import type { RuntimePin } from "@ardurbot/contracts";
 import { RuntimeConfigOperationManifestSchema } from "@ardurbot/contracts/runtime-config";
 import { canonicalRuntimeJson } from "@ardurbot/core/runtime-config";
+import type {
+  Api,
+  AssistantMessageEvent,
+  Model,
+  Context as PiContext,
+  SimpleStreamOptions,
+} from "@earendil-works/pi-ai";
+import {
+  type AdmittedChatMessage,
+  piContext,
+  providerThinkingLevel,
+  translateStream,
+} from "./hermes-provider-translation.js";
 import { chatCompletionsUsage } from "./openai-chat-usage.js";
 import {
   assertAllowedOpenAiCompatibleUrl,
@@ -12,6 +25,31 @@ import {
 } from "./openai-compatible-url.js";
 import { createOpenAiCompatibleFetch } from "./pi-openai-compatible-provider.js";
 import { requestReservationTokens } from "./request-usage.js";
+
+/**
+ * Production seam to the provider layer's streamSimple. Declared here so tests
+ * can stub the module boundary without importing the provider catalog.
+ */
+let piStreamSimpleImpl: (
+  model: Model<Api>,
+  context: PiContext,
+  options?: SimpleStreamOptions,
+) => AsyncIterable<AssistantMessageEvent> = () => {
+  throw new Error("The provider layer bridge is not installed.");
+};
+
+/** Install the production provider-layer bridge (called by the worker's runtime registry). */
+export function setHermesProviderStream(impl: typeof piStreamSimpleImpl): void {
+  piStreamSimpleImpl = impl;
+}
+
+function piStreamSimple(
+  model: Model<Api>,
+  context: PiContext,
+  options?: SimpleStreamOptions,
+): AsyncIterable<AssistantMessageEvent> {
+  return piStreamSimpleImpl(model, context, options);
+}
 
 const MAX_REQUEST_BYTES = 256 * 1024;
 // Four raw MiB encode below the hub's six MiB provider-frame allowance.
@@ -79,13 +117,27 @@ export function summaryOperationHash(
     .digest("hex");
 }
 
+/** How the broker satisfies a request for one pinned connection. */
+export type BrokerRoute =
+  /** Hermes speaks Chat Completions and the provider speaks it natively; bytes pass through unchanged. */
+  | "openai-completions"
+  /** The provider speaks another protocol; the broker translates through Ardur's provider layer. */
+  | "provider-translated";
+
+/** A model entry from Ardur's provider catalog for the translated route. */
+export type BrokerCatalogModel = {
+  model: Model<Api>;
+  /** Owner-resolved API key from the same credential resolution the bot's own runs use. */
+  apiKey?: string;
+};
+
 export type BrokerConnection = {
   credentialId: string;
   provider: string;
   modelId: string;
   baseUrl: string;
   apiKey?: string;
-  route: "openai-completions";
+  route: BrokerRoute;
   contextWindow: number;
   maxOutputTokens: number;
   acceptsImages: boolean;
@@ -134,6 +186,19 @@ export type BrokerOptions = {
   observed?: (model: string | undefined, effort: string | undefined) => Promise<void>;
   requiredContext?: string;
   fetch?: typeof globalThis.fetch;
+  /**
+   * Catalog model for the translated route. The broker never accepts a key or
+   * model from the request; this is the owner's connection resolution, exactly
+   * the way the worker resolves the bot's own model. Pass a `streamSimple`
+   * implementation for tests; production resolves it from the catalog model.
+   */
+  catalog?: BrokerCatalogModel;
+  /** Test seam over the provider layer's streamSimple. Production builds it from `catalog`. */
+  streamSimple?: (
+    model: Model<Api> | undefined,
+    context: PiContext,
+    options?: SimpleStreamOptions,
+  ) => AsyncIterable<AssistantMessageEvent> | Promise<AsyncIterable<AssistantMessageEvent>>;
 };
 
 /** Hermes's pinned MCP wire-name transformation. Collisions are fatal. */
@@ -173,7 +238,7 @@ function validContent(content: unknown, images: boolean): boolean {
       image &&
         keys(image, ["url", "detail"]) &&
         typeof image.url === "string" &&
-        /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(image.url) &&
+        image.url.trim().length > 0 &&
         (image.detail === undefined || ["auto", "low", "high"].includes(String(image.detail))),
     );
   });
@@ -196,7 +261,12 @@ function validMessage(
     return false;
   if (
     !validContent(message.content, images) &&
-    !(message.role === "assistant" && message.content === null && Array.isArray(message.tool_calls))
+    !(
+      message.role === "assistant" &&
+      message.content === null &&
+      Array.isArray(message.tool_calls)
+    ) &&
+    !(message.role === "tool" && (message.content === null || message.content === undefined))
   )
     return false;
   if (message.name !== undefined && typeof message.name !== "string") return false;
@@ -367,6 +437,43 @@ function admittedBody(
   };
 }
 
+/**
+ * The admitted Chat Completions body for the translated route. Same admission
+ * rules as the pass-through path, minus the wire-only rewrites (max_tokens
+ * default, stream_options, reasoning_effort) the provider layer generates
+ * itself from the model entry and the pinned effort.
+ */
+function admittedTranslatedBody(
+  input: unknown,
+  connection: BrokerConnection,
+  pinnedEffort: string,
+  allowed: ReadonlyMap<string, JsonObject>,
+): JsonObject {
+  const body = object(input);
+  if (!body) return denied();
+  if (Object.hasOwn(body, "stream_options") && object(body.stream_options)) denied();
+  const admitted = admittedBody(
+    {
+      ...body,
+      // The provider layer owns these wire fields on the translated route.
+      stream_options: body.stream === true ? { include_usage: true } : undefined,
+      max_tokens: Object.hasOwn(body, "max_tokens")
+        ? body.max_tokens
+        : Object.hasOwn(body, "max_completion_tokens")
+          ? undefined
+          : connection.maxOutputTokens,
+      reasoning_effort: undefined,
+    },
+    connection,
+    pinnedEffort,
+    allowed,
+  );
+  return {
+    ...admitted,
+    ...(body.reasoning_effort !== undefined ? { reasoning_effort: body.reasoning_effort } : {}),
+  };
+}
+
 /** Dormant worker-only broker. The host relay is composed in a later stream. */
 export class HermesProviderBroker {
   private deliveredBytes = 0;
@@ -374,6 +481,7 @@ export class HermesProviderBroker {
   private readonly options: BrokerOptions;
   private readonly allowed: Map<string, JsonObject>;
   private readonly transport: typeof globalThis.fetch;
+  private readonly translated: boolean;
   private revoked = false;
   private busy = false;
   private controller: AbortController | null = null;
@@ -395,8 +503,9 @@ export class HermesProviderBroker {
       })),
     };
     const { connection } = this.options;
+    this.translated = connection.route === "provider-translated";
     if (
-      connection.route !== "openai-completions" ||
+      !["openai-completions", "provider-translated"].includes(connection.route) ||
       connection.credentialId !== options.credentialId ||
       options.scope.pin.credentialId !== connection.credentialId ||
       options.scope.pin.provider !== connection.provider ||
@@ -413,8 +522,26 @@ export class HermesProviderBroker {
       options.expiresAt > Date.now() + 600_000
     )
       denied();
-    const url = assertAllowedOpenAiCompatibleUrl(connection.baseUrl);
-    assertHttpsForKeyedOpenAiCompatibleUrl(url, connection.apiKey);
+    if (this.translated) {
+      // The translated route never speaks HTTP to the connection URL from the
+      // request; the provider layer owns the real endpoint and credentials.
+      // A catalog model or an explicit stream seam must exist, and the model
+      // must describe the pinned connection exactly.
+      if (!this.options.catalog && !this.options.streamSimple) denied();
+      const model = this.options.catalog?.model;
+      if (model) {
+        if (
+          model.provider !== connection.provider ||
+          model.id !== connection.modelId ||
+          !model.input.includes("text")
+        )
+          denied();
+        if (connection.acceptsImages && !model.input.includes("image")) denied();
+      }
+    } else {
+      const url = assertAllowedOpenAiCompatibleUrl(connection.baseUrl);
+      assertHttpsForKeyedOpenAiCompatibleUrl(url, connection.apiKey);
+    }
     this.allowed = catalog(this.options.tools);
     this.transport = createOpenAiCompatibleFetch(options.fetch);
     this.grant = Object.freeze({
@@ -467,7 +594,9 @@ export class HermesProviderBroker {
     };
     try {
       const { connection } = this.options;
-      const body = admittedBody(request.body, connection, this.options.pinnedEffort, this.allowed);
+      const body = this.translated
+        ? admittedTranslatedBody(request.body, connection, this.options.pinnedEffort, this.allowed)
+        : admittedBody(request.body, connection, this.options.pinnedEffort, this.allowed);
       if (this.options.requiredContext) {
         const text = (body.messages as Array<{ content?: unknown }>)
           .map((message) =>
@@ -518,6 +647,8 @@ export class HermesProviderBroker {
       } catch {
         throw new Error("Provider request could not be admitted.");
       }
+      if (this.translated)
+        return await this.openTranslated(body, controller, collector, finish, live, active);
       let responseBody: ReadableStream<Uint8Array> | null = null;
       let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
       try {
@@ -669,5 +800,193 @@ export class HermesProviderBroker {
       this.controller = null;
       this.busy = false;
     }
+  }
+
+  /**
+   * The translated route: build a provider-layer context from the admitted
+   * Chat Completions body and serialize the provider layer's events back to
+   * Chat Completions. Grants, caps and accounting were admitted by open()
+   * before this runs, exactly as for pass-through calls.
+   */
+  private async openTranslated(
+    body: JsonObject,
+    controller: AbortController,
+    collector: RequestUsageCollector,
+    finish: (
+      outcome: "success" | "failed" | "cancelled" | "timed-out" | "unknown",
+    ) => Promise<void>,
+    live: () => void,
+    active: () => Promise<void>,
+  ): Promise<Response> {
+    const { connection } = this.options;
+    const catalog = this.options.catalog;
+    const model = catalog?.model;
+    try {
+      live();
+      await active();
+      const context = piContext({
+        model: model ?? {
+          api: "openai-completions",
+          provider: connection.provider,
+          id: connection.modelId,
+        },
+        messages: body.messages as AdmittedChatMessage[],
+        allowedTools: this.allowed,
+      });
+      const options: SimpleStreamOptions = {
+        signal: controller.signal,
+        apiKey: catalog?.apiKey,
+        ...(typeof body.temperature === "number" ? { temperature: body.temperature } : {}),
+        ...(body.max_tokens !== undefined || body.max_completion_tokens !== undefined
+          ? { maxTokens: Number(body.max_tokens ?? body.max_completion_tokens) }
+          : {}),
+        ...(providerThinkingLevel(this.options.pinnedEffort)
+          ? { reasoning: providerThinkingLevel(this.options.pinnedEffort) }
+          : {}),
+        ...(Array.isArray(body.stop)
+          ? { samplingParams: { stop: body.stop } }
+          : typeof body.stop === "string"
+            ? { samplingParams: { stop: [body.stop] } }
+            : {}),
+        ...(this.options.fetch ? { fetch: this.options.fetch } : {}),
+      };
+      const invoked = this.options.streamSimple
+        ? this.options.streamSimple(model, context, options)
+        : piStreamSimple(model!, context, options);
+      // Provider seams may return the stream or a promise of it; both iterate.
+      const stream = (await invoked) as AsyncIterable<AssistantMessageEvent>;
+      const result = await translateStream({
+        stream,
+        modelId: connection.modelId,
+        streamMode: body.stream === true,
+        onUsage: (usage) => {
+          // Feed the broker accounting with the provider layer's counts so run
+          // caps and honest usage match the pass-through path.
+          void this.options.record(collector.snapshot(usage));
+        },
+      });
+      await active();
+      live();
+      const payload = result.frames.join("") || JSON.stringify(result.body);
+      const bytes = Buffer.from(payload, "utf8");
+      const size = bytes.byteLength;
+      if (size > MAX_RESPONSE_BYTES) {
+        await finish("failed");
+        throw new Error("Provider response exceeded the broker limit.");
+      }
+      if (this.deliveredBytes + size > MAX_RESPONSE_BYTES) {
+        await finish("failed");
+        throw new Error("Provider response exceeded the turn limit.");
+      }
+      if (controller.signal.aborted || this.revoked || Date.now() >= this.grant.expiresAt) {
+        await finish(Date.now() >= this.grant.expiresAt ? "timed-out" : "cancelled");
+        throw new Error("Provider request was cancelled.");
+      }
+      await this.options.observed?.(connection.modelId, this.options.pinnedEffort);
+      await finish("success");
+      this.deliveredBytes += size;
+      return new Response(bytes, {
+        status: 200,
+        headers: {
+          "content-type": body.stream === true ? "text/event-stream" : "application/json",
+        },
+      });
+    } catch (error) {
+      // Compute the outcome before aborting, exactly like the pass-through path.
+      const outcome = controller.signal.aborted
+        ? Date.now() >= this.grant.expiresAt
+          ? "timed-out"
+          : "cancelled"
+        : "failed";
+      controller.abort();
+      try {
+        await finish(outcome);
+      } catch {
+        // The started reservation remains durable when a terminal write fails.
+      }
+      if (outcome === "cancelled" || outcome === "timed-out")
+        throw new Error("Provider request was cancelled.");
+      const isInlineImageError =
+        error instanceof Error && error.message === "Only inline images are supported.";
+      const status = isInlineImageError
+        ? 400
+        : error instanceof Error
+          ? providerErrorStatus(error)
+          : 500;
+      return new Response(
+        JSON.stringify({
+          error: {
+            message: isInlineImageError ? error.message : "Provider request failed.",
+            type: status === 400 ? "invalid_request_error" : "api_error",
+            code: status,
+          },
+        }),
+        { status, headers: { "content-type": "application/json" } },
+      );
+    }
+  }
+}
+
+/** Same status classes the pass-through path surfaces from provider HTTP codes. */
+function providerErrorStatus(error: Error): 400 | 401 | 429 | 500 {
+  const text = error.message.toLowerCase();
+  if (/unauthorized|invalid[ _-]api[ _-]key|authentication|token expired|api[ _-]key/.test(text))
+    return 401;
+  if (/rate limit|too many requests|quota/.test(text)) return 429;
+  if (/not found|unknown model|unsupported|invalid|malformed|must /.test(text)) return 400;
+  return 500;
+}
+
+export class HermesRelayDispatcher {
+  private opening = false;
+  private response: Buffer | undefined;
+  private responseStatus = 200;
+  private responseType: "application/json" | "text/event-stream" = "application/json";
+  private readSequence = 0;
+
+  constructor(
+    private readonly brokerSession: { broker: HermesProviderBroker; scope: BrokerScope },
+    private readonly abortSignal: AbortSignal,
+  ) {}
+
+  async dispatch(method: string, args: unknown[]) {
+    if (method === "provider.cancel") {
+      if (this.opening) this.brokerSession.broker.revoke();
+      this.response = undefined;
+      return;
+    }
+    if (method === "provider.open") {
+      if (this.opening || this.response) throw new Error("Provider request is already active.");
+      this.opening = true;
+      try {
+        const opened = await this.brokerSession.broker.open({
+          grant: this.brokerSession.broker.grant,
+          scope: this.brokerSession.scope,
+          path: "/v1/chat/completions",
+          body: args[0],
+          signal: this.abortSignal,
+        });
+        if (!opened.ok) throw new Error("Provider request failed.");
+        this.responseStatus = opened.status;
+        this.responseType = opened.headers.get("content-type")?.includes("text/event-stream")
+          ? "text/event-stream"
+          : "application/json";
+        this.response = Buffer.from(await opened.arrayBuffer());
+        this.readSequence = 0;
+        return { status: this.responseStatus, contentType: this.responseType };
+      } finally {
+        this.opening = false;
+      }
+    }
+    if (!this.response || args[0] !== this.readSequence)
+      throw new Error("Provider response sequence changed.");
+    const chunk = this.response.subarray(
+      this.readSequence * 24 * 1024,
+      (this.readSequence + 1) * 24 * 1024,
+    );
+    const done = (this.readSequence + 1) * 24 * 1024 >= this.response.length;
+    const seq = this.readSequence++;
+    if (done) this.response = undefined;
+    return { seq, chunk: chunk.toString("base64"), done };
   }
 }

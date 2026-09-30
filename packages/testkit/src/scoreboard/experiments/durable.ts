@@ -27,6 +27,7 @@ export function fixtureHandlers(overrides: Partial<BackgroundJobHandlers>): Back
   const ignored = async () => undefined;
   return {
     "run.continue": ignored,
+    "evidence.seal": ignored,
     "board.run": ignored,
     "briefs.maintain": ignored,
     "learning.curate": ignored,
@@ -42,6 +43,7 @@ export function fixtureHandlers(overrides: Partial<BackgroundJobHandlers>): Back
     "history.compact": ignored,
     "messaging.deliver": ignored,
     "cloud_agent.poll": ignored,
+    "hermes.install": ignored,
     ...overrides,
   };
 }

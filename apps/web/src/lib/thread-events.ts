@@ -1,5 +1,6 @@
 import type {
   ComputerStatus,
+  GroupMember,
   ProductEvent,
   Run,
   RunStatus,
@@ -25,9 +26,11 @@ import {
   reduceLiveMessageBlocks,
   reduceRunContext,
   runFailureError,
+  showsReplyText,
   subagentBlockFromPayload,
   takeLiveMessage,
   updateCloudAgentMessages,
+  upsertAtLivePlace,
   upsertMessageById,
 } from "@ardurbot/core";
 
@@ -130,6 +133,25 @@ export function threadRunError(
   const run = snapshot?.run;
   if (run?.status !== "failed" || dismissedRunIds?.has(run.id)) return null;
   return run.error ?? null;
+}
+
+/**
+ * The refusing run's bot name for the refusal banner: the bot list first, then the
+ * snapshot's members. When the bot is in neither there is no name to fill — the banner
+ * shows the recorded sentence — and the thread's own name (a group's, say) is never
+ * used, because the sentence names the bot whose run refused, not the thread it ran in.
+ */
+export function refusalRunBotName(
+  snapshot: Pick<ThreadSnapshot, "run"> | null,
+  bots: ReadonlyArray<{ id: string; name: string }>,
+  members: ReadonlyArray<GroupMember> | undefined,
+): string | undefined {
+  const botId = snapshot?.run?.botId;
+  if (!botId) return undefined;
+  return (
+    bots.find((bot) => bot.id === botId)?.name ??
+    members?.find((member) => member.botId === botId)?.name
+  );
 }
 
 export function clearActiveThreadRuns(snapshot: ThreadSnapshot): ThreadSnapshot {
@@ -265,6 +287,7 @@ export function isThreadSnapshotEvent(event: ProductEvent): boolean {
     event.type === "run.started" ||
     event.type === "run.context" ||
     event.type === "run.waiting_input" ||
+    event.type === "run.retry_scheduled" ||
     event.type === "computer.takeover.requested" ||
     isRunTerminalEvent(event)
   );
@@ -408,6 +431,21 @@ export function reduceThreadSnapshot(
         : prev.activeRuns,
     };
   }
+  if (event.type === "run.retry_scheduled") {
+    const retryRunId = event.runId;
+    if (!retryRunId) return { ...prev, cursor: event.seq };
+    const waitMs = typeof event.payload.waitMs === "number" ? event.payload.waitMs : 0;
+    const providerRetryAt = new Date(Date.parse(event.createdAt) + waitMs).toISOString();
+    const markWaiting = (run: Run): Run =>
+      run.id === retryRunId ? { ...run, status: "queued", providerRetryAt } : run;
+    return {
+      ...prev,
+      cursor: event.seq,
+      members: updateMemberStatus(prev.members, event.botId, "queued"),
+      run: prev.run ? markWaiting(prev.run) : prev.run,
+      activeRuns: prev.activeRuns?.map(markWaiting),
+    };
+  }
   if (isRunTerminalEvent(event)) {
     const activeRuns = prev.activeRuns?.filter((candidate) => candidate.id !== event.runId);
     const nextMemberRun = activeRuns?.find((candidate) => candidate.botId === event.botId);
@@ -457,7 +495,11 @@ export function reduceThreadSnapshot(
       runId: event.runId,
       createdAt: event.createdAt,
     };
-    return { ...prev, cursor: event.seq, messages: [...remaining, streaming] };
+    return {
+      ...prev,
+      cursor: event.seq,
+      messages: placeLiveDraft(prev.messages, previous, remaining, streaming),
+    };
   }
   if (event.type === "agent.tool.called") {
     const liveId = progressMessageId(event);
@@ -476,7 +518,11 @@ export function reduceThreadSnapshot(
       runId: event.runId,
       createdAt: event.createdAt,
     };
-    return { ...prev, cursor: event.seq, messages: [...remaining, next] };
+    return {
+      ...prev,
+      cursor: event.seq,
+      messages: placeLiveDraft(prev.messages, previous, remaining, next),
+    };
   }
   if (event.type === "agent.tool.completed") {
     return { ...prev, cursor: event.seq };
@@ -493,17 +539,18 @@ export function reduceThreadSnapshot(
       runId: event.runId,
       createdAt: event.createdAt,
     };
-    const without: ThreadMessage[] = [];
-    const kept: ThreadMessage[] = [];
-    for (const message of prev.messages) {
-      if (message.id === next.id) continue;
-      if (message.id.startsWith("progress:")) {
-        if (message.runId) kept.push(message);
-      } else {
-        without.push(message);
-      }
-    }
-    return { ...prev, cursor: event.seq, messages: [...without, next, ...kept] };
+    // The card goes after the newest message, above the live drafts still trailing it.
+    // Drafts never move here: one that holds its place above later messages keeps it.
+    const rest = prev.messages.filter(
+      (message) =>
+        message.id !== next.id && (!message.id.startsWith("progress:") || Boolean(message.runId)),
+    );
+    const slot = rest.findLastIndex((message) => !message.id.startsWith("progress:")) + 1;
+    return {
+      ...prev,
+      cursor: event.seq,
+      messages: [...rest.slice(0, slot), next, ...rest.slice(slot)],
+    };
   }
 
   if (event.type === "thread.cloud_agent") {
@@ -514,12 +561,13 @@ export function reduceThreadSnapshot(
     };
   }
   if (event.type === "thread.message.created" || event.type === "thread.message.updated") {
+    if (event.type === "thread.message.updated" && event.seq <= prev.cursor) return prev;
     const role = (event.payload.role as ThreadMessage["role"]) ?? "bot";
     const blocks = (event.payload.blocks as ThreadMessage["blocks"]) ?? [];
     const next: ThreadMessage = {
       id: String(event.payload.messageId ?? event.id),
       threadId: event.threadId,
-      seq: event.seq,
+      seq: typeof event.payload.messageSeq === "number" ? event.payload.messageSeq : event.seq,
       role,
       blocks,
       botId: event.botId,
@@ -530,17 +578,73 @@ export function reduceThreadSnapshot(
           : undefined,
       replyQuote:
         typeof event.payload.replyQuote === "string" ? event.payload.replyQuote : undefined,
-      createdAt: event.createdAt,
+      createdAt:
+        typeof event.payload.createdAt === "string" ? event.payload.createdAt : event.createdAt,
     };
     const replacedSubagentIds = new Set(
       blocks.filter((block) => block.kind === "subagent").map((block) => block.agentId),
     );
-    const liveId = progressMessageId(event);
-    const { remaining } = takeLiveMessage(prev.messages, liveId);
-    const without = remaining.filter((message) => !replacedSubagent(message, replacedSubagentIds));
-    return { ...prev, cursor: event.seq, messages: upsertMessageById(without, next) };
+    const without = prev.messages.filter(
+      (message) => !replacedSubagent(message, replacedSubagentIds),
+    );
+    return {
+      ...prev,
+      cursor: event.seq,
+      messages: placeSavedMessage(
+        without,
+        progressMessageId(event),
+        next,
+        event.type === "thread.message.created",
+      ),
+    };
   }
   return prev;
+}
+
+/**
+ * A run's live draft holds its place in the thread once it shows reply text: the server
+ * holds the reply's position from that first streamed text, and the saved reply fills it.
+ * A draft with only tool activity or reasoning has no place yet (and no bubble); it follows
+ * the newest message, where its reply will be saved.
+ */
+function draftHoldsPlace(draft: ThreadMessage | undefined): boolean {
+  return draft !== undefined && showsReplyText(draft.blocks);
+}
+
+/** Put a run's updated live draft back: in the place it holds, or after the newest message. */
+function placeLiveDraft(
+  messages: readonly ThreadMessage[],
+  previous: ThreadMessage | undefined,
+  remaining: ThreadMessage[],
+  draft: ThreadMessage,
+): ThreadMessage[] {
+  return draftHoldsPlace(previous)
+    ? upsertAtLivePlace(messages, draft.id, draft)
+    : [...remaining, draft];
+}
+
+/**
+ * Place a saved message the way the server orders it. A new bot message that saves text
+ * fills the place its run's draft holds. Everything else lands after the newest message:
+ * the owner's messages and notices leave the draft alone, and the run's other messages
+ * (cards, or a reply whose draft held no place) keep a draft that holds its place for the
+ * reply still to come and drop one that does not.
+ */
+function placeSavedMessage(
+  messages: readonly ThreadMessage[],
+  liveId: string,
+  next: ThreadMessage,
+  created: boolean,
+): ThreadMessage[] {
+  if (next.role !== "bot") return upsertMessageById(messages, next);
+  if (!draftHoldsPlace(messages.find((message) => message.id === liveId))) {
+    return upsertMessageById(takeLiveMessage(messages, liveId).remaining, next);
+  }
+  const fillsDraft =
+    created &&
+    next.blocks.some((block) => block.kind === "text") &&
+    !messages.some((message) => message.id === next.id);
+  return fillsDraft ? upsertAtLivePlace(messages, liveId, next) : upsertMessageById(messages, next);
 }
 
 function updateMemberStatus(
@@ -565,13 +669,15 @@ export function userHoldsComputerControl(
 /** True when a live bot run is blocking Take control (API would return 409). */
 export function computerTakeoverBlocked(
   computer: Pick<ComputerStatus, "busyBotName"> | null | undefined,
-  runStatus?: string | null,
+  runs: readonly Run[],
+  botId: string,
 ): boolean {
   if (!computer?.busyBotName) return false;
-  // waiting_takeover is the bot asking for control; terminal/idle clears the block even if
+  // Only the computer bot's own run counts: in a group the headline run can be another member's.
+  const run = activeMemberRun(runs, botId);
+  // waiting_takeover is the bot asking for control; no active run clears the block even if
   // busyBotName is briefly stale while the executor still holds the lease in finally.
-  if (!runStatus || runStatus === "waiting_takeover") return false;
-  return isActive(runStatus as RunStatus);
+  return Boolean(run && run.status !== "waiting_takeover");
 }
 
 export function computerPanelAutoBoot(
@@ -590,11 +696,13 @@ export function computerPanelAutoUsesBoot(
   return action === "boot" || action === "recover-screen";
 }
 
+/** A computer that was never started needs no maintenance; one whose boot failed does. */
 export function computerPanelNeedsMaintenance(
   state: ComputerStatus["state"] | undefined,
   booting: boolean,
+  bootFailed: boolean,
 ): boolean {
-  return !booting && (state === "error" || state === "stopped");
+  return !booting && (state === "error" || (state === "stopped" && bootFailed));
 }
 
 export function reduceComputerStatus(

@@ -166,7 +166,34 @@ let cachedRegistry: ReturnType<typeof builtinModels> | undefined;
 
 /** Capability data from the bundled model registry; undefined when the registry does not know it. */
 export function piModelContextWindow(provider: string, id: string): number | undefined {
+  return piModelLimits(provider, id).contextWindow;
+}
+
+/** Registry limits for one model; each field is undefined when the registry does not know it. */
+export function piModelLimits(
+  provider: string,
+  id: string,
+): { contextWindow?: number; maxTokens?: number; reasoning?: boolean } {
   cachedRegistry ??= builtinModels();
-  const contextWindow = cachedRegistry.getModel(provider, id)?.contextWindow;
-  return typeof contextWindow === "number" && contextWindow > 0 ? contextWindow : undefined;
+  const model = cachedRegistry.getModel(provider, id);
+  return {
+    contextWindow:
+      typeof model?.contextWindow === "number" && model.contextWindow > 0
+        ? model.contextWindow
+        : undefined,
+    maxTokens:
+      typeof model?.maxTokens === "number" && model.maxTokens > 0 ? model.maxTokens : undefined,
+    reasoning: model?.reasoning === true ? true : undefined,
+  };
+}
+
+/**
+ * True when the bundled registry knows this model and the provider accepts a
+ * plain API key. OAuth-only providers (ChatGPT sign-in) report false, so the
+ * Hermes broker never routes a subscription through the translated path.
+ */
+export function piKeyBasedCatalogModel(provider: string, id: string): boolean {
+  cachedRegistry ??= builtinModels();
+  const entry = cachedRegistry.getProvider(provider);
+  return Boolean(entry?.auth.apiKey && cachedRegistry.getModel(provider, id));
 }

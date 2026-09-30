@@ -55,6 +55,14 @@ import {
 } from "./desktop-sandbox-win32-path.js";
 import { hostCapacity } from "./fleet/capacity.js";
 import { getHostEnvironment, inspectHostEnvironment } from "./host-environment.js";
+import type { HostGuardrailConfig } from "./host-guardrails.js";
+import {
+  guardrailConfigFromEnv,
+  isGuardedPath,
+  resolveGuardrailPaths,
+  seatbeltArgv,
+  seatbeltProfile,
+} from "./host-guardrails.js";
 import { verifyHostIntegration } from "./host-integrations.js";
 import { confinedHostCwd, hostCommand, resolvedRoots } from "./host-policy.js";
 
@@ -79,6 +87,10 @@ export class DesktopSandboxProvider implements SandboxProvider {
       hostRoots?: string[];
       restricted?: boolean;
       registeredFoldersFile?: string;
+      /** Ardur's own control-plane paths/ports that host commands must never touch. */
+      guard?: HostGuardrailConfig;
+      /** Test seam; production is always process.platform. */
+      platform?: NodeJS.Platform;
     } = {},
   ) {}
 
@@ -157,6 +169,35 @@ export class DesktopSandboxProvider implements SandboxProvider {
 
   async prepare(_computer: ComputerRef, _context: AdapterContext): Promise<void> {}
 
+  private guardState?: Promise<{ paths: string[]; profile: string | null }>;
+
+  /**
+   * The resolved deny list for host work on this machine. A Seatbelt profile exists only
+   * on macOS; elsewhere the list still guards the in-process file tools and commands run
+   * unwrapped (documented in host-guardrails.ts and the host computer docs).
+   */
+  private guardrail(): Promise<{ paths: string[]; profile: string | null }> {
+    this.guardState ??= (async () => {
+      const guard = this.opts.guard;
+      if (!guard) return { paths: [], profile: null };
+      const paths = await resolveGuardrailPaths(guard.paths);
+      const sockets = await resolveGuardrailPaths(guard.sockets);
+      const profile =
+        (this.opts.platform ?? process.platform) === "darwin" &&
+        (paths.length > 0 || guard.ports.length > 0 || sockets.length > 0)
+          ? seatbeltProfile({ paths, ports: guard.ports, sockets })
+          : null;
+      return { paths, profile };
+    })();
+    return this.guardState;
+  }
+
+  /** The file tools run in-process, so the deny list is applied to the resolved target. */
+  private assertNotGuarded(paths: string[], target: string) {
+    if (isGuardedPath(paths, target, this.opts.platform ?? process.platform))
+      throw new Error("This path is protected by the host guardrail.");
+  }
+
   async environmentNote(_computer: ComputerRef, _context: AdapterContext): Promise<string> {
     return hostEnvironmentNote(await inspectHostEnvironment());
   }
@@ -217,7 +258,12 @@ export class DesktopSandboxProvider implements SandboxProvider {
         if (!hasErrorCode(error, "ENOENT")) throw error;
         const root = sourceRoots.find((root) => isAllowedDesktopPath(cwd, [root]))!;
         // Preserve source-mode directory preparation without following an escaping symlink.
-        await localWorkspaceTarget(root, `${path.relative(root, cwd)}/.host-directory`, false);
+        const marker = await localWorkspaceTarget(
+          root,
+          `${path.relative(root, cwd)}/.host-directory`,
+          false,
+        );
+        this.assertNotGuarded((await this.guardrail()).paths, marker);
         cwd = await confinedHostCwd(cwd, roots);
       }
     }
@@ -238,7 +284,8 @@ export class DesktopSandboxProvider implements SandboxProvider {
         const relative = normalizeDesktopWorkspacePath(directory);
         if (path.isAbsolute(directory) || !relative)
           throw new Error("Path escapes the computer workspace.");
-        await localWorkspaceTarget(cwd, `${relative}/.host-directory`, false);
+        const target = await localWorkspaceTarget(cwd, `${relative}/.host-directory`, false);
+        this.assertNotGuarded((await this.guardrail()).paths, target);
       }
       yield { type: "exit", code: 0 };
       return;
@@ -253,6 +300,8 @@ export class DesktopSandboxProvider implements SandboxProvider {
     let argv: string[];
     try {
       argv = await hostCommand(request, env);
+      const guard = await this.guardrail();
+      if (guard.profile) argv = seatbeltArgv(argv, guard.profile);
     } catch (error) {
       yield {
         type: "stderr",
@@ -318,6 +367,7 @@ export class DesktopSandboxProvider implements SandboxProvider {
     const box = this.requiredBox(computer);
     const relative = normalizeWorkspacePath(directory);
     const target = await localWorkspaceTarget(box.home, relative, true);
+    this.assertNotGuarded((await this.guardrail()).paths, target);
     const entries = this.opts.restricted
       ? await boundedDirectoryEntries(target)
       : await readdir(target, { withFileTypes: true });
@@ -350,6 +400,7 @@ export class DesktopSandboxProvider implements SandboxProvider {
   ) {
     const box = this.requiredBox(computer);
     const target = await localWorkspaceTarget(box.home, filePath, true);
+    this.assertNotGuarded((await this.guardrail()).paths, target);
     if (this.opts.restricted)
       return readContainedWorkspaceFile(
         box.home,
@@ -372,6 +423,7 @@ export class DesktopSandboxProvider implements SandboxProvider {
       throw new Error("Host file writes require native directory handles on Windows.");
     const box = this.requiredBox(computer);
     const target = await localWorkspaceTarget(box.home, file.path, false);
+    this.assertNotGuarded((await this.guardrail()).paths, target);
     const handle = await openContainedWorkspaceFile(
       box.home,
       target,
@@ -457,16 +509,19 @@ export class DesktopSandboxProvider implements SandboxProvider {
  * Commands on this computer. Local mode supplies the folders a person added
  * (`ARDURBOT_HOST_ROOTS_FILE`) and gets the restricted provider. A source checkout sets no
  * list and keeps the unrestricted one, with `sourceRoots` beside each computer's own folder.
+ * Either way, the guardrail deny list is computed from this process's own configuration so
+ * Ardur's secrets, app data and service ports stay out of reach of host commands.
  */
 export function localDesktopSandbox(
   root?: string,
   sourceRoots?: string[],
   env: NodeJS.ProcessEnv = process.env,
 ) {
+  const guard = guardrailConfigFromEnv(env);
   const registeredFoldersFile = env.ARDURBOT_HOST_ROOTS_FILE;
   return registeredFoldersFile
-    ? new DesktopSandboxProvider({ root, restricted: true, registeredFoldersFile })
-    : new DesktopSandboxProvider({ root, hostRoots: sourceRoots });
+    ? new DesktopSandboxProvider({ root, restricted: true, registeredFoldersFile, guard })
+    : new DesktopSandboxProvider({ root, hostRoots: sourceRoots, guard });
 }
 
 /** The folders the desktop app granted. Read on every call, so a change applies to the next command. */
@@ -983,6 +1038,7 @@ function runCommand(
 function killProcessTree(pid: number | undefined, env: NodeJS.ProcessEnv) {
   if (!pid) return;
   if (process.platform === "win32") {
+    // stdio stays ignored: a detached one-shot process-tree killer owns no output.
     const killer = spawn(
       path.join(env.SystemRoot ?? "C:\\Windows", "System32", "taskkill.exe"),
       ["/pid", String(pid), "/t", "/f"],

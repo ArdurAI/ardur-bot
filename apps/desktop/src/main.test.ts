@@ -3,12 +3,19 @@ import { readFileSync } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
 import path from "node:path";
 import vm from "node:vm";
+import { darkTokens, lightTokens } from "@ardurbot/ui-tokens";
 import { describe, expect, it, vi } from "vitest";
 import { localResetFailure } from "./local-mode.js";
+import { MAIN_WINDOW_SHOW_FALLBACK_MS, showMainWindowWhenPainted } from "./main-window-show.js";
 import { managedLocalOpenUrl, parseSetupInput } from "./setup-config.js";
+import { systemSenderAllowed } from "./system/install.js";
 import { UnsavedFiles } from "./unsaved-files.js";
+import { windowBackgroundColor } from "./window-options.js";
 
 class WindowFake extends EventEmitter {
+  constructor(readonly options: { backgroundColor?: string } = {}) {
+    super();
+  }
   destroyed = false;
   webContents = Object.assign(new EventEmitter(), { setWindowOpenHandler: vi.fn() });
   hide = vi.fn();
@@ -55,10 +62,16 @@ function fixture() {
     setupError: null,
     desktopSystem: undefined,
     desktopTray: null,
+    dockBadge: { attach: vi.fn(), sync: vi.fn() },
+    // The shortcut menu follows the active window; the real menu needs Electron, so stub it here.
+    Menu: { getApplicationMenu: () => null },
+    watchAppShortcutMenu: vi.fn(),
+    syncAppShortcutMenu: vi.fn(),
     quitting: false,
     warmWindowTimer: undefined,
     clearTimeout: vi.fn(),
     launchUpdateCheckScheduled: true,
+    showMainWindowWhenPainted: vi.fn(),
     // createWindow reads the guided-setup flag and the legacy Compose marker from module scope.
     GUIDED_SETUP_ENABLED: false,
     legacyCompose: false,
@@ -69,6 +82,9 @@ function fixture() {
     process: { platform: "linux", env: {} },
     developmentIcon: () => undefined,
     browserWindowOptions: () => ({}),
+    windowBackgroundColor,
+    bootSnapshot: undefined as { current: { theme: string; language: string } } | undefined,
+    nativeTheme: { shouldUseDarkColors: true },
     markOnce: vi.fn(),
     safeOrigin: (url: string) => new URL(url).origin,
     loadAppUrl: vi.fn(async () => undefined),
@@ -96,6 +112,25 @@ function fixture() {
 }
 
 const url = "https://app.example.test";
+
+describe("main window colour before the first paint", () => {
+  it("uses the saved theme, and the system theme when nothing is saved", async () => {
+    const f = fixture();
+    await f.openAppOnce(url);
+    expect(f.mainWindow!.options.backgroundColor).toBe(darkTokens.background);
+    f.nativeTheme.shouldUseDarkColors = false;
+    await f.openAppOnce(url);
+    expect(f.mainWindow!.options.backgroundColor).toBe(lightTokens.background);
+
+    f.bootSnapshot = { current: { theme: "dark" } };
+    await f.openAppOnce(url);
+    expect(f.mainWindow!.options.backgroundColor).toBe(darkTokens.background);
+    f.nativeTheme.shouldUseDarkColors = true;
+    f.bootSnapshot = { current: { theme: "light" } };
+    await f.openAppOnce(url);
+    expect(f.mainWindow!.options.backgroundColor).toBe(lightTokens.background);
+  });
+});
 
 describe("first-launch setup dispatch", () => {
   it.each([
@@ -271,12 +306,67 @@ describe("guided setup service handoff", () => {
     expect(retry({})).toBeNull();
     expect(localMode.start).toHaveBeenCalledTimes(2);
   });
+
+  it("allows only the app page in the main window to save the boot snapshot", async () => {
+    const source = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+    const start = source.indexOf('ipcMain.handle("desktop.boot.save"');
+    const end = source.indexOf("currentSetup = await readSetup", start);
+    expect(start).toBeGreaterThan(0);
+    expect(end).toBeGreaterThan(start);
+    const handlers = new Map<string, (event: unknown, snapshot: unknown) => Promise<unknown>>();
+    const boot = { save: vi.fn(async () => true) };
+    const mainFrame = { url: "https://app.ardur.ai/chat" };
+    const mainWindow = {
+      isDestroyed: () => false,
+      webContents: { mainFrame },
+    };
+    const context = {
+      ipcMain: {
+        handle: (name: string, handler: (event: unknown, snapshot: unknown) => Promise<unknown>) =>
+          handlers.set(name, handler),
+      },
+      boot,
+      mainWindow,
+      permissionTarget: () => ({ url: "https://app.ardur.ai/chat" }),
+      systemSenderAllowed,
+    };
+    vm.runInNewContext(stripTypeScriptTypes(source.slice(start, end)), context);
+    const handler = handlers.get("desktop.boot.save")!;
+    expect(handler).toBeDefined();
+
+    // 1. The main window's own main frame saves successfully.
+    await handler({ sender: mainWindow.webContents, senderFrame: mainFrame }, { theme: "dark" });
+    expect(boot.save).toHaveBeenCalledWith({ theme: "dark" });
+    boot.save.mockClear();
+
+    // 2. A subframe in the main window is ignored.
+    const subframe = { url: "https://app.ardur.ai/chat" };
+    await handler({ sender: mainWindow.webContents, senderFrame: subframe }, { theme: "dark" });
+    expect(boot.save).not.toHaveBeenCalled();
+
+    // 3. Another window is ignored.
+    const otherContents = { mainFrame: { url: "https://app.ardur.ai/chat" } };
+    await handler(
+      { sender: otherContents, senderFrame: otherContents.mainFrame },
+      { theme: "dark" },
+    );
+    expect(boot.save).not.toHaveBeenCalled();
+
+    // 4. Another origin in the main window is ignored.
+    const otherOriginFrame = { url: "https://evil.example.com/chat" };
+    await handler(
+      { sender: mainWindow.webContents, senderFrame: otherOriginFrame },
+      { theme: "dark" },
+    );
+    expect(boot.save).not.toHaveBeenCalled();
+  });
 });
 
 describe("main window host lifecycle", () => {
   it("keeps the reactivated host running when reconnect destroys the previous window", async () => {
     const f = fixture();
     expect(await f.openAppOnce(url)).toBe(true);
+    expect(f.dockBadge.attach).toHaveBeenCalledOnce();
     f.commitPendingAppSwitch();
     const previous = f.mainWindow!;
     expect(await f.openAppOnce(url)).toBe(true);
@@ -298,6 +388,7 @@ describe("main window host lifecycle", () => {
     await f.openAppOnce(url);
     const replacement = f.mainWindow!;
     expect(await f.abandonPendingAppSwitch(null, url)).toBe("restored");
+    expect(f.dockBadge.sync).toHaveBeenCalled();
     expect(replacement.isDestroyed()).toBe(true);
     expect(f.mainWindow).toBe(previous);
     expect(f.stop).not.toHaveBeenCalled();
@@ -312,7 +403,18 @@ describe("main window host lifecycle", () => {
     f.loadAppUrl.mockRejectedValueOnce(new Error("offline"));
     expect(await f.openAppOnce(url)).toBe(false);
     expect(f.mainWindow).toBe(previous);
+    expect(f.dockBadge.sync).toHaveBeenCalled();
     expect(f.stop).not.toHaveBeenCalled();
+  });
+  it("attaches the dock count to the window server before that server is published", async () => {
+    const f = fixture();
+    let published: string | null = "unset";
+    f.loadAppUrl.mockImplementationOnce(async () => {
+      published = f.currentTargetUrl;
+    });
+    await f.openAppOnce(url);
+    expect(f.dockBadge.attach).toHaveBeenCalledWith(expect.anything(), url);
+    expect(published).toBeNull();
   });
   it("reactivates the restored server before completing a failed setup save", async () => {
     const f = fixture();
@@ -816,5 +918,28 @@ describe("cache limits wiring in the main process", () => {
     const f = fixture();
     expect(await f.openAppOnce(url)).toBe(true);
     expect(f.resolveSessionForTarget).toHaveBeenCalledExactlyOnceWith(url);
+  });
+});
+
+describe("main window ready-to-show wiring", () => {
+  it("shows the new window once on ready-to-show and still records the mark", async () => {
+    vi.useFakeTimers();
+    try {
+      const f = fixture();
+      f.showMainWindowWhenPainted = showMainWindowWhenPainted;
+      expect(await f.openAppOnce(url)).toBe(true);
+      const win = f.mainWindow!;
+      expect(win.show).not.toHaveBeenCalled();
+      win.emit("ready-to-show");
+      expect(win.show).toHaveBeenCalledOnce();
+      expect(win.focus).toHaveBeenCalledOnce();
+      expect(f.markOnce).toHaveBeenCalledWith("rk:main:ready-to-show");
+      win.emit("ready-to-show");
+      vi.advanceTimersByTime(MAIN_WINDOW_SHOW_FALLBACK_MS);
+      expect(win.show).toHaveBeenCalledOnce();
+      expect(win.focus).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

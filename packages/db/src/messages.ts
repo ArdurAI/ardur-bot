@@ -52,6 +52,12 @@ export interface CreateThreadMessageInput {
   runId?: string;
   clientNonce?: string;
   markUnread?: boolean;
+  /**
+   * The place the run's streamed reply held, read by the caller before the run left
+   * `running` (leaving it releases the place). The run's final message fills it even
+   * when it carries no text.
+   */
+  heldReplySeq?: number | null;
 }
 
 export async function createThreadMessage(prisma: PrismaClient, input: CreateThreadMessageInput) {
@@ -64,19 +70,36 @@ export async function createThreadMessageInTransaction(
   tx: Prisma.TransactionClient,
   input: CreateThreadMessageInput,
 ) {
+  // A bot message that saves text its run already showed fills the place held when that
+  // text first appeared, so it stays above anything the owner sent meanwhile.
+  const fillsReplyPlace =
+    Boolean(input.runId) &&
+    input.role === "bot" &&
+    (input.heldReplySeq != null || input.blocks.some((block) => block.kind === "text"));
+  if (fillsReplyPlace) {
+    // The thread row orders every seq allocation. Lock it before reading the run's hold,
+    // so two messages of one run cannot both take the place.
+    await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
+  }
+  const run = fillsReplyPlace ? await assertRunCanWriteHistory(tx, input.runId) : undefined;
+  const runHold = run && run.threadId === input.threadId ? run.replySeq : null;
+  const heldSeq = input.heldReplySeq ?? runHold;
+  if (input.runId && runHold !== null && runHold === heldSeq) {
+    await tx.run.update({ where: { id: input.runId }, data: { replySeq: null } });
+  }
   const thread = await tx.thread.update({
     where: { id: input.threadId },
     data: {
-      nextMessageSeq: { increment: 1 },
+      ...(heldSeq === null ? { nextMessageSeq: { increment: 1 } } : {}),
       unread: (input.markUnread ?? input.role === "bot") ? true : undefined,
     },
     select: { nextMessageSeq: true },
   });
-  await assertRunCanWriteHistory(tx, input.runId);
+  if (!fillsReplyPlace) await assertRunCanWriteHistory(tx, input.runId);
   return tx.message.create({
     data: {
       threadId: input.threadId,
-      seq: thread.nextMessageSeq - 1,
+      seq: heldSeq ?? thread.nextMessageSeq - 1,
       role: input.role,
       origin: input.origin ?? "system",
       actorId: input.actorId,
@@ -102,12 +125,14 @@ export async function assertRunCanWriteHistory(
   runId?: string,
 ): Promise<
   | {
+      threadId: string;
       status: string;
       startedAt: Date | null;
       originDeviceGrantId: string | null;
       remoteRootTaskId: string | null;
       delegationId: string | null;
       delegationRootTaskId: string | null;
+      replySeq: number | null;
     }
   | undefined
 > {
@@ -115,12 +140,14 @@ export async function assertRunCanWriteHistory(
   const run = await tx.run.findUnique({
     where: { id: runId },
     select: {
+      threadId: true,
       status: true,
       startedAt: true,
       originDeviceGrantId: true,
       remoteRootTaskId: true,
       delegationId: true,
       delegationRootTaskId: true,
+      replySeq: true,
     },
   });
   if (!run || run.status === "cancelled") {

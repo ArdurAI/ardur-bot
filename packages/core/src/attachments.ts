@@ -6,6 +6,7 @@ import {
   isAttachmentImageMimeType,
   type MessageBlock,
 } from "@ardurbot/contracts";
+import { isReasoningSummaryBlock } from "./tool-activity.js";
 
 export class AttachmentValidationError extends Error {
   constructor(message: string) {
@@ -114,6 +115,10 @@ export function blocksToAgentHistoryText(
         excludedDeliveryIds.has(block.deliveryId)
       )
         return "";
+      // System receipts are presentation, never reasoning or peer input.
+      if (block.kind === "chief_receipt") return "";
+      // A reasoning summary is work-record detail, never something the bot said.
+      if (isReasoningSummaryBlock(block)) return "";
       if (block.kind === "text") return block.text;
       if (block.kind === "chart") return `[chart: ${block.name}]`;
       if (block.kind === "image") return `[image: ${block.name}]`;
@@ -126,6 +131,11 @@ export function blocksToAgentHistoryText(
       if (block.kind === "bot_message_sent") return `[to ${block.toBotName}] ${block.text}`;
       if (block.kind === "handoff") {
         return `[handoff ${block.fromBotId} -> ${block.toBotId}] ${block.text}`;
+      }
+      // A coordination round is room bookkeeping; the asked members' own replies
+      // carry the content, so the request text is attributed to nobody.
+      if (block.kind === "coordination") {
+        return `[asked ${block.members.map((member) => member.name).join(", ")}] ${block.text}`;
       }
       if ("text" in block && typeof block.text === "string") return block.text;
       return "";

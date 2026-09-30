@@ -35,19 +35,23 @@ import {
 } from "@ardurbot/contracts";
 import type { ComposerActionId, ComposerMention, ComposerSkill } from "@ardurbot/core";
 import {
+  answerableAskMessageIds,
+  applyChiefReceipt,
   attachmentsForThread,
   buildComposerMentionOptions,
   canAddComposerFolder,
   clampMentionHighlightIndex,
   composerSkills,
+  coordinationBlock,
   cronFromPreset,
   groupBotsForSidebar,
   inferAttachmentMimeType,
   isActive,
+  isInterimNarrationAt,
   isPeerReceiptBlocks,
+  isReasoningSummaryBlock,
   isRunTerminalEvent,
   isToolActivityBlock,
-  latestAnswerableAskMessageId,
   mentionChipKey,
   projectMessageReactions,
   reorderBotTo,
@@ -58,6 +62,7 @@ import {
   serializeComposerPrompt,
   speechFromBlocks,
   userVisibleMessages,
+  workRecordEntries,
 } from "@ardurbot/core";
 import type { GroupAvatarMember } from "@ardurbot/ui-web";
 import {
@@ -125,10 +130,17 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArtifactFileCard } from "../components/ArtifactFileCard";
 import { AskCard } from "../components/AskCard";
 import { ActiveBotGlyph } from "../components/ai/CollaborationMarker";
+import { CompactWorkRecord } from "../components/ai/CompactWorkRecord";
+import {
+  ChiefDispatchLine,
+  ChiefReceiptText,
+  CoordinationLine,
+} from "../components/ai/CoordinationLine";
+import { NarrationBlocks } from "../components/ai/NarrationBlocks";
 import { CloudAgentCard } from "../components/CloudAgentCard";
 import { ComputerMaintenanceActions } from "../components/ComputerMaintenanceActions";
 import {
@@ -151,12 +163,13 @@ import type { FeedbackEdit } from "../components/MessageFeedback";
 import { MessageFeedback } from "../components/MessageFeedback";
 import { MessageHoverMetadata } from "../components/MessageHoverMetadata";
 import { PeerMessageReceipt } from "../components/PeerMessageReceipt";
-import { ThreadCommandBlock } from "../components/ThreadCommandBlock";
 import { SkillDraftCard } from "../components/teach/SkillDraftCard";
 import { TeachCaptureOverlay } from "../components/teach/TeachCaptureOverlay";
 import { TeachComputerOverlayControl } from "../components/teach/TeachComputerOverlay";
 import { TeachRecordingChrome, TeachStopButton } from "../components/teach/TeachRecordingChrome";
 import { readActivityMode, writeActivityMode } from "../lib/activity-mode";
+import type { AppShortcutHandlers } from "../lib/app-shortcuts";
+import { shortcutAria, useAppShortcuts } from "../lib/app-shortcuts";
 import type { ArtifactTarget } from "../lib/artifact-open";
 import { authClient } from "../lib/auth";
 import { takeInitialBootstrap } from "../lib/bootstrap";
@@ -171,10 +184,16 @@ import {
   screenIframeSandbox,
 } from "../lib/computer-screen";
 import { desktopBridge } from "../lib/desktop";
+import { countOwnerWaiting, openDockSnapshot, publishDockWaitingCount } from "../lib/dock-badge";
 import { scheduleFocusPrompt } from "../lib/focus-prompt";
-import { INSIGHT_ACTION_EVENT } from "../lib/insight-actions";
+import { INSIGHT_ACTION_EVENT, openInsightAction } from "../lib/insight-actions";
 import { localTimezone } from "../lib/local-timezone";
-import { copyableMessageText } from "../lib/message-text";
+import {
+  copyableMessageText,
+  narrationBubbleBlocks,
+  replyMarkdownProps,
+  workingBotsWithoutVisibleActivity,
+} from "../lib/message-text";
 import { messageProviderLabel } from "../lib/messaging";
 import {
   isFileDrag,
@@ -200,6 +219,7 @@ import {
   reconcileRefreshedThread,
   reduceComputerStatus,
   reduceThreadSnapshot,
+  refusalRunBotName,
   threadRunError,
   userHoldsComputerControl,
 } from "../lib/thread-events";
@@ -207,11 +227,12 @@ import {
   transcriptCanSnapAfterFrame,
   transcriptIsNearEnd,
   transcriptMovedDown,
+  useTranscriptFollowSnap,
 } from "../lib/transcript-scroll";
 import { whenSpeakerReady, withSpeaker } from "../lib/tts-lazy";
 import { useModelSettings } from "../lib/use-model-settings";
 import { useNotifications } from "../lib/use-notifications";
-import { useSettingsShortcut } from "../lib/use-settings-shortcut";
+import { workingIndicatorLabel } from "../lib/working-indicator";
 import type { ContextMenuPosition } from "./BotContextMenu";
 import { ConnectorSuggestion } from "./capabilities/ConnectorSuggestion";
 import { DashboardPage } from "./dashboard/DashboardPage";
@@ -229,7 +250,6 @@ import {
 import type { SettingsSection } from "./SettingsOverlay";
 import { SpaceSearchResults } from "./SpaceSearch";
 import { BotModelChip } from "./shell/bot-model-chip";
-import { isCommandPaletteHotkey } from "./shell/command-palette-hotkey";
 import {
   initialComputerErrorState,
   reduceComputerError,
@@ -247,12 +267,32 @@ import {
   McpApprovalCard,
 } from "./shell/message-cards";
 import { ProviderErrorMessage } from "./shell/provider-error-message";
+import {
+  hasSharedPanelHeader,
+  isSettingsPanel,
+  PanelHeaderTitle,
+  SettingsPanelToggle,
+  ThreadSettingsButton,
+} from "./shell/settings-chrome";
+import {
+  botsSidebarCollapsedForPage,
+  sidebarSearchFocusRequested,
+  useSidebarSearchFocus,
+} from "./shell/sidebar-search-focus";
+import { TakeControlButton } from "./shell/take-control-button";
 import { useComputerTerminalOpen } from "./shell/use-computer-terminal-open";
 import { useTakeControl } from "./shell/use-take-control";
 import { handleWorkspaceOpenRun } from "./shell/workspace-run";
 import { SystemDictation } from "./system/SystemDictation";
 import { WindowChrome } from "./WindowChrome";
+import { terminalSupported } from "./workspace/terminal-controller";
+import { WorkspaceFileGuard } from "./workspace/WorkspaceFileGuard";
 
+const ChiefResultBubble = lazy(() =>
+  import("../components/ai/ChiefResultBubble").then((module) => ({
+    default: module.ChiefResultBubble,
+  })),
+);
 const BotSettings = lazy(() =>
   import("./shell/bot-panel").then((module) => ({ default: module.BotSettings })),
 );
@@ -401,6 +441,7 @@ export function ShellPage({
   teamView.current = team || board || dashboard;
   const { botId, groupId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   // Mirrors searchParams for effects that only need to read it once on run,
   // not re-run on every unrelated query-param change (e.g. the SSE subscribe
@@ -427,9 +468,16 @@ export function ShellPage({
   useEffect(() => {
     setCollapsedSidebarSections(readCollapsedSidebarSections(userId));
   }, [userId]);
+  const [sidebarPrefReady, setSidebarPrefReady] = useState(false);
+  // A search from the Board arrives on the next page. Open the list before focusing it,
+  // and save that, or the stored preference closes the list again once the request is cleared.
   useEffect(() => {
-    setBotsSidebarCollapsed(readBotsSidebarCollapsed(userId));
-  }, [userId]);
+    const stored = readBotsSidebarCollapsed(userId);
+    const requested = sidebarSearchFocusRequested(location.state);
+    setBotsSidebarCollapsed(botsSidebarCollapsedForPage(stored, requested, dashboard));
+    if (requested && !dashboard && stored) writeBotsSidebarCollapsed(userId, false);
+    setSidebarPrefReady(true);
+  }, [userId, dashboard, location.state]);
   const [query, setQuery] = useState("");
   const [searchHits, setSearchHits] = useState<SearchHit[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -463,7 +511,20 @@ export function ShellPage({
   const [sendError, setSendError] = useState<string | null>(null);
   const [attachmentNotice, setAttachmentNotice] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [panel, setPanel] = useState<Panel>(null);
+  const [panel, setPanelUnchecked] = useState<Panel>(null);
+  const terminalCloseGuard = useRef<(() => boolean) | null>(null);
+  const panelRef = useRef(panel);
+  panelRef.current = panel;
+  const registerTerminalCloseGuard = useCallback((guard: (() => boolean) | null) => {
+    terminalCloseGuard.current = guard;
+  }, []);
+  const setPanel = useCallback((next: Panel | ((current: Panel) => Panel)) => {
+    const target = typeof next === "function" ? next(panelRef.current) : next;
+    if (target !== panelRef.current && terminalCloseGuard.current && !terminalCloseGuard.current())
+      return false;
+    setPanelUnchecked(target);
+    return true;
+  }, []);
   const [workspaceTab, setWorkspaceTab] = useState("tasks");
   const [workspaceExpanded, setWorkspaceExpanded] = useState(false);
   const paneReturnFocus = useRef<HTMLElement | null>(null);
@@ -476,8 +537,8 @@ export function ShellPage({
         event.target.closest("[data-workspace-chrome]")
       ) {
         event.preventDefault();
+        if (!setPanel(null)) return;
         setWorkspaceExpanded(false);
-        setPanel(null);
         paneReturnFocus.current?.focus();
         return;
       }
@@ -498,8 +559,8 @@ export function ShellPage({
       if (!activeBotId.current) return;
       event.preventDefault();
       if (panel === "computer") {
+        if (!setPanel(null)) return;
         setWorkspaceExpanded(false);
-        setPanel(null);
         paneReturnFocus.current?.focus();
       } else {
         paneReturnFocus.current =
@@ -519,11 +580,21 @@ export function ShellPage({
   }, [panel]);
   const [modelFocusRequest, setModelFocusRequest] = useState(0);
   const [runtimeFocusRequest, setRuntimeFocusRequest] = useState(0);
+  const [destinationsFocusRequest, setDestinationsFocusRequest] = useState(0);
+  const [computerFocusRequest, setComputerFocusRequest] = useState(0);
   useEffect(() => {
     if (panel !== "settings") setModelFocusRequest(0);
   }, [panel]);
   function openBotModelSettings() {
     setModelFocusRequest((request) => request + 1);
+    setPanel("settings");
+  }
+  function openBotDestinationsSettings() {
+    setDestinationsFocusRequest((request) => request + 1);
+    setPanel("settings");
+  }
+  function openBotComputerSettings() {
+    setComputerFocusRequest((request) => request + 1);
     setPanel("settings");
   }
   const [peerConversation, setPeerConversation] = useState<{
@@ -592,12 +663,29 @@ export function ShellPage({
     setComputer(next);
   }
 
+  // Visibility judged from the computer identity that owns the screen right now —
+  // commitComputer can run mid-refresh, before React re-renders with the new state.
+  function computerScreenVisible(targetBotId: string): boolean {
+    if (computerOpenRef.current) {
+      const modalBotId = computerBotIdRef.current ?? computerRef.current?.botId;
+      if (modalBotId !== targetBotId) return false;
+      return computerTabRef.current === "screen";
+    }
+    if (panelRef.current !== "computer") return false;
+    const computer = computerRef.current;
+    if (computer?.botId !== targetBotId) return false;
+    const effectiveTab = getEffectiveWorkspaceTab(
+      workspaceTabRef.current,
+      computer?.capabilities?.graphical,
+    );
+    return effectiveTab === "screen" || effectiveTab === "computer";
+  }
+
   function updateSnapshot(update: (prev: ThreadSnapshot | null) => ThreadSnapshot | null) {
     commitSnapshot(update(snapshotRef.current));
   }
   const [integrationFocus, setIntegrationFocus] = useState<string>();
   const [settingsOpen, setSettingsOpen] = useState(false);
-  useSettingsShortcut(() => openSettings("general"));
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
   const [messagingSettingsOpen, setMessagingSettingsOpen] = useState(false);
   const [messagingSurfaceEnabled, setMessagingSurfaceEnabled] = useState(false);
@@ -720,6 +808,9 @@ export function ShellPage({
   const [computerBotId, setComputerBotId] = useState<string | undefined>();
   const computerOpenRef = useRef(false);
   const computerBotIdRef = useRef<string | undefined>(undefined);
+  const computerTabRef = useRef<"screen" | "terminal">("screen");
+  // Latest panel/tab identity for guards that run before React re-renders.
+  const workspaceTabRef = useRef(workspaceTab);
   const computerBootEpoch = useRef(0);
   const openComputerRef = useRef<(botId?: string) => Promise<void>>(async () => {});
   const [computerViewport, setComputerViewport] = useState<{
@@ -816,11 +907,15 @@ export function ShellPage({
   const effectiveWorkspaceTab = getEffectiveWorkspaceTab(
     workspaceTab,
     computer?.capabilities?.graphical,
+    true,
+    terminalSupported(computer),
   );
   const isVisible = isComputerVisible(computerOpen, panel, effectiveWorkspaceTab);
   computerVisible.current = isVisible;
   computerOpenRef.current = computerOpen;
   computerBotIdRef.current = computerBotId ?? active?.id;
+  panelRef.current = panel;
+  workspaceTabRef.current = workspaceTab;
   const activeGroup = groups.find((group) => group.id === groupId);
   useEffect(() => {
     setGoal(null);
@@ -1075,7 +1170,7 @@ export function ShellPage({
   }
 
   async function refreshComputerScreen(id: string, explicitRetry = false) {
-    if (!computerVisible.current) return null;
+    if (!computerVisible.current || !computerScreenVisible(id)) return null;
     const request = ++screenRequest.current;
     dispatchComputerError({
       type: "screen-requested",
@@ -1797,6 +1892,26 @@ export function ShellPage({
     : snapshot?.botId === active?.id
       ? snapshot
       : null;
+  const dockWaitingCount = useMemo(() => {
+    const view = openDockSnapshot(
+      Boolean(active) || inGroup,
+      activeSnapshot
+        ? { threadId: activeSnapshot.threadId, runs: activeThreadRuns(activeSnapshot) }
+        : null,
+    );
+    return countOwnerWaiting({
+      bots,
+      groups,
+      spaces,
+      currentSpaceId: bootstrapMe?.spaceId,
+      snapshot: view.snapshot,
+      viewingThreadId: view.viewingThreadId,
+    });
+  }, [active, activeSnapshot, bots, bootstrapMe?.spaceId, groups, inGroup, spaces]);
+  useEffect(() => {
+    if (!initialBotsLoaded) return;
+    publishDockWaitingCount(dockWaitingCount);
+  }, [dockWaitingCount, initialBotsLoaded]);
   const activeReplyTarget =
     replyTarget && activeSnapshot?.messages.some((message) => message.id === replyTarget.id)
       ? replyTarget
@@ -1807,7 +1922,7 @@ export function ShellPage({
     setReplyQuote(null);
   }, []);
   const currentRuns = activeThreadRuns(activeSnapshot);
-  const answerableAskMessageId = latestAnswerableAskMessageId(activeSnapshot);
+  const answerableAskIds = useMemo(() => answerableAskMessageIds(activeSnapshot), [activeSnapshot]);
   const workingRuns = currentRuns.filter((run) =>
     ["running", "queued", "leased"].includes(run.status),
   );
@@ -1843,6 +1958,7 @@ export function ShellPage({
       color: bot?.color ?? FALLBACK_BOT_COLOR,
       name: bot?.name,
       status: run.status,
+      retrying: run.providerRetryAt != null,
     };
   });
   const resolveTranscriptMemberName = useCallback(
@@ -2156,7 +2272,7 @@ export function ShellPage({
         }
         const clientNonce = newClientNonce();
         if (groupTarget) {
-          await rpc.threads.send({
+          const sent = await rpc.threads.send({
             groupId: groupTarget,
             clientNonce,
             text: trimmed || undefined,
@@ -2165,6 +2281,9 @@ export function ShellPage({
             replyToMessageId: reroutedToGroup ? undefined : activeReplyTarget?.id,
             replyQuote: reroutedToGroup ? undefined : (activeReplyQuote ?? undefined),
           });
+          if (activeGroupId.current === groupTarget) {
+            updateSnapshot((current) => applyChiefReceipt(current, sent.receipt));
+          }
         } else if (botTarget) {
           const sent = await rpc.threads.send({
             botId: botTarget,
@@ -2175,7 +2294,7 @@ export function ShellPage({
             replyToMessageId: activeReplyTarget?.id,
             replyQuote: activeReplyQuote ?? undefined,
           });
-          if (activeBotId.current === botTarget) {
+          if (activeBotId.current === botTarget && sent.kind !== "receipt-only") {
             updateSnapshot((current) =>
               applyThreadSendReceipt(
                 current,
@@ -2417,12 +2536,14 @@ export function ShellPage({
     title: string;
     description: string;
     computerMode: ComputerMode;
+    isolatedComputer?: { connectionId: string | null };
   }) {
     const isFirstBot = botsRef.current.length === 0;
     const bot = await rpc.bots.create({
       ...normalizeCreateBotProfile(input),
       notifyOnFinish: true,
       computerMode: input.computerMode,
+      isolatedComputer: input.isolatedComputer,
     });
     setBots((current) =>
       current.some((item) => item.id === bot.id) ? current : [bot, ...current],
@@ -2580,15 +2701,55 @@ export function ShellPage({
     return () => window.removeEventListener("keydown", onKey);
   }, [computerOpen]);
 
-  useEffect(() => {
-    function onKey(event: KeyboardEvent) {
-      if (!isCommandPaletteHotkey(event)) return;
-      event.preventDefault();
-      setCommandPaletteState(!commandPaletteOpenRef.current);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [setCommandPaletteState]);
+  const sidebarSearchRef = useRef<HTMLInputElement>(null);
+  const narrowLayout = () => window.matchMedia("(max-width: 767px)").matches;
+  const requestSidebarSearch = useSidebarSearchFocus({
+    dashboard,
+    hidden: botsSidebarCollapsed && !mobileSidebarOpen,
+    ready: sidebarPrefReady,
+    reveal: () => {
+      if (narrowLayout()) setMobileSidebarOpen(true);
+      else setBotsSidebarCollapsedPref(false);
+    },
+    inputRef: sidebarSearchRef,
+  });
+  const shortcutHandlers = {
+    commandPalette: () => setCommandPaletteState(!commandPaletteOpenRef.current),
+    newBot: () => {
+      setCreateMenuOpen(false);
+      setMobileSidebarOpen(false);
+      setPanel("create");
+    },
+    focusMessage:
+      team || dashboard
+        ? undefined
+        : () => {
+            setMobileSidebarOpen(false);
+            requestAnimationFrame(() =>
+              document.querySelector<HTMLTextAreaElement>('textarea[name="chat-message"]')?.focus(),
+            );
+          },
+    find: () => {
+      // The Board shell unmounts on the way to the bots list, so the request has to
+      // travel with the route. Remember the list open before that page reads the preference.
+      if (dashboard) writeBotsSidebarCollapsed(userId, false);
+      requestSidebarSearch();
+    },
+    toggleSidebar: dashboard
+      ? undefined
+      : () => {
+          if (narrowLayout()) setMobileSidebarOpen((open) => !open);
+          else setBotsSidebarCollapsedPref(!botsSidebarCollapsed);
+        },
+    // React Router numbers its entries; index 0 is where this tab entered the app.
+    back: () => {
+      const index = (window.history.state as { idx?: unknown } | null)?.idx;
+      if (typeof index === "number" && index > 0) navigate(-1);
+    },
+    forward: () => navigate(1),
+    settings: () => openSettings("general"),
+  } satisfies AppShortcutHandlers;
+  useAppShortcuts(shortcutHandlers);
 
   useEffect(() => {
     const heartbeatBotId = computerBot?.id ?? active?.id;
@@ -2603,7 +2764,10 @@ export function ShellPage({
     ping();
     const timer = window.setInterval(ping, 60_000);
     return () => window.clearInterval(timer);
-  }, [panel, workspaceTab, computerOpen, computerBot?.id, active?.id, computer?.state]);
+    // The capability-driven tab resolution decides visibility: a computer that
+    // stops being graphical resolves a retained Screen tab to Tasks and must
+    // stop the heartbeat, and one that gains a capability must start it again.
+  }, [panel, effectiveWorkspaceTab, computerOpen, computerBot?.id, active?.id, computer?.state]);
 
   async function openComputer(botId?: string, viewOnly = false) {
     const id = botId ?? active?.id;
@@ -2623,7 +2787,7 @@ export function ShellPage({
     setWorkspaceExpanded(false);
     computerVisible.current = true;
     const needsTakeover = !userHoldsComputerControl(targetComputer, id);
-    const blocked = computerTakeoverBlocked(targetComputer, snapshot?.run?.status);
+    const blocked = computerTakeoverBlocked(targetComputer, currentRuns, id);
     try {
       await bootComputer({
         botId: id,
@@ -2680,6 +2844,7 @@ export function ShellPage({
     botId: computerBot?.id,
     hasControl,
     working: composerRunning,
+    open: computerOpen,
     onTakeControl: async () => {
       if (computerBot) {
         await rpc.computer.takeover({ botId: computerBot.id });
@@ -2688,7 +2853,11 @@ export function ShellPage({
     },
     onStop: stopRun,
     onOpen: useComputerTerminalOpen(setComputerOpen, setWorkspaceExpanded),
+    onTabChange: (nextTab) => {
+      computerTabRef.current = nextTab;
+    },
   });
+  computerTabRef.current = terminalSurface.tab;
   const displayedComputerError = visibleComputerError(
     computerErrorState,
     Boolean(embeddedScreenUrl),
@@ -2768,6 +2937,7 @@ export function ShellPage({
         mobileSidebarSwipeRef.current = null;
       }}
     >
+      <WorkspaceFileGuard />
       <ComputerUpdateProgress
         onCompleted={() => {
           if (active) void refreshThread(active.id);
@@ -2845,6 +3015,7 @@ export function ShellPage({
               aria-label={t`Minimize bots`}
               title={t`Minimize bots`}
               data-testid="minimize-bots-sidebar"
+              aria-keyshortcuts={shortcutAria("toggleSidebar")}
               onClick={() => setBotsSidebarCollapsedPref(true)}
             >
               <PanelLeftClose size={15} strokeWidth={1.8} aria-hidden="true" />
@@ -2916,11 +3087,13 @@ export function ShellPage({
             <Search size={16} strokeWidth={1.8} aria-hidden="true" />
           </InputGroupAddon>
           <InputGroupInput
+            ref={sidebarSearchRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t`Search`}
             autoComplete="off"
             name="sidebar-search"
+            aria-keyshortcuts={shortcutAria("find")}
           />
         </InputGroup>
         <div className="rk-scroll flex flex-1 flex-col gap-0.5 overflow-y-auto px-2.5 pb-2.5">
@@ -3422,6 +3595,7 @@ export function ShellPage({
                 type="button"
                 data-testid="restore-bots-sidebar"
                 aria-label={t`Show bots`}
+                aria-keyshortcuts={shortcutAria("toggleSidebar")}
                 title={t`Show bots`}
                 onClick={() => setBotsSidebarCollapsedPref(false)}
                 className="app-no-drag hidden h-8 w-8 shrink-0 place-items-center rounded-lg text-foreground/75 hover:bg-accent md:grid"
@@ -3480,6 +3654,16 @@ export function ShellPage({
             <RunContext run={activeSnapshot?.contextRun ?? activeSnapshot?.run} />
           </div>
           <div className="flex items-center gap-1">
+            {(inGroup ? activeGroup : active) ? (
+              <ThreadSettingsButton
+                group={inGroup}
+                panel={panel}
+                onPanel={(next) => {
+                  setModelFocusRequest(0);
+                  setPanel(next);
+                }}
+              />
+            ) : null}
             {!inGroup && active ? (
               <button
                 type="button"
@@ -3536,9 +3720,10 @@ export function ShellPage({
             messages={transcriptMessages}
             olderCursor={activeSnapshot?.olderCursor ?? null}
             loadingOlder={loadingOlder}
-            answerableAskMessageId={answerableAskMessageId}
+            answerableAskIds={answerableAskIds}
             running={transcriptRunning}
             workingBots={workingBots}
+            room={inGroup}
             onLoadOlder={loadOlder}
             onOpenBot={openBot}
             onAnswer={answerMessage}
@@ -3565,6 +3750,7 @@ export function ShellPage({
             onSpeak={speakMessage}
             onOpenComputer={onOpenComputer}
             onOpenMcp={(serverId) => openSettings("mcp", undefined, serverId)}
+            onOpenMemberModelSettings={(botId) => openInsightAction({ kind: "bot-model", botId })}
           />
         )}
         {recordingSkill ? (
@@ -3577,6 +3763,7 @@ export function ShellPage({
             key={inGroup ? `group:${groupId}` : `bot:${active?.id}`}
             comparisonBotId={!inGroup && bots.length >= 2 ? active?.id : undefined}
             activeName={inGroup ? (activeGroup?.name ?? activeSnapshot?.groupName) : active?.name}
+            refusalBotName={refusalRunBotName(activeSnapshot, bots, transcriptMembers)}
             running={composerRunning}
             disabled={Boolean(recordingSkill)}
             pendingAttachments={activePendingAttachments}
@@ -3589,6 +3776,38 @@ export function ShellPage({
             onConnectPin={() =>
               openSettings("models", activeSnapshot?.run?.runtimeProblem?.pin.provider ?? undefined)
             }
+            onEnableExperimental={() => {
+              const botId = activeSnapshot?.run?.botId ?? active?.id;
+              const bot = botId ? bots.find((candidate) => candidate.id === botId) : undefined;
+              if (!botId || !bot) {
+                // The refusing bot is gone, so the save has nothing to land on; say so
+                // instead of dropping the click silently.
+                setSendError(t`Could not save. Try again.`);
+                return;
+              }
+              void (async () => {
+                try {
+                  await rpc.bots.update({ botId, runtimeExperimental: true });
+                  await refreshBots();
+                } catch {
+                  setSendError(t`Could not save. Try again.`);
+                  return;
+                }
+                // The banner leaves with the setting it named; a fresh run needs a fresh send.
+                dismissComposerError();
+              })();
+            }}
+            onOpenBotDestinations={() => {
+              const botId = activeSnapshot?.run?.botId ?? active?.id;
+              if (botId && botId !== active?.id) navigate(`/app/${botId}`);
+              openBotDestinationsSettings();
+            }}
+            onOpenBotComputer={() => {
+              const botId = activeSnapshot?.run?.botId ?? active?.id;
+              if (botId && botId !== active?.id) navigate(`/app/${botId}`);
+              openBotComputerSettings();
+            }}
+            onOpenSpaceModels={() => openSettings("models")}
             runErrorId={displayedRunErrorId}
             onRunErrorPresented={handleRunErrorPresented}
             onDismissError={dismissComposerError}
@@ -3663,36 +3882,29 @@ export function ShellPage({
       <SlidingPanel
         open={Boolean(panel && (active || activeGroup || panel === "create"))}
         panel={panel ?? "closed"}
+        size={isSettingsPanel(panel) ? "wide" : "narrow"}
         workspace={panel === "computer"}
         expanded={panel === "computer" && workspaceExpanded}
+        resizeLabel={t`Resize pane`}
       >
         {panel && (active || activeGroup || panel === "create") ? (
           <div
             className={
               panel === "computer"
                 ? "flex h-full min-h-0 w-full flex-col overflow-hidden px-3 py-3"
-                : "rk-scroll h-full w-full overflow-y-auto px-5 py-[17px] md:w-[384px]"
+                : "rk-scroll h-full min-w-0 w-full overflow-y-auto px-5 py-[17px]"
             }
           >
-            {panel !== "routine" &&
-            panel !== "create" &&
-            panel !== "create-group" &&
-            panel !== "group-settings" ? (
+            {hasSharedPanelHeader(panel) ? (
               <div
                 data-workspace-chrome={panel === "computer" ? "" : undefined}
-                className="mb-4 flex shrink-0 items-center justify-between"
+                className="mb-4 flex shrink-0 items-center justify-between gap-2"
               >
-                <span className="text-[13.5px] text-muted-foreground">
-                  {panel === "settings" ? (
-                    <Trans>Settings</Trans>
-                  ) : panel === "computer" ? (
-                    <Trans>Workspace</Trans>
-                  ) : active ? (
-                    (computer?.state ?? active.status)
-                  ) : (
-                    <Trans>Group</Trans>
-                  )}
-                </span>
+                <PanelHeaderTitle
+                  panel={panel}
+                  activeBot={active}
+                  computerState={computer?.state}
+                />
                 <div className="flex gap-1">
                   {panel === "computer" ? (
                     <Button
@@ -3709,7 +3921,11 @@ export function ShellPage({
                   {active &&
                   panel === "computer" &&
                   !computerOpen &&
-                  computerPanelNeedsMaintenance(computer?.state, booting) ? (
+                  computerPanelNeedsMaintenance(
+                    computer?.state,
+                    booting,
+                    Boolean(computerErrorState.operation),
+                  ) ? (
                     <ComputerMaintenanceActions
                       botId={active.id}
                       computer={computer}
@@ -3719,22 +3935,17 @@ export function ShellPage({
                     />
                   ) : null}
                   {active ? (
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={panel === "settings" ? t`Show computer` : t`Show settings`}
-                      onClick={() => setPanel(panel === "settings" ? "computer" : "settings")}
-                      className={panel === "settings" ? "text-foreground" : "text-muted-foreground"}
-                    >
-                      <Settings size={16} strokeWidth={1.7} />
-                    </Button>
+                    <SettingsPanelToggle
+                      open={panel === "settings"}
+                      onToggle={() => setPanel(panel === "settings" ? "computer" : "settings")}
+                    />
                   ) : null}
                   <Button
                     variant="ghost"
                     size="icon-sm"
                     aria-label={t`Close panel`}
                     onClick={() => {
-                      setPanel(null);
+                      if (!setPanel(null)) return;
                       setWorkspaceExpanded(false);
                     }}
                   >
@@ -3750,6 +3961,29 @@ export function ShellPage({
                   computer={computer}
                   tab={workspaceTab}
                   onTabChange={setWorkspaceTab}
+                  terminal={
+                    computer
+                      ? {
+                          working: composerRunning,
+                          registerCloseGuard: registerTerminalCloseGuard,
+                          onTakeControl: async () => {
+                            await rpc.computer.takeover({ botId: active.id });
+                            await refreshComputerFor(active.id);
+                          },
+                          onStop: stopRun,
+                          onStart: async () => {
+                            await bootComputer({
+                              botId: active.id,
+                              takeControl: false,
+                              overlay: false,
+                            });
+                          },
+                          onReleased: () => {
+                            void refreshComputerFor(active.id).catch(() => undefined);
+                          },
+                        }
+                      : null
+                  }
                   onOpenRun={(run) =>
                     handleWorkspaceOpenRun({
                       run,
@@ -3823,7 +4057,7 @@ export function ShellPage({
                 group={activeGroup}
                 bots={bots}
                 modelSettings={modelSettings}
-                onModelPin={async (member, pin) => {
+                onModelPin={async (member, pin, expectedBotModelPinRevision) => {
                   if (!member.memberId) return;
                   const target = {
                     groupId: activeGroup.id,
@@ -3835,7 +4069,9 @@ export function ShellPage({
                     ? await rpc.groups.setMemberModelPin({
                         ...target,
                         expectedBotModelPinRevision:
-                          bots.find((b) => b.id === member.botId)?.modelPinRevision ?? 0,
+                          expectedBotModelPinRevision ??
+                          bots.find((b) => b.id === member.botId)?.modelPinRevision ??
+                          0,
                         pin,
                       })
                     : await rpc.groups.clearMemberModelPin(target);
@@ -3886,6 +4122,7 @@ export function ShellPage({
                 <CreateBotForm
                   onCancel={() => setPanel(null)}
                   onCreate={(input) => createBot(input)}
+                  onSetupComputer={() => openSettings("computer")}
                 />
               </Suspense>
             ) : null}
@@ -3896,6 +4133,8 @@ export function ShellPage({
                   bot={active}
                   modelFocusRequest={modelFocusRequest}
                   runtimeFocusRequest={runtimeFocusRequest}
+                  destinationsFocusRequest={destinationsFocusRequest}
+                  computerFocusRequest={computerFocusRequest}
                   modelSettings={modelSettings}
                   overrideGroups={groups}
                   onOpenGroup={(id) => {
@@ -3911,8 +4150,9 @@ export function ShellPage({
                         mode: computerMode,
                       });
                     }
-                    await rpc.bots.update({ botId: active.id, ...patch });
+                    const updated = await rpc.bots.update({ botId: active.id, ...patch });
                     await refreshBots();
+                    return updated;
                   }}
                   onExport={async () => {
                     const { path } = await rpc.export.bot({ botId: active.id });
@@ -4425,6 +4665,9 @@ export function ShellPage({
                         (computer.homeRevision && computer.homeRevision !== "empty"))
                         ? [{ id: "files", label: t`Files` }]
                         : []),
+                      ...(terminalSupported(computer)
+                        ? [{ id: "terminal", label: t`Terminal` }]
+                        : []),
                       { id: "routines", label: t`Routines` },
                       ...(computer?.capabilities?.graphical === true
                         ? [{ id: "screen", label: t`Screen` }]
@@ -4440,6 +4683,25 @@ export function ShellPage({
                 setMobileSidebarOpen(false);
                 navigate(`/app/${id}`);
               }}
+              actions={(
+                [
+                  ["newBot", t`New bot`],
+                  ["focusMessage", t`Message`],
+                  ["find", t`Search`],
+                  [
+                    "toggleSidebar",
+                    (narrowLayout() ? mobileSidebarOpen : !botsSidebarCollapsed)
+                      ? t`Hide bots`
+                      : t`Show bots`,
+                  ],
+                  ["back", t`Back`],
+                  ["forward", t`Forward`],
+                  ["settings", t`Settings`],
+                ] as const
+              ).flatMap(([id, label]) => {
+                const run = shortcutHandlers[id];
+                return run ? [{ id, label, onSelect: run }] : [];
+              })}
             />
           </Suspense>
         ) : null}
@@ -4689,20 +4951,15 @@ export function ShellPage({
                     onRelease={releaseComputer}
                   />
                 ) : (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={takingControl}
-                    aria-label={t`Take control`}
-                    onClick={async () => {
-                      if (computerBotIdRef.current) {
-                        await takeControl(computerBotIdRef.current);
-                      }
+                  <TakeControlButton
+                    computer={computer}
+                    runs={currentRuns}
+                    botId={computerBot.id}
+                    taking={takingControl}
+                    onTakeControl={() => {
+                      if (computerBotIdRef.current) void takeControl(computerBotIdRef.current);
                     }}
-                  >
-                    <Trans>Take control</Trans>
-                  </Button>
+                  />
                 )}
                 {computerBot && !recordingSkill ? (
                   <TeachComputerOverlayControl
@@ -4799,6 +5056,7 @@ export function ShellPage({
             size="icon"
             className="app-no-drag"
             aria-label={t`Search`}
+            aria-keyshortcuts={shortcutAria("find")}
             onClick={() => setCommandPaletteState(true)}
           >
             <Search size={17} />
@@ -4808,6 +5066,7 @@ export function ShellPage({
             size="icon"
             className="app-no-drag ms-auto shrink-0"
             aria-label={t`Settings`}
+            aria-keyshortcuts={shortcutAria("settings")}
             onClick={() => openSettings("general")}
           >
             <Settings size={17} />
@@ -4825,9 +5084,10 @@ const Transcript = memo(function Transcript({
   messages,
   olderCursor,
   loadingOlder,
-  answerableAskMessageId,
+  answerableAskIds,
   running,
   workingBots,
+  room,
   onLoadOlder,
   onOpenBot,
   onAnswer,
@@ -4836,6 +5096,7 @@ const Transcript = memo(function Transcript({
   onReact,
   onJumpToMessage,
   onOpenPeerMessages,
+  onOpenMemberModelSettings,
   memberName,
   peerBot,
   onRefresh,
@@ -4852,9 +5113,10 @@ const Transcript = memo(function Transcript({
   messages: ThreadMessage[];
   olderCursor: number | null;
   loadingOlder: boolean;
-  answerableAskMessageId: string | null;
+  answerableAskIds: ReadonlySet<string>;
   running: boolean;
   workingBots: GroupAvatarMember[];
+  room: boolean;
   onLoadOlder: () => void | Promise<void>;
   onOpenBot: (botId: string) => void;
   onAnswer: (message: ThreadMessage, text: string) => Promise<void>;
@@ -4867,6 +5129,7 @@ const Transcript = memo(function Transcript({
   ) => Promise<void>;
   onJumpToMessage: (messageId: string) => void;
   onOpenPeerMessages: (peer: { peerBotId: string; peerBotName: string }) => void;
+  onOpenMemberModelSettings?: (botId: string) => void;
   memberName?: (botId: string | undefined) => string | undefined;
   peerBot: (botId: string) => { color: string; status?: string } | undefined;
   onRefresh: () => Promise<void>;
@@ -4890,11 +5153,8 @@ const Transcript = memo(function Transcript({
     [messages],
   );
   const reactionView = useMemo(() => projectMessageReactions(messages), [messages]);
-  const workingBotName = workingBots.length === 1 ? workingBots[0]?.name : undefined;
-  const workingLabel =
-    workingBotName != null && workingBotName !== ""
-      ? t`${workingBotName} is working`
-      : t`Bots are working`;
+  const indicatorBots = workingBotsWithoutVisibleActivity(workingBots, messages);
+  const workingLabel = workingIndicatorLabel(indicatorBots, { room });
   const [quoteDraft, setQuoteDraft] = useState<{
     message: ThreadMessage;
     text: string;
@@ -4984,9 +5244,13 @@ const Transcript = memo(function Transcript({
     );
   }, [scrollRef]);
 
-  useLayoutEffect(() => {
-    if (following.current) snapToEnd();
-  }, [messages, running, snapToEnd]);
+  useTranscriptFollowSnap({
+    messages,
+    running,
+    quoteOpen: quoteDraft !== null,
+    following,
+    snapToEnd,
+  });
 
   useLayoutEffect(() => {
     const button = jumpButtonRef.current;
@@ -5073,14 +5337,24 @@ const Transcript = memo(function Transcript({
           </button>
         ) : null}
         {reactionView.visibleMessages.map((message) => {
-          if (!message.blocks.some((block) => !isToolActivityBlock(block))) return null;
+          // Tool-only and reasoning-only messages still show their compact work record.
+          if (
+            !message.blocks.some((block) => !isToolActivityBlock(block)) &&
+            workRecordEntries(message.blocks).length === 0
+          )
+            return null;
           const peerReceipt = isPeerReceiptBlocks(message.blocks);
+          const coordination = coordinationBlock(message.blocks);
           const messageReactions = reactionView.reactions.get(message.id);
           return (
             <div
               key={message.id}
               data-message-id={message.id}
-              className={peerReceipt ? "relative py-0.5" : "group/message relative hover:z-20"}
+              className={cn(
+                peerReceipt || coordination
+                  ? "relative py-0.5"
+                  : "group/message relative hover:z-20",
+              )}
             >
               {!peerReceipt && !message.id.startsWith("progress:") ? (
                 <time
@@ -5097,73 +5371,80 @@ const Transcript = memo(function Transcript({
                   })}
                 </time>
               ) : null}
-              <div
-                className={
-                  peerReceipt
-                    ? undefined
-                    : `relative flex ${message.role === "user" ? "justify-end" : "justify-start"}`
-                }
-              >
+              {coordination ? (
+                <CoordinationLine
+                  block={coordination}
+                  onOpenMemberSettings={onOpenMemberModelSettings}
+                />
+              ) : (
                 <div
-                  data-testid={peerReceipt ? undefined : "message-bubble-frame"}
                   className={
                     peerReceipt
                       ? undefined
-                      : `relative w-fit min-w-0 ${
-                          message.role === "user"
-                            ? "max-w-[min(70%,calc(100%_-_6rem))]"
-                            : "max-w-[min(74%,calc(100%_-_6rem))]"
-                        }`
+                      : `relative flex ${message.role === "user" ? "justify-end" : "justify-start"}`
                   }
                 >
-                  {peerReceipt ? null : (
-                    <MessageHoverActions
-                      message={message}
-                      side={message.role === "user" ? "start" : "end"}
-                      onReply={onReply}
-                      onReact={onReact}
-                    />
-                  )}
-                  <MessageView
-                    artifactTarget={artifactTarget}
-                    message={message}
-                    canAnswer={
-                      message.id === answerableAskMessageId ||
-                      message.blocks.some(
-                        (block) =>
-                          block.kind === "ask" && block.peerHold && block.status === "pending",
-                      )
-                    }
-                    onOpenBot={onOpenBot}
-                    onOpenPeerMessages={onOpenPeerMessages}
-                    onAnswer={onAnswer}
-                    speakerName={
+                  <div
+                    data-testid={peerReceipt ? undefined : "message-bubble-frame"}
+                    className={
                       peerReceipt
                         ? undefined
-                        : message.role === "bot"
-                          ? memberName?.(message.botId)
+                        : `relative w-fit min-w-0 ${
+                            message.role === "user"
+                              ? "max-w-[min(70%,calc(100%_-_6rem))]"
+                              : "max-w-[min(74%,calc(100%_-_6rem))]"
+                          }`
+                    }
+                  >
+                    {peerReceipt ? null : (
+                      <MessageHoverActions
+                        message={message}
+                        side={message.role === "user" ? "start" : "end"}
+                        onReply={onReply}
+                        onReact={onReact}
+                      />
+                    )}
+                    <MessageView
+                      artifactTarget={artifactTarget}
+                      message={message}
+                      canAnswer={
+                        answerableAskIds.has(message.id) ||
+                        message.blocks.some(
+                          (block) =>
+                            block.kind === "ask" && block.peerHold && block.status === "pending",
+                        )
+                      }
+                      onOpenBot={onOpenBot}
+                      onOpenPeerMessages={onOpenPeerMessages}
+                      onAnswer={onAnswer}
+                      speakerName={
+                        peerReceipt
+                          ? undefined
+                          : message.role === "bot"
+                            ? memberName?.(message.botId)
+                            : undefined
+                      }
+                      memberName={memberName}
+                      peerBot={peerBot}
+                      replyPreview={
+                        message.replyToMessageId
+                          ? messageById.get(message.replyToMessageId)
                           : undefined
-                    }
-                    memberName={memberName}
-                    peerBot={peerBot}
-                    replyPreview={
-                      message.replyToMessageId
-                        ? messageById.get(message.replyToMessageId)
-                        : undefined
-                    }
-                    replyToMessageId={message.replyToMessageId}
-                    onJumpToMessage={onJumpToMessage}
-                    onRefresh={onRefresh}
-                    onBotChanged={onBotChanged}
-                    onAddRoutine={onAddRoutine}
-                    voiceReady={voiceReady}
-                    speaking={speakingMessageId === message.id}
-                    onSpeak={() => onSpeak(message)}
-                    onOpenComputer={onOpenComputer}
-                    onOpenMcp={onOpenMcp}
-                  />
+                      }
+                      replyToMessageId={message.replyToMessageId}
+                      onJumpToMessage={onJumpToMessage}
+                      onRefresh={onRefresh}
+                      onBotChanged={onBotChanged}
+                      onAddRoutine={onAddRoutine}
+                      voiceReady={voiceReady}
+                      speaking={speakingMessageId === message.id}
+                      onSpeak={() => onSpeak(message)}
+                      onOpenComputer={onOpenComputer}
+                      onOpenMcp={onOpenMcp}
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
               {!peerReceipt && messageReactions ? (
                 <div
                   data-testid="message-reactions"
@@ -5186,16 +5467,8 @@ const Transcript = memo(function Transcript({
             </div>
           );
         })}
-        {running &&
-        !messages.some(
-          (message) =>
-            message.id.startsWith("progress:") &&
-            message.blocks.some(
-              (block) =>
-                block.kind === "progress" && !isToolActivityBlock(block) && Boolean(block.text),
-            ),
-        ) ? (
-          <ActiveBotGlyph bots={workingBots} label={workingLabel} />
+        {running && indicatorBots.length > 0 ? (
+          <ActiveBotGlyph bots={indicatorBots} label={workingLabel} />
         ) : null}
       </div>
       {quoteDraft ? (
@@ -5312,6 +5585,11 @@ export const Composer = memo(function Composer({
   runtimeProblem,
   modelCatalog,
   onConnectPin,
+  refusalBotName,
+  onEnableExperimental,
+  onOpenBotDestinations,
+  onOpenBotComputer,
+  onOpenSpaceModels,
   runErrorId,
   onRunErrorPresented,
   onDismissError,
@@ -5350,6 +5628,12 @@ export const Composer = memo(function Composer({
   runtimeProblem?: RuntimeProblem;
   modelCatalog?: ModelCatalogEntry[];
   onConnectPin?: () => void;
+  /** The bot whose run the refusal named, for sentences that name the bot. */
+  refusalBotName?: string;
+  onEnableExperimental?: () => void;
+  onOpenBotDestinations?: () => void;
+  onOpenBotComputer?: () => void;
+  onOpenSpaceModels?: () => void;
   runErrorId: string | null;
   onRunErrorPresented: (runId: string) => void;
   onDismissError: () => void;
@@ -5391,11 +5675,16 @@ export const Composer = memo(function Composer({
   const mentionListboxId = useId();
   const dragDepth = useRef(0);
   const [draggingFiles, setDraggingFiles] = useState(false);
+  const [comparing, setComparing] = useState(false);
+  const [compareLoaded, setCompareLoaded] = useState(false);
   const canSend =
     draft.trim().length > 0 ||
     selectedSkill !== null ||
     selectedMentions.length > 0 ||
     pendingAttachments.length > 0;
+  const comparePrompt = comparisonBotId
+    ? serializeComposerPrompt(draft, selectedSkill, selectedMentions)
+    : "";
 
   useEffect(() => {
     if (!runError || !runErrorId) return;
@@ -5646,8 +5935,13 @@ export const Composer = memo(function Composer({
             providerErrorKind={providerErrorKind}
             runtimeProblem={runtimeProblem}
             catalog={modelCatalog}
+            botName={refusalBotName}
             onConnect={onConnectPin}
             onChangeModel={onChangeModel}
+            onEnableExperimental={onEnableExperimental}
+            onOpenBotDestinations={onOpenBotDestinations}
+            onOpenBotComputer={onOpenBotComputer}
+            onOpenSpaceModels={onOpenSpaceModels}
           />
           <button
             type="button"
@@ -5740,7 +6034,10 @@ export const Composer = memo(function Composer({
                 aria-label={t`@${mention.name}`}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => insertMention(mention)}
-                onMouseEnter={() => setMentionHighlightIndex(index)}
+                // Only a pointer that actually moves may take the keyboard highlight: a
+                // layout shift can open the picker under a parked cursor, and mouseenter
+                // would otherwise steal the highlight and complete the wrong mention.
+                onMouseMove={() => setMentionHighlightIndex(index)}
                 className={`flex w-full items-start gap-3 px-4 py-2.5 text-start hover:bg-accent ${
                   highlighted ? "bg-accent" : ""
                 }`}
@@ -5773,19 +6070,14 @@ export const Composer = memo(function Composer({
           />
         </Suspense>
       ) : null}
-      {comparisonBotId ? (
-        <Suspense
-          fallback={
-            <Button type="button" variant="ghost" size="sm" disabled>
-              <Trans>Compare with…</Trans>
-            </Button>
-          }
-        >
+      {comparisonBotId && compareLoaded ? (
+        <Suspense fallback={null}>
           <CompareStart
             botId={comparisonBotId}
-            text={serializeComposerPrompt(draft, selectedSkill, selectedMentions)}
+            text={comparePrompt}
             files={pendingAttachments.map((item) => item.file)}
-            disabled={disabled || sending}
+            open={comparing}
+            onOpenChange={setComparing}
             onCreated={() => {
               setDraft("");
               setSelectedSkill(null);
@@ -5795,56 +6087,58 @@ export const Composer = memo(function Composer({
           />
         </Suspense>
       ) : null}
-      <div className="relative h-8">
-        <div className="absolute bottom-1 start-12 flex max-w-[calc(100%-3rem)] gap-1.5 overflow-x-auto whitespace-nowrap">
-          {selectedSkill ? (
-            <span
-              data-testid="skill-chip"
-              className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-accent px-2.5 py-1 text-[13px] text-foreground"
-            >
-              <Box size={13} strokeWidth={1.7} className="shrink-0 text-muted-foreground/70" />
-              <span dir="auto" className="truncate">
-                {selectedSkill.name}
-              </span>
-              <button
-                type="button"
-                aria-label={t`Remove skill ${selectedSkill.name}`}
-                onClick={() => setSelectedSkill(null)}
-                className="text-muted-foreground hover:text-foreground"
+      {selectedSkill || selectedMentions.length ? (
+        <div data-testid="composer-chips" className="relative h-8">
+          <div className="absolute bottom-1 start-12 flex max-w-[calc(100%-3rem)] gap-1.5 overflow-x-auto whitespace-nowrap">
+            {selectedSkill ? (
+              <span
+                data-testid="skill-chip"
+                className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-accent px-2.5 py-1 text-[13px] text-foreground"
               >
-                <X size={12} strokeWidth={2} />
-              </button>
-            </span>
-          ) : null}
-          {selectedMentions.map((mention) => (
-            <span
-              key={mentionChipKey(mention)}
-              data-testid="mention-chip"
-              data-mention-kind={mention.kind}
-              className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-accent px-2.5 py-1 text-[13px] text-foreground"
-            >
-              <MentionChipIcon mention={mention} />
-              <span dir="auto" className="truncate">
-                {mention.name}
+                <Box size={13} strokeWidth={1.7} className="shrink-0 text-muted-foreground/70" />
+                <span dir="auto" className="truncate">
+                  {selectedSkill.name}
+                </span>
+                <button
+                  type="button"
+                  aria-label={t`Remove skill ${selectedSkill.name}`}
+                  onClick={() => setSelectedSkill(null)}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <X size={12} strokeWidth={2} />
+                </button>
               </span>
-              <button
-                type="button"
-                aria-label={t`Remove mention ${mention.name}`}
-                onClick={() =>
-                  setSelectedMentions((current) =>
-                    current.filter(
-                      (selected) => mentionChipKey(selected) !== mentionChipKey(mention),
-                    ),
-                  )
-                }
-                className="text-muted-foreground hover:text-foreground"
+            ) : null}
+            {selectedMentions.map((mention) => (
+              <span
+                key={mentionChipKey(mention)}
+                data-testid="mention-chip"
+                data-mention-kind={mention.kind}
+                className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-accent px-2.5 py-1 text-[13px] text-foreground"
               >
-                <X size={12} strokeWidth={2} />
-              </button>
-            </span>
-          ))}
+                <MentionChipIcon mention={mention} />
+                <span dir="auto" className="truncate">
+                  {mention.name}
+                </span>
+                <button
+                  type="button"
+                  aria-label={t`Remove mention ${mention.name}`}
+                  onClick={() =>
+                    setSelectedMentions((current) =>
+                      current.filter(
+                        (selected) => mentionChipKey(selected) !== mentionChipKey(mention),
+                      ),
+                    )
+                  }
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <X size={12} strokeWidth={2} />
+                </button>
+              </span>
+            ))}
+          </div>
         </div>
-      </div>
+      ) : null}
       <div
         data-testid="composer-bar"
         className="flex items-center gap-3.5 rounded-full border border-border bg-background py-[9px] pe-2.5 ps-3 transition-colors focus-within:border-ring"
@@ -5870,6 +6164,14 @@ export const Composer = memo(function Composer({
           onManage={onManage}
           onError={onComposerError}
           onOpen={onSlashOpen}
+          onCompare={
+            comparePrompt.trim() && !sending
+              ? () => {
+                  setCompareLoaded(true);
+                  setComparing(true);
+                }
+              : undefined
+          }
         />
         <div className="relative flex min-w-0 flex-1 items-end gap-1.5">
           <textarea
@@ -5927,6 +6229,7 @@ export const Composer = memo(function Composer({
                 : undefined
             }
             aria-label={activeName ? t`Message ${activeName}` : t`Message`}
+            aria-keyshortcuts={shortcutAria("focusMessage")}
             role="combobox"
             aria-autocomplete="list"
             aria-haspopup="listbox"
@@ -6312,7 +6615,7 @@ const MessageView = memo(function MessageView({
     );
   const isLive = message.id.startsWith("progress:");
   const quoteMessageId = message.id.includes(":") ? undefined : message.id;
-  const visibleNarrationBlocks = message.blocks.filter((block) => !isToolActivityBlock(block));
+  const visibleNarrationBlocks = narrationBubbleBlocks(message.blocks);
   const parentJumpId = replyPreview?.id ?? replyToMessageId;
   const speakerBot = message.botId ? peerBot?.(message.botId) : undefined;
   const messageContext = (
@@ -6328,7 +6631,7 @@ const MessageView = memo(function MessageView({
             label={speakerName}
             size={22}
           />
-          {speakerName}
+          <span>{speakerName}</span>
         </div>
       ) : null}
       {parentJumpId ? (
@@ -6350,52 +6653,81 @@ const MessageView = memo(function MessageView({
     </>
   );
   if (isNarration) {
-    if (visibleNarrationBlocks.length === 0) return null;
     return (
       <>
         {messageContext}
-        <div className="flex w-fit max-w-full justify-start">
-          <div
-            data-testid="message-bot-bubble"
-            className="max-w-full space-y-2.5 rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
-            dir="auto"
-          >
-            {visibleNarrationBlocks.map((block, i) => {
-              if (block.kind === "text" || block.kind === "progress") {
-                return (
-                  <div
-                    key={i}
-                    data-quote-message-id={block.kind === "text" ? quoteMessageId : undefined}
-                  >
-                    <ChatMarkdown streaming={block.kind === "progress"}>{block.text}</ChatMarkdown>
-                  </div>
-                );
-              }
-              return null;
-            })}
-            {!isLive && voiceReady && message.blocks.some((block) => block.kind === "text") ? (
-              <button
-                type="button"
-                aria-label={speaking ? t`Stop speaking` : t`Speak this reply`}
-                onClick={onSpeak}
-                className="text-[12px] text-muted-foreground hover:text-foreground"
-              >
-                {speaking ? <Trans>Stop</Trans> : <Trans>Speak</Trans>}
-              </button>
-            ) : null}
+        <CompactWorkRecord blocks={message.blocks} live={isLive} />
+        {visibleNarrationBlocks.length > 0 ? (
+          <div className="flex w-fit max-w-full justify-start">
+            <div
+              data-testid="message-bot-bubble"
+              className="max-w-full space-y-2.5 rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
+              dir="auto"
+            >
+              <NarrationBlocks blocks={visibleNarrationBlocks} quoteMessageId={quoteMessageId} />
+              {!isLive && voiceReady && message.blocks.some((block) => block.kind === "text") ? (
+                <button
+                  type="button"
+                  aria-label={speaking ? t`Stop speaking` : t`Speak this reply`}
+                  onClick={onSpeak}
+                  className="text-[12px] text-muted-foreground hover:text-foreground"
+                >
+                  {speaking ? <Trans>Stop</Trans> : <Trans>Speak</Trans>}
+                </button>
+              ) : null}
+            </div>
           </div>
-        </div>
+        ) : null}
       </>
     );
   }
   return (
     <>
       {messageContext}
+      <CompactWorkRecord blocks={message.blocks} live={isLive} />
       {message.blocks.map((block, i) => {
-        if (block.kind === "command")
-          return <ThreadCommandBlock key={block.command.commandId} block={block.command} />;
-        if (isToolActivityBlock(block)) return null;
+        if (
+          block.kind === "command" ||
+          isToolActivityBlock(block) ||
+          isReasoningSummaryBlock(block) ||
+          isInterimNarrationAt(message.blocks, i)
+        ) {
+          return null;
+        }
+        if (block.kind === "progress") {
+          return (
+            <div key={i} className="flex w-fit max-w-full justify-start">
+              <div
+                data-testid="message-bot-bubble"
+                className="max-w-full rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
+                dir="auto"
+              >
+                <ChatMarkdown {...replyMarkdownProps(block)}>{block.text}</ChatMarkdown>
+              </div>
+            </div>
+          );
+        }
+        if (block.kind === "chief_receipt") {
+          return (
+            <div
+              key={i}
+              data-testid="message-bot-bubble"
+              className="rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
+              dir="auto"
+            >
+              <ChiefReceiptText receiptKey={block.key} />
+            </div>
+          );
+        }
+        if (block.kind === "chief_result")
+          return (
+            <Suspense key={i} fallback={null}>
+              <ChiefResultBubble block={block} />
+            </Suspense>
+          );
         if (block.kind === "handoff") {
+          if (block.chiefDispatch)
+            return <ChiefDispatchLine key={i} dispatch={block.chiefDispatch} detail={block.text} />;
           const from = memberName?.(block.fromBotId) ?? t`bot`;
           const to = memberName?.(block.toBotId) ?? t`bot`;
           return (
@@ -6411,6 +6743,8 @@ const MessageView = memo(function MessageView({
           );
         }
         if (block.kind === "bot_message_sent" || block.kind === "bot_message_received") {
+          if (block.kind === "bot_message_sent" && block.chiefDispatch)
+            return <ChiefDispatchLine key={i} dispatch={block.chiefDispatch} detail={block.text} />;
           return (
             <PeerMessageReceipt
               key={i}
@@ -6444,19 +6778,6 @@ const MessageView = memo(function MessageView({
             >
               <span className="text-warning">◷</span>
               <span>{block.text}</span>
-            </div>
-          );
-        }
-        if (block.kind === "progress") {
-          return (
-            <div key={i} className="flex w-fit max-w-full justify-start">
-              <div
-                data-testid="message-bot-bubble"
-                className="max-w-full rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
-                dir="auto"
-              >
-                <ChatMarkdown streaming>{block.text}</ChatMarkdown>
-              </div>
             </div>
           );
         }
@@ -6498,6 +6819,7 @@ const MessageView = memo(function MessageView({
             </div>
           );
         }
+
         if (block.kind === "child_bot") {
           const removed = block.status === "deleted" || block.status === "archived";
           return (
@@ -6625,9 +6947,13 @@ const MessageView = memo(function MessageView({
               ? t`This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model.`
               : block.notice?.id === "group-model-credential-missing"
                 ? t`${botName} couldn't use the model set for this group. Reconnect it or change the group model.`
-                : block.notice?.id === "group-model-unavailable"
-                  ? t`${botName} couldn't use the model set for this group. Change the group model or check this bot's settings.`
-                  : block.text;
+                : block.notice?.id === "group-model-usage-limit"
+                  ? t`${botName} hit the group model's usage limit. Try again after it resets, or change the group model.`
+                  : block.notice?.id === "group-model-sign-in-expired"
+                    ? t`${botName}'s sign-in for the group model expired. Reconnect it or change the group model.`
+                    : block.notice?.id === "group-model-unavailable"
+                      ? t`${botName} couldn't use the model set for this group. Change the group model or check this bot's settings.`
+                      : block.text;
           return (
             <div key={i} className="flex w-fit max-w-full justify-start">
               <div

@@ -36,6 +36,7 @@ const payloadSchemas = {
     generation: z.number().int().nonnegative(),
   }),
   "run.continue": z.object({ runId: z.string().min(1) }),
+  "evidence.seal": z.strictObject({ runId: z.string().min(1) }),
   "routine.wakeup": z.object({
     routineId: z.string().min(1),
     scheduledFor: z.string().datetime({ offset: true }),
@@ -59,6 +60,7 @@ const payloadSchemas = {
   }),
   "messaging.deliver": z.object({ runId: z.string().min(1).optional() }),
   "cloud_agent.poll": z.object({ agentId: z.string().min(1) }),
+  "hermes.install": z.strictObject({}),
 } satisfies { [Name in BackgroundJobName]: z.ZodType<BackgroundJobPayloads[Name]> };
 
 export function parseBackgroundJob(name: string, payload: unknown): BackgroundJob {
@@ -80,6 +82,10 @@ export async function dispatchBackgroundJob(
 
 export function runJobKey(runId: string): string {
   return `run:${runId}`;
+}
+
+export function evidenceSealJob(runId: string): BackgroundJob {
+  return { name: "evidence.seal", payload: { runId }, replaceKey: runId };
 }
 
 export function routineJobKey(routineId: string): string {
@@ -166,6 +172,14 @@ export function historyCompactJob(threadId: string, sourceRunId?: string): Backg
     name: "history.compact",
     payload: { threadId, ...(sourceRunId ? { sourceRunId } : {}) },
     replaceKey: historyCompactJobKey(threadId),
+  };
+}
+
+export function hermesInstallJob(): BackgroundJob {
+  return {
+    name: "hermes.install",
+    payload: {},
+    replaceKey: "hermes.install",
   };
 }
 

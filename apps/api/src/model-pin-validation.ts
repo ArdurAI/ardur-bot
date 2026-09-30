@@ -1,5 +1,6 @@
 import {
   hermesCompatibility,
+  isSerializedModelCredential,
   listOllamaModels,
   listPiCatalog,
   modelCredentialDto,
@@ -202,6 +203,17 @@ export async function normalizeModelPinUpdate(
       message: `Thinking level must be one of: ${levels.join(", ")}`,
     });
   if (runtimeKind === "hermes") {
+    // Hermes refuses sign-in connections; detect them from the stored secret so
+    // editing fails with the same reason a run would.
+    const secret = await deps.prisma.secret.findFirst({
+      where: { id: credential.secretId, userId: actor.userId, spaceId: null },
+    });
+    if (!secret)
+      throw new ORPCError("BAD_REQUEST", { message: "The pinned connection secret is missing." });
+    const plaintext = deps.secrets.load(secret.ciphertext, secret.id);
+    const signIn =
+      parseModelSecret(plaintext).kind === "oauth" ||
+      (provider === "anthropic" && isSerializedModelCredential(plaintext));
     const problem = hermesCompatibility(
       { runtimeKind, provider, modelId, effort, credentialId: credential.id, revision: 0 },
       {
@@ -211,6 +223,13 @@ export async function normalizeModelPinUpdate(
         contextWindow: compatible?.contextWindow,
         maxTokens: compatible?.maxTokens,
         thinkingLevel: ThinkingLevelSchema.parse(effort),
+        ...(signIn
+          ? {
+              oauth: {
+                credential: { type: "oauth" as const, access: "", refresh: "", expires: 0 },
+              },
+            }
+          : {}),
       },
     );
     if (problem) throw new ORPCError("BAD_REQUEST", { message: problem.reason });
@@ -225,12 +244,21 @@ export async function normalizeModelPinUpdate(
   };
 }
 
+/** A validated choice with every required field bound: the shape setReviewer accepts. */
+export type ValidatedModelPinChoice = {
+  runtimeKind: RuntimeKind;
+  provider: string;
+  modelId: string;
+  credentialId: string;
+  effort: string | null;
+};
+
 /** Share the bot editor's catalog, credential, custom endpoint, effort and native checks. */
 export async function validateModelPinSelection(
   deps: RouterDeps,
   actor: Actor,
   choice: Omit<RuntimePin, "revision">,
-): Promise<Omit<RuntimePin, "revision">> {
+): Promise<ValidatedModelPinChoice> {
   const checked = RuntimePinSchema.omit({ revision: true }).parse(choice);
   if (
     !checked.provider ||

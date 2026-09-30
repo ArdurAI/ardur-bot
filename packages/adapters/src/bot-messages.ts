@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { runContinueJob } from "@ardurbot/adapter-kit";
-import type { BotMessageIntent, MessageBlock } from "@ardurbot/contracts";
+import type { BotMessageIntent, ChiefDispatch, MessageBlock } from "@ardurbot/contracts";
 import {
   canonicalDispatchJson,
   PeerEffectDescriptorsSchema,
@@ -19,7 +19,8 @@ import {
   resolveBotAddress,
   taskCardPrompt,
 } from "@ardurbot/core";
-import type { PrismaClient } from "@ardurbot/db";
+import { classifyPeerEffectBinding } from "@ardurbot/core/node/peer-effect-digest";
+import type { Prisma, PrismaClient } from "@ardurbot/db";
 import {
   appendBotMessageAuditInTransaction,
   appendEventInTransaction,
@@ -30,6 +31,7 @@ import {
   goalBotAuthorityFingerprint,
   lockPeerTrafficPolicy,
   recordPeerTrafficBlock,
+  validateChiefDispatch,
   withTransactionRetry,
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
@@ -161,6 +163,8 @@ export async function messageBot(
   const groupId = sourceThread?.groupId;
   const goalRequest = Boolean(groupId);
   const held = classifyPeerEffects(effects.data).kind !== "read-only";
+  // Only a digest-bound exact descriptor can become one approved execution.
+  const binding = classifyPeerEffectBinding(effects.data);
   if (held && (!goalRequest || !["request", "question"].includes(input.intent ?? "request")))
     return { ok: false as const, error: "This peer request needs an active goal and a task card." };
   const goal = goalRequest
@@ -549,6 +553,7 @@ export async function messageBot(
         });
         if (!stillAddressable)
           return { ok: false as const, error: `${target.name} is no longer available` };
+        let chiefChoice: { planId?: string; dispatch?: ChiefDispatch } = {};
         if (goal) {
           const liveGoal = await tx.teamGoal.findFirst({
             where: {
@@ -572,6 +577,11 @@ export async function messageBot(
           });
           if (!liveGoal || !liveGroup || senderStillRunning.id !== parentRun?.id)
             return { ok: false as const, error: "The goal request is no longer available." };
+          if (intent === "request" || intent === "question") {
+            const choice = await validateChiefDispatch(tx, run, goal.groupId, target.id);
+            if ("error" in choice) return { ok: false as const, error: choice.error };
+            chiefChoice = choice;
+          }
           const now = new Date();
           const base = { rootTaskId: goal.rootTaskId, kind: "message" as const };
           const turnCount = await tx.delegation.count({
@@ -817,9 +827,12 @@ export async function messageBot(
             card: input.card,
             ...(goal
               ? {
-                  // A complete descriptor is still only an intent to prepare in S4.
-                  // Exact write authority needs its own effect-bound card and gate.
-                  peerMode: "read-only" as const,
+                  // One exact descriptor with owner-readable, digest-bound arguments
+                  // binds a single approved effect; everything else prepares only.
+                  peerMode:
+                    binding.kind === "effect-bound"
+                      ? ("effect-bound" as const)
+                      : ("read-only" as const),
                   tokens: goal.perWorkerTokens,
                   deadlineAt: new Date(
                     Math.min(
@@ -863,6 +876,18 @@ export async function messageBot(
           : false;
         const outboundBlock: MessageBlock = {
           ...outboundBase,
+          ...(chiefChoice.dispatch
+            ? {
+                chiefDispatch: {
+                  ...chiefChoice.dispatch,
+                  state: held
+                    ? ("approval-held" as const)
+                    : busyRecipient
+                      ? ("queued" as const)
+                      : ("messaged" as const),
+                },
+              }
+            : {}),
           ...(goal
             ? {
                 delegationId: admitted.record.id,
@@ -946,6 +971,34 @@ export async function messageBot(
           data: { runId: nextRun.id },
         });
         await tx.message.update({ where: { id: inbound.id }, data: { runId: nextRun.id } });
+        if (chiefChoice.planId && "chiefDispatch" in outboundBlock && outboundBlock.chiefDispatch) {
+          await tx.message.update({
+            where: { id: outbound.id },
+            data: {
+              blocks: [
+                {
+                  ...outboundBlock,
+                  chiefDispatch: {
+                    ...outboundBlock.chiefDispatch,
+                    runId: nextRun.id,
+                    delegationId: admitted.record.id,
+                  },
+                },
+              ],
+            },
+          });
+          await tx.chiefPlan.update({
+            where: { id: chiefChoice.planId },
+            data: {
+              dispatch: {
+                ...outboundBlock.chiefDispatch,
+                runId: nextRun.id,
+                delegationId: admitted.record.id,
+                messageId: outbound.id,
+              },
+            },
+          });
+        }
         if (goal && deliveryId) {
           const now = new Date();
           const delivery = await tx.botMessageDelivery.create({
@@ -970,7 +1023,7 @@ export async function messageBot(
               delegationId: admitted.record.id,
               state: held ? "held" : "delivered",
               wakeAdmittedAt: held ? null : now,
-              requestedEffects: effects.data,
+              requestedEffects: effects.data as Prisma.InputJsonValue,
               hop,
               authorityFingerprint: authorityFingerprint!,
               requestFingerprint: admitted.record.fingerprint,
@@ -982,11 +1035,13 @@ export async function messageBot(
           await appendBotMessageAuditInTransaction(tx, delivery, "queued");
           await appendBotMessageAuditInTransaction(tx, delivery, held ? "held" : "delivered");
           if (held) {
+            const bound = binding.kind === "effect-bound" ? binding.effect : undefined;
             const approvalRequest = {
               deliveryId,
               authorityFingerprint,
               requestedEffects: effects.data,
-              preparationOnly: true,
+              preparationOnly: !bound,
+              ...(bound ? { boundEffect: bound } : {}),
             };
             const approval = await tx.externalEffect.create({
               data: {
@@ -995,7 +1050,7 @@ export async function messageBot(
                 kind: "peer_hold",
                 idempotencyKey: `peer-hold:${deliveryKey}`,
                 status: "intended",
-                request: approvalRequest,
+                request: approvalRequest as Prisma.InputJsonValue,
               },
             });
             const home = await tx.instanceIdentity.findUnique({
@@ -1027,12 +1082,20 @@ export async function messageBot(
             const ask: MessageBlock = {
               kind: "ask",
               peerHold: true,
+              ...(bound ? { peerEffectBound: true } : {}),
               approvalEffectId: approval.id,
-              text: `${sender.name} wants ${target.name} to prepare a team request.`,
-              detail: `Requested by ${sender.name} · Acting as ${target.name}\n${effects.data.map((effect) => effect.kind).join(", ")}`,
+              text: bound
+                ? `${sender.name} wants ${target.name} to run ${bound.toolName}.`
+                : `${sender.name} wants ${target.name} to prepare a team request.`,
+              detail: bound
+                ? `Requested by ${sender.name} · Acting as ${target.name}\n${bound.toolName} · ${bound.resourceRef}\n${JSON.stringify(bound.args)}`
+                : `Requested by ${sender.name} · Acting as ${target.name}\n${effects.data.map((effect) => effect.kind).join(", ")}`,
               status: "pending",
               actions: [
-                { id: "allow", label: "Allow preparation" },
+                {
+                  id: "allow",
+                  label: bound ? "Allow once" : "Allow preparation",
+                },
                 { id: "deny", label: "Deny" },
               ],
             };
@@ -1132,7 +1195,9 @@ export async function messageBot(
     runId: committed.runId,
     differences: committed.differences,
     note: held
-      ? "Waiting for your approval. The recipient will only prepare this task after approval."
+      ? binding.kind === "effect-bound"
+        ? "Waiting for your approval. The recipient can run the exact approved action once after approval."
+        : "Waiting for your approval. The recipient will only prepare this task after approval."
       : `Sent to ${target.name}. Delivery is async. Continue independent work. Progress stays on the task card; completion produces one coordinator summary.`,
   };
 }

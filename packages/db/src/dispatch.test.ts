@@ -36,6 +36,7 @@ function fixture() {
     remoteDeviceGrantIds: ["phone-a"],
     cancelRequestedAt: null as Date | null,
     cancelConfirmedAt: null as Date | null,
+    delegationId: null as string | null,
   };
   const bot = { id: "bot-a", spaceId: "space", userId: "owner", thread: { id: "thread-a" } };
   const tx = {
@@ -339,3 +340,99 @@ it.each([undefined, "task-a"])(
     expect(f.tx.dispatchReceipt.create).not.toHaveBeenCalled();
   },
 );
+
+describe("delegated stop cause", () => {
+  const delegatedFixture = (delegation: Record<string, unknown>) => {
+    const f = fixture();
+    f.run().status = "running";
+    f.run().delegationId = "delegation-a";
+    Object.assign(f.tx.delegation, {
+      findUnique: vi.fn(async () => delegation),
+      findUniqueOrThrow: vi.fn(async () => delegation),
+      update: vi.fn(async () => delegation),
+    });
+    Object.assign(f.tx.delegationRoot, {
+      findUniqueOrThrow: vi.fn(async () => ({
+        rootTaskId: "task-a",
+        coordinatorThreadId: "thread-a",
+        coordinatorBotId: "bot-a",
+      })),
+      update: vi.fn(async () => ({})),
+    });
+    f.tx.delegation.updateMany.mockResolvedValue({ count: 1 });
+    return f;
+  };
+  const delegationRow = (patch: Record<string, unknown>) => ({
+    id: "delegation-a",
+    rootTaskId: "task-a",
+    spaceId: "space",
+    userId: "owner",
+    requesterName: "Chief",
+    actingName: "Worker",
+    requesterBotId: "bot-a",
+    actingBotId: "bot-b",
+    kind: "helper",
+    hop: 1,
+    status: "cancel-requested",
+    card: null,
+    runId: null,
+    summaryMessageId: null,
+    admissionKey: "helper:run-a:x",
+    cancelReason: "stopped",
+    deadlineAt: new Date(Date.now() + 60_000),
+    usedTokens: 99_999,
+    reservedTokens: 36_864,
+    ...patch,
+  });
+  it("records an owner stop as the cancellation cause when it happens", async () => {
+    const f = fixture();
+    await requestDispatchStop(f.db, grant, "task-a");
+    expect(f.tx.delegation.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ cancelReason: null }),
+        data: { cancelReason: "stopped" },
+      }),
+    );
+  });
+  it("reports the recorded cause instead of inferring it from usage flushed at shutdown", async () => {
+    const f = delegatedFixture(delegationRow({}));
+    await requestDispatchStop(f.db, grant, "task-a");
+    expect(await confirmDispatchStop(f.db, "run-a")).toBe(true);
+    const summary = f.tx.message.create.mock.calls.at(-1)?.[0].data.blocks[0].text as string;
+    expect(summary).toContain("Worker stopped.");
+    expect(summary).not.toContain("used its token budget");
+  });
+  it("keeps a gate-recorded budget stop even when unwinding passes the deadline", async () => {
+    const f = delegatedFixture(
+      delegationRow({
+        cancelReason: "budget",
+        deadlineAt: new Date(Date.now() - 1_000),
+        usedTokens: 0,
+      }),
+    );
+    await requestDispatchStop(f.db, grant, "task-a");
+    expect(await confirmDispatchStop(f.db, "run-a")).toBe(true);
+    const summary = f.tx.message.create.mock.calls.at(-1)?.[0].data.blocks[0].text as string;
+    expect(summary).toContain("Worker used its token budget. Raise the budget and try again.");
+  });
+  it("labels a worker that failed while stopping as failed with its recorded reason", async () => {
+    const f = delegatedFixture(
+      delegationRow({
+        cancelReason: "failed",
+        result: "Claude Code's usage limit is reached. Try again after it resets.",
+      }),
+    );
+    await requestDispatchStop(f.db, grant, "task-a");
+    expect(await confirmDispatchStop(f.db, "run-a")).toBe(true);
+    const summary = f.tx.message.create.mock.calls.at(-1)?.[0].data.blocks[0].text as string;
+    expect(summary).toContain(
+      "Chief → Worker: failed: Claude Code's usage limit is reached. Try again after it resets.",
+    );
+    expect(summary).not.toContain("Worker stopped.");
+    expect(f.tx.delegation.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "failed" }),
+      }),
+    );
+  });
+});

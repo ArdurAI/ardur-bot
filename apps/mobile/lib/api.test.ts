@@ -62,6 +62,70 @@ afterEach(() => {
 });
 
 describe("mobile API authentication", () => {
+  it("replays chief projection once and rejects an old activity after reload", () => {
+    const blocks: MobileMessage["blocks"] = [
+      {
+        kind: "handoff",
+        fromBotId: "chief",
+        toBotId: "worker",
+        text: "Details",
+        chiefDispatch: {
+          requestMessageId: "request",
+          revision: 1,
+          memberId: "worker",
+          memberName: "Member",
+          state: "messaged",
+          reason: "eligible",
+          activity: {
+            revision: 1,
+            runId: "run",
+            delegationId: "assignment",
+            attempt: 1,
+            sourceSeq: 2,
+            key: "read-input",
+            state: "active",
+            updatedAt: "2026-01-01T00:00:00Z",
+          },
+        },
+      },
+    ];
+    const initial: MobileSnapshot = {
+      threadId: "room",
+      cursor: 1,
+      olderCursor: null,
+      run: null,
+      messages: [{ id: "dispatch", role: "bot", botId: "chief", blocks: [] }],
+    };
+    const update = {
+      type: "thread.message.updated",
+      seq: 2,
+      botId: "chief",
+      payload: { messageId: "dispatch", role: "bot", blocks },
+    };
+    const live = applyMobileThreadEvent(initial, update)!;
+    expect(live.messages).toEqual([
+      {
+        id: "dispatch",
+        role: "bot",
+        botId: "chief",
+        blocks,
+        runId: undefined,
+        replyQuote: undefined,
+        replyToMessageId: undefined,
+      },
+    ]);
+    expect(applyMobileThreadEvent(live, update)).toBe(live);
+    expect(
+      applyMobileThreadEvent(live, {
+        ...update,
+        seq: 1,
+        payload: { ...update.payload, blocks: [] },
+      }),
+    ).toBe(live);
+    expect(
+      mergeMobileSnapshot(live, { ...live, messages: structuredClone(live.messages) })?.messages,
+    ).toEqual(live.messages);
+  });
   it.each([
     "Memory review is not available with Claude Code or Codex yet; import memory or edit a document directly.",
     "This bot may only run locally — change the pin or the space policy",
@@ -135,16 +199,16 @@ describe("mobile API authentication", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        jsonResponse({ passwordReset: true, resetUrl: "https://ardurbot.test/reset-password" }),
+        jsonResponse({ passwordReset: true, resetUrl: "https://example.test/reset-password" }),
       )
       .mockResolvedValueOnce(jsonResponse({ status: true }));
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(passwordResetCapabilities()).resolves.toEqual({
       passwordReset: true,
-      resetUrl: "https://ardurbot.test/reset-password",
+      resetUrl: "https://example.test/reset-password",
     });
-    await requestPasswordReset("ada@example.test", "https://ardurbot.test/reset-password");
+    await requestPasswordReset("ada@example.test", "https://example.test/reset-password");
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
@@ -153,7 +217,7 @@ describe("mobile API authentication", () => {
         method: "POST",
         body: JSON.stringify({
           email: "ada@example.test",
-          redirectTo: "https://ardurbot.test/reset-password",
+          redirectTo: "https://example.test/reset-password",
         }),
       }),
     );
@@ -1799,6 +1863,78 @@ describe("mobile thread event reduction", () => {
     });
   });
 
+  it("keeps two room bots' drafts independent and clears them as their runs end", () => {
+    const room: MobileSnapshot = {
+      ...snapshot([]),
+      botId: undefined,
+      groupId: "group-1",
+      members: [
+        { botId: "bot-a", name: "Ada", color: "#111" },
+        { botId: "bot-b", name: "Beck", color: "#222" },
+      ],
+      activeRuns: [
+        { id: "run-a", botId: "bot-a", status: "running" },
+        { id: "run-b", botId: "bot-b", status: "running" },
+      ],
+    };
+    const streaming = [
+      {
+        type: "thread.progress",
+        seq: 4,
+        runId: "run-a",
+        botId: "bot-a",
+        payload: { delta: "Ada says hel" },
+      },
+      {
+        type: "thread.progress",
+        seq: 5,
+        runId: "run-b",
+        botId: "bot-b",
+        payload: { delta: "Beck says hi" },
+      },
+      {
+        type: "thread.progress",
+        seq: 6,
+        runId: "run-a",
+        botId: "bot-a",
+        payload: { delta: "lo" },
+      },
+    ].reduce<MobileSnapshot | null>(
+      (current, event) => applyMobileThreadEvent(current, event as never),
+      room,
+    );
+    // Each draft accumulates only its own run's deltas.
+    expect(streaming?.messages.find((message) => message.id === "progress:run-a")?.blocks).toEqual([
+      { kind: "progress", text: "Ada says hello" },
+    ]);
+    expect(streaming?.messages.find((message) => message.id === "progress:run-b")?.blocks).toEqual([
+      { kind: "progress", text: "Beck says hi" },
+    ]);
+
+    // One run finishing drops only its own draft; the other keeps streaming.
+    const oneDone = applyMobileThreadEvent(streaming, {
+      type: "run.completed",
+      seq: 7,
+      runId: "run-a",
+      botId: "bot-a",
+      payload: {},
+    } as never);
+    expect(oneDone?.messages.some((message) => message.id === "progress:run-a")).toBe(false);
+    expect(oneDone?.messages.some((message) => message.id === "progress:run-b")).toBe(true);
+    expect(oneDone?.activeRuns?.map((run) => run.id)).toEqual(["run-b"]);
+
+    // Stop ends every run; each terminal event clears its own draft.
+    const stopped = applyMobileThreadEvent(oneDone, {
+      type: "run.cancelled",
+      seq: 8,
+      runId: "run-b",
+      botId: "bot-b",
+      payload: {},
+    } as never);
+    expect(stopped?.messages.some((message) => message.id.startsWith("progress:"))).toBe(false);
+    expect(stopped?.activeRuns).toEqual([]);
+  });
+
   it("prepends ordered history pages without duplicating the boundary message", () => {
     const initial = snapshot([mobileMessage("m-2", [], 2), mobileMessage("m-3", [], 3)], 2);
 
@@ -1933,9 +2069,7 @@ describe("mobile thread event reduction", () => {
       { kind: "text", text: "Let me check now." },
       { kind: "steps", steps: [{ label: "Slack find channels", count: 1 }] },
     ]);
-    expect(blockText(completed?.messages[0] as MobileMessage)).toBe(
-      "Let me check now.\nSlack find channels",
-    );
+    expect(blockText(completed?.messages[0] as MobileMessage)).toBe("Slack find channels");
   });
 
   it("formats channel messages with their platform attribution", () => {
@@ -1987,7 +2121,37 @@ describe("mobile thread event reduction", () => {
     );
   });
 
-  it("deduplicates durable messages and replaces matching transient subagent state", () => {
+  it("does not speak a reasoning summary or interim narration", () => {
+    expect(
+      blockText(
+        mobileMessage("spoken", [
+          { kind: "progress", text: "Weighing options.", reasoning: true },
+          { kind: "text", text: "Here is the answer." },
+          { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+          { kind: "text", text: "The actual answer is here." },
+        ]),
+      ),
+    ).toBe("Shell\nThe actual answer is here.");
+  });
+
+  it("does not speak the coordinator's request from a coordination line", () => {
+    expect(
+      blockText(
+        mobileMessage("coordination", [
+          {
+            kind: "coordination",
+            nonce: "group-ask:1:ask-run:call-1",
+            round: 1,
+            text: "Say hello to your teammates in one sentence.",
+            updates: [],
+            members: [{ botId: "ada", name: "Ada", outcome: "pending" }],
+          },
+        ]),
+      ),
+    ).toBe("");
+  });
+
+  it("deduplicates durable messages, replaces matching subagent state and keeps the draft", () => {
     const initial = snapshot([
       mobileMessage("message-1", [{ kind: "text", text: "old" }]),
       mobileMessage("subagent:research", [
@@ -2024,7 +2188,13 @@ describe("mobile thread event reduction", () => {
       payload: { messageId: "message-1", role: "bot", blocks: [completed] },
     });
 
-    expect(next?.messages.map((item) => item.id)).toEqual(["message-1", "subagent:other"]);
+    // The card saves no reply text, so the run's draft keeps the place its text holds for
+    // the reply still to come.
+    expect(next?.messages.map((item) => item.id)).toEqual([
+      "message-1",
+      "subagent:other",
+      "progress:run-1",
+    ]);
     expect(next?.messages[0]?.blocks).toEqual([completed]);
   });
 
@@ -2312,6 +2482,480 @@ describe("mobile thread event reduction", () => {
     expect(applyMobileThreadEvent(initial, { type: "run.started" })).toBe(initial);
     expect(applyMobileThreadEvent(null, { type: "thread.progress" })).toBeNull();
   });
+
+  it("queues the run with its retry wake moment only while it waits for the model", () => {
+    const initial: MobileSnapshot = {
+      ...snapshot(),
+      run: { id: "run-1", botId: "bot-1", status: "running" },
+      activeRuns: [{ id: "run-1", botId: "bot-1", status: "running" }],
+    };
+    const waiting = applyMobileThreadEvent(initial, {
+      type: "run.retry_scheduled",
+      seq: 4,
+      runId: "run-1",
+      createdAt: "2026-08-16T00:00:10.000Z",
+      payload: { providerErrorKind: "rate-limit", attempt: 1, waitMs: 2_000 },
+    });
+    expect(waiting?.run).toMatchObject({
+      id: "run-1",
+      status: "queued",
+      providerRetryAt: "2026-08-16T00:00:12.000Z",
+    });
+    expect(waiting?.activeRuns?.[0]).toMatchObject({
+      id: "run-1",
+      status: "queued",
+      providerRetryAt: "2026-08-16T00:00:12.000Z",
+    });
+
+    // The retry's start clears the wait: the row reads as working again.
+    const restarted = applyMobileThreadEvent(waiting, {
+      type: "run.started",
+      seq: 5,
+      runId: "run-1",
+    });
+    expect(restarted?.run).toMatchObject({ id: "run-1", status: "running" });
+    expect(restarted?.run?.providerRetryAt).toBeNull();
+    expect(restarted?.activeRuns?.[0]).toMatchObject({ id: "run-1", status: "running" });
+
+    // A start for a run the snapshot does not know changes nothing, as before.
+    expect(applyMobileThreadEvent(initial, { type: "run.started", runId: "other" })).toBe(initial);
+  });
+
+  it("keeps a streamed reply above the follow-up the owner sent before the run ended", () => {
+    const initial = snapshot([mobileMessage("m-0", [{ kind: "text", text: "earlier" }], 0)]);
+    const streamed = applyMobileThreadEvent(initial, {
+      type: "thread.progress",
+      seq: 4,
+      runId: "run-1",
+      payload: { text: "Chief's summary", streaming: true },
+    });
+    expect(streamed?.messages.map((message) => message.id)).toEqual(["m-0", "progress:run-1"]);
+
+    // The owner sends a follow-up while the run is still active; the draft keeps its place.
+    const withQuestion = applyMobileThreadEvent(streamed, {
+      type: "thread.message.created",
+      seq: 5,
+      runId: "run-1",
+      payload: {
+        messageId: "q-1",
+        role: "user",
+        blocks: [{ kind: "text", text: "any pending PRs left?" }],
+      },
+    });
+    expect(withQuestion?.messages.map((message) => message.id)).toEqual([
+      "m-0",
+      "progress:run-1",
+      "q-1",
+    ]);
+
+    // When the run ends, the saved reply fills the draft's slot, above the follow-up.
+    const finished = applyMobileThreadEvent(withQuestion, {
+      type: "thread.message.created",
+      seq: 6,
+      runId: "run-1",
+      payload: {
+        messageId: "reply-1",
+        role: "bot",
+        blocks: [{ kind: "text", text: "Chief's summary" }],
+      },
+    });
+    expect(finished?.messages.map((message) => message.id)).toEqual(["m-0", "reply-1", "q-1"]);
+  });
+
+  it("keeps a streaming draft in its place through every later update", () => {
+    let state: MobileSnapshot | null = snapshot([
+      mobileMessage("m-0", [{ kind: "text", text: "earlier" }], 0),
+    ]);
+    state = applyMobileThreadEvent(state, {
+      type: "thread.progress",
+      seq: 4,
+      runId: "run-1",
+      payload: { text: "Chief's summary", streaming: true },
+    });
+    state = applyMobileThreadEvent(state, {
+      type: "thread.message.created",
+      seq: 5,
+      runId: "run-1",
+      payload: {
+        messageId: "q-1",
+        role: "user",
+        blocks: [{ kind: "text", text: "any pending PRs left?" }],
+      },
+    });
+    // The owner's follow-up lands under the draft; nothing after it moves the draft.
+    const updates = [
+      {
+        type: "thread.progress",
+        seq: 6,
+        runId: "run-1",
+        payload: { delta: " continues.", streaming: true },
+      },
+      { type: "agent.tool.called", seq: 7, runId: "run-1", payload: { name: "run_command" } },
+      {
+        type: "thread.progress",
+        seq: 8,
+        runId: "run-1",
+        payload: { text: "Running gh pr list", activity: true },
+      },
+      {
+        type: "thread.subagent",
+        seq: 9,
+        runId: "run-1",
+        payload: { agentId: "research", name: "Research", task: "Check", status: "running" },
+      },
+    ];
+    for (const update of updates) {
+      state = applyMobileThreadEvent(state, update);
+      expect(state?.messages.slice(0, 3).map((message) => message.id)).toEqual([
+        "m-0",
+        "progress:run-1",
+        "q-1",
+      ]);
+    }
+
+    // The saved reply fills the draft's place, above the follow-up, as a reload shows it.
+    state = applyMobileThreadEvent(state, {
+      type: "thread.message.created",
+      seq: 10,
+      runId: "run-1",
+      payload: {
+        messageId: "reply-1",
+        role: "bot",
+        blocks: [{ kind: "text", text: "Chief's summary continues." }],
+      },
+    });
+    expect(state?.messages.map((message) => message.id)).toEqual([
+      "m-0",
+      "reply-1",
+      "q-1",
+      "subagent:research",
+    ]);
+  });
+
+  it("gives a draft its place only once its reply text streams", () => {
+    let state: MobileSnapshot | null = snapshot([
+      mobileMessage("m-0", [{ kind: "text", text: "earlier" }], 0),
+    ]);
+    // A tool call starts before any reply text: the draft has no place of its own yet.
+    state = applyMobileThreadEvent(state, {
+      type: "agent.tool.called",
+      seq: 4,
+      runId: "run-1",
+      payload: { name: "run_command" },
+    });
+    state = applyMobileThreadEvent(state, {
+      type: "thread.message.created",
+      seq: 5,
+      runId: "run-1",
+      payload: {
+        messageId: "q-1",
+        role: "user",
+        blocks: [{ kind: "text", text: "use weekly buckets" }],
+      },
+    });
+    // Its text streams after the follow-up, so that is where the reply's place is held.
+    state = applyMobileThreadEvent(state, {
+      type: "thread.progress",
+      seq: 6,
+      runId: "run-1",
+      payload: { text: "Here are the weekly numbers.", streaming: true },
+    });
+    expect(state?.messages.map((message) => message.id)).toEqual(["m-0", "q-1", "progress:run-1"]);
+    state = applyMobileThreadEvent(state, {
+      type: "thread.message.created",
+      seq: 7,
+      runId: "run-1",
+      payload: {
+        messageId: "reply-1",
+        role: "bot",
+        blocks: [{ kind: "text", text: "Here are the weekly numbers." }],
+      },
+    });
+    expect(state?.messages.map((message) => message.id)).toEqual(["m-0", "q-1", "reply-1"]);
+  });
+
+  it("puts a card the run posts after the owner's message below that message", () => {
+    const chart = { kind: "chart", name: "Weekly", spec: {}, data: [] };
+    const updates = [
+      {
+        type: "thread.progress",
+        seq: 4,
+        runId: "run-1",
+        payload: { text: "Let me chart it.", streaming: true },
+      },
+      // The narration is saved before the tool starts, leaving a steps-only draft.
+      {
+        type: "thread.message.created",
+        seq: 5,
+        runId: "run-1",
+        payload: {
+          messageId: "narration-1",
+          role: "bot",
+          blocks: [{ kind: "text", text: "Let me chart it." }],
+        },
+      },
+      { type: "agent.tool.called", seq: 6, runId: "run-1", payload: { name: "render_plot" } },
+      {
+        type: "thread.message.created",
+        seq: 7,
+        runId: "run-1",
+        payload: {
+          messageId: "q-1",
+          role: "user",
+          blocks: [{ kind: "text", text: "use weekly buckets" }],
+        },
+      },
+      {
+        type: "thread.message.created",
+        seq: 8,
+        runId: "run-1",
+        payload: { messageId: "chart-1", role: "bot", blocks: [chart] },
+      },
+    ];
+    let state: MobileSnapshot | null = snapshot([
+      mobileMessage("m-0", [{ kind: "text", text: "earlier" }], 0),
+    ]);
+    for (const update of updates) state = applyMobileThreadEvent(state, update);
+    expect(
+      state?.messages
+        .filter((message) => !message.id.startsWith("progress:"))
+        .map((message) => message.id),
+    ).toEqual(["m-0", "narration-1", "q-1", "chart-1"]);
+  });
+
+  it("keeps the reply's place when the run posts a card while its text streams", () => {
+    const chart = { kind: "chart", name: "Weekly", spec: {}, data: [] };
+    let state = applyMobileThreadEvent(
+      snapshot([mobileMessage("m-0", [{ kind: "text", text: "earlier" }], 0)]),
+      {
+        type: "thread.progress",
+        seq: 4,
+        runId: "run-1",
+        payload: { text: "Weekly numbers", streaming: true },
+      },
+    );
+    state = applyMobileThreadEvent(state, {
+      type: "thread.message.created",
+      seq: 5,
+      runId: "run-1",
+      payload: { messageId: "chart-1", role: "bot", blocks: [chart] },
+    });
+    expect(state?.messages.map((message) => message.id)).toEqual([
+      "m-0",
+      "progress:run-1",
+      "chart-1",
+    ]);
+    state = applyMobileThreadEvent(state, {
+      type: "thread.message.created",
+      seq: 6,
+      runId: "run-1",
+      payload: {
+        messageId: "reply-1",
+        role: "bot",
+        blocks: [{ kind: "text", text: "Weekly numbers are up." }],
+      },
+    });
+    expect(state?.messages.map((message) => message.id)).toEqual(["m-0", "reply-1", "chart-1"]);
+  });
+
+  it("keeps the streamed reply above the follow-up when tool activity arrives before the narration is saved", () => {
+    let state: MobileSnapshot | null = snapshot([
+      mobileMessage("m-0", [{ kind: "text", text: "earlier" }], 0),
+    ]);
+    state = applyMobileThreadEvent(state, {
+      type: "thread.progress",
+      seq: 1,
+      runId: "run-1",
+      payload: { text: "Chief's summary", streaming: true },
+    });
+    state = applyMobileThreadEvent(state, {
+      type: "thread.message.created",
+      seq: 2,
+      runId: "run-1",
+      payload: {
+        messageId: "q-1",
+        role: "user",
+        blocks: [{ kind: "text", text: "any pending PRs left?" }],
+      },
+    });
+    state = applyMobileThreadEvent(state, {
+      type: "thread.progress",
+      seq: 3,
+      runId: "run-1",
+      payload: { text: "Running gh pr list", activity: true },
+    });
+    expect(state?.messages.map((message) => message.id)).toEqual(["m-0", "progress:run-1", "q-1"]);
+    expect(state?.messages[1]?.blocks).toEqual([
+      { kind: "text", text: "Chief's summary" },
+      { kind: "progress", text: "Running gh pr list", activity: true },
+    ]);
+    state = applyMobileThreadEvent(state, {
+      type: "thread.message.created",
+      seq: 4,
+      runId: "run-1",
+      payload: {
+        messageId: "narr-1",
+        role: "bot",
+        blocks: [{ kind: "text", text: "Chief's summary" }],
+      },
+    });
+    state = applyMobileThreadEvent(state, {
+      type: "agent.tool.called",
+      seq: 5,
+      runId: "run-1",
+      payload: { name: "shell" },
+    });
+    // The narration filled the draft's place. The tool call after that is a new
+    // activity draft at the end, and it does not move the saved reply.
+    expect(state?.messages.map((message) => message.id)).toEqual([
+      "m-0",
+      "narr-1",
+      "q-1",
+      "progress:run-1",
+    ]);
+    expect(state?.messages.at(-1)?.blocks).toEqual([
+      { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+    ]);
+  });
+
+  it("keeps each bot's narration in the place it streamed when another bot is also replying", () => {
+    let state: MobileSnapshot | null = snapshot([
+      { ...mobileMessage("q-0", [{ kind: "text", text: "status please" }], 0), role: "user" },
+    ]);
+    state = applyMobileThreadEvent(state, {
+      type: "thread.progress",
+      seq: 1,
+      runId: "run-a",
+      botId: "bot-a",
+      payload: { text: "Alpha answer", streaming: true },
+    });
+    state = applyMobileThreadEvent(state, {
+      type: "thread.progress",
+      seq: 2,
+      runId: "run-b",
+      botId: "bot-b",
+      payload: { text: "Beta answer", streaming: true },
+    });
+    state = applyMobileThreadEvent(state, {
+      type: "thread.progress",
+      seq: 3,
+      runId: "run-a",
+      botId: "bot-a",
+      payload: { text: "Running gh pr list", activity: true },
+    });
+    expect(state?.messages.map((message) => message.id)).toEqual([
+      "q-0",
+      "progress:run-a",
+      "progress:run-b",
+    ]);
+    state = applyMobileThreadEvent(state, {
+      type: "thread.message.created",
+      seq: 4,
+      runId: "run-a",
+      botId: "bot-a",
+      payload: {
+        messageId: "a-narr",
+        role: "bot",
+        blocks: [{ kind: "text", text: "Alpha answer" }],
+      },
+    });
+    state = applyMobileThreadEvent(state, {
+      type: "thread.message.created",
+      seq: 5,
+      runId: "run-b",
+      botId: "bot-b",
+      payload: {
+        messageId: "b-reply",
+        role: "bot",
+        blocks: [{ kind: "text", text: "Beta answer" }],
+      },
+    });
+    expect(state?.messages.map((message) => message.id)).toEqual(["q-0", "a-narr", "b-reply"]);
+  });
+
+  it("keeps a routine summary above the card when activity arrives before the narration is saved", () => {
+    const chart = { kind: "chart" as const, name: "Weekly", spec: {}, data: [] };
+    let state: MobileSnapshot | null = snapshot([
+      mobileMessage("m-0", [{ kind: "text", text: "earlier" }], 0),
+    ]);
+    state = applyMobileThreadEvent(state, {
+      type: "thread.progress",
+      seq: 1,
+      runId: "run-1",
+      payload: { text: "Let me chart it.", streaming: true },
+    });
+    state = applyMobileThreadEvent(state, {
+      type: "thread.progress",
+      seq: 2,
+      runId: "run-1",
+      payload: { text: "Rendering a chart", activity: true },
+    });
+    state = applyMobileThreadEvent(state, {
+      type: "thread.message.created",
+      seq: 3,
+      runId: "run-1",
+      payload: { messageId: "chart-1", role: "bot", blocks: [chart] },
+    });
+    state = applyMobileThreadEvent(state, {
+      type: "thread.progress",
+      seq: 4,
+      runId: "run-1",
+      payload: { text: "Weekly numbers.", streaming: true },
+    });
+    expect(state?.messages.map((message) => message.id)).toEqual([
+      "m-0",
+      "progress:run-1",
+      "chart-1",
+    ]);
+    expect(state?.messages[1]?.blocks).toEqual([
+      { kind: "progress", text: "Weekly numbers.", streaming: true },
+    ]);
+    state = applyMobileThreadEvent(state, {
+      type: "thread.message.created",
+      seq: 5,
+      runId: "run-1",
+      payload: {
+        messageId: "summary-1",
+        role: "bot",
+        blocks: [{ kind: "text", text: "Weekly numbers." }],
+      },
+    });
+    expect(state?.messages.map((message) => message.id)).toEqual(["m-0", "summary-1", "chart-1"]);
+  });
+
+  it("marks the live reply as streaming only while its text is growing", () => {
+    const initial = snapshot();
+    const growing = applyMobileThreadEvent(initial, {
+      type: "thread.progress",
+      seq: 4,
+      runId: "run-1",
+      payload: { text: "Chief's summary", streaming: true },
+    });
+    expect(growing?.messages.at(-1)?.blocks.at(-1)).toMatchObject({
+      kind: "progress",
+      streaming: true,
+    });
+
+    // The text stops and the bot moves on to a command; the cursor must go away.
+    const working = applyMobileThreadEvent(growing, {
+      type: "agent.tool.called",
+      seq: 5,
+      runId: "run-1",
+      payload: { name: "run_command" },
+    });
+    const tail = working?.messages.at(-1)?.blocks.at(-1);
+    expect(tail).toMatchObject({ kind: "progress" });
+    expect(tail).not.toHaveProperty("streaming");
+
+    // The run ends; no live draft remains.
+    const done = applyMobileThreadEvent(working, {
+      type: "run.completed",
+      seq: 6,
+      runId: "run-1",
+      payload: {},
+    });
+    expect(done?.messages).toEqual([]);
+  });
 });
 
 function jsonResponse(body: unknown, init?: ResponseInit) {
@@ -2387,6 +3031,33 @@ describe("mobile clipboard text", () => {
         ],
       }),
     ).toBe(answer);
+  });
+  it("leaves a reasoning summary out of copied text", async () => {
+    const { copyableMobileMessageText } = await import("./api");
+    expect(
+      copyableMobileMessageText({
+        id: "message",
+        role: "bot",
+        blocks: [
+          { kind: "progress", text: "Weighing options.", reasoning: true },
+          { kind: "text", text: "Here is the answer." },
+        ],
+      }),
+    ).toBe("Here is the answer.");
+  });
+  it("omits interim narration", async () => {
+    const { copyableMobileMessageText } = await import("./api");
+    expect(
+      copyableMobileMessageText({
+        id: "message",
+        role: "bot",
+        blocks: [
+          { kind: "progress", text: "Searching..." },
+          { kind: "steps" } as any,
+          { kind: "progress", text: "Reading result..." },
+        ],
+      }),
+    ).toBe("Reading result...");
   });
   it("includes the shortened reply marker when copying a bounded receipt", async () => {
     const { copyableMobileMessageText } = await import("./api");

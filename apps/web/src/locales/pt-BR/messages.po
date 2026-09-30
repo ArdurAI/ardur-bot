@@ -154,11 +154,6 @@ msgstr "{0} execuções · {1} tokens"
 msgid "{0} runs at these pins; hosted providers may bill per run"
 msgstr ""
 
-#. placeholder {0}: counts.pendingCount
-#: src/pages/LearningInbox.tsx
-msgid "{0} suggestions to review"
-msgstr ""
-
 #. placeholder {0}: bot.name
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} will still respond to direct mentions."
@@ -184,6 +179,10 @@ msgstr ""
 #: src/pages/LearningObservation.tsx
 msgid "{after} corrections in {0} exposed runs; before: {before} in {1} comparable runs"
 msgstr ""
+
+#: src/lib/failure-category-copy.ts
+msgid "{bot}'s allowed model destinations block this model. Change them in {bot}'s settings."
+msgstr "Os destinos de modelo permitidos de {bot} bloqueiam este modelo. Altere-os nas configurações de {bot}."
 
 #: src/pages/LearningInsights.tsx
 msgid "{bot}'s last {count} runs on {model} failed because it cannot use tools; {suggested} used tools in your runs."
@@ -222,8 +221,16 @@ msgid "{botName} couldn't use the model set for this group. Reconnect it or chan
 msgstr "{botName} não conseguiu usar o modelo definido para este grupo. Reconecte-o ou altere o modelo do grupo."
 
 #: src/pages/Shell.tsx
+msgid "{botName} hit the group model's usage limit. Try again after it resets, or change the group model."
+msgstr "{botName} atingiu o limite de uso do modelo do grupo. Tente novamente após a redefinição ou altere o modelo do grupo."
+
+#: src/pages/Shell.tsx
 msgid "{botName}’s computer"
 msgstr "Computador do {botName}"
+
+#: src/pages/Shell.tsx
+msgid "{botName}'s sign-in for the group model expired. Reconnect it or change the group model."
+msgstr "O login de {botName} para o modelo do grupo expirou. Reconecte-o ou altere o modelo do grupo."
 
 #: src/pages/LearningInsights.tsx
 msgid "{connection} rejected its sign-in; {count} runs could not use it."
@@ -253,13 +260,41 @@ msgstr ""
 msgid "{hours}h ago"
 msgstr "{hours}h atrás"
 
+#: src/pages/LearningInbox.tsx
+msgid "{learned, plural, one {learned # thing this week} other {learned # things this week}}"
+msgstr "{learned, plural, one {aprendeu # coisa esta semana} other {aprendeu # coisas esta semana}}"
+
 #: src/pages/storage/StorageSettings.tsx
 msgid "{location} · Docker not running"
 msgstr ""
 
+#: src/lib/failure-category-copy.ts
+msgid "{member} failed."
+msgstr "{member} falhou."
+
+#: src/lib/failure-category-copy.ts
+msgid "{member} stopped."
+msgstr "{member} parou."
+
 #: src/pages/ActivityList.tsx
 msgid "{minutes}m ago"
 msgstr "{minutes}m atrás"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer"
+msgstr "{name} não pôde responder"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model account hit a rate limit"
+msgstr "{name} não pôde responder: a conta do seu modelo atingiu um limite de requisições"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model account needs attention"
+msgstr "{name} não pôde responder: a conta do seu modelo precisa de atenção"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model is unavailable"
+msgstr "{name} não pôde responder: seu modelo está indisponível"
 
 #. js-lingui-explicit-id
 #: src/lib/use-notifications.ts
@@ -276,21 +311,65 @@ msgstr "{name} terminou"
 msgid "{name} needs your input"
 msgstr ""
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} stopped before answering"
+msgstr "{name} parou antes de responder"
+
+#: src/pages/LearningInbox.tsx
+msgid "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
+msgstr "{pending, plural, one {# sugestão para revisar} other {# sugestões para revisar}}"
+
 #: src/components/composer/ComposerMenu.tsx
 msgid "{reconnectCount} need reconnection"
 msgstr ""
 
 #: src/pages/dashboard/UsagePanel.tsx
-msgid "{records} usage records"
-msgstr "{records} registros de uso"
+msgid "{records, plural, one {# usage record} other {# usage records}}"
+msgstr "{records, plural, one {# registro de uso} other {# registros de uso}}"
 
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "{remaining} restantes · o bot está observando, não agindo"
 
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} could not finish this run. Check the runtime or change the pin."
+msgstr "{runtime} não conseguiu concluir esta execução. Verifique o runtime ou altere o modelo fixado."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} is experimental. Turn on Experimental for {bot} to use it."
+msgstr "{runtime} é experimental. Ative Experimental para {bot} usá-lo."
+
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "{runtime} loads all connected tools because deferred loading is unavailable."
 msgstr ""
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} reached this run's turn limit. Narrow the task and try again."
+msgstr "{runtime} atingiu o limite de turnos desta execução. Restrinja a tarefa e tente novamente."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} runs on the host computer, not in a sandbox. Change {bot}'s computer to use it."
+msgstr "{runtime} roda no computador host, não em uma sandbox. Altere o computador de {bot} para usá-lo."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} stopped before finishing this run."
+msgstr "{runtime} parou antes de concluir esta execução."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s configuration is invalid. Check this bot's settings."
+msgstr "A configuração do {runtime} é inválida. Verifique as configurações deste bot."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model connection is missing. Connect it or change the pin."
+msgstr "A conexão do modelo do {runtime} está ausente. Conecte-a ou altere o modelo fixado."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s pinned model is unavailable. Change the pin and try again."
+msgstr "O modelo fixado do {runtime} está indisponível. Altere o modelo fixado e tente novamente."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s usage limit is reached. Try again after it resets."
+msgstr "O limite de uso de {runtime} foi atingido. Tente novamente após a redefinição."
 
 #: src/pages/dashboard/NowPanel.tsx
 msgid "{seconds}s"
@@ -309,14 +388,14 @@ msgid "{title}, {label}"
 msgstr "{title}, {label}"
 
 #: src/pages/dashboard/UsagePanel.tsx
-msgid "{tokens} tokens"
-msgstr ""
+msgid "{tokens, plural, one {# token} other {# tokens}}"
+msgstr "{tokens, plural, one {# símbolo} other {# símbolos}}"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "{toolCount, plural, one {# tool} other {# tools}}"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/lib/working-indicator.ts
 msgid "{workingBotName} is working"
 msgstr "{workingBotName} está trabalhando"
 
@@ -490,6 +569,10 @@ msgstr "Adicione um nome de servidor."
 msgid "Add a stdio command."
 msgstr "Adicione um comando stdio."
 
+#: src/lib/hermes-refusal.ts
+msgid "Add an API key connection to use this provider with Hermes."
+msgstr "Adicione uma conexão com chave de API para usar este provedor com o Hermes."
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Add an HTTPS server URL."
 msgstr "Adicione um URL do servidor HTTPS."
@@ -519,6 +602,10 @@ msgstr ""
 #: src/pages/HostComputerSettings.tsx
 msgid "Add folder"
 msgstr ""
+
+#: src/pages/ScratchpadSection.tsx
+msgid "Add from board"
+msgstr "Adicionar do quadro"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Add GraphQL"
@@ -594,6 +681,7 @@ msgstr "Adicionando"
 #: src/pages/RoutineSchedule.tsx
 #: src/pages/settings-sections.ts
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-config-panel.tsx
 msgid "Advanced"
 msgstr "Avançado"
 
@@ -774,6 +862,10 @@ msgstr ""
 msgid "Answer"
 msgstr "Resposta"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "answered"
+msgstr "respondeu"
+
 #: src/components/AskCard.tsx
 msgid "Answered"
 msgstr "Respondido"
@@ -787,6 +879,7 @@ msgstr "Respondido: {0}"
 msgid "Answered: {answer}"
 msgstr "Respondido: {answer}"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Antigravity"
 msgstr "Antigravity"
@@ -841,6 +934,10 @@ msgstr "Não foi possível verificar a lista atual de modelos do Antigravity. Ve
 #: src/pages/ModelDestinations.tsx
 msgid "Any"
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "API attempts"
+msgstr "Tentativas de API"
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "API is back, but the update did not finish. Check the host logs."
@@ -960,13 +1057,26 @@ msgstr "Arquivado"
 msgid "Archived. Chat, memory, and files kept."
 msgstr "Arquivado. Chat, memória e arquivos mantidos."
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Ardur (built-in)"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Ardur manages"
+msgstr "Gerenciado pela Ardur"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Ardur manages paths, hooks, permissions, and network access."
+msgstr "A Ardur gerencia caminhos, hooks, permissões e acesso à rede."
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Ardur reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Ardur sets the model and thinking level. Change them in bot settings."
+msgstr "A Ardur define o modelo e o nível de raciocínio. Altere-os nas configurações do bot."
 
 #: src/lib/board-close-copy.ts
 msgid "Ardur tried five times. Close it on the Board, or check that this computer is connected."
@@ -986,8 +1096,8 @@ msgstr ""
 msgid "Ask"
 msgstr ""
 
-#: src/pages/ide/dialogs.tsx
 #: src/pages/ide/IdePage.tsx
+#: src/pages/workspace/dialogs.tsx
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Ask a bot"
 msgstr ""
@@ -1031,6 +1141,10 @@ msgstr ""
 msgid "Ask the server owner to configure this provider."
 msgstr ""
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Asked {asked, plural, one {# bot} other {# bots}} · {answered, plural, one {# answered} other {# answered}}"
+msgstr "Perguntado a {asked, plural, one {# bot} other {# bots}} · {answered, plural, one {# respondeu} other {# responderam}}"
+
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "asks first"
 msgstr ""
@@ -1052,6 +1166,11 @@ msgstr "em {0}"
 #: src/pages/RoutineSchedule.tsx
 msgid "at {timeSelect}"
 msgstr "em {timeSelect}"
+
+#. placeholder {0}: row.usage.tokens
+#: src/pages/TeamBoard.tsx
+msgid "at least {0}"
+msgstr "pelo menos {0}"
 
 #: src/pages/storage/StorageSettings.tsx
 msgid "at least {size}"
@@ -1133,8 +1252,9 @@ msgstr ""
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
+#: src/pages/Shell.tsx
 msgid "Back"
-msgstr ""
+msgstr "Voltar"
 
 #: src/pages/capabilities/CapabilitiesSettings.tsx
 msgid "Back to capabilities"
@@ -1227,10 +1347,10 @@ msgstr ""
 msgid "Blocked"
 msgstr "Bloqueado"
 
-#. placeholder {0}: row.reason
+#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, }, }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
-msgstr ""
+msgstr "Bloqueado — {0}"
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
@@ -1244,6 +1364,7 @@ msgstr ""
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/DashboardPage.tsx
+#: src/pages/ScratchpadSection.tsx
 #: src/pages/shell/TopNav.tsx
 msgid "Board"
 msgstr ""
@@ -1300,8 +1421,9 @@ msgid "Bot screen preview"
 msgstr "Pré-visualização da tela"
 
 #: src/pages/BotContextMenu.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Bot settings"
-msgstr ""
+msgstr "Configurações do bot"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Bot to link"
@@ -1320,9 +1442,9 @@ msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
-#: src/pages/ide/dialogs.tsx
 #: src/pages/shell/OpenToSetting.tsx
 #: src/pages/shell/top-nav.ts
+#: src/pages/workspace/dialogs.tsx
 msgid "Bots"
 msgstr ""
 
@@ -1330,7 +1452,11 @@ msgstr ""
 msgid "Bots act without asking by default. Add an exception only when you want to review a type of action first."
 msgstr "Os bots agem sem perguntar por padrão. Adicione uma exceção apenas quando quiser analisar um tipo de ação primeiro."
 
-#: src/pages/Shell.tsx
+#: src/pages/GroupPanel.tsx
+msgid "Bots answering at once"
+msgstr "Bots respondendo ao mesmo tempo"
+
+#: src/lib/working-indicator.ts
 msgid "Bots are working"
 msgstr "Bots estão trabalhando"
 
@@ -1343,6 +1469,11 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Bots on this computer: {0}"
 msgstr "Bots neste computador: {0}"
+
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-summary.tsx
+msgid "Bots share files and installed tools"
+msgstr "Os bots compartilham arquivos e ferramentas instaladas"
 
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
@@ -1426,6 +1557,7 @@ msgstr "Não é possível acessar o servidor."
 #: src/pages/memory/MemoryImport.tsx
 #: src/pages/MemoryImportExport.tsx
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/ScratchpadSection.tsx
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
@@ -1474,6 +1606,10 @@ msgstr "Cancelado"
 msgid "Capabilities"
 msgstr ""
 
+#: src/pages/group-model-control.tsx
+msgid "Captured for this group."
+msgstr "Capturado para este grupo."
+
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Catalog"
 msgstr ""
@@ -1487,6 +1623,10 @@ msgstr ""
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Change computer"
 msgstr ""
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Change location"
+msgstr "Alterar local"
 
 #: src/pages/LearningInsights.tsx
 #: src/pages/shell/provider-error-message.tsx
@@ -1551,6 +1691,10 @@ msgstr ""
 msgid "Chat Settings"
 msgstr "Configurações do chat"
 
+#: src/lib/hermes-refusal.ts
+msgid "ChatGPT sign-ins only work inside Codex; add an OpenAI API key to use GPT models with Hermes."
+msgstr "Os acessos do ChatGPT só funcionam dentro do Codex; adicione uma chave de API da OpenAI para usar modelos GPT com o Hermes."
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Check"
 msgstr ""
@@ -1585,6 +1729,18 @@ msgstr ""
 msgid "Checked {0}"
 msgstr "Verificado em {0}"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Checking the download"
+msgstr "Verificando o download"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Checking the missing tool"
+msgstr "Verificando a ferramenta que falta"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Checking the Notion page"
+msgstr "Verificando a página do Notion"
+
 #: src/components/DesktopUpdates.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/SoftwareUpdateSection.tsx
@@ -1598,6 +1754,10 @@ msgstr ""
 #: src/pages/storage/StorageSettings.tsx
 msgid "Checkpoints"
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Child agents"
+msgstr "Agentes filhos"
 
 #: src/pages/customize/ConfigureExtension.tsx
 msgid "Choose"
@@ -1623,8 +1783,10 @@ msgstr ""
 msgid "Choose a folder inside your home folder."
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/group-model-control.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose a model"
 msgstr ""
@@ -1657,6 +1819,10 @@ msgstr ""
 msgid "Choose one credential: a token or a header."
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Choose Trim older context or Stop the run."
+msgstr "Escolha «Cortar contexto antigo» ou «Interromper a execução»."
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Choose which connected model Ardur uses."
 msgstr "Escolha qual modelo conectado a Ardur usa."
@@ -1670,6 +1836,7 @@ msgstr ""
 msgid "Claim"
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Claude Code (your claude sign-in)"
 msgstr ""
@@ -1677,6 +1844,10 @@ msgstr ""
 #: src/pages/shell/runtime-settings.tsx
 msgid "Claude Code runs on host computers for now — change the bot's computer or its runtime."
 msgstr ""
+
+#: src/lib/hermes-refusal.ts
+msgid "Claude subscriptions only work in Anthropic's own apps; add an Anthropic API key to use Claude with Hermes."
+msgstr "As assinaturas do Claude só funcionam nos aplicativos da própria Anthropic; adicione uma chave de API da Anthropic para usar o Claude com o Hermes."
 
 #: src/pages/shell/dialogs.tsx
 msgid "Clear"
@@ -1812,6 +1983,7 @@ msgstr "Código"
 msgid "Code execution on computers"
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Codex (your ChatGPT sign-in)"
 msgstr ""
@@ -1863,6 +2035,7 @@ msgstr "Cor {color}"
 msgid "Coming soon"
 msgstr ""
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Command"
@@ -1880,10 +2053,10 @@ msgstr ""
 msgid "Compare bots"
 msgstr ""
 
+#: src/components/composer/ComposerMenu.tsx
 #: src/pages/CompareStart.tsx
-#: src/pages/Shell.tsx
 msgid "Compare with…"
-msgstr ""
+msgstr "Comparar com…"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Complete"
@@ -1907,7 +2080,6 @@ msgstr ""
 
 #: src/pages/ide/IdePage.tsx
 #: src/pages/Shell.tsx
-#: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
 #: src/pages/workspace/WorkspacePane.tsx
@@ -1921,6 +2093,10 @@ msgstr ""
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Computer change pending."
 msgstr ""
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Computer changed. Refresh files."
+msgstr "O computador mudou. Atualize os arquivos."
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Computer engine is unavailable."
@@ -1941,6 +2117,14 @@ msgstr "O computador está dormindo"
 #: src/pages/Shell.tsx
 msgid "Computer is asleep. Open it to wake."
 msgstr "O computador está em repouso. Abra para acordar."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Computer location unavailable. Choose a supported connection."
+msgstr "Local do computador indisponível. Escolha uma conexão compatível."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Computer location unavailable. Try again."
+msgstr "Local do computador indisponível. Tente novamente."
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -1971,6 +2155,14 @@ msgstr ""
 #: src/components/Context.tsx
 msgid "Concurrent runs"
 msgstr "Execuções simultâneas"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Configuration (JSON)"
+msgstr "Configuração (JSON)"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Configuration must be 16 KiB or smaller."
+msgstr "A configuração deve ter 16 KiB ou menos."
 
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Configure"
@@ -2042,6 +2234,7 @@ msgstr ""
 msgid "Connect a desktop app to approve new devices."
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/GuidedOnboarding.tsx
 #: src/pages/Onboarding.tsx
 msgid "Connect a model"
@@ -2115,6 +2308,10 @@ msgstr ""
 msgid "Connected. Review tools in MCP settings."
 msgstr ""
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Connecting to Notion"
+msgstr "Conectando ao Notion"
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
@@ -2161,6 +2358,10 @@ msgstr ""
 msgid "Consolidation uses the review connection and may incur model charges. Approval is required."
 msgstr ""
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Container"
+msgstr "Contêiner"
+
 #: src/components/Context.tsx
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/GroupPanel.tsx
@@ -2171,6 +2372,12 @@ msgstr "Contexto"
 #: src/pages/Onboarding.tsx
 msgid "Context limit"
 msgstr "Limite de contexto"
+
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Context limit (KiB)"
+msgstr "Limite de contexto (KiB)"
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/capabilities/CapabilitiesPage.tsx
@@ -2203,6 +2410,10 @@ msgstr ""
 #: src/pages/TeamBoard.tsx
 msgid "Conversation with {0}"
 msgstr "Conversa com {0}"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Coordination round: {asked} asked, {answered} answered"
+msgstr "Rodada de coordenação: {asked} perguntados, {answered} respostas"
 
 #: src/pages/GroupPanel.tsx
 msgid "Coordinator"
@@ -2664,6 +2875,10 @@ msgstr "Não foi possível carregar as configurações de voz"
 msgid "Could not load your bots; reopen quick access."
 msgstr ""
 
+#: src/components/ai/ChiefResultBubble.tsx
+msgid "Could not open file"
+msgstr "Não foi possível abrir o arquivo"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Could not open setup. Try again."
 msgstr ""
@@ -2679,6 +2894,10 @@ msgstr "Não foi possível reproduzir um clipe de teste"
 #: src/pages/memory/MemoryImport.tsx
 msgid "Could not prepare the import. Try again."
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Could not preview the configuration. Try again."
+msgstr "Não foi possível visualizar a configuração. Tente novamente."
 
 #: src/pages/LocalSettings.tsx
 msgid "Could not reach the local server. Start it and try again."
@@ -2852,7 +3071,12 @@ msgstr "Não foi possível salvar esta opção"
 msgid "Could not save this credential. Check it and try again."
 msgstr ""
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Could not save this file. Try again."
+msgstr "Não foi possível salvar este arquivo. Tente novamente."
+
 #: src/pages/customize/McpCredentialFix.tsx
+#: src/pages/Shell.tsx
 msgid "Could not save. Try again."
 msgstr ""
 
@@ -2880,13 +3104,17 @@ msgstr ""
 msgid "Could not show the menu bar item; try again."
 msgstr ""
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Could not start"
+msgstr "Não foi possível iniciar"
+
 #: src/components/composer/composer-actions.ts
 msgid "Could not start a new chat"
 msgstr ""
 
 #: src/pages/CompareStart.tsx
 msgid "Could not start comparison; retry."
-msgstr ""
+msgstr "Não foi possível iniciar a comparação; tente novamente."
 
 #: src/pages/CompareStart.tsx
 msgid "Could not start comparison; review the pins and retry."
@@ -2999,6 +3227,14 @@ msgstr ""
 msgid "Could not update uploaded files."
 msgstr ""
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "couldn't answer"
+msgstr "não pôde responder"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Couldn't install Hermes. Try again."
+msgstr "Não foi possível instalar o Hermes. Tente de novo."
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't load messaging settings"
 msgstr ""
@@ -3080,6 +3316,10 @@ msgstr ""
 #: src/pages/board/BoardsSettings.tsx
 msgid "Creates .beads/ with config.yaml, metadata.json, .gitignore, README.md, interactions.jsonl, .local_version, and embeddeddolt/. Git files and hooks stay unchanged."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Creating the Notion page"
+msgstr "Criando a página do Notion"
 
 #: src/pages/GroupPanel.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -3375,6 +3615,10 @@ msgstr ""
 msgid "Developer (git, GitHub and GitLab CLIs, node, jq)"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Developer image"
+msgstr ""
+
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Developer is a larger download and uses more disk space."
 msgstr ""
@@ -3536,12 +3780,17 @@ msgstr ""
 msgid "Don’t have an account?"
 msgstr "Não tem uma conta?"
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/lib/run-status-label.ts
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardColumns.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Done"
 msgstr "Concluído"
+
+#: src/components/ai/ChiefResultBubble.tsx
+msgid "Done — added the document to Notion."
+msgstr "Pronto — o documento foi adicionado ao Notion."
 
 #: src/pages/TeamBoard.tsx
 msgid "Done — waiting for your OK"
@@ -3550,6 +3799,10 @@ msgstr ""
 #: src/pages/GoalForm.tsx
 msgid "Done when (one per line)"
 msgstr "Critérios de conclusão (um por linha)"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Done: {title}"
+msgstr "Concluído: {title}"
 
 #. placeholder {0}: props.name
 #: src/components/ArtifactFileCard.tsx
@@ -3568,9 +3821,17 @@ msgstr "Baixar como markdown"
 msgid "Download Executor"
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Downloading"
+msgstr "Baixando"
+
 #: src/components/DesktopUpdates.tsx
 msgid "Downloading…"
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Downloads Hermes 0.21.0 from GitHub and about 200 MB of Python packages."
+msgstr "Baixa o Hermes 0.21.0 do GitHub e cerca de 200 MB de pacotes Python."
 
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Draft skill"
@@ -3628,6 +3889,10 @@ msgstr "Editar primeiro"
 msgid "Education"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Effective configuration"
+msgstr "Configuração efetiva"
+
 #: src/pages/TeamBoard.tsx
 msgid "Effort"
 msgstr ""
@@ -3640,7 +3905,6 @@ msgstr ""
 msgid "Email"
 msgstr "E-mail"
 
-#: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/McpDefaults.tsx
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/LearningInsights.tsx
@@ -3651,6 +3915,10 @@ msgstr ""
 #: src/lib/mcp-sign-in.ts
 msgid "Enable this server first, then sign in."
 msgstr ""
+
+#: src/pages/workspace/WorkspaceTerminal.tsx
+msgid "End this terminal?"
+msgstr "Encerrar este terminal?"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Engage when... Ignore..."
@@ -3688,14 +3956,6 @@ msgstr ""
 msgid "Enter a valid token."
 msgstr ""
 
-#: src/pages/shell/hermes-limits.tsx
-msgid "Enter a whole number between 1 and 600 for the time limit."
-msgstr ""
-
-#: src/pages/shell/hermes-limits.tsx
-msgid "Enter a whole number between 1 and 64 for model calls per turn."
-msgstr ""
-
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Enter a whole number from 1 to {MAX_MODEL_CONTEXT_WINDOW} for the context limit."
@@ -3716,6 +3976,10 @@ msgstr "Digite um número inteiro de 1 a 1000 para o limite de imagens."
 #: src/pages/Onboarding.tsx
 msgid "Enter this code at <0>{0}</0>"
 msgstr "Digite este código em <0>{0}</0>"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Enter valid JSON."
+msgstr "Insira um JSON válido."
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Environment values are requested when you connect this server."
@@ -3874,6 +4138,7 @@ msgstr ""
 msgid "failed"
 msgstr "falhou"
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/run-status-label.ts
 #: src/lib/team-delivery-text.ts
@@ -3898,6 +4163,10 @@ msgstr "Ocorreu um erro ao enviar a mensagem"
 #: src/pages/Shell.tsx
 msgid "Failed to stop"
 msgstr "Não foi possível parar"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Failed: {title}"
+msgstr "Falha: {title}"
 
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Failure handling"
@@ -3977,6 +4246,10 @@ msgstr "concluído"
 msgid "Finished"
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Finishing"
+msgstr "Concluindo"
+
 #: src/pages/McpOAuthCallback.tsx
 msgid "Finishing MCP connection…"
 msgstr "Finalizando conexão MCP…"
@@ -3984,6 +4257,14 @@ msgstr "Finalizando conexão MCP…"
 #: src/pages/GuidedOnboarding.tsx
 msgid "First bot not created"
 msgstr "O primeiro bot ainda não foi criado"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Fix"
+msgstr "Corrigir"
+
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Fix the configuration JSON to edit these settings."
+msgstr "Corrija o JSON de configuração para editar essas configurações."
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Flag unexpected actions"
@@ -4021,9 +4302,17 @@ msgstr ""
 msgid "For {task}, {better} on this machine did as well as {other} in your runs."
 msgstr ""
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "For testing only; not an isolation boundary."
+msgstr "Somente para testes; não é uma barreira de isolamento."
+
 #: src/pages/Auth.tsx
 msgid "Forgot password?"
 msgstr "Esqueceu a senha?"
+
+#: src/pages/Shell.tsx
+msgid "Forward"
+msgstr "Avançar"
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Found on this computer"
@@ -4113,6 +4402,18 @@ msgstr ""
 msgid "Goal"
 msgstr "Meta"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check the request and choose the next step."
+msgstr "Entendido — vou verificar o pedido e escolher o próximo passo."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check what’s missing and ask before installing it."
+msgstr "Entendido — vou verificar o que está faltando e perguntar antes de instalar."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll choose a team member to put this in Notion."
+msgstr "Entendido — vou escolher um membro da equipe para colocar isto no Notion."
+
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
 msgstr ""
@@ -4132,6 +4433,7 @@ msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group"
 msgstr "Grupo"
 
@@ -4139,7 +4441,7 @@ msgstr "Grupo"
 msgid "Group brief"
 msgstr "Resumo do grupo"
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group settings"
 msgstr "Configuração do grupo"
 
@@ -4162,6 +4464,10 @@ msgstr ""
 #: src/pages/CallView.tsx
 msgid "Hang up, then enter the code on screen."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "has not answered yet"
+msgstr "ainda não respondeu"
 
 #: src/pages/RoutineEditor.tsx
 msgid "header"
@@ -4186,27 +4492,26 @@ msgstr "Valor do cabeçalho"
 msgid "Hear a sample"
 msgstr "Ouvir uma amostra"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes"
 msgstr "Hermes"
-
-#: src/pages/group-model-control.tsx
-#: src/pages/shell/bot-panel.tsx
-msgid "Hermes does not yet support Anthropic connections."
-msgstr "O Hermes ainda não oferece suporte a conexões Anthropic."
-
-#: src/pages/group-model-control.tsx
-#: src/pages/shell/bot-panel.tsx
-msgid "Hermes does not yet support this connection."
-msgstr "O Hermes ainda não oferece suporte a esta conexão."
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes is not installed on this computer."
 msgstr "O Hermes não está instalado neste computador."
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Hermes isn't available on Windows yet."
+msgstr "O Hermes ainda não está disponível no Windows."
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."
 msgstr "O Hermes é executado com o acesso deste computador."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Hi everyone."
+msgstr "Olá a todos."
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Hi, this is how I'll sound when I read replies out loud."
@@ -4214,7 +4519,7 @@ msgstr "Olá, é assim que vou soar quando ler as respostas em voz alta."
 
 #: src/pages/Shell.tsx
 msgid "Hide bots"
-msgstr ""
+msgstr "Ocultar bots"
 
 #: src/pages/customize/McpDiagnostics.tsx
 msgid "Hide logs"
@@ -4257,6 +4562,10 @@ msgstr ""
 #: src/pages/shell/model-pin-select.tsx
 msgid "Hosted providers"
 msgstr ""
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Hosted sandbox"
+msgstr "Sandbox hospedado"
 
 #: src/pages/RoutineSchedule.tsx
 msgid "hour"
@@ -4302,6 +4611,10 @@ msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Image profile"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Image pull secret"
 msgstr ""
 
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -4444,6 +4757,10 @@ msgstr ""
 msgid "Install Beads"
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Install Hermes"
+msgstr "Instalar o Hermes"
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Installed"
 msgstr ""
@@ -4463,6 +4780,10 @@ msgstr "Instalado, mas parado"
 #: src/pages/customize/PluginsPage.tsx
 msgid "Installing"
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Installing packages"
+msgstr "Instalando pacotes"
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Instance API key"
@@ -4518,6 +4839,14 @@ msgstr ""
 msgid "Interrupt"
 msgstr "Interromper"
 
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Interrupted"
+msgstr "Interrompido"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Interrupted: {title}"
+msgstr "Interrompido: {title}"
+
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineSchedule.tsx
 msgid "Interval"
@@ -4530,6 +4859,10 @@ msgstr "Quantidade Intervalo"
 #: src/pages/RoutineSchedule.tsx
 msgid "Interval unit"
 msgstr "Unidade do intervalo:"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "is waiting for you"
+msgstr "está esperando por você"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Isolated"
@@ -4692,11 +5025,6 @@ msgstr "Saiba mais"
 msgid "Learn more about {title}"
 msgstr "Saiba mais sobre {title}"
 
-#. placeholder {0}: counts.appliedThisWeek
-#: src/pages/LearningInbox.tsx
-msgid "learned {0} things this week"
-msgstr ""
-
 #: src/pages/customize/SkillsPage.tsx
 msgid "Learned skills"
 msgstr ""
@@ -4704,8 +5032,8 @@ msgstr ""
 #: src/pages/dashboard/LearningDialog.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/KnowledgeSection.tsx
-#: src/pages/LearningInbox.tsx
 #: src/pages/settings-sections.ts
+#: src/pages/shell/runtime-config-panel.tsx
 msgid "Learning"
 msgstr ""
 
@@ -4713,6 +5041,10 @@ msgstr ""
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Learning consent"
 msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Learning for this space"
+msgstr "Aprendizado para este espaço"
 
 #: src/pages/MemoryHistory.tsx
 msgid "Learning grant"
@@ -4732,12 +5064,9 @@ msgid "Learning review"
 msgstr ""
 
 #: src/pages/board/BoardsSettings.tsx
-msgid "Learning review is off"
-msgstr ""
-
-#: src/pages/board/BoardsSettings.tsx
-msgid "Learning review is on"
-msgstr ""
+#: src/pages/settings-sections.ts
+msgid "Learning reviewer"
+msgstr "Revisor de aprendizado"
 
 #: src/pages/LearningInbox.tsx
 msgid "Learning views"
@@ -4900,6 +5229,7 @@ msgstr ""
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/SharedCommand.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
 msgid "Loading…"
 msgstr "Carregando..."
 
@@ -4950,6 +5280,11 @@ msgstr ""
 #: src/lib/thinking-level-options.ts
 msgid "low — quick, with a little checking"
 msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/HostComputerPrompt.tsx
+msgid "macOS will not ask for extra permission if you let bots run on this Mac. They run as you."
+msgstr "O macOS não pedirá permissão extra se você permitir que os bots sejam executados neste Mac. Eles são executados como você."
 
 #: src/pages/board/BoardsSettings.tsx
 msgid "Make default"
@@ -5076,6 +5411,7 @@ msgstr ""
 #: src/pages/memory/MemoryProposals.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/settings-sections.ts
+#: src/pages/shell/bot-panel.tsx
 msgid "Memory"
 msgstr "Memória"
 
@@ -5196,6 +5532,10 @@ msgstr ""
 msgid "Message…"
 msgstr "Mensagem…"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Messaged {name}"
+msgstr "Mensagem enviada para {name}"
+
 #: src/pages/account/AccountMore.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Messaging"
@@ -5225,6 +5565,7 @@ msgstr "minuto"
 msgid "minutes"
 msgstr "minutos"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/LearningInsights.tsx
 #: src/pages/MemoryHistory.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -5239,7 +5580,9 @@ msgstr "Modelo"
 msgid "Model & effort"
 msgstr ""
 
-#: src/pages/shell/hermes-limits.tsx
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
 msgid "Model calls per turn"
 msgstr "Chamadas ao modelo por turno"
 
@@ -5287,6 +5630,10 @@ msgstr "Modelo Atualizado"
 #: src/pages/ComparePanel.tsx
 msgid "Model version"
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Model, thinking, connections, tools, and permissions come from Ardur."
+msgstr "Modelo, raciocínio, conexões, ferramentas e permissões vêm da Ardur."
 
 #: src/pages/LocalSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -5404,6 +5751,18 @@ msgstr ""
 msgid "Namespace"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Native child agents are not available with Hermes."
+msgstr "Agentes filhos nativos não estão disponíveis com o Hermes."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Native compression"
+msgstr "Compressão nativa"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Native compression is not available with Hermes."
+msgstr "A compressão nativa não está disponível com o Hermes."
+
 #: src/pages/shell/TopNav.tsx
 msgid "Navigation"
 msgstr ""
@@ -5457,6 +5816,7 @@ msgstr ""
 msgid "New access token"
 msgstr ""
 
+#: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "New bot"
 msgstr "Novo bot"
@@ -5496,6 +5856,10 @@ msgstr "Nova habilidade"
 #: src/pages/shell/dialogs.tsx
 msgid "New space"
 msgstr ""
+
+#: src/pages/ScratchpadSection.tsx
+msgid "New work item"
+msgstr "Novo item de trabalho"
 
 #: src/pages/account/AccountTables.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
@@ -5880,6 +6244,7 @@ msgid "Obsidian vault"
 msgstr ""
 
 #: src/pages/shell/model-pin-select.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Off"
 msgstr ""
@@ -5925,11 +6290,16 @@ msgstr ""
 msgid "Only space-shared documents go to this repository."
 msgstr ""
 
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-summary.tsx
+msgid "Only this bot"
+msgstr "Somente este bot"
+
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/ide/IdePage.tsx
-#: src/pages/ide/terminal.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Open"
 msgstr "Abrir"
 
@@ -5951,8 +6321,9 @@ msgid "Open Ardur"
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/shell/provider-error-message.tsx
 msgid "Open bot settings"
-msgstr ""
+msgstr "Abrir configurações do bot"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open chat links in the desktop app."
@@ -5969,6 +6340,10 @@ msgstr ""
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Open files"
 msgstr ""
+
+#: src/pages/ScratchpadSection.tsx
+msgid "Open in board"
+msgstr "Abrir no quadro"
 
 #: src/pages/workspace/WorkspaceScreen.tsx
 msgid "Open in full window"
@@ -6011,8 +6386,9 @@ msgid "Open screen to view this computer."
 msgstr "Abra a tela para ver este computador."
 
 #: src/components/composer/command-description.ts
+#: src/pages/shell/provider-error-message.tsx
 msgid "Open Settings"
-msgstr ""
+msgstr "Abrir Configurações"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open System Settings"
@@ -6054,6 +6430,7 @@ msgstr "Abrindo o chat…"
 
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
+#: src/pages/workspace/WorkspaceTerminal.tsx
 msgid "Opening terminal"
 msgstr ""
 
@@ -6154,6 +6531,10 @@ msgstr ""
 #: src/pages/ScratchpadSection.tsx
 msgid "Park"
 msgstr "Suspender"
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Partially reported"
+msgstr "Parcialmente reportado"
 
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountSignIn.tsx
@@ -6270,6 +6651,7 @@ msgstr ""
 msgid "Port"
 msgstr ""
 
+#: src/pages/dashboard/LearningPanel.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Possible regression — review undo"
 msgstr ""
@@ -6351,10 +6733,6 @@ msgstr ""
 msgid "Privacy"
 msgstr ""
 
-#: src/pages/shell/bot-panel.tsx
-msgid "Private"
-msgstr "Privado"
-
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Private key"
 msgstr ""
@@ -6374,8 +6752,9 @@ msgstr ""
 #: src/pages/account/AccountProfile.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/memory/MemoryProposals.tsx
+#: src/pages/shell/bot-panel.tsx
 msgid "Profile"
-msgstr ""
+msgstr "Perfil"
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Project ID"
@@ -6401,6 +6780,7 @@ msgstr ""
 msgid "Propose on a branch"
 msgstr ""
 
+#: src/pages/dashboard/LearningPanel.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Proposed consolidation"
 msgstr ""
@@ -6460,11 +6840,15 @@ msgstr "Espera na fila"
 msgid "Queued"
 msgstr "Na fila"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Queued for {name}"
+msgstr "Na fila para {name}"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Quick access shortcut"
 msgstr ""
 
-#: src/pages/ide/dialogs.tsx
+#: src/pages/workspace/dialogs.tsx
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Quick open"
 msgstr ""
@@ -6495,10 +6879,6 @@ msgstr "Lido"
 msgid "Read by {recipient}"
 msgstr "Lido por {recipient}"
 
-#: src/pages/workspace/WorkspaceFiles.tsx
-msgid "Read only in this pane. Open IDE to edit."
-msgstr ""
-
 #: src/pages/ide/IdePage.tsx
 msgid "Read only: file is larger than 2 MB"
 msgstr ""
@@ -6515,6 +6895,10 @@ msgstr "somente leitura"
 msgid "Reading storage usage…"
 msgstr ""
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Reading the document"
+msgstr "Lendo o documento"
+
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Reads can run without asking once you allow them. Writes always ask."
 msgstr ""
@@ -6525,6 +6909,10 @@ msgstr ""
 #: src/pages/dashboard/WorkPanel.tsx
 msgid "Ready"
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Ready. The bot can use Hermes."
+msgstr "Pronto. O bot pode usar o Hermes."
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -6667,6 +7055,7 @@ msgstr ""
 
 #: src/pages/ide/terminal.tsx
 #: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspaceTerminal.tsx
 msgid "Release"
 msgstr "Libere"
 
@@ -6685,6 +7074,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Remote base directory"
 msgstr ""
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Remote computer"
+msgstr "Computador remoto"
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Remote MCP URL"
@@ -6756,6 +7149,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Remove skill {0}"
 msgstr "Remover habilidade {0}"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Remove the duplicate field."
+msgstr "Remova o campo duplicado."
 
 #: src/pages/RoutineEditor.tsx
 msgid "Remove webhook"
@@ -6932,6 +7329,10 @@ msgstr ""
 msgid "Reset password"
 msgstr "Redefinir senha"
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Reset to defaults"
+msgstr "Restaurar padrões"
+
 #: src/pages/Auth.tsx
 msgid "Reset your password"
 msgstr "Redefina sua senha"
@@ -6939,6 +7340,10 @@ msgstr "Redefina sua senha"
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Resetting…"
 msgstr "Redefinindo…"
+
+#: src/pages/Shell.tsx
+msgid "Resize pane"
+msgstr "Redimensionar painel"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Resources"
@@ -7012,10 +7417,11 @@ msgstr "Retomar mensagens da equipe"
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
+#: src/pages/shell/runtime-summary.tsx
 #: src/pages/system/SystemPage.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Retry"
-msgstr ""
+msgstr "Tentar novamente"
 
 #. placeholder {0}: failure.relativePath
 #: src/pages/import/LocalImportPage.tsx
@@ -7094,9 +7500,6 @@ msgid "Reviewer"
 msgstr ""
 
 #: src/pages/board/BoardsSettings.tsx
-msgid "Reviewer: {reviewer}"
-msgstr ""
-
 #: src/pages/LearningInbox.tsx
 msgid "Reviews use this connection and may incur model charges."
 msgstr ""
@@ -7189,6 +7592,7 @@ msgstr ""
 msgid "Run time must be in the future."
 msgstr ""
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/components/CloudAgentCard.tsx
 msgid "running"
 msgstr "em execução"
@@ -7199,6 +7603,7 @@ msgstr "em execução"
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/shell/runtime-summary.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Running"
 msgstr "Em execução"
@@ -7215,7 +7620,16 @@ msgstr "Executando..."
 msgid "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?"
 msgstr "Há execuções ativas neste computador. Alterar a conexão pode interrompê-las. Salvar mesmo assim?"
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Runs as you; can use your files and signed-in tools"
+msgstr "Executa com suas permissões; pode usar seus arquivos e ferramentas conectadas à sua conta"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Runs at the configured provider; can use granted credentials and network access."
+msgstr "Executa no provedor configurado; pode usar credenciais concedidas e acesso à rede."
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Runs on"
 msgstr ""
@@ -7232,6 +7646,14 @@ msgstr ""
 #: src/pages/shell/runtime-settings.tsx
 msgid "Runtime availability could not be checked."
 msgstr ""
+
+#: src/pages/group-model-control.tsx
+msgid "Runtime settings"
+msgstr "Configurações do runtime"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Runtime settings cannot install or load code."
+msgstr "As configurações do runtime não podem instalar nem carregar código."
 
 #: src/pages/LearningObservation.tsx
 msgid "safety"
@@ -7279,6 +7701,7 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/dialogs.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Save"
 msgstr "Salvar"
 
@@ -7305,10 +7728,12 @@ msgstr "Salvar modelo"
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/account/AccountProfile.tsx
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/MemoryHistory.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Saved"
 msgstr "Salva"
 
@@ -7401,6 +7826,7 @@ msgstr ""
 #: src/pages/board/Board.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-picker.tsx
 #: src/pages/shell/command-palette.tsx
@@ -7482,7 +7908,7 @@ msgstr ""
 msgid "Selected bots"
 msgstr "Bots selecionados"
 
-#: src/pages/ide/dialogs.tsx
+#: src/pages/workspace/dialogs.tsx
 msgid "Selection shortened to 32,000 characters."
 msgstr "A seleção foi reduzida a 32.000 caracteres."
 
@@ -7547,6 +7973,10 @@ msgstr "Enviado para {peer}"
 msgid "Sentry alert"
 msgstr ""
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Separate home; can reach allowed network services and granted credentials."
+msgstr "Pasta pessoal separada; pode acessar serviços de rede permitidos e credenciais concedidas."
+
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Serif"
 msgstr ""
@@ -7608,6 +8038,14 @@ msgstr ""
 msgid "Set up a board"
 msgstr "Configurar um quadro"
 
+#: src/pages/shell/bot-panel.tsx
+msgid "Set up a container for isolated work."
+msgstr "Configure um contêiner para trabalhar de forma isolada."
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Set up computer"
+msgstr "Configurar computador"
+
 #: src/pages/import/ImportedServerCredentials.tsx
 msgid "Set up credentials"
 msgstr ""
@@ -7620,11 +8058,16 @@ msgstr ""
 msgid "Set up servers"
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Setting up Python"
+msgstr "Configurando o Python"
+
 #: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Settings"
 msgstr "Configurações"
 
@@ -7662,17 +8105,22 @@ msgstr ""
 msgid "Shared recall will use proposed facts after merge."
 msgstr ""
 
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-summary.tsx
+msgid "Shared with team"
+msgstr "Compartilhado com a equipe"
+
 #: src/components/ShowAllModels.tsx
 msgid "Show all models"
 msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Show bots"
-msgstr ""
+msgstr "Mostrar bots"
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show computer"
-msgstr ""
+msgstr "Mostrar computador"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Show in the menu bar."
@@ -7690,7 +8138,7 @@ msgstr "Mostrar mais"
 msgid "Show password"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show settings"
 msgstr "Mostrar configurações"
 
@@ -7713,6 +8161,10 @@ msgstr "Entrar"
 #: src/pages/account/AccountSettings.tsx
 msgid "Sign in again to manage sessions."
 msgstr ""
+
+#: src/lib/failure-category-copy.ts
+msgid "Sign in to {runtime} on this computer, then try again."
+msgstr "Entre no {runtime} neste computador e tente novamente."
 
 #: src/pages/shell/provider-error-message.tsx
 #: src/pages/shell/runtime-settings.tsx
@@ -7820,6 +8272,10 @@ msgstr ""
 #: src/components/composer/SlashPicker.tsx
 msgid "Slash commands"
 msgstr ""
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Sleeping"
+msgstr "Em repouso"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Socket missing"
@@ -7930,6 +8386,10 @@ msgstr ""
 msgid "Standard"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Standard image"
+msgstr ""
+
 #: src/components/composer/command-description.ts
 msgid "Start a new chat"
 msgstr ""
@@ -7945,6 +8405,14 @@ msgstr "Iniciar quadro?"
 #: src/pages/CompareStart.tsx
 msgid "Start comparison"
 msgstr ""
+
+#: src/pages/workspace/terminal-controller.ts
+msgid "Start computer"
+msgstr "Iniciar computador"
+
+#: src/pages/workspace/terminal-controller.ts
+msgid "Start computer to open a terminal"
+msgstr "Inicie o computador para abrir um terminal"
 
 #: src/pages/GoalForm.tsx
 msgid "Start goal"
@@ -7967,6 +8435,7 @@ msgid "Start the engine and press Test."
 msgstr "Inicie o mecanismo e clique em Testar."
 
 #: src/lib/run-status-label.ts
+#: src/pages/shell/runtime-summary.tsx
 msgid "Starting"
 msgstr "Iniciando"
 
@@ -8008,8 +8477,8 @@ msgstr "Passos"
 #: src/pages/DelegationLines.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/Shell.tsx
-#: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Stop"
 msgstr "Parar"
 
@@ -8029,6 +8498,10 @@ msgstr "Parar de ensinar"
 msgid "Stop the current run"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Stop the run"
+msgstr "Interromper a execução"
+
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Stop work in this conversation"
 msgstr ""
@@ -8036,8 +8509,13 @@ msgstr ""
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/GroupPanel.tsx
+#: src/pages/shell/runtime-summary.tsx
 msgid "Stopped"
 msgstr "Parado"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "stopped before answering"
+msgstr "parou antes de responder"
 
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
@@ -8116,14 +8594,12 @@ msgstr ""
 msgid "System"
 msgstr "Sistema"
 
-#: src/pages/ide/terminal.tsx
-#: src/pages/Shell.tsx
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/take-control-button.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Take control"
 msgstr "Assumir o controle"
 
-#: src/pages/ide/terminal.tsx
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Take control to open a terminal"
 msgstr ""
 
@@ -8158,7 +8634,6 @@ msgid "Teaching in progress. Stop teaching before sending a new message."
 msgstr "Ensino em andamento. Pare de ensinar antes de enviar uma nova mensagem."
 
 #: src/pages/Shell.tsx
-#: src/pages/shell/bot-panel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Team"
 msgstr "Equipe"
@@ -8190,8 +8665,10 @@ msgid "Tell your bot what to change or remove"
 msgstr ""
 
 #: src/pages/ide/IdePage.tsx
+#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Terminal"
 msgstr ""
 
@@ -8199,8 +8676,7 @@ msgstr ""
 msgid "Terminal could not open; try again"
 msgstr ""
 
-#: src/pages/ide/terminal.tsx
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Terminal is not available on this computer"
 msgstr ""
 
@@ -8210,6 +8686,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Test"
 msgstr "Teste"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Test computer"
+msgstr "Computador de teste"
 
 #: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
 msgid "Test connection"
@@ -8240,13 +8720,25 @@ msgstr ""
 msgid "The API did not come back. Refresh this page."
 msgstr ""
 
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "The bot is working — wait or stop it"
 msgstr ""
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "The computer is busy. Wait for it to finish."
+msgstr "O computador está ocupado. Aguarde até ele terminar."
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr ""
+
+#: src/components/ai/ChiefResultBubble.tsx
+msgid "The draft is ready."
+msgstr "O rascunho está pronto."
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "The file changed. Open it again before saving."
+msgstr "O arquivo mudou. Abra de novo antes de salvar."
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "The first bot could not be created. Try again."
@@ -8256,9 +8748,17 @@ msgstr "Não foi possível criar o primeiro bot. Tente novamente."
 msgid "The group model choice was reloaded. Pick again."
 msgstr "A escolha de modelo do grupo foi recarregada. Escolha novamente."
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "The Hermes install on this computer failed its safety check."
+msgstr "A instalação do Hermes neste computador não passou na verificação de segurança."
+
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
+
+#: src/pages/board/BoardsSettings.tsx
+msgid "The reviewer was changed in another window."
+msgstr "O revisor foi alterado em outra janela."
 
 #: src/lib/mcp-sign-in.ts
 msgid "The saved sign-in expired. Sign in again."
@@ -8277,15 +8777,17 @@ msgstr ""
 msgid "Theme"
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Thinking"
 msgstr "Pensando"
 
 #: src/components/ThreadCommandBlock.tsx
-#: src/pages/ide/dialogs.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/ide/terminal.tsx
+#: src/pages/workspace/dialogs.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "This action could not finish; try again."
 msgstr ""
 
@@ -8360,6 +8862,7 @@ msgstr "Este chat é somente leitura"
 msgid "This command is not available to this account."
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "Este computador"
@@ -8372,14 +8875,39 @@ msgstr "Este computador"
 #: src/pages/fleet/target-name.ts
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
+#: src/pages/shell/runtime-summary.tsx
 msgid "This computer"
-msgstr ""
+msgstr "Este computador"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "This configuration is too complex."
+msgstr "Esta configuração é complexa demais."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "This configuration version is not supported."
+msgstr "Esta versão da configuração não é compatível."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "This field is not supported."
+msgstr "Este campo não é compatível."
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This file is larger than 2 MB. Open a copy to edit it."
+msgstr "Este arquivo é maior que 2 MB. Abra uma cópia para editá-lo."
 
 #: src/components/ArtifactFileCard.tsx
 msgid "This file is not valid UTF-8 Markdown."
 msgstr "Este arquivo não é válido UTF-8 Markdown."
 
-#: src/pages/ide/file-tree.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This file is read-only. Open a copy to edit it."
+msgstr "Este arquivo é somente leitura. Abra uma cópia para editá-lo."
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This file no longer exists. Save it as a new file or close it."
+msgstr "Este arquivo não existe mais. Salve-o como um novo arquivo ou feche-o."
+
+#: src/pages/workspace/file-tree.tsx
 msgid "This folder is empty."
 msgstr ""
 
@@ -8395,6 +8923,11 @@ msgstr ""
 msgid "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model."
 msgstr "O modelo do grupo está bloqueado pelas configurações do bot ou do espaço. Altere a política de destino ou escolha outro modelo para o grupo."
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This is a binary file. You cannot edit it here."
+msgstr "Este é um arquivo binário. Você não pode editá-lo aqui."
+
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "esse Mac"
@@ -8429,6 +8962,10 @@ msgstr ""
 #: src/pages/Auth.tsx
 msgid "This reset link is invalid or expired"
 msgstr "Este link de redefinição é inválido ou expirou"
+
+#: src/lib/failure-category-copy.ts
+msgid "This runtime"
+msgstr "Este runtime"
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "This scan is out of date. Re-scan, then try again."
@@ -8476,6 +9013,10 @@ msgstr ""
 msgid "This signs out every other session and keeps this one signed in."
 msgstr ""
 
+#: src/lib/failure-category-copy.ts
+msgid "This space's model policy blocks this model. Change it in Settings, under Models."
+msgstr "A política de modelos deste espaço bloqueia este modelo. Altere-a nas Configurações, em Modelos."
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "This subscription sign-in is not available in Ardur yet. Use a deployment credential or choose another provider."
 msgstr "Este login de assinatura ainda não está disponível no Ardur. Use uma credencial de implantação ou escolha outro provedor."
@@ -8492,9 +9033,11 @@ msgstr ""
 msgid "Thumbs"
 msgstr ""
 
-#: src/pages/shell/hermes-limits.tsx
-msgid "Time limit"
-msgstr "Limite de tempo"
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Time limit (seconds)"
+msgstr "Limite de tempo (segundos)"
 
 #: src/pages/RoutineSchedule.tsx
 msgid "Time of day"
@@ -8602,6 +9145,10 @@ msgstr ""
 msgid "Treg token"
 msgstr "Token Treg"
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Trim older context"
+msgstr "Cortar contexto antigo"
+
 #: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Trusted folders"
@@ -8615,12 +9162,18 @@ msgstr ""
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/computer-screen-error.tsx
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-settings.tsx
 msgid "Try again"
 msgstr "Tentar novamente"
 
 #: src/pages/LearningInbox.tsx
 msgid "Turn on"
 msgstr ""
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Turn on Experimental"
+msgstr "Ativar Experimental"
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
@@ -8638,8 +9191,13 @@ msgstr "Não atribuído"
 
 #: src/components/SoftwareUpdateSection.tsx
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Unavailable"
-msgstr ""
+msgstr "Indisponível"
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Unavailable with Hermes."
+msgstr "Indisponível com o Hermes."
 
 #: src/pages/LearningObservation.tsx
 msgid "unclassified"
@@ -8666,14 +9224,19 @@ msgstr "Deixar de seguir"
 msgid "Uninstall"
 msgstr ""
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/pages/LearningCurator.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Unknown"
-msgstr ""
+msgstr "Desconhecido"
 
 #: src/pages/account/AccountTables.tsx
 msgid "Unknown device"
 msgstr ""
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Unknown: {title}"
+msgstr "Desconhecido: {title}"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Unlink"
@@ -8684,6 +9247,8 @@ msgid "Unpin"
 msgstr "Desafixar"
 
 #: src/pages/ide/IdePage.tsx
+#: src/pages/workspace/WorkspaceFileGuard.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Unsaved changes"
 msgstr ""
 
@@ -8811,6 +9376,23 @@ msgstr "Usar um modelo encontrado"
 msgid "Use a token"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Use a whole number from 1 to 3."
+msgstr "Use um número inteiro de 1 a 3."
+
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use a whole number from 1 to 600."
+msgstr "Use um número inteiro de 1 a 600."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use a whole number from 1 to 64."
+msgstr "Use um número inteiro de 1 a 64."
+
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use a whole number from 4 to 64."
+msgstr "Use um número inteiro de 4 a 64."
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Use all selected tools"
@@ -8819,6 +9401,22 @@ msgstr "Usar todas as ferramentas selecionadas"
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Use all selected tools, or choose a subset for this bot."
 msgstr "Use todas as ferramentas selecionadas ou escolha algumas para este bot."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Use Ardur Connections for provider settings."
+msgstr "Use as Conexões da Ardur para configurações de provedor."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Use Ardur Learning settings."
+msgstr "Use as configurações de Aprendizado da Ardur."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Use Ardur settings for tools, integrations, MCP servers, skills, and plugins."
+msgstr "Use as configurações da Ardur para ferramentas, integrações, servidores MCP, skills e plugins."
+
+#: src/pages/group-model-control.tsx
+msgid "Use bot runtime settings"
+msgstr "Usar configurações do runtime do bot"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Use default guidance"
@@ -8846,9 +9444,23 @@ msgstr ""
 msgid "Use this model"
 msgstr "Use este modelo"
 
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use whole KiB."
+msgstr "Use KiB inteiros."
+
+#: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Use whole seconds."
+msgstr "Use segundos inteiros."
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "User"
 msgstr ""
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Uses that account's permissions."
+msgstr "Usa as permissões dessa conta."
 
 #: src/pages/shell/bot-model-chip.tsx
 #: src/pages/shell/group-participants.tsx
@@ -8895,15 +9507,20 @@ msgstr "Falha na voz"
 msgid "Voice shortcut"
 msgstr ""
 
+#: src/lib/working-indicator.ts
+msgid "Waiting for a free place"
+msgstr "Aguardando um lugar livre"
+
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
 msgid "Waiting for a turn"
 msgstr "Aguardando a vez"
 
+#: src/components/ai/CoordinationLine.tsx
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Waiting for approval"
-msgstr ""
+msgstr "Aguardando aprovação"
 
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
@@ -8921,6 +9538,14 @@ msgstr "Aguardando login..."
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Waiting for the API to come back…"
 msgstr ""
+
+#: src/lib/working-indicator.ts
+msgid "Waiting for the model"
+msgstr "Aguardando o modelo"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Waiting for the tool"
+msgstr "Aguardando a ferramenta"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
@@ -9012,6 +9637,10 @@ msgstr ""
 msgid "When a webhook fires"
 msgstr ""
 
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "When context is full"
+msgstr "Quando o contexto estiver cheio"
+
 #: src/pages/settings/GeneralSettings.tsx
 msgid "When routines finish, cannot run, or need your input."
 msgstr ""
@@ -9027,6 +9656,10 @@ msgstr "Quando usar"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Where should bots run?"
 msgstr "Onde os bots devem ser executados?"
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Where this bot runs"
+msgstr "Onde este bot é executado"
 
 #: src/pages/memory/MemoryDocuments.tsx
 msgid "Who the user is and the professional domain"
@@ -9044,6 +9677,7 @@ msgstr "Trabalho"
 msgid "Work items"
 msgstr "Itens de trabalho"
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/TeamBoard.tsx
@@ -9063,6 +9697,14 @@ msgstr "Trabalhando em {task}"
 msgid "Working on {task} for {0}"
 msgstr "Trabalhando em {task} para {0}"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Working on the task"
+msgstr "Trabalhando na tarefa"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Working: {title}"
+msgstr "Em andamento: {title}"
+
 #: src/pages/Auth.tsx
 #: src/pages/CallView.tsx
 #: src/pages/import/LocalImportPage.tsx
@@ -9070,7 +9712,7 @@ msgid "Working…"
 msgstr "Funcionando"
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Workspace"
 msgstr "Espaço de trabalho"
 
@@ -9106,6 +9748,10 @@ msgstr "Você pode fechar esta guia se ela não for redirecionada automaticament
 #: src/pages/McpOAuthCallback.tsx
 msgid "You can close this window."
 msgstr "Você pode fechar esta janela."
+
+#: src/pages/workspace/WorkspaceTerminal.tsx
+msgid "You control the computer"
+msgstr "Você controla o computador"
 
 #: src/pages/LearningInsights.tsx
 msgid "You gave {count} thumbs with reasons in {days} days, but Learning is off."
@@ -9144,9 +9790,18 @@ msgstr "Seu endereço de e-mail"
 msgid "Your name"
 msgstr "O seu nome"
 
+#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/HostComputerPrompt.tsx
+msgid "Your OS will not ask for extra permission if you let bots run on {hostLabel}. They run as you."
+msgstr "Seu sistema operacional não pedirá permissão extra se você permitir que os bots sejam executados no {hostLabel}. Eles são executados como você."
+
 #: src/pages/DevicesSettings.tsx
 msgid "Your phone can reach this Mac on your network."
 msgstr ""
+
+#: src/pages/shell/runtime-config-advanced.tsx
+msgid "Your settings"
+msgstr "Suas configurações"
 
 #: src/pages/Welcome.tsx
 msgid "Your team of always-on agents<0/>that you can give real work to."

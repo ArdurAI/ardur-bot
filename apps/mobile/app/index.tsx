@@ -26,6 +26,7 @@ import { BotOrganizeModal } from "../components/bot-organize-modal";
 import { GroupAvatar } from "../components/group-avatar";
 import { NativeSymbol } from "../components/native-symbol";
 import {
+  activityRowPreview,
   activityStatusLabel,
   fetchSpaceActivity,
   formatActivityRelativeTime,
@@ -780,7 +781,7 @@ function ActivityRow({
 }) {
   const title = run.groupName ? `${run.botName} · ${run.groupName}` : run.botName;
   const status = activityStatusLabel(run.status);
-  const preview = run.promptSnippet ? `${run.promptSnippet} · ${status}` : status;
+  const preview = activityRowPreview(run);
   return (
     <View>
       <ConversationRow

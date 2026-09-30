@@ -30,8 +30,8 @@ Probes are cached for 30 seconds, have time and output limits, and run four at a
 | This Mac | The installed app's own services; otherwise the authenticated host bridge | Host tools and supported pinned native runtimes | Host OS CPU, load, free memory, filesystem | Registered folders remain host-only; portable checkpoints contain the computer home |
 | Existing local Docker/Podman computers | Existing supervisor, selected Unix socket | Existing graphical computer | Engine info and supervisor host statistics | Existing supervisor topology and screen rules apply |
 | Added Docker, OrbStack, Colima, Podman targets | Owner host CLI with socket or saved Docker context | Headless container, terminal, isolated named volume | Engine info plus host statistics; Podman reports host free memory | No graphical screen on these added targets; local VM headroom is bounded by host memory |
-| Remote Docker/Podman | System SSH to the remote engine CLI, or TLS engine endpoint | Headless container and engine-owned volume | Engine info plus SSH host statistics; TLS-only Docker free memory is not reported | Selected image must already exist on the engine; no automatic pull or build |
-| kind and existing Kubernetes | Saved context and namespace; existing provider with direct API in development, host `kubectl` transport when packaged | Pod and persistent volume claim | Schedulable-node allocatable minus requests; metrics when available | Certificate/token HTTPS kubeconfig; no credential plugins; namespace and storage must exist; no screen/terminal |
+| Remote Docker/Podman | System SSH to the remote engine CLI, or TLS engine endpoint | Headless container and engine-owned volume | Engine info plus SSH host statistics; TLS-only Docker free memory is not reported | The [resolved computer image](compute-profiles.md#decisions-and-boundaries) must already exist on the engine; no automatic pull or build |
+| kind and existing Kubernetes | Saved context and namespace; existing provider with direct API in development, host `kubectl` transport when packaged | Pod and persistent volume claim | Schedulable-node allocatable minus requests; metrics when available; unknown without the optional capacity ClusterRole | Certificate/token HTTPS kubeconfig, which `make-kubeconfig.sh` writes for [hosted clusters](compute-profiles.md#hosted-clusters-eks-aks-gke); no credential plugins; namespace and storage must exist; no screen/terminal |
 | Linux machine | System SSH; agent, encrypted private key, or Tailscale SSH; optional jump host | Commands, files, interactive terminal, per-computer home | `nproc`, `/proc/loadavg`, `/proc/meminfo`, `df` | Bash, Python 3, SFTP and a verified SSH host key are required |
 | Tailscale peer | Existing host CLI login discovers online Linux peers; added as SSH | Same as SSH | Same as SSH after adding | Tailnet policy and SSH access must already permit the connection; no Tailscale keys are stored |
 
@@ -129,7 +129,8 @@ Only an opaque reference enters connection metadata. The system clients receive 
 with mode 0600, removed when an operation finishes. Agents stay on the host. Bridge authorization
 checks owner, space, saved connection, home, active run or maintenance grant, and terminal lease.
 Disconnection closes terminals. Kubernetes host transport accepts only the provider's exact
-non-root pod/PVC specifications and embedded HTTPS kubeconfig credentials.
+non-root pod/PVC specifications, running a published computer image,
+and embedded HTTPS kubeconfig credentials.
 
 Direct SSH/container transfers allow 16 MiB per file and a 64 MiB checkpoint. Host bridge transfers
 retain the existing 128 KiB file-operation limit and 8 MiB total response limit. Checkpoints
@@ -171,8 +172,9 @@ infrastructure charges; the feature does not provision machines or purchase serv
    and key paths. Test it, select it for a private bot, create a file, and verify sleep/wake and
    checkpoint restore. Confirm no port is published by the new container.
 6. Select a discovered kind or existing Kubernetes context. Choose an existing namespace and
-   storage settings. For kind, load the selected computer image using the normal kind image
-   workflow. Add and test it. Confirm pod/PVC ownership labels and persisted files. Remove
+   storage settings. For kind, load the resolved computer image names using the normal kind image
+   workflow; for a hosted cluster, follow [hosted clusters](compute-profiles.md#hosted-clusters-eks-aks-gke).
+   Add and test it. Confirm pod/PVC ownership labels and persisted files. Remove
    metrics access temporarily on a disposable fixture and confirm CPU load is unknown while
    capacity based on requests remains available. Do not change production cluster permissions.
 7. Put a private, Pi-runtime bot on one Linux machine, create a small marker file, and set
@@ -226,7 +228,7 @@ Primary controls are **Computers**, **Add computer**, **Test**, **Placement**, *
 **Move**, and **Keep here**. Rows show **Connected**, **Available**, **Unavailable**, **Memory not
 reported**, and **{amount} GB free**. **Moved to {computer}: {reason}** appears only after a move.
 Form labels identify the selected authentication, endpoint and namespace. Advanced paths, resource
-limits and certificates are disclosed only while adding the relevant connection. Failure text
+limits, certificates and computer images are disclosed only while adding the relevant connection. Failure text
 appears only after a failed operation. These words identify actions and consequences; there is
 no persistent explanatory panel.
 

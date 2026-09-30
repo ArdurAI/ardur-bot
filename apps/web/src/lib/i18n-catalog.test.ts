@@ -12,6 +12,40 @@ import tr from "../../scripts/translations-tr.json";
 import zhCN from "../../scripts/translations-zh-CN.json";
 
 describe("lingui catalogs", () => {
+  it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+    "translates bounded chief receipts and dispatch in %s",
+    async (locale) => {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const catalog = await formatter().parse(readFileSync(filename, "utf8"), {
+        locale,
+        sourceLocale: "en",
+        filename,
+      });
+      for (const message of [
+        "Got it — I’ll choose a team member to put this in Notion.",
+        "Got it — I’ll check what’s missing and ask before installing it.",
+        "Got it — I’ll check the request and choose the next step.",
+        "Hi everyone.",
+        "Messaged {name}",
+        "Queued for {name}",
+        "Waiting for approval",
+        "Reading the document",
+        "Connecting to Notion",
+        "Creating the Notion page",
+        "Checking the Notion page",
+        "Checking the missing tool",
+        "Working on the task",
+        "Waiting for the tool",
+        "Done — added the document to Notion.",
+        "The draft is ready.",
+        "Could not open file",
+      ]) {
+        const entry = Object.values(catalog).find((value) => value.message === message);
+        expect(entry?.translation, `${locale}: ${message}`).toBeTruthy();
+        if (message.includes("{name}")) expect(entry?.translation).toContain("{name}");
+      }
+    },
+  );
   beforeEach(() => {
     i18n.load("en", {});
     i18n.activate("en");
@@ -57,6 +91,31 @@ describe("lingui catalogs", () => {
         "First bot not created",
         "Open Models",
         "The first bot could not be created. Try again.",
+      ]) {
+        const entry = Object.values(catalog).find((value) => value.message === message);
+        expect(entry?.translation, `${locale}: ${message}`).toBeTruthy();
+      }
+    },
+  );
+
+  it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+    "catalogs the command palette shortcut commands in %s",
+    async (locale) => {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const catalog = await formatter().parse(readFileSync(filename, "utf8"), {
+        locale,
+        sourceLocale: "en",
+        filename,
+      });
+      for (const message of [
+        "New bot",
+        "Message",
+        "Search",
+        "Hide bots",
+        "Show bots",
+        "Back",
+        "Forward",
+        "Settings",
       ]) {
         const entry = Object.values(catalog).find((value) => value.message === message);
         expect(entry?.translation, `${locale}: ${message}`).toBeTruthy();
@@ -496,6 +555,22 @@ describe("lingui catalogs", () => {
     }
   });
 
+  it("ships the Team board usage availability labels in every catalog", () => {
+    // A native run that never reported usage renders these instead of a fake zero;
+    // an empty translation would fall back to English on the card.
+    const sentences = ["Unavailable", "at least {0}"];
+    for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      for (const sentence of sentences) {
+        expect(catalog).toContain(`msgid ${JSON.stringify(sentence)}`);
+        expect(catalog).not.toContain(`msgid ${JSON.stringify(sentence)}\nmsgstr ""`);
+      }
+    }
+  });
+
   it("ships both computer preparation messages in every catalog", () => {
     const sentences = ["Preparing the bot computer…", "Preparing the bot computer… {percent}%"];
     for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {
@@ -506,6 +581,27 @@ describe("lingui catalogs", () => {
       for (const sentence of sentences) {
         expect(catalog).toContain(`#: src/pages/Shell.tsx\nmsgid ${JSON.stringify(sentence)}`);
         expect(catalog).not.toContain(`msgid ${JSON.stringify(sentence)}\nmsgstr ""`);
+      }
+    }
+  });
+
+  it("translates the host-computer warning in every shipped catalog", () => {
+    const sentences = [
+      "macOS will not ask for extra permission if you let bots run on this Mac. They run as you.",
+      "Your OS will not ask for extra permission if you let bots run on {hostLabel}. They run as you.",
+    ];
+    for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      for (const sentence of sentences) {
+        expect(catalog, `${locale}: ${sentence}`).toContain(
+          `msgid ${JSON.stringify(sentence)}\nmsgstr "`,
+        );
+        expect(catalog, `${locale}: ${sentence}`).not.toContain(
+          `msgid ${JSON.stringify(sentence)}\nmsgstr ""`,
+        );
       }
     }
   });
@@ -528,6 +624,72 @@ describe("lingui catalogs", () => {
     }
   });
 
+  it("translates workspace file save errors in every shipped catalog", async () => {
+    const sentences = [
+      "Could not save this file. Try again.",
+      "The computer is busy. Wait for it to finish.",
+      "Computer changed. Refresh files.",
+      "The file changed. Open it again before saving.",
+      "This file is read-only. Open a copy to edit it.",
+      "This file is larger than 2 MB. Open a copy to edit it.",
+      "This is a binary file. You cannot edit it here.",
+      "This file no longer exists. Save it as a new file or close it.",
+    ];
+    for (const locale of ["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"]) {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const parsed = await formatter().parse(readFileSync(filename, "utf8"), {
+        locale,
+        sourceLocale: "en",
+        filename,
+      });
+      for (const sentence of sentences) {
+        const entry = Object.values(parsed).find((value) => value.message === sentence);
+        expect(entry, `${locale}: ${sentence} missing from catalog`).toBeTruthy();
+        expect(entry?.translation?.trim(), `${locale}: ${sentence} must not be empty`).toBeTruthy();
+      }
+    }
+  });
+
+  it("translates the learning reviewer strings in every shipped catalog", () => {
+    const sentences = ["Learning reviewer", "The reviewer was changed in another window."];
+    for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      for (const sentence of sentences) {
+        const key = `msgid ${JSON.stringify(sentence)}\nmsgstr "`;
+        const at = catalog.indexOf(key);
+        expect(at, `${locale}: ${sentence} missing from catalog`).toBeGreaterThanOrEqual(0);
+        const translated = catalog.slice(at + key.length, catalog.indexOf('"', at + key.length));
+        expect(translated.trim(), `${locale}: ${sentence} must not be empty`).toBeTruthy();
+      }
+    }
+  });
+
+  it("translates each coordination failure reason in every shipped catalog", () => {
+    const sentences = [
+      "{name} couldn't answer",
+      "{name} couldn't answer: its model account needs attention",
+      "{name} couldn't answer: its model account hit a rate limit",
+      "{name} couldn't answer: its model is unavailable",
+      "{name} stopped before answering",
+    ];
+    for (const locale of ["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      for (const sentence of sentences) {
+        const key = `msgid ${JSON.stringify(sentence)}\nmsgstr "`;
+        const at = catalog.indexOf(key);
+        expect(at, `${locale}: ${sentence} missing from catalog`).toBeGreaterThanOrEqual(0);
+        const translated = catalog.slice(at + key.length, catalog.indexOf('"', at + key.length));
+        expect(translated.trim(), `${locale}: ${sentence} must not be empty`).toBeTruthy();
+      }
+    }
+  });
+
   it("translates new computer placeholders in every shipped catalog", () => {
     const sentences = [
       "Booting live desktop…",
@@ -544,6 +706,82 @@ describe("lingui catalogs", () => {
         expect(catalog).toContain(`msgid ${JSON.stringify(sentence)}`);
         if (locale !== "en") {
           expect(catalog).not.toContain(`msgid ${JSON.stringify(sentence)}\nmsgstr ""`);
+        }
+      }
+    }
+  });
+
+  it("translates every failure-category sentence in every shipped catalog", () => {
+    // The table's default sentences (packages/contracts/src/failure-categories.ts) plus
+    // the blocked-card frame they render inside.
+    const sentences = [
+      "{runtime}'s usage limit is reached. Try again after it resets.",
+      "Sign in to {runtime} on this computer, then try again.",
+      "{runtime} reached this run's turn limit. Narrow the task and try again.",
+      "{runtime}'s pinned model is unavailable. Change the pin and try again.",
+      "{runtime}'s configuration is invalid. Check this bot's settings.",
+      "{runtime}'s model connection is missing. Connect it or change the pin.",
+      "{runtime} is experimental. Turn on Experimental for {bot} to use it.",
+      "{runtime} runs on the host computer, not in a sandbox. Change {bot}'s computer to use it.",
+      "{bot}'s allowed model destinations block this model. Change them in {bot}'s settings.",
+      "This space's model policy blocks this model. Change it in Settings, under Models.",
+      "{runtime} stopped before finishing this run.",
+      "{runtime} could not finish this run. Check the runtime or change the pin.",
+      "{member} stopped.",
+      "{member} failed.",
+      "Blocked — {0}",
+      // Stands in for a runtime whose name is not known.
+      "This runtime",
+    ];
+    for (const locale of ["de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      for (const sentence of sentences) {
+        const key = `msgid ${JSON.stringify(sentence)}\nmsgstr "`;
+        const at = catalog.indexOf(key);
+        expect(at, `${locale}: ${sentence} missing from catalog`).toBeGreaterThanOrEqual(0);
+        const translated = catalog.slice(at + key.length, catalog.indexOf('"', at + key.length));
+        expect(translated.trim(), `${locale}: ${sentence} must not be empty`).toBeTruthy();
+        expect(translated, `${locale}: ${sentence} must be translated`).not.toEqual(sentence);
+      }
+    }
+  });
+
+  it('translates the refusal banner\'s "Open bot settings" action in every shipped catalog', () => {
+    // The banner's first button for the computer-unsupported and destinations-bot
+    // refusals; an empty translation would fall back to English on the banner.
+    const message = "Open bot settings";
+    for (const locale of ["de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      const key = `msgid ${JSON.stringify(message)}\nmsgstr "`;
+      const at = catalog.indexOf(key);
+      expect(at, `${locale}: ${message} missing from catalog`).toBeGreaterThanOrEqual(0);
+      const translated = catalog.slice(at + key.length, catalog.indexOf('"', at + key.length));
+      expect(translated.trim(), `${locale}: ${message} must not be empty`).toBeTruthy();
+      expect(translated, `${locale}: ${message} must be translated`).not.toEqual(message);
+    }
+  });
+
+  it("translates open-work board links in every shipped catalog", () => {
+    const sentences = ["Add from board", "New work item", "Open in board"];
+    for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      for (const sentence of sentences) {
+        expect(catalog).toContain(`msgid ${JSON.stringify(sentence)}`);
+        if (locale !== "en") {
+          expect(catalog).not.toContain(`msgid ${JSON.stringify(sentence)}\nmsgstr ""`);
+          const key = `msgid ${JSON.stringify(sentence)}\nmsgstr "`;
+          const at = catalog.indexOf(key);
+          const translated = catalog.slice(at + key.length, catalog.indexOf('"', at + key.length));
+          expect(translated).not.toEqual(sentence);
         }
       }
     }

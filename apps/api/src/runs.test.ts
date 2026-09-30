@@ -95,6 +95,110 @@ describe("run activity notification preference", () => {
   });
 });
 
+describe("run activity failure cause", () => {
+  const pin = {
+    runtimeKind: "claude-code",
+    provider: "anthropic",
+    modelId: "claude-sonnet",
+    effort: "high",
+    credentialId: "native:claude",
+    revision: 1,
+  };
+  function prismaWith(run: Record<string, unknown>) {
+    return {
+      userPreferences: { findUnique: vi.fn(async () => null) },
+      run: {
+        findMany: vi.fn(async () => [
+          {
+            id: "run",
+            botId: "worker",
+            threadId: "thread",
+            taskId: "task",
+            delegationRootTaskId: null,
+            delegationId: null,
+            status: "failed",
+            trigger: "user",
+            task: { prompt: "Review" },
+            bot: { name: "Worker", notifyOnFinish: false },
+            thread: { groupId: null, externalConversationId: null, group: null },
+            updatedAt: new Date(),
+            completedAt: new Date(),
+            ...run,
+          },
+        ]),
+      },
+      delegation: { findMany: vi.fn(async () => []) },
+    } as unknown as PrismaClient;
+  }
+  const actor = { userId: "owner", spaceId: "space" } as Actor;
+
+  it("carries the classified cause of a failed run on its activity row", async () => {
+    const [row] = await listSpaceRuns(
+      prismaWith({
+        runtimePin: pin,
+        runtimeProblem: {
+          kind: "problem",
+          code: "runtime-unavailable",
+          pin,
+          reason: "Claude Code's usage limit is reached. Try again after it resets.",
+          reasonId: "usage-limit",
+          actions: ["change-pin"],
+        },
+        error: "Claude Code's usage limit is reached. Try again after it resets.",
+        providerErrorKind: "other",
+      }),
+      actor,
+      "recent",
+    );
+    expect(row).toMatchObject({
+      failureCategory: "usage-limit",
+      failureRuntime: "Claude Code",
+    });
+  });
+
+  it("maps a classified provider error kind to a failure category", async () => {
+    const [row] = await listSpaceRuns(
+      prismaWith({
+        runtimePin: { ...pin, runtimeKind: "pi" },
+        runtimeProblem: null,
+        providerErrorKind: "rate-limit",
+        error: "429 too many requests",
+      }),
+      actor,
+      "recent",
+    );
+    expect(row).toMatchObject({ failureCategory: "usage-limit", failureRuntime: "Ardur" });
+  });
+
+  it("maps an older record's stored English sentence back to its category", async () => {
+    const [row] = await listSpaceRuns(
+      prismaWith({
+        runtimePin: pin,
+        runtimeProblem: null,
+        providerErrorKind: "other",
+        error: "Sign in to Codex on this computer, then try again.",
+      }),
+      actor,
+      "recent",
+    );
+    expect(row).toMatchObject({ failureCategory: "signed-out", failureRuntime: "Codex" });
+  });
+
+  it("leaves an unclassified failure without a category", async () => {
+    const [row] = await listSpaceRuns(
+      prismaWith({
+        runtimePin: pin,
+        runtimeProblem: null,
+        providerErrorKind: "other",
+        error: "something unusual happened",
+      }),
+      actor,
+      "recent",
+    );
+    expect(row?.failureCategory).toBeUndefined();
+  });
+});
+
 it.each([false, true])(
   "keeps one tree stop target when the coordinator is visible: %s",
   async (includeCoordinator) => {

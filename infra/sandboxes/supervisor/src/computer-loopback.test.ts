@@ -412,6 +412,48 @@ describe("provisioning network rollback", () => {
     );
   });
 
+  it.each([
+    [false, "ghcr.io/ardurai/ardur-bot/computer:dev-developer"],
+    [true, "ardurbot/computer:0.1.0-developer"],
+  ])("resolves Developer like Standard (local build: %s)", async (localBuild, image) => {
+    fixture();
+    // The deployment image names Standard only; it must not replace Developer.
+    vi.stubEnv("ARDURBOT_COMPUTER_IMAGE", "ardurbot/computer:local");
+    vi.stubEnv("ARDURBOT_COMPUTER_CHANNEL", "dev");
+    let pulled = false;
+    mocks.docker.getImage.mockImplementation((name: string) => ({
+      inspect: vi.fn(async () => {
+        if (name === image && (localBuild || pulled)) return { Id: "image" };
+        throw Object.assign(new Error("missing"), { statusCode: 404 });
+      }),
+    }));
+    mocks.docker.pull.mockImplementation(async () => {
+      pulled = true;
+      return Readable.from(['{"id":"layer","status":"Pull complete"}\n']);
+    });
+    const { supervisorApp } = await import("./index.js");
+    const response = await supervisorApp.request("/computers", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${resolveSupervisorToken(process.env)}`,
+        "content-type": "application/json",
+        "x-ardurbot-bot-id": "bot-developer",
+        "x-ardurbot-space-id": "space",
+      },
+      body: JSON.stringify({
+        botId: "bot-developer",
+        spaceId: "space",
+        homePath: path.join(process.env.DATA_DIR!, "homes", "bot-developer"),
+        imageProfile: "developer",
+      }),
+    });
+    expect(response.status).toBe(200);
+    expect(mocks.docker.pull).toHaveBeenCalledTimes(localBuild ? 0 : 1);
+    expect(mocks.docker.createContainer).toHaveBeenCalledWith(
+      expect.objectContaining({ Image: image }),
+    );
+  });
+
   it.each(["1.44", "1.45"])(
     "provisions named-volume homes only with subpath support (%s)",
     async (apiVersion) => {

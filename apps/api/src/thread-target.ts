@@ -8,6 +8,7 @@ import {
   traceNow,
   tracePoint,
 } from "@ardurbot/adapters";
+import type { ChiefReceipt, ThreadSendResult } from "@ardurbot/contracts";
 import {
   type Actor,
   ContextSnapshotSchema,
@@ -27,15 +28,21 @@ import {
 import { RunPlacementSchema } from "@ardurbot/contracts/fleet";
 import {
   ACTIVE_RUN_STATUSES,
+  chiefIntent,
+  chiefWantsIndividualReplies,
   hasMentionToken,
   isActive,
+  progressMessageId,
   projectMessages,
+  resolveAddressedBotIds,
   runFailureError,
 } from "@ardurbot/core";
+import { localTaskClassifier } from "@ardurbot/core/effort-router";
 import { deriveMessageQuote } from "@ardurbot/core/message-quote";
 import {
   answerWaitingRunWithTextInTransaction,
   appendEventInTransaction,
+  createChiefReceipt,
   createGroupRepos,
   createRepos,
   createThreadMessageInTransaction,
@@ -46,6 +53,9 @@ import {
   mapGroupMembers,
   type Prisma,
   type PrismaClient,
+  readChiefReceipt,
+  recordStoppedGroupAskOutcomesInTransaction,
+  saveChiefSelection,
   type ThreadEvents,
   touchGroupUpdatedAt,
 } from "@ardurbot/db";
@@ -172,6 +182,8 @@ async function replayExistingSend(
   if (!clientNonce) return null;
   const message = await findSendReceipt(deps.prisma, threadId, clientNonce);
   if (!message) return null;
+  const chiefReceipt = await readChiefReceipt(deps.prisma, threadId, message.id);
+  if (chiefReceipt?.key === "greeting") return sendResult(message, [], chiefReceipt);
   const receiptEvent = await deps.prisma.event.findFirst({
     where: {
       threadId,
@@ -199,19 +211,21 @@ async function replayExistingSend(
     : message.sourceRuns.length
       ? message.sourceRuns
       : [linkedRun!];
-  await enqueueRunsNeedingContinue(deps.jobs, runs);
+  if (chiefReceipt) void enqueueRunsNeedingContinue(deps.jobs, runs);
+  else await enqueueRunsNeedingContinue(deps.jobs, runs);
   const latestEvent = await deps.prisma.event.findFirst({
     where: { threadId },
     orderBy: { seq: "desc" },
     select: { seq: true },
   });
   if (latestEvent) {
-    await deps.events.notify(threadId, latestEvent.seq).catch((error) => {
+    const notify = deps.events.notify(threadId, latestEvent.seq).catch((error) => {
       // Subscribers catch up from the durable event cursor after a missed realtime wake.
       getLogger().error("thread send realtime notification", error);
     });
+    if (!chiefReceipt) await notify;
   }
-  return sendResult(message, runs);
+  return sendResult(message, runs, chiefReceipt);
 }
 
 function sendEventRunIds(payload: Prisma.JsonValue | undefined): string[] {
@@ -220,14 +234,21 @@ function sendEventRunIds(payload: Prisma.JsonValue | undefined): string[] {
   return Array.isArray(runIds) ? runIds.filter((id): id is string => typeof id === "string") : [];
 }
 
-function sendResult(message: { seq: number }, runs: Array<{ id: string; taskId: string }>) {
+function sendResult(
+  message: { seq: number },
+  runs: Array<{ id: string; taskId: string }>,
+  receipt?: ChiefReceipt,
+): ThreadSendResult {
   const first = runs[0];
+  if (!first && receipt) return { kind: "receipt-only", seq: message.seq, receipt };
   if (!first) throw new IsolationError("Send did not create a run");
   return {
+    kind: "work",
     taskId: first.taskId,
     runId: first.id,
     seq: message.seq,
     runIds: runs.map((run) => run.id),
+    ...(receipt ? { receipt } : {}),
   };
 }
 
@@ -450,7 +471,11 @@ export async function threadSnapshot(
       threadId: target.threadId,
       contextRun: core.contextRun ? mapRun(core.contextRun) : null,
       cursor: core.last?.seq ?? -1,
-      messages: messagesWithLiveEvents(core.messagePage.messages, core.liveEvents),
+      messages: messagesWithLiveEvents(
+        core.messagePage.messages,
+        core.liveEvents,
+        core.run ? [core.run] : [],
+      ),
       olderCursor: core.messagePage.olderCursor,
       run: core.run
         ? {
@@ -530,7 +555,7 @@ export async function threadSnapshot(
     members: target.members,
     threadId: target.threadId,
     cursor: core.last?.seq ?? -1,
-    messages: messagesWithLiveEvents(core.messagePage.messages, core.liveEvents),
+    messages: messagesWithLiveEvents(core.messagePage.messages, core.liveEvents, core.activeRuns),
     olderCursor: core.messagePage.olderCursor,
     // Match the live reducer: a failed latest terminal stays in run even while siblings are
     // still active or start late. A newer completed/cancelled terminal clears it.
@@ -583,22 +608,67 @@ function pickLatestTerminalRun<T extends { id: string; createdAt: Date; complete
   });
 }
 
+/** Drop reply text the run already saved. Tool activity on that draft stays. */
+function withoutSavedReplyText<T extends { blocks: MessageBlock[] }>(message: T): T | null {
+  const blocks = message.blocks.filter(
+    (block) => block.kind !== "text" && !(block.kind === "progress" && block.activity !== true),
+  );
+  if (blocks.length === 0) return null;
+  return { ...message, blocks };
+}
+
+/**
+ * Saved messages with the active runs' live messages after them. A draft whose reply text
+ * is on screen sits at the place its run holds instead, above anything sent after that text
+ * appeared, which is where its saved reply lands. Once that place is released, the saved
+ * narration is the reply: the live draft keeps only tool activity.
+ */
 function messagesWithLiveEvents(
   persisted: ThreadSnapshot["messages"],
   liveEvents: Parameters<typeof projectMessages>[0],
+  runs: ReadonlyArray<{ id: string; replySeq: number | null }>,
 ) {
-  const live = projectMessages(liveEvents).filter((message) => {
-    if (message.blocks.some((block) => block.kind === "progress" || block.kind === "steps")) {
-      return true;
+  const replySeqByRun = new Map(runs.map((run) => [run.id, run.replySeq]));
+  const live = projectMessages(liveEvents)
+    .flatMap((message) => {
+      const replySeq = message.runId ? replySeqByRun.get(message.runId) : undefined;
+      // Only a run whose place was released (replySeq null) has saved its narration.
+      // A missing run, or a place still held (including seq 0), keeps the live text.
+      if (replySeq !== null || message.id !== progressMessageId({ runId: message.runId })) {
+        return [message];
+      }
+      const stripped = withoutSavedReplyText(message);
+      return stripped ? [stripped] : [];
+    })
+    .filter((message) => {
+      if (message.blocks.some((block) => block.kind === "progress" || block.kind === "steps")) {
+        return true;
+      }
+      if (!message.id.startsWith("subagent:")) return false;
+      return !persisted.some((row) =>
+        row.blocks.some(
+          (block) => block.kind === "subagent" && message.id === `subagent:${block.agentId}`,
+        ),
+      );
+    });
+  const heldDrafts = runs
+    .flatMap((run) => {
+      const draft = live.find((message) => message.id === progressMessageId({ runId: run.id }));
+      return draft && run.replySeq != null ? [{ seq: run.replySeq, draft }] : [];
+    })
+    .sort((left, right) => left.seq - right.seq);
+  const placed = new Set<(typeof live)[number]>();
+  const messages: Array<(typeof persisted)[number] | (typeof live)[number]> = [];
+  for (const row of persisted) {
+    for (const { seq, draft } of heldDrafts) {
+      if (seq < row.seq && !placed.has(draft)) {
+        messages.push(draft);
+        placed.add(draft);
+      }
     }
-    if (!message.id.startsWith("subagent:")) return false;
-    return !persisted.some((row) =>
-      row.blocks.some(
-        (block) => block.kind === "subagent" && message.id === `subagent:${block.agentId}`,
-      ),
-    );
-  });
-  return [...persisted, ...live];
+    messages.push(row);
+  }
+  return [...messages, ...live.filter((message) => !placed.has(message))];
 }
 
 function mapRun(run: {
@@ -618,6 +688,7 @@ function mapRun(run: {
   contextSnapshot?: unknown;
   routingRule?: unknown;
   error: string | null;
+  providerRetryAt: Date | null;
   startedAt: Date | null;
   completedAt: Date | null;
   createdAt: Date;
@@ -651,6 +722,7 @@ function mapRun(run: {
       run.status === "failed"
         ? runFailureError({ type: "run.failed", payload: { error: run.error } })
         : run.error,
+    providerRetryAt: run.providerRetryAt?.toISOString() ?? null,
     startedAt: run.startedAt?.toISOString() ?? null,
     completedAt: run.completedAt?.toISOString() ?? null,
     createdAt: run.createdAt.toISOString(),
@@ -678,7 +750,7 @@ export async function sendThreadMessage(
   const traceStarted = traceNow();
   const existing = await replayExistingSend(deps, target.threadId, input.clientNonce);
   if (existing) {
-    tracePoint(existing.runId, "admission.replayed");
+    if (existing.kind !== "receipt-only") tracePoint(existing.runId, "admission.replayed");
     return existing;
   }
   const requestedReplyQuote = input.replyQuote?.trim() || undefined;
@@ -898,6 +970,16 @@ export async function sendThreadMessage(
       }
 
       const members = await lockAndLoadGroupMembers(tx, actor, target);
+      const intent = chiefIntent({
+        text: input.text ?? "",
+        taskType: localTaskClassifier.classify({
+          text: input.text ?? "",
+          hasAttachments: Boolean(input.artifactIds?.length),
+        }).taskType,
+        hasAttachments: Boolean(input.artifactIds?.length),
+        hasContextReferences: Boolean(input.mentions?.length || input.board),
+        reply: Boolean(input.replyToMessageId),
+      });
       const memberBotIds = members.map((member) => member.botId);
       const mentionTargets = splitMentionTargets(input.mentions);
       const [groupRouting, spaceRouting, replyTarget, lastRun, candidateGoal] = await Promise.all([
@@ -947,11 +1029,17 @@ export async function sendThreadMessage(
         candidateGoal && root && !goalExhaustionReason(candidateGoal, root, new Date())
           ? candidateGoal
           : null;
+      const addressedBotIds = resolveAddressedBotIds({
+        text: input.text ?? "",
+        members: members.map((member) => ({ id: member.botId, name: member.name })),
+      });
       const explicit = members.filter(
         (member) =>
+          chiefWantsIndividualReplies(input.text ?? "") ||
           mentionTargets.botMentionIds.includes(member.botId) ||
           hasMentionToken(input.text ?? "", member.name) ||
-          hasMentionToken(input.text ?? "", "everyone"),
+          hasMentionToken(input.text ?? "", "everyone") ||
+          addressedBotIds.includes(member.botId),
       );
       const routed = routeIncoming({
         text: input.text ?? "",
@@ -998,6 +1086,37 @@ export async function sendThreadMessage(
         replyQuote,
         clientNonce: input.clientNonce,
       });
+      const chiefBotId = groupRouting?.coordinatorBotId;
+      const chiefSend = Boolean(
+        chiefBotId &&
+          memberBotIds.includes(chiefBotId) &&
+          (intent.receiptOnly || (targetBotIds.length === 1 && targetBotIds[0] === chiefBotId)),
+      );
+      if (chiefSend && chiefBotId && intent.receiptOnly) {
+        await appendEventInTransaction(tx, {
+          spaceId: actor.spaceId,
+          threadId: target.threadId,
+          botId: chiefBotId,
+          type: "thread.message.created",
+          payload: {
+            messageId: message.id,
+            role: "user",
+            origin: "human-typed",
+            actorId: actor.userId,
+            blocks,
+            runIds: [],
+          },
+        });
+        const { receipt, eventSeq } = await createChiefReceipt(tx, {
+          ...actor,
+          threadId: target.threadId,
+          chiefBotId,
+          requestMessageId: message.id,
+          key: intent.key,
+        });
+        await touchGroupUpdatedAt(tx, target.groupId);
+        return { message, runs: [], eventSeq, receipt };
+      }
       const activeRuns = await tx.run.findMany({
         where: {
           threadId: target.threadId,
@@ -1164,6 +1283,27 @@ export async function sendThreadMessage(
           replyQuote,
         },
       });
+      if (chiefSend && chiefBotId && firstRun) {
+        const { receipt, eventSeq } = await createChiefReceipt(tx, {
+          ...actor,
+          threadId: target.threadId,
+          chiefBotId,
+          requestMessageId: message.id,
+          key: intent.key,
+        });
+        await saveChiefSelection(tx, {
+          spaceId: actor.spaceId,
+          userId: actor.userId,
+          groupId: target.groupId,
+          threadId: target.threadId,
+          chiefBotId,
+          sourceMessageId: message.id,
+          sourceRunId: firstRun.id,
+          taskId: firstRun.taskId,
+          operation: intent.operation,
+        });
+        return { message, runs, eventSeq, receipt };
+      }
       return { message, runs, eventSeq: event.seq };
     });
 
@@ -1173,7 +1313,8 @@ export async function sendThreadMessage(
     throw error;
   });
   if ("replay" in committed) {
-    tracePoint(committed.replay.runId, "admission.replayed");
+    if (committed.replay.kind !== "receipt-only")
+      tracePoint(committed.replay.runId, "admission.replayed");
     return committed.replay;
   }
   for (const run of committed.runs) {
@@ -1182,12 +1323,21 @@ export async function sendThreadMessage(
       tracePoint(run.id, "admission.started", undefined, traceStarted);
     tracePoint(run.id, "admission.committed");
   }
-  await deps.events.notify(target.threadId, committed.eventSeq).catch((error) => {
+  const publication = deps.events.notify(target.threadId, committed.eventSeq).catch((error) => {
     // Subscribers catch up from the durable event cursor after a missed realtime wake.
     getLogger().error("thread send realtime notification", error);
   });
-  await enqueueRunsNeedingContinue(deps.jobs, committed.runs);
-  return sendResult(committed.message, committed.runs);
+  const receipt = "receipt" in committed ? committed.receipt : undefined;
+  // Durable runs and events are reconciled after a missed publication; a slow wake
+  // must not hold the accepted chief receipt behind runtime scheduling.
+  if (receipt) {
+    void publication;
+    void enqueueRunsNeedingContinue(deps.jobs, committed.runs);
+  } else {
+    await publication;
+    await enqueueRunsNeedingContinue(deps.jobs, committed.runs);
+  }
+  return sendResult(committed.message, committed.runs, receipt);
 }
 
 /**
@@ -1266,7 +1416,7 @@ export async function stopThreadRuns(
           status: { in: [...ACTIVE_RUN_STATUSES] },
         },
         data: { status: "cancelled", completedAt: new Date() },
-        select: { id: true, botId: true },
+        select: { id: true, botId: true, delegationId: true },
       });
       for (const run of cancelled) {
         await appendEventInTransaction(
@@ -1281,6 +1431,16 @@ export async function stopThreadRuns(
           { cancelledRunId: run.id },
         );
       }
+      // A stopped ask member never finalizes, so mark its round stopped here or
+      // the coordination line would pulse pending forever.
+      await recordStoppedGroupAskOutcomesInTransaction(
+        tx,
+        cancelled.map((run) => ({
+          delegationId: run.delegationId,
+          threadId: target.threadId,
+          spaceId: actor.spaceId,
+        })),
+      );
       const ids = cancelled.map((run) => run.id);
       await tx.steeringMessage.deleteMany({
         where: {

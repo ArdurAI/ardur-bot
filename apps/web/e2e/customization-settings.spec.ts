@@ -4,7 +4,7 @@ import { captureScreenshot, completeOnboarding, openUserSettings, signup } from 
 test("customization settings share searchable lists and hide native pages on web", async ({
   page,
 }, testInfo) => {
-  await signup(page, `customization-${Date.now()}@ardurbot.test`, "password12", "Fixture user");
+  await signup(page, `customization-${Date.now()}@example.test`, "password12", "Fixture user");
   await completeOnboarding(page);
   await openUserSettings(page);
   const settings = page.getByTestId("user-settings");

@@ -1,37 +1,76 @@
 # Hermes runtime (Experimental)
 
 Hermes is a selectable bot runtime for an owner with a pinned, qualified Hermes
-installation on a paired macOS or Linux host. Windows is unavailable until its
+installation on a paired macOS or Linux host, or running Ardur natively on this computer in local mode or the dev stack. Windows is unavailable until its
 native acceptance lane passes. Selecting Hermes reuses the bot's existing Ardur
 connection, model, effort, computer, integrations, connectors, MCP assignments,
 skills and plugins. It does not import local configuration or ask for a Hermes
-account. A missing install, unsupported connection, non-host computer or old host
-relay protocol blocks execution without changing the saved pin.
+account. A missing install, unsupported connection, non-host computer, or old host
+relay protocol blocks execution without changing the saved pin. Local mode and the
+dev stack still need a desktop host computer.
+
+## Install Hermes from settings
+
+On this computer, in desktop local mode or the dev stack, an owner who picks
+Hermes and sees that it is not installed gets an **Install Hermes** button.
+A paired host keeps that message and does not show the button. Windows stays
+unavailable.
+
+The button does not ask for a path, an address, or a version. It downloads the
+pinned Hermes source from GitHub, uv 0.12.19 for this Mac or Linux computer,
+and Python 3.13 with the locked packages for the extras `acp`, `mcp`,
+`computer-use`, and `web`. Those packages are about 200 MB. uv chooses the
+exact Python patch from its own checked list, and Ardur records that patch.
+
+Ardur checks the download before the bot can use it. The unpacked files must
+match git tree `daaffc303ae437041b7f76be17c5f61b14f2ce99`, the file tree of
+commit `29112bef099274229cadff79cdff7bf7b99c4b77`. The uv download must match
+its published checksum. If the files do not match, Ardur removes them and
+stops. Ardur then writes `.ardur-install.json` with the commit, the tree, the
+uv version, the Python version, and the time. Each later launch still checks
+the pinned source-file hashes.
+
+The files live under `<DATA_DIR>/hermes/runtimes`. The versioned directory is
+`hermes-agent-29112bef0992`. When the checks pass, `hermes-agent` points at
+that directory. Per-turn staging stays at `<DATA_DIR>/hermes/staging`.
 
 ## Install a pinned source checkout
 
-The supported upstream source is revision
-`29112bef099274229cadff79cdff7bf7b99c4b77`. Place a checkout at that exact revision at the install
-root. From that checkout, create its `.venv` with the project's own lockfile:
+The same revision can be placed by hand. From that checkout, create its
+`.venv` with the project's own lockfile:
 
 ```sh
-uv sync --locked --extra acp --extra mcp
+uv sync --locked --extra acp --extra mcp --extra computer-use --extra web
 ```
 
 The install root must contain `pyproject.toml`, `uv.lock`, the pinned source
 files and `.venv/bin/python`. It must **not** contain a project `.env` file.
-Ardur checks the required source hashes and interpreter before offering the
-runtime; it never downloads or installs Hermes in this milestone.
+A git checkout is accepted when `HEAD` is the pinned commit. A directory
+without `.git` is accepted when `.ardur-install.json` records that same commit
+and tree. Ardur checks the required source hashes and interpreter before
+offering the runtime.
 
-On both macOS and Linux desktop, the managed install root is
+On both macOS and Linux desktop, the host-service install root is
 `<desktop application data>/host-service/runtimes/hermes-agent` (a sibling of
 the host service's `workspaces` directory). To keep a qualified checkout in a
 different absolute location, set `ARDUR_HERMES_INSTALL=<install-root>` in the
 desktop or host-service launch environment; that explicit path takes priority.
+When running locally (local mode or the dev stack), the local Hermes root is
+`<DATA_DIR>/hermes`, with per-turn staging at `<DATA_DIR>/hermes/staging` and
+the managed install at `<DATA_DIR>/hermes/runtimes/hermes-agent`. A relative
+`DATA_DIR` resolves against each process's working directory, so set
+`ARDUR_HERMES_INSTALL` or a shared absolute `DATA_DIR` to keep one install
+path across the stack.
 The host probes no other location, including `PATH`, pipx, Homebrew or a
 personal Hermes directory. Restart the desktop app or host service after
-installing or changing the selector. Until qualification passes, settings show
-"Hermes is not installed on this computer."
+installing or changing the selector. A missing install shows "Hermes is not
+installed on this computer." On this computer, that message is where **Install
+Hermes** appears. An install that fails its safety check shows "The Hermes
+install on this computer failed its safety check." When that install is the
+managed one, **Install Hermes** appears again so reinstalling repairs it; an
+install chosen with `ARDUR_HERMES_INSTALL` belongs to the operator and shows
+the same message without the button. Windows shows "Hermes isn't available on
+Windows yet."
 
 The optional qualification lane needs an owner-provided install and fake
 provider; run it separately from normal unit tests:
@@ -41,21 +80,45 @@ ARDUR_HERMES_INSTALL_LANE=1 ARDUR_HERMES_INSTALL=<install-root> \
   pnpm exec vitest run packages/adapters/src/hermes-install-lane.test.ts
 ```
 
-The current provider path accepts direct `openai-compatible` and Ollama connections
-that expose Chat Completions. Anthropic Messages, Responses-only endpoints, OAuth
-connections and other routes have no qualified translator. The chosen connection
+The provider path accepts two kinds of API-key connections. Custom endpoints
+(OpenAI-compatible servers and Ollama) expose Chat Completions directly, and
+Ardur passes requests through unchanged. Every other key-based connection —
+Anthropic, Google (AI Studio or a Vertex key), OpenAI, OpenRouter, Kimi for
+Coding, Z.AI and the remaining key-based catalog providers — is translated
+through Ardur's provider layer, so Hermes speaks the same Chat Completions
+protocol either way. The real key stays in the worker; a per-turn grant stands
+in for it, with the same request and token caps on both routes.
+
+Sign-in (subscription) connections cannot back Hermes. Anthropic does not
+permit third-party apps to offer Claude.ai login or to route requests through
+Free, Pro or Max plan credentials, so a Claude subscription only works in
+Anthropic's own apps; use an Anthropic API key instead
+(<https://code.claude.com/docs/en/legal-and-compliance>). A ChatGPT sign-in is
+sanctioned only inside Codex, which runs a stateful agent loop rather than the
+plain model turns Hermes needs; use an OpenAI API key instead. The settings
+picker keeps these connections visible but disabled with the reason, a run
+pinned to one is refused, and any other sign-in connection is refused the same
+way. A run on an Anthropic sign-in saved by an older version is refused with
+"Reconnect with an API key." The chosen connection
 must have a bounded context window and an output limit at most 65,536 tokens.
 Effort is a requested value; seeing the outbound field does not prove the provider
 applied it. The bot and run keep their exact credential, model, effort and revision.
 Group member model choices must pass the same compatibility check. An admitted run
 keeps its immutable pin even if the bot or group choice changes later.
 
-The settings panel exposes two limits: **Model calls per turn** (1–64, default 16)
-and **Time limit** (1–600 seconds, default 180). They live together in a versioned
-bot field and are copied into the run pin. There is no raw Hermes configuration
-editor. A model call ceiling constrains broker admissions; a started request with
-unknown usage retains its conservative reservation. These are initial policy
-values, not measured performance or spend promises.
+The settings panel exposes three tunable limits and an Advanced inspector:
+**Model calls per turn** (1–64, default 16), **Time limit (seconds)**
+(1–600 s, default 180) and **Context limit (KiB)** (4–64 KiB, default 16).
+They live together in a versioned bot field and are copied into the run pin.
+Advanced edits the same document as strict JSON and previews the effective
+configuration server-side; familiar harness keys for model, connections,
+tools, paths, native memory, children or compression are rejected with a
+specific reason because Ardur owns those. Native Hermes memory, learning,
+child agents, automatic compression and independent provider routes stay
+disabled in this release. A model call ceiling constrains broker
+admissions; a started request with unknown usage retains its conservative
+reservation. These are initial policy values, not measured performance or
+spend promises.
 
 ## Host and tool authority
 

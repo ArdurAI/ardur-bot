@@ -73,6 +73,13 @@ export const RuntimeAvailabilitySchema = z.object({
   catalogSource: z.enum(["live", "cache", "captured", "none"]).optional(),
   catalogCheckedAt: z.string().optional(),
   catalogStale: z.boolean().optional(),
+  /** Local-mode owner install progress. Omitted for a paired host and for anyone else. */
+  install: z
+    .object({
+      state: z.enum(["absent", "installing", "ready", "failed"]),
+      phase: z.enum(["downloading", "checking", "python", "packages", "finishing"]).optional(),
+    })
+    .optional(),
   models: z.array(
     z.object({
       id: z.string(),

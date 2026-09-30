@@ -1,4 +1,21 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "Reading the document": "正在读取文档",
+  "Connecting to Notion": "正在连接 Notion",
+  "Creating the Notion page": "正在创建 Notion 页面",
+  "Checking the Notion page": "正在检查 Notion 页面",
+  "Checking the missing tool": "正在检查缺少的工具",
+  "Working on the task": "正在处理任务",
+  "Waiting for the tool": "正在等待工具",
+  "Done — added the document to Notion.": "已完成 — 文档已添加到 Notion。",
+  "The draft is ready.": "草稿已准备好。",
+  "Got it — I’ll choose a team member to put this in Notion.":
+    "收到 — 我会选择一位团队成员把它放到 Notion。",
+  "Got it — I’ll check what’s missing and ask before installing it.":
+    "收到 — 我会检查缺少什么，并在安装前征求同意。",
+  "Got it — I’ll check the request and choose the next step.": "收到 — 我会检查请求并选择下一步。",
+  "Hi everyone.": "大家好。",
+  "Messaged {name}": "已向 {name} 发送消息",
+  "Queued for {name}": "已排队等待 {name}",
   "Allow preparation": "允许准备",
   "Preparation allowed": "已允许准备",
   "Request expired": "请求已过期",
@@ -37,8 +54,38 @@ export const ZH_MESSAGES: Record<string, string> = {
     "群组模型被 Bot 或空间设置阻止。请更改目标位置策略，或选择其他群组模型。",
   "{botName} couldn't use the model set for this group. Reconnect it or change the group model.":
     "{botName} 无法使用为此群组设置的模型。请重新连接，或更改群组模型。",
+  "{botName} hit the group model's usage limit. Try again after it resets, or change the group model.":
+    "{botName} 已达到群组模型的用量上限。请在限额重置后重试，或更改群组模型。",
+  "{botName}'s sign-in for the group model expired. Reconnect it or change the group model.":
+    "{botName} 的群组模型登录已过期。请重新连接，或更改群组模型。",
   "{botName} couldn't use the model set for this group. Change the group model or check this bot's settings.":
     "{botName} 无法使用为此群组设置的模型。请更改群组模型，或检查 Bot 设置。",
+  "{runtime}'s usage limit is reached. Try again after it resets.":
+    "{runtime} 的用量已达上限。请在限额重置后重试。",
+  "Sign in to {runtime} on this computer, then try again.":
+    "请在这台电脑上登录 {runtime}，然后重试。",
+  "{runtime} reached this run's turn limit. Narrow the task and try again.":
+    "{runtime} 已达到此次运行的轮次上限。请缩小任务范围后重试。",
+  "{runtime}'s pinned model is unavailable. Change the pin and try again.":
+    "{runtime} 固定的模型不可用。请更改固定模型后重试。",
+  "{runtime}'s configuration is invalid. Check this bot's settings.":
+    "{runtime} 的配置无效。请检查 Bot 设置。",
+  "{runtime}'s model connection is missing. Connect it or change the pin.":
+    "{runtime} 的模型连接缺失。请连接或更改固定模型。",
+  "{runtime} stopped before finishing this run.": "{runtime} 在完成此次运行前已停止。",
+  "{runtime} could not finish this run. Check the runtime or change the pin.":
+    "{runtime} 无法完成此次运行。请检查运行时或更改固定模型。",
+  "{runtime} is experimental. Turn on Experimental for {bot} to use it.":
+    "{runtime} 是实验性运行时。为 {bot} 启用「实验性」后才能使用。",
+  "{runtime} runs on the host computer, not in a sandbox. Change {bot}'s computer to use it.":
+    "{runtime} 运行在主机电脑上，而不是沙盒中。请更改 {bot} 的电脑后再使用。",
+  "{bot}'s allowed model destinations block this model. Change them in {bot}'s settings.":
+    "{bot} 允许的模型目的地阻止了此模型。请在 {bot} 的设置中更改。",
+  "This space's model policy blocks this model. Change it in Settings, under Models.":
+    "此空间的模型策略阻止了此模型。请在设置的「模型」中更改。",
+  "This bot": "此 Bot",
+  "Turn on Experimental": "启用「实验性」",
+  "Open Settings": "打开设置",
   Antigravity: "Antigravity",
   Hermes: "Hermes",
   "Ardur (built-in)": "Ardur（内置）",
@@ -48,8 +95,15 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Model calls per turn": "每轮模型调用次数",
   "Time limit": "时间限制",
   "Hermes is not installed on this computer.": "此计算机上未安装 Hermes。",
-  "Hermes does not yet support Anthropic connections.": "Hermes 尚不支持 Anthropic 连接。",
-  "Hermes does not yet support this connection.": "Hermes 尚不支持此连接。",
+  "The Hermes install on this computer failed its safety check.":
+    "此计算机上的 Hermes 安装未通过安全检查。",
+  "Hermes isn't available on Windows yet.": "Hermes 暂不支持 Windows。",
+  "Claude subscriptions only work in Anthropic's own apps; add an Anthropic API key to use Claude with Hermes.":
+    "Claude 订阅只能在 Anthropic 自家的应用中使用；添加 Anthropic API 密钥即可在 Hermes 中使用 Claude。",
+  "ChatGPT sign-ins only work inside Codex; add an OpenAI API key to use GPT models with Hermes.":
+    "ChatGPT 登录只能在 Codex 内使用；添加 OpenAI API 密钥即可在 Hermes 中使用 GPT 模型。",
+  "Add an API key connection to use this provider with Hermes.":
+    "添加 API 密钥连接，即可在 Hermes 中使用此提供商。",
   "Hermes runs with this computer's access.": "Hermes 使用此计算机的访问权限运行。",
   "Antigravity did not finish in time. Try again.": "Antigravity 未能按时完成。请重试。",
   "Antigravity's live model list could not be checked. Check again.":
@@ -69,6 +123,7 @@ export const ZH_MESSAGES: Record<string, string> = {
     "Antigravity 无法识别模型 {model}。请从其列表中选择模型。",
   "Antigravity could not run this turn: {reason}.": "Antigravity 无法完成本轮运行：{reason}。",
   "Cost unavailable": "费用不可用",
+  "Partially reported": "部分已报告",
   "Antigravity is installed (version {version})": "Antigravity 已安装（版本 {version}）",
   "Sign-in unknown until the first run": "首次运行前无法确定登录状态",
   "Antigravity is not installed on this computer. Install it and sign in there, then check again.":
@@ -155,6 +210,8 @@ export const ZH_MESSAGES: Record<string, string> = {
   Read: "已读",
   Replied: "已回复",
   "Waiting for a turn": "等待轮次",
+  "Waiting for a free place": "正在等待空位",
+  "Waiting for the model": "正在等待模型",
   Expired: "已过期",
   "Could not update learning. Try again.": "无法更新学习设置。请重试。",
   "Could not update this task; try again.": "无法更新此任务，请重试。",
@@ -765,6 +822,8 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Work stopped, but the thread could not refresh: {detail}":
     "工作已停止，但线程无法刷新：{detail}",
   "You have control": "你已接管控制",
+  "You control the computer": "你正在控制电脑",
+  "End this terminal?": "结束此终端？",
   "Your account": "你的账户",
   "Stored securely. Never shown here.": "已安全存储。不会显示在这里。",
   Actions: "操作",
@@ -1113,9 +1172,16 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Work items": "工作事项",
   "All bots": "所有机器人",
   "Bots keep the board and memory current": "机器人会保持看板和记忆为最新",
+  "Bots answering at once": "同时应答的机器人",
   "Learning review is off": "学习复查已关闭",
   "Learning review is on": "学习复查已开启",
   "Reviewer: {model}": "复查模型：{model}",
+  "Learning review": "学习复查",
+  "Learning reviewer": "学习复查模型",
+  "Thinking: {level}": "思考：{level}",
+  "Connect a model": "连接模型",
+  "Reviews use this connection and may incur model charges.":
+    "复查使用此连接，可能会产生模型调用费用。",
   Enable: "启用",
   "Filed by {name}": "由机器人 {name} 记录",
   "No reviewer model yet.": "尚未选择复查模型。",
@@ -1227,4 +1293,100 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Same as bot": "与 Bot 相同",
   "Could not save group model.": "无法保存群组模型。",
   "This member's model changed. Reload the group.": "此成员的模型已更改。请重新加载群组。",
+  "Time limit (seconds)": "时间限制（秒）",
+  "Context limit (KiB)": "上下文限制（KiB）",
+  "Enter valid JSON.": "请输入有效的 JSON。",
+  "Remove the duplicate field.": "请删除重复的字段。",
+  "Configuration must be 16 KiB or smaller.": "配置不得超过 16 KiB。",
+  "This configuration is too complex.": "此配置过于复杂。",
+  "This configuration version is not supported.": "不支持此配置版本。",
+  "This field is not supported.": "不支持此字段。",
+  "Ardur sets the model and thinking level. Change them in bot settings.":
+    "模型和思考级别由 Ardur 设定。请在机器人设置中更改。",
+  "Use Ardur Connections for provider settings.": "请使用 Ardur 的“连接”管理提供商设置。",
+  "Use Ardur settings for tools, integrations, MCP servers, skills, and plugins.":
+    "请使用 Ardur 的设置管理工具、集成、MCP 服务器、技能和插件。",
+  "Ardur manages paths, hooks, permissions, and network access.":
+    "路径、钩子、权限和网络访问由 Ardur 管理。",
+  "Runtime settings cannot install or load code.": "运行时设置不能安装或加载代码。",
+  "Use Ardur Learning settings.": "请使用 Ardur 的学习设置。",
+  "Native child agents are not available with Hermes.": "Hermes 不提供原生子代理。",
+  "Native compression is not available with Hermes.": "Hermes 不提供原生压缩。",
+  "Use a whole number from 1 to 64.": "请输入 1 到 64 之间的整数。",
+  "Use whole seconds.": "请输入整数秒。",
+  "Use whole KiB.": "请输入整数 KiB。",
+  "Choose Trim older context or Stop the run.": "请选择“修剪较早的上下文”或“停止运行”。",
+  "Use a whole number from 1 to 600.": "请输入 1 到 600 之间的整数。",
+  "Use a whole number from 4 to 64.": "请输入 4 到 64 之间的整数。",
+  "Use a whole number from 1 to 3.": "请输入 1 到 3 之间的整数。",
+  "Bot settings changed. Reload before saving.": "机器人设置已更改。保存前请重新加载。",
+  "Could not preview the configuration. Try again.": "无法预览配置。请重试。",
+  "Configuration (JSON)": "配置（JSON）",
+  "Effective configuration": "生效的配置",
+  "Your settings": "您的设置",
+  "Ardur manages": "由 Ardur 管理",
+  "Model, thinking, connections, tools, and permissions come from Ardur.":
+    "模型、思考、连接、工具和权限均来自 Ardur。",
+  "When context is full": "当上下文已满时",
+  "Trim older context": "修剪较早的上下文",
+  "Stop the run": "停止运行",
+  "API attempts": "API 尝试次数",
+  "Child agents": "子代理",
+  "Unavailable with Hermes.": "在 Hermes 中不可用。",
+  "Native compression": "原生压缩",
+  "Reset to defaults": "重置为默认值",
+  "Fix the configuration JSON to edit these settings.": "请修复配置 JSON 后再编辑这些设置。",
+  Reload: "重新加载",
+  "Done: {title}": "完成：{title}",
+  "Failed: {title}": "失败：{title}",
+  "Working: {title}": "工作中：{title}",
+  Interrupted: "已中断",
+  "Interrupted: {title}": "已中断: {title}",
+  "Unknown: {title}": "未知: {title}",
+  Command: "命令",
+  "1 bot": "1 个机器人",
+  "{count} bots": "{count} 个机器人",
+  "{count} answered": "{count} 已回答",
+  "Asked {asked} · {answered}": "询问了 {asked} · {answered}",
+  "{name} couldn't answer": "{name} 无法回答",
+  "{name} couldn't answer: its model account needs attention":
+    "{name} 无法回答：其模型账户需要处理",
+  "{name} couldn't answer: its model account hit a rate limit":
+    "{name} 无法回答：其模型账户已达到速率限制",
+  "{name} couldn't answer: its model is unavailable": "{name} 无法回答：其模型不可用",
+  "{name} stopped before answering": "{name} 在回答前已停止",
+  Fix: "修复",
+  answered: "已回答",
+  "couldn't answer": "无法回答",
+  "stopped before answering": "未回答就停止",
+  "is waiting for you": "正在等你",
+  "has not answered yet": "尚未回答",
+  "This runtime": "此运行时",
+  "Where this bot runs": "此 Bot 的运行位置",
+  "Only this bot": "仅此 Bot 使用",
+  "Shared with team": "与团队共享",
+  "Bots share files and installed tools": "Bot 共享文件和已安装的工具",
+  "Runs as you; can use your files and signed-in tools":
+    "以你的身份运行；可以使用你的文件和已登录的工具",
+  Container: "容器",
+  "Remote computer": "远程计算机",
+  "Hosted sandbox": "托管沙箱",
+  "Test computer": "测试计算机",
+  "Separate home; can reach allowed network services and granted credentials.":
+    "独立的主目录；可以访问获准的网络服务和授予的凭据。",
+  "Uses that account's permissions.": "使用该账户的权限。",
+  "Runs at the configured provider; can use granted credentials and network access.":
+    "在已配置的服务商处运行；可以使用授予的凭据和网络访问权限。",
+  "For testing only; not an isolation boundary.": "仅用于测试；不构成隔离边界。",
+  "Computer location unavailable. Choose a supported connection.":
+    "无法获取计算机位置。请选择受支持的连接。",
+  "Computer location unavailable. Try again.": "无法获取计算机位置。请重试。",
+  "Change location": "更改位置",
+  "Set up a container for isolated work.": "请设置容器以进行隔离工作。",
+  "Set up computer": "设置计算机",
+  "Could not start": "无法启动",
+  Sharing: "共享方式",
+  "Change location on desktop.": "请在桌面端更改位置。",
+  "Set up a container on desktop, then try again.": "请在桌面端设置容器，然后重试。",
+  Sleeping: "休眠中",
 };

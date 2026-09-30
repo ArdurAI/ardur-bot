@@ -179,6 +179,139 @@ describe("archiveGroup", () => {
   });
 });
 
+describe("updateGroup member removal", () => {
+  it("marks a removed member's open ask round stopped instead of leaving it pending", async () => {
+    const actor = {
+      spaceId: "workspace-1",
+      userId: "user-1",
+      email: "user@example.com",
+      isDeploymentOwner: true,
+    };
+    const storedMessage = {
+      id: "ask-message",
+      botId: "chief",
+      blocks: [
+        {
+          kind: "coordination",
+          nonce: "group-ask:1:ask-run:call-1",
+          round: 1,
+          text: "Say hello.",
+          updates: [],
+          members: [
+            { botId: "ada", name: "Ada", outcome: "answered" },
+            { botId: "ben", name: "Ben", outcome: "pending" },
+          ],
+        },
+      ],
+    };
+    const messageUpdate = vi.fn(
+      async (_args: {
+        data: { blocks: Array<{ members: Array<{ botId: string; outcome: string }> }> };
+      }) => ({}),
+    );
+    const delegationUpdateMany = vi.fn(async () => ({ count: 0 }));
+    const fullGroup = {
+      id: "group-1",
+      spaceId: "workspace-1",
+      userId: "user-1",
+      name: "Intro room",
+      coordinatorBotId: "chief",
+      pinned: false,
+      sectionId: null,
+      archivedAt: null,
+      createdAt: new Date("2026-09-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-09-01T00:00:00.000Z"),
+      thread: { id: "thread-1", unread: false, messages: [] },
+      members: [],
+    };
+    const tx = {
+      $queryRaw: vi.fn(async () => [{ id: "group-1" }]),
+      botCommunicationPolicy: {
+        upsert: vi.fn(async () => ({})),
+        findMany: vi.fn(async () => [{ paused: false, enabled: true }]),
+      },
+      chatGroup: {
+        findFirst: vi.fn(async () => ({
+          id: "group-1",
+          coordinatorBotId: "chief",
+          members: [
+            { botId: "chief", bot: { archivedAt: null } },
+            { botId: "ada", bot: { archivedAt: null } },
+            { botId: "ben", bot: { archivedAt: null } },
+          ],
+          thread: { id: "thread-1" },
+        })),
+        findFirstOrThrow: vi.fn(async () => fullGroup),
+        update: vi.fn(async () => ({})),
+      },
+      chatGroupMember: {
+        deleteMany: vi.fn(async () => ({ count: 1 })),
+        createMany: vi.fn(async () => ({ count: 0 })),
+      },
+      botMessageDelivery: { findMany: vi.fn(async () => []) },
+      run: {
+        findMany: vi.fn(async () => [
+          {
+            id: "run-ben",
+            taskId: "task-ben",
+            delegationId: "delegation-ben",
+            threadId: "thread-1",
+            spaceId: "workspace-1",
+          },
+        ]),
+        updateMany: vi.fn(async () => ({ count: 1 })),
+      },
+      attempt: { updateMany: vi.fn(async () => ({ count: 0 })) },
+      task: { updateMany: vi.fn(async () => ({ count: 0 })) },
+      delegation: {
+        findMany: vi.fn(async () => [
+          {
+            id: "delegation-ben",
+            actingBotId: "ben",
+            actingName: "Ben",
+            admissionKey: "group-ask:1:ask-run:call-1:ben",
+          },
+        ]),
+        updateMany: delegationUpdateMany,
+      },
+      message: {
+        findUnique: vi.fn(async () => storedMessage),
+        update: messageUpdate,
+      },
+      thread: { update: vi.fn(async () => ({ nextEventSeq: 7 })) },
+      event: {
+        create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+          id: "event",
+          ...data,
+        })),
+      },
+    };
+    const prisma = {
+      $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
+      bot: {
+        findMany: vi.fn(async () => [
+          { id: "chief", name: "Chief", color: "#111" },
+          { id: "ada", name: "Ada", color: "#222" },
+        ]),
+      },
+    } as unknown as PrismaClient;
+
+    const repos = createGroupRepos(prisma);
+    const result = await repos.updateGroup(actor, {
+      groupId: "group-1",
+      botIds: ["chief", "ada"],
+    });
+
+    expect(result.cancelledRunIds).toEqual(["run-ben"]);
+    const blocks = messageUpdate.mock.calls[0]?.[0].data.blocks;
+    expect(blocks?.[0]?.members.find((row) => row.botId === "ben")?.outcome).toBe("stopped");
+    expect(blocks?.[0]?.members.find((row) => row.botId === "ada")?.outcome).toBe("answered");
+    // The delegation row stays unsettled so the fan-in settles silently and
+    // never wakes the coordinator for an ask the person ended.
+    expect(delegationUpdateMany).not.toHaveBeenCalled();
+  });
+});
+
 describe("stable group memberships", () => {
   const actor = {
     spaceId: "space",
@@ -243,6 +376,8 @@ describe("stable group memberships", () => {
       },
       chatGroupMember: { deleteMany, createMany },
       run: { findMany: vi.fn().mockResolvedValue([]) },
+      botCommunicationPolicy: { upsert: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
+      botMessageDelivery: { findMany: vi.fn().mockResolvedValue([]) },
     };
     const prisma = {
       bot: {
@@ -268,7 +403,7 @@ describe("stable group memberships", () => {
         botId: { in: ["bot-3"] },
         status: { in: ["queued", "leased", "running", "waiting_input", "waiting_takeover"] },
       },
-      select: { id: true, taskId: true },
+      select: { id: true, taskId: true, delegationId: true, threadId: true, spaceId: true },
     });
   });
 

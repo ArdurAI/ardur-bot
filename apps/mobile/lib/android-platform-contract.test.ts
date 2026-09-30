@@ -167,12 +167,35 @@ describe("Android mobile platform contract", () => {
     expect(thread).toContain("inGroup && workingGroupBots.length > 0 ?");
     expect(thread).toContain("workingGroupBots.length - index");
     expect(thread).toContain("agents working");
-    // Visible chrome is avatar-only; copy stays on accessibilityLabel.
+    // Visible chrome is the avatar stack; the working label stays on accessibilityLabel.
+    // The one visible line is the waiting notice, shown only while every listed bot is
+    // queued for a free place in the room.
     expect(thread).toMatch(
-      /accessibilityLabel=\{\s*workingGroupBots\.length === 1[\s\S]*agents working/,
+      /accessibilityLabel=\{\s*workingGroupBots\.every\(\(bot\) => bot\.retrying\)[\s\S]*agents working/,
+    );
+    expect(thread).toMatch(
+      /workingGroupBots\.every\(\(bot\) => bot\.status === "queued" && !bot\.retrying\) \?\s*\(\s*<Text[^>]*>\s*\{t\("Waiting for a free place"\)\}/,
     );
     expect(thread).not.toMatch(
       /workingGroupBots\.length === 1\s*\?[\s\S]*<Text[^>]*>\s*\{t\("\{name\} is working"/,
+    );
+  });
+
+  it("says waiting for the model only while a run waits to retry", () => {
+    const thread = readFileSync(resolve(mobileRoot, "app/thread.tsx"), "utf8");
+    // The flag comes from the run's retry wake moment, not from its queued status.
+    expect(thread).toContain("retrying: run.providerRetryAt != null");
+    expect(thread).toContain("const currentBotRetrying = snap?.run?.providerRetryAt != null;");
+    // The group footer's one visible waiting line prefers the model wait over the room wait.
+    expect(thread).toMatch(
+      /workingGroupBots\.every\(\(bot\) => bot\.retrying\)\s*\?\s*t\("Waiting for the model"\)[\s\S]*workingGroupBots\.every\(\(bot\) => bot\.status === "queued" && !bot\.retrying\)\s*\?\s*t\("Waiting for a free place"\)/,
+    );
+    expect(thread).toMatch(
+      /workingGroupBots\.every\(\(bot\) => bot\.retrying\) \?\s*\(\s*<Text[^>]*>\s*\{t\("Waiting for the model"\)\}/,
+    );
+    // A direct thread's bot row says it only while its own run waits.
+    expect(thread).toMatch(
+      /currentBotRetrying\s*\?\s*t\("Waiting for the model"\)\s*:\s*t\("\{name\} is working"/,
     );
   });
 

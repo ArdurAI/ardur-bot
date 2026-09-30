@@ -29,11 +29,35 @@ vi.mock("../lib/rpc", () => ({ rpc: { delegations: calls } }));
 vi.mock("@lingui/react/macro", () => ({
   Trans: ({ children }: { children: ReactNode }) => children,
   useLingui: () => ({
-    t: (parts: TemplateStringsArray | { id: string }) =>
-      "id" in parts ? parts.id : parts.join(""),
+    t: (
+      parts: TemplateStringsArray | { id: string; values?: Record<string, unknown> },
+      ...values: unknown[]
+    ) => {
+      if ("id" in parts) {
+        const bound = parts.values ?? {};
+        return parts.id.replace(/\{(\w+)\}/g, (_, key: string) => String(bound[key] ?? `{${key}}`));
+      }
+      return parts.reduce(
+        (text, part, index) => text + part + (index < values.length ? String(values[index]) : ""),
+        "",
+      );
+    },
+    i18n: {
+      _: (
+        descriptor: { id: string; values?: Record<string, string> },
+        values?: Record<string, string>,
+      ) =>
+        Object.entries({ ...descriptor.values, ...values }).reduce(
+          (text, [key, value]) => text.replaceAll(`{${key}}`, value),
+          descriptor.id,
+        ),
+    },
   }),
 }));
-vi.mock("@lingui/core/macro", () => ({ t: (parts: TemplateStringsArray) => parts.join("") }));
+vi.mock("@lingui/core/macro", () => ({
+  t: (parts: TemplateStringsArray) => parts.join(""),
+  msg: (parts: TemplateStringsArray) => ({ id: parts.join(""), message: parts.join("") }),
+}));
 vi.mock("@ardurbot/ui-web", () => ({
   Button: ({
     variant: _v,
@@ -254,5 +278,63 @@ it.each([
   );
   expect(node.textContent).toContain(expected);
   expect(node.textContent).not.toContain(absent);
+  await act(async () => root.unmount());
+});
+
+it("fills the bot's name in a blocked card's refusal sentence", async () => {
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  await act(async () =>
+    root.render(
+      <MemoryRouter>
+        <TeamBoardRow
+          row={{
+            ...row,
+            state: "blocked",
+            sentence: null,
+            requesterName: null,
+            reason: null,
+            reasonCategory: "destinations-bot",
+            reasonRuntime: null,
+            availability: "busy",
+            observedAt: new Date().toISOString(),
+          }}
+          refresh={async () => {}}
+        />
+      </MemoryRouter>,
+    ),
+  );
+  expect(node.textContent).toContain("Reviewer's allowed model destinations block this model");
+  expect(node.textContent).not.toContain("{bot}");
+  await act(async () => root.unmount());
+});
+
+it("shows unavailable usage instead of zero, and a partial total as a lower bound", async () => {
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  await act(async () =>
+    root.render(
+      <MemoryRouter>
+        <TeamBoardRow
+          row={{ ...row, usage: { tokens: null, partial: false, costs: [] } }}
+          refresh={async () => {}}
+        />
+      </MemoryRouter>,
+    ),
+  );
+  expect(node.textContent).toContain("Tokens");
+  expect(node.textContent).toContain("Unavailable");
+  expect(node.textContent).not.toContain("Tokens: 0");
+  await act(async () =>
+    root.render(
+      <MemoryRouter>
+        <TeamBoardRow
+          row={{ ...row, usage: { tokens: 40, partial: true, costs: [] } }}
+          refresh={async () => {}}
+        />
+      </MemoryRouter>,
+    ),
+  );
+  expect(node.textContent).toContain("at least 40");
   await act(async () => root.unmount());
 });

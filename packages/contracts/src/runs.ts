@@ -1,5 +1,6 @@
 import * as z from "zod";
 import { DelegationRecordSchema } from "./delegation.js";
+import { FailureCategoryIdSchema } from "./failure-categories.js";
 import { Id, RunStatus, RunTriggerSchema } from "./ids.js";
 
 export const RunActivityRowSchema = z.object({
@@ -17,6 +18,10 @@ export const RunActivityRowSchema = z.object({
     .optional(),
   externalThread: z.boolean().optional(),
   status: RunStatus,
+  /** The classified cause of a failed run, when one was recorded. */
+  failureCategory: FailureCategoryIdSchema.optional(),
+  /** The runtime display name a categorized failure sentence names, when it names one. */
+  failureRuntime: z.string().nullable().optional(),
   trigger: RunTriggerSchema,
   routineId: Id.nullable().optional(),
   notificationsEnabled: z.boolean(),

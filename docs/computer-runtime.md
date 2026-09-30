@@ -130,8 +130,8 @@ confirmed background maintenance and preserve the external workspace checkpoint.
 
 See [profiles, connection boundaries, official sources and manual acceptance](compute-profiles.md)
 for build tags, engine discovery, Kubernetes resource/RBAC settings, and the macOS/Linux checks.
-The profile registry is `packages/contracts/src/computer-profiles.ts`; unpublished digest fields
-remain null. No image is built implicitly during provisioning, and no vendor credentials are
+The profile registry is `packages/contracts/src/computer-profiles.ts`; image tags and digests live
+in `packages/contracts/src/computer-image.js`, where unrecorded digests remain null. No image is built implicitly during provisioning, and no vendor credentials are
 installed in these profiles.
 
 ## Packaged host computers

@@ -338,6 +338,64 @@ it("explains an incompatible saved connection and omits it from Hermes choices",
         },
         experimental: true,
         catalog: [{ provider: "anthropic", id: "valid", label: "Valid" }],
+        credentials: [
+          {
+            id: "connection",
+            provider: "anthropic",
+            label: "Connection",
+            connectionIssue: "api-key-required",
+          },
+        ],
+        onSaved: vi.fn(),
+        onError: vi.fn(),
+      } as never),
+    ),
+  );
+  await act(async () =>
+    (node.querySelector('button[aria-label="Runtime · Worker"]') as HTMLButtonElement).click(),
+  );
+  await act(async () =>
+    vi
+      .mocked(presentMessageActionSheet)
+      .mock.calls.at(-1)![0]
+      .actions.find((action) => action.text === "Hermes")!
+      .onPress(),
+  );
+  expect(node.textContent).toContain(
+    "Claude subscriptions only work in Anthropic's own apps; add an Anthropic API key to use Claude with Hermes.",
+  );
+  await act(async () =>
+    (
+      node.querySelector('button[aria-label="Model in this group · Worker"]') as HTMLButtonElement
+    ).click(),
+  );
+  expect(vi.mocked(presentMessageActionSheet).mock.calls.at(-1)![0].actions).toHaveLength(1);
+  expect(rpc).not.toHaveBeenCalled();
+  await act(async () => root.unmount());
+});
+
+it("offers a key-based connection in the Hermes choices without a warning", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  await act(async () =>
+    root.render(
+      createElement(GroupMemberModelControl, {
+        groupId: "room",
+
+        member: {
+          ...member,
+          runtimePin: {
+            runtimeKind: "pi",
+            provider: "anthropic",
+            modelId: "valid",
+            credentialId: "connection",
+            effort: "high",
+            revision: 2,
+          },
+        },
+        experimental: true,
+        catalog: [{ provider: "anthropic", id: "valid", label: "Valid" }],
         credentials: [{ id: "connection", provider: "anthropic", label: "Connection" }],
         onSaved: vi.fn(),
         onError: vi.fn(),
@@ -354,14 +412,14 @@ it("explains an incompatible saved connection and omits it from Hermes choices",
       .actions.find((action) => action.text === "Hermes")!
       .onPress(),
   );
-  expect(node.textContent).toContain("Hermes does not yet support Anthropic connections.");
+  expect(node.textContent).not.toContain("Claude subscriptions");
   await act(async () =>
     (
       node.querySelector('button[aria-label="Model in this group · Worker"]') as HTMLButtonElement
     ).click(),
   );
-  expect(vi.mocked(presentMessageActionSheet).mock.calls.at(-1)![0].actions).toHaveLength(1);
-  expect(rpc).not.toHaveBeenCalled();
+  const actions = vi.mocked(presentMessageActionSheet).mock.calls.at(-1)![0].actions;
+  expect(actions.some((action) => action.text === "anthropic · Valid")).toBe(true);
   await act(async () => root.unmount());
 });
 
@@ -1042,5 +1100,102 @@ it("shows the server's reason when it refuses a group model", async () => {
   const retryButton = node.querySelector('button[aria-label="Runtime · Worker"]');
   expect(retryButton).not.toBeNull();
   expect(retryButton?.textContent).toContain("Hermes");
+  await act(async () => root.unmount());
+});
+
+it("prefers the refreshed member effectiveRuntimePin over the cached botRuntimeKind after Same as bot and on conflict", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const pinnedMember: GroupMember = {
+    ...member,
+    modelPinRevision: 3,
+    runtimePin: {
+      runtimeKind: "pi",
+      provider: "fixture",
+      modelId: "valid",
+      credentialId: "connection",
+      effort: "high",
+      revision: 3,
+    },
+  };
+  const inheritedHermes: GroupMember = {
+    ...member,
+    modelPinRevision: 4,
+    runtimePin: null,
+    effectiveRuntimePin: {
+      runtimeKind: "hermes",
+      provider: "fixture",
+      modelId: "valid",
+      credentialId: "connection",
+      effort: "high",
+      revision: 4,
+    },
+  };
+  // The cached botRuntimeKind prop is stale; the save response carries the
+  // member's refreshed effective runtime.
+  vi.mocked(rpc).mockResolvedValueOnce({ id: "room", members: [inheritedHermes] });
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  const props = {
+    groupId: "room",
+    bot: { modelPinRevision: 1 },
+    member: pinnedMember,
+    botRuntimeKind: "pi",
+    experimental: true,
+    catalog: [
+      {
+        provider: "fixture",
+        providerName: "Fixture",
+        id: "valid",
+        label: "Valid",
+        reasoning: true,
+        thinkingLevels: ["high"],
+      },
+    ],
+    credentials: [
+      { id: "connection", provider: "fixture", label: "Connection", thinkingLevel: "high" },
+    ],
+    onSaved: vi.fn(),
+    onError: vi.fn(),
+  };
+  await act(async () => root.render(createElement(GroupMemberModelControl, props as never)));
+  await act(async () =>
+    (
+      node.querySelector('button[aria-label="Model in this group · Worker"]') as HTMLButtonElement
+    ).click(),
+  );
+  const sheet = vi.mocked(presentMessageActionSheet).mock.calls.at(-1)![0];
+  await act(async () => sheet.actions[0]!.onPress());
+  expect(rpc).toHaveBeenCalledWith("groups/clearMemberModelPin", expect.any(Object));
+  expect(node.querySelector('button[aria-label="Runtime · Worker"]')?.textContent).toContain(
+    "Hermes",
+  );
+
+  // Conflict recovery: the reloaded member's effective runtime also wins over
+  // the stale cached prop.
+  vi.mocked(rpc)
+    .mockRejectedValueOnce(
+      new RpcError("This member's model changed. Reload the group.", "CONFLICT"),
+    )
+    .mockResolvedValueOnce([{ id: "room", members: [inheritedHermes] }])
+    .mockResolvedValueOnce([{ id: "worker", modelPinRevision: 2 }]);
+  await act(async () =>
+    root.render(
+      createElement(GroupMemberModelControl, {
+        ...props,
+        member: { ...pinnedMember, modelPinRevision: 4 },
+      } as never),
+    ),
+  );
+  await act(async () =>
+    (
+      node.querySelector('button[aria-label="Model in this group · Worker"]') as HTMLButtonElement
+    ).click(),
+  );
+  const conflictSheet = vi.mocked(presentMessageActionSheet).mock.calls.at(-1)![0];
+  await act(async () => conflictSheet.actions[0]!.onPress());
+  expect(props.onError).toHaveBeenCalledWith("This member's model changed. Reload the group.");
+  expect(node.querySelector('button[aria-label="Runtime · Worker"]')?.textContent).toContain(
+    "Hermes",
+  );
   await act(async () => root.unmount());
 });

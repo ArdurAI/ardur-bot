@@ -162,6 +162,26 @@ describe("MCP connector session cache", () => {
     );
     await connector.close();
   });
+  it("lists servers in creation order so tool definitions repeat byte for byte", async () => {
+    const findMany = vi.fn(async () => []);
+    const connector = fixtureConnector(
+      {
+        bot: { findFirst: vi.fn(async () => ({ id: "bot-1", computer: { kind: "docker" } })) },
+        mcpServer: { findMany },
+      },
+      new EncryptedSecretStore("fixture-encryption-material"),
+    );
+    await connector.discoverTools({
+      spaceId: "w1",
+      userId: "u1",
+      botId: "bot-1",
+      signal: new AbortController().signal,
+    } as never);
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
+    );
+    await connector.close();
+  });
   it("requires sign-in after a personal token is rejected without a refresh mechanism", async () => {
     vi.stubGlobal(
       "fetch",
@@ -351,6 +371,119 @@ describe("MCP connector session cache", () => {
       },
     });
     expect(append.mock.calls[0]?.[0].payload.error).toEqual(expect.any(String));
+    await connector.close();
+  });
+
+  it("records an unauthenticated server once and skips it until its state changes", async () => {
+    const network = vi.fn(async () => new Response("fake-private-response", { status: 401 }));
+    vi.stubGlobal("fetch", network);
+    const append = vi.fn().mockResolvedValue(undefined);
+    const serverRow = {
+      ...SERVER,
+      catalogId: null,
+      secretId: "secret-1",
+      connectionState: "not-connected",
+      lastError: null as string | null,
+      recentErrors: [] as unknown[],
+    };
+    const assignment = { ...ASSIGNMENT, server: serverRow };
+    const updates: Record<string, unknown>[] = [];
+    const prisma = {
+      bot: { findFirst: vi.fn(async () => ({ id: "bot-1", computer: { kind: "desktop" } })) },
+      mcpServer: {
+        findMany: vi.fn(async () => [{ ...serverRow, assignments: [assignment] }]),
+        findFirst: vi.fn(async () => serverRow),
+        updateMany: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+          updates.push(data);
+          Object.assign(serverRow, data);
+          return { count: 1 };
+        }),
+      },
+      secret: { findFirst: vi.fn(async () => ({ id: "secret-1", ciphertext: "encrypted" })) },
+      run: { findUnique: vi.fn(async () => ({ threadId: "thread-1" })) },
+    };
+    const connector = fixtureConnector(
+      prisma as never,
+      { load: () => JSON.stringify({ headers: { Authorization: "Bearer fake-token" } }) } as never,
+      { network: TEST_NETWORK, events: { append } },
+    );
+    const context = {
+      spaceId: "w1",
+      userId: "u1",
+      botId: "bot-1",
+      runId: "run-1",
+      signal: new AbortController().signal,
+    } as never;
+
+    await expect(connector.discoverTools(context)).resolves.toEqual([]);
+    // The state changed once: one write, one audit event, the sign-in diagnostic recorded.
+    expect(updates).toHaveLength(1);
+    expect(updates[0]).toMatchObject({ connectionState: "needs-sign-in" });
+    expect(serverRow.lastError).toBe(mcpSignInDiagnostic("credential_rejected"));
+    expect(append).toHaveBeenCalledTimes(1);
+
+    // Later runs skip the server entirely: no network, no audit, no state write.
+    const networkCalls = network.mock.calls.length;
+    await expect(connector.discoverTools(context)).resolves.toEqual([]);
+    expect(network.mock.calls.length).toBe(networkCalls);
+    expect(append).toHaveBeenCalledTimes(1);
+    expect(updates).toHaveLength(1);
+
+    // A state change (the owner reconnected) resumes discovery.
+    serverRow.connectionState = "connected";
+    serverRow.lastError = null;
+    serverRow.revision++;
+    await expect(connector.discoverTools(context)).resolves.toEqual([]);
+    expect(network.mock.calls.length).toBeGreaterThan(networkCalls);
+    await connector.close();
+  });
+
+  it("writes no log line and no audit event when the sign-in transition loses a race", async () => {
+    // The owner reconnected between the read and the write: the revision-guarded update
+    // matches nothing, so the server stays connected and the run must not be told a
+    // healthy server needs sign-in.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("fake-private-response", { status: 401 })),
+    );
+    const append = vi.fn().mockResolvedValue(undefined);
+    const serverRow = {
+      ...SERVER,
+      catalogId: null,
+      secretId: "secret-1",
+      connectionState: "not-connected",
+      lastError: null as string | null,
+      recentErrors: [] as unknown[],
+    };
+    const assignment = { ...ASSIGNMENT, server: serverRow };
+    const prisma = {
+      bot: { findFirst: vi.fn(async () => ({ id: "bot-1", computer: { kind: "desktop" } })) },
+      mcpServer: {
+        findMany: vi.fn(async () => [{ ...serverRow, assignments: [assignment] }]),
+        findFirst: vi.fn(async () => serverRow),
+        updateMany: vi.fn(async () => ({ count: 0 })),
+      },
+      secret: { findFirst: vi.fn(async () => ({ id: "secret-1", ciphertext: "encrypted" })) },
+      run: { findUnique: vi.fn(async () => ({ threadId: "thread-1" })) },
+    };
+    const connector = fixtureConnector(
+      prisma as never,
+      { load: () => JSON.stringify({ headers: { Authorization: "Bearer fake-token" } }) } as never,
+      { network: TEST_NETWORK, events: { append } },
+    );
+
+    await expect(
+      connector.discoverTools({
+        spaceId: "w1",
+        userId: "u1",
+        botId: "bot-1",
+        runId: "run-1",
+        signal: new AbortController().signal,
+      } as never),
+    ).resolves.toEqual([]);
+
+    expect(prisma.mcpServer.updateMany).toHaveBeenCalledTimes(1);
+    expect(append).not.toHaveBeenCalled();
     await connector.close();
   });
 

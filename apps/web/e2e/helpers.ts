@@ -1,4 +1,4 @@
-import { expect, type Page, type TestInfo } from "@playwright/test";
+import { expect, type Locator, type Page, type TestInfo } from "@playwright/test";
 import { DEPLOYMENT_OWNER_RENEW_MS } from "../../../packages/testkit/src/cli/deployment-owner.js";
 
 export function isRealSandboxProvider(provider = process.env.SANDBOX_PROVIDER) {
@@ -118,6 +118,22 @@ export async function signup(
   await page.getByRole("button", { name: "Create account" }).click();
 }
 
+/** Visible text stays inside the dialog, including on a narrow window. */
+export async function expectVisibleTextInside(scope: Locator) {
+  const box = await scope.boundingBox();
+  expect(box).not.toBeNull();
+  if (!box) return;
+  const nodes = scope.locator("p, h2, h3, h4");
+  const count = await nodes.count();
+  for (let index = 0; index < count; index += 1) {
+    const node = nodes.nth(index);
+    if (!(await node.isVisible())) continue;
+    const rect = await node.boundingBox();
+    if (!rect) continue;
+    expect(rect.x + rect.width).toBeLessThanOrEqual(box.x + box.width + 1);
+  }
+}
+
 export async function captureScreenshot(page: Page, testInfo: TestInfo, name: string) {
   const screenshotPath = testInfo.outputPath(`${name}.png`);
   await page.screenshot({
@@ -134,6 +150,12 @@ export async function openNewBot(page: Page) {
   await page.getByTestId("create-new-bot").click();
   await expect(page.getByTestId("side-panel")).toHaveAttribute("data-panel", "create");
   await expect(page.getByTestId("create-bot-form")).toBeVisible();
+}
+
+export async function openBotSettings(page: Page) {
+  const button = page.locator("main").getByRole("button", { name: "Bot settings", exact: true });
+  if ((await button.getAttribute("aria-pressed")) !== "true") await button.click();
+  await expect(page.getByTestId("side-panel")).toHaveAttribute("data-panel", "settings");
 }
 
 export async function openNewGroup(page: Page) {
@@ -168,7 +190,8 @@ export async function createBotFromPicker(
   }
   if (options.computerMode === "dedicated") {
     await form.getByTestId("create-bot-private").click();
-  } else if (options.computerMode === "team") {
+  } else {
+    // Live test deployments use the fake engine, not an isolated container.
     await form.getByTestId("create-bot-team").click();
   }
   await form.getByRole("button", { name: "Create", exact: true }).click();
@@ -190,6 +213,7 @@ export async function openUserSettings(
     | "usage"
     | "integrations"
     | "computer"
+    | "boards"
     | "updates",
 ) {
   await page

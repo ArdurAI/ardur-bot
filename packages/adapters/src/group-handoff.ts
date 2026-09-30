@@ -6,15 +6,18 @@ import {
   nextBotMessageHop,
   redactTaskValue,
   renderGroupMembersContext,
+  taskCardGoal,
   taskCardPrompt,
 } from "@ardurbot/core";
-import type { PrismaClient } from "@ardurbot/db";
+import type { Prisma, PrismaClient } from "@ardurbot/db";
 import {
   appendEventInTransaction,
   createThreadMessageInTransaction,
   IsolationError,
+  loadChiefMemberFacts,
   lockOwnedGroup,
   touchGroupUpdatedAt,
+  validateChiefDispatch,
   withTransactionRetry,
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
@@ -103,6 +106,8 @@ export async function handoffToGroupBot(
       if (!group.members.some((member) => member.bot.id === targetId)) {
         return { error: "handoff target is not a group member" } as const;
       }
+      const chiefChoice = await validateChiefDispatch(tx, run, groupId, targetId);
+      if ("error" in chiefChoice) return chiefChoice;
       const goal =
         input.mode === "assign"
           ? await tx.teamGoal.findFirst({
@@ -120,6 +125,11 @@ export async function handoffToGroupBot(
       }
       const card = input.mode === "assign" ? TaskCardRequestSchema.safeParse(input.card) : null;
       if (card && !card.success) return { error: "assign requires a valid task card" } as const;
+      // A card-carrying handoff (comparisons, assignments) may leave the message blank;
+      // the visible line then falls back to the card's goal instead of posting empty.
+      const visibleMessage = input.message.trim();
+      if (!visibleMessage && !input.card)
+        return { error: "Give the handoff a message describing the next stage." } as const;
       const deliveryKey =
         input.mode === "assign"
           ? `group-handoff:${run.id}:${targetId}:${createHash("sha256")
@@ -213,11 +223,13 @@ export async function handoffToGroupBot(
         deps.resolveDelegationPin,
       );
       if (!admitted.ok) return admitted;
+      const handoffText = visibleMessage || taskCardGoal(admitted.record.card) || "";
       const handoffBlock: MessageBlock = {
         kind: "handoff",
+        ...(chiefChoice.dispatch ? { chiefDispatch: chiefChoice.dispatch } : {}),
         fromBotId: run.botId,
         toBotId: targetId,
-        text: input.message,
+        text: handoffText,
         hop,
       };
       const message = await createThreadMessageInTransaction(tx, {
@@ -265,7 +277,7 @@ export async function handoffToGroupBot(
           messageId: message.id,
           fromBotId: run.botId,
           toBotId: targetId,
-          text: input.message,
+          text: handoffText,
         },
       });
       const assignedEvent = goal
@@ -287,6 +299,33 @@ export async function handoffToGroupBot(
         where: { id: admitted.record.id },
         data: { runId: nextRun.id },
       });
+      if (chiefChoice.planId && chiefChoice.dispatch) {
+        const boundDispatch = {
+          ...chiefChoice.dispatch,
+          runId: nextRun.id,
+          delegationId: admitted.record.id,
+        };
+        await tx.message.update({
+          where: { id: message.id },
+          data: { blocks: [{ ...handoffBlock, chiefDispatch: boundDispatch }] },
+        });
+        await tx.chiefPlan.update({
+          where: { id: chiefChoice.planId },
+          data: {
+            dispatch: {
+              ...chiefChoice.dispatch,
+              runId: nextRun.id,
+              delegationId: admitted.record.id,
+              messageId: message.id,
+            },
+            checkedFacts: (await loadChiefMemberFacts(
+              tx,
+              run,
+              groupId,
+            )) as unknown as Prisma.InputJsonValue,
+          },
+        });
+      }
       await touchGroupUpdatedAt(tx, groupId);
       return {
         ok: true,

@@ -1,4 +1,5 @@
 import type { TeamRow } from "@ardurbot/contracts";
+import { failureCategory } from "@ardurbot/contracts";
 import { presenceFreshness } from "./bot-presence.js";
 export const TEAM_REFRESH_MS = 15000;
 const priority: Record<TeamRow["state"], number> = {
@@ -18,9 +19,16 @@ export function sortTeamRows(rows: TeamRow[]) {
       a.botId.localeCompare(b.botId),
   );
 }
+/** Identity translation that still substitutes a category sentence's named placeholders. */
+const identityTranslate = (text: string, values?: Record<string, string | number>): string =>
+  values
+    ? text.replace(/\{([A-Za-z0-9_]+)\}/g, (match, key: string) =>
+        Object.hasOwn(values, key) ? String(values[key]) : match,
+      )
+    : text;
 export function teamRowText(
   row: TeamRow,
-  t: (text: string) => string = (text) => text,
+  t: (text: string, values?: Record<string, string | number>) => string = identityTranslate,
   now = Date.now(),
 ): string {
   if (
@@ -43,8 +51,16 @@ export function teamRowText(
         : t("Working");
     case "waiting-approval":
       return t("Waiting for approval");
-    case "blocked":
-      return `${t("Blocked")} — ${row.reason ?? t("The task needs attention")}`;
+    case "blocked": {
+      // A categorized reason comes from the failure-category table so the app can
+      // translate it; anything else is the recorded text.
+      const reason = row.reasonCategory
+        ? t(failureCategory(row.reasonCategory).message, {
+            runtime: row.reasonRuntime ?? t("This runtime"),
+          })
+        : (row.reason ?? t("The task needs attention"));
+      return `${t("Blocked")} — ${reason}`;
+    }
     case "completed":
       return t("Done — waiting for your OK");
     case "accepted":

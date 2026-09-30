@@ -76,6 +76,123 @@ function frames() {
 }
 
 describe("client trace", () => {
+  it("counts scoped activity and result paint without retaining tool details", () => {
+    globalThis.__ardurTrace = { capacity: 20 };
+    const frame = frames();
+    const dispatch = {
+      requestMessageId: "request",
+      revision: 1,
+      memberId: "worker",
+      memberName: "Member",
+      state: "messaged",
+      reason: "eligible",
+      runId: "run",
+      delegationId: "assignment",
+      activity: {
+        revision: 1,
+        runId: "run",
+        delegationId: "assignment",
+        attempt: 1,
+        sourceSeq: 1,
+        key: "read-input",
+        state: "active",
+        updatedAt: "2026-01-01T00:00:00Z",
+      },
+    };
+    const blocks = [{ kind: "handoff", text: "private detail", chiefDispatch: dispatch }];
+    receiveTraceEvent({
+      ...event("thread.message.updated", 2, { messageId: "message-a", blocks }),
+      runId: undefined,
+    });
+    const current = snapshot(2);
+    current.messages[0]!.blocks = blocks as ThreadSnapshot["messages"][number]["blocks"];
+    const cancel = paintThreadTrace(current)!;
+    frame();
+    frame();
+    expect(clientTraceSnapshot()?.points.map((p) => p.boundary)).toEqual([
+      "client.activity.painted",
+    ]);
+    const resultBlocks = [
+      {
+        kind: "chief_result",
+        name: "Draft",
+        botId: "worker",
+        mimeType: "text/plain",
+        result: {
+          requestMessageId: "request",
+          revision: 1,
+          artifactId: "file",
+          href: "artifact:file",
+          state: "draft",
+        },
+      },
+    ];
+    receiveTraceEvent({
+      ...event("thread.message.created", 3, { messageId: "message-a", blocks: resultBlocks }),
+      runId: undefined,
+    });
+    const result = snapshot(3);
+    result.messages[0]!.blocks = resultBlocks as ThreadSnapshot["messages"][number]["blocks"];
+    paintThreadTrace(result);
+    frame();
+    frame();
+    expect(clientTraceSnapshot()?.points.map((p) => p.boundary)).toEqual([
+      "client.activity.painted",
+      "client.result.painted",
+    ]);
+    expect(JSON.stringify(clientTraceSnapshot())).not.toContain("private detail");
+    expect(JSON.stringify(clientTraceSnapshot())).not.toContain("artifact:file");
+    cancel();
+  });
+  it.each([false, true])(
+    "counts receipt-only paint without a run, including event-first=%s",
+    async (eventFirst) => {
+      globalThis.__ardurTrace = { capacity: 20 };
+      const tick = frames();
+      const receipt = {
+        id: "receipt-a",
+        threadId: "thread-a",
+        botId: "chief",
+        requestMessageId: "request-a",
+        seq: 2,
+        key: "greeting" as const,
+        text: "Hi everyone.",
+        createdAt: "2026-01-01T00:00:00Z",
+      };
+      const state = snapshot(0);
+      state.messages = [
+        {
+          id: receipt.id,
+          threadId: receipt.threadId,
+          seq: receipt.seq,
+          botId: receipt.botId,
+          role: "bot",
+          createdAt: receipt.createdAt,
+          blocks: [
+            {
+              kind: "chief_receipt",
+              requestMessageId: receipt.requestMessageId,
+              key: receipt.key,
+              text: receipt.text,
+            },
+          ],
+        },
+      ];
+      if (eventFirst) paintThreadTrace(state);
+      await traceRpc(["threads", "send"], async () => ({ kind: "receipt-only", seq: 2, receipt }));
+      if (!eventFirst) paintThreadTrace(state);
+      tick();
+      tick();
+      expect(clientTraceSnapshot()!.points.map((point) => [point.traceId, point.boundary])).toEqual(
+        [
+          ["request-a", "client.submitted"],
+          ["request-a", "client.acknowledged"],
+          ["request-a", "client.receipt.painted"],
+        ],
+      );
+      expect(JSON.stringify(clientTraceSnapshot())).not.toContain("Hi everyone.");
+    },
+  );
   it("retains the submission boundary captured before a cold collector import", async () => {
     globalThis.__ardurTrace = { capacity: 20 };
     const beforeImport = performance.now();

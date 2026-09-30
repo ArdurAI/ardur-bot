@@ -8,6 +8,7 @@ import {
 } from "@ardurbot/contracts";
 import type { HermesRuntimeConfigV2 } from "@ardurbot/contracts/runtime-config";
 import {
+  hermesConnectionRefusal,
   modelPinOptionKey as modelOptionKey,
   parseModelPinOptionKey as parseModelOptionKey,
   spaceDefaultEffort,
@@ -19,14 +20,18 @@ import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { BotAvatar } from "../components/bot-avatar";
 import { ComputerModePicker } from "../components/computer-mode-picker";
 import { ContextSection } from "../components/context-section";
+import { RuntimeConfigPanel } from "../components/runtime-config-panel";
 import { RuntimeSettings } from "../components/runtime-settings";
+import { BotRuntimeSettings } from "../components/runtime-summary";
 import type { MobileBot, MobileMe, MobileModel, MobileModelCredential } from "../lib/api";
 import { rpc } from "../lib/api";
 import { COMPUTER_LIFECYCLE_TIMEOUT_MS } from "../lib/computer";
+import { hermesRefusalMessage } from "../lib/hermes-refusal";
 import { useI18n } from "../lib/i18n";
 import { loadLearning } from "../lib/learning";
 import { presentMessageActionSheet } from "../lib/message-action-sheet";
 import { useMobileTokens, useResolvedAppearance } from "../lib/native";
+import { RpcError } from "../lib/rpc-error";
 
 type BotSettingsRecord = MobileBot & {
   description?: string;
@@ -71,7 +76,9 @@ export default function BotSettingsScreen() {
   const [modelMetaReady, setModelMetaReady] = useState(false);
   const [modelMetaError, setModelMetaError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [conflict, setConflict] = useState(false);
   const [pending, setPending] = useState(false);
+  const [runtimeConfigError, setRuntimeConfigError] = useState<string | null>(null);
   const [learningCounts, setLearningCounts] = useState({ pendingCount: 0, appliedThisWeek: 0 });
   useEffect(() => {
     if (!botId) return;
@@ -133,6 +140,9 @@ export default function BotSettingsScreen() {
     const options: ModelOption[] = [];
     const seen = new Set<string>();
     for (const credential of credentials) {
+      // Sign-in connections stay off the Hermes choices; key-based ones are served.
+      if (runtimeKind === "hermes" && hermesConnectionRefusal(credential.provider, credential))
+        continue;
       const providerModels = catalog.filter(
         (entry) =>
           entry.provider === credential.provider &&
@@ -169,7 +179,7 @@ export default function BotSettingsScreen() {
         Number(a.provider === "ollama" || a.provider === "local") -
         Number(b.provider === "ollama" || b.provider === "local"),
     );
-  }, [catalog, credentials]);
+  }, [catalog, credentials, runtimeKind]);
 
   const effectiveProvider = modelKey
     ? parseModelOptionKey(modelKey)?.provider
@@ -190,6 +200,10 @@ export default function BotSettingsScreen() {
   );
   const supportedThinking =
     effectiveCredential?.thinkingLevels ?? effectiveEntry?.thinkingLevels ?? [];
+  const hermesRefusal =
+    runtimeKind === "hermes"
+      ? hermesConnectionRefusal(effectiveProvider, effectiveCredential)
+      : undefined;
   const isOllama = effectiveProvider === "ollama";
   const thinkingOptions: ThinkingLevel[] = supportedThinking.filter((level) =>
     isOllama ? level === "off" || level === "medium" : level !== "off",
@@ -284,8 +298,10 @@ export default function BotSettingsScreen() {
 
   async function save() {
     if (!botId || !bot || pending) return;
+    if (runtimeKind === "hermes" && runtimeConfigError) return;
     setPending(true);
     setError(null);
+    setConflict(false);
     try {
       const profile = normalizeCreateBotProfile({ name, title, description });
       const selected = modelKey ? parseModelOptionKey(modelKey) : null;
@@ -344,7 +360,33 @@ export default function BotSettingsScreen() {
       }
       router.back();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("Could not save bot"));
+      if (err instanceof RpcError && err.code === "CONFLICT") {
+        // Same conflict message and recovery as web: reload the bot before saving again.
+        setConflict(true);
+        setError(err.message || t("Bot settings changed. Reload before saving."));
+        try {
+          const next = await rpc<BotSettingsRecord>("bots/get", { botId });
+          setBot(next);
+          setRuntimeKind(next.runtimeKind ?? "pi");
+          setRuntimeConfig(effectiveHermesRuntimeConfigV2(next.runtimeConfig));
+          setRuntimeExperimental(next.runtimeExperimental ?? false);
+          setName(next.name);
+          setTitle(next.title);
+          setDescription(next.description ?? "");
+          setColor(next.color);
+          setComputerMode(next.computerMode);
+          setModelKey(
+            next.modelProvider && next.modelId
+              ? modelOptionKey(next.modelProvider, next.modelId, next.modelCredentialId)
+              : "",
+          );
+          setThinkingLevel(next.thinkingLevel ?? "");
+        } catch {
+          // Keep the conflict message; the owner can retry Save or leave.
+        }
+      } else {
+        setError(err instanceof Error ? err.message : t("Could not save bot"));
+      }
     } finally {
       setPending(false);
     }
@@ -462,7 +504,9 @@ export default function BotSettingsScreen() {
             />
           ))}
         </ScrollView>
-        <ComputerModePicker value={computerMode} onChange={setComputerMode} />
+        <BotRuntimeSettings botId={botId} mode={computerMode}>
+          <ComputerModePicker value={computerMode} onChange={setComputerMode} />
+        </BotRuntimeSettings>
         {runtimeKind === "hermes" ? (
           <Text style={{ color: tokens.mutedForeground, marginTop: 8 }}>
             {t("Hermes runs with this computer's access.")}
@@ -490,50 +534,19 @@ export default function BotSettingsScreen() {
           />
         </View>
         {runtimeKind === "hermes" ? (
-          <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: tokens.mutedForeground }}>{t("Model calls per turn")}</Text>
-              <TextInput
-                accessibilityLabel={t("Model calls per turn")}
-                keyboardType="number-pad"
-                value={String(runtimeConfig.limits.maxProviderRequests)}
-                onChangeText={(value) =>
-                  setRuntimeConfig((current) => ({
-                    ...current,
-                    limits: { ...current.limits, maxProviderRequests: Number(value) },
-                  }))
-                }
-                style={{
-                  color: tokens.foreground,
-                  borderColor: tokens.border,
-                  borderWidth: 1,
-                  borderRadius: 11,
-                  padding: 12,
-                }}
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: tokens.mutedForeground }}>{t("Time limit")}</Text>
-              <TextInput
-                accessibilityLabel={t("Time limit")}
-                keyboardType="number-pad"
-                value={String(runtimeConfig.limits.timeoutMs / 1_000)}
-                onChangeText={(value) =>
-                  setRuntimeConfig((current) => ({
-                    ...current,
-                    limits: { ...current.limits, timeoutMs: Number(value) * 1_000 },
-                  }))
-                }
-                style={{
-                  color: tokens.foreground,
-                  borderColor: tokens.border,
-                  borderWidth: 1,
-                  borderRadius: 11,
-                  padding: 12,
-                }}
-              />
-            </View>
-          </View>
+          <RuntimeConfigPanel
+            value={runtimeConfig}
+            onChange={setRuntimeConfig}
+            onError={setRuntimeConfigError}
+            onOpenLearning={() => router.push({ pathname: "/learning", params: { botId } })}
+            pin={{
+              runtimeKind: "hermes",
+              provider: effectiveProvider,
+              modelId: effectiveModelId,
+              effort: thinkingLevel || null,
+              credentialId: parseModelOptionKey(modelKey)?.credentialId ?? null,
+            }}
+          />
         ) : null}
         <Pressable
           accessibilityRole="button"
@@ -580,13 +593,9 @@ export default function BotSettingsScreen() {
             >
               <Text style={{ color: tokens.foreground }}>{selectedModelLabel}</Text>
             </Pressable>
-            {runtimeKind === "hermes" &&
-            effectiveProvider &&
-            !["openai-compatible", "ollama"].includes(effectiveProvider) ? (
+            {hermesRefusal ? (
               <Text style={{ color: tokens.mutedForeground, marginTop: 8 }}>
-                {effectiveProvider === "anthropic"
-                  ? t("Hermes does not yet support Anthropic connections.")
-                  : t("Hermes does not yet support this connection.")}
+                {hermesRefusalMessage(hermesRefusal, t)}
               </Text>
             ) : null}
             {isOllama && effectiveEntry?.reasoning === false ? (
@@ -627,17 +636,65 @@ export default function BotSettingsScreen() {
             ) : null}
           </View>
         ) : null}
-        {error ? <Text style={{ color: tokens.destructive, marginTop: 16 }}>{error}</Text> : null}
+        {error ? (
+          <Text accessibilityRole="alert" style={{ color: tokens.destructive, marginTop: 16 }}>
+            {error}
+          </Text>
+        ) : null}
+        {conflict ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t("Reload")}
+            onPress={() => {
+              setConflict(false);
+              setError(null);
+              if (!botId) return;
+              void rpc<BotSettingsRecord>("bots/get", { botId })
+                .then((next) => {
+                  setBot(next);
+                  setRuntimeKind(next.runtimeKind ?? "pi");
+                  setRuntimeConfig(effectiveHermesRuntimeConfigV2(next.runtimeConfig));
+                  setRuntimeExperimental(next.runtimeExperimental ?? false);
+                  setName(next.name);
+                  setTitle(next.title);
+                  setDescription(next.description ?? "");
+                  setColor(next.color);
+                  setComputerMode(next.computerMode);
+                  setModelKey(
+                    next.modelProvider && next.modelId
+                      ? modelOptionKey(next.modelProvider, next.modelId, next.modelCredentialId)
+                      : "",
+                  );
+                  setThinkingLevel(next.thinkingLevel ?? "");
+                })
+                .catch(() => undefined);
+            }}
+            style={{ marginTop: 8 }}
+          >
+            <Text style={{ color: tokens.foreground }}>{t("Reload")}</Text>
+          </Pressable>
+        ) : null}
         <Pressable
           onPress={() => void save()}
-          disabled={!name.trim() || pending || !bot}
+          disabled={
+            !name.trim() ||
+            pending ||
+            !bot ||
+            (runtimeKind === "hermes" && Boolean(runtimeConfigError || hermesRefusal))
+          }
           style={{
             marginTop: 24,
             backgroundColor: tokens.primary,
             borderRadius: 11,
             padding: 16,
             alignItems: "center",
-            opacity: !name.trim() || pending || !bot ? 0.4 : 1,
+            opacity:
+              !name.trim() ||
+              pending ||
+              !bot ||
+              (runtimeKind === "hermes" && Boolean(runtimeConfigError))
+                ? 0.4
+                : 1,
           }}
         >
           <Text style={{ color: tokens.primaryForeground, fontSize: 16 }}>

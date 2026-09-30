@@ -48,6 +48,7 @@ function fixture(runStatus = "running", delegationStatus = "running") {
     depth: 1,
     hop: 1,
     status: delegationStatus,
+    result: null as string | null,
     snapshot,
     card,
     authority: card.approvalBoundaries,
@@ -170,12 +171,180 @@ describe("team.board", () => {
     expect(result.rows[1].state).toBe("idle");
     expect(f.db.message.findMany).not.toHaveBeenCalled();
     expect(f.db.$queryRaw).toHaveBeenCalledOnce();
-    expect(result.rows[0].usage).toEqual({ tokens: 150, costs: [] });
+    expect(result.rows[0].usage).toEqual({ tokens: 150, partial: false, costs: [] });
     expect(result.rows[0].sentence).not.toContain("narration");
     if (run !== "queued") expect(result.rows[0].executing?.pin.modelId).toBe("executed-model");
     else expect(result.rows[0].executing).toBeNull();
   });
 
+  it.each(["failed", "cancelled"])(
+    "keeps a %s handoff record listed after its run ends",
+    async (status) => {
+      const f = fixture("cancelled", status);
+      const result = TeamBoardSchema.parse(await teamBoard(f.prisma, actor));
+      expect(f.db.delegation.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            OR: expect.arrayContaining([
+              expect.objectContaining({
+                status: { in: expect.arrayContaining(["failed", "cancelled"]) },
+              }),
+            ]),
+          }),
+        }),
+      );
+      expect(result.rows[0]!.delegations.map((row) => row.status)).toContain(status);
+    },
+  );
+
+  it("bounds terminal handoff records by time without bounding active ones", async () => {
+    const f = fixture();
+    await teamBoard(f.prisma, actor);
+    expect(f.db.delegation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          OR: [
+            { status: { in: ["queued", "running", "cancel-requested"] } },
+            {
+              status: { in: ["completed", "failed", "cancelled"] },
+              createdAt: { gte: expect.any(Date) },
+            },
+          ],
+        }),
+      }),
+    );
+  });
+
+  it("shows the handoff's recorded reason when a blocked card has no runtime problem", async () => {
+    // The owner stopped the worker mid-turn; the runtime reported its usage limit while
+    // unwinding, the run ended cancelled and no run.failed event exists. The recorded
+    // handoff reason is the card's reason, not a generic line.
+    const f = fixture("cancelled", "failed");
+    f.delegation.result = "Claude Code's usage limit is reached. Try again after it resets.";
+    const row = TeamBoardSchema.parse(await teamBoard(f.prisma, actor)).rows[0]!;
+    expect(row.state).toBe("blocked");
+    expect(row.reason).toBe("Claude Code's usage limit is reached. Try again after it resets.");
+    expect(row.reasonCategory).toBe("usage-limit");
+    expect(row.reasonRuntime).toBe("Claude Code");
+  });
+
+  it("shows a recorded provider failure reason a plain handoff carries", async () => {
+    // A pi provider failure carries no runtimeProblem; the redacted reason recorded on
+    // the handoff is still the honest card text.
+    const f = fixture("failed", "failed");
+    f.delegation.result = "rate limit reached; retry later";
+    const row = TeamBoardSchema.parse(await teamBoard(f.prisma, actor)).rows[0]!;
+    expect(row.state).toBe("blocked");
+    expect(row.reason).toBe("rate limit reached; retry later");
+    expect(row.reasonCategory).toBeUndefined();
+  });
+
+  it.each(["npm test failed.", "The build failed.", "The owner stopped."])(
+    "keeps the words of a recorded reason that ends like a handoff line: %j",
+    async (recorded) => {
+      const f = fixture("failed", "failed");
+      f.delegation.result = recorded;
+      const row = TeamBoardSchema.parse(await teamBoard(f.prisma, actor)).rows[0]!;
+      expect(row.state).toBe("blocked");
+      expect(row.reason).toBe(recorded);
+      expect(row.reasonCategory).toBeUndefined();
+    },
+  );
+
+  it.each([
+    ["Reviewer failed.", "failed"],
+    ["Worker stopped.", "cancelled"],
+  ])("shows no reason for a handoff line, which says only that it ended: %j", async (line, run) => {
+    const f = fixture(run, "failed");
+    f.delegation.result = line;
+    const row = TeamBoardSchema.parse(await teamBoard(f.prisma, actor)).rows[0]!;
+    expect(row.state).toBe("blocked");
+    expect(row.reason).toBe(run === "failed" ? "The run failed" : "The task needs attention");
+    expect(row.reasonCategory).toBeUndefined();
+  });
+
+  it("stops showing a failed handoff as blocked once the bot has newer work", async () => {
+    const f = fixture("completed", "failed");
+    f.delegation.result = "Claude Code's usage limit is reached. Try again after it resets.";
+    f.delegation.createdAt = new Date("2026-09-28T10:00:00.000Z");
+    Object.assign(f.run, {
+      delegationId: null,
+      createdAt: new Date("2026-09-28T12:00:00.000Z"),
+    });
+    const row = TeamBoardSchema.parse(await teamBoard(f.prisma, actor)).rows[0]!;
+    expect(row.state).toBe("idle");
+    expect(row.reason).toBeNull();
+  });
+
+  it("keeps a failed handoff blocked when the bot's latest run is older than it", async () => {
+    const f = fixture("completed", "failed");
+    f.delegation.result = "Claude Code's usage limit is reached. Try again after it resets.";
+    f.delegation.createdAt = new Date("2026-09-28T12:00:00.000Z");
+    Object.assign(f.run, {
+      delegationId: null,
+      createdAt: new Date("2026-09-28T10:00:00.000Z"),
+    });
+    const row = TeamBoardSchema.parse(await teamBoard(f.prisma, actor)).rows[0]!;
+    expect(row.state).toBe("blocked");
+    expect(row.reason).toBe("Claude Code's usage limit is reached. Try again after it resets.");
+  });
+
+  it("keeps unavailable usage off the card instead of showing zero", async () => {
+    const f = fixture();
+    f.db.usageRecord.findMany.mockResolvedValue([
+      {
+        runId: "run",
+        delegationId: "handoff",
+        inputTokens: 0,
+        outputTokens: 0,
+        cost: null,
+        pricingProvenance: null,
+        categoryCoverage: { logicalInput: "unknown", output: "unknown" },
+      },
+    ]);
+    expect(TeamBoardSchema.parse(await teamBoard(f.prisma, actor)).rows[0]!.usage).toEqual({
+      tokens: null,
+      partial: false,
+      costs: [],
+    });
+  });
+  it("marks a partial measurement as a lower bound", async () => {
+    const f = fixture();
+    f.db.usageRecord.findMany.mockResolvedValue([
+      {
+        runId: "run",
+        delegationId: "handoff",
+        inputTokens: 100,
+        outputTokens: 40,
+        cost: null,
+        pricingProvenance: null,
+        categoryCoverage: { logicalInput: "complete", output: "partial" },
+      },
+    ]);
+    expect(TeamBoardSchema.parse(await teamBoard(f.prisma, actor)).rows[0]!.usage).toEqual({
+      tokens: 140,
+      partial: true,
+      costs: [],
+    });
+  });
+  it("shows a started run that never reported usage as unavailable, not zero", async () => {
+    const f = fixture();
+    f.db.usageRecord.findMany.mockResolvedValue([]);
+    expect(TeamBoardSchema.parse(await teamBoard(f.prisma, actor)).rows[0]!.usage).toEqual({
+      tokens: null,
+      partial: false,
+      costs: [],
+    });
+  });
+  it("keeps zero for a run that never started", async () => {
+    const f = fixture("queued", "queued");
+    f.db.usageRecord.findMany.mockResolvedValue([]);
+    expect(TeamBoardSchema.parse(await teamBoard(f.prisma, actor)).rows[0]!.usage).toEqual({
+      tokens: 0,
+      partial: false,
+      costs: [],
+    });
+  });
   it("shows saved blocker reasons and actions", async () => {
     const f = fixture();
     f.delegation.card = {

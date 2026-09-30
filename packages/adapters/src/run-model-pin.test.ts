@@ -5,6 +5,7 @@ import { compileHermesRuntimeConfig } from "@ardurbot/host-runtime/runtimes/herm
 import { describe, expect, it, vi } from "vitest";
 import { effectiveHermesConfig, hermesConfigHash } from "./hermes-compatibility.js";
 import { resolveModelApiKey } from "./pi-oauth.js";
+import { catalogModels } from "./pi-runtime.js";
 import { resolveRunModelPin } from "./run-model-pin.js";
 
 const scope = { userId: "user", spaceId: "space" };
@@ -25,14 +26,16 @@ const pin = {
   runtimeKind: "pi" as const,
   revision: 2,
 };
-function fixture() {
+function fixture(overrides?: { spacePolicy?: unknown }) {
   const findCredential = vi.fn(async () => credential);
   const findPreference = vi.fn(async () => ({ credential, modelId: "grok-4.6", isDefault: true }));
   const loadKey = vi.fn(
     async (): Promise<AgentRunModel> => ({ provider: "xai", id: "grok-4.6", apiKey: "test-key" }),
   );
   const prisma = {
-    space: { findUnique: vi.fn(async () => ({ allowedModelDestinations: null })) },
+    space: {
+      findUnique: vi.fn(async () => ({ allowedModelDestinations: overrides?.spacePolicy ?? null })),
+    },
     userModelCredential: { findFirst: findCredential },
     spaceModelPreference: { findFirst: findPreference },
   } as unknown as PrismaClient;
@@ -195,6 +198,67 @@ describe("run pin snapshots", () => {
         maxTokens: result.maxTokens,
       });
       expect(result.pin.effectiveRuntimeConfigHash).toMatch(/^[a-f0-9]{64}$/);
+    },
+  );
+  it.each(["primary", "group", "delegated"])(
+    "admits a key-based catalog connection for Hermes on %s admission, and again on resume",
+    async (path) => {
+      // The stored secret of a key-based connection is the key and nothing else: its limits
+      // live in the registry.
+      const f = fixture();
+      const catalog = catalogModels().getModel(pin.provider, pin.modelId);
+      expect(catalog?.maxTokens).toBeGreaterThan(4_096);
+      const config = effectiveHermesConfig(null);
+      const choice = {
+        ...pin,
+        runtimeKind: "hermes" as const,
+        runtimeConfig: config,
+        runtimeConfigHash: hermesConfigHash(config),
+      };
+      const admitted = await resolveRunModelPin({
+        ...f,
+        bot:
+          path === "group"
+            ? {}
+            : {
+                runtimeKind: "hermes",
+                modelProvider: choice.provider,
+                modelId: choice.modelId,
+                thinkingLevel: choice.effort,
+                modelCredentialId: choice.credentialId,
+                modelPinRevision: choice.revision,
+                runtimeConfig: config,
+              },
+        ...(path === "group" ? { snapshot: choice } : {}),
+        newAdmission: true,
+        ...(path === "delegated" ? { maxOutputTokens: 10_000 } : {}),
+      });
+      expect(admitted).toMatchObject({ kind: "resolved" });
+      if (admitted.kind !== "resolved") return;
+      expect(admitted.contextWindow).toBe(catalog?.contextWindow);
+      expect(admitted.maxTokens).toBe(
+        path === "delegated" ? 10_000 : Math.min(catalog?.maxTokens ?? 0, 65_536),
+      );
+      expect(admitted.pin.effectiveRuntimeConfig?.model).toMatchObject({
+        contextWindow: admitted.contextWindow,
+        maxTokens: admitted.maxTokens,
+      });
+      // A retry or a resume reads the recorded pin and resolves the same way.
+      expect(await resolveRunModelPin({ ...f, bot: {}, snapshot: admitted.pin })).toMatchObject({
+        kind: "resolved",
+        maxTokens: admitted.maxTokens,
+      });
+      // A connection that can now produce less than was recorded still fails closed.
+      f.loadKey.mockResolvedValue({
+        provider: pin.provider,
+        id: pin.modelId,
+        apiKey: "test-key",
+        maxTokens: 1_024,
+      });
+      expect(await resolveRunModelPin({ ...f, bot: {}, snapshot: admitted.pin })).toMatchObject({
+        kind: "problem",
+        code: "runtime-configuration-invalid",
+      });
     },
   );
   it("rejects a resumed Hermes pin when the connection capabilities changed", async () => {
@@ -427,7 +491,14 @@ it("checks root locality against the resolved endpoint before returning an execu
       snapshot: pin,
       bot: { allowedModelDestinations: { mode: "local" } },
     }),
-  ).toMatchObject({ kind: "problem", code: "locality-denied" });
+  ).toMatchObject({
+    kind: "problem",
+    code: "locality-denied",
+    reasonId: "destinations-bot",
+    reason:
+      "this bot's allowed model destinations block this model. Change them in this bot's settings.",
+    actions: ["change-pin"],
+  });
   f.findCredential.mockResolvedValue({ ...credential, provider: "openai-compatible" });
   f.loadKey.mockResolvedValue({
     provider: "openai-compatible",
@@ -443,6 +514,34 @@ it("checks root locality against the resolved endpoint before returning an execu
       bot: { allowedModelDestinations: { mode: "local" } },
     }),
   ).toMatchObject({ kind: "resolved", runtimePin: custom });
+});
+
+it("names the space policy when the bot's allows but the space's blocks", async () => {
+  const f = fixture({ spacePolicy: { mode: "local" } });
+  expect(
+    await resolveRunModelPin({
+      ...f,
+      snapshot: pin,
+      bot: { allowedModelDestinations: { mode: "any" } },
+    }),
+  ).toMatchObject({
+    kind: "problem",
+    code: "locality-denied",
+    reasonId: "destinations-space",
+    reason: "This space's model policy blocks this model. Change it in Settings, under Models.",
+    actions: ["change-pin"],
+  });
+  // Both block: the bot's policy is named first.
+  expect(
+    await resolveRunModelPin({
+      ...f,
+      snapshot: pin,
+      bot: { allowedModelDestinations: { mode: "local" } },
+    }),
+  ).toMatchObject({
+    kind: "problem",
+    reasonId: "destinations-bot",
+  });
 });
 
 it.each(["low", "medium", "high", "xhigh", "max"])(

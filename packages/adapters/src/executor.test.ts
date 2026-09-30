@@ -7,7 +7,7 @@ vi.mock("./context/concurrency.js", () => ({
     input.claim(prisma),
 }));
 
-import type { MessageBlock } from "@ardurbot/contracts";
+import { DELEGATION_LIMITS, type MessageBlock } from "@ardurbot/contracts";
 import { ONCE_ROUTINE_CRON } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
@@ -17,8 +17,10 @@ import {
   createRunWorkspaceCheckpoint,
   loadCurrentTurnImages,
   missingTurnImagesInstruction,
+  offerAskMembers,
   parseUpdateBotPatch,
   runNotificationsEnabled,
+  runtimeAcceptsFoldedImages,
   selectBuiltinToolsForRun,
   settleSteeringAttachmentLoads,
   threadContextForRun,
@@ -53,6 +55,15 @@ it("labels a peer group reply as user data rather than the current bot's words",
   ).toEqual({
     role: "user",
     content: "I found a failure.",
+  });
+});
+
+describe("folded image delivery", () => {
+  it("keeps images off a runtime that rejects them, including Antigravity", () => {
+    expect(runtimeAcceptsFoldedImages("antigravity", { images: false }, true)).toBe(false);
+    expect(runtimeAcceptsFoldedImages("pi", { images: false }, true)).toBe(false);
+    expect(runtimeAcceptsFoldedImages("pi", {}, true)).toBe(true);
+    expect(runtimeAcceptsFoldedImages("codex-app-server", {}, false)).toBe(false);
   });
 });
 
@@ -309,7 +320,56 @@ describe("run workspace checkpoint", () => {
   });
 });
 
+describe("offerAskMembers", () => {
+  const coordinator = {
+    groupCoordinator: true,
+    runtimeKind: "pi",
+    clientNonce: null,
+    delegated: false,
+    goal: false,
+    peerReadOnly: false,
+    comparison: false,
+    messaging: false,
+  };
+
+  it("offers an ask to a tool-capable room coordinator before the last round", () => {
+    expect(offerAskMembers(coordinator)).toBe(true);
+    expect(offerAskMembers({ ...coordinator, runtimeKind: "hermes" })).toBe(true);
+    expect(offerAskMembers({ ...coordinator, clientNonce: "ask-wake:1:ask-run" })).toBe(true);
+  });
+
+  it("withholds an ask from Antigravity, a third round, a delegated turn and a goal turn", () => {
+    expect(offerAskMembers({ ...coordinator, runtimeKind: "antigravity" })).toBe(false);
+    expect(offerAskMembers({ ...coordinator, clientNonce: "ask-wake:2:ask-run" })).toBe(false);
+    expect(offerAskMembers({ ...coordinator, delegated: true })).toBe(false);
+    expect(offerAskMembers({ ...coordinator, goal: true })).toBe(false);
+    expect(offerAskMembers({ ...coordinator, peerReadOnly: true })).toBe(false);
+    expect(offerAskMembers({ ...coordinator, comparison: true })).toBe(false);
+    expect(offerAskMembers({ ...coordinator, messaging: true })).toBe(false);
+    expect(offerAskMembers({ ...coordinator, groupCoordinator: false })).toBe(false);
+    expect(offerAskMembers({ ...coordinator, runtimeKind: "not-a-runtime" })).toBe(false);
+  });
+});
+
 describe("run tool selection", () => {
+  it("offers ask_members only to a group's coordinator", () => {
+    const names = (groupId: string | null, roomCoordinator?: boolean) =>
+      selectBuiltinToolsForRun({
+        graphicalToolsAllowed: false,
+        groupId,
+        trigger: "user",
+        semanticMemoryEnabled: false,
+        messagingChannelRun: false,
+        roomCoordinator,
+      }).map((tool) => tool.name);
+    expect(names("group-1", true)).toEqual(
+      expect.arrayContaining(["ask_members", "handoff_to_bot"]),
+    );
+    expect(names("group-1", false)).not.toContain("ask_members");
+    expect(names("group-1")).not.toContain("ask_members");
+    expect(names(null, true)).not.toContain("ask_members");
+  });
+
   it.each([
     [false, false],
     [false, true],
@@ -1723,7 +1783,8 @@ description: Prepare standup notes
     const plaintext = serializeModelSecret({
       kind: "openai_compatible",
       baseUrl: "http://127.0.0.1:8000/v1",
-      maxTokens: 16_384,
+      // Above the worker reservation, so admission is what bounds the manifest.
+      maxTokens: 65_536,
     });
     const bot = {
       runtimeKind: "hermes",
@@ -1762,7 +1823,7 @@ description: Prepare standup notes
     );
     expect(selected.kind).toBe("resolved");
     if (selected.kind !== "resolved") return;
-    expect(selected.maxTokens).toBe(10_000);
+    expect(selected.maxTokens).toBe(DELEGATION_LIMITS.reservationTokens);
     expect(selected.pin.effectiveRuntimeConfig?.model).toMatchObject({
       contextWindow: selected.contextWindow,
       maxTokens: selected.maxTokens,

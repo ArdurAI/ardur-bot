@@ -9,7 +9,7 @@ import {
 
 test("bot creation, editing, and deletion persist", async ({ page }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `bot-crud-${stamp}@ardurbot.test`, "password12", "Bot CRUD");
+  await signup(page, `bot-crud-${stamp}@example.test`, "password12", "Bot CRUD");
   await completeOnboarding(page);
   await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 
@@ -29,11 +29,13 @@ test("bot creation, editing, and deletion persist", async ({ page }, testInfo) =
   await openNewBot(page);
   const form = page.getByTestId("create-bot-form");
   await form.locator("label:has-text('Name') input").fill("New Bot");
+  await form.getByTestId("create-bot-team").click();
   await form.getByRole("button", { name: "Create", exact: true }).click();
   await createAborted;
   // Failed create keeps the form open on the current bot chat.
   await expect(page.getByPlaceholder("Message Chief")).toBeVisible();
   await expect(page.getByTestId("side-panel")).toHaveAttribute("data-panel", "create");
+  await expect(page.getByTestId("side-panel")).toHaveCSS("width", "384px");
   await expect(page.getByTestId("create-bot-error")).toBeVisible();
   expect(createFailed).toBe(true);
   await page.unroute("**/rpc/bots/create");
@@ -62,7 +64,12 @@ test("bot creation, editing, and deletion persist", async ({ page }, testInfo) =
   await captureScreenshot(page, testInfo, "27-created-bot");
 
   await page.locator("main").getByRole("button", { name: "New Bot", exact: true }).click();
-  await expect(page.getByTestId("side-panel").getByText("Settings", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("side-panel")).toHaveAttribute("data-panel", "settings");
+  await expect(page.getByTestId("side-panel")).toHaveCSS("width", "560px");
+  const botSettingsButton = page
+    .locator("main")
+    .getByRole("button", { name: "Bot settings", exact: true });
+  await expect(botSettingsButton).toHaveAttribute("aria-pressed", "true");
   const nameInput = page.locator("label:has-text('Name') input");
   const titleInput = page.locator("label:has-text('Title') input");
   const descriptionInput = page.locator("label:has-text('Description') textarea");
@@ -95,9 +102,9 @@ test("bot creation, editing, and deletion persist", async ({ page }, testInfo) =
   await expect(studio.getByRole("button", { name: "Color #7F621B" })).toHaveClass(/ring-2/);
   await studio.getByRole("button", { name: "Done", exact: true }).click();
   const modelSelect = settings.locator("label:has-text('Model') select");
-  const teamComputer = settings.getByRole("button", { name: "Team" });
+  const teamComputer = settings.getByRole("button", { name: "Shared with team", exact: true });
   const openWork = settings.getByTestId("bot-scratchpad");
-  await expect(teamComputer).toBeHidden();
+  await expect(teamComputer).toBeVisible();
   await expect(modelSelect).toBeVisible();
   await expect(openWork).toBeHidden();
   await expect(settings.getByRole("button", { name: "Save", exact: true })).toBeVisible();
@@ -129,7 +136,8 @@ test("bot creation, editing, and deletion persist", async ({ page }, testInfo) =
   await expect(sidePanel.getByRole("button", { name: "Take control" })).toHaveCount(0);
   await expect(sidePanel.getByTestId("computer-more-button")).toHaveCount(0);
   await captureScreenshot(page, testInfo, "27b-computer-panel");
-  await page.getByRole("button", { name: "Show settings" }).click();
+  await botSettingsButton.click();
+  await expect(sidePanel).toHaveAttribute("data-panel", "settings");
 
   await nameInput.fill("Atlas");
   await titleInput.fill("Research lead");
@@ -138,6 +146,9 @@ test("bot creation, editing, and deletion persist", async ({ page }, testInfo) =
   await expect(botList.getByRole("button", { name: /^Atlas/ })).toBeVisible();
   await expect(page.getByPlaceholder("Message Atlas")).toBeVisible();
   await captureScreenshot(page, testInfo, "28-edited-bot-profile");
+  await botSettingsButton.click();
+  await expect(sidePanel).toHaveAttribute("data-panel", "closed");
+  await expect(botSettingsButton).toHaveAttribute("aria-pressed", "false");
 
   await page.reload();
   await expect(botList.getByRole("button", { name: /^Atlas/ })).toBeVisible();

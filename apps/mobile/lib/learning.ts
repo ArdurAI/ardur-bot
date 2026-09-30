@@ -1,3 +1,9 @@
+import type {
+  ModelCatalogEntry,
+  ModelCredential,
+  RuntimeKind,
+  ThinkingLevel,
+} from "@ardurbot/contracts";
 import {
   LearningActionSchema,
   LearningInboxSchema,
@@ -5,8 +11,18 @@ import {
   ProposalEvidenceSchema,
   SpaceLearningConfigSchema,
 } from "@ardurbot/contracts";
-import { rpcErrorMessage } from "@ardurbot/core";
+import { connectedModelOptions, parseModelPinOptionKey, rpcErrorMessage } from "@ardurbot/core";
 import { RpcServerError, rpc } from "./api";
+
+type MenuOption = { text: string; onPress: () => void };
+
+export type ReviewerChoice = {
+  runtimeKind: RuntimeKind;
+  provider: string;
+  modelId: string;
+  credentialId: string;
+  effort: string | null;
+};
 
 export async function loadLearning(botId?: string) {
   return LearningInboxSchema.parse(await rpc("learning/list", { botId }));
@@ -60,4 +76,79 @@ export function learningBeforeAfter(diff: string) {
       .map((line) => line.slice(1))
       .join("\n"),
   };
+}
+
+export function reviewerMenuOptions(
+  catalog: ModelCatalogEntry[],
+  credentials: ModelCredential[],
+  t: (key: string, values?: Record<string, string | number>) => string,
+  onSelect: (pin: {
+    runtimeKind: "pi" | "hermes";
+    provider: string;
+    modelId: string;
+    credentialId: string;
+  }) => void,
+  runtimeKind: "pi" | "hermes" = "pi",
+  onConnect: () => void = () => {},
+): MenuOption[] {
+  const usable =
+    runtimeKind === "hermes"
+      ? credentials.filter(
+          (item) => item.provider === "openai-compatible" || item.provider === "ollama",
+        )
+      : credentials;
+  const options = connectedModelOptions(catalog, usable);
+  if (options.length === 0) {
+    return [{ text: t("Connect a model"), onPress: onConnect }];
+  }
+
+  return options.map((opt) => ({
+    text: opt.label,
+    onPress: () => {
+      const selected = parseModelPinOptionKey(opt.key);
+      if (!selected?.credentialId) return;
+      onSelect({
+        runtimeKind,
+        provider: selected.provider,
+        modelId: selected.modelId,
+        credentialId: selected.credentialId,
+      });
+    },
+  }));
+}
+
+export function effortLabel(level: string, t: (message: string) => string): string {
+  if (level === "xhigh") return t("Extra high");
+  if (level === "low") return t("Low");
+  if (level === "medium") return t("Medium");
+  if (level === "high") return t("High");
+  if (level === "minimal") return t("Minimal");
+  if (level === "max") return t("Max");
+  if (level === "off") return t("Off");
+  return level.slice(0, 1).toUpperCase() + level.slice(1);
+}
+
+export function thinkingMenuOptions(
+  supported: ThinkingLevel[],
+  isOllama: boolean,
+  t: (key: string, values?: Record<string, string | number>) => string,
+  onSelect: (effort: ThinkingLevel) => void,
+): MenuOption[] {
+  const options = supported.filter((level) =>
+    isOllama ? level === "off" || level === "medium" : level !== "off",
+  );
+
+  return options.map((level) => ({
+    text: isOllama ? (level === "off" ? t("Off") : t("On")) : effortLabel(level, t),
+    onPress: () => onSelect(level),
+  }));
+}
+
+export async function setReviewerPin(expectedRevision: number, pin: ReviewerChoice) {
+  return SpaceLearningConfigSchema.parse(
+    await rpc("learning/setReviewer", {
+      expectedRevision,
+      pin,
+    }),
+  );
 }

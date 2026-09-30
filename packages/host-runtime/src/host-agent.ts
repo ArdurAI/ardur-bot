@@ -35,7 +35,16 @@ import { discoverFleet } from "./fleet/discovery.js";
 import { engineFailureReason } from "./fleet/probe.js";
 import { systemFleetProcess } from "./fleet/process.js";
 import { FleetService } from "./fleet/service.js";
-import { getHostEnvironment, inspectHostEnvironment } from "./host-environment.js";
+import {
+  getHostEnvironment,
+  inspectHostEnvironment,
+  setHostCommandGuard,
+} from "./host-environment.js";
+import {
+  containerEngineGuard,
+  type HostGuardrailConfig,
+  loopbackPortOf,
+} from "./host-guardrails.js";
 import { inspectHostIntegrations } from "./host-integrations.js";
 import { HostMcpServers } from "./host-mcp.js";
 import { confinedHostCwd } from "./host-policy.js";
@@ -49,16 +58,16 @@ import {
   validateCompiledHermesProfile,
 } from "./runtimes/hermes-config.js";
 import {
+  buildHermesRuntime,
   HERMES_SOURCE_PIN,
   hermesInstallCandidate,
-  pinnedHermesLaunch,
   probeHermesInstall,
   resolveHermesLauncherAsset,
 } from "./runtimes/hermes-install.js";
 import { startHermesProviderRelay } from "./runtimes/hermes-provider-relay.js";
-import { HermesRuntime } from "./runtimes/hermes-runtime.js";
+import type { HermesRuntime } from "./runtimes/hermes-runtime.js";
 import type { NativeSpawn } from "./runtimes/native-process.js";
-import { spawnNative } from "./runtimes/native-process.js";
+import { guardNativeSpawn, sessionSpawnFor, spawnNative } from "./runtimes/native-process.js";
 
 type Active = {
   abort: AbortController;
@@ -76,6 +85,10 @@ export class HostAgent {
   private fleet: FleetService;
   private importer?: LocalImportScanner;
   private readonly mcp: HostMcpServers;
+  private readonly guard: HostGuardrailConfig;
+  private readonly runtimes: Partial<
+    Record<"claude-code" | "codex-app-server" | "antigravity" | "hermes", AgentRuntime>
+  >;
   refreshMcp?: () => Promise<void>;
   private acceptedHealth?: string;
   setAcceptedHealth(advertisement?: string) {
@@ -87,22 +100,47 @@ export class HostAgent {
       root: string;
       hostRoots: string[];
       mcpServers?: HostMcpRegistration[];
+      /** Control-plane paths and loopback ports host work must never touch. */
+      guardPaths?: string[];
+      guardPorts?: number[];
+      apiUrl?: string;
     },
     private readonly wire: HostWire,
-    private readonly runtimes: Partial<
+    runtimes?: Partial<
       Record<"claude-code" | "codex-app-server" | "antigravity" | "hermes", AgentRuntime>
-    > = {
-      "claude-code": new ClaudeCodeRuntime(),
-      "codex-app-server": new CodexAppServerRuntime(),
-      antigravity: new AntigravityRuntime(),
-    },
+    >,
   ) {
     this.fleet = new FleetService(config.root, config.token ?? randomUUID());
-    this.mcp = new HostMcpServers(config.mcpServers);
+    const engine = containerEngineGuard();
+    this.guard = {
+      paths: config.guardPaths ?? [],
+      ports: [
+        ...new Set(
+          [...(config.guardPorts ?? []), ...engine.ports, loopbackPortOf(config.apiUrl)].filter(
+            (port): port is number => port !== undefined,
+          ),
+        ),
+      ],
+      sockets: engine.sockets,
+    };
+    // Probes that do not take this agent's spawn (login shell, tool inventory)
+    // use the same deny list. Set before initialize(), which captures the shell.
+    setHostCommandGuard(this.guard);
+    this.mcp = new HostMcpServers(config.mcpServers, this.guard);
+    const start: NativeSpawn = guardNativeSpawn(spawnNative, this.guard);
+    this.runtimes = runtimes ?? {
+      "claude-code": new ClaudeCodeRuntime(start),
+      "codex-app-server": new CodexAppServerRuntime(
+        sessionSpawnFor("codex-app-server", this.guard),
+        this.guard,
+      ),
+      antigravity: new AntigravityRuntime(start),
+    };
     this.sandbox = new DesktopSandboxProvider({
       root: config.root,
       hostRoots: config.hostRoots,
       restricted: true,
+      guard: this.guard,
     });
   }
   async initialize() {
@@ -120,7 +158,10 @@ export class HostAgent {
   }
   async health(refreshSignIn = false): Promise<HostHealth> {
     const cwd = await confinedHostCwd(this.config.root, [this.config.root]);
-    const start: NativeSpawn = (binary, args) => spawnNative(binary, args, cwd);
+    const start: NativeSpawn = guardNativeSpawn(
+      (binary, args) => spawnNative(binary, args, cwd),
+      this.guard,
+    );
     const [claude, codex, antigravity, environment, integrations] = await Promise.all([
       probeClaude(start),
       probeCodex(start),
@@ -316,11 +357,11 @@ export class HostAgent {
           negotiateHostHealth(await this.health(op.refreshSignIn), this.acceptedHealth),
         );
       } else if (op.op === "board.run") {
-        const result = await new BoardRunner({ root: this.config.root, hostRoots: this.roots }).run(
-          op.request,
-          request.scope.spaceId,
-          state.abort.signal,
-        );
+        const result = await new BoardRunner({
+          root: this.config.root,
+          hostRoots: this.roots,
+          guard: this.guard,
+        }).run(op.request, request.scope.spaceId, state.abort.signal);
         if (result.ok && result.stdout) {
           for (let offset = 0; offset < result.stdout.length; offset += 24 * 1024)
             await send("stdout", result.stdout.slice(offset, offset + 24 * 1024));
@@ -642,29 +683,21 @@ export class HostAgent {
     try {
       let runtime = this.runtimes[kind];
       if (kind === "hermes") {
-        const install = hermesInstallCandidate(this.config.root, process.env.ARDUR_HERMES_INSTALL);
-        if (!install || !relay) throw new Error("Pinned Hermes install is unavailable.");
-        const qualified = probeHermesInstall(install);
-        const staging = await realpath(this.config.root);
-        const overlap = path.relative(qualified.root, staging);
-        if (
-          overlap === "" ||
-          (overlap !== ".." && !overlap.startsWith(`..${path.sep}`) && !path.isAbsolute(overlap))
-        )
-          throw new Error("Hermes staging cannot overlap its install.");
-        const launcher = resolveHermesLauncherAsset(process.argv[1] ?? "", import.meta.url);
-        hermes = new HermesRuntime({
-          command: qualified.python,
-          args: [launcher],
-          launch: pinnedHermesLaunch(qualified.root, launcher),
-          pinned: true,
+        if (!relay) throw new Error("Pinned Hermes install is unavailable.");
+        const runtimeInstance = await buildHermesRuntime({
+          hostRoot: this.config.root,
+          explicitInstall: process.env.ARDUR_HERMES_INSTALL,
+          bundleFile: process.argv[1] ?? "",
+          moduleUrl: import.meta.url,
+          guard: this.guard,
           executionEnvelope: profile?.envelope,
           onProfileAcknowledged: () => {
             profileAcknowledged = true;
           },
-          stagingParent: this.config.root,
           onTurnFinished: () => relay.close(),
         });
+        if (!runtimeInstance) throw new Error("Pinned Hermes install is unavailable.");
+        hermes = runtimeInstance;
         runtime = hermes;
       }
       if (!runtime) throw new Error("Host runtime is unavailable.");

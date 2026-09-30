@@ -6,12 +6,15 @@ import type {
   RuntimeProblem,
 } from "@ardurbot/contracts";
 import {
+  failureCategoryMessage,
   nativeRuntimeHealthKeys,
   runtimeNames,
   runtimePinProblem,
   validateAntigravityPin,
 } from "@ardurbot/contracts";
 import type { BrokerScope, HermesProviderBroker } from "./hermes-provider-broker.js";
+import { setHermesProviderStream } from "./hermes-provider-broker.js";
+import { catalogModels } from "./pi-runtime.js";
 import { RemoteHostRuntime } from "./remote-host-runtime.js";
 import { createHostClient, usesHostBridge } from "./remote-host-sandbox.js";
 import { AntigravityRuntime, probeAntigravity } from "./runtimes/antigravity-runtime.js";
@@ -38,13 +41,21 @@ export class RuntimeRegistry {
       return runtimePinProblem(
         pin,
         "runtime-unsupported-computer",
-        `${runtimeNames[pin.runtimeKind]} runs on host computers for now — change the bot's computer or its runtime.`,
+        failureCategoryMessage("computer-unsupported", {
+          runtime: runtimeNames[pin.runtimeKind],
+          bot: "this bot",
+        }),
+        "computer-unsupported",
       );
     if (pin.runtimeKind !== "pi" && !experimental)
       return runtimePinProblem(
         pin,
         "runtime-unavailable",
-        "This runtime is experimental — enable Experimental in the bot's settings or change the pin.",
+        failureCategoryMessage("experimental-off", {
+          runtime: runtimeNames[pin.runtimeKind],
+          bot: "this bot",
+        }),
+        "experimental-off",
       );
     const availability = await entry.probe().catch(
       (): RuntimeAvailability => ({
@@ -103,6 +114,31 @@ export class RuntimeRegistry {
   }
 }
 
+import { LocalHermesRuntime } from "./runtimes/local-hermes-runtime.js";
+/** A runtime for a one-off call outside a run, with the request fields it must run with. */
+export type DetachedRuntime = {
+  runtime: AgentRuntime;
+  request: Pick<AgentRunRequest, "nativeCwd" | "controlledComparison">;
+};
+
+/**
+ * Isolation for a one-off native call outside a run, such as a learning review. Codex
+ * and Claude Code run as in a controlled comparison, without the bot folder's
+ * instructions, settings, skills or saved memories. Antigravity cannot isolate a turn
+ * and refuses to start without the bot's host folder.
+ */
+export function detachedRuntimeRequest(
+  pin: RuntimePin,
+  computer: { kind: string; providerRef: string | null } | null | undefined,
+): DetachedRuntime["request"] {
+  if (pin.runtimeKind === "pi") return {};
+  if (pin.runtimeKind === "antigravity")
+    return {
+      nativeCwd: computer?.kind === "desktop" ? (computer.providerRef ?? undefined) : undefined,
+    };
+  return { controlledComparison: true };
+}
+
 export function createRuntimeRegistry(
   pi: AgentRuntime,
   brokerForTurn?: (
@@ -111,6 +147,12 @@ export function createRuntimeRegistry(
     fence: { operationId: string; hostGeneration: string },
   ) => Promise<{ broker: HermesProviderBroker; scope: BrokerScope }>,
 ) {
+  // The broker's translated route streams through Ardur's provider layer with
+  // the same registry the built-in runtime uses; the connection's resolved key
+  // travels in the broker's catalog binding, never to the Hermes process.
+  setHermesProviderStream((model, context, options) =>
+    catalogModels().streamSimple(model, context, options),
+  );
   const client = usesHostBridge() ? createHostClient() : undefined;
   const claude = client ? new RemoteHostRuntime(client, "claude-code") : new ClaudeCodeRuntime();
   const codex = client
@@ -119,7 +161,9 @@ export function createRuntimeRegistry(
   const antigravity = client
     ? new RemoteHostRuntime(client, "antigravity")
     : new AntigravityRuntime();
-  const hermes = client ? new RemoteHostRuntime(client, "hermes", brokerForTurn) : undefined;
+  const hermes = client
+    ? new RemoteHostRuntime(client, "hermes", brokerForTurn)
+    : new LocalHermesRuntime(brokerForTurn);
   return new RuntimeRegistry({
     pi: {
       factory: () => pi,
@@ -140,10 +184,7 @@ export function createRuntimeRegistry(
       probe: () => nativeRuntimeAvailability("antigravity"),
     },
     hermes: {
-      factory: () => {
-        if (!hermes) throw new Error("Hermes needs a connected host.");
-        return hermes;
-      },
+      factory: () => hermes,
       probe: () => nativeRuntimeAvailability("hermes"),
     },
   });
@@ -168,13 +209,61 @@ export async function nativeRuntimeAvailability(
       }
     );
   }
-  if (kind === "hermes")
+  if (kind === "hermes") {
+    if (process.platform === "win32") {
+      return {
+        runtimeKind: "hermes",
+        available: false,
+        models: [],
+        reason: "Hermes isn't available on Windows yet.",
+      };
+    }
+    const {
+      hermesInstallProgress,
+      localHermesInstallCandidate,
+      localHermesRoot,
+      probeHermesInstall,
+    } = await import("@ardurbot/host-runtime/runtimes/hermes-install");
+    const candidate = localHermesInstallCandidate();
+    // An explicit install belongs to the operator, so a failed check never offers reinstall.
+    const managed = !process.env.ARDUR_HERMES_INSTALL;
+    const progress = hermesInstallProgress(localHermesRoot());
+    let available = false;
+    if (candidate) {
+      try {
+        probeHermesInstall(candidate);
+        available = true;
+      } catch {
+        available = false;
+      }
+    }
+    const install = available
+      ? progress?.state === "ready"
+        ? { state: "ready" as const }
+        : undefined
+      : !managed
+        ? undefined
+        : progress?.state === "installing"
+          ? progress
+          : progress
+            ? { state: "failed" as const }
+            : candidate
+              ? { state: "absent" as const }
+              : undefined;
     return {
-      runtimeKind: kind,
-      available: false,
+      runtimeKind: "hermes",
+      available,
       models: [],
-      reason: "Hermes needs a connected host.",
+      ...(!available
+        ? {
+            reason: candidate
+              ? "The Hermes install on this computer failed its safety check."
+              : "Hermes is not installed on this computer.",
+          }
+        : {}),
+      ...(install ? { install } : {}),
     };
+  }
   return kind === "claude-code"
     ? probeClaude()
     : kind === "codex-app-server"

@@ -2,8 +2,12 @@ import { deploymentHostLabel } from "@ardurbot/adapters";
 import type { Actor, HostLabel, TeamRow } from "@ardurbot/contracts";
 import {
   DelegationSnapshotSchema,
+  FailureCategoryIdSchema,
+  failureCategoryFromMemberLine,
+  failureCategoryFromText,
   RunFailurePayloadSchema,
   RuntimeInfoSchema,
+  runtimeNames,
   taskCardSentence,
 } from "@ardurbot/contracts";
 import { ENGINE_LABELS } from "@ardurbot/contracts/fleet";
@@ -19,6 +23,13 @@ async function requireMember(prisma: PrismaClient, actor: Actor) {
   if (!member) throw new ORPCError("FORBIDDEN");
 }
 const active = ["queued", "leased", "running", "waiting_input", "waiting_takeover"];
+/**
+ * Terminal handoff records are listed on the board only for a recent window; the board is
+ * polled per client and a long-lived space accrues records without limit. Active records
+ * are never bounded, and an older terminal record still appears through latestCards when
+ * it is the bot's latest work.
+ */
+const TEAM_BOARD_TERMINAL_CARD_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 export function teamState(input: {
   runStatus?: string;
   delegationStatus?: string;
@@ -81,7 +92,19 @@ export async function teamBoard(
         orderBy: { createdAt: "desc" },
       }),
       prisma.delegation.findMany({
-        where: { ...scope, status: { in: ["queued", "running", "cancel-requested", "completed"] } },
+        // Terminal records stay listed after the run ends; a failed or cancelled handoff
+        // must not vanish from the board while it is still that bot's latest work. Active
+        // records are always listed; terminal ones are bounded to a recent window.
+        where: {
+          ...scope,
+          OR: [
+            { status: { in: ["queued", "running", "cancel-requested"] } },
+            {
+              status: { in: ["completed", "failed", "cancelled"] },
+              createdAt: { gte: new Date(Date.now() - TEAM_BOARD_TERMINAL_CARD_WINDOW_MS) },
+            },
+          ],
+        },
         orderBy: { createdAt: "desc" },
       }),
       prisma.delegation.findMany({
@@ -150,14 +173,19 @@ export async function teamBoard(
       own.find((row) => ["queued", "running", "cancel-requested"].includes(row.status)) ??
       own.find((row) => row.status === "completed") ??
       own[0];
-    const selected =
+    // A newer run displaces a handoff card. For a finished failed or cancelled handoff
+    // any newer run of that bot displaces it, not only an active one: the card must not
+    // resurface as "Blocked" forever after the bot has already moved on.
+    const displaced = Boolean(
       delegation &&
-      (!run ||
-        run.delegationId === delegation.id ||
-        (delegation.kind === "helper" && delegation.parentRunId === run.id) ||
-        !active.includes(run.status))
-        ? delegation
-        : undefined;
+        run &&
+        run.delegationId !== delegation.id &&
+        !(delegation.kind === "helper" && delegation.parentRunId === run.id) &&
+        (active.includes(run.status) ||
+          (["failed", "cancelled"].includes(delegation.status) &&
+            run.createdAt.getTime() >= delegation.createdAt.getTime())),
+    );
+    const selected = delegation && !displaced ? delegation : undefined;
     const record = selected ? delegationView(selected) : undefined;
     const card = record?.card;
     const rootTaskId = selected?.rootTaskId ?? run?.delegationRootTaskId ?? run?.taskId ?? null;
@@ -172,6 +200,22 @@ export async function teamBoard(
       failures.find((event) => event.runId === run?.id)?.payload,
     );
     const runtimeProblem = failure.success ? failure.data.runtimeProblem : undefined;
+    // A finished failed or cancelled handoff carries its own recorded reason (already
+    // redacted); a run that ended cancelled leaves no run.failed event to read one from.
+    const recorded =
+      selected && ["failed", "cancelled"].includes(selected.status)
+        ? selected.result?.trim()
+        : undefined;
+    // A handoff line ("Reviewer failed.") says that the handoff ended, never why: it is
+    // not a reason to show.
+    const recordedReason =
+      recorded && selected && !failureCategoryFromMemberLine(recorded, selected.actingName)
+        ? recorded
+        : undefined;
+    const problemCategory = FailureCategoryIdSchema.safeParse(runtimeProblem?.reasonId);
+    const legacyCategory = recordedReason
+      ? failureCategoryFromText(recordedReason, { runtimes: Object.values(runtimeNames) })
+      : undefined;
     const state = teamState({
       runStatus: run?.status,
       delegationStatus: selected?.status,
@@ -180,6 +224,19 @@ export async function teamBoard(
         (selected?.status === "running" && timelineState?.kind === "blocked") ||
         ["error", "failed"].includes(bot.computer?.state ?? ""),
     });
+    const reasonCategory =
+      state === "blocked"
+        ? problemCategory.success
+          ? {
+              category: problemCategory.data,
+              runtime: runtimeProblem
+                ? (runtimeNames[runtimeProblem.pin.runtimeKind] ?? null)
+                : null,
+            }
+          : legacyCategory
+            ? { category: legacyCategory.id, runtime: legacyCategory.params.runtime ?? null }
+            : undefined
+        : undefined;
     const executing = run?.startedAt
       ? DelegationSnapshotSchema.safeParse({
           pin: run.runtimePin,
@@ -238,10 +295,15 @@ export async function teamBoard(
               ? timelineState.text
               : runtimeProblem
                 ? redactTaskValue(runtimeProblem.reason)
-                : run?.status === "failed"
-                  ? "The run failed"
-                  : "The task needs attention"
+                : recordedReason
+                  ? redactTaskValue(recordedReason)
+                  : run?.status === "failed"
+                    ? "The run failed"
+                    : "The task needs attention"
           : null,
+      ...(reasonCategory
+        ? { reasonCategory: reasonCategory.category, reasonRuntime: reasonCategory.runtime }
+        : {}),
       action:
         state === "blocked"
           ? (timelineState?.action ?? "Open conversation")
@@ -282,19 +344,48 @@ export async function teamBoard(
         : selected?.kind === "helper" && selected.status !== "queued"
           ? record!.snapshot
           : null,
-      usage: {
-        tokens: spent.reduce((sum, item) => sum + item.inputTokens + item.outputTokens, 0),
-        costs: spent.flatMap((item) =>
-          item.cost !== null && item.pricingProvenance
-            ? [
-                {
-                  amount: item.cost,
-                  provenance: redactTaskValue(JSON.stringify(item.pricingProvenance)),
-                },
-              ]
-            : [],
-        ),
-      },
+      usage: (() => {
+        // Unavailable measurements stay unavailable. Unknown categories are omitted.
+        // Partial categories are a lower bound, so the number is shown as "at least".
+        // A zero fallback would claim a native run consumed nothing when usage never arrived.
+        // A run that started (or finished) without any usage record is likewise unavailable;
+        // zero is only honest for work that never started.
+        const started = selected ? selected.status !== "queued" : Boolean(run?.startedAt);
+        type Coverage = Record<string, string> | null;
+        let measured = 0;
+        let hasGap = false;
+        for (const item of spent) {
+          const coverage = (item.categoryCoverage as Coverage) ?? null;
+          const inputState = coverage?.logicalInput;
+          const outputState = coverage?.output;
+          const inputUnknown = inputState === "unknown";
+          const outputUnknown = outputState === "unknown";
+          if (!inputUnknown) measured += item.inputTokens;
+          if (!outputUnknown) measured += item.outputTokens;
+          if (
+            inputUnknown ||
+            outputUnknown ||
+            inputState === "partial" ||
+            outputState === "partial"
+          )
+            hasGap = true;
+        }
+        return {
+          tokens:
+            spent.length === 0 ? (started ? null : 0) : measured === 0 && hasGap ? null : measured,
+          partial: hasGap && measured > 0,
+          costs: spent.flatMap((item) =>
+            item.cost !== null && item.pricingProvenance
+              ? [
+                  {
+                    amount: item.cost,
+                    provenance: redactTaskValue(JSON.stringify(item.pricingProvenance)),
+                  },
+                ]
+              : [],
+          ),
+        };
+      })(),
     };
   });
   return { rows, hostLabel: host };

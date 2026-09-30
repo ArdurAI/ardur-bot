@@ -43,8 +43,10 @@ test("launches with a narrow preload bridge and an isolated renderer", async () 
     });
 
     expect(renderer.bridgeKeys).toEqual([
+      "boot",
       "customization",
       "devices",
+      "dock",
       "host",
       "integrations",
       "localSettings",
@@ -52,6 +54,7 @@ test("launches with a narrow preload bridge and an isolated renderer", async () 
       "notifications",
       "oauth",
       "platform",
+      "shortcuts",
       "storage",
       "system",
       "update",

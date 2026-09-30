@@ -11,12 +11,14 @@ import {
   goalExhaustionReason,
   reconcileGoalExhaustion,
   reconcileQuietBotMessageClaims,
+  unsettledGroupAskDelegations,
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import type { PoolClient } from "pg";
 import { returnBotMessageOutcome } from "./bot-messages.js";
 import { scheduleComputerControlExpiry } from "./computer-control.js";
 import { wakeGoalAfterDelegation } from "./goal-wake.js";
+import { wakeCoordinatorAfterAsk } from "./group-ask.js";
 import { isUserProgressClientNonce } from "./user-progress.js";
 
 const DEFAULT_INTERVAL_MS = 30_000;
@@ -24,6 +26,8 @@ const DEFAULT_BATCH_SIZE = 100;
 const ROUTINE_LOOKAHEAD_MS = 60_000;
 const CONTROL_LOOKAHEAD_MS = 60_000;
 const BRIEF_MAINTENANCE_INTERVAL_MS = 600_000;
+/** Asks settle or expire within about an hour of their coordinator's turn. */
+const GROUP_ASK_RECONCILE_WINDOW_MS = 24 * 60 * 60_000;
 // Two keys give Ardur's lock a namespace without relying on a hash that might collide
 // with an application using the one-key advisory-lock API.
 const RECONCILIATION_LOCK_NAMESPACE = 1_380_019_075;
@@ -115,6 +119,7 @@ export function createJobReconciler(
     reconcileComputerUpdates?: () => Promise<void>;
     reconcileCloudAgents?: () => Promise<void>;
     reconcileMemory?: () => Promise<void>;
+    reconcileEvidence?: () => Promise<void>;
     /** Board work reaches a host, so it runs after recovery and never holds it up. */
     reconcileBoardOutcomes?: (signal: AbortSignal) => Promise<void>;
     reconcileLocalImport?: () => Promise<void>;
@@ -168,6 +173,7 @@ export function createJobReconciler(
         deps.reconcileCloudAgents,
         deps.reconcileComputerUpdates,
         deps.reconcileMemory,
+        deps.reconcileEvidence,
         deps.reconcileLocalImport,
         async () => {
           if (!deps.reconcileBriefs || Date.now() < nextBriefMaintenanceAt) return;
@@ -235,7 +241,7 @@ export function createJobReconciler(
         },
         orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
         take: batchSize,
-        select: { id: true, updatedAt: true },
+        select: { id: true, updatedAt: true, providerRetryAt: true },
       }),
       deps.prisma.routine.findMany({
         where: {
@@ -397,6 +403,22 @@ export function createJobReconciler(
       }
     }
 
+    // A coordinator busy when its ask settled, or a missed wake, is retried here.
+    if (deps.prisma.delegation) {
+      const asks = await unsettledGroupAskDelegations(
+        deps.prisma,
+        new Date(now.getTime() - GROUP_ASK_RECONCILE_WINDOW_MS),
+        batchSize,
+      ).catch((error) => {
+        getLogger().error("group ask reconciliation", error);
+        return [];
+      });
+      for (const delegationId of asks)
+        await wakeCoordinatorAfterAsk(deps, delegationId).catch((error) =>
+          getLogger().error("group ask wake reconciliation", error),
+        );
+    }
+
     if (deps.prisma.botMessageDelivery) {
       await expireHeldBotMessages(deps.prisma, now, batchSize).catch((error) =>
         getLogger().error("held bot message expiry", error),
@@ -449,7 +471,19 @@ export function createJobReconciler(
     }
 
     await Promise.all([
-      ...runs.map((run) => deps.jobs.enqueue(runContinueJob(run.id))),
+      // A run waiting out a provider refusal keeps its wake moment: a duplicate
+      // run.continue key must not replace the pending delayed job with an immediate one.
+      ...runs.flatMap((run) =>
+        run.providerRetryAt && run.providerRetryAt > now
+          ? [
+              deps.jobs.enqueue({
+                ...runContinueJob(run.id),
+                availableAt: run.providerRetryAt,
+                preserveRunAt: true,
+              }),
+            ]
+          : [deps.jobs.enqueue(runContinueJob(run.id))],
+      ),
       ...routines.flatMap((routine) =>
         routine.nextRunAt
           ? [deps.jobs.enqueue(routineWakeupJob(routine.id, routine.nextRunAt))]

@@ -22,10 +22,12 @@ import {
   createBackgroundJobHandlers,
   createCloudAgentConnection,
   createConnectorStack,
+  createEvidenceSealRecovery,
   createJobReconciler,
   createMemoryLifecycle,
   createMessagingContextLoader,
   createMessagingTeamChatSender,
+  createRunEvidenceRecorder,
   createRunExecutor,
   createRunSandbox,
   createRunSecretWriter,
@@ -61,6 +63,7 @@ import {
   reconcileCloudAgents,
   reconcileComputerUpdates,
   reconcileMemoryDelivery,
+  recordStandaloneUsage,
   removePiUserSessions,
   ScriptedAgentRuntime,
   SmtpEmailProvider,
@@ -94,11 +97,11 @@ import { RPCHandler } from "@orpc/server/fetch";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { mountExportRoutes } from "./account-export.js";
+import { loadAppEnv } from "./app-env.js";
 import { warnAutoReviewConfiguration } from "./auto-review-status.js";
 import { backfillRuntimePins } from "./backfill-runtime-pins.js";
 import { boardCloseRetry } from "./board.js";
 import type { AppEnv } from "./env.js";
-import { loadEnv } from "./env.js";
 import { reconcileFleetSecretCleanup } from "./fleet.js";
 import { HostBridge } from "./host-bridge.js";
 import { mountHostMcpRoutes } from "./host-mcp-routes.js";
@@ -122,7 +125,7 @@ import { createRouter } from "./router.js";
 import { mountScreenTarget } from "./screen-proxy.js";
 import { mountSystemRoutines } from "./system/routines.js";
 import { isDeferredReservationLost, TeamChatBridge } from "./team-chat-bridge.js";
-import { ModelTeamChatEngagementJudge } from "./team-chat-judge.js";
+import { ModelTeamChatEngagementJudge, TEAM_CHAT_JUDGE_USAGE_PURPOSE } from "./team-chat-judge.js";
 import {
   PendingTeamChatInbound,
   prefersTeamChatSurface,
@@ -177,7 +180,7 @@ export async function createApp(
     runtime: runtimeOverride,
     ...envOverrides
   } = overrides;
-  const env = { ...loadEnv(process.env), ...envOverrides };
+  const env = { ...loadAppEnv(), ...envOverrides };
   const logger = loggerOverride ?? createServiceLogger({ service: SERVICE_NAMES.api });
   installLogger(logger);
   warnAutoReviewConfiguration(logger);
@@ -202,9 +205,7 @@ export async function createApp(
   const secrets = new EncryptedSecretStore(env.encryptionKey);
   const instance = await ensureInstanceIdentity(prisma, secrets);
   await backfillRuntimePins({ prisma, secrets, logger });
-  const events = createThreadEvents(prisma, realtime, {
-    runSecretWriter: createRunSecretWriter(secrets),
-  });
+
   const environmentSignupPolicy = signupPolicyFromEnv(env);
   const deploymentSettings = await prisma.deploymentSettings.upsert({
     where: { id: "default" },
@@ -252,6 +253,10 @@ export async function createApp(
           })(),
       );
   const hostBridge = new HostBridge(prisma, env.encryptionKey);
+  const events = createThreadEvents(prisma, realtime, {
+    runSecretWriter: createRunSecretWriter(secrets),
+    jobs,
+  });
   const sandbox: SandboxProvider =
     sandboxOverride ??
     createRunSandbox(env.sandboxProvider, {
@@ -428,6 +433,7 @@ export async function createApp(
   });
   const shutdown = new AbortController();
   const executor = createRunExecutor({
+    evidenceRecorder: createRunEvidenceRecorder({ prisma, secretStore: secrets }),
     prisma,
     lockPool: created.lockPool,
     runtime,
@@ -510,6 +516,7 @@ export async function createApp(
         reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
         reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
         reconcileMemory: () => reconcileMemoryDelivery(memoryLifecycleDeps, memoryDocuments),
+        reconcileEvidence: createEvidenceSealRecovery({ prisma, jobs }),
         // No worker runs beside the in-memory queue, so this reconciler also sweeps board closes.
         reconcileBoardOutcomes: (signal) =>
           reconcileBoardOutcomes(
@@ -906,6 +913,12 @@ export async function createApp(
               deploymentModelKey: env.deploymentModelKey,
               providerOverride: env.teamChatJudgeProvider,
               modelOverride: env.teamChatJudgeModel,
+              recordUsage: (usage, scope) =>
+                recordStandaloneUsage(
+                  { prisma },
+                  { ...scope, purpose: TEAM_CHAT_JUDGE_USAGE_PURPOSE },
+                  usage,
+                ),
             })
           : new ModelTeamChatEngagementJudge({
               resolvePinnedModel: executor.resolveModel,
@@ -915,6 +928,12 @@ export async function createApp(
               deploymentProvider: env.defaultProvider,
               deploymentModel: env.defaultModel,
               deploymentModelKey: env.deploymentModelKey,
+              recordUsage: (usage, scope) =>
+                recordStandaloneUsage(
+                  { prisma },
+                  { ...scope, purpose: TEAM_CHAT_JUDGE_USAGE_PURPOSE },
+                  usage,
+                ),
             });
       const bridge = new TeamChatBridge({
         prisma,

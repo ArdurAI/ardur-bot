@@ -1,11 +1,15 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { RealtimeFanout } from "@ardurbot/adapter-kit";
+import type { JobPublisher, RealtimeFanout } from "@ardurbot/adapter-kit";
+import { evidenceSealJob } from "@ardurbot/adapter-kit";
 import type { RunFailurePayload } from "@ardurbot/contracts";
 import {
   type BotSecretDestination,
   CommandEventPayloadSchema,
+  FailureCategoryIdSchema,
+  failureCategoryGroupMessage,
   type MessageBlock,
   MessageBlock as MessageBlockSchema,
+  PeerEffectDescriptorsSchema,
   type ProductEvent,
   RuntimePinSourceSchema,
 } from "@ardurbot/contracts";
@@ -14,15 +18,19 @@ import {
   buildBotMessageWakePrompt,
   isApprovalAskBlock,
   isCommandEvent,
+  isReasoningSummaryBlock,
   isSecretAskBlock,
   LEGACY_RESTART_SUMMARY,
   messagingChannelId,
+  parseGroupAskKey,
+  peerHoldBoundEffect,
   peerPairKey,
   RECEIPT_FILTERED_SUMMARY_MARKER,
   redactTaskValue,
   resolveAskChoice,
   sanitizeJsonValue,
 } from "@ardurbot/core";
+import { classifyPeerEffectBinding } from "@ardurbot/core/node/peer-effect-digest";
 import { getLogger } from "@ardurbot/logging";
 import {
   appendBotMessageAuditInTransaction,
@@ -46,6 +54,7 @@ import { expireComputerExecutionLeases } from "./computers.js";
 import { finishDelegation, lockDelegationRoot } from "./delegation.js";
 import { delegationAnswerThread, delegationApprovalTarget } from "./delegation-approval.js";
 import { inheritedRemoteOrigin, persistDispatchSummary } from "./dispatch.js";
+import { recordGroupAskOutcomeInTransaction } from "./group-asks.js";
 import {
   assertRunCanWriteHistory,
   createThreadMessageInTransaction,
@@ -61,6 +70,7 @@ const POLL_ONLY_CATCH_UP_MS = 400;
 export function groupModelFailureNotice(
   code: string,
   name: string | null,
+  reasonId?: string,
 ): Extract<MessageBlock, { kind: "text" }> {
   const botName = name ?? "This bot";
   if (code === "locality-denied") {
@@ -70,16 +80,33 @@ export function groupModelFailureNotice(
       notice: { id: "group-model-locality-denied", botName },
     };
   }
-  if (code === "pin-credential-missing") {
+  // Every cause sentence comes from the failure-category table; the stored notice id is
+  // the category's id in this context, and apps translate from it.
+  const category = FailureCategoryIdSchema.safeParse(reasonId);
+  if (code === "pin-credential-missing" || category.data === "connection-missing") {
     return {
       kind: "text",
-      text: `${botName} couldn't use the model set for this group. Reconnect it or change the group model.`,
+      text: failureCategoryGroupMessage("connection-missing", { bot: botName }),
       notice: { id: "group-model-credential-missing", botName },
+    };
+  }
+  if (category.data === "usage-limit") {
+    return {
+      kind: "text",
+      text: failureCategoryGroupMessage("usage-limit", { bot: botName }),
+      notice: { id: "group-model-usage-limit", botName },
+    };
+  }
+  if (category.data === "signed-out") {
+    return {
+      kind: "text",
+      text: failureCategoryGroupMessage("signed-out", { bot: botName }),
+      notice: { id: "group-model-sign-in-expired", botName },
     };
   }
   return {
     kind: "text",
-    text: `${botName} couldn't use the model set for this group. Change the group model or check this bot's settings.`,
+    text: failureCategoryGroupMessage("configuration-invalid", { bot: botName }),
     notice: { id: "group-model-unavailable", botName },
   };
 }
@@ -97,6 +124,7 @@ export interface ThreadEvents {
   answerRunInput(input: AnswerRunInput): Promise<boolean>;
   append(input: AppendEventInput): Promise<ProductEvent>;
   claimSteering(input: ClaimSteeringInput): Promise<ClaimedSteeringMessage[]>;
+  releaseSteering(input: ReleaseSteeringInput): Promise<void>;
   clearThread(input: ClearThreadInput): Promise<ClearThreadResult>;
   finalizeComputerControlRelease(
     input: FinalizeComputerControlReleaseInput,
@@ -147,6 +175,15 @@ export interface ClaimSteeringInput {
   leaseFence: number;
   seenIds: string[];
   kind?: "correction" | "added-requirement" | "other";
+}
+
+export interface ReleaseSteeringInput {
+  threadId: string;
+  botId: string;
+  runId: string;
+  leaseOwner: string;
+  leaseFence: number;
+  ids: string[];
 }
 
 export interface ClaimedSteeringMessage {
@@ -237,6 +274,7 @@ export interface PauseRunForTakeover {
   leaseOwner: string;
   leaseFence: number;
   reason: string;
+  blocks?: MessageBlock[];
   /** Computer that should expose the pending takeover to the UI via controlRunId. */
   computerId: string;
 }
@@ -293,16 +331,17 @@ export interface RunSecretWriter {
 export function createThreadEvents(
   prisma: PrismaClient,
   realtime?: RealtimeFanout,
-  options: { catchUpMs?: number; runSecretWriter?: RunSecretWriter } = {},
+  options: { catchUpMs?: number; runSecretWriter?: RunSecretWriter; jobs?: JobPublisher } = {},
 ): ThreadEvents {
   return {
     answerRunInput: (input) => answerRunInput(prisma, input, realtime, options.runSecretWriter),
     append: (input) => appendEvent(prisma, input, realtime),
     claimSteering: (input) => claimSteering(prisma, input),
+    releaseSteering: (input) => releaseSteering(prisma, input),
     clearThread: (input) => clearThread(prisma, input, realtime),
     finalizeComputerControlRelease: (input) =>
       finalizeComputerControlRelease(prisma, input, realtime),
-    finalizeRun: (input) => finalizeRun(prisma, input, realtime),
+    finalizeRun: (input) => finalizeRun(prisma, input, realtime, options.jobs),
     notify: (threadId, seq) => notifyRealtime(realtime, threadId, seq),
     pauseRunForInput: (input) => pauseRunForInput(prisma, input, realtime),
     pauseRunForTakeover: (input) => pauseRunForTakeover(prisma, input, realtime),
@@ -701,9 +740,30 @@ export async function claimSteering(
       orderBy: [{ message: { seq: "asc" } }, { id: "asc" }],
     });
     if (steering.length === 0) return [];
+    // A row another run let go may still carry that run's claim. Taking it over makes the run
+    // that delivers it the one that deletes it on completion, so it is not answered again.
     await tx.steeringMessage.updateMany({
-      where: { id: { in: steering.map((item) => item.id) }, claimedAt: null },
+      where: {
+        id: { in: steering.map((item) => item.id) },
+        OR: [{ claimedAt: null }, { runId: null }],
+      },
       data: { runId: input.runId, claimedAt: new Date() },
+    });
+    const takenOver = steering.filter((item) => item.runId === null).map((item) => item.id);
+    if (takenOver.length) {
+      await tx.steeringMessage.updateMany({
+        where: { id: { in: takenOver }, runId: input.runId },
+        data: { adopted: true },
+      });
+    }
+    // The bound wake follows its steering row to the run now answering it. A
+    // continuation's batch is pre-assigned rather than taken over, and a released
+    // row's wake was cleared, so every claimed row re-points its wake, not just
+    // takeovers. Claiming never selects another live run's rows, so a bound wake
+    // can only move here from a finished run or a cleared one.
+    await tx.botMessageWake.updateMany({
+      where: { steeringMessageId: { in: steering.map((item) => item.id) }, state: "bound" },
+      data: { runId: input.runId },
     });
     // The summary survives deletion of the consumed queue row. Text stays in its source message.
     for (const item of steering) {
@@ -727,6 +787,48 @@ export async function claimSteering(
       text: blocksToAgentHistoryText(item.message.blocks as MessageBlock[]),
       blocks: item.message.blocks as MessageBlock[],
     }));
+  });
+}
+
+/**
+ * Unclaims steering the run took but cannot carry this turn. Clearing runId
+ * makes the row a later follow-up; this turn's claims also skip these ids so
+ * the runtime cannot take them straight back.
+ */
+export async function releaseSteering(
+  prisma: PrismaClient,
+  input: ReleaseSteeringInput,
+): Promise<void> {
+  if (input.ids.length === 0) return;
+  await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
+    const run = await tx.run.findFirst({
+      where: {
+        id: input.runId,
+        threadId: input.threadId,
+        botId: input.botId,
+        status: "running",
+        leaseOwner: input.leaseOwner,
+        leaseFence: input.leaseFence,
+      },
+      select: { id: true },
+    });
+    if (!run) return;
+    const released = await tx.steeringMessage.findMany({
+      where: { id: { in: input.ids }, runId: input.runId },
+      select: { messageId: true },
+    });
+    await tx.steeringMessage.updateMany({
+      where: { id: { in: input.ids }, runId: input.runId },
+      data: { claimedAt: null, runId: null, adopted: false },
+    });
+    await tx.botMessageWake.updateMany({
+      where: { steeringMessageId: { in: input.ids }, runId: input.runId, state: "bound" },
+      data: { runId: null },
+    });
+    await tx.steeringSummary.deleteMany({
+      where: { runId: input.runId, messageId: { in: released.map((row) => row.messageId) } },
+    });
   });
 }
 
@@ -927,6 +1029,25 @@ async function commitAnswerRunInput(
         })) !== peerHold.authorityFingerprint
       )
         return null;
+      // An effect-bound hold approves only the exact digest-bound descriptor captured
+      // when the hold was created. If the stored request or the delivery's descriptor
+      // list no longer proves that binding, refuse the answer like any other stale
+      // approval: the card stays pending and nothing is released.
+      const boundHold = peerHoldBoundEffect(approvalEffect!.request);
+      if (boundHold.kind === "invalid") return null;
+      if (boundHold.kind === "bound") {
+        const storedEffects = PeerEffectDescriptorsSchema.safeParse(peerHold.requestedEffects);
+        const binding = storedEffects.success
+          ? classifyPeerEffectBinding(storedEffects.data)
+          : { kind: "preparation-only" as const };
+        if (
+          binding.kind !== "effect-bound" ||
+          binding.effect.toolName !== boundHold.effect.toolName ||
+          binding.effect.resourceRef !== boundHold.effect.resourceRef ||
+          binding.effect.argsDigest !== boundHold.effect.argsDigest
+        )
+          return null;
+      }
     }
   }
 
@@ -1133,6 +1254,12 @@ async function pauseRunForInputOnce(prisma: PrismaClient, input: PauseRunForInpu
     );
     // Thread row first, then the delegated root task. clearThread and finalizeRun agree.
     await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
+    // Read the held place before the run leaves `running`, which releases it, so the
+    // pause card can still fill it below.
+    const pausingRun = await tx.run.findUnique({
+      where: { id: input.runId },
+      select: { replySeq: true },
+    });
     const paused = await tx.run.updateMany({
       where: {
         id: input.runId,
@@ -1181,6 +1308,10 @@ async function pauseRunForInputOnce(prisma: PrismaClient, input: PauseRunForInpu
         blocks: target.blocks,
         botId: target.botId,
         runId: input.runId,
+        // The card fills the reply's held place only when it lands on the run's own
+        // thread; a delegated approval card lands on the coordinator thread.
+        heldReplySeq:
+          target.threadId === input.threadId ? (pausingRun?.replySeq ?? undefined) : undefined,
       }));
     await appendEventInTransaction(tx, {
       spaceId: input.spaceId,
@@ -1212,8 +1343,25 @@ async function pauseRunForInputOnce(prisma: PrismaClient, input: PauseRunForInpu
       runId: input.runId,
       payload: {},
     });
+    // A room member that pauses to ask the person marks its coordination round
+    // "waiting for you" instead of leaving the line pending.
+    const memberDelegation = waitingRun?.delegationId
+      ? await tx.delegation.findUnique({
+          where: { id: waitingRun.delegationId },
+          select: { actingBotId: true, actingName: true, admissionKey: true },
+        })
+      : null;
+    const coordination = memberDelegation
+      ? await recordGroupAskOutcomeInTransaction(tx, {
+          spaceId: input.spaceId,
+          threadId: input.threadId,
+          delegation: memberDelegation,
+          delegationStatus: "running",
+          runStatus: "waiting_input",
+        })
+      : null;
     await tx.event.deleteMany({ where: { runId: input.runId, type: "thread.progress" } });
-    return { threadId: waitingEvent.threadId, seq: waitingEvent.seq };
+    return { threadId: waitingEvent.threadId, seq: coordination?.seq ?? waitingEvent.seq };
   });
 }
 
@@ -1308,6 +1456,7 @@ export async function pauseRunForTakeover(
       runId: input.runId,
       payload: {
         reason: input.reason,
+        blocks: input.blocks,
         takeoverRequested: true,
         retainedControl: retainControl,
       },
@@ -1421,9 +1570,14 @@ export async function finalizeRun(
   prisma: PrismaClient,
   input: FinalizeRunInput,
   realtime?: RealtimeFanout,
+  jobs?: JobPublisher,
 ): Promise<FinalizeRunResult | false> {
   const committed = await withTransactionRetry(() => finalizeRunOnce(prisma, input));
   if (!committed) return false;
+  if (jobs)
+    await jobs.enqueue(evidenceSealJob(input.runId)).catch(() => {
+      getLogger().warn("evidence seal enqueue failed");
+    });
   let continuationRunId = committed.continuationRunId;
   if (input.outcome === "completed" && !continuationRunId) {
     const run = await prisma.run.findUnique({
@@ -1465,6 +1619,33 @@ export async function finalizeRun(
   for (const update of committed.updatedThreads)
     await notifyRealtime(realtime, update.threadId, update.seq);
   return { continuationRunId };
+}
+
+/** Reply text for readers that must not treat a reasoning summary as something the bot said. */
+export function replyTextFromBlocks(blocks: readonly MessageBlock[]): string {
+  return blocks
+    .flatMap((block) =>
+      "text" in block && !isReasoningSummaryBlock(block) && block.kind !== "coordination"
+        ? [block.text]
+        : [],
+    )
+    .join("\n");
+}
+
+/**
+ * A peer-message run keeps each reasoning summary as its own record entry.
+ * The reply bubble is everything else that has text, with the same redaction
+ * the bubble had before summaries were stored.
+ */
+export function peerRunMessageBlocks(blocks: readonly MessageBlock[]): MessageBlock[] {
+  const reasoning = blocks.flatMap((block) => {
+    if (block.kind === "progress" && block.reasoning === true) {
+      return [{ ...block, text: redactTaskValue(block.text) }];
+    }
+    return [];
+  });
+  const reply = redactTaskValue(replyTextFromBlocks(blocks));
+  return [...reasoning, ...(reply.trim() ? [{ kind: "text" as const, text: reply }] : [])];
 }
 
 /** Stamps one turn-level wall-clock duration on the final tool block. */
@@ -1521,6 +1702,7 @@ async function finalizeRunOnce(
           remoteRootTaskId: string | null;
           delegationId: string | null;
           delegationRootTaskId: string | null;
+          replySeq: number | null;
         }
       | undefined;
     try {
@@ -1591,7 +1773,9 @@ async function finalizeRunOnce(
     const failedGroupPin = pinProblem && groupSource?.kind === "group-member";
     if (failedGroupPin) {
       const bot = await tx.bot.findUnique({ where: { id: input.botId }, select: { name: true } });
-      const blocks = [groupModelFailureNotice(pinProblem.code, bot?.name ?? null)];
+      const blocks = [
+        groupModelFailureNotice(pinProblem.code, bot?.name ?? null, pinProblem.reasonId),
+      ];
       const notice = await createThreadMessageInTransaction(tx, {
         threadId: input.threadId,
         role: "system",
@@ -1616,7 +1800,13 @@ async function finalizeRunOnce(
       writableRun?.delegationId && writableRun.delegationRootTaskId
         ? await tx.delegation.findFirst({
             where: { id: writableRun.delegationId, rootTaskId: writableRun.delegationRootTaskId },
-            select: { kind: true, admissionKey: true },
+            select: {
+              id: true,
+              kind: true,
+              admissionKey: true,
+              actingBotId: true,
+              actingName: true,
+            },
           })
         : null;
     const goalRoomAssignment =
@@ -1635,19 +1825,30 @@ async function finalizeRunOnce(
       delegation?.kind === "message" &&
       (delegation.admissionKey.startsWith("bot-message:") ||
         delegation.admissionKey.startsWith("message:"));
+    // A member asked by its room coordinator answers in the room under its own name.
+    const groupAskAnswer = Boolean(delegation && parseGroupAskKey(delegation.admissionKey));
+    const coordinationUpdates: { threadId: string; seq: number }[] = [];
+    if (groupAskAnswer && delegation) {
+      // The round's coordination line carries this member's outcome, so a member
+      // that could not answer shows as one plain line instead of a raw error.
+      const coordination = await recordGroupAskOutcomeInTransaction(tx, {
+        spaceId: input.spaceId,
+        threadId: input.threadId,
+        delegation,
+        delegationStatus: input.outcome,
+        runStatus: input.outcome,
+        error: input.outcome === "failed" ? input.error : undefined,
+        providerErrorKind: input.outcome === "failed" ? input.providerErrorKind : undefined,
+        now,
+      });
+      if (coordination) coordinationUpdates.push(coordination);
+    }
     if (
       input.outcome === "completed" &&
-      (!writableRun?.delegationId || goalRoomAssignment || peerMessageAssignment)
+      (!writableRun?.delegationId || goalRoomAssignment || peerMessageAssignment || groupAskAnswer)
     ) {
-      const peerReply = peerMessageAssignment
-        ? redactTaskValue(
-            input.blocks.flatMap((block) => ("text" in block ? [block.text] : [])).join("\n"),
-          )
-        : null;
       const completedBlocks = peerMessageAssignment
-        ? peerReply?.trim()
-          ? [{ kind: "text" as const, text: peerReply }]
-          : []
+        ? peerRunMessageBlocks(input.blocks)
         : completedRunBlocks(input.blocks, writableRun?.startedAt ?? null, now);
       if (completedBlocks.length > 0) {
         const message = await createThreadMessageInTransaction(tx, {
@@ -1657,6 +1858,8 @@ async function finalizeRunOnce(
           botId: input.botId,
           runId: input.runId,
           markUnread: input.markUnread,
+          // Read before the run left `running`, which released the place.
+          heldReplySeq: writableRun?.replySeq,
         });
         finalMessageId = message.id;
         await appendEventInTransaction(tx, {
@@ -1674,9 +1877,7 @@ async function finalizeRunOnce(
           tx,
           writableRun.delegationId,
           input.outcome,
-          input.outcome === "completed"
-            ? input.blocks.flatMap((block) => ("text" in block ? [block.text] : [])).join("\n")
-            : input.error,
+          input.outcome === "completed" ? replyTextFromBlocks(input.blocks) : input.error,
           input.runId,
         )
       : undefined;
@@ -1705,9 +1906,7 @@ async function finalizeRunOnce(
             select: { id: true, groupId: true, untilAt: true },
           });
           if (goal) {
-            const text = redactTaskValue(
-              input.blocks.flatMap((block) => ("text" in block ? [block.text] : [])).join("\n"),
-            );
+            const text = redactTaskValue(replyTextFromBlocks(input.blocks));
             const recipientAvailable = await tx.bot.findFirst({
               where: {
                 id: parent.senderBotId,
@@ -1899,18 +2098,30 @@ async function finalizeRunOnce(
         data: { runId: null },
       });
     } else {
-      const { sourceMessage } = await tx.run.findUniqueOrThrow({
+      const failing = await tx.run.findUniqueOrThrow({
         where: { id: input.runId },
-        select: { sourceMessage: { select: { seq: true } } },
+        select: {
+          clientNonce: true,
+          sourceMessage: { select: { seq: true } },
+        },
       });
-      // A continuation's source is the newest steering it was created for. Only newer
-      // messages justify another run after failure, even if setup failed before claiming.
+      const batchSeq =
+        isSteeringContinuationClientNonce(failing.clientNonce) && failing.sourceMessage
+          ? failing.sourceMessage.seq
+          : null;
+      // A follow-up keeps the batch it was created with. Every other waiting row it
+      // holds, including one it took over from a failed run, is released so a later
+      // run can answer it. A run that is not a follow-up releases every row.
       await tx.steeringMessage.updateMany({
         where: {
           runId: input.runId,
-          message: sourceMessage ? { seq: { gt: sourceMessage.seq } } : undefined,
+          ...(batchSeq == null
+            ? {}
+            : {
+                OR: [{ adopted: true }, { message: { seq: { gt: batchSeq } } }],
+              }),
         },
-        data: { runId: null },
+        data: { runId: null, claimedAt: null, adopted: false },
       });
     }
     const steeringContinuationRunId =
@@ -1919,14 +2130,27 @@ async function finalizeRunOnce(
         : await createSteeringContinuation(tx, input);
     const continuationRunId = peerSettlement.continuationRunId ?? steeringContinuationRunId;
     await tx.bot.update({ where: { id: input.botId }, data: { updatedAt: now } });
+    coordinationUpdates.push(...peerSettlement.updatedThreads, ...quietUpdates);
     return {
       threadId: lastEvent.threadId,
       seq: lastEvent.seq,
       continuationRunId,
       summary,
-      updatedThreads: [...peerSettlement.updatedThreads, ...quietUpdates],
+      updatedThreads: coordinationUpdates,
     };
   });
+}
+
+/**
+ * Runs created by createSteeringContinuation carry this clientNonce prefix so a
+ * failed follow-up can be told from an ordinary run. The follow-up keeps the
+ * batch it was created with; rows it took over, and messages that arrived
+ * later, are released for a later run.
+ */
+export const STEERING_CONTINUATION_CLIENT_NONCE_PREFIX = "steering-continuation:";
+
+export function isSteeringContinuationClientNonce(clientNonce: string | null | undefined): boolean {
+  return Boolean(clientNonce?.startsWith(STEERING_CONTINUATION_CLIENT_NONCE_PREFIX));
 }
 
 async function createSteeringContinuation(
@@ -1956,6 +2180,13 @@ async function createSteeringContinuation(
   });
   if (pending.length === 0) return null;
   const last = pending.at(-1)!;
+  // The continuation answers on the finished run's behalf, so it carries the
+  // run's goal scope: peer deliveries it takes over acknowledge against the
+  // same recipient fence, and admission derives the same peer authority.
+  const source = await tx.run.findUniqueOrThrow({
+    where: { id: input.runId },
+    select: { goalId: true, delegationRootTaskId: true },
+  });
   const task = await tx.task.create({
     data: {
       spaceId: input.spaceId,
@@ -1969,6 +2200,8 @@ async function createSteeringContinuation(
   const run = await tx.run.create({
     data: {
       ...(await inheritedRemoteOrigin(tx, input.runId)),
+      ...(source.goalId ? { goalId: source.goalId } : {}),
+      ...(source.delegationRootTaskId ? { delegationRootTaskId: source.delegationRootTaskId } : {}),
 
       spaceId: input.spaceId,
       botId: input.botId,
@@ -1977,12 +2210,15 @@ async function createSteeringContinuation(
       userId: pending[0]!.userId,
       status: "queued",
       trigger: "follow_up",
+      // One finalization creates at most one continuation, so the finishing run's
+      // id keeps the nonce unique within the space.
+      clientNonce: `${STEERING_CONTINUATION_CLIENT_NONCE_PREFIX}${input.runId}`,
       sourceMessageId: last.message.id,
     },
   });
   await tx.steeringMessage.updateMany({
     where: { id: { in: pending.map((item) => item.id) }, runId: null },
-    data: { runId: run.id, claimedAt: null },
+    data: { runId: run.id, claimedAt: null, adopted: false },
   });
   return run.id;
 }
@@ -2039,7 +2275,12 @@ export async function appendEventInTransaction(
     });
     if (existing) return existing;
   }
-  if (!terminal || input.type !== "run.cancelled") await assertRunCanWriteHistory(tx, input.runId);
+  const run =
+    !terminal || input.type !== "run.cancelled"
+      ? await assertRunCanWriteHistory(tx, input.runId)
+      : undefined;
+  if (input.type === "thread.progress" && input.runId && run && isStreamingReplyText(input.payload))
+    await holdReplyPlace(tx, input.threadId, input.runId, run);
   // Unpaired UTF-16 surrogates (e.g. a split emoji high half) are invalid JSON for Postgres.
   const payload = sanitizeJsonValue(input.payload);
   const event = await tx.event.create({
@@ -2055,6 +2296,37 @@ export async function appendEventInTransaction(
   });
   await materializeCommandEvent(tx, event);
   return event;
+}
+
+/**
+ * Hold the thread place of a run's reply from its first visible text, not from when the
+ * run ends, so anything the owner sends meanwhile lands below the saved reply. One place
+ * per streamed draft: the bot message that saves the text fills it, and the run leaving
+ * `running` by any path releases it (a trigger on runs), so a place is never held after
+ * its draft is gone. The caller has locked the thread and read the run after that lock.
+ */
+async function holdReplyPlace(
+  tx: Prisma.TransactionClient,
+  threadId: string,
+  runId: string,
+  run: { threadId: string; status: string; replySeq: number | null },
+) {
+  if (run.status !== "running" || run.replySeq !== null || run.threadId !== threadId) return;
+  const thread = await tx.thread.update({
+    where: { id: threadId },
+    data: { nextMessageSeq: { increment: 1 } },
+    select: { nextMessageSeq: true },
+  });
+  await tx.run.update({ where: { id: runId }, data: { replySeq: thread.nextMessageSeq - 1 } });
+}
+
+/** Reply text the owner can already see, as opposed to tool activity lines. */
+function isStreamingReplyText(payload: Record<string, unknown>): boolean {
+  if (payload.streaming !== true) return false;
+  return (
+    (typeof payload.text === "string" && payload.text.length > 0) ||
+    (typeof payload.delta === "string" && payload.delta.length > 0)
+  );
 }
 
 async function notifyRealtime(

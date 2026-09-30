@@ -36,27 +36,31 @@ vi.mock("@lingui/core/macro", () => ({
 vi.mock("@lingui/react", () => ({
   useLingui: () => ({ i18n: { _: (value: MessageDescriptor) => value.message ?? value.id } }),
 }));
-vi.mock("@ardurbot/ui-web", () => ({
-  Button: ({
-    size: _size,
-    variant: _variant,
-    ...props
-  }: ComponentProps<"button"> & { size?: string; variant?: string }) => <button {...props} />,
-  Input: (props: ComponentProps<"input">) => <input {...props} />,
-  Textarea: (props: ComponentProps<"textarea">) => <textarea {...props} />,
-  NativeSelect: (props: ComponentProps<"select">) => <select {...props} />,
-  NativeSelectOption: (props: ComponentProps<"option">) => <option {...props} />,
-  Dialog: ({ children, open }: { children: ReactNode; open: boolean }) =>
-    open ? <div role="dialog">{children}</div> : null,
-  DialogContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  DialogTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
-}));
+vi.mock("@ardurbot/ui-web", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@ardurbot/ui-web")>();
+  return {
+    Button: ({
+      size: _size,
+      variant: _variant,
+      ...props
+    }: ComponentProps<"button"> & { size?: string; variant?: string }) => <button {...props} />,
+    Input: (props: ComponentProps<"input">) => <input {...props} />,
+    Textarea: (props: ComponentProps<"textarea">) => <textarea {...props} />,
+    NativeSelect: (props: ComponentProps<"select">) => <select {...props} />,
+    NativeSelectOption: (props: ComponentProps<"option">) => <option {...props} />,
+    Dialog: ({ children, open }: { children: ReactNode; open: boolean }) =>
+      open ? <div role="dialog">{children}</div> : null,
+    DialogContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+    DialogTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
+    Splitter: actual.Splitter,
+  };
+});
 vi.mock("./terminal", () => ({
   IdeTerminal: ({ root }: { root: { computerId: string } }) => (
     <div data-terminal-computer={root.computerId}>terminal surface</div>
   ),
 }));
-vi.mock("./editor", () => ({
+vi.mock("../workspace/editor", () => ({
   default: ({
     document,
     onChange,
@@ -92,7 +96,17 @@ vi.mock("./editor", () => ({
   },
 }));
 
+import { useAppShortcuts } from "../../lib/app-shortcuts";
 import IdePage from "./IdePage";
+
+function IdePageWithShortcuts() {
+  useAppShortcuts({
+    back: vi.fn(),
+    forward: vi.fn(),
+    find: vi.fn(),
+  });
+  return <IdePage />;
+}
 
 let host: HTMLDivElement, renderer: ReturnType<typeof createRoot>;
 const tick = () =>
@@ -170,7 +184,7 @@ beforeEach(async () => {
     renderer.render(
       <BrowserRouter>
         <Routes>
-          <Route path="/app/ide" element={<IdePage />} />
+          <Route path="/app/ide" element={<IdePageWithShortcuts />} />
           <Route path="/app/bots" element={<p>Bots page</p>} />
         </Routes>
       </BrowserRouter>,
@@ -532,5 +546,30 @@ describe("IDE page", () => {
     expect(host.querySelector('[data-terminal-computer="computer"]')).not.toBeNull();
     await key("p");
     expect(host.querySelector("input[aria-label='Quick open']")).not.toBeNull();
+  });
+
+  it("leaves indent keys to the editor", async () => {
+    await click("readme.md");
+    await tick();
+    const editor = host.querySelector("textarea[data-editor]")!;
+    for (const [key, code] of [
+      ["[", "BracketLeft"],
+      ["]", "BracketRight"],
+    ] as const) {
+      for (const modifier of ["metaKey", "ctrlKey"] as const) {
+        const event = new KeyboardEvent("keydown", {
+          key,
+          code,
+          [modifier]: true,
+          bubbles: true,
+          cancelable: true,
+        });
+        await act(async () => {
+          editor.dispatchEvent(event);
+        });
+        expect(event.defaultPrevented, `${modifier} ${key}`).toBe(false);
+      }
+    }
+    expect(window.location.pathname).toBe("/app/ide");
   });
 });

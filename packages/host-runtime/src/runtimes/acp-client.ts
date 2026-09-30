@@ -2,7 +2,36 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process";
 
 type JsonObject = Record<string, unknown>;
 
-export class AcpClientError extends Error {}
+export class AcpClientError extends Error {
+  /**
+   * The agent's own error text, kept only so the runtime can classify the failure's
+   * cause. It is never stored or shown; the recorded failure names the category.
+   */
+  constructor(
+    message: string,
+    readonly detail?: string,
+  ) {
+    super(message);
+    this.name = "AcpClientError";
+  }
+}
+
+/** The matchable text of a JSON-RPC error: its message and any nested message. */
+function acpErrorDetail(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const parts: string[] = [];
+  if ("message" in error && typeof error.message === "string") parts.push(error.message);
+  const data = "data" in error ? error.data : undefined;
+  if (typeof data === "string") parts.push(data);
+  else if (
+    data &&
+    typeof data === "object" &&
+    "message" in data &&
+    typeof data.message === "string"
+  )
+    parts.push(data.message);
+  return parts.length ? parts.join("\n") : undefined;
+}
 
 export interface AcpClientOptions {
   maxLineBytes?: number;
@@ -157,7 +186,8 @@ export class AcpClient {
     }
     this.pending.delete(message.id);
     clearTimeout(entry.timer);
-    if (message.error !== undefined) entry.reject(new AcpClientError("ACP request failed."));
+    if (message.error !== undefined)
+      entry.reject(new AcpClientError("ACP request failed.", acpErrorDetail(message.error)));
     else if (message.result && typeof message.result === "object" && !Array.isArray(message.result))
       entry.resolve(message.result as JsonObject);
     else entry.reject(new AcpClientError("ACP sent an invalid response."));

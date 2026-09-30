@@ -267,6 +267,45 @@ it("adopts two refreshes delivered before a render without dropping the newest m
   await act(async () => root.unmount());
 });
 
+it("saves how many bots answer at once, defaulting to four", async () => {
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  await act(async () => root.render(createElement(GroupSettingsScreen)));
+
+  const row = () =>
+    [...node.querySelectorAll("button")].find((b) =>
+      b.textContent?.startsWith("Bots answering at once:"),
+    )!;
+  // A room without a stored policy reads the shared default.
+  expect(row().textContent).toBe("Bots answering at once: 4");
+
+  await act(async () => row().click());
+  const sheet = vi.mocked(presentMessageActionSheet).mock.calls.at(-1)![0] as unknown as {
+    actions: { text: string; onPress: () => void }[];
+  };
+  expect(sheet.actions.map((action) => action.text)).toEqual([
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+  ]);
+  await act(async () => sheet.actions.find((action) => action.text === "1")!.onPress());
+  expect(row().textContent).toBe("Bots answering at once: 1");
+
+  const saveButton = [...node.querySelectorAll("button")].find((b) => b.textContent === "Save");
+  await act(async () => saveButton!.click());
+  expect(rpc).toHaveBeenCalledWith(
+    "groups/update",
+    expect.objectContaining({ groupId: "group-1", roomPolicy: { maxConcurrentRuns: 1 } }),
+  );
+
+  await act(async () => root.unmount());
+});
+
 it("warns only while the picked coordinator's runtime can't use Ardur tools", async () => {
   const antigravityGroup = {
     ...initialGroup,

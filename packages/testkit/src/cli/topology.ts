@@ -146,7 +146,7 @@ async function signup(baseUrl: string) {
     method: "POST",
     headers: { "content-type": "application/json", origin: baseUrl },
     body: JSON.stringify({
-      email: `topology-${Date.now()}@ardurbot.test`,
+      email: `topology-${Date.now()}@example.test`,
       password: "password12",
       name: "Topology",
     }),

@@ -6,24 +6,21 @@ import type {
   AgentRuntimeEvent,
   AgentToolCompletion,
 } from "@ardurbot/adapter-kit";
-import {
-  HostRuntimeEventSchema,
-  HostRuntimeInfoSchema,
-  HostTurnSchema,
-} from "@ardurbot/contracts/host-bridge";
+import { HostRuntimeEventSchema, HostRuntimeInfoSchema } from "@ardurbot/contracts/host-bridge";
 import type { RuntimeInfoSchema } from "@ardurbot/contracts/runtime-pins";
 import { runtimeSupportsTools } from "@ardurbot/contracts/runtime-pins";
 import { validateHermesExecutionEnvelope } from "@ardurbot/core/node/runtime-config-hash";
 import type { HostClient } from "@ardurbot/host-runtime/host-client";
 import * as z from "zod";
 import type { BrokerScope, HermesProviderBroker } from "./hermes-provider-broker.js";
-import { summaryOperationHash, summaryOperationManifest } from "./hermes-provider-broker.js";
+import {
+  HermesRelayDispatcher,
+  summaryOperationHash,
+  summaryOperationManifest,
+} from "./hermes-provider-broker.js";
+import { buildHostTurn } from "./host-turn.js";
 
-/** The host turn receives the same tool catalog the executor selected, including board tools. */
-export function advertisedHostTools(tools: AgentRunRequest["tools"]) {
-  if (tools === "none") return "none" as const;
-  return tools.map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
-}
+export { advertisedHostTools } from "./host-turn.js";
 
 export class RemoteHostRuntime implements AgentRuntime {
   private active = new Map<string, AbortController>();
@@ -173,63 +170,19 @@ export class RemoteHostRuntime implements AgentRuntime {
           throw new Error("Provider broker scope does not match this host turn.");
         }
       }
-      let response: Buffer | undefined;
-      let responseStatus = 200;
-      let responseType: "application/json" | "text/event-stream" = "application/json";
-      let readSequence = 0;
-      let opening = false;
+      let relayDispatcher: HermesRelayDispatcher | undefined;
       const homeKey = request.nativeCwd?.startsWith("host:")
         ? request.nativeCwd.slice(5)
         : request.botId;
-      const turn = HostTurnSchema.parse({
+      const turn = buildHostTurn({
+        kind: this.kind,
+        request,
         executionEnvelope,
+        operationHash,
         providerBroker: brokerSession
-          ? { protocol: 1, ...brokerSession.broker.grant, hostGeneration: health!.generation }
+          ? { protocol: 1, ...brokerSession.broker.grant, hostGeneration: health!.generation! }
           : undefined,
-        controlledComparison: request.controlledComparison,
-        botId: request.botId,
-        threadId: request.threadId,
-        runId: request.runId,
-        providerSourceRunId: request.providerSourceRunId,
-        providerPurpose: request.providerPurpose === "summary" ? "summary" : undefined,
         providerBriefAttemptedAt: brokerSession?.scope.briefAttemptedAt,
-        prompt: request.prompt,
-        instructions: request.instructions,
-        history: request.history,
-        nativeSession: request.nativeSession,
-        nativeCwd: request.nativeCwd?.startsWith("host:") ? undefined : request.nativeCwd,
-        sourceMessageId: request.sourceMessageId,
-        tools: advertisedHostTools(request.tools),
-        model: {
-          runtimePin: executionEnvelope
-            ? { ...request.model.runtimePin, runtimeConfig: undefined }
-            : request.model.runtimePin,
-          provider: request.model.provider,
-          id: request.model.id,
-          maxTokens:
-            this.kind === "hermes"
-              ? operationHash
-                ? (request.model.maxTokens ?? 4_096)
-                : (executionEnvelope?.effectiveRuntimeConfig.model.maxTokens ??
-                  request.model.maxTokens ??
-                  4_096)
-              : request.model.maxTokens,
-          contextWindow:
-            this.kind === "hermes"
-              ? (executionEnvelope?.effectiveRuntimeConfig.model.contextWindow ??
-                request.model.contextWindow ??
-                32_768)
-              : request.model.contextWindow,
-          acceptsImages: request.model.acceptsImages,
-          reasoning: request.model.reasoning,
-          thinkingLevel: request.model.thinkingLevel,
-        },
-        currentTurnImages: request.currentTurnImages?.map((image) => ({
-          ...image,
-          data: Buffer.from(image.data).toString("base64"),
-        })),
-        allowSilentEmpty: request.allowSilentEmpty,
-        emptyResponseText: request.emptyResponseText,
       });
       abort.signal.throwIfAborted();
       const tools = request.tools === "none" ? [] : request.tools;
@@ -244,44 +197,10 @@ export class RemoteHostRuntime implements AgentRuntime {
           abort.signal.throwIfAborted();
           if (frame.method.startsWith("provider.")) {
             if (!brokerSession) throw new Error("Provider callback is unavailable.");
-            if (frame.method === "provider.cancel") {
-              if (opening) brokerSession.broker.revoke();
-              response = undefined;
-              return;
+            if (!relayDispatcher) {
+              relayDispatcher = new HermesRelayDispatcher(brokerSession, abort.signal);
             }
-            if (frame.method === "provider.open") {
-              if (opening || response) throw new Error("Provider request is already active.");
-              opening = true;
-              try {
-                const opened = await brokerSession.broker.open({
-                  grant: brokerSession.broker.grant,
-                  scope: brokerSession.scope,
-                  path: "/v1/chat/completions",
-                  body: frame.args[0],
-                  signal: abort.signal,
-                });
-                if (!opened.ok) throw new Error("Provider request failed.");
-                responseStatus = opened.status;
-                responseType = opened.headers.get("content-type")?.includes("text/event-stream")
-                  ? "text/event-stream"
-                  : "application/json";
-                response = Buffer.from(await opened.arrayBuffer());
-                readSequence = 0;
-                return { status: responseStatus, contentType: responseType };
-              } finally {
-                opening = false;
-              }
-            }
-            if (!response || frame.args[0] !== readSequence)
-              throw new Error("Provider response sequence changed.");
-            const chunk = response.subarray(
-              readSequence * 24 * 1024,
-              (readSequence + 1) * 24 * 1024,
-            );
-            const done = (readSequence + 1) * 24 * 1024 >= response.length;
-            const seq = readSequence++;
-            if (done) response = undefined;
-            return { seq, chunk: chunk.toString("base64"), done };
+            return relayDispatcher.dispatch(frame.method, frame.args);
           }
           if (frame.method === "onRuntimeInfo") {
             const info = HostRuntimeInfoSchema.parse(frame.args[0]) as ReturnType<

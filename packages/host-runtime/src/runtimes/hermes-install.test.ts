@@ -1,12 +1,70 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { realpathSync } from "node:fs";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import {
+  HERMES_SOURCE_PIN,
+  HERMES_SOURCE_TREE,
   hermesInstallCandidate,
+  hermesLaunchArgv,
+  localHermesInstallCandidate,
+  localHermesRoot,
+  localHermesStaging,
   probeHermesInstall,
+  qualifyHermesInstall,
   resolveHermesLauncherAsset,
 } from "./hermes-install.js";
+
+it("wraps the pinned Hermes process in the host guardrail only on macOS", () => {
+  const guard = {
+    paths: ["/fixture/user-data/secrets.env"],
+    ports: [55433],
+    sockets: ["/fixture/run/docker.sock"],
+  };
+  const wrapped = hermesLaunchArgv(
+    "/fixture/.venv/bin/python",
+    "/fixture/launcher.py",
+    guard,
+    "darwin",
+  );
+  expect(wrapped[0]).toBe("/usr/bin/sandbox-exec");
+  expect(wrapped[1]).toBe("-p");
+  expect(wrapped[2]).toContain('(subpath "/fixture/user-data/secrets.env")');
+  expect(wrapped[2]).toContain('(remote ip "localhost:55433")');
+  expect(wrapped[2]).toContain('(remote unix-socket (literal "/fixture/run/docker.sock"))');
+  expect(wrapped.slice(3)).toEqual(["/fixture/.venv/bin/python", "-B", "/fixture/launcher.py"]);
+  for (const platform of ["linux", "win32"] as const)
+    expect(
+      hermesLaunchArgv("/fixture/.venv/bin/python", "/fixture/launcher.py", guard, platform),
+    ).toEqual(["/fixture/.venv/bin/python", "-B", "/fixture/launcher.py"]);
+  expect(
+    hermesLaunchArgv("/fixture/.venv/bin/python", "/fixture/launcher.py", undefined, "darwin"),
+  ).toEqual(["/fixture/.venv/bin/python", "-B", "/fixture/launcher.py"]);
+});
+
+it("resolves the local root, staging and managed install under DATA_DIR", async () => {
+  const data = await mkdtemp(path.join(tmpdir(), "hermes-local-root-"));
+  vi.stubEnv("DATA_DIR", data);
+  vi.stubEnv("ARDUR_HERMES_INSTALL", "");
+  try {
+    const root = path.join(path.resolve(data), "hermes");
+    expect(localHermesRoot()).toBe(root);
+    expect(localHermesStaging()).toBe(path.join(root, "staging"));
+    const managed = path.join(root, "runtimes", "hermes-agent");
+    expect(localHermesInstallCandidate()).toBeNull();
+    await mkdir(managed, { recursive: true });
+    expect(localHermesInstallCandidate()).toBe(managed);
+    expect(hermesInstallCandidate(localHermesStaging(), undefined)).toBe(managed);
+    expect(localHermesInstallCandidate()).toBe(
+      hermesInstallCandidate(localHermesStaging(), process.env.ARDUR_HERMES_INSTALL),
+    );
+  } finally {
+    vi.unstubAllEnvs();
+    await rm(data, { recursive: true, force: true });
+  }
+});
 
 it.skipIf(process.platform === "win32")(
   "prefers the explicit install over the one managed host location",
@@ -71,4 +129,157 @@ it.skipIf(process.platform === "win32")("refuses a project dotenv by existence a
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+it("resolves the desktop packaged launcher from the worker service bundle", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "desktop-asset-"));
+  try {
+    const workerBundle = path.join(root, "services", "worker.mjs");
+    const launcher = path.join(root, "host-service", "python", "hermes_launcher.py");
+    await mkdir(path.dirname(launcher), { recursive: true });
+    await writeFile(launcher, "fixture");
+    for (const name of ["hermes_profile.py", "hermes_sources.json", "runtime_config_profile.json"])
+      await writeFile(path.join(path.dirname(launcher), name), "fixture");
+    expect(resolveHermesLauncherAsset(workerBundle, undefined)).toBe(launcher);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+const hello = Buffer.from("hello");
+const helloHash = createHash("sha256").update(hello).digest("hex");
+const sources = { "hello.txt": helloHash };
+
+function marker(pin = HERMES_SOURCE_PIN, tree = HERMES_SOURCE_TREE): string {
+  return JSON.stringify({
+    pin,
+    tree,
+    uv: "0.12.19",
+    python: "3.13.2",
+    installedAt: "2026-01-01T00:00:00.000Z",
+  });
+}
+
+async function layoutInstall(root: string): Promise<void> {
+  await mkdir(path.join(root, ".venv", "bin"), { recursive: true });
+  await writeFile(path.join(root, ".venv", "bin", "python"), "fixture");
+  await writeFile(path.join(root, "hello.txt"), hello);
+}
+
+async function gitStub(dir: string, revision: string): Promise<string> {
+  const bin = path.join(dir, "git-bin");
+  await mkdir(bin, { recursive: true });
+  const argsFile = path.join(dir, "git-args");
+  const git = path.join(bin, "git");
+  await writeFile(
+    git,
+    `#!${process.execPath}\nconst fs = require("fs");\nfs.writeFileSync(process.env.HERMES_GIT_ARGS, process.argv.slice(2).join("\\n"));\nprocess.stdout.write(process.env.HERMES_GIT_REVISION + "\\n");\n`,
+  );
+  await chmod(git, 0o755);
+  process.env.HERMES_GIT_ARGS = argsFile;
+  process.env.HERMES_GIT_REVISION = revision;
+  process.env.PATH = `${bin}${path.delimiter}${process.env.PATH ?? ""}`;
+  return argsFile;
+}
+
+it.skipIf(process.platform === "win32")(
+  "accepts a managed install recorded by the marker and still checks file hashes",
+  async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "hermes-marker-"));
+    try {
+      await layoutInstall(root);
+      await writeFile(path.join(root, ".ardur-install.json"), marker());
+      expect(qualifyHermesInstall(root, { sources }).root).toBe(realpathSync(root));
+      await writeFile(path.join(root, "hello.txt"), "changed");
+      expect(() => qualifyHermesInstall(root, { sources })).toThrow("provenance check");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
+
+it.skipIf(process.platform === "win32")(
+  "accepts a checkout whose own git HEAD is the pin",
+  async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "hermes-git-"));
+    const savedPath = process.env.PATH;
+    try {
+      await layoutInstall(root);
+      await mkdir(path.join(root, ".git"));
+      const argsFile = await gitStub(root, HERMES_SOURCE_PIN);
+      const resolved = realpathSync(root);
+      expect(qualifyHermesInstall(root, { sources }).root).toBe(resolved);
+      expect(await readFile(argsFile, "utf8")).toBe(
+        ["-C", resolved, "rev-parse", "HEAD"].join("\n"),
+      );
+    } finally {
+      process.env.PATH = savedPath;
+      delete process.env.HERMES_GIT_ARGS;
+      delete process.env.HERMES_GIT_REVISION;
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
+
+it.skipIf(process.platform === "win32")(
+  "refuses a marker with the wrong pin or the wrong tree",
+  async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "hermes-marker-bad-"));
+    try {
+      await layoutInstall(root);
+      await writeFile(path.join(root, ".ardur-install.json"), marker("0".repeat(40)));
+      expect(() => qualifyHermesInstall(root, { sources })).toThrow("provenance check");
+      await writeFile(
+        path.join(root, ".ardur-install.json"),
+        marker(HERMES_SOURCE_PIN, "0".repeat(40)),
+      );
+      expect(() => qualifyHermesInstall(root, { sources })).toThrow("provenance check");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
+
+it.skipIf(process.platform === "win32")(
+  "refuses a git checkout whose HEAD is not the pin even when the marker matches",
+  async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "hermes-git-bad-"));
+    const savedPath = process.env.PATH;
+    try {
+      await layoutInstall(root);
+      await writeFile(path.join(root, ".git"), "gitdir: /unused\n");
+      await writeFile(path.join(root, ".ardur-install.json"), marker());
+      await gitStub(root, "f".repeat(40));
+      expect(() => qualifyHermesInstall(root, { sources })).toThrow("provenance check");
+    } finally {
+      process.env.PATH = savedPath;
+      delete process.env.HERMES_GIT_ARGS;
+      delete process.env.HERMES_GIT_REVISION;
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
+
+it.skipIf(process.platform === "win32")(
+  "refuses a python tree that has neither git metadata nor a marker",
+  async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "hermes-unmarked-"));
+    try {
+      await layoutInstall(root);
+      expect(() => probeHermesInstall(root)).toThrow("provenance check");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
+
+it("resolves the source launcher from the local hermes runtime module", () => {
+  const bundle = path.join(tmpdir(), "unrelated-services", "worker.mjs");
+  const localModuleUrl = new URL(
+    "../../../adapters/src/runtimes/local-hermes-runtime.ts",
+    import.meta.url,
+  ).href;
+  expect(resolveHermesLauncherAsset(bundle, localModuleUrl)).toBe(
+    path.resolve(import.meta.dirname, "../../python/hermes_launcher.py"),
+  );
 });

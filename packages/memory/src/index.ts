@@ -42,6 +42,8 @@ export class MarkdownMemoryStore implements MemoryStore {
         content: doc.content,
         revision: doc.revision,
         updatedAt: doc.updatedAt.toISOString(),
+        scope: doc.scope === "bot" ? ("bot" as const) : ("user" as const),
+        owner: doc.scope === "bot" ? (doc.botId ?? "") : doc.userId,
       })),
     };
   }

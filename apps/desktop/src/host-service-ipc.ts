@@ -1,12 +1,14 @@
 import { stat } from "node:fs/promises";
 import path from "node:path";
 import { DESKTOP_FOLDER_ERRORS } from "@ardurbot/contracts/desktop-errors";
+import { knownLoopbackGuardPorts } from "@ardurbot/host-runtime/host-guardrails";
 import type { BrowserWindow, IpcMainInvokeEvent, Tray } from "electron";
 import { app, dialog, ipcMain, safeStorage } from "electron";
 import {
   HostLifecyclePreferences,
   HostServiceStore,
   HostServiceSupervisor,
+  hostGuardPaths,
   hostServiceIdentity,
   hostServiceLaunch,
   hostStorageAvailable,
@@ -29,6 +31,18 @@ function secureHostTarget(target: string) {
   } catch {
     return false;
   }
+}
+
+/**
+ * Ports this Mac can already see are always denied, together with any list a pair
+ * response or a stored config named. A remote URL adds nothing.
+ */
+function guardPortsFor(ports: number[] | undefined): number[] {
+  return [...new Set([...(ports ?? []), ...knownLoopbackGuardPorts(process.env)])];
+}
+
+function withGuardPorts<T extends { guardPorts?: number[] }>(config: T): T {
+  return { ...config, guardPorts: guardPortsFor(config.guardPorts) };
 }
 
 /** Registered folders that are not a folder right now; commands skip them until they return. */
@@ -63,6 +77,11 @@ export function installHostService(options: {
       appPath: app.getAppPath(),
     }),
     (connected) => updateHostTray(options.tray(), connected),
+    undefined,
+    (config) => ({
+      ...withGuardPorts(config),
+      guardPaths: hostGuardPaths(app.getPath("userData")),
+    }),
   );
   let tail = Promise.resolve();
   function trusted(event: IpcMainInvokeEvent) {
@@ -142,22 +161,34 @@ export function installHostService(options: {
       { method: "POST", credentials: "include", redirect: "error" },
     );
     if (response.status === 409 && existing?.apiUrl === target) {
-      supervisor.start(existing);
+      supervisor.start(withGuardPorts(existing));
       return;
     }
     if (!response.ok) throw new Error("Disconnect the existing computer, then try again.");
     const result: unknown = await response.json();
-    if (
-      !result ||
-      typeof result !== "object" ||
-      !("token" in result) ||
-      typeof result.token !== "string" ||
-      !/^[A-Za-z0-9_-]{43}$/.test(result.token)
-    )
+    if (!result || typeof result !== "object") throw new Error("Could not connect this computer.");
+    const token = "token" in result && typeof result.token === "string" ? result.token : "";
+    if (!/^[A-Za-z0-9_-]{43}$/.test(token)) throw new Error("Could not connect this computer.");
+    let supplied: number[] | undefined;
+    if (!("guardPorts" in result) || result.guardPorts === undefined) {
+      supplied = undefined;
+    } else if (Array.isArray(result.guardPorts)) {
+      const rawPorts = result.guardPorts;
+      supplied = rawPorts.filter(
+        (port): port is number =>
+          typeof port === "number" && Number.isInteger(port) && port > 0 && port <= 65535,
+      );
+      if (supplied.length !== rawPorts.length) {
+        throw new Error("Could not connect this computer.");
+      }
+    } else {
       throw new Error("Could not connect this computer.");
+    }
+    const guardPorts = guardPortsFor(supplied);
     const config = {
       apiUrl: target,
-      token: result.token,
+      token,
+      guardPorts,
       root: path.join(directory, "workspaces"),
       hostRoots: [],
     };
@@ -189,7 +220,7 @@ export function installHostService(options: {
     config.hostRoots = [...new Set([...config.hostRoots, root])];
     if (config.hostRoots.length > 32) throw new Error("Remove a folder before adding another.");
     await store.write(config);
-    supervisor.start(config);
+    supervisor.start(withGuardPorts(config));
     return root;
   });
   register("removeRoot", async (event, value) => {
@@ -204,7 +235,7 @@ export function installHostService(options: {
       throw new Error("Folder unavailable.");
     config.hostRoots = config.hostRoots.filter((root) => root !== value);
     await store.write(config);
-    supervisor.start(config);
+    supervisor.start(withGuardPorts(config));
   });
   register("clear", async (event) => {
     trusted(event);
@@ -238,7 +269,7 @@ export function installHostService(options: {
           !options.local.owns(target) &&
           config?.apiUrl === target
         )
-          supervisor.start(config);
+          supervisor.start(withGuardPorts(config));
         else supervisor.stop();
       });
       tail = result.then(

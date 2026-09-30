@@ -157,6 +157,7 @@ describePostgres("local import receipts, journal and credentials (PostgreSQL)", 
     expect(JSON.parse(secrets.load(saved.secret!.ciphertext, saved.secret!.id))).toEqual({
       env: { API_KEY: "new-owner-supplied-value" },
       headers: {},
+      credentialFlags: { env: { API_KEY: true }, headers: {} },
     });
     expect(
       (

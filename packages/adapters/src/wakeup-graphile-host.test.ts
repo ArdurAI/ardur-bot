@@ -105,6 +105,27 @@ it("runs an import request once because its answer has already been delivered", 
   await publisher.close();
 });
 
+it("runs a Hermes install once and replaces a waiting one", async () => {
+  const addJob = vi.fn(async () => undefined);
+  makeWorkerUtils.mockResolvedValueOnce({ addJob, release: vi.fn() });
+  const publisher = new GraphileJobPublisher({} as Pool);
+  await publisher.enqueue({
+    name: "hermes.install",
+    payload: {},
+    replaceKey: "hermes.install",
+  });
+  expect(addJob).toHaveBeenCalledWith(
+    "hermes.install",
+    expect.anything(),
+    expect.objectContaining({
+      jobKey: "hermes.install",
+      jobKeyMode: "replace",
+      maxAttempts: 1,
+    }),
+  );
+  await publisher.close();
+});
+
 function handlers(): BackgroundJobHandlers {
   return {
     "board.run": vi.fn(async () => undefined),
@@ -115,6 +136,7 @@ function handlers(): BackgroundJobHandlers {
     "memory.git-push": async () => undefined,
     "memory.deliver": async () => undefined,
     "run.continue": vi.fn(async () => undefined),
+    "evidence.seal": vi.fn(async () => undefined),
     "routine.wakeup": vi.fn(async () => undefined),
     "computer.update": vi.fn(async () => undefined),
     "computer.sleep": vi.fn(async () => undefined),
@@ -123,6 +145,7 @@ function handlers(): BackgroundJobHandlers {
     "history.compact": vi.fn(async () => undefined),
     "messaging.deliver": vi.fn(async () => undefined),
     "cloud_agent.poll": vi.fn(async () => undefined),
+    "hermes.install": vi.fn(async () => undefined),
   };
 }
 

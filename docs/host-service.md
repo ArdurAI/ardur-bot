@@ -91,9 +91,143 @@ sequenceDiagram
   to registered folders; cwd validation is not an OS filesystem sandbox for shell
   commands. Confined `mkdir -p` preparation retains the existing directory helper.
   Native Claude/Codex operations keep their fixed adapter arguments.
+- On macOS, host commands additionally run under the host command guardrail
+  (`packages/host-runtime/src/host-guardrails.ts`). Every command, background launch,
+  native runtime turn (Claude Code, Antigravity), version and health probe
+  (`probeClaude`, `probeCodex`, `probeAntigravity`, and `hostProbe` for the login shell
+  and tool inventory), pinned Hermes launch and owner-registered local MCP server
+  process is executed through `/usr/bin/sandbox-exec` with a Seatbelt profile generated
+  per process from the running configuration — the mechanism the Codex CLI and Claude
+  Code sandboxes use on macOS, although `sandbox-exec` is marked DEPRECATED in its own
+  man page. Codex turns are the exception: Codex starts its own sandbox when a session
+  begins, and macOS refuses a second sandbox once a profile with a deny rule is in force,
+  so a wrapped Codex cannot start a session. Its session process runs unwrapped
+  (`NATIVE_SESSION_GUARD` in `runtimes/native-process.ts`) under its own read-only
+  profile with the network off and shell tools disabled, and the runtime refuses a bot
+  folder that sits inside the protected paths or contains them. Codex follows links in
+  what it reads and cannot check the file it ends up with, so it is given as little to
+  read as possible. The bot's folder is resolved first, then checked, granted and handed
+  to Codex as the disk spells it, and looked at once more just before the session is
+  asked for. Codex's own loading of project instructions is turned off
+  (`project_doc_max_bytes = 0`): Ardur reads `AGENTS.md`, its override and the
+  configured fallback names itself, by Codex's rules and limit, and hands Codex the
+  text. Each file is opened first and checked second, so what is checked is what is
+  read: it must be an ordinary file with one name, inside the project and outside the
+  protected paths, and still where it was found once it is open. A link out of the
+  project, a second name for a file elsewhere (a hard link), a folder, a broken link or
+  protected data refuses the session before it starts. Codex's `deny` entries are not
+  used as a second lock: a granted link wins over a `deny` on its target. Codex also
+  loads an instruction file from its own folder, which cannot be turned off. After the
+  session starts and before any turn is sent, every file Codex reports as loaded must
+  be an ordinary file outside the protected paths and outside the project, unchanged
+  since just before the session was asked for; a file swapped for a link and put back
+  keeps the time of that change, which cannot be reset. The bot's folder is
+  looked at again once the session exists, before any turn is sent. What remains open until bot commands are
+  kept out of the agent tools' own folders: Codex's own folder holds its instruction
+  file, memories, skills and settings, and a bot command can write there. What it writes
+  is its own text, never protected data, which a guarded command cannot read; and
+  replacing that whole folder with a prepared copy for the moment a session starts is
+  not detected.
+  A probe uses that same wrap. When the profile cannot be built, the probe
+  does not start the command. The profile is `(allow default)` plus targeted denies, so
+  ordinary work is untouched while the deny list blocks reads and writes of Ardur's
+  control plane: the env file the stack loaded (recorded as `ARDURBOT_ENV_FILE`), the
+  desktop `secrets.env`, the Postgres data directory (the desktop cluster, or every
+  database file in `DATA_DIR` on a source checkout, where the embedded cluster and the
+  dev `credentials.json` sit beside the app state), the compose stack's `.env` and stack
+  token, the encrypted host pairing store, the local-data reset backups under
+  `backups/`, and the app-managed state under `DATA_DIR` (everything except the bots'
+  own `desktop-computers` homes and the `board` databases that host board commands
+  write). It also denies outbound connections to the loopback ports of the database,
+  the API and the sandbox supervisor, taken from `DATABASE_URL`, `API_PORT`/`API_URL`
+  and `SANDBOX_SUPERVISOR_URL`; a database or API on another host is out of scope. A
+  paired host gets those database and supervisor ports through pairing (`guardPorts`)
+  and denies them along with its API port. A host that is already paired is not sent a
+  new port list: pairing again is rejected, and that host keeps the ports it stored
+  until it is disconnected and paired again. The embedded Postgres server is started
+  with an empty `unix_socket_directories`, and the profile also denies its unix socket
+  `.s.PGSQL.<port>`. The directory is an absolute `PGHOST` when that is set (libpq's
+  client socket directory), otherwise an absolute `ARDURBOT_PG_SOCKET_DIR`, otherwise
+  `/tmp`. A file deny does not cover a unix-socket connect. Finally it denies
+  connections to the local container-engine sockets, because an engine socket is
+  root-equivalent and reaches the stack's own containers and the secrets in their
+  environment. The documented sockets are `/var/run/docker.sock` (the launchd symlink,
+  which points at `~/.docker/run/docker.sock` — a different socket from Docker Desktop's
+  raw engine socket), `~/.docker/run/docker.sock`, `~/.docker/desktop/docker.sock`,
+  `~/Library/Containers/com.docker.docker/Data/docker.raw.sock`, Rancher Desktop's
+  `~/.rd/docker.sock`, OrbStack's `~/.orbstack/run/docker.sock`, Colima's
+  `~/.colima/default/docker.sock`, Lima's `~/.lima/default/sock/docker.sock`,
+  `~/.lima/docker/sock/docker.sock`, `~/.lima/docker-rootful/sock/docker.sock`,
+  `~/.lima/podman/sock/podman.sock` and `~/.lima/podman-rootful/sock/podman.sock`
+  (`LIMA_HOME` defaults to `~/.lima`), and Podman machine's
+  `~/.local/share/containers/podman/machine/podman.sock`. The public Docker Desktop
+  install docs do not name `docker.raw.sock`; it is denied because a same-user process
+  can reach the engine through it. Sockets for Colima profiles, Lima instances and
+  Podman machine providers that are present on disk are denied too, as is whatever
+  `DOCKER_HOST` or `CONTAINER_HOST` points at. A bot that needs containers belongs on a
+  Docker or VM computer, not on This Mac. The in-process file tools apply the same path
+  deny list on every platform, so a registered folder that contains a protected file
+  still cannot serve it. Desktop local mode does not put control-plane secrets
+  (`DATABASE_URL`'s password, `ENCRYPTION_KEY`, `BETTER_AUTH_SECRET`,
+  `SANDBOX_SUPERVISOR_TOKEN`, and the other keys in the guarded secrets file) into the
+  API or worker process environment. It passes `ARDURBOT_SECRETS_FILE`, and those
+  processes read the file at startup into a plain object. Assigning the values to
+  `process.env` after start would still be visible in the kernel environment block, and
+  deleting a key does not remove it. No scoped Seatbelt `process-info` or `sysctl-read`
+  rule hides another process's arguments and environment without also stopping ordinary
+  commands such as a shell, so the profile does not deny `process-info`. `pnpm dev`
+  does not set `ARDURBOT_SECRETS_FILE`, so a dev stack still loads secrets into
+  `process.env`. When the secrets file is set, loading a repo `.env` does not copy
+  those control-plane keys onto `process.env`; other keys in that file can still be
+  copied.
+- The guardrail is deliberately narrow. It is not a workspace sandbox: everything else on
+  the host remains reachable to commands, including the owner's other files, and it does
+  not stop a command from using the owner's signed-in CLI accounts or the network beyond
+  the denied ports. On Linux no wrapper is applied — Landlock's TCP rules need kernel 6.7
+  and a native helper this repo does not ship, and bubblewrap can mask files but not filter
+  ports — so only the file-tool deny list applies there. Windows host commands are
+  unwrapped. A misconfigured deny list fails the command closed instead of skipping the
+  sandbox.
 - Host workspaces persist under desktop application data. They are not copied into
   a container home store, and a host checkpoint does not overwrite that store with
   an empty export. Registered folders are not deleted by computer destruction.
+
+## What Ardur logs about the processes it starts
+
+Every child process the host runtime spawns (Hermes, Claude Code, Codex, the
+Antigravity model catalog probe, host environment probes, fleet terminals and the
+Hermes installer) has its stderr read line by line by one capture helper,
+`captureChildOutput` in `packages/host-runtime/src/child-output.ts`; stdout is
+captured too where the protocol does not already own it.
+
+- By default, child output never reaches a log sink, even with `LOG_LEVEL=debug`.
+  It stays in private bounded memory until the process ends. Failure logs contain
+  only structured facts: process kind, pid, run id, exit code or signal, phase,
+  duration, byte and line counts, and whether output was produced. Failure causes
+  never include output tails.
+- Detailed process logging requires `ARDUR_DETAILED_PROCESS_LOGS=1` and a debug
+  logger. A Settings switch comes later. Known credentials are redacted on each
+  stream before line framing, including credentials split across chunks or
+  physical lines. Shared text redaction also covers sensitive assignments,
+  scheme-prefixed credentials, credentialed URLs, GitHub tokens (including
+  `github_pat_`), AWS credentials, JWTs, `sk-` and `xai-` keys, and emails.
+- Detailed mode is best-effort, not a guarantee that arbitrary text contains no
+  secrets: unknown credential formats and transformations may evade recognition.
+  Leave it off for private workloads. Message and file contents never appear at
+  info or above, even with detailed mode enabled.
+- Tails stay within 64 KiB and lines within 8 KiB. Oversized lines are replaced
+  entirely by a size-limit marker. A credential or carry window too large to
+  redact safely suppresses the rest of that stream. The fallback logger's bounded
+  debug queue drops excess lines under backpressure without blocking child reads;
+  error records are never evicted, and recovery reports the dropped debug count.
+
+Three sites keep ignoring a stream on purpose, each with a reason in source and
+in the guard test's allow list: the two Windows `taskkill` helpers own no
+output, and the Hermes installer's stdin is ignored because its commands read
+nothing while both output pipes are captured. The guard test
+(`child-output.guard.test.ts`) scans the package for `stderr.resume()` and
+`stdio: "ignore"`, including ignored streams anywhere in a stdio array, and
+fails on any new site outside the helper and the allow list.
 
 ## Owner environment and tool inventory
 

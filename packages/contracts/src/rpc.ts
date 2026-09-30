@@ -1,3 +1,8 @@
+import {
+  ProtectedLocationsPatchInputSchema,
+  ProtectedLocationsReadInputSchema,
+  ProtectedLocationViewsSchema,
+} from "@ardurbot/contracts/protected-locations";
 import { eventIterator, oc } from "@orpc/contract";
 import * as z from "zod";
 import { accountContract } from "./account.js";
@@ -11,6 +16,7 @@ import {
   CapabilitySettingsSchema,
   ComputerNetworkInputSchema,
 } from "./capability-settings.js";
+import { ThreadSendResultSchema } from "./chief-loop.js";
 import { CommandBlockSchema } from "./command-blocks.js";
 import { ComparisonExportSchema, comparisonsContract } from "./comparison.js";
 import {
@@ -29,6 +35,7 @@ import { customizationContract } from "./customization.js";
 import { dashboardContract, RoutineOverviewSchema, UsageSummarySchema } from "./dashboard.js";
 import { delegationsContract } from "./delegation.js";
 import { devicesContract, pairingContract } from "./dispatch.js";
+import type { ThreadSnapshot } from "./domain.js";
 import {
   ActionApprovalRuleSchema,
   ActionAutoReviewSettingsSchema,
@@ -149,6 +156,7 @@ import {
   LearningObservationSchema,
   LearningProposalSchema,
   ProposalEvidenceSchema,
+  SetLearningReviewerInput,
   SpaceLearningConfigInput,
   SpaceLearningConfigSchema,
 } from "./learning.js";
@@ -344,6 +352,52 @@ export const groupsContract = {
   remove: oc.input(groupId).output(z.object({ ok: z.literal(true) })),
 };
 export type GroupsContract = typeof groupsContract;
+export const threadsSendContract = oc.input(threadSendInput).output(ThreadSendResultSchema);
+export type ThreadsSendContract = typeof threadsSendContract;
+
+export const threadsContract = {
+  head: oc.input(threadTarget).output(z.object({ threadId: Id, cursor: z.number().int().min(-1) })),
+  get: oc.input(threadTarget).output(ThreadSnapshotSchema as z.ZodType<ThreadSnapshot>),
+  messages: oc
+    .input(
+      threadTarget.safeExtend({
+        before: z.number().int().nonnegative().optional(),
+        includePeerRuns: z.boolean().optional(),
+        includePeerReceipts: z.boolean().optional(),
+        around: z
+          .object({ messageId: Id.optional(), seq: z.number().int().nonnegative().optional() })
+          .optional(),
+      }),
+    )
+    .output(ThreadMessagePageSchema),
+  subscribe: oc
+    .input(threadTarget.safeExtend({ cursor: z.number().int().min(-1) }))
+    .output(eventIterator(ProductEventSchema)),
+  send: threadsSendContract as ThreadsSendContract,
+  react: oc
+    .input(
+      threadTarget.safeExtend({
+        messageId: Id,
+        reaction: MessageReactionSchema,
+        reason: FeedbackReasonSchema.optional(),
+        retract: z.boolean().optional(),
+        clientNonce: z.string().min(1).max(200),
+      }),
+    )
+    .output(z.object({ ok: z.literal(true) })),
+  stop: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
+  followUp: oc
+    .input(threadTarget.safeExtend({ text: z.string().min(1) }))
+    .output(z.object({ ok: z.literal(true) })),
+  clear: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
+  restart: oc.input(botId).output(z.object({ ok: z.literal(true) })),
+  answer: oc
+    .input(threadTarget.safeExtend({ runId: Id, messageId: Id, answer: z.string().min(1) }))
+    .output(z.object({ ok: z.literal(true) })),
+  markRead: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
+  markUnread: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
+};
+export type ThreadsContract = typeof threadsContract;
 
 export const appContract = {
   features: featuresContract,
@@ -513,6 +567,9 @@ export const appContract = {
     cancelConnect: oc
       .input(z.object({ loginId: z.string() }))
       .output(z.object({ ok: z.literal(true) })),
+    installHermes: oc
+      .input(z.strictObject({}).optional())
+      .output(z.object({ ok: z.literal(true) })),
   },
   runtimeConfig: {
     preview: oc
@@ -608,69 +665,7 @@ export const appContract = {
       .input(z.object({ sectionId: Id, name: z.string().trim().min(1).max(60) }))
       .output(BotSectionSchema),
   },
-  threads: {
-    head: oc.input(threadTarget).output(
-      z.object({
-        threadId: Id,
-        cursor: z.number().int().min(-1),
-      }),
-    ),
-    get: oc.input(threadTarget).output(ThreadSnapshotSchema),
-    messages: oc
-      .input(
-        threadTarget.safeExtend({
-          before: z.number().int().nonnegative().optional(),
-          includePeerRuns: z.boolean().optional(),
-          includePeerReceipts: z.boolean().optional(),
-          around: z
-            .object({
-              messageId: Id.optional(),
-              seq: z.number().int().nonnegative().optional(),
-            })
-            .optional(),
-        }),
-      )
-      .output(ThreadMessagePageSchema),
-    subscribe: oc
-      .input(threadTarget.safeExtend({ cursor: z.number().int().min(-1) }))
-      .output(eventIterator(ProductEventSchema)),
-    send: oc.input(threadSendInput).output(
-      z.object({
-        taskId: Id,
-        runId: Id,
-        seq: z.number().int(),
-        runIds: z.array(Id).optional(),
-      }),
-    ),
-    react: oc
-      .input(
-        threadTarget.safeExtend({
-          messageId: Id,
-          reaction: MessageReactionSchema,
-          reason: FeedbackReasonSchema.optional(),
-          retract: z.boolean().optional(),
-          clientNonce: z.string().min(1).max(200),
-        }),
-      )
-      .output(z.object({ ok: z.literal(true) })),
-    stop: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
-    followUp: oc
-      .input(threadTarget.safeExtend({ text: z.string().min(1) }))
-      .output(z.object({ ok: z.literal(true) })),
-    clear: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
-    restart: oc.input(botId).output(z.object({ ok: z.literal(true) })),
-    answer: oc
-      .input(
-        threadTarget.safeExtend({
-          runId: Id,
-          messageId: Id,
-          answer: z.string().min(1),
-        }),
-      )
-      .output(z.object({ ok: z.literal(true) })),
-    markRead: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
-    markUnread: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
-  },
+  threads: threadsContract as ThreadsContract,
   ide: ideContract,
   workspace: {
     describe: oc.input(botId).output(WorkspaceContextSchema),
@@ -694,6 +689,26 @@ export const appContract = {
         }),
       )
       .output(WorkspaceFileSchema),
+    save: oc
+      .input(
+        z.object({
+          botId: Id,
+          computerId: Id,
+          generation: z.number().int().nonnegative(),
+          path: IdePathSchema.min(1),
+          content: z.string().max(IDE_FILE_BYTES),
+          version: z.string().regex(/^[a-f0-9]{64}$/),
+          approved: z.boolean().default(false),
+        }),
+      )
+      .output(
+        z.object({
+          saved: z.boolean(),
+          approvalRequired: z.boolean(),
+          version: z.string().optional(),
+          reason: z.string().optional(),
+        }),
+      ),
     tasks: oc.input(botId).output(WorkspaceTasksSchema),
   },
   terminal: {
@@ -999,6 +1014,15 @@ export const appContract = {
       )
       .output(ScratchpadItemSchema),
     remove: oc.input(z.object({ itemId: Id })).output(z.object({ ok: z.literal(true) })),
+    linkBoardItems: oc
+      .input(
+        z.object({
+          botId: Id,
+          boardWorkspaceId: Id,
+          boardItemIds: z.array(Id).min(1),
+        }),
+      )
+      .output(z.array(ScratchpadItemSchema)),
   },
   skills: {
     list: oc.input(botId).output(z.array(TaughtSkillSchema)),
@@ -1059,6 +1083,7 @@ export const appContract = {
     summary: oc.input(z.object({ botId: Id.optional() })).output(LearningCountsSchema),
     settings: oc.output(SpaceLearningConfigSchema),
     configure: oc.input(SpaceLearningConfigInput).output(SpaceLearningConfigSchema),
+    setReviewer: oc.input(SetLearningReviewerInput).output(SpaceLearningConfigSchema),
     list: oc.input(z.object({ botId: Id.optional() })).output(LearningInboxSchema),
     approve: oc
       .input(z.object({ proposalId: Id, edits: LearningEditSchema.optional() }))
@@ -1474,7 +1499,15 @@ export const appContract = {
   search: {
     query: oc.input(z.object({ q: z.string().max(200) })).output(SearchQueryOutputSchema),
   },
-  delegations: delegationsContract,
+  delegations: {
+    ...delegationsContract,
+    protectedLocations: oc
+      .input(ProtectedLocationsReadInputSchema)
+      .output(ProtectedLocationViewsSchema),
+    patchProtectedLocations: oc
+      .input(ProtectedLocationsPatchInputSchema)
+      .output(ProtectedLocationViewsSchema),
+  },
   goals: goalsContract,
   botComms: botCommsContract,
   team: teamContract,

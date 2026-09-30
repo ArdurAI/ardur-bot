@@ -11,6 +11,7 @@ import type {
 } from "@ardurbot/adapter-kit";
 import {
   computerControlExpireJobKey,
+  hermesInstallJob,
   messagingDeliverJob,
   routineJobKey,
   routineWakeupJob,
@@ -95,6 +96,7 @@ import {
   resolveAutoReviewChecker,
   resolveBotWorkspacePath,
   revokeScreenControl,
+  SUBSCRIPTION_SIGN_IN_PROVIDERS,
   sanitizeComposioError,
   savePushToken,
   scheduleComputerControlExpiry,
@@ -108,7 +110,13 @@ import {
   verifyMcpInstall,
 } from "@ardurbot/adapters";
 import type { Auth } from "@ardurbot/auth";
-import type { Actor, ComputerStatus, Me, SpaceNavigation } from "@ardurbot/contracts";
+import type {
+  Actor,
+  ComputerStatus,
+  Me,
+  RuntimeAvailability,
+  SpaceNavigation,
+} from "@ardurbot/contracts";
 import {
   COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE,
   ComputerImageDownloadError,
@@ -117,6 +125,8 @@ import {
   HostMoveUnavailableError,
   IntegrationManifestSchema,
   IntegrationProviderIdSchema,
+  ISOLATED_COMPUTER_UNAVAILABLE_CODE,
+  IsolatedComputerUnavailableError,
   nativeRuntimeHealthKeys,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   usableModelId,
@@ -186,6 +196,16 @@ import {
   updateUserPreferences,
 } from "@ardurbot/db";
 import { redactMcpArguments } from "@ardurbot/host-runtime/mcp-diagnostics";
+import {
+  hermesInstallLockHeld,
+  localHermesRoot,
+} from "@ardurbot/host-runtime/runtimes/hermes-install";
+import {
+  HERMES_HOST_UNAVAILABLE,
+  HERMES_INSTALL_ALREADY,
+  HERMES_INSTALL_BRIDGE,
+  HERMES_INSTALL_RUNNING,
+} from "@ardurbot/host-runtime/runtimes/hermes-installer";
 import { getLogger } from "@ardurbot/logging";
 import type { MemoryService } from "@ardurbot/memory";
 import { MemoryRedactionError } from "@ardurbot/memory";
@@ -266,6 +286,7 @@ import {
 } from "./memory-provider-config.js";
 import { memoryContext, memoryRpc } from "./memory-routes.js";
 import { createChannelPairing } from "./messaging-dispatch.js";
+import { validateModelPinSelection } from "./model-pin-validation.js";
 import { notificationActivity } from "./notification-activity.js";
 import { ollamaConnection, ollamaStatus } from "./ollama.js";
 import {
@@ -275,6 +296,7 @@ import {
   promptFocus,
   startOnboarding,
 } from "./onboarding.js";
+import { getProtectedLocations, patchProtectedLocations } from "./protected-locations.js";
 import { createRemoteDevices } from "./remote-devices.js";
 import { routineHistory } from "./routine-history.js";
 import { listSpaceRuns } from "./runs.js";
@@ -568,6 +590,18 @@ function mapSpaceLifecycleError(error: unknown): unknown {
   return error;
 }
 
+/** The settings button is only for the owner of this computer, and only when nothing is installed. */
+function hermesLocalInstallOffer(
+  owner: boolean,
+  desktop: boolean,
+  probe: RuntimeAvailability,
+): RuntimeAvailability["install"] {
+  if (!owner || !desktop) return undefined;
+  if (probe.install) return probe.install;
+  if (!probe.available && probe.reason?.includes("not installed")) return { state: "absent" };
+  return undefined;
+}
+
 export function createRouter(deps: RouterDeps): Router<typeof appContract, RouterContext> {
   const board = createBoard(deps);
   const comparisons = createComparisons({
@@ -719,10 +753,13 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         workspaceFiles.describe(context.actor, input.botId),
       ),
       list: authed.workspace.list.handler(({ context, input }) =>
-        workspaceFiles.list(context.actor, input),
+        workspaceFiles.list(context.actor, input, context.signal),
       ),
       read: authed.workspace.read.handler(({ context, input }) =>
-        workspaceFiles.read(context.actor, input),
+        workspaceFiles.read(context.actor, input, context.signal),
+      ),
+      save: authed.workspace.save.handler(({ context, input }) =>
+        workspaceFiles.save(context.actor, input, context.signal),
       ),
       tasks: authed.workspace.tasks.handler(({ context, input }) =>
         workspaceTasks(deps.prisma, context.actor, input.botId),
@@ -1137,13 +1174,36 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
               },
             ];
           });
-          const available = Boolean(
-            owner &&
+          const isBridgeMode = process.env.ARDURBOT_HOST_BRIDGE === "api";
+
+          let healthAvailable = false;
+          let healthReason: string | undefined;
+          let localProbe: RuntimeAvailability | undefined;
+
+          if (isBridgeMode) {
+            healthAvailable = Boolean(
               host?.connected &&
-              (!bot || bot.computer?.kind === "desktop") &&
-              health?.capabilities?.providerRelay === 1 &&
-              health.hermes?.available,
-          );
+                health?.capabilities?.providerRelay === 1 &&
+                health.hermes?.available,
+            );
+            healthReason =
+              !host?.connected || !health
+                ? "Host service is not running — open the desktop app."
+                : health.capabilities?.providerRelay !== 1
+                  ? "Update Ardur on the connected computer for the provider relay."
+                  : (health?.hermes?.reason ?? "Hermes is not installed on this computer.");
+          } else {
+            localProbe = await nativeRuntimeAvailability("hermes", input.refresh);
+            healthAvailable = localProbe.available;
+            healthReason = localProbe.reason ?? "Hermes is not installed on this computer.";
+          }
+
+          const desktop = !bot || bot.computer?.kind === "desktop";
+          const available = Boolean(owner && desktop && healthAvailable);
+          const install =
+            localProbe && !isBridgeMode
+              ? hermesLocalInstallOffer(Boolean(owner), desktop, localProbe)
+              : undefined;
           return {
             runtimeKind: "hermes" as const,
             available,
@@ -1154,13 +1214,10 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                     ? NATIVE_HOST_OWNER_MESSAGE
                     : bot && bot.computer?.kind !== "desktop"
                       ? "Choose a host computer for Hermes."
-                      : !host?.connected || !health
-                        ? "Host service is not running — open the desktop app."
-                        : health.capabilities?.providerRelay !== 1
-                          ? "Update Ardur on the connected computer for the provider relay."
-                          : (health?.hermes?.reason ?? "Hermes is not installed on this computer."),
+                      : healthReason,
                 }
               : {}),
+            ...(install ? { install } : {}),
           };
         }
         if (process.env.ARDURBOT_HOST_BRIDGE === "api" && input.runtimeKind !== "pi") {
@@ -1206,6 +1263,20 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         if (!(await nativeHostOwner(deps.prisma, context.actor.userId)))
           throw new ORPCError("FORBIDDEN", { message: NATIVE_HOST_OWNER_MESSAGE });
         return nativeConnections.begin(context.actor.userId);
+      }),
+      installHermes: authed.runtimes.installHermes.handler(async ({ context }) => {
+        if (process.env.ARDURBOT_HOST_BRIDGE === "api")
+          throw new ORPCError("FORBIDDEN", { message: HERMES_INSTALL_BRIDGE });
+        if (!(await nativeHostOwner(deps.prisma, context.actor.userId)))
+          throw new ORPCError("FORBIDDEN", { message: NATIVE_HOST_OWNER_MESSAGE });
+        const current = await nativeRuntimeAvailability("hermes");
+        if (current.reason === HERMES_HOST_UNAVAILABLE)
+          throw new ORPCError("BAD_REQUEST", { message: HERMES_HOST_UNAVAILABLE });
+        if (current.available) throw new ORPCError("CONFLICT", { message: HERMES_INSTALL_ALREADY });
+        if (hermesInstallLockHeld(localHermesRoot()))
+          throw new ORPCError("CONFLICT", { message: HERMES_INSTALL_RUNNING });
+        await deps.jobs.enqueue(hermesInstallJob());
+        return { ok: true as const };
       }),
       connectStatus: authed.runtimes.connectStatus.handler(({ context, input }) =>
         nativeConnections.status(context.actor.userId, input.loginId),
@@ -1254,16 +1325,19 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           },
           orderBy: newestModelCredentialOrder,
         });
-        const compatibleRows = rows.filter(
+        // OAuth markers need the stored secret too, and only subscription
+        // sign-in providers can hold an OAuth credential.
+        const secretRows = rows.filter(
           (row) =>
             row.provider === OPENAI_COMPATIBLE_PROVIDER_ID ||
             row.provider === "anthropic" ||
-            row.provider === "ollama",
+            row.provider === "ollama" ||
+            row.provider in SUBSCRIPTION_SIGN_IN_PROVIDERS,
         );
-        const secrets = compatibleRows.length
+        const secrets = secretRows.length
           ? await deps.prisma.secret.findMany({
               where: {
-                id: { in: compatibleRows.map((row) => row.secretId) },
+                id: { in: secretRows.map((row) => row.secretId) },
                 userId: context.actor.userId,
                 spaceId: null,
               },
@@ -1488,6 +1562,11 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         try {
           return await repos.createBot(context.actor, input);
         } catch (error) {
+          if (error instanceof IsolatedComputerUnavailableError)
+            throw new ORPCError("BAD_REQUEST", {
+              message: error.message,
+              data: { code: ISOLATED_COMPUTER_UNAVAILABLE_CODE },
+            });
           throw mapSpaceLifecycleError(error);
         }
       }),
@@ -3338,7 +3417,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     scratchpad: {
       list: authed.scratchpad.list.handler(async ({ context, input }) => {
         await repos.getBot(context.actor, input.botId);
-        return listScratchpadItems(
+        const items = await listScratchpadItems(
           { prisma: deps.prisma },
           {
             spaceId: context.actor.spaceId,
@@ -3347,6 +3426,51 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             includeDone: input.includeDone ?? false,
           },
         );
+
+        const workspaces = new Set(
+          items.map((i) => i.boardWorkspaceId).filter(Boolean) as string[],
+        );
+        const snapshots = new Map<string, Awaited<ReturnType<typeof board.snapshot>>>();
+
+        for (const ws of workspaces) {
+          try {
+            snapshots.set(ws, await board.snapshot(context.actor, { workspaceId: ws }));
+          } catch {
+            // ignore if board unavailable
+          }
+        }
+
+        return items.map((item) => {
+          if (!item.boardWorkspaceId || !item.boardItemId) return item;
+          const snap = snapshots.get(item.boardWorkspaceId);
+          if (!snap) return item;
+          const boardItem = snap.items.find((i) => i.id === item.boardItemId);
+          if (!boardItem) return item;
+
+          let st = boardItem.status;
+          if (st === "closed") {
+            st =
+              boardItem.closedAt && Date.parse(boardItem.closedAt) >= Date.now() - 7 * 86400000
+                ? "done"
+                : "closed";
+          } else if (
+            st === "deferred" ||
+            st === "pinned" ||
+            (boardItem.deferUntil && Date.parse(boardItem.deferUntil) > Date.now())
+          ) {
+            st = "deferred";
+          } else {
+            const isBlocked = snap.blockedIds.includes(boardItem.id) || st === "blocked";
+            if (isBlocked) {
+              st = "blocked";
+            } else if (st === "in_progress" || st === "hooked") {
+              st = "in_progress";
+            } else {
+              st = snap.readyIds.includes(boardItem.id) ? "ready" : "blocked";
+            }
+          }
+          return { ...item, status: st as any, title: boardItem.title };
+        });
       }),
       create: authed.scratchpad.create.handler(async ({ context, input }) => {
         await repos.getBot(context.actor, input.botId);
@@ -3374,6 +3498,31 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         if (input.status !== undefined && !isScratchpadStatus(input.status)) {
           throw new ORPCError("BAD_REQUEST", { message: "Invalid scratchpad status." });
         }
+
+        if (existing.boardWorkspaceId && existing.boardItemId && input.status !== undefined) {
+          try {
+            if (input.status === "done" || input.status === "closed") {
+              const provider = await board.service.provider(
+                context.actor,
+                existing.boardWorkspaceId,
+              );
+              await provider.close([existing.boardItemId], input.status);
+            } else {
+              let st: any = "open";
+              if (input.status === "parked" || input.status === "deferred") st = "deferred";
+              else if (input.status === "in_progress") st = "in_progress";
+              else if (input.status === "blocked") st = "blocked";
+              const provider = await board.service.provider(
+                context.actor,
+                existing.boardWorkspaceId,
+              );
+              await provider.update(existing.boardItemId, { status: st });
+            }
+          } catch (e) {
+            getLogger().error("Failed to update board status for linked item", e);
+          }
+        }
+
         const row = await deps.prisma.scratchpadItem.update({
           where: { id: existing.id },
           data: {
@@ -3395,6 +3544,74 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         if (!existing) throw new IsolationError();
         await deps.prisma.scratchpadItem.delete({ where: { id: existing.id } });
         return { ok: true as const };
+      }),
+      linkBoardItems: authed.scratchpad.linkBoardItems.handler(async ({ context, input }) => {
+        await repos.getBot(context.actor, input.botId);
+
+        const workspace = await deps.prisma.boardWorkspace.findFirst({
+          where: {
+            id: input.boardWorkspaceId,
+            spaceId: context.actor.spaceId,
+            enabled: true,
+          },
+        });
+        if (!workspace)
+          throw new ORPCError("BAD_REQUEST", { message: "Board not found or disabled" });
+        if (!workspace.allowAllBots && !workspace.allowedBotIds.includes(input.botId)) {
+          throw new ORPCError("BAD_REQUEST", { message: "Bot not allowed on board" });
+        }
+
+        const snapshot = await board.snapshot(context.actor, {
+          workspaceId: input.boardWorkspaceId,
+        });
+        const itemsById = new Map(snapshot.items.map((i) => [i.id, i]));
+        for (const itemId of input.boardItemIds) {
+          if (!itemsById.has(itemId)) {
+            throw new ORPCError("BAD_REQUEST", { message: `Item ${itemId} not found on board` });
+          }
+        }
+
+        const existing = await deps.prisma.scratchpadItem.findMany({
+          where: {
+            spaceId: context.actor.spaceId,
+            botId: input.botId,
+            boardWorkspaceId: input.boardWorkspaceId,
+            boardItemId: { in: input.boardItemIds },
+          },
+        });
+        if (existing.length > 0) {
+          throw new ORPCError("BAD_REQUEST", { message: "Duplicate link refused" });
+        }
+
+        const now = new Date();
+        const data = input.boardItemIds.map((itemId) => {
+          const item = itemsById.get(itemId)!;
+          return {
+            spaceId: context.actor.spaceId,
+            botId: input.botId,
+            userId: context.actor.userId,
+            boardWorkspaceId: input.boardWorkspaceId,
+            boardItemId: itemId,
+            title: item.title,
+            status: "open",
+            notes: "",
+            createdAt: now,
+            updatedAt: now,
+          };
+        });
+
+        await deps.prisma.scratchpadItem.createMany({ data });
+
+        const created = await deps.prisma.scratchpadItem.findMany({
+          where: {
+            spaceId: context.actor.spaceId,
+            botId: input.botId,
+            boardWorkspaceId: input.boardWorkspaceId,
+            boardItemId: { in: input.boardItemIds },
+          },
+          orderBy: { createdAt: "desc" },
+        });
+        return created.map(mapScratchpadItem);
       }),
     },
     skills: {
@@ -3498,7 +3715,15 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       ),
       settings: authed.learning.settings.handler(({ context }) => learning.settings(context.actor)),
       configure: authed.learning.configure.handler(({ context, input }) =>
-        learning.configure(context.actor, input),
+        learning.configure(context.actor, input, (pin) =>
+          validateModelPinSelection(deps, context.actor, pin),
+        ),
+      ),
+      setReviewer: authed.learning.setReviewer.handler(async ({ context, input }) =>
+        learning.setReviewer(context.actor, {
+          expectedRevision: input.expectedRevision,
+          pin: await validateModelPinSelection(deps, context.actor, input.pin),
+        }),
       ),
       list: authed.learning.list.handler(({ context, input }) =>
         learning.list(context.actor, input.botId),
@@ -5951,6 +6176,12 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       ),
       setPolicy: authed.delegations.setPolicy.handler(({ context, input }) =>
         setModelDestinations(deps.prisma, context.actor, input),
+      ),
+      protectedLocations: authed.delegations.protectedLocations.handler(({ context, input }) =>
+        getProtectedLocations(deps.prisma, context.actor, input.botId),
+      ),
+      patchProtectedLocations: authed.delegations.patchProtectedLocations.handler(
+        ({ context, input }) => patchProtectedLocations(deps.prisma, context.actor, input),
       ),
     },
     runs: {

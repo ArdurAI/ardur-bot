@@ -32,6 +32,7 @@ function harness(
   const runCreate = vi.fn(async () => ({ id: "run-b" }));
   const messageCreate = vi.fn(async () => ({ id: "message-1" }));
   const tx = {
+    chiefPlan: { findFirst: vi.fn(async () => null) },
     delegation: { update: vi.fn(async () => ({})) },
     $queryRaw: vi.fn(async () => [{ id: "group-1" }]),
     chatGroup: {
@@ -125,6 +126,71 @@ describe("group handoff ownership", () => {
     );
     expect(runCreate).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ trigger: "follow_up" }) }),
+    );
+  });
+
+  it("refuses a handoff with neither a message nor a card instead of posting empty", async () => {
+    const { deps, messageCreate, runCreate } = harness([{ kind: "text", text: "user request" }]);
+
+    await expect(
+      handoffToGroupBot(deps as never, run, "group-1", {
+        bot_id: "bot-b",
+        message: "   ",
+      }),
+    ).resolves.toEqual({ error: "Give the handoff a message describing the next stage." });
+    expect(messageCreate).not.toHaveBeenCalled();
+    expect(runCreate).not.toHaveBeenCalled();
+  });
+
+  it("shows the card's goal when a card-carrying handoff leaves the message blank", async () => {
+    const { deps, messageCreate } = harness([{ kind: "text", text: "user request" }]);
+    vi.mocked(prepareDelegation).mockResolvedValueOnce({
+      ok: true,
+      record: {
+        id: "delegation",
+        differences: [],
+        card: {
+          goal: "Compare the two drafts",
+          inputs: [],
+          doneWhen: [],
+          deadlineAt: null,
+          requesterBotId: "bot-a",
+          workerBotId: "bot-b",
+          approvalBoundaries: { scopes: [], connectors: [] },
+          snapshot: {
+            pin: {
+              runtimeKind: "pi",
+              provider: "fixture",
+              modelId: "fixture",
+              effort: null,
+              credentialId: null,
+              revision: 1,
+            },
+            computer: { id: null, mode: "team", kind: null },
+            destination: { host: null, local: false },
+          },
+          budget: { tokens: 36_864, deadlineAt: "2030-01-01T00:00:00.000Z" },
+          artifacts: [],
+          timeline: [],
+          reports: [],
+        },
+      } as never,
+      runData: { delegationId: "delegation" } as never,
+    });
+
+    await expect(
+      handoffToGroupBot(deps as never, run, "group-1", {
+        bot_id: "bot-b",
+        message: "",
+        card: { goal: "Compare the two drafts" },
+      }),
+    ).resolves.toMatchObject({ ok: true, botId: "bot-b" });
+    expect(messageCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          blocks: [expect.objectContaining({ kind: "handoff", text: "Compare the two drafts" })],
+        }),
+      }),
     );
   });
 

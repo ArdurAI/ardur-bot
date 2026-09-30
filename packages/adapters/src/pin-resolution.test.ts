@@ -143,8 +143,9 @@ describe("runtime pin selection", () => {
     expect(await registry.resolve(pin, "docker")).toMatchObject({
       code: "runtime-unsupported-computer",
       pin,
+      reasonId: "computer-unsupported",
       reason:
-        "Claude Code runs on host computers for now — change the bot's computer or its runtime.",
+        "Claude Code runs on the host computer, not in a sandbox. Change this bot's computer to use it.",
     });
     expect(probe).not.toHaveBeenCalled();
     expect(await registry.resolve(pin, "desktop", true)).toMatchObject({

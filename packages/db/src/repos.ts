@@ -1,17 +1,19 @@
+import { randomUUID } from "node:crypto";
+import type { Actor, Bot, BotSection, MessageBlock, SpaceBot } from "@ardurbot/contracts";
 import {
-  type Actor,
   BOT_COLORS,
-  type Bot,
-  type BotSection,
-  type MessageBlock,
+  ComputerConnectionSettingsSchema,
+  computerKindFacts,
+  IsolatedComputerUnavailableError,
   RuntimeKindSchema,
-  type SpaceBot,
 } from "@ardurbot/contracts";
 import type { HistoricalHermesRuntimeConfig } from "@ardurbot/contracts/runtime-config";
-import { sandboxKindForBot, userVisibleMessages } from "@ardurbot/core";
+import { defaultComputerKindForNewBot, userVisibleMessages } from "@ardurbot/core";
 import { decodeHistoricalHermesRuntimeConfig } from "@ardurbot/core/runtime-config";
-import { Prisma, type PrismaClient } from "./client.js";
-import { type ComputerMode, ensureComputerRecord, parseComputerMode } from "./computers.js";
+import type { PrismaClient } from "./client.js";
+import { Prisma } from "./client.js";
+import type { ComputerMode } from "./computers.js";
+import { ensureComputerRecord, parseComputerMode } from "./computers.js";
 import { createThreadMessageInTransaction } from "./messages.js";
 import { BotSectionNameConflictError, IsolationError } from "./scope.js";
 import { lockSpaceForContentCreation } from "./spaces.js";
@@ -422,6 +424,7 @@ export function createRepos(prisma: PrismaClient) {
         color?: string;
         parentBotId?: string | null;
         computerMode?: ComputerMode;
+        isolatedComputer?: { connectionId: string | null };
         spawnKey?: string;
         onCreated?: (
           tx: Prisma.TransactionClient,
@@ -482,28 +485,69 @@ export function createRepos(prisma: PrismaClient) {
         if (thinkingLevel == null) thinkingLevel = parent.thinkingLevel ?? null;
       }
       const settings = await prisma.deploymentSettings.findUnique({ where: { id: "default" } });
-      const kind = sandboxKindForBot(
+      let kind = defaultComputerKindForNewBot(
         process.env.SANDBOX_PROVIDER ?? "docker",
         settings?.computerHost,
+        runtimeKind,
       );
+      // The kind decision chose Docker although the owner runs bots on This Mac (possible
+      // only for a runtime that supports non-host computers, today the built-in one). That
+      // new bot must not inherit the space's Team computer — it may be the host — so it
+      // starts on its own Docker computer instead. The owner can still move it to the Team
+      // computer (with the This Mac warning). Existing bots and computer rows never change.
+      const privateDockerComputer =
+        Boolean(input.isolatedComputer) ||
+        (kind === "docker" && settings?.computerHost === "this-mac");
       const insertBot = () =>
         prisma.$transaction(async (tx) => {
           await lockSpaceForContentCreation(tx, {
             spaceId: actor.spaceId,
             userId: actor.userId,
           });
+          if (input.isolatedComputer) {
+            if (input.computerMode !== "dedicated" || runtimeKind !== "pi")
+              throw new IsolatedComputerUnavailableError();
+            if (input.isolatedComputer.connectionId) {
+              const connection = await tx.connection.findFirst({
+                where: {
+                  id: input.isolatedComputer.connectionId,
+                  spaceId: actor.spaceId,
+                  connectorId: "computer",
+                },
+              });
+              const parsed = ComputerConnectionSettingsSchema.safeParse(connection?.metadata);
+              if (!parsed.success || parsed.data.engine === "ssh")
+                throw new IsolatedComputerUnavailableError();
+              kind = parsed.data.engine === "kubernetes" ? "kubernetes" : "remote-docker";
+            }
+            if (computerKindFacts(kind)?.boundary !== "container")
+              throw new IsolatedComputerUnavailableError();
+          }
           const positions = await tx.bot.aggregate({
             where: { spaceId: actor.spaceId, userId: actor.userId },
             _max: { position: true },
           });
-          const teamComputer = await ensureComputerRecord(tx, {
-            mode: "team",
-            spaceId: actor.spaceId,
-            userId: actor.userId,
-            kind,
-          });
+          // A dedicated computer's key contains the bot id, so the id is fixed up front;
+          // both rows land in this one transaction.
+          const botId = privateDockerComputer ? randomUUID() : undefined;
+          const computer = privateDockerComputer
+            ? await ensureComputerRecord(tx, {
+                mode: "dedicated",
+                spaceId: actor.spaceId,
+                userId: actor.userId,
+                botId,
+                kind,
+                connectionId: input.isolatedComputer?.connectionId,
+              })
+            : await ensureComputerRecord(tx, {
+                mode: "team",
+                spaceId: actor.spaceId,
+                userId: actor.userId,
+                kind,
+              });
           const created = await tx.bot.create({
             data: {
+              ...(botId ? { id: botId } : {}),
               spaceId: actor.spaceId,
               userId: actor.userId,
               name: input.name,
@@ -514,7 +558,7 @@ export function createRepos(prisma: PrismaClient) {
               color,
               position: (positions._max.position ?? -1) + 1,
               parentBotId: input.parentBotId ?? null,
-              computerId: teamComputer.id,
+              computerId: computer.id,
               spawnKey: input.spawnKey,
               modelProvider,
               modelId,
@@ -539,7 +583,7 @@ export function createRepos(prisma: PrismaClient) {
               ...input.initialMessage,
             });
           }
-          if (input.computerMode === "dedicated") {
+          if (input.computerMode === "dedicated" && !privateDockerComputer) {
             const dedicated = await ensureComputerRecord(tx, {
               mode: "dedicated",
               spaceId: actor.spaceId,

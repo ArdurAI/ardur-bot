@@ -1,7 +1,30 @@
-import type { ModelCatalogEntry, ProviderErrorKind, RuntimeProblem } from "@ardurbot/contracts";
+import type {
+  FailureCategoryId,
+  ModelCatalogEntry,
+  ProviderErrorKind,
+  RuntimeProblem,
+} from "@ardurbot/contracts";
+import {
+  FailureCategoryIdSchema,
+  failureCategory,
+  failureCategoryFromText,
+  runtimeNames,
+} from "@ardurbot/contracts";
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
+import { failureCategoryMessages } from "../../lib/failure-category-copy";
 import { parseProviderError } from "../../lib/provider-error";
+
+/**
+ * The refusal categories whose fix the banner can offer directly: each names the setting
+ * that blocked the run, and its actions come from the failure-category table.
+ */
+const RUNTIME_REFUSAL_IDS: ReadonlySet<FailureCategoryId> = new Set([
+  "experimental-off",
+  "computer-unsupported",
+  "destinations-bot",
+  "destinations-space",
+]);
 
 export function ProviderErrorMessage({
   text,
@@ -10,6 +33,11 @@ export function ProviderErrorMessage({
   runtimeProblem,
   catalog,
   onConnect,
+  botName,
+  onEnableExperimental,
+  onOpenBotDestinations,
+  onOpenBotComputer,
+  onOpenSpaceModels,
 }: {
   text: string;
   providerErrorKind?: ProviderErrorKind;
@@ -17,9 +45,77 @@ export function ProviderErrorMessage({
   runtimeProblem?: RuntimeProblem;
   catalog?: ModelCatalogEntry[];
   onConnect?: () => void;
+  /** The refusing bot's name; the recorded sentence stands in when it is not known. */
+  botName?: string;
+  onEnableExperimental?: () => void;
+  onOpenBotDestinations?: () => void;
+  onOpenBotComputer?: () => void;
+  onOpenSpaceModels?: () => void;
 }) {
-  const { t } = useLingui();
+  const { t, i18n } = useLingui();
   if (runtimeProblem) {
+    // A classified runtime refusal shows its category's sentence — the setting that said
+    // no, with this bot's and the runtime's names — plus one button per table action.
+    const refusalId = FailureCategoryIdSchema.safeParse(runtimeProblem.reasonId);
+    if (refusalId.success && RUNTIME_REFUSAL_IDS.has(refusalId.data)) {
+      const entry = failureCategory(refusalId.data);
+      const runtime = runtimeNames[runtimeProblem.pin.runtimeKind];
+      const actions = [entry.action, ...(entry.more ?? [])];
+      return (
+        <>
+          <span className="min-w-0 flex-1">
+            {botName
+              ? i18n._({
+                  ...failureCategoryMessages[refusalId.data],
+                  values: { runtime, bot: botName },
+                })
+              : runtimeProblem.reason}
+          </span>
+          {actions.map((action) => {
+            if (action.kind === "enable-experimental")
+              return onEnableExperimental ? (
+                <Button
+                  key="enable-experimental"
+                  variant="link"
+                  size="xs"
+                  onClick={onEnableExperimental}
+                >
+                  <Trans>Turn on Experimental</Trans>
+                </Button>
+              ) : null;
+            if (action.kind !== "open-settings") return null;
+            if (action.target === "model-pin")
+              return (
+                <Button key="model-pin" variant="link" size="xs" onClick={onChangeModel}>
+                  <Trans>Change pin</Trans>
+                </Button>
+              );
+            if (action.target === "bot-destinations")
+              return onOpenBotDestinations ? (
+                <Button
+                  key="bot-destinations"
+                  variant="link"
+                  size="xs"
+                  onClick={onOpenBotDestinations}
+                >
+                  <Trans>Open bot settings</Trans>
+                </Button>
+              ) : null;
+            if (action.target === "bot-computer")
+              return onOpenBotComputer ? (
+                <Button key="bot-computer" variant="link" size="xs" onClick={onOpenBotComputer}>
+                  <Trans>Open bot settings</Trans>
+                </Button>
+              ) : null;
+            return onOpenSpaceModels ? (
+              <Button key="space-models" variant="link" size="xs" onClick={onOpenSpaceModels}>
+                <Trans>Open Settings</Trans>
+              </Button>
+            ) : null;
+          })}
+        </>
+      );
+    }
     if (runtimeProblem.code === "locality-denied")
       return (
         <>
@@ -89,11 +185,31 @@ export function ProviderErrorMessage({
           return runtimeProblem.reason;
       }
     })();
+    // Native runtime failures carry a classified reason id; older records hold the
+    // category sentence, mapped back to its id. Either way the sentence comes from the
+    // failure-category table, translated here. Anything unclassified keeps the recorded
+    // reason — a missed variant degrades to the old behavior, never to a wrong category.
+    const nativeReason = (() => {
+      if (pin.runtimeKind === "antigravity" || pin.runtimeKind === "pi") return null;
+      const runtime = runtimeNames[pin.runtimeKind];
+      const byId = FailureCategoryIdSchema.safeParse(runtimeProblem.reasonId);
+      if (byId.success)
+        return i18n._({ ...failureCategoryMessages[byId.data], values: { runtime } });
+      const legacy = failureCategoryFromText(runtimeProblem.reason, {
+        runtimes: Object.values(runtimeNames),
+      });
+      if (legacy)
+        return i18n._({
+          ...failureCategoryMessages[legacy.id],
+          values: { runtime: legacy.params.runtime ?? runtime },
+        });
+      return null;
+    })();
     return (
       <>
         <span className="min-w-0 flex-1">
           {pin.runtimeKind !== "pi" || runtimeProblem.code !== "pin-credential-missing" ? (
-            (antigravityReason ?? runtimeProblem.reason)
+            (antigravityReason ?? nativeReason ?? runtimeProblem.reason)
           ) : (
             <Trans>
               This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin.

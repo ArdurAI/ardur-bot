@@ -25,6 +25,8 @@ import {
   cancelResponseBody,
   ensureAiDataConsent,
   isCommandCardEvent,
+  isInterimNarrationAt,
+  isReasoningSummaryBlock,
   isRunTerminalEvent,
   mergeCommandLinks,
   mergeThreadHistory,
@@ -35,9 +37,11 @@ import {
   reduceLiveMessageBlocks,
   reduceRunContext,
   runFailureError,
+  showsReplyText,
   signupRequiresEmailVerification,
   takeLiveMessage,
   updateCloudAgentMessages,
+  upsertAtLivePlace,
   upsertMessageById,
 } from "@ardurbot/core";
 import * as SecureStore from "expo-secure-store";
@@ -826,6 +830,7 @@ export type MobileGroup = Pick<
   | "updatedAt"
   | "members"
   | "coordinatorBotId"
+  | "roomPolicy"
 > &
   Partial<Pick<Group, "spaceId">>;
 
@@ -847,6 +852,8 @@ export type MobileSnapshot = {
     botId?: string;
     status: string;
     error?: string | null;
+    /** When a run queued to retry a provider's rate limit wakes again; only while it waits. */
+    providerRetryAt?: string | null;
     runtimeProblem?: RuntimeProblem;
     runtimePin?: RuntimePin | null;
     runtimeInfo?: RuntimeInfo | null;
@@ -854,7 +861,12 @@ export type MobileSnapshot = {
     routingRule?: string | null;
   } | null;
   contextRun?: MobileSnapshot["run"];
-  activeRuns?: Array<{ id: string; botId?: string; status: string }>;
+  activeRuns?: Array<{
+    id: string;
+    botId?: string;
+    status: string;
+    providerRetryAt?: string | null;
+  }>;
   members?: MobileGroup["members"];
   computer?: {
     state: string;
@@ -918,7 +930,9 @@ export function messagingProviderLabel(provider: string, transport?: string): st
 
 export function copyableMobileMessageText(message: MobileMessage): string {
   return message.blocks
-    .map((block) => {
+    .map((block, index) => {
+      if (isReasoningSummaryBlock(block)) return "";
+      if (isInterimNarrationAt(message.blocks, index)) return "";
       if (block.kind === "channel_message") {
         return `${messagingProviderLabel(block.provider, block.transport)} · ${block.fromLabel}: ${block.text}`;
       }
@@ -945,7 +959,11 @@ export function blockText(
   translateNotice?: (notice: GroupModelFailureNotice) => string,
 ) {
   return message.blocks
-    .map((block) => {
+    .map((block, index) => {
+      if (isReasoningSummaryBlock(block)) return "";
+      if (isInterimNarrationAt(message.blocks, index)) return "";
+      // Coordination is the owner's quiet line, never spoken text (same as web).
+      if (block.kind === "coordination") return "";
       if (block.kind === "text" && block.notice && translateNotice)
         return translateNotice(block.notice);
       if (block.kind === "channel_message") {
@@ -1050,7 +1068,9 @@ export function isMobileThreadSnapshotEvent(event: ThreadEvent): boolean {
     event.type === "thread.subagent" ||
     event.type === "thread.cloud_agent" ||
     event.type === "thread.cleared" ||
+    event.type === "run.started" ||
     event.type === "run.waiting_input" ||
+    event.type === "run.retry_scheduled" ||
     event.type === "computer.takeover.requested" ||
     isRunTerminalEvent(event)
   );
@@ -1159,6 +1179,41 @@ export function applyMobileThreadEvent(
       : prev.activeRuns;
     return { ...prev, cursor, run, activeRuns, messages, computer };
   }
+  if (event.type === "run.retry_scheduled") {
+    const runId = event.runId;
+    if (!runId) return prev;
+    const waitMs = typeof event.payload?.waitMs === "number" ? event.payload.waitMs : 0;
+    const providerRetryAt = new Date(
+      Date.parse(event.createdAt ?? new Date().toISOString()) + waitMs,
+    ).toISOString();
+    // The run waits out the provider's "not now" as queued, carrying the moment it wakes.
+    const run =
+      prev.run && prev.run.id === runId
+        ? { ...prev.run, status: "queued", providerRetryAt }
+        : prev.run;
+    const activeRuns = prev.activeRuns?.map((candidate) =>
+      candidate.id === runId ? { ...candidate, status: "queued", providerRetryAt } : candidate,
+    );
+    return { ...prev, cursor: event.seq ?? prev.cursor, run, activeRuns };
+  }
+  if (event.type === "run.started") {
+    const runId = event.runId;
+    if (!runId) return prev;
+    const known =
+      prev.run?.id === runId || Boolean(prev.activeRuns?.some((run) => run.id === runId));
+    // A run the snapshot does not know still arrives with the next refresh, as before.
+    if (!known) return prev;
+    const run =
+      prev.run && prev.run.id === runId
+        ? { ...prev.run, status: "running", providerRetryAt: null }
+        : prev.run;
+    const activeRuns = prev.activeRuns?.map((candidate) =>
+      candidate.id === runId
+        ? { ...candidate, status: "running", providerRetryAt: null }
+        : candidate,
+    );
+    return { ...prev, cursor: event.seq ?? prev.cursor, run, activeRuns };
+  }
   if (isRunTerminalEvent(event)) {
     const activeRuns = prev.activeRuns?.filter((candidate) => candidate.id !== event.runId);
     const failure = runFailureError(event);
@@ -1203,7 +1258,7 @@ export function applyMobileThreadEvent(
     return {
       ...prev,
       cursor: event.seq ?? prev.cursor,
-      messages: [...remaining, streaming],
+      messages: placeLiveDraft(prev.messages, previous, remaining, streaming),
     };
   }
   if (event.type === "agent.tool.called") {
@@ -1222,7 +1277,7 @@ export function applyMobileThreadEvent(
     return {
       ...prev,
       cursor: event.seq ?? prev.cursor,
-      messages: [...remaining, streaming],
+      messages: placeLiveDraft(prev.messages, previous, remaining, streaming),
     };
   }
   if (event.type === "agent.tool.completed") {
@@ -1262,7 +1317,9 @@ export function applyMobileThreadEvent(
     };
   }
   if (event.type === "thread.message.created" || event.type === "thread.message.updated") {
-    const { remaining } = takeLiveMessage(prev.messages, progressMessageId(event));
+    if (event.type === "thread.message.updated" && (event.seq ?? -1) <= (prev.cursor ?? -1))
+      return prev;
+    const liveId = progressMessageId(event);
     const next: MobileMessage = {
       id: String(event.payload?.messageId ?? event.id ?? `msg:${event.seq ?? 0}`),
       runId: event.runId ? String(event.runId) : undefined,
@@ -1274,24 +1331,68 @@ export function applyMobileThreadEvent(
         : undefined,
       replyQuote: event.payload?.replyQuote ? String(event.payload.replyQuote) : undefined,
     };
+    const without = prev.messages.filter(
+      (message) =>
+        !(
+          message.id.startsWith("subagent:") &&
+          next.blocks.some(
+            (block) => block.kind === "subagent" && message.id === `subagent:${block.agentId}`,
+          )
+        ),
+    );
     return {
       ...prev,
       cursor: event.seq ?? prev.cursor,
-      messages: upsertMessageById(
-        remaining.filter(
-          (message) =>
-            !(
-              message.id.startsWith("subagent:") &&
-              next.blocks.some(
-                (block) => block.kind === "subagent" && message.id === `subagent:${block.agentId}`,
-              )
-            ),
-        ),
-        next,
-      ),
+      messages: placeSavedMessage(without, liveId, next, event.type === "thread.message.created"),
     };
   }
   return prev;
+}
+
+/**
+ * A run's live draft holds its place in the thread once it shows reply text: the server
+ * holds the reply's position from that first streamed text, and the saved reply fills it.
+ * A draft with only tool activity or reasoning has no place yet (and no bubble); it follows
+ * the newest message, where its reply will be saved.
+ */
+function draftHoldsPlace(draft: MobileMessage | undefined): boolean {
+  return draft !== undefined && showsReplyText(draft.blocks);
+}
+
+/** Put a run's updated live draft back: in the place it holds, or after the newest message. */
+function placeLiveDraft(
+  messages: readonly MobileMessage[],
+  previous: MobileMessage | undefined,
+  remaining: MobileMessage[],
+  draft: MobileMessage,
+): MobileMessage[] {
+  return draftHoldsPlace(previous)
+    ? upsertAtLivePlace(messages, draft.id, draft)
+    : [...remaining, draft];
+}
+
+/**
+ * Place a saved message the way the server orders it. A new bot message that saves text
+ * fills the place its run's draft holds. Everything else lands after the newest message:
+ * the owner's messages and notices leave the draft alone, and the run's other messages
+ * (cards, or a reply whose draft held no place) keep a draft that holds its place for the
+ * reply still to come and drop one that does not.
+ */
+function placeSavedMessage(
+  messages: readonly MobileMessage[],
+  liveId: string,
+  next: MobileMessage,
+  created: boolean,
+): MobileMessage[] {
+  if (next.role !== "bot") return upsertMessageById(messages, next);
+  if (!draftHoldsPlace(messages.find((message) => message.id === liveId))) {
+    return upsertMessageById(takeLiveMessage(messages, liveId).remaining, next);
+  }
+  const fillsDraft =
+    created &&
+    next.blocks.some((block) => block.kind === "text") &&
+    !messages.some((message) => message.id === next.id);
+  return fillsDraft ? upsertAtLivePlace(messages, liveId, next) : upsertMessageById(messages, next);
 }
 
 export {

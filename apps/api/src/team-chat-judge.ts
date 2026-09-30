@@ -1,9 +1,8 @@
 import { randomUUID } from "node:crypto";
-import type { AgentRunModel, AgentRuntime } from "@ardurbot/adapter-kit";
+import type { AgentRunModel, AgentRuntime, AgentUsage } from "@ardurbot/adapter-kit";
 import {
   type EncryptedSecretStore,
   formatCurrentTimeInstruction,
-  ObservedUsageTotals,
   resolveModelAuth,
   serializeModelSecret,
   toOAuthCredential,
@@ -17,6 +16,15 @@ const MAX_MESSAGES = 20;
 const MAX_MESSAGE_CHARS = 2_000;
 const MAX_REASON_CHARS = 240;
 const DEFAULT_TIMEOUT_MS = 20_000;
+/** Judge spend is auxiliary model work, recorded with purpose and pin like any other call. */
+export const TEAM_CHAT_JUDGE_USAGE_PURPOSE = "helper" as const;
+export interface TeamChatUsageScope {
+  spaceId: string;
+  userId: string;
+  botId: string;
+  threadId: string;
+  runtimePin?: unknown;
+}
 
 export interface TeamChatEngagementMessage {
   eventId: string;
@@ -118,6 +126,8 @@ interface ModelTeamChatEngagementJudgeDeps {
     spaceId: string;
     botId: string;
   }) => Promise<AgentRunModel | RuntimeProblem>;
+  /** Shared usage accounting; every usage event is passed through, unreported included. */
+  recordUsage?: (usage: AgentUsage, scope: TeamChatUsageScope) => Promise<void>;
 }
 
 export class ModelTeamChatEngagementJudge implements TeamChatEngagementJudge {
@@ -136,7 +146,6 @@ export class ModelTeamChatEngagementJudge implements TeamChatEngagementJudge {
       });
       const judgeId = `team-chat-judge:${randomUUID()}`;
       let text = "";
-      const usageTotals = new ObservedUsageTotals();
       for await (const event of this.deps.runtime.run(
         {
           botId: input.bot.id,
@@ -151,7 +160,8 @@ export class ModelTeamChatEngagementJudge implements TeamChatEngagementJudge {
             'Return JSON only: {"act":false} or {"act":true,"reason":"one short sentence","asked_by":"event id when directly asked"}.',
           ].join(" "),
           history: [],
-          tools: [],
+          tools: "none",
+          singleRequest: true,
           model: resolved.model,
         },
         {
@@ -164,21 +174,14 @@ export class ModelTeamChatEngagementJudge implements TeamChatEngagementJudge {
         },
       )) {
         if (event.type === "done" && event.text) text = event.text;
-        if (event.type === "usage") {
-          const delta = usageTotals.observe(event);
-          if (!delta) continue;
-          await this.deps.prisma.usageRecord.create({
-            data: {
-              spaceId: input.bot.spaceId,
-              botId: input.bot.id,
-              userId: input.bot.userId,
-              provider: event.provider,
-              model: event.model,
-              inputTokens: delta.inputTokens,
-              outputTokens: delta.outputTokens,
-            },
+        if (event.type === "usage")
+          await this.deps.recordUsage?.(event, {
+            spaceId: input.bot.spaceId,
+            userId: input.bot.userId,
+            botId: input.bot.id,
+            threadId: judgeId,
+            runtimePin: resolved.model.runtimePin,
           });
-        }
       }
       return parseTeamChatEngagementDecision(text);
     } catch (error) {
