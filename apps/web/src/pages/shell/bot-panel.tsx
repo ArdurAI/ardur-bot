@@ -214,6 +214,8 @@ export function BotSettings({
   bot,
   modelFocusRequest = 0,
   runtimeFocusRequest = 0,
+  destinationsFocusRequest = 0,
+  computerFocusRequest = 0,
   modelSettings,
   memoryProviderConfigured,
   onSkillsChange,
@@ -226,6 +228,8 @@ export function BotSettings({
   bot: Bot;
   modelFocusRequest?: number;
   runtimeFocusRequest?: number;
+  destinationsFocusRequest?: number;
+  computerFocusRequest?: number;
   modelSettings?: ModelSettings | null;
   onSkillsChange: (skills: AgentSkillCatalogEntry[]) => void;
   memoryProviderConfigured: boolean;
@@ -261,11 +265,25 @@ export function BotSettings({
   const advancedDetailsRef = useRef<HTMLDetailsElement>(null);
   const modelRef = useRef<HTMLSelectElement>(null);
   const runtimeRef = useRef<HTMLDivElement>(null);
+  const destinationsRef = useRef<HTMLDivElement>(null);
+  const computerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!runtimeFocusRequest) return;
     runtimeRef.current?.querySelector("select")?.focus();
     runtimeRef.current?.scrollIntoView({ block: "nearest" });
   }, [runtimeFocusRequest]);
+  // A destinations refusal points at the bot's own destinations select.
+  useEffect(() => {
+    if (!destinationsFocusRequest) return;
+    destinationsRef.current?.querySelector("select")?.focus();
+    destinationsRef.current?.scrollIntoView({ block: "nearest" });
+  }, [destinationsFocusRequest]);
+  // The computer card sits inside Advanced; a computer refusal opens it on the way.
+  useEffect(() => {
+    if (!computerFocusRequest) return;
+    if (advancedDetailsRef.current) advancedDetailsRef.current.open = true;
+    computerRef.current?.scrollIntoView({ block: "nearest" });
+  }, [computerFocusRequest]);
   // The model select exists only for the built-in runtime, and a focus request can arrive
   // while another runtime is shown or before the select has rendered; the request stays
   // pending until the select mounts, so it is honoured exactly once without timers.
@@ -715,7 +733,7 @@ export function BotSettings({
               </div>
             </details>
           ) : null}
-          <div className="mt-4">
+          <div ref={destinationsRef} className="mt-4">
             <ModelDestinations botId={bot.id} />
           </div>
           <BotContext botId={bot.id} />
@@ -830,7 +848,7 @@ export function BotSettings({
             </div>
           </SettingsGroup>
           <SettingsGroup label={t`Computer`}>
-            <div className="py-4">
+            <div ref={computerRef} className="py-4">
               <ComputerModePicker value={computerMode} onChange={setComputerMode} />
             </div>
           </SettingsGroup>

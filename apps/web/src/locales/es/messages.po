@@ -180,6 +180,10 @@ msgstr ""
 msgid "{after} corrections in {0} exposed runs; before: {before} in {1} comparable runs"
 msgstr ""
 
+#: src/lib/failure-category-copy.ts
+msgid "{bot}'s allowed model destinations block this model. Change them in {bot}'s settings."
+msgstr "Los destinos de modelo permitidos de {bot} bloquean este modelo. Cámbialos en los ajustes de {bot}."
+
 #: src/pages/LearningInsights.tsx
 msgid "{bot}'s last {count} runs on {model} failed because it cannot use tools; {suggested} used tools in your runs."
 msgstr ""
@@ -331,6 +335,10 @@ msgstr "Quedan {remaining} · el bot observa, no actúa"
 msgid "{runtime} could not finish this run. Check the runtime or change the pin."
 msgstr "{runtime} no pudo terminar esta ejecución. Revisa el entorno de ejecución o cambia el modelo fijado."
 
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} is experimental. Turn on Experimental for {bot} to use it."
+msgstr "{runtime} es experimental. Activa Experimental para {bot} para usarlo."
+
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "{runtime} loads all connected tools because deferred loading is unavailable."
 msgstr ""
@@ -338,6 +346,10 @@ msgstr ""
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} reached this run's turn limit. Narrow the task and try again."
 msgstr "{runtime} alcanzó el límite de turnos de esta ejecución. Acota la tarea e inténtalo de nuevo."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} runs on the host computer, not in a sandbox. Change {bot}'s computer to use it."
+msgstr "{runtime} se ejecuta en el ordenador anfitrión, no en un sandbox. Cambia el ordenador de {bot} para usarlo."
 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} stopped before finishing this run."
@@ -3028,6 +3040,7 @@ msgid "Could not save this file. Try again."
 msgstr "No se pudo guardar este archivo. Inténtalo de nuevo."
 
 #: src/pages/customize/McpCredentialFix.tsx
+#: src/pages/Shell.tsx
 msgid "Could not save. Try again."
 msgstr ""
 
@@ -6223,6 +6236,7 @@ msgid "Open Ardur"
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/shell/provider-error-message.tsx
 msgid "Open bot settings"
 msgstr ""
 
@@ -6287,8 +6301,9 @@ msgid "Open screen to view this computer."
 msgstr "Abra la pantalla para ver esta computadora."
 
 #: src/components/composer/command-description.ts
+#: src/pages/shell/provider-error-message.tsx
 msgid "Open Settings"
-msgstr ""
+msgstr "Abrir ajustes"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open System Settings"
@@ -8864,6 +8879,10 @@ msgstr ""
 msgid "This signs out every other session and keeps this one signed in."
 msgstr ""
 
+#: src/lib/failure-category-copy.ts
+msgid "This space's model policy blocks this model. Change it in Settings, under Models."
+msgstr "La política de modelos de este espacio bloquea este modelo. Cámbiala en Ajustes, en Modelos."
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "This subscription sign-in is not available in Ardur yet. Use a deployment credential or choose another provider."
 msgstr "Este inicio de sesión por suscripción aún no está disponible en Ardur. Usa una credencial de despliegue o elige otro proveedor."
@@ -9017,6 +9036,10 @@ msgstr "Intentarlo de nuevo"
 #: src/pages/LearningInbox.tsx
 msgid "Turn on"
 msgstr ""
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Turn on Experimental"
+msgstr "Activar Experimental"
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
