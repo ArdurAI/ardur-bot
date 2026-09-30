@@ -189,7 +189,7 @@ describe.skipIf(!hasDb)("Chief of Staff context product journey", () => {
         });
         expect(row.contextSnapshot).toMatchObject({
           inputTokens: usage
-            .filter((record) => record.purpose === "legacy")
+            .filter((record) => record.purpose === "main")
             .reduce((total, record) => total + record.inputTokens, 0),
         });
       }
