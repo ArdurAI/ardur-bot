@@ -3,6 +3,7 @@ import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
 import {
   backfillAutomaticBotMessageWake,
   dispatchBotMessageWake,
+  settleChiefActivity,
   wakeGoalCoordinatorForDelegation,
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
@@ -13,6 +14,10 @@ export async function wakeGoalAfterDelegation(
   delegationId: string | null | undefined,
 ) {
   if (!delegationId) return;
+  if (deps.prisma.chiefPlan) {
+    const update = await settleChiefActivity(deps.prisma, delegationId);
+    if (update) await deps.events?.notify(update.threadId, update.seq).catch(() => undefined);
+  }
   const automatic = deps.prisma.botMessageDelivery
     ? await deps.prisma.botMessageDelivery.findFirst({
         where: { sourceDelegationId: delegationId, idempotencyKey: `auto-result:${delegationId}` },

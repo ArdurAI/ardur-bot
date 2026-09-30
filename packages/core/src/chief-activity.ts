@@ -7,17 +7,26 @@ import type {
 
 export type ChiefToolIdentity = {
   name: string;
+  serviceId?: string;
   /** Adapter-owned capability metadata, never tool arguments or descriptions. */
   capability?: "notion-connect" | "notion-write" | "notion-read-back" | "package-check";
 };
 export type ChiefActivityRule = {
   tools: readonly string[];
+  serviceId?: string;
   capability?: ChiefToolIdentity["capability"];
   activity: ChiefActivityKey;
 };
 /** One place to add mappings. Unknown tools (including shell) stay deliberately opaque. */
 export const CHIEF_ACTIVITY_RULES: readonly ChiefActivityRule[] = [
   { tools: ["read_file"], activity: "read-input" },
+  { tools: ["notion-create-pages", "create_page"], serviceId: "notion", activity: "write-notion" },
+  {
+    tools: ["notion-fetch", "fetch_page", "retrieve_page"],
+    serviceId: "notion",
+    activity: "verify-notion",
+  },
+  { tools: ["notion-get-self", "get_self"], serviceId: "notion", activity: "connect-notion" },
   { tools: [], capability: "notion-connect", activity: "connect-notion" },
   { tools: [], capability: "notion-write", activity: "write-notion" },
   { tools: [], capability: "notion-read-back", activity: "verify-notion" },
@@ -35,7 +44,9 @@ export const CHIEF_ACTIVITY_TEXT: Readonly<Record<ChiefActivityKey, string>> = {
 export function chiefToolActivity(tool: ChiefToolIdentity): ChiefActivityKey {
   return (
     CHIEF_ACTIVITY_RULES.find((row) =>
-      row.capability ? row.capability === tool.capability : row.tools.includes(tool.name),
+      row.capability
+        ? row.capability === tool.capability
+        : row.serviceId === tool.serviceId && row.tools.includes(tool.name),
     )?.activity ?? "working"
   );
 }
@@ -119,7 +130,7 @@ export function chiefResult(input: {
   };
 }): ChiefResult | undefined {
   // Public service links or scoped internal artifact routes only; no credentials or private URLs.
-  const artifactRoute = `/api/artifacts/${encodeURIComponent(input.artifactId)}`;
+  const artifactRoute = `artifact:${encodeURIComponent(input.artifactId)}`;
   let safe = input.href === artifactRoute;
   try {
     const url = new URL(input.href);

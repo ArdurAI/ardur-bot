@@ -72,6 +72,7 @@ import {
   botInstructionText,
   botMessageAllowsSilence,
   capabilityAllowsTool,
+  chiefToolActivity,
   connectorKindFromToolName,
   containsSecret,
   createStreamingRedactor,
@@ -148,6 +149,8 @@ import {
   type Prisma,
   type PrismaClient,
   parseComputerMode,
+  projectChiefActivity,
+  publishChiefDraftResult,
   quietHistoryDeliveryIds,
   recordDelegationFailure,
   refreshBoundBotMessageWakeRun,
@@ -234,6 +237,7 @@ import {
   browserSnapshotFromTool,
 } from "./browser-tools.js";
 import { agentConnectionTools, builtinAgentTools } from "./builtin-tools.js";
+import { chiefActivityFeed } from "./chief-activity.js";
 import { archiveSpawnedBot, spawnBot } from "./child-bots.js";
 import { type CloudAgentConnection, cloudAgentsEnabled } from "./cloud-agent-factory.js";
 import { executeCloudAgentTool } from "./cloud-agent-service.js";
@@ -1929,6 +1933,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
       let detachShutdown: (() => void) | undefined;
       let briefToolResults = "";
       let recordRecallCall: (() => Promise<unknown>) | undefined;
+      let chiefFeed: ReturnType<typeof chiefActivityFeed> | undefined;
       const stopHeartbeat = startExecutionHeartbeat({
         checkStop: async () => {
           try {
@@ -2862,6 +2867,37 @@ export function createRunExecutor(deps: ExecutorDeps) {
         }).filter(
           (tool) => !peerReadOnly || peerEffectBoundToolAllowed(tool.name, peerBound?.effect),
         );
+        const chiefPlan =
+          run.delegationId && deps.prisma.chiefPlan
+            ? await deps.prisma.chiefPlan.findFirst({
+                where: {
+                  spaceId: run.spaceId,
+                  userId: run.userId,
+                  dispatch: { path: ["runId"], equals: runId },
+                },
+              })
+            : null;
+        if (chiefPlan && run.delegationId)
+          chiefFeed = chiefActivityFeed({
+            revision: chiefPlan.revision,
+            runId,
+            delegationId: run.delegationId,
+            attempt: fence,
+            write: async (activity) => {
+              try {
+                const update = await projectChiefActivity(deps.prisma, {
+                  spaceId: run.spaceId,
+                  userId: run.userId,
+                  botId: run.botId,
+                  planId: chiefPlan.id,
+                  activity,
+                });
+                if (update) await deps.events.notify(update.threadId, update.seq);
+              } catch (error) {
+                getLogger().error("chief activity projection", error);
+              }
+            },
+          });
         const approvedEffects = await deps.prisma.externalEffect.findMany({
           where: { runId, status: "approved" },
           orderBy: APPROVED_EFFECT_REPLAY_ORDER,
@@ -2964,6 +3000,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         let terminalCheckpointComplete = false;
         let approvalPausePending = false;
         let handedOff = false;
+        let publishedChiefResult = false;
         // Asked members answer after this turn; an empty coordinator reply adds nothing then.
         let askedMembers = false;
         // The coordination round this turn opened; its progress notes fold into
@@ -3421,6 +3458,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
           const enforceCeiling = () => checkCeiling(name);
           if (!(await enforceCeiling())) return pauseForApproval();
+          if (!helperToolDelegations.has(executionId))
+            await chiefFeed?.start(
+              executionId,
+              chiefToolActivity({
+                name: connectorCall.route?.toolName ?? name,
+                serviceId: connectorCall.route?.serviceId,
+              }),
+            );
           const integrationDetails = await integrationApprovalDetailsForCall(
             deps.prisma,
             connectorCall.route,
@@ -4980,17 +5025,43 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 String(args.root_task_id ?? run.delegationRootTaskId ?? run.taskId),
               ),
             );
-          if (name === "accept_delegation")
-            return finish(
-              await deps.prisma.$transaction((tx) =>
-                acceptDelegation(
-                  tx,
-                  { spaceId: run.spaceId, userId: run.userId },
-                  String(args.delegation_id),
-                  bot.id,
-                ),
+          if (name === "accept_delegation") {
+            const accepted = await deps.prisma.$transaction((tx) =>
+              acceptDelegation(
+                tx,
+                { spaceId: run.spaceId, userId: run.userId },
+                String(args.delegation_id),
+                bot.id,
               ),
             );
+            const result =
+              accepted.accepted && deps.prisma.chiefPlan
+                ? await publishChiefDraftResult(deps.prisma, {
+                    spaceId: run.spaceId,
+                    userId: run.userId,
+                    chiefBotId: bot.id,
+                    delegationId: String(args.delegation_id),
+                  })
+                : undefined;
+            if (result?.published) {
+              publishedChiefResult = true;
+              publishedMidTurnUserMessage = true;
+              assembled = "";
+              pendingProgress = "";
+              if ("event" in result && result.event)
+                await deps.events
+                  .notify(result.event.threadId, result.event.seq)
+                  .catch(() => undefined);
+            }
+            return finish({
+              ...accepted,
+              ...(result?.published
+                ? {
+                    note: "The saved draft link is already shown. End this turn without repeating it or asking another question. Service completion is unverified.",
+                  }
+                : {}),
+            });
+          }
           if (name === "run_subagent") {
             const admitted = await admitRunHelper(
               deps.prisma,
@@ -5801,6 +5872,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
             } catch (error) {
               tracePoint(runId, "tool.finished", { ...trace, outcome: "failed" });
               throw error;
+            } finally {
+              await chiefFeed?.finish(executionId);
             }
           };
           const recordedApplyTool = async (
@@ -6414,6 +6487,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               tracePoint(runId, "runtime.first", { attempt: fence });
             }
             if (event.type === "text") {
+              if (publishedChiefResult) continue;
               if (event.text && !tracedText) {
                 tracedText = true;
                 tracePoint(runId, "runtime.text", { attempt: fence });
@@ -6441,6 +6515,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 await flushProgress();
               }
             } else if (event.type === "progress") {
+              if (publishedChiefResult) continue;
               toolCallStreak = { key: undefined, count: 0 };
               // Flush batched text deltas first so an activity line cannot land
               // ahead of text the model streamed before the tool call.
@@ -6808,15 +6883,20 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 publishedTerminalSubagent || publishedMidTurnUserMessage || askedMembers,
             });
           }
-          const blocks = handedOff
-            ? []
-            : finalBlocksAfterMidTurnProgress(
-                redactBlocks(completionBlocks, runSecrets),
-                runAllowsSilentEmpty(run.trigger) ? "silent-routine" : "ordinary-run",
-              );
-          const text = handedOff
-            ? ""
-            : redactSecrets(completionNotificationBody(silentReply.assembled, blocks), runSecrets);
+          const blocks =
+            handedOff || publishedChiefResult
+              ? []
+              : finalBlocksAfterMidTurnProgress(
+                  redactBlocks(completionBlocks, runSecrets),
+                  runAllowsSilentEmpty(run.trigger) ? "silent-routine" : "ordinary-run",
+                );
+          const text =
+            handedOff || publishedChiefResult
+              ? ""
+              : redactSecrets(
+                  completionNotificationBody(silentReply.assembled, blocks),
+                  runSecrets,
+                );
           if (containsSecret(text, runSecrets)) {
             throw new Error("refusing to persist a secret in the thread");
           }
@@ -7181,8 +7261,17 @@ export function createRunExecutor(deps: ExecutorDeps) {
         stopHeartbeat();
         const stopping = await deps.prisma.run.findUnique({
           where: { id: runId },
-          select: { cancelRequestedAt: true },
+          select: { cancelRequestedAt: true, status: true },
         });
+        await chiefFeed?.settle(
+          stopping?.status === "completed"
+            ? "completed"
+            : stopping?.status === "failed"
+              ? "failed"
+              : stopping?.status === "cancelled"
+                ? "stopped"
+                : "waiting",
+        );
         const stopConfirmed =
           Boolean(stopping?.cancelRequestedAt) &&
           Boolean(screenRelease) &&

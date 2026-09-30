@@ -147,10 +147,10 @@ describe("chief linked result", () => {
       "javascript:alert(1)",
       "https://user:password@notion.so/page",
       "https://notion.so/page?token=fake",
-      "/api/artifacts/other",
+      "artifact:other",
     ])
       expect(chiefResult({ ...input, href })).toBeUndefined();
-    expect(chiefResult({ ...input, href: "/api/artifacts/draft" })?.state).toBe("draft");
+    expect(chiefResult({ ...input, href: "artifact:draft" })?.state).toBe("draft");
   });
   it("keeps result copy to one sentence without automatic follow-up", () => {
     const copy = ["Done — added the document to Notion.", "The draft is ready."];
