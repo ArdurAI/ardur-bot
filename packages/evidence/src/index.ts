@@ -1,3 +1,5 @@
+export type { EvidenceBundleFile, EvidenceBundleInput } from "./bundle.js";
+export { buildEvidenceBundle, EVIDENCE_CHECK_COMMAND } from "./bundle.js";
 export { EvidenceFormatError } from "./errors.js";
 export { canonicalize } from "./jcs.js";
 export {

@@ -209,6 +209,41 @@ describe("closed receipt validation", () => {
   it.each([null, [], new Date(), "claims"])("rejects non-object %#", (value) => {
     expect(() => validateReceiptClaims(value)).toThrow(EvidenceFormatError);
   });
+  it("rejects hidden or accessor claims before signing", () => {
+    const hidden = base();
+    Object.defineProperty(hidden, "tool", { value: "read_file", enumerable: false });
+    expect(() => signReceipt(hidden, key, keys.kid)).toThrow(EvidenceFormatError);
+    const accessor = base();
+    let accessed = false;
+    Object.defineProperty(accessor, "tool", {
+      enumerable: true,
+      get() {
+        accessed = true;
+        return "read_file";
+      },
+    });
+    expect(() => signReceipt(accessor, key, keys.kid)).toThrow(EvidenceFormatError);
+    expect(accessed).toBe(false);
+    const hiddenDecision = { decision: "permit" };
+    Object.defineProperty(hiddenDecision, "backend", { value: "local", enumerable: false });
+    expect(() => validateReceiptClaims({ ...base(), policy_decisions: [hiddenDecision] })).toThrow(
+      EvidenceFormatError,
+    );
+  });
+  it("checks printable Unicode rule IDs by character count", () => {
+    for (const rule_id of ["a\u200bb", "a\u00a0b", "a\u2028b"]) {
+      expect(() =>
+        validateReceiptClaims({
+          ...base(),
+          policy_decisions: [{ backend: "local", decision: "permit", rule_id }],
+        }),
+      ).toThrow(EvidenceFormatError);
+    }
+    validateReceiptClaims({
+      ...base(),
+      policy_decisions: [{ backend: "local", decision: "permit", rule_id: "😀".repeat(256) }],
+    });
+  });
   it("rejects unknown claims with stable code and name", () => {
     expect(() => validateReceiptClaims({ ...base(), args: {} })).toThrow(
       expect.objectContaining({ code: "unknown_claim", claim: "args" }),

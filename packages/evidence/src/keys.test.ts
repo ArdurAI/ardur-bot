@@ -59,4 +59,9 @@ describe("evidence keys", () => {
     const { privateKey } = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
     expect(() => evidenceKeyId(privateKey)).toThrow("public key");
   });
+  it("rejects private PEM in public-key APIs", () => {
+    const keys = generateEvidenceKey();
+    expect(() => loadEvidencePublicKey(keys.privateKeyPem)).toThrow("public key PEM");
+    expect(() => evidenceKeyId(keys.privateKeyPem)).toThrow("public key PEM");
+  });
 });

@@ -13,11 +13,18 @@ export function loadEvidencePrivateKey(pem: string): KeyObject {
 }
 
 export function loadEvidencePublicKey(pem: string): KeyObject {
+  if (
+    !/^-----BEGIN PUBLIC KEY-----\r?\n[A-Za-z0-9+/=\r\n]+-----END PUBLIC KEY-----$/.test(pem.trim())
+  ) {
+    throw new TypeError("Expected an SPKI public key PEM");
+  }
   return requireP256(createPublicKey(pem));
 }
 
 export function evidenceKeyId(publicKey: KeyObject | string): string {
-  const key = requireP256(typeof publicKey === "string" ? createPublicKey(publicKey) : publicKey);
+  const key = requireP256(
+    typeof publicKey === "string" ? loadEvidencePublicKey(publicKey) : publicKey,
+  );
   if (key.type !== "public") throw new TypeError("Expected a public key");
   return `sha256:${createHash("sha256")
     .update(key.export({ type: "spki", format: "der" }))

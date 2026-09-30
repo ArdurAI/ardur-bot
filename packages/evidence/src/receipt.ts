@@ -118,9 +118,21 @@ export function validateReceiptClaims(value: unknown): asserts value is ReceiptC
       throw new EvidenceFormatError("missing_claim", claim, "Required claim");
   }
   const allowed: readonly string[] = [...RECEIPT_REQUIRED_CLAIMS, ...RECEIPT_OPTIONAL_CLAIMS];
-  for (const claim of Object.keys(value)) {
+  requireClaim(Object.getOwnPropertySymbols(value).length === 0, "claims");
+  for (const claim of Object.getOwnPropertyNames(value)) {
     if (!allowed.includes(claim))
       throw new EvidenceFormatError("unknown_claim", claim, "Unknown claim");
+    const descriptor = Object.getOwnPropertyDescriptor(value, claim);
+    requireClaim(
+      descriptor?.enumerable && "value" in descriptor,
+      claim,
+      "Expected an enumerable data claim",
+    );
+    try {
+      canonicalize(descriptor.value);
+    } catch {
+      throw new EvidenceFormatError("invalid_claim", claim, "Not canonicalizable JSON");
+    }
   }
   const fixed = {
     schema_version: "ardur.execution_receipt.v0.2",
@@ -194,6 +206,8 @@ export function validateReceiptClaims(value: unknown): asserts value is ReceiptC
     const claim = `policy_decisions[${index}]`;
     requireClaim(
       isObject(decision) &&
+        Object.keys(decision).includes("backend") &&
+        Object.keys(decision).includes("decision") &&
         Object.keys(decision).every((key) =>
           ["backend", "decision", "reason", "rule_id", "eval_ms"].includes(key),
         ),
@@ -209,8 +223,8 @@ export function validateReceiptClaims(value: unknown): asserts value is ReceiptC
     if (Object.hasOwn(decision, "rule_id"))
       requireClaim(
         typeof decision.rule_id === "string" &&
-          decision.rule_id.length <= 256 &&
-          !/[\p{Cc}\p{Cs}]/u.test(decision.rule_id),
+          Array.from(decision.rule_id).length <= 256 &&
+          !/[\p{C}\p{Z}]/u.test(decision.rule_id.replaceAll(" ", "")),
         `${claim}.rule_id`,
       );
     if (Object.hasOwn(decision, "eval_ms"))
@@ -242,15 +256,6 @@ export function validateReceiptClaims(value: unknown): asserts value is ReceiptC
     requireClaim(isSensitivity(value.sensitivity), "sensitivity");
   if (Object.hasOwn(value, "instruction_bearing"))
     requireClaim(typeof value.instruction_bearing === "boolean", "instruction_bearing");
-  // Catch non-JSON optional metadata too, without invoking toJSON.
-  for (const [claim, item] of Object.entries(value)) {
-    try {
-      canonicalize(item);
-    } catch {
-      throw new EvidenceFormatError("invalid_claim", claim, "Not canonicalizable JSON");
-    }
-  }
-  requireClaim(Object.getOwnPropertySymbols(value).length === 0, "claims");
 }
 
 export type ReceiptInput = {
