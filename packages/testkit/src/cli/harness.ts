@@ -115,6 +115,7 @@ async function main() {
         "packages/testkit/src/connections.test.ts",
         "packages/testkit/src/bot-secrets.test.ts",
         "packages/db/src/space-membership.postgres.test.ts",
+        "packages/db/src/customization.postgres.test.ts",
         "packages/db/src/group-model-pins.postgres.test.ts",
         "packages/db/src/protected-locations.postgres.test.ts",
         "packages/db/src/hermes-runtime-config.postgres.test.ts",
