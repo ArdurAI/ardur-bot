@@ -28,6 +28,10 @@ cleanup() {
     fi
   fi
   if [[ "$mounted" == 1 ]]; then hdiutil detach "$work/mount" -quiet || status=1; fi
+  # Retain only service logs from this run's isolated profiles, never cluster or secret files.
+  for profile in "$work"/profiles/*; do
+    if [[ -d "$profile/logs" ]]; then cp -R "$profile/logs" "$logs/$(basename "$profile")-services" || status=1; fi
+  done
   # Logs survive; delete only the installation/profile this script created.
   rm -rf "$work/Applications" "$work/BrewApplications" "$work/profiles" "$work/tap" "$work/mount" "$work/input.dmg"
   if [[ "$status" != 0 ]]; then printf 'FAIL macOS install acceptance\n' | tee -a "$logs/summary.log"; fi
@@ -146,7 +150,7 @@ text = text.replace('@ARM64_SHA256@', sha).replace('@X64_SHA256@', sha)
 text = re.sub(r'    url "[^\n]+"', '    url "' + pathlib.Path(dmg).as_uri() + '"', text)
 pathlib.Path(output).write_text(text)
 PY
-if brew help trust >/dev/null 2>&1; then brew trust --cask "$work/tap/Casks/ardur.rb" > "$logs/brew-trust.log" 2>&1; fi
+# This file is outside Homebrew's taps; tap trust does not apply to local cask paths.
 # Mark ownership before install so a partially installed cask is removed on failure too.
 brew_owned=1
 check 'Homebrew local cask install' brew install --cask --no-quarantine --appdir="$work/BrewApplications" "$work/tap/Casks/ardur.rb" > "$logs/brew-install.log" 2>&1

@@ -7,6 +7,13 @@ import { describe, expect, it } from "vitest";
 const mac = new URL("./release/install-acceptance-mac.sh", import.meta.url);
 
 describe("macOS install verdict", () => {
+  it("installs the standalone local cask without a fully-qualified tap trust call", async () => {
+    const script = await readFile(mac, "utf8");
+    expect(script).not.toContain("brew trust --cask");
+    expect(script).toContain('"$work/tap/Casks/ardur.rb"');
+    expect(script).toContain('cp -R "$profile/logs"');
+  });
+
   it.each([
     [false, 3, "Ardur.app: rejected\nsource=no usable signature\n", true],
     [false, 3, "Ardur.app: rejected\n", true],

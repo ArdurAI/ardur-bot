@@ -108,6 +108,10 @@ try {
         }
     }
     # Leave diagnostics, remove only files created by this run. No real profile is touched.
+    $serviceLogs = Join-Path $work 'profile/logs'
+    if (Test-Path -LiteralPath $serviceLogs) {
+        Copy-Item -LiteralPath $serviceLogs -Destination (Join-Path $logs 'app-services') -Recurse
+    }
     foreach ($item in @($installDir, (Join-Path $work 'profile'), (Join-Path $work 'Uninstall.exe'))) {
         if (Test-Path -LiteralPath $item) { Remove-Item -LiteralPath $item -Recurse -Force }
     }
