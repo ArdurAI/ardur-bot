@@ -13,6 +13,7 @@ import type { Prisma, PrismaClient } from "@ardurbot/db";
 import {
   appendEventInTransaction,
   createThreadMessageInTransaction,
+  DELEGATION_ADMISSION_TRANSACTION,
   IsolationError,
   loadChiefMemberFacts,
   lockOwnedGroup,
@@ -335,7 +336,7 @@ export async function handoffToGroupBot(
         differences: admitted.record.differences,
         delegationId: admitted.record.id,
       } as const;
-    }),
+    }, DELEGATION_ADMISSION_TRANSACTION),
   ).catch(delegationFailure);
   if ("error" in committed) return committed;
   await deps.events.notify(run.threadId, committed.eventSeq).catch((error) => {
