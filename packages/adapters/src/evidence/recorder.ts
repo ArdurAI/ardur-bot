@@ -78,6 +78,12 @@ export function createEvidenceRecorder(deps: RecorderDeps) {
   const keys = new Map<string, KeyObject>();
   const pendingGaps = new Map<string, number>();
 
+  function releaseRunState(runId: string) {
+    chains.delete(runId);
+    enabled.delete(runId);
+    // Undurable gap counts are retry work, not a cache; flushGaps releases them after persistence.
+  }
+
   async function serial<T>(runId: string, work: () => Promise<T>): Promise<T> {
     const next = (queues.get(runId) ?? Promise.resolve()).catch(() => undefined).then(work);
     queues.set(runId, next);
@@ -236,6 +242,7 @@ export function createEvidenceRecorder(deps: RecorderDeps) {
   async function sealRunEvidence(runId: string): Promise<EvidenceResult> {
     return serial(runId, async () => {
       try {
+        await flushGaps(runId);
         if (await deps.store.sealForRun(runId)) return { ok: true };
         const records = await deps.store.recordsForRun(runId);
         const first = records[0];
@@ -269,15 +276,15 @@ export function createEvidenceRecorder(deps: RecorderDeps) {
           recordCount: records.length,
           gapCount: await deps.store.gapCount(runId),
         });
-        chains.delete(runId);
-        enabled.delete(runId);
         return { ok: true };
       } catch {
         return { ok: false, reason: "sealing_failed" };
+      } finally {
+        releaseRunState(runId);
       }
     });
   }
-  return { recordDecision, sealRunEvidence };
+  return { recordDecision, sealRunEvidence, releaseRunState };
 }
 
 export type EvidenceRecorder = ReturnType<typeof createEvidenceRecorder>;

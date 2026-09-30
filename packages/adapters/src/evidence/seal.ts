@@ -59,9 +59,11 @@ export function createEvidenceSealer(deps: {
           if (!result.ok) return result;
         }
       }
-      return deps.recorder.sealRunEvidence(runId);
+      return await deps.recorder.sealRunEvidence(runId);
     } catch {
       return { ok: false, reason: "sealing_failed" };
+    } finally {
+      deps.recorder.releaseRunState(runId);
     }
   };
 }

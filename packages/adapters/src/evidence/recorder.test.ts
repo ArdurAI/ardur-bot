@@ -56,6 +56,25 @@ describe("evidence classification tables", () => {
 });
 
 describe("evidence recorder", () => {
+  it.each(["governance_off", "no_records", "invalid_chain", "already_sealed"])(
+    "releases per-run lookups on the %s terminal path",
+    async (path) => {
+      const { recorder, store, records } = setup();
+      if (path === "governance_off") vi.mocked(store.governanceEnabled).mockResolvedValue(false);
+      if (path === "no_records")
+        vi.mocked(store.insertRecord).mockRejectedValueOnce(new Error("Storage unavailable"));
+      await recorder.recordDecision(input);
+      if (path === "invalid_chain") records[0]!.jws = "corrupted";
+      await recorder.sealRunEvidence(input.run.id);
+      if (path === "already_sealed") {
+        await recorder.recordDecision(input);
+        await recorder.sealRunEvidence(input.run.id);
+      }
+      const before = vi.mocked(store.governanceEnabled).mock.calls.length;
+      await recorder.recordDecision(input);
+      expect(store.governanceEnabled).toHaveBeenCalledTimes(before + 1);
+    },
+  );
   it("does nothing when governance is off and caches the lookup per run", async () => {
     const { store, recorder, records, keys } = setup();
     vi.mocked(store.governanceEnabled).mockResolvedValue(false);
