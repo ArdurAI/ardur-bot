@@ -66,7 +66,7 @@ export type ActionApprovalRule = Pick<
   StoredActionApprovalRule,
   "effect" | "matchKind" | "matchValue" | "botId"
 > &
-  Partial<Pick<StoredActionApprovalRule, "scopeKey">>;
+  Partial<Pick<StoredActionApprovalRule, "scopeKey" | "id">>;
 
 export function connectorKindFromToolName(toolName: string, connectorKinds: string[] = []): string {
   const normalizedTool = toolName.toLowerCase();

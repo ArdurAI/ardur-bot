@@ -13,6 +13,7 @@ export function fakeEvidenceStore(): {
   const seals: NonNullable<Awaited<ReturnType<EvidenceStore["sealForRun"]>>>[] = [];
   const gaps = new Map<string, number>();
   const store: EvidenceStore = {
+    recordById: async (id) => records.find((row) => row.id === id) ?? null,
     governanceEnabled: vi.fn(async () => true),
     lastRecord: async (runId) =>
       records.filter((row) => row.runId === runId).sort((a, b) => b.seq - a.seq)[0] ?? null,
@@ -25,7 +26,7 @@ export function fakeEvidenceStore(): {
         throw new EvidenceSequenceConflict(data.runId);
       const row = {
         ...data,
-        id: `record-${records.length}`,
+        id: data.id ?? `record-${records.length}`,
         createdAt: new Date(),
         parentSha256: data.parentSha256 ?? null,
       } as (typeof records)[number];

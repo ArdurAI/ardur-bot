@@ -32,6 +32,7 @@ export interface RecordDecisionInput {
   target?: { path?: string; host?: string; connectorKind?: string };
   decisionKind: DecisionKind;
   ruleId?: string;
+  decisionId?: string;
   secrets?: string[];
 }
 export type EvidenceResult = { ok: true } | { ok: false; reason: string };
@@ -184,6 +185,10 @@ export function createEvidenceRecorder(deps: RecorderDeps) {
     return serial(input.run.id, async () => {
       try {
         if (!(await governance(input.run))) return { ok: true };
+        const durableId = input.decisionId
+          ? `evidence:${input.run.id}:${input.decisionId}`
+          : undefined;
+        if (durableId && (await deps.store.recordById(durableId))) return { ok: true };
         await flushGaps(input.run.id);
         for (let attempt = 0; attempt < 3; attempt++) {
           const state = await runChain(input.run);
@@ -200,6 +205,7 @@ export function createEvidenceRecorder(deps: RecorderDeps) {
           try {
             await deps.store.insertRecord({
               ...record,
+              ...(durableId ? { id: durableId } : {}),
               runId: input.run.id,
               spaceId: input.run.spaceId,
               kid: state.kid,
@@ -210,6 +216,7 @@ export function createEvidenceRecorder(deps: RecorderDeps) {
             return { ok: true };
           } catch (error) {
             chains.delete(input.run.id);
+            if (durableId && (await deps.store.recordById(durableId))) return { ok: true };
             if (!(error instanceof EvidenceSequenceConflict) || attempt === 2) throw error;
           }
         }

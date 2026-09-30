@@ -90,6 +90,7 @@ export async function insertEvidenceKey(
 
 export function createEvidenceStore(prisma: PrismaClient) {
   return {
+    recordById: async (id: string) => prisma.evidenceRecord.findUnique({ where: { id } }),
     insertRecord: (data: Prisma.EvidenceRecordUncheckedCreateInput) => insertRecord(prisma, data),
     lastRecord: (runId: string) => lastRecord(prisma, runId),
     firstRecord: (runId: string) =>

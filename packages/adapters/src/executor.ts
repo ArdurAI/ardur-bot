@@ -127,6 +127,7 @@ import {
   type ClaimedSteeringMessage,
   claimQuietBotMessages,
   confirmDispatchStop,
+  createEvidenceStore,
   createSpaceForMember,
   createThreadMessageInTransaction,
   effectiveMemoryScope,
@@ -291,6 +292,10 @@ import { admitRunHelper } from "./delegation-helpers.js";
 import { stoppedRunComputer } from "./delegation-stop.js";
 import { prepareDelegationWorkspace, taskWorkspacePath } from "./delegation-workspace.js";
 import { resolveDeploymentModel } from "./deployment-model.js";
+import type { DecisionKind } from "./evidence/decision-kinds.js";
+import { recordToolDecision } from "./evidence/executor.js";
+import type { EvidenceRecorder } from "./evidence/recorder.js";
+import { createEvidenceRecorder } from "./evidence/recorder.js";
 import { startExecutionHeartbeat } from "./execution-heartbeat.js";
 import { beforeFileChange, fileChangeText, recordFileChange } from "./file-changes.js";
 import { wakeGoalAfterDelegation } from "./goal-wake.js";
@@ -382,6 +387,7 @@ import {
 } from "./plot-tool.js";
 import { classifyProviderError, ProviderError } from "./provider-error.js";
 import {
+  ApprovalExpiredError,
   approvalRequestRoute,
   bindDeviceApproval,
   DispatchStopRequested,
@@ -749,6 +755,7 @@ export function isProtectedComputerLifecycleCommand(command: string): boolean {
 
 /** Cap the roster so a large Space cannot flood the prompt. */
 export interface ExecutorDeps {
+  evidenceRecorder?: EvidenceRecorder;
   placement?: (runId: string, signal: AbortSignal) => Promise<boolean>;
   prisma: PrismaClient;
   events: ThreadEvents;
@@ -1054,6 +1061,13 @@ export function buildApprovalContinuation(
 }
 
 export function createRunExecutor(deps: ExecutorDeps) {
+  const evidenceRecorder =
+    deps.evidenceRecorder ??
+    createEvidenceRecorder({
+      store: createEvidenceStore(deps.prisma),
+      secretStore: deps.secretStore,
+      logFailure: (codes) => getLogger().warn("evidence verification failed", { codes }),
+    });
   // Capture the injected runtime capability once for stable peer admission.
   const scriptedRuntimeAvailable = Boolean(deps.runtime?.describe().capabilities.scripted);
   const runtimeRegistry =
@@ -1513,6 +1527,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
       };
     },
     resolveConnectedModel,
+    sealRunEvidence: evidenceRecorder.sealRunEvidence,
     async resolveModel(
       scope: { userId: string; spaceId: string; botId?: string },
       newAdmission = false,
@@ -2812,6 +2827,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 matchValue: true,
                 botId: true,
                 scopeKey: true,
+                id: true,
               },
             })
             .then((rules) => rules as ActionApprovalRule[]);
@@ -2862,6 +2878,26 @@ export function createRunExecutor(deps: ExecutorDeps) {
           select: { kind: true, request: true },
         });
         const approvedEffectReplays = createApprovedEffectReplayQueue(approvedEffects);
+        // Denials may never be replayed by the model. Capture them on resume, once per effect.
+        const deniedEffects = await deps.prisma.externalEffect.findMany({
+          where: { runId, status: "denied" },
+          orderBy: APPROVED_EFFECT_REPLAY_ORDER,
+          select: { id: true, kind: true, request: true },
+        });
+        for (const effect of deniedEffects) {
+          const bound = boundDirectApprovalDetails(effect.request, CATALOG_APPROVAL_TOOL);
+          const catalog = catalogApprovalDetails(effect.request, CATALOG_APPROVAL_TOOL);
+          const toolName = bound?.route.toolName ?? catalog?.toolName ?? effect.kind;
+          await evidenceRecorder.recordDecision({
+            run,
+            toolName,
+            viaConnector: !BUILTIN_AGENT_TOOL_NAMES.has(toolName),
+            args: bound?.args ?? (catalog ? catalogApprovalInnerArgs(catalog) : effect.request),
+            decisionKind: "denied_by_owner",
+            decisionId: `effect:${effect.id}:denied_by_owner`,
+            secrets: runSecrets,
+          });
+        }
         const computerInstruction = peerBound
           ? `This desk task is read-only except for one owner-approved action: ${peerBound.effect.toolName} on ${peerBound.effect.resourceRef} with exactly these arguments: ${JSON.stringify(peerBound.effect.args)}. Run it once with those exact arguments, then report the result on this card. Every other action stays refused.`
           : peerReadOnly
@@ -3092,6 +3128,31 @@ export function createRunExecutor(deps: ExecutorDeps) {
           args: Record<string, unknown>,
           executionId: string,
         ) => {
+          const evidenceDecisions = new Map<string, ReturnType<typeof recordToolDecision>>();
+          const recordEvidence = (
+            decisionKind: DecisionKind,
+            ruleId?: string,
+            decisionId = `${executionId}:${decisionKind}`,
+          ) => {
+            const prior = evidenceDecisions.get(decisionId);
+            if (prior) return prior;
+            const recording = recordToolDecision(evidenceRecorder, {
+              run,
+              toolName: name,
+              viaConnector: !BUILTIN_AGENT_TOOL_NAMES.has(name),
+              args,
+              target: {
+                path: typeof args.path === "string" ? args.path : undefined,
+                host: typeof args.url === "string" ? args.url : undefined,
+              },
+              decisionKind,
+              ruleId,
+              decisionId,
+              secrets: runSecrets,
+            });
+            evidenceDecisions.set(decisionId, recording);
+            return recording;
+          };
           const toolDirectory =
             helperWorkspaces.get(helperToolDelegations.get(executionId) ?? "") ?? taskDirectory;
           const toolWorkspacePath = (value: string) =>
@@ -3121,11 +3182,17 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 "This peer task is read-only. Ask the coordinator to bring blocked work to the owner.",
             };
           }
-          if (comparisonRun && !comparisonToolAllowed(name))
+          if (comparisonRun && !comparisonToolAllowed(name)) {
+            await recordEvidence("denied_by_rule", "comparison");
             return { error: "This tool is unavailable in a controlled comparison." };
-          if (!capabilityAllowsTool(capabilities, name))
+          }
+          if (!capabilityAllowsTool(capabilities, name)) {
+            await recordEvidence("denied_by_rule", "capability");
             return { error: "This capability is disabled in this space." };
+          }
           if (name === "list_bots") {
+            const recordingError = await recordEvidence("allowed_by_default");
+            if (recordingError) return recordingError;
             const input = ListBotsInputSchema.safeParse(args);
             if (!input.success) return { error: "Invalid directory request." };
             return loadBotPresence(
@@ -3144,6 +3211,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
             );
           }
           if (name === "search_connectors") {
+            const recordingError = await recordEvidence("allowed_by_default");
+            if (recordingError) return recordingError;
             const query = String(args.query ?? "")
               .trim()
               .toLowerCase()
@@ -3279,7 +3348,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
             directApprovalRoute ?? connectorCall.route,
             helperToolDelegations.get(executionId),
           );
-          if (delegationDenied) return { error: delegationDenied };
+          if (delegationDenied) {
+            await recordEvidence("denied_by_rule", "delegation");
+            return { error: delegationDenied };
+          }
           // A held exact write runs only as the approved tool, target and argument
           // digest. The one-execution claim happens below, after every refusal check.
           const peerBoundCall = peerBound && !peerReadOnlyToolAllowed(name) ? peerBound : null;
@@ -3702,11 +3774,29 @@ export function createRunExecutor(deps: ExecutorDeps) {
           const needsApproval = gateDecision === "ask";
           const bypassApproval = gateDecision === "allow" && requiresApprovalByDefault;
           let claimedEffect = false;
+          const allowKind: DecisionKind =
+            applied?.effect.status === "approved" || peerBoundCall
+              ? "approved_by_owner"
+              : plan === "judge"
+                ? "allowed_by_auto_review"
+                : approvalResolved.source === "always_allow" ||
+                    approvalResolved.source === "space_policy"
+                  ? "allowed_by_rule"
+                  : "allowed_by_default";
+          const allowDecisionId =
+            applied?.effect.status === "approved"
+              ? `effect:${applied.effect.id}:approved_by_owner`
+              : `${executionId}:${allowKind}`;
+          const allowRuleId =
+            approvalResolved.matchingRules[0]?.id ??
+            (allowKind === "allowed_by_rule" ? approvalResolved.source : undefined);
 
           const claimOrReturn = async (
             from: "approved" | "intended",
           ): Promise<unknown | undefined> => {
             if (!(await enforceCeiling())) return pauseForApproval();
+            const recordingError = await recordEvidence(allowKind, allowRuleId, allowDecisionId);
+            if (recordingError) return recordingError;
             if (
               hostCommand &&
               !hostCommandApprovalMatches(
@@ -3715,8 +3805,25 @@ export function createRunExecutor(deps: ExecutorDeps) {
               )
             )
               return { error: "This command changed or has no bound approval. Review it again." };
-            if (from === "approved")
-              await revalidateDeviceApprovalExecution(deps.prisma, applied!.effect.id, runId, name);
+            if (from === "approved") {
+              try {
+                await revalidateDeviceApprovalExecution(
+                  deps.prisma,
+                  applied!.effect.id,
+                  runId,
+                  name,
+                );
+              } catch (error) {
+                if (error instanceof ApprovalExpiredError) {
+                  await recordEvidence(
+                    "approval_expired",
+                    undefined,
+                    `effect:${applied!.effect.id}:approval_expired`,
+                  );
+                }
+                throw error;
+              }
+            }
             const claim = from === "approved" ? claimApprovedEffect : claimIntendedEffect;
             if (await claim(deps.prisma, applied!.effect.id)) {
               claimedEffect = true;
@@ -3770,6 +3877,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
             if (!paused) {
               throw new Error("Could not pause this run for approval; try sending again.");
             }
+            await recordEvidence(
+              "asked",
+              approvalResolved.matchingRules[0]?.id ?? approvalResolved.source,
+              `effect:${applied!.effect.id}:asked`,
+            );
             await notifyRun(deps, run, {
               kind: "help",
               title: `${bot.name} needs approval`,
@@ -3847,6 +3959,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
             if (early !== undefined) return early;
           }
           if (!(await enforceCeiling())) return pauseForApproval();
+          const recordingError = await recordEvidence(allowKind, allowRuleId, allowDecisionId);
+          if (recordingError) return recordingError;
           // One approval allows one execution, claimed atomically just before dispatch.
           let peerBoundClaimed = false;
           if (peerBoundCall && peerBoundLive) {
