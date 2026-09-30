@@ -4052,11 +4052,11 @@ msgstr "Jede Woche"
 
 #: src/pages/LearningInbox.tsx
 msgid "Evidence"
-msgstr ""
+msgstr "Nachweise"
 
 #: src/components/RunEvidence.tsx
 msgid "Evidence gap"
-msgstr ""
+msgstr "Nachweislücke"
 
 #: src/components/RunEvidence.tsx
 #: src/pages/dashboard/GovernancePanel.tsx
@@ -6187,7 +6187,7 @@ msgstr ""
 
 #: src/components/RunEvidence.tsx
 msgid "Not sealed"
-msgstr ""
+msgstr "Nicht versiegelt"
 
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
@@ -6999,7 +6999,7 @@ msgstr "Nachweise für Bot-Entscheidungen aufzeichnen"
 
 #: src/components/RunEvidence.tsx
 msgid "Recording"
-msgstr ""
+msgstr "Wird aufgezeichnet"
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Recording may have started, but the view could not refresh"
@@ -9504,7 +9504,7 @@ msgstr "Verwendet {currentId}"
 
 #: src/components/RunEvidence.tsx
 msgid "Verified"
-msgstr ""
+msgstr "Verifiziert"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"

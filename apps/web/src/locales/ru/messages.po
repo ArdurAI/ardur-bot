@@ -4052,11 +4052,11 @@ msgstr "Каждую неделю"
 
 #: src/pages/LearningInbox.tsx
 msgid "Evidence"
-msgstr ""
+msgstr "Свидетельства"
 
 #: src/components/RunEvidence.tsx
 msgid "Evidence gap"
-msgstr ""
+msgstr "Пробел в свидетельствах"
 
 #: src/components/RunEvidence.tsx
 #: src/pages/dashboard/GovernancePanel.tsx
@@ -6187,7 +6187,7 @@ msgstr ""
 
 #: src/components/RunEvidence.tsx
 msgid "Not sealed"
-msgstr ""
+msgstr "Не запечатано"
 
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
@@ -6999,7 +6999,7 @@ msgstr "Записывать свидетельства решений бото�
 
 #: src/components/RunEvidence.tsx
 msgid "Recording"
-msgstr ""
+msgstr "Идёт запись"
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Recording may have started, but the view could not refresh"
@@ -9504,7 +9504,7 @@ msgstr "Используется {currentId}"
 
 #: src/components/RunEvidence.tsx
 msgid "Verified"
-msgstr ""
+msgstr "Проверено"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"

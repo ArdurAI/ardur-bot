@@ -4052,11 +4052,11 @@ msgstr "हर सप्ताह"
 
 #: src/pages/LearningInbox.tsx
 msgid "Evidence"
-msgstr ""
+msgstr "साक्ष्य"
 
 #: src/components/RunEvidence.tsx
 msgid "Evidence gap"
-msgstr ""
+msgstr "साक्ष्य में अंतर"
 
 #: src/components/RunEvidence.tsx
 #: src/pages/dashboard/GovernancePanel.tsx
@@ -6187,7 +6187,7 @@ msgstr ""
 
 #: src/components/RunEvidence.tsx
 msgid "Not sealed"
-msgstr ""
+msgstr "सील नहीं"
 
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
@@ -6999,7 +6999,7 @@ msgstr "बॉट के निर्णयों के साक्ष्य �
 
 #: src/components/RunEvidence.tsx
 msgid "Recording"
-msgstr ""
+msgstr "रिकॉर्ड हो रहा है"
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Recording may have started, but the view could not refresh"
@@ -9504,7 +9504,7 @@ msgstr "{currentId} का उपयोग हो रहा है"
 
 #: src/components/RunEvidence.tsx
 msgid "Verified"
-msgstr ""
+msgstr "सत्यापित"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"

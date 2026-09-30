@@ -4052,11 +4052,11 @@ msgstr "매주"
 
 #: src/pages/LearningInbox.tsx
 msgid "Evidence"
-msgstr ""
+msgstr "증거"
 
 #: src/components/RunEvidence.tsx
 msgid "Evidence gap"
-msgstr ""
+msgstr "증거 누락"
 
 #: src/components/RunEvidence.tsx
 #: src/pages/dashboard/GovernancePanel.tsx
@@ -6187,7 +6187,7 @@ msgstr ""
 
 #: src/components/RunEvidence.tsx
 msgid "Not sealed"
-msgstr ""
+msgstr "봉인되지 않음"
 
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
@@ -6999,7 +6999,7 @@ msgstr "봇 결정의 증거 기록"
 
 #: src/components/RunEvidence.tsx
 msgid "Recording"
-msgstr ""
+msgstr "기록 중"
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Recording may have started, but the view could not refresh"
@@ -9504,7 +9504,7 @@ msgstr "{currentId} 사용 중"
 
 #: src/components/RunEvidence.tsx
 msgid "Verified"
-msgstr ""
+msgstr "검증됨"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"

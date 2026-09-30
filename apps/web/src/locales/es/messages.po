@@ -4052,11 +4052,11 @@ msgstr "Cada semana"
 
 #: src/pages/LearningInbox.tsx
 msgid "Evidence"
-msgstr ""
+msgstr "Pruebas"
 
 #: src/components/RunEvidence.tsx
 msgid "Evidence gap"
-msgstr ""
+msgstr "Pruebas incompletas"
 
 #: src/components/RunEvidence.tsx
 #: src/pages/dashboard/GovernancePanel.tsx
@@ -6187,7 +6187,7 @@ msgstr ""
 
 #: src/components/RunEvidence.tsx
 msgid "Not sealed"
-msgstr ""
+msgstr "Sin sellar"
 
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
@@ -6999,7 +6999,7 @@ msgstr "Registrar pruebas de las decisiones de los bots"
 
 #: src/components/RunEvidence.tsx
 msgid "Recording"
-msgstr ""
+msgstr "Registrando"
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Recording may have started, but the view could not refresh"
@@ -9504,7 +9504,7 @@ msgstr "Usando {currentId}"
 
 #: src/components/RunEvidence.tsx
 msgid "Verified"
-msgstr ""
+msgstr "Verificado"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"
