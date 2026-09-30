@@ -111,11 +111,15 @@ function isInside(target: string, base: string, platform: NodeJS.Platform): bool
   return left === right || left.startsWith(right.endsWith(sep) ? right : right + sep);
 }
 
+/** How a refused read or write reads in a command's output, whatever the tool. */
+const REFUSED = /operation not permitted|permission denied|\bEPERM\b|\bEACCES\b/i;
+
 /**
- * One plain line for command output that says an operation is not permitted and
- * names a path inside a protected location: the location's label and where the
- * owner grants access. Decided from the path, never from the wording alone, so a
- * failure that mentions no protected path gets no hint.
+ * One plain line for command output that says an operation was refused and names a
+ * path inside a protected location: the location's label and where the owner grants
+ * access. It takes both: output that only mentions such a path (a listing, a command
+ * that was granted the location) gets no hint, and a refusal that names no protected
+ * path gets none either. Pass the locations the process is kept out of.
  */
 export function protectedLocationHint(
   output: string,
@@ -123,6 +127,7 @@ export function protectedLocationHint(
   home: string,
   platform: NodeJS.Platform = process.platform,
 ): string | undefined {
+  if (!REFUSED.test(output)) return undefined;
   for (const token of output.match(/[^\s"'`]+/g) ?? []) {
     const candidate = token.replace(/^[("'`]+|[)"'`.,;:]+$/g, "");
     if (!candidate.includes(sep)) continue;

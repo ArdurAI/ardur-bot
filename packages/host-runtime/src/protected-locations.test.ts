@@ -1,5 +1,15 @@
 import { execFile } from "node:child_process";
-import { access, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  access,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ProtectedLocation } from "@ardurbot/contracts";
@@ -236,6 +246,31 @@ describe("protectedLocationHint", () => {
     );
   });
 
+  it("stays silent when the output only mentions a protected path", async () => {
+    const home = await scratchHome();
+    // A listing, or a command that was granted the location: nothing was refused.
+    for (const output of [
+      `${path.join(home, ".aws", "credentials")}\n${path.join(home, ".aws", "config")}`,
+      `Wrote the profile to ${path.join(home, ".aws", "config")}.`,
+      "Reading ~/.ssh/config",
+    ])
+      expect(protectedLocationHint(output, scratchLocations, home)).toBeUndefined();
+  });
+
+  it.each(["Operation not permitted", "Permission denied", "EPERM", "EACCES"])(
+    "names the location for a refusal worded %j",
+    async (words) => {
+      const home = await scratchHome();
+      expect(
+        protectedLocationHint(
+          `open ${path.join(home, ".ssh", "id_ed25519")}: ${words}`,
+          scratchLocations,
+          home,
+        ),
+      ).toContain("SSH keys");
+    },
+  );
+
   it("stays silent for a path outside every location, whatever the words", async () => {
     const home = await scratchHome();
     const denied = `cat: ${path.join(home, "project", "notes.txt")}: Operation not permitted`;
@@ -358,6 +393,32 @@ describe.skipIf(process.platform !== "darwin")(
       ]);
       expect(planted.code).not.toBe(0);
       await expect(access(path.join(home, ".codex", "AGENTS.md"))).rejects.toThrow();
+    });
+
+    it("keeps a command from linking into, moving, deleting or replacing an agent tool's folder", async () => {
+      // A tool that loads its own folder trusts what is in it. A command that could swap the
+      // folder for a prepared copy, even for a moment, would decide what the tool loads.
+      const home = await protectedHome();
+      const folder = path.join(home, ".codex");
+      await writeFile(path.join(folder, "AGENTS.md"), "tool instructions\n");
+      const prepared = path.join(home, "project", "prepared");
+      await mkdir(prepared);
+      await writeFile(path.join(prepared, "AGENTS.md"), "planted\n");
+      const profile = guardFor(home);
+      for (const argv of [
+        ["/bin/ln", "-s", prepared, path.join(folder, "planted")],
+        ["/bin/mv", folder, `${folder}.kept`],
+        ["/bin/ln", "-sfn", prepared, folder],
+      ]) {
+        const attempt = await sandboxed(profile, argv);
+        expect(attempt.code, argv.join(" ")).not.toBe(0);
+      }
+      // A forced delete reports success for a folder it cannot even see. What counts is
+      // that the folder is still there.
+      await sandboxed(profile, ["/bin/rm", "-rf", folder]);
+      expect((await lstat(folder)).isDirectory()).toBe(true);
+      expect(await readFile(path.join(folder, "AGENTS.md"), "utf8")).toBe("tool instructions\n");
+      await expect(access(`${folder}.kept`)).rejects.toThrow();
     });
 
     it("lets an agent runtime read its own tool folder", async () => {
