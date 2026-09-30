@@ -58,6 +58,17 @@ export const RU_MESSAGES: Record<string, string> = {
   "{runtime} stopped before finishing this run.": "{runtime} остановился, не завершив этот запуск.",
   "{runtime} could not finish this run. Check the runtime or change the pin.":
     "{runtime} не смог завершить этот запуск. Проверьте среду выполнения или измените закрепление.",
+  "{runtime} is experimental. Turn on Experimental for {bot} to use it.":
+    "{runtime} — экспериментальная среда. Включите «Экспериментально» для {bot}, чтобы использовать её.",
+  "{runtime} runs on the host computer, not in a sandbox. Change {bot}'s computer to use it.":
+    "{runtime} работает на компьютере-хосте, а не в песочнице. Измените компьютер {bot}, чтобы использовать её.",
+  "{bot}'s allowed model destinations block this model. Change them in {bot}'s settings.":
+    "Разрешённые направления моделей {bot} блокируют эту модель. Измените их в настройках {bot}.",
+  "This space's model policy blocks this model. Change it in Settings, under Models.":
+    "Политика моделей этого пространства блокирует эту модель. Измените её в настройках, в разделе «Модели».",
+  "This bot": "Этот бот",
+  "Turn on Experimental": "Включить «Экспериментально»",
+  "Open Settings": "Открыть настройки",
   Antigravity: "Antigravity",
   Hermes: "Hermes",
   "Ardur (built-in)": "Ardur (встроенная)",

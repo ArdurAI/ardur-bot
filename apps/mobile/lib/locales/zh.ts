@@ -58,6 +58,17 @@ export const ZH_MESSAGES: Record<string, string> = {
   "{runtime} stopped before finishing this run.": "{runtime} 在完成此次运行前已停止。",
   "{runtime} could not finish this run. Check the runtime or change the pin.":
     "{runtime} 无法完成此次运行。请检查运行时或更改固定模型。",
+  "{runtime} is experimental. Turn on Experimental for {bot} to use it.":
+    "{runtime} 是实验性运行时。为 {bot} 启用「实验性」后才能使用。",
+  "{runtime} runs on the host computer, not in a sandbox. Change {bot}'s computer to use it.":
+    "{runtime} 运行在主机电脑上，而不是沙盒中。请更改 {bot} 的电脑后再使用。",
+  "{bot}'s allowed model destinations block this model. Change them in {bot}'s settings.":
+    "{bot} 允许的模型目的地阻止了此模型。请在 {bot} 的设置中更改。",
+  "This space's model policy blocks this model. Change it in Settings, under Models.":
+    "此空间的模型策略阻止了此模型。请在设置的「模型」中更改。",
+  "This bot": "此 Bot",
+  "Turn on Experimental": "启用「实验性」",
+  "Open Settings": "打开设置",
   Antigravity: "Antigravity",
   Hermes: "Hermes",
   "Ardur (built-in)": "Ardur（内置）",

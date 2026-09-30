@@ -134,7 +134,12 @@ import {
 import { native, useMobileTokens, useResolvedAppearance } from "../lib/native";
 import { type PickedAttachment, pickDocuments, pickFromLibrary } from "../lib/pick-attachments";
 import { threadRefreshDelayMs } from "../lib/refresh";
-import { antigravityProblemMessage, runtimePinRecovery } from "../lib/runtime-pin-recovery";
+import {
+  antigravityProblemMessage,
+  runtimePinRecovery,
+  runtimeRefusalActionLabel,
+  runtimeRefusalRecovery,
+} from "../lib/runtime-pin-recovery";
 import {
   type ThreadScrollAction,
   ThreadScrollBehavior,
@@ -200,6 +205,17 @@ function isWorkingStatus(status: string | undefined): boolean {
 }
 
 type NotificationRouteState = "loading" | "ready" | "failed";
+
+/**
+ * The refusal categories whose sentence the thread renders from the failure-category
+ * table, with the refusing bot's name filled in.
+ */
+const RUNTIME_REFUSAL_IDS: ReadonlySet<string> = new Set([
+  "experimental-off",
+  "computer-unsupported",
+  "destinations-bot",
+  "destinations-space",
+]);
 
 export default function ThreadRoute() {
   const tokens = useMobileTokens();
@@ -1408,22 +1424,45 @@ function Thread() {
   }
 
   const answerableAskIds = useMemo(() => answerableAskMessageIds(snap), [snap]);
+  const failedRunBotId = snap?.run?.runtimeProblem ? (snap.run.botId ?? botId ?? "") : "";
+  // Turn on Experimental saves the bot's setting the way the bot settings screen does; the
+  // banner leaves with the next snapshot, which reports the failed run as it was.
+  async function enableExperimental(targetBotId: string) {
+    if (!targetBotId) return;
+    try {
+      await rpc("bots/update", {
+        botId: targetBotId,
+        runtimeExperimental: true,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("Could not save changes. Try again."));
+    }
+  }
   const pinRecovery = snap?.run?.runtimeProblem
-    ? runtimePinRecovery(snap.run.runtimeProblem, snap.run.botId ?? botId ?? "")
+    ? runtimePinRecovery(snap.run.runtimeProblem, failedRunBotId)
     : null;
+  const refusalRecovery = snap?.run?.runtimeProblem
+    ? runtimeRefusalRecovery(snap.run.runtimeProblem, failedRunBotId)
+    : null;
+  const refusalBotName =
+    snap?.run?.runtimeProblem && RUNTIME_REFUSAL_IDS.has(snap.run.runtimeProblem.reasonId ?? "")
+      ? (memberName(snap?.members, snap.run.botId) ?? name ?? t("This bot"))
+      : null;
   const runError =
     snap?.run?.status === "failed"
       ? snap.run.runtimeProblem
-        ? pinRecovery?.message
-          ? snap.run.runtimeProblem.pin.runtimeKind === "antigravity"
-            ? `${antigravityProblemMessage(snap.run.runtimeProblem)} ${t(pinRecovery.message)}`
-            : t(pinRecovery.message)
-          : snap.run.runtimeProblem.pin.runtimeKind !== "pi" ||
-              snap.run.runtimeProblem.code !== "pin-credential-missing"
+        ? refusalBotName
+          ? runtimeProblemText(snap.run.runtimeProblem, refusalBotName)
+          : pinRecovery?.message
             ? snap.run.runtimeProblem.pin.runtimeKind === "antigravity"
-              ? antigravityProblemMessage(snap.run.runtimeProblem)
-              : runtimeProblemText(snap.run.runtimeProblem)
-            : runtimePinMessage(snap.run.runtimeProblem.pin)
+              ? `${antigravityProblemMessage(snap.run.runtimeProblem)} ${t(pinRecovery.message)}`
+              : t(pinRecovery.message)
+            : snap.run.runtimeProblem.pin.runtimeKind !== "pi" ||
+                snap.run.runtimeProblem.code !== "pin-credential-missing"
+              ? snap.run.runtimeProblem.pin.runtimeKind === "antigravity"
+                ? antigravityProblemMessage(snap.run.runtimeProblem)
+                : runtimeProblemText(snap.run.runtimeProblem)
+              : runtimePinMessage(snap.run.runtimeProblem.pin)
         : (snap.run.error ?? null)
       : null;
   const liveMessages = useMemo(() => [...visibleMessages].reverse(), [visibleMessages]);
@@ -1753,7 +1792,30 @@ function Thread() {
         <View style={{ marginTop: 12 }}>
           <Text style={{ color: tokens.destructive }}>{runError}</Text>
           {snap?.run?.runtimeProblem ? (
-            <View style={{ flexDirection: "row", gap: 16, marginTop: 8 }}>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 16, marginTop: 8 }}>
+              {refusalRecovery && refusalBotName
+                ? refusalRecovery.actions.map((action, index) =>
+                    action.kind === "enable-experimental" ? (
+                      <Text
+                        key="enable-experimental"
+                        accessibilityRole="button"
+                        style={{ color: tokens.destructive }}
+                        onPress={() => void enableExperimental(action.botId)}
+                      >
+                        {t("Turn on Experimental")}
+                      </Text>
+                    ) : (
+                      <Text
+                        key={`${action.pathname}:${index}`}
+                        accessibilityRole="button"
+                        style={{ color: tokens.destructive }}
+                        onPress={() => router.push(action)}
+                      >
+                        {runtimeRefusalActionLabel(action)}
+                      </Text>
+                    ),
+                  )
+                : null}
               {snap.run.runtimeProblem.pin.runtimeKind === "pi" &&
               snap.run.runtimeProblem.code === "pin-credential-missing" ? (
                 <Text
@@ -1764,17 +1826,19 @@ function Thread() {
                   {t("Connect")}
                 </Text>
               ) : null}
-              <Text
-                accessibilityRole="button"
-                style={{ color: tokens.destructive }}
-                onPress={() => pinRecovery && router.push(pinRecovery.changePin)}
-              >
-                {t(
-                  snap.run.runtimeProblem.source?.kind === "group-member"
-                    ? "Group settings"
-                    : "Change pin",
-                )}
-              </Text>
+              {!(refusalRecovery && refusalBotName) ? (
+                <Text
+                  accessibilityRole="button"
+                  style={{ color: tokens.destructive }}
+                  onPress={() => pinRecovery && router.push(pinRecovery.changePin)}
+                >
+                  {t(
+                    snap.run.runtimeProblem.source?.kind === "group-member"
+                      ? "Group settings"
+                      : "Change pin",
+                  )}
+                </Text>
+              ) : null}
             </View>
           ) : null}
         </View>
