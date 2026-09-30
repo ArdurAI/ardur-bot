@@ -8,6 +8,7 @@ export type SpaceFeatureState = z.infer<typeof SpaceFeatureStateSchema>;
 export const SpaceFeatureEntrySchema = z.object({
   feature: SpaceFeatureSchema,
   state: SpaceFeatureStateSchema,
+  canManage: z.boolean().optional(),
 });
 export type SpaceFeatureEntry = z.infer<typeof SpaceFeatureEntrySchema>;
 export const featuresContract = {

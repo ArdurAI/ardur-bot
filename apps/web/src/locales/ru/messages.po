@@ -256,6 +256,10 @@ msgstr "Личных записей памяти: {documents}, {kb} КБ; пои
 msgid "{failed} failed"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "{gapCount} evidence gaps"
+msgstr "Пробелов в записи: {gapCount}"
+
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
 msgstr "{hours} ч назад"
@@ -427,6 +431,10 @@ msgstr ""
 #: src/pages/system/SystemPage.tsx
 msgid "A saved shortcut is unavailable; choose another."
 msgstr ""
+
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "About evidence"
+msgstr "О свидетельствах"
 
 #: src/pages/shell/bot-picker.tsx
 msgid "About groups"
@@ -1693,6 +1701,11 @@ msgstr "Проверить"
 #: src/pages/shell/runtime-settings.tsx
 msgid "Check again"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+msgid "Check failed"
+msgstr "Проверка не пройдена"
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Check failed"
@@ -3040,9 +3053,10 @@ msgid "Could not save this file. Try again."
 msgstr "Не удалось сохранить этот файл. Повторите попытку."
 
 #: src/pages/customize/McpCredentialFix.tsx
+#: src/pages/dashboard/GovernancePanel.tsx
 #: src/pages/Shell.tsx
 msgid "Could not save. Try again."
-msgstr ""
+msgstr "Не удалось сохранить. Повторите попытку."
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
@@ -3769,6 +3783,10 @@ msgstr "Скачать {name}"
 msgid "Download as markdown"
 msgstr "Скачать как Markdown"
 
+#: src/components/RunEvidence.tsx
+msgid "Download evidence"
+msgstr "Скачать свидетельства"
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Download Executor"
 msgstr "Скачать Executor"
@@ -3987,6 +4005,25 @@ msgstr "Каждую неделю"
 #: src/pages/LearningInbox.tsx
 msgid "Evidence"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+msgid "Evidence gap"
+msgstr "Пробел в записи"
+
+#: src/pages/dashboard/GovernancePanel.tsx
+#: src/pages/dashboard/panels.ts
+msgid "Evidence off"
+msgstr "Запись выключена"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+msgid "Evidence off"
+msgstr "Запись выключена"
+
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "Evidence on"
+msgstr "Запись включена"
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Excluded files"
@@ -4364,8 +4401,8 @@ msgstr ""
 
 #: src/pages/dashboard/GovernancePanel.tsx
 #: src/pages/dashboard/panels.ts
-msgid "Governance and encryption are not part of this build yet."
-msgstr ""
+#~ msgid "Governance and encryption are not part of this build yet."
+#~ msgstr ""
 
 #: src/pages/LearningTimeline.tsx
 msgid "Grant"
@@ -6102,6 +6139,11 @@ msgstr ""
 msgid "Not running — open the desktop app"
 msgstr ""
 
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+msgid "Not sealed"
+msgstr "Без печати"
+
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
 msgstr ""
@@ -6900,6 +6942,15 @@ msgstr ""
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Reconnecting"
 msgstr "Повторное подключение"
+
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "Record evidence of bot decisions"
+msgstr "Записывать свидетельства решений ботов"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+msgid "Recording"
+msgstr "Запись"
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Recording may have started, but the view could not refresh"
@@ -9352,6 +9403,11 @@ msgstr ""
 #: src/pages/shell/group-participants.tsx
 msgid "Using {currentId}"
 msgstr "Используется {currentId}"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+msgid "Verified"
+msgstr "Проверено"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"

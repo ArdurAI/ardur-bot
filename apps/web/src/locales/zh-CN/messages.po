@@ -256,6 +256,10 @@ msgstr "{documents} 条个人记忆，{kb} KB，尚未设置记忆搜索。"
 msgid "{failed} failed"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "{gapCount} evidence gaps"
+msgstr "{gapCount} 处证据缺失"
+
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
 msgstr "{hours} 小时前"
@@ -427,6 +431,10 @@ msgstr ""
 #: src/pages/system/SystemPage.tsx
 msgid "A saved shortcut is unavailable; choose another."
 msgstr ""
+
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "About evidence"
+msgstr "关于证据"
 
 #: src/pages/shell/bot-picker.tsx
 msgid "About groups"
@@ -1693,6 +1701,11 @@ msgstr "检查"
 #: src/pages/shell/runtime-settings.tsx
 msgid "Check again"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+msgid "Check failed"
+msgstr "验证失败"
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Check failed"
@@ -3040,9 +3053,10 @@ msgid "Could not save this file. Try again."
 msgstr "无法保存此文件。请重试。"
 
 #: src/pages/customize/McpCredentialFix.tsx
+#: src/pages/dashboard/GovernancePanel.tsx
 #: src/pages/Shell.tsx
 msgid "Could not save. Try again."
-msgstr ""
+msgstr "无法保存，请重试。"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
@@ -3769,6 +3783,10 @@ msgstr "下载 {name}"
 msgid "Download as markdown"
 msgstr "下载为 Markdown"
 
+#: src/components/RunEvidence.tsx
+msgid "Download evidence"
+msgstr "下载证据"
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Download Executor"
 msgstr ""
@@ -3987,6 +4005,25 @@ msgstr "每周"
 #: src/pages/LearningInbox.tsx
 msgid "Evidence"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+msgid "Evidence gap"
+msgstr "证据缺失"
+
+#: src/pages/dashboard/GovernancePanel.tsx
+#: src/pages/dashboard/panels.ts
+msgid "Evidence off"
+msgstr "证据记录已关闭"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+msgid "Evidence off"
+msgstr "证据记录已关闭"
+
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "Evidence on"
+msgstr "证据记录已开启"
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Excluded files"
@@ -4364,8 +4401,8 @@ msgstr ""
 
 #: src/pages/dashboard/GovernancePanel.tsx
 #: src/pages/dashboard/panels.ts
-msgid "Governance and encryption are not part of this build yet."
-msgstr ""
+#~ msgid "Governance and encryption are not part of this build yet."
+#~ msgstr ""
 
 #: src/pages/LearningTimeline.tsx
 msgid "Grant"
@@ -6102,6 +6139,11 @@ msgstr ""
 msgid "Not running — open the desktop app"
 msgstr ""
 
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+msgid "Not sealed"
+msgstr "未封存"
+
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
 msgstr ""
@@ -6900,6 +6942,15 @@ msgstr ""
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Reconnecting"
 msgstr "正在重新连接"
+
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "Record evidence of bot decisions"
+msgstr "记录机器人决策的证据"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+msgid "Recording"
+msgstr "记录中"
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Recording may have started, but the view could not refresh"
@@ -9352,6 +9403,11 @@ msgstr ""
 #: src/pages/shell/group-participants.tsx
 msgid "Using {currentId}"
 msgstr "正在使用 {currentId}"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+msgid "Verified"
+msgstr "已验证"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"

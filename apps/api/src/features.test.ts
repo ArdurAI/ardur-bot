@@ -51,7 +51,7 @@ describe("space feature RPCs", () => {
     const response = await f.request("list");
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
-      json: [{ feature: "governance", state: "disabled" }],
+      json: [{ feature: "governance", state: "disabled", canManage: role === "owner" }],
     });
     expect(f.membership).toHaveBeenCalledWith({
       where: { spaceId_userId: { spaceId: "space", userId: "viewer" } },
@@ -104,7 +104,7 @@ describe("space feature RPCs", () => {
   it("reads an explicitly enabled row", async () => {
     const f = fixture("member", [{ feature: "governance", state: "enabled" }]);
     expect(await (await f.request("list")).json()).toEqual({
-      json: [{ feature: "governance", state: "enabled" }],
+      json: [{ feature: "governance", state: "enabled", canManage: false }],
     });
   });
   it("rejects unavailable as a writable state", async () => {

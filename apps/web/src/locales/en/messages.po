@@ -256,6 +256,10 @@ msgstr "{documents} personal memories, {kb} KB, and memory search is not set up.
 msgid "{failed} failed"
 msgstr "{failed} failed"
 
+#: src/components/RunEvidence.tsx
+msgid "{gapCount} evidence gaps"
+msgstr "{gapCount} evidence gaps"
+
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
 msgstr "{hours}h ago"
@@ -427,6 +431,10 @@ msgstr "A new version is available — download"
 #: src/pages/system/SystemPage.tsx
 msgid "A saved shortcut is unavailable; choose another."
 msgstr "A saved shortcut is unavailable; choose another."
+
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "About evidence"
+msgstr "About evidence"
 
 #: src/pages/shell/bot-picker.tsx
 msgid "About groups"
@@ -1693,6 +1701,11 @@ msgstr "Check"
 #: src/pages/shell/runtime-settings.tsx
 msgid "Check again"
 msgstr "Check again"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+msgid "Check failed"
+msgstr "Check failed"
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Check failed"
@@ -3040,6 +3053,7 @@ msgid "Could not save this file. Try again."
 msgstr "Could not save this file. Try again."
 
 #: src/pages/customize/McpCredentialFix.tsx
+#: src/pages/dashboard/GovernancePanel.tsx
 #: src/pages/Shell.tsx
 msgid "Could not save. Try again."
 msgstr "Could not save. Try again."
@@ -3769,6 +3783,10 @@ msgstr "Download {name}"
 msgid "Download as markdown"
 msgstr "Download as markdown"
 
+#: src/components/RunEvidence.tsx
+msgid "Download evidence"
+msgstr "Download evidence"
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Download Executor"
 msgstr "Download Executor"
@@ -3987,6 +4005,25 @@ msgstr "Every week"
 #: src/pages/LearningInbox.tsx
 msgid "Evidence"
 msgstr "Evidence"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+msgid "Evidence gap"
+msgstr "Evidence gap"
+
+#: src/pages/dashboard/GovernancePanel.tsx
+#: src/pages/dashboard/panels.ts
+msgid "Evidence off"
+msgstr "Evidence off"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+msgid "Evidence off"
+msgstr "Evidence off"
+
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "Evidence on"
+msgstr "Evidence on"
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Excluded files"
@@ -4364,8 +4401,8 @@ msgstr "Governance"
 
 #: src/pages/dashboard/GovernancePanel.tsx
 #: src/pages/dashboard/panels.ts
-msgid "Governance and encryption are not part of this build yet."
-msgstr "Governance and encryption are not part of this build yet."
+#~ msgid "Governance and encryption are not part of this build yet."
+#~ msgstr "Governance and encryption are not part of this build yet."
 
 #: src/pages/LearningTimeline.tsx
 msgid "Grant"
@@ -6102,6 +6139,11 @@ msgstr "Not requested"
 msgid "Not running — open the desktop app"
 msgstr "Not running — open the desktop app"
 
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+msgid "Not sealed"
+msgstr "Not sealed"
+
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
 msgstr "Not set up"
@@ -6900,6 +6942,15 @@ msgstr "Reconnect with an API key"
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Reconnecting"
 msgstr "Reconnecting"
+
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "Record evidence of bot decisions"
+msgstr "Record evidence of bot decisions"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+msgid "Recording"
+msgstr "Recording"
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Recording may have started, but the view could not refresh"
@@ -9352,6 +9403,11 @@ msgstr "User"
 #: src/pages/shell/group-participants.tsx
 msgid "Using {currentId}"
 msgstr "Using {currentId}"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+msgid "Verified"
+msgstr "Verified"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"

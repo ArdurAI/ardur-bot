@@ -21,10 +21,11 @@ export async function listSpaceFeatures(
   prisma: PrismaClient,
   actor: Actor,
 ): Promise<SpaceFeatureEntry[]> {
-  await membership(prisma, actor);
+  const member = await membership(prisma, actor);
   const rows = await prisma.spaceFeature.findMany({ where: { spaceId: actor.spaceId } });
   return (Object.keys(availability) as SpaceFeature[]).map((feature) => ({
     feature,
+    canManage: member.role === "owner",
     state: !availability[feature]
       ? "unavailable"
       : rows.find((row) => row.feature === feature)?.state === "enabled"
