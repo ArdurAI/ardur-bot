@@ -48,6 +48,7 @@ export * from "./ollama.js";
 export * from "./openai-compatible-ui.js";
 export * from "./preferences.js";
 export * from "./privacy.js";
+export * from "./protected-locations.js";
 export * from "./provider-errors.js";
 export * from "./reactions.js";
 export * from "./request-usage.js";
