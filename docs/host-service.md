@@ -192,6 +192,37 @@ sequenceDiagram
   a container home store, and a host checkpoint does not overwrite that store with
   an empty export. Registered folders are not deleted by computer destruction.
 
+## What Ardur logs about the processes it starts
+
+Every child process the host runtime spawns (Hermes, Claude Code, Codex, the
+Antigravity model catalog probe, host environment probes, fleet terminals and the
+Hermes installer) has its stderr read line by line by one capture helper,
+`captureChildOutput` in `packages/host-runtime/src/child-output.ts`; stdout is
+captured too where the protocol does not already own it.
+
+- Each redacted line is streamed to the debug log, tagged with the process kind,
+  pid and run id. Run the service with `LOG_LEVEL=debug` to see them.
+- Every line is redacted with the run's secrets and the shared text redaction
+  (bearer tokens, `token=`/`password=` assignments, credentials in URLs, bare
+  token shapes such as JWTs and `sk-` keys, and email addresses) before it is
+  stored or logged. Nothing captured leaves the helper unredacted.
+- The helper keeps a bounded ring buffer of the last 64 KB of output. When a run
+  fails, the runtime attaches that tail, the exit code or signal, the protocol
+  phase and the duration to the thrown error's cause, and the worker log records
+  the full cause chain — so "Hermes could not complete this turn." always has a
+  logged reason (provider refused, ACP handshake failed, pin check failed,
+  timeout, …) instead of a dead end.
+- Message and file contents never appear at info level. Info and above carry
+  outcomes only; process output is debug-level detail plus the failure tail.
+
+Three sites keep ignoring a stream on purpose, each with a reason in source and
+in the guard test's allow list: the two Windows `taskkill` helpers own no
+output, and the Hermes installer's stdin is ignored because its commands read
+nothing while both output pipes are captured. The guard test
+(`child-output.guard.test.ts`) scans the package for `stderr.resume()` and
+`stdio: "ignore"` and fails on any new site outside the helper and the allow
+list.
+
 ## Owner environment and tool inventory
 
 `packages/contracts/src/host-environment.js` defines one OS-variable allowlist for
