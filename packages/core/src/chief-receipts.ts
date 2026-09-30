@@ -1,10 +1,9 @@
 import type { ChiefReceipt, ThreadMessage } from "@ardurbot/contracts";
 
 /** The response and event use one durable identity; never advance the event cursor here. */
-export function applyChiefReceipt<T extends { threadId: string; messages: ThreadMessage[] }>(
-  snapshot: T | null,
-  receipt?: ChiefReceipt,
-): T | null {
+export function applyChiefReceipt<
+  T extends { threadId: string; messages: { id: string; seq?: number }[] },
+>(snapshot: T | null, receipt?: ChiefReceipt): T | null {
   if (
     !snapshot ||
     !receipt ||
@@ -28,5 +27,8 @@ export function applyChiefReceipt<T extends { threadId: string; messages: Thread
       },
     ],
   };
-  return { ...snapshot, messages: [...snapshot.messages, message].sort((a, b) => a.seq - b.seq) };
+  return {
+    ...snapshot,
+    messages: [...snapshot.messages, message].sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0)),
+  };
 }

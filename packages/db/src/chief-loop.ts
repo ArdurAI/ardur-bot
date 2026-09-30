@@ -22,10 +22,11 @@ type Scope = { spaceId: string; userId: string };
 /** No probes, private task prompts, connection values or credentials in this projection. */
 export async function loadChiefMemberFacts(
   tx: Prisma.TransactionClient,
-  scope: Scope,
+  { spaceId, userId }: Scope,
   groupId: string,
   now = new Date(),
 ): Promise<ChiefMemberFacts[]> {
+  const scope = { spaceId, userId };
   const bots = await tx.bot.findMany({
     where: {
       ...scope,
