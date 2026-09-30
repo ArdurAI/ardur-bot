@@ -1,8 +1,10 @@
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { access, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ProtectedLocation } from "@ardurbot/contracts";
 import { afterEach, describe, expect, it } from "vitest";
+import { seatbeltProfile } from "./host-guardrails.js";
 import {
   protectedLocationHint,
   protectedLocationOf,
@@ -255,3 +257,130 @@ describe("protectedLocationHint", () => {
     ).toContain("SSH keys");
   });
 });
+
+/**
+ * Real `/usr/bin/sandbox-exec` runs of the deny list this module builds, in the
+ * style of the host-guardrails tests: a rule shape the kernel ignores cannot stay
+ * green. A scratch folder stands in for the home folder, so the owner's real
+ * credential and agent-tool folders are never touched. Skipped where there is no
+ * sandbox-exec (non-macOS); inside an already-sandboxed process the kernel refuses
+ * a second profile and these tests cannot run there.
+ */
+describe.skipIf(process.platform !== "darwin")(
+  "protected locations under real sandbox-exec",
+  () => {
+    const SANDBOX_EXEC = "/usr/bin/sandbox-exec";
+
+    function run(argv: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+      return new Promise((resolve) => {
+        execFile(argv[0]!, argv.slice(1), { timeout: 15_000 }, (error, stdout, stderr) => {
+          const code = error ? (typeof error.code === "number" ? error.code : 1) : 0;
+          resolve({ code, stdout, stderr });
+        });
+      });
+    }
+
+    function sandboxed(profile: string, argv: string[]) {
+      return run([SANDBOX_EXEC, "-p", profile, ...argv]);
+    }
+
+    async function protectedHome(): Promise<string> {
+      const home = await mkdtemp(path.join(tmpdir(), "protected-sandbox-"));
+      cleanup.push(home);
+      // The folders a real home would hold, with fake material only.
+      await mkdir(path.join(home, ".aws"));
+      await mkdir(path.join(home, ".ssh"));
+      await mkdir(path.join(home, ".codex"));
+      await mkdir(path.join(home, "project"));
+      await writeFile(
+        path.join(home, ".aws", "credentials"),
+        "[default]\naws_access_key_id = FAKE\n",
+      );
+      await writeFile(path.join(home, "project", "notes.txt"), "ordinary work\n");
+      return home;
+    }
+
+    function guardFor(home: string, grants: string[] = []) {
+      return seatbeltProfile(
+        withProtectedLocations(
+          { paths: [], ports: [], sockets: [] },
+          protectedPaths({ process: "bot-command", grants, locations: scratchLocations, home }),
+        ),
+      );
+    }
+
+    it("keeps a command from reading or writing a protected location", async () => {
+      const home = await protectedHome();
+      const profile = guardFor(home);
+      const denied = await sandboxed(profile, ["/bin/cat", path.join(home, ".aws", "credentials")]);
+      expect(denied.code).not.toBe(0);
+      expect(denied.stdout).not.toContain("FAKE");
+      const write = await sandboxed(profile, [
+        "/bin/sh",
+        "-c",
+        `echo planted > ${JSON.stringify(path.join(home, ".ssh", "authorized_keys"))}`,
+      ]);
+      expect(write.code).not.toBe(0);
+      // The same profile leaves ordinary work alone.
+      const allowed = await sandboxed(profile, [
+        "/bin/cat",
+        path.join(home, "project", "notes.txt"),
+      ]);
+      expect(allowed.code).toBe(0);
+      expect(allowed.stdout).toBe("ordinary work\n");
+    });
+
+    it("lets a granted location read again", async () => {
+      const home = await protectedHome();
+      const profile = guardFor(home, ["aws"]);
+      const granted = await sandboxed(profile, [
+        "/bin/cat",
+        path.join(home, ".aws", "credentials"),
+      ]);
+      expect(granted.code).toBe(0);
+      expect(granted.stdout).toContain("FAKE");
+      // The grant opened exactly its location: SSH stays denied.
+      const stillDenied = await sandboxed(profile, [
+        "/bin/sh",
+        "-c",
+        `cat ${JSON.stringify(path.join(home, ".ssh", "authorized_keys"))}`,
+      ]);
+      expect(stillDenied.code).not.toBe(0);
+    });
+
+    it("keeps a command from creating a file inside an agent tool's folder", async () => {
+      const home = await protectedHome();
+      const profile = guardFor(home);
+      const planted = await sandboxed(profile, [
+        "/bin/sh",
+        "-c",
+        `echo planted > ${JSON.stringify(path.join(home, ".codex", "AGENTS.md"))}`,
+      ]);
+      expect(planted.code).not.toBe(0);
+      await expect(access(path.join(home, ".codex", "AGENTS.md"))).rejects.toThrow();
+    });
+
+    it("lets an agent runtime read its own tool folder", async () => {
+      const home = await protectedHome();
+      await writeFile(path.join(home, ".codex", "AGENTS.md"), "tool instructions\n");
+      const profile = seatbeltProfile(
+        withProtectedLocations(
+          { paths: [], ports: [], sockets: [] },
+          protectedPaths({
+            process: "agent-runtime",
+            tool: "codex-app-server",
+            grants: [],
+            locations: scratchLocations,
+            home,
+          }),
+        ),
+      );
+      const own = await sandboxed(profile, ["/bin/cat", path.join(home, ".codex", "AGENTS.md")]);
+      expect(own.code).toBe(0);
+      expect(own.stdout).toBe("tool instructions\n");
+      // Its own folder is open; every other location stays denied.
+      const other = await sandboxed(profile, ["/bin/cat", path.join(home, ".aws", "credentials")]);
+      expect(other.code).not.toBe(0);
+    });
+  },
+);
