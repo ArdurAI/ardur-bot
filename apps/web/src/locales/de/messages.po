@@ -9631,6 +9631,14 @@ msgstr ""
 msgid "You have control"
 msgstr "Du hast die Kontrolle"
 
+#: src/pages/workspace/WorkspaceTerminal.tsx
+msgid "You control the computer"
+msgstr "Du steuerst den Computer"
+
+#: src/pages/workspace/WorkspaceTerminal.tsx
+msgid "End this terminal?"
+msgstr "Dieses Terminal beenden?"
+
 #: src/pages/LearningInsights.tsx
 msgid "You sent {bot} the same request {count} times in {days} days."
 msgstr ""

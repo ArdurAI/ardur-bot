@@ -9631,6 +9631,14 @@ msgstr "你在 {days} 天内给出了 {count} 个附带理由的评价，但学�
 msgid "You have control"
 msgstr "你已接管"
 
+#: src/pages/workspace/WorkspaceTerminal.tsx
+msgid "You control the computer"
+msgstr "你正在控制电脑"
+
+#: src/pages/workspace/WorkspaceTerminal.tsx
+msgid "End this terminal?"
+msgstr "结束此终端？"
+
 #: src/pages/LearningInsights.tsx
 msgid "You sent {bot} the same request {count} times in {days} days."
 msgstr "你在 {days} 天内向 {bot} 发送了 {count} 次相同的请求。"
