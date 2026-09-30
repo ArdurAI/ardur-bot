@@ -36,12 +36,12 @@ function retryAfter(error: unknown, depth: number, now: number): number | undefi
   if (!error || typeof error !== "object") return undefined;
   const headers = "headers" in error ? Reflect.get(error, "headers") : undefined;
   if (headers) {
+    const headerMap = headers as Record<string, unknown> & { get?: unknown };
     const read = (name: string): string | null => {
-      if (typeof headers.get === "function") return headers.get(name);
-      const lower = headers as Record<string, unknown>;
-      for (const key of Object.keys(lower)) {
+      if (typeof headerMap.get === "function") return headerMap.get(name);
+      for (const key of Object.keys(headerMap)) {
         if (key.toLowerCase() === name) {
-          const value = lower[key];
+          const value = headerMap[key];
           return typeof value === "string" || typeof value === "number" ? String(value) : null;
         }
       }

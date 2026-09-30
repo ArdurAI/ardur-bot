@@ -112,6 +112,8 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
     boardCloseWhenDone: false,
     boardCommentedAt: null as Date | null,
     cancelRequestedAt: null as Date | null,
+    cancelConfirmedAt: null as Date | null,
+    providerRetryAt: null as Date | null,
     delegationId: null as string | null,
   };
   const memoryCommit = vi.fn(async () => ({ revision: "rev-1" }));
