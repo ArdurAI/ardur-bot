@@ -1,4 +1,13 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "Reading the document": "正在读取文档",
+  "Connecting to Notion": "正在连接 Notion",
+  "Creating the Notion page": "正在创建 Notion 页面",
+  "Checking the Notion page": "正在检查 Notion 页面",
+  "Checking the missing tool": "正在检查缺少的工具",
+  "Working on the task": "正在处理任务",
+  "Waiting for the tool": "正在等待工具",
+  "Done — added the document to Notion.": "已完成 — 文档已添加到 Notion。",
+  "The draft is ready.": "草稿已准备好。",
   "Got it — I’ll choose a team member to put this in Notion.":
     "收到 — 我会选择一位团队成员把它放到 Notion。",
   "Got it — I’ll check what’s missing and ask before installing it.":

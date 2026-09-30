@@ -96,8 +96,7 @@ export function withChiefActivity(dispatch: ChiefDispatch, next: ChiefActivity):
     )
       return dispatch;
     if (
-      previous.state !== "active" &&
-      previous.state !== "idle" &&
+      ["completed", "failed", "stopped"].includes(previous.state) &&
       next.attempt === previous.attempt
     )
       return dispatch;
@@ -129,25 +128,11 @@ export function chiefResult(input: {
     pendingEffects: boolean;
   };
 }): ChiefResult | undefined {
-  // Public service links or scoped internal artifact routes only; no credentials or private URLs.
-  const artifactRoute = `artifact:${encodeURIComponent(input.artifactId)}`;
-  let safe = input.href === artifactRoute;
-  try {
-    const url = new URL(input.href);
-    safe ||=
-      url.protocol === "https:" &&
-      !url.username &&
-      !url.password &&
-      (url.hostname === "www.notion.so" || url.hostname === "notion.so") &&
-      !url.search &&
-      !url.hash;
-  } catch {
-    /* Relative artifact routes are validated above. */
-  }
-  if (!safe) return undefined;
+  if (!chiefResultHref(input.artifactId, input.href)) return undefined;
   const v = input.verification;
   const pass = Boolean(
-    v &&
+    input.href.startsWith("https:") &&
+      v &&
       v.verdict === "pass" &&
       v.independent &&
       v.artifactId === input.artifactId &&
@@ -165,4 +150,22 @@ export function chiefResult(input: {
     href: input.href,
     state: pass ? "verified-notion" : "draft",
   };
+}
+
+/** Renderers validate only the link; service verification belongs to the backend. */
+export function chiefResultHref(artifactId: string, href: string): boolean {
+  if (href === `artifact:${encodeURIComponent(artifactId)}`) return true;
+  try {
+    const url = new URL(href);
+    return (
+      url.protocol === "https:" &&
+      !url.username &&
+      !url.password &&
+      (url.hostname === "www.notion.so" || url.hostname === "notion.so") &&
+      !url.search &&
+      !url.hash
+    );
+  } catch {
+    return false;
+  }
 }

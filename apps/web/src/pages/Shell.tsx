@@ -138,7 +138,6 @@ import { CompactWorkRecord } from "../components/ai/CompactWorkRecord";
 import {
   ChiefDispatchLine,
   ChiefReceiptText,
-  ChiefResultBubble,
   CoordinationLine,
 } from "../components/ai/CoordinationLine";
 import { NarrationBlocks } from "../components/ai/NarrationBlocks";
@@ -289,6 +288,11 @@ import { WindowChrome } from "./WindowChrome";
 import { terminalSupported } from "./workspace/terminal-controller";
 import { WorkspaceFileGuard } from "./workspace/WorkspaceFileGuard";
 
+const ChiefResultBubble = lazy(() =>
+  import("../components/ai/ChiefResultBubble").then((module) => ({
+    default: module.ChiefResultBubble,
+  })),
+);
 const BotSettings = lazy(() =>
   import("./shell/bot-panel").then((module) => ({ default: module.BotSettings })),
 );
@@ -6699,7 +6703,12 @@ const MessageView = memo(function MessageView({
             </div>
           );
         }
-        if (block.kind === "chief_result") return <ChiefResultBubble key={i} block={block} />;
+        if (block.kind === "chief_result")
+          return (
+            <Suspense key={i} fallback={null}>
+              <ChiefResultBubble block={block} />
+            </Suspense>
+          );
         if (block.kind === "handoff") {
           if (block.chiefDispatch)
             return <ChiefDispatchLine key={i} dispatch={block.chiefDispatch} detail={block.text} />;

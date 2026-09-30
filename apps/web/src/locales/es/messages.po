@@ -1724,6 +1724,14 @@ msgstr "Comprobado {0}"
 msgid "Checking the download"
 msgstr "Comprobando la descarga"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Checking the missing tool"
+msgstr "Comprobando la herramienta que falta"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Checking the Notion page"
+msgstr "Comprobando la página de Notion"
+
 #: src/components/DesktopUpdates.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/SoftwareUpdateSection.tsx
@@ -2284,6 +2292,10 @@ msgstr ""
 msgid "Connected. Review tools in MCP settings."
 msgstr ""
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Connecting to Notion"
+msgstr "Conectando con Notion"
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
@@ -2843,6 +2855,10 @@ msgstr "No se pudo cargar la configuración de voz"
 msgid "Could not load your bots; reopen quick access."
 msgstr ""
 
+#: src/components/ai/ChiefResultBubble.tsx
+msgid "Could not open file"
+msgstr "No se pudo abrir el archivo"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Could not open setup. Try again."
 msgstr ""
@@ -3276,6 +3292,10 @@ msgstr ""
 #: src/pages/board/BoardsSettings.tsx
 msgid "Creates .beads/ with config.yaml, metadata.json, .gitignore, README.md, interactions.jsonl, .local_version, and embeddeddolt/. Git files and hooks stay unchanged."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Creating the Notion page"
+msgstr "Creando la página de Notion"
 
 #: src/pages/GroupPanel.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -3743,6 +3763,10 @@ msgstr "¿No tienes una cuenta?"
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Done"
 msgstr "Listo"
+
+#: src/components/ai/ChiefResultBubble.tsx
+msgid "Done — added the document to Notion."
+msgstr "Listo — el documento se ha añadido a Notion."
 
 #: src/pages/TeamBoard.tsx
 msgid "Done — waiting for your OK"
@@ -6834,6 +6858,10 @@ msgstr "Solo lectura"
 msgid "Reading storage usage…"
 msgstr ""
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Reading the document"
+msgstr "Leyendo el documento"
+
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Reads can run without asking once you allow them. Writes always ask."
 msgstr ""
@@ -8627,6 +8655,10 @@ msgstr "El ordenador está ocupado. Espera a que termine."
 msgid "The connection was cancelled."
 msgstr ""
 
+#: src/components/ai/ChiefResultBubble.tsx
+msgid "The draft is ready."
+msgstr "El borrador está listo."
+
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "The file changed. Open it again before saving."
 msgstr "El archivo cambió. Ábrelo de nuevo antes de guardar."
@@ -9429,6 +9461,10 @@ msgstr "Esperando a que vuelva la API…"
 msgid "Waiting for the model"
 msgstr "Esperando al modelo"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Waiting for the tool"
+msgstr "Esperando a la herramienta"
+
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
 #: src/pages/dashboard/NowPanel.tsx
@@ -9574,6 +9610,10 @@ msgstr "Trabajando en {task}"
 #: src/pages/TeamBoard.tsx
 msgid "Working on {task} for {0}"
 msgstr "Trabajando en {task} para {0}"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Working on the task"
+msgstr "Trabajando en la tarea"
 
 #: src/components/ai/CompactWorkRecord.tsx
 msgid "Working: {title}"

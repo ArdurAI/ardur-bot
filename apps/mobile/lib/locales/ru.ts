@@ -1,4 +1,13 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "Reading the document": "Читаю документ",
+  "Connecting to Notion": "Подключаюсь к Notion",
+  "Creating the Notion page": "Создаю страницу в Notion",
+  "Checking the Notion page": "Проверяю страницу в Notion",
+  "Checking the missing tool": "Проверяю недостающий инструмент",
+  "Working on the task": "Работаю над задачей",
+  "Waiting for the tool": "Ожидаю инструмент",
+  "Done — added the document to Notion.": "Готово — документ добавлен в Notion.",
+  "The draft is ready.": "Черновик готов.",
   "Got it — I’ll choose a team member to put this in Notion.":
     "Понял — выберу участника команды, который разместит это в Notion.",
   "Got it — I’ll check what’s missing and ask before installing it.":

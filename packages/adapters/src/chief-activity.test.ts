@@ -66,4 +66,21 @@ describe("chief tool feed", () => {
     expect(writes.map((row) => row.state)).toEqual(["active", "stopped"]);
     expect(writes.map((row) => row.sourceSeq)).toEqual([1, 2]);
   });
+  it("a projection outage cannot fail tool execution or poison terminal settlement", async () => {
+    const write = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("projection unavailable"))
+      .mockResolvedValue(undefined);
+    const instance = chiefActivityFeed({
+      revision: 1,
+      runId: "run",
+      delegationId: "assignment",
+      attempt: 1,
+      write,
+    });
+    await expect(instance.start("call", "read-input")).resolves.toBeUndefined();
+    await instance.settle("completed");
+    expect(write).toHaveBeenCalledTimes(2);
+    expect(write.mock.calls[1]![0].state).toBe("completed");
+  });
 });

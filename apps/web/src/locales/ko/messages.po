@@ -1724,6 +1724,14 @@ msgstr "확인 시간 {0}"
 msgid "Checking the download"
 msgstr "다운로드 확인 중"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Checking the missing tool"
+msgstr "없는 도구를 확인하는 중"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Checking the Notion page"
+msgstr "Notion 페이지를 확인하는 중"
+
 #: src/components/DesktopUpdates.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/SoftwareUpdateSection.tsx
@@ -2284,6 +2292,10 @@ msgstr ""
 msgid "Connected. Review tools in MCP settings."
 msgstr ""
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Connecting to Notion"
+msgstr "Notion에 연결하는 중"
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
@@ -2843,6 +2855,10 @@ msgstr "음성 설정을 불러오지 못했습니다."
 msgid "Could not load your bots; reopen quick access."
 msgstr ""
 
+#: src/components/ai/ChiefResultBubble.tsx
+msgid "Could not open file"
+msgstr "파일을 열 수 없습니다"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Could not open setup. Try again."
 msgstr ""
@@ -3276,6 +3292,10 @@ msgstr ""
 #: src/pages/board/BoardsSettings.tsx
 msgid "Creates .beads/ with config.yaml, metadata.json, .gitignore, README.md, interactions.jsonl, .local_version, and embeddeddolt/. Git files and hooks stay unchanged."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Creating the Notion page"
+msgstr "Notion 페이지를 만드는 중"
 
 #: src/pages/GroupPanel.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -3743,6 +3763,10 @@ msgstr "계정이 없나요?"
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Done"
 msgstr "완료"
+
+#: src/components/ai/ChiefResultBubble.tsx
+msgid "Done — added the document to Notion."
+msgstr "완료 — 문서를 Notion에 추가했습니다."
 
 #: src/pages/TeamBoard.tsx
 msgid "Done — waiting for your OK"
@@ -6834,6 +6858,10 @@ msgstr "읽기 전용"
 msgid "Reading storage usage…"
 msgstr ""
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Reading the document"
+msgstr "문서를 읽는 중"
+
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Reads can run without asking once you allow them. Writes always ask."
 msgstr ""
@@ -8627,6 +8655,10 @@ msgstr "컴퓨터가 바쁩니다. 끝날 때까지 기다리세요."
 msgid "The connection was cancelled."
 msgstr ""
 
+#: src/components/ai/ChiefResultBubble.tsx
+msgid "The draft is ready."
+msgstr "초안이 준비되었습니다."
+
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "The file changed. Open it again before saving."
 msgstr "파일이 변경되었습니다. 저장하기 전에 다시 여세요."
@@ -9429,6 +9461,10 @@ msgstr "API가 다시 작동하기를 기다리는 중…"
 msgid "Waiting for the model"
 msgstr "모델을 기다리는 중"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Waiting for the tool"
+msgstr "도구를 기다리는 중"
+
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
 #: src/pages/dashboard/NowPanel.tsx
@@ -9574,6 +9610,10 @@ msgstr "{task} 작업 중"
 #: src/pages/TeamBoard.tsx
 msgid "Working on {task} for {0}"
 msgstr "{0}님을 위해 {task} 작업 중"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Working on the task"
+msgstr "작업을 진행하는 중"
 
 #: src/components/ai/CompactWorkRecord.tsx
 msgid "Working: {title}"

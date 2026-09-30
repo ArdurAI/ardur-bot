@@ -8,8 +8,10 @@
       import { I18nProvider } from "@lingui/react";
       import { createElement as h } from "react";
       import { createRoot } from "react-dom/client";
-      import { ChiefDispatchLine, ChiefResultBubble } from "../../src/components/ai/CoordinationLine";
+      import { ChiefResultBubble } from "../../src/components/ai/ChiefResultBubble";
+      import { ChiefDispatchLine } from "../../src/components/ai/CoordinationLine";
       import "../../src/styles.css";
+
       const i18n = setupI18n({ locale: "en", messages: { en: {} } });
       const finished = new URLSearchParams(location.search).has("finished");
       const dispatch = { requestMessageId: "request", revision: 1, memberId: "worker", memberName: "Writer", reason: "eligible", state: "messaged", runId: "run", delegationId: "assignment", activity: { revision: 1, runId: "run", delegationId: "assignment", attempt: 1, sourceSeq: 1, key: "connect-notion", state: finished ? "completed" : "active", updatedAt: "2026-01-01T00:00:00Z" } };

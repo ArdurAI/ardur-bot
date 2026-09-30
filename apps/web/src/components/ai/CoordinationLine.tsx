@@ -1,23 +1,14 @@
-import type {
-  ChiefActivityKey,
-  ChiefDispatch,
-  ChiefReceiptKey,
-  MessageBlock,
-} from "@ardurbot/contracts";
+import type { ChiefActivityKey, ChiefDispatch, ChiefReceiptKey } from "@ardurbot/contracts";
 import type { CoordinationBlock, CoordinationMember } from "@ardurbot/core";
-import {
-  chiefActivityKey,
-  chiefResult,
-  coordinationMemberFailureCode,
-  fixableFailure,
-} from "@ardurbot/core";
+import { chiefActivityKey, coordinationMemberFailureCode, fixableFailure } from "@ardurbot/core";
 import { Button } from "@ardurbot/ui-web";
 import { Plural, Trans, useLingui } from "@lingui/react/macro";
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
-import { downloadArtifact } from "../../lib/artifact-open";
 
-function translatedChiefActivity(key: ChiefActivityKey, t: ReturnType<typeof useLingui>["t"]) {
+function useTranslatedChiefActivity(key: ChiefActivityKey | undefined) {
+  const { t } = useLingui();
+  if (!key) return undefined;
   switch (key) {
     case "read-input":
       return t`Reading the document`;
@@ -34,54 +25,6 @@ function translatedChiefActivity(key: ChiefActivityKey, t: ReturnType<typeof use
     default:
       return t`Working on the task`;
   }
-}
-
-export function ChiefResultBubble({
-  block,
-}: {
-  block: Extract<MessageBlock, { kind: "chief_result" }>;
-}) {
-  const { t } = useLingui();
-  const [failed, setFailed] = useState(false);
-  const result = block.result;
-  if (!chiefResult(result)) return null;
-  return (
-    <div
-      data-testid="chief-result"
-      className="rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
-      dir="auto"
-    >
-      <span>
-        {result.state === "verified-notion"
-          ? t`Done — added the document to Notion.`
-          : t`The draft is ready.`}
-      </span>{" "}
-      <a
-        href={result.href}
-        className="underline underline-offset-4"
-        onClick={
-          result.state === "draft"
-            ? (event) => {
-                event.preventDefault();
-                setFailed(false);
-                void downloadArtifact(
-                  block.groupId ? { groupId: block.groupId } : { botId: block.botId },
-                  result.artifactId,
-                  block.name,
-                  block.mimeType,
-                ).catch(() => setFailed(true));
-              }
-            : undefined
-        }
-        rel="noopener noreferrer"
-      >
-        {block.name}
-      </a>
-      {failed ? (
-        <span role="alert" className="block text-destructive">{t`Could not open file`}</span>
-      ) : null}
-    </div>
-  );
 }
 
 export function ChiefReceiptText({ receiptKey }: { receiptKey: ChiefReceiptKey }) {
@@ -119,7 +62,7 @@ export function ChiefDispatchLine({
         ? t`Queued for ${name}`
         : t`Messaged ${name}`;
   const activityKey = chiefActivityKey(dispatch);
-  const activity = activityKey ? translatedChiefActivity(activityKey, t) : undefined;
+  const activity = useTranslatedChiefActivity(activityKey);
   return (
     <div className="my-1 text-[13px] text-muted-foreground" data-testid="chief-dispatch">
       <button

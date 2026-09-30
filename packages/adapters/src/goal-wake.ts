@@ -15,7 +15,7 @@ export async function wakeGoalAfterDelegation(
 ) {
   if (!delegationId) return;
   if (deps.prisma.chiefPlan) {
-    const update = await settleChiefActivity(deps.prisma, delegationId);
+    const update = await settleChiefActivity(deps.prisma, delegationId).catch(() => undefined);
     if (update) await deps.events?.notify(update.threadId, update.seq).catch(() => undefined);
   }
   const automatic = deps.prisma.botMessageDelivery

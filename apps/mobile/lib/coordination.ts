@@ -3,7 +3,7 @@ import type { CoordinationBlock, CoordinationMember } from "@ardurbot/core";
 import {
   CHIEF_ACTIVITY_TEXT,
   chiefActivityKey,
-  chiefResult,
+  chiefResultHref,
   coordinationMemberFailureCode,
   fixableFailure,
 } from "@ardurbot/core";
@@ -35,7 +35,7 @@ export function chiefActivityText(dispatch: ChiefDispatch): string | undefined {
   return key ? t(CHIEF_ACTIVITY_TEXT[key]) : undefined;
 }
 export function chiefResultText(result: ChiefResult): string | undefined {
-  if (!chiefResult(result)) return undefined;
+  if (!chiefResultHref(result.artifactId, result.href)) return undefined;
   return result.state === "verified-notion"
     ? t("Done — added the document to Notion.")
     : t("The draft is ready.");

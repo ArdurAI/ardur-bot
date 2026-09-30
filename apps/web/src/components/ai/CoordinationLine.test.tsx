@@ -17,12 +17,8 @@ vi.mock("@lingui/react/macro", () => ({
 
 import type { ChiefDispatch, MessageBlock } from "@ardurbot/contracts";
 import type { CoordinationBlock } from "@ardurbot/core";
-import {
-  ChiefDispatchLine,
-  ChiefReceiptText,
-  ChiefResultBubble,
-  CoordinationLine,
-} from "./CoordinationLine";
+import { ChiefResultBubble } from "./ChiefResultBubble";
+import { ChiefDispatchLine, ChiefReceiptText, CoordinationLine } from "./CoordinationLine";
 
 vi.mock("../../lib/artifact-open", () => ({ downloadArtifact: vi.fn(async () => {}) }));
 

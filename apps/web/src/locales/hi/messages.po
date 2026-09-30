@@ -1724,6 +1724,14 @@ msgstr "जाँच की गई {0}"
 msgid "Checking the download"
 msgstr "डाउनलोड की जाँच हो रही है"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Checking the missing tool"
+msgstr "गुम टूल की जाँच हो रही है"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Checking the Notion page"
+msgstr "Notion पेज की जाँच हो रही है"
+
 #: src/components/DesktopUpdates.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/SoftwareUpdateSection.tsx
@@ -2284,6 +2292,10 @@ msgstr ""
 msgid "Connected. Review tools in MCP settings."
 msgstr ""
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Connecting to Notion"
+msgstr "Notion से कनेक्ट हो रहा है"
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
@@ -2843,6 +2855,10 @@ msgstr "आवाज़ सेटिंग्स लोड नहीं हो �
 msgid "Could not load your bots; reopen quick access."
 msgstr ""
 
+#: src/components/ai/ChiefResultBubble.tsx
+msgid "Could not open file"
+msgstr "फ़ाइल नहीं खोली जा सकी"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Could not open setup. Try again."
 msgstr ""
@@ -3276,6 +3292,10 @@ msgstr ""
 #: src/pages/board/BoardsSettings.tsx
 msgid "Creates .beads/ with config.yaml, metadata.json, .gitignore, README.md, interactions.jsonl, .local_version, and embeddeddolt/. Git files and hooks stay unchanged."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Creating the Notion page"
+msgstr "Notion पेज बनाया जा रहा है"
 
 #: src/pages/GroupPanel.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -3743,6 +3763,10 @@ msgstr "खाता नहीं है?"
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Done"
 msgstr "पूर्ण"
+
+#: src/components/ai/ChiefResultBubble.tsx
+msgid "Done — added the document to Notion."
+msgstr "हो गया — दस्तावेज़ Notion में जोड़ दिया गया।"
 
 #: src/pages/TeamBoard.tsx
 msgid "Done — waiting for your OK"
@@ -6834,6 +6858,10 @@ msgstr "केवल पढ़ने योग्य"
 msgid "Reading storage usage…"
 msgstr ""
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Reading the document"
+msgstr "दस्तावेज़ पढ़ा जा रहा है"
+
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Reads can run without asking once you allow them. Writes always ask."
 msgstr ""
@@ -8627,6 +8655,10 @@ msgstr "कंप्यूटर व्यस्त है। इसके प�
 msgid "The connection was cancelled."
 msgstr ""
 
+#: src/components/ai/ChiefResultBubble.tsx
+msgid "The draft is ready."
+msgstr "ड्राफ़्ट तैयार है।"
+
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "The file changed. Open it again before saving."
 msgstr "फ़ाइल बदल गई। सहेजने से पहले इसे फिर से खोलें।"
@@ -9429,6 +9461,10 @@ msgstr ""
 msgid "Waiting for the model"
 msgstr "मॉडल का इंतज़ार"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Waiting for the tool"
+msgstr "टूल का इंतज़ार है"
+
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
 #: src/pages/dashboard/NowPanel.tsx
@@ -9574,6 +9610,10 @@ msgstr "{task} पर काम कर रहा है"
 #: src/pages/TeamBoard.tsx
 msgid "Working on {task} for {0}"
 msgstr "{0} के लिए {task} पर काम कर रहा है"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Working on the task"
+msgstr "कार्य पर काम हो रहा है"
 
 #: src/components/ai/CompactWorkRecord.tsx
 msgid "Working: {title}"

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { ChiefActivity, ChiefDispatch } from "@ardurbot/contracts";
 import { describe, expect, it } from "vitest";
 import {
@@ -33,6 +34,10 @@ const dispatch: ChiefDispatch = {
 describe("chief activity policy", () => {
   it("maps only instrumented identities and trusted capabilities", () => {
     expect(chiefToolActivity({ name: "read_file" })).toBe("read-input");
+    expect(chiefToolActivity({ name: "create_page", serviceId: "notion" })).toBe("write-notion");
+    expect(chiefToolActivity({ name: "retrieve_page", serviceId: "notion" })).toBe("verify-notion");
+    expect(chiefToolActivity({ name: "get_self", serviceId: "notion" })).toBe("connect-notion");
+    expect(chiefToolActivity({ name: "create_page", serviceId: "other" })).toBe("working");
     for (const [capability, key] of [
       ["notion-connect", "connect-notion"],
       ["notion-write", "write-notion"],
@@ -93,6 +98,10 @@ describe("chief activity policy", () => {
     expect(staleChiefActivity(terminal, new Date("2026-01-01T00:01:00Z"))).toBeUndefined();
     expect(chiefActivityKey(dispatch)).toBe("working");
     expect(chiefActivityKey({ ...dispatch, state: "approval-held" })).toBeUndefined();
+    const waiting = withChiefActivity(dispatch, { ...activity, state: "waiting" });
+    expect(
+      withChiefActivity(waiting, { ...activity, sourceSeq: 2, state: "stopped" }).activity?.state,
+    ).toBe("stopped");
   });
   it("reload and replay produce the same durable one-line state", () => {
     const events = [
@@ -152,7 +161,33 @@ describe("chief linked result", () => {
       expect(chiefResult({ ...input, href })).toBeUndefined();
     expect(chiefResult({ ...input, href: "artifact:draft" })?.state).toBe("draft");
   });
+  it("checks independently read-back fake service content and destination", () => {
+    const digest = (text: string) => createHash("sha256").update(text).digest("hex");
+    const pages = new Map<string, string>();
+    pages.set(input.href, "Fixture document");
+    const readBack = (destination: string) => ({
+      ...verification,
+      destination,
+      contentDigest: digest(pages.get(destination) ?? ""),
+      expectedContentDigest: digest("Fixture document"),
+    });
+    expect(chiefResult({ ...input, verification: readBack(input.href) })?.state).toBe(
+      "verified-notion",
+    );
+    pages.set(input.href, "Wrong content");
+    expect(chiefResult({ ...input, verification: readBack(input.href) })?.state).toBe("draft");
+    expect(
+      chiefResult({ ...input, verification: readBack("https://www.notion.so/other") })?.state,
+    ).toBe("draft");
+  });
   it("keeps result copy to one sentence without automatic follow-up", () => {
+    expect(
+      chiefResult({
+        ...input,
+        href: "artifact:draft",
+        verification: { ...verification, destination: "artifact:draft" },
+      })?.state,
+    ).toBe("draft");
     const copy = ["Done — added the document to Notion.", "The draft is ready."];
     for (const text of copy) {
       expect(text.match(/[.!]/g)).toHaveLength(1);

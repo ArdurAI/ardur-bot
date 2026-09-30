@@ -29,7 +29,8 @@ export function chiefActivityFeed(input: {
       ...(executionId ? { executionId } : {}),
     };
     pending = pending.then(async () => {
-      await input.write(activity);
+      // Observational projection must never fail a tool or poison later settlement.
+      await input.write(activity).catch(() => undefined);
     });
     return pending;
   };
