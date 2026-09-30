@@ -12,11 +12,39 @@
       import { I18nProvider } from "@lingui/react";
       import { createElement as h } from "react";
       import { createRoot } from "react-dom/client";
-      import { CoordinationLine } from "../../src/components/ai/CoordinationLine";
+      import {
+        ChiefDispatchLine,
+        ChiefReceiptText,
+        CoordinationLine,
+      } from "../../src/components/ai/CoordinationLine";
       import "../../src/styles.css";
 
       const i18n = setupI18n({ locale: "en", messages: { en: {} } });
       const failed = new URLSearchParams(location.search).get("failed") === "1";
+      const stopState = new URLSearchParams(location.search).get("stop");
+      const correction = ["requested", "confirmed", "uncertain", "replacement"].includes(stopState);
+      const dispatch = {
+        requestMessageId: "request",
+        revision: 87,
+        memberId: "replacement",
+        memberName: "Replacement",
+        state: "messaged",
+        reason: "eligible",
+        stop:
+          correction && stopState !== "replacement"
+            ? { revision: 86, memberName: "Member", state: stopState }
+            : undefined,
+        activity: {
+          revision: 87,
+          runId: "run",
+          delegationId: "assignment",
+          attempt: 1,
+          sourceSeq: 1,
+          key: "read-input",
+          state: "active",
+          updatedAt: "2026-01-01T00:00:00Z",
+        },
+      };
 
       // One ask round: three members asked. Without a failure, all three
       // answered; with one, Radiant could not use its model account.
@@ -53,7 +81,7 @@
             className:
               "max-w-[min(70%,calc(100%_-_6rem))] whitespace-pre-wrap rounded-[20px] bg-chat-user px-[18px] py-3 text-[15.5px] leading-[1.45] text-chat-user-foreground",
           },
-          "make every say hello to each other",
+          correction ? "Keep Member off this task." : "make every say hello to each other",
         ),
       );
       const memberBubble = (name, text) =>
@@ -82,20 +110,32 @@
                 "flex min-h-screen flex-col justify-end gap-2 bg-background px-4 py-6 md:px-7 md:py-6",
             },
             owner,
-            h(
-              "div",
-              { "data-testid": "coordination-round" },
-              h(CoordinationLine, {
-                block,
-                onOpenMemberSettings: (botId) => {
-                  // Match the app's client-side navigation without loading its auth gate.
-                  window.history.pushState(null, "", `/app/${botId}`);
-                },
-              }),
-            ),
-            memberBubble("Radiant", "Hello everyone! Glad to be here."),
-            memberBubble("test", "Hi all 👋"),
-            memberBubble("zai-bot", "Hey team, good to meet you."),
+            ...(correction
+              ? [
+                  h(ChiefReceiptText, {
+                    key: "receipt",
+                    receiptKey: "exclude-member",
+                    memberName: "Member",
+                  }),
+                  h(ChiefReceiptText, { key: "change", receiptKey: "change-task" }),
+                  h(ChiefDispatchLine, { key: "dispatch", dispatch, detail: "Preparation request" }),
+                ]
+              : [
+                  h(
+                    "div",
+                    { "data-testid": "coordination-round" },
+                    h(CoordinationLine, {
+                      block,
+                      onOpenMemberSettings: (botId) => {
+                        // Match the app's client-side navigation without loading its auth gate.
+                        window.history.pushState(null, "", `/app/${botId}`);
+                      },
+                    }),
+                  ),
+                  memberBubble("Radiant", "Hello everyone! Glad to be here."),
+                  memberBubble("test", "Hi all 👋"),
+                  memberBubble("zai-bot", "Hey team, good to meet you."),
+                ]),
           ),
         ),
       );

@@ -31,68 +31,79 @@ import {
 } from "./thread-events.js";
 
 describe("thread event reduction", () => {
-  it("replays chief activity in place and matches reload without accepting older updates", () => {
-    const blocks: ThreadMessage["blocks"] = [
-      {
-        kind: "handoff",
-        fromBotId: "chief",
-        toBotId: "worker",
-        text: "Details",
-        chiefDispatch: {
-          requestMessageId: "request",
-          revision: 1,
-          memberId: "worker",
-          memberName: "Member",
-          state: "messaged",
-          reason: "eligible",
-          runId: "run",
-          delegationId: "assignment",
-          activity: {
+  it.each(["requested", "confirmed", "uncertain", undefined] as const)(
+    "replays chief activity and %s stop in place and matches reload without accepting older updates",
+    (stopState) => {
+      const blocks: ThreadMessage["blocks"] = [
+        {
+          kind: "handoff",
+          fromBotId: "chief",
+          toBotId: "worker",
+          text: "Details",
+          chiefDispatch: {
+            requestMessageId: "request",
             revision: 1,
+            memberId: "worker",
+            memberName: "Member",
+            state: "messaged",
+            reason: "eligible",
+            stop: stopState
+              ? { revision: 2, memberName: "Previous member", state: stopState }
+              : undefined,
             runId: "run",
             delegationId: "assignment",
-            attempt: 1,
-            sourceSeq: 2,
-            key: "connect-notion",
-            state: "active",
-            updatedAt: "2026-01-01T00:00:00Z",
+            activity: {
+              revision: 1,
+              runId: "run",
+              delegationId: "assignment",
+              attempt: 1,
+              sourceSeq: 2,
+              key: "connect-notion",
+              state: "active",
+              updatedAt: "2026-01-01T00:00:00Z",
+            },
           },
         },
-      },
-    ];
-    const original = message("dispatch", [], 1);
-    const initial = snapshot([original]);
-    const update = event({
-      type: "thread.message.updated",
-      seq: 10,
-      payload: {
-        messageId: original.id,
-        role: original.role,
-        blocks,
-        messageSeq: original.seq,
-        createdAt: original.createdAt,
-      },
-    });
-    const live = reduceThreadSnapshot(initial, update)!;
-    expect(live.messages).toEqual([
-      {
-        ...original,
-        blocks,
-        threadId: update.threadId,
-        botId: update.botId,
-        runId: update.runId,
-        replyQuote: undefined,
-        replyToMessageId: undefined,
-      },
-    ]);
-    expect(reduceThreadSnapshot(live, update)).toBe(live);
-    expect(
-      reduceThreadSnapshot(live, { ...update, seq: 9, payload: { ...update.payload, blocks: [] } }),
-    ).toBe(live);
-    expect(
-      mergeThreadSnapshot(live, { ...live, messages: structuredClone(live.messages) })?.messages,
-    ).toEqual(live.messages);
-  });
+      ];
+      const original = message("dispatch", [], 1);
+      const initial = snapshot([original]);
+      const update = event({
+        type: "thread.message.updated",
+        seq: 10,
+        payload: {
+          messageId: original.id,
+          role: original.role,
+          blocks,
+          messageSeq: original.seq,
+          createdAt: original.createdAt,
+        },
+      });
+      const live = reduceThreadSnapshot(initial, update)!;
+      expect(live.messages).toEqual([
+        {
+          ...original,
+          blocks,
+          threadId: update.threadId,
+          botId: update.botId,
+          runId: update.runId,
+          replyQuote: undefined,
+          replyToMessageId: undefined,
+        },
+      ]);
+      expect(reduceThreadSnapshot(live, update)).toBe(live);
+      expect(
+        reduceThreadSnapshot(live, {
+          ...update,
+          seq: 9,
+          payload: { ...update.payload, blocks: [] },
+        }),
+      ).toBe(live);
+      expect(
+        mergeThreadSnapshot(live, { ...live, messages: structuredClone(live.messages) })?.messages,
+      ).toEqual(live.messages);
+      expect(mergeThreadSnapshot(live, initial)).toBe(live);
+    },
+  );
   it("recognizes either member pin event for a group refresh", () => {
     expect(isGroupMemberModelPinEvent(event({ type: "group.memberModelPin.set" }))).toBe(true);
     expect(isGroupMemberModelPinEvent(event({ type: "group.memberModelPin.cleared" }))).toBe(true);

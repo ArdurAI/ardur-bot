@@ -4414,6 +4414,30 @@ msgstr "알겠습니다 — 무엇이 없는지 확인하고 설치 전에 물�
 msgid "Got it — I’ll choose a team member to put this in Notion."
 msgstr "알겠습니다 — 이 문서를 Notion에 올릴 팀원을 선택하겠습니다."
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll keep {name} off this task."
+msgstr "알겠습니다 — {name}님을 이 작업에서 제외하겠습니다."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check this change before the next action."
+msgstr "알겠습니다 — 다음 행동 전에 이 변경 사항을 확인하겠습니다."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Told {name} to stand down"
+msgstr "{name}님에게 중단을 요청했습니다"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Stopping {name}"
+msgstr "{name}님을 중단하는 중"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} stood down"
+msgstr "{name}님이 중단했습니다"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "The previous action may have finished. I’ll check before retrying."
+msgstr "이전 작업이 이미 끝났을 수 있습니다. 재시도 전에 확인하겠습니다."
+
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
 msgstr ""

@@ -9,8 +9,14 @@ import {
 } from "@ardurbot/core";
 import { t } from "./i18n";
 
-export function chiefReceiptText(key: ChiefReceiptKey): string {
+export function chiefReceiptText(key: ChiefReceiptKey, memberName?: string): string {
   switch (key) {
+    case "exclude-member":
+      return memberName
+        ? t("Got it — I’ll keep {name} off this task.", { name: memberName })
+        : t("Got it — I’ll check the request and choose the next step.");
+    case "change-task":
+      return t("Got it — I’ll check this change before the next action.");
     case "document-to-service":
       return t("Got it — I’ll choose a team member to put this in Notion.");
     case "install-tool":
@@ -22,6 +28,17 @@ export function chiefReceiptText(key: ChiefReceiptKey): string {
   }
 }
 export function chiefDispatchSummary(dispatch: ChiefDispatch): string {
+  if (dispatch.stop) {
+    const name = dispatch.stop.memberName;
+    switch (dispatch.stop.state) {
+      case "requested":
+        return t("Told {name} to stand down", { name });
+      case "confirmed":
+        return t("{name} stood down", { name });
+      case "uncertain":
+        return t("The previous action may have finished. I’ll check before retrying.");
+    }
+  }
   const name = dispatch.memberName;
   return dispatch.state === "approval-held"
     ? t("Waiting for approval")
@@ -31,6 +48,10 @@ export function chiefDispatchSummary(dispatch: ChiefDispatch): string {
 }
 
 export function chiefActivityText(dispatch: ChiefDispatch): string | undefined {
+  if (dispatch.stop)
+    return dispatch.stop.state === "requested"
+      ? t("Stopping {name}", { name: dispatch.stop.memberName })
+      : undefined;
   const key = chiefActivityKey(dispatch);
   return key ? t(CHIEF_ACTIVITY_TEXT[key]) : undefined;
 }

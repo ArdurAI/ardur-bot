@@ -4414,6 +4414,30 @@ msgstr "समझ गया — क्या कमी है, जाँचू�
 msgid "Got it — I’ll choose a team member to put this in Notion."
 msgstr "समझ गया — इसे Notion में रखने के लिए टीम का एक सदस्य चुनूँगा।"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll keep {name} off this task."
+msgstr "समझ गया — {name} को इस काम से अलग रखूँगा।"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check this change before the next action."
+msgstr "समझ गया — अगली कार्रवाई से पहले इस बदलाव की जाँच करूँगा।"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Told {name} to stand down"
+msgstr "{name} को रुकने के लिए कहा"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Stopping {name}"
+msgstr "{name} को रोक रहा हूँ"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} stood down"
+msgstr "{name} रुक गया"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "The previous action may have finished. I’ll check before retrying."
+msgstr "पिछली कार्रवाई पूरी हो चुकी हो सकती है। दोबारा कोशिश करने से पहले जाँचूँगा।"
+
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
 msgstr ""

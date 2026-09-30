@@ -62,70 +62,76 @@ afterEach(() => {
 });
 
 describe("mobile API authentication", () => {
-  it("replays chief projection once and rejects an old activity after reload", () => {
-    const blocks: MobileMessage["blocks"] = [
-      {
-        kind: "handoff",
-        fromBotId: "chief",
-        toBotId: "worker",
-        text: "Details",
-        chiefDispatch: {
-          requestMessageId: "request",
-          revision: 1,
-          memberId: "worker",
-          memberName: "Member",
-          state: "messaged",
-          reason: "eligible",
-          activity: {
+  it.each(["requested", "confirmed", "uncertain", undefined] as const)(
+    "replays chief projection with %s stop once and rejects old state after reload",
+    (stopState) => {
+      const blocks: MobileMessage["blocks"] = [
+        {
+          kind: "handoff",
+          fromBotId: "chief",
+          toBotId: "worker",
+          text: "Details",
+          chiefDispatch: {
+            requestMessageId: "request",
             revision: 1,
-            runId: "run",
-            delegationId: "assignment",
-            attempt: 1,
-            sourceSeq: 2,
-            key: "read-input",
-            state: "active",
-            updatedAt: "2026-01-01T00:00:00Z",
+            memberId: "worker",
+            memberName: "Member",
+            state: "messaged",
+            reason: "eligible",
+            stop: stopState
+              ? { revision: 2, memberName: "Previous member", state: stopState }
+              : undefined,
+            activity: {
+              revision: 1,
+              runId: "run",
+              delegationId: "assignment",
+              attempt: 1,
+              sourceSeq: 2,
+              key: "read-input",
+              state: "active",
+              updatedAt: "2026-01-01T00:00:00Z",
+            },
           },
         },
-      },
-    ];
-    const initial: MobileSnapshot = {
-      threadId: "room",
-      cursor: 1,
-      olderCursor: null,
-      run: null,
-      messages: [{ id: "dispatch", role: "bot", botId: "chief", blocks: [] }],
-    };
-    const update = {
-      type: "thread.message.updated",
-      seq: 2,
-      botId: "chief",
-      payload: { messageId: "dispatch", role: "bot", blocks },
-    };
-    const live = applyMobileThreadEvent(initial, update)!;
-    expect(live.messages).toEqual([
-      {
-        id: "dispatch",
-        role: "bot",
+      ];
+      const initial: MobileSnapshot = {
+        threadId: "room",
+        cursor: 1,
+        olderCursor: null,
+        run: null,
+        messages: [{ id: "dispatch", role: "bot", botId: "chief", blocks: [] }],
+      };
+      const update = {
+        type: "thread.message.updated",
+        seq: 2,
         botId: "chief",
-        blocks,
-        runId: undefined,
-        replyQuote: undefined,
-        replyToMessageId: undefined,
-      },
-    ]);
-    expect(applyMobileThreadEvent(live, update)).toBe(live);
-    expect(
-      applyMobileThreadEvent(live, {
-        ...update,
-        seq: 1,
-        payload: { ...update.payload, blocks: [] },
-      }),
-    ).toBe(live);
-    expect(
-      mergeMobileSnapshot(live, { ...live, messages: structuredClone(live.messages) })?.messages,
-    ).toEqual(live.messages);
-  });
+        payload: { messageId: "dispatch", role: "bot", blocks },
+      };
+      const live = applyMobileThreadEvent(initial, update)!;
+      expect(live.messages).toEqual([
+        {
+          id: "dispatch",
+          role: "bot",
+          botId: "chief",
+          blocks,
+          runId: undefined,
+          replyQuote: undefined,
+          replyToMessageId: undefined,
+        },
+      ]);
+      expect(applyMobileThreadEvent(live, update)).toBe(live);
+      expect(
+        applyMobileThreadEvent(live, {
+          ...update,
+          seq: 1,
+          payload: { ...update.payload, blocks: [] },
+        }),
+      ).toBe(live);
+      expect(
+        mergeMobileSnapshot(live, { ...live, messages: structuredClone(live.messages) })?.messages,
+      ).toEqual(live.messages);
+    },
+  );
   it.each([
     "Memory review is not available with Claude Code or Codex yet; import memory or edit a document directly.",
     "This bot may only run locally — change the pin or the space policy",

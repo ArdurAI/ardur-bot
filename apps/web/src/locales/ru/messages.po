@@ -4414,6 +4414,30 @@ msgstr "Понял — проверю, чего не хватает, и спро
 msgid "Got it — I’ll choose a team member to put this in Notion."
 msgstr "Понял — выберу участника команды, который разместит это в Notion."
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll keep {name} off this task."
+msgstr "Понял — не буду поручать эту задачу {name}."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check this change before the next action."
+msgstr "Понял — проверю это изменение перед следующим действием."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Told {name} to stand down"
+msgstr "Попросил {name} остановиться"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Stopping {name}"
+msgstr "Останавливаю {name}"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} stood down"
+msgstr "{name} прекратил работу"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "The previous action may have finished. I’ll check before retrying."
+msgstr "Предыдущее действие могло завершиться. Проверю перед повторной попыткой."
+
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
 msgstr ""

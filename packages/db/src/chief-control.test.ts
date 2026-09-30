@@ -141,15 +141,27 @@ describe("chief final tool admission fence", () => {
     await requestSelectiveCancelInTransaction(tx as never, { spaceId: "space", userId: "owner" }, [
       "run",
     ]);
-    expect(tx.run.updateMany.mock.calls[0][0].where.id).toEqual({ in: ["run"] });
-    expect(tx.delegation.updateMany.mock.calls[0][0].where.id).toEqual({ in: ["delegation"] });
-    expect(tx.delegation.updateMany.mock.calls[1][0].where).toMatchObject({
-      parentRunId: { in: ["run"] },
-      kind: "helper",
-    });
-    expect(tx.externalEffect.updateMany.mock.calls[0][0]).toMatchObject({
-      where: { runId: { in: ["run"] }, status: { in: ["intended", "approved"] } },
-      data: { status: "denied" },
-    });
+    expect(tx.run.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ id: { in: ["run"] } }) }),
+    );
+    expect(tx.delegation.updateMany).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ where: expect.objectContaining({ id: { in: ["delegation"] } }) }),
+    );
+    expect(tx.delegation.updateMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: expect.objectContaining({ parentRunId: { in: ["run"] }, kind: "helper" }),
+      }),
+    );
+    expect(tx.externalEffect.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          runId: { in: ["run"] },
+          status: { in: ["intended", "approved"] },
+        }),
+        data: { status: "denied" },
+      }),
+    );
   });
 });

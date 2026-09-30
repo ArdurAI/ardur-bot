@@ -1,5 +1,5 @@
 import type { ChiefReceipt, ThreadSendResult } from "@ardurbot/contracts";
-import { ThreadSendResultSchema } from "@ardurbot/contracts";
+import { ChiefDispatchSchema, MessageBlock, ThreadSendResultSchema } from "@ardurbot/contracts";
 import { applyChiefReceipt } from "@ardurbot/core";
 import { describe, expect, it, vi } from "vitest";
 
@@ -36,6 +36,49 @@ const receipt: ChiefReceipt = {
   createdAt: "2026-01-01T00:00:00Z",
 };
 describe("phone chief receipts", () => {
+  it("preserves named correction receipts and stop states at the message boundary", () => {
+    const block = MessageBlock.parse({
+      kind: "chief_receipt",
+      requestMessageId: "request",
+      key: "exclude-member",
+      memberName: "Member",
+      text: "Saved acknowledgement",
+    });
+    expect(block).toMatchObject({ memberName: "Member", key: "exclude-member" });
+    const before: MobileSnapshot = {
+      threadId: "room",
+      messages: [],
+      cursor: 0,
+      olderCursor: null,
+      run: null,
+    };
+    const after = applyMobileThreadEvent(before, {
+      botId: "chief",
+      seq: 1,
+      type: "thread.message.created",
+      payload: { messageId: "receipt", role: "bot", blocks: [block] },
+    });
+    expect(after?.messages[0]?.blocks).toEqual([block]);
+    for (const state of ["requested", "confirmed", "uncertain"] as const) {
+      const dispatch = {
+        requestMessageId: "request",
+        revision: 2,
+        memberId: "worker",
+        memberName: "Replacement",
+        reason: "eligible",
+        state: "messaged",
+        stop: { revision: 1, memberName: "Member", state },
+      };
+      expect(ChiefDispatchSchema.parse(dispatch).stop).toEqual(dispatch.stop);
+      expect(
+        ChiefDispatchSchema.safeParse({
+          ...dispatch,
+          stop: { ...dispatch.stop, revision: 0 },
+        }).success,
+      ).toBe(false);
+    }
+  });
+
   it.each([RU_MESSAGES, ZH_MESSAGES])(
     "translates all new receipt and dispatch strings",
     (catalog) => {
@@ -44,6 +87,12 @@ describe("phone chief receipts", () => {
         "Got it — I’ll check what’s missing and ask before installing it.",
         "Got it — I’ll check the request and choose the next step.",
         "Hi everyone.",
+        "Got it — I’ll keep {name} off this task.",
+        "Got it — I’ll check this change before the next action.",
+        "Told {name} to stand down",
+        "Stopping {name}",
+        "{name} stood down",
+        "The previous action may have finished. I’ll check before retrying.",
         "Messaged {name}",
         "Queued for {name}",
         "Waiting for approval",

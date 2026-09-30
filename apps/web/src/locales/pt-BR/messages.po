@@ -4414,6 +4414,30 @@ msgstr "Entendido — vou verificar o que está faltando e perguntar antes de in
 msgid "Got it — I’ll choose a team member to put this in Notion."
 msgstr "Entendido — vou escolher um membro da equipe para colocar isto no Notion."
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll keep {name} off this task."
+msgstr "Entendido — vou manter {name} fora desta tarefa."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check this change before the next action."
+msgstr "Entendido — vou verificar esta mudança antes da próxima ação."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Told {name} to stand down"
+msgstr "Pedi para {name} parar"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Stopping {name}"
+msgstr "Parando {name}"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} stood down"
+msgstr "{name} parou"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "The previous action may have finished. I’ll check before retrying."
+msgstr "A ação anterior pode ter terminado. Vou verificar antes de tentar novamente."
+
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
 msgstr ""

@@ -1,4 +1,12 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "Got it — I’ll keep {name} off this task.": "Понял — не буду поручать эту задачу {name}.",
+  "Got it — I’ll check this change before the next action.":
+    "Понял — проверю это изменение перед следующим действием.",
+  "Told {name} to stand down": "Попросил {name} остановиться",
+  "Stopping {name}": "Останавливаю {name}",
+  "{name} stood down": "{name} прекратил работу",
+  "The previous action may have finished. I’ll check before retrying.":
+    "Предыдущее действие могло завершиться. Проверю перед повторной попыткой.",
   "Reading the document": "Читаю документ",
   "Connecting to Notion": "Подключаюсь к Notion",
   "Creating the Notion page": "Создаю страницу в Notion",

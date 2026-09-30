@@ -2608,7 +2608,7 @@ const MessageBubble = memo(function MessageBubble({
   if (chiefReceipt)
     return (
       <Text style={{ color: tokens.foreground, fontSize: 15.5 }} accessibilityLiveRegion="polite">
-        {chiefReceiptText(chiefReceipt.key)}
+        {chiefReceiptText(chiefReceipt.key, chiefReceipt.memberName)}
       </Text>
     );
   if (handoff) {

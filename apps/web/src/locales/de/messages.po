@@ -4414,6 +4414,30 @@ msgstr "Verstanden — ich prüfe, was fehlt, und frage vor der Installation nac
 msgid "Got it — I’ll choose a team member to put this in Notion."
 msgstr "Verstanden — ich wähle ein Teammitglied aus, das dies in Notion ablegt."
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll keep {name} off this task."
+msgstr "Verstanden — ich halte {name} aus dieser Aufgabe heraus."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check this change before the next action."
+msgstr "Verstanden — ich prüfe diese Änderung vor der nächsten Aktion."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Told {name} to stand down"
+msgstr "{name} zum Aufhören aufgefordert"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Stopping {name}"
+msgstr "Stoppe {name}"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} stood down"
+msgstr "{name} hat die Arbeit eingestellt"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "The previous action may have finished. I’ll check before retrying."
+msgstr "Die vorherige Aktion ist möglicherweise abgeschlossen. Ich prüfe das vor einem erneuten Versuch."
+
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
 msgstr ""

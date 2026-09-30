@@ -6,6 +6,49 @@ const viewports = [
   { name: "mobile-390x844", width: 390, height: 844 },
 ];
 
+for (const state of ["requested", "confirmed", "uncertain", "replacement"] as const) {
+  test(`chief correction shows truthful ${state} state`, async ({ page }, testInfo) => {
+    for (const viewport of viewports) {
+      await page.setViewportSize(viewport);
+      await page.goto(`/e2e/fixtures/coordination-line.html?stop=${state}`);
+      await expect(page.getByTestId("chief-receipt")).toHaveText([
+        "Got it — I’ll keep Member off this task.",
+        "Got it — I’ll check this change before the next action.",
+      ]);
+      const label =
+        state === "requested"
+          ? "Told Member to stand down"
+          : state === "confirmed"
+            ? "Member stood down"
+            : state === "uncertain"
+              ? "The previous action may have finished. I’ll check before retrying."
+              : "Messaged Replacement";
+      const activity =
+        state === "requested"
+          ? "Stopping Member"
+          : state === "replacement"
+            ? "Reading the document"
+            : undefined;
+      const line = page.getByTestId("chief-dispatch");
+      const button = line.getByRole("button", {
+        name: [label, activity].filter(Boolean).join(" · "),
+        exact: true,
+      });
+      await expect(button).toHaveAttribute("aria-expanded", "false");
+      await expect(button.locator('[aria-live="polite"]')).toHaveText(label);
+      await expect(line.getByTestId("chief-activity")).toHaveCount(activity ? 1 : 0);
+      if (activity) await expect(line.getByTestId("chief-activity")).toHaveText(activity);
+      await expect(line).not.toContainText("Preparation request");
+      await expect(line).not.toContainText(/86|87/);
+      await expect(page.locator("body")).toHaveJSProperty("scrollWidth", viewport.width);
+      await captureScreenshot(page, testInfo, `correction-${state}-${viewport.name}`);
+      await button.click();
+      await expect(button).toHaveAttribute("aria-expanded", "true");
+      await expect(line).toContainText("Preparation request");
+    }
+  });
+}
+
 test("group ask shows the answers with one collapsed coordination line", async ({
   page,
 }, testInfo) => {

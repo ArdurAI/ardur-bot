@@ -15,6 +15,8 @@ vi.mock("./i18n", () => ({
 
 import {
   chiefActivityText,
+  chiefDispatchSummary,
+  chiefReceiptText,
   chiefResultText,
   coordinationAccessibilityLabel,
   coordinationFailureFixable,
@@ -40,6 +42,45 @@ function block(patch: Partial<CoordinationBlock> = {}): CoordinationBlock {
 }
 
 describe("mobile coordination line", () => {
+  it("acknowledges a correction without claiming the member has stopped", () => {
+    expect(chiefReceiptText("exclude-member", "Member")).toBe(
+      "Got it — I’ll keep Member off this task.",
+    );
+    expect(chiefReceiptText("change-task")).toBe(
+      "Got it — I’ll check this change before the next action.",
+    );
+    expect(chiefReceiptText("exclude-member")).toBe(
+      "Got it — I’ll check the request and choose the next step.",
+    );
+  });
+
+  it("distinguishes a stop request, confirmation, uncertainty and replacement", () => {
+    const dispatch: ChiefDispatch = {
+      requestMessageId: "request",
+      revision: 87,
+      memberId: "replacement",
+      memberName: "Replacement",
+      state: "messaged",
+      reason: "eligible",
+    };
+    for (const state of ["requested", "confirmed", "uncertain"] as const) {
+      const stopping = { ...dispatch, stop: { revision: 86, memberName: "Member", state } };
+      expect(chiefDispatchSummary(stopping)).toBe(
+        state === "requested"
+          ? "Told Member to stand down"
+          : state === "confirmed"
+            ? "Member stood down"
+            : "The previous action may have finished. I’ll check before retrying.",
+      );
+      expect(chiefActivityText(stopping)).toBe(
+        state === "requested" ? "Stopping Member" : undefined,
+      );
+      expect(chiefDispatchSummary(stopping)).not.toMatch(/86|87|Replacement/);
+    }
+    expect(chiefDispatchSummary(dispatch)).toBe("Messaged Replacement");
+    expect(chiefActivityText(dispatch)).toBe("Working on the task");
+  });
+
   it("shows genuine activity and removes it for waiting and terminal states", () => {
     const dispatch: ChiefDispatch = {
       requestMessageId: "request",

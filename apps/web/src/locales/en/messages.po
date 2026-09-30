@@ -4414,6 +4414,30 @@ msgstr "Got it — I’ll check what’s missing and ask before installing it."
 msgid "Got it — I’ll choose a team member to put this in Notion."
 msgstr "Got it — I’ll choose a team member to put this in Notion."
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll keep {name} off this task."
+msgstr "Got it — I’ll keep {name} off this task."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check this change before the next action."
+msgstr "Got it — I’ll check this change before the next action."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Told {name} to stand down"
+msgstr "Told {name} to stand down"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Stopping {name}"
+msgstr "Stopping {name}"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} stood down"
+msgstr "{name} stood down"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "The previous action may have finished. I’ll check before retrying."
+msgstr "The previous action may have finished. I’ll check before retrying."
+
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
 msgstr "Governance"

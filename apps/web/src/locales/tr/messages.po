@@ -4414,6 +4414,30 @@ msgstr "Anladım — neyin eksik olduğunu kontrol edip yüklemeden önce soraca
 msgid "Got it — I’ll choose a team member to put this in Notion."
 msgstr "Anladım — bunu Notion’a koyacak bir ekip üyesi seçeceğim."
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll keep {name} off this task."
+msgstr "Anladım — {name} bu görevde yer almayacak."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check this change before the next action."
+msgstr "Anladım — bir sonraki işlemden önce bu değişikliği kontrol edeceğim."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Told {name} to stand down"
+msgstr "{name} için durma talimatı verildi"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Stopping {name}"
+msgstr "{name} durduruluyor"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} stood down"
+msgstr "{name} durdu"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "The previous action may have finished. I’ll check before retrying."
+msgstr "Önceki işlem tamamlanmış olabilir. Yeniden denemeden önce kontrol edeceğim."
+
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
 msgstr ""
