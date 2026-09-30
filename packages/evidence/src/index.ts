@@ -15,6 +15,7 @@ export type {
   PolicyDecision,
   ReceiptClaims,
   ReceiptInput,
+  ReceiptRunIdentity,
 } from "./receipt.js";
 export {
   buildReceiptClaims,

@@ -281,25 +281,40 @@ export type ReceiptInput = {
   now?: Date | (() => Date);
 } & Pick<ReceiptClaims, (typeof RECEIPT_OPTIONAL_CLAIMS)[number]>;
 
-export function buildReceiptClaims(input: ReceiptInput, previous: string | null): ReceiptClaims {
+export type ReceiptRunIdentity = Pick<
+  ReceiptInput,
+  "runId" | "spaceId" | "botId" | "actor" | "verifierId" | "grantId" | "traceId" | "runNonce"
+>;
+
+function receiptIdentity(input: ReceiptRunIdentity, step: number) {
   requireClaim(isNonemptyString(input.runId), "runId");
   requireClaim(isNonemptyString(input.spaceId), "spaceId");
+  const verifierId = input.verifierId ?? `ardur:${input.spaceId}:evidence`;
+  return {
+    grant_id: input.grantId,
+    trace_id: input.traceId,
+    run_nonce: input.runNonce,
+    actor: input.actor ?? input.botId ?? "",
+    verifier_id: verifierId,
+    iss: verifierId,
+    step_id: `${input.runId}:${step}`,
+  };
+}
+
+export function buildReceiptClaims(input: ReceiptInput, previous: string | null): ReceiptClaims {
+  const identity = receiptIdentity(input, input.step);
   requireClaim(isNonnegativeInteger(input.step), "step");
   const iat = epochSeconds(input.now);
   const receiptId = randomUUID();
   const parentHash = previous === null ? null : sha256(previous);
-  const verifierId = input.verifierId ?? `ardur:${input.spaceId}:evidence`;
   const claims: ReceiptClaims = {
+    ...identity,
     schema_version: "ardur.execution_receipt.v0.2",
     canonicalization: "jcs-rfc8785",
     receipt_kind: "action",
     receipt_id: receiptId,
-    grant_id: input.grantId,
     parent_receipt_hash: parentHash,
     parent_receipt_id: parentHash?.slice(0, 16) ?? null,
-    actor: input.actor ?? input.botId ?? "",
-    verifier_id: verifierId,
-    step_id: `${input.runId}:${input.step}`,
     tool: input.tool,
     action_class: input.actionClass,
     side_effect_class: input.sideEffectClass,
@@ -310,8 +325,6 @@ export function buildReceiptClaims(input: ReceiptInput, previous: string | null)
     reason: input.reason,
     policy_decisions: input.policyDecisions,
     arguments_hash: sha256(canonicalize(input.args)),
-    trace_id: input.traceId,
-    run_nonce: input.runNonce,
     invocation_digest: {
       alg: "sha-256",
       canonicalization: "jcs-rfc8785",
@@ -322,7 +335,6 @@ export function buildReceiptClaims(input: ReceiptInput, previous: string | null)
     },
     budget_remaining: input.budgetRemaining,
     timestamp: new Date(iat * 1000).toISOString().replace(".000Z", "Z"),
-    iss: verifierId,
     iat,
     exp: iat + 3600,
     jti: receiptId,
@@ -402,12 +414,18 @@ export function createEvidenceChain(privateKey: KeyObject | string, kid: string)
 
 /** The stored tail and sequence must come from the same durable append. */
 export function resumeChain(
-  { lastJws, lastSeq }: { lastJws: string; lastSeq: number },
+  {
+    lastJws,
+    lastSeq,
+    expectedRun,
+  }: { lastJws: string; lastSeq: number; expectedRun: ReceiptRunIdentity },
   privateKey: KeyObject | string,
   kid: string,
 ): EvidenceChain {
   if (!isNonnegativeInteger(lastSeq) || lastSeq === Number.MAX_SAFE_INTEGER)
     throw new EvidenceFormatError("invalid_sequence", "lastSeq", "Expected a resumable sequence");
+  const identity = receiptIdentity(expectedRun, lastSeq);
+  let claims: ReceiptClaims;
   try {
     const decoded = decodeCompact(lastJws);
     validateReceiptClaims(decoded.payload);
@@ -429,13 +447,21 @@ export function resumeChain(
       Buffer.from(canonicalize(decoded.payload)).equals(decoded.payloadBytes),
       "payload",
     );
-    requireClaim(decoded.payload.step_id.endsWith(`:${lastSeq}`), "lastSeq");
+    claims = decoded.payload;
   } catch {
     throw new EvidenceFormatError(
       "invalid_jws",
       "lastJws",
-      "Stored tail is invalid or does not match the key and sequence",
+      "Stored tail is invalid or does not match the key",
     );
+  }
+  for (const [claim, expected] of Object.entries(identity)) {
+    if (claims[claim as keyof typeof identity] !== expected)
+      throw new EvidenceFormatError(
+        "tail_mismatch",
+        claim,
+        "Stored tail belongs to a different run or step",
+      );
   }
   return chain(privateKey, kid, lastJws, lastSeq + 1);
 }

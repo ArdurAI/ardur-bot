@@ -354,7 +354,11 @@ describe("resumable chain", () => {
       Buffer.from(second.jws.split(".")[1] ?? "", "base64url").toString(),
     ) as ReceiptClaims;
     expect(claims.parent_receipt_id).toBe(first.sha256.slice(0, 16));
-    const resumed = resumeChain({ lastJws: second.jws, lastSeq: second.seq }, key, keys.kid);
+    const resumed = resumeChain(
+      { lastJws: second.jws, lastSeq: second.seq, expectedRun: receiptInput() },
+      key,
+      keys.kid,
+    );
     expect(resumed.previousJws).toBe(second.jws);
     expect(resumed.nextStep).toBe(2);
     const third = resumed.append(receiptInput());
@@ -367,20 +371,66 @@ describe("resumable chain", () => {
     expect(chain.nextStep).toBe(0);
     expect(chain.previousJws).toBeNull();
   });
+  it.each([
+    ["runId", { runId: "run-other" }],
+    ["grant_id", { grantId: "grant-other" }],
+    ["trace_id", { traceId: "trace-other" }],
+    ["run_nonce", { runNonce: "YWJjZGVmMDEyMzQ1Njc4OQ" }],
+    ["actor via botId", { botId: "bot-other" }],
+    ["actor override", { actor: "actor-other" }],
+    ["verifier_id and iss via spaceId", { spaceId: "space-other" }],
+    ["verifier_id and iss override", { verifierId: "verifier-other" }],
+  ] as const)("rejects another run's same-key tail differing in %s", (_field, overrides) => {
+    const record = createEvidenceChain(key, keys.kid).append(receiptInput(overrides));
+    expect(() =>
+      resumeChain(
+        { lastJws: record.jws, lastSeq: record.seq, expectedRun: receiptInput() },
+        key,
+        keys.kid,
+      ),
+    ).toThrow(expect.objectContaining({ name: "EvidenceFormatError", code: "tail_mismatch" }));
+  });
+  it.each(["run-test:00", "run-test:1"])("rejects a nonmatching step_id %s", (step_id) => {
+    const lastJws = signReceipt({ ...base(), step_id }, key, keys.kid);
+    expect(() =>
+      resumeChain({ lastJws, lastSeq: 0, expectedRun: receiptInput() }, key, keys.kid),
+    ).toThrow(expect.objectContaining({ code: "tail_mismatch", claim: "step_id" }));
+  });
+  it.each([
+    {
+      runId: "run:with:colons",
+      actor: "actor-test",
+      botId: "ignored",
+      verifierId: "verifier-test",
+    },
+    { spaceId: "space-other", botId: "bot-other" },
+  ])("resumes matching resolved identity %#", (overrides) => {
+    const input = receiptInput(overrides);
+    const record = createEvidenceChain(key, keys.kid).append(input);
+    const resumed = resumeChain(
+      { lastJws: record.jws, lastSeq: record.seq, expectedRun: input },
+      keys.privateKeyPem,
+      keys.kid,
+    );
+    const next = resumed.append(input);
+    expect(next.seq).toBe(1);
+    expect(next.parentSha256).toBe(record.sha256);
+  });
   it("rejects corrupt tails, wrong keys and wrong sequence", () => {
     const record = createEvidenceChain(key, keys.kid).append(receiptInput());
-    expect(() => resumeChain({ lastJws: "invalid", lastSeq: 0 }, key, keys.kid)).toThrow(
-      EvidenceFormatError,
-    );
-    expect(() => resumeChain({ lastJws: record.jws, lastSeq: -1 }, key, keys.kid)).toThrow(
-      EvidenceFormatError,
-    );
-    expect(() => resumeChain({ lastJws: record.jws, lastSeq: 1 }, key, keys.kid)).toThrow(
-      EvidenceFormatError,
-    );
+    const expectedRun = receiptInput();
+    expect(() =>
+      resumeChain({ lastJws: "invalid", lastSeq: 0, expectedRun }, key, keys.kid),
+    ).toThrow(EvidenceFormatError);
+    expect(() =>
+      resumeChain({ lastJws: record.jws, lastSeq: -1, expectedRun }, key, keys.kid),
+    ).toThrow(EvidenceFormatError);
+    expect(() =>
+      resumeChain({ lastJws: record.jws, lastSeq: 1, expectedRun }, key, keys.kid),
+    ).toThrow(EvidenceFormatError);
     const other = generateEvidenceKey();
     expect(() =>
-      resumeChain({ lastJws: record.jws, lastSeq: 0 }, other.privateKeyPem, other.kid),
+      resumeChain({ lastJws: record.jws, lastSeq: 0, expectedRun }, other.privateKeyPem, other.kid),
     ).toThrow(EvidenceFormatError);
   });
 });

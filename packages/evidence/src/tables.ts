@@ -120,6 +120,7 @@ export const FORMAT_ERROR_CODES = [
   "invalid_key",
   "invalid_jws",
   "invalid_sequence",
+  "tail_mismatch",
 ] as const;
 export type FormatErrorCode = (typeof FORMAT_ERROR_CODES)[number];
 export const VERIFICATION_CODES = [

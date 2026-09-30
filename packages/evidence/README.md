@@ -23,10 +23,14 @@ Optional wire claims use snake_case names as defined in ReceiptClaims.
 
 Persist the record before treating the append as durable. This in-memory helper
 cannot make database writes atomic: discard/rebuild it after a failed write.
-resumeChain({ lastJws, lastSeq }, privateKey, kid) checks the stored tail's
-signature, format and sequence before continuing. The caller must supply the
-same run identity and the actual durable tail; resuming is not a check of the
-entire stored history. One helper belongs to one run and one writer.
+resumeChain({ lastJws, lastSeq, expectedRun }, privateKey, kid) checks the stored
+tail's signature and format, then binds it to the expected run and exact step.
+expectedRun is ReceiptRunIdentity: runId, spaceId, grantId, traceId, runNonce,
+and actor or botId, with optional verifierId. Identity defaults and overrides
+match the builder. A different grant_id, trace_id, run_nonce, actor, verifier_id,
+iss or step_id throws EvidenceFormatError with code tail_mismatch. Supply the
+actual durable tail; resuming does not check the entire stored history.
+One helper belongs to one run and one writer.
 
 sealRun({ records, actor, grantId, iss, now }, privateKey, kid) verifies the chain
 and refuses empty chains or mismatched run identities. records is an ordered
