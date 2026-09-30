@@ -77,9 +77,12 @@ function overlaps(left: string, right: string): boolean {
  * folder; `tool` is present exactly when `kind` is "agent-tool" (the schema enforces
  * this).
  */
+const protectedLocationId = z.string().min(1).max(64);
+const GRANTS_PATCH_MAX = 128;
+
 export const ProtectedLocationSchema = z
   .object({
-    id: z.string().min(1).max(64),
+    id: protectedLocationId,
     label: z.string().min(1).max(120),
     paths: z.array(locationPath).min(1).max(16),
     kind: ProtectedLocationKindSchema,
@@ -212,7 +215,7 @@ export const PROTECTED_LOCATIONS_DEFAULTS: ProtectedLocation[] = [
 ];
 
 /**
- * Locations the owner adds beyond the defaults. The policy is stored per host and
+ * Locations the owner adds beyond the defaults. The policy is stored per space and
  * read back with parseProtectedLocationsPolicy. The schema refuses a custom id that
  * repeats a default id and a custom id used twice, so `protectedLocations` can
  * never return two locations with one id.
@@ -261,7 +264,7 @@ function storedCustomEntries(raw: unknown): unknown[] | undefined {
 }
 
 /**
- * The stored policy for a host. It never throws, and it reads each custom location on its
+ * The stored policy for a space. It never throws, and it reads each custom location on its
  * own: one that is malformed, repeats an id, or covers a place that is already protected is
  * left out, and the rest stay protected. A policy from another version reads as no custom
  * locations. `unreadProtectedLocations` says how many entries were left out.
@@ -293,6 +296,87 @@ export function unreadProtectedLocations(raw: unknown): number {
 export function protectedLocations(policy: ProtectedLocationsPolicyV1): ProtectedLocation[] {
   const custom = parseProtectedLocationsPolicy(policy).custom;
   return [...PROTECTED_LOCATIONS_DEFAULTS, ...custom];
+}
+
+/** Stored grants are all-or-nothing string lists; stale ids and duplicates are omitted. */
+export function parseProtectedLocationGrants(
+  raw: unknown,
+  locations: readonly ProtectedLocation[],
+): string[] {
+  if (!Array.isArray(raw) || !raw.every((id) => typeof id === "string")) return [];
+  const known = new Set(locations.map((location) => location.id));
+  return [...new Set(raw.filter((id) => known.has(id)))];
+}
+
+export const ProtectedLocationGrantsPatchSchema = z.strictObject({
+  grant: z.array(protectedLocationId).max(GRANTS_PATCH_MAX).optional(),
+  revoke: z.array(protectedLocationId).max(GRANTS_PATCH_MAX).optional(),
+});
+export type ProtectedLocationGrantsPatch = z.infer<typeof ProtectedLocationGrantsPatchSchema>;
+
+/** Apply an explicit grant/revoke delta, never replacing unrelated grants. */
+export function applyProtectedLocationGrantsPatch(
+  stored: unknown,
+  patch: ProtectedLocationGrantsPatch,
+  locations: readonly ProtectedLocation[],
+): string[] {
+  const { grant = [], revoke = [] } = ProtectedLocationGrantsPatchSchema.parse(patch);
+  const known = new Set(locations.map((location) => location.id));
+  const revoked = new Set(revoke);
+  for (const id of [...grant, ...revoke]) {
+    if (!known.has(id)) throw new Error(`Unknown protected location "${id}".`);
+  }
+  for (const id of grant) {
+    if (revoked.has(id)) throw new Error(`Cannot grant and revoke protected location "${id}".`);
+  }
+  return [...new Set([...parseProtectedLocationGrants(stored, locations), ...grant])].filter(
+    (id) => !revoked.has(id),
+  );
+}
+
+export const ProtectedLocationsPolicyPatchSchema = z.strictObject({
+  add: z.array(ProtectedLocationSchema).max(CUSTOM_LOCATIONS_MAX).optional(),
+  remove: z.array(protectedLocationId).max(CUSTOM_LOCATIONS_MAX).optional(),
+});
+export type ProtectedLocationsPolicyPatch = z.infer<typeof ProtectedLocationsPolicyPatchSchema>;
+
+export function applyProtectedLocationsPolicyPatch(
+  stored: unknown,
+  patch: ProtectedLocationsPolicyPatch,
+): ProtectedLocationsPolicyV1 {
+  const { add = [], remove = [] } = ProtectedLocationsPolicyPatchSchema.parse(patch);
+  const removed = new Set(remove);
+  for (const location of PROTECTED_LOCATIONS_DEFAULTS) {
+    if (removed.has(location.id))
+      throw new Error(`Cannot remove default location "${location.id}".`);
+  }
+  return ProtectedLocationsPolicyV1Schema.parse({
+    version: 1,
+    custom: [
+      ...parseProtectedLocationsPolicy(stored).custom.filter(
+        (location) => !removed.has(location.id),
+      ),
+      ...add,
+    ],
+  });
+}
+
+export type ProtectedLocationView = ProtectedLocation & { custom: boolean; granted: boolean };
+
+/** The shared app list: defaults first, with bot grants applied only to known locations. */
+export function protectedLocationViews(input: {
+  policy: unknown;
+  grants: unknown;
+}): ProtectedLocationView[] {
+  const policy = parseProtectedLocationsPolicy(input.policy);
+  const locations = protectedLocations(policy);
+  const granted = new Set(parseProtectedLocationGrants(input.grants, locations));
+  const custom = new Set(policy.custom.map((location) => location.id));
+  return locations.map((location) => ({
+    ...location,
+    custom: custom.has(location.id),
+    granted: granted.has(location.id),
+  }));
 }
 
 /**
