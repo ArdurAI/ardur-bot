@@ -7,6 +7,7 @@ import { createBackgroundJobHandlers } from "../background-job-handlers.js";
 import { EncryptedSecretStore } from "../secrets.js";
 import { createEvidenceRecorder } from "./recorder.js";
 import { createEvidenceSealRecovery } from "./recovery.js";
+import { createEvidenceSealer } from "./seal.js";
 import { fakeEvidenceStore } from "./test-store.js";
 
 function fixture() {
@@ -60,6 +61,12 @@ function fixture() {
     },
     bot: { update: vi.fn(async () => ({})) },
     delegation: { findMany: vi.fn(async () => []) },
+    externalEffect: {
+      findUnique: vi.fn(async () => ({ runId: run.id, status: "intended", request: {} })),
+    },
+    deviceApprovalBinding: {
+      findUnique: vi.fn(async (): Promise<{ expiresAt: Date } | null> => null),
+    },
   };
   const prisma = {
     ...tx,
@@ -72,11 +79,23 @@ function fixture() {
     }),
   } as unknown as JobPublisher;
   const handlers = createBackgroundJobHandlers({
-    executor: { sealRunEvidence: recorder.sealRunEvidence },
+    executor: {
+      sealRunEvidence: createEvidenceSealer({ prisma, store: evidence.store, recorder }),
+    },
     prisma,
     jobs,
   } as unknown as Parameters<typeof createBackgroundJobHandlers>[0]);
-  return { ...evidence, recorder, run, prisma, jobs, queued, handlers };
+  return {
+    ...evidence,
+    recorder,
+    run,
+    prisma,
+    jobs,
+    queued,
+    handlers,
+    approval: tx.externalEffect,
+    binding: tx.deviceApprovalBinding,
+  };
 }
 
 async function record(f: ReturnType<typeof fixture>) {
@@ -96,6 +115,66 @@ async function drain(f: ReturnType<typeof fixture>) {
 }
 
 describe("terminal-run evidence jobs", () => {
+  it.each(["denied", "unanswered", "expired"])(
+    "closes an open ask as %s before cancellation sealing",
+    async (outcome) => {
+      const f = fixture();
+      await f.recorder.recordDecision({
+        run: f.run,
+        toolName: "write_file",
+        viaConnector: false,
+        args: {},
+        decisionKind: "asked",
+        decisionId: "effect:effect-1:asked",
+      });
+      if (outcome === "denied")
+        f.approval.findUnique.mockResolvedValue({
+          runId: f.run.id,
+          status: "denied",
+          request: {},
+        });
+      if (outcome === "expired")
+        f.binding.findUnique.mockResolvedValue({
+          expiresAt: new Date(0),
+        });
+      f.run.cancelRequestedAt = new Date();
+      expect(await confirmDispatchStop(f.prisma, f.run.id, undefined, f.jobs)).toBe(true);
+      await drain(f);
+      await drain(f);
+      expect(f.records.map((row) => row.decisionKind)).toEqual([
+        "asked",
+        outcome === "denied"
+          ? "denied_by_owner"
+          : outcome === "expired"
+            ? "approval_expired"
+            : "unanswered_at_run_end",
+      ]);
+      expect(f.seals).toHaveLength(1);
+      expect(
+        verifySeal(
+          f.seals[0]!.jws,
+          f.records.map((row) => row.jws),
+          f.keys[0]!.publicKeyPem,
+        ).ok,
+      ).toBe(true);
+    },
+  );
+
+  it("does not resolve an ask that already has a later owner decision", async () => {
+    const f = fixture();
+    for (const decisionKind of ["asked", "approved_by_owner"] as const)
+      await f.recorder.recordDecision({
+        run: f.run,
+        toolName: "write_file",
+        viaConnector: false,
+        args: {},
+        decisionKind,
+        decisionId: `effect:effect-1:${decisionKind}`,
+      });
+    await f.handlers["evidence.seal"]({ runId: f.run.id });
+    expect(f.records.map((row) => row.decisionKind)).toEqual(["asked", "approved_by_owner"]);
+    expect(f.prisma.externalEffect.findUnique).not.toHaveBeenCalled();
+  });
   it.each(["completed", "failed"] as const)(
     "%s enqueues and seals the durable head once",
     async (outcome) => {

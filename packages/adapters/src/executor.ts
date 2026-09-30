@@ -185,6 +185,7 @@ import {
   approvedReplayArgs,
   boundDirectApprovalDetails,
   boundDirectApprovalRequest,
+  CATALOG_APPROVAL_TOOL,
   catalogApprovalConnectorId,
   catalogApprovalDetails,
   catalogApprovalInnerArgs,
@@ -296,6 +297,7 @@ import type { DecisionKind } from "./evidence/decision-kinds.js";
 import { recordToolDecision } from "./evidence/executor.js";
 import type { EvidenceRecorder } from "./evidence/recorder.js";
 import { createEvidenceRecorder } from "./evidence/recorder.js";
+import { createEvidenceSealer } from "./evidence/seal.js";
 import { startExecutionHeartbeat } from "./execution-heartbeat.js";
 import { beforeFileChange, fileChangeText, recordFileChange } from "./file-changes.js";
 import { wakeGoalAfterDelegation } from "./goal-wake.js";
@@ -982,7 +984,6 @@ export async function persistLivePluginConnections(
 }
 
 export const APPROVED_EFFECT_REPLAY_ORDER = [{ createdAt: "asc" as const }, { id: "asc" as const }];
-const CATALOG_APPROVAL_TOOL = "__ardurbotCatalogTool";
 
 export function approvalReplayEffectToolName(
   liveName: string,
@@ -1528,7 +1529,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
       };
     },
     resolveConnectedModel,
-    sealRunEvidence: evidenceRecorder.sealRunEvidence,
+    sealRunEvidence: createEvidenceSealer({
+      prisma: deps.prisma,
+      store: createEvidenceStore(deps.prisma),
+      recorder: evidenceRecorder,
+    }),
     async resolveModel(
       scope: { userId: string; spaceId: string; botId?: string },
       newAdmission = false,

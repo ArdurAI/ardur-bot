@@ -74,6 +74,14 @@ export const DECISION_KINDS = {
     decision: "Deny",
     ruleId: "expiry",
   },
+  unanswered_at_run_end: {
+    verdict: "violation",
+    public_denial_reason: "policy_denied",
+    internal_denial_code: "approval_unanswered",
+    backend: "ardur-approvals",
+    decision: "Deny",
+    ruleId: "run_end",
+  },
 } as const satisfies Record<string, DecisionFields>;
 
 export type DecisionKind = keyof typeof DECISION_KINDS;

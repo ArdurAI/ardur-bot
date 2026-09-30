@@ -44,6 +44,7 @@ describe("evidence classification tables", () => {
       "denied_by_auto_review",
       "denied_by_owner",
       "approval_expired",
+      "unanswered_at_run_end",
     ]);
     for (const kind of Object.keys(DECISION_KINDS) as (keyof typeof DECISION_KINDS)[]) {
       const fields = decisionFields(kind, "rule-test");
