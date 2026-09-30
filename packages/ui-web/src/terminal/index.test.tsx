@@ -5,16 +5,23 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { TerminalLabels, TerminalTicket } from "./index.js";
 import ComputerTerminal from "./index.js";
 
+const renderer = vi.hoisted(() => ({
+  fit: vi.fn(),
+  focus: vi.fn(),
+  dispose: vi.fn(),
+  input: (_data: string) => {},
+}));
 vi.mock("@xterm/xterm", () => ({
   Terminal: class {
     options = {};
     parser = { registerOscHandler: () => ({ dispose() {} }) };
     loadAddon() {}
     open() {}
-    focus() {}
-    dispose() {}
+    focus = renderer.focus;
+    dispose = renderer.dispose;
     write() {}
-    onData() {
+    onData(callback: (data: string) => void) {
+      renderer.input = callback;
       return { dispose() {} };
     }
     onBinary() {
@@ -24,7 +31,7 @@ vi.mock("@xterm/xterm", () => ({
 }));
 vi.mock("@xterm/addon-fit", () => ({
   FitAddon: class {
-    fit() {}
+    fit = renderer.fit;
   },
 }));
 vi.mock("@xterm/addon-search", () => ({ SearchAddon: class {} }));
@@ -39,7 +46,85 @@ const labels: TerminalLabels = {
   next: "Next",
   previous: "Previous",
 };
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.clearAllMocks();
+});
+it("fits after reveal without remounting or stealing focus while hidden", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  let socket: { onmessage: (event: { data: string }) => void } | undefined;
+  const send = vi.fn();
+  vi.stubGlobal(
+    "WebSocket",
+    class {
+      static OPEN = 1;
+      readyState = 1;
+      send = send;
+      constructor() {
+        socket = this as unknown as typeof socket;
+      }
+      close() {}
+    },
+  );
+  const ticket = vi.fn(async () => ({
+    sessionId: "shell",
+    ticket: "ticket",
+    path: "/api/terminal/socket",
+  }));
+  const close = vi.fn(async () => {});
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        <ComputerTerminal ticket={ticket} close={close} labels={labels} visible={false} />,
+      ),
+    );
+    const terminalHost = host.querySelector(".ardur-terminal")!;
+    Object.defineProperties(terminalHost, {
+      clientWidth: { value: 600 },
+      clientHeight: { value: 300 },
+    });
+    await act(async () =>
+      socket?.onmessage({ data: JSON.stringify({ type: "ready", inputSeq: 0 }) }),
+    );
+    expect(renderer.focus).not.toHaveBeenCalled();
+    send.mockClear();
+    renderer.input("echo hidden\n");
+    expect(send).not.toHaveBeenCalled();
+    renderer.fit.mockClear();
+    await act(async () =>
+      root.render(<ComputerTerminal ticket={ticket} close={close} labels={labels} visible />),
+    );
+    expect(renderer.fit).toHaveBeenCalledOnce();
+    expect(
+      send.mock.calls.some(
+        ([value]) => typeof value === "string" && JSON.parse(value).type === "resize",
+      ),
+    ).toBe(true);
+    expect(ticket).toHaveBeenCalledOnce();
+    expect(close).not.toHaveBeenCalled();
+    expect(renderer.dispose).not.toHaveBeenCalled();
+    send.mockClear();
+    renderer.input("echo live\n");
+    expect(send).toHaveBeenCalledOnce();
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+  expect(close).toHaveBeenCalledExactlyOnceWith("shell");
+  send.mockClear();
+  renderer.input("echo stopped\n");
+  expect(send).not.toHaveBeenCalled();
+});
 it("opens once through StrictMode setup/cleanup and closes a late grant before another admission", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal(

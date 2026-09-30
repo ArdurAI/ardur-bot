@@ -45,6 +45,7 @@ export function WorkspacePane({
     onStop(): Promise<unknown>;
     onStart(): Promise<unknown>;
     onReleased(): void;
+    registerCloseGuard?(guard: (() => boolean) | null): void;
   } | null;
   onOpenRun(run: RunActivityRow): void;
   tab: string;
@@ -52,6 +53,7 @@ export function WorkspacePane({
 }) {
   const { t } = useLingui();
   const [context, setContext] = useState<WorkspaceContext | null>(null);
+  const [controlsHost, setControlsHost] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
     const abort = new AbortController();
     setContext(null);
@@ -120,6 +122,8 @@ export function WorkspacePane({
                   onStop={terminal.onStop}
                   onStart={terminal.onStart}
                   onReleased={terminal.onReleased}
+                  controlsHost={controlsHost}
+                  registerCloseGuard={terminal.registerCloseGuard}
                 />
               </Suspense>
             ),
@@ -151,5 +155,10 @@ export function WorkspacePane({
           },
         ]),
   ];
-  return <WorkspaceTabs tabs={tabs} value={selected} onChange={onTabChange} />;
+  return (
+    <>
+      <div ref={setControlsHost} />
+      <WorkspaceTabs tabs={tabs} value={selected} onChange={onTabChange} />
+    </>
+  );
 }

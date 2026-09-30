@@ -847,6 +847,8 @@ export const RU_MESSAGES: Record<string, string> = {
   "Work stopped, but the thread could not refresh: {detail}":
     "Работа остановлена, но диалог не удалось обновить: {detail}",
   "You have control": "Вы управляете",
+  "You control the computer": "Вы управляете компьютером",
+  "End this terminal?": "Закрыть этот терминал?",
   "Your account": "Ваш аккаунт",
   "Your key or subscription token is stored securely and is never shown here.":
     "Ваш ключ или токен подписки надежно хранится и никогда не отображается здесь.",
