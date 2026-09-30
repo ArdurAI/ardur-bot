@@ -7327,7 +7327,7 @@ msgstr "Ekip mesajlarını sürdür"
 #: src/pages/system/SystemPage.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Retry"
-msgstr ""
+msgstr "Yeniden dene"
 
 #. placeholder {0}: failure.relativePath
 #: src/pages/import/LocalImportPage.tsx
@@ -8743,7 +8743,7 @@ msgstr "bu bilgisayar"
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
 msgid "This computer"
-msgstr ""
+msgstr "Bu bilgisayar"
 
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "This configuration is too complex."
@@ -9655,3 +9655,95 @@ msgstr "Gerçek işler verebileceğin,<0/>her zaman açık agent takımın."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Where this bot runs"
+msgstr "Bu botun çalıştığı yer"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Only this bot"
+msgstr "Yalnızca bu bot"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Shared with team"
+msgstr "Ekiple paylaşılan"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Bots share files and installed tools"
+msgstr "Botlar dosyaları ve kurulu araçları paylaşır"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Runs as you; can use your files and signed-in tools"
+msgstr "Sizin izinlerinizle çalışır; dosyalarınızı ve oturum açtığınız araçları kullanabilir"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Container"
+msgstr "Konteyner"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Remote computer"
+msgstr "Uzak bilgisayar"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Hosted sandbox"
+msgstr "Barındırılan korumalı ortam"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Test computer"
+msgstr "Test bilgisayarı"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Separate home; can reach allowed network services and granted credentials."
+msgstr "Ayrı ana klasör; izin verilen ağ hizmetlerine ve sağlanan kimlik bilgilerine erişebilir."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Uses that account's permissions."
+msgstr "O hesabın izinlerini kullanır."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Runs at the configured provider; can use granted credentials and network access."
+msgstr "Yapılandırılmış sağlayıcıda çalışır; sağlanan kimlik bilgilerini ve ağ erişimini kullanabilir."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "For testing only; not an isolation boundary."
+msgstr "Yalnızca test içindir; bir yalıtım sınırı değildir."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Computer location unavailable. Choose a supported connection."
+msgstr "Bilgisayar konumu kullanılamıyor. Desteklenen bir bağlantı seçin."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Computer location unavailable. Try again."
+msgstr "Bilgisayar konumu kullanılamıyor. Yeniden deneyin."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Change location"
+msgstr "Konumu değiştir"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Set up a container for isolated work."
+msgstr "Yalıtılmış çalışma için bir konteyner kurun."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Set up computer"
+msgstr "Bilgisayar kur"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Could not start"
+msgstr "Başlatılamadı"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Sharing"
+msgstr "Paylaşım"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Change location on desktop."
+msgstr "Konumu masaüstü uygulamasında değiştirin."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Set up a container on desktop, then try again."
+msgstr "Masaüstü uygulamasında bir konteyner kurup yeniden deneyin."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Sleeping"
+msgstr "Uykuda"

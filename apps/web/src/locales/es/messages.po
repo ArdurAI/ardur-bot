@@ -7327,7 +7327,7 @@ msgstr "Reanudar mensajes del equipo"
 #: src/pages/system/SystemPage.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Retry"
-msgstr ""
+msgstr "Reintentar"
 
 #. placeholder {0}: failure.relativePath
 #: src/pages/import/LocalImportPage.tsx
@@ -8743,7 +8743,7 @@ msgstr "esta computadora"
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
 msgid "This computer"
-msgstr ""
+msgstr "Esta computadora"
 
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "This configuration is too complex."
@@ -9655,3 +9655,95 @@ msgstr "Tu equipo de agentes siempre activos<0/>a los que puedes dar trabajo rea
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Where this bot runs"
+msgstr "Dónde se ejecuta este bot"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Only this bot"
+msgstr "Solo este bot"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Shared with team"
+msgstr "Compartido con el equipo"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Bots share files and installed tools"
+msgstr "Los bots comparten archivos y herramientas instaladas"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Runs as you; can use your files and signed-in tools"
+msgstr "Se ejecuta con tus permisos; puede usar tus archivos y herramientas con sesión iniciada"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Container"
+msgstr "Contenedor"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Remote computer"
+msgstr "Computadora remota"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Hosted sandbox"
+msgstr "Entorno aislado alojado"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Test computer"
+msgstr "Computadora de prueba"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Separate home; can reach allowed network services and granted credentials."
+msgstr "Directorio personal separado; puede acceder a servicios de red permitidos y credenciales concedidas."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Uses that account's permissions."
+msgstr "Usa los permisos de esa cuenta."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Runs at the configured provider; can use granted credentials and network access."
+msgstr "Se ejecuta en el proveedor configurado; puede usar credenciales concedidas y acceso a la red."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "For testing only; not an isolation boundary."
+msgstr "Solo para pruebas; no proporciona aislamiento."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Computer location unavailable. Choose a supported connection."
+msgstr "Ubicación de la computadora no disponible. Elige una conexión compatible."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Computer location unavailable. Try again."
+msgstr "Ubicación de la computadora no disponible. Inténtalo de nuevo."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Change location"
+msgstr "Cambiar ubicación"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Set up a container for isolated work."
+msgstr "Configura un contenedor para trabajar de forma aislada."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Set up computer"
+msgstr "Configurar computadora"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Could not start"
+msgstr "No se pudo iniciar"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Sharing"
+msgstr "Uso compartido"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Change location on desktop."
+msgstr "Cambia la ubicación en la aplicación de escritorio."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Set up a container on desktop, then try again."
+msgstr "Configura un contenedor en la aplicación de escritorio e inténtalo de nuevo."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Sleeping"
+msgstr "En reposo"

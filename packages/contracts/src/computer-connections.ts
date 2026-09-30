@@ -136,7 +136,7 @@ export const COMPUTER_KINDS = {
     boundary: "container",
     isolated: true,
     capabilities: { graphical: false, interactiveTerminal: false },
-    policyFields: ["cpu", "memory", "disk", "network"],
+    policyFields: ["cpu", "memory", "network"],
   },
   desktop: {
     location: "This computer",

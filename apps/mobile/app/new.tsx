@@ -1,8 +1,14 @@
-import type { ComputerConnectionSettings, ComputerMode, Me } from "@ardurbot/contracts";
+import type {
+  ComputerConnectionSettings,
+  ComputerMode,
+  ComputerStatus,
+  Me,
+} from "@ardurbot/contracts";
 import {
   BOT_DESCRIPTION_MAX_LENGTH,
   BOT_NAME_MAX_LENGTH,
   BOT_TITLE_MAX_LENGTH,
+  computerKindFacts,
   errorDataCode,
   ISOLATED_COMPUTER_UNAVAILABLE_CODE,
   normalizeCreateBotProfile,
@@ -29,6 +35,7 @@ export default function NewBot() {
   const [computerMode, setComputerMode] = useState<ComputerMode>("dedicated");
   const [container, setContainer] = useState<{ connectionId: string | null } | null>(null);
   const [containerName, setContainerName] = useState("");
+  const [teamKind, setTeamKind] = useState("");
   const [locationReady, setLocationReady] = useState(false);
   const [locationRevision, setLocationRevision] = useState(0);
   useEffect(() => {
@@ -41,10 +48,15 @@ export default function NewBot() {
         "computer/connections",
         {},
       ),
+      rpc<{ status: ComputerStatus }[]>("computer/list", {}),
     ])
-      .then(([me, connections]) => {
+      .then(([me, connections, computers]) => {
         if (active) {
           const recommendation = recommendedContainer(me.sandboxProvider, connections);
+          setTeamKind(
+            computers.find((entry) => entry.status.mode === "team")?.status.kind ??
+              me.sandboxProvider,
+          );
           setContainer(recommendation);
           setContainerName(
             connections.find((entry) => entry.id === recommendation?.connectionId)?.name ??
@@ -62,6 +74,9 @@ export default function NewBot() {
   }, [locationRevision]);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const computerReady =
+    locationReady &&
+    (computerMode === "dedicated" ? Boolean(container) : Boolean(computerKindFacts(teamKind)));
 
   function close() {
     if (router.canDismiss()) {
@@ -76,7 +91,7 @@ export default function NewBot() {
   }
 
   async function create() {
-    if (!name.trim() || pending || !locationReady || !container) return;
+    if (!name.trim() || pending || !computerReady) return;
     setPending(true);
     setError(null);
     try {
@@ -196,7 +211,8 @@ export default function NewBot() {
             <RuntimeBoundary kind="docker" locationName={containerName} />
           ) : null}
           <ComputerModePicker value={computerMode} onChange={setComputerMode} />
-          {locationReady && !container ? (
+          {computerMode === "team" && teamKind ? <RuntimeBoundary kind={teamKind} /> : null}
+          {computerMode === "dedicated" && locationReady && !container ? (
             <>
               <Text style={{ color: tokens.mutedForeground }}>
                 {t("Set up a container for isolated work.")}
@@ -224,7 +240,7 @@ export default function NewBot() {
         {error ? <Text style={{ color: tokens.destructive, marginTop: 16 }}>{error}</Text> : null}
         <Pressable
           onPress={() => void create()}
-          disabled={!name.trim() || pending || !locationReady || !container}
+          disabled={!name.trim() || pending || !computerReady}
           style={{
             marginTop: 24,
             backgroundColor: tokens.primary,

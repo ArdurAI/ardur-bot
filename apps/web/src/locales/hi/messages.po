@@ -7327,7 +7327,7 @@ msgstr "टीम संदेश फिर शुरू करें"
 #: src/pages/system/SystemPage.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Retry"
-msgstr ""
+msgstr "फिर से कोशिश करें"
 
 #. placeholder {0}: failure.relativePath
 #: src/pages/import/LocalImportPage.tsx
@@ -8743,7 +8743,7 @@ msgstr "यह कंप्यूटर"
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
 msgid "This computer"
-msgstr ""
+msgstr "यह कंप्यूटर"
 
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "This configuration is too complex."
@@ -9655,3 +9655,95 @@ msgstr "हमेशा चालू रहने वाले एजेंट�
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Where this bot runs"
+msgstr "यह बॉट कहाँ चलता है"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Only this bot"
+msgstr "केवल यह बॉट"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Shared with team"
+msgstr "टीम के साथ साझा"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Bots share files and installed tools"
+msgstr "बॉट फ़ाइलें और इंस्टॉल किए गए टूल साझा करते हैं"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Runs as you; can use your files and signed-in tools"
+msgstr "आपकी अनुमतियों से चलता है; आपकी फ़ाइलें और साइन-इन किए हुए टूल इस्तेमाल कर सकता है"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Container"
+msgstr "कंटेनर"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Remote computer"
+msgstr "रिमोट कंप्यूटर"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Hosted sandbox"
+msgstr "होस्ट किया गया सैंडबॉक्स"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Test computer"
+msgstr "टेस्ट कंप्यूटर"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Separate home; can reach allowed network services and granted credentials."
+msgstr "अलग होम फ़ोल्डर; अनुमत नेटवर्क सेवाओं और दिए गए क्रेडेंशियल तक पहुँच सकता है।"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Uses that account's permissions."
+msgstr "उस खाते की अनुमतियों का उपयोग करता है।"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Runs at the configured provider; can use granted credentials and network access."
+msgstr "कॉन्फ़िगर किए गए प्रदाता पर चलता है; दिए गए क्रेडेंशियल और नेटवर्क पहुँच का उपयोग कर सकता है।"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "For testing only; not an isolation boundary."
+msgstr "केवल परीक्षण के लिए; यह अलगाव की सीमा नहीं है।"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Computer location unavailable. Choose a supported connection."
+msgstr "कंप्यूटर का स्थान उपलब्ध नहीं है। समर्थित कनेक्शन चुनें।"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Computer location unavailable. Try again."
+msgstr "कंप्यूटर का स्थान उपलब्ध नहीं है। फिर से कोशिश करें।"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Change location"
+msgstr "स्थान बदलें"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Set up a container for isolated work."
+msgstr "अलग वातावरण में काम करने के लिए कंटेनर सेट अप करें।"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Set up computer"
+msgstr "कंप्यूटर सेट अप करें"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Could not start"
+msgstr "शुरू नहीं हो सका"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Sharing"
+msgstr "साझा करना"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Change location on desktop."
+msgstr "डेस्कटॉप पर स्थान बदलें।"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Set up a container on desktop, then try again."
+msgstr "डेस्कटॉप पर कंटेनर सेट अप करें, फिर कोशिश करें।"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Sleeping"
+msgstr "स्लीप मोड में"

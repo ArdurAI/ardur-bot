@@ -9655,3 +9655,95 @@ msgstr "你的一支随时在线的 Agent 团队<0/>可以交给它们真正的�
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Where this bot runs"
+msgstr "此 Bot 的运行位置"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Only this bot"
+msgstr "仅此 Bot 使用"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Shared with team"
+msgstr "与团队共享"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Bots share files and installed tools"
+msgstr "Bot 共享文件和已安装的工具"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Runs as you; can use your files and signed-in tools"
+msgstr "以你的身份运行；可以使用你的文件和已登录的工具"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Container"
+msgstr "容器"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Remote computer"
+msgstr "远程计算机"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Hosted sandbox"
+msgstr "托管沙箱"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Test computer"
+msgstr "测试计算机"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Separate home; can reach allowed network services and granted credentials."
+msgstr "独立的主目录；可以访问获准的网络服务和授予的凭据。"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Uses that account's permissions."
+msgstr "使用该账户的权限。"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Runs at the configured provider; can use granted credentials and network access."
+msgstr "在已配置的服务商处运行；可以使用授予的凭据和网络访问权限。"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "For testing only; not an isolation boundary."
+msgstr "仅用于测试；不构成隔离边界。"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Computer location unavailable. Choose a supported connection."
+msgstr "无法获取计算机位置。请选择受支持的连接。"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Computer location unavailable. Try again."
+msgstr "无法获取计算机位置。请重试。"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Change location"
+msgstr "更改位置"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Set up a container for isolated work."
+msgstr "请设置容器以进行隔离工作。"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Set up computer"
+msgstr "设置计算机"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Could not start"
+msgstr "无法启动"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Sharing"
+msgstr "共享方式"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Change location on desktop."
+msgstr "请在桌面端更改位置。"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Set up a container on desktop, then try again."
+msgstr "请在桌面端设置容器，然后重试。"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Sleeping"
+msgstr "休眠中"

@@ -148,6 +148,28 @@ it("offers setup for new isolated work when no container is configured", async (
   expect(container.textContent).toContain("Set up a container for isolated work.");
   expect(request.mock.calls.some((call) => call[0] === "bots/create")).toBe(false);
 });
+it("allows an explicit team choice only after showing the host and sharing warning", async () => {
+  request.mockImplementation(async (procedure) =>
+    procedure === "me"
+      ? { sandboxProvider: "desktop" }
+      : procedure === "bots/create"
+        ? { id: "new-bot", name: "Builder" }
+        : [],
+  );
+  await act(async () => root.render(createElement(NewBot)));
+  await enterName();
+  expect(createButton().disabled).toBe(true);
+  const team = [...container.querySelectorAll<HTMLButtonElement>("button")].find(
+    (button) => button.textContent === "Shared with team",
+  )!;
+  await act(async () => team.click());
+  expect(container.textContent).toContain("Runs as you; can use your files and signed-in tools");
+  expect(container.textContent).toContain("Bots share files and installed tools");
+  await act(async () => createButton().click());
+  const input = request.mock.calls.find((call) => call[0] === "bots/create")?.[1];
+  expect(input).toMatchObject({ computerMode: "team" });
+  expect(input).not.toHaveProperty("isolatedComputer");
+});
 it.each(["docker", "desktop"])(
   "uses the dedicated container recommendation on a %s deployment",
   async (provider) => {

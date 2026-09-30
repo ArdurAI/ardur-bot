@@ -9655,3 +9655,95 @@ msgstr "Your team of always-on agents<0/>that you can give real work to."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr "Yours"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Where this bot runs"
+msgstr "Where this bot runs"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Only this bot"
+msgstr "Only this bot"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Shared with team"
+msgstr "Shared with team"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Bots share files and installed tools"
+msgstr "Bots share files and installed tools"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Runs as you; can use your files and signed-in tools"
+msgstr "Runs as you; can use your files and signed-in tools"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Container"
+msgstr "Container"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Remote computer"
+msgstr "Remote computer"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Hosted sandbox"
+msgstr "Hosted sandbox"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Test computer"
+msgstr "Test computer"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Separate home; can reach allowed network services and granted credentials."
+msgstr "Separate home; can reach allowed network services and granted credentials."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Uses that account's permissions."
+msgstr "Uses that account's permissions."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Runs at the configured provider; can use granted credentials and network access."
+msgstr "Runs at the configured provider; can use granted credentials and network access."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "For testing only; not an isolation boundary."
+msgstr "For testing only; not an isolation boundary."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Computer location unavailable. Choose a supported connection."
+msgstr "Computer location unavailable. Choose a supported connection."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Computer location unavailable. Try again."
+msgstr "Computer location unavailable. Try again."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Change location"
+msgstr "Change location"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Set up a container for isolated work."
+msgstr "Set up a container for isolated work."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Set up computer"
+msgstr "Set up computer"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Could not start"
+msgstr "Could not start"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Sharing"
+msgstr "Sharing"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Change location on desktop."
+msgstr "Change location on desktop."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Set up a container on desktop, then try again."
+msgstr "Set up a container on desktop, then try again."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Sleeping"
+msgstr "Sleeping"

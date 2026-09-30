@@ -468,6 +468,25 @@ describe("new isolated work", () => {
     expect(onSetupComputer).toHaveBeenCalledOnce();
     expect(onCreate).not.toHaveBeenCalled();
   });
+  it("allows an explicit team choice with the host warning and no isolated claim", async () => {
+    api.me.mockResolvedValue({ ...me, sandboxProvider: "desktop" });
+    const onCreate = vi.fn();
+    await act(async () => root.render(<CreateBotForm onCreate={onCreate} onCancel={() => {}} />));
+    await enterName();
+    expect(createButton().disabled).toBe(true);
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[data-testid="create-bot-team"]')!.click(),
+    );
+    expect(container.textContent).toContain("Runs as you; can use your files and signed-in tools");
+    expect(container.textContent).toContain("Bots share files and installed tools");
+    await act(async () => createButton().click());
+    expect(onCreate).toHaveBeenCalledWith({
+      name: "Builder",
+      title: "",
+      description: "",
+      computerMode: "team",
+    });
+  });
   it("uses a saved container on a host-only deployment", async () => {
     api.me.mockResolvedValue({ ...me, sandboxProvider: "desktop" });
     api.connections.mockResolvedValue([

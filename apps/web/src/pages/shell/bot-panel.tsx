@@ -12,6 +12,8 @@ import {
   BOT_DESCRIPTION_MAX_LENGTH,
   BOT_NAME_MAX_LENGTH,
   BOT_TITLE_MAX_LENGTH,
+  computerKindFacts,
+  errorDataCode,
   ISOLATED_COMPUTER_UNAVAILABLE_CODE,
   recommendedContainer,
 } from "@ardurbot/contracts";
@@ -159,8 +161,11 @@ export function CreateBotForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const computerReady =
+    locationReady &&
+    (computerMode === "dedicated" ? Boolean(container) : Boolean(computerKindFacts(teamKind)));
   async function handleSubmit() {
-    if (!name.trim() || submitting || !locationReady || !container) return;
+    if (!name.trim() || submitting || !computerReady) return;
     setError(null);
     setSubmitting(true);
     try {
@@ -172,10 +177,7 @@ export function CreateBotForm({
         ...(computerMode === "dedicated" ? { isolatedComputer: container } : {}),
       });
     } catch (err) {
-      const refusal =
-        err instanceof Error &&
-        (err as Error & { data?: { code?: string } }).data?.code ===
-          ISOLATED_COMPUTER_UNAVAILABLE_CODE;
+      const refusal = errorDataCode(err) === ISOLATED_COMPUTER_UNAVAILABLE_CODE;
       setError(
         refusal
           ? t`Set up a container for isolated work.`
@@ -268,7 +270,7 @@ export function CreateBotForm({
             <RuntimeBoundary kind={teamKind} />
           </div>
         ) : null}
-        {locationReady && !container ? (
+        {computerMode === "dedicated" && locationReady && !container ? (
           <div className="mt-2 text-sm">
             <p>
               <Trans>Set up a container for isolated work.</Trans>
@@ -281,7 +283,7 @@ export function CreateBotForm({
       </div>
       <Button
         className="mt-5"
-        disabled={!name.trim() || submitting || !locationReady || !container}
+        disabled={!name.trim() || submitting || !computerReady}
         onClick={() => void handleSubmit()}
       >
         {submitting ? <Trans>Creating…</Trans> : <Trans>Create</Trans>}

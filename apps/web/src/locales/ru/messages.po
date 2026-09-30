@@ -9655,3 +9655,95 @@ msgstr "Ваша команда постоянно работающих аген
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Where this bot runs"
+msgstr "Где работает этот бот"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Only this bot"
+msgstr "Только этот бот"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Shared with team"
+msgstr "Общий с командой"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Bots share files and installed tools"
+msgstr "Боты совместно используют файлы и установленные инструменты"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Runs as you; can use your files and signed-in tools"
+msgstr "Работает с вашими правами; может использовать ваши файлы и инструменты, в которых вы вошли в аккаунт"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Container"
+msgstr "Контейнер"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Remote computer"
+msgstr "Удалённый компьютер"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Hosted sandbox"
+msgstr "Облачная песочница"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Test computer"
+msgstr "Тестовый компьютер"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Separate home; can reach allowed network services and granted credentials."
+msgstr "Отдельная домашняя папка; доступны разрешённые сетевые службы и предоставленные учётные данные."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Uses that account's permissions."
+msgstr "Использует права этой учётной записи."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Runs at the configured provider; can use granted credentials and network access."
+msgstr "Работает у настроенного провайдера; может использовать предоставленные учётные данные и доступ к сети."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "For testing only; not an isolation boundary."
+msgstr "Только для тестирования; не обеспечивает изоляцию."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Computer location unavailable. Choose a supported connection."
+msgstr "Местоположение компьютера недоступно. Выберите поддерживаемое подключение."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Computer location unavailable. Try again."
+msgstr "Местоположение компьютера недоступно. Попробуйте снова."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Change location"
+msgstr "Изменить местоположение"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Set up a container for isolated work."
+msgstr "Настройте контейнер для изолированной работы."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Set up computer"
+msgstr "Настроить компьютер"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Could not start"
+msgstr "Не удалось запустить"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Sharing"
+msgstr "Совместное использование"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Change location on desktop."
+msgstr "Измените местоположение в настольном приложении."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Set up a container on desktop, then try again."
+msgstr "Настройте контейнер в настольном приложении, затем попробуйте снова."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Sleeping"
+msgstr "Спит"

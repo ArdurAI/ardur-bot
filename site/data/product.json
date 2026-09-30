@@ -16,7 +16,7 @@
       "id": "team",
       "eyebrow": "TEAM",
       "title": "Named bots, together",
-      "body": "Give each bot its own conversation and history, bring bots together in group chats whose members answer at the same time — the owner sets how many bots answer at once (1-8) in group settings — and see current tasks and availability in Team. On web and desktop, inspect tasks and edit workspace files beside a conversation. Mobile reads those files in its own screens.",
+      "body": "Give each bot its own conversation and history, bring bots together in group chats whose members answer at the same time — the owner sets how many bots answer at once (1-8) in group settings — and see current tasks and availability in Team. On web and desktop, inspect tasks and edit workspace files beside a conversation. Mobile reads those files in its own screens. Ordinary bot settings show where the bot runs, what it can reach, and whether its computer is shared. New isolated work starts with a dedicated container when configured, or offers setup without falling back to the host.",
       "source": "README.md#What you get today"
     },
     {
@@ -900,6 +900,14 @@
     }
   ],
   "screenshots": [
+    {
+      "id": "bot-runtime-settings",
+      "file": "screenshots/bot-runtime-settings.png",
+      "alt": "Ordinary bot settings showing the container location, reachable network services and granted credentials, team sharing, and stopped status.",
+      "width": 2880,
+      "height": 1800,
+      "theme": "light"
+    },
     {
       "id": "app-chat",
       "file": "screenshots/app-chat.png",
