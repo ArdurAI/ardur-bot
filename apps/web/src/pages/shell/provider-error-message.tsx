@@ -1,12 +1,6 @@
-import type {
-  FailureCategoryId,
-  ModelCatalogEntry,
-  ProviderErrorKind,
-  RuntimeProblem,
-} from "@ardurbot/contracts";
+import type { ModelCatalogEntry, ProviderErrorKind, RuntimeProblem } from "@ardurbot/contracts";
 import {
   FailureCategoryIdSchema,
-  failureCategory,
   failureCategoryFromText,
   runtimeNames,
 } from "@ardurbot/contracts";
@@ -15,17 +9,6 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { failureCategoryMessages } from "../../lib/failure-category-copy";
 import { parseProviderError } from "../../lib/provider-error";
 
-/**
- * The refusal categories whose fix the banner can offer directly: each names the setting
- * that blocked the run, and its actions come from the failure-category table.
- */
-const RUNTIME_REFUSAL_IDS: ReadonlySet<FailureCategoryId> = new Set([
-  "experimental-off",
-  "computer-unsupported",
-  "destinations-bot",
-  "destinations-space",
-]);
-
 export function ProviderErrorMessage({
   text,
   providerErrorKind,
@@ -33,11 +16,6 @@ export function ProviderErrorMessage({
   runtimeProblem,
   catalog,
   onConnect,
-  botName,
-  onEnableExperimental,
-  onOpenBotDestinations,
-  onOpenBotComputer,
-  onOpenSpaceModels,
 }: {
   text: string;
   providerErrorKind?: ProviderErrorKind;
@@ -45,77 +23,9 @@ export function ProviderErrorMessage({
   runtimeProblem?: RuntimeProblem;
   catalog?: ModelCatalogEntry[];
   onConnect?: () => void;
-  /** The refusing bot's name; the recorded sentence stands in when it is not known. */
-  botName?: string;
-  onEnableExperimental?: () => void;
-  onOpenBotDestinations?: () => void;
-  onOpenBotComputer?: () => void;
-  onOpenSpaceModels?: () => void;
 }) {
   const { t, i18n } = useLingui();
   if (runtimeProblem) {
-    // A classified runtime refusal shows its category's sentence — the setting that said
-    // no, with this bot's and the runtime's names — plus one button per table action.
-    const refusalId = FailureCategoryIdSchema.safeParse(runtimeProblem.reasonId);
-    if (refusalId.success && RUNTIME_REFUSAL_IDS.has(refusalId.data)) {
-      const entry = failureCategory(refusalId.data);
-      const runtime = runtimeNames[runtimeProblem.pin.runtimeKind];
-      const actions = [entry.action, ...(entry.more ?? [])];
-      return (
-        <>
-          <span className="min-w-0 flex-1">
-            {botName
-              ? i18n._({
-                  ...failureCategoryMessages[refusalId.data],
-                  values: { runtime, bot: botName },
-                })
-              : runtimeProblem.reason}
-          </span>
-          {actions.map((action) => {
-            if (action.kind === "enable-experimental")
-              return onEnableExperimental ? (
-                <Button
-                  key="enable-experimental"
-                  variant="link"
-                  size="xs"
-                  onClick={onEnableExperimental}
-                >
-                  <Trans>Turn on Experimental</Trans>
-                </Button>
-              ) : null;
-            if (action.kind !== "open-settings") return null;
-            if (action.target === "model-pin")
-              return (
-                <Button key="model-pin" variant="link" size="xs" onClick={onChangeModel}>
-                  <Trans>Change pin</Trans>
-                </Button>
-              );
-            if (action.target === "bot-destinations")
-              return onOpenBotDestinations ? (
-                <Button
-                  key="bot-destinations"
-                  variant="link"
-                  size="xs"
-                  onClick={onOpenBotDestinations}
-                >
-                  <Trans>Open bot settings</Trans>
-                </Button>
-              ) : null;
-            if (action.target === "bot-computer")
-              return onOpenBotComputer ? (
-                <Button key="bot-computer" variant="link" size="xs" onClick={onOpenBotComputer}>
-                  <Trans>Open bot settings</Trans>
-                </Button>
-              ) : null;
-            return onOpenSpaceModels ? (
-              <Button key="space-models" variant="link" size="xs" onClick={onOpenSpaceModels}>
-                <Trans>Open Settings</Trans>
-              </Button>
-            ) : null;
-          })}
-        </>
-      );
-    }
     if (runtimeProblem.code === "locality-denied")
       return (
         <>

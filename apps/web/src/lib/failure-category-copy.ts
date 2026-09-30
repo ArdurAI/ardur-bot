@@ -14,10 +14,6 @@ export const failureCategoryMessages: Record<FailureCategoryId, ReturnType<typeo
   "model-unavailable": msg`{runtime}'s pinned model is unavailable. Change the pin and try again.`,
   "configuration-invalid": msg`{runtime}'s configuration is invalid. Check this bot's settings.`,
   "connection-missing": msg`{runtime}'s model connection is missing. Connect it or change the pin.`,
-  "experimental-off": msg`{runtime} is experimental. Turn on Experimental for {bot} to use it.`,
-  "computer-unsupported": msg`{runtime} runs on the host computer, not in a sandbox. Change {bot}'s computer to use it.`,
-  "destinations-bot": msg`{bot}'s allowed model destinations block this model. Change them in {bot}'s settings.`,
-  "destinations-space": msg`This space's model policy blocks this model. Change it in Settings, under Models.`,
   stopped: msg`{runtime} stopped before finishing this run.`,
   other: msg`{runtime} could not finish this run. Check the runtime or change the pin.`,
 };
