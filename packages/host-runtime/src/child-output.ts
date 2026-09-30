@@ -128,7 +128,7 @@ export function captureChildOutput(
 
 let fallbackLogger: ChildOutputLogger | undefined;
 
-/** A bounded, non-blocking handoff to the host's writable log sink. */
+/** A non-blocking handoff: debug is bounded, failure records are never evicted. */
 export function createChildProcessLogger(sink: Writable = process.stderr): ChildOutputLogger {
   const queue: string[] = [];
   let queuedBytes = 0;
@@ -170,7 +170,11 @@ export function createChildProcessLogger(sink: Writable = process.stderr): Child
   const enqueue = (record: Record<string, unknown>) => {
     const line = `${JSON.stringify(record)}\n`;
     const size = Buffer.byteLength(line);
-    if (queue.length >= 128 || queuedBytes + size > TAIL_LIMIT_BYTES) {
+    // One error per failure must survive even when debug has filled the queue.
+    if (
+      record.level !== "error" &&
+      (queue.length >= 128 || queuedBytes + size > TAIL_LIMIT_BYTES)
+    ) {
       dropped++;
       return;
     }

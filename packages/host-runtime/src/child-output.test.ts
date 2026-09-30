@@ -93,6 +93,51 @@ describe("captureChildOutput", () => {
     }
   });
 
+  it.each([
+    ["record count", 1000, "fixture line"],
+    ["byte count", 128, "x".repeat(1024)],
+  ])("retains the failure behind a blocked sink and full %s queue", async (_limit, count, line) => {
+    vi.stubEnv("LOG_LEVEL", "debug");
+    const sink = new Writable({
+      write(_chunk, _encoding, callback) {
+        callback();
+      },
+    });
+    const write = vi.spyOn(sink, "write").mockReturnValue(false);
+    const logger = createChildProcessLogger(sink);
+    try {
+      logger.debug("first");
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      for (let i = 0; i < count; i++) logger.debug(line);
+      logger.error?.("Fixture process failed", new Error("phase: prompt; exit: 4"));
+      logger.debug("last debug line");
+      expect(write).toHaveBeenCalledTimes(1);
+      write.mockReturnValue(true);
+      sink.emit("drain");
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      const records = write.mock.calls.map(([output]) => JSON.parse(String(output)));
+      const errors = records.filter((record) => record.level === "error");
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toMatchObject({
+        message: "Fixture process failed",
+        error: { name: "Error", message: "phase: prompt; exit: 4" },
+      });
+      const summaries = records.filter((record) => record.droppedLines !== undefined);
+      expect(summaries).toHaveLength(1);
+      const admitted =
+        records.filter((record) => record.level === "debug" && record.droppedLines === undefined)
+          .length - 1;
+      expect(admitted).toBeGreaterThan(0);
+      expect(summaries[0].droppedLines).toBe(count - admitted + 1);
+      if (_limit === "record count") expect(admitted).toBe(128);
+      else expect(admitted).toBeLessThan(128);
+    } finally {
+      write.mockRestore();
+      sink.destroy();
+      vi.unstubAllEnvs();
+    }
+  });
+
   it.each([true, false])(
     "bounds a lazily generated 100 MiB line (newline: %s)",
     async (newline) => {
