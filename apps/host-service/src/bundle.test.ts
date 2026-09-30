@@ -26,6 +26,7 @@ it("builds one relocatable JavaScript file without server modules or workspace i
       "hermes_launcher.py",
       "hermes_profile.py",
       "hermes_sources.json",
+      "hermes_compat.json",
       "runtime_config_profile.json",
     ]) {
       expect((await readFile(path.join(directory, "python", name))).length).toBeGreaterThan(0);

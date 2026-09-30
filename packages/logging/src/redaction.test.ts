@@ -11,7 +11,7 @@ describe("redaction", () => {
     ["URL colons", () => `https://fixture:${":".repeat(1024 * 1024)}`],
     ["JWT prefixes", () => "eyJ-".repeat(256 * 1024)],
     ["key prefixes", () => "sk-".repeat(350000)],
-  ])("redacts a 1 MiB adversarial line in under 50 ms: %s", (_name, input) => {
+  ])("redacts a 1 MiB adversarial line without catastrophic backtracking: %s", (_name, input) => {
     // Compile the matchers before measuring; construction and assertions are not timed.
     redactSensitiveText("Safe diagnostic");
     const line = `${input()} token=fixture-credential`;
@@ -19,7 +19,10 @@ describe("redaction", () => {
     const redacted = redactSensitiveText(line);
     const elapsed = performance.now() - start;
     expect(redacted).not.toContain("fixture-credential");
-    expect(elapsed).toBeLessThan(50);
+    // A linear pass over 1 MiB takes a few tens of milliseconds; catastrophic backtracking takes
+    // seconds to minutes. The bound only needs to separate the two, so it leaves room for a busy
+    // CI runner (a 50 ms bound failed at 55 ms on shared hardware).
+    expect(elapsed).toBeLessThan(500);
   });
 
   it.each([

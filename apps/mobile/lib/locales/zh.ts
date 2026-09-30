@@ -1393,4 +1393,12 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Change location on desktop.": "请在桌面端更改位置。",
   "Set up a container on desktop, then try again.": "请在桌面端设置容器，然后重试。",
   Sleeping: "休眠中",
+  "Evidence off": "证据记录已关闭",
+  Recording: "记录中",
+  Verified: "已验证",
+  "Not sealed": "未封存",
+  "Evidence gap": "证据缺失",
+  "Check failed": "验证失败",
+  "Download evidence": "下载证据",
+  "{gapCount} evidence gaps": "{gapCount} 处证据缺失",
 };

@@ -256,6 +256,10 @@ msgstr ""
 msgid "{failed} failed"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "{gapCount} evidence gaps"
+msgstr "증거 누락 {gapCount}건"
+
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
 msgstr "{hours}시간 전"
@@ -427,6 +431,10 @@ msgstr ""
 #: src/pages/system/SystemPage.tsx
 msgid "A saved shortcut is unavailable; choose another."
 msgstr ""
+
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "About evidence"
+msgstr "증거 정보"
 
 #: src/pages/shell/bot-picker.tsx
 msgid "About groups"
@@ -1695,6 +1703,7 @@ msgstr ""
 msgid "Check again"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Check failed"
 msgstr "확인 실패"
@@ -3069,9 +3078,10 @@ msgid "Could not save this file. Try again."
 msgstr "이 파일을 저장하지 못했습니다. 다시 시도하세요."
 
 #: src/pages/customize/McpCredentialFix.tsx
+#: src/pages/dashboard/GovernancePanel.tsx
 #: src/pages/Shell.tsx
 msgid "Could not save. Try again."
-msgstr ""
+msgstr "저장하지 못했습니다. 다시 시도하세요."
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
@@ -3810,6 +3820,10 @@ msgstr "{name} 다운로드"
 msgid "Download as markdown"
 msgstr "마크다운으로 다운로드"
 
+#: src/components/RunEvidence.tsx
+msgid "Download evidence"
+msgstr "증거 다운로드"
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Download Executor"
 msgstr ""
@@ -4031,7 +4045,21 @@ msgstr "매주"
 
 #: src/pages/LearningInbox.tsx
 msgid "Evidence"
-msgstr ""
+msgstr "증거"
+
+#: src/components/RunEvidence.tsx
+msgid "Evidence gap"
+msgstr "증거 누락"
+
+#: src/components/RunEvidence.tsx
+#: src/pages/dashboard/GovernancePanel.tsx
+#: src/pages/dashboard/panels.ts
+msgid "Evidence off"
+msgstr "증거 기록 꺼짐"
+
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "Evidence on"
+msgstr "증거 기록 켜짐"
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Excluded files"
@@ -4409,11 +4437,6 @@ msgstr "알겠습니다 — 이 문서를 Notion에 올릴 팀원을 선택하�
 
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
-msgstr ""
-
-#: src/pages/dashboard/GovernancePanel.tsx
-#: src/pages/dashboard/panels.ts
-msgid "Governance and encryption are not part of this build yet."
 msgstr ""
 
 #: src/pages/LearningTimeline.tsx
@@ -6162,6 +6185,10 @@ msgstr ""
 msgid "Not running — open the desktop app"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "Not sealed"
+msgstr "봉인되지 않음"
+
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
 msgstr ""
@@ -6969,6 +6996,14 @@ msgstr ""
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Reconnecting"
 msgstr "다시 연결 중"
+
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "Record evidence of bot decisions"
+msgstr "봇 결정의 증거 기록"
+
+#: src/components/RunEvidence.tsx
+msgid "Recording"
+msgstr "기록 중"
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Recording may have started, but the view could not refresh"
@@ -9470,6 +9505,10 @@ msgstr "해당 계정의 권한을 사용합니다."
 #: src/pages/shell/group-participants.tsx
 msgid "Using {currentId}"
 msgstr "{currentId} 사용 중"
+
+#: src/components/RunEvidence.tsx
+msgid "Verified"
+msgstr "검증됨"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"

@@ -51,7 +51,7 @@
       "id": "approve",
       "eyebrow": "APPROVAL",
       "title": "Stay in control",
-      "body": "Ardur asks for approval before consequential actions.",
+      "body": "Ardur asks for approval before consequential actions. Space owners can opt in to signed bot-decision evidence; members can check run status and download sealed evidence from visible runs for independent verification. Evidence is not encrypted and does not prove tool execution or completeness.",
       "source": "README.md#What you get today"
     }
   ],

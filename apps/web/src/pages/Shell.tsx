@@ -160,7 +160,7 @@ import {
 } from "../components/composer/folders";
 import { useComposerCommands } from "../components/composer/use-composer-commands";
 import type { FeedbackEdit } from "../components/MessageFeedback";
-import { MessageFeedback } from "../components/MessageFeedback";
+
 import { MessageHoverMetadata } from "../components/MessageHoverMetadata";
 import { PeerMessageReceipt } from "../components/PeerMessageReceipt";
 import { SkillDraftCard } from "../components/teach/SkillDraftCard";
@@ -302,6 +302,10 @@ const CreateBotForm = lazy(() =>
 
 const TeamBoard = lazy(() =>
   import("./TeamBoard").then((module) => ({ default: module.TeamBoard })),
+);
+const RunEvidence = lazy(() => import("../components/RunEvidence"));
+const MessageFeedback = lazy(() =>
+  import("../components/MessageFeedback").then((module) => ({ default: module.MessageFeedback })),
 );
 
 const ActivityList = lazy(() =>
@@ -5448,6 +5452,16 @@ const Transcript = memo(function Transcript({
                   </div>
                 </div>
               )}
+              {message.role === "bot" &&
+              message.runId &&
+              message ===
+                reactionView.visibleMessages.findLast(
+                  (entry) => entry.role === "bot" && entry.runId === message.runId,
+                ) ? (
+                <Suspense fallback={null}>
+                  <RunEvidence runId={message.runId} live={message.id.startsWith("progress:")} />
+                </Suspense>
+              ) : null}
               {!peerReceipt && messageReactions ? (
                 <div
                   data-testid="message-reactions"
@@ -6439,7 +6453,9 @@ function MessageHoverActions({
     <MessageHoverMetadata pinned={moreOpen || reactionsOpen} side={side}>
       <div data-testid="message-hover-actions" className="flex items-center gap-0.5">
         {message.role === "bot" && message.runId && canReactToThreadMessage(message) ? (
-          <MessageFeedback onFeedback={(reaction, edit) => onReact(message, reaction, edit)} />
+          <Suspense fallback={null}>
+            <MessageFeedback onFeedback={(reaction, edit) => onReact(message, reaction, edit)} />
+          </Suspense>
         ) : null}
         {canReactToThreadMessage(message) ? (
           <Popover open={reactionsOpen} onOpenChange={setReactionsOpen}>
@@ -6507,6 +6523,11 @@ function MessageHoverActions({
               <Copy size={14} strokeWidth={1.7} />
               <Trans>Copy</Trans>
             </DropdownMenuItem>
+            {moreOpen && message.role === "bot" && message.runId ? (
+              <Suspense fallback={null}>
+                <RunEvidence runId={message.runId} action="download" />
+              </Suspense>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

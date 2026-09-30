@@ -2,6 +2,7 @@ import { mkdir, realpath } from "node:fs/promises";
 import path from "node:path";
 import type { MemoryDocumentStore } from "@ardurbot/adapter-kit";
 import type { Prisma } from "@ardurbot/db";
+import { getLogger } from "@ardurbot/logging";
 import { PostgresDocumentStore } from "@ardurbot/memory";
 import type { EncryptedSecretStore } from "../secrets.js";
 import { configuredGitStore } from "./git-config.js";
@@ -21,7 +22,10 @@ export async function selectDocumentStore(
   secrets?: Pick<EncryptedSecretStore, "load">,
   selectListIds?: ListIdSelector,
 ): Promise<MemoryDocumentStore> {
-  const postgres = new PostgresDocumentStore(tx, undefined, selectListIds);
+  const postgres = new PostgresDocumentStore(tx, undefined, selectListIds, (documentId) =>
+    // The id only: neither the content nor the path (which is checked too) is logged.
+    getLogger().warn("memory document left out: it failed the credential check", { documentId }),
+  );
   if (!config?.documentStore || config.documentStore === "postgres") return postgres;
   if (config.documentStore === "git")
     return new VaultWithPrivateDocuments(

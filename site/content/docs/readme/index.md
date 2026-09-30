@@ -46,6 +46,9 @@ Apache-2.0 attribution.
 - Connectors: MCP servers, OpenAPI documents, Composio, Pipedream Connect
 - Approvals before consequential actions, voice mode, and web, Electron desktop and Expo
   mobile clients of the same API
+- [Bot decision evidence](/docs/governance/): space owners can opt in to signed decision records.
+  Members can inspect run verification and download sealed evidence for visible runs to check
+  independently. Evidence is not encrypted and does not prove tool execution or completeness.
 
 Experimental Antigravity text conversations can run on a connected host computer with an exact model pin; see [Antigravity runtime](/docs/antigravity-runtime/).
 

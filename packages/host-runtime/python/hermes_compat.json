@@ -1,0 +1,157 @@
+{
+  "format": 1,
+  "entries": {
+    "daaffc303ae437041b7f76be17c5f61b14f2ce99": {
+      "version": "v2026.8.31",
+      "commit": "29112bef099274229cadff79cdff7bf7b99c4b77",
+      "tree": "daaffc303ae437041b7f76be17c5f61b14f2ce99",
+      "sources": {
+        "acp_adapter/session.py": "423f9b8b065600607dced5185ce58cd60d2fe450844caf6ce6229c3b7ceeb835",
+        "acp_adapter/server.py": "5ebbbda6511a692faeaf8f57e0ad88182bf22c2d818d16c94f1e95516bb7375d",
+        "acp_adapter/entry.py": "b70e7b189e36644d60576bc1acdc929ae4bd16c80022d5e2b7a8dec97b24d383",
+        "run_agent.py": "5b2e7083680e6c728f2306adc73e5f814c444aaa9ff3e3b840206142c67a7149",
+        "pyproject.toml": "c70c8b52f6cc08a4e65f0fc1713c26814fd4f19811bc7e01de645009b2a76600",
+        "uv.lock": "383cd8f98ec23dc3fe4cf63759ec73be5a869cc953f068b4e79ec4e8ed00287d",
+        "hermes_cli/config_defaults.py": "2a89363e62dac1695ccfdc42b488e9eafd94edb104dcceb24bc1d9f9e626eb64",
+        "hermes_cli/config.py": "cbce38a2aeed3838dc768d69ee0b31278a211f64bfec66bf786f571c775b3730",
+        "agent/agent_init.py": "a7caf2c1fcd66fe55b483435ec759811376c303d0724a8dda57446f6dfd61545",
+        "agent/prompt_builder.py": "1fc4b6fc166caf098aa63c8f01fc71f4d4ed496cf8dd4dcd961e2a2e7713aa80",
+        "agent/conversation_loop.py": "33924321c2ef848a7474d4daf4dd5ec1e98588aa54db967d92ea2fc6aa3ff56a",
+        "agent/turn_context.py": "86a4f6c61183167850046b025a8f5c7b8601fb910f8a9ee464535afccc541c06",
+        "tools/mcp_tool.py": "8b0bd48bd96df60a2c92bb9d5b6f0fd5f794e9dfb5f39e012ef25a749fd395b5",
+        "model_tools.py": "5227bfe30f7c3f6eb20d064f648420138031e038d38eac2829d25b749739ad11",
+        "tools/registry.py": "f95d011cae75f0426dd77cb1e25df6bebb61a067d795312df297cb877dd616f5"
+      },
+      "sessionHook": {
+        "parameters": [
+          ["self", "POSITIONAL_OR_KEYWORD"],
+          ["session_id", "KEYWORD_ONLY"],
+          ["cwd", "KEYWORD_ONLY"],
+          ["model", "KEYWORD_ONLY"],
+          ["requested_provider", "KEYWORD_ONLY"],
+          ["base_url", "KEYWORD_ONLY"],
+          ["api_mode", "KEYWORD_ONLY"]
+        ]
+      },
+      "toolsetHelper": {
+        "parameters": [
+          ["toolsets", "POSITIONAL_OR_KEYWORD"],
+          ["mcp_server_names", "POSITIONAL_OR_KEYWORD"]
+        ]
+      },
+      "acpAgentInit": {
+        "parameters": [
+          ["self", "POSITIONAL_OR_KEYWORD"],
+          ["session_manager", "POSITIONAL_OR_KEYWORD"]
+        ]
+      },
+      "agentInit": {
+        "parameterCount": 81,
+        "required": [
+          "base_url",
+          "api_key",
+          "provider",
+          "api_mode",
+          "model",
+          "max_iterations",
+          "enabled_toolsets",
+          "disabled_toolsets",
+          "save_trajectories",
+          "skip_context_files",
+          "skip_memory",
+          "skip_background_review",
+          "run_budget_seconds",
+          "fallback_model"
+        ]
+      },
+      "sourceGuard": {
+        "mustContain": ["\"hermes-acp\""],
+        "mustNotContain": ["disabled_toolsets"]
+      },
+      "callbacks": {
+        "setup_mcp_callback": "setup_mcp_callback"
+      },
+      "constructedToolsets": {
+        "enabled": ["mcp-ardur"],
+        "disabled": ["hermes-acp"]
+      }
+    },
+    "5849eacde63aaea608ca418821cc84771fce3bec": {
+      "version": "v2026.9.24",
+      "commit": "f97608f178d1ffeca59860195ab7da295f7c8e5f",
+      "tree": "5849eacde63aaea608ca418821cc84771fce3bec",
+      "sources": {
+        "acp_adapter/session.py": "b4a31319bf384538ada301aabb009241e8704720e9f2d790a62c55f0315a2136",
+        "acp_adapter/server.py": "42741bd01361de1ab6c37a9b74c51db36ad9f1fbb0ca28c6307df59a1cadf35a",
+        "acp_adapter/entry.py": "aa75bd116cce1849a0f72e32e0b9322932c8c5a0d1009e0b0d07e53523ae9429",
+        "run_agent.py": "244da863d3c21591a3b5326dc14c2962d4e31131dda52df628502cd9fcbfea33",
+        "pyproject.toml": "6f969b9fdff95e7269ec808361e3ae8be5357036e6257e53a3306878cf8c41dd",
+        "uv.lock": "5b3798f326209475abca8ef7cbf7c9406f12e687c28c0b540dfe597466f48590",
+        "hermes_cli/config_defaults.py": "2af916849856bfa39b4903c660301f968a4cec87410cd7023c89ee7b3f3fdc68",
+        "hermes_cli/config.py": "398bee1c8ab2f8647b7967f0ae3ca57477ed4dc29e67023f858db4c5656aaace",
+        "agent/agent_init.py": "ce93f1d5acd4727d0005b46d7054d8892a55c820be40ebc7f594695f576b4d81",
+        "agent/prompt_builder.py": "64bc77a26641754b8c5ca76fc876687d3c9e81aad7816c2e76ce251a41121526",
+        "agent/conversation_loop.py": "c93ee86e1da583abc7cc57417380cd71241ae028c04a4cb8456580b52ffbf3d8",
+        "agent/turn_context.py": "85f857dc3c317366d918516bc8b37a022f1020b34da0c3966a31bd289b2942e1",
+        "tools/mcp_tool.py": "c8c99d7fdfb57a21ab112b005c51103db40d41a8d6fae3628fd5933936ca90ad",
+        "model_tools.py": "5d5a947d84f31f1ba4ef5267e28154b819e8f957a0b378739696f1ac305e1509",
+        "tools/registry.py": "1dd185b85dee4e578905273668369efc3abd8ce6d55abf8fa3d133393cb9dedc"
+      },
+      "sessionHook": {
+        "parameters": [
+          ["self", "POSITIONAL_OR_KEYWORD"],
+          ["session_id", "KEYWORD_ONLY"],
+          ["cwd", "KEYWORD_ONLY"],
+          ["model", "KEYWORD_ONLY"],
+          ["requested_provider", "KEYWORD_ONLY"],
+          ["base_url", "KEYWORD_ONLY"],
+          ["api_mode", "KEYWORD_ONLY"],
+          ["enabled_toolsets", "KEYWORD_ONLY"],
+          ["disabled_toolsets", "KEYWORD_ONLY"]
+        ]
+      },
+      "toolsetHelper": {
+        "parameters": [
+          ["toolsets", "POSITIONAL_OR_KEYWORD"],
+          ["mcp_server_names", "POSITIONAL_OR_KEYWORD"]
+        ]
+      },
+      "acpAgentInit": {
+        "parameters": [
+          ["self", "POSITIONAL_OR_KEYWORD"],
+          ["session_manager", "POSITIONAL_OR_KEYWORD"]
+        ]
+      },
+      "agentInit": {
+        "parameterCount": 85,
+        "required": [
+          "base_url",
+          "api_key",
+          "provider",
+          "api_mode",
+          "model",
+          "max_iterations",
+          "enabled_toolsets",
+          "disabled_toolsets",
+          "save_trajectories",
+          "skip_context_files",
+          "skip_memory",
+          "skip_background_review",
+          "run_budget_seconds",
+          "fallback_model"
+        ]
+      },
+      "sourceGuard": {
+        "mustContain": ["\"enabled_toolsets\"", "\"disabled_toolsets\""],
+        "mustNotContain": []
+      },
+      "callbacks": {
+        "setup_mcp_callback": "connection_callback"
+      },
+      "constructedToolsets": {
+        "enabled": ["mcp-ardur"],
+        "disabled": ["hermes-acp"]
+      }
+    }
+  }
+}

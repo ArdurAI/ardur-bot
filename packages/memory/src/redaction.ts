@@ -1,5 +1,5 @@
 import { containsSecret } from "@ardurbot/core";
-import { redactSensitiveText } from "@ardurbot/logging";
+import { redactCredentialText } from "@ardurbot/logging";
 
 export class MemoryRedactionError extends Error {
   constructor(
@@ -29,9 +29,9 @@ export function assertMemorySafe(value: unknown, knownSecrets: readonly string[]
         }) ?? "");
   if (typeof value === "string") texts.push(value);
   if (
-    redactSensitiveText(outline) !== outline ||
+    redactCredentialText(outline) !== outline ||
     containsSecret(value, [...knownSecrets]) ||
-    texts.some((text) => redactSensitiveText(text) !== text || CREDENTIAL.test(text))
+    texts.some((text) => redactCredentialText(text) !== text || CREDENTIAL.test(text))
   ) {
     throw new MemoryRedactionError();
   }
