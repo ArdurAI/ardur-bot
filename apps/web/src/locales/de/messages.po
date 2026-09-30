@@ -13,6 +13,36 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: \n"
 
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Check failed"
+#~ msgstr "Prüfung fehlgeschlagen"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Evidence gap"
+#~ msgstr "Nachweislücke"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Evidence off"
+#~ msgstr "Nachweise aus"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Not sealed"
+#~ msgstr "Nicht versiegelt"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Recording"
+#~ msgstr "Aufzeichnung läuft"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Verified"
+#~ msgstr "Verifiziert"
+
 #: src/pages/shell/model-pin-select.tsx
 msgid " — May not be available on your plan"
 msgstr ""
@@ -1702,11 +1732,7 @@ msgstr ""
 msgid "Check again"
 msgstr ""
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
-msgid "Check failed"
-msgstr "Prüfung fehlgeschlagen"
-
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Check failed"
 msgstr "Prüfung fehlgeschlagen"
@@ -4006,18 +4032,13 @@ msgstr "Jede Woche"
 msgid "Evidence"
 msgstr ""
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
 msgid "Evidence gap"
-msgstr "Nachweislücke"
+msgstr ""
 
+#: src/components/RunEvidence.tsx
 #: src/pages/dashboard/GovernancePanel.tsx
 #: src/pages/dashboard/panels.ts
-msgid "Evidence off"
-msgstr "Nachweise aus"
-
-#. js-lingui-explicit-id
-#: src/components/RunEvidence.tsx
 msgid "Evidence off"
 msgstr "Nachweise aus"
 
@@ -6139,10 +6160,9 @@ msgstr ""
 msgid "Not running — open the desktop app"
 msgstr ""
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
 msgid "Not sealed"
-msgstr "Nicht versiegelt"
+msgstr ""
 
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
@@ -6947,10 +6967,9 @@ msgstr "Verbindung wird wiederhergestellt"
 msgid "Record evidence of bot decisions"
 msgstr "Nachweise für Bot-Entscheidungen aufzeichnen"
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
 msgid "Recording"
-msgstr "Aufzeichnung läuft"
+msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Recording may have started, but the view could not refresh"
@@ -9404,10 +9423,9 @@ msgstr ""
 msgid "Using {currentId}"
 msgstr "Verwendet {currentId}"
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
 msgid "Verified"
-msgstr "Verifiziert"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"

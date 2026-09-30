@@ -13,6 +13,36 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: \n"
 
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Check failed"
+#~ msgstr "Check failed"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Evidence gap"
+#~ msgstr "Evidence gap"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Evidence off"
+#~ msgstr "Evidence off"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Not sealed"
+#~ msgstr "Not sealed"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Recording"
+#~ msgstr "Recording"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Verified"
+#~ msgstr "Verified"
+
 #: src/pages/shell/model-pin-select.tsx
 msgid " — May not be available on your plan"
 msgstr " — May not be available on your plan"
@@ -1702,11 +1732,7 @@ msgstr "Check"
 msgid "Check again"
 msgstr "Check again"
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
-msgid "Check failed"
-msgstr "Check failed"
-
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Check failed"
 msgstr "Check failed"
@@ -4006,18 +4032,13 @@ msgstr "Every week"
 msgid "Evidence"
 msgstr "Evidence"
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
 msgid "Evidence gap"
 msgstr "Evidence gap"
 
+#: src/components/RunEvidence.tsx
 #: src/pages/dashboard/GovernancePanel.tsx
 #: src/pages/dashboard/panels.ts
-msgid "Evidence off"
-msgstr "Evidence off"
-
-#. js-lingui-explicit-id
-#: src/components/RunEvidence.tsx
 msgid "Evidence off"
 msgstr "Evidence off"
 
@@ -6139,7 +6160,6 @@ msgstr "Not requested"
 msgid "Not running — open the desktop app"
 msgstr "Not running — open the desktop app"
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
 msgid "Not sealed"
 msgstr "Not sealed"
@@ -6947,7 +6967,6 @@ msgstr "Reconnecting"
 msgid "Record evidence of bot decisions"
 msgstr "Record evidence of bot decisions"
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
 msgid "Recording"
 msgstr "Recording"
@@ -9404,7 +9423,6 @@ msgstr "User"
 msgid "Using {currentId}"
 msgstr "Using {currentId}"
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
 msgid "Verified"
 msgstr "Verified"

@@ -1680,7 +1680,10 @@ function Thread() {
           </Pressable>
           {message.role === "bot" &&
           message.runId &&
-          message === visibleMessages.findLast((entry) => entry.role === "bot" && entry.runId === message.runId) ? (
+          message ===
+            visibleMessages.findLast(
+              (entry) => entry.role === "bot" && entry.runId === message.runId,
+            ) ? (
             <RunEvidence
               runId={message.runId}
               live={message.id.startsWith("progress:")}

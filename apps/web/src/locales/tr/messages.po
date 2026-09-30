@@ -13,6 +13,36 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: \n"
 
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Check failed"
+#~ msgstr "Kontrol başarısız"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Evidence gap"
+#~ msgstr "Kanıt eksikliği"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Evidence off"
+#~ msgstr "Kanıt kaydı kapalı"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Not sealed"
+#~ msgstr "Mühürlenmedi"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Recording"
+#~ msgstr "Kaydediliyor"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Verified"
+#~ msgstr "Doğrulandı"
+
 #: src/pages/shell/model-pin-select.tsx
 msgid " — May not be available on your plan"
 msgstr ""
@@ -1702,11 +1732,7 @@ msgstr ""
 msgid "Check again"
 msgstr ""
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
-msgid "Check failed"
-msgstr "Kontrol başarısız"
-
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Check failed"
 msgstr "Kontrol başarısız"
@@ -4006,18 +4032,13 @@ msgstr "Her hafta"
 msgid "Evidence"
 msgstr ""
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
 msgid "Evidence gap"
-msgstr "Kanıt eksikliği"
+msgstr ""
 
+#: src/components/RunEvidence.tsx
 #: src/pages/dashboard/GovernancePanel.tsx
 #: src/pages/dashboard/panels.ts
-msgid "Evidence off"
-msgstr "Kanıt kaydı kapalı"
-
-#. js-lingui-explicit-id
-#: src/components/RunEvidence.tsx
 msgid "Evidence off"
 msgstr "Kanıt kaydı kapalı"
 
@@ -6139,10 +6160,9 @@ msgstr ""
 msgid "Not running — open the desktop app"
 msgstr ""
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
 msgid "Not sealed"
-msgstr "Mühürlenmedi"
+msgstr ""
 
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
@@ -6947,10 +6967,9 @@ msgstr "Yeniden bağlanıyor"
 msgid "Record evidence of bot decisions"
 msgstr "Bot kararlarının kanıtlarını kaydet"
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
 msgid "Recording"
-msgstr "Kaydediliyor"
+msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Recording may have started, but the view could not refresh"
@@ -9404,10 +9423,9 @@ msgstr ""
 msgid "Using {currentId}"
 msgstr "{currentId} kullanılıyor"
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
 msgid "Verified"
-msgstr "Doğrulandı"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"

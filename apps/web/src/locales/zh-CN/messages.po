@@ -13,6 +13,36 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: \n"
 
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Check failed"
+#~ msgstr "验证失败"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Evidence gap"
+#~ msgstr "证据缺失"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Evidence off"
+#~ msgstr "证据记录已关闭"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Not sealed"
+#~ msgstr "未封存"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Recording"
+#~ msgstr "记录中"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Verified"
+#~ msgstr "已验证"
+
 #: src/pages/shell/model-pin-select.tsx
 msgid " — May not be available on your plan"
 msgstr ""
@@ -1702,11 +1732,7 @@ msgstr "检查"
 msgid "Check again"
 msgstr ""
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
-msgid "Check failed"
-msgstr "验证失败"
-
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Check failed"
 msgstr "检查失败"
@@ -4006,18 +4032,13 @@ msgstr "每周"
 msgid "Evidence"
 msgstr ""
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
 msgid "Evidence gap"
-msgstr "证据缺失"
+msgstr ""
 
+#: src/components/RunEvidence.tsx
 #: src/pages/dashboard/GovernancePanel.tsx
 #: src/pages/dashboard/panels.ts
-msgid "Evidence off"
-msgstr "证据记录已关闭"
-
-#. js-lingui-explicit-id
-#: src/components/RunEvidence.tsx
 msgid "Evidence off"
 msgstr "证据记录已关闭"
 
@@ -6139,10 +6160,9 @@ msgstr ""
 msgid "Not running — open the desktop app"
 msgstr ""
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
 msgid "Not sealed"
-msgstr "未封存"
+msgstr ""
 
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
@@ -6947,10 +6967,9 @@ msgstr "正在重新连接"
 msgid "Record evidence of bot decisions"
 msgstr "记录机器人决策的证据"
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
 msgid "Recording"
-msgstr "记录中"
+msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Recording may have started, but the view could not refresh"
@@ -9404,10 +9423,9 @@ msgstr ""
 msgid "Using {currentId}"
 msgstr "正在使用 {currentId}"
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
 msgid "Verified"
-msgstr "已验证"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"

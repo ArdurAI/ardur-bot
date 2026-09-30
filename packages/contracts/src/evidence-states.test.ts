@@ -30,5 +30,8 @@ describe("evidence state rules", () => {
     expect(
       evidenceState({ ...facts, finished: false, gapCount: 2, verificationFailed: true }),
     ).toBe("failed");
+    expect(
+      evidenceState({ ...facts, recordCount: 0, sealed: false, verificationFailed: true }),
+    ).toBe("failed");
   });
 });

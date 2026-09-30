@@ -48,6 +48,15 @@ describePostgres("run evidence download (PostgreSQL)", () => {
       [memberId, "member"],
     ] as const) {
       await prisma.user.create({ data: { id, name: "Fixture", email: `${id}@example.test` } });
+      await prisma.member.create({
+        data: {
+          id: `${id}-organization-membership`,
+          organizationId: orgId,
+          userId: id,
+          role,
+          createdAt: new Date(),
+        },
+      });
       await prisma.spaceMember.create({
         data: {
           id: `${id}-membership`,

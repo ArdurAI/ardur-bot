@@ -13,6 +13,36 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
 
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Check failed"
+#~ msgstr "Проверка не пройдена"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Evidence gap"
+#~ msgstr "Пробел в записи"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Evidence off"
+#~ msgstr "Запись выключена"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Not sealed"
+#~ msgstr "Без печати"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Recording"
+#~ msgstr "Запись"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Verified"
+#~ msgstr "Проверено"
+
 #: src/pages/shell/model-pin-select.tsx
 msgid " — May not be available on your plan"
 msgstr ""
@@ -1702,11 +1732,7 @@ msgstr "Проверить"
 msgid "Check again"
 msgstr ""
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
-msgid "Check failed"
-msgstr "Проверка не пройдена"
-
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Check failed"
 msgstr "Проверка не удалась"
@@ -4006,18 +4032,13 @@ msgstr "Каждую неделю"
 msgid "Evidence"
 msgstr ""
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
 msgid "Evidence gap"
-msgstr "Пробел в записи"
+msgstr ""
 
+#: src/components/RunEvidence.tsx
 #: src/pages/dashboard/GovernancePanel.tsx
 #: src/pages/dashboard/panels.ts
-msgid "Evidence off"
-msgstr "Запись выключена"
-
-#. js-lingui-explicit-id
-#: src/components/RunEvidence.tsx
 msgid "Evidence off"
 msgstr "Запись выключена"
 
@@ -6139,10 +6160,9 @@ msgstr ""
 msgid "Not running — open the desktop app"
 msgstr ""
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
 msgid "Not sealed"
-msgstr "Без печати"
+msgstr ""
 
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
@@ -6947,10 +6967,9 @@ msgstr "Повторное подключение"
 msgid "Record evidence of bot decisions"
 msgstr "Записывать свидетельства решений ботов"
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
 msgid "Recording"
-msgstr "Запись"
+msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Recording may have started, but the view could not refresh"
@@ -9404,10 +9423,9 @@ msgstr ""
 msgid "Using {currentId}"
 msgstr "Используется {currentId}"
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
 msgid "Verified"
-msgstr "Проверено"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"

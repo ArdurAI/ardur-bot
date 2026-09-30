@@ -17,7 +17,7 @@ export const EVIDENCE_STATES = {
   off: {
     labelMessageId: "Evidence off",
     icon: "circle",
-    matches: (f) => f.recordCount === 0 && !f.sealed && f.gapCount === 0,
+    matches: (f) => f.recordCount === 0 && !f.sealed && f.gapCount === 0 && !f.verificationFailed,
   },
   failed: {
     labelMessageId: "Check failed",

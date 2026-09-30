@@ -8,15 +8,15 @@ import { Circle, Download, Loader, Shield, ShieldAlert, ShieldCheck, ShieldX } f
 import { useEffect, useRef, useState } from "react";
 import { rpc, selectedSpaceId } from "../lib/rpc";
 
-// Explicit ids let the shared browser-safe table own state labels without depending on Lingui.
-const labels = [
-  msg({ id: "Evidence off", message: "Evidence off" }),
-  msg({ id: "Recording", message: "Recording" }),
-  msg({ id: "Verified", message: "Verified" }),
-  msg({ id: "Evidence gap", message: "Evidence gap" }),
-  msg({ id: "Not sealed", message: "Not sealed" }),
-  msg({ id: "Check failed", message: "Check failed" }),
-];
+// Extractable descriptors translate the shared table's labels without a Lingui dependency there.
+const labels = {
+  "Evidence off": msg`Evidence off`,
+  Recording: msg`Recording`,
+  Verified: msg`Verified`,
+  "Evidence gap": msg`Evidence gap`,
+  "Not sealed": msg`Not sealed`,
+  "Check failed": msg`Check failed`,
+};
 const icons = {
   circle: Circle,
   loader: Loader,
@@ -43,7 +43,7 @@ export function EvidenceStatus({ summary }: { summary: EvidenceRunSummary }) {
       className="inline-flex items-center gap-1 text-xs text-muted-foreground"
     >
       <Icon size={13} aria-hidden="true" />
-      {i18n._(labels.find((label) => label.id === entry.labelMessageId)!)}
+      {i18n._(labels[entry.labelMessageId])}
     </span>
   );
 }

@@ -13,6 +13,36 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: \n"
 
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Check failed"
+#~ msgstr "जाँच विफल"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Evidence gap"
+#~ msgstr "साक्ष्य में कमी"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Evidence off"
+#~ msgstr "साक्ष्य बंद"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Not sealed"
+#~ msgstr "सील नहीं हुआ"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Recording"
+#~ msgstr "रिकॉर्ड हो रहा है"
+
+#. js-lingui-explicit-id
+#: src/components/RunEvidence.tsx
+#~ msgid "Verified"
+#~ msgstr "सत्यापित"
+
 #: src/pages/shell/model-pin-select.tsx
 msgid " — May not be available on your plan"
 msgstr ""
@@ -1702,11 +1732,7 @@ msgstr ""
 msgid "Check again"
 msgstr ""
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
-msgid "Check failed"
-msgstr "जाँच विफल"
-
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Check failed"
 msgstr "जाँच विफल"
@@ -4006,18 +4032,13 @@ msgstr "हर सप्ताह"
 msgid "Evidence"
 msgstr ""
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
 msgid "Evidence gap"
-msgstr "साक्ष्य में कमी"
+msgstr ""
 
+#: src/components/RunEvidence.tsx
 #: src/pages/dashboard/GovernancePanel.tsx
 #: src/pages/dashboard/panels.ts
-msgid "Evidence off"
-msgstr "साक्ष्य बंद"
-
-#. js-lingui-explicit-id
-#: src/components/RunEvidence.tsx
 msgid "Evidence off"
 msgstr "साक्ष्य बंद"
 
@@ -6139,10 +6160,9 @@ msgstr ""
 msgid "Not running — open the desktop app"
 msgstr ""
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
 msgid "Not sealed"
-msgstr "सील नहीं हुआ"
+msgstr ""
 
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
@@ -6947,10 +6967,9 @@ msgstr "पुनः कनेक्ट हो रहा है"
 msgid "Record evidence of bot decisions"
 msgstr "बॉट के निर्णयों के साक्ष्य रिकॉर्ड करें"
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
 msgid "Recording"
-msgstr "रिकॉर्ड हो रहा है"
+msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Recording may have started, but the view could not refresh"
@@ -9404,10 +9423,9 @@ msgstr ""
 msgid "Using {currentId}"
 msgstr "{currentId} का उपयोग हो रहा है"
 
-#. js-lingui-explicit-id
 #: src/components/RunEvidence.tsx
 msgid "Verified"
-msgstr "सत्यापित"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"
