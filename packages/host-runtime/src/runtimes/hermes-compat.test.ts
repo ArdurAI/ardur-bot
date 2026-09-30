@@ -1,6 +1,9 @@
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import sourceHashes from "../../python/hermes_sources.json" with { type: "json" };
 import compatFixtures from "../../python/tests/compat_fixtures.json" with { type: "json" };
+import type { HermesCompatTable } from "./hermes-compat.js";
 import {
   assertCompatTableValid,
   assertHermesCompatInStep,
@@ -61,6 +64,15 @@ describe("hermes compatibility table", () => {
   });
 
   it("agrees with the Python validator on every shared fixture", () => {
+    const collision = compatFixtures.invalid.find(
+      (testCase) => testCase.name === "comma-colliding additional source keys",
+    );
+    if (!collision) throw new Error("Collision regression fixture is missing");
+    const paths = Object.values((collision.table as HermesCompatTable).entries).map((entry) =>
+      Object.keys(entry.sources).sort(),
+    );
+    expect(paths[0]).not.toEqual(paths[1]);
+    expect(paths[0]?.join()).toBe(paths[1]?.join());
     for (const [index, table] of compatFixtures.valid.entries()) {
       expect(() => assertCompatTableValid(table), `valid fixture ${index}`).not.toThrow();
     }
@@ -70,9 +82,48 @@ describe("hermes compatibility table", () => {
         `invalid fixture: ${testCase.name}`,
       ).toThrow("Compatibility table is invalid");
     }
+    const python = spawnSync(
+      "python3",
+      [
+        "-B",
+        "-c",
+        [
+          "import json, pathlib, sys",
+          "sys.path.insert(0, sys.argv[1])",
+          "from hermes_launcher import validate_compat",
+          "fixtures = json.loads(pathlib.Path(sys.argv[2]).read_text())",
+          "verdicts = []",
+          "for table in fixtures['valid'] + [case['table'] for case in fixtures['invalid']]:",
+          "    try:",
+          "        validate_compat(table)",
+          "        verdicts.append(True)",
+          "    except RuntimeError:",
+          "        verdicts.append(False)",
+          "print(json.dumps(verdicts))",
+        ].join("\n"),
+        fileURLToPath(new URL("../../python", import.meta.url)),
+        fileURLToPath(new URL("../../python/tests/compat_fixtures.json", import.meta.url)),
+      ],
+      { encoding: "utf8", timeout: 30_000 },
+    );
+    expect(python.error).toBeUndefined();
+    expect(python.status, python.stderr).toBe(0);
+    const tables = [
+      ...compatFixtures.valid,
+      ...compatFixtures.invalid.map((testCase) => testCase.table),
+    ];
+    const verdicts = tables.map((table) => {
+      try {
+        assertCompatTableValid(table);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    expect(JSON.parse(python.stdout)).toEqual(verdicts);
   });
 
-  it("qualifies v2026.9.24 with stronger constructed-agent expectations", () => {
+  it("qualifies v2026.9.24 without making constructed-agent assertions optional", () => {
     const qualified = HERMES_COMPAT.entries["5849eacde63aaea608ca418821cc84771fce3bec"];
     expect(qualified?.version).toBe("v2026.9.24");
     expect(qualified?.agentInit.parameterCount).toBe(85);
@@ -83,6 +134,6 @@ describe("hermes compatibility table", () => {
       disabled: ["hermes-acp"],
     });
     const pinned = HERMES_COMPAT.entries[HERMES_SOURCE_TREE];
-    expect(pinned?.constructedToolsets).toBeUndefined();
+    expect(pinned?.constructedToolsets).toEqual(qualified?.constructedToolsets);
   });
 });

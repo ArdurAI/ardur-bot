@@ -70,6 +70,10 @@
       },
       "callbacks": {
         "setup_mcp_callback": "setup_mcp_callback"
+      },
+      "constructedToolsets": {
+        "enabled": ["mcp-ardur"],
+        "disabled": ["hermes-acp"]
       }
     },
     "5849eacde63aaea608ca418821cc84771fce3bec": {

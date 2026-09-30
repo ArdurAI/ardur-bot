@@ -105,13 +105,10 @@ it("prefers the packaged launcher when the module URL is unavailable", async () 
     await mkdir(path.dirname(launcher));
     await writeFile(launcher, "fixture");
     expect(() => resolveHermesLauncherAsset(bundle, undefined)).toThrow("unavailable");
-    for (const name of [
-      "hermes_profile.py",
-      "hermes_sources.json",
-      "hermes_compat.json",
-      "runtime_config_profile.json",
-    ])
+    for (const name of ["hermes_profile.py", "hermes_sources.json", "runtime_config_profile.json"])
       await writeFile(path.join(root, "python", name), "fixture");
+    expect(() => resolveHermesLauncherAsset(bundle, undefined)).toThrow("unavailable");
+    await writeFile(path.join(root, "python", "hermes_compat.json"), "fixture");
     expect(resolveHermesLauncherAsset(bundle, undefined)).toBe(launcher);
   } finally {
     await rm(root, { recursive: true, force: true });

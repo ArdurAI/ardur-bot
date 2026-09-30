@@ -1,4 +1,4 @@
-"""The table-driven hook guard matches the original hard-coded guard exactly.
+"""Offline hook and constructed-agent guards for reviewed source trees.
 
 Stubs are inert classes and functions built from the compatibility table's
 own signature data — no Hermes code is imported or executed.
@@ -17,7 +17,7 @@ import unittest
 from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from hermes_launcher import check_hooks, harden_constructed_agent, load_compat
+from hermes_launcher import check_hooks, harden_constructed_agent, load_compat, mcp_server_config
 
 
 ENTRY = load_compat()["entries"]["daaffc303ae437041b7f76be17c5f61b14f2ce99"]
@@ -165,7 +165,7 @@ class HookTests(unittest.TestCase):
                     outcome(reference_check_hooks, modules))
 
     def test_source_guard_rejects_disabled_toolsets(self):
-        modules = with_make_source(ENTRY, "        return ['hermes-acp', 'disabled_toolsets']")
+        modules = with_make_source(ENTRY, '        return ["hermes-acp", "disabled_toolsets"]')
         with self.assertRaisesRegex(RuntimeError, "Session hook behavior changed"):
             check_hooks(*modules, ENTRY)
 
@@ -206,12 +206,13 @@ class ConstructedAgentTests(unittest.TestCase):
 
     def server(self, **overrides):
         values = {"name": "ardur", "transport": "http", "command": None,
-                  "url": "http://127.0.0.1:9/mcp", "args": ["--relay"]}
+                  "url": "http://127.0.0.1:9/mcp", "args": ["--relay"],
+                  "env": [], "headers": []}
         values.update(overrides)
         return SimpleNamespace(**values)
 
     def manager(self, accepted=None):
-        return SimpleNamespace(_ardur_mcp_server=accepted)
+        return SimpleNamespace(_ardur_mcp_config=mcp_server_config(accepted))
 
     def test_new_entry_asserts_exact_toolsets(self):
         agent = self.agent(["mcp-ardur"], ["hermes-acp"])
@@ -274,6 +275,10 @@ class ConstructedAgentTests(unittest.TestCase):
         harden_constructed_agent(agent, NEW_ENTRY, self.manager(accepted))
         with self.assertRaisesRegex(RuntimeError, "MCP server attachment refused"):
             agent.connection_callback(self.server(name="other"), server=accepted)
+        with self.assertRaisesRegex(RuntimeError, "MCP server attachment refused"):
+            agent.connection_callback(self.server(name="other"), name="ardur")
+        with self.assertRaisesRegex(RuntimeError, "MCP server attachment refused"):
+            agent.connection_callback(accepted, name="other")
 
     def test_callback_guard_refuses_without_an_accepted_server(self):
         agent = self.agent(["mcp-ardur"], ["hermes-acp"])
@@ -284,10 +289,75 @@ class ConstructedAgentTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "MCP server attachment refused"):
             agent.connection_callback(server=self.server())
 
-    def test_old_entry_leaves_the_constructed_agent_untouched(self):
-        agent = SimpleNamespace(enabled_toolsets=None, disabled_toolsets=None)
-        harden_constructed_agent(agent, ENTRY)
-        self.assertFalse(hasattr(agent, "connection_callback"))
+    def test_every_entry_asserts_exact_toolsets(self):
+        for entry in (ENTRY, NEW_ENTRY):
+            for enabled, disabled in ((None, None), (["terminal"], ["hermes-acp"]),
+                                      (["mcp-ardur"], [])):
+                with self.subTest(version=entry["version"], enabled=enabled, disabled=disabled):
+                    with self.assertRaisesRegex(RuntimeError, "Constructed toolsets changed"):
+                        harden_constructed_agent(self.agent(enabled, disabled), entry)
+
+    def test_every_entry_guards_its_callback(self):
+        for entry in (ENTRY, NEW_ENTRY):
+            with self.subTest(version=entry["version"]):
+                calls = []
+                callback_name = entry["callbacks"]["setup_mcp_callback"]
+                agent = self.agent(["mcp-ardur"], ["hermes-acp"])
+                setattr(agent, callback_name, lambda server: calls.append(server))
+                accepted = self.server()
+                harden_constructed_agent(agent, entry, self.manager(accepted))
+                callback = getattr(agent, callback_name)
+                callback(self.server())
+                self.assertEqual(len(calls), 1)
+                with self.assertRaisesRegex(RuntimeError, "MCP server attachment refused"):
+                    callback(self.server(url="https://unconfigured.invalid/mcp"))
+                self.assertEqual(len(calls), 1)
+
+    def test_callback_guard_compares_the_whole_environment_and_headers(self):
+        for entry in (ENTRY, NEW_ENTRY):
+            for named_field in ("env", "headers"):
+                with self.subTest(version=entry["version"], field=named_field):
+                    calls = []
+                    accepted = self.server(transport="stdio", command="fixture-mcp", url=None,
+                                           env=[SimpleNamespace(name="FIXTURE", value="configured")],
+                                           headers=[SimpleNamespace(name="X-Fixture", value="configured")])
+                    callback_name = entry["callbacks"]["setup_mcp_callback"]
+                    agent = self.agent(["mcp-ardur"], ["hermes-acp"])
+                    setattr(agent, callback_name, lambda server: calls.append(server))
+                    harden_constructed_agent(agent, entry, self.manager(accepted))
+                    callback = getattr(agent, callback_name)
+                    callback(self.server(**vars(accepted)))
+                    for replacement in (
+                        [],
+                        [SimpleNamespace(name="OTHER", value="configured")],
+                        [SimpleNamespace(name=getattr(accepted, named_field)[0].name, value="changed")],
+                        [*getattr(accepted, named_field),
+                         SimpleNamespace(name="NODE_OPTIONS", value="--require /fixture/unconfigured-hook.cjs")],
+                    ):
+                        presented = self.server(**vars(accepted))
+                        setattr(presented, named_field, replacement)
+                        with self.assertRaisesRegex(RuntimeError, "MCP server attachment refused"):
+                            callback(presented)
+                    self.assertEqual(len(calls), 1)
+
+    def test_callback_guard_snapshots_mutable_configuration(self):
+        accepted = self.server(env={"FIXTURE": "configured"}, headers={"X-Fixture": "configured"})
+        calls = []
+        agent = self.agent(["mcp-ardur"], ["hermes-acp"], callback=lambda server: calls.append(server))
+        manager = self.manager(accepted)
+        harden_constructed_agent(agent, NEW_ENTRY, manager)
+        accepted.env["NODE_OPTIONS"] = "--require /fixture/unconfigured-hook.cjs"
+        manager._ardur_mcp_config = mcp_server_config(accepted)
+        with self.assertRaisesRegex(RuntimeError, "MCP server attachment refused"):
+            agent.connection_callback(accepted)
+        self.assertEqual(calls, [])
+
+    def test_callback_guard_refuses_duplicate_named_values(self):
+        accepted = self.server(env=[SimpleNamespace(name="FIXTURE", value="configured")])
+        agent = self.agent(["mcp-ardur"], ["hermes-acp"])
+        harden_constructed_agent(agent, NEW_ENTRY, self.manager(accepted))
+        with self.assertRaisesRegex(RuntimeError, "MCP server attachment refused"):
+            agent.connection_callback(self.server(env=accepted.env * 2))
 
 
 if __name__ == "__main__":

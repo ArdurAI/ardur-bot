@@ -13,18 +13,16 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import hermes_launcher
-from hermes_launcher import PIN, TREE
+from hermes_launcher import MANDATORY_SOURCE_PATHS, PIN, TREE, validate_compat
 
 
 def table_with(sources: dict[str, str], pin: str = PIN, tree: str = TREE) -> dict:
     base = json.loads((Path(__file__).resolve().parents[1] / "hermes_compat.json").read_text())
-    for key, entry in base["entries"].items():
-        entry["sources"] = dict(sources)
-        entry["commit"] = pin
-        entry["tree"] = tree
-        base["entries"] = {tree: entry}
-        return base
-    raise AssertionError("table has no entries")
+    entry = base["entries"][tree]
+    entry["sources"] = dict(sources)
+    entry["commit"] = pin
+    base["entries"] = {tree: entry}
+    return base
 
 
 class InstallTests(unittest.TestCase):
@@ -39,8 +37,13 @@ class InstallTests(unittest.TestCase):
         bindir = self.root / ".venv" / "bin"
         bindir.mkdir(parents=True)
         (bindir / "python").symlink_to(Path(sys.executable).resolve())
-        (self.root / "hello.txt").write_bytes(b"hello")
-        self.digest = hashlib.sha256(b"hello").hexdigest()
+        self.sources = {}
+        for name in MANDATORY_SOURCE_PATHS:
+            source = self.root / name
+            source.parent.mkdir(parents=True, exist_ok=True)
+            content = f"inert reviewed bytes: {name}\n".encode()
+            source.write_bytes(content)
+            self.sources[name] = hashlib.sha256(content).hexdigest()
 
     def marker(self, pin: str = PIN, tree: str = TREE) -> None:
         (self.root / ".ardur-install.json").write_text(
@@ -55,13 +58,19 @@ class InstallTests(unittest.TestCase):
         )
 
     def check(self, sources: dict[str, str] | None = None, pin: str = PIN, tree: str = TREE) -> None:
-        mapped = {"hello.txt": self.digest} if sources is None else sources
-        with patch.object(hermes_launcher, "COMPAT", table_with(mapped, pin, tree)):
+        mapped = self.sources if sources is None else sources
+        with patch.object(hermes_launcher, "COMPAT", validate_compat(table_with(mapped, pin, tree))):
             hermes_launcher.check_install(self.root, self.home)
 
     def test_marker_accepted_without_git(self):
         self.marker()
         self.check()
+
+    def test_second_reviewed_entry_is_accepted(self):
+        pin = "f97608f178d1ffeca59860195ab7da295f7c8e5f"
+        tree = "5849eacde63aaea608ca418821cc84771fce3bec"
+        self.marker(pin=pin, tree=tree)
+        self.check(pin=pin, tree=tree)
 
     def test_git_checkout_accepted(self):
         (self.root / ".git").mkdir()
@@ -87,7 +96,7 @@ class InstallTests(unittest.TestCase):
 
     def test_unknown_tree_refused_with_the_same_message(self):
         self.marker(tree="0" * 40)
-        with patch.object(hermes_launcher, "COMPAT", table_with({"hello.txt": self.digest})):
+        with patch.object(hermes_launcher, "COMPAT", validate_compat(table_with(self.sources))):
             with self.assertRaises(RuntimeError) as caught:
                 hermes_launcher.check_install(self.root, self.home)
         self.assertEqual(str(caught.exception), "Install marker mismatch")
@@ -100,7 +109,7 @@ class InstallTests(unittest.TestCase):
             return SimpleNamespace(stdout="f" * 40 + "\n", returncode=0)
 
         with patch.object(hermes_launcher.subprocess, "run", side_effect=fake_run):
-            with patch.object(hermes_launcher, "COMPAT", table_with({"hello.txt": self.digest})):
+            with patch.object(hermes_launcher, "COMPAT", validate_compat(table_with(self.sources))):
                 with self.assertRaises(RuntimeError) as caught:
                     hermes_launcher.check_install(self.root, self.home)
         self.assertEqual(str(caught.exception), "Install revision changed")
@@ -118,8 +127,30 @@ class InstallTests(unittest.TestCase):
 
     def test_source_hash_mismatch_refused_with_a_matching_marker(self):
         self.marker()
-        with self.assertRaises(RuntimeError):
-            self.check({"hello.txt": "0" * 64})
+        (self.root / "run_agent.py").write_bytes(b"changed inert bytes")
+        with self.assertRaisesRegex(RuntimeError, "Install source changed: run_agent.py"):
+            self.check()
+
+    def test_every_mandatory_source_hash_is_verified(self):
+        self.marker()
+        for name in sorted(MANDATORY_SOURCE_PATHS):
+            with self.subTest(source=name):
+                source = self.root / name
+                reviewed = source.read_bytes()
+                source.write_bytes(b"changed inert bytes")
+                with self.assertRaisesRegex(RuntimeError, f"Install source changed: {name}"):
+                    self.check()
+                source.write_bytes(reviewed)
+
+    def test_additional_source_hashes_cannot_be_skipped(self):
+        self.marker()
+        source = self.root / "additional.py"
+        source.write_bytes(b"inert additional bytes")
+        sources = {**self.sources, "additional.py": hashlib.sha256(source.read_bytes()).hexdigest()}
+        self.check(sources)
+        source.write_bytes(b"changed inert bytes")
+        with self.assertRaisesRegex(RuntimeError, "Install source changed: additional.py"):
+            self.check(sources)
 
 
 if __name__ == "__main__":

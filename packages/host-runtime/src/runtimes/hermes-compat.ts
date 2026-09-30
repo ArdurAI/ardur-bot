@@ -24,7 +24,7 @@ export interface HermesCompatCallbacks {
   setup_mcp_callback: string;
 }
 
-/** Exact toolsets the constructed agent must carry; entries without it keep the source-guard-only check. */
+/** Mandatory exact toolsets the constructed agent must carry for every tree. */
 export interface HermesCompatConstructedToolsets {
   enabled: string[];
   disabled: string[];
@@ -42,7 +42,7 @@ export interface HermesCompatEntry {
   agentInit: HermesCompatAgentInit;
   sourceGuard: HermesCompatSourceGuard;
   callbacks: HermesCompatCallbacks;
-  constructedToolsets?: HermesCompatConstructedToolsets;
+  constructedToolsets: HermesCompatConstructedToolsets;
 }
 
 export interface HermesCompatTable {
@@ -58,6 +58,27 @@ const PARAMETER_KINDS = new Set([
   "VAR_KEYWORD",
 ]);
 
+// Keep the minimum checks independent of mutable table entries.
+const MANDATORY_SOURCE_PATHS = new Set([
+  "acp_adapter/session.py",
+  "acp_adapter/server.py",
+  "acp_adapter/entry.py",
+  "run_agent.py",
+  "pyproject.toml",
+  "uv.lock",
+  "hermes_cli/config_defaults.py",
+  "hermes_cli/config.py",
+  "agent/agent_init.py",
+  "agent/prompt_builder.py",
+  "agent/conversation_loop.py",
+  "agent/turn_context.py",
+  "tools/mcp_tool.py",
+  "model_tools.py",
+  "tools/registry.py",
+]);
+const ENABLED_TOOLSETS = ["mcp-ardur"];
+const DISABLED_TOOLSETS = ["hermes-acp"];
+
 const ENTRY_FIELDS = new Set([
   "version",
   "commit",
@@ -69,8 +90,8 @@ const ENTRY_FIELDS = new Set([
   "agentInit",
   "sourceGuard",
   "callbacks",
+  "constructedToolsets",
 ]);
-const OPTIONAL_ENTRY_FIELDS = new Set(["constructedToolsets"]);
 
 function sameKeys(value: object, expected: Set<string>): boolean {
   const keys = Object.keys(value);
@@ -78,7 +99,15 @@ function sameKeys(value: object, expected: Set<string>): boolean {
 }
 
 function isHex(value: unknown, length: number): value is string {
-  return typeof value === "string" && new RegExp(`^[0-9a-f]{${length}}$`).test(value);
+  return (
+    typeof value === "string" &&
+    value.length === length &&
+    new RegExp(`^[0-9a-f]{${length}}$`).test(value)
+  );
+}
+
+function sameStrings(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function isStringList(value: unknown, nonEmpty = false): value is string[] {
@@ -115,9 +144,9 @@ function checkHook(value: unknown): void {
 /**
  * Validate the reviewed per-tree compatibility table, refusing any defect.
  *
- * Every entry must carry exactly the reviewed fields; sources must be
- * non-empty and cover the same reviewed files in every entry; and any
- * missing, extra or malformed field refuses the whole table. This must stay
+ * Every entry must cover the launcher-owned mandatory sources and
+ * constructed expectations. Additional sources may strengthen coverage;
+ * missing, extra or malformed fields refuse the whole table. This must stay
  * in step with `validate_compat` in `python/hermes_launcher.py`; the shared
  * fixtures in `python/tests/compat_fixtures.json` prove both sides agree.
  */
@@ -130,7 +159,12 @@ export function assertCompatTableValid(table: unknown): HermesCompatTable {
   )
     throw new Error("Compatibility table is invalid");
   const compat = table as HermesCompatTable;
-  if (compat.format !== 1 || !compat.entries || typeof compat.entries !== "object")
+  if (
+    compat.format !== 1 ||
+    !compat.entries ||
+    typeof compat.entries !== "object" ||
+    Array.isArray(compat.entries)
+  )
     throw new Error("Compatibility table is invalid");
   const entries = Object.entries(compat.entries);
   if (entries.length === 0) throw new Error("Compatibility table is invalid");
@@ -138,9 +172,7 @@ export function assertCompatTableValid(table: unknown): HermesCompatTable {
   for (const [tree, entry] of entries) {
     if (!isHex(tree, 40) || !entry || typeof entry !== "object" || Array.isArray(entry))
       throw new Error("Compatibility table is invalid");
-    const keys = new Set([...ENTRY_FIELDS, ...OPTIONAL_ENTRY_FIELDS]);
-    if (!sameKeys(entry, keys) && !sameKeys(entry, ENTRY_FIELDS))
-      throw new Error("Compatibility table is invalid");
+    if (!sameKeys(entry, ENTRY_FIELDS)) throw new Error("Compatibility table is invalid");
     if (
       typeof entry.version !== "string" ||
       entry.version.length === 0 ||
@@ -159,7 +191,10 @@ export function assertCompatTableValid(table: unknown): HermesCompatTable {
     )
       throw new Error("Compatibility table is invalid");
     const paths = Object.keys(entry.sources).sort();
-    if (sourcePaths && paths.join() !== sourcePaths.join())
+    if (
+      [...MANDATORY_SOURCE_PATHS].some((name) => !Object.hasOwn(entry.sources, name)) ||
+      (sourcePaths && !sameStrings(paths, sourcePaths))
+    )
       throw new Error("Compatibility table is invalid");
     sourcePaths = paths;
     checkHook(entry.sessionHook);
@@ -176,7 +211,8 @@ export function assertCompatTableValid(table: unknown): HermesCompatTable {
       Array.isArray(entry.agentInit) ||
       !sameKeys(entry.agentInit, new Set(["parameterCount", "required"])) ||
       typeof entry.agentInit.parameterCount !== "number" ||
-      !Number.isInteger(entry.agentInit.parameterCount) ||
+      // JSON has one number type: integral values must also be exactly representable.
+      !Number.isSafeInteger(entry.agentInit.parameterCount) ||
       entry.agentInit.parameterCount < 0 ||
       !isStringList(entry.agentInit.required, true) ||
       entry.agentInit.parameterCount < entry.agentInit.required.length
@@ -201,18 +237,18 @@ export function assertCompatTableValid(table: unknown): HermesCompatTable {
       entry.callbacks.setup_mcp_callback.length === 0
     )
       throw new Error("Compatibility table is invalid");
-    if ("constructedToolsets" in entry) {
-      const constructed = entry.constructedToolsets;
-      if (
-        !constructed ||
-        typeof constructed !== "object" ||
-        Array.isArray(constructed) ||
-        !sameKeys(constructed, new Set(["enabled", "disabled"])) ||
-        !isStringList(constructed.enabled, true) ||
-        !isStringList(constructed.disabled, true)
-      )
-        throw new Error("Compatibility table is invalid");
-    }
+    const constructed = entry.constructedToolsets;
+    if (
+      !constructed ||
+      typeof constructed !== "object" ||
+      Array.isArray(constructed) ||
+      !sameKeys(constructed, new Set(["enabled", "disabled"])) ||
+      !isStringList(constructed.enabled) ||
+      !isStringList(constructed.disabled) ||
+      !sameStrings(constructed.enabled, ENABLED_TOOLSETS) ||
+      !sameStrings(constructed.disabled, DISABLED_TOOLSETS)
+    )
+      throw new Error("Compatibility table is invalid");
   }
   return compat;
 }

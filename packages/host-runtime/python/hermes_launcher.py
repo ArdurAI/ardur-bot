@@ -18,11 +18,22 @@ from hermes_profile import acknowledge, check_catalog, check_constructed, valida
 PIN = "29112bef099274229cadff79cdff7bf7b99c4b77"
 TREE = "daaffc303ae437041b7f76be17c5f61b14f2ce99"
 
+# The table supplies expectations, never the minimum set of checks.
+MANDATORY_SOURCE_PATHS = frozenset({
+    "acp_adapter/session.py", "acp_adapter/server.py", "acp_adapter/entry.py",
+    "run_agent.py", "pyproject.toml", "uv.lock", "hermes_cli/config_defaults.py",
+    "hermes_cli/config.py", "agent/agent_init.py", "agent/prompt_builder.py",
+    "agent/conversation_loop.py", "agent/turn_context.py", "tools/mcp_tool.py",
+    "model_tools.py", "tools/registry.py",
+})
+ENABLED_TOOLSETS = ("mcp-ardur",)
+DISABLED_TOOLSETS = ("hermes-acp",)
+CONSTRUCTED_TOOLSET_FIELDS = frozenset({"enabled", "disabled"})
+
 ENTRY_FIELDS = {
     "version", "commit", "tree", "sources", "sessionHook", "toolsetHelper",
-    "acpAgentInit", "agentInit", "sourceGuard", "callbacks",
+    "acpAgentInit", "agentInit", "sourceGuard", "callbacks", "constructedToolsets",
 }
-OPTIONAL_ENTRY_FIELDS = {"constructedToolsets"}
 HOOK_FIELDS = {"parameters"}
 PARAMETER_KINDS = {
     "POSITIONAL_ONLY", "POSITIONAL_OR_KEYWORD", "VAR_POSITIONAL",
@@ -45,6 +56,13 @@ def _is_string_list(value: object, *, non_empty: bool = False) -> bool:
             all(type(item) is str for item in value))
 
 
+def _is_json_integer(value: object) -> bool:
+    """JSON numbers use the same safe integral-value policy in both validators."""
+    return (isinstance(value, (int, float)) and not isinstance(value, bool) and
+            abs(value) <= 9007199254740991 and
+            value == int(value))
+
+
 def _check_hook(value: dict) -> None:
     require(type(value) is dict and set(value) == HOOK_FIELDS,
             "Compatibility table is invalid")
@@ -58,13 +76,13 @@ def _check_hook(value: dict) -> None:
 def validate_compat(data: dict) -> dict:
     """Validate the reviewed per-tree compatibility table, refusing any defect.
 
-    Every entry must carry exactly the reviewed fields; sources must be
-    non-empty and cover the same reviewed files in every entry; and any
-    missing, extra or malformed field refuses the whole table.
+    Every entry must cover the launcher-owned mandatory sources and
+    constructed expectations. Additional sources may strengthen coverage;
+    missing, extra or malformed fields refuse the whole table.
     """
     require(type(data) is dict and set(data) == {"format", "entries"},
             "Compatibility table is invalid")
-    require(type(data["format"]) is int and data["format"] == 1,
+    require(_is_json_integer(data["format"]) and data["format"] == 1,
             "Compatibility table is invalid")
     entries = data["entries"]
     require(type(entries) is dict and bool(entries), "Compatibility table is invalid")
@@ -72,8 +90,7 @@ def validate_compat(data: dict) -> dict:
     for tree, entry in entries.items():
         require(type(tree) is str and _is_hex(tree, 40) and type(entry) is dict,
                 "Compatibility table is invalid")
-        fields = set(entry)
-        require(ENTRY_FIELDS <= fields and fields <= ENTRY_FIELDS | OPTIONAL_ENTRY_FIELDS,
+        require(set(entry) == ENTRY_FIELDS,
                 "Compatibility table is invalid")
         require(type(entry["version"]) is str and bool(entry["version"]) and
                 entry["tree"] == tree and _is_hex(entry["commit"], 40),
@@ -84,7 +101,8 @@ def validate_compat(data: dict) -> dict:
                     for name, digest in sources.items()),
                 "Compatibility table is invalid")
         paths = set(sources)
-        require(source_paths is None or paths == source_paths,
+        require(MANDATORY_SOURCE_PATHS <= paths and
+                (source_paths is None or paths == source_paths),
                 "Compatibility table is invalid")
         source_paths = paths
         for hook in ("sessionHook", "toolsetHelper", "acpAgentInit"):
@@ -95,7 +113,7 @@ def validate_compat(data: dict) -> dict:
         agent_init = entry["agentInit"]
         require(type(agent_init) is dict and set(agent_init) == {"parameterCount", "required"},
                 "Compatibility table is invalid")
-        require(type(agent_init["parameterCount"]) is int and agent_init["parameterCount"] >= 0 and
+        require(_is_json_integer(agent_init["parameterCount"]) and agent_init["parameterCount"] >= 0 and
                 _is_string_list(agent_init["required"], non_empty=True) and
                 agent_init["parameterCount"] >= len(agent_init["required"]),
                 "Compatibility table is invalid")
@@ -109,12 +127,11 @@ def validate_compat(data: dict) -> dict:
         require(type(callbacks) is dict and set(callbacks) == {"setup_mcp_callback"} and
                 type(callbacks["setup_mcp_callback"]) is str and callbacks["setup_mcp_callback"],
                 "Compatibility table is invalid")
-        if "constructedToolsets" in entry:
-            constructed = entry["constructedToolsets"]
-            require(type(constructed) is dict and set(constructed) == {"enabled", "disabled"} and
-                    _is_string_list(constructed["enabled"], non_empty=True) and
-                    _is_string_list(constructed["disabled"], non_empty=True),
-                    "Compatibility table is invalid")
+        constructed = entry["constructedToolsets"]
+        require(type(constructed) is dict and set(constructed) == CONSTRUCTED_TOOLSET_FIELDS and
+                constructed["enabled"] == list(ENABLED_TOOLSETS) and
+                constructed["disabled"] == list(DISABLED_TOOLSETS),
+                "Compatibility table is invalid")
     return data
 
 
@@ -172,7 +189,8 @@ def check_install(root: Path, home: Path) -> dict:
             raise RuntimeError("Install marker mismatch") from error
         entry = compat_entry(marker.get("pin"), marker.get("tree")) if isinstance(marker, dict) else None
         require(entry is not None, "Install marker mismatch")
-    for name, expected in entry["sources"].items():
+    for name in sorted(MANDATORY_SOURCE_PATHS | entry["sources"].keys()):
+        expected = entry["sources"][name]
         require(hashlib.sha256((root / name).read_bytes()).hexdigest() == expected, f"Install source changed: {name}")
     return entry
 
@@ -199,56 +217,71 @@ def check_hooks(session, server, run_agent, entry: dict) -> None:
     require(callback in agent_parameters or hasattr(run_agent.AIAgent, callback), "Agent MCP callback changed")
 
 
-def mcp_server_config(server: object) -> tuple | None:
-    """Canonical MCP server configuration: identity plus how it is reached.
+def _mcp_named_values(values: object) -> tuple | None:
+    """Snapshot complete ACP name/value lists or mappings without losing duplicates."""
+    if values is None:
+        return ()
+    if type(values) is dict:
+        pairs = list(values.items())
+    elif type(values) is list:
+        pairs = [(getattr(item, "name", None), getattr(item, "value", None)) for item in values]
+    else:
+        return None
+    if (any(type(name) is not str or type(value) is not str for name, value in pairs) or
+            len({name for name, _value in pairs}) != len(pairs)):
+        return None
+    return tuple(sorted(pairs))
 
-    A bare name is not a configuration, so anything that is not a full
-    server object can never match the server Ardur configured.
-    """
+
+def mcp_server_config(server: object) -> tuple | None:
+    """Immutable identity, transport, endpoint, argv, environment and headers."""
     if server is None or isinstance(server, str):
         return None
+    name = getattr(server, "name", None)
+    transport = getattr(server, "transport", None)
+    command = getattr(server, "command", None)
+    url = getattr(server, "url", None)
+    args = getattr(server, "args", None)
+    env = _mcp_named_values(getattr(server, "env", None))
+    headers = _mcp_named_values(getattr(server, "headers", None))
+    if (type(name) is not str or not name or not (command or url) or
+            any(value is not None and type(value) is not str for value in (transport, command, url)) or
+            (args is not None and not _is_string_list(args)) or env is None or headers is None):
+        return None
     return (
-        getattr(server, "name", None),
-        getattr(server, "transport", None),
-        getattr(server, "command", None),
-        getattr(server, "url", None),
-        tuple(getattr(server, "args", None) or ()),
+        name, transport, command, url, tuple(args or ()), env, headers,
     )
 
 
 def harden_constructed_agent(agent, entry: dict, session_manager=None) -> None:
     """Prove the constructed agent enforces Ardur's toolset restriction.
 
-    Runs for every entry that declares the stronger expectations; entries
-    without them (the original pin) are untouched. ``session_manager`` must
-    expose the single MCP server Ardur accepted for this turn as
-    ``_ardur_mcp_server``; the attach guard compares the full configured
-    server (transport, command or URL, and arguments), never a name alone.
+    Toolset assertions and the MCP guard always run, including for the
+    original pin. The table cannot select which assertions run.
     """
-    constructed = entry.get("constructedToolsets")
-    if constructed:
-        require(getattr(agent, "enabled_toolsets", None) == constructed["enabled"] and
-                getattr(agent, "disabled_toolsets", None) == constructed["disabled"],
-                "Constructed toolsets changed")
+    require(getattr(agent, "enabled_toolsets", None) == list(ENABLED_TOOLSETS) and
+            getattr(agent, "disabled_toolsets", None) == list(DISABLED_TOOLSETS),
+            "Constructed toolsets changed")
     callback_name = entry["callbacks"]["setup_mcp_callback"]
-    if callback_name != "setup_mcp_callback":
-        original = getattr(agent, callback_name, None)
-        require(original is None or callable(original), "MCP attach callback is invalid")
+    original = getattr(agent, callback_name, None)
+    require(original is None or callable(original), "MCP attach callback is invalid")
+    accepted = getattr(session_manager, "_ardur_mcp_config", None)
 
-        def ardur_guarded_connect(*args, **kwargs):
-            accepted = getattr(session_manager, "_ardur_mcp_server", None)
-            server = kwargs["server"] if "server" in kwargs else (args[0] if args else None)
-            presented = mcp_server_config(server)
-            require(presented is not None and presented == mcp_server_config(accepted),
+    def ardur_guarded_connect(*args, **kwargs):
+        server = kwargs["server"] if "server" in kwargs else (args[0] if args else None)
+        presented = mcp_server_config(server)
+        require(presented is not None and presented == accepted,
+                "MCP server attachment refused")
+        if "server" in kwargs and args:
+            require(mcp_server_config(args[0]) == presented,
                     "MCP server attachment refused")
-            if "server" in kwargs and args:
-                require(mcp_server_config(args[0]) == presented,
-                        "MCP server attachment refused")
-            if original is None:
-                return None
-            return original(*args, **kwargs)
+        if "name" in kwargs:
+            require(kwargs["name"] == presented[0], "MCP server attachment refused")
+        if original is None:
+            return None
+        return original(*args, **kwargs)
 
-        setattr(agent, callback_name, ardur_guarded_connect)
+    setattr(agent, callback_name, ardur_guarded_connect)
 
 
 def main() -> None:
@@ -288,13 +321,13 @@ def main() -> None:
                 require(kwargs.get("base_url") in (None, route), "ACP route override refused")
                 require(kwargs.get("api_mode") in (None, "chat_completions"), "ACP API override refused")
                 if "enabled_toolsets" in session_parameters:
-                    require(kwargs.get("enabled_toolsets") in (None, ["mcp-ardur"]), "ACP toolset override refused")
-                    require(kwargs.get("disabled_toolsets") in (None, ["hermes-acp"]), "ACP toolset override refused")
+                    require(kwargs.get("enabled_toolsets") in (None, list(ENABLED_TOOLSETS)), "ACP toolset override refused")
+                    require(kwargs.get("disabled_toolsets") in (None, list(DISABLED_TOOLSETS)), "ACP toolset override refused")
                 agent = run_agent.AIAgent(
                     base_url=route, api_key=token, provider="custom", api_mode="chat_completions",
                     model=expected_model, max_iterations=max_iterations, run_budget_seconds=run_budget_seconds,
                     max_tokens=max_tokens,
-                    enabled_toolsets=["mcp-ardur"], disabled_toolsets=["hermes-acp"],
+                    enabled_toolsets=list(ENABLED_TOOLSETS), disabled_toolsets=list(DISABLED_TOOLSETS),
                     save_trajectories=False, skip_context_files=True, load_soul_identity=True,
                     skip_memory=True, skip_background_review=True, fallback_model=None,
                     checkpoints_enabled=False, quiet_mode=True, platform="acp",
@@ -320,7 +353,9 @@ def main() -> None:
             async def new_session(self, cwd, mcp_servers=None, **kwargs):
                 require(not self._session_created, "Only one ACP session is allowed")
                 require(len(mcp_servers or []) == 1 and mcp_servers[0].name == "ardur", "Only the Ardur MCP server is allowed")
-                self.session_manager._ardur_mcp_server = mcp_servers[0]
+                configured = mcp_server_config(mcp_servers[0])
+                require(configured is not None, "MCP server configuration is invalid")
+                self.session_manager._ardur_mcp_config = configured
                 self._session_created = True
                 response = await super().new_session(cwd, mcp_servers=mcp_servers, **kwargs)
                 if profile:
