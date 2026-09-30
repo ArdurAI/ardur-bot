@@ -82,6 +82,24 @@ async function mounted(update: ComputerUpdate, run: (container: HTMLDivElement) 
   }
 }
 
+it("keeps the existing release confirmation in the update banner", async () => {
+  await mounted(
+    { ...base, status: "interrupted", canReleaseReservation: true },
+    async (container) => {
+      const button = (label: string) =>
+        [...container.querySelectorAll("button")].find((entry) => entry.textContent === label)!;
+      await act(async () => button("Release computer").click());
+      expect(container.textContent).toContain("Release interrupted computer?");
+      expect(container.textContent).toContain(
+        "Make sure nothing is still running on this computer.",
+      );
+      expect(client.releaseInterrupted).not.toHaveBeenCalled();
+      await act(async () => button("Nothing is still running").click());
+      expect(client.releaseInterrupted).toHaveBeenCalledExactlyOnceWith(base.id);
+    },
+  );
+});
+
 it("offers Recover and the generic warning for a failure with no reason", async () => {
   await mounted(base, async (container) => {
     expect(container.textContent).toContain(

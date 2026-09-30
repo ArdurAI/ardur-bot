@@ -28,7 +28,12 @@ vi.mock("../../lib/rpc", () => ({
     models: api,
     runtimes: { availability: api.availability },
     me: api.me,
-    computer: { connections: api.connections, list: api.computers, status: api.status },
+    computer: {
+      connections: api.connections,
+      list: api.computers,
+      status: api.status,
+      updates: async () => [],
+    },
     voice: { voices: async () => [] },
   },
 }));

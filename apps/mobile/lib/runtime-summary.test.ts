@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
-import type { ComputerStatus } from "@ardurbot/contracts";
-import { COMPUTER_KINDS, computerRuntimeSummary } from "@ardurbot/contracts";
+import type { ComputerStatus, ComputerUpdate } from "@ardurbot/contracts";
+import { COMPUTER_KINDS, COMPUTER_STATES, computerRuntimeSummary } from "@ardurbot/contracts";
 import type { ReactNode } from "react";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
+import { Alert } from "react-native";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const request = vi.hoisted(() => vi.fn());
+const releaseInterrupted = vi.hoisted(() => vi.fn(async (_id: string) => {}));
+vi.mock("./computer-updates", () => ({ computerUpdates: { releaseInterrupted } }));
 vi.mock("./api", () => ({ rpc: request }));
 vi.mock("./i18n", () => ({ useI18n: () => ({ t: (text: string) => text }) }));
 vi.mock("./focus-prompt", () => ({ allowFocusPrompt: vi.fn(), scheduleFocusPrompt: vi.fn() }));
@@ -65,6 +68,8 @@ let root: ReturnType<typeof createRoot>;
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   request.mockReset();
+  releaseInterrupted.mockClear();
+  vi.mocked(Alert.alert).mockClear();
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -110,6 +115,7 @@ it("reads the saved pin without booting or changing the computer", async () => {
   expect(request.mock.calls.map((call) => call[0])).toEqual([
     "computer/status",
     "computer/connections",
+    "computer/updates",
   ]);
 });
 it("shows the location, sharing choice and consequence once in bot settings", async () => {
@@ -139,6 +145,64 @@ it("shows the location, sharing choice and consequence once in bot settings", as
     expect(container.textContent?.split(fact).length).toBe(2);
   }
 });
+
+it.each(Object.entries(COMPUTER_STATES))(
+  "renders the shared phrase for %s on phone",
+  async (state, label) => {
+    await act(async () =>
+      root.render(
+        createElement(RuntimeSummary, {
+          status: { ...status, state: state as ComputerStatus["state"] },
+        }),
+      ),
+    );
+    expect(container.textContent).toContain(label);
+  },
+);
+
+it.each([true, false])(
+  "offers confirmed release on phone only when permitted: %s",
+  async (canReleaseReservation) => {
+    const update: ComputerUpdate = {
+      id: "interrupted",
+      botId: "other",
+      computerId: "computer",
+      name: "Builder",
+      mode: "team",
+      action: "update",
+      stage: "saving",
+      status: "interrupted",
+      canReleaseReservation,
+    };
+    request.mockImplementation(async (procedure) =>
+      procedure === "computer/status"
+        ? { ...status, computerId: "computer", state: "suspending" }
+        : procedure === "computer/updates"
+          ? [update]
+          : [],
+    );
+    await act(async () =>
+      root.render(createElement(BotRuntimeSettings, { botId: "bot", mode: "dedicated" })),
+    );
+    expect(container.textContent).toContain("Paused for an update");
+    expect(container.textContent).not.toContain("Starting");
+    expect(container.textContent).toContain("The last update was interrupted.");
+    const button = [...container.querySelectorAll("button")].find(
+      (entry) => entry.textContent === "Release computer",
+    );
+    expect(Boolean(button)).toBe(canReleaseReservation);
+    if (!button) return;
+    await act(async () => button.click());
+    expect(Alert.alert).toHaveBeenCalledWith(
+      "Release interrupted computer?",
+      "Make sure nothing is still running on this computer.",
+      expect.any(Array),
+    );
+    expect(releaseInterrupted).not.toHaveBeenCalled();
+    await act(async () => vi.mocked(Alert.alert).mock.calls[0]![2]![1]!.onPress!());
+    expect(releaseInterrupted).toHaveBeenCalledExactlyOnceWith("interrupted");
+  },
+);
 
 it("fails closed for an unknown kind", async () => {
   await act(async () =>

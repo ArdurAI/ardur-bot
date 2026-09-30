@@ -1,9 +1,20 @@
-import type { ComputerConnectionSettings, ComputerMode, ComputerStatus } from "@ardurbot/contracts";
-import { COMPUTER_STATES, computerKindFacts, computerRuntimeSummary } from "@ardurbot/contracts";
+import type {
+  ComputerConnectionSettings,
+  ComputerMode,
+  ComputerStatus,
+  ComputerUpdate,
+} from "@ardurbot/contracts";
+import {
+  COMPUTER_STATES,
+  computerKindFacts,
+  computerRuntimeSummary,
+  interruptedComputerUpdate,
+} from "@ardurbot/contracts";
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { ReactNode } from "react";
 import { lazy, Suspense, useEffect, useState } from "react";
+import { ReleaseInterruptedComputer } from "../../components/ReleaseInterruptedComputer";
 import { rpc } from "../../lib/rpc";
 
 const ComputerProfile = lazy(() =>
@@ -91,6 +102,7 @@ export function BotRuntimeSettings({
     status: ComputerStatus;
     connections: Connection[];
     deploymentDefault: string | null;
+    updates: ComputerUpdate[];
   } | null>(null);
   const [error, setError] = useState(false);
   const [revision, setRevision] = useState(0);
@@ -110,13 +122,19 @@ export function BotRuntimeSettings({
     setError(false);
     void Promise.resolve()
       .then(() =>
-        Promise.all([rpc.computer.status({ botId }), rpc.computer.connections(), rpc.me()]),
+        Promise.all([
+          rpc.computer.status({ botId }),
+          rpc.computer.connections(),
+          rpc.me(),
+          rpc.computer.updates(),
+        ]),
       )
-      .then(([status, connections, me]) => {
+      .then(([status, connections, me, updates]) => {
         if (active)
           setData({
             status,
             connections,
+            updates,
 
             deploymentDefault:
               me.sandboxProvider === "docker" && me.computerHost === "this-mac"
@@ -131,6 +149,7 @@ export function BotRuntimeSettings({
       active = false;
     };
   }, [botId, mode, revision]);
+  const interrupted = data ? interruptedComputerUpdate(data.status, data.updates) : undefined;
   return (
     <>
       {data ? (
@@ -147,6 +166,20 @@ export function BotRuntimeSettings({
         />
       ) : null}
 
+      {interrupted ? (
+        <div className="space-y-2 text-sm">
+          <p role="alert">
+            <Trans>The last update was interrupted.</Trans>
+          </p>
+          {interrupted.canReleaseReservation ? (
+            <ReleaseInterruptedComputer
+              key={interrupted.id}
+              updateId={interrupted.id}
+              onReleased={() => setRevision((value) => value + 1)}
+            />
+          ) : null}
+        </div>
+      ) : null}
       {error ? (
         <div role="alert">
           <p>{t`Computer location unavailable. Try again.`}</p>

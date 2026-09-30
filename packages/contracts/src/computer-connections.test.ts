@@ -5,12 +5,37 @@ import {
   computerCapabilities,
   computerKindFacts,
   computerRuntimeSummary,
+  interruptedComputerUpdate,
   recommendedContainer,
 } from "./computer-connections.js";
+import type { ComputerUpdate } from "./domain.js";
 import { ComputerStatusSchema, CreateBotInput } from "./domain.js";
 import { SandboxKind } from "./ids.js";
 
 describe("computer execution facts", () => {
+  it("matches interrupted updates to the actual computer, including shared bots", () => {
+    const update: ComputerUpdate = {
+      id: "update",
+      computerId: "team-computer",
+      botId: "other-bot",
+      name: "Builder",
+      mode: "team",
+      status: "interrupted",
+      stage: "saving",
+      action: "update",
+    };
+    expect(interruptedComputerUpdate({ botId: "bot", computerId: "team-computer" }, [update])).toBe(
+      update,
+    );
+    expect(
+      interruptedComputerUpdate({ botId: "other-bot", computerId: "different" }, [update]),
+    ).toBeUndefined();
+    expect(
+      interruptedComputerUpdate({ botId: "bot", computerId: "team-computer" }, [
+        { ...update, status: "running" },
+      ]),
+    ).toBeUndefined();
+  });
   it("covers every computer state with an honest phrase", () => {
     expect(Object.keys(COMPUTER_STATES).sort()).toEqual(
       [...ComputerStatusSchema.shape.state.options].sort(),
