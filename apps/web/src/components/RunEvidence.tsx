@@ -87,17 +87,16 @@ export default function RunEvidence({
     summary: EvidenceRunSummary;
   } | null>(null);
   useEffect(() => {
-    const controller = new AbortController();
+    // Stale answers are ignored rather than aborted: the lookup is small, and aborting it on
+    // every remount (a live message finishing, a layout change) shows up as a failed request.
+    let stale = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let observer: IntersectionObserver | undefined;
     let retries = 0;
     async function load() {
       try {
-        const reply = await rpc.evidence.runSummary(
-          { runId },
-          { signal: controller.signal, context: { spaceId } },
-        );
-        if (controller.signal.aborted) return;
+        const reply = await rpc.evidence.runSummary({ runId }, { context: { spaceId } });
+        if (stale) return;
         // A reply that is not a summary (an older server, a stub) shows nothing rather than
         // crashing the message list around it.
         const parsed = EvidenceRunSummarySchema.safeParse(reply);
@@ -115,7 +114,7 @@ export default function RunEvidence({
         )
           timer = setTimeout(() => void load(), 5_000);
       } catch {
-        if (!controller.signal.aborted) setResult(null);
+        if (!stale) setResult(null);
       }
     }
     if (action === "download" || typeof IntersectionObserver === "undefined") void load();
@@ -128,7 +127,7 @@ export default function RunEvidence({
       observer.observe(marker.current);
     }
     return () => {
-      controller.abort();
+      stale = true;
       clearTimeout(timer);
       observer?.disconnect();
     };

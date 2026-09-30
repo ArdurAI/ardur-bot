@@ -136,3 +136,16 @@ it.each([
   vi.unstubAllGlobals();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 });
+it("ignores an answer that arrives after unmounting instead of aborting the request", async () => {
+  vi.stubGlobal("IntersectionObserver", undefined);
+  let answer: (value: EvidenceRunSummary) => void = () => undefined;
+  api.summary.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+  await act(async () => root.render(<RunEvidence runId="run" />));
+  const [, options] = api.summary.mock.calls[0] as [unknown, { signal?: AbortSignal }];
+  await act(async () => root.render(<p>message text</p>));
+  await act(async () => answer(summary("verified")));
+  expect(options.signal).toBeUndefined();
+  expect(node.textContent).toBe("message text");
+  vi.unstubAllGlobals();
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+});
