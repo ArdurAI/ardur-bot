@@ -1,7 +1,8 @@
 import { mkdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { BOT_COLORS } from "@ardurbot/contracts";
-import { expect, type Page, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { listPiCatalog } from "../../../packages/adapters/src/pi-models";
 import { dashboardFixture } from "./dashboard-fixture";
 
@@ -75,9 +76,9 @@ function showcaseData() {
     sectionId: null,
     archivedAt: null,
     members: [0, 1, 3].map((index) => ({
-      botId: bots[index].id,
-      name: bots[index].name,
-      color: bots[index].color,
+      botId: bots[index]!.id,
+      name: bots[index]!.name,
+      color: bots[index]!.color,
       status: "idle",
     })),
     threadId: "operations-thread",
@@ -306,6 +307,31 @@ test("captures bot chat, group collaboration, and routines from seeded demo data
     }
     if (procedure === "models/credentials")
       return route.fulfill({ json: { json: data.credentials } });
+    if (procedure === "computer/status")
+      return route.fulfill({
+        json: {
+          json: {
+            botId: "bot",
+            computerId: "demo-computer",
+            kind: "docker",
+            mode: "team",
+            state: "stopped",
+            connectionId: null,
+            imageProfile: "base",
+            controlHolder: "none",
+            controlBotId: null,
+            takeoverRequested: false,
+            screenAvailable: false,
+            screenWidth: 1280,
+            screenHeight: 800,
+            homeRevision: "saved",
+            busyBotName: null,
+            canUpdate: true,
+          },
+        },
+      });
+    if (procedure === "computer/connections" || procedure === "computer/list")
+      return route.fulfill({ json: { json: [] } });
     const original = data.fixture.rpc(procedure, input);
     const space = { ...data.base.spaces[0], bots: data.bots, groups: [data.group] };
     const result =
@@ -395,6 +421,14 @@ test("captures bot chat, group collaboration, and routines from seeded demo data
     page.locator("main").getByRole("button", { name: "Bot settings", exact: true }),
   ).toBeVisible();
   await captureSiteScreenshot(page, "app-chat");
+
+  await page.getByTestId("bot-settings-trigger").click();
+  const botSettings = page.getByTestId("bot-settings");
+  const runtimeSummary = botSettings.getByTestId("runtime-summary");
+  await expect(runtimeSummary).toContainText("Container");
+  await expect(runtimeSummary).toContainText("Bots share files and installed tools");
+  await runtimeSummary.scrollIntoViewIfNeeded();
+  await captureSiteScreenshot(page, "bot-runtime-settings");
 
   await page.goto("/app/g/operations-group");
   await expect(page.getByTestId("group-participant-models")).toBeVisible();

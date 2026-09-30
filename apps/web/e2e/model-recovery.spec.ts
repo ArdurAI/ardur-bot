@@ -6,7 +6,7 @@ import type {
   SpaceNavigation,
 } from "@ardurbot/contracts";
 import { expect, type Page, test } from "@playwright/test";
-import { captureScreenshot, completeOnboarding, signup } from "./helpers";
+import { captureScreenshot, completeOnboarding, rpc, signup } from "./helpers";
 
 async function patchBotNavigation(page: Page, patch: Partial<Bot>) {
   const update = (bots: Bot[]) => bots.map((bot) => ({ ...bot, ...patch }));
@@ -130,20 +130,20 @@ test("the model chip and provider error open the bot model control", async ({ pa
       },
     }),
   );
-  await page.route("**/rpc/me", async (route) => {
-    const response = await route.fetch();
-    const body = (await response.json()) as { json: Me };
-    await route.fulfill({
-      response,
+  const me = await rpc<Me>(page, "me", {});
+  // Settings can finish focusing before their account reads finish; keep the fixture
+  // independent of live fetches that would outlast the test during context teardown.
+  await page.route("**/rpc/me", (route) =>
+    route.fulfill({
       json: {
         json: {
-          ...body.json,
+          ...me,
           defaultProvider: "openai-codex",
           defaultModel: "gpt-6-astra",
         },
       },
-    });
-  });
+    }),
+  );
   await page.reload();
   const chip = page.getByRole("button", {
     name: "Change model: Ardur · Codex · GPT-6 Astra · medium",

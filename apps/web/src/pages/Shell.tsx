@@ -2536,12 +2536,14 @@ export function ShellPage({
     title: string;
     description: string;
     computerMode: ComputerMode;
+    isolatedComputer?: { connectionId: string | null };
   }) {
     const isFirstBot = botsRef.current.length === 0;
     const bot = await rpc.bots.create({
       ...normalizeCreateBotProfile(input),
       notifyOnFinish: true,
       computerMode: input.computerMode,
+      isolatedComputer: input.isolatedComputer,
     });
     setBots((current) =>
       current.some((item) => item.id === bot.id) ? current : [bot, ...current],
@@ -4120,6 +4122,7 @@ export function ShellPage({
                 <CreateBotForm
                   onCancel={() => setPanel(null)}
                   onCreate={(input) => createBot(input)}
+                  onSetupComputer={() => openSettings("computer")}
                 />
               </Suspense>
             ) : null}

@@ -1470,6 +1470,11 @@ msgstr ""
 msgid "Bots on this computer: {0}"
 msgstr "Bu bilgisayardaki botlar: {0}"
 
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-summary.tsx
+msgid "Bots share files and installed tools"
+msgstr "Botlar dosyaları ve kurulu araçları paylaşır"
+
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
 msgstr ""
@@ -1618,6 +1623,10 @@ msgstr ""
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Change computer"
 msgstr ""
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Change location"
+msgstr "Konumu değiştir"
 
 #: src/pages/LearningInsights.tsx
 #: src/pages/shell/provider-error-message.tsx
@@ -2071,7 +2080,6 @@ msgstr ""
 
 #: src/pages/ide/IdePage.tsx
 #: src/pages/Shell.tsx
-#: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
 #: src/pages/workspace/WorkspacePane.tsx
@@ -2109,6 +2117,14 @@ msgstr "Bilgisayar uykuda"
 #: src/pages/Shell.tsx
 msgid "Computer is asleep. Open it to wake."
 msgstr "Bilgisayar uyku modunda. Uyandırmak için açın."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Computer location unavailable. Choose a supported connection."
+msgstr "Bilgisayar konumu kullanılamıyor. Desteklenen bir bağlantı seçin."
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Computer location unavailable. Try again."
+msgstr "Bilgisayar konumu kullanılamıyor. Yeniden deneyin."
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -2341,6 +2357,10 @@ msgstr ""
 #: src/pages/LearningCurator.tsx
 msgid "Consolidation uses the review connection and may incur model charges. Approval is required."
 msgstr ""
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Container"
+msgstr "Konteyner"
 
 #: src/components/Context.tsx
 #: src/pages/fleet/FleetSettings.tsx
@@ -3083,6 +3103,10 @@ msgstr ""
 #: src/pages/system/SystemPage.tsx
 msgid "Could not show the menu bar item; try again."
 msgstr ""
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Could not start"
+msgstr "Başlatılamadı"
 
 #: src/components/composer/composer-actions.ts
 msgid "Could not start a new chat"
@@ -4278,6 +4302,10 @@ msgstr ""
 msgid "For {task}, {better} on this machine did as well as {other} in your runs."
 msgstr ""
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "For testing only; not an isolation boundary."
+msgstr "Yalnızca test içindir; bir yalıtım sınırı değildir."
+
 #: src/pages/Auth.tsx
 msgid "Forgot password?"
 msgstr "Parolanızı mı unuttunuz?"
@@ -4534,6 +4562,10 @@ msgstr ""
 #: src/pages/shell/model-pin-select.tsx
 msgid "Hosted providers"
 msgstr ""
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Hosted sandbox"
+msgstr "Barındırılan korumalı ortam"
 
 #: src/pages/RoutineSchedule.tsx
 msgid "hour"
@@ -6258,6 +6290,11 @@ msgstr ""
 msgid "Only space-shared documents go to this repository."
 msgstr ""
 
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-summary.tsx
+msgid "Only this bot"
+msgstr "Yalnızca bu bot"
+
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/ScratchpadSection.tsx
@@ -6696,10 +6733,6 @@ msgstr ""
 msgid "Privacy"
 msgstr ""
 
-#: src/pages/shell/bot-panel.tsx
-msgid "Private"
-msgstr "Özel"
-
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Private key"
 msgstr ""
@@ -7042,6 +7075,10 @@ msgstr ""
 msgid "Remote base directory"
 msgstr ""
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Remote computer"
+msgstr "Uzak bilgisayar"
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Remote MCP URL"
 msgstr ""
@@ -7380,10 +7417,11 @@ msgstr "Ekip mesajlarını sürdür"
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
+#: src/pages/shell/runtime-summary.tsx
 #: src/pages/system/SystemPage.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Retry"
-msgstr ""
+msgstr "Yeniden dene"
 
 #. placeholder {0}: failure.relativePath
 #: src/pages/import/LocalImportPage.tsx
@@ -7565,6 +7603,7 @@ msgstr "çalışıyor"
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/shell/runtime-summary.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Running"
 msgstr "Çalışıyor"
@@ -7580,6 +7619,14 @@ msgstr "Çalışıyor…"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?"
 msgstr "Bu bilgisayarda etkin çalışmalar var. Bağlantıyı değiştirmek onları kesintiye uğratabilir. Yine de kaydedilsin mi?"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Runs as you; can use your files and signed-in tools"
+msgstr "Sizin izinlerinizle çalışır; dosyalarınızı ve oturum açtığınız araçları kullanabilir"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Runs at the configured provider; can use granted credentials and network access."
+msgstr "Yapılandırılmış sağlayıcıda çalışır; sağlanan kimlik bilgilerini ve ağ erişimini kullanabilir."
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -7926,6 +7973,10 @@ msgstr "{peer} için gönderildi"
 msgid "Sentry alert"
 msgstr ""
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Separate home; can reach allowed network services and granted credentials."
+msgstr "Ayrı ana klasör; izin verilen ağ hizmetlerine ve sağlanan kimlik bilgilerine erişebilir."
+
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Serif"
 msgstr ""
@@ -7987,6 +8038,14 @@ msgstr ""
 msgid "Set up a board"
 msgstr "Pano kur"
 
+#: src/pages/shell/bot-panel.tsx
+msgid "Set up a container for isolated work."
+msgstr "Yalıtılmış çalışma için bir konteyner kurun."
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Set up computer"
+msgstr "Bilgisayar kur"
+
 #: src/pages/import/ImportedServerCredentials.tsx
 msgid "Set up credentials"
 msgstr ""
@@ -8045,6 +8104,11 @@ msgstr ""
 #: src/pages/GitMemorySettings.tsx
 msgid "Shared recall will use proposed facts after merge."
 msgstr ""
+
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/runtime-summary.tsx
+msgid "Shared with team"
+msgstr "Ekiple paylaşılan"
 
 #: src/components/ShowAllModels.tsx
 msgid "Show all models"
@@ -8209,6 +8273,10 @@ msgstr ""
 msgid "Slash commands"
 msgstr ""
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Sleeping"
+msgstr "Uykuda"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Socket missing"
 msgstr "Soket bulunamadı"
@@ -8367,6 +8435,7 @@ msgid "Start the engine and press Test."
 msgstr "Motoru başlatıp Test düğmesine basın."
 
 #: src/lib/run-status-label.ts
+#: src/pages/shell/runtime-summary.tsx
 msgid "Starting"
 msgstr "Başlıyor"
 
@@ -8440,6 +8509,7 @@ msgstr ""
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/GroupPanel.tsx
+#: src/pages/shell/runtime-summary.tsx
 msgid "Stopped"
 msgstr "Durduruldu"
 
@@ -8564,7 +8634,6 @@ msgid "Teaching in progress. Stop teaching before sending a new message."
 msgstr "Öğretme sürüyor. Yeni mesaj göndermeden önce öğretmeyi durdur."
 
 #: src/pages/Shell.tsx
-#: src/pages/shell/bot-panel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Team"
 msgstr "Takım"
@@ -8617,6 +8686,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Test"
 msgstr "Dene"
+
+#: src/pages/shell/runtime-summary.tsx
+msgid "Test computer"
+msgstr "Test bilgisayarı"
 
 #: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
 msgid "Test connection"
@@ -8802,8 +8875,9 @@ msgstr "bu bilgisayar"
 #: src/pages/fleet/target-name.ts
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
+#: src/pages/shell/runtime-summary.tsx
 msgid "This computer"
-msgstr ""
+msgstr "Bu bilgisayar"
 
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "This configuration is too complex."
@@ -9384,6 +9458,10 @@ msgstr "Tam saniyeler kullanın."
 msgid "User"
 msgstr ""
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "Uses that account's permissions."
+msgstr "O hesabın izinlerini kullanır."
+
 #: src/pages/shell/bot-model-chip.tsx
 #: src/pages/shell/group-participants.tsx
 msgid "Using {currentId}"
@@ -9578,6 +9656,10 @@ msgstr "Ne zaman kullanılır"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Where should bots run?"
 msgstr "Botlar nerede çalışsın?"
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Where this bot runs"
+msgstr "Bu botun çalıştığı yer"
 
 #: src/pages/memory/MemoryDocuments.tsx
 msgid "Who the user is and the professional domain"
