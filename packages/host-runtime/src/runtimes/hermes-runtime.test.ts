@@ -1126,7 +1126,7 @@ describe("HermesRuntime M0 ACP seam", () => {
         configHasKey: false,
       });
       expect(data.config.agent.reasoning_effort).toBe("high");
-      expect(data.config.custom_providers[0].key_env).toBe("[redacted]");
+      expect(data.config.custom_providers[0].key_env).toBe("ARDUR_HERMES_PROVIDER_KEY");
       expect(data.context).toContain("Earlier answer");
       expect(data.prompt).toEqual([{ type: "text", text: "Hello" }]);
     } finally {

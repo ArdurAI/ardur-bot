@@ -35,7 +35,7 @@ describe("redaction", () => {
     expect(redactSensitiveText(input)).toBe(expected);
   });
 
-  it("preserves non-string JSON facts and containers under sensitive-looking keys", () => {
+  it("preserves non-secret metadata without exempting sensitive non-string values", () => {
     const data = {
       parentSecretAbsent: true,
       configHasKey: false,
@@ -46,8 +46,131 @@ describe("redaction", () => {
     };
     expect(JSON.parse(redactSensitiveText(JSON.stringify(data)))).toEqual({
       ...data,
-      secrets: { password: "[Redacted]" },
+      credential: "[Redacted]",
+      tokens: "[Redacted]",
+      secrets: "[Redacted]",
     });
+  });
+
+  it("preserves setting keys, scope keys and credential references", () => {
+    const data = {
+      key: "bot.autoSpeak",
+      value: true,
+      scopeKey: { kind: "bot", botId: "fixture" },
+      credentialId: "fixture-connection",
+      key_env: "FIXTURE_PROVIDER_KEY",
+    };
+    const text = JSON.stringify(data);
+    expect(redactSensitiveText(text)).toBe(text);
+  });
+
+  it.each(
+    [
+      "Bearer",
+      "bEaReR",
+      "Basic",
+      "bAsIc",
+      "Token",
+      "tOkEn",
+      "FixtureScheme",
+      "fIxTuReScHeMe",
+      "Fixture.Scheme",
+      "fixture+scheme",
+    ].flatMap((scheme) => [
+      [
+        `${scheme} header`,
+        `AuThOrIzAtIoN: ${scheme} fixture-credential\r\nstatus=ready`,
+        "AuThOrIzAtIoN: [Redacted]\r\nstatus=ready",
+      ],
+      [
+        `${scheme} JSON`,
+        JSON.stringify({ aUtHoRiZaTiOn: `${scheme} fixture-credential`, status: "ready" }),
+        '{"aUtHoRiZaTiOn":"[Redacted]","status":"ready"}',
+      ],
+      [
+        `${scheme} query`,
+        `?aUtHoRiZaTiOn=${scheme} fixture-credential&status=ready`,
+        "?aUtHoRiZaTiOn=[Redacted]&status=ready",
+      ],
+      [
+        `${scheme} env`,
+        `AUTHORIZATION=${scheme} fixture-credential status=ready`,
+        "AUTHORIZATION=[Redacted] status=ready",
+      ],
+      [
+        `${scheme} quoted env`,
+        `AuThOrIzAtIoN="${scheme} fixture-credential" status=ready`,
+        'AuThOrIzAtIoN="[Redacted]" status=ready',
+      ],
+    ]),
+  )("redacts the complete auth value in %s", (_name, input, expected) => {
+    const redacted = redactSensitiveText(input!);
+    expect(redacted).toBe(expected);
+    expect(redactSensitiveText(redacted)).toBe(redacted);
+  });
+
+  it.each([
+    "?authorization=Basic%20fixture-credential&status=ready",
+    "?AUTHORIZATION=FixtureScheme+fixture-credential&status=ready",
+    "Proxy-Authorization: FixtureScheme\tfixture-credential\r\nstatus=ready",
+  ])("redacts encoded or tab-separated auth values: %s", (input) => {
+    const redacted = redactSensitiveText(input);
+    expect(redacted).not.toContain("fixture-credential");
+    expect(redacted).toContain("status=ready");
+  });
+
+  it.each([
+    ['Authorization: Basic "fixture credential"', "Authorization: [Redacted]"],
+    ["AUTHORIZATION=FixtureScheme 'fixture credential'", "AUTHORIZATION=[Redacted]"],
+    ['"Authorization: Bearer fixture-credential"', '"Authorization: [Redacted]"'],
+  ])(
+    "redacts quoted auth credentials while preserving surrounding quotes: %s",
+    (input, expected) => {
+      expect(redactSensitiveText(input)).toBe(expected);
+    },
+  );
+
+  it.each([
+    "PASSWORD",
+    "Secret",
+    "accessToken",
+    "Api_Key",
+    "CREDENTIAL",
+    "Authorization",
+    "Cookie",
+  ])("redacts every JSON value type under %s", (key) => {
+    for (const value of [
+      123456,
+      -123.456,
+      true,
+      false,
+      null,
+      [],
+      [123456, { safe: 'fixture } ] \\" value' }],
+      {},
+      { safe: [123456, { nested: "fixture-value" }] },
+    ]) {
+      const data = { [key]: value, status: "ready" };
+      expect(JSON.parse(redactSensitiveText(JSON.stringify(data)))).toEqual({
+        [key]: "[Redacted]",
+        status: "ready",
+      });
+      expect(redactBindings(data)).toEqual({ [key]: "[Redacted]", status: "ready" });
+    }
+  });
+
+  it("preserves SHA-1 provenance while redacting AWS key shapes and explicit secrets", () => {
+    const commitId = "0123456789abcdef".repeat(3).slice(0, 40);
+    const secret = "Q7x9Z2v4B6n8D0p3".repeat(3).slice(0, 40);
+    expect(redactSensitiveText(JSON.stringify({ commitId }))).toBe(JSON.stringify({ commitId }));
+    expect(redactSensitiveText(`commit ${commitId}`)).toBe(`commit ${commitId}`);
+    expect(redactSensitiveText(`AWS_SECRET_ACCESS_KEY=${commitId}`)).toBe(
+      "AWS_SECRET_ACCESS_KEY=[Redacted]",
+    );
+    expect(redactSensitiveText(`key=${commitId}`)).toBe("key=[Redacted]");
+    expect(redactSensitiveText(`credentials ${secret} ${secret}=`)).toBe(
+      "credentials [Redacted] [Redacted]",
+    );
   });
 
   it.each([
