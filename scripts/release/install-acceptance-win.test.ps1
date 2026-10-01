@@ -10,8 +10,8 @@ $ciScript = Join-Path $PSScriptRoot 'install-acceptance-win-ci.ps1'
 $ciAst = [Management.Automation.Language.Parser]::ParseFile($ciScript, [ref]$tokens, [ref]$errors)
 if ($errors.Count) { throw ($errors | Out-String) }
 $ciText = $ciAst.Extent.Text
-if ($ciText -notmatch '\[RestrictedProcess\]::Run' -or $ciText -notmatch 'if \(\$code -ne 0\)') {
-    throw 'Unprivileged launcher must use a restricted token and verify its result'
+if ($ciText -notmatch 'New-LocalUser' -or $ciText -notmatch '-Credential \$credential -LoadUserProfile -Wait -PassThru' -or $ciText -notmatch 'if \(\$code -ne 0\)') {
+    throw 'Unprivileged launcher must use a standard-user credential and verify its result'
 }
 if ($ast.Extent.Text -notmatch 'IsInRole\(\[Security.Principal.WindowsBuiltInRole\]::Administrator\)') {
     throw 'Acceptance must reject an administrative execution token'
@@ -30,22 +30,6 @@ $cases = @(
     @{ Code = "[Console]::WriteLine('ARDUR_INSTALL_SMOKE_PASS'); [Console]::WriteLine('Unable to find helper app'); exit 0"; Pass = $false }
 )
 try {
-    Add-Type -Path (Join-Path $PSScriptRoot 'RestrictedProcess.cs')
-    $probe = '$p = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent()); if ($p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { exit 9 }; exit 0'
-    foreach ($item in @(@{ Code = $probe; Exit = 0 }, @{ Code = 'exit 7'; Exit = 7 })) {
-        $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($item.Code))
-        $exitCode = [RestrictedProcess]::Run((Join-Path $PSHOME 'pwsh.exe'), "-NoProfile -NonInteractive -EncodedCommand $encoded", (Get-Location).Path, 10000)
-        if ($exitCode -ne $item.Exit) { throw "Restricted launcher returned $exitCode instead of $($item.Exit)" }
-    }
-    $timedOut = $false
-    try {
-        [RestrictedProcess]::Run((Join-Path $PSHOME 'pwsh.exe'), '-NoProfile -NonInteractive -Command "Start-Sleep -Seconds 30"', (Get-Location).Path, 800) | Out-Null
-    } catch {
-        if ($_.Exception.GetBaseException() -isnot [TimeoutException]) { throw }
-        $timedOut = $true
-    }
-    if (-not $timedOut) { throw 'Restricted launcher did not enforce its process bound' }
-    Write-Host 'PASS restricted token launcher: non-admin token, nonzero exit and timeout cleanup'
     $index = 0
     foreach ($case in $cases) {
         $accepted = $true
@@ -55,7 +39,7 @@ try {
         if ($accepted -ne $case.Pass) { throw "Wrong verdict for fixture $index" }
         $index++
     }
-    Write-Host "PASS Windows process boundary: $index offline cases, both scripts parsed, restricted-token contract"
+    Write-Host "PASS Windows process boundary: $index offline cases, both scripts parsed, standard-user launcher contract"
 } finally {
     Remove-Item -LiteralPath $work -Recurse -Force
 }

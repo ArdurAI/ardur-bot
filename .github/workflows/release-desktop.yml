@@ -266,6 +266,10 @@ jobs:
         env:
           ARDUR_INSTALL_LOG_DIR: ${{ runner.temp }}/install-acceptance
         run: ./scripts/release/install-acceptance-win-ci.ps1 installers/ardur-${{ needs.validate.outputs.version }}-win-${{ matrix.arch }}.exe
+      - name: Remove temporary Windows acceptance user and profile
+        if: always() && matrix.platform == 'win'
+        shell: pwsh
+        run: ./scripts/release/install-acceptance-win-ci.ps1 -Cleanup
       - name: Record accepted installer hashes
         shell: bash
         run: node scripts/release/install-acceptance-record.mjs record installers accepted/${{ matrix.platform }}-${{ matrix.arch }}.json ${{ matrix.platform }} ${{ matrix.arch }} ${{ needs.validate.outputs.sha }} ${{ needs.validate.outputs.version }}
