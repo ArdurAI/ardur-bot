@@ -23,7 +23,7 @@
       "id": "remember",
       "eyebrow": "MEMORY",
       "title": "Memory you can inspect",
-      "body": "Keep documents in the built-in database, or connect a Git repository for a space's shared notes.",
+      "body": "Keep documents in the built-in database, or connect a Git repository for a space's shared notes. Bots can recall saved private facts in later direct and group conversations.",
       "source": "README.md#Memory"
     },
     {

@@ -64,6 +64,14 @@ export class MemoryService {
   async generation(context: MemoryOperationContext) {
     return this.open(context, async (s) => s.generation);
   }
+  async recallRevision(context: MemoryOperationContext) {
+    return this.open({ ...context, memoryRecall: true }, async (s) => {
+      const revision = await s.store.recallRevision?.(s.access);
+      return revision == null
+        ? null
+        : JSON.stringify([s.store.describe().id, s.generation, revision]);
+    });
+  }
   async startSession(context: MemoryOperationContext) {
     await this.open(
       { ...context, memorySessionStart: true },
