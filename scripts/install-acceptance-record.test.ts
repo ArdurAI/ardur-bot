@@ -59,13 +59,32 @@ describe("publication install receipts", () => {
     expect(await readdir(artifacts)).not.toContain("desktop-linux-arm64");
   });
 
-  it("refuses missing required receipts", async () => {
+  it.each(["mac-arm64", "mac-x64", "linux-x64"])(
+    "refuses missing required %s receipts",
+    async (id) => {
+      const { artifacts, receipts } = await fixture();
+      await rm(path.join(receipts, `${id}.json`));
+      await expect(filterAccepted(artifacts, receipts, sha, version)).rejects.toThrow();
+    },
+  );
+
+  it("retains advisory Windows installers without inventing an accepted receipt", async () => {
     const { artifacts, receipts } = await fixture();
-    await rm(path.join(receipts, "mac-x64.json"));
+    await rm(path.join(receipts, "win-x64.json"));
+    const accepted = await filterAccepted(artifacts, receipts, sha, version);
+    expect(accepted).toHaveLength(4);
+    expect(accepted.some((record: { platform: string }) => record.platform === "win")).toBe(false);
+    expect(await readdir(artifacts)).toContain("desktop-win-x64");
+  });
+
+  it("still validates the advisory Windows installer's file set", async () => {
+    const { artifacts, receipts } = await fixture();
+    await rm(path.join(receipts, "win-x64.json"));
+    await writeFile(path.join(artifacts, "desktop-win-x64/unexpected.exe"), "fixture");
     await expect(filterAccepted(artifacts, receipts, sha, version)).rejects.toThrow();
   });
 
-  it.each(["hash", "sha", "version", "signed", "extra", "corrupt-optional"])(
+  it.each(["hash", "sha", "version", "signed", "extra", "corrupt-optional", "corrupt-advisory"])(
     "refuses %s mismatch instead of treating tampered artifacts as accepted",
     async (mutation) => {
       const { artifacts, receipts } = await fixture();
@@ -76,6 +95,8 @@ describe("publication install receipts", () => {
         await writeFile(path.join(directory, "unverified.dmg"), "extra fixture");
       } else if (mutation === "corrupt-optional") {
         await writeFile(path.join(receipts, "linux-arm64.json"), "not json");
+      } else if (mutation === "corrupt-advisory") {
+        await writeFile(path.join(receipts, "win-x64.json"), "not json");
       } else {
         const file = path.join(receipts, "mac-arm64.json");
         const record = JSON.parse(await readFile(file, "utf8"));
@@ -102,7 +123,18 @@ describe("publication install receipts", () => {
     expect(acceptance.needs).toContain("build");
     expect(workflow.jobs.publish.needs).toContain("install-acceptance");
     expect(workflow.jobs.evidence.needs).toContain("install-acceptance");
-    expect(acceptance["continue-on-error"]).toBe(workflow.jobs.build["continue-on-error"]);
+    expect(acceptance["continue-on-error"]).toBe(
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: Literal workflow expression.
+      "${{ matrix.platform == 'win' || matrix.optional || false }}",
+    );
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: Literal workflow expression.
+    expect(workflow.jobs.build["continue-on-error"]).toBe("${{ matrix.optional || false }}");
+    expect(acceptance.name).toContain(" (advisory: admin runner)");
+    expect(
+      INSTALL_TARGETS.filter((target: { advisory?: boolean }) => target.advisory).map(
+        (target: { platform: string }) => target.platform,
+      ),
+    ).toEqual(["win"]);
     const upload = acceptance.steps.find(
       (step: { name: string }) => step.name === "Upload install logs and screenshots",
     );

@@ -14,7 +14,7 @@ export const INSTALL_TARGETS = [
     optional: true,
     files: ["linux-arm64.deb", "linux-arm64.AppImage"],
   },
-  { platform: "win", arch: "x64", files: ["win-x64.exe"] },
+  { platform: "win", arch: "x64", advisory: true, files: ["win-x64.exe"] },
 ];
 
 function inputs(sha, version) {
@@ -63,7 +63,7 @@ export async function recordAcceptance(directory, output, platform, arch, sha, v
   return record;
 }
 
-/** Optional installs may fail, but those exact files must not reach publication. */
+/** Optional failures are omitted; Windows remains publishable without claiming acceptance. */
 export async function filterAccepted(artifactsRoot, receiptsRoot, sha, version) {
   inputs(sha, version);
   const known = new Set(
@@ -80,6 +80,18 @@ export async function filterAccepted(artifactsRoot, receiptsRoot, sha, version) 
     try {
       record = JSON.parse(await readFile(path.join(receiptsRoot, `${id}.json`), "utf8"));
     } catch (error) {
+      if (target.advisory && error.code === "ENOENT") {
+        // Check the build's file set, but never manufacture an install success receipt.
+        await hashes(directory, target, version);
+        const signing = JSON.parse(
+          await readFile(path.join(directory, `install-build-${id}.json`), "utf8"),
+        );
+        if (typeof signing.signed !== "boolean") throw new Error("Missing build signing decision.");
+        console.error(
+          "::warning title=Windows x64::Install acceptance is advisory; first-launch check pending.",
+        );
+        continue;
+      }
       if (!target.optional || error.code !== "ENOENT") throw error;
       await rm(directory, { recursive: true, force: true });
       console.error(

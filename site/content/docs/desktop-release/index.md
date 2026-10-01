@@ -248,6 +248,9 @@ An evidence waiver cannot bypass installation checks.
   refuses an administrative token. The acceptance script rejects elevation before installation;
   launches remain bounded and the wrapper checks the owned process's exit status. An always-run
   cleanup removes the temporary user and profile. Manual runs must also be non-elevated.
+  Windows acceptance remains visible on every release but is advisory on the administrative
+  hosted runner. Silent installation and uninstallation passed; first-launch health/window/clean-exit
+  acceptance is still pending. Generated release notes state that limitation explicitly.
 
 Every launch sets `ARDUR_INSTALL_SMOKE=1`, disables update discovery and uses a fresh
 `ARDURBOT_USER_DATA_DIR`. The app sets Electron's user-data path before requesting the single-instance
@@ -268,7 +271,8 @@ Normal startup is unchanged; no hosted service or model credentials are needed.
 
 Successful jobs upload hash-bound `install-approved-*` receipts. Before performance gating,
 the publication assembly checks their commit, version, signing decision and exact installer
-hashes. Required missing or mismatched receipts fail closed. Optional missing ARM receipts
+hashes. Required missing or mismatched receipts fail closed. Only Windows may publish without
+an install receipt while its check is advisory; no accepted receipt is fabricated. Optional missing ARM receipts
 remove that build's files. The publication artifact retains `install-acceptance.json`; each
 platform separately uploads stdout, stderr, PASS/FAIL summaries and any screenshots as
 `install-acceptance-<platform>-<arch>`.

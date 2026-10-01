@@ -67,6 +67,8 @@ export async function releaseNotes(subjects, gate, signed = false) {
     "",
     "macOS updates require downloading and installing the new build manually.",
     "",
+    "Windows installer checked for silent install and uninstall; first-launch check pending.",
+    "",
     ...[...counts]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([label, count]) => `- ${label}: ${count} ${count === 1 ? "change" : "changes"}.`),

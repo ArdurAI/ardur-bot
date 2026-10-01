@@ -504,7 +504,7 @@
           ]
         }
       ],
-      "note": "“This computer” starts its own database and services, without Docker. Homebrew's ardur command opens the installed bundle. Previews update by manual download. Branch installers can be checked in CI without publishing a release."
+      "note": "“This computer” runs its database/services without Docker. Homebrew's ardur opens the installed bundle. Previews update manually. CI checks branch installers without publishing. Windows installer checked for silent install and uninstall; first-launch check pending."
     },
     "installScript": {
       "platforms": [

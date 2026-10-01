@@ -19,6 +19,9 @@ describe("release metadata", () => {
       "macOS updates require downloading and installing the new build manually.",
     );
     expect(notes).not.toContain("Signed builds come later.");
+    expect(notes.split("\n")).toContain(
+      "Windows installer checked for silent install and uninstall; first-launch check pending.",
+    );
   });
 
   it("accepts a preview matching the root version and rejects mismatched or unsafe refs", () => {

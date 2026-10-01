@@ -208,11 +208,11 @@ jobs:
             apps/desktop/out/install-build-*.json
 
   install-acceptance:
-    name: Install ${{ matrix.platform }} ${{ matrix.arch }}
+    name: "Install ${{ matrix.platform }} ${{ matrix.arch }}${{ matrix.platform == 'win' && ' (advisory: admin runner)' || '' }}"
     needs: [validate, build]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
-    continue-on-error: ${{ matrix.optional || false }}
+    continue-on-error: ${{ matrix.platform == 'win' || matrix.optional || false }}
     strategy:
       fail-fast: false
       matrix:
