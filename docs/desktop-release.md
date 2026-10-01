@@ -237,9 +237,10 @@ An evidence waiver cannot bypass installation checks.
   reject crashes/nonzero exits or blocking dialogs, and run the generated uninstaller silently.
   Existing Ardur processes or registered installations cause a hand-run check to refuse instead
   of replacing them. Windows desktop acceptance runs on the fresh runner, not in a container.
-  CI uses a unique limited-token interactive scheduled task because PostgreSQL refuses an
-  administrative token. The acceptance script verifies it is not elevated before installation;
-  the CI wrapper checks the task result and removes only its own task. Manual runs must also be non-elevated.
+  CI explicitly creates a restricted process token with Administrators disabled and medium integrity
+  because PostgreSQL refuses an administrative token. This works even when runner UAC is disabled.
+  The acceptance script verifies it is not elevated before installation; the CI wrapper checks the
+  owned process's exit status and timeout. Manual runs must also be non-elevated.
 
 Every launch sets `ARDUR_INSTALL_SMOKE=1`, disables update discovery and uses a fresh
 `ARDURBOT_USER_DATA_DIR`. The app sets Electron's user-data path before requesting the single-instance
