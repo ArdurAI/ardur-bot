@@ -1,3 +1,4 @@
+import type { RuntimeAvailability } from "@ardurbot/contracts";
 import { expect, test } from "@playwright/test";
 import { dashboardFixture } from "./dashboard-fixture";
 import { captureScreenshot } from "./helpers";
@@ -26,6 +27,12 @@ test("a host runtime offers This computer without mislabeling its current contai
     else if (procedure === "bots/get") result = { ...(result as object), ...pin };
     else if (procedure === "host/status")
       result = { configured: true, connected: true, roots: [], health: null };
+    else if (procedure === "runtimes/availability")
+      result = {
+        runtimeKind: "codex-app-server",
+        available: true,
+        models: [{ id: "fixture-model", label: "Fixture model", efforts: ["off"] }],
+      } satisfies RuntimeAvailability;
     else if (procedure === "computer/status")
       result = {
         botId: "bot",
@@ -58,7 +65,7 @@ test("a host runtime offers This computer without mislabeling its current contai
     await expect(summary).toContainText("Container");
   } catch (error) {
     throw new Error(
-      `Location panel: ${await settings.innerText()}; browser errors: ${browserErrors.join("; ")}`,
+      `Rendered page: ${await page.locator("body").innerText({ timeout: 1_000 })}; browser errors: ${browserErrors.join("; ")}`,
       { cause: error },
     );
   }
