@@ -238,7 +238,8 @@ An evidence waiver cannot bypass installation checks.
   Existing Ardur processes or registered installations cause a hand-run check to refuse instead
   of replacing them. Windows desktop acceptance runs on the fresh runner, not in a container.
   CI explicitly creates a restricted process token with Administrators disabled and medium integrity
-  because PostgreSQL refuses an administrative token. This works even when runner UAC is disabled.
+  because PostgreSQL refuses an administrative token. An offline child-process probe must verify
+  this boundary before installation; requesting a limited scheduled task alone did not remove elevation.
   The acceptance script verifies it is not elevated before installation; the CI wrapper checks the
   owned process's exit status and timeout. Manual runs must also be non-elevated.
 
