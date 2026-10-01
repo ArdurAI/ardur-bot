@@ -7,6 +7,8 @@ test("a host runtime offers This computer without mislabeling its current contai
 }, testInfo) => {
   const fixture = dashboardFixture();
   const mutations: string[] = [];
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
   await page.route("**/api/auth/get-session*", (route) => route.fulfill({ json: fixture.session }));
   await page.route("**/rpc/**", async (route) => {
     const procedure = new URL(route.request().url()).pathname.slice("/rpc/".length);
@@ -52,7 +54,14 @@ test("a host runtime offers This computer without mislabeling its current contai
   await page.getByTestId("bot-settings-trigger").click();
   const settings = page.getByTestId("bot-settings");
   const summary = settings.getByTestId("runtime-summary");
-  await expect(summary).toContainText("Container");
+  try {
+    await expect(summary).toContainText("Container");
+  } catch (error) {
+    throw new Error(
+      `Location panel: ${await settings.innerText()}; browser errors: ${browserErrors.join("; ")}`,
+      { cause: error },
+    );
+  }
   await expect(summary).toContainText("Docker Desktop");
   await expect(summary).not.toContainText("Runs as you");
   await settings.getByText("Change location", { exact: true }).click();
