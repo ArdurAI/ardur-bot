@@ -2261,6 +2261,10 @@ msgstr "OAuth 연결"
 msgid "Connect remote account"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Connect the host service to choose This computer."
+msgstr "이 컴퓨터를 선택하려면 호스트 서비스를 연결하세요."
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Connect this provider to use it as your personal model."
 msgstr "이 AI 서비스를 연결하면 내 기본 모델로 사용할 수 있습니다."
@@ -6513,6 +6517,10 @@ msgstr ""
 #: src/pages/import/LocalImportPage.tsx
 msgid "Other files"
 msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Other locations are unavailable for {runtime}. Choose This computer."
+msgstr "{runtime}에서는 다른 위치를 사용할 수 없습니다. 이 컴퓨터를 선택하세요."
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx

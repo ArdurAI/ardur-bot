@@ -98,14 +98,22 @@ const ComputerConfigurationFieldsSchema = z.object({
   botId: z.string().min(1),
   imageProfile: ComputerProfileSchema.optional(),
   /** Omitted keeps the computer where it is; null chooses the deployment default. */
-  connectionId: z.string().nullable().optional(),
+  connectionId: z.string().min(1).nullable().optional(),
+  /** Explicit owner-consented host destination; never inferred from the deployment default. */
+  destination: z.literal("host").optional(),
   confirmed: z.boolean().default(false),
 });
 /** A configuration that changes neither the profile nor the connection is not a request. */
 export const ComputerConfigurationSchema = ComputerConfigurationFieldsSchema.refine(
   (configuration) =>
-    configuration.imageProfile !== undefined || configuration.connectionId !== undefined,
+    configuration.imageProfile !== undefined ||
+    configuration.connectionId !== undefined ||
+    configuration.destination !== undefined,
   { message: "Choose an image profile or a connection to change." },
+).refine(
+  (configuration) =>
+    configuration.destination === undefined || configuration.connectionId === undefined,
+  { message: "Choose one computer destination." },
 );
 type ComputerKindFacts = {
   location: "Container" | "This computer" | "Remote computer" | "Hosted sandbox" | "Test computer";
@@ -257,4 +265,10 @@ export function recommendedContainer(
 
 export const ComputerReplacementConfigurationSchema = ComputerConfigurationFieldsSchema.omit({
   botId: true,
-}).extend({ networkEgress: z.boolean().optional(), confirmed: z.literal(true) });
+})
+  .extend({ networkEgress: z.boolean().optional(), confirmed: z.literal(true) })
+  .refine(
+    (configuration) =>
+      configuration.destination === undefined || configuration.connectionId === undefined,
+    { message: "Choose one computer destination." },
+  );

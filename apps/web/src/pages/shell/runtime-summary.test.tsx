@@ -20,8 +20,11 @@ const api = vi.hoisted(() => ({
   me: vi.fn(async () => ({ sandboxProvider: "docker" })),
   updates: vi.fn<() => Promise<ComputerUpdate[]>>(async () => []),
   releaseInterrupted: vi.fn(async (_id: string) => {}),
+  host: vi.fn(async () => ({ connected: true })),
 }));
-vi.mock("../../lib/rpc", () => ({ rpc: { computer: api, me: api.me } }));
+vi.mock("../../lib/rpc", () => ({
+  rpc: { computer: api, me: api.me, host: { status: api.host } },
+}));
 vi.mock("../../lib/computer-updates", () => ({
   computerUpdates: { releaseInterrupted: api.releaseInterrupted },
 }));

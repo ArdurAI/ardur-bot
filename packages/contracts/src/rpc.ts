@@ -740,7 +740,14 @@ export const appContract = {
       }),
     ),
     list: oc.output(
-      z.array(z.object({ botId: Id, name: z.string(), status: ComputerStatusSchema })),
+      z.array(
+        z.object({
+          botId: Id,
+          name: z.string(),
+          runtimeKind: RuntimeKindSchema.optional(),
+          status: ComputerStatusSchema,
+        }),
+      ),
     ),
     connections: oc.output(
       z.array(

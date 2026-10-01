@@ -1,4 +1,8 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "Other locations are unavailable for {runtime}. Choose This computer.":
+    "Другие расположения недоступны для {runtime}. Выберите Этот компьютер.",
+  "Connect the host service to choose This computer.":
+    "Подключите службу хоста, чтобы выбрать Этот компьютер.",
   "Move to a container": "Переместить в контейнер",
   "Keep current location": "Оставить текущее расположение",
   "Paused for an update": "Приостановлен для обновления",

@@ -8,6 +8,7 @@ import {
   BOT_DESCRIPTION_MAX_LENGTH,
   BOT_NAME_MAX_LENGTH,
   BOT_TITLE_MAX_LENGTH,
+  computerExecutionKind,
   computerKindFacts,
   errorDataCode,
   ISOLATED_COMPUTER_UNAVAILABLE_CODE,
@@ -36,6 +37,7 @@ export default function NewBot() {
   const [container, setContainer] = useState<{ connectionId: string | null } | null>(null);
   const [containerName, setContainerName] = useState("");
   const [teamKind, setTeamKind] = useState("");
+  const [teamName, setTeamName] = useState<string>();
   const [locationReady, setLocationReady] = useState(false);
   const [locationRevision, setLocationRevision] = useState(0);
   useEffect(() => {
@@ -53,10 +55,14 @@ export default function NewBot() {
       .then(([me, connections, computers]) => {
         if (active) {
           const recommendation = recommendedContainer(me.sandboxProvider, connections);
+          const team = computers.find((entry) => entry.status.mode === "team")?.status;
+          const connection = connections.find((entry) => entry.id === team?.connectionId);
           setTeamKind(
-            computers.find((entry) => entry.status.mode === "team")?.status.kind ??
-              me.sandboxProvider,
+            team
+              ? (computerExecutionKind({ ...team, connectionSettings: connection?.settings }) ?? "")
+              : me.sandboxProvider,
           );
+          setTeamName(connection?.name);
           setContainer(recommendation);
           setContainerName(
             connections.find((entry) => entry.id === recommendation?.connectionId)?.name ??
@@ -211,7 +217,9 @@ export default function NewBot() {
             <RuntimeBoundary kind="docker" locationName={containerName} />
           ) : null}
           <ComputerModePicker value={computerMode} onChange={setComputerMode} />
-          {computerMode === "team" && teamKind ? <RuntimeBoundary kind={teamKind} /> : null}
+          {computerMode === "team" && teamKind ? (
+            <RuntimeBoundary kind={teamKind} locationName={teamName} />
+          ) : null}
           {computerMode === "dedicated" && locationReady && !container ? (
             <>
               <Text style={{ color: tokens.mutedForeground }}>

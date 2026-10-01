@@ -53,6 +53,7 @@ export async function queueComputerUpdate(
   configuration?: {
     imageProfile?: "base" | "developer";
     connectionId?: string | null;
+    destination?: "host";
     networkEgress?: boolean;
     confirmed: boolean;
   },

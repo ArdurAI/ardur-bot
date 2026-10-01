@@ -418,6 +418,7 @@ import {
   tryCompleteConnectionWithCode,
 } from "./run-secret.js";
 import { brokerRunAllowance, recordRunUsage } from "./run-usage.js";
+import { runtimeComputerLocation } from "./runtime-computer-location.js";
 import type { DetachedRuntime, RuntimeRegistry } from "./runtime-registry.js";
 import { createRuntimeRegistry, detachedRuntimeRequest } from "./runtime-registry.js";
 import { reportRuntimeWaits, withRuntimeCleanup } from "./runtime-stream.js";
@@ -1436,7 +1437,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
       : undefined;
     const selection = await runtimeRegistry.resolve(
       selected.pin,
-      bot.computer?.kind,
+      await runtimeComputerLocation(deps.prisma, bot.computer),
       bot.runtimeExperimental,
       selected.pin.runtimeKind === "hermes"
         ? {
@@ -1503,7 +1504,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
           bot: {
             select: {
               runtimeExperimental: true,
-              computer: { select: { kind: true, providerRef: true } },
+              computer: {
+                select: { kind: true, providerRef: true, connectionId: true, spaceId: true },
+              },
             },
           },
         },
@@ -1518,7 +1521,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         return runtimePinProblem(pin, "runtime-unavailable", NATIVE_HOST_OWNER_MESSAGE);
       const selection = await runtimeRegistry.resolve(
         pin,
-        run.bot.computer?.kind,
+        await runtimeComputerLocation(deps.prisma, run.bot.computer),
         run.bot.runtimeExperimental,
       );
       if ("kind" in selection) return selection;
@@ -2202,7 +2205,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           );
         const runtimeSelection = await runtimeRegistry.resolve(
           selected.pin,
-          bot.computer?.kind,
+          await runtimeComputerLocation(deps.prisma, bot.computer),
           bot.runtimeExperimental,
           selected.pin.runtimeKind === "hermes"
             ? {

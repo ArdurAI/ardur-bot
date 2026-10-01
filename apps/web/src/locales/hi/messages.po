@@ -2261,6 +2261,10 @@ msgstr "OAuth कनेक्ट करें"
 msgid "Connect remote account"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Connect the host service to choose This computer."
+msgstr "यह कंप्यूटर चुनने के लिए होस्ट सेवा कनेक्ट करें।"
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Connect this provider to use it as your personal model."
 msgstr "इस प्रोवाइडर को अपने व्यक्तिगत मॉडल के रूप में उपयोग करने के लिए कनेक्ट करें।"
@@ -6513,6 +6517,10 @@ msgstr ""
 #: src/pages/import/LocalImportPage.tsx
 msgid "Other files"
 msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Other locations are unavailable for {runtime}. Choose This computer."
+msgstr "{runtime} के लिए अन्य स्थान उपलब्ध नहीं हैं। यह कंप्यूटर चुनें।"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx

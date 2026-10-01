@@ -4,14 +4,18 @@ import path from "node:path";
 import type { AdapterContext } from "@ardurbot/adapter-kit";
 import type { EncryptedSecretStore } from "@ardurbot/adapters";
 import { DockerSandboxProvider, kubernetesContexts, snapshotKubeconfig } from "@ardurbot/adapters";
+import type { RuntimeComputerLocation, RuntimeKind } from "@ardurbot/contracts";
 import {
   ComputerConfigurationSchema,
   ComputerConnectionInputSchema,
   ComputerConnectionSettingsSchema,
   ComputerEngineUnavailableError,
   FLEET_ACTIVE_RUN_CONFLICT_CODE,
+  failureCategoryMessage,
   HOST_MOVE_UNAVAILABLE_CODE,
   HOST_MOVE_UNAVAILABLE_MESSAGE,
+  runtimeNames,
+  runtimeSupportsLocation,
 } from "@ardurbot/contracts";
 import { ACTIVE_RUN_STATUSES, sandboxKindForBot } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
@@ -413,6 +417,54 @@ export async function validateComputerConfiguration(
   )
     throw new ORPCError("BAD_REQUEST", { message: "Choose an available computer connection." });
   return configuration;
+}
+
+/** The same placement policy guards Settings and run admission, before any destructive work. */
+export async function validateRuntimeComputerConfiguration(
+  prisma: PrismaClient,
+  bot: {
+    runtimeKind: string;
+    computer: { kind: string; connectionId: string | null; spaceId: string } | null;
+  },
+  configuration: z.infer<typeof ComputerConfigurationSchema>,
+  deploymentKind: string,
+  hostConnected: boolean,
+) {
+  if (configuration.destination === "host" && !hostConnected)
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Connect the host service to choose This computer.",
+    });
+  const connectionId =
+    configuration.destination === "host"
+      ? null
+      : configuration.connectionId === undefined
+        ? bot.computer?.connectionId
+        : configuration.connectionId;
+  const connection = connectionId
+    ? await prisma.connection.findFirst({
+        where: { id: connectionId, spaceId: bot.computer?.spaceId, connectorId: "computer" },
+      })
+    : null;
+  const parsed = ComputerConnectionSettingsSchema.safeParse(connection?.metadata);
+  const location: RuntimeComputerLocation = {
+    kind:
+      configuration.destination === "host"
+        ? "desktop"
+        : configuration.connectionId === null
+          ? deploymentKind
+          : bot.computer?.kind,
+    connectionId,
+    connectionSettings: parsed.success ? parsed.data : null,
+  };
+  const runtime = bot.runtimeKind as RuntimeKind;
+  if (!runtimeSupportsLocation(runtime, location))
+    throw new ORPCError("BAD_REQUEST", {
+      message: failureCategoryMessage("computer-unsupported", {
+        runtime: runtimeNames[runtime],
+        bot: "this bot",
+      }),
+      data: { code: "computer-unsupported" },
+    });
 }
 
 export async function computerEngineInfo(

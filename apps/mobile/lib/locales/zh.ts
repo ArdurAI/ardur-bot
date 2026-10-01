@@ -1,4 +1,7 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "Other locations are unavailable for {runtime}. Choose This computer.":
+    "{runtime} 无法使用其他位置。请选择此电脑。",
+  "Connect the host service to choose This computer.": "连接主机服务后才能选择此电脑。",
   "Move to a container": "移至容器",
   "Keep current location": "保留当前位置",
   "Paused for an update": "已暂停以进行更新",

@@ -216,6 +216,23 @@ it("fails closed for an unknown kind", async () => {
     "Choose a supported connection",
   );
 });
+it.each(["docker", "podman", "kubernetes", "ssh"] as const)(
+  "describes a legacy desktop row by its %s connection on phone",
+  async (engine) => {
+    await act(async () =>
+      root.render(
+        createElement(RuntimeSummary, {
+          status: { ...status, connectionId: "saved", mode: "team" },
+          locationName: "Saved connection",
+          connectionSettings: { engine },
+        }),
+      ),
+    );
+    expect(container.textContent).toContain(engine === "ssh" ? "Remote computer" : "Container");
+    expect(container.textContent).toContain("Saved connection");
+    expect(container.textContent).not.toContain("Runs as you");
+  },
+);
 async function enterName() {
   const input = container.querySelector<HTMLInputElement>('input[placeholder="Name this bot"]')!;
   await act(async () => {
@@ -230,6 +247,25 @@ const createButton = () =>
   [...container.querySelectorAll<HTMLButtonElement>("button")].find(
     (button) => button.textContent === "Create",
   )!;
+it("describes the existing Team container by connection when creating a bot on phone", async () => {
+  request.mockImplementation(async (procedure) =>
+    procedure === "me"
+      ? { sandboxProvider: "desktop" }
+      : procedure === "computer/connections"
+        ? [{ id: "saved", name: "Team engine", settings: { engine: "docker" } }]
+        : procedure === "computer/list"
+          ? [{ status: { kind: "desktop", connectionId: "saved", mode: "team" } }]
+          : [],
+  );
+  await act(async () => root.render(createElement(NewBot)));
+  const team = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Shared with team",
+  )!;
+  await act(async () => team.click());
+  expect(container.textContent).toContain("Container · Team engine");
+  expect(container.textContent).not.toContain("Runs as you");
+  expect(request.mock.calls.some((call) => call[0] === "bots/create")).toBe(false);
+});
 it("offers setup for new isolated work when no container is configured", async () => {
   request.mockImplementation(async (procedure) =>
     procedure === "me" ? { sandboxProvider: "desktop" } : [],

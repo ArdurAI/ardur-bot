@@ -3,8 +3,16 @@ import type {
   ComputerProfileId,
   ComputerStatus,
   Me,
+  RuntimeKind,
 } from "@ardurbot/contracts";
-import { COMPUTER_PROFILES, computerKindFacts } from "@ardurbot/contracts";
+import {
+  COMPUTER_PROFILES,
+  computerConnectionKind,
+  computerExecutionKind,
+  computerKindFacts,
+  runtimeNames,
+  runtimeSupportsLocation,
+} from "@ardurbot/contracts";
 import { ENGINE_LABELS } from "@ardurbot/contracts/fleet";
 import { computerRefusalMessage, sandboxKindForBot } from "@ardurbot/core";
 import {
@@ -37,24 +45,28 @@ export function deploymentDefaultEngine(
 }
 
 const DEPLOYMENT_DEFAULT = "deployment-default";
+const HOST_COMPUTER = "host-computer";
 
 export function ComputerProfilesSettings() {
   const { t } = useLingui();
   const [computers, setComputers] = useState<
-    { botId: string; name: string; status: ComputerStatus }[]
+    { botId: string; name: string; runtimeKind?: RuntimeKind; status: ComputerStatus }[]
   >([]);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [deploymentDefault, setDeploymentDefault] = useState<string | null>("docker");
+  const [hostConnected, setHostConnected] = useState(false);
   const [error, setError] = useState("");
   async function refresh() {
-    const [computers, connections, me] = await Promise.all([
+    const [computers, connections, me, host] = await Promise.all([
       rpc.computer.list(),
       rpc.computer.connections(),
       rpc.me(),
+      rpc.host.status(),
     ]);
     setComputers(computers);
     setConnections(connections);
     setDeploymentDefault(deploymentDefaultEngine(me));
+    setHostConnected(host.connected && me.isDeploymentOwner);
   }
   useEffect(() => {
     const reload = () =>
@@ -76,6 +88,7 @@ export function ComputerProfilesSettings() {
           {...computer}
           connections={connections}
           deploymentDefault={deploymentDefault}
+          hostConnected={hostConnected}
           onChanged={refresh}
         />
       ))}
@@ -91,6 +104,8 @@ export function ComputerProfile({
   deploymentDefault = "docker",
   onChanged,
   choicesOnly = false,
+  runtimeKind = "pi",
+  hostConnected = false,
 }: {
   botId: string;
   name: string;
@@ -99,25 +114,36 @@ export function ComputerProfile({
   deploymentDefault?: string | null;
   onChanged: () => Promise<void>;
   choicesOnly?: boolean;
+  runtimeKind?: RuntimeKind;
+  hostConnected?: boolean;
 }) {
   const { t } = useLingui();
-  const savedConnectionId = status.kind === "desktop" ? "" : (status.connectionId ?? "");
+  const savedConnectionId = status.connectionId ?? "";
   const [profile, setProfile] = useState<ComputerProfileId>(status.imageProfile ?? "base");
   const [selection, setSelection] = useState(savedConnectionId);
   useEffect(() => {
-    setSelection(status.kind === "desktop" ? "" : (status.connectionId ?? ""));
+    setSelection(status.connectionId ?? "");
   }, [status.connectionId, status.kind]);
   const [confirm, setConfirm] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const connection = connections.find((entry) => entry.id === selection);
   const choosingDefault = selection === DEPLOYMENT_DEFAULT;
+  const choosingHost = selection === HOST_COMPUTER;
   // Local Docker and saved connections answer a probe; other engines are named by their kind.
-  const probed = choosingDefault
-    ? deploymentDefault === "docker"
-      ? ""
-      : null
-    : selection || (status.kind === "docker" ? "" : null);
+  const probed =
+    choosingHost ||
+    !runtimeSupportsLocation(runtimeKind, {
+      kind: status.kind,
+      connectionId: status.connectionId,
+      connectionSettings: connections.find((entry) => entry.id === status.connectionId)?.settings,
+    })
+      ? null
+      : choosingDefault
+        ? deploymentDefault === "docker"
+          ? ""
+          : null
+        : selection || (status.kind === "docker" ? "" : null);
   const [engineError, setEngineError] = useState("");
   const [engineRefresh, setEngineRefresh] = useState(0);
   const [detectedEngine, setDetectedEngine] = useState<{
@@ -157,7 +183,13 @@ export function ComputerProfile({
       ? detectedEngine.name
       : (connection?.settings.engine ??
         (choosingDefault && deploymentDefault ? deploymentDefault : status.kind));
-  const hostComputer = status.kind === "desktop";
+  const savedConnection = connections.find((entry) => entry.id === savedConnectionId);
+  const currentKind = computerExecutionKind({
+    kind: status.kind,
+    connectionId: status.connectionId,
+    connectionSettings: savedConnection?.settings,
+  });
+  const hostComputer = currentKind === "desktop";
 
   const engineLabel = (kind: string) =>
     kind !== "desktop"
@@ -168,30 +200,49 @@ export function ComputerProfile({
   // The deployment's engine is offered when the computer runs elsewhere and it is not the host.
   const defaultLabel = deploymentDefault ? ENGINE_LABELS[deploymentDefault] : undefined;
   const offerDeploymentDefault =
-    defaultLabel !== undefined && (!!status.connectionId || status.kind !== deploymentDefault);
+    defaultLabel !== undefined &&
+    (!!status.connectionId || status.kind !== deploymentDefault) &&
+    runtimeSupportsLocation(runtimeKind, { kind: deploymentDefault });
   const defaultOption = t`Deployment default (${defaultLabel})`;
   const supported = ["docker", "podman", "kubernetes", "remote-docker"].includes(engine);
-  const selectedKind = connection
-    ? connection.settings.engine === "docker" || connection.settings.engine === "podman"
-      ? "remote-docker"
-      : connection.settings.engine
-    : choosingDefault
-      ? deploymentDefault
-      : status.kind;
+  const selectedKind = choosingHost
+    ? "desktop"
+    : connection
+      ? computerConnectionKind(connection.settings)
+      : choosingDefault
+        ? deploymentDefault
+        : currentKind;
   const selectedFacts = selectedKind ? computerKindFacts(selectedKind) : null;
-  const savedConnection = connections.find((entry) => entry.id === savedConnectionId);
-  const sourceLabel = savedConnection?.name ?? engineLabel(status.kind);
-  const destinationLabel = choosingDefault ? defaultOption : (connection?.name ?? "");
+  const sourceLabel = savedConnection?.name ?? engineLabel(currentKind ?? "");
+  const destinationLabel = choosingHost
+    ? t`This computer`
+    : choosingDefault
+      ? defaultOption
+      : (connection?.name ?? "");
+  const eligibleConnections = connections.filter((entry) =>
+    runtimeSupportsLocation(runtimeKind, { kind: computerConnectionKind(entry.settings) }),
+  );
+  const offerHost =
+    !hostComputer && hostConnected && runtimeSupportsLocation(runtimeKind, { kind: "desktop" });
+  const selectionSupported =
+    runtimeSupportsLocation(runtimeKind, { kind: selectedKind }) &&
+    (!choosingHost || hostConnected);
+  const runtime = runtimeNames[runtimeKind];
+  const unavailableLocations =
+    eligibleConnections.length !== connections.length ||
+    !runtimeSupportsLocation(runtimeKind, { kind: "docker" });
   async function save() {
     setPending(true);
     setError("");
     try {
       await rpc.computer.configure({
         botId,
-        ...(hostComputer ? {} : { imageProfile: profile }),
+        ...(selectedKind === "desktop" || hostComputer ? {} : { imageProfile: profile }),
         ...(selection === savedConnectionId
           ? {}
-          : { connectionId: choosingDefault ? null : selection }),
+          : choosingHost
+            ? { destination: "host" as const }
+            : { connectionId: choosingDefault ? null : selection }),
         confirmed: true,
       });
       setConfirm(false);
@@ -207,7 +258,7 @@ export function ComputerProfile({
       setPending(false);
     }
   }
-  const label = engineLabel(status.kind);
+  const label = engineLabel(currentKind ?? "");
   return (
     <section className="space-y-3 rounded-xl border border-border p-4">
       {!choicesOnly ? (
@@ -219,6 +270,7 @@ export function ComputerProfile({
           <RuntimeSummary
             status={status}
             locationName={hostComputer ? undefined : savedConnection?.name}
+            connectionSettings={savedConnection?.settings}
           />
         </>
       ) : null}
@@ -238,7 +290,10 @@ export function ComputerProfile({
           </Button>
         </div>
       ) : null}
-      {!status.connectionId && !offerDeploymentDefault && connections.length === 0 ? null : (
+      {!status.connectionId &&
+      !offerDeploymentDefault &&
+      !offerHost &&
+      eligibleConnections.length === 0 ? null : (
         <label htmlFor={`connection-${botId}`} className="block space-y-1">
           <span>
             <Trans>Connection</Trans>
@@ -256,7 +311,10 @@ export function ComputerProfile({
             {offerDeploymentDefault ? (
               <NativeSelectOption value={DEPLOYMENT_DEFAULT}>{defaultOption}</NativeSelectOption>
             ) : null}
-            {connections
+            {offerHost ? (
+              <NativeSelectOption value={HOST_COMPUTER}>{t`This computer`}</NativeSelectOption>
+            ) : null}
+            {eligibleConnections
               .filter((entry) => entry.id !== savedConnectionId)
               .map((entry) => (
                 <NativeSelectOption key={entry.id} value={entry.id}>
@@ -266,7 +324,13 @@ export function ComputerProfile({
           </NativeSelect>
         </label>
       )}
-      {supported && !hostComputer ? (
+      {unavailableLocations ? (
+        <p className="text-sm text-muted-foreground">{t`Other locations are unavailable for ${runtime}. Choose This computer.`}</p>
+      ) : null}
+      {unavailableLocations && !hostComputer && !hostConnected ? (
+        <p className="text-sm text-muted-foreground">{t`Connect the host service to choose This computer.`}</p>
+      ) : null}
+      {supported && selectedKind !== "desktop" && selectionSupported ? (
         <>
           <label htmlFor={`profile-${botId}`} className="block space-y-1">
             <span>
@@ -303,6 +367,7 @@ export function ComputerProfile({
         disabled={
           pending ||
           !selectedFacts ||
+          !selectionSupported ||
           status.state === "booting" ||
           (profile === (status.imageProfile ?? "base") && selection === savedConnectionId)
         }
