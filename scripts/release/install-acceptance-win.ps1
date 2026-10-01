@@ -3,6 +3,11 @@ param([Parameter(Mandatory = $true, Position = 0)][string]$Artifact)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 if (-not $IsWindows) { throw 'FAIL Windows runner required' }
+$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$principal = [Security.Principal.WindowsPrincipal]::new($identity)
+if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    throw 'FAIL Install acceptance must run without administrative permissions'
+}
 $installer = (Resolve-Path -LiteralPath $Artifact).Path
 $work = Join-Path ([IO.Path]::GetTempPath()) ('ardur-install-' + [Guid]::NewGuid().ToString('N'))
 $logs = if ($env:ARDUR_INSTALL_LOG_DIR) { $env:ARDUR_INSTALL_LOG_DIR } else { Join-Path $work 'logs' }
@@ -67,6 +72,7 @@ function Invoke-OwnedProcess([string]$File, [string]$Arguments, [string]$Label, 
 }
 
 try {
+    Summary 'PASS unprivileged Windows execution token'
     # The NSIS installer/uninstaller can stop an existing app itself. Refuse before invoking it.
     if (Get-Process -Name Ardur -ErrorAction SilentlyContinue) { throw 'An existing Ardur process is running; use a clean machine' }
     $keys = @('HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',

@@ -16,6 +16,16 @@ const workflow = builder("js-yaml").load(
 );
 
 describe("non-publishing desktop dispatch", () => {
+  it("builds and accepts x64 macOS natively without extending readiness deadlines", () => {
+    for (const job of [workflow.jobs.build, workflow.jobs["install-acceptance"]]) {
+      expect(
+        job.strategy.matrix.include.find(
+          (entry: { platform: string; arch: string }) =>
+            entry.platform === "mac" && entry.arch === "x64",
+        ).os,
+      ).toBe("macos-15-intel");
+    }
+  });
   it("defaults to no publication and uses the selected ref, not an input tag", () => {
     const inputs = workflow.on.workflow_dispatch.inputs;
     expect(inputs.publish).toMatchObject({ type: "boolean", default: false, required: false });

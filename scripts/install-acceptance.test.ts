@@ -7,12 +7,18 @@ import { describe, expect, it } from "vitest";
 const mac = new URL("./release/install-acceptance-mac.sh", import.meta.url);
 
 describe("macOS install verdict", () => {
-  it("installs the standalone local cask without a fully-qualified tap trust call", async () => {
+  it("installs a fully qualified cask from an owned temporary tap", async () => {
     const script = await readFile(mac, "utf8");
     expect(script).not.toContain("brew trust --cask");
     expect(script).not.toContain("brew install --cask --no-quarantine");
     expect(script).toContain('xattr -dr com.apple.quarantine "$work/BrewApplications/Ardur.app"');
-    expect(script).toContain('"$work/tap/Casks/ardur.rb"');
+    expect(script).toContain('brew tap-new --no-git "$tap_name"');
+    expect(script).toContain('"$tap_dir/Casks/ardur.rb"');
+    expect(script).toContain('brew untap "$tap_name"');
+    expect(script).toContain(
+      'brew install --cask --appdir="$work/BrewApplications" "$tap_name/ardur"',
+    );
+    expect(script).not.toContain("ArdurAI/tap");
     expect(script).toContain('cp -R "$profile/logs"');
   });
 
@@ -85,6 +91,25 @@ describe("macOS install verdict", () => {
 describe("macOS install launch verdict", () => {
   it.each([
     [0, "ARDUR_INSTALL_SMOKE_PASS\n", "", true],
+    [
+      0,
+      "ARDUR_INSTALL_SMOKE_PASS\n",
+      "UnhandledPromiseRejectionWarning: TypeError: done is not a function\n",
+      true,
+    ],
+    [
+      1,
+      "ARDUR_INSTALL_SMOKE_PASS\n",
+      "UnhandledPromiseRejectionWarning: TypeError: done is not a function\n",
+      false,
+    ],
+    [
+      0,
+      "ARDUR_INSTALL_SMOKE_PASS\n",
+      "UnhandledPromiseRejectionWarning: TypeError: another error\n",
+      false,
+    ],
+    [0, "", "UnhandledPromiseRejectionWarning: TypeError: done is not a function\n", false],
     [0, "", "", false],
     [1, "ARDUR_INSTALL_SMOKE_PASS\n", "", false],
     [0, "ARDUR_INSTALL_SMOKE_PASS\n", "FATAL: renderer crashed\n", false],

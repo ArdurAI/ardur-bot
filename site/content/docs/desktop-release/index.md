@@ -222,16 +222,17 @@ are macOS arm64 and x64, Linux x64, and Windows x64. Linux arm64 retains the bui
 optional status: if it fails installation, its installers and update feed are omitted, not published.
 An evidence waiver cannot bypass installation checks.
 
-- **macOS (`macos-15`)**: quarantine a copy of the DMG as a Safari download, mount it, copy the
+- **macOS (`macos-15` arm64, `macos-15-intel` x64)**: quarantine a copy of the DMG as a Safari download, mount it, copy the
   app into temporary Applications, and verify the quarantine attribute. The bundle must pass
   deep, strict codesign verification. Gatekeeper must accept a signed, notarized build; an
   ad-hoc preview must return `rejected` (some macOS versions omit the source line), never damaged or
   missing resources. The signing decision comes from the build's `install-build-mac-<arch>.json`.
   Remove quarantine to model Open Anyway, then open the installed bundle. Render the shipped
-  cask template with the local DMG URL and real checksum, install it into temporary Applications,
+  cask template with the local DMG URL and real checksum into a unique temporary local tap,
+  install its fully qualified cask into temporary Applications, remove that copy's quarantine,
   run the Homebrew `ardur` wrapper, and uninstall. The wrapper executes the bundle's real path
-  rather than a symlink, so Electron can locate its helpers. No real tap is changed.
-  The x64 lane uses Rosetta if its runner is Apple silicon; this is not native Intel hardware evidence.
+  rather than a symlink, so Electron can locate its helpers. Cleanup removes the temporary tap;
+  no existing tap is changed. Both CI architectures execute natively, with unchanged readiness budgets.
 - **Linux (`ubuntu-24.04`, native ARM runner when available)**: each format runs in its own
   fresh `ubuntu:24.04` container. Install the deb with apt, including dependencies; install the
   AppImage as an executable. Launch as a non-root user under Xvfb and a session bus. Probe user
@@ -242,6 +243,9 @@ An evidence waiver cannot bypass installation checks.
   reject crashes/nonzero exits or blocking dialogs, and run the generated uninstaller silently.
   Existing Ardur processes or registered installations cause a hand-run check to refuse instead
   of replacing them. Windows desktop acceptance runs on the fresh runner, not in a container.
+  CI uses a unique limited-token interactive scheduled task because PostgreSQL refuses an
+  administrative token. The acceptance script verifies it is not elevated before installation;
+  the CI wrapper checks the task result and removes only its own task. Manual runs must also be non-elevated.
 
 Every launch sets `ARDUR_INSTALL_SMOKE=1`, disables update discovery and uses a fresh
 `ARDURBOT_USER_DATA_DIR`. The app sets Electron's user-data path before requesting the single-instance
@@ -255,6 +259,9 @@ through runtime installation, service startup, health, window loading, screensho
 cleanup. A timeout names the current stage, including a stalled quit. The script's launch bound is
 180 seconds. This is stricter
 than merely surviving 15 seconds. Crash lines in either output stream fail acceptance.
+The pinned embedded-postgres dependency's exit hook emits `TypeError: done is not a function`.
+The Mac predicate records that exact rejection as a known warning only after a success marker,
+zero exit and clean crash checks; other rejection messages still fail. The original stderr is retained.
 Normal startup is unchanged; no hosted service or model credentials are needed.
 
 Successful jobs upload hash-bound `install-approved-*` receipts. Before performance gating,

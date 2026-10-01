@@ -110,7 +110,7 @@ jobs:
       matrix:
         include:
           - { os: macos-15, platform: mac, arch: arm64, nodePlatform: darwin }
-          - { os: macos-15, platform: mac, arch: x64, nodePlatform: darwin }
+          - { os: macos-15-intel, platform: mac, arch: x64, nodePlatform: darwin }
           - { os: ubuntu-24.04, platform: linux, arch: x64, nodePlatform: linux }
           - { os: ubuntu-24.04-arm, platform: linux, arch: arm64, optional: true, nodePlatform: linux }
           - { os: windows-2022, platform: win, arch: x64, nodePlatform: win32 }
@@ -218,7 +218,7 @@ jobs:
       matrix:
         include:
           - { os: macos-15, platform: mac, arch: arm64 }
-          - { os: macos-15, platform: mac, arch: x64 }
+          - { os: macos-15-intel, platform: mac, arch: x64 }
           - { os: ubuntu-24.04, platform: linux, arch: x64, debArch: amd64, imageArch: x86_64 }
           - { os: ubuntu-24.04-arm, platform: linux, arch: arm64, debArch: arm64, imageArch: arm64, optional: true }
           - { os: windows-2022, platform: win, arch: x64 }
@@ -265,7 +265,7 @@ jobs:
         shell: pwsh
         env:
           ARDUR_INSTALL_LOG_DIR: ${{ runner.temp }}/install-acceptance
-        run: ./scripts/release/install-acceptance-win.ps1 installers/ardur-${{ needs.validate.outputs.version }}-win-${{ matrix.arch }}.exe
+        run: ./scripts/release/install-acceptance-win-ci.ps1 installers/ardur-${{ needs.validate.outputs.version }}-win-${{ matrix.arch }}.exe
       - name: Record accepted installer hashes
         shell: bash
         run: node scripts/release/install-acceptance-record.mjs record installers accepted/${{ matrix.platform }}-${{ matrix.arch }}.json ${{ matrix.platform }} ${{ matrix.arch }} ${{ needs.validate.outputs.sha }} ${{ needs.validate.outputs.version }}

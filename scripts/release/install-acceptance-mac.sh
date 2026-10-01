@@ -12,6 +12,8 @@ failed=0
 pid=''
 mounted=0
 brew_owned=0
+tap_owned=0
+tap_name="ardur-acceptance/install-$(basename "$work" | tr '[:upper:].' '[:lower:]-')"
 export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ANALYTICS=1
 check() {
   local label="$1"; shift
@@ -23,8 +25,15 @@ cleanup() {
   trap - EXIT
   if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then kill -TERM "$pid"; wait "$pid" || true; fi
   if [[ "$brew_owned" == 1 ]]; then
-    if ! brew uninstall --cask ardur >> "$logs/brew-uninstall.log" 2>&1; then
+    if brew list --cask "$tap_name/ardur" >/dev/null 2>&1 && ! brew uninstall --cask "$tap_name/ardur" >> "$logs/brew-uninstall.log" 2>&1; then
       printf 'FAIL Homebrew cleanup\n' | tee -a "$logs/summary.log"; status=1
+    fi
+  fi
+  if [[ "$tap_owned" == 1 ]]; then
+    if ! brew untap "$tap_name" >> "$logs/brew-untap.log" 2>&1; then
+      printf 'FAIL Homebrew temporary tap cleanup\n' | tee -a "$logs/summary.log"; status=1
+    else
+      printf 'PASS Homebrew temporary tap cleanup\n' | tee -a "$logs/summary.log"
     fi
   fi
   if [[ "$mounted" == 1 ]]; then hdiutil detach "$work/mount" -quiet || status=1; fi
@@ -124,7 +133,15 @@ smoke() {
   wait "$pid" || status=$?
   pid=''
   [[ "$status" == 0 ]] && grep -qx 'ARDUR_INSTALL_SMOKE_PASS' "$logs/$label.stdout.log" &&
-    ! grep -Eiq 'Unable to|damaged|FATAL|crashed|Uncaught Exception' "$logs/$label.stderr.log" "$logs/$label.stdout.log"
+    ! grep -Eiq 'Unable to|damaged|FATAL|crashed|Uncaught Exception' "$logs/$label.stderr.log" "$logs/$label.stdout.log" || return 1
+  # The pinned dependency calls its exit hook's missing done() callback after stop().
+  # Keep its diagnostics, but never waive a nonzero exit or another rejection.
+  if grep -E 'UnhandledPromiseRejectionWarning:' "$logs/$label.stderr.log" "$logs/$label.stdout.log" |
+    grep -Ev 'UnhandledPromiseRejectionWarning: TypeError: done is not a function$|UnhandledPromiseRejectionWarning: Unhandled promise rejection\.'; then return 1; fi
+  if grep -Eq 'UnhandledPromiseRejectionWarning: TypeError: done is not a function$' "$logs/$label.stderr.log"; then
+    printf 'KNOWN WARNING embedded-postgres exit hook: TypeError: done is not a function (clean exit)\n' | tee -a "$logs/summary.log"
+  fi
+  return 0
 }
 check 'installed bundle opens, health answers, clean exit' smoke bundle "$binary"
 if [[ "$artifact" == *.app ]]; then
@@ -135,9 +152,19 @@ if ! command -v brew >/dev/null || brew list --cask ardur >/dev/null 2>&1 || [[ 
   check 'Homebrew available without an existing Ardur installation' false
   exit 1
 fi
-mkdir -p "$work/tap/Casks" "$work/BrewApplications"
+[[ "$failed" == 0 ]] || exit 1
+# Own only a unique local tap; never replace or remove a pre-existing runner tap.
+if brew tap | grep -Fxq "$tap_name"; then
+  check 'Homebrew temporary tap is unused' false
+  exit 1
+fi
+check 'Homebrew isolated temporary tap' brew tap-new --no-git "$tap_name" > "$logs/brew-tap.log" 2>&1
+[[ "$failed" == 0 ]] || exit 1
+tap_owned=1
+tap_dir="$(brew --repository "$tap_name")"
+mkdir -p "$tap_dir/Casks" "$work/BrewApplications"
 # Render the shipped template using the release substitutions, retaining the real launcher.
-python3 - "$script_dir/../../homebrew/Casks/ardur.rb" "$work/tap/Casks/ardur.rb" "$work/input.dmg" "$app/Contents/Info.plist" "$signed" <<'PY'
+python3 - "$script_dir/../../homebrew/Casks/ardur.rb" "$tap_dir/Casks/ardur.rb" "$work/input.dmg" "$app/Contents/Info.plist" "$signed" <<'PY'
 import hashlib, pathlib, plistlib, re, sys
 source, output, dmg, info, signed = sys.argv[1:]
 version = plistlib.load(open(info, 'rb'))['CFBundleShortVersionString']
@@ -150,10 +177,9 @@ text = text.replace('@ARM64_SHA256@', sha).replace('@X64_SHA256@', sha)
 text = re.sub(r'    url "[^\n]+"', '    url "' + pathlib.Path(dmg).as_uri() + '"', text)
 pathlib.Path(output).write_text(text)
 PY
-# This file is outside Homebrew's taps; tap trust does not apply to local cask paths.
 # Mark ownership before install so a partially installed cask is removed on failure too.
 brew_owned=1
-check 'Homebrew local cask install' brew install --cask --appdir="$work/BrewApplications" "$work/tap/Casks/ardur.rb" > "$logs/brew-install.log" 2>&1
+check 'Homebrew local cask install' brew install --cask --appdir="$work/BrewApplications" "$tap_name/ardur" > "$logs/brew-install.log" 2>&1
 cat "$logs/brew-install.log"
 if [[ "$failed" == 0 ]]; then
   # New Homebrew versions removed --no-quarantine. The policy verdict was checked above;
@@ -161,6 +187,12 @@ if [[ "$failed" == 0 ]]; then
   check 'Homebrew installed-copy quarantine removal' xattr -dr com.apple.quarantine "$work/BrewApplications/Ardur.app"
   if [[ "$failed" == 0 ]]; then check 'Homebrew ardur wrapper opens, health answers, clean exit' smoke brew "$(brew --prefix)/bin/ardur"; fi
 fi
-check 'Homebrew silent cleanup' brew uninstall --cask ardur > "$logs/brew-uninstall.log" 2>&1
-if [[ "$failed" == 0 ]]; then brew_owned=0; fi
+if brew list --cask "$tap_name/ardur" >/dev/null 2>&1; then
+  if brew uninstall --cask "$tap_name/ardur" > "$logs/brew-uninstall.log" 2>&1; then
+    brew_owned=0
+    printf 'PASS Homebrew silent cleanup\n' | tee -a "$logs/summary.log"
+  else
+    check 'Homebrew silent cleanup' false
+  fi
+fi
 exit "$failed"

@@ -6,6 +6,16 @@ $tokens = $null
 $errors = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$tokens, [ref]$errors)
 if ($errors.Count) { throw ($errors | Out-String) }
+$ciScript = Join-Path $PSScriptRoot 'install-acceptance-win-ci.ps1'
+$ciAst = [Management.Automation.Language.Parser]::ParseFile($ciScript, [ref]$tokens, [ref]$errors)
+if ($errors.Count) { throw ($errors | Out-String) }
+$ciText = $ciAst.Extent.Text
+if ($ciText -notmatch '-LogonType Interactive -RunLevel Limited' -or $ciText -notmatch 'LastTaskResult') {
+    throw 'Unprivileged task must use a filtered interactive token and verify its result'
+}
+if ($ast.Extent.Text -notmatch 'IsInRole\(\[Security.Principal.WindowsBuiltInRole\]::Administrator\)') {
+    throw 'Acceptance must reject an administrative execution token'
+}
 $functions = $ast.FindAll({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Invoke-OwnedProcess' }, $true)
 if ($functions.Count -ne 1) { throw 'Process boundary missing' }
 . ([ScriptBlock]::Create($functions[0].Extent.Text))
@@ -29,7 +39,7 @@ try {
         if ($accepted -ne $case.Pass) { throw "Wrong verdict for fixture $index" }
         $index++
     }
-    Write-Host "PASS Windows process boundary: $index offline cases and script parsing"
+    Write-Host "PASS Windows process boundary: $index offline cases, both scripts parsed, filtered-token contract"
 } finally {
     Remove-Item -LiteralPath $work -Recurse -Force
 }
