@@ -7,7 +7,7 @@ import type {
   SandboxProvider,
 } from "@ardurbot/adapter-kit";
 import type { IntegrationResourceKind } from "@ardurbot/contracts";
-import { IntegrationManifestSchema, isLocalMcpHost } from "@ardurbot/contracts";
+import { computerRunsOnHost, IntegrationManifestSchema, isLocalMcpHost } from "@ardurbot/contracts";
 import { integrationToolKind } from "@ardurbot/core";
 import type { McpServer, PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { argumentSecrets, McpLogBuffer } from "@ardurbot/host-runtime/mcp-diagnostics";
@@ -192,7 +192,7 @@ export class McpConnector implements ConnectorProvider {
         userId: context.userId,
         archivedAt: null,
       },
-      select: { id: true, computer: { select: { kind: true } } },
+      select: { id: true, computer: { select: { kind: true, connectionId: true } } },
     });
     if (!bot) return [];
     // Tool definitions lead every request, so a fixed order keeps the prompt cache reusable.
@@ -206,7 +206,7 @@ export class McpConnector implements ConnectorProvider {
       },
     });
     const assignments = servers
-      .filter((server) => server.transport !== "host-cli" || bot.computer?.kind === "desktop")
+      .filter((server) => server.transport !== "host-cli" || computerRunsOnHost(bot.computer))
       .map((server) => ({
         ...(server.assignments[0] ?? {
           serverId: server.id,

@@ -1,5 +1,6 @@
 import type { AdapterContext, ConnectorRoute, SandboxProvider } from "@ardurbot/adapter-kit";
 import {
+  computerRunsOnHost,
   IntegrationManifestSchema,
   IntegrationResourceConstraintsSchema,
   notionResourceId,
@@ -93,15 +94,16 @@ export async function mcpGrantForBot(
       userId: context.userId,
       archivedAt: null,
     },
-    select: { id: true, computer: { select: { kind: true } } },
+    select: { id: true, computer: { select: { kind: true, connectionId: true } } },
   });
-  if (!bot || (assignment?.server.transport === "host-cli" && bot.computer?.kind !== "desktop"))
+  if (!bot || (assignment?.server.transport === "host-cli" && !computerRunsOnHost(bot.computer)))
     return null;
   if (assignment) return assignment;
   const server = await prisma.mcpServer.findFirst({
     where: { id: serverId, spaceId: context.spaceId, userId: context.userId, enabled: true },
   });
-  if (!server || (server.transport === "host-cli" && bot.computer?.kind !== "desktop")) return null;
+  if (!server || (server.transport === "host-cli" && !computerRunsOnHost(bot.computer)))
+    return null;
   return {
     id: null,
     serverId,

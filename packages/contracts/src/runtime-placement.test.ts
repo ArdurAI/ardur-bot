@@ -7,6 +7,7 @@ import {
 import { RuntimeKindSchema } from "./runtime-pins.js";
 import {
   computerExecutionKind,
+  computerRunsOnHost,
   RUNTIME_PLACEMENT_RULES,
   runtimeSupportsLocation,
 } from "./runtime-placement.js";
@@ -23,6 +24,11 @@ const locations = [
   { kind: "unknown" },
   {},
 ];
+it.each(locations)("grants host authority only to connectionless desktop: %j", (location) => {
+  expect(computerRunsOnHost(location)).toBe(
+    location.kind === "desktop" && !("connectionId" in location),
+  );
+});
 describe.each(RuntimeKindSchema.options)("%s placement", (runtime) => {
   it.each(locations)("admits only the supported concrete location: %j", (location) => {
     const kind = computerExecutionKind(location);
