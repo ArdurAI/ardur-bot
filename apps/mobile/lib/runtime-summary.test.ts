@@ -11,7 +11,12 @@ const request = vi.hoisted(() => vi.fn());
 const releaseInterrupted = vi.hoisted(() => vi.fn(async (_id: string) => {}));
 vi.mock("./computer-updates", () => ({ computerUpdates: { releaseInterrupted } }));
 vi.mock("./api", () => ({ rpc: request }));
-vi.mock("./i18n", () => ({ useI18n: () => ({ t: (text: string) => text }) }));
+vi.mock("./i18n", () => ({
+  useI18n: () => ({
+    t: (text: string, values?: Record<string, string>) =>
+      text.replace(/\{(\w+)\}/g, (match, key) => values?.[key] ?? match),
+  }),
+}));
 vi.mock("./focus-prompt", () => ({ allowFocusPrompt: vi.fn(), scheduleFocusPrompt: vi.fn() }));
 vi.mock("./native", () => ({
   useMobileTokens: () => ({ foreground: "black", mutedForeground: "gray", destructive: "red" }),
@@ -98,6 +103,30 @@ it.each(["host", "sandbox"] as const)(
     expect(buttons.map((button) => button.getAttribute("aria-pressed"))).toEqual(
       value === "host" ? ["true", "false"] : ["false", "true"],
     );
+  },
+);
+it.each(["codex-app-server", "claude-code", "antigravity", "hermes"] as const)(
+  "disables Sandbox for the phone's %s runtime",
+  async (runtimeKind) => {
+    await act(async () =>
+      root.render(
+        createElement(ComputerLocationPicker, {
+          value: "host",
+          hostAvailable: true,
+          sandboxAvailable: true,
+          runtimeKind,
+          onChange: vi.fn(),
+        }),
+      ),
+    );
+    expect(container.querySelector<HTMLButtonElement>('[aria-label="Sandbox"]')?.disabled).toBe(
+      true,
+    );
+    expect(
+      container.querySelector<HTMLButtonElement>('[aria-label="This computer"]')?.disabled,
+    ).toBe(false);
+    expect(container.textContent).toContain("Other locations are unavailable for");
+    expect(container.textContent).not.toContain("{runtime}");
   },
 );
 it("keeps the unavailable host visible with its reason on phone", async () => {

@@ -1,8 +1,40 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "./client.js";
 import { provisionMessagingIdentity } from "./messaging.js";
+import * as reposModule from "./repos.js";
 
 describe("provisionMessagingIdentity", () => {
+  it("passes the resolved provider and gives a synthetic starter bot a dedicated server-default location", async () => {
+    const createBot = vi.fn(async () => ({ id: "starter" }));
+    const spy = vi
+      .spyOn(reposModule, "createRepos")
+      .mockReturnValue({ createBot } as unknown as ReturnType<typeof reposModule.createRepos>);
+    const prisma = {
+      messagingIdentity: { findUnique: vi.fn(async () => null), create: vi.fn() },
+      user: {
+        findUnique: vi.fn(async () => ({ id: "synthetic", email: "synthetic@example.test" })),
+      },
+      spaceMember: { findFirst: vi.fn(async () => ({ spaceId: "space" })) },
+      bot: { findFirst: vi.fn(async () => null) },
+      thread: { findFirst: vi.fn(async () => ({ id: "thread" })) },
+    };
+    try {
+      await provisionMessagingIdentity(
+        prisma as unknown as PrismaClient,
+        { provider: "chat", address: "sender" },
+        { signupsEnabled: undefined, signupAllowlist: undefined },
+        { sandboxProvider: "fake" },
+      );
+      expect(spy).toHaveBeenCalledWith(prisma, { sandboxProvider: "fake" });
+      expect(createBot).toHaveBeenCalledWith(
+        expect.objectContaining({ isDeploymentOwner: false }),
+        expect.objectContaining({ computerMode: "dedicated" }),
+      );
+      expect(createBot.mock.calls[0]?.[1]).not.toHaveProperty("computerLocation");
+    } finally {
+      spy.mockRestore();
+    }
+  });
   it("returns the existing identity without creating anything when already provisioned", async () => {
     const existing = {
       id: "mi-1",

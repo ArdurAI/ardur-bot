@@ -1,5 +1,9 @@
-import type { NewBotLocation } from "@ardurbot/contracts";
-import { COMPUTER_BOUNDARY_MESSAGES } from "@ardurbot/contracts";
+import type { NewBotLocation, RuntimeKind } from "@ardurbot/contracts";
+import {
+  COMPUTER_BOUNDARY_MESSAGES,
+  runtimeNames,
+  runtimeSupportsLocation,
+} from "@ardurbot/contracts";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useI18n } from "../lib/i18n";
 import { useMobileTokens } from "../lib/native";
@@ -10,6 +14,7 @@ export function ComputerLocationPicker({
   hostAvailable,
   sandboxAvailable,
   teamLocation,
+  runtimeKind = "pi",
   disabled = false,
 }: {
   value: NewBotLocation;
@@ -17,10 +22,13 @@ export function ComputerLocationPicker({
   hostAvailable: boolean;
   sandboxAvailable: boolean;
   teamLocation?: NewBotLocation;
+  runtimeKind?: RuntimeKind;
   disabled?: boolean;
 }) {
   const { t } = useI18n();
   const tokens = useMobileTokens();
+  const runtime = runtimeNames[runtimeKind];
+  const supportsSandbox = runtimeSupportsLocation(runtimeKind, { kind: "docker" });
   return (
     <View testID="computer-location-picker" style={styles.row}>
       {(["host", "sandbox"] as const).map((location) => {
@@ -31,9 +39,11 @@ export function ComputerLocationPicker({
               ? !hostAvailable
                 ? "Connect the host service to choose This computer."
                 : null
-              : !sandboxAvailable
-                ? "Set up a container for isolated work."
-                : null;
+              : !supportsSandbox
+                ? "Other locations are unavailable for {runtime}. Choose This computer."
+                : !sandboxAvailable
+                  ? "Set up a container for isolated work."
+                  : null;
         return (
           <View key={location} style={styles.option}>
             <Pressable
@@ -60,7 +70,9 @@ export function ComputerLocationPicker({
                 {t(COMPUTER_BOUNDARY_MESSAGES[location === "host" ? "host" : "container"])}
               </Text>
             </Pressable>
-            {reason ? <Text style={{ color: tokens.mutedForeground }}>{t(reason)}</Text> : null}
+            {reason ? (
+              <Text style={{ color: tokens.mutedForeground }}>{t(reason, { runtime })}</Text>
+            ) : null}
           </View>
         );
       })}

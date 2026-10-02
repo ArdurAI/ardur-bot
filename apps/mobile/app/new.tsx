@@ -220,6 +220,7 @@ export default function NewBot() {
             hostAvailable={hostAvailable}
             sandboxAvailable={sandboxAvailable}
             teamLocation={teamComputer?.location}
+            runtimeKind="pi"
             disabled={!locationReady || pending}
           />
           <ComputerModePicker value={computerMode} onChange={setComputerMode} />

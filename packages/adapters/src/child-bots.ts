@@ -44,6 +44,7 @@ export async function spawnBot(
   deps: {
     prisma: PrismaClient;
     jobs: JobPublisher;
+    sandbox?: Pick<SandboxProvider, "describe">;
   },
   input: {
     spawnedBy: {
@@ -74,7 +75,9 @@ export async function spawnBot(
   let duplicate = false;
   let created: Pick<Bot, "id" | "name" | "title" | "threadId">;
   try {
-    created = await createRepos(deps.prisma).createBot(actor, {
+    created = await createRepos(deps.prisma, {
+      ...(deps.sandbox ? { sandboxProvider: deps.sandbox.describe().kind ?? "none" } : {}),
+    }).createBot(actor, {
       name,
       title: (input.title ?? "").trim(),
       description: "",

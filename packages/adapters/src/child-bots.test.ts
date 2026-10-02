@@ -110,6 +110,7 @@ describe("spawned bot creation", () => {
       {
         prisma: {} as PrismaClient,
         jobs: { enqueue: vi.fn() } as unknown as JobPublisher,
+        sandbox: { describe: () => ({ kind: "desktop" }) } as Pick<SandboxProvider, "describe">,
       },
       {
         spawnedBy: {
@@ -125,6 +126,7 @@ describe("spawned bot creation", () => {
       },
     );
 
+    expect(createReposSpy).toHaveBeenCalledWith({}, { sandboxProvider: "desktop" });
     expect(createBot).toHaveBeenCalledWith(
       expect.objectContaining({ userId: "user-1", spaceId: "workspace-1" }),
       expect.objectContaining({

@@ -6612,7 +6612,7 @@ async function computerStatus(
   actor: Actor,
   botId: string,
 ): Promise<ComputerStatus> {
-  const repos = createRepos(deps.prisma);
+  const repos = createRepos(deps.prisma, { sandboxProvider: deps.env.sandboxProvider });
   let bot = await repos.getBot(actor, botId);
   if (await expireStaleComputerControl(deps, bot.computer)) {
     bot = await repos.getBot(actor, botId);
@@ -6635,7 +6635,7 @@ async function runComputerReplace(
   mode: "recover" | "reset" | "update",
   operationId: string,
 ): Promise<ComputerStatus> {
-  const repos = createRepos(deps.prisma);
+  const repos = createRepos(deps.prisma, { sandboxProvider: deps.env.sandboxProvider });
   const bot = await repos.getBot(context.actor, botId);
   if (!bot.computer) throw new IsolationError();
   if (mode === "update" && !computerSupportsUpdate(bot.computer.kind)) {
