@@ -6653,10 +6653,6 @@ msgstr "टीम संदेश रोकें"
 msgid "Paused"
 msgstr "रुका हुआ"
 
-#: src/lib/computer-state-labels.ts
-msgid "Paused for an update"
-msgstr "अपडेट के लिए रुका हुआ"
-
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Permission denied on the socket"
 msgstr "सॉकेट की अनुमति नहीं है"
@@ -7087,26 +7083,6 @@ msgstr ""
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Recovery restores the last saved workspace. Unsaved work may be lost."
 msgstr ""
-
-#: src/components/ComputerUpdateProgress.tsx
-msgid "The computer stopped before its workspace could be saved."
-msgstr "कार्यस्थान सहेजे जाने से पहले कंप्यूटर रुक गया।"
-
-#: src/components/ComputerUpdateProgress.tsx
-msgid "The computer or its workspace could not be found."
-msgstr "कंप्यूटर या उसका कार्यस्थान नहीं मिला।"
-
-#: src/components/ComputerUpdateProgress.tsx
-msgid "The computer's engine could not be reached to save its workspace."
-msgstr "कार्यस्थान सहेजने के लिए कंप्यूटर के इंजन से संपर्क नहीं हो सका।"
-
-#: src/components/ComputerUpdateProgress.tsx
-msgid "The workspace is too large to save."
-msgstr "कार्यस्थान सहेजने के लिए बहुत बड़ा है।"
-
-#: src/components/ComputerUpdateProgress.tsx
-msgid "The workspace could not be saved."
-msgstr "कार्यस्थान सहेजा नहीं जा सका।"
 
 #: src/pages/LearningCurator.tsx
 msgid "Recovery skill"
@@ -7883,6 +7859,7 @@ msgid "Saved. Rotate to reveal."
 msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
+#: src/lib/computer-state-labels.ts
 msgid "Saving your workspace"
 msgstr "आपका कार्यक्षेत्र सहेजा जा रहा है"
 
@@ -8842,6 +8819,18 @@ msgstr ""
 msgid "The computer is busy. Wait for it to finish."
 msgstr "कंप्यूटर व्यस्त है। इसके पूरा होने तक प्रतीक्षा करें।"
 
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer or its workspace could not be found."
+msgstr "कंप्यूटर या उसका कार्यस्थान नहीं मिला।"
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer stopped before its workspace could be saved."
+msgstr "कार्यस्थान सहेजे जाने से पहले कंप्यूटर रुक गया।"
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer's engine could not be reached to save its workspace."
+msgstr "कार्यस्थान सहेजने के लिए कंप्यूटर के इंजन से संपर्क नहीं हो सका।"
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr ""
@@ -8893,6 +8882,14 @@ msgstr ""
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "The service may use its own embedding providers. Check its settings before saving private documents."
 msgstr ""
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The workspace could not be saved."
+msgstr "कार्यस्थान सहेजा नहीं जा सका।"
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The workspace is too large to save."
+msgstr "कार्यस्थान सहेजने के लिए बहुत बड़ा है।"
 
 #: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx

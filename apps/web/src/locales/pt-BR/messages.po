@@ -6653,10 +6653,6 @@ msgstr "Pausar mensagens da equipe"
 msgid "Paused"
 msgstr "Pausado"
 
-#: src/lib/computer-state-labels.ts
-msgid "Paused for an update"
-msgstr "Pausado para uma atualização"
-
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Permission denied on the socket"
 msgstr "Permissão negada no socket"
@@ -7087,26 +7083,6 @@ msgstr ""
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Recovery restores the last saved workspace. Unsaved work may be lost."
 msgstr ""
-
-#: src/components/ComputerUpdateProgress.tsx
-msgid "The computer stopped before its workspace could be saved."
-msgstr "O computador parou antes que seu espaço de trabalho pudesse ser salvo."
-
-#: src/components/ComputerUpdateProgress.tsx
-msgid "The computer or its workspace could not be found."
-msgstr "O computador ou seu espaço de trabalho não foi encontrado."
-
-#: src/components/ComputerUpdateProgress.tsx
-msgid "The computer's engine could not be reached to save its workspace."
-msgstr "Não foi possível acessar o mecanismo do computador para salvar seu espaço de trabalho."
-
-#: src/components/ComputerUpdateProgress.tsx
-msgid "The workspace is too large to save."
-msgstr "O espaço de trabalho é grande demais para ser salvo."
-
-#: src/components/ComputerUpdateProgress.tsx
-msgid "The workspace could not be saved."
-msgstr "Não foi possível salvar o espaço de trabalho."
 
 #: src/pages/LearningCurator.tsx
 msgid "Recovery skill"
@@ -7883,6 +7859,7 @@ msgid "Saved. Rotate to reveal."
 msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
+#: src/lib/computer-state-labels.ts
 msgid "Saving your workspace"
 msgstr "Salvando seu espaço de trabalho"
 
@@ -8842,6 +8819,18 @@ msgstr ""
 msgid "The computer is busy. Wait for it to finish."
 msgstr "O computador está ocupado. Aguarde até ele terminar."
 
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer or its workspace could not be found."
+msgstr "O computador ou seu espaço de trabalho não foi encontrado."
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer stopped before its workspace could be saved."
+msgstr "O computador parou antes que seu espaço de trabalho pudesse ser salvo."
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer's engine could not be reached to save its workspace."
+msgstr "Não foi possível acessar o mecanismo do computador para salvar seu espaço de trabalho."
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr ""
@@ -8893,6 +8882,14 @@ msgstr ""
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "The service may use its own embedding providers. Check its settings before saving private documents."
 msgstr ""
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The workspace could not be saved."
+msgstr "Não foi possível salvar o espaço de trabalho."
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The workspace is too large to save."
+msgstr "O espaço de trabalho é grande demais para ser salvo."
 
 #: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx
