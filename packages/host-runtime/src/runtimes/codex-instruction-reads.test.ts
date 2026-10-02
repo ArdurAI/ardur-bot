@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  codexBaseInstructions,
   INSTRUCTION_CHANGE_SLACK_MS,
   loadProjectInstructions,
   trustedInstructionSources,
@@ -298,5 +299,29 @@ describe("what Codex says it loaded", () => {
     const missing = path.join(await scratch(), "gone.md");
     for (const sources of [[missing], ["relative.md"], [7], "AGENTS.md", {}])
       expect(await trustedInstructionSources(sources, check([], [], later))).toBe(false);
+  });
+});
+
+describe("base instructions", () => {
+  it("tells Codex that the Ardur tools are the way to read, write and run, before the bot's own text", () => {
+    const text = codexBaseInstructions("Be brief.", "");
+    expect(text.startsWith("Your Codex sandbox is read-only and offline on purpose.")).toBe(true);
+    expect(text).toContain("read_file, write_file, shell");
+    expect(text.endsWith("Be brief.")).toBe(true);
+    expect(text).not.toContain("Project instructions");
+  });
+
+  it("keeps the project instructions after the bot's text under their heading", () => {
+    const text = codexBaseInstructions("Be brief.", "root rules");
+    expect(text.split("\n\n")).toEqual([
+      expect.stringContaining("Ardur tools"),
+      "Be brief.",
+      "Project instructions (from the folder's instruction files):",
+      "root rules",
+    ]);
+  });
+
+  it("leaves the note out of a controlled comparison, which offers no Ardur tools", () => {
+    expect(codexBaseInstructions("Be brief.", "", true)).toBe("Be brief.");
   });
 });

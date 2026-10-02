@@ -179,6 +179,26 @@ const INSTRUCTION_FILENAMES = ["AGENTS.override.md", "AGENTS.md"];
 const INSTRUCTION_BYTES_DEFAULT = 32 * 1024;
 const INSTRUCTION_BYTES_LIMIT = 256 * 1024;
 const PROJECT_INSTRUCTIONS_HEADING = "Project instructions (from the folder's instruction files):";
+// Codex's own session is read-only and offline by design (the ardur-read profile). Without this
+// sentence Codex reads that sandbox as a rule against changing anything and refuses to use the
+// Ardur tools that are the intended way to read, write and run commands.
+const ARDUR_TOOLS_NOTE =
+  "Your Codex sandbox is read-only and offline on purpose. Read and write files and run commands through the Ardur tools (read_file, write_file, shell); using them is the intended way to work, not a bypass, and Ardur applies its own approvals.";
+export function codexBaseInstructions(
+  instructions: string,
+  projectText: string,
+  controlledComparison = false,
+): string {
+  // A controlled comparison offers no Ardur tools, so the note would be untrue there.
+  return [
+    controlledComparison ? "" : ARDUR_TOOLS_NOTE,
+    instructions,
+    projectText ? PROJECT_INSTRUCTIONS_HEADING : "",
+    projectText,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
 function plainNames(value: unknown, fallback: string[]): string[] {
   const names = Array.isArray(value)
     ? value.filter(
@@ -675,11 +695,11 @@ export class CodexAppServerRuntime implements AgentRuntime {
         modelProvider: "openai",
         cwd: folder,
         approvalPolicy: "on-request",
-        baseInstructions: project.text
-          ? [request.instructions, PROJECT_INSTRUCTIONS_HEADING, project.text]
-              .filter(Boolean)
-              .join("\n\n")
-          : request.instructions,
+        baseInstructions: codexBaseInstructions(
+          request.instructions,
+          project.text,
+          request.controlledComparison,
+        ),
         config: {
           // Codex opens no file for project instructions: a file it opens is a file it follows.
           project_doc_max_bytes: 0,
