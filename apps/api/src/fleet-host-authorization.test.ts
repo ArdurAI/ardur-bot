@@ -124,6 +124,28 @@ it("maintenance can prepare folders but cannot run arbitrary commands without a 
   }
 });
 
+it.each(["owned", "home", "connection", "member", "maintenance"])(
+  "binds workspace readiness to the existing maintenance grant: %s",
+  async (scenario) => {
+    const f = fixture();
+    f.prisma.run.findFirst.mockResolvedValue(null as never);
+    if (f.request.operation.op !== "computer.remote.call") throw new Error("fixture");
+    f.request.operation.action = { type: "workspace.ready" };
+    f.request.operation.maintenanceId = "move";
+    if (scenario === "home") f.request.operation.homeKey = "foreign";
+    if (scenario === "connection") f.request.operation.connectionId = "foreign";
+    if (scenario === "member") f.prisma.spaceMember.findFirst.mockResolvedValue(null as never);
+    if (scenario === "maintenance")
+      f.prisma.computerUpdate.findFirst.mockResolvedValue(null as never);
+    try {
+      await f.bridge.hub.request(f.request, f.worker);
+      expect(f.sent).toHaveLength(scenario === "owned" ? 1 : 0);
+    } finally {
+      f.bridge.hub.detach();
+    }
+  },
+);
+
 it.each([false, true])(
   "Kubernetes maintenance accepts confined file operations only: %s",
   async (confined) => {

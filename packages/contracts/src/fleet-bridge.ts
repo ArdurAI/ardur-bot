@@ -1,6 +1,16 @@
 import { z } from "zod";
 import { ComputerConnectionSettingsSchema } from "./computer-connections.js";
 import { ComputerProfileSchema } from "./computer-profiles.js";
+import { ComputerWorkspaceSaveFailureReasonSchema } from "./computer-workspace.js";
+
+export const RemoteWorkspaceSaveResultSchema = z.discriminatedUnion("ok", [
+  z.strictObject({ ok: z.literal(true) }),
+  z.strictObject({
+    ok: z.literal(false),
+    reason: ComputerWorkspaceSaveFailureReasonSchema,
+    engineFailureCategory: z.string().optional(),
+  }),
+]);
 
 const id = /* @__PURE__ */ (() =>
   z
@@ -39,6 +49,7 @@ export const RemoteComputerActionSchema = /* @__PURE__ */ (() =>
     }),
     z.strictObject({ type: z.literal("capacity") }),
     z.strictObject({ type: z.literal("test") }),
+    z.strictObject({ type: z.literal("workspace.ready") }),
     z.strictObject({
       type: z.literal("provision"),
       imageProfile: ComputerProfileSchema.default("base"),

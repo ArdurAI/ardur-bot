@@ -11,7 +11,9 @@ import type {
   TerminalProvider,
 } from "@ardurbot/adapter-kit";
 import type { ComputerConnectionSettings, RemoteComputerAction } from "@ardurbot/contracts";
+import { ComputerWorkspaceSaveError } from "@ardurbot/contracts";
 import { CapacitySnapshotSchema, unknownCapacity } from "@ardurbot/contracts/fleet";
+import { RemoteWorkspaceSaveResultSchema } from "@ardurbot/contracts/fleet-bridge";
 import { HOST_FILE_BYTES } from "@ardurbot/contracts/host-bridge";
 import {
   FLEET_LINUX_CAPABILITIES,
@@ -104,8 +106,8 @@ export class RemoteFleetSandbox implements SandboxProvider {
       capabilities: FLEET_LINUX_CAPABILITIES,
     };
   }
-  private request(homeKey: string, action: RemoteComputerAction, context: AdapterContext) {
-    return this.client.request(
+  private async *request(homeKey: string, action: RemoteComputerAction, context: AdapterContext) {
+    for await (const frame of this.client.request(
       {
         op: "computer.remote.call",
         homeKey,
@@ -115,7 +117,17 @@ export class RemoteFleetSandbox implements SandboxProvider {
         ...(context.runId ? {} : { maintenanceId: context.operationId }),
       },
       context,
-    );
+    )) {
+      if (
+        frame.channel === "result" &&
+        (action.type === "workspace.ready" || action.type === "export")
+      ) {
+        const result = RemoteWorkspaceSaveResultSchema.parse(frame.data);
+        if (!result.ok)
+          throw new ComputerWorkspaceSaveError(result.reason, result.engineFailureCategory);
+      }
+      yield frame;
+    }
   }
   private async result(homeKey: string, action: RemoteComputerAction, context: AdapterContext) {
     let result: unknown;
@@ -160,6 +172,17 @@ export class RemoteFleetSandbox implements SandboxProvider {
   }
   async prepare(computer: ComputerRef, context: AdapterContext) {
     await this.result(computer.botId, { type: "prepare" }, context);
+  }
+  async ensureWorkspaceReady(computer: ComputerRef, context: AdapterContext) {
+    const hash = fleetComputerKey(context.spaceId, computer.botId);
+    const name = this.settings.engine === "ssh" ? `ssh:${hash}` : `ardurbot-${hash.slice(0, 40)}`;
+    if (computer.providerRef !== name)
+      throw new ComputerWorkspaceSaveError("save-failed", "command-failed");
+    const result = RemoteWorkspaceSaveResultSchema.safeParse(
+      await this.result(computer.botId, { type: "workspace.ready" }, context),
+    );
+    if (!result.success || !result.data.ok)
+      throw new ComputerWorkspaceSaveError("save-failed", "command-failed");
   }
   async resolveCommandCwd(computer: ComputerRef, cwd: string | undefined, context: AdapterContext) {
     return (await this.result(computer.botId, { type: "cwd", cwd }, context)) as string;
