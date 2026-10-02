@@ -47,7 +47,7 @@ export function restoreWorkspaceLayout(value: unknown): WorkspaceLayout {
   if (
     saved.version !== 1 ||
     !Array.isArray(saved.open) ||
-    saved.open.length > 6 ||
+    saved.open.length > 8 ||
     typeof saved.visible !== "boolean" ||
     typeof saved.expanded !== "boolean" ||
     !["right", "left", "bottom"].includes(String(saved.position)) ||

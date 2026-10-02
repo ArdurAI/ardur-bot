@@ -2,7 +2,7 @@ import type { ComputerStatus, WorkspaceContext, WorkspaceViewId } from "@ardurbo
 import { msg } from "@lingui/core/macro";
 import type { useLingui } from "@lingui/react/macro";
 import type { LucideIcon } from "lucide-react";
-import { ClipboardList, Folder, Monitor, Repeat, Terminal } from "lucide-react";
+import { ClipboardList, Code, FileDiff, Folder, Monitor, Repeat, Terminal } from "lucide-react";
 import type { ReactNode } from "react";
 import { createElement, lazy } from "react";
 import { terminalSupported } from "./terminal-controller";
@@ -17,12 +17,22 @@ const Files = lazy(() =>
 const Screen = lazy(() =>
   import("./WorkspaceScreen").then((module) => ({ default: module.WorkspaceScreen })),
 );
+const ChangesView = lazy(() =>
+  import("./WorkspaceChanges").then((module) => ({ default: module.WorkspaceChanges })),
+);
 const TerminalView = lazy(() =>
   import("./WorkspaceTerminal").then((module) => ({ default: module.WorkspaceTerminal })),
 );
 type ViewBodyProps = Pick<
   WorkspacePaneProps,
-  "bot" | "computer" | "routines" | "screen" | "terminal" | "onOpenRun"
+  | "bot"
+  | "computer"
+  | "routines"
+  | "screen"
+  | "terminal"
+  | "onOpenRun"
+  | "fileLocation"
+  | "changeLocation"
 > & {
   context: WorkspaceContext | null;
   visible: boolean;
@@ -63,8 +73,35 @@ export const workspaceViews = {
     icon: Folder,
     available: ({ context }) => Boolean(context?.computerId && context.files !== "unavailable"),
     unavailable: (t) => t(msg`Files are unavailable on this computer.`),
-    render: ({ bot, context, compact }) =>
-      context ? createElement(Files, { bot, context, compact }) : null,
+    render: ({ bot, context, compact, fileLocation }) =>
+      context ? createElement(Files, { bot, context, compact, location: fileLocation }) : null,
+  },
+  ide: {
+    id: "ide",
+    label: (t) => t(msg`IDE`),
+    icon: Code,
+    primary: true,
+    available: ({ context }) => Boolean(context?.rootId && context.files !== "unavailable"),
+    unavailable: (t) => t(msg`Files are unavailable on this computer.`),
+    render: ({ bot, context, compact, fileLocation }) =>
+      context ? createElement(Files, { bot, context, compact, location: fileLocation }) : null,
+  },
+  changes: {
+    id: "changes",
+    label: (t) => t(msg`Recorded changes`),
+    icon: FileDiff,
+    primary: true,
+    available: ({ context }) => Boolean(context?.rootId && context.files !== "unavailable"),
+    unavailable: (t) => t(msg`Files are unavailable on this computer.`),
+    render: ({ context, visible, changeLocation }) =>
+      context
+        ? createElement(ChangesView, {
+            key: `${context.botId}:${context.rootId}:${context.generation}`,
+            context,
+            visible,
+            location: changeLocation,
+          })
+        : null,
   },
   terminal: {
     id: "terminal",

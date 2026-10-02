@@ -7,12 +7,17 @@ describe("sanitizeMarkdownUrl", () => {
     expect(sanitizeMarkdownUrl("mailto:hello@example.com")).toBe("mailto:hello@example.com");
     expect(sanitizeMarkdownUrl("/docs", true)).toBe("/docs");
     expect(sanitizeMarkdownUrl("#section", true)).toBe("#section");
+    expect(sanitizeMarkdownUrl("notes.md#L2", true)).toBe("notes.md#L2");
+    expect(sanitizeMarkdownUrl("src/main.ts", true)).toBe("src/main.ts");
+    expect(sanitizeMarkdownUrl("notes.md#L2")).toBeUndefined();
   });
 
   it("rejects executable and embedded-data URLs", () => {
     expect(sanitizeMarkdownUrl("javascript:alert(1)", true)).toBeUndefined();
     expect(sanitizeMarkdownUrl("data:text/html,<script>alert(1)</script>", true)).toBeUndefined();
     expect(sanitizeMarkdownUrl("/docs")).toBeUndefined();
+    expect(sanitizeMarkdownUrl("file:///notes.md", true)).toBeUndefined();
+    expect(sanitizeMarkdownUrl("java\nscript:alert.md", true)).toBeUndefined();
   });
 });
 

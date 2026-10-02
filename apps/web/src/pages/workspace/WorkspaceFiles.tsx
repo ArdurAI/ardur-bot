@@ -32,10 +32,12 @@ export function WorkspaceFiles({
   bot,
   context,
   compact = false,
+  location,
 }: {
   bot: Bot;
   context: WorkspaceContext;
   compact?: boolean;
+  location?: { path: string; line?: number; requestId: number };
 }) {
   const { t } = useLingui();
   const computerId = context.computerId;
@@ -113,16 +115,17 @@ export function WorkspaceFiles({
         computerId,
         generation,
         path,
+        rootId: context.rootId,
       });
       return result.entries;
     },
-    [bot.id, computerId, generation, revision],
+    [bot.id, computerId, generation, revision, context.rootId],
   );
-  const open = (path: string) => {
+  const open = (path: string, preserveDraft = false) => {
     const target = sessionId;
     if (!target || !computerId || generation === null) return;
     const existing = sessionRef.current.tabs.find((tab) => tab.path === path);
-    if (existing && !existing.conflict) {
+    if (existing && (!existing.conflict || preserveDraft)) {
       commit({ ...sessionRef.current, active: existing.id });
       setError(null);
       return;
@@ -130,7 +133,7 @@ export function WorkspaceFiles({
     setError(null);
     setStatus(null);
     void rpc.workspace
-      .read({ botId: bot.id, computerId, generation, path })
+      .read({ botId: bot.id, computerId, generation, path, rootId: context.rootId })
       .then((file) => {
         if (file.binary) {
           if (alive.current && boundRef.current === target) {
@@ -141,7 +144,7 @@ export function WorkspaceFiles({
         }
         const stored = readWorkspaceFileSession(target);
         const previous = stored.tabs.find((tab) => tab.path === path);
-        if (previous && !previous.conflict) {
+        if (previous && (!previous.conflict || preserveDraft)) {
           const next = { ...stored, active: previous.id };
           writeWorkspaceFileSession(target, next);
           if (alive.current && boundRef.current === target) setSession(next);
@@ -200,6 +203,7 @@ export function WorkspaceFiles({
         content: tab.content,
         version: tab.version,
         approved: false,
+        rootId: context.rootId,
       };
       let result = await rpc.workspace.save(input);
       if (result.approvalRequired && window.confirm(t`Save`))
@@ -249,7 +253,14 @@ export function WorkspaceFiles({
     }
   };
   const saveRef = useRef(save);
-  saveRef.current = save;
+  const openRef = useRef(open);
+  useEffect(() => {
+    openRef.current = open;
+    saveRef.current = save;
+  });
+  useEffect(() => {
+    if (location) openRef.current(location.path, true);
+  }, [location, sessionId]);
   useEffect(() => {
     const hotkey = (event: KeyboardEvent) => {
       if (
@@ -403,6 +414,7 @@ export function WorkspaceFiles({
                     readOnly: current.readOnly === true,
                   }}
                   openIds={showing.tabs.map((tab) => tab.id)}
+                  location={location?.path === current.path ? location : undefined}
                   onChange={(id, content) => {
                     commit({
                       ...sessionRef.current,

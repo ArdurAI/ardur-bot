@@ -65,6 +65,7 @@ export async function installPerformanceFixture(
   manualTrace = false,
   account: Partial<Record<keyof typeof me, unknown>> = {},
   computer?: unknown,
+  conversationText?: string,
 ) {
   const current = { ...me, ...account };
   let sent = false;
@@ -81,7 +82,12 @@ export async function installPerformanceFixture(
         threadId: bots[index]!.threadId,
         seq,
         role: "bot",
-        blocks: [{ kind: "text", text: `Fixture message ${seq}` }],
+        blocks: [
+          {
+            kind: "text",
+            text: seq === 99 && conversationText ? conversationText : `Fixture message ${seq}`,
+          },
+        ],
         createdAt,
       })),
       ...(sent && index === 0

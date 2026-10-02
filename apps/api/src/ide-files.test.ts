@@ -46,9 +46,18 @@ async function fixture() {
     state: "running",
     providerRef: ref.providerRef,
     maintenanceId: null,
+    screenGeneration: 1,
   };
   const db = {
-    bot: { findMany: vi.fn(async (_query: unknown) => [{ id: "bot", name: "Test", computer }]) },
+    bot: {
+      findMany: vi.fn(async (_query: unknown) => [{ id: "bot", name: "Test", computer }]),
+      findFirst: vi.fn(
+        async ({ where }: { where: { id: string; userId: string; spaceId: string } }) =>
+          where.id === "bot" && where.userId === "owner" && where.spaceId === "space"
+            ? { id: "bot", name: "Test", computer }
+            : null,
+      ),
+    },
     computer: { findFirst: vi.fn(async () => computer), updateMany: vi.fn(async () => ({})) },
     actionApprovalRule: { findMany: vi.fn(async () => []) },
   };
@@ -67,6 +76,49 @@ async function fixture() {
   return { files, sandbox, computer, db, home, ref, context, input };
 }
 describe("IDE file operations", () => {
+  it("binds a Team root to the selected bot instead of the root list's representative", async () => {
+    const f = await fixture();
+    f.db.bot.findMany.mockResolvedValue([{ id: "teammate", name: "Team", computer: f.computer }]);
+    const result = await f.files.checkedRoot(actor, {
+      botId: "bot",
+      rootId: f.input.rootId,
+      computerId: "computer",
+      generation: 1,
+    });
+    expect(result.root.botId).toBe("bot");
+    expect(result.context.botId).toBe("bot");
+  });
+  it.each([
+    { botId: "foreign" },
+    { rootId: "sandbox-other-bot-computer" },
+    { rootId: "host-folder" },
+  ])("refuses cross-bot and host root targets before accessing files: %s", async (other) => {
+    const f = await fixture();
+    const read = vi.spyOn(f.sandbox, "readFile");
+    await expect(
+      f.files.checkedRoot(actor, {
+        botId: "bot",
+        rootId: f.input.rootId,
+        computerId: "computer",
+        generation: 1,
+        ...other,
+      }),
+    ).rejects.toThrow("Resource not found");
+    expect(read).not.toHaveBeenCalled();
+  });
+  it("refuses another owner's target and stale computer generations", async () => {
+    const f = await fixture();
+    const binding = { botId: "bot", rootId: f.input.rootId, computerId: "computer", generation: 1 };
+    await expect(f.files.checkedRoot({ ...actor, userId: "other" }, binding)).rejects.toThrow(
+      "Resource not found",
+    );
+    await expect(f.files.checkedRoot(actor, { ...binding, generation: 0 })).rejects.toThrow(
+      "Computer changed. Refresh files.",
+    );
+    await expect(
+      f.files.checkedRoot(actor, { ...binding, computerId: "replaced" }),
+    ).rejects.toThrow("Computer changed. Refresh files.");
+  });
   it.each(["docker", "podman"] as const)(
     "keeps a legacy desktop %s connection in sandbox roots and routes its files there",
     async (engine) => {

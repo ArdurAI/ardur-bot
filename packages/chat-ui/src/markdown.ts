@@ -42,7 +42,8 @@ export function sanitizeMarkdownUrl(url: string, allowRelative = false): string 
     (value.startsWith("/") ||
       value.startsWith("./") ||
       value.startsWith("../") ||
-      value.startsWith("#"))
+      value.startsWith("#") ||
+      /^[^?#:\\\s]+\.[a-z0-9]+(?:#L[1-9][0-9]*)?$/i.test(value))
   ) {
     return value;
   }

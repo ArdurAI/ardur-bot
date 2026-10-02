@@ -124,6 +124,7 @@ export default function Editor({
   onSave,
   onAsk,
   ref,
+  location,
 }: {
   document: EditorDocument;
   openIds: string[];
@@ -131,6 +132,7 @@ export default function Editor({
   onSave(): void;
   onAsk(): void;
   ref?: Ref<EditorHandle>;
+  location?: { line?: number; requestId: number };
 }) {
   const container = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
@@ -218,6 +220,16 @@ export default function Editor({
     };
     // A tab owns its editor state, undo history, and selection. Save never replaces that state.
   }, [document.id, document.path, document.readOnly]);
+  useEffect(() => {
+    const editor = view.current;
+    if (!editor || !location?.line) return;
+    const line = editor.state.doc.line(Math.min(location.line, editor.state.doc.lines));
+    editor.dispatch({
+      selection: { anchor: line.from },
+      effects: EditorView.scrollIntoView(line.from, { y: "center" }),
+    });
+    editor.focus();
+  }, [document.id, location]);
   useEffect(() => {
     for (const id of states.current.keys()) if (!openIds.includes(id)) states.current.delete(id);
   }, [openIds]);

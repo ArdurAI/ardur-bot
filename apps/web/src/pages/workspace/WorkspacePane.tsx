@@ -12,6 +12,7 @@ import type { ReactNode } from "react";
 import { Suspense, useEffect, useState } from "react";
 import { Shimmer } from "../../components/ai/primitives";
 import { rpc } from "../../lib/rpc";
+import type { ChangeLocation } from "./change-target";
 import { availableWorkspaceViews, isWorkspaceViewId, workspaceViews } from "./view-registry";
 
 export function WorkspacePane({
@@ -36,6 +37,8 @@ export function WorkspacePane({
   onBackToChat,
   hiddenControlsHost,
   compact = false,
+  fileLocation,
+  changeLocation,
 }: WorkspacePaneProps) {
   const { t } = useLingui();
   const [context, setContext] = useState<{
@@ -89,9 +92,10 @@ export function WorkspacePane({
     const view = workspaceViews[type];
     return {
       id: type,
+      contentId: type === "files" || type === "ide" ? "editor" : type,
       label: view.label(t),
       content:
-        type === "files" && contextLoading ? (
+        (type === "files" || type === "ide" || type === "changes") && contextLoading ? (
           <div
             role="status"
             className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground"
@@ -118,6 +122,8 @@ export function WorkspacePane({
               visible: visible && selected === type,
               controlsHost: !visible && hiddenControlsHost ? hiddenControlsHost : controlsHost,
               compact,
+              fileLocation,
+              changeLocation,
             })}
           </Suspense>
         ) : (
@@ -220,4 +226,6 @@ export type WorkspacePaneProps = {
   onBackToChat?(): void;
   hiddenControlsHost?: HTMLElement | null;
   compact?: boolean;
+  fileLocation?: { path: string; line?: number; requestId: number };
+  changeLocation?: ChangeLocation;
 };

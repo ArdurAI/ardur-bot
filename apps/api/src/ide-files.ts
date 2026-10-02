@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import type { AdapterContext, ComputerFileEntry } from "@ardurbot/adapter-kit";
 import { DesktopSandboxProvider, toComputerRef } from "@ardurbot/adapters";
-import type { Actor, IdeFile, IdeRoot } from "@ardurbot/contracts";
+import type { Actor, IdeFile, IdeRoot, WorkspaceRootBinding } from "@ardurbot/contracts";
 import {
   computerRunsOnHost,
   IDE_FILE_BYTES,
@@ -363,5 +363,23 @@ export function createIdeFiles(deps: Deps) {
     }
     return { saved: true, approvalRequired: false, version: digest(bytes) };
   }
-  return { roots, resolve, list, read, save };
+  async function checkedRoot(actor: Actor, binding: WorkspaceRootBinding) {
+    const bot = await deps.prisma.bot.findFirst({
+      where: { id: binding.botId, spaceId: actor.spaceId, userId: actor.userId, archivedAt: null },
+      include: { computer: true },
+    });
+    if (!bot) throw new IsolationError();
+    const computer = bot.computer;
+    if (!computer || computerRunsOnHost(computer) || binding.rootId !== `sandbox-${computer.id}`)
+      throw new IsolationError();
+    if (binding.computerId !== computer.id || binding.generation !== computer.screenGeneration)
+      throw new ORPCError("CONFLICT", { message: "Computer changed. Refresh files." });
+    const target = await resolve(actor, binding.rootId);
+    return {
+      ...target,
+      root: { ...target.root, botId: bot.id },
+      context: { ...target.context, botId: bot.id },
+    };
+  }
+  return { roots, resolve, list, read, save, checkedRoot };
 }
