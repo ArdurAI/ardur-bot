@@ -73,6 +73,7 @@ import {
   lockMcpServerRevision,
   McpOAuthAttemptReplacedError,
   McpOAuthBroker,
+  MissingComputerConnectionError,
   MissingComputerProviderError,
   mapScratchpadItem,
   modelCredentialDto,
@@ -82,6 +83,7 @@ import {
   ollamaCatalog,
   ollamaCatalogPlaceholder,
   ollamaErrorMessage,
+  owningSandbox,
   pickReusableConnection,
   planLiveConnectionSync,
   prepareApiInstall,
@@ -949,7 +951,11 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
               }
             });
           }, SPACE_DELETION_CLAIM_TIMEOUT_MS / 5);
-          const adapterContext = connectionContext(context.actor, "spaces.remove", context.signal);
+          const adapterContext = connectionContext(
+            { spaceId: input.spaceId, userId: context.actor.userId },
+            "spaces.remove",
+            context.signal,
+          );
           for (const computer of claim.computers) {
             await assertClaim();
             // Provider errors are ambiguous: teardown may have reached the
@@ -974,6 +980,11 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                   }, spaceTeardownTimeoutMs());
                 }),
               ]);
+            } catch (error) {
+              if (!(error instanceof MissingComputerConnectionError)) throw error;
+              getLogger().warn("space computer teardown skipped", {
+                reason: "missing_computer_connection",
+              });
             } finally {
               if (teardownTimer !== undefined) clearTimeout(teardownTimer);
             }
@@ -1987,14 +1998,36 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
               signal: new AbortController().signal,
             };
             const ref = toComputerRef(computer);
+            let provider: SandboxProvider;
+            try {
+              provider = await owningSandbox(deps.sandbox, ref, adapterContext);
+            } catch (error) {
+              if (error instanceof MissingComputerConnectionError) {
+                getLogger().warn("group computer teardown skipped", {
+                  reason: "missing_computer_connection",
+                });
+                await deps.prisma.computer.updateMany({
+                  where: {
+                    id: computer.id,
+                    spaceId: context.actor.spaceId,
+                    connectionId: computer.connectionId,
+                    providerRef: computer.providerRef,
+                    executionRunId: null,
+                  },
+                  data: { state: "stopped", providerRef: null },
+                });
+              }
+              // Archive cancellation is best effort after the run is cancelled.
+              return;
+            }
             await cancelComputerRunWork(
-              deps.sandbox,
+              provider,
               ref,
               computer.id,
               computer.executionRunId,
               adapterContext,
             );
-            await deps.sandbox.releaseScreen?.(ref, adapterContext).catch(() => undefined);
+            await provider.releaseScreen?.(ref, adapterContext).catch(() => undefined);
           }),
         );
         return { ok: true as const };

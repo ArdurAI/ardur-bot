@@ -7,6 +7,7 @@ import {
   McpReauthorizationRequiredError,
 } from "@ardurbot/adapters";
 import type { McpServer } from "@ardurbot/db";
+import { IsolationError } from "@ardurbot/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { McpSession } from "../../../packages/adapters/src/mcp-transport.js";
 import { IntegrationConnections } from "./integration-connections.js";
@@ -124,7 +125,12 @@ function fixture(stdio: { stdioEnabled?: boolean; allowedCommands?: string[] } =
     spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) },
     bot: {
       findMany: vi.fn(async ({ where }: { where: { id: { in: string[] } } }) =>
-        where.id.in.filter((id) => id === "bot").map((id) => ({ id })),
+        where.id.in
+          .filter((id) => id === "bot")
+          .map((id) => ({
+            id,
+            computer: { kind: "desktop", connectionId: null as string | null },
+          })),
       ),
     },
     botMcpServer: {
@@ -1319,6 +1325,47 @@ describe("connection recovery and health", () => {
       1_800_000,
     );
   });
+  it.each([
+    { kind: "desktop", connectionId: null, assignable: true },
+    { kind: "desktop", connectionId: "saved-container", assignable: false },
+    { kind: "desktop", connectionId: "", assignable: false },
+    { kind: "docker", connectionId: null, assignable: false },
+    { kind: "unknown", connectionId: null, assignable: false },
+  ])(
+    "checks host CLI assignment against actual placement: %j",
+    async ({ assignable, ...computer }) => {
+      const f = fixture();
+      f.setRow({ transport: "host-cli" });
+      // Return the row even if the query would exclude it to exercise the shared predicate too.
+      f.db.bot.findMany.mockResolvedValue([{ id: "bot", computer }]);
+      const assignment = f.service.assign(actor, {
+        connectionId: "connection",
+        botIds: ["bot"],
+        toolIds: ["synthetic_read"],
+      });
+      if (assignable) {
+        await expect(assignment).resolves.toEqual([
+          { botId: "bot", access: "custom", toolIds: ["synthetic_read"], needsReview: false },
+        ]);
+        expect(f.db.botMcpServer.upsert).toHaveBeenCalledOnce();
+      } else {
+        await expect(assignment).rejects.toBeInstanceOf(IsolationError);
+        expect(f.db.botMcpServer.upsert).not.toHaveBeenCalled();
+        expect(f.db.mcpServer.update).not.toHaveBeenCalled();
+        expect(f.db.externalEffect.updateMany).not.toHaveBeenCalled();
+      }
+      expect(f.db.bot.findMany).toHaveBeenCalledExactlyOnceWith({
+        where: {
+          id: { in: ["bot"] },
+          spaceId: actor.spaceId,
+          userId: actor.userId,
+          archivedAt: null,
+          computer: { connectionId: null },
+        },
+        select: { id: true, computer: { select: { kind: true, connectionId: true } } },
+      });
+    },
+  );
   it("creates a host grant without copying a credential into the secret store", async () => {
     const f = fixture();
     vi.spyOn(f.service, "hostSignIns").mockResolvedValue([
@@ -1346,7 +1393,7 @@ describe("connection recovery and health", () => {
     });
     expect(f.db.bot.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ computer: { kind: "desktop" } }),
+        where: expect.objectContaining({ computer: { connectionId: null } }),
       }),
     );
     await expect(

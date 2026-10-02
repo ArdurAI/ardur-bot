@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ComputerConnections,
   ConnectedSandboxProvider,
+  MissingComputerConnectionError,
   MissingComputerProviderError,
 } from "./computer-connections.js";
 import { fakePodmanSupervisor } from "./docker-test-supervisor.js";
@@ -50,7 +51,12 @@ function fixture(metadata: Record<string, unknown>) {
       ),
     },
     secret: {
-      findFirst: vi.fn(async () => ({ id: "encrypted", ciphertext: "opaque-ciphertext" })),
+      findFirst: vi.fn(
+        async (): Promise<{ id: string; ciphertext: string } | null> => ({
+          id: "encrypted",
+          ciphertext: "opaque-ciphertext",
+        }),
+      ),
     },
   };
   const secrets = { load: vi.fn(() => JSON.stringify({ inline: "credential-placeholder" })) };
@@ -104,6 +110,30 @@ it("rebuilds a provider when credential metadata changes within the same timesta
 });
 
 describe("saved computer connections", () => {
+  it("reports a deleted connection as missing even after its provider was cached", async () => {
+    const { connections, prisma } = fixture({ engine: "docker" });
+    await connections.resolve("saved", context);
+    prisma.connection.findFirst.mockResolvedValue(null);
+    await expect(connections.resolve("saved", context)).rejects.toBeInstanceOf(
+      MissingComputerConnectionError,
+    );
+  });
+
+  it("preserves lookup failures rather than reporting a missing connection", async () => {
+    const { connections, prisma } = fixture({ engine: "docker" });
+    const error = new Error("Connection lookup failed");
+    prisma.connection.findFirst.mockRejectedValue(error);
+    await expect(connections.resolve("saved", context)).rejects.toBe(error);
+  });
+
+  it("does not report existing connections with unavailable credentials as missing", async () => {
+    const { connections, prisma } = fixture({ engine: "kubernetes", context: "kind-local" });
+    prisma.secret.findFirst.mockResolvedValue(null);
+    const error = await connections.resolve("saved", context).catch((error: unknown) => error);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(MissingComputerConnectionError);
+  });
+
   it.each([undefined, "saved"])(
     "forwards history cwd options through connection %s and preserves execution defaults",
     async (connectionId) => {
@@ -161,9 +191,9 @@ describe("saved computer connections", () => {
       engine: "kubernetes",
       context: "kind-local",
     });
-    await expect(connections.resolve("saved", { ...context, spaceId: "other" })).rejects.toThrow(
-      "unavailable",
-    );
+    await expect(
+      connections.resolve("saved", { ...context, spaceId: "other" }),
+    ).rejects.toBeInstanceOf(MissingComputerConnectionError);
     expect(secrets.load).not.toHaveBeenCalled();
     expect(prisma.secret.findFirst).not.toHaveBeenCalled();
   });

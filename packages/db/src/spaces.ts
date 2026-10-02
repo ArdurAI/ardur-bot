@@ -268,6 +268,15 @@ type ClaimedSpaceDeleteInput = EmptySpaceDeleteInput & { claimId: string };
 
 type SpaceDeleteDb = Pick<PrismaClient, "spaceMember" | "bot" | "chatGroup" | "computer">;
 
+type SpaceDeletionComputer = {
+  homeKey: string;
+  kind: string;
+  providerRef: string;
+  connectionId: string | null;
+  imageProfile: string;
+  networkEgress: boolean;
+};
+
 async function assertEmptySpaceDeletable(
   db: SpaceDeleteDb,
   input: EmptySpaceDeleteInput,
@@ -278,7 +287,7 @@ async function assertEmptySpaceDeletable(
     createdAt: Date;
     space: { isDefault: boolean };
   }>;
-  computers: Array<{ homeKey: string; kind: string; providerRef: string }>;
+  computers: SpaceDeletionComputer[];
 }> {
   const currentMembership = await db.spaceMember.findUnique({
     where: {
@@ -326,7 +335,14 @@ async function assertEmptySpaceDeletable(
     db.chatGroup.count({ where: { spaceId: input.spaceId } }),
     db.computer.findMany({
       where: { spaceId: input.spaceId, providerRef: { not: null } },
-      select: { homeKey: true, kind: true, providerRef: true },
+      select: {
+        homeKey: true,
+        kind: true,
+        providerRef: true,
+        connectionId: true,
+        imageProfile: true,
+        networkEgress: true,
+      },
     }),
   ]);
   if (botCount > 0 || groupCount > 0) throw new SpaceNotEmptyError();
@@ -334,9 +350,7 @@ async function assertEmptySpaceDeletable(
     organizationId: currentMembership.organizationId,
     memberships,
     computers: computers.flatMap((computer) =>
-      computer.providerRef
-        ? [{ homeKey: computer.homeKey, kind: computer.kind, providerRef: computer.providerRef }]
-        : [],
+      computer.providerRef ? [{ ...computer, providerRef: computer.providerRef }] : [],
     ),
   };
 }
@@ -357,7 +371,7 @@ export async function claimEmptySpaceDeletionForMember(
 ): Promise<{
   claimId: string;
   recovered: boolean;
-  computers: Array<{ homeKey: string; kind: string; providerRef: string }>;
+  computers: SpaceDeletionComputer[];
 }> {
   const claimId = randomUUID();
   return withTransactionRetry(() =>

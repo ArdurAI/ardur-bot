@@ -32,6 +32,7 @@ import type {
   SpaceToolPolicies,
 } from "@ardurbot/contracts";
 import {
+  computerRunsOnHost,
   IntegrationManifestSchema,
   IntegrationResourceConstraintsSchema,
   IntegrationStateSchema,
@@ -879,16 +880,20 @@ export class IntegrationConnections {
         )
       )
         throw new Error("Review the available tools and try again.");
-      const bots = await tx.bot.findMany({
+      const candidates = await tx.bot.findMany({
         where: {
           id: { in: botIds },
           spaceId: actor.spaceId,
           userId: actor.userId,
           archivedAt: null,
-          ...(server.transport === "host-cli" ? { computer: { kind: "desktop" } } : {}),
+          ...(server.transport === "host-cli" ? { computer: { connectionId: null } } : {}),
         },
-        select: { id: true },
+        select: { id: true, computer: { select: { kind: true, connectionId: true } } },
       });
+      const bots =
+        server.transport === "host-cli"
+          ? candidates.filter((bot) => computerRunsOnHost(bot.computer))
+          : candidates;
       if (bots.length !== botIds.length) throw new IsolationError();
       const toolIds = [...new Set(input.toolIds)];
       for (const override of overrides) {
