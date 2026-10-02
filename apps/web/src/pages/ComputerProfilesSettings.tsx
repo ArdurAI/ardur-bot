@@ -10,6 +10,7 @@ import {
   computerConnectionKind,
   computerExecutionKind,
   computerKindFacts,
+  newBotSandboxAvailable,
   recommendedContainer,
   runtimeSupportsLocation,
 } from "@ardurbot/contracts";
@@ -243,7 +244,7 @@ export function ComputerProfile({
             ? { destination: "host" as const }
             : {
                 connectionId: choosingDefault ? null : selection,
-                ...(choosingDefault && selectedFacts?.boundary === "container"
+                ...(choosingDefault && newBotSandboxAvailable(selectedKind ?? "desktop", null)
                   ? { destination: "sandbox" as const }
                   : {}),
               }),
@@ -292,7 +293,10 @@ export function ComputerProfile({
         <ComputerLocationPicker
           value={selectedKind === "desktop" ? "host" : "sandbox"}
           hostAvailable={hostConnected}
-          sandboxAvailable={Boolean(sandbox) || selectedFacts?.boundary === "container"}
+          sandboxAvailable={newBotSandboxAvailable(
+            computerExecutionKind({ kind: deploymentDefault }) ?? "desktop",
+            sandbox,
+          )}
           runtimeKind={runtimeKind}
           disabled={pending}
           onChange={(location) => {
@@ -300,6 +304,13 @@ export function ComputerProfile({
             else if (currentKind && computerKindFacts(currentKind)?.boundary === "container")
               setSelection(savedConnectionId);
             else if (sandbox) setSelection(sandbox.connectionId ?? DEPLOYMENT_DEFAULT);
+            else if (
+              newBotSandboxAvailable(
+                computerExecutionKind({ kind: deploymentDefault }) ?? "desktop",
+                null,
+              )
+            )
+              setSelection(DEPLOYMENT_DEFAULT);
           }}
         />
       ) : null}

@@ -332,6 +332,7 @@ it("offers the deployment default by its engine name unless that is the host", a
     botId: "bot",
     imageProfile: "base",
     connectionId: null,
+    destination: "sandbox",
     confirmed: true,
   });
   await act(async () => root.unmount());
@@ -376,6 +377,7 @@ it("moves a connectionless Docker computer to an E2B deployment default and name
     botId: "bot",
     imageProfile: "base",
     connectionId: null,
+    destination: "sandbox",
     confirmed: true,
   });
   api.configure.mockClear();
@@ -900,6 +902,80 @@ it.each([
   },
 );
 
+it.each(["fake", "e2b", "daytona", "box"])(
+  "offers a confirmed move from the host back to the %s deployment sandbox",
+  async (deploymentDefault) => {
+    const element = document.createElement("div");
+    const root = createRoot(element);
+    try {
+      await act(async () =>
+        root.render(
+          <ComputerProfile
+            choicesOnly
+            botId="bot"
+            name="Builder"
+            status={{ ...status, kind: "desktop" }}
+            connections={[]}
+            deploymentDefault={deploymentDefault}
+            hostConnected
+            onChanged={async () => {}}
+          />,
+        ),
+      );
+      const sandbox = element.querySelector<HTMLButtonElement>('[aria-label="Sandbox"]')!;
+      expect(sandbox.disabled).toBe(false);
+      await act(async () => sandbox.click());
+      expect(sandbox.getAttribute("aria-pressed")).toBe("true");
+      const button = (label: string) =>
+        [...element.querySelectorAll("button")].find((entry) => entry.textContent === label)!;
+      await act(async () => button("Apply").click());
+      expect(api.configure).not.toHaveBeenCalled();
+      expect(element.querySelector('[role="alertdialog"]')?.textContent).toContain(
+        "and replaces its files. Continue?",
+      );
+      await act(async () => button("Continue").click());
+      expect(api.configure).toHaveBeenCalledWith({
+        botId: "bot",
+        destination: "sandbox",
+        connectionId: null,
+        confirmed: true,
+      });
+      expect(api.engine).not.toHaveBeenCalled();
+    } finally {
+      await act(async () => root.unmount());
+    }
+  },
+);
+it.each([null, "none", "unknown"])(
+  "disables Sandbox without a known deployment provider or container: %s",
+  async (deploymentDefault) => {
+    const element = document.createElement("div");
+    const root = createRoot(element);
+    try {
+      await act(async () =>
+        root.render(
+          <ComputerProfile
+            choicesOnly
+            botId="bot"
+            name="Builder"
+            status={{ ...status, kind: "desktop" }}
+            connections={[]}
+            deploymentDefault={deploymentDefault}
+            hostConnected
+            onChanged={async () => {}}
+          />,
+        ),
+      );
+      expect(element.querySelector<HTMLButtonElement>('[aria-label="Sandbox"]')?.disabled).toBe(
+        true,
+      );
+      expect(element.textContent).toContain("Set up a container for isolated work.");
+      expect(api.configure).not.toHaveBeenCalled();
+    } finally {
+      await act(async () => root.unmount());
+    }
+  },
+);
 it("refuses configuration on an unknown computer kind", async () => {
   const element = document.createElement("div");
   const root = createRoot(element);

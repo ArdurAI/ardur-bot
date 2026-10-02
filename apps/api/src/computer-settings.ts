@@ -517,15 +517,19 @@ export async function validateRuntimeComputerConfiguration(
     kind:
       configuration.destination === "host"
         ? "desktop"
-        : configuration.connectionId === null
+        : configuration.connectionId === null ||
+            (configuration.destination === "sandbox" && connectionId == null)
           ? deploymentKind
           : bot.computer?.kind,
     connectionId,
     connectionSettings: parsed.success ? parsed.data : null,
   };
+  const executionKind = computerExecutionKind(location);
   if (
     configuration.destination === "sandbox" &&
-    computerKindFacts(computerExecutionKind(location) ?? "")?.boundary !== "container"
+    (connectionId
+      ? computerKindFacts(executionKind ?? "")?.boundary !== "container"
+      : !newBotSandboxAvailable(executionKind ?? "desktop", null))
   )
     throw new ORPCError("BAD_REQUEST", { message: "Set up a container for isolated work." });
   const runtime = bot.runtimeKind as RuntimeKind;
