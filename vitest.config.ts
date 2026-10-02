@@ -8,7 +8,7 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        find: /^\.\/host-guardrails\.js$/,
+        find: /^\.\/desktop-guardrails\.js$/,
         replacement: path.join(root, "apps/desktop/scripts/host-guardrails-entry.ts"),
       },
       {

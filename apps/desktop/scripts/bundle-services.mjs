@@ -337,7 +337,7 @@ export async function bundleFleetDiscovery(
 
 /** Electron cannot strip TypeScript inside packaged node_modules. */
 export async function bundleHostGuardrails(
-  outfile = path.join(desktopDir, "dist", "host-guardrails.js"),
+  outfile = path.join(desktopDir, "dist", "desktop-guardrails.js"),
 ) {
   const { build } = esbuildRequire("esbuild");
   await build({

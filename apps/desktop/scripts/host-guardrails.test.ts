@@ -27,7 +27,7 @@ describe("desktop host guardrails packaging", () => {
       expect(result.status).toBe(0);
       for (const name of ["host-service.ts", "host-service-ipc.ts"]) {
         const source = await readFile(new URL(`../src/${name}`, import.meta.url), "utf8");
-        expect(source).toContain('from "./host-guardrails.js"');
+        expect(source).toContain('from "./desktop-guardrails.js"');
         expect(source).not.toContain('from "@ardurbot/host-runtime/host-guardrails"');
       }
     } finally {

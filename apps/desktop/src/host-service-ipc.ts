@@ -3,7 +3,7 @@ import path from "node:path";
 import { DESKTOP_FOLDER_ERRORS } from "@ardurbot/contracts/desktop-errors";
 import type { BrowserWindow, IpcMainInvokeEvent, Tray } from "electron";
 import { app, dialog, ipcMain, safeStorage } from "electron";
-import { knownLoopbackGuardPorts } from "./host-guardrails.js";
+import { knownLoopbackGuardPorts } from "./desktop-guardrails.js";
 import {
   HostLifecyclePreferences,
   HostServiceStore,
