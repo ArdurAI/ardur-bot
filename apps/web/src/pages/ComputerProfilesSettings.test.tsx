@@ -855,11 +855,13 @@ it("renders only destination choices and consequences inside Change location", a
 });
 
 it.each([
-  { kind: "desktop" as const, showGuidance: false },
-  { kind: "docker" as const, showGuidance: true },
+  { kind: "desktop" as const, choicesOnly: false, showGuidance: false },
+  { kind: "docker" as const, choicesOnly: false, showGuidance: true },
+  { kind: "desktop" as const, choicesOnly: true, showGuidance: true },
+  { kind: "docker" as const, choicesOnly: true, showGuidance: true },
 ])(
-  "shows host-only runtime guidance only away from This computer: $kind",
-  async ({ kind, showGuidance }) => {
+  "shows host-only runtime guidance only on a mismatch or explicit location choice: $kind / $choicesOnly",
+  async ({ kind, choicesOnly, showGuidance }) => {
     const element = document.createElement("div");
     const root = createRoot(element);
     try {
@@ -869,6 +871,7 @@ it.each([
             botId="bot"
             name="Builder"
             runtimeKind="codex-app-server"
+            choicesOnly={choicesOnly}
             status={{ ...status, kind, hostLabel: "This computer" }}
             connections={[]}
             hostConnected
@@ -878,6 +881,17 @@ it.each([
       );
       const guidance = "Other locations are unavailable for Codex. Choose This computer.";
       expect(element.textContent?.includes(guidance)).toBe(showGuidance);
+      expect(element.textContent?.split(guidance).length).toBe(showGuidance ? 2 : 1);
+      const picker = element.querySelector('[data-testid="computer-location-picker"]');
+      expect(Boolean(picker)).toBe(showGuidance);
+      if (picker) {
+        expect(picker.querySelector<HTMLButtonElement>('[aria-label="Sandbox"]')?.disabled).toBe(
+          true,
+        );
+        expect(
+          picker.querySelector<HTMLButtonElement>('[aria-label="This computer"]')?.disabled,
+        ).toBe(false);
+      }
       expect(api.engine).not.toHaveBeenCalled();
       expect(api.configure).not.toHaveBeenCalled();
     } finally {

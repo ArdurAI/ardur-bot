@@ -11,7 +11,6 @@ import {
   computerExecutionKind,
   computerKindFacts,
   recommendedContainer,
-  runtimeNames,
   runtimeSupportsLocation,
 } from "@ardurbot/contracts";
 import { ENGINE_LABELS } from "@ardurbot/contracts/fleet";
@@ -228,10 +227,8 @@ export function ComputerProfile({
   const selectionSupported =
     runtimeSupportsLocation(runtimeKind, { kind: selectedKind }) &&
     (!choosingHost || hostConnected);
-  const runtime = runtimeNames[runtimeKind];
-  const unavailableLocations =
-    eligibleConnections.length !== connections.length ||
-    !runtimeSupportsLocation(runtimeKind, { kind: "docker" });
+  const showLocationChoices =
+    choicesOnly || !hostComputer || runtimeSupportsLocation(runtimeKind, { kind: "docker" });
   const sandbox = recommendedContainer(deploymentDefault ?? "", connections);
   async function save() {
     setPending(true);
@@ -291,19 +288,21 @@ export function ComputerProfile({
           />
         </>
       ) : null}
-      <ComputerLocationPicker
-        value={selectedKind === "desktop" ? "host" : "sandbox"}
-        hostAvailable={hostConnected}
-        sandboxAvailable={Boolean(sandbox) || selectedFacts?.boundary === "container"}
-        runtimeKind={runtimeKind}
-        disabled={pending}
-        onChange={(location) => {
-          if (location === "host") setSelection(hostComputer ? savedConnectionId : HOST_COMPUTER);
-          else if (currentKind && computerKindFacts(currentKind)?.boundary === "container")
-            setSelection(savedConnectionId);
-          else if (sandbox) setSelection(sandbox.connectionId ?? DEPLOYMENT_DEFAULT);
-        }}
-      />
+      {showLocationChoices ? (
+        <ComputerLocationPicker
+          value={selectedKind === "desktop" ? "host" : "sandbox"}
+          hostAvailable={hostConnected}
+          sandboxAvailable={Boolean(sandbox) || selectedFacts?.boundary === "container"}
+          runtimeKind={runtimeKind}
+          disabled={pending}
+          onChange={(location) => {
+            if (location === "host") setSelection(hostComputer ? savedConnectionId : HOST_COMPUTER);
+            else if (currentKind && computerKindFacts(currentKind)?.boundary === "container")
+              setSelection(savedConnectionId);
+            else if (sandbox) setSelection(sandbox.connectionId ?? DEPLOYMENT_DEFAULT);
+          }}
+        />
+      ) : null}
       {selection !== savedConnectionId && selectedKind && selectedFacts ? (
         <div className="space-y-2 text-sm">
           <p>
@@ -354,12 +353,7 @@ export function ComputerProfile({
           </NativeSelect>
         </label>
       )}
-      {unavailableLocations && !hostComputer ? (
-        <p className="text-sm text-muted-foreground">{t`Other locations are unavailable for ${runtime}. Choose This computer.`}</p>
-      ) : null}
-      {unavailableLocations && !hostComputer && !hostConnected ? (
-        <p className="text-sm text-muted-foreground">{t`Connect the host service to choose This computer.`}</p>
-      ) : null}
+
       {supported && selectedKind !== "desktop" && selectionSupported ? (
         <>
           <label htmlFor={`profile-${botId}`} className="block space-y-1">
