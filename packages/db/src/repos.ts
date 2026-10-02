@@ -693,6 +693,7 @@ export function createRepos(prisma: PrismaClient) {
         userId: actor.userId,
         botId,
         kind: bot.computer.kind,
+        connectionId: bot.computer.connectionId,
       });
       const updated = await prisma.bot.update({
         where: { id: botId },

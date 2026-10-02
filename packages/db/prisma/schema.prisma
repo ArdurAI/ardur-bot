@@ -661,11 +661,43 @@ model ChiefPlan {
   checkedFacts Json
   dependencies Json @default("[]")
   dispatch Json?
+  control Json?
+  assignments ChiefAssignment[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([sourceRunId, createdAt])
   @@map("chief_plans")
+}
+
+model ChiefAssignment {
+  runId String @id
+  planId String
+  plan ChiefPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  revision Int
+  memberId String
+  coordinator Boolean @default(false)
+  supersededAt DateTime?
+  actions ChiefActionAdmission[]
+  @@index([planId])
+  @@map("chief_assignments")
+}
+
+model ChiefActionAdmission {
+  id String @id @default(cuid())
+  runId String
+  assignment ChiefAssignment @relation(fields: [runId], references: [runId], onDelete: Cascade)
+  revision Int
+  attempt Int
+  executionId String
+  consequential Boolean
+  tool String?
+  effectId String?
+  state String @default("admitted")
+  admittedAt DateTime @default(now())
+  settledAt DateTime?
+  @@unique([runId, attempt, executionId])
+  @@map("chief_action_admissions")
 }
 
 model Run {

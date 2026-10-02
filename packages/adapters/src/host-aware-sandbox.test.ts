@@ -151,6 +151,7 @@ describe("host-aware sandbox", () => {
 
   it.each([
     ["desktop", true, "host"],
+
     ["docker", true, "isolated"],
     ["docker", false, "isolated"],
   ] as const)(
@@ -537,7 +538,7 @@ describe("a Docker deployment with a host bridge", () => {
   });
 
   it("starts and runs a new computer on Docker until the host is chosen", async () => {
-    const { sandbox, provisions } = await stackSandbox(null);
+    const { sandbox, provisions, RemoteHostSandboxProvider } = await stackSandbox(null);
     const execute = vi
       .spyOn(DockerSandboxProvider.prototype, "execute")
       .mockImplementation(async function* () {
@@ -550,10 +551,11 @@ describe("a Docker deployment with a host bridge", () => {
       { type: "exit", code: 0 },
     ]);
     expect(execute).toHaveBeenCalledOnce();
-    const missing = owningSandbox(sandbox, { kind: "desktop" }, ctx);
-    await expect(missing).rejects.toBeInstanceOf(MissingComputerProviderError);
-    // The sentence names the paired desktop, not the platform the API happens to run on.
-    await expect(missing).rejects.toThrow("This computer runs on This Mac");
+    // Explicit host computers can use the paired bridge without changing the default.
+    await expect(owningSandbox(sandbox, { kind: "desktop" }, ctx)).resolves.toBeInstanceOf(
+      RemoteHostSandboxProvider,
+    );
+    expect(provisions.host).not.toHaveBeenCalled();
   });
 
   it("starts a new computer on this computer through the host bridge once Set up chose it", async () => {

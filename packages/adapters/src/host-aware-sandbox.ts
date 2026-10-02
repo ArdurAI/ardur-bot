@@ -48,10 +48,11 @@ export function createRunSandbox(
   );
   const selected = kind === "desktop" ? host() : createSandboxProvider(kind, opts);
   // Connectionless computers keep the engine of their kind; a hosted one needs its key here.
-  // The host is never one of these. It runs computers on a desktop deployment, and on Docker once
-  // the owner chose it, which Set up does on the desktop app's own stack.
+  // A host destination must never fall back to a hosted deployment's server.
+  // Only local desktop mode or the paired host bridge can resolve it directly.
   const local: Partial<Record<string, () => SandboxProvider>> = {
     docker: once(() => createSandboxProvider("docker", opts)),
+    ...(kind === "desktop" || usesHostBridge() ? { desktop: host } : {}),
   };
   for (const [hosted, key] of [
     ["e2b", opts.e2bApiKey],
@@ -79,6 +80,9 @@ export function createRunSandbox(
       return sandboxKindForBot(kind, settings?.computerHost) === "desktop";
     },
     () => deploymentHostLabel(opts.prisma!),
+    // Explicit host computers use the paired bridge independently of the default location.
+    // Source mode retains its existing host opt-in boundary.
+    usesHostBridge() ? async () => true : undefined,
   );
 }
 
@@ -109,6 +113,7 @@ export class HostAwareSandbox implements SandboxProvider {
     private readonly host: SandboxProvider,
     private readonly hostEnabled: () => Promise<boolean>,
     private readonly hostName: () => Promise<HostLabel> = async () => hostLabel(process.platform),
+    private readonly hostAvailable: () => Promise<boolean> = hostEnabled,
   ) {
     if (isolated.pageBrowser || host.pageBrowser) {
       this.pageBrowser = async (computer, request, context) => {
@@ -136,14 +141,14 @@ export class HostAwareSandbox implements SandboxProvider {
   }
 
   /**
-   * A saved kind routes itself: desktop to the host while This Mac is on, anything else to its
+   * A saved kind routes itself: desktop to an available host, anything else to its
    * own provider. Pass the This Mac setting only while choosing where a new computer starts.
    */
   private async route(subject: ComputerIdentity, hostSelected?: boolean) {
     if (subject.connectionId) return this.isolated;
     if (hostSelected !== undefined) return hostSelected ? this.host : this.isolated;
     if (subject.kind !== "desktop") return this.isolated;
-    if (await this.hostEnabled()) return this.host;
+    if (await this.hostAvailable()) return this.host;
     throw new MissingComputerProviderError("desktop", { hostLabel: await this.hostName() });
   }
 

@@ -52,7 +52,10 @@ describe("createRepos.createBot model pins", () => {
         spaceMember: {
           findUnique: vi.fn(async () => ({ organizationId: "org", space: { deletingAt: null } })),
         },
-        computer: { upsert: vi.fn(async () => ({ id: "computer" })) },
+        computer: {
+          upsert: vi.fn(async () => ({ id: "computer" })),
+          findFirst: vi.fn(async () => null),
+        },
         bot: {
           aggregate: vi.fn(async () => ({ _max: { position: 0 } })),
           create: vi.fn(async ({ data }: { data: typeof pin }) => {
@@ -481,7 +484,7 @@ describe("createRepos.createBot computer kind", () => {
       spaceMember: {
         findUnique: vi.fn(async () => ({ organizationId: "org", space: { deletingAt: null } })),
       },
-      computer: { upsert },
+      computer: { upsert, findFirst: vi.fn(async () => null) },
       bot: {
         aggregate: vi.fn(async () => ({ _max: { position: 0 } })),
         create,
@@ -557,4 +560,74 @@ describe("createRepos.createBot computer kind", () => {
     // The bot row reuses the cuid default path: no explicit id is forced.
     expect(bot!.id).toBeUndefined();
   });
+});
+
+describe("Shared With Team placement", () => {
+  it.each(["desktop", "remote-docker", "kubernetes"])(
+    "joins the existing Team computer from %s without creating one",
+    async (kind) => {
+      const existing = {
+        id: "existing-team",
+        scope: "team",
+        scopeKey: "legacy-team-key",
+        kind: "desktop",
+        connectionId: "team-engine",
+      };
+      const findFirst = vi.fn(async () => existing);
+      const upsert = vi.fn();
+      const update = vi.fn(async () => ({ ...baseBot, computer: existing }));
+      const prisma = {
+        computer: { findFirst, upsert },
+        bot: {
+          findFirst: vi.fn(async () => ({
+            ...baseBot,
+            computer: { kind, connectionId: "source-engine", scope: "dedicated" },
+          })),
+          update,
+        },
+      } as unknown as PrismaClient;
+      const result = await createRepos(prisma).setBotComputer(actor, baseBot.id, "team");
+      expect(result.computerMode).toBe("team");
+      expect(findFirst).toHaveBeenCalledWith({
+        where: { spaceId: actor.spaceId, scope: "team" },
+        orderBy: [{ bots: { _count: "desc" } }, { createdAt: "asc" }, { id: "asc" }],
+      });
+      expect(upsert).not.toHaveBeenCalled();
+      expect(update).toHaveBeenCalledWith({
+        where: { id: baseBot.id },
+        data: { computerId: existing.id },
+        include: { thread: true, computer: true },
+      });
+    },
+  );
+  it.each(["team", "dedicated"] as const)(
+    "creates %s only when needed and preserves the source connection",
+    async (mode) => {
+      const findFirst = vi.fn(async () => null);
+      const upsert = vi.fn(async () => ({ id: "new-computer", scope: mode }));
+      const update = vi.fn(async () => ({ ...baseBot, computer: { scope: mode } }));
+      const prisma = {
+        computer: { findFirst, upsert },
+        bot: {
+          findFirst: vi.fn(async () => ({
+            ...baseBot,
+            computer: { kind: "remote-docker", connectionId: "source-engine", scope: "dedicated" },
+          })),
+          update,
+        },
+      } as unknown as PrismaClient;
+      await createRepos(prisma).setBotComputer(actor, baseBot.id, mode);
+      expect(upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({
+            kind: "remote-docker",
+            connectionId: "source-engine",
+            scope: mode,
+          }),
+          update: {},
+        }),
+      );
+      expect(findFirst.mock.calls.length).toBe(mode === "team" ? 1 : 0);
+    },
+  );
 });

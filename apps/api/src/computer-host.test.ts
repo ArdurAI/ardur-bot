@@ -66,6 +66,7 @@ function deployment(sandboxProvider: string, computerHost: string | null) {
       findUnique: vi.fn(async () => ({ organizationId: "org", space: { deletingAt: null } })),
     },
     computer: {
+      findFirst: vi.fn(async () => null),
       upsert: vi.fn(async ({ create }: { create: { kind: string } }) => ({
         id: "computer",
         ...create,

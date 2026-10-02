@@ -28,6 +28,7 @@ vi.mock("../../lib/rpc", () => ({
     models: api,
     runtimes: { availability: api.availability },
     me: api.me,
+    host: { status: async () => ({ connected: true }) },
     computer: {
       connections: api.connections,
       list: api.computers,
@@ -511,6 +512,22 @@ describe("new isolated work", () => {
     await enterName();
     await act(async () => createButton().click());
     expect(onCreate.mock.calls[0]?.[0].isolatedComputer).toEqual({ connectionId: "saved" });
+  });
+  it("describes the existing Team container by connection, not its legacy desktop kind", async () => {
+    api.connections.mockResolvedValue([
+      { id: "saved", name: "Team engine", settings: { engine: "docker" } },
+    ]);
+    api.computers.mockResolvedValue([
+      { status: { kind: "desktop", connectionId: "saved", mode: "team" } },
+    ]);
+    const onCreate = vi.fn();
+    await act(async () => root.render(<CreateBotForm onCreate={onCreate} onCancel={() => {}} />));
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[data-testid="create-bot-team"]')!.click(),
+    );
+    expect(container.textContent).toContain("Container · Team engine");
+    expect(container.textContent).not.toContain("Runs as you");
+    expect(onCreate).not.toHaveBeenCalled();
   });
 });
 

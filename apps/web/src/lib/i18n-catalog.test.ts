@@ -56,6 +56,13 @@ describe("lingui catalogs", () => {
         "Got it — I’ll check what’s missing and ask before installing it.",
         "Got it — I’ll check the request and choose the next step.",
         "Hi everyone.",
+        "Got it — I’ll keep {name} off this task.",
+        "Got it — I’ll check this change before the next action.",
+        "Told {name} to stand down",
+        "Stopping {name}",
+        "{name} stood down",
+        "The previous action may have finished. I’ll check before retrying.",
+        "Checking the earlier action",
         "Messaged {name}",
         "Queued for {name}",
         "Waiting for approval",
@@ -72,6 +79,7 @@ describe("lingui catalogs", () => {
       ]) {
         const entry = Object.values(catalog).find((value) => value.message === message);
         expect(entry?.translation, `${locale}: ${message}`).toBeTruthy();
+        if (locale !== "en") expect(entry?.translation).not.toBe(message);
         if (message.includes("{name}")) expect(entry?.translation).toContain("{name}");
       }
     },

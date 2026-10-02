@@ -3,8 +3,10 @@ import type {
   ComputerMode,
   ComputerStatus,
   ComputerUpdate,
+  RuntimeKind,
 } from "@ardurbot/contracts";
 import {
+  computerExecutionKind,
   computerKindFacts,
   computerRuntimeSummary,
   interruptedComputerUpdate,
@@ -57,19 +59,22 @@ export function RuntimeSummary({
   mode = status.mode,
   locationName,
   sharingControl,
+  connectionSettings,
 }: {
   status: ComputerStatus;
   mode?: ComputerMode;
   locationName?: string;
   sharingControl?: ReactNode;
+  connectionSettings?: Pick<ComputerConnectionSettings, "engine">;
 }) {
   const { t } = useLingui();
-  const summary = computerRuntimeSummary(status, mode);
+  const kind = computerExecutionKind({ ...status, connectionSettings });
+  const summary = kind ? computerRuntimeSummary({ ...status, kind }, mode) : null;
   const states = useComputerStateLabels();
-  if (!summary) return <RuntimeBoundary kind={status.kind} />;
+  if (!summary) return <RuntimeBoundary kind="" />;
   return (
     <div data-testid="runtime-summary" className="space-y-2 text-sm">
-      <RuntimeBoundary kind={status.kind} locationName={locationName} />
+      <RuntimeBoundary kind={kind!} locationName={locationName} />
       {sharingControl ?? <p>{summary.scope === "bot" ? t`Only this bot` : t`Shared with team`}</p>}
       {summary.sharingWarning ? (
         <p className="text-muted-foreground">{t`Bots share files and installed tools`}</p>
@@ -84,11 +89,13 @@ export function BotRuntimeSettings({
   name,
   mode,
   children,
+  runtimeKind = "pi",
 }: {
   botId: string;
   name: string;
   mode: ComputerMode;
   children?: ReactNode;
+  runtimeKind?: RuntimeKind;
 }) {
   const { t } = useLingui();
   const [data, setData] = useState<{
@@ -96,6 +103,7 @@ export function BotRuntimeSettings({
     connections: Connection[];
     deploymentDefault: string | null;
     updates: ComputerUpdate[];
+    hostConnected: boolean;
   } | null>(null);
   const [error, setError] = useState(false);
   const [revision, setRevision] = useState(0);
@@ -120,14 +128,16 @@ export function BotRuntimeSettings({
           rpc.computer.connections(),
           rpc.me(),
           rpc.computer.updates(),
+          rpc.host.status(),
         ]),
       )
-      .then(([status, connections, me, updates]) => {
+      .then(([status, connections, me, updates, host]) => {
         if (active)
           setData({
             status,
             connections,
             updates,
+            hostConnected: host.connected && me.isDeploymentOwner,
 
             deploymentDefault:
               me.sandboxProvider === "docker" && me.computerHost === "this-mac"
@@ -151,10 +161,10 @@ export function BotRuntimeSettings({
           mode={mode}
           sharingControl={children}
           locationName={
-            data.status.kind === "desktop"
-              ? undefined
-              : (data.connections.find((entry) => entry.id === data.status.connectionId)?.name ??
-                data.status.kind)
+            data.connections.find((entry) => entry.id === data.status.connectionId)?.name
+          }
+          connectionSettings={
+            data.connections.find((entry) => entry.id === data.status.connectionId)?.settings
           }
         />
       ) : null}
@@ -195,6 +205,8 @@ export function BotRuntimeSettings({
                 status={data.status}
                 connections={data.connections}
                 deploymentDefault={data.deploymentDefault}
+                hostConnected={data.hostConnected}
+                runtimeKind={runtimeKind}
                 onChanged={async () => setRevision((value) => value + 1)}
               />
             </Suspense>

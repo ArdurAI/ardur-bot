@@ -96,6 +96,7 @@ import {
   resolveAutoReviewChecker,
   resolveBotWorkspacePath,
   revokeScreenControl,
+  runtimeComputerLocation,
   SUBSCRIPTION_SIGN_IN_PROVIDERS,
   sanitizeComposioError,
   savePushToken,
@@ -129,6 +130,8 @@ import {
   IsolatedComputerUnavailableError,
   nativeRuntimeHealthKeys,
   OPENAI_COMPATIBLE_PROVIDER_ID,
+  RuntimeKindSchema,
+  runtimeSupportsLocation,
   usableModelId,
 } from "@ardurbot/contracts";
 import { HostHealthSchema } from "@ardurbot/contracts/host-bridge";
@@ -234,6 +237,7 @@ import {
   saveComputerConnection,
   updateComputerConnection,
   validateComputerConfiguration,
+  validateRuntimeComputerConfiguration,
 } from "./computer-settings.js";
 import {
   executionBlocksUserTakeover,
@@ -1199,7 +1203,12 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             healthReason = localProbe.reason ?? "Hermes is not installed on this computer.";
           }
 
-          const desktop = !bot || bot.computer?.kind === "desktop";
+          const desktop =
+            !bot ||
+            runtimeSupportsLocation(
+              "hermes",
+              await runtimeComputerLocation(deps.prisma, bot.computer),
+            );
           const available = Boolean(owner && desktop && healthAvailable);
           const install =
             localProbe && !isBridgeMode
@@ -1213,7 +1222,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
               ? {
                   reason: !owner
                     ? NATIVE_HOST_OWNER_MESSAGE
-                    : bot && bot.computer?.kind !== "desktop"
+                    : !desktop
                       ? "Choose a host computer for Hermes."
                       : healthReason,
                 }
@@ -2342,7 +2351,14 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           if (!bot.computer || seen.has(bot.computer.id)) return [];
           seen.add(bot.computer.id);
           const status = toComputerStatus(bot.id, bot.computer, null, hostLabel);
-          return [{ botId: bot.id, name: bot.name, status }];
+          return [
+            {
+              botId: bot.id,
+              name: bot.name,
+              runtimeKind: RuntimeKindSchema.parse(bot.runtimeKind),
+              status,
+            },
+          ];
         });
       }),
       connections: authed.computer.connections.handler(({ context }) =>
@@ -2370,11 +2386,26 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           input,
           deps.env.sandboxProvider,
         );
+        const host =
+          configuration.destination === "host"
+            ? ((await sourceHostStatus(
+                deps.prisma,
+                context.actor.userId,
+                deps.env.sandboxProvider,
+              )) ?? (await deps.hostBridge?.status(context.actor.userId)))
+            : undefined;
+        await validateRuntimeComputerConfiguration(
+          deps.prisma,
+          bot,
+          configuration,
+          deps.env.sandboxProvider,
+          Boolean(host?.connected && (await nativeHostOwner(deps.prisma, context.actor.userId))),
+        );
         try {
           await releaseMaintenanceControl(deps, context.actor, bot.computer.id);
           // A configuration that does not itself choose a destination stays on the computer's own
           // connection, which a genuinely missing engine can never reach.
-          if (configuration.connectionId === undefined)
+          if (configuration.connectionId === undefined && configuration.destination === undefined)
             await refuseIfEngineMissing(
               deps.sandbox,
               bot.computer,

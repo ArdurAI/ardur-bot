@@ -6,6 +6,7 @@ import type {
 } from "@ardurbot/contracts";
 import {
   COMPUTER_BOUNDARY_MESSAGES,
+  computerExecutionKind,
   computerKindFacts,
   computerRuntimeSummary,
   interruptedComputerUpdate,
@@ -47,20 +48,23 @@ export function RuntimeSummary({
   mode = status.mode,
   locationName,
   sharingControl,
+  connectionSettings,
 }: {
   status: ComputerStatus;
   mode?: ComputerMode;
   locationName?: string;
   sharingControl?: ReactNode;
+  connectionSettings?: Pick<ComputerConnectionSettings, "engine">;
 }) {
   const { t } = useI18n();
   const tokens = useMobileTokens();
-  const facts = computerRuntimeSummary(status, mode);
-  if (!facts) return <RuntimeBoundary kind={status.kind} />;
+  const kind = computerExecutionKind({ ...status, connectionSettings });
+  const facts = kind ? computerRuntimeSummary({ ...status, kind }, mode) : null;
+  if (!facts) return <RuntimeBoundary kind="" />;
 
   return (
     <View testID="runtime-summary" style={styles.lines}>
-      <RuntimeBoundary kind={status.kind} locationName={locationName} />
+      <RuntimeBoundary kind={kind!} locationName={locationName} />
       {sharingControl ?? <Text style={{ color: tokens.foreground }}>{t(facts.sharing)}</Text>}
       {facts.sharingWarning ? (
         <Text style={{ color: tokens.mutedForeground }}>{t(facts.sharingWarning)}</Text>
@@ -127,10 +131,10 @@ export function BotRuntimeSettings({
           mode={mode}
           sharingControl={children}
           locationName={
-            data.status.kind === "desktop"
-              ? undefined
-              : (data.connections.find((entry) => entry.id === data.status.connectionId)?.name ??
-                data.status.kind)
+            data.connections.find((entry) => entry.id === data.status.connectionId)?.name
+          }
+          connectionSettings={
+            data.connections.find((entry) => entry.id === data.status.connectionId)?.settings
           }
         />
       ) : null}

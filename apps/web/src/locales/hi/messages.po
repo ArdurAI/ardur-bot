@@ -316,6 +316,10 @@ msgid "{name} needs your input"
 msgstr ""
 
 #: src/components/ai/CoordinationLine.tsx
+msgid "{name} stood down"
+msgstr "{name} रुक गया"
+
+#: src/components/ai/CoordinationLine.tsx
 msgid "{name} stopped before answering"
 msgstr "{name} जवाब देने से पहले रुक गया"
 
@@ -1735,6 +1739,10 @@ msgid "Checking the download"
 msgstr "डाउनलोड की जाँच हो रही है"
 
 #: src/components/ai/CoordinationLine.tsx
+msgid "Checking the earlier action"
+msgstr "पिछली कार्रवाई की जाँच कर रहा हूँ"
+
+#: src/components/ai/CoordinationLine.tsx
 msgid "Checking the missing tool"
 msgstr "गुम टूल की जाँच हो रही है"
 
@@ -2260,6 +2268,10 @@ msgstr "OAuth कनेक्ट करें"
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Connect remote account"
 msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Connect the host service to choose This computer."
+msgstr "यह कंप्यूटर चुनने के लिए होस्ट सेवा कनेक्ट करें।"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Connect this provider to use it as your personal model."
@@ -4428,12 +4440,20 @@ msgid "Got it — I’ll check the request and choose the next step."
 msgstr "समझ गया — अनुरोध जाँचूँगा और अगला कदम चुनूँगा।"
 
 #: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check this change before the next action."
+msgstr "समझ गया — अगली कार्रवाई से पहले इस बदलाव की जाँच करूँगा।"
+
+#: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll check what’s missing and ask before installing it."
 msgstr "समझ गया — क्या कमी है, जाँचूँगा और इंस्टॉल करने से पहले पूछूँगा।"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll choose a team member to put this in Notion."
 msgstr "समझ गया — इसे Notion में रखने के लिए टीम का एक सदस्य चुनूँगा।"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll keep {name} off this task."
+msgstr "समझ गया — {name} को इस काम से अलग रखूँगा।"
 
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
@@ -6514,6 +6534,10 @@ msgstr ""
 msgid "Other files"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Other locations are unavailable for {runtime}. Choose This computer."
+msgstr "{runtime} के लिए अन्य स्थान उपलब्ध नहीं हैं। यह कंप्यूटर चुनें।"
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Other model…"
@@ -8560,6 +8584,10 @@ msgstr "जवाब देने से पहले रुक गया"
 msgid "Stopping"
 msgstr ""
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Stopping {name}"
+msgstr "{name} को रोक रहा हूँ"
+
 #: src/pages/settings-sections.ts
 msgid "Storage"
 msgstr ""
@@ -8796,6 +8824,10 @@ msgstr "पिछला अपडेट बीच में रुक गया 
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "The previous action may have finished. I’ll check before retrying."
+msgstr "पिछली कार्रवाई पूरी हो चुकी हो सकती है। दोबारा कोशिश करने से पहले जाँचूँगा।"
 
 #: src/pages/board/BoardsSettings.tsx
 msgid "The reviewer was changed in another window."
@@ -9150,6 +9182,10 @@ msgstr ""
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Tokens over seven days"
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Told {name} to stand down"
+msgstr "{name} को रुकने के लिए कहा"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Tool access mode"

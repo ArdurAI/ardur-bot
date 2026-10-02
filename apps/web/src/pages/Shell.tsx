@@ -6768,7 +6768,7 @@ const MessageView = memo(function MessageView({
               className="rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
               dir="auto"
             >
-              <ChiefReceiptText receiptKey={block.key} />
+              <ChiefReceiptText receiptKey={block.key} memberName={block.memberName} />
             </div>
           );
         }

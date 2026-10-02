@@ -774,7 +774,7 @@ it("never describes a desktop computer as Docker when a container is selected", 
   }
 });
 
-it("offers a retained container connection as a move, not a desktop computer's current location", async () => {
+it("keeps a connected desktop row on its real container location without a mutation", async () => {
   const element = document.createElement("div");
   const root = createRoot(element);
   try {
@@ -794,27 +794,17 @@ it("offers a retained container connection as a move, not a desktop computer's c
       ),
     );
     const select = element.querySelector<HTMLSelectElement>('[aria-label="Connection"]')!;
-    expect(select.value).toBe("");
+    expect(select.value).toBe("container");
     expect([...select.options].map((option) => option.textContent)).toEqual([
       "Keep current location",
-      "Container engine",
     ]);
-    expect(api.engine).not.toHaveBeenCalled();
-    await act(async () => {
-      select.value = "container";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-    expect(element.textContent).toContain("Move to a container");
-    expect(element.textContent).not.toContain("Engine: Docker");
+    expect(api.engine).toHaveBeenCalledWith({ connectionId: "container" });
+    expect(element.textContent).not.toContain("Move to a container");
+    expect(element.textContent).not.toContain("Runs as you");
     const button = (label: string) =>
       [...element.querySelectorAll("button")].find((entry) => entry.textContent === label)!;
-    await act(async () => button("Apply").click());
-    await act(async () => button("Continue").click());
-    expect(api.configure).toHaveBeenCalledWith({
-      botId: "bot",
-      connectionId: "container",
-      confirmed: true,
-    });
+    expect(button("Apply").disabled).toBe(true);
+    expect(api.configure).not.toHaveBeenCalled();
   } finally {
     await act(async () => root.unmount());
   }

@@ -316,6 +316,10 @@ msgid "{name} needs your input"
 msgstr ""
 
 #: src/components/ai/CoordinationLine.tsx
+msgid "{name} stood down"
+msgstr "{name} прекратил работу"
+
+#: src/components/ai/CoordinationLine.tsx
 msgid "{name} stopped before answering"
 msgstr "{name} остановился до ответа"
 
@@ -1735,6 +1739,10 @@ msgid "Checking the download"
 msgstr "Проверка загрузки"
 
 #: src/components/ai/CoordinationLine.tsx
+msgid "Checking the earlier action"
+msgstr "Проверяю предыдущее действие"
+
+#: src/components/ai/CoordinationLine.tsx
 msgid "Checking the missing tool"
 msgstr "Проверяю недостающий инструмент"
 
@@ -2260,6 +2268,10 @@ msgstr "Подключить OAuth"
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Connect remote account"
 msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Connect the host service to choose This computer."
+msgstr "Подключите службу хоста, чтобы выбрать Этот компьютер."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Connect this provider to use it as your personal model."
@@ -4428,12 +4440,20 @@ msgid "Got it — I’ll check the request and choose the next step."
 msgstr "Понял — проверю запрос и выберу следующий шаг."
 
 #: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check this change before the next action."
+msgstr "Понял — проверю это изменение перед следующим действием."
+
+#: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll check what’s missing and ask before installing it."
 msgstr "Понял — проверю, чего не хватает, и спрошу перед установкой."
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll choose a team member to put this in Notion."
 msgstr "Понял — выберу участника команды, который разместит это в Notion."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll keep {name} off this task."
+msgstr "Понял — не буду поручать эту задачу {name}."
 
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
@@ -6514,6 +6534,10 @@ msgstr ""
 msgid "Other files"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Other locations are unavailable for {runtime}. Choose This computer."
+msgstr "Другие расположения недоступны для {runtime}. Выберите Этот компьютер."
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Other model…"
@@ -8560,6 +8584,10 @@ msgstr "остановился, не ответив"
 msgid "Stopping"
 msgstr ""
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Stopping {name}"
+msgstr "Останавливаю {name}"
+
 #: src/pages/settings-sections.ts
 msgid "Storage"
 msgstr "Хранилище"
@@ -8796,6 +8824,10 @@ msgstr "Последнее обновление было прервано."
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "The previous action may have finished. I’ll check before retrying."
+msgstr "Предыдущее действие могло завершиться. Проверю перед повторной попыткой."
 
 #: src/pages/board/BoardsSettings.tsx
 msgid "The reviewer was changed in another window."
@@ -9150,6 +9182,10 @@ msgstr "токенов контекста"
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Tokens over seven days"
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Told {name} to stand down"
+msgstr "Попросил {name} остановиться"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Tool access mode"

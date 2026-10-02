@@ -45,6 +45,7 @@ describe("CoordinationLine", () => {
   let root: ReturnType<typeof createRoot>;
 
   beforeEach(() => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -55,6 +56,7 @@ describe("CoordinationLine", () => {
       root.unmount();
     });
     container.remove();
+    vi.unstubAllGlobals();
   });
 
   it("collapses a finished round to one line with the counts", () => {
@@ -98,6 +100,92 @@ describe("CoordinationLine", () => {
     expect(container.querySelectorAll('[data-testid="coordination-member"]')).toHaveLength(0);
     // One visual line: a single summary row inside the line.
     expect(line.querySelectorAll('[data-testid="coordination-line-summary"]')).toHaveLength(1);
+  });
+
+  it("shows the committed checking turn without stale activity", () => {
+    const dispatch: ChiefDispatch = {
+      requestMessageId: "request",
+      revision: 2,
+      memberId: "member",
+      memberName: "Member",
+      state: "messaged",
+      reason: "saved",
+      stop: { revision: 2, memberName: "Member", state: "checking" },
+    };
+    act(() => root.render(<ChiefDispatchLine dispatch={dispatch} detail="Preparation request" />));
+    expect(container.querySelector("button")?.getAttribute("aria-label")).toBe(
+      "Checking the earlier action",
+    );
+    expect(container.querySelector('[data-testid="chief-activity"]')).toBeNull();
+    expect(container.textContent).not.toContain("Preparation request");
+  });
+
+  it("renders correction receipts from the recorded member name with polite announcements", () => {
+    act(() => root.render(<ChiefReceiptText receiptKey="exclude-member" memberName="Member" />));
+    expect(container.textContent).toBe("Got it — I’ll keep Member off this task.");
+    expect(container.querySelector("span")?.getAttribute("aria-live")).toBe("polite");
+    act(() => root.render(<ChiefReceiptText receiptKey="change-task" />));
+    expect(container.textContent).toBe("Got it — I’ll check this change before the next action.");
+    act(() => root.render(<ChiefReceiptText receiptKey="exclude-member" />));
+    expect(container.textContent).toBe("Got it — I’ll check the request and choose the next step.");
+  });
+
+  it("announces requested, confirmed and uncertain stops without leaking revisions or stale activity", () => {
+    const dispatch: ChiefDispatch = {
+      requestMessageId: "request",
+      revision: 87,
+      memberId: "replacement",
+      memberName: "Replacement",
+      state: "messaged",
+      reason: "eligible",
+      activity: {
+        revision: 87,
+        runId: "run",
+        delegationId: "assignment",
+        attempt: 1,
+        sourceSeq: 1,
+        key: "write-notion",
+        state: "active",
+        updatedAt: "2026-01-01T00:00:00Z",
+      },
+    };
+    for (const state of ["requested", "confirmed", "uncertain"] as const) {
+      act(() =>
+        root.render(
+          <ChiefDispatchLine
+            dispatch={{ ...dispatch, stop: { revision: 86, memberName: "Member", state } }}
+            detail="Preparation request"
+          />,
+        ),
+      );
+      const label =
+        state === "requested"
+          ? "Told Member to stand down"
+          : state === "confirmed"
+            ? "Member stood down"
+            : "The previous action may have finished. I’ll check before retrying.";
+      const button = container.querySelector("button")!;
+      expect(button.getAttribute("aria-label")).toBe(
+        state === "requested" ? `${label} · Stopping Member` : label,
+      );
+      expect(button.getAttribute("aria-expanded")).toBe("false");
+      expect(button.querySelector('[aria-live="polite"]')?.textContent).toBe(label);
+      expect(container.querySelectorAll('[data-testid="chief-activity"]')).toHaveLength(
+        state === "requested" ? 1 : 0,
+      );
+      expect(container.textContent).not.toMatch(
+        /86|87|Replacement|Creating the Notion page|Preparation request/,
+      );
+      if (state === "uncertain")
+        expect(button.querySelector("span")?.className).not.toContain("truncate");
+    }
+    act(() => root.render(<ChiefDispatchLine dispatch={dispatch} detail="Preparation request" />));
+    expect(container.querySelector("button")?.getAttribute("aria-label")).toBe(
+      "Messaged Replacement · Creating the Notion page",
+    );
+    act(() => container.querySelector("button")!.click());
+    expect(container.textContent).toContain("Preparation request");
+    expect(container.querySelector("button")?.getAttribute("aria-expanded")).toBe("true");
   });
 
   it("expands to show the request and each member's outcome", () => {

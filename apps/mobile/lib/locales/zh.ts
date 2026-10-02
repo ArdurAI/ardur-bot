@@ -1,4 +1,7 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "Other locations are unavailable for {runtime}. Choose This computer.":
+    "{runtime} 无法使用其他位置。请选择此电脑。",
+  "Connect the host service to choose This computer.": "连接主机服务后才能选择此电脑。",
   "Move to a container": "移至容器",
   "Keep current location": "保留当前位置",
   "Paused for an update": "已暂停以进行更新",
@@ -1401,4 +1404,13 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Check failed": "验证失败",
   "Download evidence": "下载证据",
   "{gapCount} evidence gaps": "{gapCount} 处证据缺失",
+  "Checking the earlier action": "正在检查先前的操作",
+  "Got it — I’ll keep {name} off this task.": "收到 — 我不会让 {name} 参与这项任务。",
+  "Got it — I’ll check this change before the next action.":
+    "收到 — 我会在下一步操作前检查这项变更。",
+  "Told {name} to stand down": "已通知 {name} 停下",
+  "Stopping {name}": "正在停止 {name}",
+  "{name} stood down": "{name} 已停下",
+  "The previous action may have finished. I’ll check before retrying.":
+    "上一步操作可能已完成。我会先检查，再重试。",
 };

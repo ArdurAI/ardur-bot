@@ -313,10 +313,10 @@ test("captures bot chat, group collaboration, and routines from seeded demo data
           json: {
             botId: "bot",
             computerId: "demo-computer",
-            kind: "docker",
+            kind: "desktop",
             mode: "team",
             state: "stopped",
-            connectionId: null,
+            connectionId: "demo-engine",
             imageProfile: "base",
             controlHolder: "none",
             controlBotId: null,
@@ -330,8 +330,13 @@ test("captures bot chat, group collaboration, and routines from seeded demo data
           },
         },
       });
-    if (procedure === "computer/connections" || procedure === "computer/list")
-      return route.fulfill({ json: { json: [] } });
+    if (procedure === "computer/connections")
+      return route.fulfill({
+        json: {
+          json: [{ id: "demo-engine", name: "Docker Desktop", settings: { engine: "docker" } }],
+        },
+      });
+    if (procedure === "computer/list") return route.fulfill({ json: { json: [] } });
     const original = data.fixture.rpc(procedure, input);
     const space = { ...data.base.spaces[0], bots: data.bots, groups: [data.group] };
     const result =
@@ -426,6 +431,8 @@ test("captures bot chat, group collaboration, and routines from seeded demo data
   const botSettings = page.getByTestId("bot-settings");
   const runtimeSummary = botSettings.getByTestId("runtime-summary");
   await expect(runtimeSummary).toContainText("Container");
+  await expect(runtimeSummary).toContainText("Docker Desktop");
+  await expect(runtimeSummary).not.toContainText("Runs as you");
   await expect(runtimeSummary).toContainText("Bots share files and installed tools");
   await runtimeSummary.scrollIntoViewIfNeeded();
   await captureSiteScreenshot(page, "bot-runtime-settings");

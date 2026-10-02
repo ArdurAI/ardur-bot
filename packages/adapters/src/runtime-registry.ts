@@ -1,6 +1,7 @@
 import type { AdapterContext, AgentRunRequest, AgentRuntime } from "@ardurbot/adapter-kit";
 import type {
   RuntimeAvailability,
+  RuntimeComputerLocation,
   RuntimeKind,
   RuntimePin,
   RuntimeProblem,
@@ -10,6 +11,7 @@ import {
   nativeRuntimeHealthKeys,
   runtimeNames,
   runtimePinProblem,
+  runtimeSupportsLocation,
   validateAntigravityPin,
 } from "@ardurbot/contracts";
 import type { BrokerScope, HermesProviderBroker } from "./hermes-provider-broker.js";
@@ -26,7 +28,7 @@ export class RuntimeRegistry {
   constructor(private readonly entries: Partial<Record<RuntimeKind, RuntimeEntry>>) {}
   async resolve(
     pin: RuntimePin,
-    computerKind?: string,
+    computerLocation?: string | RuntimeComputerLocation,
     experimental = false,
     connection?: { credentialId: string; provider: string; modelId: string; effort: string },
   ): Promise<{ runtime: AgentRuntime; availability: RuntimeAvailability } | RuntimeProblem> {
@@ -37,7 +39,14 @@ export class RuntimeRegistry {
         "runtime-unavailable",
         "The pinned runtime is unavailable — change the pin.",
       );
-    if (pin.runtimeKind !== "pi" && computerKind !== "desktop")
+    if (
+      !runtimeSupportsLocation(
+        pin.runtimeKind,
+        typeof computerLocation === "string"
+          ? { kind: computerLocation }
+          : (computerLocation ?? {}),
+      )
+    )
       return runtimePinProblem(
         pin,
         "runtime-unsupported-computer",

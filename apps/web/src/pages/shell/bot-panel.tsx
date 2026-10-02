@@ -12,6 +12,7 @@ import {
   BOT_DESCRIPTION_MAX_LENGTH,
   BOT_NAME_MAX_LENGTH,
   BOT_TITLE_MAX_LENGTH,
+  computerExecutionKind,
   computerKindFacts,
   computerModeFacts,
   errorDataCode,
@@ -126,6 +127,7 @@ export function CreateBotForm({
   const [locationReady, setLocationReady] = useState(false);
   const [containerName, setContainerName] = useState("");
   const [teamKind, setTeamKind] = useState("");
+  const [teamName, setTeamName] = useState<string>();
   const [locationRevision, setLocationRevision] = useState(0);
   useEffect(() => {
     const reload = () => setLocationRevision((value) => value + 1);
@@ -140,10 +142,14 @@ export function CreateBotForm({
       .then(([me, connections, computers]) => {
         if (active) {
           const recommendation = recommendedContainer(me.sandboxProvider, connections);
+          const team = computers.find((entry) => entry.status.mode === "team")?.status;
+          const connection = connections.find((entry) => entry.id === team?.connectionId);
           setTeamKind(
-            computers.find((entry) => entry.status.mode === "team")?.status.kind ??
-              me.sandboxProvider,
+            team
+              ? (computerExecutionKind({ ...team, connectionSettings: connection?.settings }) ?? "")
+              : me.sandboxProvider,
           );
+          setTeamName(connection?.name);
           setContainer(recommendation);
           setContainerName(
             connections.find((entry) => entry.id === recommendation?.connectionId)?.name ??
@@ -268,7 +274,7 @@ export function CreateBotForm({
         ) : null}
         {computerMode === "team" && teamKind ? (
           <div className="mt-2 text-sm">
-            <RuntimeBoundary kind={teamKind} />
+            <RuntimeBoundary kind={teamKind} locationName={teamName} />
           </div>
         ) : null}
         {computerMode === "dedicated" && locationReady && !container ? (
@@ -823,7 +829,12 @@ export function BotSettings({
       </SettingsGroup>
       <SettingsGroup label={t`Where this bot runs`}>
         <div ref={computerRef} className="space-y-3 py-4">
-          <BotRuntimeSettings botId={bot.id} name={bot.name} mode={computerMode}>
+          <BotRuntimeSettings
+            botId={bot.id}
+            name={bot.name}
+            mode={computerMode}
+            runtimeKind={runtimeKind}
+          >
             <ComputerModePicker value={computerMode} onChange={setComputerMode} />
           </BotRuntimeSettings>
         </div>

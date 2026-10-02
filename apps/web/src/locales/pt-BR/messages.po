@@ -316,6 +316,10 @@ msgid "{name} needs your input"
 msgstr ""
 
 #: src/components/ai/CoordinationLine.tsx
+msgid "{name} stood down"
+msgstr "{name} parou"
+
+#: src/components/ai/CoordinationLine.tsx
 msgid "{name} stopped before answering"
 msgstr "{name} parou antes de responder"
 
@@ -1735,6 +1739,10 @@ msgid "Checking the download"
 msgstr "Verificando o download"
 
 #: src/components/ai/CoordinationLine.tsx
+msgid "Checking the earlier action"
+msgstr "Verificando a ação anterior"
+
+#: src/components/ai/CoordinationLine.tsx
 msgid "Checking the missing tool"
 msgstr "Verificando a ferramenta que falta"
 
@@ -2260,6 +2268,10 @@ msgstr "Conectar OAuth"
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Connect remote account"
 msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Connect the host service to choose This computer."
+msgstr "Conecte o serviço do computador para escolher Este computador."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Connect this provider to use it as your personal model."
@@ -4428,12 +4440,20 @@ msgid "Got it — I’ll check the request and choose the next step."
 msgstr "Entendido — vou verificar o pedido e escolher o próximo passo."
 
 #: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check this change before the next action."
+msgstr "Entendido — vou verificar esta mudança antes da próxima ação."
+
+#: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll check what’s missing and ask before installing it."
 msgstr "Entendido — vou verificar o que está faltando e perguntar antes de instalar."
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll choose a team member to put this in Notion."
 msgstr "Entendido — vou escolher um membro da equipe para colocar isto no Notion."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll keep {name} off this task."
+msgstr "Entendido — vou manter {name} fora desta tarefa."
 
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
@@ -6514,6 +6534,10 @@ msgstr ""
 msgid "Other files"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Other locations are unavailable for {runtime}. Choose This computer."
+msgstr "Outros locais não estão disponíveis para {runtime}. Escolha Este computador."
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Other model…"
@@ -8560,6 +8584,10 @@ msgstr "parou antes de responder"
 msgid "Stopping"
 msgstr ""
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Stopping {name}"
+msgstr "Parando {name}"
+
 #: src/pages/settings-sections.ts
 msgid "Storage"
 msgstr ""
@@ -8796,6 +8824,10 @@ msgstr "A última atualização foi interrompida."
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "The previous action may have finished. I’ll check before retrying."
+msgstr "A ação anterior pode ter terminado. Vou verificar antes de tentar novamente."
 
 #: src/pages/board/BoardsSettings.tsx
 msgid "The reviewer was changed in another window."
@@ -9150,6 +9182,10 @@ msgstr ""
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Tokens over seven days"
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Told {name} to stand down"
+msgstr "Pedi para {name} parar"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Tool access mode"
