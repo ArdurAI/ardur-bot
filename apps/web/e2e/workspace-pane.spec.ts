@@ -172,7 +172,7 @@ test("conversation file and recorded-change links open checked views beside chat
   );
   const editor = pane.locator("[data-ide-editor]");
   await expect(editor).toContainText("Workspace notes");
-  await expect(pane.locator(".cm-activeLineGutter")).toHaveText("2");
+  await expect(editor.locator(".cm-line").nth(1)).toHaveClass(/cm-activeLine/);
   await expect(page).toHaveURL(`/app/${botId}`);
   await captureScreenshot(page, testInfo, "workspace-ide-beside-chat");
   await editor.fill("Unsaved IDE draft");
