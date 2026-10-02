@@ -42,7 +42,7 @@ export function workspaceFileIntentFromHref(
       computerId: context.computerId,
       generation: context.generation,
     },
-    path: match[1],
+    path: match[1]!.replace(/^\.\//, ""),
     ...(match[2] ? { line: Number(match[2]) } : {}),
   };
 }

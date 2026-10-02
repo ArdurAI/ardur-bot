@@ -60,6 +60,8 @@ export function WorkspaceChanges({
   );
   useEffect(() => {
     setSelected(null);
+    setLoading(false);
+    setError(false);
     if (location) void open(location);
     return () => request.current?.abort();
   }, [location, open]);

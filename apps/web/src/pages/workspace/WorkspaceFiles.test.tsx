@@ -211,6 +211,24 @@ describe("workspace files", () => {
     expect(host.querySelector("textarea")?.value).toBe("draft from IDE");
     expect(api.read).toHaveBeenCalledTimes(1);
   });
+  it("retains a conflicted draft when an intent is replayed after reopening", async () => {
+    const location = { path: "notes.md", line: 2, requestId: 1 };
+    await show("bot", { rootId: "sandbox-computer" }, location);
+    await type("conflicted intent draft");
+    api.save.mockResolvedValueOnce({
+      saved: false,
+      approvalRequired: false,
+      reason: "The file changed. Open it again before saving.",
+    });
+    await click("Save");
+    await act(async () => renderer.render(null));
+    await show("bot", { rootId: "sandbox-computer" }, location);
+    expect(host.querySelector("textarea")?.value).toBe("conflicted intent draft");
+    expect(api.read).toHaveBeenCalledTimes(1);
+    await show("bot", { rootId: "sandbox-computer" }, { ...location, requestId: 2 });
+    expect(host.querySelector("textarea")?.value).toBe("conflicted intent draft");
+    expect(api.read).toHaveBeenCalledTimes(1);
+  });
   it("opens, edits, and saves a file with the IDE's approval and conflict protection", async () => {
     await click("notes.md");
     const editor = host.querySelector("textarea");

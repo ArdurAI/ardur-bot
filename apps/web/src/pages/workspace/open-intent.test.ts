@@ -1,6 +1,6 @@
 import type { WorkspaceContext } from "@ardurbot/contracts";
 import { describe, expect, it } from "vitest";
-import { checkedWorkspaceIntent } from "./open-intent";
+import { checkedWorkspaceIntent, workspaceFileIntentFromHref } from "./open-intent";
 
 const context: WorkspaceContext = {
   botId: "bot",
@@ -13,6 +13,30 @@ const context: WorkspaceContext = {
 };
 const target = { botId: "bot", rootId: "sandbox-computer", computerId: "computer", generation: 3 };
 describe("workspace navigation intents", () => {
+  it.each(["notes.md#L2", "./notes.md#L2"])(
+    "binds relative file links after Markdown rendering: %s",
+    (href) => {
+      expect(
+        checkedWorkspaceIntent(workspaceFileIntentFromHref(href, context), "bot", context),
+      ).toEqual({
+        view: { type: "ide" },
+        target,
+        path: "notes.md",
+        line: 2,
+      });
+    },
+  );
+  it.each([
+    "../secret.md",
+    "/secret.md",
+    "a/../secret.md",
+    "javascript:secret.md",
+    "https://example.com/file.md",
+  ])("never promotes an escaping or external link to a file target: %s", (href) => {
+    expect(
+      checkedWorkspaceIntent(workspaceFileIntentFromHref(href, context), "bot", context),
+    ).toBeNull();
+  });
   it.each([
     { view: { type: "ide" }, target, path: "src/main.ts", line: 9 },
     {

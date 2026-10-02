@@ -121,11 +121,11 @@ export function WorkspaceFiles({
     },
     [bot.id, computerId, generation, revision, context.rootId],
   );
-  const open = (path: string) => {
+  const open = (path: string, preserveDraft = false) => {
     const target = sessionId;
     if (!target || !computerId || generation === null) return;
     const existing = sessionRef.current.tabs.find((tab) => tab.path === path);
-    if (existing && !existing.conflict) {
+    if (existing && (!existing.conflict || preserveDraft)) {
       commit({ ...sessionRef.current, active: existing.id });
       setError(null);
       return;
@@ -144,7 +144,7 @@ export function WorkspaceFiles({
         }
         const stored = readWorkspaceFileSession(target);
         const previous = stored.tabs.find((tab) => tab.path === path);
-        if (previous && !previous.conflict) {
+        if (previous && (!previous.conflict || preserveDraft)) {
           const next = { ...stored, active: previous.id };
           writeWorkspaceFileSession(target, next);
           if (alive.current && boundRef.current === target) setSession(next);
@@ -256,7 +256,7 @@ export function WorkspaceFiles({
   const openRef = useRef(open);
   openRef.current = open;
   useEffect(() => {
-    if (location) openRef.current(location.path);
+    if (location) openRef.current(location.path, true);
   }, [location, sessionId]);
   saveRef.current = save;
   useEffect(() => {
