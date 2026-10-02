@@ -12,7 +12,13 @@ import type {
 } from "@ardurbot/adapter-kit";
 import type { CapacitySnapshot } from "@ardurbot/contracts";
 import { boundedSandboxCommandTimeoutMs } from "@ardurbot/core";
-import { fleetPath, MAX_FLEET_ARCHIVE, readFleetArchive, writeFleetArchive } from "./archive.js";
+import {
+  fleetArchiveBatches,
+  fleetPath,
+  MAX_FLEET_ARCHIVE,
+  readFleetArchive,
+  writeFleetArchive,
+} from "./archive.js";
 import {
   LINUX_ARCHIVE_SCRIPT,
   LINUX_EXEC_SCRIPT,
@@ -189,12 +195,20 @@ export abstract class LinuxFleetSandbox implements SandboxProvider {
     files: AsyncIterable<PortableFile>,
     context: AdapterContext,
   ) {
-    await this.call(
-      computer,
-      ["python3", "-c", LINUX_RESTORE_SCRIPT, await this.root(computer, context)],
-      context,
-      await writeFleetArchive(files),
-    );
+    const root = await this.root(computer, context);
+    // A saved workspace can outgrow one archive; restore it in groups that each fit.
+    for await (const batch of fleetArchiveBatches(files)) {
+      await this.call(
+        computer,
+        ["python3", "-c", LINUX_RESTORE_SCRIPT, root],
+        context,
+        await writeFleetArchive(
+          (async function* () {
+            yield* batch;
+          })(),
+        ),
+      );
+    }
   }
   async snapshot(computer: ComputerRef, _context: AdapterContext) {
     return { id: computer.providerRef, createdAt: new Date().toISOString() };

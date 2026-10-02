@@ -98,6 +98,12 @@ describe("release metadata", () => {
       await generateCask("1.2.3-alpha.1", dir, signedOutput, true);
       const signedCask = await readFile(signedOutput, "utf8");
       expect(signedCask).not.toMatch(/caveats|Open Anyway|--no-quarantine|@MACOS_CAVEATS@/);
+      for (const generated of [cask, signedCask]) {
+        expect(generated).toContain(
+          'command_wrapper "ardur", executable: "#{appdir}/Ardur.app/Contents/MacOS/Ardur"',
+        );
+        expect(generated).not.toContain('binary "');
+      }
       // The template documents its placeholders in a leading comment; only the
       // published cask drops it, and the template in this repository keeps it.
       expect(cask.startsWith('cask "ardur" do')).toBe(true);

@@ -45,6 +45,8 @@ function fakeStore(
         : request.scope === "user" && (row.userId ?? row.owner) === ctx.userId) &&
     (!request.path || row.path === request.path);
   return {
+    // Isolate candidate verification and FTS performance; durable changes have their own suite.
+    recallRevision: async () => "fixture",
     read: async (request: MemoryReadRequest, ctx: AdapterContext): Promise<MemorySnapshot> => ({
       documents: rows
         .filter((row) => visible(row, request, ctx))
@@ -321,6 +323,8 @@ describe.skipIf(!ftsAvailable)("indexed local recall", () => {
     const base = new LifecycleMemoryStore(service);
     const memory = {
       describe: () => base.describe(),
+      // This suite isolates the in-process sink, rather than cross-process invalidation.
+      recallRevision: async () => "fixture",
       read: (request: MemoryReadRequest, ctx: AdapterContext) => {
         if (!request.path) fullReads(request);
         return base.read(request, ctx);
@@ -386,6 +390,7 @@ describe.skipIf(!ftsAvailable)("indexed local recall", () => {
     // build in flight and a snapshot that does not yet contain it.
     const memory = {
       describe: () => base.describe(),
+      recallRevision: async () => "fixture",
       read: async (request: MemoryReadRequest, ctx: AdapterContext) => {
         const page = await base.read(request, ctx);
         if (!request.path) {

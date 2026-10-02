@@ -20,15 +20,9 @@ cask "ardur" do
   depends_on :macos
 
   app "Ardur.app"
-  # Execute the bundle path, not Homebrew's binary symlink: Electron locates helpers beside it.
-  preflight do
-    require "shellwords"
-    executable = "#{appdir}/Ardur.app/Contents/MacOS/Ardur".shellescape
-    launcher = staged_path.join("ardur")
-    File.write(launcher, "#!/bin/bash\nexec #{executable} \"$@\"\n")
-    File.chmod(0755, launcher)
-  end
-  binary "ardur"
+  # Electron resolves its helper apps from the path it was launched with, so a symlink straight to
+  # Contents/MacOS/Ardur aborts with "Unable to find helper app". The wrapper keeps the bundle path.
+  command_wrapper "ardur", executable: "#{appdir}/Ardur.app/Contents/MacOS/Ardur"
 
 @MACOS_CAVEATS@
 end

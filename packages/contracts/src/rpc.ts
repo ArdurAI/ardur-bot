@@ -109,6 +109,7 @@ import {
   VoiceStatusSchema,
 } from "./domain.js";
 import { ProductEventSchema } from "./events.js";
+import { evidenceContract } from "./evidence.js";
 import { featuresContract } from "./features.js";
 import {
   FleetConnectionDetailsSchema,
@@ -401,6 +402,7 @@ export type ThreadsContract = typeof threadsContract;
 
 export const appContract = {
   features: featuresContract,
+  evidence: evidenceContract,
   dashboard: dashboardContract,
   board: boardContract,
   localImport: {

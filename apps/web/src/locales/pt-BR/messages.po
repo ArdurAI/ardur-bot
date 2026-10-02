@@ -256,6 +256,10 @@ msgstr ""
 msgid "{failed} failed"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "{gapCount} evidence gaps"
+msgstr "{gapCount} lacunas de evidência"
+
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
 msgstr "{hours}h atrás"
@@ -427,6 +431,10 @@ msgstr ""
 #: src/pages/system/SystemPage.tsx
 msgid "A saved shortcut is unavailable; choose another."
 msgstr ""
+
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "About evidence"
+msgstr "Sobre as evidências"
 
 #: src/pages/shell/bot-picker.tsx
 msgid "About groups"
@@ -1695,9 +1703,10 @@ msgstr ""
 msgid "Check again"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Check failed"
-msgstr ""
+msgstr "Verificação falhou"
 
 #: src/components/DesktopUpdates.tsx
 #: src/components/SoftwareUpdateSection.tsx
@@ -3069,9 +3078,10 @@ msgid "Could not save this file. Try again."
 msgstr "Não foi possível salvar este arquivo. Tente novamente."
 
 #: src/pages/customize/McpCredentialFix.tsx
+#: src/pages/dashboard/GovernancePanel.tsx
 #: src/pages/Shell.tsx
 msgid "Could not save. Try again."
-msgstr ""
+msgstr "Não foi possível salvar. Tente novamente."
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
@@ -3810,6 +3820,10 @@ msgstr "Baixar {name}"
 msgid "Download as markdown"
 msgstr "Baixar como markdown"
 
+#: src/components/RunEvidence.tsx
+msgid "Download evidence"
+msgstr "Baixar evidências"
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Download Executor"
 msgstr ""
@@ -4031,7 +4045,21 @@ msgstr "A cada semana"
 
 #: src/pages/LearningInbox.tsx
 msgid "Evidence"
-msgstr ""
+msgstr "Evidências"
+
+#: src/components/RunEvidence.tsx
+msgid "Evidence gap"
+msgstr "Lacuna nas evidências"
+
+#: src/components/RunEvidence.tsx
+#: src/pages/dashboard/GovernancePanel.tsx
+#: src/pages/dashboard/panels.ts
+msgid "Evidence off"
+msgstr "Evidências desativadas"
+
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "Evidence on"
+msgstr "Evidências ativadas"
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Excluded files"
@@ -4409,11 +4437,6 @@ msgstr "Entendido — vou escolher um membro da equipe para colocar isto no Noti
 
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
-msgstr ""
-
-#: src/pages/dashboard/GovernancePanel.tsx
-#: src/pages/dashboard/panels.ts
-msgid "Governance and encryption are not part of this build yet."
 msgstr ""
 
 #: src/pages/LearningTimeline.tsx
@@ -6162,6 +6185,10 @@ msgstr ""
 msgid "Not running — open the desktop app"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "Not sealed"
+msgstr "Não selado"
+
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
 msgstr ""
@@ -6969,6 +6996,14 @@ msgstr ""
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Reconnecting"
 msgstr "Reconectando"
+
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "Record evidence of bot decisions"
+msgstr "Registrar evidências das decisões dos bots"
+
+#: src/components/RunEvidence.tsx
+msgid "Recording"
+msgstr "Registrando"
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Recording may have started, but the view could not refresh"
@@ -9470,6 +9505,10 @@ msgstr "Usa as permissões dessa conta."
 #: src/pages/shell/group-participants.tsx
 msgid "Using {currentId}"
 msgstr "Usando {currentId}"
+
+#: src/components/RunEvidence.tsx
+msgid "Verified"
+msgstr "Verificado"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"

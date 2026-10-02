@@ -23,7 +23,7 @@
       "id": "remember",
       "eyebrow": "MEMORY",
       "title": "Memory you can inspect",
-      "body": "Keep documents in the built-in database, or connect a Git repository for a space's shared notes.",
+      "body": "Keep documents in the built-in database, or connect a Git repository for a space's shared notes. Bots can recall saved private facts in later direct and group conversations.",
       "source": "README.md#Memory"
     },
     {
@@ -51,7 +51,7 @@
       "id": "approve",
       "eyebrow": "APPROVAL",
       "title": "Stay in control",
-      "body": "Ardur asks for approval before consequential actions.",
+      "body": "Ardur asks for approval before consequential actions. Space owners can opt in to signed bot-decision evidence; members can check run status and download sealed evidence from visible runs for independent verification. Evidence is not encrypted and does not prove tool execution or completeness.",
       "source": "README.md#What you get today"
     }
   ],
@@ -504,7 +504,7 @@
           ]
         }
       ],
-      "note": "“This computer” runs its database/services without Docker. Homebrew's ardur opens the installed bundle. Previews update manually. CI checks branch installers without publishing. Windows installer checked for silent install and uninstall; first-launch check pending."
+      "note": "“This computer” needs no Docker. Previews update manually. Homebrew needs 2026-09-20 or later; brew update first. CI checks branch installers without publishing. Windows installer checked for silent install and uninstall; first-launch check pending."
     },
     "installScript": {
       "platforms": [

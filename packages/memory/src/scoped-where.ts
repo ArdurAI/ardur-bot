@@ -100,6 +100,7 @@ type FilterRow = {
   botId: string | null;
   scope: string;
   scopeKey: string | null;
+  path?: string;
   deletedAt: Date | null;
 };
 
@@ -117,6 +118,7 @@ export function matchesDocumentWhere(
     "botId",
     "scope",
     "scopeKey",
+    "path",
     "deletedAt",
   ]);
   for (const key of Object.keys(where))
@@ -134,6 +136,7 @@ export function matchesDocumentWhere(
     "botId",
     "scope",
     "scopeKey",
+    "path",
     "deletedAt",
   ] as const) {
     const filter = where[key];

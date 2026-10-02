@@ -117,7 +117,7 @@ beforeEach(() => {
   api.learning.mockResolvedValue({ pendingCount: 0, proposals: [] });
   api.work.mockResolvedValue({ workspace: null, ready: 0, inProgress: 0, blocked: 0, items: [] });
   api.filingOutcomes.mockResolvedValue({ bots: [] });
-  api.features.mockResolvedValue([{ feature: "governance", state: "unavailable" }]);
+  api.features.mockResolvedValue([{ feature: "governance", state: "disabled", canManage: false }]);
   node = document.createElement("div");
   document.body.append(node);
   root = createRoot(node);
@@ -175,9 +175,7 @@ it("loads eight independent lazy panels and renders honest empty states", async 
   ])
     expect(node.textContent).toContain(text);
   const governance = node.querySelector('[data-panel="governance"]')!;
-  expect(governance.querySelector("p")?.textContent).toBe(
-    "Governance and encryption are not part of this build yet.",
-  );
+  expect(governance.querySelector("p")?.textContent).toBe("Evidence off");
   expect(governance.querySelector("a")?.getAttribute("href")).toContain("governance.md");
   expect(governance.querySelector("button, input, select")).toBeNull();
 });
@@ -303,7 +301,7 @@ it.each([
   ["routines", "routines", "No scheduled runs"],
   ["usage", "usage", "No usage"],
   ["learning", "learning", "No proposals"],
-  ["governance", "features", "Governance and encryption are not part of this build yet."],
+  ["governance", "features", "Evidence off"],
 ] as const)(
   "isolates %s loading and failure, then retries to its empty projection",
   async (id, source, empty) => {

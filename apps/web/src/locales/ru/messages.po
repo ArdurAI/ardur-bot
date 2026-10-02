@@ -256,6 +256,10 @@ msgstr "Личных записей памяти: {documents}, {kb} КБ; пои
 msgid "{failed} failed"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "{gapCount} evidence gaps"
+msgstr "Пробелов в записи: {gapCount}"
+
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
 msgstr "{hours} ч назад"
@@ -427,6 +431,10 @@ msgstr ""
 #: src/pages/system/SystemPage.tsx
 msgid "A saved shortcut is unavailable; choose another."
 msgstr ""
+
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "About evidence"
+msgstr "О свидетельствах"
 
 #: src/pages/shell/bot-picker.tsx
 msgid "About groups"
@@ -1695,6 +1703,7 @@ msgstr "Проверить"
 msgid "Check again"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Check failed"
 msgstr "Проверка не удалась"
@@ -3069,9 +3078,10 @@ msgid "Could not save this file. Try again."
 msgstr "Не удалось сохранить этот файл. Повторите попытку."
 
 #: src/pages/customize/McpCredentialFix.tsx
+#: src/pages/dashboard/GovernancePanel.tsx
 #: src/pages/Shell.tsx
 msgid "Could not save. Try again."
-msgstr ""
+msgstr "Не удалось сохранить. Повторите попытку."
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
@@ -3810,6 +3820,10 @@ msgstr "Скачать {name}"
 msgid "Download as markdown"
 msgstr "Скачать как Markdown"
 
+#: src/components/RunEvidence.tsx
+msgid "Download evidence"
+msgstr "Скачать свидетельства"
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Download Executor"
 msgstr "Скачать Executor"
@@ -4031,7 +4045,21 @@ msgstr "Каждую неделю"
 
 #: src/pages/LearningInbox.tsx
 msgid "Evidence"
-msgstr ""
+msgstr "Свидетельства"
+
+#: src/components/RunEvidence.tsx
+msgid "Evidence gap"
+msgstr "Пробел в свидетельствах"
+
+#: src/components/RunEvidence.tsx
+#: src/pages/dashboard/GovernancePanel.tsx
+#: src/pages/dashboard/panels.ts
+msgid "Evidence off"
+msgstr "Запись выключена"
+
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "Evidence on"
+msgstr "Запись включена"
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Excluded files"
@@ -4409,11 +4437,6 @@ msgstr "Понял — выберу участника команды, кото�
 
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
-msgstr ""
-
-#: src/pages/dashboard/GovernancePanel.tsx
-#: src/pages/dashboard/panels.ts
-msgid "Governance and encryption are not part of this build yet."
 msgstr ""
 
 #: src/pages/LearningTimeline.tsx
@@ -6162,6 +6185,10 @@ msgstr ""
 msgid "Not running — open the desktop app"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "Not sealed"
+msgstr "Не запечатано"
+
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
 msgstr ""
@@ -6969,6 +6996,14 @@ msgstr ""
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Reconnecting"
 msgstr "Повторное подключение"
+
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "Record evidence of bot decisions"
+msgstr "Записывать свидетельства решений ботов"
+
+#: src/components/RunEvidence.tsx
+msgid "Recording"
+msgstr "Идёт запись"
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Recording may have started, but the view could not refresh"
@@ -9470,6 +9505,10 @@ msgstr "Использует права этой учётной записи."
 #: src/pages/shell/group-participants.tsx
 msgid "Using {currentId}"
 msgstr "Используется {currentId}"
+
+#: src/components/RunEvidence.tsx
+msgid "Verified"
+msgstr "Проверено"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"

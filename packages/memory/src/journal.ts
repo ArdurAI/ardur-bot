@@ -12,7 +12,7 @@ import type {
 import { MemoryAccessError, MemoryConflictError } from "@ardurbot/adapter-kit";
 import { DocumentRevisionSchema } from "@ardurbot/contracts";
 import { previewImport, requireImportReady } from "./portable.js";
-import { assertMemoryPath, assertMemorySafe } from "./redaction.js";
+import { assertMemoryPath, assertMemorySafe, MemoryRedactionError } from "./redaction.js";
 import { assertScope, canAccess, scopeKey } from "./scope.js";
 
 export interface JournalDocument {
@@ -45,7 +45,35 @@ export class JournalDocumentStore implements MemoryDocumentStore {
     protected readonly journal: MemoryJournal,
     private readonly id: string,
     private readonly clock: () => Date = () => new Date(),
+    /** Called with the id (never the content or path) of a stored document the credential check refused. */
+    private readonly onUnsafeDocument?: (documentId: string) => void,
   ) {}
+  /**
+   * A stored document that fails the credential check stays out of every read (listing, direct
+   * read, history, export) instead of failing it: one refused note must never stop every bot in
+   * the space. Writes still refuse such content up front (see commit). Only the id is reported:
+   * the path is checked too and could be what was refused.
+   */
+  protected isSafe(documentId: string, value: unknown, knownSecrets: readonly string[] = []) {
+    try {
+      assertMemorySafe(value, knownSecrets);
+      return true;
+    } catch (error) {
+      if (!(error instanceof MemoryRedactionError)) throw error;
+      try {
+        this.onUnsafeDocument?.(documentId);
+      } catch {
+        // Reporting is best effort; a failing reporter must not fail the read either.
+      }
+      return false;
+    }
+  }
+  protected withoutUnsafe<T extends { id: string }>(
+    items: T[],
+    knownSecrets: readonly string[] = [],
+  ): T[] {
+    return items.filter((doc) => this.isSafe(doc.id, doc, knownSecrets));
+  }
   describe(): ReturnType<MemoryDocumentStore["describe"]> {
     return {
       id: this.id,
@@ -71,12 +99,10 @@ export class JournalDocumentStore implements MemoryDocumentStore {
             (!input.cursor || doc.id > input.cursor),
         )
         .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-      const page = {
-        items: items.slice(0, limit),
+      return {
+        items: this.withoutUnsafe(items.slice(0, limit), access.knownSecrets),
         nextCursor: items.length > limit ? items[limit - 1]!.id : null,
       };
-      assertMemorySafe(page, access.knownSecrets);
-      return page;
     });
   }
   async read(id: string, access: MemoryAccess) {
@@ -85,8 +111,7 @@ export class JournalDocumentStore implements MemoryDocumentStore {
         (entry) => entry.id === id && canAccess(entry.revisions.at(-1)!.scopeKey, access),
       );
       const head = doc ? documentHead(doc) : null;
-      assertMemorySafe(head, access.knownSecrets);
-      return head;
+      return head && this.isSafe(head.id, head, access.knownSecrets) ? head : null;
     });
   }
   async commit(input: DocumentCommit, access: MemoryAccess) {
@@ -187,23 +212,25 @@ export class JournalDocumentStore implements MemoryDocumentStore {
       const revisions = visibleDocument(docs, id, access)
         .revisions.filter((r) => !input.cursor || r.revision < input.cursor)
         .toReversed();
-      const page = {
-        items: revisions.slice(0, limit),
+      return {
+        items: revisions
+          .slice(0, limit)
+          .filter((revision) => this.isSafe(id, revision, access.knownSecrets)),
         nextCursor: revisions.length > limit ? revisions[limit - 1]!.revision : null,
       };
-      assertMemorySafe(page, access.knownSecrets);
-      return page;
     });
   }
   async exportBundle(access: MemoryAccess): Promise<MemoryBundle> {
     return this.journal.transaction(access, async (docs) => {
       const bundle = {
         version: 1 as const,
-        documents: docs
-          .filter((d) => canAccess(d.revisions.at(-1)!.scopeKey, access))
-          .map(({ id, revisions }) => ({ id, revisions })),
+        documents: this.withoutUnsafe(
+          docs
+            .filter((d) => canAccess(d.revisions.at(-1)!.scopeKey, access))
+            .map(({ id, revisions }) => ({ id, revisions })),
+          access.knownSecrets,
+        ),
       };
-      assertMemorySafe(bundle, access.knownSecrets);
       return structuredClone(bundle);
     });
   }

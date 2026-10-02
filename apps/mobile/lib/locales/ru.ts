@@ -1452,4 +1452,12 @@ export const RU_MESSAGES: Record<string, string> = {
   "Set up a container on desktop, then try again.":
     "Настройте контейнер в настольном приложении, затем попробуйте снова.",
   Sleeping: "Спит",
+  "Evidence off": "Запись выключена",
+  Recording: "Запись",
+  Verified: "Проверено",
+  "Not sealed": "Без печати",
+  "Evidence gap": "Пробел в записи",
+  "Check failed": "Проверка не пройдена",
+  "Download evidence": "Скачать свидетельства",
+  "{gapCount} evidence gaps": "Пробелов в записи: {gapCount}",
 };
