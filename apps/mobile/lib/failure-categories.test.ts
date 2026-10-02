@@ -21,6 +21,19 @@ afterEach(() => {
 });
 
 describe("failure-category mobile completeness", () => {
+  it.each(["ru", "zh-CN"] as const)("translates a Hermes session-start failure in %s", (locale) => {
+    activateUiLocale(locale);
+    const problem = runtimePinProblem(
+      { ...pinFor(), runtimeKind: "hermes" },
+      "runtime-unavailable",
+      "Hermes could not start a session. Check the runtime and try again.",
+      "session-start-failed",
+    );
+    const text = runtimeProblemText(problem);
+    expect(text).toContain("Hermes");
+    expect(text).not.toContain("{runtime}");
+    expect(text).not.toBe(problem.reason);
+  });
   it("gives every table id a non-empty ru and zh catalog entry", () => {
     for (const entry of FAILURE_CATEGORIES) {
       expect(RU_MESSAGES[entry.message], `ru: ${entry.id}`).toBeTruthy();

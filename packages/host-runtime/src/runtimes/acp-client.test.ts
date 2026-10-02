@@ -17,19 +17,22 @@ describe("AcpClient request correlation", () => {
     const client = new AcpClient(child);
     try {
       expect(await client.request("first", {})).toEqual({ seen: 1 });
-      await expect(client.request("silent", {}, 30)).rejects.toThrow("ACP request timed out.");
+      await expect(client.request("silent", {}, 30)).rejects.toMatchObject({
+        message: "ACP request timed out.",
+        kind: "timeout",
+      });
       expect(await client.request("third", {})).toEqual({ seen: 3 });
     } finally {
       client.close();
       await stopNative(child);
     }
   });
-  it("fails a write after the agent closes stdin without an unhandled stream error", async () => {
+  it("fails a write after stdin closes without an unhandled stream error", async () => {
     const child = spawn(
       process.execPath,
       [
         "-e",
-        'const fs=require("node:fs");process.stdin.once("data",chunk=>{const item=JSON.parse(chunk.toString());fs.closeSync(0);process.stdout.write(JSON.stringify({jsonrpc:"2.0",id:item.id,result:{ok:true}})+"\\n");setTimeout(()=>{},1000)})',
+        'process.stdin.once("data",chunk=>{const item=JSON.parse(chunk.toString());process.stdout.write(JSON.stringify({jsonrpc:"2.0",id:item.id,result:{ok:true}})+"\\n");setTimeout(()=>{},1000)})',
       ],
       { env: { PATH: "/usr/bin:/bin" }, stdio: "pipe" },
     );
@@ -37,7 +40,11 @@ describe("AcpClient request correlation", () => {
     const client = new AcpClient(child);
     try {
       expect(await client.request("first", {})).toEqual({ ok: true });
-      await expect(client.request("second", {}, 500)).rejects.toThrow("ACP input closed.");
+      child.stdin.destroy();
+      await expect(client.request("second", {}, 500)).rejects.toMatchObject({
+        message: "ACP input closed.",
+        kind: "closed",
+      });
     } finally {
       client.close();
       await stopNative(child);

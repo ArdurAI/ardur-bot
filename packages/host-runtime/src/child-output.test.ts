@@ -5,11 +5,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createLogger } from "../../logging/src/logger.js";
 import { createTestSink } from "../../logging/src/test-sink.js";
 import type { ChildOutputLogger } from "./child-output.js";
-import { captureChildOutput, createChildProcessLogger } from "./child-output.js";
+import { captureChildOutput, createChildProcessLogger, redactChildText } from "./child-output.js";
 
 function fakeChild(script: string): ChildProcess {
   return spawn(process.execPath, ["-e", script], { stdio: "pipe" });
 }
+
+it("redacts complete diagnostics before capping, including wrapped and encoded known secrets", () => {
+  const secret = "fixture value/+credential";
+  const message = `${"x".repeat(290)} ${secret} ${encodeURIComponent(secret)} ${secret.slice(0, 8)}\n${secret.slice(8)} Authorization: Bearer unknown-value`;
+  const safe = redactChildText(message, [secret]);
+  expect(safe).not.toContain(secret);
+  expect(safe).not.toContain(encodeURIComponent(secret));
+  expect(safe).not.toContain(secret.slice(8));
+  expect(safe).not.toContain("unknown-value");
+  expect(safe).toContain("[redacted]");
+  expect(safe.slice(0, 300)).not.toContain("fixture");
+});
 
 function fakeLogger() {
   const debug = vi.fn();

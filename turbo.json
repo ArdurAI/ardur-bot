@@ -26,7 +26,11 @@
     },
     "dev": {
       "cache": false,
-      "passThroughEnv": ["ARDURBOT_DESKTOP_STACK_TOKEN", "ARDUR_HERMES_INSTALL"],
+      "passThroughEnv": [
+        "ARDURBOT_DESKTOP_STACK_TOKEN",
+        "ARDUR_HERMES_INSTALL",
+        "ARDUR_DETAILED_PROCESS_LOGS"
+      ],
       "env": ["PUBLIC_POSTHOG_HOST", "PUBLIC_POSTHOG_KEY"],
       "persistent": true
     }

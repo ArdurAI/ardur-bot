@@ -110,6 +110,13 @@ function knownSecretStream(secrets: readonly string[], emit: (text: string) => v
   };
 }
 
+/** Redact a complete diagnostic with the same wrapped-secret scanner as child output. */
+export function redactChildText(text: string, secrets: readonly string[] = []): string {
+  const parts: string[] = [];
+  knownSecretStream(secrets, (part) => parts.push(part))(text, true);
+  return redactMcpText(parts.join(""), secrets);
+}
+
 /**
  * One capture point for every child process Ardur starts. Replaces bare
  * `child.stderr.resume()` so no child output is ever discarded unread. Output

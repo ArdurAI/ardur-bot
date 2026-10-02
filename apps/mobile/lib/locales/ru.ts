@@ -1,4 +1,6 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "{runtime} could not start a session. Check the runtime and try again.":
+    "{runtime} не удалось запустить сессию. Проверьте среду выполнения и повторите попытку.",
   Sandbox: "Песочница",
   "Move to This computer": "Переместить на Этот компьютер",
   "Choose Only this bot to use a different location from the Team computer.":

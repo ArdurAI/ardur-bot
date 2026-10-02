@@ -9,6 +9,7 @@ import type {
   AgentRuntime,
   AgentRuntimeEvent,
 } from "@ardurbot/adapter-kit";
+import { failureCategoryMessage } from "@ardurbot/contracts/failure-categories";
 import type { HermesExecutionEnvelopeSchema } from "@ardurbot/contracts/runtime-config";
 import type { RuntimeInfo } from "@ardurbot/contracts/runtime-pins";
 import {
@@ -23,6 +24,7 @@ import {
   captureChildOutput,
   childProcessLogger,
   detailedProcessLogsEnabled,
+  redactChildText,
 } from "../child-output.js";
 import { argumentSecrets, mcpConfigSecrets, redactMcpText } from "../mcp-diagnostics.js";
 import { AcpClient, AcpClientError } from "./acp-client.js";
@@ -288,25 +290,25 @@ interface ActiveTurn {
   captured?: CapturedChildOutput;
   /** Which kind of failure this was, when the runtime could tell (logged reason). */
   failureKind?: string;
+  acpError?: AcpClientError;
   secrets?: readonly string[];
 }
 
 /**
  * The one-line reason a Hermes turn failed, for the log record. The thrown
- * message stays generic; this names what actually happened.
+ * message stays a safe category sentence; this names what actually happened.
  */
 function classifyTurnFailure(
   error: unknown,
   phase: string | undefined,
   category: string | undefined,
 ): string {
+  if (phase === "initialize" || phase === "session/new") return "ACP handshake failed";
   if (category) return `provider refused (${category})`;
-  const message = error instanceof Error ? error.message : String(error);
   const detail = error instanceof AcpClientError ? error.detail : undefined;
-  if (/timed out/i.test(message)) return "timeout";
+  if (error instanceof AcpClientError && error.kind === "timeout") return "timeout";
   const status = detail?.match(/\b([45]\d\d)\b/)?.[1];
   if (status) return `provider refused (HTTP ${status})`;
-  if (phase === "initialize" || phase === "session/new") return "ACP handshake failed";
   if (phase === "profile-ack") return "pin check failed";
   if (error instanceof AcpClientError) return "ACP protocol failed";
   return "runtime error";
@@ -400,6 +402,12 @@ export class HermesRuntime implements AgentRuntime {
             ...turn.captured?.facts(),
             kind: turn.failureKind ?? "unknown",
             phase: turn.phase,
+            acpFailure: turn.acpError?.kind,
+            protocolErrorCode: turn.acpError?.protocolError?.code,
+            protocolErrorMessage:
+              turn.acpError?.protocolError?.message === undefined
+                ? undefined
+                : redactChildText(turn.acpError.protocolError.message, turn.secrets).slice(0, 300),
             exitCode: turn.exitCode,
             signal: turn.exitSignal,
             durationMs: turn.startedAt === undefined ? undefined : Date.now() - turn.startedAt,
@@ -778,7 +786,7 @@ export class HermesRuntime implements AgentRuntime {
           if (turn.active) {
             // Classify the provider failure before the generic rewrite: a usage limit,
             // an expired or missing credential and an unavailable model each record their
-            // category sentence; the vendor's text is never stored.
+            // category sentence; the conversation never receives the vendor's text.
             const pin = request.model.runtimePin;
             const category = nativeFailureCategory(
               nativeFailureDetail(
@@ -787,6 +795,8 @@ export class HermesRuntime implements AgentRuntime {
               ),
             );
             turn.failureKind = classifyTurnFailure(error, turn.phase, category);
+            if (error instanceof AcpClientError) turn.acpError = error;
+            const handshakeFailed = turn.phase === "initialize" || turn.phase === "session/new";
             // Stdout ends a tick before the process 'close', so the exit code
             // is often still unknown here; stop the child and settle the exit
             // facts before the failure is recorded.
@@ -795,11 +805,18 @@ export class HermesRuntime implements AgentRuntime {
             void this.finishTurn(
               request.runId,
               "failure",
-              category && pin
-                ? new RuntimePinError(nativeFailureProblem(pin, category))
-                : new Error("Hermes could not complete this turn.", {
-                    cause: error,
-                  }),
+              handshakeFailed && pin
+                ? new RuntimePinError(nativeFailureProblem(pin, "session-start-failed"))
+                : category && pin
+                  ? new RuntimePinError(nativeFailureProblem(pin, category))
+                  : new Error(
+                      handshakeFailed
+                        ? failureCategoryMessage("session-start-failed", { runtime: "Hermes" })
+                        : "Hermes could not complete this turn.",
+                      {
+                        cause: error,
+                      },
+                    ),
             ).catch(() => {});
           }
         }

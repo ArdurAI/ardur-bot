@@ -14,6 +14,21 @@ import zhCN from "../../scripts/translations-zh-CN.json";
 
 describe("lingui catalogs", () => {
   it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+    "translates session-start failures once in %s",
+    async (locale) => {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const source = readFileSync(filename, "utf8");
+      const message = "{runtime} could not start a session. Check the runtime and try again.";
+      const catalog = await formatter().parse(source, { locale, sourceLocale: "en", filename });
+      expect(source.split(`msgid ${JSON.stringify(message)}\n`)).toHaveLength(2);
+      const entry = Object.values(catalog).find((value) => value.message === message);
+      expect(entry?.translation?.trim(), locale).toBeTruthy();
+      expect(entry?.translation).toContain("{runtime}");
+      if (locale === "en") expect(entry?.translation).toBe(message);
+      else expect(entry?.translation).not.toBe(message);
+    },
+  );
+  it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
     "translates every computer state and typed workspace save failure once in %s",
     async (locale) => {
       const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));

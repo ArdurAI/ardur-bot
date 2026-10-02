@@ -17,6 +17,10 @@ msgstr ""
 msgid " — May not be available on your plan"
 msgstr " — May not be available on your plan"
 
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} could not start a session. Check the runtime and try again."
+msgstr "{runtime} could not start a session. Check the runtime and try again."
+
 #: src/pages/shell/bot-panel.tsx
 msgid " — not available on your account"
 msgstr " — not available on your account"

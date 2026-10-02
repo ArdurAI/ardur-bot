@@ -47,6 +47,20 @@ async function handle(value) {
     if (!value.params?.cwd || !Array.isArray(value.params?.mcpServers)) process.exit(3);
     sessionId = `fixture-${process.pid}`;
     mcp = value.params.mcpServers[0];
+    if (scenario === "session-new-closed") process.exit(4);
+    if (scenario === "session-new-error" || scenario === "session-new-long-error") {
+      const message = `session refused: ${process.env.ARDUR_HERMES_PROVIDER_KEY} ${mcp.args.at(-1)} ${mcp.env.find(({ name }) => name === "BRIDGE_TOKEN")?.value}`;
+      send({
+        id: value.id,
+        error: {
+          code: -32602,
+          message:
+            scenario === "session-new-long-error" ? `${message} ${"x".repeat(500)}` : message,
+          data: { message: "fixture private error data", prompt: "fixture private prompt" },
+        },
+      });
+      return;
+    }
     if (scenario === "profile-construction-tool") {
       const client = new Client({ name: "fixture", version: "0.1.0" });
       const transport = new StdioClientTransport({

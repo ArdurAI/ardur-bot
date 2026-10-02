@@ -81,6 +81,116 @@ function turnFinishSignal(runId: string) {
 
 describe("HermesRuntime M0 ACP seam", () => {
   afterEach(() => vi.unstubAllEnvs());
+  it.each([
+    ["session-new-error", false],
+    ["session-new-error", true],
+    ["session-new-long-error", false],
+    ["session-new-long-error", true],
+  ] as const)(
+    "logs only safe protocol metadata for %s (detailed=%s)",
+    async (scenario, detailed) => {
+      vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", detailed ? "1" : undefined);
+      vi.stubEnv("LOG_LEVEL", "debug");
+      const records: string[] = [];
+      const sink = new Writable({
+        write(chunk, _encoding, done) {
+          records.push(String(chunk));
+          done();
+        },
+      });
+      const run = request();
+      run.model.runtimePin = {
+        runtimeKind: "hermes",
+        provider: "fixture",
+        modelId: "fixture-model",
+        effort: "high",
+        credentialId: "fixture-connection",
+        revision: 1,
+      };
+      const adapter = new HermesRuntime({
+        command: process.execPath,
+        args: [fixture, scenario],
+        launch: async (spec) => ({
+          ...(await launchUnconfinedProcess(spec)),
+          mcpConfig: {
+            command: "fixture",
+            args: ["bridge", "fixture-bridge-argument"],
+            env: { BRIDGE_TOKEN: "fixture-bridge-environment" },
+          },
+        }),
+        logger: createChildProcessLogger(sink),
+      });
+      try {
+        const failure = await collect(adapter, run).catch((error: unknown) => error);
+        expect(failure).toMatchObject({
+          name: "RuntimePinError",
+          problem: {
+            reasonId: "session-start-failed",
+            reason: "Hermes could not start a session. Check the runtime and try again.",
+          },
+        });
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        const failures = records
+          .map((line) => JSON.parse(line))
+          .filter((record) => record.level === "error");
+        expect(failures).toHaveLength(1);
+        expect(failures[0].message).toBe("Hermes turn failed");
+        const facts = JSON.parse(failures[0].error.message);
+        const prefix = "session refused: [redacted] [redacted] [redacted]";
+        expect(facts).toMatchObject({
+          kind: "ACP handshake failed",
+          phase: "session/new",
+          acpFailure: "protocol-error",
+          protocolErrorCode: -32602,
+          protocolErrorMessage:
+            scenario === "session-new-long-error"
+              ? `${prefix} ${"x".repeat(500)}`.slice(0, 300)
+              : prefix,
+        });
+        expect(facts.protocolErrorMessage.length).toBeLessThanOrEqual(300);
+        const logged = records.join("");
+        for (const privateText of [
+          run.model.apiKey!,
+          "fixture-bridge-argument",
+          "fixture-bridge-environment",
+          "fixture private error data",
+          "fixture private prompt",
+        ])
+          expect(logged).not.toContain(privateText);
+        expect(JSON.stringify(failure)).not.toContain("session refused:");
+        expect((failure as Error).cause).toMatchObject({
+          message: expect.stringContaining("phase: session/new"),
+        });
+        expect(((failure as Error).cause as Error).cause).toBeUndefined();
+      } finally {
+        sink.destroy();
+      }
+    },
+  );
+
+  it("records a child closing during session/new as closed, not a protocol refusal", async () => {
+    const error = vi.fn();
+    const adapter = new HermesRuntime({
+      command: process.execPath,
+      args: [fixture, "session-new-closed"],
+      launch: launchUnconfinedProcess,
+      logger: { debug: vi.fn(), error },
+    });
+    await expect(collect(adapter, request())).rejects.toThrow(
+      "Hermes could not start a session. Check the runtime and try again.",
+    );
+    expect(error).toHaveBeenCalledExactlyOnceWith(
+      "Hermes turn failed",
+      expect.objectContaining({
+        kind: "ACP handshake failed",
+        phase: "session/new",
+        acpFailure: "closed",
+        exitCode: 4,
+        protocolErrorCode: undefined,
+        protocolErrorMessage: undefined,
+      }),
+    );
+  });
   it("redacts provider and overridden bridge credentials from child stderr", async () => {
     vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", "1");
     const debug: string[] = [];
@@ -319,11 +429,13 @@ describe("HermesRuntime M0 ACP seam", () => {
       stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: message.id, result })}\n`);
     });
     const finished = vi.fn();
+    const error = vi.fn();
     const adapter = new HermesRuntime({
       command: "fixture",
       pinned: true,
       launch: async () => ({ child, teardown: async () => undefined }),
       onTurnFinished: finished,
+      logger: { debug: vi.fn(), error },
     });
     const base = request();
     const run = request({
@@ -354,6 +466,14 @@ describe("HermesRuntime M0 ACP seam", () => {
       expect(finished).not.toHaveBeenCalled();
       await vi.advanceTimersByTimeAsync(423_200);
       await expect(completion).rejects.toThrow("Hermes could not complete this turn.");
+      expect(error).toHaveBeenCalledWith(
+        "Hermes turn failed",
+        expect.objectContaining({
+          phase: "prompt",
+          acpFailure: "timeout",
+          protocolErrorCode: undefined,
+        }),
+      );
     } finally {
       vi.useRealTimers();
     }
