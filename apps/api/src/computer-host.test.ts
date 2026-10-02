@@ -48,6 +48,7 @@ function deployment(sandboxProvider: string, computerHost: string | null) {
       ),
     },
     hostRegistration: {
+      findUnique: vi.fn(async () => registration),
       create: vi.fn(async ({ data }: { data: unknown }) => {
         if (registration) throw new Error("Already paired");
         registration = data;
@@ -66,6 +67,7 @@ function deployment(sandboxProvider: string, computerHost: string | null) {
       findUnique: vi.fn(async () => ({ organizationId: "org", space: { deletingAt: null } })),
     },
     computer: {
+      findFirst: vi.fn(async () => null),
       upsert: vi.fn(async ({ create }: { create: { kind: string } }) => ({
         id: "computer",
         ...create,
@@ -106,6 +108,7 @@ function deployment(sandboxProvider: string, computerHost: string | null) {
   const handler = new RPCHandler(
     createRouter({
       prisma: prisma as unknown as PrismaClient,
+      hostBridge: bridge,
       env: {
         agentRuntime: "scripted",
         defaultProvider: "fake",
@@ -147,7 +150,10 @@ function deployment(sandboxProvider: string, computerHost: string | null) {
     /** The kind a new bot's computer starts on. */
     async newBotKind(runtimeKind?: string) {
       prisma.computer.upsert.mockClear();
-      await createRepos(prisma as unknown as PrismaClient).createBot(owner, {
+      await createRepos(prisma as unknown as PrismaClient, {
+        sandboxProvider,
+        hostAvailable: async () => Boolean(registration),
+      }).createBot(owner, {
         name: "New",
         title: "",
         description: "",
@@ -218,12 +224,12 @@ it.each(["api", ""])(
   },
 );
 
-it("on the desktop app's own Compose stack, paired bots on the built-in runtime stay on Docker and only native-runtime bots use this computer", async () => {
+it("uses the paired connected host default for built-in and native bots, without moving existing bots", async () => {
   desktopStack();
   const stack = deployment("docker", null);
   expect(await stack.newBotKind()).toBe("docker");
   await stack.pair();
-  expect(await stack.newBotKind()).toBe("docker");
+  expect(await stack.newBotKind()).toBe("desktop");
   // Host-only runtimes still start on this computer once it is paired.
   expect(await stack.newBotKind("claude-code")).toBe("desktop");
   await stack.disconnect();

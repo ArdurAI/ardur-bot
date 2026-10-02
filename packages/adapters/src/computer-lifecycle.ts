@@ -7,8 +7,8 @@ import type {
   JobPublisher,
   SandboxProvider,
 } from "@ardurbot/adapter-kit";
-import type { ComputerUpdate } from "@ardurbot/contracts";
-import { HostMoveUnavailableError } from "@ardurbot/contracts";
+import type { ComputerUpdate, RuntimeComputerLocation } from "@ardurbot/contracts";
+import { computerRunsOnHost, HostMoveUnavailableError } from "@ardurbot/contracts";
 import {
   ACTIVE_RUN_STATUSES,
   parseScreenLeaseId,
@@ -812,8 +812,10 @@ async function noteRestoredWorkspace(
   await deps.events.notify(thread.id, event.seq);
 }
 
-export function computerSupportsUpdate(kind: string): boolean {
-  return kind !== "desktop";
+export function computerSupportsUpdate(
+  computer: RuntimeComputerLocation | null | undefined,
+): boolean {
+  return !computerRunsOnHost(computer);
 }
 
 export async function replaceComputer(
@@ -834,6 +836,7 @@ export async function replaceComputer(
     placementRunId?: string;
     imageProfile?: "base" | "developer";
     connectionId?: string | null;
+    destination?: "host" | "sandbox";
     networkEgress?: boolean;
   },
   /** An automatic move's destination; a Settings change is routed by the saved connection. */
@@ -928,17 +931,25 @@ export async function replaceComputer(
     engineMissing = error;
   }
   const chosenDefault = configuration?.connectionId === null;
-  const connectionId = chosenDefault
-    ? null
-    : (configuration?.connectionId ?? existing.connectionId);
+  const choosingHost = configuration?.destination === "host";
+  const connectionId =
+    chosenDefault || choosingHost ? null : (configuration?.connectionId ?? existing.connectionId);
   const lostEngine = connectionId === null && !source;
-  if (lostEngine && !chosenDefault && mode === "update") throw engineMissing;
+  if (lostEngine && !chosenDefault && !choosingHost && mode === "update") throw engineMissing;
   // Choosing the deployment default, or losing the engine, starts on the deployment's own engine.
   const destination =
     target ??
-    (chosenDefault || lostEngine
-      ? await deploymentEngine(deps, chosenDefault, context)
-      : undefined);
+    (choosingHost
+      ? await owningSandbox(deps.sandbox, { kind: "desktop", connectionId: null }, context)
+      : chosenDefault || lostEngine
+        ? await deploymentEngine(
+            deps,
+            chosenDefault && configuration?.destination !== "sandbox",
+            context,
+          )
+        : undefined);
+  if (choosingHost && destination?.describe().kind !== "desktop")
+    throw new MissingComputerProviderError("desktop", { resetAvailable: false });
   const moving =
     connectionId !== existing.connectionId || (destination !== undefined && destination !== source);
   const previousState = existing.state;
@@ -1036,6 +1047,7 @@ export async function replaceComputer(
               ...(configuration.connectionId !== undefined
                 ? { connectionId: configuration.connectionId }
                 : {}),
+              ...(choosingHost ? { connectionId: null } : {}),
               ...(configuration.networkEgress !== undefined
                 ? { networkEgress: configuration.networkEgress }
                 : {}),

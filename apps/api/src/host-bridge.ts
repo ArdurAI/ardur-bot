@@ -4,7 +4,7 @@ import path from "node:path";
 import type { Duplex } from "node:stream";
 import type { AdapterContext } from "@ardurbot/adapter-kit";
 import type { Actor } from "@ardurbot/contracts";
-import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
+import { ComputerConnectionSettingsSchema, computerRunsOnHost } from "@ardurbot/contracts";
 import type { BoardRun, BoardRunResult } from "@ardurbot/contracts/board";
 import { BoardError, BoardRunResultSchema } from "@ardurbot/contracts/board";
 import type { HostOperation, HostRequest } from "@ardurbot/contracts/host-bridge";
@@ -301,7 +301,7 @@ export class HostBridge {
         !run ||
         run.bot.spaceId !== request.scope.spaceId ||
         op.actor !== `bot:${run.bot.name}` ||
-        run.bot.computer?.kind !== "desktop"
+        !computerRunsOnHost(run.bot.computer)
       )
         return false;
     }
@@ -487,7 +487,7 @@ export class HostBridge {
       },
       include: { bot: { include: { computer: true } } },
     });
-    if (run?.bot.computer?.kind !== "desktop" || run.bot.spaceId !== request.scope.spaceId)
+    if (!run || !computerRunsOnHost(run.bot.computer) || run.bot.spaceId !== request.scope.spaceId)
       return false;
     if ("homeKey" in request.operation && run.bot.computer?.homeKey !== request.operation.homeKey)
       return false;

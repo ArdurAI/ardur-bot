@@ -794,7 +794,10 @@ export async function createApp(
       prisma,
       events,
       jobs,
-      provision: (request, policyEnv) => provisionMessagingIdentity(prisma, request, policyEnv),
+      provision: (request, policyEnv) =>
+        provisionMessagingIdentity(prisma, request, policyEnv, {
+          sandboxProvider: env.sandboxProvider,
+        }),
       openSignup: env.messagingOpenSignup,
       signupPolicy: {
         signupsEnabled: env.signupsEnabled,

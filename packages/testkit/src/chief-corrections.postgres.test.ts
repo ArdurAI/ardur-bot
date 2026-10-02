@@ -12,7 +12,6 @@ import {
   expireComputerExecutionLeases,
   finalizeRun,
   findChiefCorrectionPlan,
-  finishDelegation,
   IsolationError,
   projectChiefActivity,
   provisionMessagingIdentity,
@@ -122,6 +121,7 @@ describe.skipIf(!enabled).sequential("chief correction cross-run Postgres journe
           ],
         },
         spaceAllowedTools: ["fetch_page"],
+        spaceToolPolicies: { fetch_page: "allow" },
         assignments: {
           create: [worker, replacement, chief].map((bot) => ({
             ...scope,
@@ -587,26 +587,23 @@ describe.skipIf(!enabled).sequential("chief correction cross-run Postgres journe
       data: { status: "uncertain" },
     });
     await settleChiefAction(db.prisma, admission.admissionId, true);
-    await db.prisma.run.update({
-      where: { id: f.run.id },
-      data: {
-        status: "cancelled",
-        cancelConfirmedAt: new Date(),
-      },
+    // No computer work remains; use the executor's settlement-before-cancellation path.
+    expect(await confirmDispatchStop(db.prisma, f.run.id)).toBe(true);
+    expect(await confirmDispatchStop(db.prisma, f.run.id)).toBe(false);
+    expect(await db.prisma.run.findUniqueOrThrow({ where: { id: f.run.id } })).toMatchObject({
+      status: "cancelled",
+      cancelConfirmedAt: expect.any(Date),
     });
-    await db.prisma.$transaction((tx) =>
-      // Same settlement used by owned teardown, with no computer process to stop in this fixture.
-      finishDelegation(
-        tx,
-        f.run.delegationId!,
-        "cancelled",
-        "Owned fixture teardown confirmed",
-        f.run.id,
-      ),
-    );
     const checking = await reconcileChiefCorrection(db.prisma, f.plan.id);
     expect(checking).toMatchObject({ runId: expect.any(String) });
     if (!checking?.runId) throw new Error("Expected checking turn");
+    expect(checking.runId).not.toBe(f.run.id);
+    expect(checking.runId).not.toBe(f.sent.runId);
+    expect(await db.prisma.run.findUniqueOrThrow({ where: { id: checking.runId } })).toMatchObject({
+      status: "queued",
+      cancelRequestedAt: null,
+      cancelConfirmedAt: null,
+    });
     expect(await reconcileChiefCorrection(db.prisma, f.plan.id)).toBeUndefined();
     await db.prisma.run.update({
       where: { id: checking.runId },
@@ -632,6 +629,13 @@ describe.skipIf(!enabled).sequential("chief correction cross-run Postgres journe
       }),
     ).toMatchObject({ error: expect.stringContaining("Read back") });
     // Script the granted connector's read-back; the durable admission proves a successful read.
+    const verificationRead = await chiefVerificationRead(db.prisma, checking.runId, {
+      connectorId: "mcp",
+      resourceId: f.server.id,
+      resourceRevision: f.server.revision,
+      toolName: "fetch_page",
+    });
+    expect(verificationRead).toBe(true);
     const read = await admitChiefAction(db.prisma, {
       runId: checking.runId,
       attempt: 1,
@@ -639,14 +643,9 @@ describe.skipIf(!enabled).sequential("chief correction cross-run Postgres journe
       consequential: true,
       remote: true,
       tool: "fetch_page",
-      verificationRead: await chiefVerificationRead(db.prisma, checking.runId, {
-        connectorId: "mcp",
-        resourceId: f.server.id,
-        resourceRevision: f.server.revision,
-        toolName: "fetch_page",
-      }),
+      verificationRead,
     });
-    expect(read.admissionId).toBeTruthy();
+    expect(read).toMatchObject({ admissionId: expect.any(String) });
     await settleChiefAction(db.prisma, read.admissionId, false);
     const verified = {
       runId: f.run.id,
@@ -656,7 +655,7 @@ describe.skipIf(!enabled).sequential("chief correction cross-run Postgres journe
     };
     expect(
       await recordChiefActionReconciliation(db.prisma, checking.runId, verified),
-    ).toMatchObject({ ok: true });
+    ).toMatchObject({ ok: true, event: { runId: checking.runId } });
     expect(await recordChiefActionReconciliation(db.prisma, checking.runId, verified)).toEqual({
       ok: true,
     });
@@ -777,8 +776,11 @@ describe.skipIf(!enabled).sequential("chief correction cross-run Postgres journe
         createdAt: new Date(),
       },
     });
-    await db.prisma.spaceMember.create({
-      data: {
+    // Organization membership already creates the default-space membership via a trigger.
+    await db.prisma.spaceMember.upsert({
+      where: { spaceId_userId: { spaceId: space.id, userId: other.userId } },
+      update: {},
+      create: {
         id: randomUUID(),
         spaceId: space.id,
         organizationId: space.organizationId,
@@ -787,6 +789,9 @@ describe.skipIf(!enabled).sequential("chief correction cross-run Postgres journe
         createdAt: new Date(),
       },
     });
+    expect(
+      await db.prisma.spaceMember.count({ where: { spaceId: space.id, userId: other.userId } }),
+    ).toBe(1);
     const actor = { spaceId: space.id, userId: other.userId } as Actor;
     const before = await db.prisma.chiefPlan.findUniqueOrThrow({ where: { id: f.plan.id } });
     const eventsBefore = await db.prisma.event.count({ where: { threadId: f.target.threadId } });

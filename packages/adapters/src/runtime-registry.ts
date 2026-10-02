@@ -1,15 +1,18 @@
 import type { AdapterContext, AgentRunRequest, AgentRuntime } from "@ardurbot/adapter-kit";
 import type {
   RuntimeAvailability,
+  RuntimeComputerLocation,
   RuntimeKind,
   RuntimePin,
   RuntimeProblem,
 } from "@ardurbot/contracts";
 import {
+  computerRunsOnHost,
   failureCategoryMessage,
   nativeRuntimeHealthKeys,
   runtimeNames,
   runtimePinProblem,
+  runtimeSupportsLocation,
   validateAntigravityPin,
 } from "@ardurbot/contracts";
 import type { BrokerScope, HermesProviderBroker } from "./hermes-provider-broker.js";
@@ -26,7 +29,7 @@ export class RuntimeRegistry {
   constructor(private readonly entries: Partial<Record<RuntimeKind, RuntimeEntry>>) {}
   async resolve(
     pin: RuntimePin,
-    computerKind?: string,
+    computerLocation?: string | RuntimeComputerLocation,
     experimental = false,
     connection?: { credentialId: string; provider: string; modelId: string; effort: string },
   ): Promise<{ runtime: AgentRuntime; availability: RuntimeAvailability } | RuntimeProblem> {
@@ -37,7 +40,14 @@ export class RuntimeRegistry {
         "runtime-unavailable",
         "The pinned runtime is unavailable — change the pin.",
       );
-    if (pin.runtimeKind !== "pi" && computerKind !== "desktop")
+    if (
+      !runtimeSupportsLocation(
+        pin.runtimeKind,
+        typeof computerLocation === "string"
+          ? { kind: computerLocation }
+          : (computerLocation ?? {}),
+      )
+    )
       return runtimePinProblem(
         pin,
         "runtime-unsupported-computer",
@@ -129,12 +139,12 @@ export type DetachedRuntime = {
  */
 export function detachedRuntimeRequest(
   pin: RuntimePin,
-  computer: { kind: string; providerRef: string | null } | null | undefined,
+  computer: (RuntimeComputerLocation & { providerRef: string | null }) | null | undefined,
 ): DetachedRuntime["request"] {
   if (pin.runtimeKind === "pi") return {};
   if (pin.runtimeKind === "antigravity")
     return {
-      nativeCwd: computer?.kind === "desktop" ? (computer.providerRef ?? undefined) : undefined,
+      nativeCwd: computerRunsOnHost(computer) ? (computer?.providerRef ?? undefined) : undefined,
     };
   return { controlledComparison: true };
 }

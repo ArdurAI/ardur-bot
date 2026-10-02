@@ -3,12 +3,15 @@ import type {
   ComputerMode,
   ComputerStatus,
   ComputerUpdate,
+  RuntimeKind,
 } from "@ardurbot/contracts";
 import {
   COMPUTER_BOUNDARY_MESSAGES,
+  computerExecutionKind,
   computerKindFacts,
   computerRuntimeSummary,
   interruptedComputerUpdate,
+  runtimeSupportsLocation,
 } from "@ardurbot/contracts";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
@@ -47,20 +50,23 @@ export function RuntimeSummary({
   mode = status.mode,
   locationName,
   sharingControl,
+  connectionSettings,
 }: {
   status: ComputerStatus;
   mode?: ComputerMode;
   locationName?: string;
   sharingControl?: ReactNode;
+  connectionSettings?: Pick<ComputerConnectionSettings, "engine">;
 }) {
   const { t } = useI18n();
   const tokens = useMobileTokens();
-  const facts = computerRuntimeSummary(status, mode);
-  if (!facts) return <RuntimeBoundary kind={status.kind} />;
+  const kind = computerExecutionKind({ ...status, connectionSettings });
+  const facts = kind ? computerRuntimeSummary({ ...status, kind }, mode) : null;
+  if (!facts) return <RuntimeBoundary kind="" />;
 
   return (
     <View testID="runtime-summary" style={styles.lines}>
-      <RuntimeBoundary kind={status.kind} locationName={locationName} />
+      <RuntimeBoundary kind={kind!} locationName={locationName} />
       {sharingControl ?? <Text style={{ color: tokens.foreground }}>{t(facts.sharing)}</Text>}
       {facts.sharingWarning ? (
         <Text style={{ color: tokens.mutedForeground }}>{t(facts.sharingWarning)}</Text>
@@ -73,10 +79,12 @@ export function BotRuntimeSettings({
   botId,
   mode,
   children,
+  runtimeKind = "pi",
 }: {
   botId: string;
   mode: ComputerMode;
   children?: ReactNode;
+  runtimeKind?: RuntimeKind;
 }) {
   const { t } = useI18n();
   const tokens = useMobileTokens();
@@ -118,6 +126,19 @@ export function BotRuntimeSettings({
   const interrupted = data ? interruptedComputerUpdate(data.status, data.updates) : undefined;
   return (
     <View style={[styles.card, { borderColor: tokens.border }]}>
+      {data &&
+      !runtimeSupportsLocation(runtimeKind, {
+        ...data.status,
+        connectionSettings: data.connections.find((entry) => entry.id === data.status.connectionId)
+          ?.settings,
+      }) ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => Alert.alert(t("Move to This computer"), t("Change location on desktop."))}
+        >
+          <Text style={{ color: tokens.foreground }}>{t("Move to This computer")}</Text>
+        </Pressable>
+      ) : null}
       <Text style={{ color: tokens.foreground, fontWeight: "600" }}>
         {t("Where this bot runs")}
       </Text>
@@ -127,10 +148,10 @@ export function BotRuntimeSettings({
           mode={mode}
           sharingControl={children}
           locationName={
-            data.status.kind === "desktop"
-              ? undefined
-              : (data.connections.find((entry) => entry.id === data.status.connectionId)?.name ??
-                data.status.kind)
+            data.connections.find((entry) => entry.id === data.status.connectionId)?.name
+          }
+          connectionSettings={
+            data.connections.find((entry) => entry.id === data.status.connectionId)?.settings
           }
         />
       ) : null}

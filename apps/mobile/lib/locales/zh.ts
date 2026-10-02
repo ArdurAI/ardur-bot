@@ -1,4 +1,11 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  Sandbox: "沙盒",
+  "Move to This computer": "迁移到这台计算机",
+  "Choose Only this bot to use a different location from the Team computer.":
+    "选择仅此机器人，即可使用与团队计算机不同的位置。",
+  "Other locations are unavailable for {runtime}. Choose This computer.":
+    "{runtime} 无法使用其他位置。请选择此电脑。",
+  "Connect the host service to choose This computer.": "连接主机服务后才能选择此电脑。",
   "Move to a container": "移至容器",
   "Keep current location": "保留当前位置",
   "Paused for an update": "已暂停以进行更新",

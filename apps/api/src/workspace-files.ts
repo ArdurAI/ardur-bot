@@ -9,8 +9,13 @@ import {
   toComputerRef,
   workspacePath,
 } from "@ardurbot/adapters";
-import type { Actor, WorkspaceContext } from "@ardurbot/contracts";
-import { IDE_FILE_BYTES, IdeEntrySchema, IdePathSchema } from "@ardurbot/contracts";
+import type { Actor, RuntimeComputerLocation, WorkspaceContext } from "@ardurbot/contracts";
+import {
+  computerRunsOnHost,
+  IDE_FILE_BYTES,
+  IdeEntrySchema,
+  IdePathSchema,
+} from "@ardurbot/contracts";
 import { resolveActionApproval } from "@ardurbot/core";
 import { IsolationError, parseComputerMode } from "@ardurbot/db";
 import { ORPCError } from "@orpc/server";
@@ -27,16 +32,18 @@ const fileMissingReason = "This file no longer exists. Save it as a new file or 
 const computerBusyMessage = "The computer is busy. Wait for it to finish.";
 
 export function workspaceFileSource(
-  computer: {
-    kind: string;
-    state: string;
-    providerRef: string | null;
-    homeRevision: string;
-    maintenanceId: string | null;
-  } | null,
+  computer:
+    | (RuntimeComputerLocation & {
+        kind: string;
+        state: string;
+        providerRef: string | null;
+        homeRevision: string;
+        maintenanceId: string | null;
+      })
+    | null,
 ): WorkspaceContext["files"] {
   // Host folders require an explicit registered-root choice; a bot has no implicit host root.
-  if (!computer || computer.kind === "fake" || computer.kind === "desktop") return "unavailable";
+  if (!computer || computer.kind === "fake" || computerRunsOnHost(computer)) return "unavailable";
   if (computer.state === "running" && computer.providerRef && !computer.maintenanceId)
     return "live";
   if (computer.homeRevision !== "empty") return "saved";
@@ -61,6 +68,7 @@ export function createWorkspaceFiles(deps: Deps) {
       computerId: computer?.id ?? null,
       generation: computer?.screenGeneration ?? null,
       files: workspaceFileSource(computer),
+      runsOnHost: computerRunsOnHost(computer ?? {}),
       observedAt: new Date().toISOString(),
     };
   }

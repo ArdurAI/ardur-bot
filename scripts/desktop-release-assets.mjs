@@ -16,6 +16,7 @@ await mkdir(destination, { recursive: true });
 const feeds = new Map();
 for (const directory of await readdir(source)) {
   for (const file of await readdir(path.join(source, directory))) {
+    if (file.startsWith("install-build-")) continue;
     const from = path.join(source, directory, file);
     if (file.endsWith(".yml")) {
       const feed = yaml.load(await readFile(from, "utf8"));

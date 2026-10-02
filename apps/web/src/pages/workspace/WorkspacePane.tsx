@@ -17,6 +17,8 @@ import { availableWorkspaceViews, isWorkspaceViewId, workspaceViews } from "./vi
 export function WorkspacePane({
   bot,
   computer,
+  context: suppliedContext,
+  contextLoading: suppliedContextLoading = false,
   routines,
   screen,
   terminal,
@@ -45,11 +47,14 @@ export function WorkspacePane({
   const contextKey = JSON.stringify([
     bot.id,
     computer?.computerId,
+    computer?.connectionId,
+    computer?.kind,
     computer?.state,
     computer?.homeRevision,
     revision,
   ]);
   useEffect(() => {
+    if (suppliedContext !== undefined) return;
     const abort = new AbortController();
     setContext(null);
     void rpc.workspace
@@ -61,13 +66,15 @@ export function WorkspacePane({
         if (!abort.signal.aborted) setContext({ key: contextKey, value: null });
       });
     return () => abort.abort();
-  }, [bot.id, contextKey]);
-  const contextLoading = context?.key !== contextKey;
+  }, [bot.id, contextKey, suppliedContext]);
+  const contextLoading =
+    suppliedContext === undefined ? context?.key !== contextKey : suppliedContextLoading;
+  const describedContext = suppliedContext === undefined ? context?.value : suppliedContext;
   const currentContext =
     !contextLoading &&
-    context?.value?.botId === bot.id &&
-    context.value.computerId === (computer?.computerId ?? null)
-      ? context.value
+    describedContext?.botId === bot.id &&
+    describedContext.computerId === (computer?.computerId ?? null)
+      ? describedContext
       : null;
   const capabilities = { computer, context: currentContext, terminal: terminal !== null };
   const selected = isWorkspaceViewId(tab) ? tab : "tasks";
@@ -180,6 +187,8 @@ export function WorkspacePane({
 export type WorkspacePaneProps = {
   bot: Bot;
   computer: ComputerStatus | null;
+  context?: WorkspaceContext | null;
+  contextLoading?: boolean;
   routines: ReactNode;
   screen: {
     computer: ComputerStatus | null;

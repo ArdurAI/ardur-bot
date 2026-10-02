@@ -13,6 +13,8 @@ const messages = [
     ...Object.values(COMPUTER_STATES),
     "Move to a container",
     "Keep current location",
+    "Other locations are unavailable for {runtime}. Choose This computer.",
+    "Connect the host service to choose This computer.",
     "The last update was interrupted.",
     "Release computer",
     "Release interrupted computer?",

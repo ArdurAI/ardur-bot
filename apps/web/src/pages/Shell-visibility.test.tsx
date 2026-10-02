@@ -10,6 +10,7 @@ import type {
   ProductEvent,
   ThreadMessage,
   ThreadSnapshot,
+  WorkspaceContext,
 } from "@ardurbot/contracts";
 import type { ReactNode } from "react";
 import { StrictMode, useEffect } from "react";
@@ -92,6 +93,8 @@ const state = vi.hoisted(
       takeoverRejections: number;
       takeoverFailures: number;
       terminalAvailable: boolean;
+      workspaceContexts: Record<string, WorkspaceContext>;
+      desktopHostEnabled: boolean;
     },
 );
 state.bots = [botFor("bot-1", "Graphical"), botFor("bot-2", "Plain")];
@@ -319,7 +322,22 @@ vi.mock("../lib/rpc", () => {
       integrations: { list: record("integrations.list") },
       mcp: { servers: { list: record("mcp.servers.list") } },
       connectors: { summary: record("connectors.summary") },
-      workspace: { describe: record("workspace.describe"), tasks: record("workspace.tasks") },
+      workspace: {
+        describe: async ({ botId }: { botId: string }) => {
+          state.calls.push("workspace.describe");
+          return (
+            state.workspaceContexts[botId] ?? {
+              botId,
+              computerId: state.threads[botId]?.computer?.computerId ?? null,
+              generation: 1,
+              files: "unavailable",
+              runsOnHost: false,
+              observedAt: "2026-09-28T00:00:00.000Z",
+            }
+          );
+        },
+        tasks: record("workspace.tasks"),
+      },
       terminal: {
         available: async () => ({ available: state.terminalAvailable }),
         ticket: record("terminal.ticket"),
@@ -362,6 +380,42 @@ vi.mock("../lib/auth", () => ({
 vi.mock("../lib/performance", () => ({ markOnce: vi.fn(), markAfterPaint: vi.fn() }));
 vi.mock("./ScratchpadSection", () => ({ ScratchpadSection: () => null }));
 vi.mock("./KnowledgeSection", () => ({ KnowledgeSection: () => null }));
+vi.mock("../lib/desktop", async (original) => ({
+  ...(await original<object>()),
+  desktopBridge: () => (state.desktopHostEnabled ? { platform: "linux", host: {} } : undefined),
+}));
+vi.mock("../components/composer/ComposerTools", () => ({
+  ComposerTools: ({ canAddFolder }: { canAddFolder: boolean }) => (
+    <button type="button" data-testid="composer-folder" disabled={!canAddFolder}>
+      Add folder
+    </button>
+  ),
+}));
+vi.mock("./shell/command-palette", () => ({
+  CommandPalette: ({
+    open,
+    workspaceTabs,
+    onOpenWorkspaceTab,
+  }: {
+    open: boolean;
+    workspaceTabs: Array<{ id: string; label: string }>;
+    onOpenWorkspaceTab(tab: string): void;
+  }) =>
+    open ? (
+      <div data-testid="workspace-commands">
+        {workspaceTabs.map((tab) => (
+          <button
+            type="button"
+            key={tab.id}
+            data-command={tab.id}
+            onClick={() => onOpenWorkspaceTab(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+    ) : null,
+}));
 vi.mock("./shell/terminal-session", () => ({
   default: () => {
     useEffect(() => {
@@ -484,6 +538,8 @@ beforeEach(() => {
   state.takeoverRejections = 0;
   state.takeoverFailures = 0;
   state.terminalAvailable = false;
+  state.workspaceContexts = {};
+  state.desktopHostEnabled = false;
   state.threads = {
     "bot-1": snapshotFor("bot-1", true),
     "bot-2": snapshotFor("bot-2", false),
@@ -499,6 +555,101 @@ afterEach(async () => {
 });
 
 const tick = (ms = 50) => new Promise((resolve) => setTimeout(resolve, ms));
+
+it.each(["docker", "podman"] as const)(
+  "uses API workspace policy for a legacy desktop %s connection",
+  async (engine) => {
+    state.desktopHostEnabled = true;
+    state.threads["bot-1"]!.computer = {
+      ...computerFor("bot-1", true),
+      kind: "desktop",
+      connectionId: `saved-${engine}`,
+    };
+    state.workspaceContexts["bot-1"] = {
+      botId: "bot-1",
+      computerId: "computer-bot-1",
+      generation: 1,
+      files: "live",
+      runsOnHost: false,
+      observedAt: "2026-09-28T00:00:00.000Z",
+    };
+    await renderShell("/app/bot-1");
+    await openWorkspacePane();
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="composer-folder"]')?.disabled).toBe(
+      true,
+    );
+    const apple = /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "k",
+        code: "KeyK",
+        metaKey: apple,
+        ctrlKey: !apple,
+        bubbles: true,
+      }),
+    );
+    await until(() => host.querySelector('[data-testid="workspace-commands"]') !== null);
+    expect(host.querySelector('[data-command="files"]')).not.toBeNull();
+    click(host.querySelector('[data-command="files"]'));
+    await until(() => paneTab("Files") !== undefined);
+    expect(paneTab("Files")).toBeDefined();
+  },
+);
+
+it("keeps connectionless host folder references and omits implicit workspace files", async () => {
+  state.desktopHostEnabled = true;
+  state.threads["bot-1"]!.computer = {
+    ...computerFor("bot-1", true),
+    kind: "desktop",
+    connectionId: null,
+  };
+  state.workspaceContexts["bot-1"] = {
+    botId: "bot-1",
+    computerId: "computer-bot-1",
+    generation: 1,
+    files: "unavailable",
+    runsOnHost: true,
+    observedAt: "2026-09-28T00:00:00.000Z",
+  };
+  await renderShell("/app/bot-1");
+  await openWorkspacePane();
+  expect(paneTab("Files")).toBeUndefined();
+  expect(host.querySelector<HTMLButtonElement>('[data-testid="composer-folder"]')?.disabled).toBe(
+    false,
+  );
+  const apple = /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
+  window.dispatchEvent(
+    new KeyboardEvent("keydown", {
+      key: "k",
+      code: "KeyK",
+      metaKey: apple,
+      ctrlKey: !apple,
+      bubbles: true,
+    }),
+  );
+  await until(() => host.querySelector('[data-testid="workspace-commands"]') !== null);
+  expect(host.querySelector('[data-command="files"]')).toBeNull();
+});
+
+it("does not infer host folder access from a desktop label when API policy is absent", async () => {
+  state.desktopHostEnabled = true;
+  state.threads["bot-1"]!.computer = {
+    ...computerFor("bot-1", true),
+    kind: "desktop",
+    connectionId: null,
+  };
+  state.workspaceContexts["bot-1"] = {
+    botId: "bot-1",
+    computerId: "computer-bot-1",
+    generation: 1,
+    files: "unavailable",
+    observedAt: "2026-09-28T00:00:00.000Z",
+  };
+  await renderShell("/app/bot-1");
+  expect(host.querySelector<HTMLButtonElement>('[data-testid="composer-folder"]')?.disabled).toBe(
+    true,
+  );
+});
 
 async function until(condition: () => boolean, budgetMs = 5000, step = 50) {
   let waited = 0;

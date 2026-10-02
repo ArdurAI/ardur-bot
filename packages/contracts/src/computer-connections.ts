@@ -88,6 +88,20 @@ export const HOST_MOVE_UNAVAILABLE_CODE = "host-move-unavailable";
 export const FLEET_ACTIVE_RUN_CONFLICT_CODE = "fleet-active-runs";
 export const FLEET_PINNED_BOTS_CONFLICT_CODE = "fleet-pinned-bots";
 export const ISOLATED_COMPUTER_UNAVAILABLE_CODE = "isolated-computer-unavailable";
+export const NEW_BOT_TEAM_LOCATION_CONFLICT_CODE = "new-bot-team-location-conflict";
+export const NEW_BOT_HOST_UNAVAILABLE_CODE = "new-bot-host-unavailable";
+export class NewBotHostUnavailableError extends Error {
+  constructor() {
+    super("Connect the host service to choose This computer.");
+    this.name = "NewBotHostUnavailableError";
+  }
+}
+export class NewBotTeamLocationConflictError extends Error {
+  constructor() {
+    super("Choose Only this bot to use a different location from the Team computer.");
+    this.name = "NewBotTeamLocationConflictError";
+  }
+}
 export class IsolatedComputerUnavailableError extends Error {
   constructor() {
     super("Set up a container for isolated work.");
@@ -98,14 +112,22 @@ const ComputerConfigurationFieldsSchema = z.object({
   botId: z.string().min(1),
   imageProfile: ComputerProfileSchema.optional(),
   /** Omitted keeps the computer where it is; null chooses the deployment default. */
-  connectionId: z.string().nullable().optional(),
+  connectionId: z.string().min(1).nullable().optional(),
+  /** Explicit owner-consented host destination; never inferred from the deployment default. */
+  destination: z.enum(["host", "sandbox"]).optional(),
   confirmed: z.boolean().default(false),
 });
 /** A configuration that changes neither the profile nor the connection is not a request. */
 export const ComputerConfigurationSchema = ComputerConfigurationFieldsSchema.refine(
   (configuration) =>
-    configuration.imageProfile !== undefined || configuration.connectionId !== undefined,
+    configuration.imageProfile !== undefined ||
+    configuration.connectionId !== undefined ||
+    configuration.destination !== undefined,
   { message: "Choose an image profile or a connection to change." },
+).refine(
+  (configuration) =>
+    configuration.destination !== "host" || configuration.connectionId === undefined,
+  { message: "Choose one computer destination." },
 );
 type ComputerKindFacts = {
   location: "Container" | "This computer" | "Remote computer" | "Hosted sandbox" | "Test computer";
@@ -257,4 +279,10 @@ export function recommendedContainer(
 
 export const ComputerReplacementConfigurationSchema = ComputerConfigurationFieldsSchema.omit({
   botId: true,
-}).extend({ networkEgress: z.boolean().optional(), confirmed: z.literal(true) });
+})
+  .extend({ networkEgress: z.boolean().optional(), confirmed: z.literal(true) })
+  .refine(
+    (configuration) =>
+      configuration.destination !== "host" || configuration.connectionId === undefined,
+    { message: "Choose one computer destination." },
+  );

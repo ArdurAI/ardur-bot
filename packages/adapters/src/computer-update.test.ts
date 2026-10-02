@@ -32,6 +32,7 @@ function fixture(status = "queued") {
       | {
           imageProfile: "base" | "developer";
           connectionId: string | null;
+          destination?: "host" | "sandbox";
           confirmed: true;
         }
       | undefined,
@@ -79,6 +80,50 @@ function fixture(status = "queued") {
   return { row, computer, computerUpdate, deps, jobs };
 }
 describe("background computer maintenance", () => {
+  it("passes an explicit sandbox move through the queued worker despite a host default", async () => {
+    const { row, deps } = fixture();
+    row.computer.kind = "desktop";
+    row.configuration = {
+      imageProfile: "base",
+      connectionId: null,
+      destination: "sandbox",
+      confirmed: true,
+    };
+    Object.assign(deps, { sandbox: { describe: () => ({ id: "docker", kind: "docker" }) } });
+    Object.assign(deps.prisma, {
+      deploymentSettings: { findUnique: async () => ({ computerHost: "this-mac" }) },
+    });
+    await performComputerUpdate(deps, row.id);
+    expect(row.status).toBe("completed");
+    expect(replacement).toHaveBeenCalledWith(
+      deps,
+      row.computerId,
+      "update",
+      expect.anything(),
+      "none",
+      expect.any(Function),
+      row.configuration,
+    );
+  });
+  it.each([null, "docker", "podman", "missing", ""])(
+    "admits desktop updates only off the real host (connection %s)",
+    async (connectionId) => {
+      const { row, deps, computerUpdate, jobs } = fixture();
+      row.computer.kind = "desktop";
+      row.computer.connectionId = connectionId;
+      const update = queueComputerUpdate(deps, row.computerId, row.botId);
+      if (connectionId === null) {
+        await expect(update).rejects.toThrow("Computer update is not available on this device");
+        expect(computerUpdate.create).not.toHaveBeenCalled();
+        expect(jobs.enqueue).not.toHaveBeenCalled();
+      } else {
+        await expect(update).resolves.toMatchObject({ id: row.id, action: "update" });
+        expect(computerUpdate.create).toHaveBeenCalledOnce();
+        expect(jobs.enqueue).toHaveBeenCalledOnce();
+      }
+    },
+  );
+
   it("includes the computer identity so shared bots can find their interrupted update", () => {
     const { row } = fixture("interrupted");
     expect(computerUpdateView(row, true)).toMatchObject({

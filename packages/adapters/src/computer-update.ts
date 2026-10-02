@@ -53,6 +53,7 @@ export async function queueComputerUpdate(
   configuration?: {
     imageProfile?: "base" | "developer";
     connectionId?: string | null;
+    destination?: "host" | "sandbox";
     networkEgress?: boolean;
     confirmed: boolean;
   },
@@ -64,7 +65,7 @@ export async function queueComputerUpdate(
     // The following statement then observes their committed reservation.
     await tx.$queryRaw`SELECT id FROM computers WHERE id = ${computerId} FOR UPDATE`;
     const computer = await tx.computer.findUniqueOrThrow({ where: { id: computerId } });
-    if (action === "update" && !configuration && !computerSupportsUpdate(computer.kind))
+    if (action === "update" && !configuration && !computerSupportsUpdate(computer))
       throw new Error("Computer update is not available on this device");
     const update = await tx.computerUpdate.create({
       data: { computerId, botId, action, ...(configuration ? { configuration } : {}) },
@@ -148,6 +149,7 @@ export async function performComputerUpdate(deps: Deps, updateId: string) {
       signal: controller.signal,
     };
     if (
+      configuration?.destination === undefined &&
       connectionlessConfigurationUnchanged(update.computer, configuration) &&
       (await staysOnDeploymentEngine(deps, update.computer, context))
     ) {

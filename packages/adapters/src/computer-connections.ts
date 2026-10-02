@@ -166,7 +166,7 @@ export class ConnectedSandboxProvider implements SandboxProvider {
   }
   /** Every operation on an existing computer: its connection, else the engine of its kind. */
   async owner(computer: ComputerIdentity, context: AdapterContext): Promise<SandboxProvider> {
-    return computer.connectionId
+    return computer.connectionId != null
       ? this.connections.resolve(computer.connectionId, context)
       : this.connectionless(computer.kind);
   }

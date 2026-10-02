@@ -2004,9 +2004,13 @@ function leasePrisma(options: {
 }
 
 describe("computer replacement", () => {
-  it("exposes update availability by sandbox kind", () => {
-    expect(computerSupportsUpdate("e2b")).toBe(true);
-    expect(computerSupportsUpdate("desktop")).toBe(false);
+  it("exposes update availability by execution location", () => {
+    expect(computerSupportsUpdate({ kind: "e2b", connectionId: null })).toBe(true);
+    expect(computerSupportsUpdate({ kind: "desktop", connectionId: null })).toBe(false);
+    expect(computerSupportsUpdate({ kind: "desktop", connectionId: "docker" })).toBe(true);
+    expect(computerSupportsUpdate({ kind: "desktop", connectionId: "podman" })).toBe(true);
+    expect(computerSupportsUpdate({ kind: "desktop", connectionId: "missing" })).toBe(true);
+    expect(computerSupportsUpdate({ kind: "desktop", connectionId: "" })).toBe(true);
   });
 
   it("replaces a wedged computer and restores the durable home", async () => {

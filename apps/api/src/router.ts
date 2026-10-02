@@ -96,6 +96,7 @@ import {
   resolveAutoReviewChecker,
   resolveBotWorkspacePath,
   revokeScreenControl,
+  runtimeComputerLocation,
   SUBSCRIPTION_SIGN_IN_PROVIDERS,
   sanitizeComposioError,
   savePushToken,
@@ -120,6 +121,9 @@ import type {
 import {
   COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE,
   ComputerImageDownloadError,
+  computerExecutionKind,
+  computerKindFacts,
+  computerRunsOnHost,
   ENGINE_MISSING_CODE,
   HOST_MOVE_UNAVAILABLE_CODE,
   HostMoveUnavailableError,
@@ -127,8 +131,14 @@ import {
   IntegrationProviderIdSchema,
   ISOLATED_COMPUTER_UNAVAILABLE_CODE,
   IsolatedComputerUnavailableError,
+  NEW_BOT_HOST_UNAVAILABLE_CODE,
+  NEW_BOT_TEAM_LOCATION_CONFLICT_CODE,
+  NewBotHostUnavailableError,
+  NewBotTeamLocationConflictError,
   nativeRuntimeHealthKeys,
   OPENAI_COMPATIBLE_PROVIDER_ID,
+  RuntimeKindSchema,
+  runtimeSupportsLocation,
   usableModelId,
 } from "@ardurbot/contracts";
 import { HostHealthSchema } from "@ardurbot/contracts/host-bridge";
@@ -231,9 +241,12 @@ import { refuseIfEngineMissing, releaseMaintenanceControl } from "./computer-mai
 import {
   computerEngineInfo,
   listComputerConnections,
+  newBotComputerOptions,
+  newBotHostAvailable,
   saveComputerConnection,
   updateComputerConnection,
   validateComputerConfiguration,
+  validateRuntimeComputerConfiguration,
 } from "./computer-settings.js";
 import {
   executionBlocksUserTakeover,
@@ -625,7 +638,10 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
   const channelPairing = createChannelPairing(deps);
   const remoteDevices = createRemoteDevices({ ...deps, publicUrl: deps.env.webOrigin });
   const account = createAccountService({ ...deps, remoteDevices });
-  const repos = createRepos(deps.prisma);
+  const repos = createRepos(deps.prisma, {
+    sandboxProvider: deps.env.sandboxProvider,
+    hostAvailable: (actor) => newBotHostAvailable(deps, actor, deps.env.sandboxProvider),
+  });
   const onboardingDeps = { prisma: deps.prisma, events: deps.events, connectors: deps.connectors };
   const mcpOAuth = deps.mcpOAuth ?? new McpOAuthBroker(deps.prisma, deps.secrets);
   const integrations =
@@ -1199,7 +1215,12 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             healthReason = localProbe.reason ?? "Hermes is not installed on this computer.";
           }
 
-          const desktop = !bot || bot.computer?.kind === "desktop";
+          const desktop =
+            !bot ||
+            runtimeSupportsLocation(
+              "hermes",
+              await runtimeComputerLocation(deps.prisma, bot.computer),
+            );
           const available = Boolean(owner && desktop && healthAvailable);
           const install =
             localProbe && !isBridgeMode
@@ -1213,7 +1234,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
               ? {
                   reason: !owner
                     ? NATIVE_HOST_OWNER_MESSAGE
-                    : bot && bot.computer?.kind !== "desktop"
+                    : !desktop
                       ? "Choose a host computer for Hermes."
                       : healthReason,
                 }
@@ -1563,6 +1584,19 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         try {
           return await repos.createBot(context.actor, input);
         } catch (error) {
+          if (
+            error instanceof NewBotTeamLocationConflictError ||
+            error instanceof NewBotHostUnavailableError
+          )
+            throw new ORPCError("BAD_REQUEST", {
+              message: error.message,
+              data: {
+                code:
+                  error instanceof NewBotTeamLocationConflictError
+                    ? NEW_BOT_TEAM_LOCATION_CONFLICT_CODE
+                    : NEW_BOT_HOST_UNAVAILABLE_CODE,
+              },
+            });
           if (error instanceof IsolatedComputerUnavailableError)
             throw new ORPCError("BAD_REQUEST", {
               message: error.message,
@@ -1573,6 +1607,9 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       }),
       duplicate: authed.bots.duplicate.handler(async ({ context, input }) => {
         const source = await repos.getBot(context.actor, input.botId);
+        const sourceKind = computerExecutionKind(
+          await runtimeComputerLocation(deps.prisma, source.computer),
+        );
         const duplicate = await repos
           .createBot(context.actor, {
             name: duplicateBotName(source.name),
@@ -1582,6 +1619,16 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             notifyOnFinish: source.notifyOnFinish,
             color: source.color,
             computerMode: source.computer?.scope === "dedicated" ? "dedicated" : "team",
+            ...(source.computer
+              ? {
+                  computerLocation:
+                    sourceKind === "desktop" ? ("host" as const) : ("sandbox" as const),
+                  ...(source.computer.connectionId ||
+                  (sourceKind && computerKindFacts(sourceKind)?.boundary === "container")
+                    ? { isolatedComputer: { connectionId: source.computer.connectionId } }
+                    : {}),
+                }
+              : {}),
             modelProvider: source.modelProvider,
             modelId: source.modelId,
             thinkingLevel: source.thinkingLevel,
@@ -1595,6 +1642,24 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             runtimeExperimental: source.runtimeExperimental,
           })
           .catch((error: unknown) => {
+            if (
+              error instanceof NewBotTeamLocationConflictError ||
+              error instanceof NewBotHostUnavailableError
+            )
+              throw new ORPCError("BAD_REQUEST", {
+                message: error.message,
+                data: {
+                  code:
+                    error instanceof NewBotTeamLocationConflictError
+                      ? NEW_BOT_TEAM_LOCATION_CONFLICT_CODE
+                      : NEW_BOT_HOST_UNAVAILABLE_CODE,
+                },
+              });
+            if (error instanceof IsolatedComputerUnavailableError)
+              throw new ORPCError("BAD_REQUEST", {
+                message: error.message,
+                data: { code: ISOLATED_COMPUTER_UNAVAILABLE_CODE },
+              });
             throw mapSpaceLifecycleError(error);
           });
         const assignments = await deps.prisma.botMcpServer.findMany({
@@ -2322,6 +2387,9 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       }),
     },
     computer: {
+      creationOptions: authed.computer.creationOptions.handler(({ context }) =>
+        newBotComputerOptions(deps, context.actor, deps.env.sandboxProvider),
+      ),
       engine: authed.computer.engine.handler(({ context, input }) => {
         if (!context.actor.isDeploymentOwner) throw new ORPCError("FORBIDDEN");
         return computerEngineInfo(
@@ -2342,7 +2410,15 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           if (!bot.computer || seen.has(bot.computer.id)) return [];
           seen.add(bot.computer.id);
           const status = toComputerStatus(bot.id, bot.computer, null, hostLabel);
-          return [{ botId: bot.id, name: bot.name, status }];
+          const runtimeKind = RuntimeKindSchema.safeParse(bot.runtimeKind);
+          return [
+            {
+              botId: bot.id,
+              name: bot.name,
+              ...(runtimeKind.success ? { runtimeKind: runtimeKind.data } : {}),
+              status,
+            },
+          ];
         });
       }),
       connections: authed.computer.connections.handler(({ context }) =>
@@ -2370,11 +2446,26 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           input,
           deps.env.sandboxProvider,
         );
+        const host =
+          configuration.destination === "host"
+            ? ((await sourceHostStatus(
+                deps.prisma,
+                context.actor.userId,
+                deps.env.sandboxProvider,
+              )) ?? (await deps.hostBridge?.status(context.actor.userId)))
+            : undefined;
+        await validateRuntimeComputerConfiguration(
+          deps.prisma,
+          bot,
+          configuration,
+          deps.env.sandboxProvider,
+          Boolean(host?.connected && (await nativeHostOwner(deps.prisma, context.actor.userId))),
+        );
         try {
           await releaseMaintenanceControl(deps, context.actor, bot.computer.id);
           // A configuration that does not itself choose a destination stays on the computer's own
           // connection, which a genuinely missing engine can never reach.
-          if (configuration.connectionId === undefined)
+          if (configuration.connectionId === undefined && configuration.destination === undefined)
             await refuseIfEngineMissing(
               deps.sandbox,
               bot.computer,
@@ -2519,7 +2610,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       update: authed.computer.update.handler(async ({ context, input }) => {
         const bot = await repos.getBot(context.actor, input.botId);
         if (!bot.computer) throw new IsolationError();
-        if (!computerSupportsUpdate(bot.computer.kind))
+        if (!computerSupportsUpdate(bot.computer))
           throw new ORPCError("BAD_REQUEST", {
             message: "Computer update is not available on this device",
           });
@@ -2981,12 +3072,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           });
           await touchRunningComputer(
             { sandbox: deps.sandbox, jobs: deps.jobs },
-            {
-              id: bot.computer.id,
-              homeKey: bot.computer.homeKey,
-              providerRef: bot.computer.providerRef,
-              kind: bot.computer.kind,
-            },
+            bot.computer,
           ).catch(() => undefined);
         }
         return { ok: true as const };
@@ -3962,7 +4048,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             userId: context.actor.userId,
             archivedAt: null,
           },
-          select: { id: true, computer: { select: { kind: true } } },
+          select: { id: true, computer: { select: { kind: true, connectionId: true } } },
         });
         if (!bot) throw new IsolationError();
         const servers = await deps.prisma.mcpServer.findMany({
@@ -3979,7 +4065,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         });
         return servers
           .filter((server) => {
-            if (server.transport === "host-cli" && bot.computer?.kind !== "desktop") return false;
+            if (server.transport === "host-cli" && !computerRunsOnHost(bot.computer)) return false;
             const row = server.assignments[0];
             const grant = row ?? {
               access: "inherit",
@@ -6523,7 +6609,7 @@ async function computerStatus(
   actor: Actor,
   botId: string,
 ): Promise<ComputerStatus> {
-  const repos = createRepos(deps.prisma);
+  const repos = createRepos(deps.prisma, { sandboxProvider: deps.env.sandboxProvider });
   let bot = await repos.getBot(actor, botId);
   if (await expireStaleComputerControl(deps, bot.computer)) {
     bot = await repos.getBot(actor, botId);
@@ -6546,10 +6632,10 @@ async function runComputerReplace(
   mode: "recover" | "reset" | "update",
   operationId: string,
 ): Promise<ComputerStatus> {
-  const repos = createRepos(deps.prisma);
+  const repos = createRepos(deps.prisma, { sandboxProvider: deps.env.sandboxProvider });
   const bot = await repos.getBot(context.actor, botId);
   if (!bot.computer) throw new IsolationError();
-  if (mode === "update" && !computerSupportsUpdate(bot.computer.kind)) {
+  if (mode === "update" && !computerSupportsUpdate(bot.computer)) {
     throw new ORPCError("BAD_REQUEST", {
       message: "Computer update is not available on this device",
     });

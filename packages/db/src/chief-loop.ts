@@ -153,7 +153,7 @@ export async function loadChiefMemberFacts(
     }
     const local = Boolean(
       bot.computer &&
-        !bot.computer.connectionId &&
+        bot.computer.connectionId == null &&
         ["docker", "podman", "desktop"].includes(bot.computer.kind),
     );
     // Preparation only: execution still needs the existing exact installation approval.

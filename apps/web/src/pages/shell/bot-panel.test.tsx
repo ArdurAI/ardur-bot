@@ -12,6 +12,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { rpc } from "../../lib/rpc";
 
 const api = vi.hoisted(() => ({
   list: vi.fn(),
@@ -21,6 +22,15 @@ const api = vi.hoisted(() => ({
   connections: vi.fn(),
   computers: vi.fn(),
   status: vi.fn(),
+  creationOptions: vi.fn(
+    async (): Promise<Awaited<ReturnType<typeof rpc.computer.creationOptions>>> => ({
+      defaultLocation: "sandbox",
+      hostAvailable: false,
+      container: { connectionId: null },
+      sandboxAvailable: true,
+      team: null,
+    }),
+  ),
 }));
 vi.mock("../../lib/rpc", () => ({
   rpc: {
@@ -28,11 +38,13 @@ vi.mock("../../lib/rpc", () => ({
     models: api,
     runtimes: { availability: api.availability },
     me: api.me,
+    host: { status: async () => ({ connected: true }) },
     computer: {
       connections: api.connections,
       list: api.computers,
       status: api.status,
       updates: async () => [],
+      creationOptions: api.creationOptions,
     },
     voice: { voices: async () => [] },
   },
@@ -447,13 +459,19 @@ describe("new isolated work", () => {
       (button) => button.textContent === "Create",
     )!;
   it("defaults to a dedicated container and submits an explicit pin", async () => {
-    api.me.mockResolvedValue({ ...me, sandboxProvider: "docker", computerHost: "this-mac" });
+    api.creationOptions.mockResolvedValue({
+      defaultLocation: "sandbox",
+      hostAvailable: false,
+      container: { connectionId: null },
+      sandboxAvailable: true,
+      team: null,
+    });
     const onCreate = vi.fn();
     await act(async () => root.render(<CreateBotForm onCreate={onCreate} onCancel={() => {}} />));
     expect(
       container.querySelector('[data-testid="create-bot-private"]')?.getAttribute("aria-pressed"),
     ).toBe("true");
-    expect(container.textContent).toContain("Container");
+    expect(container.textContent).toContain("Sandbox");
     await enterName();
     await act(async () => createButton().click());
     expect(onCreate).toHaveBeenCalledWith({
@@ -461,11 +479,66 @@ describe("new isolated work", () => {
       title: "",
       description: "",
       computerMode: "dedicated",
+      computerLocation: "sandbox",
       isolatedComputer: { connectionId: null },
     });
   });
+  it.each(["team", "dedicated"] as const)(
+    "creates on a non-container deployment sandbox with %s sharing",
+    async (mode) => {
+      api.creationOptions.mockResolvedValue({
+        defaultLocation: "sandbox",
+        hostAvailable: false,
+        sandboxAvailable: true,
+        container: null,
+        team: { location: "sandbox", connectionId: null },
+      });
+      const onCreate = vi.fn();
+      await act(async () => root.render(<CreateBotForm onCreate={onCreate} onCancel={() => {}} />));
+      if (mode === "team")
+        await act(async () =>
+          container.querySelector<HTMLButtonElement>('[data-testid="create-bot-team"]')!.click(),
+        );
+      await enterName();
+      expect(createButton().disabled).toBe(false);
+      expect(container.textContent).not.toContain("Set up a container for isolated work.");
+      await act(async () => createButton().click());
+      expect(onCreate.mock.calls[0]?.[0]).toMatchObject({
+        computerMode: mode,
+        computerLocation: "sandbox",
+      });
+      expect(onCreate.mock.calls[0]?.[0]).not.toHaveProperty("isolatedComputer");
+    },
+  );
+  it.each(["hosted", "test"] as const)(
+    "the create form forwards the %s deployment boundary",
+    async (sandboxBoundary) => {
+      api.creationOptions.mockResolvedValue({
+        defaultLocation: "sandbox",
+        hostAvailable: false,
+        sandboxAvailable: true,
+        sandboxBoundary,
+        container: null,
+        team: null,
+      });
+      await act(async () => root.render(<CreateBotForm onCreate={vi.fn()} onCancel={() => {}} />));
+      const sandbox = container.querySelector('[aria-label="Sandbox"]')!;
+      expect(sandbox.textContent).toContain(
+        sandboxBoundary === "hosted"
+          ? "Runs at the configured provider; can use granted credentials and network access."
+          : "For testing only; not an isolation boundary.",
+      );
+      expect(sandbox.textContent).not.toContain("Separate home;");
+    },
+  );
   it("offers setup rather than silently creating on the host", async () => {
-    api.me.mockResolvedValue({ ...me, sandboxProvider: "desktop" });
+    api.creationOptions.mockResolvedValue({
+      defaultLocation: "sandbox",
+      hostAvailable: false,
+      container: null,
+      sandboxAvailable: false,
+      team: null,
+    });
     const onCreate = vi.fn();
     const onSetupComputer = vi.fn();
     await act(async () =>
@@ -475,6 +548,12 @@ describe("new isolated work", () => {
     );
     await enterName();
     expect(createButton().disabled).toBe(true);
+    expect(container.textContent?.split("Set up a container for isolated work.")).toHaveLength(2);
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[data-testid="create-bot-team"]')!.click(),
+    );
+    // Sharing does not make an unavailable execution location usable.
+    expect(createButton().disabled).toBe(true);
     const setup = [...container.querySelectorAll("button")].find(
       (button) => button.textContent === "Set up computer",
     )!;
@@ -483,11 +562,16 @@ describe("new isolated work", () => {
     expect(onCreate).not.toHaveBeenCalled();
   });
   it("allows an explicit team choice with the host warning and no isolated claim", async () => {
-    api.me.mockResolvedValue({ ...me, sandboxProvider: "desktop" });
+    api.creationOptions.mockResolvedValue({
+      defaultLocation: "host",
+      hostAvailable: true,
+      container: { connectionId: null },
+      sandboxAvailable: true,
+      team: null,
+    });
     const onCreate = vi.fn();
     await act(async () => root.render(<CreateBotForm onCreate={onCreate} onCancel={() => {}} />));
     await enterName();
-    expect(createButton().disabled).toBe(true);
     await act(async () =>
       container.querySelector<HTMLButtonElement>('[data-testid="create-bot-team"]')!.click(),
     );
@@ -499,9 +583,17 @@ describe("new isolated work", () => {
       title: "",
       description: "",
       computerMode: "team",
+      computerLocation: "host",
     });
   });
   it("uses a saved container on a host-only deployment", async () => {
+    api.creationOptions.mockResolvedValue({
+      defaultLocation: "sandbox",
+      hostAvailable: false,
+      container: { connectionId: "saved" },
+      sandboxAvailable: true,
+      team: null,
+    });
     api.me.mockResolvedValue({ ...me, sandboxProvider: "desktop" });
     api.connections.mockResolvedValue([
       { id: "saved", name: "Container engine", settings: { engine: "podman" } },
@@ -511,6 +603,76 @@ describe("new isolated work", () => {
     await enterName();
     await act(async () => createButton().click());
     expect(onCreate.mock.calls[0]?.[0].isolatedComputer).toEqual({ connectionId: "saved" });
+  });
+  it.each(["host", "sandbox"] as const)(
+    "follows the Team %s before submit and frees dedicated choices",
+    async (location) => {
+      api.creationOptions.mockResolvedValue({
+        defaultLocation: location === "host" ? "sandbox" : "host",
+        hostAvailable: true,
+        container: { connectionId: null },
+        sandboxAvailable: true,
+        team: { location, connectionId: location === "sandbox" ? "saved" : null },
+      });
+      const onCreate = vi.fn();
+      await act(async () => root.render(<CreateBotForm onCreate={onCreate} onCancel={() => {}} />));
+      await act(async () =>
+        container.querySelector<HTMLButtonElement>('[data-testid="create-bot-team"]')!.click(),
+      );
+      const selected = location === "host" ? "This computer" : "Sandbox";
+      const other = location === "host" ? "Sandbox" : "This computer";
+      expect(
+        container.querySelector(`[aria-label="${selected}"]`)?.getAttribute("aria-pressed"),
+      ).toBe("true");
+      expect(container.querySelector<HTMLButtonElement>(`[aria-label="${other}"]`)?.disabled).toBe(
+        true,
+      );
+      expect(
+        container.querySelector(`[aria-label="${other}"]`)?.parentElement?.textContent,
+      ).toContain("Choose Only this bot to use a different location from the Team computer.");
+      await enterName();
+      expect(createButton().disabled).toBe(false);
+      await act(async () => createButton().click());
+      expect(onCreate.mock.calls[0]?.[0]).toMatchObject({
+        computerMode: "team",
+        computerLocation: location,
+      });
+      if (location === "sandbox")
+        expect(onCreate.mock.calls[0]?.[0].isolatedComputer).toEqual({ connectionId: "saved" });
+      await act(async () =>
+        container.querySelector<HTMLButtonElement>('[data-testid="create-bot-private"]')!.click(),
+      );
+      expect(container.querySelector<HTMLButtonElement>(`[aria-label="${other}"]`)?.disabled).toBe(
+        false,
+      );
+    },
+  );
+  it("keeps the server-selected location independent from sharing", async () => {
+    api.creationOptions.mockResolvedValue({
+      defaultLocation: "sandbox",
+      hostAvailable: false,
+      container: { connectionId: null },
+      sandboxAvailable: true,
+      team: null,
+    });
+    api.connections.mockResolvedValue([
+      { id: "saved", name: "Team engine", settings: { engine: "docker" } },
+    ]);
+    api.computers.mockResolvedValue([
+      { status: { kind: "desktop", connectionId: "saved", mode: "team" } },
+    ]);
+    const onCreate = vi.fn();
+    await act(async () => root.render(<CreateBotForm onCreate={onCreate} onCancel={() => {}} />));
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[data-testid="create-bot-team"]')!.click(),
+    );
+    expect(container.querySelector('[aria-label="Sandbox"]')?.getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(
+      container.querySelector<HTMLButtonElement>('[aria-label="This computer"]')?.disabled,
+    ).toBe(true);
+    expect(onCreate).not.toHaveBeenCalled();
   });
 });
 

@@ -365,6 +365,7 @@ export const CreateBotInput = z.object({
   notifyOnFinish: z.boolean().default(true),
   color: BotAvatarValueSchema.optional(),
   computerMode: ComputerModeSchema.default("team"),
+  computerLocation: z.enum(["host", "sandbox"]).optional(),
   /** Explicit new-work intent: refuse rather than substitute a host or shared computer. */
   isolatedComputer: z.object({ connectionId: Id.nullable() }).optional(),
   /** Idempotency key within a space (unique with spaceId). */
@@ -912,6 +913,7 @@ export const ComputerUpdateSchema = z.object({
 export type ComputerUpdate = z.infer<typeof ComputerUpdateSchema>;
 
 export const ComputerStatusSchema = z.object({
+  runsOnHost: z.boolean().optional(),
   imageProfile: ComputerProfileSchema.optional(),
   connectionId: Id.nullable().optional(),
   capabilities: z.object({ graphical: z.boolean(), interactiveTerminal: z.boolean() }).optional(),

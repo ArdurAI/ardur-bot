@@ -1,14 +1,29 @@
 import { randomUUID } from "node:crypto";
-import type { Actor, Bot, BotSection, MessageBlock, SpaceBot } from "@ardurbot/contracts";
+import type {
+  Actor,
+  Bot,
+  BotSection,
+  MessageBlock,
+  NewBotLocation,
+  SpaceBot,
+} from "@ardurbot/contracts";
 import {
   BOT_COLORS,
   ComputerConnectionSettingsSchema,
+  computerExecutionKind,
   computerKindFacts,
+  defaultNewBotLocation,
   IsolatedComputerUnavailableError,
+  NewBotHostUnavailableError,
+  NewBotTeamLocationConflictError,
+  newBotSandboxAvailable,
+  newBotTeamLocation,
+  newBotTeamLocationConflict,
   RuntimeKindSchema,
+  recommendedContainer,
 } from "@ardurbot/contracts";
 import type { HistoricalHermesRuntimeConfig } from "@ardurbot/contracts/runtime-config";
-import { defaultComputerKindForNewBot, userVisibleMessages } from "@ardurbot/core";
+import { userVisibleMessages } from "@ardurbot/core";
 import { decodeHistoricalHermesRuntimeConfig } from "@ardurbot/core/runtime-config";
 import type { PrismaClient } from "./client.js";
 import { Prisma } from "./client.js";
@@ -121,7 +136,10 @@ function mapBot(
   };
 }
 
-export function createRepos(prisma: PrismaClient) {
+export function createRepos(
+  prisma: PrismaClient,
+  options: { hostAvailable?: (actor: Actor) => Promise<boolean>; sandboxProvider?: string } = {},
+) {
   async function listBotSectionsForSpaces(
     actor: Actor,
     spaceIds: string[],
@@ -425,6 +443,7 @@ export function createRepos(prisma: PrismaClient) {
         color?: string;
         parentBotId?: string | null;
         computerMode?: ComputerMode;
+        computerLocation?: NewBotLocation;
         isolatedComputer?: { connectionId: string | null };
         spawnKey?: string;
         onCreated?: (
@@ -486,32 +505,126 @@ export function createRepos(prisma: PrismaClient) {
         if (thinkingLevel == null) thinkingLevel = parent.thinkingLevel ?? null;
       }
       const settings = await prisma.deploymentSettings.findUnique({ where: { id: "default" } });
-      let kind = defaultComputerKindForNewBot(
-        process.env.SANDBOX_PROVIDER ?? "docker",
-        settings?.computerHost,
-        runtimeKind,
+      const provider = options.sandboxProvider ?? process.env.SANDBOX_PROVIDER ?? "docker";
+      const hostAvailable = Boolean(
+        actor.isDeploymentOwner &&
+          settings?.ownerUserId === actor.userId &&
+          (await options.hostAvailable?.(actor)),
       );
-      // The kind decision chose Docker although the owner runs bots on This Mac (possible
-      // only for a runtime that supports non-host computers, today the built-in one). That
-      // new bot must not inherit the space's Team computer — it may be the host — so it
-      // starts on its own Docker computer instead. The owner can still move it to the Team
-      // computer (with the This Mac warning). Existing bots and computer rows never change.
+      const delegatedCreation = Boolean(input.parentBotId && input.spawnKey && input.onCreated);
+      let computerMode = input.computerMode;
+      let isolatedComputer = input.isolatedComputer;
+      let container: { connectionId: string | null } | null = isolatedComputer ?? null;
+      if (
+        !input.computerLocation &&
+        !isolatedComputer &&
+        provider === "desktop" &&
+        !delegatedCreation
+      ) {
+        const connections = await prisma.connection.findMany({
+          where: { spaceId: actor.spaceId, connectorId: "computer" },
+        });
+        container = recommendedContainer(
+          provider,
+          connections.flatMap((entry) => {
+            const parsed = ComputerConnectionSettingsSchema.safeParse(entry.metadata);
+            return parsed.success ? [{ id: entry.id, settings: parsed.data }] : [];
+          }),
+        );
+      }
+      let inheritedLocation: NewBotLocation | undefined;
+      const team =
+        computerMode !== "dedicated" && !delegatedCreation
+          ? await prisma.computer.findFirst({
+              where: { spaceId: actor.spaceId, scope: "team" },
+              orderBy: [{ bots: { _count: "desc" } }, { createdAt: "asc" }, { id: "asc" }],
+            })
+          : null;
+      // Automatic creation joins the saved Team location when usable, never an unavailable host.
+      if (
+        !input.computerLocation &&
+        !isolatedComputer &&
+        computerMode !== "dedicated" &&
+        !delegatedCreation
+      ) {
+        if (team) {
+          const connection = team.connectionId
+            ? await prisma.connection.findFirst({
+                where: { id: team.connectionId, spaceId: actor.spaceId, connectorId: "computer" },
+              })
+            : null;
+          const parsed = ComputerConnectionSettingsSchema.safeParse(connection?.metadata);
+          const teamKind = computerExecutionKind({
+            ...team,
+            connectionSettings: parsed.success ? parsed.data : null,
+          });
+          if (team.connectionId && !teamKind) throw new IsolatedComputerUnavailableError();
+          const teamLocation = newBotTeamLocation(team);
+          if (teamLocation === "host" && !hostAvailable) computerMode = "dedicated";
+          else {
+            inheritedLocation = teamLocation;
+            computerMode = "team";
+            if (team.connectionId) isolatedComputer = { connectionId: team.connectionId };
+          }
+        }
+      }
+      const location =
+        input.computerLocation ??
+        inheritedLocation ??
+        (isolatedComputer
+          ? "sandbox"
+          : defaultNewBotLocation({
+              isDeploymentOwner: actor.isDeploymentOwner,
+              hostConnected: hostAvailable,
+              hostPaired: hostAvailable,
+              computerHost: settings?.computerHost as "docker" | "this-mac" | null | undefined,
+              sandboxAvailable: newBotSandboxAvailable(provider, container),
+            }));
+      if (
+        location === "sandbox" &&
+        !isolatedComputer &&
+        !inheritedLocation &&
+        !input.computerLocation
+      )
+        isolatedComputer = container ?? undefined;
+      if (location === "host" && !hostAvailable) throw new NewBotHostUnavailableError();
+      if (location === "host" && isolatedComputer) throw new IsolatedComputerUnavailableError();
+      let kind = location === "host" ? "desktop" : provider;
       const privateDockerComputer =
-        Boolean(input.isolatedComputer) ||
-        (kind === "docker" && settings?.computerHost === "this-mac");
+        computerMode === "dedicated" || (computerMode === undefined && Boolean(isolatedComputer));
+      const joinsTeamSandbox = Boolean(
+        team &&
+          !privateDockerComputer &&
+          location === "sandbox" &&
+          !newBotTeamLocationConflict(team, {
+            kind: "none",
+            connectionId: isolatedComputer?.connectionId,
+          }),
+      );
+      // Internal spawns bind their admitted delegation snapshot in this same transaction.
+      // They do not choose a new execution location through the human creation policy.
+      if (
+        location === "sandbox" &&
+        !newBotSandboxAvailable(
+          provider,
+          isolatedComputer?.connectionId ? isolatedComputer : null,
+        ) &&
+        !joinsTeamSandbox &&
+        !delegatedCreation
+      )
+        throw new IsolatedComputerUnavailableError();
       const insertBot = () =>
         prisma.$transaction(async (tx) => {
           await lockSpaceForContentCreation(tx, {
             spaceId: actor.spaceId,
             userId: actor.userId,
           });
-          if (input.isolatedComputer) {
-            if (input.computerMode !== "dedicated" || runtimeKind !== "pi")
-              throw new IsolatedComputerUnavailableError();
-            if (input.isolatedComputer.connectionId) {
+          if (isolatedComputer) {
+            if (runtimeKind !== "pi") throw new IsolatedComputerUnavailableError();
+            if (isolatedComputer.connectionId) {
               const connection = await tx.connection.findFirst({
                 where: {
-                  id: input.isolatedComputer.connectionId,
+                  id: isolatedComputer.connectionId,
                   spaceId: actor.spaceId,
                   connectorId: "computer",
                 },
@@ -521,7 +634,7 @@ export function createRepos(prisma: PrismaClient) {
                 throw new IsolatedComputerUnavailableError();
               kind = parsed.data.engine === "kubernetes" ? "kubernetes" : "remote-docker";
             }
-            if (computerKindFacts(kind)?.boundary !== "container")
+            if (!joinsTeamSandbox && computerKindFacts(kind)?.boundary !== "container")
               throw new IsolatedComputerUnavailableError();
           }
           const positions = await tx.bot.aggregate({
@@ -538,14 +651,25 @@ export function createRepos(prisma: PrismaClient) {
                 userId: actor.userId,
                 botId,
                 kind,
-                connectionId: input.isolatedComputer?.connectionId,
+                connectionId: isolatedComputer?.connectionId,
               })
             : await ensureComputerRecord(tx, {
                 mode: "team",
                 spaceId: actor.spaceId,
                 userId: actor.userId,
                 kind,
+                connectionId: isolatedComputer?.connectionId,
               });
+          // Sharing never authorizes another location or mutates an existing Team computer.
+          if (!privateDockerComputer && !delegatedCreation) {
+            if (
+              newBotTeamLocationConflict(computer, {
+                kind: location === "host" ? "desktop" : "none",
+                connectionId: isolatedComputer?.connectionId,
+              })
+            )
+              throw new NewBotTeamLocationConflictError();
+          }
           const created = await tx.bot.create({
             data: {
               ...(botId ? { id: botId } : {}),
@@ -693,6 +817,7 @@ export function createRepos(prisma: PrismaClient) {
         userId: actor.userId,
         botId,
         kind: bot.computer.kind,
+        connectionId: bot.computer.connectionId,
       });
       const updated = await prisma.bot.update({
         where: { id: botId },

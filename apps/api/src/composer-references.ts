@@ -1,4 +1,5 @@
-import type { Actor, MessageBlock } from "@ardurbot/contracts";
+import type { Actor, MessageBlock, RuntimeComputerLocation } from "@ardurbot/contracts";
+import { computerRunsOnHost } from "@ardurbot/contracts";
 import type { Prisma } from "@ardurbot/db";
 import { IsolationError } from "@ardurbot/db";
 import { ORPCError } from "@orpc/server";
@@ -10,7 +11,7 @@ export async function resolveComposerReferences(
   tx: Prisma.TransactionClient,
   actor: Actor,
   references: readonly ComposerReference[],
-  computerKind?: string,
+  computer?: RuntimeComputerLocation | null,
 ): Promise<{ note: string; blocks: MessageBlock[] }> {
   const serverIds = [
     ...new Set(references.filter((row) => row.kind === "mcp").map((row) => row.id)),
@@ -35,7 +36,7 @@ export async function resolveComposerReferences(
   )
     throw new IsolationError();
   if (folders.length) {
-    if (computerKind !== "desktop")
+    if (!computerRunsOnHost(computer ?? {}))
       throw new ORPCError("BAD_REQUEST", { message: "Folders require this computer." });
     const registration = await tx.hostRegistration.findFirst({
       where: { id: "default", userId: actor.userId },

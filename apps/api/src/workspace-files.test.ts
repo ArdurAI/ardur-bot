@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { LocalAgentHomeStore } from "@ardurbot/adapters";
-import type { Actor } from "@ardurbot/contracts";
+import type { Actor, RuntimeComputerLocation } from "@ardurbot/contracts";
 import { IDE_FILE_BYTES } from "@ardurbot/contracts";
 import { IsolationError } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
@@ -22,6 +22,8 @@ function fixture() {
     id: "computer",
     screenGeneration: 2,
     kind: "docker",
+    connectionId: null as string | null,
+    connectionSettings: null as RuntimeComputerLocation["connectionSettings"],
     scope: "team",
     homeKey: "home",
     homeRevision: "saved",
@@ -63,6 +65,81 @@ function fixture() {
 }
 
 describe("bot workspace files", () => {
+  it.each(["docker", "podman"] as const)(
+    "uses live and saved workspace files for legacy desktop rows on %s",
+    async (engine) => {
+      const f = fixture();
+      f.computer.kind = "desktop";
+      f.computer.connectionId = "saved-connection";
+      f.computer.connectionSettings = { engine };
+      expect(await f.files.describe(actor, "bot")).toMatchObject({
+        files: "live",
+        runsOnHost: false,
+      });
+      expect((await f.files.list(actor, f.input)).entries).toEqual([
+        { path: "notes.md", kind: "file", size: 5 },
+      ]);
+      const live = await f.files.read(actor, { ...f.input, path: "notes.md" });
+      expect(live.content).toBe("hello");
+      expect(
+        await f.files.save(actor, {
+          ...f.input,
+          path: "notes.md",
+          content: "edited",
+          version: live.version,
+          approved: false,
+        }),
+      ).toMatchObject({ saved: true });
+      expect(f.sandbox.writeFile).toHaveBeenCalled();
+      expect(f.home.list).not.toHaveBeenCalled();
+      f.computer.state = "stopped";
+      expect(await f.files.describe(actor, "bot")).toMatchObject({
+        files: "saved",
+        runsOnHost: false,
+      });
+      const saved = await f.files.read(actor, { ...f.input, path: "notes.md" });
+      expect(saved.content).toBe("saved");
+      expect(
+        await f.files.save(actor, {
+          ...f.input,
+          path: "notes.md",
+          content: "edited",
+          version: saved.version,
+          approved: false,
+        }),
+      ).toMatchObject({ saved: true });
+      expect(f.home.writeFile).toHaveBeenCalled();
+    },
+  );
+
+  it("keeps connectionless host files out of the implicit workspace", async () => {
+    const f = fixture();
+    f.computer.kind = "desktop";
+    expect(await f.files.describe(actor, "bot")).toMatchObject({
+      files: "unavailable",
+      runsOnHost: true,
+    });
+    await expect(f.files.list(actor, f.input)).rejects.toThrow("Files are unavailable");
+    await expect(f.files.read(actor, { ...f.input, path: "notes.md" })).rejects.toThrow(
+      "Files are unavailable",
+    );
+    await expect(
+      f.files.save(actor, {
+        ...f.input,
+        path: "notes.md",
+        content: "edited",
+        version: digest("hello"),
+        approved: false,
+      }),
+    ).rejects.toThrow("Files are unavailable");
+    expect(f.sandbox.listFiles).not.toHaveBeenCalled();
+    expect(f.sandbox.readFile).not.toHaveBeenCalled();
+    expect(f.sandbox.writeFile).not.toHaveBeenCalled();
+    expect(f.home.list).not.toHaveBeenCalled();
+    expect(f.home.readFile).not.toHaveBeenCalled();
+    expect(f.home.writeFile).not.toHaveBeenCalled();
+  });
+
   it("distinguishes live, saved, and unavailable computers without activating one", async () => {
     const f = fixture();
     expect(await f.files.describe(actor, "bot")).toMatchObject({ files: "live", generation: 2 });

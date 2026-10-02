@@ -48,6 +48,7 @@ export async function provisionMessagingIdentity(
   prisma: PrismaClient,
   request: MessagingIdentityRequest,
   env: SignupPolicyEnv,
+  options: { sandboxProvider?: string } = {},
 ): Promise<ProvisionedMessagingIdentity> {
   const { provider, address } = request;
   if (!ADDRESS_PATTERN.test(address)) {
@@ -107,7 +108,7 @@ export async function provisionMessagingIdentity(
     })
   )?.id;
   if (!botId) {
-    const repos = createRepos(prisma);
+    const repos = createRepos(prisma, options);
     const bot = await repos.createBot(
       {
         userId: user.id,
@@ -124,6 +125,7 @@ export async function provisionMessagingIdentity(
           "keep replies concise and conversational. Your first reply doubles as onboarding: " +
           "briefly introduce yourself and what you can help with.",
         notifyOnFinish: true,
+        computerMode: "dedicated",
       },
     );
     botId = bot.id;

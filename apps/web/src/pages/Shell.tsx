@@ -25,6 +25,7 @@ import type {
   ThreadMessage,
   ThreadSnapshot,
   VoiceStatus,
+  WorkspaceContext,
   WorkspaceLayout,
   WorkspaceViewId,
 } from "@ardurbot/contracts";
@@ -1009,6 +1010,43 @@ export function ShellPage({
     observer.observe(pane, { childList: true, subtree: true });
     return () => observer.disconnect();
   }, [workspaceFocusRequest, workspaceKey, workspaceShown, workspaceOverlay]);
+  const workspaceBotId = inGroup ? undefined : active?.id;
+  const [workspaceRevision, setWorkspaceRevision] = useState(0);
+  const workspaceLocationKey = JSON.stringify([
+    workspaceBotId,
+    computer?.computerId,
+    computer?.connectionId,
+    computer?.kind,
+    computer?.state,
+    computer?.homeRevision,
+    workspaceRevision,
+  ]);
+  const [workspaceState, setWorkspaceState] = useState<{
+    key: string;
+    context: WorkspaceContext | null;
+  } | null>(null);
+  useEffect(() => {
+    if (!workspaceBotId) return;
+    const abort = new AbortController();
+    void rpc.workspace
+      .describe({ botId: workspaceBotId }, { signal: abort.signal })
+      .then((context) => {
+        if (!abort.signal.aborted) setWorkspaceState({ key: workspaceLocationKey, context });
+      })
+      .catch(() => {
+        if (!abort.signal.aborted) setWorkspaceState({ key: workspaceLocationKey, context: null });
+      });
+    return () => abort.abort();
+  }, [workspaceBotId, workspaceLocationKey]);
+  const workspaceContext =
+    workspaceState?.key === workspaceLocationKey &&
+    workspaceState.context &&
+    workspaceState.context.botId === workspaceBotId &&
+    workspaceState.context.computerId === (computer?.computerId ?? null)
+      ? workspaceState.context
+      : null;
+  const workspaceContextLoading =
+    Boolean(workspaceBotId) && workspaceState?.key !== workspaceLocationKey;
   const effectiveWorkspaceTab = getEffectiveWorkspaceTab(
     workspaceTab,
     computer?.capabilities?.graphical,
@@ -2671,12 +2709,14 @@ export function ShellPage({
     description: string;
     computerMode: ComputerMode;
     isolatedComputer?: { connectionId: string | null };
+    computerLocation: "host" | "sandbox";
   }) {
     const isFirstBot = botsRef.current.length === 0;
     const bot = await rpc.bots.create({
       ...normalizeCreateBotProfile(input),
       notifyOnFinish: true,
       computerMode: input.computerMode,
+      computerLocation: input.computerLocation,
       isolatedComputer: input.isolatedComputer,
     });
     setBots((current) =>
@@ -3804,7 +3844,7 @@ export function ShellPage({
               {!inGroup && active ? (
                 <Suspense fallback={null}>
                   <ViewControls
-                    capabilities={{ computer }}
+                    capabilities={{ computer, context: workspaceContext }}
                     layout={workspaceLayout}
                     visible={workspaceShown}
                     onOpen={openWorkspace}
@@ -4014,7 +4054,7 @@ export function ShellPage({
               mentionTargets={composerMentionTargets}
               skills={composerSkills(agentSkills, activeTaughtSkills, active?.id)}
               routines={activeRoutines}
-              computerKind={!inGroup ? computer?.kind : undefined}
+              runsOnHost={workspaceContext?.runsOnHost === true}
               botAvailable={!inGroup}
               onComposerError={setAttachmentNotice}
               onManage={(connectionId) => openSettings("integrations", undefined, connectionId)}
@@ -4105,6 +4145,8 @@ export function ShellPage({
                     key={workspaceKey}
                     bot={active}
                     computer={computer}
+                    context={workspaceContext}
+                    contextLoading={workspaceContextLoading}
                     tab={workspaceTab}
                     onTabChange={setWorkspaceTab}
                     openViews={workspaceLayout.open}
@@ -4116,7 +4158,10 @@ export function ShellPage({
                     expanded={workspaceExpanded}
                     onExpand={() => setWorkspaceExpanded((value) => !value)}
                     onClose={closeWorkspace}
-                    onRetry={() => void refreshThread(active.id).catch(() => undefined)}
+                    onRetry={() => {
+                      setWorkspaceRevision((value) => value + 1);
+                      void refreshThread(active.id).catch(() => undefined);
+                    }}
                     headerActions={
                       <>
                         {!computerOpen &&
@@ -4836,10 +4881,12 @@ export function ShellPage({
               onOpenTerminal={terminalSurface.open}
               workspaceTabs={
                 active
-                  ? availableWorkspaceViews({ computer }).map((view) => ({
-                      id: view.id,
-                      label: view.label(t),
-                    }))
+                  ? availableWorkspaceViews({ computer, context: workspaceContext }).map(
+                      (view) => ({
+                        id: view.id,
+                        label: view.label(t),
+                      }),
+                    )
                   : []
               }
               onOpenWorkspaceTab={openWorkspace}
@@ -5170,7 +5217,7 @@ export function ShellPage({
               {terminalSurface.content ??
                 (computer?.capabilities?.graphical === false ? (
                   <p className="p-4 text-muted-foreground">{t`Not available on this computer`}</p>
-                ) : computer?.kind === "desktop" ? (
+                ) : computer?.runsOnHost === true ? (
                   <DesktopKindEmptyState className="grid h-full place-items-center px-8 text-center text-sm text-muted-foreground/80" />
                 ) : computer?.state === "running" && embeddedScreenUrl ? (
                   <>
@@ -5782,7 +5829,7 @@ export const Composer = memo(function Composer({
   mentionTargets,
   skills = [],
   routines = [],
-  computerKind,
+  runsOnHost = false,
   onComposerError,
   onManage,
   onRoutine,
@@ -5826,7 +5873,7 @@ export const Composer = memo(function Composer({
   mentionTargets?: ComposerMention[];
   skills?: ComposerSkill[];
   routines?: Routine[];
-  computerKind?: string;
+  runsOnHost?: boolean;
   onComposerError: (message: string) => void;
   onManage: (connectionId?: string) => void;
   onRoutine: (id: string) => void | Promise<void> | Promise<boolean>;
@@ -5961,10 +6008,10 @@ export const Composer = memo(function Composer({
     focus: focusComposer,
   });
   const desktop = desktopBridge();
-  const folderAvailable = canAddComposerFolder(Boolean(desktop?.host), computerKind);
+  const folderAvailable = canAddComposerFolder(Boolean(desktop?.host), runsOnHost);
   async function addFolder(dropped?: File) {
     try {
-      if (computerKind !== "desktop") throw new Error("Folders require this computer.");
+      if (!runsOnHost) throw new Error("Folders require this computer.");
       const folder = await pickComposerFolder(desktop?.host, dropped);
       if (folder) insertMention(folder);
     } catch (error) {

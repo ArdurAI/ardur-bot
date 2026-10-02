@@ -9,6 +9,7 @@ import type {
 } from "@ardurbot/contracts";
 import {
   ALL_DEVICE_SCOPES,
+  computerRunsOnHost,
   DELEGATION_LIMITS,
   DelegationAuthoritySchema,
   DelegationSnapshotSchema,
@@ -372,11 +373,11 @@ export async function admitDelegation(
   };
   const requesterConnectors = [
     ...sharedConnectors,
-    ...(await connectors(parent.botId, requester.computer?.kind === "desktop")),
+    ...(await connectors(parent.botId, computerRunsOnHost(requester.computer))),
   ];
   const recipientConnectors = [
     ...sharedConnectors,
-    ...(await connectors(recipient.id, recipient.computer?.kind === "desktop")),
+    ...(await connectors(recipient.id, computerRunsOnHost(recipient.computer))),
   ];
   const layers = [
     { scopes: scopes("bot", parent.botId), connectors: requesterConnectors },

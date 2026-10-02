@@ -1568,6 +1568,7 @@ msgstr "Не удаётся связаться с сервером."
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/shell/dialogs.tsx
+#: src/pages/shell/move-to-host.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Cancel"
 msgstr "Отмена"
@@ -1629,8 +1630,9 @@ msgstr ""
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/shell/move-to-host.tsx
 msgid "Change computer"
-msgstr ""
+msgstr "Сменить компьютер"
 
 #: src/pages/shell/runtime-summary.tsx
 msgid "Change location"
@@ -1831,6 +1833,11 @@ msgstr ""
 #: src/pages/McpServersOverlay.tsx
 msgid "Choose one credential: a token or a header."
 msgstr "Выберите один способ: токен или заголовок."
+
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/computer-location-picker.tsx
+msgid "Choose Only this bot to use a different location from the Team computer."
+msgstr "Выберите Только этот бот, чтобы использовать другое расположение, чем у компьютера команды."
 
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "Choose Trim older context or Stop the run."
@@ -2277,6 +2284,12 @@ msgstr "Подключить OAuth"
 msgid "Connect remote account"
 msgstr ""
 
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/computer-location-picker.tsx
+#: src/pages/shell/move-to-host.tsx
+msgid "Connect the host service to choose This computer."
+msgstr "Подключите службу хоста, чтобы выбрать Этот компьютер."
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Connect this provider to use it as your personal model."
 msgstr "Подключите этого провайдера, чтобы использовать его в качестве своей личной модели."
@@ -2400,6 +2413,7 @@ msgstr "Лимит контекста (КиБ)"
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/shell/move-to-host.tsx
 msgid "Continue"
 msgstr "Продолжить"
 
@@ -2530,8 +2544,9 @@ msgid "Could not change password"
 msgstr "Не удалось изменить пароль"
 
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/shell/move-to-host.tsx
 msgid "Could not change the computer; stop its bots and try again."
-msgstr ""
+msgstr "Не удалось сменить компьютер; остановите его ботов и попробуйте снова."
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Could not change the computer. Stop its bots and try again."
@@ -4339,6 +4354,7 @@ msgstr "Для {task} {better} завершала ваши запуски так
 msgid "For {task}, {better} on this machine did as well as {other} in your runs."
 msgstr "Для {task} {better} на этом компьютере справилась в ваших запусках не хуже, чем {other}."
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "For testing only; not an isolation boundary."
 msgstr "Только для тестирования; не обеспечивает изоляцию."
@@ -5774,6 +5790,10 @@ msgstr ""
 msgid "Move to a container"
 msgstr "Переместить в контейнер"
 
+#: src/pages/shell/move-to-host.tsx
+msgid "Move to This computer"
+msgstr "Переместить на Этот компьютер"
+
 #. placeholder {0}: value.minimumFreeGb
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Move when this Mac has under {0} GB free"
@@ -6555,6 +6575,10 @@ msgstr ""
 #: src/pages/import/LocalImportPage.tsx
 msgid "Other files"
 msgstr ""
+
+#: src/pages/shell/computer-location-picker.tsx
+msgid "Other locations are unavailable for {runtime}. Choose This computer."
+msgstr "Другие расположения недоступны для {runtime}. Выберите Этот компьютер."
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -7702,10 +7726,13 @@ msgstr "Выполняется…"
 msgid "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?"
 msgstr "На этом компьютере есть активные запуски. Изменение подключения может прервать их. Всё равно сохранить?"
 
+#: src/pages/shell/computer-location-picker.tsx
+#: src/pages/shell/move-to-host.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "Runs as you; can use your files and signed-in tools"
 msgstr "Работает с вашими правами; может использовать ваши файлы и инструменты, в которых вы вошли в аккаунт"
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "Runs at the configured provider; can use granted credentials and network access."
 msgstr "Работает у настроенного провайдера; может использовать предоставленные учётные данные и доступ к сети."
@@ -7754,6 +7781,10 @@ msgstr ""
 #: src/pages/ComparePanel.tsx
 msgid "Same task, {count} bots"
 msgstr ""
+
+#: src/pages/shell/computer-location-picker.tsx
+msgid "Sandbox"
+msgstr "Песочница"
 
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Sans"
@@ -8058,6 +8089,7 @@ msgstr "Отправлено для {peer}"
 msgid "Sentry alert"
 msgstr "Оповещение Sentry"
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "Separate home; can reach allowed network services and granted credentials."
 msgstr "Отдельная домашняя папка; доступны разрешённые сетевые службы и предоставленные учётные данные."
@@ -8124,6 +8156,7 @@ msgid "Set up a board"
 msgstr "Настроить доску"
 
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/computer-location-picker.tsx
 msgid "Set up a container for isolated work."
 msgstr "Настройте контейнер для изолированной работы."
 
@@ -8194,6 +8227,10 @@ msgstr ""
 #: src/pages/shell/runtime-summary.tsx
 msgid "Shared with team"
 msgstr "Общий с командой"
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Sharing"
+msgstr "Совместное использование"
 
 #: src/components/ShowAllModels.tsx
 msgid "Show all models"
@@ -8972,6 +9009,7 @@ msgstr "этот компьютер"
 #: src/pages/fleet/target-name.ts
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "This computer"
 msgstr "Этот компьютер"
@@ -9052,8 +9090,9 @@ msgstr "Это навсегда удалит все сообщения и ост
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/shell/move-to-host.tsx
 msgid "This replaces the computer's files. Continue?"
-msgstr ""
+msgstr "Это заменит файлы компьютера. Продолжить?"
 
 #: src/pages/Auth.tsx
 msgid "This reset link is invalid or expired"
@@ -9558,6 +9597,7 @@ msgstr "Используйте целые секунды."
 msgid "User"
 msgstr ""
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "Uses that account's permissions."
 msgstr "Использует права этой учётной записи."

@@ -335,6 +335,13 @@ export function dashboardFixture(botCount = 1) {
         },
         "messaging/status": { enabled: false, providers: [], identities: [], openSignup: false },
         "voice/status": { transcribe: false, synthesize: false },
+        "computer/creationOptions": {
+          defaultLocation: "sandbox",
+          hostAvailable: false,
+          sandboxAvailable: true,
+          container: { connectionId: null },
+          team: null,
+        },
         "integrations/list": { catalog: [], connections: [] },
         "mcp/servers/list": [],
         "memory/config": null,

@@ -110,6 +110,7 @@ describe("spawned bot creation", () => {
       {
         prisma: {} as PrismaClient,
         jobs: { enqueue: vi.fn() } as unknown as JobPublisher,
+        sandbox: { describe: () => ({ kind: "desktop" }) } as Pick<SandboxProvider, "describe">,
       },
       {
         spawnedBy: {
@@ -125,6 +126,7 @@ describe("spawned bot creation", () => {
       },
     );
 
+    expect(createReposSpy).toHaveBeenCalledWith({}, { sandboxProvider: "desktop" });
     expect(createBot).toHaveBeenCalledWith(
       expect.objectContaining({ userId: "user-1", spaceId: "workspace-1" }),
       expect.objectContaining({
@@ -323,7 +325,12 @@ describe("destroyBot", () => {
         taskId: "group-task",
         botId: "bot-2",
         bot: {
-          computer: { homeKey: "team-home", kind: "fake", providerRef: "screen-1" },
+          computer: {
+            homeKey: "team-home",
+            kind: "desktop",
+            providerRef: "screen-1",
+            connectionId: "saved-container",
+          },
         },
       },
     ]);
@@ -421,6 +428,11 @@ describe("destroyBot", () => {
         where: expect.objectContaining({
           threadId: { in: ["thread-1", "thread-3"] },
         }),
+        select: expect.objectContaining({
+          bot: {
+            select: { computer: { select: expect.objectContaining({ connectionId: true }) } },
+          },
+        }),
       }),
     );
     expect(cancelRuns).toHaveBeenCalledWith({
@@ -458,7 +470,8 @@ describe("destroyBot", () => {
       expect.objectContaining({
         id: "screen-1",
         botId: "team-home",
-        kind: "fake",
+        kind: "desktop",
+        connectionId: "saved-container",
         providerRef: "screen-1",
       }),
       expect.objectContaining({

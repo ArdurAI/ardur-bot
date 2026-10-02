@@ -733,6 +733,22 @@ export const appContract = {
   },
   fleet: fleetContract,
   computer: {
+    creationOptions: oc.output(
+      z.object({
+        defaultLocation: z.enum(["host", "sandbox"]),
+        hostAvailable: z.boolean(),
+        sandboxAvailable: z.boolean(),
+        sandboxBoundary: z.enum(["container", "account", "hosted", "test"]).optional(),
+        container: z.object({ connectionId: Id.nullable() }).nullable(),
+        team: z
+          .object({
+            location: z.enum(["host", "sandbox"]),
+            connectionId: Id.nullable(),
+            name: z.string().optional(),
+          })
+          .nullable(),
+      }),
+    ),
     engine: oc.input(z.object({ connectionId: Id.nullable() })).output(
       z.object({
         name: z.enum(["docker", "podman", "kubernetes", "ssh"]),
@@ -740,7 +756,14 @@ export const appContract = {
       }),
     ),
     list: oc.output(
-      z.array(z.object({ botId: Id, name: z.string(), status: ComputerStatusSchema })),
+      z.array(
+        z.object({
+          botId: Id,
+          name: z.string(),
+          runtimeKind: RuntimeKindSchema.optional(),
+          status: ComputerStatusSchema,
+        }),
+      ),
     ),
     connections: oc.output(
       z.array(

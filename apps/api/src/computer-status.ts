@@ -1,6 +1,11 @@
 import { computerSupportsUpdate } from "@ardurbot/adapters";
 import type { ComputerStatus, HostLabel } from "@ardurbot/contracts";
-import { COMPUTER_STATES, ComputerProfileSchema, computerCapabilities } from "@ardurbot/contracts";
+import {
+  COMPUTER_STATES,
+  ComputerProfileSchema,
+  computerCapabilities,
+  computerRunsOnHost,
+} from "@ardurbot/contracts";
 import { ACTIVE_RUN_STATUSES, computerScreenSize } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 
@@ -77,6 +82,7 @@ export function toComputerStatus(
   const kind = (computer?.kind ?? "fake") as ComputerStatus["kind"];
   return {
     ...(computer?.id ? { computerId: computer.id } : {}),
+    runsOnHost: computerRunsOnHost(computer),
     botId,
     imageProfile: ComputerProfileSchema.parse(computer?.imageProfile ?? "base"),
     connectionId: computer?.connectionId ?? null,
@@ -95,7 +101,7 @@ export function toComputerStatus(
     screenHeight: screen.height,
     homeRevision: computer?.homeRevision ?? null,
     busyBotName,
-    canUpdate: computerSupportsUpdate(kind),
+    canUpdate: computerSupportsUpdate(computer),
     ...(hostLabel ? { hostLabel } : {}),
   };
 }

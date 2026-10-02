@@ -32,8 +32,13 @@ describe("unsigned desktop release contract", () => {
   it("keeps credentials out of builds and limits publication to a complete pre-release", () => {
     expect(workflow).not.toMatch(/pull_request:|DESKTOP_.*CSC|APPLE_API|forceCodeSigning=true/);
     expect(workflow).toContain("permissions:\n  contents: read");
-    expect(jobNeeds(workflow, "evidence")).toEqual(["validate", "build"]);
-    expect(jobNeeds(workflow, "publish")).toEqual(["validate", "build", "evidence"]);
+    expect(jobNeeds(workflow, "evidence")).toEqual(["validate", "build", "install-acceptance"]);
+    expect(jobNeeds(workflow, "publish")).toEqual([
+      "validate",
+      "build",
+      "evidence",
+      "install-acceptance",
+    ]);
     expect(workflow).toContain("node scripts/release-publish.mjs");
     expect(publish).toContain('"--draft"');
     expect(publish).toContain('"--prerelease"');

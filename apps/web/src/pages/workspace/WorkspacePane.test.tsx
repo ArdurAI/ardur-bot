@@ -128,6 +128,47 @@ afterEach(async () => {
 });
 
 describe("WorkspacePane tab selection and content rendering", () => {
+  it.each([
+    { connectionId: "saved-docker", files: "live" as const, selected: "Files" },
+    { connectionId: "saved-podman", files: "saved" as const, selected: "Files" },
+    { connectionId: null, files: "unavailable" as const, selected: "Files" },
+  ])(
+    "uses supplied API file policy for a desktop row on $connectionId",
+    async ({ connectionId, files, selected }) => {
+      const computer: ComputerStatus = { ...graphicalComputer, kind: "desktop", connectionId };
+      await act(async () =>
+        root.render(
+          <WorkspacePane
+            bot={bot}
+            computer={computer}
+            context={{
+              botId: bot.id,
+              computerId: "computer-1",
+              generation: 1,
+              files,
+              runsOnHost: connectionId === null,
+              observedAt: "2026-09-28T00:00:00.000Z",
+            }}
+            tab="files"
+            terminal={null}
+            onTabChange={vi.fn()}
+            onOpenRun={vi.fn()}
+            routines={<div>Routines content</div>}
+            screen={{ computer, open: false, url: null, error: null, onOpen: vi.fn() }}
+          />,
+        ),
+      );
+      expect(container.querySelector('[role="tab"][data-active]')?.textContent).toBe(selected);
+      if (files === "unavailable") {
+        expect(container.querySelector('[data-testid="workspace-files"]')).toBeNull();
+        expect(container.textContent).toContain("Files are unavailable on this computer.");
+      } else {
+        expect(container.querySelector('[data-testid="workspace-files"]')).not.toBeNull();
+      }
+      expect(describeCall).not.toHaveBeenCalled();
+    },
+  );
+
   it("defaults to Tasks tab on graphical computers when tab is empty", async () => {
     await act(async () =>
       root.render(
@@ -345,6 +386,33 @@ describe("WorkspacePane Files availability loading", () => {
     expect(container.querySelector('[data-testid="workspace-files"]')).toBeNull();
   }
 
+  it("keeps supplied discovery loading and delegates Retry without a second policy request", async () => {
+    const onRetry = vi.fn();
+    await act(async () =>
+      root.render(<WorkspacePane {...props} context={null} contextLoading onRetry={onRetry} />),
+    );
+    expectLoading();
+    await act(async () =>
+      root.render(<WorkspacePane {...props} context={null} onRetry={onRetry} />),
+    );
+    expect(container.textContent).toContain("Files are unavailable on this computer.");
+    await act(async () =>
+      [...container.querySelectorAll("button")]
+        .find((button) => button.textContent === "Retry")!
+        .click(),
+    );
+    expect(onRetry).toHaveBeenCalledOnce();
+    await act(async () =>
+      root.render(<WorkspacePane {...props} context={null} contextLoading onRetry={onRetry} />),
+    );
+    expectLoading();
+    await act(async () =>
+      root.render(<WorkspacePane {...props} context={context} onRetry={onRetry} />),
+    );
+    expect(container.querySelector('[data-testid="workspace-files"]')).not.toBeNull();
+    expect(describeCall).not.toHaveBeenCalled();
+  });
+
   it.each(["live", "unavailable", "failed"] as const)(
     "shows loading, not a reason or Retry, until describe settles as %s",
     async (outcome) => {
@@ -413,7 +481,7 @@ describe("WorkspacePane Files availability loading", () => {
     expect(container.querySelector('[data-testid="workspace-files"]')).not.toBeNull();
   });
 
-  it.each(["bot", "computer", "homeRevision", "state"] as const)(
+  it.each(["bot", "computer", "connection", "kind", "homeRevision", "state"] as const)(
     "waits for the new context when %s changes and ignores an aborted response",
     async (change) => {
       const previous = deferred();
@@ -425,6 +493,8 @@ describe("WorkspacePane Files availability loading", () => {
       const nextComputer = {
         ...graphicalComputer,
         ...(change === "computer" ? { computerId: "computer-2" } : {}),
+        ...(change === "connection" ? { connectionId: "container-connection" } : {}),
+        ...(change === "kind" ? { kind: "desktop" as const } : {}),
         ...(change === "homeRevision" ? { homeRevision: "new-revision" } : {}),
         ...(change === "state" ? { state: "stopped" as const } : {}),
       };

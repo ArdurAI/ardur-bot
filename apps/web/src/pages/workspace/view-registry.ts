@@ -61,16 +61,7 @@ export const workspaceViews = {
     id: "files",
     label: (t) => t(msg`Files`),
     icon: Folder,
-    available: ({ computer, context }) =>
-      context !== undefined
-        ? Boolean(context?.computerId && context.files !== "unavailable")
-        : Boolean(
-            computer?.computerId &&
-              computer.kind !== "fake" &&
-              computer.kind !== "desktop" &&
-              (computer.state === "running" ||
-                (computer.homeRevision && computer.homeRevision !== "empty")),
-          ),
+    available: ({ context }) => Boolean(context?.computerId && context.files !== "unavailable"),
     unavailable: (t) => t(msg`Files are unavailable on this computer.`),
     render: ({ bot, context, compact }) =>
       context ? createElement(Files, { bot, context, compact }) : null,
