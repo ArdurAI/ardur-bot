@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import type { AgentRunRequest, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
 import { HermesExecutionEnvelopeSchema } from "@ardurbot/contracts/runtime-config";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createConsoleSink } from "../../../logging/src/console-sink.js";
 import { createLogger } from "../../../logging/src/logger.js";
 import { createTestSink } from "../../../logging/src/test-sink.js";
 import profileFixture from "../../python/tests/valid_profile.json" with { type: "json" };
@@ -88,6 +89,8 @@ describe("HermesRuntime M0 ACP seam", () => {
     ["session-new-long-error", true],
     ["session-new-escaped-error", false],
     ["session-new-escaped-error", true],
+    ["session-new-control-error", false],
+    ["session-new-control-error", true],
   ] as const)(
     "logs only safe protocol metadata for %s (detailed=%s)",
     async (scenario, detailed) => {
@@ -145,10 +148,13 @@ describe("HermesRuntime M0 ACP seam", () => {
           acpFailure: "protocol-error",
           protocolErrorCode: -32602,
           protocolErrorMessage:
-            scenario === "session-new-long-error"
-              ? `${prefix} ${"x".repeat(500)}`.slice(0, 300)
-              : prefix,
+            scenario === "session-new-control-error"
+              ? `${prefix} forged line ${"x".repeat(230)} [redacted] end`.slice(0, 300)
+              : scenario === "session-new-long-error"
+                ? `${prefix} ${"x".repeat(500)}`.slice(0, 300)
+                : prefix,
         });
+        expect(facts.protocolErrorMessage).not.toMatch(/\p{Cc}/u);
         expect(facts.protocolErrorMessage.length).toBeLessThanOrEqual(300);
         const logged = records.join("");
         for (const privateText of [
@@ -169,6 +175,50 @@ describe("HermesRuntime M0 ACP seam", () => {
       }
     },
   );
+
+  it("keeps protocol error bindings on one line through the pretty console sink", async () => {
+    vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", undefined);
+    const output = vi.spyOn(console, "error").mockImplementation(() => {});
+    const sink = createTestSink();
+    const run = request();
+    const adapter = new HermesRuntime({
+      command: process.execPath,
+      args: [fixture, "session-new-control-error"],
+      launch: async (spec) => ({
+        ...(await launchUnconfinedProcess(spec)),
+        mcpConfig: {
+          command: "fixture",
+          args: ["bridge", "fixture-bridge-argument"],
+          env: { BRIDGE_TOKEN: "fixture-bridge-environment" },
+        },
+      }),
+      logger: createLogger({
+        service: "fixture",
+        level: "debug",
+        sinks: [sink, createConsoleSink({ format: "pretty" })],
+      }),
+    });
+    try {
+      await expect(collect(adapter, run)).rejects.toThrow(
+        "Hermes could not start a session. Check the runtime and try again.",
+      );
+      const record = sink.events.find((event) => event.message === "Hermes turn failed");
+      expect(record?.protocolErrorMessage).toBe(
+        `session refused: [redacted] [redacted] [redacted] forged line ${"x".repeat(230)} [redacted] end`.slice(
+          0,
+          300,
+        ),
+      );
+      expect(output).toHaveBeenCalledTimes(1);
+      const line = String(output.mock.calls[0]?.[0]);
+      expect(line).not.toMatch(/\p{Cc}/u);
+      expect(line).toContain("protocolErrorMessage=session refused: [redacted]");
+      expect(line).not.toContain(run.model.apiKey!);
+      expect(line).not.toContain("fixture-bridge");
+    } finally {
+      output.mockRestore();
+    }
+  });
 
   it("records a child closing during session/new as closed, not a protocol refusal", async () => {
     const error = vi.fn();

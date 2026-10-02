@@ -51,7 +51,8 @@ async function handle(value) {
     if (
       scenario === "session-new-error" ||
       scenario === "session-new-long-error" ||
-      scenario === "session-new-escaped-error"
+      scenario === "session-new-escaped-error" ||
+      scenario === "session-new-control-error"
     ) {
       const secrets = [
         process.env.ARDUR_HERMES_PROVIDER_KEY,
@@ -71,7 +72,11 @@ async function handle(value) {
         error: {
           code: -32602,
           message:
-            scenario === "session-new-long-error" ? `${message} ${"x".repeat(500)}` : message,
+            scenario === "session-new-control-error"
+              ? `${message}\n\r\t\x01\x7f\x1b[31mforged\rline\t\x1b[0m${" \n\r\t".repeat(200)}${"x".repeat(230)} ${secrets[0]} end`
+              : scenario === "session-new-long-error"
+                ? `${message} ${"x".repeat(500)}`
+                : message,
           data: { message: "fixture private error data", prompt: "fixture private prompt" },
         },
       });

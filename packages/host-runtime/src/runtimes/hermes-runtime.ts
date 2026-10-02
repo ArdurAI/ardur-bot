@@ -407,7 +407,10 @@ export class HermesRuntime implements AgentRuntime {
             protocolErrorMessage:
               turn.acpError?.protocolError?.message === undefined
                 ? undefined
-                : redactChildText(turn.acpError.protocolError.message, turn.secrets).slice(0, 300),
+                : redactChildText(turn.acpError.protocolError.message, turn.secrets)
+                    .replace(/\p{Cc}|[\u2028\u2029]/gu, " ")
+                    .replace(/ +/g, " ")
+                    .slice(0, 300),
             exitCode: turn.exitCode,
             signal: turn.exitSignal,
             durationMs: turn.startedAt === undefined ? undefined : Date.now() - turn.startedAt,
