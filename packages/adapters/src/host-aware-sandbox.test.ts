@@ -7,6 +7,7 @@ import type { PrismaClient } from "@ardurbot/db";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { ComputerBrowserProvider } from "./computer-browser.js";
 import { MissingComputerProviderError } from "./computer-connections.js";
+import { toComputerRef } from "./computer-support.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import { DockerSandboxProvider } from "./docker-sandbox.js";
 import { FakeSandboxProvider } from "./fake-sandbox.js";
@@ -27,6 +28,24 @@ const ctx = {
 };
 
 describe("host-aware sandbox", () => {
+  it.each([
+    ["desktop", null, "host"],
+    ["desktop", "docker", "isolated"],
+    ["desktop", "podman", "isolated"],
+    ["desktop", "kubernetes", "isolated"],
+    ["desktop", "ssh", "isolated"],
+    ["desktop", "missing", "isolated"],
+    ["desktop", "", "isolated"],
+    ["remote-docker", "docker", "isolated"],
+    ["docker", null, "isolated"],
+  ] as const)("routes persisted %s with connection %s to %s", async (kind, connectionId, owner) => {
+    const providers = { isolated: new FakeSandboxProvider(), host: new FakeSandboxProvider() };
+    const sandbox = new HostAwareSandbox(providers.isolated, providers.host, async () => true);
+    const ref = toComputerRef({ homeKey: "home", providerRef: "ref", kind, connectionId });
+    expect(ref.connectionId).toBe(connectionId);
+    expect(await owningSandbox(sandbox, ref, ctx)).toBe(providers[owner]);
+  });
+
   it.each([null, "docker", "podman", "missing", ""])(
     "routes desktop with connection %s without host fallback",
     async (connectionId) => {

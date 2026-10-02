@@ -3013,12 +3013,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           });
           await touchRunningComputer(
             { sandbox: deps.sandbox, jobs: deps.jobs },
-            {
-              id: bot.computer.id,
-              homeKey: bot.computer.homeKey,
-              providerRef: bot.computer.providerRef,
-              kind: bot.computer.kind,
-            },
+            bot.computer,
           ).catch(() => undefined);
         }
         return { ok: true as const };

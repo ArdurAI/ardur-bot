@@ -602,7 +602,16 @@ async function detachBotFromGroups(
           spaceId: true,
           bot: {
             select: {
-              computer: { select: { homeKey: true, kind: true, providerRef: true } },
+              computer: {
+                select: {
+                  homeKey: true,
+                  kind: true,
+                  providerRef: true,
+                  connectionId: true,
+                  imageProfile: true,
+                  networkEgress: true,
+                },
+              },
             },
           },
         },
