@@ -100,6 +100,13 @@ describe("optional macOS release signing", () => {
     expect(cleanup.run).toContain('security delete-keychain "$CSC_KEYCHAIN"');
     expect(pack.env.CSC_IDENTITY_AUTO_DISCOVERY).toBe("true");
     expect(release.jobs.build.env.CSC_IDENTITY_AUTO_DISCOVERY).toBe("false");
+    expect(release.jobs.build.env.CSC_KEYCHAIN).toBeUndefined();
+    const keychainPath = steps.find(
+      (step: { name?: string }) => step.name === "Set temporary signing keychain path",
+    );
+    expect(keychainPath.if).toBe(condition);
+    expect(keychainPath.run).toContain('"$RUNNER_TEMP"');
+    expect(keychainPath.run).toContain('>> "$GITHUB_ENV"');
     expect(release.jobs.build.name).toContain("'Signed' || 'Unsigned'");
     expect(release.jobs.evidence.with.mac_signed).toContain("needs.validate.outputs.signed");
     expect(performance.on.workflow_call.inputs.mac_signed.type).toBe("boolean");
