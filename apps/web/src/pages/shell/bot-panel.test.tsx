@@ -494,6 +494,12 @@ describe("new isolated work", () => {
     );
     await enterName();
     expect(createButton().disabled).toBe(true);
+    expect(container.textContent?.split("Set up a container for isolated work.")).toHaveLength(2);
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[data-testid="create-bot-team"]')!.click(),
+    );
+    // Sharing does not make an unavailable execution location usable.
+    expect(createButton().disabled).toBe(true);
     const setup = [...container.querySelectorAll("button")].find(
       (button) => button.textContent === "Set up computer",
     )!;

@@ -206,9 +206,6 @@ export default function NewBot() {
           <ComputerModePicker value={computerMode} onChange={setComputerMode} />
           {computerLocation === "sandbox" && locationReady && !container ? (
             <>
-              <Text style={{ color: tokens.mutedForeground }}>
-                {t("Set up a container for isolated work.")}
-              </Text>
               <Pressable
                 accessibilityRole="button"
                 onPress={() =>

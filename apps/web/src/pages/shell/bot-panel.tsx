@@ -274,9 +274,6 @@ export function CreateBotForm({
         ) : null}
         {computerLocation === "sandbox" && locationReady && !container ? (
           <div className="mt-2 text-sm">
-            <p>
-              <Trans>Set up a container for isolated work.</Trans>
-            </p>
             <Button variant="outline" onClick={onSetupComputer}>
               <Trans>Set up computer</Trans>
             </Button>
