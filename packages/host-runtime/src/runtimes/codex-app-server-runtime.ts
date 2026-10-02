@@ -184,9 +184,14 @@ const PROJECT_INSTRUCTIONS_HEADING = "Project instructions (from the folder's in
 // Ardur tools that are the intended way to read, write and run commands.
 const ARDUR_TOOLS_NOTE =
   "Your Codex sandbox is read-only and offline on purpose. Read and write files and run commands through the Ardur tools (read_file, write_file, shell); using them is the intended way to work, not a bypass, and Ardur applies its own approvals.";
-export function codexBaseInstructions(instructions: string, projectText: string): string {
+export function codexBaseInstructions(
+  instructions: string,
+  projectText: string,
+  controlledComparison = false,
+): string {
+  // A controlled comparison offers no Ardur tools, so the note would be untrue there.
   return [
-    ARDUR_TOOLS_NOTE,
+    controlledComparison ? "" : ARDUR_TOOLS_NOTE,
     instructions,
     projectText ? PROJECT_INSTRUCTIONS_HEADING : "",
     projectText,
@@ -690,7 +695,11 @@ export class CodexAppServerRuntime implements AgentRuntime {
         modelProvider: "openai",
         cwd: folder,
         approvalPolicy: "on-request",
-        baseInstructions: codexBaseInstructions(request.instructions, project.text),
+        baseInstructions: codexBaseInstructions(
+          request.instructions,
+          project.text,
+          request.controlledComparison,
+        ),
         config: {
           // Codex opens no file for project instructions: a file it opens is a file it follows.
           project_doc_max_bytes: 0,

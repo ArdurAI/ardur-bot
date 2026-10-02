@@ -320,4 +320,8 @@ describe("base instructions", () => {
       "root rules",
     ]);
   });
+
+  it("leaves the note out of a controlled comparison, which offers no Ardur tools", () => {
+    expect(codexBaseInstructions("Be brief.", "", true)).toBe("Be brief.");
+  });
 });
