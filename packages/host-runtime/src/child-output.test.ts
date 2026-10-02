@@ -5,11 +5,52 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createLogger } from "../../logging/src/logger.js";
 import { createTestSink } from "../../logging/src/test-sink.js";
 import type { ChildOutputLogger } from "./child-output.js";
-import { captureChildOutput, createChildProcessLogger } from "./child-output.js";
+import { captureChildOutput, createChildProcessLogger, redactChildText } from "./child-output.js";
 
 function fakeChild(script: string): ChildProcess {
   return spawn(process.execPath, ["-e", script], { stdio: "pipe" });
 }
+
+it("redacts complete diagnostics before capping, including wrapped and encoded known secrets", () => {
+  const secret = "fixture value/+credential";
+  const message = `${"x".repeat(290)} ${secret} ${encodeURIComponent(secret)} ${secret.slice(0, 8)}\n${secret.slice(8)} Authorization: Bearer unknown-value`;
+  const safe = redactChildText(message, [secret]);
+  expect(safe).not.toContain(secret);
+  expect(safe).not.toContain(encodeURIComponent(secret));
+  expect(safe).not.toContain(secret.slice(8));
+  expect(safe).not.toContain("unknown-value");
+  expect(safe).toContain("[redacted]");
+  expect(safe.slice(0, 300)).not.toContain("fixture");
+});
+
+it("redacts the exact ANSI-interleaved known-secret reproduction", () => {
+  expect(redactChildText("a\x1b[0mbc", ["abc"])).toBe("[redacted]");
+});
+
+it("redacts the exact tab-interleaved known-secret reproduction", () => {
+  expect(
+    redactChildText("err sk-liv\te-abc123XYZdef456ghi end", ["sk-live-abc123XYZdef456ghi"]),
+  ).toBe("err [redacted] end");
+});
+
+it.each(["\t", "\u00a0", "\u2028", "\u2029", "\u0301", "\u{1d185}"])(
+  "redacts known secrets with separators after every character (%j)",
+  (separator) => {
+    const secret = "opaque-fixture-credential";
+    const text = `${[...secret].join(separator)}${separator}`;
+    expect(redactChildText(`before ${text} after`, [secret])).toBe(
+      `before [redacted]${separator} after`,
+    );
+  },
+);
+
+it("prefers false redaction across word boundaries but preserves unrelated whitespace", () => {
+  expect(redactChildText("  before pass word after  ", ["password"])).toBe(
+    "  before [redacted] after  ",
+  );
+  const ordinary = "  before\tordinary\u00a0word\u2028after\u0301  ";
+  expect(redactChildText(ordinary, ["password"])).toBe(ordinary);
+});
 
 function fakeLogger() {
   const debug = vi.fn();
@@ -121,6 +162,7 @@ describe("captureChildOutput", () => {
         captureStdout: true,
       });
       stderr.write(`${credential}\n`);
+      stderr.write(`${[...credential].join("\t\u0301")}\n`);
       stdout.write(`${credential.slice(0, 15)}\r\n${credential.slice(15)}\n`);
       if (state === "ended") {
         const ended = Promise.all(
@@ -139,6 +181,7 @@ describe("captureChildOutput", () => {
       expect(captured.tail()).not.toContain(credential);
       expect(captured.tail()).not.toContain(credential.slice(0, 15));
       expect(captured.tail()).not.toContain(credential.slice(15));
+      expect(captured.tail()).not.toContain([...credential].join("\t\u0301"));
       expect(captured.facts()).toEqual(facts);
       secrets.length = 0;
       expect(captured.tail()).not.toContain(credential);
@@ -165,7 +208,7 @@ describe("captureChildOutput", () => {
     stderr.destroy();
   });
 
-  it.each(["", "\n", "\r\n"])(
+  it.each(["", "\n", "\r\n", "\t", "\u00a0", "\u2028", "\u2029", "\u0301"])(
     "redacts known credentials across chunks and physical lines (%j)",
     async (separator) => {
       const { logger, debug } = fakeLogger();
@@ -186,6 +229,46 @@ describe("captureChildOutput", () => {
       captured.close();
     },
   );
+
+  it.each(["\t", "\u00a0", "\u2028", "\u2029", "\u0301", "\u{1d185}"])(
+    "redacts interleaved known secrets across every UTF-8 byte boundary (%j)",
+    (separator) => {
+      const { logger, debug } = fakeLogger();
+      const stderr = new PassThrough();
+      const secret = "opaque-fixture-credential";
+      const captured = captureChildOutput({ stderr } as unknown as ChildProcess, {
+        kind: "fixture",
+        logger,
+        secrets: [secret],
+      });
+      stderr.write("before\n");
+      const text = [...secret].join(separator);
+      for (const byte of Buffer.from(text)) {
+        stderr.write(Buffer.from([byte]));
+        expect(JSON.stringify(debug.mock.calls)).not.toContain("opaque");
+      }
+      stderr.write("\nafter\n");
+      captured.close();
+      expect(captured.tail()).toBe("before\n[redacted]\nafter");
+      expect(JSON.stringify(debug.mock.calls)).not.toMatch(/opaque|fixture-credential/);
+      stderr.destroy();
+    },
+  );
+
+  it("redacts known secrets across ordinary word boundaries in streamed logs", () => {
+    const { logger, debug } = fakeLogger();
+    const stderr = new PassThrough();
+    const captured = captureChildOutput({ stderr } as unknown as ChildProcess, {
+      kind: "fixture",
+      logger,
+      secrets: ["password"],
+    });
+    for (const part of ["  before pass ", "word after  \n", "ordinary words\n"]) stderr.write(part);
+    captured.close();
+    expect(captured.tail()).toBe("  before [redacted] after  \nordinary words");
+    expect(JSON.stringify(debug.mock.calls)).not.toContain("pass word");
+    stderr.destroy();
+  });
 
   it("redacts encoded multiline credentials before line framing", async () => {
     const { logger, debug } = fakeLogger();
@@ -208,6 +291,74 @@ describe("captureChildOutput", () => {
       expect(records).not.toContain(fragment);
     expect(records).toContain("[redacted]");
     captured.close();
+  });
+
+  it.each([
+    "\x1b[0m",
+    "\x1b[?25l",
+    "\x1b]0;fixture title\x07",
+    "\x1b]0;fixture title\x1b\\",
+    "\x1bM",
+    "\x1b(B",
+    "\u200b\x00",
+  ])("normalizes split escapes before streaming known-secret redaction (%j)", (sequence) => {
+    const { logger, debug } = fakeLogger();
+    const stderr = new PassThrough();
+    const secret = "opaque-first-half-second-half";
+    const captured = captureChildOutput({ stderr } as unknown as ChildProcess, {
+      kind: "fixture",
+      logger,
+      secrets: [secret],
+    });
+    stderr.write(secret.slice(0, 17));
+    for (const character of sequence) {
+      stderr.write(character);
+      expect(debug).not.toHaveBeenCalled();
+    }
+    stderr.write(`${secret.slice(17)}\nafter\n`);
+    captured.close();
+    expect(captured.tail()).toBe("[redacted]\nafter");
+    expect(JSON.stringify(debug.mock.calls)).not.toMatch(/opaque|second-half|fixture title/);
+    stderr.destroy();
+  });
+
+  it.each([
+    ["sk-fixture\x1b[0mSynthetic12345", "sk-fixtureSynthetic12345"],
+    ["Bearer fixture\x1b]0;title\x1b\\OpaqueValue", "fixtureOpaqueValue"],
+  ])(
+    "normalizes split escapes before streaming general credential patterns (%j)",
+    (text, secret) => {
+      const { logger, debug } = fakeLogger();
+      const stderr = new PassThrough();
+      const captured = captureChildOutput({ stderr } as unknown as ChildProcess, {
+        kind: "fixture",
+        logger,
+      });
+      for (const character of text) stderr.write(character);
+      stderr.write("\n");
+      captured.close();
+      expect(captured.tail()).toBe(text.startsWith("Bearer") ? "Bearer [redacted]" : "[redacted]");
+      expect(captured.tail() + JSON.stringify(debug.mock.calls)).not.toContain(secret);
+      stderr.destroy();
+    },
+  );
+
+  it("fails closed when interleaved whitespace exceeds the streaming carry bound", () => {
+    const { logger, debug } = fakeLogger();
+    const stderr = new PassThrough();
+    const secret = "opaque-fixture-credential";
+    const captured = captureChildOutput({ stderr } as unknown as ChildProcess, {
+      kind: "fixture",
+      logger,
+      secrets: [secret],
+    });
+    stderr.write(secret.slice(0, 6));
+    for (let index = 0; index < 20; index++) stderr.write("\t".repeat(4096));
+    stderr.write(`${secret.slice(6)}\nafter\n`);
+    captured.close();
+    expect(captured.tail()).toBe("Output line exceeded the size limit.");
+    expect(JSON.stringify(debug.mock.calls)).not.toMatch(/opaque|fixture-credential/);
+    stderr.destroy();
   });
 
   it("suppresses rather than cuts a credential larger than the carry bound", async () => {

@@ -234,17 +234,27 @@ captured too where the protocol does not already own it.
   It stays in private bounded memory until the process ends. Failure logs contain
   only structured facts: process kind, pid, run id, exit code or signal, phase,
   duration, byte and line counts, and whether output was produced. Failure causes
-  never include output tails.
+  never include output tails. Hermes ACP request failures additionally record
+  `acpFailure` (`closed`, `timeout`, or `protocol-error`). A JSON-RPC error adds
+  `protocolErrorCode` and `protocolErrorMessage`: only the numeric code and message,
+  with known turn secrets and shared sensitive-text patterns redacted before the
+  message is capped at 300 characters. The error's `data` is never logged. This
+  diagnostic is for operators, not the conversation, and redaction is best-effort.
 - Detailed process logging requires `ARDUR_DETAILED_PROCESS_LOGS=1` and a debug
   logger. A Settings switch comes later. Known credentials are redacted on each
   stream before line framing, including credentials split across chunks or
   physical lines. Shared text redaction also covers sensitive assignments,
   scheme-prefixed credentials, credentialed URLs, GitHub tokens (including
   `github_pat_`), AWS credentials, JWTs, `sk-` and `xai-` keys, and emails.
+  For a source checkout, launch with
+  `ARDUR_DETAILED_PROCESS_LOGS=1 LOG_LEVEL=debug pnpm dev`; Turbo passes the opt-in
+  to the API and worker's shared `dev` task. Restart with these variables for a
+  diagnostic attempt, then remove the opt-in when finished.
 - Detailed mode is best-effort, not a guarantee that arbitrary text contains no
   secrets: unknown credential formats and transformations may evade recognition.
-  Leave it off for private workloads. Message and file contents never appear at
-  info or above, even with detailed mode enabled.
+  Leave it off for private workloads. Child output never appears at info or above,
+  even with detailed mode enabled. The always-logged ACP error message is a narrow
+  exception: agent-supplied context may remain after redaction.
 - Tails stay within 64 KiB and lines within 8 KiB. Oversized lines are replaced
   entirely by a size-limit marker. A credential or carry window too large to
   redact safely suppresses the rest of that stream. The fallback logger's bounded

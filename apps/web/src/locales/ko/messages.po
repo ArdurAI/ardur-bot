@@ -344,6 +344,10 @@ msgid "{runtime} could not finish this run. Check the runtime or change the pin.
 msgstr "{runtime}이(가) 이 실행을 완료하지 못했습니다. 런타임을 확인하거나 고정을 변경하세요."
 
 #: src/lib/failure-category-copy.ts
+msgid "{runtime} could not start a session. Check the runtime and try again."
+msgstr "{runtime}에서 세션을 시작하지 못했습니다. 런타임을 확인한 후 다시 시도하세요."
+
+#: src/lib/failure-category-copy.ts
 msgid "{runtime} is experimental. Turn on Experimental for {bot} to use it."
 msgstr "{runtime}은(는) 실험적입니다. 사용하려면 {bot}에 대해 실험 기능을 켜세요."
 

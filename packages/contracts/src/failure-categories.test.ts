@@ -116,6 +116,11 @@ describe("failure categories table", () => {
     ],
     ["Worker stopped.", "stopped", {}],
     [
+      "Hermes could not start a session. Check the runtime and try again.",
+      "session-start-failed",
+      { runtime: "Hermes" },
+    ],
+    [
       "Claude Code could not finish this run — connect it or change the pin.",
       "other",
       { runtime: "Claude Code" },

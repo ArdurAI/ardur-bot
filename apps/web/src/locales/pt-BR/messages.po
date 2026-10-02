@@ -344,6 +344,10 @@ msgid "{runtime} could not finish this run. Check the runtime or change the pin.
 msgstr "{runtime} não conseguiu concluir esta execução. Verifique o runtime ou altere o modelo fixado."
 
 #: src/lib/failure-category-copy.ts
+msgid "{runtime} could not start a session. Check the runtime and try again."
+msgstr "{runtime} não conseguiu iniciar uma sessão. Verifique o ambiente de execução e tente novamente."
+
+#: src/lib/failure-category-copy.ts
 msgid "{runtime} is experimental. Turn on Experimental for {bot} to use it."
 msgstr "{runtime} é experimental. Ative Experimental para {bot} usá-lo."
 

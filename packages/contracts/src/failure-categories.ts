@@ -18,6 +18,7 @@ export const FailureCategoryIdSchema = z.enum([
   "destinations-bot",
   "destinations-space",
   "stopped",
+  "session-start-failed",
   "other",
 ]);
 export type FailureCategoryId = z.infer<typeof FailureCategoryIdSchema>;
@@ -151,6 +152,12 @@ export const FAILURE_CATEGORIES: readonly FailureCategory[] = [
     memberMessage: "{member} failed.",
     action: { kind: "none" },
     legacy: ["{runtime} could not finish this run — connect it or change the pin."],
+  },
+  {
+    id: "session-start-failed",
+    message: "{runtime} could not start a session. Check the runtime and try again.",
+    action: { kind: "retry" },
+    legacy: [],
   },
 ];
 

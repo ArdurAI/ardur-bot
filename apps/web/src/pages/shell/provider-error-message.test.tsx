@@ -128,6 +128,34 @@ function nativePin(runtimeKind: "claude-code" | "codex-app-server" | "hermes") {
   };
 }
 
+it("renders a translated Hermes session-start failure without protocol detail", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const message = "{runtime} could not start a session. Check the runtime and try again.";
+  i18n.load("zh-CN", { [message]: "{runtime} 无法启动会话。请检查运行环境后重试。" });
+  i18n.activate("zh-CN");
+  const element = document.createElement("div");
+  const root = createRoot(element);
+  try {
+    await act(async () =>
+      root.render(
+        <ProviderErrorMessage
+          text="private protocol detail"
+          runtimeProblem={runtimePinProblem(
+            nativePin("hermes"),
+            "runtime-unavailable",
+            "Hermes could not start a session. Check the runtime and try again.",
+            "session-start-failed",
+          )}
+        />,
+      ),
+    );
+    expect(element.textContent).toContain("Hermes 无法启动会话。请检查运行环境后重试。");
+    expect(element.textContent).not.toContain("private protocol detail");
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
 it.each([
   ["claude-code", "Claude Code"],
   ["codex-app-server", "Codex"],

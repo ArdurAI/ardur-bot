@@ -344,6 +344,10 @@ msgid "{runtime} could not finish this run. Check the runtime or change the pin.
 msgstr "{runtime} 无法完成此次运行。请检查运行时或更改固定模型。"
 
 #: src/lib/failure-category-copy.ts
+msgid "{runtime} could not start a session. Check the runtime and try again."
+msgstr "{runtime} 无法启动会话。请检查运行环境后重试。"
+
+#: src/lib/failure-category-copy.ts
 msgid "{runtime} is experimental. Turn on Experimental for {bot} to use it."
 msgstr "{runtime} 是实验性运行时。为 {bot} 启用「实验性」后才能使用。"
 

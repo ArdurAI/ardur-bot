@@ -344,6 +344,10 @@ msgid "{runtime} could not finish this run. Check the runtime or change the pin.
 msgstr "{runtime} не смог завершить этот запуск. Проверьте среду выполнения или измените закрепление."
 
 #: src/lib/failure-category-copy.ts
+msgid "{runtime} could not start a session. Check the runtime and try again."
+msgstr "{runtime} не удалось запустить сессию. Проверьте среду выполнения и повторите попытку."
+
+#: src/lib/failure-category-copy.ts
 msgid "{runtime} is experimental. Turn on Experimental for {bot} to use it."
 msgstr "{runtime} — экспериментальная среда. Включите «Экспериментально» для {bot}, чтобы использовать её."
 

@@ -344,6 +344,10 @@ msgid "{runtime} could not finish this run. Check the runtime or change the pin.
 msgstr "{runtime} bu çalıştırmayı tamamlayamadı. Çalışma zamanını kontrol edin veya sabitlemeyi değiştirin."
 
 #: src/lib/failure-category-copy.ts
+msgid "{runtime} could not start a session. Check the runtime and try again."
+msgstr "{runtime} bir oturum başlatamadı. Çalışma ortamını kontrol edip yeniden deneyin."
+
+#: src/lib/failure-category-copy.ts
 msgid "{runtime} is experimental. Turn on Experimental for {bot} to use it."
 msgstr "{runtime} deneyseldir. Kullanmak için {bot} için Deneysel'i açın."
 

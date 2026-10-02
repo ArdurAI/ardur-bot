@@ -1,4 +1,6 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "{runtime} could not start a session. Check the runtime and try again.":
+    "{runtime} 无法启动会话。请检查运行环境后重试。",
   Sandbox: "沙盒",
   "Move to This computer": "迁移到这台计算机",
   "Choose Only this bot to use a different location from the Team computer.":
