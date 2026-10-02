@@ -17,6 +17,15 @@ msgstr ""
 msgid " — May not be available on your plan"
 msgstr " — May not be available on your plan"
 
+#: src/pages/workspace/view-registry.ts
+#: src/pages/workspace/WorkspaceChanges.tsx
+msgid "Recorded changes"
+msgstr "Recorded changes"
+
+#: src/pages/workspace/WorkspaceChanges.tsx
+msgid "No changes to show"
+msgstr "No changes to show"
+
 #: src/pages/shell/bot-panel.tsx
 msgid " — not available on your account"
 msgstr " — not available on your account"

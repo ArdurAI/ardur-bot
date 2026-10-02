@@ -24,6 +24,9 @@ describe("lingui catalogs", () => {
       for (const message of [
         "Tasks",
         "Routines",
+        "IDE",
+        "Recorded changes",
+        "No changes to show",
         "Show settings",
         "Show computer",
         "Settings",

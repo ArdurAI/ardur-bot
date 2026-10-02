@@ -1,6 +1,7 @@
 import { encodeTerminalFrame } from "@ardurbot/core";
 import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
+import { workspaceIntentHref } from "../src/pages/workspace/open-intent";
 import { captureScreenshot } from "./helpers";
 import { bots, installPerformanceFixture } from "./performance-fixture";
 import { openWorkspaceView as openView } from "./workspace-view";
@@ -49,6 +50,7 @@ async function installWorkspace(
   const botId = bots[0]!.id;
   const context = {
     botId,
+    rootId: "sandbox-fixture-computer",
     computerId: "fixture-computer",
     generation: 1,
     files,
@@ -64,6 +66,13 @@ async function installWorkspace(
       ...computerFor(botId),
       ...(legacyContainer ? { kind: "desktop", connectionId: "container-connection" } : {}),
     },
+    `[notes.md:2](notes.md#L2) · [Open recorded change](${workspaceIntentHref({
+      view: { type: "changes" },
+      target: { botId, rootId: context.rootId, computerId: context.computerId, generation: 1 },
+      changeId: "fixture-change",
+      since: "2026-09-28T00:00:00.000Z",
+      until: "2026-09-29T00:00:00.000Z",
+    })})`,
   );
   const run = {
     runId: "fixture-run",
@@ -90,24 +99,49 @@ async function installWorkspace(
     )
       unexpected.push(name);
     const result =
-      name === "workspace/describe"
-        ? context
-        : name === "workspace/tasks"
-          ? { runs: [run], delegations: [], routines: [], observedAt: context.observedAt }
-          : name === "workspace/list"
-            ? { context, entries: [{ path: "notes.md", kind: "file", size: 17 }] }
-            : name === "workspace/read"
-              ? fileBody(
-                  context,
-                  ++reads === 1 ? "Workspace notes\n" : "Workspace notes from disk\n",
-                )
-              : name === "workspace/save"
-                ? {
-                    saved: false,
-                    approvalRequired: false,
-                    reason: saveReason ?? "The file changed. Open it again before saving.",
-                  }
-                : undefined;
+      name === "ide/target"
+        ? {
+            id: context.rootId,
+            kind: "sandbox",
+            path: "/",
+            computerId: context.computerId,
+            botId,
+            name: "Workspace",
+          }
+        : name === "ide/changes"
+          ? {
+              items: [
+                {
+                  id: "fixture-change",
+                  botId,
+                  runId: "fixture-run",
+                  path: "notes.md",
+                  source: "tool",
+                  before: "Workspace notes\n",
+                  after: "Workspace notes updated\n",
+                  createdAt: "2026-09-28T12:00:00.000Z",
+                },
+              ],
+              nextCursor: null,
+            }
+          : name === "workspace/describe"
+            ? context
+            : name === "workspace/tasks"
+              ? { runs: [run], delegations: [], routines: [], observedAt: context.observedAt }
+              : name === "workspace/list"
+                ? { context, entries: [{ path: "notes.md", kind: "file", size: 17 }] }
+                : name === "workspace/read"
+                  ? fileBody(
+                      context,
+                      ++reads === 1 ? "Workspace notes\n" : "Workspace notes from disk\n",
+                    )
+                  : name === "workspace/save"
+                    ? {
+                        saved: false,
+                        approvalRequired: false,
+                        reason: saveReason ?? "The file changed. Open it again before saving.",
+                      }
+                    : undefined;
     if (result !== undefined) await route.fulfill({ json: { json: result } });
     else await route.fallback();
   });
@@ -123,6 +157,45 @@ async function openFiles(page: Page) {
   await expect(pane).toContainText("Workspace notes");
   return pane;
 }
+
+test("conversation file and recorded-change links open checked views beside chat", async ({
+  page,
+}, testInfo) => {
+  const { botId, unexpected } = await installWorkspace(page, "live");
+  await page.goto(`/app/${botId}`);
+  await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
+  const pane = page.getByTestId("side-panel");
+  await page.getByRole("link", { name: "notes.md:2", exact: true }).click();
+  await expect(pane.getByRole("tab", { name: "IDE", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  const editor = pane.locator("[data-ide-editor]");
+  await expect(editor).toContainText("Workspace notes");
+  await expect(pane.locator(".cm-activeLineGutter")).toHaveText("2");
+  await expect(page).toHaveURL(`/app/${botId}`);
+  await captureScreenshot(page, testInfo, "workspace-ide-beside-chat");
+  await editor.fill("Unsaved IDE draft");
+  await editor.evaluate((element) => element.setAttribute("data-draft-proof", "ide"));
+  await pane.getByRole("button", { name: "Expand", exact: true }).click();
+  await expect(pane.locator('[data-draft-proof="ide"]')).toBeVisible();
+  await pane.getByRole("button", { name: "Back to chat", exact: true }).click();
+  await page.getByRole("link", { name: "Open recorded change", exact: true }).click();
+  await expect(pane.getByRole("tab", { name: "Recorded changes", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(pane.getByTestId("ide-diff")).toContainText("Workspace notes updated");
+  await expect(page).toHaveURL(`/app/${botId}`);
+  await captureScreenshot(page, testInfo, "workspace-recorded-changes-beside-chat");
+  await pane.getByRole("tab", { name: "IDE", exact: true }).click();
+  await expect(pane.locator('[data-draft-proof="ide"]')).toBeVisible();
+  await expect(editor).toContainText("Unsaved IDE draft");
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await pane.getByRole("button", { name: "Close IDE", exact: true }).click();
+  await expect(pane.getByRole("tab", { name: "IDE", exact: true })).toBeVisible();
+  expect(unexpected).toEqual([]);
+});
 
 test("workspace pane opens Tasks and bot files without starting the computer", async ({
   page,
@@ -206,6 +279,7 @@ test("workspace views retain drafts across docking, expansion and return to chat
   await page.setViewportSize({ width: 1440, height: 900 });
   await expect(pane).toHaveAttribute("data-overlay", "false");
   await pane.getByRole("tab", { name: "Tasks", exact: true }).click();
+  page.once("dialog", (dialog) => dialog.accept());
   await pane.getByRole("button", { name: "Close Files", exact: true }).click();
   await expect(pane.getByRole("tab", { name: "Files", exact: true })).toHaveCount(0);
   await expect(pane.getByRole("tab", { name: "Tasks", exact: true })).toBeFocused();

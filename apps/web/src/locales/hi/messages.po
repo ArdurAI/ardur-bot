@@ -13,6 +13,15 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: \n"
 
+#: src/pages/workspace/view-registry.ts
+#: src/pages/workspace/WorkspaceChanges.tsx
+msgid "Recorded changes"
+msgstr "दर्ज किए गए बदलाव"
+
+#: src/pages/workspace/WorkspaceChanges.tsx
+msgid "No changes to show"
+msgstr "दिखाने के लिए कोई बदलाव नहीं है"
+
 #: src/pages/shell/model-pin-select.tsx
 msgid " — May not be available on your plan"
 msgstr ""
@@ -4651,7 +4660,7 @@ msgstr "मेरा काम हो गया"
 #: src/pages/ide/IdePage.tsx
 #: src/pages/shell/ide-nav.ts
 msgid "IDE"
-msgstr ""
+msgstr "IDE"
 
 #: src/pages/TeamBoard.tsx
 msgid "Idle"
