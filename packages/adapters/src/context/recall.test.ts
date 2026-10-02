@@ -8,7 +8,7 @@ import type { JournalDocument } from "@ardurbot/memory";
 import { JournalDocumentStore, LifecycleMemoryStore, MemoryService } from "@ardurbot/memory";
 import { MemoryRecallIndex } from "@ardurbot/memory/node/recall-index";
 import { describe, expect, it, vi } from "vitest";
-import { assembleTurnContext } from "./assemble.js";
+import { assembleTurnContext, needsRecall } from "./assemble.js";
 import { fitContextRecall, recallLocalDocuments } from "./recall.js";
 
 const ftsAvailable = await new MemoryRecallIndex().indexSlice("probe", "probe", []);
@@ -63,13 +63,19 @@ function fakeStore(
   } as unknown as MemoryStore;
 }
 
-it("falls back to the word-count scan with revision citations when the index is unavailable", async () => {
+it("falls back to the ranked scan with revision citations when the index is unavailable", async () => {
   const read = vi.fn(async ({ scope }) => ({
     documents:
       scope === "bot"
         ? [
             { id: "launch", path: "facts/launch.md", content: "launch Friday", revision: 4 },
             { id: "skill", path: "skills/launch.md", content: "launch procedure", revision: 1 },
+            {
+              id: "preference",
+              path: "preferences/launch.md",
+              content: "launch preference",
+              revision: 1,
+            },
             { id: "unrelated", path: "facts/menu.md", content: "lunch menu", revision: 1 },
           ]
         : [],
@@ -86,7 +92,7 @@ it("falls back to the word-count scan with revision citations when the index is 
     {
       id: "launch",
       memory: "launch Friday",
-      score: 1,
+      score: expect.any(Number),
       provenance: "[ardur-memory:launch:4]",
       updatedAt: undefined,
     },
@@ -132,6 +138,189 @@ it("records exactly the recalled bytes delivered after escaping and budgeting", 
   expect(recall).not.toHaveBeenCalled();
 });
 
+describe.each(["index", "scan"] as const)("recall ranking and packing (%s)", (mode) => {
+  const makeIndex = () =>
+    mode === "index"
+      ? new MemoryRecallIndex()
+      : new MemoryRecallIndex({ loader: async () => null, onUnavailable: () => undefined });
+
+  it.skipIf(mode === "index" && !ftsAvailable)(
+    "recalls a tiny saved fact among 400 imported prose documents after the frame budget",
+    async () => {
+      const prose =
+        "When you review the garden code with the team, you test the watering plan. " +
+        "The guide explains what you asked about, with a reply for each task. " +
+        "You check the layout and keep just the ordinary supplies nearby. ";
+      const rows: Parameters<typeof fakeStore>[0] = Array.from({ length: 400 }, (_, i) => {
+        const paragraph =
+          prose + (i % 2 ? "The release guide covers planting. " : "Each word describes a task. ");
+        const length = 3000 + (i % 28) * 1000;
+        return {
+          id: `import-${i}`,
+          path: `imported/memories/garden-${String(i).padStart(3, "0")}.md`,
+          content: paragraph.repeat(Math.ceil(length / paragraph.length)).slice(0, length),
+          revision: 1,
+          scope: "user",
+          owner: "owner",
+        };
+      });
+      rows.push({
+        id: "release-note",
+        path: "memory/release-code-word.md",
+        content: "The release code word is heliotrope.",
+        revision: 7,
+        scope: "bot",
+        owner: "chief",
+      });
+      const memory = fakeStore(rows);
+      const read = vi.spyOn(memory, "read");
+      const index = makeIndex();
+      const query =
+        "@lik Test 13: what is the release code word I asked you to remember? Reply with just the word.";
+      const results = await recallLocalDocuments(memory, "chief", query, context, index);
+      const fitted = fitContextRecall(results, 6000, []);
+      const turn = await assembleTurnContext({
+        instructions: "Rules",
+        history: [],
+        message: query,
+        recall: async () => fitted.text,
+      });
+      expect(turn.history[0]?.content.includes("heliotrope")).toBe(true);
+      expect(turn.history[0]?.content).toContain("[ardur-memory:release-note:7]");
+      expect(results[0]?.id).toBe("release-note");
+      expect(turn.snapshot.layers.recall).toBeLessThanOrEqual(6000);
+      expect(fitted.results.length).toBeGreaterThanOrEqual(3);
+      if (mode === "index") {
+        read.mockClear();
+        await recallLocalDocuments(memory, "chief", query, context, index);
+        expect(read.mock.calls.length).toBeLessThanOrEqual(20);
+        expect(read.mock.calls.every(([request]) => Boolean(request.path))).toBe(true);
+      }
+    },
+  );
+
+  it.skipIf(mode === "index" && !ftsAvailable)(
+    "finds the best passage deep in a long note",
+    async () => {
+      const memory = fakeStore([
+        {
+          id: "deep-note",
+          path: "facts/garden.md",
+          content:
+            "Orchid grows here. " +
+            "Ordinary garden observations. ".repeat(500) +
+            "The orchid release code word is heliotrope. " +
+            "More ordinary observations. ".repeat(500),
+          revision: 2,
+          scope: "bot",
+          owner: "chief",
+        },
+      ]);
+      const results = await recallLocalDocuments(
+        memory,
+        "chief",
+        "orchid release code word",
+        context,
+        makeIndex(),
+      );
+      const fitted = fitContextRecall(results, 6000, []);
+      expect(fitted.results[0]?.memory).toContain("heliotrope");
+      expect(fitted.results[0]?.memory.length).toBeLessThanOrEqual(1200);
+      expect(fitted.results[0]?.truncated).toBe(true);
+      expect(fitted.text).toContain("[ardur-memory:deep-note:2]");
+      expect(fitted.text).toMatch(/partial/i);
+    },
+  );
+
+  it("does not read the store or index for a stop-word-only query", async () => {
+    const memory = fakeStore([
+      {
+        id: "filler",
+        path: "facts/filler.md",
+        content: "the you with just asked reply",
+        revision: 1,
+        scope: "bot",
+        owner: "chief",
+      },
+    ]);
+    const read = vi.spyOn(memory, "read");
+    const index = makeIndex();
+    const queryIndex = vi.spyOn(index, "query");
+    const query = "What is the you with just asked reply?";
+    expect(await recallLocalDocuments(memory, "chief", query, context, index)).toEqual([]);
+    expect(read).not.toHaveBeenCalled();
+    expect(queryIndex).not.toHaveBeenCalled();
+    expect(needsRecall(query, "")).toBe(false);
+  });
+
+  it.skipIf(mode === "index" && !ftsAvailable)(
+    "prefers bot, then user, then shared scope on coverage ties",
+    async () => {
+      const rows: Parameters<typeof fakeStore>[0] = [
+        { id: "shared", path: "facts/a.md", scope: "shared", owner: "" },
+        { id: "user", path: "facts/b.md", scope: "user", owner: "owner" },
+        { id: "bot", path: "facts/z.md", scope: "bot", owner: "chief" },
+      ].map((row) => ({
+        ...row,
+        scope: row.scope as "bot" | "user" | "shared",
+        content: "orchid fact",
+        revision: 1,
+      }));
+      const results = await recallLocalDocuments(
+        fakeStore(rows),
+        "chief",
+        "orchid",
+        context,
+        makeIndex(),
+      );
+      expect(results.map((result) => result.id)).toEqual(["bot", "user", "shared"]);
+    },
+  );
+});
+
+it("packs at least three excerpts even with escaped content and a smaller recall budget", async () => {
+  const results = Array.from({ length: 5 }, (_, i) => ({
+    id: `note-${i}`,
+    score: 1,
+    provenance: `[ardur-memory:note-${i}:1]`,
+    memory: "<&>".repeat(4000),
+  }));
+  const fitted = fitContextRecall(results, 1000, []);
+  expect(fitted.results.length).toBeGreaterThanOrEqual(3);
+  expect(fitted.results.every((result) => result.truncated)).toBe(true);
+  expect(fitted.text).toMatch(/partial/i);
+  const turn = await assembleTurnContext({
+    instructions: "Rules",
+    history: [],
+    message: "What are the notes?",
+    budgets: { recall: 1000 },
+    recall: async () => fitted.text,
+  });
+  expect(turn.snapshot.layers.recall).toBeLessThanOrEqual(1000);
+  for (const result of fitted.results) {
+    expect(turn.history[0]?.content).toContain(result.provenance);
+  }
+});
+
+it("keeps the top fact when a tiny budget cannot hold three full citations", async () => {
+  const results = Array.from({ length: 3 }, (_, i) => ({
+    score: 1,
+    provenance: `[ardur-memory:00000000-0000-4000-8000-00000000000${i}:1]`,
+    memory: i === 0 ? "heliotrope" : "ordinary prose ".repeat(500),
+  }));
+  const fitted = fitContextRecall(results, 200, []);
+  expect(fitted.results[0]?.memory).toBe("heliotrope");
+  const turn = await assembleTurnContext({
+    instructions: "Rules",
+    history: [],
+    message: "What is the word?",
+    budgets: { recall: 200 },
+    recall: async () => fitted.text,
+  });
+  expect(turn.history[0]?.content).toContain(results[0]!.provenance);
+  expect(turn.snapshot.layers.recall).toBeLessThanOrEqual(200);
+});
+
 describe.skipIf(!ftsAvailable)("indexed local recall", () => {
   it("answers recall from the index with BM25 ranking and the same output shape", async () => {
     const padding =
@@ -158,6 +347,14 @@ describe.skipIf(!ftsAvailable)("indexed local recall", () => {
         id: "skill",
         path: "skills/deploy.md",
         content: "deployment deadline procedure",
+        revision: 1,
+        scope: "bot",
+        owner: "chief",
+      },
+      {
+        id: "preference",
+        path: "preferences/deploy.md",
+        content: "deployment deadline preference",
         revision: 1,
         scope: "bot",
         owner: "chief",

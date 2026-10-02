@@ -23,7 +23,7 @@
       "id": "remember",
       "eyebrow": "MEMORY",
       "title": "Memory you can inspect",
-      "body": "Keep documents in the built-in database, or connect a Git repository for a space's shared notes. Bots can recall saved private facts in later direct and group conversations.",
+      "body": "Keep documents in the built-in database, or connect a Git repository for a space's shared notes. Bots can recall saved private facts in later direct and group conversations. Local recall uses cited excerpts so long imported notes share the context budget with shorter saved facts.",
       "source": "README.md#Memory"
     },
     {
@@ -504,7 +504,7 @@
           ]
         }
       ],
-      "note": "“This computer” starts the app's own database and services, so the first launch doesn't need Docker. Previews don't update themselves; download each new version by hand. Homebrew installs need Homebrew from 2026-09-20 or later; run brew update first on older installs."
+      "note": "“This computer” needs no Docker. Previews update manually. Homebrew needs 2026-09-20 or later; brew update first. CI checks branch installers without publishing. Windows installer checked for silent install and uninstall; first-launch check pending."
     },
     "installScript": {
       "platforms": [

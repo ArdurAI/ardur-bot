@@ -181,14 +181,24 @@ export abstract class LinuxFleetSandbox implements SandboxProvider {
     computer: ComputerRef,
     context: AdapterContext,
   ): AsyncIterable<PortableFile> {
-    const archive = await this.call(
-      computer,
-      ["python3", "-c", LINUX_ARCHIVE_SCRIPT, await this.root(computer, context)],
-      context,
-      undefined,
-      MAX_FLEET_ARCHIVE,
-    );
-    yield* readFleetArchive(archive);
+    const root = await this.root(computer, context);
+    // A workspace can outgrow one archive; export it in batches until one comes back empty.
+    for (let exported = 0; ; ) {
+      const archive = await this.call(
+        computer,
+        ["python3", "-c", LINUX_ARCHIVE_SCRIPT, root, String(exported)],
+        context,
+        undefined,
+        MAX_FLEET_ARCHIVE,
+      );
+      let batch = 0;
+      for (const file of readFleetArchive(archive)) {
+        batch += 1;
+        yield file;
+      }
+      if (batch === 0) return;
+      exported += batch;
+    }
   }
   async importWorkspace(
     computer: ComputerRef,

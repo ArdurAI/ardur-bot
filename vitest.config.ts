@@ -8,6 +8,10 @@ export default defineConfig({
   resolve: {
     alias: [
       {
+        find: /^\.\/desktop-guardrails\.js$/,
+        replacement: path.join(root, "apps/desktop/scripts/host-guardrails-entry.ts"),
+      },
+      {
         find: /^\.\.\/fleet-discovery\.js$/,
         replacement: path.join(root, "apps/desktop/scripts/fleet-discovery-entry.ts"),
       },
