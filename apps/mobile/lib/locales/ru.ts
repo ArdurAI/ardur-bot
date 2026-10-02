@@ -403,8 +403,8 @@ export const RU_MESSAGES: Record<string, string> = {
   "Recreating the computer": "Повторное создание компьютера",
   "The computer stopped before its workspace could be saved.":
     "Компьютер остановился до сохранения рабочего пространства.",
-  "The computer could not be found to save its workspace.":
-    "Компьютер не найден, поэтому сохранить его рабочее пространство не удалось.",
+  "The computer or its workspace could not be found.":
+    "Компьютер или его рабочее пространство не найдено.",
   "The computer's engine could not be reached to save its workspace.":
     "Движок компьютера недоступен, поэтому сохранить его рабочее пространство не удалось.",
   "The workspace is too large to save.": "Рабочее пространство слишком велико для сохранения.",

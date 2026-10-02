@@ -133,6 +133,7 @@ type ComputerKindFacts = {
   location: "Container" | "This computer" | "Remote computer" | "Hosted sandbox" | "Test computer";
   boundary: "container" | "host" | "account" | "hosted" | "test";
   isolated: boolean;
+  sleepWorkspace: "checkpoint" | "keep-local-files";
   capabilities: { graphical: boolean; interactiveTerminal: boolean };
   policyFields: readonly ("cpu" | "memory" | "disk" | "network")[];
 };
@@ -140,6 +141,7 @@ type ComputerKindFacts = {
 /** Describes execution boundaries, not proof that a requested limit was applied. */
 export const COMPUTER_KINDS = {
   docker: {
+    sleepWorkspace: "checkpoint",
     location: "Container",
     boundary: "container",
     isolated: true,
@@ -147,6 +149,7 @@ export const COMPUTER_KINDS = {
     policyFields: ["cpu", "memory", "network"],
   },
   "remote-docker": {
+    sleepWorkspace: "checkpoint",
     location: "Container",
     boundary: "container",
     isolated: true,
@@ -154,6 +157,7 @@ export const COMPUTER_KINDS = {
     policyFields: ["cpu", "memory", "network"],
   },
   kubernetes: {
+    sleepWorkspace: "checkpoint",
     location: "Container",
     boundary: "container",
     isolated: true,
@@ -161,6 +165,7 @@ export const COMPUTER_KINDS = {
     policyFields: ["cpu", "memory", "network"],
   },
   desktop: {
+    sleepWorkspace: "keep-local-files",
     location: "This computer",
     boundary: "host",
     isolated: false,
@@ -168,6 +173,7 @@ export const COMPUTER_KINDS = {
     policyFields: [],
   },
   ssh: {
+    sleepWorkspace: "checkpoint",
     location: "Remote computer",
     boundary: "account",
     isolated: false,
@@ -175,6 +181,7 @@ export const COMPUTER_KINDS = {
     policyFields: [],
   },
   e2b: {
+    sleepWorkspace: "checkpoint",
     location: "Hosted sandbox",
     boundary: "hosted",
     isolated: true,
@@ -182,6 +189,7 @@ export const COMPUTER_KINDS = {
     policyFields: [],
   },
   daytona: {
+    sleepWorkspace: "checkpoint",
     location: "Hosted sandbox",
     boundary: "hosted",
     isolated: true,
@@ -189,6 +197,7 @@ export const COMPUTER_KINDS = {
     policyFields: [],
   },
   box: {
+    sleepWorkspace: "checkpoint",
     location: "Hosted sandbox",
     boundary: "hosted",
     isolated: true,
@@ -196,6 +205,7 @@ export const COMPUTER_KINDS = {
     policyFields: [],
   },
   fake: {
+    sleepWorkspace: "checkpoint",
     location: "Test computer",
     boundary: "test",
     isolated: false,
@@ -232,7 +242,7 @@ export const COMPUTER_STATES = {
   stopped: "Stopped",
   booting: "Starting",
   running: "Running",
-  suspending: "Paused for an update",
+  suspending: "Saving your workspace",
   suspended: "Sleeping",
   error: "Could not start",
 } as const satisfies Record<ComputerStatus["state"], string>;

@@ -113,7 +113,7 @@ it("offers Recover and the generic warning for a failure with no reason", async 
 
 it.each([
   ["source-not-running", "The computer stopped before its workspace could be saved."],
-  ["source-missing", "The computer could not be found to save its workspace."],
+  ["source-missing", "The computer or its workspace could not be found."],
   ["engine-unreachable", "The computer's engine could not be reached to save its workspace."],
   ["too-large", "The workspace is too large to save."],
   ["save-failed", "The workspace could not be saved."],

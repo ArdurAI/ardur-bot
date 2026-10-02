@@ -37,7 +37,7 @@ describe("mobile i18n", () => {
       resetI18nForTests(locale);
       for (const message of [
         "The computer stopped before its workspace could be saved.",
-        "The computer could not be found to save its workspace.",
+        "The computer or its workspace could not be found.",
         "The computer's engine could not be reached to save its workspace.",
         "The workspace is too large to save.",
         "The workspace could not be saved.",

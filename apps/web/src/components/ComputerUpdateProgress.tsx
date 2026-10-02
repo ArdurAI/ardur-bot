@@ -156,7 +156,7 @@ export function ComputerUpdateProgress({ onCompleted }: { onCompleted: () => voi
                   generic: t`Recovery restores the last saved workspace. Unsaved work may be lost.`,
                   workspaceSave: {
                     "source-not-running": t`The computer stopped before its workspace could be saved.`,
-                    "source-missing": t`The computer could not be found to save its workspace.`,
+                    "source-missing": t`The computer or its workspace could not be found.`,
                     "engine-unreachable": t`The computer's engine could not be reached to save its workspace.`,
                     "too-large": t`The workspace is too large to save.`,
                     "save-failed": t`The workspace could not be saved.`,

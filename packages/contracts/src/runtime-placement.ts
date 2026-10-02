@@ -81,6 +81,13 @@ export function computerRunsOnHost(location: RuntimeComputerLocation | null | un
   );
 }
 
+/** Unresolved connections save conservatively; only an actual host keeps local files. */
+export function computerSleepWorkspacePolicy(location: RuntimeComputerLocation) {
+  if (computerRunsOnHost(location)) return COMPUTER_KINDS.desktop.sleepWorkspace;
+  const kind = computerExecutionKind(location);
+  return kind ? COMPUTER_KINDS[kind].sleepWorkspace : "checkpoint";
+}
+
 /** Joining preserves the Team row; unresolved non-host rows never grant host authority. */
 export function newBotTeamLocation(location: RuntimeComputerLocation): NewBotLocation {
   return computerRunsOnHost(location) ? "host" : "sandbox";

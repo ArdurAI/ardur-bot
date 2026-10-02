@@ -99,6 +99,23 @@ The portable computer workspace is the durable boundary. E2B uses `/home/user/ar
 
 Before exporting a remote workspace, remote backends quiesce desktop browsers so profile databases and login state are copied consistently. Run checkpoints defer while another bot holds an execution or user-control lease; the last finishing run or idle job saves the shared workspace. Idle shutdown claims the computer before exporting, preventing a new bot from starting during the snapshot. They exclude only transient cache/lock files inside `.browser-profiles`; similarly named project files remain durable.
 
+The exhaustive computer-kind policy keeps host workspace files in place during
+idle sleep: a computer on This computer does not export or copy them. Containers,
+hosted computers, remote accounts and test computers retain their sleep checkpoint.
+Execution-kind resolution prevents a saved container connection on a legacy host
+row from bypassing that checkpoint. Moving, updating and resetting a host still
+save its workspace before replacement.
+
+An incoming message during an idle checkpoint waits: Team lease admission refuses
+the save claim, and dedicated setup retries instead of waking or failing the run.
+The status says **Saving your workspace**, not **Paused for an update**. A long
+save renews its claim; transient renewal failures retry and lost ownership cancels
+the export before releasing the fence. When work arrives, completion keeps the
+computer running and immediately republishes queued runs. Busy-run retries also
+recheck readiness after publication so a late delayed job cannot overwrite that
+wake. Messages that arrive while stop finishes are also immediately continued and
+wake the suspended computer. No run accesses the source during its export.
+
 The disposable OS image is not a portable disk snapshot. System packages installed outside the workspace are lost when moving to another provider; durable machine customization should be represented by a reproducible image or setup recipe. This is what makes a future backend switch practical instead of trying to translate vendor-specific VM snapshots.
 
 ## Verification

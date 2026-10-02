@@ -366,7 +366,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   Dismiss: "关闭",
   "Getting ready": "正在准备",
   "The computer stopped before its workspace could be saved.": "电脑在工作区保存完成之前停止了。",
-  "The computer could not be found to save its workspace.": "找不到电脑，无法保存其工作区。",
+  "The computer or its workspace could not be found.": "找不到电脑或其工作区。",
   "The computer's engine could not be reached to save its workspace.":
     "无法连接电脑的引擎来保存其工作区。",
   "The workspace is too large to save.": "工作区过大，无法保存。",

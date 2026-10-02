@@ -129,7 +129,10 @@ export function computerUpdateAttentionMessage(
   copy: {
     interrupted: string;
     generic: string;
-    workspaceSave: Record<(typeof ComputerWorkspaceSaveFailureReasonSchema.options)[number], string>;
+    workspaceSave: Record<
+      (typeof ComputerWorkspaceSaveFailureReasonSchema.options)[number],
+      string
+    >;
   },
 ): string {
   if (update.status === "interrupted") return copy.interrupted;

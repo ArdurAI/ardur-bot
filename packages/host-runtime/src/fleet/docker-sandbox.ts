@@ -36,6 +36,11 @@ class EngineCommandError extends Error {
 
 function saveEngineError(error: unknown): ComputerWorkspaceSaveError {
   if (error instanceof ComputerWorkspaceSaveError) return error;
+  if (
+    error instanceof Error &&
+    /output exceeds.*limit|archive.*limit|too large/i.test(error.message)
+  )
+    return new ComputerWorkspaceSaveError("too-large", "too-large");
   const category =
     error instanceof EngineCommandError ? error.category : engineFailureReason(error);
   if (
@@ -222,6 +227,7 @@ export class FleetDockerSandboxProvider extends LinuxFleetSandbox {
     ) as {
       Config: { Image: string; Labels?: Record<string, string> };
       State?: { Running?: boolean };
+      Mounts?: { Type?: string; Name?: string; Destination?: string }[];
       HostConfig?: { NetworkMode?: string };
     }[];
     const record = details[0];
@@ -345,6 +351,15 @@ export class FleetDockerSandboxProvider extends LinuxFleetSandbox {
       const name = this.name(computer, context);
       const existing = await this.owned(name, context);
       if (!existing || !(await this.ownedVolume(name, context)))
+        throw new ComputerWorkspaceSaveError("source-missing");
+      if (
+        !existing.Mounts?.some(
+          (mount) =>
+            mount.Type === "volume" &&
+            mount.Name === `${name}-home` &&
+            mount.Destination === "/home/ardurbot",
+        )
+      )
         throw new ComputerWorkspaceSaveError("source-missing");
       if (!existing.State?.Running) await this.engine(["start", name], context);
       if (!(await this.owned(name, context))?.State?.Running)

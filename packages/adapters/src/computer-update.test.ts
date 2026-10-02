@@ -2,6 +2,7 @@ import {
   ComputerWorkspaceSaveError,
   ComputerWorkspaceSaveFailureReasonSchema,
 } from "@ardurbot/contracts";
+import { getLogger } from "@ardurbot/logging";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MissingComputerProviderError } from "./computer-connections.js";
 import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
@@ -84,6 +85,30 @@ function fixture(status = "queued") {
   return { row, computer, computerUpdate, deps, jobs };
 }
 describe("background computer maintenance", () => {
+  it("logs only the allowlisted engine failure category, never command output", async () => {
+    const { deps, row } = fixture();
+    const logged = vi.spyOn(getLogger(), "error").mockImplementation(() => {});
+    try {
+      replacement.mockRejectedValueOnce(
+        new ComputerWorkspaceSaveError("engine-unreachable", "permission-denied"),
+      );
+      await performComputerUpdate(deps, row.id);
+      expect(logged).toHaveBeenCalledWith(
+        "computer update failed",
+        undefined,
+        expect.objectContaining({
+          saveFailureReason: "engine-unreachable",
+          engineFailureCategory: "permission-denied",
+        }),
+      );
+      expect(
+        new ComputerWorkspaceSaveError("save-failed", "private-command-output")
+          .engineFailureCategory,
+      ).toBeUndefined();
+    } finally {
+      logged.mockRestore();
+    }
+  });
   it.each(ComputerWorkspaceSaveFailureReasonSchema.options)(
     "persists the safe workspace save reason %s",
     async (reason) => {

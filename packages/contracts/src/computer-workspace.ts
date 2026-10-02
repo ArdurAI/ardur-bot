@@ -13,11 +13,25 @@ export type ComputerWorkspaceSaveFailureReason = z.infer<
 
 /** Safe diagnostics only: never retain provider output or a raw cause. */
 export class ComputerWorkspaceSaveError extends Error {
+  readonly engineFailureCategory?: string;
   constructor(
     readonly reason: ComputerWorkspaceSaveFailureReason,
-    readonly engineFailureCategory?: string,
+    engineFailureCategory?: string,
   ) {
     super(reason);
     this.name = "ComputerWorkspaceSaveError";
+    if (
+      engineFailureCategory &&
+      [
+        ...ComputerWorkspaceSaveFailureReasonSchema.options,
+        "command-failed",
+        "permission-denied",
+        "timed-out",
+        "socket-missing",
+        "engine-not-running",
+        "not-reachable",
+      ].includes(engineFailureCategory)
+    )
+      this.engineFailureCategory = engineFailureCategory;
   }
 }

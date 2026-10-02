@@ -7093,8 +7093,8 @@ msgid "The computer stopped before its workspace could be saved."
 msgstr "कार्यस्थान सहेजे जाने से पहले कंप्यूटर रुक गया।"
 
 #: src/components/ComputerUpdateProgress.tsx
-msgid "The computer could not be found to save its workspace."
-msgstr "कार्यस्थान सहेजने के लिए कंप्यूटर नहीं मिला।"
+msgid "The computer or its workspace could not be found."
+msgstr "कंप्यूटर या उसका कार्यस्थान नहीं मिला।"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "The computer's engine could not be reached to save its workspace."

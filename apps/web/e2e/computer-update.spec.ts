@@ -77,7 +77,7 @@ test("computer maintenance shows durable background progress and failure recover
   await captureScreenshot(page, testInfo, "computer-update-failed");
   updates = [{ ...updating, status: "failed", stage: "saving", failureReason: "source-missing" }];
   await expect(dialog.getByRole("alert")).toHaveText(
-    "The computer could not be found to save its workspace.",
+    "The computer or its workspace could not be found.",
   );
   await expect(dialog.getByRole("alert")).toHaveCount(1);
   await expect(dialog.getByRole("button", { name: "Recover computer" })).toBeEnabled();

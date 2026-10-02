@@ -69,7 +69,7 @@ test("bot settings show execution location outside Advanced before saving", asyn
   await expect(summary).toContainText("This computer");
   await expect(summary).toContainText("Runs as you; can use your files and signed-in tools");
   await expect(summary).toContainText("Shared with team");
-  await expect(summary).toContainText("Paused for an update");
+  await expect(summary).toContainText("Saving your workspace");
   await expect(summary).not.toContainText("Starting");
   await expect(settings).toContainText("The last update was interrupted.");
   await expect(
@@ -94,7 +94,7 @@ test("bot settings show execution location outside Advanced before saving", asyn
     "This computer",
     "Runs as you; can use your files and signed-in tools",
     "Bots share files and installed tools",
-    "Paused for an update",
+    "Saving your workspace",
   ]) {
     await expect(summary.getByText(fact, { exact: true })).toHaveCount(1);
   }
