@@ -4131,9 +4131,6 @@ msgstr "Развернуть"
 msgid "Expand {0}"
 msgstr "Развернуть {0}"
 
-#~ msgid "Expand workspace"
-#~ msgstr "Развернуть рабочую область"
-
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
 msgstr ""
@@ -6688,10 +6685,6 @@ msgstr "Приостановить сообщения команды"
 msgid "Paused"
 msgstr "Приостановлено"
 
-#: src/lib/computer-state-labels.ts
-msgid "Paused for an update"
-msgstr "Приостановлен для обновления"
-
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Permission denied on the socket"
 msgstr "Нет доступа к сокету"
@@ -6838,9 +6831,6 @@ msgstr ""
 #: src/pages/settings-sections.ts
 msgid "Privacy"
 msgstr ""
-
-#~ msgid "Private"
-#~ msgstr "Личный"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Private key"
@@ -7559,9 +7549,6 @@ msgstr "Повторить загрузку экрана"
 msgid "Return to Ardur"
 msgstr "Вернуться в Ardur"
 
-#~ msgid "Return to conversation"
-#~ msgstr "Вернуться к беседе"
-
 #: src/pages/GuidedOnboarding.tsx
 msgid "Return to setup"
 msgstr "Вернуться к настройке"
@@ -7900,6 +7887,7 @@ msgid "Saved. Rotate to reveal."
 msgstr "Сохранено. Поверните, чтобы раскрыть."
 
 #: src/components/ComputerUpdateProgress.tsx
+#: src/lib/computer-state-labels.ts
 msgid "Saving your workspace"
 msgstr "Сохранение вашего рабочего пространства"
 
@@ -8864,6 +8852,18 @@ msgstr ""
 msgid "The computer is busy. Wait for it to finish."
 msgstr "Компьютер занят. Дождитесь завершения."
 
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer or its workspace could not be found."
+msgstr "Компьютер или его рабочее пространство не найдено."
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer stopped before its workspace could be saved."
+msgstr "Компьютер остановился до сохранения рабочего пространства."
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer's engine could not be reached to save its workspace."
+msgstr "Движок компьютера недоступен, поэтому сохранить его рабочее пространство не удалось."
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr ""
@@ -8915,6 +8915,14 @@ msgstr "Сохранённый вход больше не принимается
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "The service may use its own embedding providers. Check its settings before saving private documents."
 msgstr ""
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The workspace could not be saved."
+msgstr "Не удалось сохранить рабочее пространство."
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The workspace is too large to save."
+msgstr "Рабочее пространство слишком велико для сохранения."
 
 #: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx

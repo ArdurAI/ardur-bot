@@ -8,7 +8,11 @@ import type {
   SandboxProvider,
 } from "@ardurbot/adapter-kit";
 import type { ComputerUpdate, RuntimeComputerLocation } from "@ardurbot/contracts";
-import { computerRunsOnHost, HostMoveUnavailableError } from "@ardurbot/contracts";
+import {
+  ComputerWorkspaceSaveError,
+  computerRunsOnHost,
+  HostMoveUnavailableError,
+} from "@ardurbot/contracts";
 import {
   ACTIVE_RUN_STATUSES,
   parseScreenLeaseId,
@@ -23,6 +27,7 @@ import {
   parseComputerMode,
   type ThreadEvents,
 } from "@ardurbot/db";
+import { engineFailureReason } from "@ardurbot/host-runtime/fleet/probe";
 import { MissingComputerProviderError, ownsKind } from "./computer-connections.js";
 import {
   clearInactiveUserComputerControl,
@@ -145,7 +150,7 @@ async function hasLiveForeignRunLease(
 }
 
 export class ComputerBusyError extends Error {
-  constructor() {
+  constructor(readonly waitingForIdleSave = false) {
     super("Computer is busy");
     this.name = "ComputerBusyError";
   }
@@ -272,7 +277,7 @@ export async function provisionComputer(
     !staleSuspending &&
     !["running", "stopped", "suspended", "error", "booting"].includes(existing.state)
   ) {
-    throw new ComputerBusyError();
+    throw new ComputerBusyError(existing.state === "suspending" && !existing.maintenanceId);
   }
   // Waited for suspending (or similar) and landed on booting we never stamped: another
   // caller owns that boot. Do not adopt its updatedAt / previousRef and double-provision.
@@ -595,7 +600,7 @@ export async function acquireComputerExecutionLease(
   if (computer.maintenanceId && computer.maintenanceId !== input.runId)
     throw new ComputerBusyError();
   if (computer.scope !== "team") return null;
-  if (isLiveSuspending(computer)) throw new ComputerBusyError();
+  if (isLiveSuspending(computer)) throw new ComputerBusyError(!computer.maintenanceId);
   const now = new Date();
   const expiresAt = new Date(now.getTime() + EXECUTION_LEASE_MS);
   const [reclaimed] = await prisma.computerExecutionLease.updateManyAndReturn({
@@ -656,7 +661,7 @@ async function validateAcquiredComputerLease(
   )
     return lease;
   await releaseComputerExecutionLease(prisma, lease);
-  throw new ComputerBusyError();
+  throw new ComputerBusyError(isLiveSuspending(computer) && !computer.maintenanceId);
 }
 
 export async function renewComputerExecutionLease(
@@ -1001,17 +1006,20 @@ export async function replaceComputer(
         ["kubernetes", "remote-docker"].includes(existing.kind) &&
         ["stopped", "suspended"].includes(existing.state)
       ) &&
-      (mode === "update" || (existing.state === "running" && mode === "recover"))
+      (mode === "update" ||
+        (computerRunsOnHost(existing) && mode === "reset") ||
+        (existing.state === "running" && mode === "recover"))
     ) {
       try {
         await onProgress?.("saving");
+        await source!.ensureWorkspaceReady?.(oldRef, context);
         const revision = await checkpointComputerWorkspace(
           deps.home,
           source!,
           existing.homeKey,
           oldRef,
           context,
-          moving,
+          moving || computerRunsOnHost(existing),
         );
         const recorded = await deps.prisma.computer.updateMany({
           where: { id: computerId, state: "suspending", updatedAt: claimStamp },
@@ -1019,7 +1027,16 @@ export async function replaceComputer(
         });
         if (recorded.count !== 1) throw new ComputerBusyError();
       } catch (error) {
-        if (mode !== "recover" || error instanceof ComputerBusyError) throw error;
+        if (error instanceof ComputerBusyError) throw error;
+        if (mode !== "recover") {
+          throw error instanceof ComputerWorkspaceSaveError
+            ? error
+            : new ComputerWorkspaceSaveError(
+                "save-failed",
+                engineFailureReason(error) ?? "command-failed",
+                { cause: error },
+              );
+        }
       }
     }
     await onProgress?.("recreating");

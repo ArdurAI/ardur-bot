@@ -4131,9 +4131,6 @@ msgstr "Expand"
 msgid "Expand {0}"
 msgstr "Expand {0}"
 
-#~ msgid "Expand workspace"
-#~ msgstr "Expand workspace"
-
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
 msgstr "Experimental"
@@ -6688,10 +6685,6 @@ msgstr "Pause team messages"
 msgid "Paused"
 msgstr "Paused"
 
-#: src/lib/computer-state-labels.ts
-msgid "Paused for an update"
-msgstr "Paused for an update"
-
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Permission denied on the socket"
 msgstr "Permission denied on the socket"
@@ -6838,9 +6831,6 @@ msgstr "Priority"
 #: src/pages/settings-sections.ts
 msgid "Privacy"
 msgstr "Privacy"
-
-#~ msgid "Private"
-#~ msgstr "Private"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Private key"
@@ -7559,9 +7549,6 @@ msgstr "Retry screen"
 msgid "Return to Ardur"
 msgstr "Return to Ardur"
 
-#~ msgid "Return to conversation"
-#~ msgstr "Return to conversation"
-
 #: src/pages/GuidedOnboarding.tsx
 msgid "Return to setup"
 msgstr "Return to setup"
@@ -7900,6 +7887,7 @@ msgid "Saved. Rotate to reveal."
 msgstr "Saved. Rotate to reveal."
 
 #: src/components/ComputerUpdateProgress.tsx
+#: src/lib/computer-state-labels.ts
 msgid "Saving your workspace"
 msgstr "Saving your workspace"
 
@@ -8864,6 +8852,18 @@ msgstr "The bot is working — wait or stop it"
 msgid "The computer is busy. Wait for it to finish."
 msgstr "The computer is busy. Wait for it to finish."
 
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer or its workspace could not be found."
+msgstr "The computer or its workspace could not be found."
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer stopped before its workspace could be saved."
+msgstr "The computer stopped before its workspace could be saved."
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer's engine could not be reached to save its workspace."
+msgstr "The computer's engine could not be reached to save its workspace."
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr "The connection was cancelled."
@@ -8915,6 +8915,14 @@ msgstr "The saved sign-in is no longer accepted. Sign in again."
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "The service may use its own embedding providers. Check its settings before saving private documents."
 msgstr "The service may use its own embedding providers. Check its settings before saving private documents."
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The workspace could not be saved."
+msgstr "The workspace could not be saved."
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The workspace is too large to save."
+msgstr "The workspace is too large to save."
 
 #: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx

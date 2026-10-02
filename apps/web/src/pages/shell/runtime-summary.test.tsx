@@ -127,7 +127,7 @@ it.each([true, false])(
       await act(async () =>
         root.render(<BotRuntimeSettings botId="bot" name="Builder" mode="dedicated" />),
       );
-      expect(container.textContent).toContain("Paused for an update");
+      expect(container.textContent).toContain("Saving your workspace");
       expect(container.textContent).not.toContain("Starting");
       expect(container.textContent).toContain("The last update was interrupted.");
       expect(Boolean(button("Release computer"))).toBe(canReleaseReservation);

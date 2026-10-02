@@ -1023,6 +1023,11 @@ it("keeps an image profile change on the host when the connection is left alone"
   vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
   const homeRoot = await mkdtemp(path.join(tmpdir(), "ardurbot-desktop-profile-"));
   const dockerProvision = vi.spyOn(DockerSandboxProvider.prototype, "provision");
+  const hostExport = vi
+    .spyOn(DesktopSandboxProvider.prototype, "exportWorkspace")
+    .mockImplementation(async function* () {
+      yield { path: "notes/keep.txt", content: new TextEncoder().encode("saved") };
+    });
   vi.spyOn(DesktopSandboxProvider.prototype, "destroy").mockResolvedValue(undefined);
   vi.spyOn(DesktopSandboxProvider.prototype, "prepare").mockResolvedValue(undefined);
   const hostProvision = vi.spyOn(DesktopSandboxProvider.prototype, "provision").mockResolvedValue({
@@ -1093,6 +1098,10 @@ it("keeps an image profile change on the host when the connection is left alone"
       update.id,
     );
     expect(update.status).toBe("completed");
+    expect(hostExport).toHaveBeenCalledOnce();
+    expect(
+      await readFile(path.join(homeRoot, "homes", computer.row.homeKey, "notes/keep.txt"), "utf8"),
+    ).toBe("saved");
     expect(dockerProvision).not.toHaveBeenCalled();
     expect(hostProvision).toHaveBeenCalledWith(
       expect.objectContaining({ providerKind: "desktop", imageProfile: "developer" }),
