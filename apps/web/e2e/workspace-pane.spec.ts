@@ -192,7 +192,10 @@ test("conversation file and recorded-change links open checked views beside chat
   await expect(pane.locator('[data-draft-proof="ide"]')).toBeVisible();
   await expect(editor).toContainText("Unsaved IDE draft");
   page.once("dialog", (dialog) => dialog.dismiss());
-  await pane.getByRole("button", { name: "Close IDE", exact: true }).click();
+  await pane
+    .getByRole("tablist", { name: "Views", exact: true })
+    .getByRole("button", { name: "Close IDE", exact: true })
+    .click();
   await expect(pane.getByRole("tab", { name: "IDE", exact: true })).toBeVisible();
   expect(unexpected).toEqual([]);
 });
