@@ -2552,7 +2552,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       update: authed.computer.update.handler(async ({ context, input }) => {
         const bot = await repos.getBot(context.actor, input.botId);
         if (!bot.computer) throw new IsolationError();
-        if (!computerSupportsUpdate(bot.computer.kind))
+        if (!computerSupportsUpdate(bot.computer))
           throw new ORPCError("BAD_REQUEST", {
             message: "Computer update is not available on this device",
           });
@@ -6577,7 +6577,7 @@ async function runComputerReplace(
   const repos = createRepos(deps.prisma);
   const bot = await repos.getBot(context.actor, botId);
   if (!bot.computer) throw new IsolationError();
-  if (mode === "update" && !computerSupportsUpdate(bot.computer.kind)) {
+  if (mode === "update" && !computerSupportsUpdate(bot.computer)) {
     throw new ORPCError("BAD_REQUEST", {
       message: "Computer update is not available on this device",
     });

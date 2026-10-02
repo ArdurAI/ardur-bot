@@ -10,15 +10,15 @@ describe("toComputerStatus", () => {
     { kind: "desktop", connectionId: "missing", host: false },
     { kind: "desktop", connectionId: "", host: false },
   ])("projects host policy for $kind / $connectionId", (row) => {
-    expect(
-      toComputerStatus("bot", {
-        ...row,
-        state: "running",
-        scope: "team",
-        controlHolder: "none",
-        homeRevision: "saved",
-      }).runsOnHost,
-    ).toBe(row.host);
+    const status = toComputerStatus("bot", {
+      ...row,
+      state: "running",
+      scope: "team",
+      controlHolder: "none",
+      homeRevision: "saved",
+    });
+    expect(status.runsOnHost).toBe(row.host);
+    expect(status.canUpdate).toBe(!row.host);
   });
   it.each([null, "update"])(
     "preserves a suspending computer with reservation %s",

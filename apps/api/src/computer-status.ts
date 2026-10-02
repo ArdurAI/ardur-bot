@@ -101,7 +101,7 @@ export function toComputerStatus(
     screenHeight: screen.height,
     homeRevision: computer?.homeRevision ?? null,
     busyBotName,
-    canUpdate: computerSupportsUpdate(kind),
+    canUpdate: computerSupportsUpdate(computer),
     ...(hostLabel ? { hostLabel } : {}),
   };
 }
