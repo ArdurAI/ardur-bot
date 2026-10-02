@@ -27,6 +27,26 @@ const ctx = {
 };
 
 describe("host-aware sandbox", () => {
+  it.each([null, "docker", "podman", "missing", ""])(
+    "routes desktop with connection %s without host fallback",
+    async (connectionId) => {
+      const isolated = new FakeSandboxProvider();
+      const host = new FakeSandboxProvider();
+      const isolatedCwd = vi.spyOn(isolated, "resolveCommandCwd");
+      const hostCwd = vi.spyOn(host, "resolveCommandCwd");
+      const sandbox = new HostAwareSandbox(isolated, host, async () => true);
+      const computer: ComputerRef = {
+        id: "computer",
+        providerRef: "ref",
+        botId: "bot",
+        kind: "desktop",
+        connectionId,
+      };
+      await sandbox.resolveCommandCwd(computer, undefined, ctx);
+      expect(hostCwd).toHaveBeenCalledTimes(connectionId === null ? 1 : 0);
+      expect(isolatedCwd).toHaveBeenCalledTimes(connectionId === null ? 0 : 1);
+    },
+  );
   const hostRoot = mkdtempSync(path.join(tmpdir(), "ardurbot-host-root-"));
 
   afterAll(() => {

@@ -5,7 +5,7 @@ import {
   nativeHostOwner,
 } from "@ardurbot/adapters";
 import type { Actor, RuntimePin } from "@ardurbot/contracts";
-import { RuntimePinSchema } from "@ardurbot/contracts";
+import { computerRunsOnHost, RuntimePinSchema } from "@ardurbot/contracts";
 import {
   appendEventInTransaction,
   createGroupRepos,
@@ -93,7 +93,7 @@ export async function updateGroupMemberModelPin(
           bot: {
             select: {
               runtimeExperimental: true,
-              computer: { select: { kind: true } },
+              computer: { select: { kind: true, connectionId: true } },
             },
           },
         },
@@ -103,7 +103,7 @@ export async function updateGroupMemberModelPin(
   if (visible?.members.length !== 1) throw new IsolationError();
   if (requested?.runtimeKind !== "pi" && requested) {
     const targetBot = visible.members[0]!.bot;
-    if (!targetBot.runtimeExperimental || targetBot.computer?.kind !== "desktop")
+    if (!targetBot.runtimeExperimental || !computerRunsOnHost(targetBot.computer))
       throw new ORPCError("BAD_REQUEST", {
         message: "This choice needs a supported computer and bot settings.",
       });
