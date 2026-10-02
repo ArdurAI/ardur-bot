@@ -53,7 +53,7 @@ describe("createRepos.createBot model pins", () => {
           findUnique: vi.fn(async () => ({ organizationId: "org", space: { deletingAt: null } })),
         },
         computer: {
-          upsert: vi.fn(async () => ({ id: "computer" })),
+          upsert: vi.fn(async ({ create }) => ({ id: "computer", ...create })),
           findFirst: vi.fn(async () => null),
         },
         bot: {

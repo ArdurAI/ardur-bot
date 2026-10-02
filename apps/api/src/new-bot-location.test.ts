@@ -294,6 +294,36 @@ it.each([true, false])(
     else expect(f.create).not.toHaveBeenCalled();
   },
 );
+it("joins a connectionless legacy desktop Team row as host without rewriting it", async () => {
+  const f = fixture({ team: { id: "team", kind: "desktop", connectionId: null } });
+  const result = await f.call("bots/create", {
+    name: "Bot",
+    color: "#000",
+    computerMode: "team",
+    computerLocation: "host",
+  });
+  expect(result.status, JSON.stringify(result.body)).toBe(200);
+  expect(f.create.mock.calls[0]![0].data.computerId).toBe("team");
+  expect(f.upsert).not.toHaveBeenCalled();
+});
+it("does not mistake a connection-backed legacy desktop Team row for host", async () => {
+  const f = fixture({ team: { id: "team", kind: "desktop", connectionId: "saved" } });
+  const result = await f.call("bots/create", {
+    name: "Bot",
+    color: "#000",
+    computerMode: "team",
+    computerLocation: "host",
+  });
+  expect(result.status).toBe(400);
+  expect(f.create).not.toHaveBeenCalled();
+});
+it("fails closed when a legacy Team row's saved engine disappeared", async () => {
+  const f = fixture({ team: { id: "team", kind: "desktop", connectionId: "saved" } });
+  f.prisma.connection.findFirst.mockResolvedValue(null as never);
+  const result = await f.call("bots/create", { name: "Bot", color: "#000", computerMode: "team" });
+  expect(result.status).toBe(400);
+  expect(f.create).not.toHaveBeenCalled();
+});
 it("joins a legacy Team row on the identical saved sandbox without rewriting it", async () => {
   const f = fixture({ team: { id: "team", kind: "desktop", connectionId: "saved" } });
   const result = await f.call("bots/create", {

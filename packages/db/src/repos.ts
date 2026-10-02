@@ -615,13 +615,36 @@ export function createRepos(
                 connectionId: isolatedComputer?.connectionId,
               });
           // Sharing never authorizes another location or mutates an existing Team computer.
-          if (
-            !privateDockerComputer &&
-            options.hostAvailable &&
-            ((computer.connectionId ?? null) !== (isolatedComputer?.connectionId ?? null) ||
-              (!computer.connectionId && computer.kind !== kind))
-          )
-            throw new NewBotTeamLocationConflictError();
+          if (!privateDockerComputer && !delegatedCreation) {
+            const executionKind = async (saved: { kind: string; connectionId?: string | null }) => {
+              const connection = saved.connectionId
+                ? await tx.connection.findFirst({
+                    where: {
+                      id: saved.connectionId,
+                      spaceId: actor.spaceId,
+                      connectorId: "computer",
+                    },
+                  })
+                : null;
+              const parsed = ComputerConnectionSettingsSchema.safeParse(connection?.metadata);
+              return computerExecutionKind({
+                ...saved,
+                connectionSettings: parsed.success ? parsed.data : null,
+              });
+            };
+            const savedKind = await executionKind(computer);
+            const requestedKind = await executionKind({
+              kind,
+              connectionId: isolatedComputer?.connectionId,
+            });
+            if (
+              !savedKind ||
+              !requestedKind ||
+              (computer.connectionId ?? null) !== (isolatedComputer?.connectionId ?? null) ||
+              savedKind !== requestedKind
+            )
+              throw new NewBotTeamLocationConflictError();
+          }
           const created = await tx.bot.create({
             data: {
               ...(botId ? { id: botId } : {}),
