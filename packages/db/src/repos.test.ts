@@ -70,6 +70,7 @@ describe("createRepos.createBot model pins", () => {
       };
       const prisma = {
         bot: { findFirst: vi.fn(async () => ({ ...baseBot, ...pin })) },
+        computer: tx.computer,
         deploymentSettings: { findUnique: vi.fn(async () => null) },
         $transaction: vi.fn((work: (client: typeof tx) => Promise<unknown>) => work(tx)),
       };
@@ -503,6 +504,7 @@ describe("createRepos.createBot computer kind", () => {
       deploymentSettings: {
         findUnique: vi.fn(async () => ({ computerHost, ownerUserId: actor.userId })),
       },
+      computer: tx.computer,
       $transaction: vi.fn((work: (client: typeof tx) => Promise<unknown>) => work(tx)),
     };
     await createRepos(prisma as unknown as PrismaClient, {

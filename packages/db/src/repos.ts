@@ -10,6 +10,7 @@ import type {
 import {
   BOT_COLORS,
   ComputerConnectionSettingsSchema,
+  computerExecutionKind,
   computerKindFacts,
   defaultNewBotLocation,
   IsolatedComputerUnavailableError,
@@ -506,9 +507,45 @@ export function createRepos(
           settings?.ownerUserId === actor.userId &&
           (await options.hostAvailable?.(actor)),
       );
+      const delegatedCreation = Boolean(input.parentBotId && input.spawnKey && input.onCreated);
+      let computerMode = input.computerMode;
+      let isolatedComputer = input.isolatedComputer;
+      let inheritedLocation: NewBotLocation | undefined;
+      // Automatic creation joins the saved Team location when usable, never an unavailable host.
+      if (
+        !input.computerLocation &&
+        !isolatedComputer &&
+        computerMode !== "dedicated" &&
+        !delegatedCreation
+      ) {
+        const team = await prisma.computer.findFirst({
+          where: { spaceId: actor.spaceId, scope: "team" },
+          orderBy: [{ bots: { _count: "desc" } }, { createdAt: "asc" }, { id: "asc" }],
+        });
+        if (team) {
+          const connection = team.connectionId
+            ? await prisma.connection.findFirst({
+                where: { id: team.connectionId, spaceId: actor.spaceId, connectorId: "computer" },
+              })
+            : null;
+          const parsed = ComputerConnectionSettingsSchema.safeParse(connection?.metadata);
+          const teamKind = computerExecutionKind({
+            ...team,
+            connectionSettings: parsed.success ? parsed.data : null,
+          });
+          if (!teamKind) throw new IsolatedComputerUnavailableError();
+          if (teamKind === "desktop" && !hostAvailable) computerMode = "dedicated";
+          else {
+            inheritedLocation = teamKind === "desktop" ? "host" : "sandbox";
+            computerMode = "team";
+            if (team.connectionId) isolatedComputer = { connectionId: team.connectionId };
+          }
+        }
+      }
       const location =
         input.computerLocation ??
-        (input.isolatedComputer
+        inheritedLocation ??
+        (isolatedComputer
           ? "sandbox"
           : defaultNewBotLocation({
               isDeploymentOwner: actor.isDeploymentOwner,
@@ -517,34 +554,31 @@ export function createRepos(
               computerHost: settings?.computerHost as "docker" | "this-mac" | null | undefined,
             }));
       if (location === "host" && !hostAvailable) throw new NewBotHostUnavailableError();
-      if (location === "host" && input.isolatedComputer)
-        throw new IsolatedComputerUnavailableError();
+      if (location === "host" && isolatedComputer) throw new IsolatedComputerUnavailableError();
       let kind = location === "host" ? "desktop" : provider;
       // Internal spawns bind their admitted delegation snapshot in this same transaction.
       // They do not choose a new execution location through the human creation policy.
-      const delegatedCreation = Boolean(input.parentBotId && input.spawnKey && input.onCreated);
       if (
         location === "sandbox" &&
         kind === "desktop" &&
-        !input.isolatedComputer?.connectionId &&
+        !isolatedComputer?.connectionId &&
         !delegatedCreation
       )
         throw new IsolatedComputerUnavailableError();
       const privateDockerComputer =
-        input.computerMode === "dedicated" ||
-        (input.computerMode === undefined && Boolean(input.isolatedComputer));
+        computerMode === "dedicated" || (computerMode === undefined && Boolean(isolatedComputer));
       const insertBot = () =>
         prisma.$transaction(async (tx) => {
           await lockSpaceForContentCreation(tx, {
             spaceId: actor.spaceId,
             userId: actor.userId,
           });
-          if (input.isolatedComputer) {
+          if (isolatedComputer) {
             if (runtimeKind !== "pi") throw new IsolatedComputerUnavailableError();
-            if (input.isolatedComputer.connectionId) {
+            if (isolatedComputer.connectionId) {
               const connection = await tx.connection.findFirst({
                 where: {
-                  id: input.isolatedComputer.connectionId,
+                  id: isolatedComputer.connectionId,
                   spaceId: actor.spaceId,
                   connectorId: "computer",
                 },
@@ -571,20 +605,20 @@ export function createRepos(
                 userId: actor.userId,
                 botId,
                 kind,
-                connectionId: input.isolatedComputer?.connectionId,
+                connectionId: isolatedComputer?.connectionId,
               })
             : await ensureComputerRecord(tx, {
                 mode: "team",
                 spaceId: actor.spaceId,
                 userId: actor.userId,
                 kind,
-                connectionId: input.isolatedComputer?.connectionId,
+                connectionId: isolatedComputer?.connectionId,
               });
           // Sharing never authorizes another location or mutates an existing Team computer.
           if (
             !privateDockerComputer &&
             options.hostAvailable &&
-            ((computer.connectionId ?? null) !== (input.isolatedComputer?.connectionId ?? null) ||
+            ((computer.connectionId ?? null) !== (isolatedComputer?.connectionId ?? null) ||
               (!computer.connectionId && computer.kind !== kind))
           )
             throw new NewBotTeamLocationConflictError();

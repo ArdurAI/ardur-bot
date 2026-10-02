@@ -82,7 +82,7 @@ export async function newBotComputerOptions(
         ? {
             location: teamKind === "desktop" ? ("host" as const) : ("sandbox" as const),
             connectionId: teamComputer.connectionId,
-            name: teamComputer.name ?? undefined,
+            name: connections.find((entry) => entry.id === teamComputer.connectionId)?.name,
           }
         : null,
   };

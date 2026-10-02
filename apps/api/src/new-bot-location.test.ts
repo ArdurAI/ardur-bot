@@ -45,6 +45,7 @@ function fixture({
     computer: { upsert, findFirst: vi.fn(async () => team) },
     bot: {
       aggregate: vi.fn(async () => ({ _max: { position: 0 } })),
+      findFirst: vi.fn(),
       create,
       findFirstOrThrow: vi.fn(async () => ({
         id: "bot",
@@ -67,6 +68,7 @@ function fixture({
       })),
     },
     thread: { create: vi.fn(async () => ({ id: "thread" })) },
+    botMcpServer: { findMany: vi.fn(async () => []) },
     browserProfile: { create: vi.fn() },
     memoryDocument: { create: vi.fn() },
     $transaction: vi.fn(async (work) => work(prisma)),
@@ -143,10 +145,90 @@ it("publishes the same default and revalidates an explicit host choice after dis
   expect(f.create).not.toHaveBeenCalled();
   expect(f.upsert).not.toHaveBeenCalled();
 });
-it("does not repurpose a saved Team container to satisfy the new host default", async () => {
+it.each([
+  ["docker", null],
+  ["desktop", "saved"],
+] as const)(
+  "duplicates the source Team sandbox despite a usable host: %s / %s",
+  async (kind, connectionId) => {
+    const computer = { id: "team", kind, connectionId, spaceId: "space", scope: "team" };
+    const f = fixture({ team: computer });
+    f.prisma.bot.findFirst.mockResolvedValue({
+      name: "Source",
+      title: "",
+      description: "",
+      instructions: "",
+      notifyOnFinish: true,
+      color: "#000",
+      computer,
+      runtimeKind: "pi",
+    } as never);
+    const result = await f.call("bots/duplicate", { botId: "source" });
+    expect(result.status, JSON.stringify(result.body)).toBe(200);
+    expect(f.create.mock.calls[0]![0].data.computerId).toBe("team");
+    expect(f.upsert).not.toHaveBeenCalled();
+  },
+);
+it.each(["host", "conflict"])("maps the duplicate %s refusal", async (refusal) => {
+  const f = fixture({
+    connected: refusal !== "host",
+    team: { id: "team", kind: "desktop", connectionId: null },
+  });
+  f.prisma.bot.findFirst.mockResolvedValue({
+    name: "Source",
+    title: "",
+    description: "",
+    instructions: "",
+    notifyOnFinish: true,
+    color: "#000",
+    computer: {
+      kind: refusal === "host" ? "desktop" : "docker",
+      connectionId: null,
+      scope: "team",
+      spaceId: "space",
+    },
+    runtimeKind: "pi",
+  } as never);
+  const result = await f.call("bots/duplicate", { botId: "source" });
+  expect(result.status).toBe(400);
+  expect(JSON.stringify(result.body)).toContain(
+    refusal === "host" ? "new-bot-host-unavailable" : "new-bot-team-location-conflict",
+  );
+  expect(f.create).not.toHaveBeenCalled();
+});
+it.each([
+  ["docker", null],
+  ["desktop", "saved"],
+] as const)(
+  "automatic first/quick/starter bots join the saved Team sandbox: %s / %s",
+  async (kind, connectionId) => {
+    const f = fixture({ team: { id: "team", kind, connectionId } });
+    const result = await f.call("bots/create", { name: "Starter", color: "#000" });
+    expect(result.status, JSON.stringify(result.body)).toBe(200);
+    expect(f.create.mock.calls[0]![0].data.computerId).toBe("team");
+    expect(f.upsert).not.toHaveBeenCalled();
+  },
+);
+it("automatic creation cannot join an unavailable host Team computer", async () => {
+  const f = fixture({
+    actor: { ...owner, userId: "member", isDeploymentOwner: false },
+    team: { id: "team", kind: "desktop", connectionId: null },
+  });
+  const result = await f.call("bots/create", { name: "Starter", color: "#000" });
+  expect(result.status, JSON.stringify(result.body)).toBe(200);
+  expect(f.upsert.mock.calls[0]![0].create).toMatchObject({ kind: "docker", scope: "dedicated" });
+});
+it("does not repurpose a saved Team container to satisfy an explicit host choice", async () => {
   const f = fixture({ team: { id: "team", kind: "docker", connectionId: null } });
   expect(
-    (await f.call("bots/create", { name: "Bot", color: "#000", computerMode: "team" })).status,
+    (
+      await f.call("bots/create", {
+        name: "Bot",
+        color: "#000",
+        computerMode: "team",
+        computerLocation: "host",
+      })
+    ).status,
   ).not.toBe(200);
   expect(f.upsert).not.toHaveBeenCalled();
   expect(f.create).not.toHaveBeenCalled();

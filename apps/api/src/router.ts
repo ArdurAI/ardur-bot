@@ -121,6 +121,8 @@ import type {
 import {
   COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE,
   ComputerImageDownloadError,
+  computerExecutionKind,
+  computerKindFacts,
   ENGINE_MISSING_CODE,
   HOST_MOVE_UNAVAILABLE_CODE,
   HostMoveUnavailableError,
@@ -1604,6 +1606,9 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       }),
       duplicate: authed.bots.duplicate.handler(async ({ context, input }) => {
         const source = await repos.getBot(context.actor, input.botId);
+        const sourceKind = computerExecutionKind(
+          await runtimeComputerLocation(deps.prisma, source.computer),
+        );
         const duplicate = await repos
           .createBot(context.actor, {
             name: duplicateBotName(source.name),
@@ -1613,6 +1618,16 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             notifyOnFinish: source.notifyOnFinish,
             color: source.color,
             computerMode: source.computer?.scope === "dedicated" ? "dedicated" : "team",
+            ...(source.computer
+              ? {
+                  computerLocation:
+                    sourceKind === "desktop" ? ("host" as const) : ("sandbox" as const),
+                  ...(source.computer.connectionId ||
+                  (sourceKind && computerKindFacts(sourceKind)?.boundary === "container")
+                    ? { isolatedComputer: { connectionId: source.computer.connectionId } }
+                    : {}),
+                }
+              : {}),
             modelProvider: source.modelProvider,
             modelId: source.modelId,
             thinkingLevel: source.thinkingLevel,
@@ -1626,6 +1641,24 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             runtimeExperimental: source.runtimeExperimental,
           })
           .catch((error: unknown) => {
+            if (
+              error instanceof NewBotTeamLocationConflictError ||
+              error instanceof NewBotHostUnavailableError
+            )
+              throw new ORPCError("BAD_REQUEST", {
+                message: error.message,
+                data: {
+                  code:
+                    error instanceof NewBotTeamLocationConflictError
+                      ? NEW_BOT_TEAM_LOCATION_CONFLICT_CODE
+                      : NEW_BOT_HOST_UNAVAILABLE_CODE,
+                },
+              });
+            if (error instanceof IsolatedComputerUnavailableError)
+              throw new ORPCError("BAD_REQUEST", {
+                message: error.message,
+                data: { code: ISOLATED_COMPUTER_UNAVAILABLE_CODE },
+              });
             throw mapSpaceLifecycleError(error);
           });
         const assignments = await deps.prisma.botMcpServer.findMany({
