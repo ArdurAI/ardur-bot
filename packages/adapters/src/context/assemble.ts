@@ -3,6 +3,7 @@ import type { ContextBudgets, ContextSnapshot, RoutingRule } from "@ardurbot/con
 import { ContextBudgetsSchema } from "@ardurbot/contracts";
 import { escapePromptData } from "@ardurbot/core";
 import { promptWithInitialSteering } from "../steering-input.js";
+import { recallQueryWords } from "./recall-query.js";
 
 type Message = AgentRunRequest["history"][number];
 const RESULT_TRUNCATED_MARKER =
@@ -11,16 +12,7 @@ const RESULT_TRUNCATED_MARKER =
 // of its budget, and its first kept character moves every few turns instead of every message.
 const HISTORY_STEPS = 4;
 const TOOL_CALL_ID = /<tool_call\b[^>]*\bid="([^"]+)"/;
-const STOP_WORDS = new Set(
-  "the a an and or but is are was were be been do does did have has had i we you it this that these those what which who when where how why please about for from with can could would should tell me our your in on of to at as my any".split(
-    " ",
-  ),
-);
-function words(text: string) {
-  return (text.toLocaleLowerCase("en").match(/[\p{L}\p{N}_-]{3,}/gu) ?? []).filter(
-    (word) => !STOP_WORDS.has(word),
-  );
-}
+
 export function needsRecall(text: string, brief: string): boolean {
   if (
     !/[?？]|\b(remember|recall|earlier|previous|find|lookup|look up|summari[sz]e|status|decision|deadline)\b/i.test(
@@ -28,8 +20,8 @@ export function needsRecall(text: string, brief: string): boolean {
     )
   )
     return false;
-  const known = new Set(words(brief));
-  return words(text).some((word) => !known.has(word));
+  const known = new Set(recallQueryWords(brief));
+  return recallQueryWords(text).some((word) => !known.has(word));
 }
 /** A tool call and its result are the call tag and the next result that names the same id. */
 function toolPairSpans(messages: Message[]): Array<{ start: number; end: number }> {

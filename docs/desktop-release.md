@@ -3,7 +3,8 @@
 macOS previews have two paths: **Open Anyway** without an identified developer, or a signed and
 notarized release when credentials exist. Windows previews remain unsigned.
 Work lands on `dev`; `main` moves only after a human verifies a build. CI quality
-and performance checks are advisory. Packaging must still finish before an artifact can be published.
+and performance checks are advisory. Packaging and installed-app acceptance must finish before
+an artifact can be published.
 
 ## Development phone pairing
 
@@ -41,12 +42,30 @@ selected model and effort to be returned by the installed CLI.
 
 ## Build contract
 
-A `v*` tag push runs `.github/workflows/release-desktop.yml`. Manual dispatch accepts an existing
-`tag` input and an optional `evidence_waiver` reason. Both routes validate that the tag matches the
-**root** `package.json` version and points to a commit on `dev`. They never move `main` or overwrite
-an existing release. Publication requires validated
+A `v*` tag push runs `.github/workflows/release-desktop.yml` with publication enabled, as before.
+Manual dispatch uses the selected branch or tag and defaults `publish` to **false**. A branch gets
+`0.0.0-branch.<short sha>` in the disposable build checkout, without changing its committed version
+or requiring ancestry on `dev`. A tag must still match the **root** `package.json` version and point
+to a commit on `dev`. Manual publication requires both `publish=true` and a selected tag; a branch
+never publishes, even when that input is true. Neither route moves `main` or overwrites an existing
+release. Publication requires validated
 [performance evidence](performance.md#evidence-index); only a dispatch with a waiver reason can
-publish without it, and a tag push cannot.
+publish without it, and a tag push cannot. Non-publishing dispatches skip performance evidence and
+publication, not packaging or install acceptance.
+
+### Check a branch without publishing
+
+Open **Actions → release-desktop → Run workflow → this branch**, leave **publish** unchecked, and
+run the workflow. For this change select `fix/install-acceptance`. The equivalent command is:
+
+```sh
+gh workflow run release-desktop.yml --ref fix/install-acceptance -f publish=false
+```
+
+All platform build and install-acceptance jobs run with the same scripts and matrix as a tag.
+Download installers from `desktop-<platform>-<arch>` and logs/screenshots from
+`install-acceptance-<platform>-<arch>` on the run page. Diagnostic uploads run even after acceptance
+fails. Successful acceptance also uploads the hash-bound receipts. No release or tag is created.
 
 | Platform | Architecture | Release assets |
 | --- | --- | --- |
@@ -150,12 +169,12 @@ Enabling signed builds does not change this update policy.
    A tag push publishes only with validated performance evidence. No job produces that evidence
    yet, so this run currently stops at the evidence gate.
 
-3. Until the physical evidence runner exists, dispatch the workflow on `dev` with the existing tag
-   and a waiver reason. The reason is recorded with the dispatching account and printed in the
+3. Until the physical evidence runner exists, dispatch the workflow on the existing tag with
+   `publish=true` and a waiver reason. The reason is recorded with the dispatching account and printed in the
    release notes:
 
    ```sh
-   gh workflow run release-desktop.yml --ref dev -f tag=v0.1.0-alpha.1 \
+   gh workflow run release-desktop.yml --ref v0.1.0-alpha.1 -f publish=true \
      -f evidence_waiver="Physical release runners are not provisioned"
    ```
 
@@ -189,6 +208,91 @@ so an installed build reads the same setup, database, and files after upgrading.
 `--dir` validates and packages an unpacked app; it does not exercise DMG mounting, quarantine,
 NSIS installation, or deb dependencies. The desktop Playwright suite belongs in CI, where it
 runs in a virtual display.
+
+## Install acceptance
+
+`install-acceptance` downloads each build on a fresh runner before publication. Required entries
+are macOS arm64 and x64, Linux x64, and Windows x64. Linux arm64 retains the build matrix's
+optional status: if it fails installation, its installers and update feed are omitted, not published.
+An evidence waiver cannot bypass installation checks.
+
+- **macOS (`macos-15` arm64, `macos-15-intel` x64)**: quarantine a copy of the DMG as a Safari download, mount it, copy the
+  app into temporary Applications, and verify the quarantine attribute. The bundle must pass
+  deep, strict codesign verification. Gatekeeper must accept a signed, notarized build; an
+  ad-hoc preview must return `rejected` (some macOS versions omit the source line), never damaged or
+  missing resources. The signing decision comes from the build's `install-build-mac-<arch>.json`.
+  Remove quarantine to model Open Anyway, then open the installed bundle. Render the shipped
+  cask template with the local DMG URL and real checksum into a unique temporary local tap,
+  install its fully qualified cask into temporary Applications, remove that copy's quarantine,
+  run the Homebrew `ardur` wrapper, and uninstall. The wrapper executes the bundle's real path
+  rather than a symlink, so Electron can locate its helpers. Cleanup removes the temporary tap;
+  no existing tap is changed. Both CI architectures execute natively, with unchanged readiness budgets.
+- **Linux (`ubuntu-24.04`, native ARM runner when available)**: each format runs in its own
+  fresh `ubuntu:24.04` container. Install the deb with apt, including dependencies; install the
+  AppImage as an executable. Launch as a non-root user under Xvfb and a session bus. Probe user
+  namespaces: use `--no-sandbox` only if the container denies them and record that reason.
+  Use `--appimage-extract-and-run` only when FUSE is unavailable, also recording why.
+- **Windows (`windows-2022`)**: silently install NSIS with `/S /D=<temporary directory>`;
+  `/D=` is last and unquoted, including when the path has spaces. Open the installed `Ardur.exe`,
+  reject crashes/nonzero exits or blocking dialogs, and run the generated uninstaller silently.
+  Existing Ardur processes or registered installations cause a hand-run check to refuse instead
+  of replacing them. Windows desktop acceptance runs on the fresh runner, not in a container.
+  CI creates a temporary standard user with a masked cryptographically random password, loads
+  its profile, and runs installation and launch with that user's credential because PostgreSQL
+  refuses an administrative token. The acceptance script rejects elevation before installation;
+  launches remain bounded and the wrapper checks the owned process's exit status. An always-run
+  cleanup removes the temporary user and profile. Manual runs must also be non-elevated.
+  Windows acceptance remains visible on every release but is advisory on the administrative
+  hosted runner. Silent installation and uninstallation passed; first-launch health/window/clean-exit
+  acceptance is still pending. Generated release notes state that limitation explicitly.
+
+Every launch sets `ARDUR_INSTALL_SMOKE=1`, disables update discovery and uses a fresh
+`ARDURBOT_USER_DATA_DIR`. The app sets Electron's user-data path before requesting the single-instance
+lock, so the fresh profile has its own lock rather than activating a running normal instance. A
+refused smoke lock exits nonzero and explains why on stderr. Only this opt-in path starts the app-managed local stack, requires its
+real health response and a loaded main window, captures a screenshot, stops its owned services,
+and prints `ARDUR_INSTALL_SMOKE_PASS` before quitting. A zero exit without that marker does not
+pass. A small JavaScript entry installs the 150-second watchdog before loading the main module;
+import failures exit nonzero without waiting for a native error dialog. Stages are written to stderr
+through runtime installation, service startup, health, window loading, screenshot capture and
+cleanup. A timeout names the current stage, including a stalled quit. The script's launch bound is
+180 seconds. This is stricter
+than merely surviving 15 seconds. Crash lines in either output stream fail acceptance.
+The pinned embedded-postgres dependency's exit hook emits `TypeError: done is not a function`.
+The Mac predicate records that exact rejection as a known warning only after a success marker,
+zero exit and clean crash checks; other rejection messages still fail. The original stderr is retained.
+Normal startup is unchanged; no hosted service or model credentials are needed.
+
+Successful jobs upload hash-bound `install-approved-*` receipts. Before performance gating,
+the publication assembly checks their commit, version, signing decision and exact installer
+hashes. Required missing or mismatched receipts fail closed. Only Windows may publish without
+an install receipt while its check is advisory; no accepted receipt is fabricated. Optional missing ARM receipts
+remove that build's files. The publication artifact retains `install-acceptance.json`; each
+platform separately uploads stdout, stderr, PASS/FAIL summaries and any screenshots as
+`install-acceptance-<platform>-<arch>`.
+
+From this repository checkout, against files already downloaded:
+
+```sh
+bash scripts/release/install-acceptance-mac.sh /path/to/ardur-<version>-mac-arm64.dmg
+bash scripts/release/install-acceptance-linux.sh /path/to/ardur-<version>-linux-amd64.deb
+bash scripts/release/install-acceptance-linux.sh /path/to/ardur-<version>-linux-x86_64.AppImage
+pwsh -File scripts/release/install-acceptance-win.ps1 C:\path\to\ardur-<version>-win-x64.exe
+```
+
+The Mac script needs Python 3, Homebrew, and the shipped cask template in this checkout. It
+refuses an existing Homebrew Ardur cask or command. Linux needs a running Docker daemon and
+network access for the public base image and Ubuntu packages. Windows needs PowerShell 7.
+Set `ARDUR_INSTALL_LOG_DIR` to retain diagnostics in a chosen directory; otherwise each script
+prints its temporary log location. Temporary installs/profiles are removed, not the source artifact.
+On a manual Mac run without a build record, the signature is inspected and that limitation is
+reported. CI requires the record. An older unsealed download must fail, not become an exception.
+
+The Mac script also accepts an unpacked `Ardur.app` from `pack:dir`. This checks the seal,
+Gatekeeper and bundle launch, but explicitly skips DMG and Homebrew checks; it is only a
+directory-build diagnostic, not full install acceptance. A local run that forbids databases,
+desktop launches or downloads cannot verify this health-based path; use CI or a permitted clean
+machine and report the unrun checks rather than claiming success.
 
 ## Homebrew tap handoff
 
@@ -235,8 +339,8 @@ running instance. macOS uses native traffic lights and the dock. A missing tray 
 normal last-window exit. Some Linux desktop environments need an AppIndicator extension; tray
 visibility must be checked on the actual desktop.
 
-Unit tests stub the platform and Electron tray boundary. No real Windows or Linux installer,
-tray integration, DPI behavior, or window manager was exercised during this implementation.
+Unit tests stub the platform and Electron tray boundary. Release install acceptance above checks
+installed startup, not interactive tray integration, DPI behavior, or window-manager usability.
 The local macOS arm64 directory build passed deep, strict codesign verification; all 128
 Mach-O files had valid ad-hoc signatures. Gatekeeper assessment returned `rejected`, not a damaged
 resource-seal error, as expected without Developer ID. This is not a quarantined DMG first-open
