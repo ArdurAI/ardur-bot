@@ -1831,6 +1831,7 @@ msgid "Choose one credential: a token or a header."
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/computer-location-picker.tsx
 msgid "Choose Only this bot to use a different location from the Team computer."
 msgstr "Wähle Nur dieser Bot, um einen anderen Ort als den Team-Computer zu verwenden."
 
@@ -2275,7 +2276,6 @@ msgstr "OAuth verbinden"
 msgid "Connect remote account"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/move-to-host.tsx
@@ -4346,6 +4346,7 @@ msgstr ""
 msgid "For {task}, {better} on this machine did as well as {other} in your runs."
 msgstr ""
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "For testing only; not an isolation boundary."
 msgstr "Nur zum Testen; keine Isolationsgrenze."
@@ -6549,7 +6550,6 @@ msgstr ""
 msgid "Other files"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/shell/computer-location-picker.tsx
 msgid "Other locations are unavailable for {runtime}. Choose This computer."
 msgstr "Andere Orte sind für {runtime} nicht verfügbar. Wählen Sie Diesen Computer."
@@ -7704,6 +7704,7 @@ msgstr "Auf diesem Computer laufen Ausführungen. Eine Änderung der Verbindung 
 msgid "Runs as you; can use your files and signed-in tools"
 msgstr "Läuft mit deinen Rechten; kann deine Dateien und angemeldeten Werkzeuge nutzen"
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "Runs at the configured provider; can use granted credentials and network access."
 msgstr "Läuft beim konfigurierten Anbieter; kann freigegebene Zugangsdaten und Netzwerkzugriff nutzen."
@@ -9563,6 +9564,7 @@ msgstr "Verwenden Sie ganze Sekunden."
 msgid "User"
 msgstr ""
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "Uses that account's permissions."
 msgstr "Nutzt die Berechtigungen dieses Kontos."

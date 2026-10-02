@@ -1831,6 +1831,7 @@ msgid "Choose one credential: a token or a header."
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/computer-location-picker.tsx
 msgid "Choose Only this bot to use a different location from the Team computer."
 msgstr "टीम के कंप्यूटर से अलग स्थान इस्तेमाल करने के लिए केवल यह बॉट चुनें।"
 
@@ -2275,7 +2276,6 @@ msgstr "OAuth कनेक्ट करें"
 msgid "Connect remote account"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/move-to-host.tsx
@@ -4346,6 +4346,7 @@ msgstr ""
 msgid "For {task}, {better} on this machine did as well as {other} in your runs."
 msgstr ""
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "For testing only; not an isolation boundary."
 msgstr "केवल परीक्षण के लिए; यह अलगाव की सीमा नहीं है।"
@@ -6549,7 +6550,6 @@ msgstr ""
 msgid "Other files"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/shell/computer-location-picker.tsx
 msgid "Other locations are unavailable for {runtime}. Choose This computer."
 msgstr "{runtime} के लिए अन्य स्थान उपलब्ध नहीं हैं। यह कंप्यूटर चुनें।"
@@ -7704,6 +7704,7 @@ msgstr "इस कंप्यूटर पर रन सक्रिय है�
 msgid "Runs as you; can use your files and signed-in tools"
 msgstr "आपकी अनुमतियों से चलता है; आपकी फ़ाइलें और साइन-इन किए हुए टूल इस्तेमाल कर सकता है"
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "Runs at the configured provider; can use granted credentials and network access."
 msgstr "कॉन्फ़िगर किए गए प्रदाता पर चलता है; दिए गए क्रेडेंशियल और नेटवर्क पहुँच का उपयोग कर सकता है।"
@@ -9563,6 +9564,7 @@ msgstr "पूर्ण सेकंड डालें।"
 msgid "User"
 msgstr ""
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "Uses that account's permissions."
 msgstr "उस खाते की अनुमतियों का उपयोग करता है।"

@@ -1831,6 +1831,7 @@ msgid "Choose one credential: a token or a header."
 msgstr "Choose one credential: a token or a header."
 
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/computer-location-picker.tsx
 msgid "Choose Only this bot to use a different location from the Team computer."
 msgstr "Choose Only this bot to use a different location from the Team computer."
 
@@ -2275,7 +2276,6 @@ msgstr "Connect OAuth"
 msgid "Connect remote account"
 msgstr "Connect remote account"
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/move-to-host.tsx
@@ -4346,6 +4346,7 @@ msgstr "For {task}, {better} finished as often as {other} in your runs with {per
 msgid "For {task}, {better} on this machine did as well as {other} in your runs."
 msgstr "For {task}, {better} on this machine did as well as {other} in your runs."
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "For testing only; not an isolation boundary."
 msgstr "For testing only; not an isolation boundary."
@@ -6549,7 +6550,6 @@ msgstr "Other"
 msgid "Other files"
 msgstr "Other files"
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/shell/computer-location-picker.tsx
 msgid "Other locations are unavailable for {runtime}. Choose This computer."
 msgstr "Other locations are unavailable for {runtime}. Choose This computer."
@@ -7704,6 +7704,7 @@ msgstr "Runs are active on this computer. Saving this connection change may inte
 msgid "Runs as you; can use your files and signed-in tools"
 msgstr "Runs as you; can use your files and signed-in tools"
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "Runs at the configured provider; can use granted credentials and network access."
 msgstr "Runs at the configured provider; can use granted credentials and network access."
@@ -9563,6 +9564,7 @@ msgstr "Use whole seconds."
 msgid "User"
 msgstr "User"
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "Uses that account's permissions."
 msgstr "Uses that account's permissions."

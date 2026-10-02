@@ -1831,6 +1831,7 @@ msgid "Choose one credential: a token or a header."
 msgstr "请只选择一种凭据：令牌或请求头。"
 
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/computer-location-picker.tsx
 msgid "Choose Only this bot to use a different location from the Team computer."
 msgstr "选择仅此机器人，即可使用与团队计算机不同的位置。"
 
@@ -2275,7 +2276,6 @@ msgstr "连接 OAuth"
 msgid "Connect remote account"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/move-to-host.tsx
@@ -4346,6 +4346,7 @@ msgstr "在你的{task}运行中，{better} 的完成率与 {other} 相当，令
 msgid "For {task}, {better} on this machine did as well as {other} in your runs."
 msgstr "在你的{task}运行中，本机上的 {better} 表现与 {other} 一样好。"
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "For testing only; not an isolation boundary."
 msgstr "仅用于测试；不构成隔离边界。"
@@ -6549,7 +6550,6 @@ msgstr ""
 msgid "Other files"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/shell/computer-location-picker.tsx
 msgid "Other locations are unavailable for {runtime}. Choose This computer."
 msgstr "{runtime} 无法使用其他位置。请选择此电脑。"
@@ -7704,6 +7704,7 @@ msgstr "此计算机上有正在进行的运行。更改连接可能中断它们
 msgid "Runs as you; can use your files and signed-in tools"
 msgstr "以你的身份运行；可以使用你的文件和已登录的工具"
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "Runs at the configured provider; can use granted credentials and network access."
 msgstr "在已配置的服务商处运行；可以使用授予的凭据和网络访问权限。"
@@ -9563,6 +9564,7 @@ msgstr "请输入整数秒。"
 msgid "User"
 msgstr ""
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "Uses that account's permissions."
 msgstr "使用该账户的权限。"

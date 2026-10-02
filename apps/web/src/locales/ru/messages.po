@@ -1831,6 +1831,7 @@ msgid "Choose one credential: a token or a header."
 msgstr "Выберите один способ: токен или заголовок."
 
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/computer-location-picker.tsx
 msgid "Choose Only this bot to use a different location from the Team computer."
 msgstr "Выберите Только этот бот, чтобы использовать другое расположение, чем у компьютера команды."
 
@@ -2275,7 +2276,6 @@ msgstr "Подключить OAuth"
 msgid "Connect remote account"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/move-to-host.tsx
@@ -4346,6 +4346,7 @@ msgstr "Для {task} {better} завершала ваши запуски так
 msgid "For {task}, {better} on this machine did as well as {other} in your runs."
 msgstr "Для {task} {better} на этом компьютере справилась в ваших запусках не хуже, чем {other}."
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "For testing only; not an isolation boundary."
 msgstr "Только для тестирования; не обеспечивает изоляцию."
@@ -6549,7 +6550,6 @@ msgstr ""
 msgid "Other files"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/shell/computer-location-picker.tsx
 msgid "Other locations are unavailable for {runtime}. Choose This computer."
 msgstr "Другие расположения недоступны для {runtime}. Выберите Этот компьютер."
@@ -7704,6 +7704,7 @@ msgstr "На этом компьютере есть активные запус�
 msgid "Runs as you; can use your files and signed-in tools"
 msgstr "Работает с вашими правами; может использовать ваши файлы и инструменты, в которых вы вошли в аккаунт"
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "Runs at the configured provider; can use granted credentials and network access."
 msgstr "Работает у настроенного провайдера; может использовать предоставленные учётные данные и доступ к сети."
@@ -9563,6 +9564,7 @@ msgstr "Используйте целые секунды."
 msgid "User"
 msgstr ""
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "Uses that account's permissions."
 msgstr "Использует права этой учётной записи."

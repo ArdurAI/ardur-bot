@@ -1831,6 +1831,7 @@ msgid "Choose one credential: a token or a header."
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/computer-location-picker.tsx
 msgid "Choose Only this bot to use a different location from the Team computer."
 msgstr "Elige Solo este bot para usar una ubicación distinta a la del ordenador del equipo."
 
@@ -2275,7 +2276,6 @@ msgstr "Conectar OAuth"
 msgid "Connect remote account"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/move-to-host.tsx
@@ -4346,6 +4346,7 @@ msgstr ""
 msgid "For {task}, {better} on this machine did as well as {other} in your runs."
 msgstr ""
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "For testing only; not an isolation boundary."
 msgstr "Solo para pruebas; no proporciona aislamiento."
@@ -6549,7 +6550,6 @@ msgstr ""
 msgid "Other files"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/shell/computer-location-picker.tsx
 msgid "Other locations are unavailable for {runtime}. Choose This computer."
 msgstr "Otras ubicaciones no están disponibles para {runtime}. Elige Este equipo."
@@ -7704,6 +7704,7 @@ msgstr "Hay ejecuciones activas en este equipo. Cambiar la conexión puede inter
 msgid "Runs as you; can use your files and signed-in tools"
 msgstr "Se ejecuta con tus permisos; puede usar tus archivos y herramientas con sesión iniciada"
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "Runs at the configured provider; can use granted credentials and network access."
 msgstr "Se ejecuta en el proveedor configurado; puede usar credenciales concedidas y acceso a la red."
@@ -9563,6 +9564,7 @@ msgstr "Usa segundos enteros."
 msgid "User"
 msgstr ""
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "Uses that account's permissions."
 msgstr "Usa los permisos de esa cuenta."

@@ -1831,6 +1831,7 @@ msgid "Choose one credential: a token or a header."
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/computer-location-picker.tsx
 msgid "Choose Only this bot to use a different location from the Team computer."
 msgstr "팀 컴퓨터와 다른 위치를 사용하려면 이 봇만을 선택하세요."
 
@@ -2275,7 +2276,6 @@ msgstr "OAuth 연결"
 msgid "Connect remote account"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/move-to-host.tsx
@@ -4346,6 +4346,7 @@ msgstr ""
 msgid "For {task}, {better} on this machine did as well as {other} in your runs."
 msgstr ""
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "For testing only; not an isolation boundary."
 msgstr "테스트 전용이며 격리 경계가 아닙니다."
@@ -6549,7 +6550,6 @@ msgstr ""
 msgid "Other files"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/shell/computer-location-picker.tsx
 msgid "Other locations are unavailable for {runtime}. Choose This computer."
 msgstr "{runtime}에서는 다른 위치를 사용할 수 없습니다. 이 컴퓨터를 선택하세요."
@@ -7704,6 +7704,7 @@ msgstr "이 컴퓨터에서 실행 중인 작업이 있습니다. 연결을 바�
 msgid "Runs as you; can use your files and signed-in tools"
 msgstr "내 권한으로 실행되며 내 파일과 로그인된 도구를 사용할 수 있습니다"
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "Runs at the configured provider; can use granted credentials and network access."
 msgstr "설정된 제공업체에서 실행되며 부여된 자격 증명과 네트워크 접근을 사용할 수 있습니다."
@@ -9563,6 +9564,7 @@ msgstr "정수 초를 사용하세요."
 msgid "User"
 msgstr ""
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "Uses that account's permissions."
 msgstr "해당 계정의 권한을 사용합니다."
