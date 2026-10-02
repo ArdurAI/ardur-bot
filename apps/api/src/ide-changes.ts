@@ -38,6 +38,8 @@ export function createIdeChanges(
       +until - +since > 26 * 60 * 60 * 1000
     )
       throw new ORPCError("BAD_REQUEST");
+    // Command changes append a diff index; file snapshots use the event id unchanged.
+    const commandEventId = input.changeId?.match(/^(.+)-(?:0|[1-9]\d*)$/)?.[1];
     const events = await deps.prisma.event.findMany({
       where: {
         spaceId: actor.spaceId,
@@ -45,10 +47,18 @@ export function createIdeChanges(
         ...(input.target ? { botId: input.target.botId } : {}),
         createdAt: { gte: since, lt: until },
         type: { in: ["computer.file.changed", "command.finished"] },
+        ...(input.changeId
+          ? {
+              OR: [
+                { id: input.changeId, type: "computer.file.changed" },
+                ...(commandEventId ? [{ id: commandEventId, type: "command.finished" }] : []),
+              ],
+            }
+          : {}),
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      take: 201,
-      ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
+      take: input.changeId ? 2 : 201,
+      ...(!input.changeId && input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
     });
     const changes = events.slice(0, 200).flatMap(eventFileChanges);
     const home =
@@ -91,11 +101,7 @@ export function createIdeChanges(
     });
     if (input.changeId) {
       const selected = items.filter((item) => item.id === input.changeId);
-      if (!selected.length) {
-        // A target may be older than the first bounded page. Continue through checked pages.
-        if (events.length > 200) return { items: [], nextCursor: events[199]!.id };
-        throw new IsolationError();
-      }
+      if (!selected.length) throw new IsolationError();
       return { items: selected, nextCursor: null };
     }
     return { items, nextCursor: events.length > 200 ? events[199]!.id : null };

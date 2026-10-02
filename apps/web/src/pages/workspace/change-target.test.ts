@@ -14,13 +14,11 @@ const item = { id: "record", botId: "bot", path: "notes.md" } as IdeChange;
 beforeEach(() => {
   changes.mockReset();
 });
-it("pages through checked history until the exact bot's change is found", async () => {
-  changes.mockResolvedValueOnce({ items: [], nextCursor: "older" });
+it("looks up the exact bot's change with one checked request", async () => {
   changes.mockResolvedValueOnce({ items: [item], nextCursor: null });
   expect(await readWorkspaceChange(target, location, new AbortController().signal)).toEqual(item);
   expect(changes.mock.calls.map(([input]) => input)).toEqual([
-    { ...location, target, rootId: "root", cursor: undefined },
-    { ...location, target, rootId: "root", cursor: "older" },
+    { ...location, target, rootId: "root" },
   ]);
 });
 it("refuses a missing, cross-bot, or stale target instead of opening a different record", async () => {
@@ -33,15 +31,25 @@ it("refuses a missing, cross-bot, or stale target instead of opening a different
     "Computer changed. Refresh files.",
   );
 });
-it("refuses a late selection and stops repeated cursors", async () => {
+it("refuses a late selection", async () => {
   const abort = new AbortController();
   changes.mockImplementation(async () => {
     abort.abort();
     return { items: [item], nextCursor: null };
   });
   await expect(readWorkspaceChange(target, location, abort.signal)).rejects.toThrow("Cancelled");
-  changes.mockResolvedValue({ items: [], nextCursor: "same" });
+  expect(changes).toHaveBeenCalledTimes(1);
+});
+it("refuses a missing change after one request even if a cursor is returned", async () => {
+  changes.mockResolvedValue({ items: [], nextCursor: "older" });
   await expect(readWorkspaceChange(target, location, new AbortController().signal)).rejects.toThrow(
     "Resource not found",
   );
+  expect(changes).toHaveBeenCalledTimes(1);
+});
+it("does not request an already cancelled target", async () => {
+  const abort = new AbortController();
+  abort.abort();
+  await expect(readWorkspaceChange(target, location, abort.signal)).rejects.toThrow("Cancelled");
+  expect(changes).not.toHaveBeenCalled();
 });

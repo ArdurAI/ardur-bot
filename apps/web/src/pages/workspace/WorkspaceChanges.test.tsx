@@ -7,6 +7,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { WorkspaceChanges } from "./WorkspaceChanges";
 
 const read = vi.hoisted(() => vi.fn());
+const changes = vi.hoisted(() => vi.fn());
+vi.mock("../../lib/rpc", () => ({ rpc: { ide: { changes } } }));
 vi.mock("./change-target", () => ({ readWorkspaceChange: read }));
 vi.mock("../ide/changes", () => ({
   useChanges: () => ({ items: [], more: undefined }),
@@ -44,6 +46,7 @@ let root: ReturnType<typeof createRoot>;
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   read.mockReset();
+  changes.mockReset();
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -81,4 +84,16 @@ it("refuses a failed checked target without showing its old diff", async () => {
   expect(host.querySelector('[role="alert"]')?.textContent).toBe("Could not open file");
   expect(host.querySelector("[data-diff]")).toBeNull();
   expect(host.querySelector('[role="status"]')).toBeNull();
+});
+it("shows the existing refusal after a missing target's single request", async () => {
+  const actual = await vi.importActual<typeof import("./change-target")>("./change-target");
+  read.mockImplementation(actual.readWorkspaceChange);
+  changes.mockResolvedValue({ items: [], nextCursor: "older" });
+  await act(async () =>
+    root.render(<WorkspaceChanges context={context} visible location={location} />),
+  );
+  expect(changes).toHaveBeenCalledTimes(1);
+  expect(host.querySelector('[role="alert"]')?.textContent).toBe("Could not open file");
+  expect(host.querySelector('[role="status"]')).toBeNull();
+  expect(host.querySelector("[data-diff]")).toBeNull();
 });
