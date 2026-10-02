@@ -13,9 +13,9 @@ import type {
   WorkspaceContext,
 } from "@ardurbot/contracts";
 import type { ReactNode } from "react";
-import { StrictMode, useEffect } from "react";
+import { act, StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const computerFor = (botId: string, graphical: boolean): ComputerStatus => ({
@@ -728,6 +728,88 @@ async function deliverCapabilityFlip(botId: string, graphical: boolean) {
   await until(() => count("threads.get") > seen);
   await tick(200);
 }
+
+it.each([false, true])(
+  "settles Bots navigation after late bootstrap restores a layout (visible: %s)",
+  async (visible) => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    const layoutKey = 'ardurbot:workspace-layout:["user-1","space-1","bot-1"]';
+    savedLayouts.set(
+      layoutKey,
+      JSON.stringify({
+        version: 1,
+        open: [{ type: "tasks" }],
+        active: "tasks",
+        visible,
+        expanded: false,
+        position: "right",
+        width: 480,
+        height: 280,
+      }),
+    );
+    const readLayout = vi.spyOn(window.localStorage, "getItem");
+    let finishBootstrap!: () => void;
+    state.bootstrapGate = new Promise<void>((resolve) => {
+      finishBootstrap = resolve;
+    });
+    function LocationProbe() {
+      const location = useLocation();
+      return <output data-testid="route">{location.pathname}</output>;
+    }
+    const route = () => host.querySelector('[data-testid="route"]')?.textContent;
+    try {
+      await act(async () => {
+        root.render(
+          <MemoryRouter initialEntries={["/app?view=dashboard"]}>
+            <LocationProbe />
+            <Routes>
+              <Route path="/app" element={<ShellPage dashboard />} />
+              <Route path="/app/bots" element={<ShellPage />} />
+              <Route path="/app/:botId" element={<ShellPage />} />
+            </Routes>
+          </MemoryRouter>,
+        );
+      });
+      expect(count("bootstrap")).toBe(1);
+      expect(readLayout).not.toHaveBeenCalledWith(layoutKey);
+      const botsLink = host.querySelector('a[href="/app/bots"]');
+      expect(botsLink).not.toBeNull();
+      await act(async () => click(botsLink));
+      expect(route()).toBe("/app/bots");
+      expect(readLayout).not.toHaveBeenCalledWith(layoutKey);
+
+      // Complete the real bootstrap only after the click; no clock or polling race.
+      await act(async () => {
+        finishBootstrap();
+        await state.bootstrapGate;
+      });
+      expect(readLayout).toHaveBeenCalledWith(layoutKey);
+      expect(route()).toBe("/app/bot-1");
+      expect(host.querySelector('[data-roster-bot-id="bot-1"]')).not.toBeNull();
+      expect(host.querySelector('[data-roster-bot-id="bot-2"]')).not.toBeNull();
+      expect(pane()?.getAttribute("data-panel")).toBe(visible ? "computer" : "closed");
+      expect(botsLink?.getAttribute("aria-current")).toBe("page");
+      expect(host.querySelector('textarea[name="chat-message"]')?.getAttribute("placeholder")).toBe(
+        "Message Graphical",
+      );
+
+      // With bootstrap already settled, the same click can retain the entry URL.
+      await act(async () => click(host.querySelector('a[href="/app?view=dashboard"]')));
+      expect(route()).toBe("/app");
+      await act(async () => click(host.querySelector('a[href="/app/bots"]')));
+      expect(route()).toBe("/app/bots");
+      expect(host.querySelector('textarea[name="chat-message"]')?.getAttribute("placeholder")).toBe(
+        "Message Graphical",
+      );
+      expect(host.querySelector('[data-testid="shell-root"]')?.getAttribute("data-ready")).toBe(
+        "true",
+      );
+    } finally {
+      readLayout.mockRestore();
+      (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+    }
+  },
+);
 
 it("opens the dashboard account popover on its first click with the existing actions", async () => {
   root.render(

@@ -297,9 +297,16 @@ test("sign-in, spawn, and stop work in the shell", async ({ page }, testInfo) =>
   await page.getByRole("button", { name: "Continue with email" }).click();
   await page.waitForURL(/\/app/, { timeout: 20_000 });
   await page.getByRole("link", { name: "Bots", exact: true }).click();
-  await expect(page).toHaveURL(/\/app\/bots$/);
   await expect(sidebarBotButton(page, /^Chief/)).toBeVisible();
   await expect(sidebarBotButton(page, /Scout/)).toBeVisible();
+  // Bots renders the first conversation; bootstrap or refresh may replace /app/bots with its URL.
+  await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
+  await expect(page.getByTestId("bot-settings-trigger")).toContainText("Chief");
+  await expect(composer).toHaveAttribute("placeholder", "Message Chief");
+  await expect(page.getByRole("link", { name: "Bots", exact: true })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
   await captureScreenshot(page, testInfo, "15-restored-session");
 });
 
