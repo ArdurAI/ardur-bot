@@ -280,6 +280,7 @@ import {
   renewComputerExecutionLease,
   screenLeaseIdForRun,
 } from "./computer-lifecycle.js";
+import { enqueueComputerRunRetry } from "./computer-run-retry.js";
 import { withComputerScreenAvailability } from "./computer-screens.js";
 import {
   displayBotWorkspacePath,
@@ -1943,7 +1944,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
         });
       } catch (error) {
         if (!(error instanceof ComputerBusyError)) throw error;
-        await requeueComputerRun(deps, runId, workerId, fence, resumeCheckpoint, heldForTakeover);
+        await requeueComputerRun(
+          deps,
+          runId,
+          workerId,
+          fence,
+          resumeCheckpoint,
+          heldForTakeover,
+          error.waitingForIdleSave,
+        );
         return;
       }
       const attempt = await deps.prisma.attempt
@@ -7447,10 +7456,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
             },
           });
           if (retryForever) {
-            await deps.jobs.enqueue({
-              ...runContinueJob(runId),
-              availableAt: new Date(Date.now() + computerRetryDelay(fence)),
-            });
+            if (computerBusy && setupError.waitingForIdleSave) {
+              await enqueueComputerRunRetry(deps, runId, computerRetryDelay(fence));
+            } else {
+              await deps.jobs.enqueue({
+                ...runContinueJob(runId),
+                availableAt: new Date(Date.now() + computerRetryDelay(fence)),
+              });
+            }
             return;
           }
           throw new Error("Run setup failed; retrying");
@@ -7986,6 +7999,7 @@ async function requeueComputerRun(
   fence: number,
   resumeCheckpoint: TakeoverResumeCheckpoint | null,
   heldForTakeover = false,
+  waitingForIdleSave = false,
 ): Promise<void> {
   const released = await writeComputerRunRequeue(
     deps,
@@ -7996,10 +8010,14 @@ async function requeueComputerRun(
     heldForTakeover,
   );
   if (!released) return;
-  await deps.jobs.enqueue({
-    ...runContinueJob(runId),
-    availableAt: new Date(Date.now() + computerRetryDelay(fence)),
-  });
+  if (waitingForIdleSave) {
+    await enqueueComputerRunRetry(deps, runId, computerRetryDelay(fence));
+  } else {
+    await deps.jobs.enqueue({
+      ...runContinueJob(runId),
+      availableAt: new Date(Date.now() + computerRetryDelay(fence)),
+    });
+  }
 }
 
 function redactBlocks(blocks: MessageBlock[], secrets: string[]): MessageBlock[] {

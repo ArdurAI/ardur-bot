@@ -1,6 +1,7 @@
+import type { ComputerUpdate, ComputerWorkspaceSaveFailureReason } from "@ardurbot/contracts";
 import {
   COMPUTER_UPDATE_STAGES,
-  type ComputerUpdate,
+  computerWorkspaceSaveFailureReason,
   ENGINE_MISSING_CODE,
   errorDataCode,
   HOST_MOVE_UNAVAILABLE_CODE,
@@ -109,20 +110,30 @@ export function computerUpdateNeedsAttention(update: ComputerUpdate): boolean {
 }
 
 /** A missing-engine failure's sentence already carries the fix, so Recover — which would only
- * hit the same missing engine again — is not offered for it. */
+ * hit the same missing engine again — is not offered for it. Typed workspace save failures
+ * still offer recovery from the last saved workspace. */
 export function computerUpdateOffersRecover(
   update: Pick<ComputerUpdate, "status" | "failureReason">,
 ): boolean {
-  return update.status === "failed" && !update.failureReason;
+  return (
+    update.status === "failed" &&
+    (!update.failureReason || computerWorkspaceSaveFailureReason(update.failureReason) !== null)
+  );
 }
 
 /** The sentence to show while a failed or interrupted update waits for the user's decision.
  * One source of truth for web and mobile; each supplies its own translated copy. */
 export function computerUpdateAttentionMessage(
   update: Pick<ComputerUpdate, "status" | "failureReason">,
-  copy: { interrupted: string; generic: string },
+  copy: {
+    interrupted: string;
+    generic: string;
+    workspaceSave: Record<ComputerWorkspaceSaveFailureReason, string>;
+  },
 ): string {
   if (update.status === "interrupted") return copy.interrupted;
+  const reason = computerWorkspaceSaveFailureReason(update.failureReason);
+  if (reason) return copy.workspaceSave[reason];
   return update.failureReason ?? copy.generic;
 }
 

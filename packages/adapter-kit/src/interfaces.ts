@@ -164,6 +164,10 @@ export interface SandboxProvider {
     options?: { maxBytes?: number; preview?: boolean },
   ): Promise<Uint8Array>;
   writeFile(computer: ComputerRef, file: PortableFile, context: AdapterContext): Promise<void>;
+  /** Resume only the existing workspace for saving; never allocate a replacement.
+   * Absent means the provider cannot resume a stopped source; export must fail honestly.
+   */
+  ensureWorkspaceReady?(computer: ComputerRef, context: AdapterContext): Promise<void>;
   exportWorkspace(computer: ComputerRef, context: AdapterContext): AsyncIterable<PortableFile>;
   importWorkspace(
     computer: ComputerRef,

@@ -6679,10 +6679,6 @@ msgstr "Teamnachrichten pausieren"
 msgid "Paused"
 msgstr "Pausiert"
 
-#: src/lib/computer-state-labels.ts
-msgid "Paused for an update"
-msgstr "Für ein Update pausiert"
-
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Permission denied on the socket"
 msgstr "Zugriff auf den Socket verweigert"
@@ -7891,8 +7887,9 @@ msgid "Saved. Rotate to reveal."
 msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
+#: src/lib/computer-state-labels.ts
 msgid "Saving your workspace"
-msgstr ""
+msgstr "Ihr Arbeitsbereich wird gespeichert"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Saving..."
@@ -8855,6 +8852,18 @@ msgstr ""
 msgid "The computer is busy. Wait for it to finish."
 msgstr "Der Computer ist beschäftigt. Warte, bis er fertig ist."
 
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer or its workspace could not be found."
+msgstr "Der Computer oder sein Arbeitsbereich wurde nicht gefunden."
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer stopped before its workspace could be saved."
+msgstr "Der Computer wurde angehalten, bevor sein Arbeitsbereich gespeichert werden konnte."
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer's engine could not be reached to save its workspace."
+msgstr "Die Engine des Computers war nicht erreichbar, sodass sein Arbeitsbereich nicht gespeichert werden konnte."
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr ""
@@ -8906,6 +8915,14 @@ msgstr ""
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "The service may use its own embedding providers. Check its settings before saving private documents."
 msgstr ""
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The workspace could not be saved."
+msgstr "Der Arbeitsbereich konnte nicht gespeichert werden."
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The workspace is too large to save."
+msgstr "Der Arbeitsbereich ist zu groß zum Speichern."
 
 #: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx

@@ -115,8 +115,10 @@ export async function checkpointComputerWorkspace(
   const staging = await mkdtemp(path.join(tmpdir(), "ardurbot-workspace-"));
   try {
     for await (const file of sandbox.exportWorkspace(computer, context)) {
+      context.signal.throwIfAborted();
       await writePortableFile(staging, file);
     }
+    context.signal.throwIfAborted();
     return await home.commit(homeKey, staging, context);
   } finally {
     await rm(staging, { recursive: true, force: true });

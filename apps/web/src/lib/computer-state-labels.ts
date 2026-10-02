@@ -7,7 +7,7 @@ export function useComputerStateLabels() {
     [COMPUTER_STATES.stopped]: t`Stopped`,
     [COMPUTER_STATES.booting]: t`Starting`,
     [COMPUTER_STATES.running]: t`Running`,
-    [COMPUTER_STATES.suspending]: t`Paused for an update`,
+    [COMPUTER_STATES.suspending]: t`Saving your workspace`,
     [COMPUTER_STATES.suspended]: t`Sleeping`,
     [COMPUTER_STATES.error]: t`Could not start`,
   };

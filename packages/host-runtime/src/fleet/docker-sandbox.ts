@@ -7,7 +7,7 @@ import type {
   ComputerConnectionSettings,
   SshSettings,
 } from "@ardurbot/contracts";
-import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
+import { ComputerConnectionSettingsSchema, ComputerWorkspaceSaveError } from "@ardurbot/contracts";
 import { COMPUTER_IMAGE_PINS } from "@ardurbot/contracts/computer-image";
 import { SshSettingsSchema } from "@ardurbot/contracts/fleet";
 import {
@@ -24,6 +24,38 @@ import { engineFailureReason } from "./probe.js";
 import type { FleetProcess } from "./process.js";
 import { remoteArgv, systemFleetProcess } from "./process.js";
 import { sshOptions } from "./ssh-sandbox.js";
+
+class EngineCommandError extends Error {
+  constructor(
+    readonly category: string,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+function saveEngineError(error: unknown): ComputerWorkspaceSaveError {
+  if (error instanceof ComputerWorkspaceSaveError) return error;
+  if (
+    error instanceof Error &&
+    /output exceeds.*limit|archive.*limit|too large/i.test(error.message)
+  )
+    return new ComputerWorkspaceSaveError("too-large", "too-large");
+  const category =
+    error instanceof EngineCommandError ? error.category : engineFailureReason(error);
+  if (category === "source-not-owned")
+    return new ComputerWorkspaceSaveError("save-failed", category);
+  if (
+    category === "source-not-running" ||
+    category === "source-missing" ||
+    category === "too-large"
+  )
+    return new ComputerWorkspaceSaveError(category, category);
+  return new ComputerWorkspaceSaveError(
+    category && category !== "command-failed" ? "engine-unreachable" : "save-failed",
+    category ?? "command-failed",
+  );
+}
 
 /** Convert the shared Kubernetes-style quantities to Docker CLI resource values. */
 export function engineLimits(settings: ComputerConnectionSettings) {
@@ -150,7 +182,16 @@ export class FleetDockerSandboxProvider extends LinuxFleetSandbox {
       );
       if (result.code !== 0) {
         const reason = engineFailureReason(result.stderr.toString());
-        throw new Error(
+        const stderr = result.stderr.toString();
+        const category = /no such container|no such volume/i.test(stderr)
+          ? "source-missing"
+          : /container .*not running|container .*stopped/i.test(stderr)
+            ? "source-not-running"
+            : /exceeds.*limit|too large/i.test(stderr)
+              ? "too-large"
+              : (reason ?? "command-failed");
+        throw new EngineCommandError(
+          category,
           reason ?? (argv[0] === "info" ? "engine-not-running" : "Engine command failed."),
         );
       }
@@ -162,7 +203,10 @@ export class FleetDockerSandboxProvider extends LinuxFleetSandbox {
   private name(computer: ComputerRef, context: AdapterContext) {
     const name = `ardurbot-${fleetComputerKey(context.spaceId, computer.botId).slice(0, 40)}`;
     if (computer.providerRef !== name)
-      throw new Error("Computer does not belong to this workspace.");
+      throw new EngineCommandError(
+        "source-not-owned",
+        "Computer does not belong to this workspace.",
+      );
     return name;
   }
   private async owned(name: string, context: AdapterContext) {
@@ -188,6 +232,7 @@ export class FleetDockerSandboxProvider extends LinuxFleetSandbox {
     ) as {
       Config: { Image: string; Labels?: Record<string, string> };
       State?: { Running?: boolean };
+      Mounts?: { Type?: string; Name?: string; Destination?: string }[];
       HostConfig?: { NetworkMode?: string };
     }[];
     const record = details[0];
@@ -195,7 +240,7 @@ export class FleetDockerSandboxProvider extends LinuxFleetSandbox {
       record?.Config.Labels?.["ardurbot.com/computer"] !== name ||
       record.Config.Labels?.["ardurbot.com/space"] !== context.spaceId
     )
-      throw new Error("Engine computer identity does not match.");
+      throw new EngineCommandError("source-not-owned", "Engine computer identity does not match.");
     return record;
   }
   private async ownedVolume(name: string, context: AdapterContext) {
@@ -216,7 +261,7 @@ export class FleetDockerSandboxProvider extends LinuxFleetSandbox {
       records[0]?.Labels?.["ardurbot.com/computer"] !== name ||
       records[0]?.Labels?.["ardurbot.com/space"] !== context.spaceId
     )
-      throw new Error("Engine volume identity does not match.");
+      throw new EngineCommandError("source-not-owned", "Engine volume identity does not match.");
     return true;
   }
   async provision(
@@ -305,6 +350,35 @@ export class FleetDockerSandboxProvider extends LinuxFleetSandbox {
   async root(computer: ComputerRef, context: AdapterContext) {
     this.name(computer, context);
     return "/home/ardurbot";
+  }
+  async ensureWorkspaceReady(computer: ComputerRef, context: AdapterContext) {
+    try {
+      const name = this.name(computer, context);
+      const existing = await this.owned(name, context);
+      if (!existing || !(await this.ownedVolume(name, context)))
+        throw new ComputerWorkspaceSaveError("source-missing");
+      if (
+        !existing.Mounts?.some(
+          (mount) =>
+            mount.Type === "volume" &&
+            mount.Name === `${name}-home` &&
+            mount.Destination === "/home/ardurbot",
+        )
+      )
+        throw new ComputerWorkspaceSaveError("source-missing");
+      if (!existing.State?.Running) await this.engine(["start", name], context);
+      if (!(await this.owned(name, context))?.State?.Running)
+        throw new ComputerWorkspaceSaveError("source-not-running");
+    } catch (error) {
+      throw saveEngineError(error);
+    }
+  }
+  override async *exportWorkspace(computer: ComputerRef, context: AdapterContext) {
+    try {
+      yield* super.exportWorkspace(computer, context);
+    } catch (error) {
+      throw saveEngineError(error);
+    }
   }
   async supportsNetworkEgress() {
     return true;

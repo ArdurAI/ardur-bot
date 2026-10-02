@@ -64,7 +64,7 @@ function harness(statuses: ("active" | "idle")[]) {
       }),
       update: vi.fn(async ({ data }) => Object.assign(row, data)),
     },
-    run: { findFirst: vi.fn().mockResolvedValue(null) },
+    run: { findFirst: vi.fn().mockResolvedValue(null), findMany: vi.fn().mockResolvedValue([]) },
     bot: { findMany: vi.fn().mockResolvedValue([]) },
   } as unknown as PrismaClient;
   const commit = vi.fn().mockResolvedValue("saved-revision");
