@@ -949,7 +949,11 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
               }
             });
           }, SPACE_DELETION_CLAIM_TIMEOUT_MS / 5);
-          const adapterContext = connectionContext(context.actor, "spaces.remove", context.signal);
+          const adapterContext = connectionContext(
+            { spaceId: input.spaceId, userId: context.actor.userId },
+            "spaces.remove",
+            context.signal,
+          );
           for (const computer of claim.computers) {
             await assertClaim();
             // Provider errors are ambiguous: teardown may have reached the

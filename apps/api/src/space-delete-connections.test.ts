@@ -2,15 +2,18 @@ import type { SandboxProvider } from "@ardurbot/adapter-kit";
 import {
   ComputerConnections,
   ConnectedSandboxProvider,
+  DockerSandboxProvider,
   FakeSandboxProvider,
   HostAwareSandbox,
 } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { RPCHandler } from "@orpc/server/fetch";
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import type { RouterDeps } from "./router.js";
 import { createRouter } from "./router.js";
+
+afterEach(() => vi.restoreAllMocks());
 
 it("deletes an empty space's legacy connected computer through its connection, never the host", async () => {
   const actor: Actor = { spaceId: "current", userId: "owner", email: "owner@example.test" };
@@ -29,6 +32,15 @@ it("deletes an empty space's legacy connected computer through its connection, n
   const prisma = {
     $queryRaw: vi.fn(async () => []),
     $executeRaw: vi.fn(),
+    connection: {
+      findFirst: vi.fn(async ({ where }) =>
+        where.id === "saved-container" &&
+        where.spaceId === "empty" &&
+        where.connectorId === "computer"
+          ? { metadata: { engine: "docker" }, secretId: null }
+          : null,
+      ),
+    },
     spaceMember: {
       findUnique: vi.fn(async () => ({
         organizationId: "org",
@@ -58,13 +70,13 @@ it("deletes an empty space's legacy connected computer through its connection, n
     $transaction: vi.fn(async (work) => work(prisma)),
   };
   const host = { destroy: vi.fn() } as unknown as SandboxProvider;
-  const container = { destroy: vi.fn() } as unknown as SandboxProvider;
+  const destroy = vi.spyOn(DockerSandboxProvider.prototype, "destroy").mockResolvedValue(undefined);
   const connections = new ComputerConnections(
     prisma as unknown as PrismaClient,
     { load: vi.fn() },
-    {},
+    { supervisorToken: "test-supervisor-token" },
   );
-  const resolve = vi.spyOn(connections, "resolve").mockResolvedValue(container);
+  const resolve = vi.spyOn(connections, "resolve");
   const sandbox = new HostAwareSandbox(
     new ConnectedSandboxProvider(new FakeSandboxProvider(), connections),
     host,
@@ -98,20 +110,21 @@ it("deletes an empty space's legacy connected computer through its connection, n
   });
   expect(resolve).toHaveBeenCalledExactlyOnceWith(
     "saved-container",
-    expect.objectContaining({ spaceId: "current", userId: "owner" }),
+    expect.objectContaining({ spaceId: "empty", userId: "owner" }),
   );
-  expect(container.destroy).toHaveBeenCalledExactlyOnceWith(
+  expect(prisma.connection.findFirst).toHaveBeenCalledExactlyOnceWith({
+    where: { id: "saved-container", spaceId: "empty", connectorId: "computer" },
+  });
+  expect(destroy).toHaveBeenCalledExactlyOnceWith(
     expect.objectContaining({
       providerRef: "container-ref",
       connectionId: "saved-container",
       imageProfile: "developer",
       networkEgress: false,
     }),
-    expect.objectContaining({ spaceId: "current", userId: "owner", botId: "shared-home" }),
+    expect.objectContaining({ spaceId: "empty", userId: "owner", botId: "shared-home" }),
   );
   expect(host.destroy).not.toHaveBeenCalled();
   expect(remove).toHaveBeenCalledExactlyOnceWith({ where: { id: "empty" } });
-  expect(vi.mocked(container.destroy).mock.invocationCallOrder[0]).toBeLessThan(
-    remove.mock.invocationCallOrder[0]!,
-  );
+  expect(destroy.mock.invocationCallOrder[0]).toBeLessThan(remove.mock.invocationCallOrder[0]!);
 });
