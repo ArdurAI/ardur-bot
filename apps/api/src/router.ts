@@ -123,6 +123,7 @@ import type {
 import {
   COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE,
   ComputerImageDownloadError,
+  ComputerWorkspaceSaveError,
   computerExecutionKind,
   computerKindFacts,
   computerRunsOnHost,
@@ -6710,6 +6711,17 @@ async function runComputerReplace(
 
 /** A missing engine or a refused host move already says what to do, so it reaches the user. */
 function engineRefusal(error: unknown) {
+  if (error instanceof ComputerWorkspaceSaveError) {
+    const data = {
+      saveFailureReason: error.reason,
+      engineFailureCategory: error.engineFailureCategory,
+    };
+    getLogger().error("computer workspace save failed", data);
+    return new ORPCError("BAD_REQUEST", {
+      message: "The workspace could not be saved.",
+      data,
+    });
+  }
   if (error instanceof ComputerImageDownloadError)
     return new ORPCError("BAD_REQUEST", {
       message: error.message,
