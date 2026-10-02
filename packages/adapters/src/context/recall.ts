@@ -20,7 +20,21 @@ export async function recallLocalDocuments(
 ): Promise<SemanticMemoryResult[]> {
   const words = queryWords(query);
   if (words.size) {
-    const indexed = await recallFromIndex(index, memory, botId, context, words).catch(() => null);
+    const indexed = await index
+      .withRecallLock(context.spaceId, async () => {
+        // Check both sides of the snapshot/query: a write racing a build must not stamp an
+        // older slice with the newer watermark. Retry boundedly, never serve that snapshot.
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const revision = (await memory.recallRevision?.(context)) ?? null;
+          index.synchronize(context.spaceId, revision);
+          const results = await recallFromIndex(index, memory, botId, context, words);
+          if (revision === null || revision === (await memory.recallRevision?.(context)))
+            return results;
+          index.invalidate(context.spaceId);
+        }
+        return [];
+      })
+      .catch(() => null);
     if (indexed) return indexed;
   }
   return scanLocalDocuments(memory, botId, words, context);
@@ -71,7 +85,7 @@ async function recallFromIndex(
   words: Set<string>,
 ): Promise<SemanticMemoryResult[] | null> {
   const spaceId = context.spaceId;
-  // The same two scope reads as the scan, loaded once per slice and kept current by writes.
+  // Reuse only after the durable watermark has authorized the current space snapshot.
   const slices = [
     { key: `bot:${botId}`, request: { scope: "bot" as const, botId }, scope: "bot" as const },
     { key: `user:${context.userId}`, request: { scope: "user" as const }, scope: "user" as const },

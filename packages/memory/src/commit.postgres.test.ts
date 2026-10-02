@@ -78,6 +78,45 @@ describePostgres("memory commits (PostgreSQL)", () => {
     });
   }
 
+  it("advances recall's watermark transactionally for every head write, but not delivery receipts", async () => {
+    const access: MemoryAccess = { ...context, botIds: ["memory-commit-bot"] };
+    const reader = new PostgresDocumentStore(prisma);
+    const before = BigInt(await reader.recallRevision(access));
+    const seed = await prisma.memoryDocument.create({
+      data: {
+        spaceId: context.spaceId,
+        userId: context.userId,
+        scope: "user",
+        path: "watermark.md",
+        content: "Original fact",
+        revision: 1,
+      },
+    });
+    expect(BigInt(await reader.recallRevision(access))).toBe(before + 1n);
+    await prisma.memoryDocument.update({
+      where: { id: seed.id },
+      data: { deliveryStatus: "pending" },
+    });
+    expect(BigInt(await reader.recallRevision(access))).toBe(before + 1n);
+    await expect(
+      prisma.$transaction(async (tx) => {
+        await tx.memoryDocument.update({
+          where: { id: seed.id },
+          data: { content: "Rolled back" },
+        });
+        throw new Error("Rollback fixture");
+      }),
+    ).rejects.toThrow("Rollback fixture");
+    expect(BigInt(await reader.recallRevision(access))).toBe(before + 1n);
+    await prisma.memoryDocument.update({
+      where: { id: seed.id },
+      data: { content: "Edited fact", revision: 2 },
+    });
+    expect(BigInt(await reader.recallRevision(access))).toBe(before + 2n);
+    await prisma.memoryDocument.delete({ where: { id: seed.id } });
+    expect(BigInt(await reader.recallRevision(access))).toBe(before + 3n);
+  });
+
   it("keeps a legacy seed and its first edit atomic, then imports the exported history into empty storage", async () => {
     const seed = await prisma.memoryDocument.create({
       data: {
