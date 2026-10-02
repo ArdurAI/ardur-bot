@@ -17,10 +17,6 @@ msgstr ""
 msgid " — May not be available on your plan"
 msgstr ""
 
-#: src/lib/failure-category-copy.ts
-msgid "{runtime} could not start a session. Check the runtime and try again."
-msgstr "{runtime} konnte keine Sitzung starten. Prüfe die Laufzeitumgebung und versuche es erneut."
-
 #: src/pages/shell/bot-panel.tsx
 msgid " — not available on your account"
 msgstr ""
@@ -346,6 +342,10 @@ msgstr "Noch {remaining} · Bot beobachtet nur"
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} could not finish this run. Check the runtime or change the pin."
 msgstr "{runtime} konnte diesen Lauf nicht abschließen. Prüfen Sie die Laufzeitumgebung oder ändern Sie die Festlegung."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} could not start a session. Check the runtime and try again."
+msgstr "{runtime} konnte keine Sitzung starten. Prüfe die Laufzeitumgebung und versuche es erneut."
 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} is experimental. Turn on Experimental for {bot} to use it."
