@@ -35,6 +35,8 @@ export default function NewBot() {
   const [computerMode, setComputerMode] = useState<ComputerMode>("dedicated");
   const [container, setContainer] = useState<{ connectionId: string | null } | null>(null);
   const [sandboxAvailable, setSandboxAvailable] = useState(false);
+  const [sandboxBoundary, setSandboxBoundary] =
+    useState<NonNullable<NewBotComputerOptions["sandboxBoundary"]>>("container");
   const [chosenLocation, setComputerLocation] = useState<NewBotLocation>("sandbox");
   const [team, setTeam] = useState<NewBotTeamComputer | null>(null);
   const teamComputer = computerMode === "team" ? team : null;
@@ -62,6 +64,7 @@ export default function NewBot() {
           setHostAvailable(options.hostAvailable);
           setContainer(options.container);
           setSandboxAvailable(options.sandboxAvailable);
+          setSandboxBoundary(options.sandboxBoundary ?? "container");
           setTeam(options.team);
           setLocationReady(true);
         }
@@ -219,6 +222,7 @@ export default function NewBot() {
             onChange={setComputerLocation}
             hostAvailable={hostAvailable}
             sandboxAvailable={sandboxAvailable}
+            sandboxBoundary={sandboxBoundary}
             teamLocation={teamComputer?.location}
             runtimeKind="pi"
             disabled={!locationReady || pending}

@@ -231,6 +231,10 @@ export function ComputerProfile({
   const showLocationChoices =
     choicesOnly || !hostComputer || runtimeSupportsLocation(runtimeKind, { kind: "docker" });
   const sandbox = recommendedContainer(deploymentDefault ?? "", connections);
+  const sandboxBoundary =
+    selectedFacts?.boundary && selectedFacts.boundary !== "host"
+      ? selectedFacts.boundary
+      : computerKindFacts(deploymentDefault ?? "")?.boundary;
   async function save() {
     setPending(true);
     setError("");
@@ -297,6 +301,9 @@ export function ComputerProfile({
             computerExecutionKind({ kind: deploymentDefault }) ?? "desktop",
             sandbox,
           )}
+          sandboxBoundary={
+            sandboxBoundary && sandboxBoundary !== "host" ? sandboxBoundary : "container"
+          }
           runtimeKind={runtimeKind}
           disabled={pending}
           onChange={(location) => {

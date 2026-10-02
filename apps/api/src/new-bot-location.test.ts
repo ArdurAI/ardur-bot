@@ -138,6 +138,7 @@ it("publishes the same default and revalidates an explicit host choice after dis
     defaultLocation: "host",
     hostAvailable: true,
     sandboxAvailable: true,
+    sandboxBoundary: "container",
     container: { connectionId: null },
     team: null,
   });
@@ -291,6 +292,7 @@ it.each(["fake", "e2b", "daytona", "box"])(
     expect(await newBotComputerOptions(f.deps, owner, sandboxProvider)).toMatchObject({
       defaultLocation: "sandbox",
       sandboxAvailable: true,
+      sandboxBoundary: sandboxProvider === "fake" ? "test" : "hosted",
       container: null,
     });
     const result = await f.call("bots/create", {

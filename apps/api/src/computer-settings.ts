@@ -70,9 +70,11 @@ export async function newBotComputerOptions(
   ]);
   const container = recommendedContainer(sandboxProvider, connections);
   const sandboxAvailable = newBotSandboxAvailable(sandboxProvider, container);
+  const boundary = computerKindFacts(sandboxProvider)?.boundary;
   return {
     hostAvailable,
     sandboxAvailable,
+    sandboxBoundary: boundary && boundary !== "host" ? boundary : "container",
     defaultLocation: defaultNewBotLocation({
       isDeploymentOwner: actor.isDeploymentOwner,
       hostConnected: hostAvailable,

@@ -164,6 +164,9 @@ test("plus picker creates a dedicated bot on the deployment sandbox without a co
     "true",
   );
   await expect(form.getByRole("button", { name: "Create", exact: true })).toBeEnabled();
+  await expect(form.getByRole("button", { name: "Sandbox", exact: true })).toContainText(
+    "For testing only; not an isolation boundary.",
+  );
   await captureScreenshot(page, testInfo, "create-private-computer-bot");
   const created = page.waitForResponse(
     (response) => response.url().includes("/rpc/bots/create") && response.ok(),

@@ -510,6 +510,27 @@ describe("new isolated work", () => {
       expect(onCreate.mock.calls[0]?.[0]).not.toHaveProperty("isolatedComputer");
     },
   );
+  it.each(["hosted", "test"] as const)(
+    "the create form forwards the %s deployment boundary",
+    async (sandboxBoundary) => {
+      api.creationOptions.mockResolvedValue({
+        defaultLocation: "sandbox",
+        hostAvailable: false,
+        sandboxAvailable: true,
+        sandboxBoundary,
+        container: null,
+        team: null,
+      });
+      await act(async () => root.render(<CreateBotForm onCreate={vi.fn()} onCancel={() => {}} />));
+      const sandbox = container.querySelector('[aria-label="Sandbox"]')!;
+      expect(sandbox.textContent).toContain(
+        sandboxBoundary === "hosted"
+          ? "Runs at the configured provider; can use granted credentials and network access."
+          : "For testing only; not an isolation boundary.",
+      );
+      expect(sandbox.textContent).not.toContain("Separate home;");
+    },
+  );
   it("offers setup rather than silently creating on the host", async () => {
     api.creationOptions.mockResolvedValue({
       defaultLocation: "sandbox",

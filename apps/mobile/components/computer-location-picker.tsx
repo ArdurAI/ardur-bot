@@ -1,4 +1,4 @@
-import type { NewBotLocation, RuntimeKind } from "@ardurbot/contracts";
+import type { NewBotLocation, RuntimeKind, SandboxBoundary } from "@ardurbot/contracts";
 import {
   COMPUTER_BOUNDARY_MESSAGES,
   runtimeNames,
@@ -13,6 +13,7 @@ export function ComputerLocationPicker({
   onChange,
   hostAvailable,
   sandboxAvailable,
+  sandboxBoundary = "container",
   teamLocation,
   runtimeKind = "pi",
   disabled = false,
@@ -21,6 +22,7 @@ export function ComputerLocationPicker({
   onChange: (location: NewBotLocation) => void;
   hostAvailable: boolean;
   sandboxAvailable: boolean;
+  sandboxBoundary?: SandboxBoundary;
   teamLocation?: NewBotLocation;
   runtimeKind?: RuntimeKind;
   disabled?: boolean;
@@ -67,7 +69,7 @@ export function ComputerLocationPicker({
                 {t(location === "host" ? "This computer" : "Sandbox")}
               </Text>
               <Text style={{ color: tokens.mutedForeground }}>
-                {t(COMPUTER_BOUNDARY_MESSAGES[location === "host" ? "host" : "container"])}
+                {t(COMPUTER_BOUNDARY_MESSAGES[location === "host" ? "host" : sandboxBoundary])}
               </Text>
             </Pressable>
             {reason ? (

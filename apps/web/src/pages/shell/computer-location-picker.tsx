@@ -1,4 +1,4 @@
-import type { NewBotLocation, RuntimeKind } from "@ardurbot/contracts";
+import type { NewBotLocation, RuntimeKind, SandboxBoundary } from "@ardurbot/contracts";
 import { runtimeNames, runtimeSupportsLocation } from "@ardurbot/contracts";
 import { Button } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
@@ -8,6 +8,7 @@ export function ComputerLocationPicker({
   onChange,
   hostAvailable,
   sandboxAvailable,
+  sandboxBoundary = "container",
   runtimeKind = "pi",
   teamLocation,
   disabled = false,
@@ -16,6 +17,7 @@ export function ComputerLocationPicker({
   onChange: (location: NewBotLocation) => void;
   hostAvailable: boolean;
   sandboxAvailable: boolean;
+  sandboxBoundary?: SandboxBoundary;
   runtimeKind?: RuntimeKind;
   teamLocation?: NewBotLocation;
   disabled?: boolean;
@@ -23,6 +25,12 @@ export function ComputerLocationPicker({
   const { t } = useLingui();
   const runtime = runtimeNames[runtimeKind];
   const supportsSandbox = runtimeSupportsLocation(runtimeKind, { kind: "docker" });
+  const sandboxConsequences = {
+    container: t`Separate home; can reach allowed network services and granted credentials.`,
+    account: t`Uses that account's permissions.`,
+    hosted: t`Runs at the configured provider; can use granted credentials and network access.`,
+    test: t`For testing only; not an isolation boundary.`,
+  };
   return (
     <div data-testid="computer-location-picker" className="grid grid-cols-2 gap-2">
       {(["host", "sandbox"] as const).map((location) => {
@@ -55,7 +63,7 @@ export function ComputerLocationPicker({
                 <span className="block font-normal text-muted-foreground">
                   {location === "host"
                     ? t`Runs as you; can use your files and signed-in tools`
-                    : t`Separate home; can reach allowed network services and granted credentials.`}
+                    : sandboxConsequences[sandboxBoundary]}
                 </span>
               </span>
             </Button>

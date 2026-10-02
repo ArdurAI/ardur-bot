@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { COMPUTER_BOUNDARY_MESSAGES } from "@ardurbot/contracts";
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -70,6 +71,26 @@ it.each(["host", "sandbox"] as const)(
     );
     await act(async () => buttons[value === "host" ? 1 : 0]!.click());
     expect(onChange).toHaveBeenCalledWith(value === "host" ? "sandbox" : "host");
+  },
+);
+it.each(["container", "hosted", "test", "account"] as const)(
+  "uses the existing %s boundary consequence for Sandbox",
+  async (sandboxBoundary) => {
+    await act(async () =>
+      root.render(
+        <ComputerLocationPicker
+          value="sandbox"
+          hostAvailable
+          sandboxAvailable
+          sandboxBoundary={sandboxBoundary}
+          onChange={vi.fn()}
+        />,
+      ),
+    );
+    const sandbox = container.querySelector('[aria-label="Sandbox"]')!;
+    expect(sandbox.textContent).toContain(COMPUTER_BOUNDARY_MESSAGES[sandboxBoundary]);
+    if (sandboxBoundary !== "container")
+      expect(sandbox.textContent).not.toContain(COMPUTER_BOUNDARY_MESSAGES.container);
   },
 );
 it("keeps both unavailable options visible with their reasons", async () => {

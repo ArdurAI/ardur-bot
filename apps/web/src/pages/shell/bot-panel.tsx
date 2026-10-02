@@ -7,6 +7,7 @@ import type {
   NewBotLocation,
   NewBotTeamComputer,
   RuntimeKind,
+  SandboxBoundary,
   ThinkingLevel,
   VoiceInfo,
 } from "@ardurbot/contracts";
@@ -128,6 +129,7 @@ export function CreateBotForm({
   const [computerMode, setComputerMode] = useState<ComputerMode>("dedicated");
   const [container, setContainer] = useState<{ connectionId: string | null } | null>(null);
   const [sandboxAvailable, setSandboxAvailable] = useState(false);
+  const [sandboxBoundary, setSandboxBoundary] = useState<SandboxBoundary>("container");
   const [locationReady, setLocationReady] = useState(false);
   const [chosenLocation, setComputerLocation] = useState<NewBotLocation>("sandbox");
   const [team, setTeam] = useState<NewBotTeamComputer | null>(null);
@@ -161,6 +163,7 @@ export function CreateBotForm({
           setHostAvailable(options.hostAvailable);
           setContainer(options.container);
           setSandboxAvailable(options.sandboxAvailable);
+          setSandboxBoundary(options.sandboxBoundary ?? "container");
           setTeam(options.team);
           setLocationReady(true);
         }
@@ -274,6 +277,7 @@ export function CreateBotForm({
           onChange={setComputerLocation}
           hostAvailable={hostAvailable}
           sandboxAvailable={sandboxAvailable}
+          sandboxBoundary={sandboxBoundary}
           teamLocation={teamComputer?.location}
           disabled={!locationReady || submitting}
         />

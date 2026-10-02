@@ -4,6 +4,7 @@ import type { SandboxKind } from "./ids.js";
 import type { RuntimeKind } from "./runtime-pins.js";
 
 export type NewBotLocation = "host" | "sandbox";
+export type SandboxBoundary = "container" | "account" | "hosted" | "test";
 
 export type NewBotTeamComputer = {
   location: NewBotLocation;
@@ -15,6 +16,7 @@ export type NewBotComputerOptions = {
   defaultLocation: NewBotLocation;
   hostAvailable: boolean;
   sandboxAvailable: boolean;
+  sandboxBoundary?: SandboxBoundary;
   container: { connectionId: string | null } | null;
   team: NewBotTeamComputer | null;
 };

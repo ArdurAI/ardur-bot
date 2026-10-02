@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 import type { ComputerStatus, ComputerUpdate } from "@ardurbot/contracts";
-import { COMPUTER_KINDS, COMPUTER_STATES, computerRuntimeSummary } from "@ardurbot/contracts";
+import {
+  COMPUTER_BOUNDARY_MESSAGES,
+  COMPUTER_KINDS,
+  COMPUTER_STATES,
+  computerRuntimeSummary,
+} from "@ardurbot/contracts";
 import type { ReactNode } from "react";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -102,6 +107,47 @@ it.each(["host", "sandbox"] as const)(
     expect(buttons.map((button) => button.childElementCount)).toEqual([2, 2]);
     expect(buttons.map((button) => button.getAttribute("aria-pressed"))).toEqual(
       value === "host" ? ["true", "false"] : ["false", "true"],
+    );
+  },
+);
+it.each(["container", "hosted", "test", "account"] as const)(
+  "uses the existing %s Sandbox consequence on phone",
+  async (sandboxBoundary) => {
+    await act(async () =>
+      root.render(
+        createElement(ComputerLocationPicker, {
+          value: "sandbox",
+          hostAvailable: true,
+          sandboxAvailable: true,
+          sandboxBoundary,
+          onChange: vi.fn(),
+        }),
+      ),
+    );
+    const sandbox = container.querySelector('[aria-label="Sandbox"]')!;
+    expect(sandbox.textContent).toContain(COMPUTER_BOUNDARY_MESSAGES[sandboxBoundary]);
+    if (sandboxBoundary !== "container")
+      expect(sandbox.textContent).not.toContain(COMPUTER_BOUNDARY_MESSAGES.container);
+  },
+);
+it.each(["hosted", "test"] as const)(
+  "the phone create screen forwards the %s deployment boundary",
+  async (sandboxBoundary) => {
+    request.mockImplementation(async (procedure) =>
+      procedure === "computer/creationOptions"
+        ? {
+            defaultLocation: "sandbox",
+            hostAvailable: false,
+            sandboxAvailable: true,
+            sandboxBoundary,
+            container: null,
+            team: null,
+          }
+        : [],
+    );
+    await act(async () => root.render(createElement(NewBot)));
+    expect(container.querySelector('[aria-label="Sandbox"]')?.textContent).toContain(
+      COMPUTER_BOUNDARY_MESSAGES[sandboxBoundary],
     );
   },
 );
