@@ -52,6 +52,7 @@ async function handle(value) {
       scenario === "session-new-error" ||
       scenario === "session-new-long-error" ||
       scenario === "session-new-escaped-error" ||
+      scenario === "session-new-interleaved-error" ||
       scenario === "session-new-control-error"
     ) {
       const secrets = [
@@ -64,7 +65,9 @@ async function handle(value) {
         .map((secret, index) =>
           scenario === "session-new-escaped-error"
             ? `${secret.slice(0, 8)}${sequences[index]}${secret.slice(8)}`
-            : secret,
+            : scenario === "session-new-interleaved-error"
+              ? [...secret].join(["\t", "\u00a0\u2028", "\u0301\u2029"][index])
+              : secret,
         )
         .join(" ")}`;
       send({

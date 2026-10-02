@@ -89,6 +89,8 @@ describe("HermesRuntime M0 ACP seam", () => {
     ["session-new-long-error", true],
     ["session-new-escaped-error", false],
     ["session-new-escaped-error", true],
+    ["session-new-interleaved-error", false],
+    ["session-new-interleaved-error", true],
     ["session-new-control-error", false],
     ["session-new-control-error", true],
   ] as const)(
