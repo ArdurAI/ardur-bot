@@ -215,9 +215,12 @@ export function resolveHermesLauncherAsset(
   moduleUrl: string | undefined,
 ): string {
   const complete = (launcher: string) =>
-    ["hermes_profile.py", "hermes_sources.json", "runtime_config_profile.json"].every((name) =>
-      existsSync(path.join(path.dirname(launcher), name)),
-    );
+    [
+      "hermes_profile.py",
+      "hermes_sources.json",
+      "hermes_compat.json",
+      "runtime_config_profile.json",
+    ].every((name) => existsSync(path.join(path.dirname(launcher), name)));
   const bundled = hermesLauncherAsset(bundleFile);
   if (existsSync(bundled) && complete(bundled)) return bundled;
   const desktopBundled = path.resolve(

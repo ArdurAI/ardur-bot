@@ -2,6 +2,21 @@ import { describe, expect, it } from "vitest";
 import { executionBlocksUserTakeover, toComputerStatus } from "./computer-status.js";
 
 describe("toComputerStatus", () => {
+  it.each([null, "update"])(
+    "preserves a suspending computer with reservation %s",
+    (maintenanceId) => {
+      expect(
+        toComputerStatus("bot", {
+          kind: "desktop",
+          state: "suspending",
+          scope: "team",
+          controlHolder: "none",
+          homeRevision: "saved",
+          maintenanceId,
+        }),
+      ).toMatchObject({ state: "suspending", screenAvailable: false });
+    },
+  );
   it("only marks control that is bound to a waiting run as a requested takeover", () => {
     const computer = {
       kind: "fake",

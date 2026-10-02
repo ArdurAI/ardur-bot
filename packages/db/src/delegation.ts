@@ -50,6 +50,20 @@ export const ACTIVE_DELEGATIONS = ["queued", "running", "cancel-requested"];
 const PEER_RECEIPT_MAX_LENGTH = 2000;
 type Scope = Pick<Actor, "spaceId" | "userId">;
 
+/**
+ * Interactive-transaction budget for every transaction that takes the delegation-root
+ * lock (peer messages, handoffs, group asks, helpers, comparisons and child spawns).
+ * The flaky bot-comms receipt e2e showed the default 5 s Prisma cap is shorter than the
+ * wait these transactions legitimately see: the recipient's in-flight turn holds the
+ * thread and root-task row locks while the sender queues ("Waiting for a turn"), and on
+ * a loaded CI machine that wait expired the transaction at ~5 010 ms, failing the run
+ * and losing the receipt. The work after the lock is short (~20 indexed queries), so
+ * the wait itself must stay inside the transaction; the timeout only needs to outlive a
+ * busy recipient, not the whole turn. Sized at 6× the observed expiry; maxWait covers
+ * acquiring a pooled connection under burst.
+ */
+export const DELEGATION_ADMISSION_TRANSACTION = { maxWait: 10_000, timeout: 30_000 } as const;
+
 async function unresolvedBrokerTokens(
   tx: Prisma.TransactionClient,
   delegationId: string,
@@ -464,6 +478,61 @@ export async function requestCancel(
   return withTransactionRetry(() =>
     prisma.$transaction((tx) => requestCancelInTransaction(tx, scope, rootTaskId, now, reason)),
   );
+}
+
+/** Exact owned attempts only. A member exclusion must never revoke the delegation root. */
+export async function requestSelectiveCancelInTransaction(
+  tx: Prisma.TransactionClient,
+  { spaceId, userId }: Scope,
+  runIds: readonly string[],
+  now = new Date(),
+) {
+  const scope = { spaceId, userId };
+  const runs = await tx.run.findMany({ where: { ...scope, id: { in: [...runIds] } } });
+  const ids = runs.map((run) => run.id);
+  const delegationIds = runs.flatMap((run) => (run.delegationId ? [run.delegationId] : []));
+  await tx.delegation.updateMany({
+    where: { ...scope, id: { in: delegationIds }, status: { in: ACTIVE_DELEGATIONS } },
+    data: { status: "cancel-requested", cancelRequestedAt: now, cancelReason: "stopped" },
+  });
+  // Helpers belong to the excluded attempt, unlike independent root siblings.
+  await tx.delegation.updateMany({
+    where: {
+      ...scope,
+      parentRunId: { in: ids },
+      kind: "helper",
+      status: { in: ACTIVE_DELEGATIONS },
+    },
+    data: { status: "cancel-requested", cancelRequestedAt: now, cancelReason: "stopped" },
+  });
+  await tx.run.updateMany({
+    where: {
+      ...scope,
+      id: { in: ids },
+      status: {
+        in: [
+          "queued",
+          "leased",
+          "running",
+          "waiting_input",
+          "waiting_takeover",
+          "peer_paused",
+          "peer_ready",
+        ],
+      },
+      cancelRequestedAt: null,
+    },
+    data: { cancelRequestedAt: now },
+  });
+  await tx.externalEffect.updateMany({
+    where: { spaceId: scope.spaceId, runId: { in: ids }, status: { in: ["intended", "approved"] } },
+    data: { status: "denied" },
+  });
+  await tx.botMessageDelivery.updateMany({
+    where: { ...scope, usageRunIds: { hasSome: ids }, state: "held" },
+    data: { state: "denied" },
+  });
+  return ids;
 }
 
 /** Shares the caller's transaction so a terminal goal and its cancellation commit together. */

@@ -7,6 +7,8 @@ export const ChiefReceiptKeySchema = z.enum([
   "install-tool",
   "general",
   "greeting",
+  "exclude-member",
+  "change-task",
 ]);
 export type ChiefReceiptKey = z.infer<typeof ChiefReceiptKeySchema>;
 export const ChiefOperationSchema = z.object({
@@ -22,6 +24,7 @@ export const ChiefReceiptSchema = z.object({
   botId: Id,
   requestMessageId: Id,
   key: ChiefReceiptKeySchema,
+  memberName: z.string().optional(),
   text: z.string(),
   createdAt: z.string(),
 });
@@ -103,6 +106,12 @@ export const ChiefResultSchema = z.object({
   state: z.enum(["draft", "verified-notion"]),
 });
 export type ChiefResult = z.infer<typeof ChiefResultSchema>;
+export const ChiefStopSchema = z.object({
+  revision: z.number().int().positive(),
+  memberName: z.string(),
+  state: z.enum(["requested", "confirmed", "uncertain", "checking"]),
+});
+export type ChiefStop = z.infer<typeof ChiefStopSchema>;
 export const ChiefDispatchSchema = z.object({
   requestMessageId: Id,
   revision: z.number().int().positive(),
@@ -113,5 +122,44 @@ export const ChiefDispatchSchema = z.object({
   runId: Id.optional(),
   delegationId: Id.optional(),
   activity: ChiefActivitySchema.optional(),
+  stop: ChiefStopSchema.optional(),
 });
 export type ChiefDispatch = z.infer<typeof ChiefDispatchSchema>;
+
+export const ChiefCorrectionSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("exclude"), memberId: Id, memberName: z.string() }),
+  z.object({ kind: z.literal("local-only") }),
+  z.object({ kind: z.literal("stop") }),
+  z.object({ kind: z.literal("replan") }),
+]);
+export type ChiefCorrection = z.infer<typeof ChiefCorrectionSchema>;
+export const ChiefActionReconciliationSchema = z.object({
+  runId: Id,
+  effectId: Id.nullable(),
+  executionId: z.string().optional(),
+  outcome: z.enum(["kept", "undone", "unknown"]),
+  revision: z.number().int().positive(),
+});
+export type ChiefActionReconciliation = z.infer<typeof ChiefActionReconciliationSchema>;
+export const ReconcileChiefActionInputSchema = z.object({
+  runId: Id,
+  effectId: Id.nullable(),
+  executionId: z.string().optional(),
+  outcome: z.enum(["kept", "undone", "unknown"]),
+  verificationExecutionId: z.string().optional(),
+});
+/** Control never carries a permission, connector grant, pin or increased budget. */
+export const ChiefControlSchema = z.object({
+  revision: z.number().int().positive(),
+  ownerMessageIds: z.array(Id),
+  excludedIds: z.array(Id),
+  localOnly: z.boolean(),
+  stopped: z.boolean(),
+  pendingReplan: z.boolean(),
+  stoppingRunIds: z.array(Id),
+  uncertainRunIds: z.array(Id),
+  uncertaintySince: z.string().datetime().optional(),
+  reconciliationRunId: Id.optional(),
+  reconciledActions: z.array(ChiefActionReconciliationSchema).optional(),
+});
+export type ChiefControl = z.infer<typeof ChiefControlSchema>;

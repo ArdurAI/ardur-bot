@@ -1,4 +1,4 @@
-import { COMPUTER_BOUNDARY_MESSAGES, COMPUTER_KINDS } from "@ardurbot/contracts";
+import { COMPUTER_BOUNDARY_MESSAGES, COMPUTER_KINDS, COMPUTER_STATES } from "@ardurbot/contracts";
 import { expect, it } from "vitest";
 import { RU_MESSAGES } from "./locales/ru";
 import { ZH_MESSAGES } from "./locales/zh";
@@ -7,6 +7,15 @@ const messages = [
   ...new Set([
     ...Object.values(COMPUTER_KINDS).map((kind) => kind.location),
     ...Object.values(COMPUTER_BOUNDARY_MESSAGES),
+    ...Object.values(COMPUTER_STATES),
+    "Move to a container",
+    "Keep current location",
+    "The last update was interrupted.",
+    "Release computer",
+    "Release interrupted computer?",
+    "Make sure nothing is still running on this computer.",
+    "Nothing is still running",
+    "Could not complete action",
     "Where this bot runs",
     "Only this bot",
     "Shared with team",

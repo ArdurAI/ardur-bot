@@ -4,12 +4,15 @@ import { EventEmitter } from "node:events";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { PassThrough } from "node:stream";
+import { PassThrough, Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import type { AgentRunRequest, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
 import { HermesExecutionEnvelopeSchema } from "@ardurbot/contracts/runtime-config";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createLogger } from "../../../logging/src/logger.js";
+import { createTestSink } from "../../../logging/src/test-sink.js";
 import profileFixture from "../../python/tests/valid_profile.json" with { type: "json" };
+import { createChildProcessLogger } from "../child-output.js";
 import { createArdurToolBridge } from "./claude-mcp-bridge.js";
 import {
   createHermesTextRedactor,
@@ -77,6 +80,87 @@ function turnFinishSignal(runId: string) {
 }
 
 describe("HermesRuntime M0 ACP seam", () => {
+  afterEach(() => vi.unstubAllEnvs());
+  it("redacts provider and overridden bridge credentials from child stderr", async () => {
+    vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", "1");
+    const debug: string[] = [];
+    const adapter = new HermesRuntime({
+      command: process.execPath,
+      args: [fixture, "stderr-bridge"],
+      launch: async (spec) => ({
+        ...(await launchUnconfinedProcess(spec)),
+        mcpConfig: {
+          command: "fixture",
+          args: ["bridge", "a1".repeat(32)],
+          env: { BRIDGE_TOKEN: "b2".repeat(32) },
+        },
+      }),
+      logger: {
+        debug: (message) => {
+          debug.push(message);
+        },
+      },
+    });
+    await collect(adapter, request()).catch(() => undefined);
+    expect(debug.join("\n")).toContain("hermes stderr: [redacted]");
+    expect(debug.join("\n")).not.toContain("a1".repeat(32));
+    expect(debug.join("\n")).not.toContain("b2".repeat(32));
+    expect(debug.join("\n")).not.toContain(request().model.apiKey!);
+  });
+
+  it.each(["info", "debug"] as const)(
+    "keeps all child content out of fallback and worker logs by default at %s",
+    async (level) => {
+      vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", undefined);
+      vi.stubEnv("LOG_LEVEL", level);
+      const records: string[] = [];
+      const sink = new Writable({
+        write(chunk, _encoding, done) {
+          records.push(String(chunk));
+          done();
+        },
+      });
+      const fallback = createChildProcessLogger(sink);
+      const debug = vi.fn((message: string, bindings?: Record<string, unknown>) =>
+        fallback.debug(message, bindings),
+      );
+      const adapter = new HermesRuntime({
+        command: process.execPath,
+        args: [fixture, "stderr-failure"],
+        launch: launchUnconfinedProcess,
+        logger: { ...fallback, debug },
+      });
+      try {
+        const failure = await collect(adapter, request()).catch((error: unknown) => error);
+        const workerSink = createTestSink();
+        createLogger({ service: "fixture-worker", level, sinks: [workerSink] }).error(
+          "Run failed",
+          failure,
+        );
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        const combined = records.join("") + JSON.stringify(workerSink.events);
+        expect(debug).not.toHaveBeenCalled();
+        expect(combined).not.toMatch(
+          /fixture diagnostic before failure|fixture prompt contents|fixture document contents|fixture-key-123/,
+        );
+        expect(combined).toContain("prompt");
+        expect(combined).toContain("durationMs");
+        const host = JSON.parse(records[0]!);
+        expect(JSON.parse(host.error.message)).toMatchObject({
+          phase: "prompt",
+          exitCode: 4,
+          durationMs: expect.any(Number),
+          byteCount: expect.any(Number),
+          lineCount: expect.any(Number),
+          outputProduced: true,
+        });
+      } finally {
+        sink.destroy();
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
   const profile = HermesExecutionEnvelopeSchema.parse(profileFixture);
   const profileRequest = () => {
     const base = request();
@@ -673,20 +757,56 @@ describe("HermesRuntime M0 ACP seam", () => {
     ).toBe("capability denied");
   });
 
-  for (const [scenario, cause] of [
-    ["malformed", "ACP sent malformed JSON."],
-    ["oversize", "ACP line exceeded its size limit."],
-    ["exit", "ACP closed before the turn completed."],
-    ["poison-text", "ACP update handler failed."],
-    ["non-object-content", "ACP update handler failed."],
+  for (const scenario of [
+    "malformed",
+    "oversize",
+    "exit",
+    "poison-text",
+    "non-object-content",
   ] as const) {
     it(`ends cleanly when the agent sends ${scenario}`, async () => {
       await expect(collect(runtime(scenario), request())).rejects.toMatchObject({
         message: "Hermes could not complete this turn.",
-        cause: { message: cause },
+        cause: { message: expect.stringContaining("kind: ACP protocol failed") },
       });
     });
   }
+
+  it("keeps the stderr tail at debug and only safe facts in failure causes", async () => {
+    vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", "1");
+    const errors: { message: string; error: unknown }[] = [];
+    const debugLines: string[] = [];
+    const adapter = new HermesRuntime({
+      command: process.execPath,
+      args: [fixture, "stderr-failure"],
+      launch: launchUnconfinedProcess,
+      logger: {
+        debug: (message) => debugLines.push(message),
+        error: (message, error) => errors.push({ message, error }),
+      },
+    });
+    const failure = (await collect(adapter, request()).catch((error: unknown) => error)) as Error;
+    expect(failure.message).toBe("Hermes could not complete this turn.");
+    const cause = failure.cause as Error;
+    expect(cause.message).not.toContain("stderr tail");
+    expect(cause.message).not.toContain("fixtu...23");
+    expect(cause.message).toContain("exit: 4");
+    expect(cause.message).toContain("phase: prompt");
+    expect(cause.message).toMatch(/durationMs: \d+/);
+    expect(cause.cause).toBeUndefined();
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.message).toBe("Hermes turn failed");
+    expect(errors[0]?.error).toMatchObject({
+      phase: "prompt",
+      exitCode: 4,
+      durationMs: expect.any(Number),
+    });
+    expect(JSON.stringify(errors)).not.toContain("fixture diagnostic before failure");
+    expect(
+      debugLines.some((line) => line.includes("hermes stderr: fixture diagnostic before failure")),
+    ).toBe(true);
+    expect(debugLines.some((line) => line.includes("key=[redacted]"))).toBe(true);
+  });
 
   describe("provider failure classification", () => {
     const pinnedRequest = () => {
@@ -791,7 +911,7 @@ describe("HermesRuntime M0 ACP seam", () => {
       };
       await expect(drain()).rejects.toMatchObject({
         message: "Hermes could not complete this turn.",
-        cause: { message: "ACP sent malformed JSON." },
+        cause: { message: expect.stringContaining("kind: ACP protocol failed") },
       });
       expect(executeTool).not.toHaveBeenCalled();
     } finally {
@@ -991,7 +1111,7 @@ describe("HermesRuntime M0 ACP seam", () => {
       };
       await expect(drain()).rejects.toMatchObject({
         message: "Hermes could not complete this turn.",
-        cause: { message: "Runtime output exceeded its limit." },
+        cause: { message: expect.stringContaining("kind: output overflow") },
       });
       expect(executeTool).not.toHaveBeenCalled();
       expect(finishSignal.calls).toEqual(["failure"]);

@@ -34,11 +34,44 @@ describe("memory credential gate", () => {
       expect(safe(`{\n  "email": "${value}",\n  "password": "${value}"\n}`)).not.toThrow();
   });
 
+  it("allows typed settings, scope metadata and credential references", () => {
+    expect(safe('{"key":"bot.autoSpeak","value":true}')).not.toThrow();
+    expect(() =>
+      assertMemorySafe({
+        scopeKey: { kind: "bot", botId: "fixture" },
+        learning: { originatingPin: { credentialId: "fixture-connection" } },
+        commitId: "0123456789abcdef".repeat(3).slice(0, 40),
+      }),
+    ).not.toThrow();
+  });
+
+  it.each([123456, true, null, [], { safe: "fixture-value" }])(
+    "refuses non-string credentials: %j",
+    (password) => {
+      expect(safe(JSON.stringify({ password }))).toThrow(MemoryRedactionError);
+      expect(() => assertMemorySafe({ password })).toThrow(MemoryRedactionError);
+    },
+  );
+
+  it("keeps notes that only look private, not secret", () => {
+    // 2026-09-30: the log redactor's privacy rules (addresses, bare "key:" lines, any
+    // 40-character identifier) were applied to stored memory and every bot in the space
+    // failed at run start. The memory gate refuses credentials only.
+    const identifier = ["ardur", "Xk9v2PqL7mN4rT8wB3zH5jY6cF1dG0sA2eU4iO"].join("-").slice(0, 40);
+    for (const content of [
+      "Owner contact: someone@example.test (prefers short replies).",
+      "key: value",
+      "Board key: the release card",
+      `Collection ${identifier} holds the drafts.`,
+      "email=someone@example.test",
+    ])
+      expect(safe(content), content).not.toThrow();
+  });
+
   it("still refuses real-looking credentials", () => {
     const github = ["gh", "p_", "a1B2".repeat(9)].join("");
     const aws = ["AKIA", "Q3EXAMPLEKEY7ABC"].join("");
     for (const content of [
-      "Write to alice@corp.example.test when it breaks.",
       "Authorization: Bearer abc123def456ghi789",
       "password = correct-horse-battery",
       '{"password": "correct-horse-battery"}',

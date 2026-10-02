@@ -161,7 +161,7 @@ import {
 } from "../components/composer/folders";
 import { useComposerCommands } from "../components/composer/use-composer-commands";
 import type { FeedbackEdit } from "../components/MessageFeedback";
-import { MessageFeedback } from "../components/MessageFeedback";
+
 import { MessageHoverMetadata } from "../components/MessageHoverMetadata";
 import { PeerMessageReceipt } from "../components/PeerMessageReceipt";
 import { SkillDraftCard } from "../components/teach/SkillDraftCard";
@@ -310,6 +310,10 @@ const CreateBotForm = lazy(() =>
 
 const TeamBoard = lazy(() =>
   import("./TeamBoard").then((module) => ({ default: module.TeamBoard })),
+);
+const RunEvidence = lazy(() => import("../components/RunEvidence"));
+const MessageFeedback = lazy(() =>
+  import("../components/MessageFeedback").then((module) => ({ default: module.MessageFeedback })),
 );
 
 const ActivityList = lazy(() =>
@@ -544,6 +548,7 @@ export function ShellPage({
     }
     if (target !== panelRef.current && terminalCloseGuard.current && !terminalCloseGuard.current())
       return false;
+    panelRef.current = target;
     setPanelUnchecked(target);
     workspaceLayoutUpdateRef.current?.((layout) =>
       target === "computer"
@@ -1018,6 +1023,10 @@ export function ShellPage({
   panelRef.current = panel;
   workspaceTabRef.current = workspaceTab;
   const activeGroup = groups.find((group) => group.id === groupId);
+  useLayoutEffect(() => {
+    if (panel === "group-settings" && !inGroup) setPanel(active ? "settings" : null);
+    else if (panel === "settings" && inGroup) setPanel("group-settings");
+  }, [inGroup, active?.id, panel, setPanel]);
   useEffect(() => {
     setGoal(null);
     if (!groupId || !bootstrapMe?.isDeploymentOwner) return;
@@ -1189,9 +1198,16 @@ export function ShellPage({
     const stickToEnd = !scrollElement || transcriptIsNearEnd(scrollElement);
     markOnce("rk:renderer:thread-request-start");
     const request = ++groupRefreshEpoch.current;
+    const epoch = historyEpoch.current;
     const snap = await rpc.threads.get({ groupId: id }, signal ? { signal } : undefined);
     markOnce("rk:renderer:thread-response");
-    if (activeGroupId.current !== id || request !== groupRefreshEpoch.current) return snap;
+    if (
+      signal?.aborted ||
+      activeGroupId.current !== id ||
+      epoch !== historyEpoch.current ||
+      request !== groupRefreshEpoch.current
+    )
+      return snap;
     const reconciled = reconcileRefreshedThread(
       snapshotRef.current,
       snap,
@@ -1224,6 +1240,7 @@ export function ShellPage({
     const snap = await rpc.threads.get({ botId: id }, signal ? { signal } : undefined);
     markOnce("rk:renderer:thread-response");
     if (
+      signal?.aborted ||
       activeBotId.current !== id ||
       epoch !== historyEpoch.current ||
       request !== threadRefreshEpoch.current
@@ -1374,10 +1391,25 @@ export function ShellPage({
           setSpaces(bootstrap.spaces);
           setInitialBotsLoaded(true);
         }
-        if (!groupId && bootstrap.thread) {
-          bootstrappedThread.current = bootstrap.thread;
-          commitSnapshot(bootstrap.thread);
-          commitComputer(bootstrap.thread.computer ?? null);
+        // Bootstrap may finish after navigation or a newer snapshot/SSE update.
+        // Seed only the selected DM, and use the same cursor guard as refreshes.
+        const currentGroupId = routeGroupId.current;
+        const currentBotId = routeBotId.current;
+        if (
+          !currentGroupId &&
+          !teamView.current &&
+          bootstrap.thread &&
+          bootstrap.thread.botId === (currentBotId ?? bootstrap.bots[0]?.id)
+        ) {
+          const reconciled = reconcileRefreshedThread(
+            snapshotRef.current,
+            bootstrap.thread,
+            computerRef.current,
+            expandedHistoryThread.current === bootstrap.thread.threadId,
+          );
+          if (!activeBotId.current) bootstrappedThread.current = reconciled.snapshot;
+          commitSnapshot(reconciled.snapshot);
+          commitComputer(reconciled.computer);
           setRoutines(bootstrap.routines);
           setRoutinesBotId(bootstrap.thread.botId ?? null);
           markOnce("rk:renderer:bots-response");
@@ -1394,14 +1426,15 @@ export function ShellPage({
           navigate("/onboarding", { replace: true });
           return;
         }
-        if (groupId) {
-          if (!groupList.some((group) => group.id === groupId)) {
+        if (currentGroupId) {
+          if (!groupList.some((group) => group.id === currentGroupId)) {
             navigate(firstThreadRoute(bootstrap.bots, groupList), { replace: true });
           }
           return;
         }
+        if (currentBotId && bootstrap.bots.some((bot) => bot.id === currentBotId)) return;
         const selectedBotId = bootstrap.thread?.botId ?? bootstrap.bots[0]?.id;
-        if (selectedBotId && selectedBotId !== botId) {
+        if (selectedBotId && selectedBotId !== currentBotId) {
           navigate(`/app/${selectedBotId}`, { replace: true });
         }
       })
@@ -3690,7 +3723,7 @@ export function ShellPage({
           className={`${team || board || dashboard ? "hidden" : "flex"} min-h-0 min-w-0 flex-1 flex-col bg-background`}
         >
           <div className="app-drag flex items-center justify-between border-b border-sidebar-border px-3 py-[17px] md:px-[22px]">
-            <div className="flex min-w-0 items-center gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
               {/* Collapsed bots sidebar: this header is the leading edge for window chrome. */}
               {botsSidebarCollapsed && desktopBridge() ? <WindowChrome /> : null}
               <button
@@ -3721,7 +3754,7 @@ export function ShellPage({
                   setModelFocusRequest(0);
                   setPanel(inGroup ? "group-settings" : "settings");
                 }}
-                className="app-no-drag flex min-w-0 items-center gap-3"
+                className="app-no-drag flex max-w-48 shrink-0 items-center gap-3"
               >
                 {inGroup ? (
                   <GroupAvatar
@@ -3739,7 +3772,7 @@ export function ShellPage({
                 ) : null}
                 <span className="min-w-0">
                   <span
-                    className="block truncate text-[16px] font-medium text-foreground"
+                    className="block break-words text-[16px] font-medium text-foreground"
                     dir="auto"
                   >
                     {inGroup
@@ -3767,7 +3800,7 @@ export function ShellPage({
               ) : null}
               <RunContext run={activeSnapshot?.contextRun ?? activeSnapshot?.run} />
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex shrink-0 items-center gap-1">
               {!inGroup && active ? (
                 <Suspense fallback={null}>
                   <ViewControls
@@ -5576,6 +5609,16 @@ const Transcript = memo(function Transcript({
                   </div>
                 </div>
               )}
+              {message.role === "bot" &&
+              message.runId &&
+              message ===
+                reactionView.visibleMessages.findLast(
+                  (entry) => entry.role === "bot" && entry.runId === message.runId,
+                ) ? (
+                <Suspense fallback={null}>
+                  <RunEvidence runId={message.runId} live={message.id.startsWith("progress:")} />
+                </Suspense>
+              ) : null}
               {!peerReceipt && messageReactions ? (
                 <div
                   data-testid="message-reactions"
@@ -6567,7 +6610,9 @@ function MessageHoverActions({
     <MessageHoverMetadata pinned={moreOpen || reactionsOpen} side={side}>
       <div data-testid="message-hover-actions" className="flex items-center gap-0.5">
         {message.role === "bot" && message.runId && canReactToThreadMessage(message) ? (
-          <MessageFeedback onFeedback={(reaction, edit) => onReact(message, reaction, edit)} />
+          <Suspense fallback={null}>
+            <MessageFeedback onFeedback={(reaction, edit) => onReact(message, reaction, edit)} />
+          </Suspense>
         ) : null}
         {canReactToThreadMessage(message) ? (
           <Popover open={reactionsOpen} onOpenChange={setReactionsOpen}>
@@ -6635,6 +6680,11 @@ function MessageHoverActions({
               <Copy size={14} strokeWidth={1.7} />
               <Trans>Copy</Trans>
             </DropdownMenuItem>
+            {moreOpen && message.role === "bot" && message.runId ? (
+              <Suspense fallback={null}>
+                <RunEvidence runId={message.runId} action="download" />
+              </Suspense>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -6846,7 +6896,7 @@ const MessageView = memo(function MessageView({
               className="rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
               dir="auto"
             >
-              <ChiefReceiptText receiptKey={block.key} />
+              <ChiefReceiptText receiptKey={block.key} memberName={block.memberName} />
             </div>
           );
         }

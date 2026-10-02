@@ -52,14 +52,19 @@ describe("unsigned desktop release contract", () => {
       for (const arch of ["x64", "arm64"])
         expect(workflow).toContain(`platform: ${platform}, arch: ${arch}`);
   });
-  it("uses root version, unsigned targets and the official update feed", () => {
+  it("uses root version, self-signed preview targets and the official update feed", () => {
     expect(desktop.version).toBe(root.version);
     expect(desktop.scripts.build).toContain("desktop-version.mjs");
+    // "-" seals the whole bundle with an ad-hoc signature so a downloaded preview opens through
+    // Gatekeeper's "Open Anyway" instead of being refused as damaged; Developer ID signing and
+    // notarization are layered on by the signed configuration only when credentials exist.
     expect(desktop.build.mac).toMatchObject({
-      identity: null,
+      identity: "-",
       notarize: false,
+      hardenedRuntime: false,
       target: ["dmg", "zip"],
     });
+    expect(desktop.build.afterSign).toBe("./scripts/sign-mac-preview.mjs");
     expect(desktop.build.linux).toMatchObject({
       executableName: "ardur",
       target: ["AppImage", "deb"],

@@ -256,6 +256,10 @@ msgstr ""
 msgid "{failed} failed"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "{gapCount} evidence gaps"
+msgstr "साक्ष्य में {gapCount} कमियाँ"
+
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
 msgstr "{hours} घंटे पहले"
@@ -310,6 +314,10 @@ msgstr "{name} पूरा हुआ"
 #: src/lib/use-notifications.ts
 msgid "{name} needs your input"
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} stood down"
+msgstr "{name} रुक गया"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "{name} stopped before answering"
@@ -427,6 +435,10 @@ msgstr ""
 #: src/pages/system/SystemPage.tsx
 msgid "A saved shortcut is unavailable; choose another."
 msgstr ""
+
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "About evidence"
+msgstr "साक्ष्य के बारे में"
 
 #: src/pages/shell/bot-picker.tsx
 msgid "About groups"
@@ -1149,10 +1161,6 @@ msgstr "{asked, plural, one {# बॉट} other {# बॉट}} से पूछ�
 msgid "asks first"
 msgstr ""
 
-#: src/pages/dashboard/ComputersPanel.tsx
-msgid "Asleep"
-msgstr ""
-
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
 msgid "Assignee"
@@ -1390,10 +1398,6 @@ msgstr "बोर्ड की स्थिति"
 msgid "Boards"
 msgstr "बोर्ड"
 
-#: src/pages/dashboard/ComputersPanel.tsx
-msgid "Booting"
-msgstr ""
-
 #: src/pages/Shell.tsx
 msgid "Booting live desktop…"
 msgstr "लाइव डेस्कटॉप बूट हो रहा है…"
@@ -1539,10 +1543,10 @@ msgstr "सर्वर तक नहीं पहुंचा जा सका�
 
 #: src/components/AskCard.tsx
 #: src/components/ComputerMaintenanceActions.tsx
-#: src/components/ComputerUpdateProgress.tsx
 #: src/components/Context.tsx
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/OllamaSettings.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -1707,9 +1711,10 @@ msgstr ""
 msgid "Check again"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Check failed"
-msgstr ""
+msgstr "जाँच विफल"
 
 #: src/components/DesktopUpdates.tsx
 #: src/components/SoftwareUpdateSection.tsx
@@ -1736,6 +1741,10 @@ msgstr "जाँच की गई {0}"
 #: src/pages/shell/runtime-settings.tsx
 msgid "Checking the download"
 msgstr "डाउनलोड की जाँच हो रही है"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Checking the earlier action"
+msgstr "पिछली कार्रवाई की जाँच कर रहा हूँ"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Checking the missing tool"
@@ -2566,8 +2575,9 @@ msgid "Could not clear conversation"
 msgstr "बातचीत साफ़ नहीं की जा सकी"
 
 #: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Could not complete action"
-msgstr ""
+msgstr "कार्रवाई पूरी नहीं हो सकी"
 
 #: src/pages/McpOAuthCallback.tsx
 msgid "Could not complete authorization. Try connecting again."
@@ -3084,9 +3094,10 @@ msgid "Could not save this file. Try again."
 msgstr "यह फ़ाइल सहेजी नहीं जा सकी। पुनः प्रयास करें।"
 
 #: src/pages/customize/McpCredentialFix.tsx
+#: src/pages/dashboard/GovernancePanel.tsx
 #: src/pages/Shell.tsx
 msgid "Could not save. Try again."
-msgstr ""
+msgstr "सहेजा नहीं जा सका। फिर कोशिश करें।"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
@@ -3112,7 +3123,7 @@ msgstr ""
 msgid "Could not show the menu bar item; try again."
 msgstr ""
 
-#: src/pages/shell/runtime-summary.tsx
+#: src/lib/computer-state-labels.ts
 msgid "Could not start"
 msgstr "शुरू नहीं हो सका"
 
@@ -3825,6 +3836,10 @@ msgstr "{name} डाउनलोड करें"
 msgid "Download as markdown"
 msgstr "मार्कडाउन के रूप में डाउनलोड करें"
 
+#: src/components/RunEvidence.tsx
+msgid "Download evidence"
+msgstr "साक्ष्य डाउनलोड करें"
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Download Executor"
 msgstr ""
@@ -4046,7 +4061,21 @@ msgstr "हर सप्ताह"
 
 #: src/pages/LearningInbox.tsx
 msgid "Evidence"
-msgstr ""
+msgstr "साक्ष्य"
+
+#: src/components/RunEvidence.tsx
+msgid "Evidence gap"
+msgstr "साक्ष्य में अंतर"
+
+#: src/components/RunEvidence.tsx
+#: src/pages/dashboard/GovernancePanel.tsx
+#: src/pages/dashboard/panels.ts
+msgid "Evidence off"
+msgstr "साक्ष्य बंद"
+
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "Evidence on"
+msgstr "साक्ष्य चालू"
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Excluded files"
@@ -4415,6 +4444,10 @@ msgid "Got it — I’ll check the request and choose the next step."
 msgstr "समझ गया — अनुरोध जाँचूँगा और अगला कदम चुनूँगा।"
 
 #: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check this change before the next action."
+msgstr "समझ गया — अगली कार्रवाई से पहले इस बदलाव की जाँच करूँगा।"
+
+#: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll check what’s missing and ask before installing it."
 msgstr "समझ गया — क्या कमी है, जाँचूँगा और इंस्टॉल करने से पहले पूछूँगा।"
 
@@ -4422,13 +4455,12 @@ msgstr "समझ गया — क्या कमी है, जाँचू�
 msgid "Got it — I’ll choose a team member to put this in Notion."
 msgstr "समझ गया — इसे Notion में रखने के लिए टीम का एक सदस्य चुनूँगा।"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll keep {name} off this task."
+msgstr "समझ गया — {name} को इस काम से अलग रखूँगा।"
+
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
-msgstr ""
-
-#: src/pages/dashboard/GovernancePanel.tsx
-#: src/pages/dashboard/panels.ts
-msgid "Governance and encryption are not part of this build yet."
 msgstr ""
 
 #: src/pages/LearningTimeline.tsx
@@ -4921,6 +4953,10 @@ msgstr "अभी-अभी"
 msgid "Keep computer awake"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Keep current location"
+msgstr "मौजूदा स्थान बनाए रखें"
+
 #: src/pages/LearningCurator.tsx
 msgid "Keep for recovery"
 msgstr ""
@@ -5290,7 +5326,6 @@ msgstr ""
 msgid "low — quick, with a little checking"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "macOS will not ask for extra permission if you let bots run on this Mac. They run as you."
 msgstr "यदि आप बॉट्स को इस Mac पर चलने देते हैं तो macOS अतिरिक्त अनुमति नहीं मांगेगा। वे आपके रूप में ही चलते हैं।"
@@ -5299,7 +5334,7 @@ msgstr "यदि आप बॉट्स को इस Mac पर चलने �
 msgid "Make default"
 msgstr "डिफ़ॉल्ट बनाएँ"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Make sure nothing is still running on this computer."
 msgstr "सुनिश्चित करें कि इस कंप्यूटर पर कुछ भी चल नहीं रहा है।"
 
@@ -5734,6 +5769,10 @@ msgstr ""
 #: src/pages/fleet/PlacementNotice.tsx
 msgid "Move to {name}?"
 msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Move to a container"
+msgstr "कंटेनर में ले जाएँ"
 
 #. placeholder {0}: value.minimumFreeGb
 #: src/pages/fleet/FleetSettings.tsx
@@ -6183,6 +6222,10 @@ msgstr ""
 msgid "Not running — open the desktop app"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "Not sealed"
+msgstr "सील नहीं"
+
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
 msgstr ""
@@ -6195,7 +6238,7 @@ msgstr ""
 msgid "Nothing installed yet"
 msgstr ""
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Nothing is still running"
 msgstr "कुछ भी नहीं चल रहा"
 
@@ -6612,6 +6655,10 @@ msgstr "टीम संदेश रोकें"
 msgid "Paused"
 msgstr "रुका हुआ"
 
+#: src/lib/computer-state-labels.ts
+msgid "Paused for an update"
+msgstr "अपडेट के लिए रुका हुआ"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Permission denied on the socket"
 msgstr "सॉकेट की अनुमति नहीं है"
@@ -6995,6 +7042,14 @@ msgstr ""
 msgid "Reconnecting"
 msgstr "पुनः कनेक्ट हो रहा है"
 
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "Record evidence of bot decisions"
+msgstr "बॉट के निर्णयों के साक्ष्य रिकॉर्ड करें"
+
+#: src/components/RunEvidence.tsx
+msgid "Recording"
+msgstr "रिकॉर्ड हो रहा है"
+
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Recording may have started, but the view could not refresh"
 msgstr ""
@@ -7088,13 +7143,13 @@ msgstr ""
 msgid "Release"
 msgstr "नियंत्रण छोड़ें"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Release computer"
-msgstr ""
+msgstr "कंप्यूटर मुक्त करें"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Release interrupted computer?"
-msgstr ""
+msgstr "बाधित कार्रवाई के बाद कंप्यूटर मुक्त करें?"
 
 #: src/pages/account/AccountProfile.tsx
 msgid "Reload"
@@ -7625,13 +7680,12 @@ msgstr ""
 msgid "running"
 msgstr "चल रहा है"
 
+#: src/lib/computer-state-labels.ts
 #: src/lib/run-status-label.ts
 #: src/pages/ComparePanel.tsx
 #: src/pages/customize/McpDiagnostics.tsx
-#: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/fleet/FleetSettings.tsx
-#: src/pages/shell/runtime-summary.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Running"
 msgstr "चल रहा है"
@@ -8304,7 +8358,7 @@ msgstr ""
 msgid "Slash commands"
 msgstr ""
 
-#: src/pages/shell/runtime-summary.tsx
+#: src/lib/computer-state-labels.ts
 msgid "Sleeping"
 msgstr "स्लीप मोड में"
 
@@ -8465,8 +8519,8 @@ msgstr "रिकॉर्डिंग शुरू करें"
 msgid "Start the engine and press Test."
 msgstr "इंजन शुरू करें और टेस्ट दबाएँ।"
 
+#: src/lib/computer-state-labels.ts
 #: src/lib/run-status-label.ts
-#: src/pages/shell/runtime-summary.tsx
 msgid "Starting"
 msgstr "शुरू हो रहा है"
 
@@ -8537,10 +8591,9 @@ msgstr "रन रोकें"
 msgid "Stop work in this conversation"
 msgstr ""
 
+#: src/lib/computer-state-labels.ts
 #: src/pages/customize/McpDiagnostics.tsx
-#: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/GroupPanel.tsx
-#: src/pages/shell/runtime-summary.tsx
 msgid "Stopped"
 msgstr "बंद"
 
@@ -8553,6 +8606,10 @@ msgstr "जवाब देने से पहले रुक गया"
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Stopping"
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Stopping {name}"
+msgstr "{name} को रोक रहा हूँ"
 
 #: src/pages/settings-sections.ts
 msgid "Storage"
@@ -8785,9 +8842,17 @@ msgstr "समूह का मॉडल चयन फिर से लोड �
 msgid "The Hermes install on this computer failed its safety check."
 msgstr "इस कंप्यूटर पर Hermes की स्थापना सुरक्षा जाँच में विफल रही।"
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "The last update was interrupted."
+msgstr "पिछला अपडेट बीच में रुक गया था।"
+
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "The previous action may have finished. I’ll check before retrying."
+msgstr "पिछली कार्रवाई पूरी हो चुकी हो सकती है। दोबारा कोशिश करने से पहले जाँचूँगा।"
 
 #: src/pages/board/BoardsSettings.tsx
 msgid "The reviewer was changed in another window."
@@ -8895,7 +8960,6 @@ msgstr "यह चैट केवल देखने के लिए है"
 msgid "This command is not available to this account."
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "यह कंप्यूटर"
@@ -8960,7 +9024,6 @@ msgstr "बॉट या स्पेस की सेटिंग इस सम
 msgid "This is a binary file. You cannot edit it here."
 msgstr "यह एक बाइनरी फ़ाइल है। आप इसे यहाँ संपादित नहीं कर सकते।"
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "यह Mac"
@@ -9144,6 +9207,10 @@ msgstr ""
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Tokens over seven days"
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Told {name} to stand down"
+msgstr "{name} को रुकने के लिए कहा"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Tool access mode"
@@ -9500,6 +9567,10 @@ msgstr "उस खाते की अनुमतियों का उपय�
 msgid "Using {currentId}"
 msgstr "{currentId} का उपयोग हो रहा है"
 
+#: src/components/RunEvidence.tsx
+msgid "Verified"
+msgstr "सत्यापित"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"
 msgstr "पुष्टि करके जोड़ें"
@@ -9828,7 +9899,6 @@ msgstr "आपका ईमेल पता"
 msgid "Your name"
 msgstr "आपका नाम"
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "Your OS will not ask for extra permission if you let bots run on {hostLabel}. They run as you."
 msgstr "यदि आप बॉट्स को {hostLabel} पर चलने देते हैं तो आपका OS अतिरिक्त अनुमति नहीं मांगेगा। वे आपके रूप में ही चलते हैं।"

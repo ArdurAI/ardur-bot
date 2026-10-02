@@ -1,4 +1,4 @@
-import type { ThreadSendResult } from "@ardurbot/contracts";
+import type { ThreadSendResult, ThreadSnapshot } from "@ardurbot/contracts";
 import { expect, test } from "@playwright/test";
 import { activeBotId, captureScreenshot, completeOnboarding, rpc, signup } from "./helpers";
 
@@ -92,4 +92,108 @@ test("chief receipts paint from accepted sends and survive reload without duplic
   await page.reload();
   await expect(page.getByTestId("chief-receipt")).toHaveCount(20);
   await expect(page.getByTestId("chief-receipt").first()).toHaveText("Hi everyone.");
+});
+
+test("the real room renders a scripted corrected dispatch after reload", async ({ page }, info) => {
+  await signup(
+    page,
+    `correction-room-${Date.now()}@example.test`,
+    "password12",
+    "Correction fixture",
+  );
+  await completeOnboarding(page);
+  const chiefId = activeBotId(page);
+  const worker = await rpc<{ id: string }>(page, "bots/create", {
+    name: "Member",
+    title: "documentation",
+    description: "",
+    computerMode: "team",
+  });
+  const group = await rpc<{ id: string }>(page, "groups/create", {
+    name: "Correction fixture",
+    botIds: [chiefId, worker.id],
+  });
+  await rpc(page, "groups/update", { groupId: group.id, coordinatorBotId: chiefId });
+  const snapshot = await rpc<ThreadSnapshot>(page, "threads/get", { groupId: group.id });
+  const createdAt = new Date().toISOString();
+  let confirmed = false;
+  // Script only the saved projection; exercise Shell and the actual room, not a duplicate renderer.
+  await page.route("**/rpc/threads/get", (route) =>
+    route.fulfill({
+      json: {
+        json: {
+          ...snapshot,
+          messages: [
+            {
+              id: "fixture-owner",
+              threadId: snapshot.threadId,
+              seq: 1,
+              role: "user",
+              createdAt,
+              blocks: [{ kind: "text", text: "dont send to Member" }],
+            },
+            {
+              id: "fixture-receipt",
+              threadId: snapshot.threadId,
+              seq: 2,
+              role: "bot",
+              botId: chiefId,
+              createdAt,
+              blocks: [
+                {
+                  kind: "chief_receipt",
+                  key: "exclude-member",
+                  memberName: "Member",
+                  requestMessageId: "fixture-owner",
+                  text: "Got it — I’ll keep Member off this task.",
+                },
+              ],
+            },
+            {
+              id: "fixture-dispatch",
+              threadId: snapshot.threadId,
+              seq: 3,
+              role: "bot",
+              botId: chiefId,
+              createdAt,
+              blocks: [
+                {
+                  kind: "handoff",
+                  fromBotId: chiefId,
+                  toBotId: worker.id,
+                  text: "Preparation request",
+                  chiefDispatch: {
+                    requestMessageId: "fixture-owner",
+                    revision: 1,
+                    memberId: worker.id,
+                    memberName: "Member",
+                    state: "messaged",
+                    reason: "eligible",
+                    stop: {
+                      revision: 2,
+                      memberName: "Member",
+                      state: confirmed ? "confirmed" : "requested",
+                    },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      },
+    }),
+  );
+  await page.goto(`/app/g/${group.id}`);
+  await expect(page.getByTestId("chief-receipt")).toHaveText(
+    "Got it — I’ll keep Member off this task.",
+  );
+  await expect(page.getByTestId("chief-dispatch")).toContainText("Told Member to stand down");
+  await expect(page.getByTestId("chief-activity")).toHaveText("Stopping Member");
+  await captureScreenshot(page, info, "chief-correction-room-requested");
+  confirmed = true;
+  await page.reload();
+  await expect(page.getByTestId("chief-dispatch")).toHaveCount(1);
+  await expect(page.getByTestId("chief-dispatch")).toContainText("Member stood down");
+  await expect(page.getByTestId("chief-activity")).toHaveCount(0);
+  await captureScreenshot(page, info, "chief-correction-room-confirmed");
 });

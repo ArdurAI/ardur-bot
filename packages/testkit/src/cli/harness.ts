@@ -125,11 +125,13 @@ async function main() {
         "packages/db/src/hermes-runtime-config.postgres.test.ts",
         "packages/testkit/src/group-model-visible.postgres.test.ts",
         "packages/testkit/src/chief-loop.postgres.test.ts",
+        "packages/testkit/src/chief-corrections.postgres.test.ts",
         "packages/db/src/messaging.postgres.test.ts",
         "packages/db/src/bot-presence.postgres.test.ts",
         "packages/db/src/learning.postgres.test.ts",
         "packages/adapters/src/learning-insights.postgres.test.ts",
         "packages/adapters/src/bot-comms.postgres.test.ts",
+        "packages/adapters/src/delegation-lock-timeout.postgres.test.ts",
         "packages/db/src/command-blocks.postgres.test.ts",
         "packages/adapters/src/board/filing.postgres.test.ts",
         "packages/adapters/src/board/delivery.postgres.test.ts",
@@ -142,6 +144,7 @@ async function main() {
         "packages/adapters/src/job-reconciler.postgres.test.ts",
         "packages/adapters/src/cloud-agent.postgres.test.ts",
         "apps/api/src/local-import.postgres.test.ts",
+        "apps/api/src/evidence.postgres.test.ts",
         "apps/api/src/scratchpad.postgres.test.ts",
       ];
       // Each app reconciles all durable work in its database, including intentionally

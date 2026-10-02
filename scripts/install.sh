@@ -72,6 +72,7 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "Plan: Verify checksum against checksums.txt"
   if [[ "$PLATFORM" == "mac" ]]; then
     echo "Plan: Mount DMG and copy Ardur.app to Applications"
+    echo "Plan: Remove the download quarantine flag from Ardur.app"
   elif [[ "$EXT" == "deb" ]]; then
     echo "Plan: Install deb via apt"
   else
@@ -143,7 +144,8 @@ if [[ "$PLATFORM" == "mac" ]]; then
   hdiutil detach "$MOUNT_DIR" -quiet
   
   echo "Installed to $APP_DIR/Ardur.app."
-  echo "Unsigned preview: Approve the app in Privacy & Security before launching."
+  xattr -dr com.apple.quarantine "$APP_DIR/Ardur.app"
+  echo "Removed the download quarantine flag from Ardur.app."
 elif [[ "$EXT" == "deb" ]]; then
   echo "Installing deb package using apt (sudo required)..."
   sudo apt install -y "$TMP_DIR/$ASSET_NAME"

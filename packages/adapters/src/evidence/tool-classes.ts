@@ -18,6 +18,8 @@ export const TOOL_CLASSES = {
   report_progress: entry("write", "internal_write", "task"),
   attach_artifact: entry("write", "internal_write", "artifact"),
   complete_task: entry("write", "state_change", "task"),
+  // Records the outcome of an earlier action on the chief's plan; it never touches the action itself.
+  reconcile_chief_action: entry("write", "state_change", "task"),
   reject_delegation: entry("write", "state_change", "bot"),
   delegation_status: entry("read", "none", "bot"),
   stop_delegation: entry("write", "state_change", "bot"),

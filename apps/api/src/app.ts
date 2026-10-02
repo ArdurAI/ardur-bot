@@ -102,6 +102,7 @@ import { warnAutoReviewConfiguration } from "./auto-review-status.js";
 import { backfillRuntimePins } from "./backfill-runtime-pins.js";
 import { boardCloseRetry } from "./board.js";
 import type { AppEnv } from "./env.js";
+import { mountEvidenceRoutes } from "./evidence.js";
 import { reconcileFleetSecretCleanup } from "./fleet.js";
 import { HostBridge } from "./host-bridge.js";
 import { mountHostMcpRoutes } from "./host-mcp-routes.js";
@@ -769,6 +770,12 @@ export async function createApp(
         : null;
     },
   );
+  mountEvidenceRoutes(app, prisma, async (c) => {
+    const session = await auth.api.getSession({ headers: sessionHeaders(c.req.raw) });
+    return session?.user
+      ? requireMembership(prisma, session.user.id, c.req.query("spaceId")).catch(() => null)
+      : null;
+  });
   mountWebhookHttpRoutes(app, { prisma, secrets, events, jobs });
   mountMessagingDispatch(app, { prisma, secrets, events, jobs });
   // Shared with stop so a shutdown during retry delays does not restart polling.

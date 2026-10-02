@@ -1,4 +1,8 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "Move to a container": "Переместить в контейнер",
+  "Keep current location": "Оставить текущее расположение",
+  "Paused for an update": "Приостановлен для обновления",
+  "The last update was interrupted.": "Последнее обновление было прервано.",
   "Reading the document": "Читаю документ",
   "Connecting to Notion": "Подключаюсь к Notion",
   "Creating the Notion page": "Создаю страницу в Notion",
@@ -1448,4 +1452,21 @@ export const RU_MESSAGES: Record<string, string> = {
   "Set up a container on desktop, then try again.":
     "Настройте контейнер в настольном приложении, затем попробуйте снова.",
   Sleeping: "Спит",
+  "Evidence off": "Запись выключена",
+  Recording: "Запись",
+  Verified: "Проверено",
+  "Not sealed": "Без печати",
+  "Evidence gap": "Пробел в записи",
+  "Check failed": "Проверка не пройдена",
+  "Download evidence": "Скачать свидетельства",
+  "{gapCount} evidence gaps": "Пробелов в записи: {gapCount}",
+  "Checking the earlier action": "Проверяю предыдущее действие",
+  "Got it — I’ll keep {name} off this task.": "Понял — не буду поручать эту задачу {name}.",
+  "Got it — I’ll check this change before the next action.":
+    "Понял — проверю это изменение перед следующим действием.",
+  "Told {name} to stand down": "Попросил {name} остановиться",
+  "Stopping {name}": "Останавливаю {name}",
+  "{name} stood down": "{name} прекратил работу",
+  "The previous action may have finished. I’ll check before retrying.":
+    "Предыдущее действие могло завершиться. Проверю перед повторной попыткой.",
 };

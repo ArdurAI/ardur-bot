@@ -32,6 +32,11 @@ on:
         required: false
         type: string
         default: ""
+      mac_signed:
+        description: Both macOS builds are signed and notarized
+        required: false
+        type: boolean
+        default: false
       evidence_waiver:
         description: >-
           Dispatch-only reason to publish a preview without measured evidence. One plain
@@ -301,11 +306,14 @@ jobs:
       - name: Assemble the exact publication files before gating
         env:
           RELEASE_VERSION: ${{ inputs.release_version }}
+          RELEASE_SIGNED: ${{ inputs.mac_signed }}
         shell: bash
         run: |
           set -euo pipefail
           [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]
-          node scripts/desktop-release-assets.mjs "$RELEASE_VERSION" release-artifacts publication/release-ready
+          mkdir -p publication/scoreboard-publication
+          printf '{"signed":%s}\n' "$RELEASE_SIGNED" > publication/scoreboard-publication/signing.json
+          node scripts/desktop-release-assets.mjs "$RELEASE_VERSION" release-artifacts publication/release-ready "$RELEASE_SIGNED"
           node scripts/scoreboard-index.mjs stage-reports --reports scoreboard-reports --directory publication/release-ready
       - name: Fail closed without validated measured artifacts
         env:

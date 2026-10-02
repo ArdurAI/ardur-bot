@@ -1,4 +1,8 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "Move to a container": "移至容器",
+  "Keep current location": "保留当前位置",
+  "Paused for an update": "已暂停以进行更新",
+  "The last update was interrupted.": "上次更新已中断。",
   "Reading the document": "正在读取文档",
   "Connecting to Notion": "正在连接 Notion",
   "Creating the Notion page": "正在创建 Notion 页面",
@@ -1389,4 +1393,21 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Change location on desktop.": "请在桌面端更改位置。",
   "Set up a container on desktop, then try again.": "请在桌面端设置容器，然后重试。",
   Sleeping: "休眠中",
+  "Evidence off": "证据记录已关闭",
+  Recording: "记录中",
+  Verified: "已验证",
+  "Not sealed": "未封存",
+  "Evidence gap": "证据缺失",
+  "Check failed": "验证失败",
+  "Download evidence": "下载证据",
+  "{gapCount} evidence gaps": "{gapCount} 处证据缺失",
+  "Checking the earlier action": "正在检查先前的操作",
+  "Got it — I’ll keep {name} off this task.": "收到 — 我不会让 {name} 参与这项任务。",
+  "Got it — I’ll check this change before the next action.":
+    "收到 — 我会在下一步操作前检查这项变更。",
+  "Told {name} to stand down": "已通知 {name} 停下",
+  "Stopping {name}": "正在停止 {name}",
+  "{name} stood down": "{name} 已停下",
+  "The previous action may have finished. I’ll check before retrying.":
+    "上一步操作可能已完成。我会先检查，再重试。",
 };

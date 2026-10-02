@@ -90,7 +90,7 @@ export function ChiefDispatchLine({
       >
         <Text
           style={{ color: tokens.mutedForeground, fontSize: 13.5, flex: 1 }}
-          numberOfLines={1}
+          numberOfLines={dispatch.stop?.state === "uncertain" ? undefined : 1}
           accessibilityLiveRegion="polite"
         >
           {label}

@@ -37,6 +37,36 @@ describe("lingui catalogs", () => {
     },
   );
   it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+    "translates evidence controls, states and downloads in %s",
+    async (locale) => {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const catalog = await formatter().parse(readFileSync(filename, "utf8"), {
+        locale,
+        sourceLocale: "en",
+        filename,
+      });
+      for (const message of [
+        "Record evidence of bot decisions",
+        "Evidence on",
+        "Evidence off",
+        "About evidence",
+        "Could not save. Try again.",
+        "Verified",
+        "Recording",
+        "Not sealed",
+        "Evidence gap",
+        "Check failed",
+        "Download evidence",
+        "{gapCount} evidence gaps",
+      ]) {
+        const entry =
+          catalog[message] ?? Object.values(catalog).find((value) => value.message === message);
+        expect(entry?.translation, `${locale}: ${message}`).toBeTruthy();
+        if (message.includes("{gapCount}")) expect(entry?.translation).toContain("{gapCount}");
+      }
+    },
+  );
+  it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
     "translates bounded chief receipts and dispatch in %s",
     async (locale) => {
       const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
@@ -50,6 +80,13 @@ describe("lingui catalogs", () => {
         "Got it — I’ll check what’s missing and ask before installing it.",
         "Got it — I’ll check the request and choose the next step.",
         "Hi everyone.",
+        "Got it — I’ll keep {name} off this task.",
+        "Got it — I’ll check this change before the next action.",
+        "Told {name} to stand down",
+        "Stopping {name}",
+        "{name} stood down",
+        "The previous action may have finished. I’ll check before retrying.",
+        "Checking the earlier action",
         "Messaged {name}",
         "Queued for {name}",
         "Waiting for approval",
@@ -66,6 +103,7 @@ describe("lingui catalogs", () => {
       ]) {
         const entry = Object.values(catalog).find((value) => value.message === message);
         expect(entry?.translation, `${locale}: ${message}`).toBeTruthy();
+        if (locale !== "en") expect(entry?.translation).not.toBe(message);
         if (message.includes("{name}")) expect(entry?.translation).toContain("{name}");
       }
     },

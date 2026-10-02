@@ -256,6 +256,10 @@ msgstr "{documents} 条个人记忆，{kb} KB，尚未设置记忆搜索。"
 msgid "{failed} failed"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "{gapCount} evidence gaps"
+msgstr "{gapCount} 处证据缺失"
+
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
 msgstr "{hours} 小时前"
@@ -310,6 +314,10 @@ msgstr "{name} 已完成"
 #: src/lib/use-notifications.ts
 msgid "{name} needs your input"
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} stood down"
+msgstr "{name} 已停下"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "{name} stopped before answering"
@@ -427,6 +435,10 @@ msgstr ""
 #: src/pages/system/SystemPage.tsx
 msgid "A saved shortcut is unavailable; choose another."
 msgstr ""
+
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "About evidence"
+msgstr "关于证据"
 
 #: src/pages/shell/bot-picker.tsx
 msgid "About groups"
@@ -1149,10 +1161,6 @@ msgstr "已询问 {asked, plural, one {# 个机器人} other {# 个机器人}} �
 msgid "asks first"
 msgstr ""
 
-#: src/pages/dashboard/ComputersPanel.tsx
-msgid "Asleep"
-msgstr ""
-
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
 msgid "Assignee"
@@ -1390,10 +1398,6 @@ msgstr "看板状态"
 msgid "Boards"
 msgstr "看板"
 
-#: src/pages/dashboard/ComputersPanel.tsx
-msgid "Booting"
-msgstr ""
-
 #: src/pages/Shell.tsx
 msgid "Booting live desktop…"
 msgstr "正在启动实时桌面…"
@@ -1539,10 +1543,10 @@ msgstr "无法连接服务器。"
 
 #: src/components/AskCard.tsx
 #: src/components/ComputerMaintenanceActions.tsx
-#: src/components/ComputerUpdateProgress.tsx
 #: src/components/Context.tsx
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/OllamaSettings.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -1707,6 +1711,7 @@ msgstr "检查"
 msgid "Check again"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Check failed"
 msgstr "检查失败"
@@ -1736,6 +1741,10 @@ msgstr "检查于 {0}"
 #: src/pages/shell/runtime-settings.tsx
 msgid "Checking the download"
 msgstr "正在检查下载"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Checking the earlier action"
+msgstr "正在检查先前的操作"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Checking the missing tool"
@@ -2566,8 +2575,9 @@ msgid "Could not clear conversation"
 msgstr "无法清空对话"
 
 #: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Could not complete action"
-msgstr ""
+msgstr "无法完成操作"
 
 #: src/pages/McpOAuthCallback.tsx
 msgid "Could not complete authorization. Try connecting again."
@@ -3084,9 +3094,10 @@ msgid "Could not save this file. Try again."
 msgstr "无法保存此文件。请重试。"
 
 #: src/pages/customize/McpCredentialFix.tsx
+#: src/pages/dashboard/GovernancePanel.tsx
 #: src/pages/Shell.tsx
 msgid "Could not save. Try again."
-msgstr ""
+msgstr "无法保存，请重试。"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
@@ -3112,7 +3123,7 @@ msgstr ""
 msgid "Could not show the menu bar item; try again."
 msgstr ""
 
-#: src/pages/shell/runtime-summary.tsx
+#: src/lib/computer-state-labels.ts
 msgid "Could not start"
 msgstr "无法启动"
 
@@ -3825,6 +3836,10 @@ msgstr "下载 {name}"
 msgid "Download as markdown"
 msgstr "下载为 Markdown"
 
+#: src/components/RunEvidence.tsx
+msgid "Download evidence"
+msgstr "下载证据"
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Download Executor"
 msgstr ""
@@ -4046,7 +4061,21 @@ msgstr "每周"
 
 #: src/pages/LearningInbox.tsx
 msgid "Evidence"
-msgstr ""
+msgstr "证据"
+
+#: src/components/RunEvidence.tsx
+msgid "Evidence gap"
+msgstr "证据缺失"
+
+#: src/components/RunEvidence.tsx
+#: src/pages/dashboard/GovernancePanel.tsx
+#: src/pages/dashboard/panels.ts
+msgid "Evidence off"
+msgstr "证据记录已关闭"
+
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "Evidence on"
+msgstr "证据记录已开启"
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Excluded files"
@@ -4415,6 +4444,10 @@ msgid "Got it — I’ll check the request and choose the next step."
 msgstr "收到 — 我会检查请求并选择下一步。"
 
 #: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check this change before the next action."
+msgstr "收到 — 我会在下一步操作前检查这项变更。"
+
+#: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll check what’s missing and ask before installing it."
 msgstr "收到 — 我会检查缺少什么，并在安装前征求同意。"
 
@@ -4422,13 +4455,12 @@ msgstr "收到 — 我会检查缺少什么，并在安装前征求同意。"
 msgid "Got it — I’ll choose a team member to put this in Notion."
 msgstr "收到 — 我会选择一位团队成员把它放到 Notion。"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll keep {name} off this task."
+msgstr "收到 — 我不会让 {name} 参与这项任务。"
+
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
-msgstr ""
-
-#: src/pages/dashboard/GovernancePanel.tsx
-#: src/pages/dashboard/panels.ts
-msgid "Governance and encryption are not part of this build yet."
 msgstr ""
 
 #: src/pages/LearningTimeline.tsx
@@ -4921,6 +4953,10 @@ msgstr "刚刚"
 msgid "Keep computer awake"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Keep current location"
+msgstr "保留当前位置"
+
 #: src/pages/LearningCurator.tsx
 msgid "Keep for recovery"
 msgstr ""
@@ -5290,7 +5326,6 @@ msgstr "其中似乎包含凭据。请从文件中删除后重新扫描。"
 msgid "low — quick, with a little checking"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "macOS will not ask for extra permission if you let bots run on this Mac. They run as you."
 msgstr "若让 Bot 在这台 Mac 上运行，它们会使用你的账户权限，macOS 不会再逐项询问。"
@@ -5299,7 +5334,7 @@ msgstr "若让 Bot 在这台 Mac 上运行，它们会使用你的账户权限�
 msgid "Make default"
 msgstr "设为默认"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Make sure nothing is still running on this computer."
 msgstr "请确认这台电脑上没有仍在运行的任务。"
 
@@ -5734,6 +5769,10 @@ msgstr ""
 #: src/pages/fleet/PlacementNotice.tsx
 msgid "Move to {name}?"
 msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Move to a container"
+msgstr "迁移到容器"
 
 #. placeholder {0}: value.minimumFreeGb
 #: src/pages/fleet/FleetSettings.tsx
@@ -6183,6 +6222,10 @@ msgstr ""
 msgid "Not running — open the desktop app"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "Not sealed"
+msgstr "未封存"
+
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
 msgstr ""
@@ -6195,7 +6238,7 @@ msgstr ""
 msgid "Nothing installed yet"
 msgstr ""
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Nothing is still running"
 msgstr "没有仍在运行的任务"
 
@@ -6612,6 +6655,10 @@ msgstr "暂停团队消息"
 msgid "Paused"
 msgstr "已暂停"
 
+#: src/lib/computer-state-labels.ts
+msgid "Paused for an update"
+msgstr "已暂停以进行更新"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Permission denied on the socket"
 msgstr "没有套接字访问权限"
@@ -6995,6 +7042,14 @@ msgstr ""
 msgid "Reconnecting"
 msgstr "正在重新连接"
 
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "Record evidence of bot decisions"
+msgstr "记录机器人决策的证据"
+
+#: src/components/RunEvidence.tsx
+msgid "Recording"
+msgstr "记录中"
+
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Recording may have started, but the view could not refresh"
 msgstr ""
@@ -7088,13 +7143,13 @@ msgstr ""
 msgid "Release"
 msgstr "释放"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Release computer"
-msgstr ""
+msgstr "释放电脑"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Release interrupted computer?"
-msgstr ""
+msgstr "释放更新中断的电脑？"
 
 #: src/pages/account/AccountProfile.tsx
 msgid "Reload"
@@ -7625,13 +7680,12 @@ msgstr "运行时间必须是将来的时间。"
 msgid "running"
 msgstr "运行中"
 
+#: src/lib/computer-state-labels.ts
 #: src/lib/run-status-label.ts
 #: src/pages/ComparePanel.tsx
 #: src/pages/customize/McpDiagnostics.tsx
-#: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/fleet/FleetSettings.tsx
-#: src/pages/shell/runtime-summary.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Running"
 msgstr "运行中"
@@ -8304,7 +8358,7 @@ msgstr ""
 msgid "Slash commands"
 msgstr ""
 
-#: src/pages/shell/runtime-summary.tsx
+#: src/lib/computer-state-labels.ts
 msgid "Sleeping"
 msgstr "休眠中"
 
@@ -8465,8 +8519,8 @@ msgstr "开始录制"
 msgid "Start the engine and press Test."
 msgstr "启动引擎后点击“测试”。"
 
+#: src/lib/computer-state-labels.ts
 #: src/lib/run-status-label.ts
-#: src/pages/shell/runtime-summary.tsx
 msgid "Starting"
 msgstr "正在开始"
 
@@ -8537,10 +8591,9 @@ msgstr "停止运行"
 msgid "Stop work in this conversation"
 msgstr ""
 
+#: src/lib/computer-state-labels.ts
 #: src/pages/customize/McpDiagnostics.tsx
-#: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/GroupPanel.tsx
-#: src/pages/shell/runtime-summary.tsx
 msgid "Stopped"
 msgstr "已停止"
 
@@ -8553,6 +8606,10 @@ msgstr "回答前已停止"
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Stopping"
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Stopping {name}"
+msgstr "正在停止 {name}"
 
 #: src/pages/settings-sections.ts
 msgid "Storage"
@@ -8785,9 +8842,17 @@ msgstr "已重新加载群组的模型选择。请重新选择。"
 msgid "The Hermes install on this computer failed its safety check."
 msgstr "此计算机上的 Hermes 安装未通过安全检查。"
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "The last update was interrupted."
+msgstr "上次更新已中断。"
+
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "The previous action may have finished. I’ll check before retrying."
+msgstr "上一步操作可能已完成。我会先检查，再重试。"
 
 #: src/pages/board/BoardsSettings.tsx
 msgid "The reviewer was changed in another window."
@@ -8895,7 +8960,6 @@ msgstr "此对话为只读"
 msgid "This command is not available to this account."
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "这台电脑"
@@ -8960,7 +9024,6 @@ msgstr "群组模型被 Bot 或空间设置阻止。请更改目标位置策略�
 msgid "This is a binary file. You cannot edit it here."
 msgstr "这是一个二进制文件。无法在此处编辑。"
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "这台 Mac"
@@ -9144,6 +9207,10 @@ msgstr "个上下文令牌"
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Tokens over seven days"
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Told {name} to stand down"
+msgstr "已通知 {name} 停下"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Tool access mode"
@@ -9500,6 +9567,10 @@ msgstr "使用该账户的权限。"
 msgid "Using {currentId}"
 msgstr "正在使用 {currentId}"
 
+#: src/components/RunEvidence.tsx
+msgid "Verified"
+msgstr "已验证"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"
 msgstr "校验并添加"
@@ -9828,7 +9899,6 @@ msgstr "你的邮箱"
 msgid "Your name"
 msgstr "你的名字"
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "Your OS will not ask for extra permission if you let bots run on {hostLabel}. They run as you."
 msgstr "若让 Bot 在 {hostLabel} 上运行，它们会使用你的账户权限，系统不会再逐项询问。"
