@@ -12,6 +12,7 @@ import type { ReactNode } from "react";
 import { Suspense, useEffect, useState } from "react";
 import { Shimmer } from "../../components/ai/primitives";
 import { rpc } from "../../lib/rpc";
+import type { ChangeLocation } from "./change-target";
 import { availableWorkspaceViews, isWorkspaceViewId, workspaceViews } from "./view-registry";
 
 export function WorkspacePane({
@@ -37,6 +38,7 @@ export function WorkspacePane({
   hiddenControlsHost,
   compact = false,
   fileLocation,
+  changeLocation,
 }: WorkspacePaneProps) {
   const { t } = useLingui();
   const [context, setContext] = useState<{
@@ -121,6 +123,7 @@ export function WorkspacePane({
               controlsHost: !visible && hiddenControlsHost ? hiddenControlsHost : controlsHost,
               compact,
               fileLocation,
+              changeLocation,
             })}
           </Suspense>
         ) : (
@@ -224,4 +227,5 @@ export type WorkspacePaneProps = {
   hiddenControlsHost?: HTMLElement | null;
   compact?: boolean;
   fileLocation?: { path: string; line?: number; requestId: number };
+  changeLocation?: ChangeLocation;
 };

@@ -1087,10 +1087,29 @@ export function ShellPage({
   };
   const targetIntent =
     workspaceTarget?.scope === workspaceLocationKey ? workspaceTarget.intent : null;
-  const fileLocation =
-    targetIntent && "path" in targetIntent
-      ? { path: targetIntent.path, line: targetIntent.line, requestId: workspaceTarget!.requestId }
-      : undefined;
+  const fileLocation = useMemo(
+    () =>
+      targetIntent && "path" in targetIntent
+        ? {
+            path: targetIntent.path,
+            line: targetIntent.line,
+            requestId: workspaceTarget!.requestId,
+          }
+        : undefined,
+    [targetIntent, workspaceTarget],
+  );
+  const changeLocation = useMemo(
+    () =>
+      targetIntent && "changeId" in targetIntent
+        ? {
+            changeId: targetIntent.changeId,
+            since: targetIntent.since,
+            until: targetIntent.until,
+            requestId: workspaceTarget!.requestId,
+          }
+        : undefined,
+    [targetIntent, workspaceTarget],
+  );
   const effectiveWorkspaceTab = getEffectiveWorkspaceTab(
     workspaceTab,
     computer?.capabilities?.graphical,
@@ -4206,6 +4225,7 @@ export function ShellPage({
                     contextLoading={workspaceContextLoading}
                     tab={workspaceTab}
                     fileLocation={fileLocation}
+                    changeLocation={changeLocation}
                     onTabChange={setWorkspaceTab}
                     openViews={workspaceLayout.open}
                     visible={workspaceShown}

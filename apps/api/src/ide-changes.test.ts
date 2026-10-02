@@ -45,6 +45,11 @@ function fixture(kind: "host" | "sandbox" = "sandbox") {
     computer: { id: "computer", kind: "fake", homeKey: "home", providerRef: "ref" },
     context: { botId: "bot" },
   }));
+  const checkedRoot = vi.fn(async () => ({
+    root,
+    computer: { id: "computer", kind: "fake", scope: "team", homeKey: "home", providerRef: "ref" },
+    context: { botId: "bot" },
+  }));
   const changes = createIdeChanges(
     {
       prisma: { event: { findMany } } as unknown as PrismaClient,
@@ -52,11 +57,74 @@ function fixture(kind: "host" | "sandbox" = "sandbox") {
     } as unknown as Parameters<typeof createIdeChanges>[0],
     {
       resolve,
+      checkedRoot,
     } as unknown as ReturnType<typeof createIdeFiles>,
   );
-  return { changes, findMany, resolve, resolveCommandCwd };
+  return { changes, findMany, resolve, checkedRoot, resolveCommandCwd };
 }
 describe("IDE change history", () => {
+  const target = { rootId: "root", botId: "bot", computerId: "computer", generation: 1 };
+  it("checks the selected bot root, strips its Team prefix, and excludes other bots", async () => {
+    const f = fixture();
+    f.findMany.mockResolvedValue([
+      event("selected", "bots/bot/src/main.ts"),
+      { ...event("other", "bots/bot/secret"), botId: "other" },
+      event("outside", "bots/other/secret"),
+    ]);
+    expect(await f.changes(actor, { ...input, target, changeId: "selected" })).toMatchObject({
+      items: [{ id: "selected", path: "src/main.ts", botId: "bot" }],
+    });
+    expect(f.checkedRoot).toHaveBeenCalledWith(actor, target);
+    expect(f.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          botId: "bot",
+          thread: { userId: "owner", spaceId: "space" },
+        }),
+      }),
+    );
+    await expect(f.changes(actor, { ...input, target, changeId: "other" })).rejects.toThrow(
+      "Resource not found",
+    );
+    await expect(f.changes(actor, { ...input, target, changeId: "missing" })).rejects.toThrow(
+      "Resource not found",
+    );
+  });
+  it.each(["Resource not found", "Computer changed. Refresh files."])(
+    "refuses an unauthorized or stale bound change before querying events: %s",
+    async (message) => {
+      const f = fixture();
+      f.checkedRoot.mockRejectedValue(new Error(message));
+      await expect(f.changes(actor, { ...input, target, changeId: "selected" })).rejects.toThrow(
+        message,
+      );
+      expect(f.findMany).not.toHaveBeenCalled();
+    },
+  );
+  it("refuses a mismatched root and unbound change target", async () => {
+    const f = fixture();
+    await expect(
+      f.changes(actor, { ...input, target: { ...target, rootId: "foreign" } }),
+    ).rejects.toThrow("Resource not found");
+    await expect(f.changes(actor, { ...input, changeId: "selected" })).rejects.toThrow(
+      "Resource not found",
+    );
+    expect(f.findMany).not.toHaveBeenCalled();
+  });
+  it("pages through a checked target older than the first bounded event page", async () => {
+    const f = fixture();
+    f.findMany.mockResolvedValueOnce(
+      Array.from({ length: 201 }, (_, index) => event(`new-${index}`, "bots/bot/other.ts")),
+    );
+    expect(await f.changes(actor, { ...input, target, changeId: "selected" })).toEqual({
+      items: [],
+      nextCursor: "new-199",
+    });
+    f.findMany.mockResolvedValueOnce([event("selected", "bots/bot/main.ts")]);
+    expect(
+      await f.changes(actor, { ...input, target, changeId: "selected", cursor: "new-199" }),
+    ).toMatchObject({ items: [{ id: "selected", path: "main.ts" }], nextCursor: null });
+  });
   const command = (id: string, cwd: string) => ({
     ...event(id, "main.ts"),
     type: "command.finished",

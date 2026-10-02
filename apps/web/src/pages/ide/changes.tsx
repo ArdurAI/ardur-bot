@@ -1,4 +1,4 @@
-import type { IdeChange } from "@ardurbot/contracts";
+import type { IdeChange, WorkspaceRootBinding } from "@ardurbot/contracts";
 import { Button } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -17,7 +17,9 @@ export function useChanges(
   enabled: boolean,
   onError: (error: unknown) => void,
   onFilesChanged: () => void,
+  target?: WorkspaceRootBinding,
 ) {
+  const targetKey = JSON.stringify(target);
   const history = useRef<ChangeHistory>({ items: [], retained: [], cursor: null });
   const [state, setState] = useState(history.current);
   const generation = useRef(0);
@@ -28,7 +30,7 @@ export function useChanges(
     setState(history.current);
     loadingMore.current = false;
     day.current = todayRange().since;
-  }, [rootId]);
+  }, [rootId, targetKey]);
   useEffect(() => {
     if (!rootId) return;
     // Commands and completed runs can change files without producing a recorded diff.
@@ -60,7 +62,10 @@ export function useChanges(
         setState(history.current);
       }
       try {
-        const page = await rpc.ide.changes({ rootId, ...range }, { signal: abort.signal });
+        const page = await rpc.ide.changes(
+          { rootId, ...range, ...(target ? { target } : {}) },
+          { signal: abort.signal },
+        );
         if (abort.signal.aborted) return;
         const previous = history.current;
         const ids = new Set(previous.items.map((item) => item.id));
@@ -102,7 +107,7 @@ export function useChanges(
       clearTimeout(timer);
       document.removeEventListener("visibilitychange", visible);
     };
-  }, [rootId, enabled, onError]);
+  }, [rootId, enabled, onError, targetKey]);
   const more = useCallback(async () => {
     const cursor = history.current.cursor;
     if (!enabled || !rootId || !cursor || loadingMore.current) return;
@@ -111,7 +116,12 @@ export function useChanges(
     loadingMore.current = true;
     const request = generation.current;
     try {
-      const page = await rpc.ide.changes({ rootId, ...range, cursor });
+      const page = await rpc.ide.changes({
+        rootId,
+        ...range,
+        cursor,
+        ...(target ? { target } : {}),
+      });
       if (request !== generation.current) return;
       history.current = {
         ...history.current,
@@ -122,7 +132,7 @@ export function useChanges(
     } finally {
       if (request === generation.current) loadingMore.current = false;
     }
-  }, [rootId, enabled]);
+  }, [rootId, enabled, targetKey]);
   return {
     items: mergeChanges(state.items, state.retained),
     more: state.cursor ? more : undefined,
@@ -139,15 +149,17 @@ export function Changes({
   more,
   onOpen,
   onError,
+  label,
 }: {
   items: IdeChange[];
   more?: () => Promise<void>;
   onOpen(change: IdeChange): void;
   onError(error: unknown): void;
+  label?: string;
 }) {
   const { t } = useLingui();
   return (
-    <section className="h-full overflow-auto p-2" aria-label={t`Changes`}>
+    <section className="h-full overflow-auto p-2" aria-label={label ?? t`Changes`}>
       {items.map((change) => (
         <Button
           variant="ghost"

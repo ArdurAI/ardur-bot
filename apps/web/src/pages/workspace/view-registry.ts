@@ -25,7 +25,14 @@ const TerminalView = lazy(() =>
 );
 type ViewBodyProps = Pick<
   WorkspacePaneProps,
-  "bot" | "computer" | "routines" | "screen" | "terminal" | "onOpenRun" | "fileLocation"
+  | "bot"
+  | "computer"
+  | "routines"
+  | "screen"
+  | "terminal"
+  | "onOpenRun"
+  | "fileLocation"
+  | "changeLocation"
 > & {
   context: WorkspaceContext | null;
   visible: boolean;
@@ -86,8 +93,15 @@ export const workspaceViews = {
     primary: true,
     available: ({ context }) => Boolean(context?.rootId && context.files !== "unavailable"),
     unavailable: (t) => t(msg`Files are unavailable on this computer.`),
-    render: ({ context, visible }) =>
-      context ? createElement(ChangesView, { context, visible }) : null,
+    render: ({ context, visible, changeLocation }) =>
+      context
+        ? createElement(ChangesView, {
+            key: `${context.botId}:${context.rootId}:${context.generation}`,
+            context,
+            visible,
+            location: changeLocation,
+          })
+        : null,
   },
   terminal: {
     id: "terminal",
