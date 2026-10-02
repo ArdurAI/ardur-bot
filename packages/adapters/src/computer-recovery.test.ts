@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { AdapterContext, JobPublisher, SandboxProvider } from "@ardurbot/adapter-kit";
+import { ComputerWorkspaceSaveError } from "@ardurbot/contracts";
 import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { extendActiveComputerControl } from "./computer-control.js";
@@ -442,7 +443,14 @@ describe("computer recovery preserves live work", () => {
     const destroy = vi.spyOn(deps.sandbox, "destroy");
     const provision = vi.spyOn(deps.sandbox, "provision");
     for (let attempt = 0; attempt < 2; attempt++) {
-      await expect(replaceComputer(deps, row.id, "update", context)).rejects.toBe(error);
+      const saved = replaceComputer(deps, row.id, "update", context);
+      await expect(saved).rejects.toBeInstanceOf(ComputerWorkspaceSaveError);
+      await expect(saved).rejects.toMatchObject({
+        reason: "save-failed",
+        cause: error,
+        engineFailureCategory:
+          message === "checkpoint directory does not exist" ? "socket-missing" : "command-failed",
+      });
       expect(row).toMatchObject({
         state: "error",
         providerRef: first.providerRef,

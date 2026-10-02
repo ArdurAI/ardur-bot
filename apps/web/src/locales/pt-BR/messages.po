@@ -7884,7 +7884,7 @@ msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Saving your workspace"
-msgstr ""
+msgstr "Salvando seu espaço de trabalho"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Saving..."

@@ -7884,7 +7884,7 @@ msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Saving your workspace"
-msgstr ""
+msgstr "आपका कार्यक्षेत्र सहेजा जा रहा है"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Saving..."

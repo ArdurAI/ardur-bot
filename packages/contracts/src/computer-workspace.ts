@@ -11,14 +11,15 @@ export type ComputerWorkspaceSaveFailureReason = z.infer<
   typeof ComputerWorkspaceSaveFailureReasonSchema
 >;
 
-/** Safe diagnostics only: never retain provider output or a raw cause. */
+/** Only reason/category may cross logging or UI boundaries; cause stays local. */
 export class ComputerWorkspaceSaveError extends Error {
   readonly engineFailureCategory?: string;
   constructor(
     readonly reason: ComputerWorkspaceSaveFailureReason,
     engineFailureCategory?: string,
+    options?: ErrorOptions,
   ) {
-    super(reason);
+    super(reason, options);
     this.name = "ComputerWorkspaceSaveError";
     if (
       engineFailureCategory &&

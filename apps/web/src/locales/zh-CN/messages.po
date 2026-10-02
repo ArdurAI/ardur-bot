@@ -7884,7 +7884,7 @@ msgstr "已保存。轮换后可查看。"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Saving your workspace"
-msgstr ""
+msgstr "正在保存您的工作区"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Saving..."

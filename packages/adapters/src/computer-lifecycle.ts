@@ -27,6 +27,7 @@ import {
   parseComputerMode,
   type ThreadEvents,
 } from "@ardurbot/db";
+import { engineFailureReason } from "@ardurbot/host-runtime/fleet/probe";
 import { MissingComputerProviderError, ownsKind } from "./computer-connections.js";
 import {
   clearInactiveUserComputerControl,
@@ -1030,7 +1031,11 @@ export async function replaceComputer(
         if (mode !== "recover") {
           throw error instanceof ComputerWorkspaceSaveError
             ? error
-            : new ComputerWorkspaceSaveError("save-failed");
+            : new ComputerWorkspaceSaveError(
+                "save-failed",
+                engineFailureReason(error) ?? "command-failed",
+                { cause: error },
+              );
         }
       }
     }

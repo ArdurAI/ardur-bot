@@ -7884,7 +7884,7 @@ msgstr "Guardado. Rota para revelar."
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Saving your workspace"
-msgstr ""
+msgstr "Guardando tu espacio de trabajo"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Saving..."

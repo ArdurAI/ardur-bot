@@ -7884,7 +7884,7 @@ msgstr "저장되었습니다. key를 교체하면 표시됩니다."
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Saving your workspace"
-msgstr ""
+msgstr "작업 공간 저장 중"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Saving..."
