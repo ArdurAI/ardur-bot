@@ -754,6 +754,9 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     },
     ide: {
       roots: authed.ide.roots.handler(({ context }) => ide.roots(context.actor)),
+      target: authed.ide.target.handler(
+        async ({ context, input }) => (await ide.checkedRoot(context.actor, input)).root,
+      ),
       list: authed.ide.list.handler(({ context, input }) =>
         ide.list(context.actor, input, context.signal),
       ),

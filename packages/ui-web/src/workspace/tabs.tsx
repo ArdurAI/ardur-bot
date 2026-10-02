@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Button } from "../components/ui/button.js";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs.js";
 
-export type WorkspaceTab = { id: string; label: string; content: ReactNode };
+export type WorkspaceTab = { id: string; label: string; content: ReactNode; contentId?: string };
 
 export function WorkspaceTabs({
   tabs,
@@ -23,6 +23,13 @@ export function WorkspaceTabs({
 }) {
   const [seen, setSeen] = useState(() => new Set([value]));
   useEffect(() => setSeen((current) => new Set(current).add(value)), [value]);
+  const bodies = new Map<string, { tab: WorkspaceTab; ids: string[] }>();
+  for (const tab of tabs) {
+    const key = tab.contentId ?? tab.id;
+    const body = bodies.get(key);
+    if (body) body.ids.push(tab.id);
+    else bodies.set(key, { tab, ids: [tab.id] });
+  }
   return (
     <Tabs value={value} onValueChange={onChange} className="min-h-0 flex-1 gap-0">
       <TabsList
@@ -49,9 +56,14 @@ export function WorkspaceTabs({
           </div>
         ))}
       </TabsList>
-      {tabs.map((tab) => (
-        <TabsContent key={tab.id} value={tab.id} className="min-h-0 overflow-auto" keepMounted>
-          {seen.has(tab.id) || value === tab.id ? tab.content : null}
+      {[...bodies].map(([key, { tab, ids }]) => (
+        <TabsContent
+          key={key}
+          value={ids.includes(value) ? value : tab.id}
+          className="min-h-0 overflow-auto"
+          keepMounted
+        >
+          {ids.some((id) => seen.has(id) || value === id) ? tab.content : null}
         </TabsContent>
       ))}
     </Tabs>

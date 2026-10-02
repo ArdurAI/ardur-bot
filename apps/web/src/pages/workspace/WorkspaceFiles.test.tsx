@@ -133,7 +133,11 @@ function Leave() {
     </button>
   );
 }
-async function show(botId = "bot", next: Partial<WorkspaceContext> = {}) {
+async function show(
+  botId = "bot",
+  next: Partial<WorkspaceContext> = {},
+  location?: { path: string; line?: number; requestId: number },
+) {
   const bot = { id: botId, name: botId } as Bot;
   const fileContext = { ...context, botId, ...next };
   window.history.replaceState(null, "", "/");
@@ -146,7 +150,7 @@ async function show(botId = "bot", next: Partial<WorkspaceContext> = {}) {
             element={
               <>
                 <WorkspaceFileGuard />
-                <WorkspaceFiles bot={bot} context={fileContext} />
+                <WorkspaceFiles bot={bot} context={fileContext} location={location} />
                 <Leave />
               </>
             }
@@ -193,6 +197,20 @@ afterEach(async () => {
 });
 
 describe("workspace files", () => {
+  it("opens a checked path intent in the bot root and keeps its draft on repeated navigation", async () => {
+    await show("bot", { rootId: "sandbox-computer" }, { path: "notes.md", line: 2, requestId: 1 });
+    expect(api.read).toHaveBeenCalledWith({
+      botId: "bot",
+      computerId: "computer",
+      generation: 2,
+      rootId: "sandbox-computer",
+      path: "notes.md",
+    });
+    await type("draft from IDE");
+    await show("bot", { rootId: "sandbox-computer" }, { path: "notes.md", line: 3, requestId: 2 });
+    expect(host.querySelector("textarea")?.value).toBe("draft from IDE");
+    expect(api.read).toHaveBeenCalledTimes(1);
+  });
   it("opens, edits, and saves a file with the IDE's approval and conflict protection", async () => {
     await click("notes.md");
     const editor = host.querySelector("textarea");

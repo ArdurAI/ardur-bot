@@ -22,7 +22,13 @@ import { ORPCError } from "@orpc/server";
 import type { RouterDeps } from "./router.js";
 
 type Deps = Pick<RouterDeps, "prisma" | "sandbox" | "home">;
-type Request = { botId: string; computerId: string; generation: number; path: string };
+type Request = {
+  botId: string;
+  computerId: string;
+  generation: number;
+  path: string;
+  rootId?: string;
+};
 type SaveRequest = Request & { content: string; version: string; approved: boolean };
 const digest = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
 const fileTooLargeReason = "This file is larger than 2 MB. Open a copy to edit it.";
@@ -69,6 +75,9 @@ export function createWorkspaceFiles(deps: Deps) {
       generation: computer?.screenGeneration ?? null,
       files: workspaceFileSource(computer),
       runsOnHost: computerRunsOnHost(computer ?? {}),
+      ...(!computerRunsOnHost(computer ?? {}) && computer
+        ? { rootId: `sandbox-${computer.id}` }
+        : {}),
       observedAt: new Date().toISOString(),
     };
   }
@@ -76,6 +85,8 @@ export function createWorkspaceFiles(deps: Deps) {
     IdePathSchema.parse(input.path);
     const bot = await target(actor, input.botId);
     const computer = bot.computer;
+    if (input.rootId !== undefined && input.rootId !== `sandbox-${computer?.id}`)
+      throw new IsolationError();
     if (
       !computer ||
       computer.id !== input.computerId ||

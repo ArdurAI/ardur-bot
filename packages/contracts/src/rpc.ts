@@ -199,6 +199,7 @@ import {
   WorkspaceContextSchema,
   WorkspaceFileSchema,
   WorkspaceFilesSchema,
+  WorkspaceRootBindingSchema,
   WorkspaceTasksSchema,
 } from "./workspace.js";
 
@@ -270,6 +271,7 @@ const ideContract = /* @__PURE__ */ createIdeContract();
 function createIdeContract() {
   return {
     roots: oc.output(z.array(IdeRootSchema)),
+    target: oc.input(WorkspaceRootBindingSchema).output(IdeRootSchema),
     list: oc
       .input(z.object({ rootId: Id, path: IdePathSchema.default("") }))
       .output(
@@ -301,6 +303,8 @@ function createIdeContract() {
           since: z.iso.datetime(),
           until: z.iso.datetime(),
           cursor: Id.optional(),
+          target: WorkspaceRootBindingSchema.optional(),
+          changeId: Id.optional(),
         }),
       )
       .output(z.object({ items: z.array(IdeChangeSchema), nextCursor: Id.nullable() })),
@@ -678,6 +682,7 @@ export const appContract = {
           computerId: Id,
           generation: z.number().int().nonnegative(),
           path: IdePathSchema,
+          rootId: Id.optional(),
         }),
       )
       .output(WorkspaceFilesSchema),
@@ -688,6 +693,7 @@ export const appContract = {
           computerId: Id,
           generation: z.number().int().nonnegative(),
           path: IdePathSchema.min(1),
+          rootId: Id.optional(),
         }),
       )
       .output(WorkspaceFileSchema),
@@ -699,6 +705,7 @@ export const appContract = {
           generation: z.number().int().nonnegative(),
           path: IdePathSchema.min(1),
           content: z.string().max(IDE_FILE_BYTES),
+          rootId: Id.optional(),
           version: z.string().regex(/^[a-f0-9]{64}$/),
           approved: z.boolean().default(false),
         }),

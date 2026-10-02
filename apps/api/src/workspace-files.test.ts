@@ -65,6 +65,19 @@ function fixture() {
 }
 
 describe("bot workspace files", () => {
+  it("describes the bot root and refuses a mismatched root before list, read or save", async () => {
+    const f = fixture();
+    expect(await f.files.describe(actor, "bot")).toMatchObject({ rootId: "sandbox-computer" });
+    const input = { ...f.input, rootId: "sandbox-other", path: "notes.md" };
+    await expect(f.files.list(actor, input)).rejects.toThrow("Resource not found");
+    await expect(f.files.read(actor, input)).rejects.toThrow("Resource not found");
+    await expect(
+      f.files.save(actor, { ...input, content: "draft", version: digest("hello"), approved: true }),
+    ).rejects.toThrow("Resource not found");
+    expect(f.sandbox.listFiles).not.toHaveBeenCalled();
+    expect(f.sandbox.readFile).not.toHaveBeenCalled();
+    expect(f.sandbox.writeFile).not.toHaveBeenCalled();
+  });
   it.each(["docker", "podman"] as const)(
     "uses live and saved workspace files for legacy desktop rows on %s",
     async (engine) => {

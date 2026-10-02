@@ -32,10 +32,12 @@ export function WorkspaceFiles({
   bot,
   context,
   compact = false,
+  location,
 }: {
   bot: Bot;
   context: WorkspaceContext;
   compact?: boolean;
+  location?: { path: string; line?: number; requestId: number };
 }) {
   const { t } = useLingui();
   const computerId = context.computerId;
@@ -113,10 +115,11 @@ export function WorkspaceFiles({
         computerId,
         generation,
         path,
+        rootId: context.rootId,
       });
       return result.entries;
     },
-    [bot.id, computerId, generation, revision],
+    [bot.id, computerId, generation, revision, context.rootId],
   );
   const open = (path: string) => {
     const target = sessionId;
@@ -130,7 +133,7 @@ export function WorkspaceFiles({
     setError(null);
     setStatus(null);
     void rpc.workspace
-      .read({ botId: bot.id, computerId, generation, path })
+      .read({ botId: bot.id, computerId, generation, path, rootId: context.rootId })
       .then((file) => {
         if (file.binary) {
           if (alive.current && boundRef.current === target) {
@@ -200,6 +203,7 @@ export function WorkspaceFiles({
         content: tab.content,
         version: tab.version,
         approved: false,
+        rootId: context.rootId,
       };
       let result = await rpc.workspace.save(input);
       if (result.approvalRequired && window.confirm(t`Save`))
@@ -249,6 +253,11 @@ export function WorkspaceFiles({
     }
   };
   const saveRef = useRef(save);
+  const openRef = useRef(open);
+  openRef.current = open;
+  useEffect(() => {
+    if (location) openRef.current(location.path);
+  }, [location, sessionId]);
   saveRef.current = save;
   useEffect(() => {
     const hotkey = (event: KeyboardEvent) => {
@@ -403,6 +412,7 @@ export function WorkspaceFiles({
                     readOnly: current.readOnly === true,
                   }}
                   openIds={showing.tabs.map((tab) => tab.id)}
+                  location={location?.path === current.path ? location : undefined}
                   onChange={(id, content) => {
                     commit({
                       ...sessionRef.current,

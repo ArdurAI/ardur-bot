@@ -27,6 +27,26 @@ export function workspaceIntentHref(intent: WorkspaceOpenIntent) {
   return `/app/workspace?intent=${encodeURIComponent(JSON.stringify(intent))}`;
 }
 
+export function workspaceFileIntentFromHref(
+  href: string,
+  context: WorkspaceContext | null,
+): unknown {
+  if (!context?.rootId || !context.computerId || context.generation === null) return null;
+  const match = /^([^?#:]+\.[a-z0-9]+)(?:#L([1-9][0-9]*))?$/i.exec(href);
+  if (!match) return null;
+  return {
+    view: { type: "ide" },
+    target: {
+      botId: context.botId,
+      rootId: context.rootId,
+      computerId: context.computerId,
+      generation: context.generation,
+    },
+    path: match[1],
+    ...(match[2] ? { line: Number(match[2]) } : {}),
+  };
+}
+
 export function workspaceIntentFromHref(href: string): unknown {
   try {
     const url = new URL(href, window.location.origin);

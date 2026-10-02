@@ -27,6 +27,7 @@ import type {
   VoiceStatus,
   WorkspaceContext,
   WorkspaceLayout,
+  WorkspaceOpenIntent,
   WorkspaceViewId,
 } from "@ardurbot/contracts";
 import {
@@ -287,12 +288,18 @@ import { useTakeControl } from "./shell/use-take-control";
 import { handleWorkspaceOpenRun } from "./shell/workspace-run";
 import { SystemDictation } from "./system/SystemDictation";
 import { WindowChrome } from "./WindowChrome";
+import { workspaceFilesSnapshot } from "./workspace/file-sessions";
 import {
   closeWorkspaceView,
   openWorkspaceView,
   useWorkspaceLayout,
   workspaceLayoutKey,
 } from "./workspace/layout-state";
+import {
+  checkedWorkspaceIntent,
+  workspaceFileIntentFromHref,
+  workspaceIntentFromHref,
+} from "./workspace/open-intent";
 import { terminalSupported } from "./workspace/terminal-controller";
 import { availableWorkspaceViews, isWorkspaceViewId } from "./workspace/view-registry";
 import { WorkspaceFileGuard } from "./workspace/WorkspaceFileGuard";
@@ -980,6 +987,10 @@ export function ShellPage({
   const closeWorkspace = (tab: string) => {
     if (!isWorkspaceViewId(tab)) return;
     if (tab === "terminal" && terminalCloseGuard.current && !terminalCloseGuard.current()) return;
+    if (tab === "ide" || tab === "files") {
+      const files = workspaceFilesSnapshot();
+      if (files.saving || (files.dirty && !window.confirm(t`Unsaved changes`))) return;
+    }
     const next = closeWorkspaceView(workspaceLayout, tab);
     updateWorkspaceLayout(() => next);
     if (!next.open.length) setPanelUnchecked(null);
@@ -1047,6 +1058,39 @@ export function ShellPage({
       : null;
   const workspaceContextLoading =
     Boolean(workspaceBotId) && workspaceState?.key !== workspaceLocationKey;
+  const intentScope = useRef(workspaceLocationKey);
+  const intentRequest = useRef(0);
+  if (intentScope.current !== workspaceLocationKey) {
+    intentScope.current = workspaceLocationKey;
+    intentRequest.current++;
+  }
+  const [workspaceTarget, setWorkspaceTarget] = useState<{
+    scope: string;
+    intent: Extract<WorkspaceOpenIntent, { target: unknown }>;
+    requestId: number;
+  } | null>(null);
+  const openWorkspaceTarget = async (value: unknown, sourceBotId: string) => {
+    const intent = checkedWorkspaceIntent(value, sourceBotId, workspaceContext);
+    if (!intent || !active || sourceBotId !== active.id || !("target" in intent)) {
+      setSendError(t`Could not open file`);
+      return;
+    }
+    const requestId = ++intentRequest.current;
+    try {
+      await rpc.ide.target(intent.target);
+      if (requestId !== intentRequest.current) return;
+      openWorkspace(intent.view.type);
+      setWorkspaceTarget({ scope: workspaceLocationKey, intent, requestId });
+    } catch {
+      if (requestId === intentRequest.current) setSendError(t`Could not open file`);
+    }
+  };
+  const targetIntent =
+    workspaceTarget?.scope === workspaceLocationKey ? workspaceTarget.intent : null;
+  const fileLocation =
+    targetIntent && "path" in targetIntent
+      ? { path: targetIntent.path, line: targetIntent.line, requestId: workspaceTarget!.requestId }
+      : undefined;
   const effectiveWorkspaceTab = getEffectiveWorkspaceTab(
     workspaceTab,
     computer?.capabilities?.graphical,
@@ -3074,6 +3118,19 @@ export function ShellPage({
     <div
       data-testid="shell-root"
       data-ready={shellReady}
+      onClickCapture={(event) => {
+        if (!(event.target instanceof Element)) return;
+        const link = event.target.closest<HTMLAnchorElement>("a[href]");
+        const message = link?.closest<HTMLElement>("[data-message-id]");
+        if (!link || !message) return;
+        const href = link.getAttribute("href") ?? "";
+        const value =
+          workspaceIntentFromHref(href) ?? workspaceFileIntentFromHref(href, workspaceContext);
+        if (value === null) return;
+        event.preventDefault();
+        event.stopPropagation();
+        void openWorkspaceTarget(value, message.dataset.messageBotId || active?.id || "");
+      }}
       className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background text-foreground/90"
       onTouchStartCapture={(event) => {
         if (
@@ -4148,6 +4205,7 @@ export function ShellPage({
                     context={workspaceContext}
                     contextLoading={workspaceContextLoading}
                     tab={workspaceTab}
+                    fileLocation={fileLocation}
                     onTabChange={setWorkspaceTab}
                     openViews={workspaceLayout.open}
                     visible={workspaceShown}
@@ -5561,6 +5619,7 @@ const Transcript = memo(function Transcript({
             <div
               key={message.id}
               data-message-id={message.id}
+              data-message-bot-id={message.botId}
               className={cn(
                 peerReceipt || coordination
                   ? "relative py-0.5"
