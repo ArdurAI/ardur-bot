@@ -23,6 +23,7 @@ import {
   HOST_MOVE_UNAVAILABLE_CODE,
   HOST_MOVE_UNAVAILABLE_MESSAGE,
   newBotSandboxAvailable,
+  newBotTeamLocation,
   recommendedContainer,
   runtimeNames,
   runtimeSupportsLocation,
@@ -67,13 +68,6 @@ export async function newBotComputerOptions(
       orderBy: [{ bots: { _count: "desc" } }, { createdAt: "asc" }, { id: "asc" }],
     }),
   ]);
-  const teamKind = teamComputer
-    ? computerExecutionKind({
-        ...teamComputer,
-        connectionSettings: connections.find((entry) => entry.id === teamComputer.connectionId)
-          ?.settings,
-      })
-    : null;
   const container = recommendedContainer(sandboxProvider, connections);
   const sandboxAvailable = newBotSandboxAvailable(sandboxProvider, container);
   return {
@@ -87,14 +81,13 @@ export async function newBotComputerOptions(
       sandboxAvailable,
     }),
     container,
-    team:
-      teamComputer && teamKind
-        ? {
-            location: teamKind === "desktop" ? ("host" as const) : ("sandbox" as const),
-            connectionId: teamComputer.connectionId,
-            name: connections.find((entry) => entry.id === teamComputer.connectionId)?.name,
-          }
-        : null,
+    team: teamComputer
+      ? {
+          location: newBotTeamLocation(teamComputer),
+          connectionId: teamComputer.connectionId,
+          name: connections.find((entry) => entry.id === teamComputer.connectionId)?.name,
+        }
+      : null,
   };
 }
 

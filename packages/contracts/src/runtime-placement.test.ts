@@ -10,6 +10,8 @@ import {
   computerRunsOnHost,
   defaultNewBotLocation,
   newBotSandboxAvailable,
+  newBotTeamLocation,
+  newBotTeamLocationConflict,
   RUNTIME_PLACEMENT_RULES,
   runtimeSupportsLocation,
 } from "./runtime-placement.js";
@@ -54,6 +56,33 @@ it.each(Object.keys(COMPUTER_KINDS))(
   (provider) => {
     expect(newBotSandboxAvailable(provider, null)).toBe(provider !== "desktop");
     expect(newBotSandboxAvailable(provider, { connectionId: "saved" })).toBe(true);
+  },
+);
+it.each([
+  [{ kind: "none" }, { kind: "none" }, false],
+  [{ kind: "unknown" }, { kind: "fake" }, false],
+  [{ kind: "docker" }, { kind: "fake" }, false],
+  [{ kind: "remote-docker" }, { kind: "docker" }, false],
+  [{ kind: "docker" }, { kind: "desktop", connectionId: "saved" }, true],
+  [{ kind: "desktop" }, { kind: "none" }, true],
+  [{ kind: "none" }, { kind: "desktop" }, true],
+  [{ kind: "desktop" }, { kind: "desktop" }, false],
+  [
+    { kind: "desktop", connectionId: "saved" },
+    { kind: "remote-docker", connectionId: "saved" },
+    false,
+  ],
+  [
+    { kind: "desktop", connectionId: "first" },
+    { kind: "remote-docker", connectionId: "second" },
+    true,
+  ],
+] as const)(
+  "compares Team joins by host and saved connection: %j / %j",
+  (team, requested, conflict) => {
+    expect(newBotTeamLocation(team)).toBe(computerRunsOnHost(team) ? "host" : "sandbox");
+    expect(newBotTeamLocationConflict(team, requested)).toBe(conflict);
+    expect(newBotTeamLocationConflict(requested, team)).toBe(conflict);
   },
 );
 it.each(locations)("grants host authority only to connectionless desktop: %j", (location) => {

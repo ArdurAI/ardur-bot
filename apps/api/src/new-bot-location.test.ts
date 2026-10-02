@@ -161,13 +161,18 @@ it("publishes the same default and revalidates an explicit host choice after dis
   expect(f.upsert).not.toHaveBeenCalled();
 });
 it.each([
-  ["docker", null],
-  ["desktop", "saved"],
+  ["docker", null, "docker"],
+  ["desktop", "saved", "docker"],
+  ["docker", null, "fake"],
+  ["docker", null, "desktop"],
+  ["remote-docker", null, "docker"],
+  ["none", null, "none"],
+  ["unknown", null, "fake"],
 ] as const)(
   "duplicates the source Team sandbox despite a usable host: %s / %s",
-  async (kind, connectionId) => {
+  async (kind, connectionId, sandboxProvider) => {
     const computer = { id: "team", kind, connectionId, spaceId: "space", scope: "team" };
-    const f = fixture({ team: computer });
+    const f = fixture({ team: computer, sandboxProvider });
     f.prisma.bot.findFirst.mockResolvedValue({
       name: "Source",
       title: "",
@@ -212,12 +217,17 @@ it.each(["host", "conflict"])("maps the duplicate %s refusal", async (refusal) =
   expect(f.create).not.toHaveBeenCalled();
 });
 it.each([
-  ["docker", null],
-  ["desktop", "saved"],
+  ["docker", null, "docker"],
+  ["desktop", "saved", "docker"],
+  ["docker", null, "fake"],
+  ["docker", null, "desktop"],
+  ["remote-docker", null, "docker"],
+  ["none", null, "none"],
+  ["unknown", null, "fake"],
 ] as const)(
   "automatic first/quick/starter bots join the saved Team sandbox: %s / %s",
-  async (kind, connectionId) => {
-    const f = fixture({ team: { id: "team", kind, connectionId } });
+  async (kind, connectionId, sandboxProvider) => {
+    const f = fixture({ team: { id: "team", kind, connectionId }, sandboxProvider });
     const result = await f.call("bots/create", { name: "Starter", color: "#000" });
     expect(result.status, JSON.stringify(result.body)).toBe(200);
     expect(f.create.mock.calls[0]![0].data.computerId).toBe("team");
@@ -249,13 +259,17 @@ it("does not repurpose a saved Team container to satisfy an explicit host choice
   expect(f.create).not.toHaveBeenCalled();
 });
 it.each([
-  ["desktop", null, "host"],
-  ["docker", null, "sandbox"],
-  ["desktop", "saved", "sandbox"],
+  ["desktop", null, "host", "docker"],
+  ["docker", null, "sandbox", "fake"],
+  ["docker", null, "sandbox", "desktop"],
+  ["remote-docker", null, "sandbox", "docker"],
+  ["none", null, "sandbox", "none"],
+  ["unknown", null, "sandbox", "fake"],
+  ["desktop", "saved", "sandbox", "docker"],
 ] as const)(
   "publishes the Team execution location: %s / %s",
-  async (kind, connectionId, location) => {
-    const f = fixture({ team: { id: "team", kind, connectionId } });
+  async (kind, connectionId, location, sandboxProvider) => {
+    const f = fixture({ team: { id: "team", kind, connectionId }, sandboxProvider });
     f.prisma.connection.findMany.mockResolvedValue([
       {
         id: "saved",
@@ -264,7 +278,7 @@ it.each([
         metadata: { engine: "docker" },
       },
     ] as never);
-    expect((await newBotComputerOptions(f.deps, owner, "docker")).team).toMatchObject({
+    expect((await newBotComputerOptions(f.deps, owner, sandboxProvider)).team).toMatchObject({
       location,
       connectionId,
     });
@@ -389,6 +403,96 @@ it("fails closed when a legacy Team row's saved engine disappeared", async () =>
   const result = await f.call("bots/create", { name: "Bot", color: "#000", computerMode: "team" });
   expect(result.status).toBe(400);
   expect(f.create).not.toHaveBeenCalled();
+});
+it("onboarding creates the first bot without a provider and a second bot joins its Team row", async () => {
+  const f = fixture({ sandboxProvider: "none", connected: false, configured: false });
+  const input = { name: "Starter", color: "#000" };
+  const first = await f.call("bots/create", input);
+  expect(first.status, JSON.stringify(first.body)).toBe(200);
+  expect(f.upsert.mock.calls[0]![0]).toMatchObject({
+    create: { kind: "none", scope: "team" },
+    update: {},
+  });
+  f.prisma.computer.findFirst.mockResolvedValue({
+    id: "computer",
+    kind: "none",
+    connectionId: null,
+  });
+  const options = await f.call("computer/creationOptions", undefined);
+  expect(options.body.json.team).toEqual({ location: "sandbox", connectionId: null });
+  const second = await f.call("bots/create", input);
+  expect(second.status, JSON.stringify(second.body)).toBe(200);
+  expect(f.create).toHaveBeenCalledTimes(2);
+  expect(f.create.mock.calls[1]![0].data.computerId).toBe("computer");
+  expect(f.upsert).toHaveBeenCalledOnce();
+});
+it.each(["fake", "desktop"])(
+  "the form joins a connectionless Team docker row on %s without moving it",
+  async (sandboxProvider) => {
+    const f = fixture({
+      sandboxProvider,
+      team: { id: "team", kind: "docker", connectionId: null },
+    });
+    f.prisma.connection.findMany.mockResolvedValue([
+      { id: "saved", metadata: { engine: "docker" }, displayName: "Saved", status: "connected" },
+    ] as never);
+    const options = await f.call("computer/creationOptions", undefined);
+    expect(options.body.json).toMatchObject({
+      sandboxAvailable: true,
+      team: { location: "sandbox", connectionId: null },
+    });
+    const result = await f.call("bots/create", {
+      name: "Bot",
+      color: "#000",
+      computerMode: "team",
+      computerLocation: "sandbox",
+    });
+    expect(result.status, JSON.stringify(result.body)).toBe(200);
+    expect(f.create.mock.calls[0]![0].data.computerId).toBe("team");
+    expect(f.upsert).not.toHaveBeenCalled();
+  },
+);
+it("refuses a different saved Team connection with the existing conflict code", async () => {
+  const f = fixture({ team: { id: "team", kind: "desktop", connectionId: "first" } });
+  const result = await f.call("bots/create", {
+    name: "Bot",
+    color: "#000",
+    computerMode: "team",
+    computerLocation: "sandbox",
+    isolatedComputer: { connectionId: "second" },
+  });
+  expect(result.status).toBe(400);
+  expect(JSON.stringify(result.body)).toContain("new-bot-team-location-conflict");
+  expect(f.create).not.toHaveBeenCalled();
+  expect(f.upsert).not.toHaveBeenCalled();
+});
+it("a non-owner duplicate cannot reach the host Team computer", async () => {
+  const computer = {
+    id: "team",
+    kind: "desktop",
+    connectionId: null,
+    scope: "team",
+    spaceId: "space",
+  };
+  const f = fixture({
+    team: computer,
+    actor: { ...owner, userId: "member", isDeploymentOwner: false },
+  });
+  f.prisma.bot.findFirst.mockResolvedValue({
+    name: "Source",
+    title: "",
+    description: "",
+    instructions: "",
+    notifyOnFinish: true,
+    color: "#000",
+    computer,
+    runtimeKind: "pi",
+  } as never);
+  const result = await f.call("bots/duplicate", { botId: "source" });
+  expect(result.status).toBe(400);
+  expect(JSON.stringify(result.body)).toContain("new-bot-host-unavailable");
+  expect(f.create).not.toHaveBeenCalled();
+  expect(f.upsert).not.toHaveBeenCalled();
 });
 it("joins a legacy Team row on the identical saved sandbox without rewriting it", async () => {
   const f = fixture({ team: { id: "team", kind: "desktop", connectionId: "saved" } });

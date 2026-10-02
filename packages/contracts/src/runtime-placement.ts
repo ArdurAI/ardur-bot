@@ -79,6 +79,21 @@ export function computerRunsOnHost(location: RuntimeComputerLocation | null | un
   );
 }
 
+/** Joining preserves the Team row; unresolved non-host rows never grant host authority. */
+export function newBotTeamLocation(location: RuntimeComputerLocation): NewBotLocation {
+  return computerRunsOnHost(location) ? "host" : "sandbox";
+}
+
+export function newBotTeamLocationConflict(
+  team: RuntimeComputerLocation,
+  requested: RuntimeComputerLocation,
+): boolean {
+  return (
+    newBotTeamLocation(team) !== newBotTeamLocation(requested) ||
+    (team.connectionId ?? null) !== (requested.connectionId ?? null)
+  );
+}
+
 export function computerConnectionKind(
   settings: Pick<ComputerConnectionSettings, "engine">,
 ): SandboxKind {
