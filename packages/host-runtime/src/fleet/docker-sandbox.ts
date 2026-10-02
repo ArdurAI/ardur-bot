@@ -43,6 +43,8 @@ function saveEngineError(error: unknown): ComputerWorkspaceSaveError {
     return new ComputerWorkspaceSaveError("too-large", "too-large");
   const category =
     error instanceof EngineCommandError ? error.category : engineFailureReason(error);
+  if (category === "source-not-owned")
+    return new ComputerWorkspaceSaveError("save-failed", category);
   if (
     category === "source-not-running" ||
     category === "source-missing" ||
@@ -201,7 +203,10 @@ export class FleetDockerSandboxProvider extends LinuxFleetSandbox {
   private name(computer: ComputerRef, context: AdapterContext) {
     const name = `ardurbot-${fleetComputerKey(context.spaceId, computer.botId).slice(0, 40)}`;
     if (computer.providerRef !== name)
-      throw new Error("Computer does not belong to this workspace.");
+      throw new EngineCommandError(
+        "source-not-owned",
+        "Computer does not belong to this workspace.",
+      );
     return name;
   }
   private async owned(name: string, context: AdapterContext) {
@@ -235,7 +240,7 @@ export class FleetDockerSandboxProvider extends LinuxFleetSandbox {
       record?.Config.Labels?.["ardurbot.com/computer"] !== name ||
       record.Config.Labels?.["ardurbot.com/space"] !== context.spaceId
     )
-      throw new Error("Engine computer identity does not match.");
+      throw new EngineCommandError("source-not-owned", "Engine computer identity does not match.");
     return record;
   }
   private async ownedVolume(name: string, context: AdapterContext) {
@@ -256,7 +261,7 @@ export class FleetDockerSandboxProvider extends LinuxFleetSandbox {
       records[0]?.Labels?.["ardurbot.com/computer"] !== name ||
       records[0]?.Labels?.["ardurbot.com/space"] !== context.spaceId
     )
-      throw new Error("Engine volume identity does not match.");
+      throw new EngineCommandError("source-not-owned", "Engine volume identity does not match.");
     return true;
   }
   async provision(

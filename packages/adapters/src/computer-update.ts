@@ -195,7 +195,7 @@ export async function performComputerUpdate(deps: Deps, updateId: string) {
     // do next (the queued job discovered its engine gone after admission already let it through).
     const failureReason =
       error instanceof ComputerWorkspaceSaveError
-        ? error.reason
+        ? error.detail
         : error instanceof MissingComputerProviderError
           ? error.message
           : undefined;

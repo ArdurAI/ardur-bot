@@ -433,6 +433,8 @@ describe("computer recovery preserves live work", () => {
     "export process killed",
     "ECONNRESET",
     "Sandbox not found",
+    "EACCES private-output",
+    "operation timed out private-output",
   ])("aborts update and its retry when checkpoint fails with %s", async (message) => {
     const { deps, row, first } = await fixture();
     const error = new Error(message);
@@ -449,8 +451,15 @@ describe("computer recovery preserves live work", () => {
         reason: "save-failed",
         cause: error,
         engineFailureCategory:
-          message === "checkpoint directory does not exist" ? "socket-missing" : "command-failed",
+          message === "checkpoint directory does not exist"
+            ? "socket-missing"
+            : message.startsWith("EACCES")
+              ? "permission-denied"
+              : message.startsWith("operation timed out")
+                ? "timed-out"
+                : "command-failed",
       });
+      await expect(saved).rejects.toHaveProperty("cause", error);
       expect(row).toMatchObject({
         state: "error",
         providerRef: first.providerRef,

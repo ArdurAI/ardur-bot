@@ -74,6 +74,12 @@ describe("computerUpdateOffersRecover", () => {
       expect(computerUpdateOffersRecover({ status: "failed", failureReason })).toBe(true);
       expect(computerUpdateOffersRecover({ status: "interrupted", failureReason })).toBe(false);
       expect(computerUpdateOffersRecover({ status: "running", failureReason })).toBe(false);
+      expect(
+        computerUpdateOffersRecover({
+          status: "failed",
+          failureReason: `${failureReason}:source-not-owned`,
+        }),
+      ).toBe(true);
     },
   );
   it("offers Recover for an ordinary failure, never for one with a missing-engine reason", () => {
@@ -110,6 +116,14 @@ describe("computerUpdateAttentionMessage", () => {
       expect(computerUpdateAttentionMessage({ status: "interrupted", failureReason }, copy)).toBe(
         copy.interrupted,
       );
+      for (const category of ["permission-denied", "source-not-owned", "command-failed"]) {
+        expect(
+          computerUpdateAttentionMessage(
+            { status: "failed", failureReason: `${failureReason}:${category}` },
+            copy,
+          ),
+        ).toBe(copy.workspaceSave[failureReason]);
+      }
     },
   );
   it("shows the missing-engine sentence in place of the generic recovery warning", () => {

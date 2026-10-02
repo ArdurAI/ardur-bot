@@ -1,7 +1,8 @@
 import type { ComputerUpdate } from "@ardurbot/contracts";
 import {
   COMPUTER_UPDATE_STAGES,
-  ComputerWorkspaceSaveFailureReasonSchema,
+  type ComputerWorkspaceSaveFailureReasonSchema,
+  computerWorkspaceSaveFailureReason,
   ENGINE_MISSING_CODE,
   errorDataCode,
   HOST_MOVE_UNAVAILABLE_CODE,
@@ -117,8 +118,7 @@ export function computerUpdateOffersRecover(
 ): boolean {
   return (
     update.status === "failed" &&
-    (!update.failureReason ||
-      ComputerWorkspaceSaveFailureReasonSchema.safeParse(update.failureReason).success)
+    (!update.failureReason || computerWorkspaceSaveFailureReason(update.failureReason) !== null)
   );
 }
 
@@ -136,8 +136,8 @@ export function computerUpdateAttentionMessage(
   },
 ): string {
   if (update.status === "interrupted") return copy.interrupted;
-  const reason = ComputerWorkspaceSaveFailureReasonSchema.safeParse(update.failureReason);
-  if (reason.success) return copy.workspaceSave[reason.data];
+  const reason = computerWorkspaceSaveFailureReason(update.failureReason);
+  if (reason) return copy.workspaceSave[reason];
   return update.failureReason ?? copy.generic;
 }
 

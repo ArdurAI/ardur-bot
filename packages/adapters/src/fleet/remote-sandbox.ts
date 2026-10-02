@@ -122,9 +122,13 @@ export class RemoteFleetSandbox implements SandboxProvider {
         frame.channel === "result" &&
         (action.type === "workspace.ready" || action.type === "export")
       ) {
-        const result = RemoteWorkspaceSaveResultSchema.parse(frame.data);
-        if (!result.ok)
-          throw new ComputerWorkspaceSaveError(result.reason, result.engineFailureCategory);
+        const result = RemoteWorkspaceSaveResultSchema.safeParse(frame.data);
+        if (!result.success) throw new ComputerWorkspaceSaveError("save-failed", "command-failed");
+        if (!result.data.ok)
+          throw new ComputerWorkspaceSaveError(
+            result.data.reason,
+            result.data.engineFailureCategory,
+          );
       }
       yield frame;
     }
@@ -177,7 +181,7 @@ export class RemoteFleetSandbox implements SandboxProvider {
     const hash = fleetComputerKey(context.spaceId, computer.botId);
     const name = this.settings.engine === "ssh" ? `ssh:${hash}` : `ardurbot-${hash.slice(0, 40)}`;
     if (computer.providerRef !== name)
-      throw new ComputerWorkspaceSaveError("save-failed", "command-failed");
+      throw new ComputerWorkspaceSaveError("save-failed", "source-not-owned");
     const result = RemoteWorkspaceSaveResultSchema.safeParse(
       await this.result(computer.botId, { type: "workspace.ready" }, context),
     );

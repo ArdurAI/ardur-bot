@@ -306,8 +306,11 @@ it.each(
         expect(commands.findIndex((args) => args.includes("start"))).toBeLessThan(
           commands.findIndex((args) => args.includes(LINUX_ARCHIVE_SCRIPT)),
         );
-        if (bridge)
+        if (bridge) {
+          expect(actions).toContain("workspace.ready");
+          expect(actions).toContain("export");
           expect(actions.indexOf("workspace.ready")).toBeLessThan(actions.indexOf("export"));
+        }
       } else {
         await expect(work).rejects.toBeInstanceOf(ComputerWorkspaceSaveError);
         await expect(work).rejects.toMatchObject({
@@ -323,6 +326,12 @@ it.each(
                     ? "save-failed"
                     : "source-missing",
         });
+        if (
+          (scenario.startsWith("wrong-") && scenario !== "wrong-mount") ||
+          scenario === "stale-reference"
+        ) {
+          await expect(work).rejects.toMatchObject({ engineFailureCategory: "source-not-owned" });
+        }
         expect(row.state).toBe("error");
         expect(row.homeRevision).toBe("old");
         if (

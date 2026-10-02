@@ -119,6 +119,34 @@ describe("background computer maintenance", () => {
       expect(computerUpdateView(row).failureReason).toBe(reason);
     },
   );
+  it.each(["permission-denied", "timed-out", "command-failed", "source-not-owned"])(
+    "persists and logs only the save category %s, not its local cause",
+    async (category) => {
+      const { deps, row } = fixture();
+      const logged = vi.spyOn(getLogger(), "error").mockImplementation(() => {});
+      try {
+        replacement.mockRejectedValueOnce(
+          new ComputerWorkspaceSaveError("save-failed", category, {
+            cause: new Error("private-output"),
+          }),
+        );
+        await performComputerUpdate(deps, row.id);
+        expect(row).toMatchObject({ status: "failed", failureReason: `save-failed:${category}` });
+        expect(computerUpdateView(row).failureReason).toBe(`save-failed:${category}`);
+        expect(logged).toHaveBeenCalledWith(
+          "computer update failed",
+          undefined,
+          expect.objectContaining({
+            saveFailureReason: "save-failed",
+            engineFailureCategory: category,
+          }),
+        );
+        expect(JSON.stringify(logged.mock.calls)).not.toContain("private-output");
+      } finally {
+        logged.mockRestore();
+      }
+    },
+  );
   it("passes an explicit sandbox move through the queued worker despite a host default", async () => {
     const { row, deps } = fixture();
     row.computer.kind = "desktop";

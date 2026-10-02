@@ -1,14 +1,17 @@
 import { z } from "zod";
 import { ComputerConnectionSettingsSchema } from "./computer-connections.js";
 import { ComputerProfileSchema } from "./computer-profiles.js";
-import { ComputerWorkspaceSaveFailureReasonSchema } from "./computer-workspace.js";
+import {
+  ComputerWorkspaceSaveFailureCategorySchema,
+  ComputerWorkspaceSaveFailureReasonSchema,
+} from "./computer-workspace.js";
 
 export const RemoteWorkspaceSaveResultSchema = z.discriminatedUnion("ok", [
   z.strictObject({ ok: z.literal(true) }),
   z.strictObject({
     ok: z.literal(false),
     reason: ComputerWorkspaceSaveFailureReasonSchema,
-    engineFailureCategory: z.string().optional(),
+    engineFailureCategory: ComputerWorkspaceSaveFailureCategorySchema.optional(),
   }),
 ]);
 

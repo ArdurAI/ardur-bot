@@ -11,6 +11,30 @@ export type ComputerWorkspaceSaveFailureReason = z.infer<
   typeof ComputerWorkspaceSaveFailureReasonSchema
 >;
 
+export const ComputerWorkspaceSaveFailureCategorySchema = z.enum([
+  ...ComputerWorkspaceSaveFailureReasonSchema.options,
+  "source-not-owned",
+  "command-failed",
+  "permission-denied",
+  "timed-out",
+  "socket-missing",
+  "engine-not-running",
+  "not-reachable",
+]);
+
+/** Read legacy reason tokens and reason:category diagnostics without displaying the detail. */
+export function computerWorkspaceSaveFailureReason(detail?: string) {
+  const [reason, category, extra] = detail?.split(":") ?? [];
+  if (
+    extra !== undefined ||
+    (category !== undefined &&
+      !ComputerWorkspaceSaveFailureCategorySchema.safeParse(category).success)
+  )
+    return null;
+  const parsed = ComputerWorkspaceSaveFailureReasonSchema.safeParse(reason);
+  return parsed.success ? parsed.data : null;
+}
+
 /** Only reason/category may cross logging or UI boundaries; cause stays local. */
 export class ComputerWorkspaceSaveError extends Error {
   readonly engineFailureCategory?: string;
@@ -21,18 +45,12 @@ export class ComputerWorkspaceSaveError extends Error {
   ) {
     super(reason, options);
     this.name = "ComputerWorkspaceSaveError";
-    if (
-      engineFailureCategory &&
-      [
-        ...ComputerWorkspaceSaveFailureReasonSchema.options,
-        "command-failed",
-        "permission-denied",
-        "timed-out",
-        "socket-missing",
-        "engine-not-running",
-        "not-reachable",
-      ].includes(engineFailureCategory)
-    )
-      this.engineFailureCategory = engineFailureCategory;
+    const category = ComputerWorkspaceSaveFailureCategorySchema.safeParse(engineFailureCategory);
+    if (category.success) this.engineFailureCategory = category.data;
+  }
+  get detail() {
+    return this.engineFailureCategory
+      ? `${this.reason}:${this.engineFailureCategory}`
+      : this.reason;
   }
 }
