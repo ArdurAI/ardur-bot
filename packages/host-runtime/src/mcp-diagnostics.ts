@@ -3,6 +3,51 @@ import { redactSensitiveText } from "../../logging/src/redaction.js";
 
 const sensitiveFlag = /(?:password|passwd|secret|token|key|credential|authorization|cookie)/i;
 
+// Preserve physical line framing; discard invisible token separators before matching.
+const invisibleSeparator =
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: Controls are the separators being removed.
+  /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]|\p{Default_Ignorable_Code_Point}/u;
+
+/** Constant-space terminal parser, including escapes split across stream chunks. */
+export function createMcpTextNormalizer() {
+  let state: "text" | "escape" | "csi" | "string" | "string-escape" = "text";
+  let osc = false;
+  return (text: string): string => {
+    if (state === "text" && !invisibleSeparator.test(text)) return text;
+    const parts: string[] = [];
+    for (const character of text) {
+      if (state === "string" || state === "string-escape") {
+        if (
+          character === "\u009c" ||
+          (osc && character === "\x07") ||
+          (state === "string-escape" && character === "\\")
+        )
+          state = "text";
+        else state = character === "\x1b" ? "string-escape" : "string";
+      } else if (character === "\x1b") state = "escape";
+      else if (character === "\u009b") state = "csi";
+      else if (character === "\u009d") {
+        state = "string";
+        osc = true;
+      } else if (state === "escape") {
+        if (character === "[") state = "csi";
+        else if (character === "]" || /[PX^_]/.test(character)) {
+          state = "string";
+          osc = character === "]";
+        } else if (character >= "0" && character <= "~") state = "text";
+      } else if (state === "csi") {
+        if (character >= "@" && character <= "~") state = "text";
+      } else if (!invisibleSeparator.test(character)) parts.push(character);
+    }
+    // Unterminated escapes stay suppressed, never buffered or released as text.
+    return parts.join("");
+  };
+}
+
+function normalizeMcpText(text: string): string {
+  return createMcpTextNormalizer()(text);
+}
+
 export function environmentSecrets(env: NodeJS.ProcessEnv): string[] {
   return Object.entries(env).flatMap(([key, value]) =>
     sensitiveFlag.test(key) && value ? [value] : [],
@@ -39,23 +84,28 @@ function secretSpellings(secret: string): Set<string> {
 export function mcpSecretSpellings(secrets: readonly string[]): string[] {
   const active = secrets.flatMap((secret) => [secret, ...secret.split(/\r?\n/).filter(Boolean)]);
   return [
-    ...new Set(active.filter(Boolean).flatMap((secret) => [...secretSpellings(secret)])),
+    ...new Set(
+      active
+        .filter(Boolean)
+        .flatMap((secret) => [...secretSpellings(secret)].map(normalizeMcpText))
+        .filter(Boolean),
+    ),
   ].sort((a, b) => b.length - a.length);
 }
 
 export function mcpTextContainsSecret(value: string, secret: string): boolean {
+  const normalized = normalizeMcpText(value);
   return (
-    Boolean(secret) && [...secretSpellings(secret)].some((spelling) => value.includes(spelling))
+    Boolean(secret) &&
+    mcpSecretSpellings([secret]).some((spelling) => normalized.includes(spelling))
   );
 }
 
 export function redactMcpText(value: string, secrets: readonly string[] = []): string {
-  let result = value;
+  let result = normalizeMcpText(value);
   for (const spelling of mcpSecretSpellings(secrets))
     result = result.split(spelling).join("[redacted]");
-  return redactSensitiveText(result)
-    .replaceAll("[Redacted]", "[redacted]")
-    .replace(new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*[A-Za-z]`, "g"), "");
+  return redactSensitiveText(result).replaceAll("[Redacted]", "[redacted]");
 }
 
 export function redactMcpArguments(

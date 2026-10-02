@@ -86,6 +86,8 @@ describe("HermesRuntime M0 ACP seam", () => {
     ["session-new-error", true],
     ["session-new-long-error", false],
     ["session-new-long-error", true],
+    ["session-new-escaped-error", false],
+    ["session-new-escaped-error", true],
   ] as const)(
     "logs only safe protocol metadata for %s (detailed=%s)",
     async (scenario, detailed) => {

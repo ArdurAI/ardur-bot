@@ -2,7 +2,7 @@ import type { ChildProcess } from "node:child_process";
 import type { Writable } from "node:stream";
 import { redactBindings } from "../../logging/src/redaction.js";
 import { serializeError } from "../../logging/src/serialize-error.js";
-import { mcpSecretSpellings, redactMcpText } from "./mcp-diagnostics.js";
+import { createMcpTextNormalizer, mcpSecretSpellings, redactMcpText } from "./mcp-diagnostics.js";
 
 /**
  * The slice of a service logger the capture helper needs. The logging package's
@@ -46,8 +46,10 @@ export function detailedProcessLogsEnabled(): boolean {
 function knownSecretStream(secrets: readonly string[], emit: (text: string) => void) {
   let pending = "";
   let suppressed = false;
+  const normalize = createMcpTextNormalizer();
   return (text: string, final = false) => {
     if (suppressed) return;
+    text = normalize(text);
     // Keep the list live: a running transport can acquire additional bridge keys.
     const spellings = mcpSecretSpellings(secrets)
       .map((spelling) => spelling.replace(/[\r\n]/g, ""))

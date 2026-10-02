@@ -8,6 +8,31 @@ import {
 } from "./mcp-diagnostics.js";
 
 describe("MCP diagnostics", () => {
+  it.each([
+    "a\x1b[0mbc",
+    "a\x1b[?25lbc",
+    "a\x1b]0;fixture title\x07bc",
+    "a\x1b]0;fixture title\x1b\\bc",
+    "a\x1bMbc",
+    "a\x1b(Bbc",
+    "a\x00\x08\x7fbc",
+    "a\u200b\u2060\ufeffbc",
+    "a\u009b0mbc",
+    "a\u009d0;fixture title\u009cbc",
+  ])("normalizes terminal and invisible separators before matching secrets (%j)", (text) => {
+    expect(redactMcpText(text, ["abc"])).toBe("[redacted]");
+    expect(mcpTextContainsSecret(text, "abc")).toBe(true);
+  });
+
+  it.each([
+    ["sk-fixture\x1b[0mSynthetic12345", "[redacted]"],
+    ["Bearer fixture\x1b]0;title\x07OpaqueValue", "Bearer [redacted]"],
+    ["sk-fixture\u200bSynthetic12345", "[redacted]"],
+    ["Bearer fixture\x00OpaqueValue", "Bearer [redacted]"],
+  ])("normalizes before general credential patterns without a known secret (%j)", (text, safe) => {
+    expect(redactMcpText(text)).toBe(safe);
+  });
+
   it("redacts split chunks before storage, retaining only the last 200 lines", () => {
     const ring = new McpLogBuffer(["fixture-secret"]);
     ring.append("token=fixture-");

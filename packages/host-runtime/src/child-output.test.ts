@@ -23,6 +23,10 @@ it("redacts complete diagnostics before capping, including wrapped and encoded k
   expect(safe.slice(0, 300)).not.toContain("fixture");
 });
 
+it("redacts the exact ANSI-interleaved known-secret reproduction", () => {
+  expect(redactChildText("a\x1b[0mbc", ["abc"])).toBe("[redacted]");
+});
+
 function fakeLogger() {
   const debug = vi.fn();
   const logger: ChildOutputLogger = { debug };
@@ -221,6 +225,56 @@ describe("captureChildOutput", () => {
     expect(records).toContain("[redacted]");
     captured.close();
   });
+
+  it.each([
+    "\x1b[0m",
+    "\x1b[?25l",
+    "\x1b]0;fixture title\x07",
+    "\x1b]0;fixture title\x1b\\",
+    "\x1bM",
+    "\x1b(B",
+    "\u200b\x00",
+  ])("normalizes split escapes before streaming known-secret redaction (%j)", (sequence) => {
+    const { logger, debug } = fakeLogger();
+    const stderr = new PassThrough();
+    const secret = "opaque-first-half-second-half";
+    const captured = captureChildOutput({ stderr } as unknown as ChildProcess, {
+      kind: "fixture",
+      logger,
+      secrets: [secret],
+    });
+    stderr.write(secret.slice(0, 17));
+    for (const character of sequence) {
+      stderr.write(character);
+      expect(debug).not.toHaveBeenCalled();
+    }
+    stderr.write(`${secret.slice(17)}\nafter\n`);
+    captured.close();
+    expect(captured.tail()).toBe("[redacted]\nafter");
+    expect(JSON.stringify(debug.mock.calls)).not.toMatch(/opaque|second-half|fixture title/);
+    stderr.destroy();
+  });
+
+  it.each([
+    ["sk-fixture\x1b[0mSynthetic12345", "sk-fixtureSynthetic12345"],
+    ["Bearer fixture\x1b]0;title\x1b\\OpaqueValue", "fixtureOpaqueValue"],
+  ])(
+    "normalizes split escapes before streaming general credential patterns (%j)",
+    (text, secret) => {
+      const { logger, debug } = fakeLogger();
+      const stderr = new PassThrough();
+      const captured = captureChildOutput({ stderr } as unknown as ChildProcess, {
+        kind: "fixture",
+        logger,
+      });
+      for (const character of text) stderr.write(character);
+      stderr.write("\n");
+      captured.close();
+      expect(captured.tail()).toBe(text.startsWith("Bearer") ? "Bearer [redacted]" : "[redacted]");
+      expect(captured.tail() + JSON.stringify(debug.mock.calls)).not.toContain(secret);
+      stderr.destroy();
+    },
+  );
 
   it("suppresses rather than cuts a credential larger than the carry bound", async () => {
     const { logger, debug } = fakeLogger();

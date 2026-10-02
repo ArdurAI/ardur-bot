@@ -48,8 +48,24 @@ async function handle(value) {
     sessionId = `fixture-${process.pid}`;
     mcp = value.params.mcpServers[0];
     if (scenario === "session-new-closed") process.exit(4);
-    if (scenario === "session-new-error" || scenario === "session-new-long-error") {
-      const message = `session refused: ${process.env.ARDUR_HERMES_PROVIDER_KEY} ${mcp.args.at(-1)} ${mcp.env.find(({ name }) => name === "BRIDGE_TOKEN")?.value}`;
+    if (
+      scenario === "session-new-error" ||
+      scenario === "session-new-long-error" ||
+      scenario === "session-new-escaped-error"
+    ) {
+      const secrets = [
+        process.env.ARDUR_HERMES_PROVIDER_KEY,
+        mcp.args.at(-1),
+        mcp.env.find(({ name }) => name === "BRIDGE_TOKEN")?.value,
+      ];
+      const sequences = ["\x1b[0m", "\x1b]0;fixture title\x07", "\x1bM"];
+      const message = `session refused: ${secrets
+        .map((secret, index) =>
+          scenario === "session-new-escaped-error"
+            ? `${secret.slice(0, 8)}${sequences[index]}${secret.slice(8)}`
+            : secret,
+        )
+        .join(" ")}`;
       send({
         id: value.id,
         error: {
