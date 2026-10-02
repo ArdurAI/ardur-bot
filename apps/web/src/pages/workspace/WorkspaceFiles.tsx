@@ -254,11 +254,13 @@ export function WorkspaceFiles({
   };
   const saveRef = useRef(save);
   const openRef = useRef(open);
-  openRef.current = open;
+  useEffect(() => {
+    openRef.current = open;
+    saveRef.current = save;
+  });
   useEffect(() => {
     if (location) openRef.current(location.path, true);
   }, [location, sessionId]);
-  saveRef.current = save;
   useEffect(() => {
     const hotkey = (event: KeyboardEvent) => {
       if (
