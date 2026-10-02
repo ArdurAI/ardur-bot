@@ -7,6 +7,7 @@ import {
 import { RuntimeKindSchema } from "./runtime-pins.js";
 import {
   computerExecutionKind,
+  defaultNewBotLocation,
   RUNTIME_PLACEMENT_RULES,
   runtimeSupportsLocation,
 } from "./runtime-placement.js";
@@ -23,6 +24,19 @@ const locations = [
   { kind: "unknown" },
   {},
 ];
+
+describe("new bot location default", () => {
+  for (const isDeploymentOwner of [true, false])
+    for (const hostConnected of [true, false])
+      for (const hostPaired of [true, false])
+        it(`owner=${isDeploymentOwner}, connected=${hostConnected}, paired=${hostPaired}`, () => {
+          const facts = { isDeploymentOwner, hostConnected, hostPaired };
+          const expected = isDeploymentOwner && hostConnected && hostPaired ? "host" : "sandbox";
+          expect(defaultNewBotLocation(facts)).toBe(expected);
+          expect(defaultNewBotLocation({ ...facts, computerHost: "this-mac" })).toBe(expected);
+          expect(defaultNewBotLocation({ ...facts, computerHost: "docker" })).toBe("sandbox");
+        });
+});
 describe.each(RuntimeKindSchema.options)("%s placement", (runtime) => {
   it.each(locations)("admits only the supported concrete location: %j", (location) => {
     const kind = computerExecutionKind(location);

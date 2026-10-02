@@ -733,6 +733,13 @@ export const appContract = {
   },
   fleet: fleetContract,
   computer: {
+    creationOptions: oc.output(
+      z.object({
+        defaultLocation: z.enum(["host", "sandbox"]),
+        hostAvailable: z.boolean(),
+        container: z.object({ connectionId: Id.nullable() }).nullable(),
+      }),
+    ),
     engine: oc.input(z.object({ connectionId: Id.nullable() })).output(
       z.object({
         name: z.enum(["docker", "podman", "kubernetes", "ssh"]),

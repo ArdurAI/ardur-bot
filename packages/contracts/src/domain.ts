@@ -365,6 +365,7 @@ export const CreateBotInput = z.object({
   notifyOnFinish: z.boolean().default(true),
   color: BotAvatarValueSchema.optional(),
   computerMode: ComputerModeSchema.default("team"),
+  computerLocation: z.enum(["host", "sandbox"]).optional(),
   /** Explicit new-work intent: refuse rather than substitute a host or shared computer. */
   isolatedComputer: z.object({ connectionId: Id.nullable() }).optional(),
   /** Idempotency key within a space (unique with spaceId). */

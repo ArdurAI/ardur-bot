@@ -3,6 +3,34 @@ import { COMPUTER_KINDS } from "./computer-connections.js";
 import type { SandboxKind } from "./ids.js";
 import type { RuntimeKind } from "./runtime-pins.js";
 
+export type NewBotLocation = "host" | "sandbox";
+
+/** The deployment's existing computerHost setting is the single default override. */
+export const NEW_BOT_LOCATION_POLICY = {
+  default: "host",
+  unavailableHost: "sandbox",
+  overrides: { docker: "sandbox", "this-mac": "host" },
+} as const satisfies {
+  default: NewBotLocation;
+  unavailableHost: NewBotLocation;
+  overrides: Record<"docker" | "this-mac", NewBotLocation>;
+};
+
+export function defaultNewBotLocation(input: {
+  isDeploymentOwner: boolean;
+  hostConnected: boolean;
+  hostPaired: boolean;
+  computerHost?: "docker" | "this-mac" | null;
+}): NewBotLocation {
+  const preferred = input.computerHost
+    ? NEW_BOT_LOCATION_POLICY.overrides[input.computerHost]
+    : NEW_BOT_LOCATION_POLICY.default;
+  return preferred === "host" &&
+    !(input.isDeploymentOwner && input.hostConnected && input.hostPaired)
+    ? NEW_BOT_LOCATION_POLICY.unavailableHost
+    : preferred;
+}
+
 export type RuntimeComputerLocation = {
   kind?: string | null;
   connectionId?: string | null;

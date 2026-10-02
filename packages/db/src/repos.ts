@@ -1,14 +1,22 @@
 import { randomUUID } from "node:crypto";
-import type { Actor, Bot, BotSection, MessageBlock, SpaceBot } from "@ardurbot/contracts";
+import type {
+  Actor,
+  Bot,
+  BotSection,
+  MessageBlock,
+  NewBotLocation,
+  SpaceBot,
+} from "@ardurbot/contracts";
 import {
   BOT_COLORS,
   ComputerConnectionSettingsSchema,
   computerKindFacts,
+  defaultNewBotLocation,
   IsolatedComputerUnavailableError,
   RuntimeKindSchema,
 } from "@ardurbot/contracts";
 import type { HistoricalHermesRuntimeConfig } from "@ardurbot/contracts/runtime-config";
-import { defaultComputerKindForNewBot, userVisibleMessages } from "@ardurbot/core";
+import { userVisibleMessages } from "@ardurbot/core";
 import { decodeHistoricalHermesRuntimeConfig } from "@ardurbot/core/runtime-config";
 import type { PrismaClient } from "./client.js";
 import { Prisma } from "./client.js";
@@ -121,7 +129,10 @@ function mapBot(
   };
 }
 
-export function createRepos(prisma: PrismaClient) {
+export function createRepos(
+  prisma: PrismaClient,
+  options: { hostAvailable?: (actor: Actor) => Promise<boolean>; sandboxProvider?: string } = {},
+) {
   async function listBotSectionsForSpaces(
     actor: Actor,
     spaceIds: string[],
@@ -425,6 +436,7 @@ export function createRepos(prisma: PrismaClient) {
         color?: string;
         parentBotId?: string | null;
         computerMode?: ComputerMode;
+        computerLocation?: NewBotLocation;
         isolatedComputer?: { connectionId: string | null };
         spawnKey?: string;
         onCreated?: (
@@ -486,19 +498,30 @@ export function createRepos(prisma: PrismaClient) {
         if (thinkingLevel == null) thinkingLevel = parent.thinkingLevel ?? null;
       }
       const settings = await prisma.deploymentSettings.findUnique({ where: { id: "default" } });
-      let kind = defaultComputerKindForNewBot(
-        process.env.SANDBOX_PROVIDER ?? "docker",
-        settings?.computerHost,
-        runtimeKind,
+      const provider = options.sandboxProvider ?? process.env.SANDBOX_PROVIDER ?? "docker";
+      const hostAvailable = Boolean(
+        actor.isDeploymentOwner &&
+          settings?.ownerUserId === actor.userId &&
+          (await options.hostAvailable?.(actor)),
       );
-      // The kind decision chose Docker although the owner runs bots on This Mac (possible
-      // only for a runtime that supports non-host computers, today the built-in one). That
-      // new bot must not inherit the space's Team computer — it may be the host — so it
-      // starts on its own Docker computer instead. The owner can still move it to the Team
-      // computer (with the This Mac warning). Existing bots and computer rows never change.
+      const location =
+        input.computerLocation ??
+        (input.isolatedComputer
+          ? "sandbox"
+          : defaultNewBotLocation({
+              isDeploymentOwner: actor.isDeploymentOwner,
+              hostConnected: hostAvailable,
+              hostPaired: hostAvailable,
+              computerHost: settings?.computerHost as "docker" | "this-mac" | null | undefined,
+            }));
+      if (location === "host" && !hostAvailable)
+        throw new Error("Connect the host service to choose This computer.");
+      if (location === "host" && input.isolatedComputer)
+        throw new IsolatedComputerUnavailableError();
+      let kind = location === "host" ? "desktop" : provider;
       const privateDockerComputer =
-        Boolean(input.isolatedComputer) ||
-        (kind === "docker" && settings?.computerHost === "this-mac");
+        input.computerMode === "dedicated" ||
+        (input.computerMode === undefined && Boolean(input.isolatedComputer));
       const insertBot = () =>
         prisma.$transaction(async (tx) => {
           await lockSpaceForContentCreation(tx, {
@@ -506,8 +529,7 @@ export function createRepos(prisma: PrismaClient) {
             userId: actor.userId,
           });
           if (input.isolatedComputer) {
-            if (input.computerMode !== "dedicated" || runtimeKind !== "pi")
-              throw new IsolatedComputerUnavailableError();
+            if (runtimeKind !== "pi") throw new IsolatedComputerUnavailableError();
             if (input.isolatedComputer.connectionId) {
               const connection = await tx.connection.findFirst({
                 where: {
@@ -545,7 +567,18 @@ export function createRepos(prisma: PrismaClient) {
                 spaceId: actor.spaceId,
                 userId: actor.userId,
                 kind,
+                connectionId: input.isolatedComputer?.connectionId,
               });
+          // Sharing never authorizes another location or mutates an existing Team computer.
+          if (
+            !privateDockerComputer &&
+            options.hostAvailable &&
+            (computer.kind !== kind ||
+              (computer.connectionId ?? null) !== (input.isolatedComputer?.connectionId ?? null))
+          )
+            throw new Error(
+              "Choose Only this bot to use a different location from the Team computer.",
+            );
           const created = await tx.bot.create({
             data: {
               ...(botId ? { id: botId } : {}),

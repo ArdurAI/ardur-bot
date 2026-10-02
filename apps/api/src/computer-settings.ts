@@ -4,16 +4,18 @@ import path from "node:path";
 import type { AdapterContext } from "@ardurbot/adapter-kit";
 import type { EncryptedSecretStore } from "@ardurbot/adapters";
 import { DockerSandboxProvider, kubernetesContexts, snapshotKubeconfig } from "@ardurbot/adapters";
-import type { RuntimeComputerLocation, RuntimeKind } from "@ardurbot/contracts";
+import type { Actor, RuntimeComputerLocation, RuntimeKind } from "@ardurbot/contracts";
 import {
   ComputerConfigurationSchema,
   ComputerConnectionInputSchema,
   ComputerConnectionSettingsSchema,
   ComputerEngineUnavailableError,
+  defaultNewBotLocation,
   FLEET_ACTIVE_RUN_CONFLICT_CODE,
   failureCategoryMessage,
   HOST_MOVE_UNAVAILABLE_CODE,
   HOST_MOVE_UNAVAILABLE_MESSAGE,
+  recommendedContainer,
   runtimeNames,
   runtimeSupportsLocation,
 } from "@ardurbot/contracts";
@@ -23,6 +25,35 @@ import { ORPCError } from "@orpc/server";
 import type { z } from "zod";
 import { cleanupFleetSecret, importFleetSecret } from "./fleet.js";
 import type { HostBridge } from "./host-bridge.js";
+
+/** Pairing is owner-scoped; no process probes or engine access are needed for this policy. */
+export async function newBotComputerOptions(
+  deps: { prisma: PrismaClient; hostBridge?: HostBridge },
+  actor: Actor,
+  sandboxProvider: string,
+) {
+  const [settings, host, connections] = await Promise.all([
+    deps.prisma.deploymentSettings.findUnique({ where: { id: "default" } }),
+    actor.isDeploymentOwner ? deps.hostBridge?.status(actor.userId) : undefined,
+    listComputerConnections(deps.prisma, actor.spaceId),
+  ]);
+  const hostAvailable = Boolean(
+    actor.isDeploymentOwner &&
+      settings?.ownerUserId === actor.userId &&
+      host?.configured &&
+      host.connected,
+  );
+  return {
+    hostAvailable,
+    defaultLocation: defaultNewBotLocation({
+      isDeploymentOwner: actor.isDeploymentOwner,
+      hostConnected: hostAvailable,
+      hostPaired: hostAvailable,
+      computerHost: settings?.computerHost as "docker" | "this-mac" | null | undefined,
+    }),
+    container: recommendedContainer(sandboxProvider, connections),
+  };
+}
 
 export async function listComputerConnections(prisma: PrismaClient, spaceId: string) {
   const rows = await prisma.connection.findMany({ where: { spaceId, connectorId: "computer" } });

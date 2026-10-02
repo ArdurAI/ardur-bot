@@ -472,11 +472,11 @@ describe("createRepos.reorderBots", () => {
 describe("createRepos.createBot computer kind", () => {
   async function createdComputer(computerHost: string | null, runtimeKind?: string) {
     const upsert = vi.fn(
-      async (_args: {
+      async (args: {
         where: { scopeKey: string };
         create: { scope: string; scopeKey: string; homeKey: string; kind: string };
         update: Record<string, never>;
-      }) => ({ id: "computer" }),
+      }) => ({ id: "computer", ...args.create }),
     );
     const create = vi.fn(async (_args: { data: { id?: string; computerId?: string } }) => baseBot);
     const tx = {
@@ -495,18 +495,25 @@ describe("createRepos.createBot computer kind", () => {
       memoryDocument: { create: vi.fn(async () => ({})) },
     };
     const prisma = {
-      deploymentSettings: { findUnique: vi.fn(async () => ({ computerHost })) },
+      deploymentSettings: {
+        findUnique: vi.fn(async () => ({ computerHost, ownerUserId: actor.userId })),
+      },
       $transaction: vi.fn((work: (client: typeof tx) => Promise<unknown>) => work(tx)),
     };
-    await createRepos(prisma as unknown as PrismaClient).createBot(actor, {
-      name: "New",
-      title: "",
-      description: "",
-      instructions: "",
-      color: baseBot.color,
-      notifyOnFinish: false,
-      ...(runtimeKind ? { runtimeKind } : {}),
-    });
+    await createRepos(prisma as unknown as PrismaClient, {
+      hostAvailable: async () => true,
+    }).createBot(
+      { ...actor, isDeploymentOwner: true },
+      {
+        name: "New",
+        title: "",
+        description: "",
+        instructions: "",
+        color: baseBot.color,
+        notifyOnFinish: false,
+        ...(runtimeKind ? { runtimeKind } : {}),
+      },
+    );
     return {
       upserts: upsert.mock.calls.map((call) => call[0]),
       bot: create.mock.calls[0]?.[0]?.data,
@@ -515,15 +522,12 @@ describe("createRepos.createBot computer kind", () => {
 
   afterEach(() => vi.unstubAllEnvs());
 
-  // The deployment's provider and the saved host choice decide the kind; when the choice is
-  // This Mac and Docker is available, a new bot on the built-in runtime starts on its own
-  // Docker computer instead of the space's Team computer (native runtimes are host-only, so
-  // a pinned bot keeps the host). Existing computer rows keep their kind (update: {}).
+  // All runtimes use the same owner/paired-host policy; saved rows are never rewritten.
   it.each([
     ["desktop", null, undefined, "team", "desktop"],
-    ["docker", null, undefined, "team", "docker"],
-    ["docker", "this-mac", undefined, "dedicated", "docker"],
-    ["docker", "this-mac", "pi", "dedicated", "docker"],
+    ["docker", null, undefined, "team", "desktop"],
+    ["docker", "this-mac", undefined, "team", "desktop"],
+    ["docker", "this-mac", "pi", "team", "desktop"],
     ["docker", "this-mac", "claude-code", "team", "desktop"],
     ["docker", "docker", undefined, "team", "docker"],
     ["desktop", "this-mac", "pi", "team", "desktop"],
@@ -539,15 +543,13 @@ describe("createRepos.createBot computer kind", () => {
     },
   );
 
-  it("gives the new built-in bot its own Docker computer keyed by the bot id", async () => {
+  it("gives a new built-in bot the paired host without rewriting existing rows", async () => {
     vi.stubEnv("SANDBOX_PROVIDER", "docker");
     const { upserts, bot } = await createdComputer("this-mac", "pi");
-    // No Team computer is created or touched for this bot.
     expect(upserts).toHaveLength(1);
-    expect(upserts[0]!.where.scopeKey).toBe(`bot:${bot!.id}`);
-    expect(upserts[0]!.create.scopeKey).toBe(`bot:${bot!.id}`);
-    expect(upserts[0]!.create.homeKey).toBe(bot!.id);
-    expect(bot!.id).toBeTruthy();
+    expect(upserts[0]!.where.scopeKey).toBe("team:ws-1");
+    expect(upserts[0]!.create.kind).toBe("desktop");
+    expect(upserts[0]!.update).toEqual({});
     expect(bot!.computerId).toBe("computer");
   });
 

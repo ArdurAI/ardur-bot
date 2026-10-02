@@ -234,6 +234,7 @@ import { refuseIfEngineMissing, releaseMaintenanceControl } from "./computer-mai
 import {
   computerEngineInfo,
   listComputerConnections,
+  newBotComputerOptions,
   saveComputerConnection,
   updateComputerConnection,
   validateComputerConfiguration,
@@ -629,7 +630,13 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
   const channelPairing = createChannelPairing(deps);
   const remoteDevices = createRemoteDevices({ ...deps, publicUrl: deps.env.webOrigin });
   const account = createAccountService({ ...deps, remoteDevices });
-  const repos = createRepos(deps.prisma);
+  const repos = createRepos(deps.prisma, {
+    sandboxProvider: deps.env.sandboxProvider,
+    hostAvailable: async (actor) => {
+      const host = await deps.hostBridge?.status(actor.userId);
+      return Boolean(host?.configured && host.connected);
+    },
+  });
   const onboardingDeps = { prisma: deps.prisma, events: deps.events, connectors: deps.connectors };
   const mcpOAuth = deps.mcpOAuth ?? new McpOAuthBroker(deps.prisma, deps.secrets);
   const integrations =
@@ -2331,6 +2338,9 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       }),
     },
     computer: {
+      creationOptions: authed.computer.creationOptions.handler(({ context }) =>
+        newBotComputerOptions(deps, context.actor, deps.env.sandboxProvider),
+      ),
       engine: authed.computer.engine.handler(({ context, input }) => {
         if (!context.actor.isDeploymentOwner) throw new ORPCError("FORBIDDEN");
         return computerEngineInfo(
