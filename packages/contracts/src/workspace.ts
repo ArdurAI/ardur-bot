@@ -8,6 +8,8 @@ import { RunActivityRowSchema } from "./runs.js";
 export const WorkspaceViewIdSchema = z.enum([
   "tasks",
   "files",
+  "ide",
+  "changes",
   "terminal",
   "routines",
   "screen",
@@ -16,14 +18,42 @@ export const WorkspaceViewIdSchema = z.enum([
 export type WorkspaceViewId = z.infer<typeof WorkspaceViewIdSchema>;
 export const WorkspaceViewSchema = z.object({ type: WorkspaceViewIdSchema }).strict();
 export type WorkspaceView = z.infer<typeof WorkspaceViewSchema>;
-export const WorkspaceOpenIntentSchema = z.object({ view: WorkspaceViewSchema }).strict();
+export const WorkspaceRootBindingSchema = z
+  .object({
+    botId: Id,
+    rootId: Id,
+    computerId: Id,
+    generation: z.number().int().nonnegative(),
+  })
+  .strict();
+export type WorkspaceRootBinding = z.infer<typeof WorkspaceRootBindingSchema>;
+export const WorkspaceOpenIntentSchema = z.union([
+  z.object({ view: WorkspaceViewSchema }).strict(),
+  z
+    .object({
+      view: z.object({ type: z.literal("ide") }).strict(),
+      target: WorkspaceRootBindingSchema,
+      path: IdePathSchema.min(1),
+      line: z.number().int().positive().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      view: z.object({ type: z.literal("changes") }).strict(),
+      target: WorkspaceRootBindingSchema,
+      changeId: Id,
+      since: z.iso.datetime(),
+      until: z.iso.datetime(),
+    })
+    .strict(),
+]);
 export type WorkspaceOpenIntent = z.infer<typeof WorkspaceOpenIntentSchema>;
 
 /** Local presentation only: never persist output, credentials, drafts or session handles. */
 export const WorkspaceLayoutSchema = z
   .object({
     version: z.literal(1),
-    open: z.array(WorkspaceViewSchema).max(6),
+    open: z.array(WorkspaceViewSchema).max(8),
     active: WorkspaceViewIdSchema.nullable(),
     visible: z.boolean(),
     expanded: z.boolean(),
@@ -40,6 +70,7 @@ export const WorkspaceContextSchema = z.object({
   generation: z.number().int().nonnegative().nullable(),
   files: z.enum(["live", "saved", "unavailable"]),
   runsOnHost: z.boolean().optional(),
+  rootId: Id.optional(),
   observedAt: z.iso.datetime(),
 });
 export type WorkspaceContext = z.infer<typeof WorkspaceContextSchema>;

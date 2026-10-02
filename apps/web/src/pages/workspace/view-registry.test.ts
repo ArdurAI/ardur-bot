@@ -16,6 +16,7 @@ const computer = {
 } as ComputerStatus;
 const context: WorkspaceContext = {
   botId: "bot",
+  rootId: "sandbox-computer",
   computerId: "computer",
   generation: 1,
   files: "live",
@@ -34,6 +35,8 @@ describe("workspace registry", () => {
     expect(availableWorkspaceViews({ computer, context }).map((view) => view.id)).toEqual([
       "tasks",
       "files",
+      "ide",
+      "changes",
       "terminal",
       "routines",
       "screen",
