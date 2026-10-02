@@ -8,7 +8,11 @@ import type {
   SandboxProvider,
 } from "@ardurbot/adapter-kit";
 import type { ComputerUpdate, RuntimeComputerLocation } from "@ardurbot/contracts";
-import { computerRunsOnHost, HostMoveUnavailableError } from "@ardurbot/contracts";
+import {
+  ComputerWorkspaceSaveError,
+  computerRunsOnHost,
+  HostMoveUnavailableError,
+} from "@ardurbot/contracts";
 import {
   ACTIVE_RUN_STATUSES,
   parseScreenLeaseId,
@@ -1005,6 +1009,7 @@ export async function replaceComputer(
     ) {
       try {
         await onProgress?.("saving");
+        await source!.ensureWorkspaceReady?.(oldRef, context);
         const revision = await checkpointComputerWorkspace(
           deps.home,
           source!,
@@ -1019,7 +1024,12 @@ export async function replaceComputer(
         });
         if (recorded.count !== 1) throw new ComputerBusyError();
       } catch (error) {
-        if (mode !== "recover" || error instanceof ComputerBusyError) throw error;
+        if (error instanceof ComputerBusyError) throw error;
+        if (mode !== "recover") {
+          throw error instanceof ComputerWorkspaceSaveError
+            ? error
+            : new ComputerWorkspaceSaveError("save-failed");
+        }
       }
     }
     await onProgress?.("recreating");

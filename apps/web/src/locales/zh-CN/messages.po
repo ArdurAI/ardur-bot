@@ -7088,6 +7088,26 @@ msgstr ""
 msgid "Recovery restores the last saved workspace. Unsaved work may be lost."
 msgstr ""
 
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer stopped before its workspace could be saved."
+msgstr "电脑在工作区保存完成之前停止了。"
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer could not be found to save its workspace."
+msgstr "找不到电脑，无法保存其工作区。"
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer's engine could not be reached to save its workspace."
+msgstr "无法连接电脑的引擎来保存其工作区。"
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The workspace is too large to save."
+msgstr "工作区过大，无法保存。"
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The workspace could not be saved."
+msgstr "无法保存工作区。"
+
 #: src/pages/LearningCurator.tsx
 msgid "Recovery skill"
 msgstr ""

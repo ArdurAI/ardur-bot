@@ -1,4 +1,5 @@
 import type { ComputerUpdate } from "@ardurbot/contracts";
+import { ComputerWorkspaceSaveFailureReasonSchema } from "@ardurbot/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   computerRefusalMessage,
@@ -67,6 +68,14 @@ describe("computer update presentation", () => {
   });
 });
 describe("computerUpdateOffersRecover", () => {
+  it.each(ComputerWorkspaceSaveFailureReasonSchema.options)(
+    "keeps Recover available for the typed %s failure",
+    (failureReason) => {
+      expect(computerUpdateOffersRecover({ status: "failed", failureReason })).toBe(true);
+      expect(computerUpdateOffersRecover({ status: "interrupted", failureReason })).toBe(false);
+      expect(computerUpdateOffersRecover({ status: "running", failureReason })).toBe(false);
+    },
+  );
   it("offers Recover for an ordinary failure, never for one with a missing-engine reason", () => {
     expect(computerUpdateOffersRecover({ status: "failed" })).toBe(true);
     expect(
@@ -81,7 +90,28 @@ describe("computerUpdateOffersRecover", () => {
   });
 });
 describe("computerUpdateAttentionMessage", () => {
-  const copy = { interrupted: "interrupted-copy", generic: "generic-copy" };
+  const copy = {
+    interrupted: "interrupted-copy",
+    generic: "generic-copy",
+    workspaceSave: {
+      "source-not-running": "stopped-copy",
+      "source-missing": "missing-copy",
+      "engine-unreachable": "unreachable-copy",
+      "too-large": "large-copy",
+      "save-failed": "save-copy",
+    },
+  };
+  it.each(ComputerWorkspaceSaveFailureReasonSchema.options)(
+    "translates %s instead of exposing its token",
+    (failureReason) => {
+      expect(computerUpdateAttentionMessage({ status: "failed", failureReason }, copy)).toBe(
+        copy.workspaceSave[failureReason],
+      );
+      expect(computerUpdateAttentionMessage({ status: "interrupted", failureReason }, copy)).toBe(
+        copy.interrupted,
+      );
+    },
+  );
   it("shows the missing-engine sentence in place of the generic recovery warning", () => {
     expect(computerUpdateAttentionMessage({ status: "failed" }, copy)).toBe("generic-copy");
     expect(

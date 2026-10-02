@@ -3179,7 +3179,7 @@ describe("computer replacement", () => {
           "update",
           context,
         ),
-      ).rejects.toThrow("ECONNRESET");
+      ).rejects.toThrow("save-failed");
       expect(destroy).not.toHaveBeenCalled();
       expect(updateMany).toHaveBeenLastCalledWith({
         where: { id: "computer-1", maintenanceId: null, updatedAt: expect.any(Date) },

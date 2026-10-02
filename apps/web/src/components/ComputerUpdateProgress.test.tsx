@@ -111,6 +111,29 @@ it("offers Recover and the generic warning for a failure with no reason", async 
   });
 });
 
+it.each([
+  ["source-not-running", "The computer stopped before its workspace could be saved."],
+  ["source-missing", "The computer could not be found to save its workspace."],
+  ["engine-unreachable", "The computer's engine could not be reached to save its workspace."],
+  ["too-large", "The workspace is too large to save."],
+  ["save-failed", "The workspace could not be saved."],
+])("shows one cause sentence and offers recovery for %s", async (failureReason, sentence) => {
+  await mounted({ ...base, stage: "saving", failureReason }, async (container) => {
+    expect(
+      [...container.querySelectorAll('[role="alert"]')].map((node) => node.textContent),
+    ).toEqual([sentence]);
+    expect(container.textContent).not.toContain(failureReason);
+    expect(container.textContent).not.toContain("Unsaved work may be lost.");
+    const recover = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Recover computer",
+    )!;
+    expect(recover.disabled).toBe(false);
+    client.start.mockResolvedValue({ ...base, action: "recover", status: "running" });
+    await act(async () => recover.click());
+    expect(client.start).toHaveBeenCalledExactlyOnceWith(base.botId, "recover");
+  });
+});
+
 it("shows the missing-engine sentence instead of the warning, and hides Recover", async () => {
   const sentence =
     "This computer runs on E2B, which is not configured here. Reset it in Settings, Computers " +

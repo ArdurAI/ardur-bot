@@ -7088,6 +7088,26 @@ msgstr ""
 msgid "Recovery restores the last saved workspace. Unsaved work may be lost."
 msgstr ""
 
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer stopped before its workspace could be saved."
+msgstr "작업 공간을 저장하기 전에 컴퓨터가 중지되었습니다."
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer could not be found to save its workspace."
+msgstr "작업 공간을 저장할 컴퓨터를 찾을 수 없습니다."
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer's engine could not be reached to save its workspace."
+msgstr "작업 공간을 저장하기 위해 컴퓨터 엔진에 연결할 수 없습니다."
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The workspace is too large to save."
+msgstr "작업 공간이 너무 커서 저장할 수 없습니다."
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The workspace could not be saved."
+msgstr "작업 공간을 저장할 수 없습니다."
+
 #: src/pages/LearningCurator.tsx
 msgid "Recovery skill"
 msgstr ""

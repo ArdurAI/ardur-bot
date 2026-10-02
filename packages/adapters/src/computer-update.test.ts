@@ -1,3 +1,7 @@
+import {
+  ComputerWorkspaceSaveError,
+  ComputerWorkspaceSaveFailureReasonSchema,
+} from "@ardurbot/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MissingComputerProviderError } from "./computer-connections.js";
 import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
@@ -80,6 +84,16 @@ function fixture(status = "queued") {
   return { row, computer, computerUpdate, deps, jobs };
 }
 describe("background computer maintenance", () => {
+  it.each(ComputerWorkspaceSaveFailureReasonSchema.options)(
+    "persists the safe workspace save reason %s",
+    async (reason) => {
+      const { row, deps } = fixture();
+      replacement.mockRejectedValueOnce(new ComputerWorkspaceSaveError(reason));
+      await performComputerUpdate(deps, row.id);
+      expect(row).toMatchObject({ status: "failed", failureReason: reason });
+      expect(computerUpdateView(row).failureReason).toBe(reason);
+    },
+  );
   it("passes an explicit sandbox move through the queued worker despite a host default", async () => {
     const { row, deps } = fixture();
     row.computer.kind = "desktop";

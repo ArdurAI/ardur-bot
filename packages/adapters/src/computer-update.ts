@@ -1,5 +1,9 @@
 import type { ComputerUpdate } from "@ardurbot/contracts";
-import { ComputerReplacementConfigurationSchema, ComputerUpdateSchema } from "@ardurbot/contracts";
+import {
+  ComputerReplacementConfigurationSchema,
+  ComputerUpdateSchema,
+  ComputerWorkspaceSaveError,
+} from "@ardurbot/contracts";
 import { ACTIVE_RUN_STATUSES } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
@@ -175,11 +179,26 @@ export async function performComputerUpdate(deps: Deps, updateId: string) {
     await finishUpdate(deps.prisma, updateId, update.computerId, "completed");
     scheduleComputerSleep(deps.jobs, update.computerId);
   } catch (error) {
-    getLogger().error("computer update failed", error, { updateId, computerId: update.computerId });
+    getLogger().error(
+      "computer update failed",
+      error instanceof ComputerWorkspaceSaveError ? undefined : error,
+      {
+        updateId,
+        computerId: update.computerId,
+        ...(error instanceof ComputerWorkspaceSaveError
+          ? { saveFailureReason: error.reason, engineFailureCategory: error.engineFailureCategory }
+          : {}),
+      },
+    );
     // Provider errors may contain credentials or private URLs. Expose only the failed stage,
     // except the missing-engine sentence, which never carries either and tells the user what to
     // do next (the queued job discovered its engine gone after admission already let it through).
-    const failureReason = error instanceof MissingComputerProviderError ? error.message : undefined;
+    const failureReason =
+      error instanceof ComputerWorkspaceSaveError
+        ? error.reason
+        : error instanceof MissingComputerProviderError
+          ? error.message
+          : undefined;
     await finishUpdate(deps.prisma, updateId, update.computerId, "failed", failureReason);
   } finally {
     clearInterval(heartbeat);

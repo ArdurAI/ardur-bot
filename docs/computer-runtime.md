@@ -137,6 +137,14 @@ migration and image-version discovery are not part of this UI. Updates checkpoin
 live work before teardown. Recovery can fall back to the last saved workspace,
 so its failure action warns that unsaved work may be lost.
 
+Before a replacement saves live work, a provider may resume the existing source
+through `ensureWorkspaceReady`; it must never allocate a fresh workspace there.
+Container engines start an owned stopped container only after checking its owned
+home volume. A missing source fails the save instead of replacing it with empty
+files. Failed saves persist a typed cause and show one translated sentence in the
+failed-update dialog. Save diagnostics log only failure categories, never engine
+command output.
+
 The reconciler republishes queued operations after a missed enqueue. Jobs already
 claimed are never destructively replayed. A worker that stops heartbeating for ten
 minutes is marked interrupted and remains reserved until its provider calls settle.

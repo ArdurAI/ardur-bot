@@ -7,7 +7,7 @@ import type {
   ComputerConnectionSettings,
   SshSettings,
 } from "@ardurbot/contracts";
-import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
+import { ComputerConnectionSettingsSchema, ComputerWorkspaceSaveError } from "@ardurbot/contracts";
 import { COMPUTER_IMAGE_PINS } from "@ardurbot/contracts/computer-image";
 import { SshSettingsSchema } from "@ardurbot/contracts/fleet";
 import {
@@ -24,6 +24,31 @@ import { engineFailureReason } from "./probe.js";
 import type { FleetProcess } from "./process.js";
 import { remoteArgv, systemFleetProcess } from "./process.js";
 import { sshOptions } from "./ssh-sandbox.js";
+
+class EngineCommandError extends Error {
+  constructor(
+    readonly category: string,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+function saveEngineError(error: unknown): ComputerWorkspaceSaveError {
+  if (error instanceof ComputerWorkspaceSaveError) return error;
+  const category =
+    error instanceof EngineCommandError ? error.category : engineFailureReason(error);
+  if (
+    category === "source-not-running" ||
+    category === "source-missing" ||
+    category === "too-large"
+  )
+    return new ComputerWorkspaceSaveError(category, category);
+  return new ComputerWorkspaceSaveError(
+    category && category !== "command-failed" ? "engine-unreachable" : "save-failed",
+    category ?? "command-failed",
+  );
+}
 
 /** Convert the shared Kubernetes-style quantities to Docker CLI resource values. */
 export function engineLimits(settings: ComputerConnectionSettings) {
@@ -150,7 +175,16 @@ export class FleetDockerSandboxProvider extends LinuxFleetSandbox {
       );
       if (result.code !== 0) {
         const reason = engineFailureReason(result.stderr.toString());
-        throw new Error(
+        const stderr = result.stderr.toString();
+        const category = /no such container|no such volume/i.test(stderr)
+          ? "source-missing"
+          : /container .*not running|container .*stopped/i.test(stderr)
+            ? "source-not-running"
+            : /exceeds.*limit|too large/i.test(stderr)
+              ? "too-large"
+              : (reason ?? "command-failed");
+        throw new EngineCommandError(
+          category,
           reason ?? (argv[0] === "info" ? "engine-not-running" : "Engine command failed."),
         );
       }
@@ -305,6 +339,26 @@ export class FleetDockerSandboxProvider extends LinuxFleetSandbox {
   async root(computer: ComputerRef, context: AdapterContext) {
     this.name(computer, context);
     return "/home/ardurbot";
+  }
+  async ensureWorkspaceReady(computer: ComputerRef, context: AdapterContext) {
+    try {
+      const name = this.name(computer, context);
+      const existing = await this.owned(name, context);
+      if (!existing || !(await this.ownedVolume(name, context)))
+        throw new ComputerWorkspaceSaveError("source-missing");
+      if (!existing.State?.Running) await this.engine(["start", name], context);
+      if (!(await this.owned(name, context))?.State?.Running)
+        throw new ComputerWorkspaceSaveError("source-not-running");
+    } catch (error) {
+      throw saveEngineError(error);
+    }
+  }
+  override async *exportWorkspace(computer: ComputerRef, context: AdapterContext) {
+    try {
+      yield* super.exportWorkspace(computer, context);
+    } catch (error) {
+      throw saveEngineError(error);
+    }
   }
   async supportsNetworkEgress() {
     return true;
