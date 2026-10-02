@@ -316,6 +316,10 @@ msgid "{name} needs your input"
 msgstr ""
 
 #: src/components/ai/CoordinationLine.tsx
+msgid "{name} stood down"
+msgstr "{name} se detuvo"
+
+#: src/components/ai/CoordinationLine.tsx
 msgid "{name} stopped before answering"
 msgstr "{name} se detuvo antes de responder"
 
@@ -1733,6 +1737,10 @@ msgstr "Comprobado {0}"
 #: src/pages/shell/runtime-settings.tsx
 msgid "Checking the download"
 msgstr "Comprobando la descarga"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Checking the earlier action"
+msgstr "Comprobando la acción anterior"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Checking the missing tool"
@@ -4432,12 +4440,20 @@ msgid "Got it — I’ll check the request and choose the next step."
 msgstr "Entendido — revisaré la solicitud y elegiré el siguiente paso."
 
 #: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check this change before the next action."
+msgstr "Entendido — comprobaré este cambio antes de la siguiente acción."
+
+#: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll check what’s missing and ask before installing it."
 msgstr "Entendido — comprobaré qué falta y preguntaré antes de instalarlo."
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll choose a team member to put this in Notion."
 msgstr "Entendido — elegiré a un miembro del equipo para poner esto en Notion."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll keep {name} off this task."
+msgstr "Entendido — mantendré a {name} fuera de esta tarea."
 
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
@@ -8568,6 +8584,10 @@ msgstr "se detuvo antes de responder"
 msgid "Stopping"
 msgstr ""
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Stopping {name}"
+msgstr "Deteniendo a {name}"
+
 #: src/pages/settings-sections.ts
 msgid "Storage"
 msgstr ""
@@ -8804,6 +8824,10 @@ msgstr "La última actualización se interrumpió."
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "The previous action may have finished. I’ll check before retrying."
+msgstr "La acción anterior puede haber terminado. Lo comprobaré antes de reintentarlo."
 
 #: src/pages/board/BoardsSettings.tsx
 msgid "The reviewer was changed in another window."
@@ -9158,6 +9182,10 @@ msgstr ""
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Tokens over seven days"
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Told {name} to stand down"
+msgstr "Le pedí a {name} que se detuviera"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Tool access mode"

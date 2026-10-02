@@ -3,6 +3,9 @@ import type { Actor } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
+import { createEvidenceRecorder } from "../../../packages/adapters/src/evidence/recorder.js";
+import { fakeEvidenceStore } from "../../../packages/adapters/src/evidence/test-store.js";
+import { EncryptedSecretStore } from "../../../packages/adapters/src/secrets.js";
 import { mountEvidenceRoutes, runEvidenceSummary } from "./evidence.js";
 import { extractEvidenceArchive, signedRunFixture } from "./evidence-test-fixture.js";
 
@@ -60,6 +63,49 @@ function fixture(role: string | null = "owner") {
 }
 
 describe("run evidence", () => {
+  it.each([false, true])(
+    "summarizes real tool recording with governance enabled=%s",
+    async (enabled) => {
+      const f = fixture();
+      const fake = fakeEvidenceStore();
+      vi.mocked(fake.store.governanceEnabled).mockResolvedValue(enabled);
+      const recorder = createEvidenceRecorder({
+        store: fake.store,
+        secretStore: new EncryptedSecretStore("test-only-encryption-material"),
+      });
+      for (const toolName of ["remember", "shell", "skill_read"]) {
+        expect(
+          await recorder.recordDecision({
+            run: { ...f.run, userId: actor.userId },
+            toolName,
+            viaConnector: false,
+            args: {},
+            decisionKind: "allowed_by_default",
+          }),
+        ).toEqual({ ok: true });
+      }
+      expect(await recorder.sealRunEvidence(f.run.id)).toEqual({ ok: true });
+      f.records.mockImplementation(() => fake.store.recordsForRun(f.run.id) as never);
+      f.seal.mockImplementation(() => fake.store.sealForRun(f.run.id) as never);
+      vi.mocked(f.prisma.evidenceKey.findUnique).mockImplementation(
+        ({ where }) => fake.store.keyByKid(where.kid!) as never,
+      );
+      expect(await runEvidenceSummary(f.prisma, actor, "run")).toMatchObject({
+        state: enabled ? "verified" : "off",
+        sealed: enabled,
+        failureCodes: [],
+        decisions: { recorded: enabled ? 3 : 0 },
+      });
+      if (enabled) {
+        fake.records[1]!.jws = "corrupted";
+        expect(await runEvidenceSummary(f.prisma, actor, "run")).toMatchObject({
+          state: "failed",
+          sealed: false,
+          failureCodes: expect.arrayContaining(["malformed_jws"]),
+        });
+      }
+    },
+  );
   it.each(["owner", "member"])(
     "allows a %s who can see the run to summarize and download",
     async (role) => {
@@ -174,6 +220,14 @@ describe("run evidence", () => {
       spaceId: "space",
       publicKeyPem: other.keys.publicKeyPem,
     } as never);
+    expect(await runEvidenceSummary(f.prisma, actor, "run")).toMatchObject({
+      state: "failed",
+      failureCodes: ["run_mismatch"],
+    });
+  });
+  it("rejects a correctly signed chain for another bot in the same run", async () => {
+    const f = fixture();
+    f.run.botId = "other-bot";
     expect(await runEvidenceSummary(f.prisma, actor, "run")).toMatchObject({
       state: "failed",
       failureCodes: ["run_mismatch"],

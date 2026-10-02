@@ -42,6 +42,13 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
+      # An invalid workflow file fails only when GitHub loads it, which for the release
+      # workflow is at tag time. Check every workflow's syntax and expressions on each push.
+      # rhysd/actionlint 1.7.12, pinned by digest.
+      - name: Lint workflow files
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo \
+            rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -shellcheck= -pyflakes=
 
   check:
     name: Typecheck

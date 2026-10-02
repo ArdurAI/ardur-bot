@@ -6,7 +6,13 @@ import type {
   ChiefReceipt,
   ChiefReceiptKey,
 } from "@ardurbot/contracts";
-import { IntegrationManifestSchema, MessageBlock, RuntimePinSchema } from "@ardurbot/contracts";
+import {
+  ChiefControlSchema,
+  ChiefDispatchSchema,
+  IntegrationManifestSchema,
+  MessageBlock,
+  RuntimePinSchema,
+} from "@ardurbot/contracts";
 import {
   CHIEF_POLICY_VERSION,
   CHIEF_RECEIPT_TEMPLATES,
@@ -14,6 +20,7 @@ import {
   effectiveMcpGrantTools,
   integrationToolKind,
 } from "@ardurbot/core";
+import { bindChiefAssignment, chiefControlAllowsDispatch } from "./chief-control.js";
 import type { Prisma, PrismaClient } from "./client.js";
 import { appendEventInTransaction } from "./events.js";
 import { createThreadMessageInTransaction } from "./messages.js";
@@ -206,13 +213,18 @@ export async function createChiefReceipt(
     chiefBotId: string;
     requestMessageId: string;
     key: ChiefReceiptKey;
+    memberName?: string;
   },
 ): Promise<{ receipt: ChiefReceipt; eventSeq: number }> {
   const block = {
     kind: "chief_receipt" as const,
     requestMessageId: input.requestMessageId,
     key: input.key,
-    text: CHIEF_RECEIPT_TEMPLATES[input.key],
+    ...(input.memberName ? { memberName: input.memberName } : {}),
+    text:
+      input.key === "exclude-member" && input.memberName
+        ? `Got it — I’ll keep ${input.memberName} off this task.`
+        : CHIEF_RECEIPT_TEMPLATES[input.key],
   };
   const message = await createThreadMessageInTransaction(tx, {
     threadId: input.threadId,
@@ -237,6 +249,7 @@ export async function createChiefReceipt(
       botId: input.chiefBotId,
       requestMessageId: input.requestMessageId,
       key: input.key,
+      ...(input.memberName ? { memberName: input.memberName } : {}),
       text: block.text,
       createdAt: message.createdAt.toISOString(),
     },
@@ -264,6 +277,7 @@ export async function readChiefReceipt(
     botId: message.botId,
     requestMessageId,
     key: block.key,
+    ...(block.memberName ? { memberName: block.memberName } : {}),
     text: block.text,
     createdAt: message.createdAt.toISOString(),
   };
@@ -290,7 +304,7 @@ export async function saveChiefSelection(
         ? facts.find((member) => member.id === input.chiefBotId)?.computer?.id
         : undefined,
   });
-  return tx.chiefPlan.create({
+  const plan = await tx.chiefPlan.create({
     data: {
       ...input,
       policyVersion: CHIEF_POLICY_VERSION,
@@ -298,6 +312,14 @@ export async function saveChiefSelection(
       checkedFacts: facts as unknown as Prisma.InputJsonValue,
     },
   });
+  await bindChiefAssignment(tx, {
+    planId: plan.id,
+    runId: input.sourceRunId,
+    memberId: input.chiefBotId,
+    revision: plan.revision,
+    coordinator: true,
+  });
+  return plan;
 }
 export async function loadChiefSelectionContext(
   prisma: PrismaClient,
@@ -308,14 +330,35 @@ export async function loadChiefSelectionContext(
     orderBy: { createdAt: "desc" },
   });
   if (!plan) return undefined;
+  const control = ChiefControlSchema.safeParse(plan.control).data;
+  const earlierEffects = control?.uncertainRunIds.length
+    ? await prisma.externalEffect.findMany({
+        where: { runId: { in: control.uncertainRunIds }, spaceId: plan.spaceId },
+        select: { id: true, runId: true, kind: true, status: true, request: true, result: true },
+      })
+    : [];
+  const earlierActions = control?.uncertainRunIds.length
+    ? await prisma.chiefActionAdmission.findMany({
+        where: { runId: { in: control.uncertainRunIds }, consequential: true },
+        select: { runId: true, executionId: true, effectId: true, state: true },
+      })
+    : [];
+  const corrections = control
+    ? await prisma.message.findMany({
+        where: { id: { in: control.ownerMessageIds }, threadId: plan.threadId },
+        orderBy: { seq: "asc" },
+        select: { blocks: true },
+      })
+    : [];
   const decision = plan.decision as ChiefDecision;
-  const choice =
-    decision.kind === "delegate" || decision.kind === "queue"
+  const choice = control?.uncertainRunIds.length
+    ? `This is a checking turn only. Read back the exact earlier effect using existing granted read tools, then use reconcile_chief_action for each outcome. Earlier effects: ${JSON.stringify(earlierEffects)}. Earlier actions: ${JSON.stringify(earlierActions)}. A failed or unavailable check is unknown, not undone. Do not repeat, reverse or dispatch work. End this turn after recording the outcomes; the backend wakes the replacement planning turn once.`
+    : decision.kind === "delegate" || decision.kind === "queue"
       ? `Use handoff_to_bot with bot_id ${JSON.stringify(decision.memberId)}. Do not ask the owner to name a member.`
       : decision.kind === "self"
         ? "Prepare this work yourself; do not self-handoff."
         : "Plan the next step using the saved member facts; unknown capability is not a grant.";
-  return `System receipt already shown. Do not repeat the acknowledgement. Chief policy ${plan.policyVersion}, request ${plan.sourceMessageId}, revision ${plan.revision}. ${choice} Selection is preparation, not approval for a write or installation. The dispatch boundary rechecks eligibility. Fixed pins and existing budgets remain unchanged.`;
+  return `System receipt already shown. Do not repeat the acknowledgement. Chief policy ${plan.policyVersion}, request ${plan.sourceMessageId}, revision ${plan.revision}. ${choice} Selection is preparation, not approval for a write or installation. The dispatch boundary rechecks eligibility. Fixed pins and existing budgets remain unchanged. ${control ? `Owner corrections supersede the previous steps: ${JSON.stringify(corrections.map((message) => message.blocks))}. Excluded member ids: ${JSON.stringify(control.excludedIds)}. Local only: ${control.localOnly}. Previous effect needs reconciliation: ${Boolean(control.uncertainRunIds.length)}. Reconciled outcomes: ${JSON.stringify(control.reconciledActions ?? [])}. Never repeat a kept or unknown external action; the replacement must do only the remaining work.` : ""}`;
 }
 /** Called under the existing owned-group lock, immediately before shared delegation admission. */
 export async function validateChiefDispatch(
@@ -324,6 +367,11 @@ export async function validateChiefDispatch(
   groupId: string,
   memberId: string,
 ): Promise<{ error: string } | { planId?: string; dispatch?: ChiefDispatch }> {
+  const assignment = tx.chiefAssignment
+    ? await tx.chiefAssignment.findUnique({ where: { runId: scope.id } })
+    : null;
+  if (assignment?.supersededAt)
+    return { error: "This chief turn belongs to an obsolete task revision." };
   const plan = await tx.chiefPlan.findFirst({
     where: {
       sourceRunId: scope.id,
@@ -338,6 +386,41 @@ export async function validateChiefDispatch(
     orderBy: { createdAt: "desc" },
   });
   if (!plan) return {};
+  const control = ChiefControlSchema.safeParse(plan.control).data;
+  if (plan.control !== null && !control)
+    return { error: "This chief turn belongs to an obsolete task revision." };
+  if (control) {
+    const continuing = await tx.chiefAssignment.findMany({
+      where: { planId: plan.id, memberId, coordinator: false, supersededAt: null },
+    });
+    const stillWorking = continuing.length
+      ? await tx.run.count({
+          where: {
+            id: { in: continuing.map((row) => row.runId) },
+            status: { in: ["queued", "running", "leased", "waiting_input", "waiting_takeover"] },
+          },
+        })
+      : 0;
+    if (stillWorking)
+      return {
+        error: "This member is still working on the task. Do not dispatch the same work again.",
+      };
+  }
+  if (
+    !chiefControlAllowsDispatch(control) ||
+    control?.pendingReplan ||
+    control?.excludedIds.includes(memberId)
+  )
+    return {
+      error:
+        "This task changed. Wait for owned teardown and reconcile the previous action before dispatching.",
+    };
+  const committed = ChiefDispatchSchema.safeParse(plan.dispatch).data;
+  if (control && committed?.revision === plan.revision && committed.memberId === memberId)
+    return { error: "The replacement was already dispatched for this task revision." };
+
+  if (assignment?.supersededAt || (assignment && assignment.revision !== plan.revision))
+    return { error: "This chief turn belongs to an obsolete task revision." };
   const operation = plan.operation as ChiefOperation;
   const saved = plan.decision as ChiefDecision;
   const facts = await loadChiefMemberFacts(tx, scope, groupId);
@@ -350,6 +433,7 @@ export async function validateChiefDispatch(
       chiefId: scope.botId,
       operation,
       members: facts.filter((member) => member.id === memberId),
+      excludedIds: control?.excludedIds,
       requiredComputerId:
         operation.purpose === "install-tool"
           ? facts.find((member) => member.id === scope.botId)?.computer?.id
@@ -373,6 +457,11 @@ export async function validateChiefDispatch(
   }
   const member = facts.find((candidate) => candidate.id === memberId);
   if (!member?.authorized) return { error: "The target is no longer an authorized room member." };
+  if (
+    (control || operation.purpose !== "general") &&
+    (!member.runtimeSupported || !member.computer?.local)
+  )
+    return { error: "This connection cannot run this peer task safely." };
   // General planning retains the existing runtime/boot admission checks; local preparation
   // constraints apply only to a saved operation-specific choice, checked above.
   return {

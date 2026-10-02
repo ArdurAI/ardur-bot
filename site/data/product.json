@@ -23,7 +23,7 @@
       "id": "remember",
       "eyebrow": "MEMORY",
       "title": "Memory you can inspect",
-      "body": "Keep documents in the built-in database, or connect a Git repository for a space's shared notes.",
+      "body": "Keep documents in the built-in database, or connect a Git repository for a space's shared notes. Bots can recall saved private facts in later direct and group conversations.",
       "source": "README.md#Memory"
     },
     {
@@ -37,7 +37,7 @@
       "id": "delegate",
       "eyebrow": "DELEGATION",
       "title": "Bots work together",
-      "body": "Accepted requests to a room's chief get a saved acknowledgement before execution; bare greetings start no work run. The chief preselects members for document transfer and installation preparation from approved capability, skill and capacity facts, and committed dispatch appears as one expandable line. Instrumented worker tools update a safe activity line in the room, including desk assignments; accepted local artifacts appear as draft links, not verified service completion. A group's coordinator can also ask members for their answers in the room. A goal coordinator can send bounded requests to group members' desk threads. Receipts show delivery, confirmed reading and replies. Effect requests wait for owner approval: the owner can allow one exact action once or read-only preparation, and can pause group or space team messages. Bots can also hand off room work or use short-lived subagents.",
+      "body": "Accepted requests to a room's chief get a saved acknowledgement before execution; bare greetings start no work run. The chief preselects members for document transfer and installation preparation from approved capability, skill and capacity facts, and committed dispatch appears as one expandable line. Correction receipts acknowledge an excluded member or changed task; saved stop states distinguish a request to stand down from confirmation or an uncertain previous action on web, desktop and mobile. After owned teardown, the chief records earlier action outcomes before resuming a corrected task with the next eligible member. Instrumented worker tools update a safe activity line in the room, including desk assignments; accepted local artifacts appear as draft links, not verified service completion. A group's coordinator can also ask members for their answers in the room. A goal coordinator can send bounded requests to group members' desk threads. Receipts show delivery, confirmed reading and replies. Effect requests wait for owner approval: the owner can allow one exact action once or read-only preparation, and can pause group or space team messages. Bots can also hand off room work or use short-lived subagents.",
       "source": "README.md#What you get today"
     },
     {

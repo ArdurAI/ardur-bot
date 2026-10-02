@@ -55,7 +55,7 @@ async function loadRunEvidence(prisma: PrismaClient, actor: Actor, runId: string
     if (chain.ok) {
       for (const [index, jws] of journal.entries()) {
         const claims = JSON.parse(Buffer.from(jws.split(".")[1]!, "base64url").toString());
-        if (claims.step_id !== `${runId}:${index}` || claims.actor !== run.botId)
+        if (claims.step_id !== `${runId}:${index}` || claims.actor !== `bot:${run.botId}`)
           failures.add("run_mismatch");
       }
     }

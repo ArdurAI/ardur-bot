@@ -214,6 +214,8 @@ export interface ManagedConnectorProvider
 
 export interface MemoryStore {
   describe(): AdapterDescriptor<MemoryCapabilities>;
+  /** Durable store watermark. Null means cached recall slices cannot be reused safely. */
+  recallRevision?(context: AdapterContext): Promise<string | null>;
   read(request: MemoryReadRequest, context: AdapterContext): Promise<MemorySnapshot>;
   search(request: MemorySearchRequest, context: AdapterContext): Promise<MemorySearchResult[]>;
   commit(request: MemoryCommitRequest, context: AdapterContext): Promise<MemoryRevision>;

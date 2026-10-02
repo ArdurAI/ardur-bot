@@ -72,6 +72,7 @@ import {
   botInstructionText,
   botMessageAllowsSilence,
   capabilityAllowsTool,
+  classifyRemoteTool,
   connectorKindFromToolName,
   containsSecret,
   createStreamingRedactor,
@@ -123,6 +124,7 @@ import { peerEffectMatches } from "@ardurbot/core/node/peer-effect-digest";
 import type { Pool } from "@ardurbot/db";
 import {
   acceptDelegation,
+  admitChiefAction,
   appendEventInTransaction,
   type ClaimedSteeringMessage,
   claimQuietBotMessages,
@@ -152,11 +154,13 @@ import {
   projectChiefActivity,
   publishChiefDraftResult,
   quietHistoryDeliveryIds,
+  recordChiefActionReconciliation,
   recordDelegationFailure,
   refreshBoundBotMessageWakeRun,
   releaseQuietBotMessageClaims,
   requestCancel,
   SpaceLimitError,
+  settleChiefAction,
   startDelegation,
   type ThreadEvents,
 } from "@ardurbot/db";
@@ -239,6 +243,11 @@ import {
 } from "./browser-tools.js";
 import { agentConnectionTools, builtinAgentTools } from "./builtin-tools.js";
 import { chiefActivityFeed } from "./chief-activity.js";
+import {
+  chiefVerificationRead,
+  wakeChiefAfterControl,
+  watchChiefControl,
+} from "./chief-control.js";
 import { archiveSpawnedBot, spawnBot } from "./child-bots.js";
 import { type CloudAgentConnection, cloudAgentsEnabled } from "./cloud-agent-factory.js";
 import { executeCloudAgentTool } from "./cloud-agent-service.js";
@@ -1755,7 +1764,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
       // A stop that lands while the run waits must hold, whatever startedAt says:
       // a retried run has started before, and claiming it again would re-lease it,
       // emit run.started and reach a provider call before the stop is confirmed.
-      if (run.cancelRequestedAt && run.status === "queued") {
+      if (run.cancelRequestedAt && ["queued", "peer_paused", "peer_ready"].includes(run.status)) {
         if (await confirmDispatchStop(deps.prisma, runId, undefined, deps.jobs)) {
           tracePoint(runId, "terminal.committed", { outcome: "cancelled" });
           await wakeGoalAfterDelegation(deps, run.delegationId).catch((error) =>
@@ -1765,6 +1774,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             getLogger().error("group ask wake", error),
           );
         }
+        await wakeChiefAfterControl(deps, runId);
         return;
       }
       if (run.cancelRequestedAt && run.status === "waiting_input") {
@@ -1948,11 +1958,24 @@ export function createRunExecutor(deps: ExecutorDeps) {
       let lastLeaseCheckAt = 0;
       let retainComputerLease = false;
       let screenRelease: { computer: ComputerRef; context: AdapterContext } | undefined;
-      let runAbortController: AbortController | null = null;
+      let runAbortController: AbortController | null = new AbortController();
       let detachShutdown: (() => void) | undefined;
       let briefToolResults = "";
       let recordRecallCall: (() => Promise<unknown>) | undefined;
       let chiefFeed: ReturnType<typeof chiefActivityFeed> | undefined;
+      const controlWatch = new AbortController();
+      const controlWatcher = watchChiefControl({
+        prisma: deps.prisma,
+        events: deps.events,
+        runId,
+        signal: controlWatch.signal,
+        abort: () => runAbortController?.abort(new DispatchStopRequested()),
+      }).catch((error) => {
+        if (!controlWatch.signal.aborted) {
+          getLogger().error("chief control subscription", error);
+          runAbortController?.abort(new DispatchStopRequested());
+        }
+      });
       const stopHeartbeat = startExecutionHeartbeat({
         checkStop: async () => {
           try {
@@ -2283,7 +2306,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               };
         const runModelProvider = selected.provider;
         const runModelId = selected.id;
-        runAbortController = new AbortController();
+        runAbortController ??= new AbortController();
         if (!leaseValid) runAbortController.abort();
         if (deps.shutdownSignal?.aborted) runAbortController.abort(deps.shutdownSignal.reason);
         const onShutdown = () => runAbortController?.abort(deps.shutdownSignal?.reason);
@@ -3131,6 +3154,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         };
         const mutatingEffectOccurrences = new Map<string, number>();
         const consumedEffectIds = new Set<string>();
+        const chiefAdmissions = new Map<string, string>();
         const nextMutatingEffectOccurrence = (toolName: string, args: Record<string, unknown>) => {
           const fingerprint = toolEffectIdempotencyKey(runId, toolName, args);
           const occurrence = mutatingEffectOccurrences.get(fingerprint) ?? 0;
@@ -4023,6 +4047,33 @@ export function createRunExecutor(deps: ExecutorDeps) {
           if (!(await enforceCeiling())) return pauseForApproval();
           const recordingError = await recordEvidence(allowKind, allowRuleId, allowDecisionId);
           if (recordingError) return recordingError;
+          const chiefAdmission = await admitChiefAction(deps.prisma, {
+            runId,
+            attempt: fence,
+            executionId,
+            consequential: classifyRemoteTool(name) === "consequential",
+            verificationRead: await chiefVerificationRead(
+              deps.prisma,
+              runId,
+              connectorCall.route,
+              args,
+            ),
+            tool: name,
+            remote: Boolean(connectorCall.route && connectorCall.route.connectorId !== "builtin"),
+            ...(applied ? { effectId: applied.effect.id } : {}),
+          });
+          if (chiefAdmission.error) {
+            tracePoint(runId, "correction.refused", { attempt: fence, operationId: executionId });
+            return { error: chiefAdmission.error };
+          }
+          if (chiefAdmission.admissionId)
+            chiefAdmissions.set(executionId, chiefAdmission.admissionId);
+          context.signal.throwIfAborted();
+          const beforeDispatch = await deps.prisma.run.findUnique({
+            where: { id: runId },
+            select: { cancelRequestedAt: true },
+          });
+          if (beforeDispatch?.cancelRequestedAt) throw new DispatchStopRequested();
           // One approval allows one execution, claimed atomically just before dispatch.
           let peerBoundClaimed = false;
           if (peerBoundCall && peerBoundLive) {
@@ -5082,6 +5133,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
             return pauseForSecret();
           }
           if (name === "request_takeover") return { ok: true };
+          if (name === "reconcile_chief_action") {
+            const result = await recordChiefActionReconciliation(deps.prisma, runId, args);
+            if ("event" in result && result.event)
+              await deps.events.notify(result.event.threadId, result.event.seq);
+            await wakeChiefAfterControl(deps, runId);
+            return finish(result);
+          }
           if (["report_progress", "attach_artifact", "complete_task"].includes(name))
             return finish(
               await updateTaskCard(deps, {
@@ -5981,8 +6039,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
             const resumes = resumedCalls.get(executionId);
             const trace = { attempt: fence, operationId: executionId, requestId: resumes };
             tracePoint(runId, "tool.started", trace);
+            let chiefUncertain = true;
+            let chiefFailed = false;
             try {
               const result = await commandRecording.invoke(name, args, executionId, applyTool);
+              chiefUncertain = Boolean(
+                result && typeof result === "object" && "uncertain" in result && result.uncertain,
+              );
+              chiefFailed = toolResultError(result) !== undefined;
               briefToolResults = appendBriefToolResult(briefToolResults, name, result, runSecrets);
               tracePoint(runId, "tool.finished", {
                 ...trace,
@@ -5998,6 +6062,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
               tracePoint(runId, "tool.finished", { ...trace, outcome: "failed" });
               throw error;
             } finally {
+              await settleChiefAction(
+                deps.prisma,
+                chiefAdmissions.get(executionId),
+                chiefUncertain,
+                chiefFailed,
+              );
+              chiefAdmissions.delete(executionId);
               await chiefFeed?.finish(executionId);
             }
           };
@@ -6348,6 +6419,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
               leaseFence: fence,
               deliveryIds: initialReceiptIds,
             });
+          if (await checkDelegationExecution(deps.prisma, runId)) throw new DispatchStopRequested();
+          context.signal.throwIfAborted();
           const runtimeEvents = withComparisonInput(
             deps,
             run,
@@ -7382,6 +7455,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
           throw new Error("Run setup failed; retrying");
         }
       } finally {
+        controlWatch.abort();
+        await controlWatcher;
         detachShutdown?.();
         stopHeartbeat();
         const stopping = await deps.prisma.run.findUnique({
@@ -7407,7 +7482,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
             runId,
             screenRelease!.context,
           ));
-        if (!retainComputerLease || stopping?.cancelRequestedAt) {
+        const correctionAttempt = deps.prisma.chiefAssignment
+          ? await deps.prisma.chiefAssignment.findUnique({ where: { runId } })
+          : null;
+        if (
+          (!retainComputerLease || stopping?.cancelRequestedAt) &&
+          !(correctionAttempt?.supersededAt && stopping?.cancelRequestedAt && !stopConfirmed)
+        ) {
           if (screenRelease && !stopConfirmed) {
             await deps.sandbox
               .releaseScreen?.(screenRelease.computer, screenRelease.context)
@@ -7417,6 +7498,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
         }
         if (stopConfirmed && (await confirmDispatchStop(deps.prisma, runId, undefined, deps.jobs)))
           tracePoint(runId, "terminal.committed", { attempt: fence, outcome: "cancelled" });
+        await wakeChiefAfterControl(deps, runId).catch((error) =>
+          getLogger().error("chief control wake", error),
+        );
         await wakeGoalAfterDelegation(deps, run.delegationId).catch((error) =>
           getLogger().error("goal wake", error),
         );

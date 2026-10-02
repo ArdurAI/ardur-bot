@@ -316,6 +316,10 @@ msgid "{name} needs your input"
 msgstr ""
 
 #: src/components/ai/CoordinationLine.tsx
+msgid "{name} stood down"
+msgstr "{name} 已停下"
+
+#: src/components/ai/CoordinationLine.tsx
 msgid "{name} stopped before answering"
 msgstr "{name} 在回答前已停止"
 
@@ -1733,6 +1737,10 @@ msgstr "检查于 {0}"
 #: src/pages/shell/runtime-settings.tsx
 msgid "Checking the download"
 msgstr "正在检查下载"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Checking the earlier action"
+msgstr "正在检查先前的操作"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Checking the missing tool"
@@ -4432,12 +4440,20 @@ msgid "Got it — I’ll check the request and choose the next step."
 msgstr "收到 — 我会检查请求并选择下一步。"
 
 #: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check this change before the next action."
+msgstr "收到 — 我会在下一步操作前检查这项变更。"
+
+#: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll check what’s missing and ask before installing it."
 msgstr "收到 — 我会检查缺少什么，并在安装前征求同意。"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll choose a team member to put this in Notion."
 msgstr "收到 — 我会选择一位团队成员把它放到 Notion。"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll keep {name} off this task."
+msgstr "收到 — 我不会让 {name} 参与这项任务。"
 
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
@@ -8568,6 +8584,10 @@ msgstr "回答前已停止"
 msgid "Stopping"
 msgstr ""
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Stopping {name}"
+msgstr "正在停止 {name}"
+
 #: src/pages/settings-sections.ts
 msgid "Storage"
 msgstr "存储"
@@ -8804,6 +8824,10 @@ msgstr "上次更新已中断。"
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "The previous action may have finished. I’ll check before retrying."
+msgstr "上一步操作可能已完成。我会先检查，再重试。"
 
 #: src/pages/board/BoardsSettings.tsx
 msgid "The reviewer was changed in another window."
@@ -9158,6 +9182,10 @@ msgstr "个上下文令牌"
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Tokens over seven days"
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Told {name} to stand down"
+msgstr "已通知 {name} 停下"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Tool access mode"

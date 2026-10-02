@@ -316,6 +316,10 @@ msgid "{name} needs your input"
 msgstr ""
 
 #: src/components/ai/CoordinationLine.tsx
+msgid "{name} stood down"
+msgstr "{name}님이 중단했습니다"
+
+#: src/components/ai/CoordinationLine.tsx
 msgid "{name} stopped before answering"
 msgstr "{name}이(가) 답변하기 전에 중지되었습니다"
 
@@ -1733,6 +1737,10 @@ msgstr "확인 시간 {0}"
 #: src/pages/shell/runtime-settings.tsx
 msgid "Checking the download"
 msgstr "다운로드 확인 중"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Checking the earlier action"
+msgstr "이전 작업을 확인하는 중"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Checking the missing tool"
@@ -4432,12 +4440,20 @@ msgid "Got it — I’ll check the request and choose the next step."
 msgstr "알겠습니다 — 요청을 확인하고 다음 단계를 선택하겠습니다."
 
 #: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check this change before the next action."
+msgstr "알겠습니다 — 다음 행동 전에 이 변경 사항을 확인하겠습니다."
+
+#: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll check what’s missing and ask before installing it."
 msgstr "알겠습니다 — 무엇이 없는지 확인하고 설치 전에 물어보겠습니다."
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll choose a team member to put this in Notion."
 msgstr "알겠습니다 — 이 문서를 Notion에 올릴 팀원을 선택하겠습니다."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll keep {name} off this task."
+msgstr "알겠습니다 — {name}님을 이 작업에서 제외하겠습니다."
 
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
@@ -8568,6 +8584,10 @@ msgstr "응답 전 중지됨"
 msgid "Stopping"
 msgstr ""
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Stopping {name}"
+msgstr "{name}님을 중단하는 중"
+
 #: src/pages/settings-sections.ts
 msgid "Storage"
 msgstr ""
@@ -8804,6 +8824,10 @@ msgstr "마지막 업데이트가 중단되었습니다."
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "The previous action may have finished. I’ll check before retrying."
+msgstr "이전 작업이 이미 끝났을 수 있습니다. 재시도 전에 확인하겠습니다."
 
 #: src/pages/board/BoardsSettings.tsx
 msgid "The reviewer was changed in another window."
@@ -9158,6 +9182,10 @@ msgstr ""
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Tokens over seven days"
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Told {name} to stand down"
+msgstr "{name}님에게 중단을 요청했습니다"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Tool access mode"

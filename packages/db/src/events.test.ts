@@ -1784,6 +1784,39 @@ describe("answerRunInput", () => {
     expect(tx.actionApprovalRule.upsert).not.toHaveBeenCalled();
   });
 
+  it("does not revive a cancelled waiting attempt through an old approval", async () => {
+    const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([{ id: "thread-1" }]),
+      run: {
+        findUnique: vi.fn().mockResolvedValue({ delegationId: null }),
+        findFirst: vi.fn().mockResolvedValue({
+          botId: "bot-1",
+          userId: "user-1",
+          cancelRequestedAt: new Date(0),
+        }),
+        updateMany: vi.fn(),
+      },
+      message: { findFirst: vi.fn() },
+      externalEffect: { findFirst: vi.fn() },
+    };
+    const prisma = {
+      $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
+    } as unknown as PrismaClient;
+    await expect(
+      answerRunInput(prisma, {
+        spaceId: "workspace-1",
+        threadId: "thread-1",
+        runId: "run-1",
+        messageId: "message-1",
+        answeredByUserId: "user-1",
+        answer: "allow",
+      }),
+    ).resolves.toBe(false);
+    expect(tx.message.findFirst).not.toHaveBeenCalled();
+    expect(tx.externalEffect.findFirst).not.toHaveBeenCalled();
+    expect(tx.run.updateMany).not.toHaveBeenCalled();
+  });
+
   it("does not queue a run when an approval card has no matching effect", async () => {
     const tx = {
       $queryRaw: vi.fn().mockResolvedValue([{ id: "thread-1" }]),

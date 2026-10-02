@@ -526,6 +526,7 @@ export function ShellPage({
     const target = typeof next === "function" ? next(panelRef.current) : next;
     if (target !== panelRef.current && terminalCloseGuard.current && !terminalCloseGuard.current())
       return false;
+    panelRef.current = target;
     setPanelUnchecked(target);
     return true;
   }, []);
@@ -921,6 +922,10 @@ export function ShellPage({
   panelRef.current = panel;
   workspaceTabRef.current = workspaceTab;
   const activeGroup = groups.find((group) => group.id === groupId);
+  useLayoutEffect(() => {
+    if (panel === "group-settings" && !inGroup) setPanel(active ? "settings" : null);
+    else if (panel === "settings" && inGroup) setPanel("group-settings");
+  }, [inGroup, active?.id, panel, setPanel]);
   useEffect(() => {
     setGoal(null);
     if (!groupId || !bootstrapMe?.isDeploymentOwner) return;
@@ -1092,9 +1097,16 @@ export function ShellPage({
     const stickToEnd = !scrollElement || transcriptIsNearEnd(scrollElement);
     markOnce("rk:renderer:thread-request-start");
     const request = ++groupRefreshEpoch.current;
+    const epoch = historyEpoch.current;
     const snap = await rpc.threads.get({ groupId: id }, signal ? { signal } : undefined);
     markOnce("rk:renderer:thread-response");
-    if (activeGroupId.current !== id || request !== groupRefreshEpoch.current) return snap;
+    if (
+      signal?.aborted ||
+      activeGroupId.current !== id ||
+      epoch !== historyEpoch.current ||
+      request !== groupRefreshEpoch.current
+    )
+      return snap;
     const reconciled = reconcileRefreshedThread(
       snapshotRef.current,
       snap,
@@ -1127,6 +1139,7 @@ export function ShellPage({
     const snap = await rpc.threads.get({ botId: id }, signal ? { signal } : undefined);
     markOnce("rk:renderer:thread-response");
     if (
+      signal?.aborted ||
       activeBotId.current !== id ||
       epoch !== historyEpoch.current ||
       request !== threadRefreshEpoch.current
@@ -1277,10 +1290,25 @@ export function ShellPage({
           setSpaces(bootstrap.spaces);
           setInitialBotsLoaded(true);
         }
-        if (!groupId && bootstrap.thread) {
-          bootstrappedThread.current = bootstrap.thread;
-          commitSnapshot(bootstrap.thread);
-          commitComputer(bootstrap.thread.computer ?? null);
+        // Bootstrap may finish after navigation or a newer snapshot/SSE update.
+        // Seed only the selected DM, and use the same cursor guard as refreshes.
+        const currentGroupId = routeGroupId.current;
+        const currentBotId = routeBotId.current;
+        if (
+          !currentGroupId &&
+          !teamView.current &&
+          bootstrap.thread &&
+          bootstrap.thread.botId === (currentBotId ?? bootstrap.bots[0]?.id)
+        ) {
+          const reconciled = reconcileRefreshedThread(
+            snapshotRef.current,
+            bootstrap.thread,
+            computerRef.current,
+            expandedHistoryThread.current === bootstrap.thread.threadId,
+          );
+          if (!activeBotId.current) bootstrappedThread.current = reconciled.snapshot;
+          commitSnapshot(reconciled.snapshot);
+          commitComputer(reconciled.computer);
           setRoutines(bootstrap.routines);
           setRoutinesBotId(bootstrap.thread.botId ?? null);
           markOnce("rk:renderer:bots-response");
@@ -1297,14 +1325,15 @@ export function ShellPage({
           navigate("/onboarding", { replace: true });
           return;
         }
-        if (groupId) {
-          if (!groupList.some((group) => group.id === groupId)) {
+        if (currentGroupId) {
+          if (!groupList.some((group) => group.id === currentGroupId)) {
             navigate(firstThreadRoute(bootstrap.bots, groupList), { replace: true });
           }
           return;
         }
+        if (currentBotId && bootstrap.bots.some((bot) => bot.id === currentBotId)) return;
         const selectedBotId = bootstrap.thread?.botId ?? bootstrap.bots[0]?.id;
-        if (selectedBotId && selectedBotId !== botId) {
+        if (selectedBotId && selectedBotId !== currentBotId) {
           navigate(`/app/${selectedBotId}`, { replace: true });
         }
       })
@@ -6739,7 +6768,7 @@ const MessageView = memo(function MessageView({
               className="rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
               dir="auto"
             >
-              <ChiefReceiptText receiptKey={block.key} />
+              <ChiefReceiptText receiptKey={block.key} memberName={block.memberName} />
             </div>
           );
         }

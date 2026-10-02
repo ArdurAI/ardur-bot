@@ -21,6 +21,7 @@ export function signedRunFixture(
       runId,
       spaceId,
       botId,
+      actor: `bot:${botId}`,
       grantId: runId,
       traceId: runId,
       runNonce: "MDEyMzQ1Njc4OWFiY2RlZg",
@@ -55,7 +56,7 @@ export function signedRunFixture(
     spaceId,
     runId,
     jws: sealRun(
-      { records: journal, actor: botId, grantId: runId, iss: `ardur:${spaceId}:evidence` },
+      { records: journal, actor: `bot:${botId}`, grantId: runId, iss: `ardur:${spaceId}:evidence` },
       privateKey,
       keys.kid,
     ),

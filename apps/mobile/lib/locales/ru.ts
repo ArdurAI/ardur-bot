@@ -1464,4 +1464,13 @@ export const RU_MESSAGES: Record<string, string> = {
   "Check failed": "Проверка не пройдена",
   "Download evidence": "Скачать свидетельства",
   "{gapCount} evidence gaps": "Пробелов в записи: {gapCount}",
+  "Checking the earlier action": "Проверяю предыдущее действие",
+  "Got it — I’ll keep {name} off this task.": "Понял — не буду поручать эту задачу {name}.",
+  "Got it — I’ll check this change before the next action.":
+    "Понял — проверю это изменение перед следующим действием.",
+  "Told {name} to stand down": "Попросил {name} остановиться",
+  "Stopping {name}": "Останавливаю {name}",
+  "{name} stood down": "{name} прекратил работу",
+  "The previous action may have finished. I’ll check before retrying.":
+    "Предыдущее действие могло завершиться. Проверю перед повторной попыткой.",
 };

@@ -27,16 +27,27 @@ function useTranslatedChiefActivity(key: ChiefActivityKey | undefined) {
   }
 }
 
-export function ChiefReceiptText({ receiptKey }: { receiptKey: ChiefReceiptKey }) {
+export function ChiefReceiptText({
+  receiptKey,
+  memberName,
+}: {
+  receiptKey: ChiefReceiptKey;
+  memberName?: string;
+}) {
   const { t } = useLingui();
+  const name = memberName;
   const text =
-    receiptKey === "document-to-service"
-      ? t`Got it — I’ll choose a team member to put this in Notion.`
-      : receiptKey === "install-tool"
-        ? t`Got it — I’ll check what’s missing and ask before installing it.`
-        : receiptKey === "greeting"
-          ? t`Hi everyone.`
-          : t`Got it — I’ll check the request and choose the next step.`;
+    receiptKey === "exclude-member" && name
+      ? t`Got it — I’ll keep ${name} off this task.`
+      : receiptKey === "change-task"
+        ? t`Got it — I’ll check this change before the next action.`
+        : receiptKey === "document-to-service"
+          ? t`Got it — I’ll choose a team member to put this in Notion.`
+          : receiptKey === "install-tool"
+            ? t`Got it — I’ll check what’s missing and ask before installing it.`
+            : receiptKey === "greeting"
+              ? t`Hi everyone.`
+              : t`Got it — I’ll check the request and choose the next step.`;
   return (
     <span data-testid="chief-receipt" aria-live="polite">
       {text}
@@ -54,15 +65,28 @@ export function ChiefDispatchLine({
 }) {
   const { t } = useLingui();
   const [expanded, setExpanded] = useState(false);
-  const name = dispatch.memberName;
+  const name = dispatch.stop?.memberName ?? dispatch.memberName;
   const label =
-    dispatch.state === "approval-held"
-      ? t`Waiting for approval`
-      : dispatch.state === "queued"
-        ? t`Queued for ${name}`
-        : t`Messaged ${name}`;
+    dispatch.stop?.state === "requested"
+      ? t`Told ${name} to stand down`
+      : dispatch.stop?.state === "confirmed"
+        ? t`${name} stood down`
+        : dispatch.stop?.state === "uncertain"
+          ? t`The previous action may have finished. I’ll check before retrying.`
+          : dispatch.stop?.state === "checking"
+            ? t`Checking the earlier action`
+            : dispatch.state === "approval-held"
+              ? t`Waiting for approval`
+              : dispatch.state === "queued"
+                ? t`Queued for ${name}`
+                : t`Messaged ${name}`;
   const activityKey = chiefActivityKey(dispatch);
-  const activity = useTranslatedChiefActivity(activityKey);
+  const translatedActivity = useTranslatedChiefActivity(activityKey);
+  const activity = dispatch.stop
+    ? dispatch.stop.state === "requested"
+      ? t`Stopping ${name}`
+      : undefined
+    : translatedActivity;
   return (
     <div className="my-1 text-[13px] text-muted-foreground" data-testid="chief-dispatch">
       <button
@@ -72,7 +96,10 @@ export function ChiefDispatchLine({
         aria-expanded={expanded}
         onClick={() => setExpanded(!expanded)}
       >
-        <span className="truncate" aria-live="polite">
+        <span
+          className={dispatch.stop?.state === "uncertain" ? "min-w-0" : "truncate"}
+          aria-live="polite"
+        >
           {label}
         </span>
         {expanded ? (

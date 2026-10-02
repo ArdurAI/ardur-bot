@@ -110,6 +110,38 @@ it("does not request summaries for offscreen messages; requests once visible", a
   );
   expect(node.textContent).toBe("Verified");
 });
+it.each([
+  ["off", ""],
+  ["verified", "Verified"],
+  ["failed", "Check failed"],
+] as const)("renders a fetched %s result without inventing a failed check", async (state, text) => {
+  vi.stubGlobal("IntersectionObserver", undefined);
+  api.summary.mockResolvedValue({
+    ...summary(state),
+    gapCount: 0,
+    decisions: {
+      allowed: state === "off" ? 0 : 3,
+      denied: 0,
+      asked: 0,
+      recorded: state === "off" ? 0 : 3,
+    },
+    failureCodes: state === "failed" ? ["signature_invalid"] : [],
+  });
+  await act(async () => root.render(<RunEvidence runId="run" />));
+  expect(node.textContent).toBe(text);
+  if (state === "failed")
+    expect(node.querySelector('[data-evidence-state="failed"]')?.getAttribute("title")).toBe(
+      "signature_invalid",
+    );
+});
+
+it("shows nothing when the summary lookup fails", async () => {
+  vi.stubGlobal("IntersectionObserver", undefined);
+  api.summary.mockRejectedValue(new Error("Lookup unavailable"));
+  await act(async () => root.render(<RunEvidence runId="run" />));
+  expect(node.textContent).toBe("");
+});
+
 it("fetches the current summary when its menu is opened", async () => {
   api.summary.mockResolvedValue(summary("verified"));
   await act(async () => root.render(<RunEvidence runId="run" action="download" />));
