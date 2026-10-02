@@ -8,6 +8,7 @@ import type {
   HostOperation,
   RemoteComputerCall,
 } from "@ardurbot/contracts";
+import { ComputerWorkspaceSaveError } from "@ardurbot/contracts";
 import { HOST_FILE_BYTES } from "@ardurbot/contracts/host-bridge";
 import type { EngineCredentials } from "./docker-sandbox.js";
 import { FleetDockerSandboxProvider } from "./docker-sandbox.js";
@@ -252,14 +253,35 @@ export class FleetService {
           context,
         );
       }
+      case "workspace.ready":
+        try {
+          await provider.ensureWorkspaceReady?.(computer, context);
+          return send("result", { ok: true });
+        } catch (error) {
+          if (!(error instanceof ComputerWorkspaceSaveError)) throw error;
+          return send("result", {
+            ok: false,
+            reason: error.reason,
+            engineFailureCategory: error.engineFailureCategory,
+          });
+        }
       case "export":
-        for await (const file of provider.exportWorkspace(computer, context)) {
-          if (file.content.length > HOST_FILE_BYTES)
-            throw new Error("Host checkpoint file exceeds limit.");
-          await send("file", {
-            path: file.path,
-            content: Buffer.from(file.content).toString("base64"),
-            executable: file.executable,
+        try {
+          for await (const file of provider.exportWorkspace(computer, context)) {
+            if (file.content.length > HOST_FILE_BYTES)
+              throw new Error("Host checkpoint file exceeds limit.");
+            await send("file", {
+              path: file.path,
+              content: Buffer.from(file.content).toString("base64"),
+              executable: file.executable,
+            });
+          }
+        } catch (error) {
+          if (!(error instanceof ComputerWorkspaceSaveError)) throw error;
+          return send("result", {
+            ok: false,
+            reason: error.reason,
+            engineFailureCategory: error.engineFailureCategory,
           });
         }
         return;

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { COMPUTER_STATES } from "@ardurbot/contracts";
 import { i18n } from "@lingui/core";
 import { formatter } from "@lingui/format-po";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -12,6 +13,52 @@ import tr from "../../scripts/translations-tr.json";
 import zhCN from "../../scripts/translations-zh-CN.json";
 
 describe("lingui catalogs", () => {
+  it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+    "preserves workspace and account entry point names in %s",
+    async (locale) => {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const catalog = await formatter().parse(readFileSync(filename, "utf8"), {
+        locale,
+        sourceLocale: "en",
+        filename,
+      });
+      for (const message of [
+        "Tasks",
+        "Routines",
+        "Show settings",
+        "Show computer",
+        "Settings",
+        "Usage",
+        "Log out",
+      ]) {
+        const entry = Object.values(catalog).find((value) => value.message === message);
+        expect(entry?.translation, `${locale}: ${message}`).toBeTruthy();
+        if (locale === "ko" && message === "Routines") expect(entry?.translation).toBe("자동 실행");
+      }
+    },
+  );
+  it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+    "translates every computer state and typed workspace save failure once in %s",
+    async (locale) => {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const source = readFileSync(filename, "utf8");
+      const catalog = await formatter().parse(source, { locale, sourceLocale: "en", filename });
+      for (const message of [
+        ...Object.values(COMPUTER_STATES),
+        "The computer stopped before its workspace could be saved.",
+        "The computer or its workspace could not be found.",
+        "The computer's engine could not be reached to save its workspace.",
+        "The workspace is too large to save.",
+        "The workspace could not be saved.",
+      ]) {
+        expect(source.split(`msgid ${JSON.stringify(message)}\n`)).toHaveLength(2);
+        const entry = Object.values(catalog).find((value) => value.message === message);
+        expect(entry?.translation?.trim(), `${locale}: ${message}`).toBeTruthy();
+        if (locale === "en") expect(entry?.translation).toBe(message);
+        else expect(entry?.translation).not.toBe(message);
+      }
+    },
+  );
   it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
     "translates both location choices, consequences, refusals and repair in %s",
     async (locale) => {

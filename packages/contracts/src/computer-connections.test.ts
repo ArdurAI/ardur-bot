@@ -11,8 +11,27 @@ import {
 import type { ComputerUpdate } from "./domain.js";
 import { ComputerStatusSchema, CreateBotInput } from "./domain.js";
 import { SandboxKind } from "./ids.js";
+import { computerSleepWorkspacePolicy } from "./runtime-placement.js";
 
 describe("computer execution facts", () => {
+  it("has an explicit sleep policy for every execution kind", () => {
+    expect(Object.keys(COMPUTER_KINDS).sort()).toEqual([...SandboxKind.options].sort());
+    for (const kind of SandboxKind.options) {
+      expect(computerSleepWorkspacePolicy({ kind })).toBe(COMPUTER_KINDS[kind].sleepWorkspace);
+    }
+    expect(computerSleepWorkspacePolicy({ kind: "desktop" })).toBe("keep-local-files");
+    expect(computerSleepWorkspacePolicy({ kind: "desktop", connectionId: "engine" })).toBe(
+      "checkpoint",
+    );
+    expect(
+      computerSleepWorkspacePolicy({
+        kind: "desktop",
+        connectionId: "engine",
+        connectionSettings: { engine: "docker" },
+      }),
+    ).toBe("checkpoint");
+    expect(computerSleepWorkspacePolicy({ kind: "unknown" })).toBe("checkpoint");
+  });
   it("matches interrupted updates to the actual computer, including shared bots", () => {
     const update: ComputerUpdate = {
       id: "update",
@@ -42,7 +61,7 @@ describe("computer execution facts", () => {
     );
     expect(
       computerRuntimeSummary({ kind: "desktop", mode: "team", state: "suspending" }),
-    ).toMatchObject({ location: "This computer", stateLabel: "Paused for an update" });
+    ).toMatchObject({ location: "This computer", stateLabel: "Saving your workspace" });
   });
   it("covers every supported kind in one table, without offering a VM", () => {
     expect(Object.keys(COMPUTER_KINDS).sort()).toEqual([...SandboxKind.options].sort());

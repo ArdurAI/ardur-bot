@@ -3,6 +3,7 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import { captureScreenshot } from "./helpers";
 import { bots, installPerformanceFixture } from "./performance-fixture";
+import { openWorkspaceView as openView } from "./workspace-view";
 
 const version = "a".repeat(64);
 
@@ -117,7 +118,7 @@ async function openFiles(page: Page) {
   await page.getByRole("button", { name: "Agent computer" }).click();
   const pane = page.getByTestId("side-panel");
   await expect(pane).toHaveAttribute("data-panel", "computer");
-  await pane.getByRole("tab", { name: "Files" }).click();
+  await openView(page, "Files");
   await pane.getByRole("button", { name: "notes.md", exact: true }).click();
   await expect(pane).toContainText("Workspace notes");
   return pane;
@@ -133,10 +134,12 @@ test("workspace pane opens Tasks and bot files without starting the computer", a
   const pane = page.getByTestId("side-panel");
   await expect(pane).toHaveAttribute("data-panel", "computer");
   await expect(pane.getByRole("tab", { name: "Tasks" })).toBeVisible();
+  await expect(pane.getByRole("tab", { name: "Routines", exact: true })).toBeVisible();
+  await expect(pane.getByRole("button", { name: "Show settings", exact: true })).toBeVisible();
   await expect(pane.getByRole("tab", { name: "Screen" })).toHaveCount(0);
   await expect(pane).toContainText("Review the workspace");
   await captureScreenshot(page, testInfo, "workspace-tasks-running");
-  await pane.getByRole("tab", { name: "Files" }).click();
+  await openView(page, "Files");
   await pane.getByRole("button", { name: "notes.md", exact: true }).click();
   await expect(pane).toContainText("Workspace notes");
   await captureScreenshot(page, testInfo, "workspace-files-light");
@@ -163,6 +166,51 @@ test("workspace pane opens Tasks and bot files without starting the computer", a
   expect(unexpected).toEqual([]);
   await page.keyboard.press("ControlOrMeta+Shift+E");
   await expect(pane).toHaveAttribute("aria-hidden", "true");
+});
+
+test("workspace views retain drafts across docking, expansion and return to chat", async ({
+  page,
+}, testInfo) => {
+  const { botId, unexpected } = await installWorkspace(page, "live");
+  await page.goto(`/app/${botId}`);
+  await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
+  const pane = await openFiles(page);
+  const editor = pane.locator("[data-ide-editor]");
+  await editor.fill("Unsaved workspace draft");
+  await editor.evaluate((element) => element.setAttribute("data-draft-proof", "original"));
+  await pane.getByRole("button", { name: "Expand", exact: true }).click();
+  await expect(pane.locator('[data-draft-proof="original"]')).toBeVisible();
+  await captureScreenshot(page, testInfo, "workspace-views-expanded");
+  await pane.getByRole("button", { name: "Back to chat", exact: true }).click();
+  for (const [direction, position] of [
+    ["left", "left"],
+    ["down", "bottom"],
+    ["right", "right"],
+  ]) {
+    await page.getByRole("button", { name: "Views", exact: true }).click();
+    await page.getByRole("menuitem", { name: `Move split view ${direction}`, exact: true }).click();
+    await expect(pane).toHaveAttribute("data-position", position!);
+    await expect(pane.locator('[data-draft-proof="original"]')).toBeVisible();
+    await captureScreenshot(page, testInfo, `workspace-views-${position}`);
+  }
+  await page.setViewportSize({ width: 600, height: 800 });
+  await expect(pane).toHaveAttribute("data-overlay", "true");
+  await expect(pane.getByRole("tree", { name: "Files", exact: true })).toBeHidden();
+  await captureScreenshot(page, testInfo, "workspace-views-narrow");
+  await pane.getByRole("button", { name: "Back to chat", exact: true }).click();
+  await expect(pane).toHaveAttribute("aria-hidden", "true");
+  await expect(page.getByRole("button", { name: "Agent computer", exact: true })).toBeFocused();
+  await page.getByRole("button", { name: "Agent computer", exact: true }).click();
+  await expect(pane.locator('[data-draft-proof="original"]')).toBeVisible();
+  await expect(editor).toContainText("Unsaved workspace draft");
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(pane).toHaveAttribute("data-overlay", "false");
+  await pane.getByRole("tab", { name: "Tasks", exact: true }).click();
+  await pane.getByRole("button", { name: "Close Files", exact: true }).click();
+  await expect(pane.getByRole("tab", { name: "Files", exact: true })).toHaveCount(0);
+  await expect(pane.getByRole("tab", { name: "Tasks", exact: true })).toBeFocused();
+  await captureScreenshot(page, testInfo, "workspace-views-closed");
+  expect(unexpected).toEqual([]);
 });
 
 test("legacy desktop container opens its workspace files", async ({ page }, testInfo) => {
@@ -265,7 +313,7 @@ test("workspace pane Terminal keeps its shell across views and releases explicit
   await page.getByRole("button", { name: "Agent computer" }).click();
   const pane = page.getByTestId("side-panel");
   await expect(pane).toHaveAttribute("data-panel", "computer");
-  const tab = pane.getByRole("tab", { name: "Terminal" });
+  const tab = await openView(page, "Terminal");
   await expect(tab).toBeVisible();
   await tab.click();
   // No ticket and no session before an explicit takeover.
@@ -291,14 +339,17 @@ test("workspace pane Terminal keeps its shell across views and releases explicit
     "Background job still running",
   );
   expect(calls).toEqual(["computer/takeover", "terminal/ticket"]);
-  await pane.getByRole("button", { name: "Expand workspace" }).click();
+  await pane.getByRole("button", { name: "Expand", exact: true }).click();
   await expect(pane.locator('[data-terminal-root][data-session-proof="original"]')).toBeVisible();
-  await pane.getByRole("button", { name: "Return to conversation" }).click();
+  await pane.getByRole("button", { name: "Back to chat", exact: true }).click();
   page.once("dialog", async (dialog) => {
     expect(dialog.message()).toBe("End this terminal?");
     await dialog.dismiss();
   });
-  await pane.getByRole("button", { name: "Close panel", exact: true }).click();
+  await pane
+    .getByRole("tablist", { name: "Views", exact: true })
+    .getByRole("button", { name: "Close Terminal", exact: true })
+    .click();
   await expect(pane).toHaveAttribute("aria-hidden", "false");
   expect(calls).toEqual(["computer/takeover", "terminal/ticket"]);
   page.once("dialog", async (dialog) => {
@@ -357,7 +408,7 @@ test("workspace pane Terminal reports an ended session instead of a dead termina
   await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
   await page.getByRole("button", { name: "Agent computer" }).click();
   const pane = page.getByTestId("side-panel");
-  await pane.getByRole("tab", { name: "Terminal" }).click();
+  await openView(page, "Terminal");
   await expect(
     pane.getByText("A terminal is already open. Close it before opening another.", {
       exact: true,
@@ -421,7 +472,7 @@ test("workspace pane Terminal boots a stopped computer without taking control", 
   await page.getByRole("button", { name: "Agent computer" }).click();
   const pane = page.getByTestId("side-panel");
   await expect(pane).toHaveAttribute("data-panel", "computer");
-  const tab = pane.getByRole("tab", { name: "Terminal" });
+  const tab = await openView(page, "Terminal");
   await expect(tab).toBeVisible();
   await tab.click();
   await expect(pane.getByText("Start computer to open a terminal", { exact: true })).toBeVisible();

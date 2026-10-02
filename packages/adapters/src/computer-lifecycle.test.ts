@@ -1919,6 +1919,27 @@ describe("computer execution leases", () => {
     });
   });
 
+  it.each([null, "update"])(
+    "distinguishes an idle save from maintenance %s",
+    async (maintenanceId) => {
+      const prisma = leasePrisma({ scope: "team" });
+      prisma.findUniqueOrThrow.mockResolvedValue({
+        scope: "team",
+        state: "suspending",
+        maintenanceId,
+        updatedAt: new Date(),
+      });
+      await expect(
+        acquireComputerExecutionLease(prisma.client, {
+          computerId: "computer-1",
+          runId: "run-1",
+          botId: "bot-1",
+        }),
+      ).rejects.toMatchObject({ waitingForIdleSave: maintenanceId === null });
+      expect(prisma.create).not.toHaveBeenCalled();
+    },
+  );
+
   it("refuses a team lease while suspension is still in progress", async () => {
     const prisma = leasePrisma({ scope: "team" });
     prisma.findUniqueOrThrow.mockResolvedValue({
@@ -3179,7 +3200,7 @@ describe("computer replacement", () => {
           "update",
           context,
         ),
-      ).rejects.toThrow("ECONNRESET");
+      ).rejects.toThrow("save-failed");
       expect(destroy).not.toHaveBeenCalled();
       expect(updateMany).toHaveBeenLastCalledWith({
         where: { id: "computer-1", maintenanceId: null, updatedAt: expect.any(Date) },

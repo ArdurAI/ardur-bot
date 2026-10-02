@@ -12,6 +12,7 @@ import {
   memoryDocsFixture,
   routineDocsFixture,
 } from "./feature-docs-fixtures";
+import { openWorkspaceView } from "./workspace-view";
 
 const captureRoot = process.env.FEATURE_DOCS_DIR
   ? Promise.resolve(process.env.FEATURE_DOCS_DIR)
@@ -327,7 +328,7 @@ test("routines: edit a scheduled routine and inspect its result", async ({ page 
   await page.goto("/app/bot");
   await expectModelReady(page);
   await page.getByTitle("Agent computer").click();
-  await page.getByRole("tab", { name: "Routines", exact: true }).click();
+  await openWorkspaceView(page, "Routines");
   await expect(page.getByRole("button", { name: /Morning brief/ })).toBeVisible();
   await capture(page, "docs-routines-open");
   await page.getByRole("button", { name: /Morning brief/ }).click();

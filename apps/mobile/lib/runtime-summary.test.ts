@@ -328,7 +328,7 @@ it.each([true, false])(
     await act(async () =>
       root.render(createElement(BotRuntimeSettings, { botId: "bot", mode: "dedicated" })),
     );
-    expect(container.textContent).toContain("Paused for an update");
+    expect(container.textContent).toContain("Saving your workspace");
     expect(container.textContent).not.toContain("Starting");
     expect(container.textContent).toContain("The last update was interrupted.");
     const button = [...container.querySelectorAll("button")].find(

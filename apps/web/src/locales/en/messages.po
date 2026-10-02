@@ -1,16 +1,16 @@
 msgid ""
 msgstr ""
-"POT-Creation-Date: 2026-08-26 00:00+0000\n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=utf-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"X-Generator: @lingui/cli\n"
-"Language: en\n"
 "Project-Id-Version: ardurbot-web\n"
 "Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-08-26 00:00+0000\n"
+"MIME-Version: 1.0\n"
+"X-Generator: @lingui/cli\n"
 "PO-Revision-Date: \n"
 "Last-Translator: \n"
+"Language: en\n"
 "Language-Team: \n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: \n"
 
 #: src/pages/shell/model-pin-select.tsx
@@ -1268,6 +1268,10 @@ msgstr "Back"
 msgid "Back to capabilities"
 msgstr "Back to capabilities"
 
+#: src/pages/workspace/WorkspacePane.tsx
+msgid "Back to chat"
+msgstr "Back to chat"
+
 #: src/pages/NotFound.tsx
 msgid "Back to home"
 msgstr "Back to home"
@@ -1923,6 +1927,10 @@ msgstr "Close"
 msgid "Close {0}"
 msgstr "Close {0}"
 
+#: src/pages/workspace/WorkspacePane.tsx
+msgid "Close {name}"
+msgstr "Close {name}"
+
 #: src/pages/shell/message-cards.tsx
 msgid "Close chart"
 msgstr "Close chart"
@@ -2098,7 +2106,7 @@ msgstr "computer"
 #: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
-#: src/pages/workspace/WorkspacePane.tsx
+#: src/pages/workspace/view-registry.ts
 msgid "Computer"
 msgstr "Computer"
 
@@ -4105,6 +4113,7 @@ msgid "Existing documents keep their scope."
 msgstr "Existing documents keep their scope."
 
 #: src/pages/shell/message-cards.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Expand"
 msgstr "Expand"
 
@@ -4112,10 +4121,6 @@ msgstr "Expand"
 #: src/pages/Shell.tsx
 msgid "Expand {0}"
 msgstr "Expand {0}"
-
-#: src/pages/Shell.tsx
-msgid "Expand workspace"
-msgstr "Expand workspace"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
@@ -4228,12 +4233,12 @@ msgstr "Feedback corrections"
 msgid "Filed by {name}"
 msgstr "Filed by {name}"
 
-#: src/pages/Shell.tsx
+#: src/pages/workspace/view-registry.ts
 #: src/pages/workspace/WorkspaceFiles.tsx
-#: src/pages/workspace/WorkspacePane.tsx
 msgid "Files"
 msgstr "Files"
 
+#: src/pages/workspace/view-registry.ts
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Files are unavailable on this computer."
 msgstr "Files are unavailable on this computer."
@@ -5282,6 +5287,7 @@ msgstr "Loading your tools."
 #: src/pages/SharedCommand.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Loading…"
 msgstr "Loading…"
 
@@ -5747,6 +5753,18 @@ msgstr "Move automatically"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Move bots first: {0}"
 msgstr "Move bots first: {0}"
+
+#: src/pages/workspace/ViewControls.tsx
+msgid "Move split view down"
+msgstr "Move split view down"
+
+#: src/pages/workspace/ViewControls.tsx
+msgid "Move split view left"
+msgstr "Move split view left"
+
+#: src/pages/workspace/ViewControls.tsx
+msgid "Move split view right"
+msgstr "Move split view right"
 
 #: src/pages/shell/dialogs.tsx
 msgid "Move them to your shared memory."
@@ -6448,6 +6466,10 @@ msgstr "Open Screen recording settings"
 msgid "Open screen to view this computer."
 msgstr "Open screen to view this computer."
 
+#: src/pages/workspace/view-registry.ts
+msgid "Open Screen to view this computer."
+msgstr "Open Screen to view this computer."
+
 #: src/components/composer/command-description.ts
 #: src/pages/shell/provider-error-message.tsx
 msgid "Open Settings"
@@ -6458,6 +6480,7 @@ msgid "Open System Settings"
 msgstr "Open System Settings"
 
 #: src/pages/shell/command-palette.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Open terminal"
 msgstr "Open terminal"
 
@@ -6652,10 +6675,6 @@ msgstr "Pause team messages"
 #: src/pages/RoutineEditor.tsx
 msgid "Paused"
 msgstr "Paused"
-
-#: src/lib/computer-state-labels.ts
-msgid "Paused for an update"
-msgstr "Paused for an update"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Permission denied on the socket"
@@ -7498,6 +7517,7 @@ msgstr "Resume team messages"
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/shell/runtime-summary.tsx
 #: src/pages/system/SystemPage.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Retry"
 msgstr "Retry"
@@ -7519,10 +7539,6 @@ msgstr "Retry screen"
 #: src/pages/McpOAuthCallback.tsx
 msgid "Return to Ardur"
 msgstr "Return to Ardur"
-
-#: src/pages/Shell.tsx
-msgid "Return to conversation"
-msgstr "Return to conversation"
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "Return to setup"
@@ -7634,8 +7650,7 @@ msgstr "Routine"
 #: src/pages/dashboard/panels.ts
 #: src/pages/RoutineEditor.tsx
 #: src/pages/settings/GeneralSettings.tsx
-#: src/pages/Shell.tsx
-#: src/pages/workspace/WorkspacePane.tsx
+#: src/pages/workspace/view-registry.ts
 msgid "Routines"
 msgstr "Routines"
 
@@ -7863,6 +7878,7 @@ msgid "Saved. Rotate to reveal."
 msgstr "Saved. Rotate to reveal."
 
 #: src/components/ComputerUpdateProgress.tsx
+#: src/lib/computer-state-labels.ts
 msgid "Saving your workspace"
 msgstr "Saving your workspace"
 
@@ -7892,15 +7908,18 @@ msgstr "Say yes or no, or answer in a sentence."
 msgid "Scopes"
 msgstr "Scopes"
 
-#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
-#: src/pages/workspace/WorkspacePane.tsx
+#: src/pages/workspace/view-registry.ts
 msgid "Screen"
 msgstr "Screen"
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Screen and terminal: Not available on this computer"
 msgstr "Screen and terminal: Not available on this computer"
+
+#: src/pages/workspace/view-registry.ts
+msgid "Screen is unavailable on this computer."
+msgstr "Screen is unavailable on this computer."
 
 #: src/pages/system/SystemPage.tsx
 msgid "Screen recording"
@@ -8710,8 +8729,7 @@ msgid "Task contracts"
 msgstr "Task contracts"
 
 #: src/pages/settings/GeneralSettings.tsx
-#: src/pages/Shell.tsx
-#: src/pages/workspace/WorkspacePane.tsx
+#: src/pages/workspace/view-registry.ts
 msgid "Tasks"
 msgstr "Tasks"
 
@@ -8759,10 +8777,9 @@ msgid "Tell your bot what to change or remove"
 msgstr "Tell your bot what to change or remove"
 
 #: src/pages/ide/IdePage.tsx
-#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
-#: src/pages/workspace/WorkspacePane.tsx
+#: src/pages/workspace/view-registry.ts
 msgid "Terminal"
 msgstr "Terminal"
 
@@ -8773,6 +8790,10 @@ msgstr "Terminal could not open; try again"
 #: src/pages/workspace/terminal-controller.ts
 msgid "Terminal is not available on this computer"
 msgstr "Terminal is not available on this computer"
+
+#: src/pages/workspace/view-registry.ts
+msgid "Terminal is unavailable on this computer."
+msgstr "Terminal is unavailable on this computer."
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/components/OllamaSettings.tsx
@@ -8821,6 +8842,18 @@ msgstr "The bot is working — wait or stop it"
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "The computer is busy. Wait for it to finish."
 msgstr "The computer is busy. Wait for it to finish."
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer or its workspace could not be found."
+msgstr "The computer or its workspace could not be found."
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer stopped before its workspace could be saved."
+msgstr "The computer stopped before its workspace could be saved."
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer's engine could not be reached to save its workspace."
+msgstr "The computer's engine could not be reached to save its workspace."
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
@@ -8873,6 +8906,14 @@ msgstr "The saved sign-in is no longer accepted. Sign in again."
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "The service may use its own embedding providers. Check its settings before saving private documents."
 msgstr "The service may use its own embedding providers. Check its settings before saving private documents."
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The workspace could not be saved."
+msgstr "The workspace could not be saved."
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The workspace is too large to save."
+msgstr "The workspace is too large to save."
 
 #: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx
@@ -9597,6 +9638,11 @@ msgstr "View"
 #: src/pages/customize/McpDiagnostics.tsx
 msgid "View logs"
 msgstr "View logs"
+
+#: src/pages/workspace/ViewControls.tsx
+#: src/pages/workspace/WorkspacePane.tsx
+msgid "Views"
+msgstr "Views"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Visuals"

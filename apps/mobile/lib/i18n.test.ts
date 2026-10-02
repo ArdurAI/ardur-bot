@@ -31,6 +31,22 @@ function collectSourceFiles(dir: string): string[] {
 }
 
 describe("mobile i18n", () => {
+  it("translates every workspace save failure in Russian and Chinese", async () => {
+    const { resetI18nForTests, t } = await import("./i18n");
+    for (const locale of ["ru", "zh-CN"] as const) {
+      resetI18nForTests(locale);
+      for (const message of [
+        "The computer stopped before its workspace could be saved.",
+        "The computer or its workspace could not be found.",
+        "The computer's engine could not be reached to save its workspace.",
+        "The workspace is too large to save.",
+        "The workspace could not be saved.",
+      ]) {
+        expect(t(message).trim()).toBeTruthy();
+        expect(t(message)).not.toBe(message);
+      }
+    }
+  });
   it("covers Team presence, peer conversation, and every delivery state in Russian and Chinese", async () => {
     const { resetI18nForTests, t } = await import("./i18n");
     const { teamDeliveryText } = await import("@ardurbot/core");
