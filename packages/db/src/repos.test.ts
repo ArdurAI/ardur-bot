@@ -36,7 +36,7 @@ const baseBot = {
 };
 
 describe("createRepos.createBot model pins", () => {
-  it.each(["child", "duplicate"])(
+  it.each(["child", "duplicate", "delegated child"])(
     "preserves the complete %s pin in storage and the DTO",
     async (kind) => {
       const pin = {
@@ -73,17 +73,22 @@ describe("createRepos.createBot model pins", () => {
         deploymentSettings: { findUnique: vi.fn(async () => null) },
         $transaction: vi.fn((work: (client: typeof tx) => Promise<unknown>) => work(tx)),
       };
-      const result = await createRepos(prisma as unknown as PrismaClient).createBot(actor, {
+      const onCreated = vi.fn(async () => {});
+      const result = await createRepos(prisma as unknown as PrismaClient, {
+        sandboxProvider: kind === "delegated child" ? "desktop" : "docker",
+      }).createBot(actor, {
         name: "Copy",
         title: "",
         description: "",
         instructions: "",
         color: baseBot.color,
         notifyOnFinish: false,
-        ...(kind === "child" ? { parentBotId: baseBot.id } : pin),
+        ...(kind === "duplicate" ? pin : { parentBotId: baseBot.id }),
+        ...(kind === "delegated child" ? { spawnKey: "spawn", onCreated } : {}),
       });
       expect(stored).toMatchObject(pin);
       expect(result).toMatchObject(pin);
+      expect(onCreated).toHaveBeenCalledTimes(kind === "delegated child" ? 1 : 0);
     },
   );
 });

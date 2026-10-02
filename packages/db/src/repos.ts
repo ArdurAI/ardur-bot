@@ -520,7 +520,15 @@ export function createRepos(
       if (location === "host" && input.isolatedComputer)
         throw new IsolatedComputerUnavailableError();
       let kind = location === "host" ? "desktop" : provider;
-      if (location === "sandbox" && kind === "desktop" && !input.isolatedComputer?.connectionId)
+      // Internal spawns bind their admitted delegation snapshot in this same transaction.
+      // They do not choose a new execution location through the human creation policy.
+      const delegatedCreation = Boolean(input.parentBotId && input.spawnKey && input.onCreated);
+      if (
+        location === "sandbox" &&
+        kind === "desktop" &&
+        !input.isolatedComputer?.connectionId &&
+        !delegatedCreation
+      )
         throw new IsolatedComputerUnavailableError();
       const privateDockerComputer =
         input.computerMode === "dedicated" ||
