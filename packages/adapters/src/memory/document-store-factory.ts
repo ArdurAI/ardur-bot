@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
 import { mkdir, realpath } from "node:fs/promises";
 import path from "node:path";
 import type { MemoryDocumentStore } from "@ardurbot/adapter-kit";
 import type { Prisma } from "@ardurbot/db";
+import { getLogger } from "@ardurbot/logging";
 import { PostgresDocumentStore } from "@ardurbot/memory";
 import type { EncryptedSecretStore } from "../secrets.js";
 import { configuredGitStore } from "./git-config.js";
@@ -21,7 +23,11 @@ export async function selectDocumentStore(
   secrets?: Pick<EncryptedSecretStore, "load">,
   selectListIds?: ListIdSelector,
 ): Promise<MemoryDocumentStore> {
-  const postgres = new PostgresDocumentStore(tx, undefined, selectListIds);
+  const postgres = new PostgresDocumentStore(tx, undefined, selectListIds, (documentId) =>
+    getLogger().warn("memory document left out: it failed the credential check", {
+      documentDigest: refusedDocumentDigest(documentId),
+    }),
+  );
   if (!config?.documentStore || config.documentStore === "postgres") return postgres;
   if (config.documentStore === "git")
     return new VaultWithPrivateDocuments(
@@ -53,4 +59,13 @@ export async function selectDocumentStore(
     exclusive: (action) => action(),
   });
   return new VaultWithPrivateDocuments(vault, postgres, settings.ownerUserId);
+}
+
+/**
+ * Names a refused document in logs without revealing it. The id, path and content are all
+ * covered by the credential check, so any of them may be what was refused; a short one-way
+ * digest still lets the owner match repeated warnings to one document.
+ */
+export function refusedDocumentDigest(documentId: string): string {
+  return createHash("sha256").update(documentId).digest("hex").slice(0, 12);
 }

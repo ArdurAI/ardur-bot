@@ -300,6 +300,18 @@ test("create group from + and see two bots in one transcript", async ({ page }, 
   await sidebar.getByRole("button", { name: /^Draft team/ }).click();
   await expect(page.getByText("Answered: Paris", { exact: true })).toBeVisible();
 
+  await page.getByTestId("bot-settings-trigger").click();
+  await expect(desktopSettings).toHaveAttribute("data-panel", "group-settings");
+  await page.locator(`[data-roster-bot-id="${researcherId}"]`).click();
+  await expect(desktopSettings).toHaveAttribute("data-panel", "settings");
+  await expect(desktopSettings.locator("label:has-text('Name') input")).toHaveValue("Researcher");
+  await sidebar.getByRole("button", { name: /^Draft team/ }).click();
+  await expect(page.getByText("Answered: Paris", { exact: true })).toBeVisible();
+  await expect(desktopSettings).toHaveAttribute("data-panel", "group-settings");
+  await expect(groupName).toHaveValue("Draft team");
+  await captureScreenshot(page, testInfo, "group-reopened-settings");
+  await desktopSettings.getByRole("button", { name: "Close panel", exact: true }).click();
+
   await composer.fill(
     "@Researcher write path notes/group-preview.md and attach it to the thread says # Group artifact",
   );

@@ -16,6 +16,8 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { captureChildOutput, childProcessLogger } from "../child-output.js";
+import { argumentSecrets, environmentSecrets, redactMcpText } from "../mcp-diagnostics.js";
 import {
   extractSourceArchive,
   extractUvBinary,
@@ -571,7 +573,8 @@ async function readPythonVersion(
   );
   await appendLog(
     options.log,
-    `$ python -c platform.python_version\n${result.stdout}\n${result.stderr}\n`,
+    `$ python -c platform.python_version\n${result.stderr}\n`,
+    environmentSecrets(options.env),
   );
   const version = result.stdout.trim();
   if (result.code !== 0 || !PYTHON_VERSION.test(version))
@@ -612,18 +615,27 @@ async function runChecked(
     env: options.env,
     timeoutMs: options.timeoutMs,
   });
-  await appendLog(options.log, `$ uv ${args.join(" ")}\n${result.stdout}\n${result.stderr}\n`);
+  await appendLog(options.log, `$ uv ${args.join(" ")}\n${result.stderr}\n`, [
+    ...argumentSecrets(args),
+    ...environmentSecrets(options.env),
+  ]);
   if (result.code !== 0) throw new HermesInstallError(HERMES_INSTALL_FAILED);
 }
 
-async function appendLog(file: string, text: string): Promise<void> {
+async function appendLog(
+  file: string,
+  text: string,
+  secrets: readonly string[] = [],
+): Promise<void> {
   let existing = "";
   try {
     existing = await readFile(file, "utf8");
   } catch {
     existing = "";
   }
-  await writeFile(file, (existing + text).slice(-LOG_BYTES), { mode: 0o600 });
+  await writeFile(file, (existing + redactMcpText(text, secrets)).slice(-LOG_BYTES), {
+    mode: 0o600,
+  });
 }
 
 async function download(
@@ -704,7 +716,7 @@ function sha256(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-async function defaultCommand(
+export async function defaultCommand(
   command: string,
   args: string[],
   options: { cwd: string; env: NodeJS.ProcessEnv; timeoutMs: number },
@@ -713,19 +725,23 @@ async function defaultCommand(
     cwd: options.cwd,
     env: options.env,
     shell: false,
+    // stdin stays ignored: the installer commands read nothing, and both
+    // output pipes are captured into bounded buffers below.
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
   });
   let stdout = "";
-  let stderr = "";
+  const captured = captureChildOutput(child, {
+    kind: "hermes-installer",
+    secrets: [...argumentSecrets(args), ...environmentSecrets(options.env)],
+    logger: childProcessLogger(),
+  });
   child.stdout?.setEncoding("utf8");
-  child.stderr?.setEncoding("utf8");
+
   child.stdout?.on("data", (chunk: string) => {
     stdout = (stdout + chunk).slice(-LOG_BYTES);
   });
-  child.stderr?.on("data", (chunk: string) => {
-    stderr = (stderr + chunk).slice(-LOG_BYTES);
-  });
+
   const code = await new Promise<number>((resolve) => {
     const timer = setTimeout(() => {
       if (child.pid !== undefined && child.exitCode === null) {
@@ -755,5 +771,6 @@ async function defaultCommand(
       resolve(status ?? 1);
     });
   });
-  return { code, stdout, stderr };
+  captured.close();
+  return { code, stdout, stderr: captured.tail() };
 }

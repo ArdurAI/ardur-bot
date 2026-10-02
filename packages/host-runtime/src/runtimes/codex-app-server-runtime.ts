@@ -11,6 +11,12 @@ import type {
 import type { RuntimeAvailability } from "@ardurbot/contracts/runtime-pins";
 import { RuntimePinError, runtimePinProblem } from "@ardurbot/contracts/runtime-pins";
 import * as z from "zod";
+import {
+  type CapturedChildOutput,
+  captureChildOutput,
+  childProcessLogger,
+} from "../child-output.js";
+import { nativeEnvironment } from "../host-environment.js";
 import type { HostGuardrailConfig } from "../host-guardrails.js";
 import {
   guardrailConfigFromEnv,
@@ -18,6 +24,7 @@ import {
   resolveGuardrailPathsSync,
   resolveRealPathSync,
 } from "../host-guardrails.js";
+import { environmentSecrets, mcpConfigSecrets } from "../mcp-diagnostics.js";
 import { startArdurMcpServer } from "./ardur-mcp-server.js";
 import { createArdurToolBridge } from "./claude-mcp-bridge.js";
 import { CodexUsageCollector } from "./codex-usage.js";
@@ -66,8 +73,15 @@ export class CodexRpc {
     }
   >();
   private reader: Promise<void>;
+  private readonly captured: CapturedChildOutput;
+  private readonly secrets: string[] = environmentSecrets(nativeEnvironment());
   constructor(readonly child: ChildProcessWithoutNullStreams) {
-    child.stderr.resume();
+    this.captured = captureChildOutput(child, {
+      kind: "codex-app-server",
+      secrets: this.secrets,
+      logger: childProcessLogger(),
+    });
+    child.once("close", () => this.captured.close());
     child.once("error", () => this.fail());
     this.reader = (async () => {
       try {
@@ -91,6 +105,8 @@ export class CodexRpc {
     })();
   }
   private fail() {
+    const tail = this.captured.tail();
+    if (tail) childProcessLogger().debug(`Codex app-server failure diagnostics: ${tail}`);
     const error = new Error("Codex app-server unavailable");
     for (const entry of this.pending.values()) {
       clearTimeout(entry.timer);
@@ -101,6 +117,9 @@ export class CodexRpc {
   }
   send(message: RpcMessage) {
     this.child.stdin.write(`${JSON.stringify(message)}\n`);
+  }
+  addSecrets(secrets: readonly string[]) {
+    this.secrets.push(...secrets);
   }
   request<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
     const id = this.nextId++;
@@ -556,6 +575,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
       this.running.delete(request.runId);
       throw problem("runtime-unavailable", "Codex tools could not start — change the pin.");
     });
+    rpc.addSecrets(mcpConfigSecrets(mcp.config));
     try {
       const { account } = await rpc.request<{ account: { type: string } | null }>("account/read", {
         refreshToken: false,

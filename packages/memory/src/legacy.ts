@@ -12,6 +12,9 @@ import type { MemoryService } from "./service.js";
 /** Keeps runtimes using MemoryStore on the same authorized lifecycle as Settings. */
 export class LifecycleMemoryStore implements MemoryStore {
   constructor(readonly service: MemoryService) {}
+  recallRevision(context: AdapterContext) {
+    return this.service.recallRevision(context);
+  }
   describe() {
     return {
       id: "documents",
@@ -21,6 +24,11 @@ export class LifecycleMemoryStore implements MemoryStore {
     };
   }
   async read(input: MemoryReadRequest, context: AdapterContext) {
+    const snapshot = await this.service.open(
+      { ...context, memoryRecall: true },
+      (s) => s.store.readSnapshot?.(input, s.access) ?? Promise.resolve(null),
+    );
+    if (snapshot) return snapshot;
     const documents = (
       await this.service.exportBundle({ ...context, memoryRecall: true })
     ).documents

@@ -21,6 +21,7 @@ export function computerUpdateView(
     action: string;
     id: string;
     botId: string;
+    computerId?: string;
     status: string;
     stage: string;
     failureReason?: string | null;
@@ -30,6 +31,7 @@ export function computerUpdateView(
 ): ComputerUpdate {
   return ComputerUpdateSchema.parse({
     canReleaseReservation: isDeploymentOwner && row.status === "interrupted",
+    computerId: row.computerId,
     action: row.action,
     id: row.id,
     botId: row.computer.bots.some((bot) => bot.id === row.botId)

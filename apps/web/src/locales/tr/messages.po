@@ -256,6 +256,10 @@ msgstr ""
 msgid "{failed} failed"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "{gapCount} evidence gaps"
+msgstr "{gapCount} kanıt eksikliği"
+
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
 msgstr "{hours} sa önce"
@@ -310,6 +314,10 @@ msgstr "{name} çalışmasını tamamladı"
 #: src/lib/use-notifications.ts
 msgid "{name} needs your input"
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} stood down"
+msgstr "{name} durdu"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "{name} stopped before answering"
@@ -427,6 +435,10 @@ msgstr ""
 #: src/pages/system/SystemPage.tsx
 msgid "A saved shortcut is unavailable; choose another."
 msgstr ""
+
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "About evidence"
+msgstr "Kanıtlar hakkında"
 
 #: src/pages/shell/bot-picker.tsx
 msgid "About groups"
@@ -1149,10 +1161,6 @@ msgstr "{asked, plural, one {# bota} other {# bota}} soruldu · {answered, plura
 msgid "asks first"
 msgstr ""
 
-#: src/pages/dashboard/ComputersPanel.tsx
-msgid "Asleep"
-msgstr ""
-
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
 msgid "Assignee"
@@ -1386,10 +1394,6 @@ msgstr "Pano durumu"
 msgid "Boards"
 msgstr "Panolar"
 
-#: src/pages/dashboard/ComputersPanel.tsx
-msgid "Booting"
-msgstr ""
-
 #: src/pages/Shell.tsx
 msgid "Booting live desktop…"
 msgstr "Canlı masaüstü başlatılıyor…"
@@ -1535,10 +1539,10 @@ msgstr "Sunucuya ulaşılamıyor."
 
 #: src/components/AskCard.tsx
 #: src/components/ComputerMaintenanceActions.tsx
-#: src/components/ComputerUpdateProgress.tsx
 #: src/components/Context.tsx
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/OllamaSettings.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -1703,9 +1707,10 @@ msgstr ""
 msgid "Check again"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Check failed"
-msgstr ""
+msgstr "Kontrol başarısız"
 
 #: src/components/DesktopUpdates.tsx
 #: src/components/SoftwareUpdateSection.tsx
@@ -1732,6 +1737,10 @@ msgstr "Kontrol edildi {0}"
 #: src/pages/shell/runtime-settings.tsx
 msgid "Checking the download"
 msgstr "İndirme denetleniyor"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Checking the earlier action"
+msgstr "Önceki işlem kontrol ediliyor"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Checking the missing tool"
@@ -2558,8 +2567,9 @@ msgid "Could not clear conversation"
 msgstr "Sohbet temizlenemedi"
 
 #: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Could not complete action"
-msgstr ""
+msgstr "İşlem tamamlanamadı"
 
 #: src/pages/McpOAuthCallback.tsx
 msgid "Could not complete authorization. Try connecting again."
@@ -3076,9 +3086,10 @@ msgid "Could not save this file. Try again."
 msgstr "Bu dosya kaydedilemedi. Yeniden deneyin."
 
 #: src/pages/customize/McpCredentialFix.tsx
+#: src/pages/dashboard/GovernancePanel.tsx
 #: src/pages/Shell.tsx
 msgid "Could not save. Try again."
-msgstr ""
+msgstr "Kaydedilemedi. Tekrar deneyin."
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
@@ -3104,7 +3115,7 @@ msgstr ""
 msgid "Could not show the menu bar item; try again."
 msgstr ""
 
-#: src/pages/shell/runtime-summary.tsx
+#: src/lib/computer-state-labels.ts
 msgid "Could not start"
 msgstr "Başlatılamadı"
 
@@ -3817,6 +3828,10 @@ msgstr "{name} indir"
 msgid "Download as markdown"
 msgstr "Markdown olarak indir"
 
+#: src/components/RunEvidence.tsx
+msgid "Download evidence"
+msgstr "Kanıtları indir"
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Download Executor"
 msgstr ""
@@ -4038,7 +4053,21 @@ msgstr "Her hafta"
 
 #: src/pages/LearningInbox.tsx
 msgid "Evidence"
-msgstr ""
+msgstr "Kanıt"
+
+#: src/components/RunEvidence.tsx
+msgid "Evidence gap"
+msgstr "Kanıt boşluğu"
+
+#: src/components/RunEvidence.tsx
+#: src/pages/dashboard/GovernancePanel.tsx
+#: src/pages/dashboard/panels.ts
+msgid "Evidence off"
+msgstr "Kanıt kaydı kapalı"
+
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "Evidence on"
+msgstr "Kanıt kaydı açık"
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Excluded files"
@@ -4407,6 +4436,10 @@ msgid "Got it — I’ll check the request and choose the next step."
 msgstr "Anladım — isteği kontrol edip sonraki adımı seçeceğim."
 
 #: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check this change before the next action."
+msgstr "Anladım — bir sonraki işlemden önce bu değişikliği kontrol edeceğim."
+
+#: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll check what’s missing and ask before installing it."
 msgstr "Anladım — neyin eksik olduğunu kontrol edip yüklemeden önce soracağım."
 
@@ -4418,37 +4451,8 @@ msgstr "Anladım — bunu Notion’a koyacak bir ekip üyesi seçeceğim."
 msgid "Got it — I’ll keep {name} off this task."
 msgstr "Anladım — {name} bu görevde yer almayacak."
 
-#: src/components/ai/CoordinationLine.tsx
-msgid "Got it — I’ll check this change before the next action."
-msgstr "Anladım — bir sonraki işlemden önce bu değişikliği kontrol edeceğim."
-
-#: src/components/ai/CoordinationLine.tsx
-msgid "Told {name} to stand down"
-msgstr "{name} için durma talimatı verildi"
-
-#: src/components/ai/CoordinationLine.tsx
-msgid "Stopping {name}"
-msgstr "{name} durduruluyor"
-
-#: src/components/ai/CoordinationLine.tsx
-msgid "{name} stood down"
-msgstr "{name} durdu"
-
-#: src/components/ai/CoordinationLine.tsx
-msgid "Checking the earlier action"
-msgstr "Önceki işlem kontrol ediliyor"
-
-#: src/components/ai/CoordinationLine.tsx
-msgid "The previous action may have finished. I’ll check before retrying."
-msgstr "Önceki işlem tamamlanmış olabilir. Yeniden denemeden önce kontrol edeceğim."
-
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
-msgstr ""
-
-#: src/pages/dashboard/GovernancePanel.tsx
-#: src/pages/dashboard/panels.ts
-msgid "Governance and encryption are not part of this build yet."
 msgstr ""
 
 #: src/pages/LearningTimeline.tsx
@@ -4941,6 +4945,10 @@ msgstr "az önce"
 msgid "Keep computer awake"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Keep current location"
+msgstr "Mevcut konumu koru"
+
 #: src/pages/LearningCurator.tsx
 msgid "Keep for recovery"
 msgstr ""
@@ -5309,7 +5317,6 @@ msgstr ""
 msgid "low — quick, with a little checking"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "macOS will not ask for extra permission if you let bots run on this Mac. They run as you."
 msgstr "Botların bu Mac'te çalışmasına izin verirsen macOS ek izin istemez. Botlar senin adına çalışır."
@@ -5318,7 +5325,7 @@ msgstr "Botların bu Mac'te çalışmasına izin verirsen macOS ek izin istemez.
 msgid "Make default"
 msgstr "Varsayılan yap"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Make sure nothing is still running on this computer."
 msgstr "Bu bilgisayarda hâlâ çalışan bir şey olmadığından emin ol."
 
@@ -5741,6 +5748,10 @@ msgstr ""
 #: src/pages/fleet/PlacementNotice.tsx
 msgid "Move to {name}?"
 msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Move to a container"
+msgstr "Bir kapsayıcıya taşı"
 
 #. placeholder {0}: value.minimumFreeGb
 #: src/pages/fleet/FleetSettings.tsx
@@ -6190,6 +6201,10 @@ msgstr ""
 msgid "Not running — open the desktop app"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "Not sealed"
+msgstr "Mühürlenmedi"
+
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
 msgstr ""
@@ -6202,7 +6217,7 @@ msgstr ""
 msgid "Nothing installed yet"
 msgstr ""
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Nothing is still running"
 msgstr "Hâlâ çalışan bir şey yok"
 
@@ -6614,6 +6629,10 @@ msgstr "Ekip mesajlarını duraklat"
 msgid "Paused"
 msgstr "Duraklatıldı"
 
+#: src/lib/computer-state-labels.ts
+msgid "Paused for an update"
+msgstr "Güncelleme için duraklatıldı"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Permission denied on the socket"
 msgstr "Soket erişim izni reddedildi"
@@ -6994,6 +7013,14 @@ msgstr ""
 msgid "Reconnecting"
 msgstr "Yeniden bağlanıyor"
 
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "Record evidence of bot decisions"
+msgstr "Bot kararlarının kanıtlarını kaydet"
+
+#: src/components/RunEvidence.tsx
+msgid "Recording"
+msgstr "Kaydediliyor"
+
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Recording may have started, but the view could not refresh"
 msgstr ""
@@ -7087,13 +7114,13 @@ msgstr ""
 msgid "Release"
 msgstr "Bırak"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Release computer"
-msgstr ""
+msgstr "Bilgisayarı serbest bırak"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Release interrupted computer?"
-msgstr ""
+msgstr "Kesintiye uğrayan bilgisayar serbest bırakılsın mı?"
 
 #: src/pages/account/AccountProfile.tsx
 msgid "Reload"
@@ -7625,13 +7652,12 @@ msgstr ""
 msgid "running"
 msgstr "çalışıyor"
 
+#: src/lib/computer-state-labels.ts
 #: src/lib/run-status-label.ts
 #: src/pages/ComparePanel.tsx
 #: src/pages/customize/McpDiagnostics.tsx
-#: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/fleet/FleetSettings.tsx
-#: src/pages/shell/runtime-summary.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Running"
 msgstr "Çalışıyor"
@@ -8301,7 +8327,7 @@ msgstr ""
 msgid "Slash commands"
 msgstr ""
 
-#: src/pages/shell/runtime-summary.tsx
+#: src/lib/computer-state-labels.ts
 msgid "Sleeping"
 msgstr "Uykuda"
 
@@ -8462,8 +8488,8 @@ msgstr "Kaydı başlat"
 msgid "Start the engine and press Test."
 msgstr "Motoru başlatıp Test düğmesine basın."
 
+#: src/lib/computer-state-labels.ts
 #: src/lib/run-status-label.ts
-#: src/pages/shell/runtime-summary.tsx
 msgid "Starting"
 msgstr "Başlıyor"
 
@@ -8534,10 +8560,9 @@ msgstr "Çalışmayı durdur"
 msgid "Stop work in this conversation"
 msgstr ""
 
+#: src/lib/computer-state-labels.ts
 #: src/pages/customize/McpDiagnostics.tsx
-#: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/GroupPanel.tsx
-#: src/pages/shell/runtime-summary.tsx
 msgid "Stopped"
 msgstr "Durduruldu"
 
@@ -8550,6 +8575,10 @@ msgstr "yanıtlamadan durdu"
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Stopping"
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Stopping {name}"
+msgstr "{name} durduruluyor"
 
 #: src/pages/settings-sections.ts
 msgid "Storage"
@@ -8780,9 +8809,17 @@ msgstr "Grubun model seçimi yeniden yüklendi. Tekrar seçin."
 msgid "The Hermes install on this computer failed its safety check."
 msgstr "Bu bilgisayardaki Hermes kurulumu güvenlik denetimini geçemedi."
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "The last update was interrupted."
+msgstr "Son güncelleme kesintiye uğradı."
+
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "The previous action may have finished. I’ll check before retrying."
+msgstr "Önceki işlem tamamlanmış olabilir. Yeniden denemeden önce kontrol edeceğim."
 
 #: src/pages/board/BoardsSettings.tsx
 msgid "The reviewer was changed in another window."
@@ -8890,7 +8927,6 @@ msgstr "Bu sohbet yalnızca görüntülenebilir"
 msgid "This command is not available to this account."
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "bu bilgisayar"
@@ -8955,7 +8991,6 @@ msgstr "Grup modeli bot veya alan ayarları tarafından engelleniyor. Hedef ilke
 msgid "This is a binary file. You cannot edit it here."
 msgstr "Bu bir ikili dosya. Burada düzenleyemezsiniz."
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "bu Mac"
@@ -9139,6 +9174,10 @@ msgstr ""
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Tokens over seven days"
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Told {name} to stand down"
+msgstr "{name} için durma talimatı verildi"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Tool access mode"
@@ -9495,6 +9534,10 @@ msgstr "O hesabın izinlerini kullanır."
 msgid "Using {currentId}"
 msgstr "{currentId} kullanılıyor"
 
+#: src/components/RunEvidence.tsx
+msgid "Verified"
+msgstr "Doğrulandı"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"
 msgstr "Doğrula ve ekle"
@@ -9818,7 +9861,6 @@ msgstr "E-posta adresin"
 msgid "Your name"
 msgstr "Adın"
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "Your OS will not ask for extra permission if you let bots run on {hostLabel}. They run as you."
 msgstr "Botların {hostLabel} üzerinde çalışmasına izin verirsen işletim sistemin ek izin istemez. Botlar senin adına çalışır."

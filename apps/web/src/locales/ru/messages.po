@@ -256,6 +256,10 @@ msgstr "Личных записей памяти: {documents}, {kb} КБ; пои
 msgid "{failed} failed"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "{gapCount} evidence gaps"
+msgstr "Пробелов в записи: {gapCount}"
+
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
 msgstr "{hours} ч назад"
@@ -310,6 +314,10 @@ msgstr "{name}: завершено"
 #: src/lib/use-notifications.ts
 msgid "{name} needs your input"
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} stood down"
+msgstr "{name} прекратил работу"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "{name} stopped before answering"
@@ -427,6 +435,10 @@ msgstr ""
 #: src/pages/system/SystemPage.tsx
 msgid "A saved shortcut is unavailable; choose another."
 msgstr ""
+
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "About evidence"
+msgstr "О свидетельствах"
 
 #: src/pages/shell/bot-picker.tsx
 msgid "About groups"
@@ -1149,10 +1161,6 @@ msgstr "Спросили {asked, plural, one {# бота} other {# ботов}} 
 msgid "asks first"
 msgstr ""
 
-#: src/pages/dashboard/ComputersPanel.tsx
-msgid "Asleep"
-msgstr ""
-
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
 msgid "Assignee"
@@ -1386,10 +1394,6 @@ msgstr "Состояние доски"
 msgid "Boards"
 msgstr "Доски"
 
-#: src/pages/dashboard/ComputersPanel.tsx
-msgid "Booting"
-msgstr ""
-
 #: src/pages/Shell.tsx
 msgid "Booting live desktop…"
 msgstr "Загрузка рабочего стола…"
@@ -1535,10 +1539,10 @@ msgstr "Не удаётся связаться с сервером."
 
 #: src/components/AskCard.tsx
 #: src/components/ComputerMaintenanceActions.tsx
-#: src/components/ComputerUpdateProgress.tsx
 #: src/components/Context.tsx
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/OllamaSettings.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -1703,6 +1707,7 @@ msgstr "Проверить"
 msgid "Check again"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Check failed"
 msgstr "Проверка не удалась"
@@ -1732,6 +1737,10 @@ msgstr "Проверено {0}"
 #: src/pages/shell/runtime-settings.tsx
 msgid "Checking the download"
 msgstr "Проверка загрузки"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Checking the earlier action"
+msgstr "Проверяю предыдущее действие"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Checking the missing tool"
@@ -2558,6 +2567,7 @@ msgid "Could not clear conversation"
 msgstr "Не удалось очистить диалог"
 
 #: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Could not complete action"
 msgstr "Не удалось выполнить действие"
 
@@ -3076,9 +3086,10 @@ msgid "Could not save this file. Try again."
 msgstr "Не удалось сохранить этот файл. Повторите попытку."
 
 #: src/pages/customize/McpCredentialFix.tsx
+#: src/pages/dashboard/GovernancePanel.tsx
 #: src/pages/Shell.tsx
 msgid "Could not save. Try again."
-msgstr ""
+msgstr "Не удалось сохранить. Повторите попытку."
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
@@ -3104,7 +3115,7 @@ msgstr ""
 msgid "Could not show the menu bar item; try again."
 msgstr ""
 
-#: src/pages/shell/runtime-summary.tsx
+#: src/lib/computer-state-labels.ts
 msgid "Could not start"
 msgstr "Не удалось запустить"
 
@@ -3817,6 +3828,10 @@ msgstr "Скачать {name}"
 msgid "Download as markdown"
 msgstr "Скачать как Markdown"
 
+#: src/components/RunEvidence.tsx
+msgid "Download evidence"
+msgstr "Скачать свидетельства"
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Download Executor"
 msgstr "Скачать Executor"
@@ -4038,7 +4053,21 @@ msgstr "Каждую неделю"
 
 #: src/pages/LearningInbox.tsx
 msgid "Evidence"
-msgstr ""
+msgstr "Свидетельства"
+
+#: src/components/RunEvidence.tsx
+msgid "Evidence gap"
+msgstr "Пробел в свидетельствах"
+
+#: src/components/RunEvidence.tsx
+#: src/pages/dashboard/GovernancePanel.tsx
+#: src/pages/dashboard/panels.ts
+msgid "Evidence off"
+msgstr "Запись выключена"
+
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "Evidence on"
+msgstr "Запись включена"
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Excluded files"
@@ -4407,6 +4436,10 @@ msgid "Got it — I’ll check the request and choose the next step."
 msgstr "Понял — проверю запрос и выберу следующий шаг."
 
 #: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check this change before the next action."
+msgstr "Понял — проверю это изменение перед следующим действием."
+
+#: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll check what’s missing and ask before installing it."
 msgstr "Понял — проверю, чего не хватает, и спрошу перед установкой."
 
@@ -4418,37 +4451,8 @@ msgstr "Понял — выберу участника команды, кото�
 msgid "Got it — I’ll keep {name} off this task."
 msgstr "Понял — не буду поручать эту задачу {name}."
 
-#: src/components/ai/CoordinationLine.tsx
-msgid "Got it — I’ll check this change before the next action."
-msgstr "Понял — проверю это изменение перед следующим действием."
-
-#: src/components/ai/CoordinationLine.tsx
-msgid "Told {name} to stand down"
-msgstr "Попросил {name} остановиться"
-
-#: src/components/ai/CoordinationLine.tsx
-msgid "Stopping {name}"
-msgstr "Останавливаю {name}"
-
-#: src/components/ai/CoordinationLine.tsx
-msgid "{name} stood down"
-msgstr "{name} прекратил работу"
-
-#: src/components/ai/CoordinationLine.tsx
-msgid "Checking the earlier action"
-msgstr "Проверяю предыдущее действие"
-
-#: src/components/ai/CoordinationLine.tsx
-msgid "The previous action may have finished. I’ll check before retrying."
-msgstr "Предыдущее действие могло завершиться. Проверю перед повторной попыткой."
-
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
-msgstr ""
-
-#: src/pages/dashboard/GovernancePanel.tsx
-#: src/pages/dashboard/panels.ts
-msgid "Governance and encryption are not part of this build yet."
 msgstr ""
 
 #: src/pages/LearningTimeline.tsx
@@ -4941,6 +4945,10 @@ msgstr "только что"
 msgid "Keep computer awake"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Keep current location"
+msgstr "Оставить текущее расположение"
+
 #: src/pages/LearningCurator.tsx
 msgid "Keep for recovery"
 msgstr ""
@@ -5309,7 +5317,6 @@ msgstr "Похоже, здесь есть учётные данные. Удал�
 msgid "low — quick, with a little checking"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "macOS will not ask for extra permission if you let bots run on this Mac. They run as you."
 msgstr "macOS не будет запрашивать дополнительные разрешения, если боты работают на этом Mac. Они действуют от вашего имени."
@@ -5318,9 +5325,9 @@ msgstr "macOS не будет запрашивать дополнительны�
 msgid "Make default"
 msgstr "Сделать по умолчанию"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Make sure nothing is still running on this computer."
-msgstr ""
+msgstr "Убедитесь, что на этом компьютере больше ничего не выполняется."
 
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
@@ -5741,6 +5748,10 @@ msgstr ""
 #: src/pages/fleet/PlacementNotice.tsx
 msgid "Move to {name}?"
 msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Move to a container"
+msgstr "Переместить в контейнер"
 
 #. placeholder {0}: value.minimumFreeGb
 #: src/pages/fleet/FleetSettings.tsx
@@ -6190,6 +6201,10 @@ msgstr ""
 msgid "Not running — open the desktop app"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "Not sealed"
+msgstr "Не запечатано"
+
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
 msgstr ""
@@ -6202,9 +6217,9 @@ msgstr ""
 msgid "Nothing installed yet"
 msgstr ""
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Nothing is still running"
-msgstr ""
+msgstr "Ничего больше не выполняется"
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Nothing remembered yet"
@@ -6614,6 +6629,10 @@ msgstr "Приостановить сообщения команды"
 msgid "Paused"
 msgstr "Приостановлено"
 
+#: src/lib/computer-state-labels.ts
+msgid "Paused for an update"
+msgstr "Приостановлен для обновления"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Permission denied on the socket"
 msgstr "Нет доступа к сокету"
@@ -6994,6 +7013,14 @@ msgstr ""
 msgid "Reconnecting"
 msgstr "Повторное подключение"
 
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "Record evidence of bot decisions"
+msgstr "Записывать свидетельства решений ботов"
+
+#: src/components/RunEvidence.tsx
+msgid "Recording"
+msgstr "Идёт запись"
+
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Recording may have started, but the view could not refresh"
 msgstr "Возможно, запись началась, но не удалось обновить представление."
@@ -7087,11 +7114,11 @@ msgstr ""
 msgid "Release"
 msgstr "Освободить управление"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Release computer"
 msgstr "Освободить компьютер"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Release interrupted computer?"
 msgstr "Освободить прерванный компьютер?"
 
@@ -7625,13 +7652,12 @@ msgstr "Время выполнения должно быть в будущем.
 msgid "running"
 msgstr "выполняется"
 
+#: src/lib/computer-state-labels.ts
 #: src/lib/run-status-label.ts
 #: src/pages/ComparePanel.tsx
 #: src/pages/customize/McpDiagnostics.tsx
-#: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/fleet/FleetSettings.tsx
-#: src/pages/shell/runtime-summary.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Running"
 msgstr "Выполняется"
@@ -8301,7 +8327,7 @@ msgstr "Slack не включен"
 msgid "Slash commands"
 msgstr ""
 
-#: src/pages/shell/runtime-summary.tsx
+#: src/lib/computer-state-labels.ts
 msgid "Sleeping"
 msgstr "Спит"
 
@@ -8462,8 +8488,8 @@ msgstr "Начать запись"
 msgid "Start the engine and press Test."
 msgstr "Запустите движок и нажмите «Проверить»."
 
+#: src/lib/computer-state-labels.ts
 #: src/lib/run-status-label.ts
-#: src/pages/shell/runtime-summary.tsx
 msgid "Starting"
 msgstr "Запуск"
 
@@ -8534,10 +8560,9 @@ msgstr "Остановить запуск"
 msgid "Stop work in this conversation"
 msgstr ""
 
+#: src/lib/computer-state-labels.ts
 #: src/pages/customize/McpDiagnostics.tsx
-#: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/GroupPanel.tsx
-#: src/pages/shell/runtime-summary.tsx
 msgid "Stopped"
 msgstr "Остановлено"
 
@@ -8550,6 +8575,10 @@ msgstr "остановился, не ответив"
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Stopping"
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Stopping {name}"
+msgstr "Останавливаю {name}"
 
 #: src/pages/settings-sections.ts
 msgid "Storage"
@@ -8780,9 +8809,17 @@ msgstr "Выбор модели для группы обновлён. Выбер
 msgid "The Hermes install on this computer failed its safety check."
 msgstr "Установка Hermes на этом компьютере не прошла проверку безопасности."
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "The last update was interrupted."
+msgstr "Последнее обновление было прервано."
+
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "The previous action may have finished. I’ll check before retrying."
+msgstr "Предыдущее действие могло завершиться. Проверю перед повторной попыткой."
 
 #: src/pages/board/BoardsSettings.tsx
 msgid "The reviewer was changed in another window."
@@ -8890,7 +8927,6 @@ msgstr "Этот чат доступен только для просмотра"
 msgid "This command is not available to this account."
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "этот компьютер"
@@ -8955,7 +8991,6 @@ msgstr "Модель группы заблокирована настройка�
 msgid "This is a binary file. You cannot edit it here."
 msgstr "Это двоичный файл. Его нельзя редактировать здесь."
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "этот Mac"
@@ -9139,6 +9174,10 @@ msgstr "токенов контекста"
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Tokens over seven days"
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Told {name} to stand down"
+msgstr "Попросил {name} остановиться"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Tool access mode"
@@ -9495,6 +9534,10 @@ msgstr "Использует права этой учётной записи."
 msgid "Using {currentId}"
 msgstr "Используется {currentId}"
 
+#: src/components/RunEvidence.tsx
+msgid "Verified"
+msgstr "Проверено"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"
 msgstr "Проверить и добавить"
@@ -9818,7 +9861,6 @@ msgstr "Ваш адрес электронной почты"
 msgid "Your name"
 msgstr "Ваше имя"
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "Your OS will not ask for extra permission if you let bots run on {hostLabel}. They run as you."
 msgstr "Ваша ОС не будет запрашивать дополнительные разрешения, если боты работают на {hostLabel}. Они действуют от вашего имени."

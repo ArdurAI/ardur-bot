@@ -9,6 +9,18 @@ import { generateCask, releaseNotes, releaseVersion } from "./desktop-release.mj
 import { syncDesktopVersion } from "./desktop-version.mjs";
 
 describe("release metadata", () => {
+  it.each([false, true])("renders exact first-open guidance for signed=%s", async (signed) => {
+    const notes = await releaseNotes([], undefined, signed);
+    const unsigned =
+      "This preview is not signed by an identified developer. On macOS the first open is refused: open System Settings > Privacy & Security, scroll to the message about Ardur, and choose Open Anyway. Or remove the download flag in Terminal: `xattr -dr com.apple.quarantine /Applications/Ardur.app`.";
+    expect(notes).toContain(signed ? "Signed and notarized for macOS." : unsigned);
+    expect(notes).not.toContain(signed ? unsigned : "Signed and notarized for macOS.");
+    expect(notes).toContain(
+      "macOS updates require downloading and installing the new build manually.",
+    );
+    expect(notes).not.toContain("Signed builds come later.");
+  });
+
   it("accepts a preview matching the root version and rejects mismatched or unsafe refs", () => {
     expect(releaseVersion("v0.1.0-alpha.1", "0.1.0-alpha.1")).toBe("0.1.0-alpha.1");
     for (const tag of ["dev", "v0.2.0", "v0.1.0;echo", "v0.1.0/other"])
@@ -76,6 +88,19 @@ describe("release metadata", () => {
       for (const arch of ["arm64", "x64"])
         expect(cask).toContain(createHash("sha256").update(arch).digest("hex"));
       expect(cask).not.toContain("@VERSION@");
+      expect(cask).not.toContain("@MACOS_CAVEATS@");
+      expect(cask).toContain("Open Anyway");
+      expect(cask).toContain("--no-quarantine");
+      const signedOutput = path.join(dir, "signed/ardur.rb");
+      await generateCask("1.2.3-alpha.1", dir, signedOutput, true);
+      const signedCask = await readFile(signedOutput, "utf8");
+      expect(signedCask).not.toMatch(/caveats|Open Anyway|--no-quarantine|@MACOS_CAVEATS@/);
+      for (const generated of [cask, signedCask]) {
+        expect(generated).toContain(
+          'command_wrapper "ardur", executable: "#{appdir}/Ardur.app/Contents/MacOS/Ardur"',
+        );
+        expect(generated).not.toContain('binary "');
+      }
       // The template documents its placeholders in a leading comment; only the
       // published cask drops it, and the template in this repository keeps it.
       expect(cask.startsWith('cask "ardur" do')).toBe(true);

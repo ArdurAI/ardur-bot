@@ -93,6 +93,7 @@ import {
 import { MessageFeedback } from "../components/message-feedback";
 import { NativeSymbol } from "../components/native-symbol";
 import { PeerMessageReceipt } from "../components/peer-message-receipt";
+import { RunEvidence } from "../components/run-evidence";
 import {
   applyMobileThreadEvent,
   blockText,
@@ -1681,6 +1682,18 @@ function Thread() {
               actionProps={actionProps}
             />
           </Pressable>
+          {message.role === "bot" &&
+          message.runId &&
+          message ===
+            visibleMessages.findLast(
+              (entry) => entry.role === "bot" && entry.runId === message.runId,
+            ) ? (
+            <RunEvidence
+              runId={message.runId}
+              live={message.id.startsWith("progress:")}
+              colorScheme={colorScheme}
+            />
+          ) : null}
           {message.role === "bot" && message.runId && canReactToThreadMessage(message) ? (
             <MessageFeedback
               onFeedback={(reaction, edit) => reactToMessage(message, reaction, edit)}

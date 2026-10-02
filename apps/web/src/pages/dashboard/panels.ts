@@ -125,6 +125,6 @@ lazyPanel(
   msg`Governance`,
   70,
   "governance",
-  msg`Governance and encryption are not part of this build yet.`,
+  msg`Evidence off`,
   () => import("./GovernancePanel"),
 );

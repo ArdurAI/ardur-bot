@@ -104,10 +104,12 @@ export class FleetDockerSandboxProvider extends LinuxFleetSandbox {
   }
   private async command(argv: string[]) {
     let directory: string | undefined;
+    const secrets: string[] = [];
     try {
       if (this.settings.endpoint?.startsWith("tcp://")) {
         if (!this.credentials) throw new Error("TLS certificates are unavailable.");
         const credentials = await this.credentials();
+        secrets.push(credentials.ca, credentials.cert, credentials.key);
         directory = await mkdtemp(path.join(tmpdir(), "ardurbot-tls-"));
         for (const name of ["ca", "cert", "key"] as const)
           await writeFile(path.join(directory, name), credentials[name], { mode: 0o600 });
@@ -115,6 +117,7 @@ export class FleetDockerSandboxProvider extends LinuxFleetSandbox {
       const command = engineCommand(this.settings, directory);
       return {
         name: command.name,
+        secrets,
         argv: [
           ...command.prefix,
           ...(command.remote
@@ -325,6 +328,7 @@ export class FleetDockerSandboxProvider extends LinuxFleetSandbox {
       return {
         child: await this.processes.start(command.name, command.argv),
         cleanup: command.cleanup,
+        secrets: command.secrets,
       };
     } catch (error) {
       await command.cleanup();

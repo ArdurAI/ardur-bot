@@ -414,6 +414,7 @@ import {
 } from "./remote-execution.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
 import { agentHistoryTurn, loadReplyContext, messageToAgentHistoryText } from "./reply-context.js";
+import { logRunFailure } from "./run-failure-log.js";
 import { resolveRunModelPin } from "./run-model-pin.js";
 import {
   commitConsumedRunSecret,
@@ -7170,7 +7171,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   error instanceof Error ? error.message : String(error),
                   runSecrets,
                 );
-                getLogger().error(`run ${runId} failed while stopping: ${message}`, {
+                logRunFailure(`run ${runId} failed while stopping`, error, runSecrets, {
                   ...(error instanceof RuntimePinError
                     ? { runtimeProblem: error.problem.code }
                     : { providerErrorKind: error.providerErrorKind }),
@@ -7281,7 +7282,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           });
           if (!failed) return;
           // Every run failure leaves its classified cause in the worker log, once.
-          getLogger().error(`run ${runId} failed: ${message}`, {
+          logRunFailure(`run ${runId} failed`, error, runSecrets, {
             providerErrorKind,
             ...(error instanceof RuntimePinError ? { runtimeProblem: error.problem.code } : {}),
           });
@@ -7344,7 +7345,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           });
           // Pin and computer failures never reached the runtime's own error path; log the cause.
           if (finalized)
-            getLogger().error(`run ${runId} failed: ${setupError.message}`, {
+            logRunFailure(`run ${runId} failed`, setupError, runSecrets, {
               ...(setupError instanceof RuntimePinError
                 ? { runtimeProblem: setupError.problem.code }
                 : {}),

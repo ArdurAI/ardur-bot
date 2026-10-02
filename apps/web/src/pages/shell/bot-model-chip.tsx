@@ -235,7 +235,7 @@ export function BotModelChip({
     nextPin,
   });
   return (
-    <span className="inline-flex min-w-0 items-center gap-1">
+    <span className="inline-flex min-w-0 shrink items-center gap-1">
       {onClick ? (
         <Button
           variant="ghost"

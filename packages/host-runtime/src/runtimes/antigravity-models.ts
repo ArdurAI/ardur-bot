@@ -1,5 +1,8 @@
 import type { RuntimeAvailability } from "@ardurbot/contracts";
 import { antigravityEffortForModel } from "@ardurbot/contracts";
+import { captureChildOutput, childProcessLogger } from "../child-output.js";
+import { nativeEnvironment } from "../host-environment.js";
+import { environmentSecrets } from "../mcp-diagnostics.js";
 import type { NativeSpawn } from "./native-process.js";
 import { spawnNative, stopNative } from "./native-process.js";
 
@@ -88,8 +91,14 @@ export async function antigravityModels(
   child.stdin.end();
   let output = "";
   let overflow = false;
+  const startedAt = Date.now();
+  let exitCode: number | null | undefined;
   const timer = setTimeout(() => void stopNative(child), 5_000);
-  child.stderr.resume();
+  const captured = captureChildOutput(child, {
+    kind: "antigravity-models",
+    secrets: environmentSecrets(nativeEnvironment()),
+    logger: childProcessLogger(),
+  });
   child.stdout.on("data", (chunk: Buffer) => {
     if (Buffer.byteLength(output) + chunk.length > 128 * 1024) overflow = true;
     else output += chunk.toString("utf8");
@@ -99,6 +108,7 @@ export async function antigravityModels(
       child.once("close", resolve);
       child.once("error", reject);
     });
+    exitCode = code;
     if (overflow || code !== 0) throw new Error("Model catalog unavailable.");
     const models = parseAntigravityModels(output);
     const checkedAt = new Date().toISOString();
@@ -110,6 +120,16 @@ export async function antigravityModels(
       catalogStale: false,
     };
   } catch {
+    // The catalog refresh degrades to the previous snapshot; the log carries why.
+    const tail = captured.tail();
+    childProcessLogger().error?.("Antigravity model catalog refresh failed", {
+      ...captured.facts(),
+      kind: "catalog unavailable",
+      phase: "models",
+      exitCode,
+      durationMs: Date.now() - startedAt,
+    });
+    if (tail) childProcessLogger().debug(`Antigravity model catalog diagnostics: ${tail}`);
     return previous
       ? {
           models: previous.models,
@@ -125,6 +145,7 @@ export async function antigravityModels(
         };
   } finally {
     clearTimeout(timer);
+    captured.close();
     await stopNative(child);
   }
 }

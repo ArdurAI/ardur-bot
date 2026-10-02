@@ -118,13 +118,15 @@ function newEntry(): SpaceEntry {
 
 /**
  * One in-memory FTS5 index per space, built lazily from the same documents recall reads and
- * kept current by the memory write path. The store stays authoritative: recall re-verifies
- * every candidate before use, so a stale row is dropped, never served.
+ * refreshed against durable store watermarks; the write sink also applies local changes.
+ * The store stays authoritative: recall re-verifies every candidate before use.
  */
 export class MemoryRecallIndex {
   private readonly loader: RecallIndexLoader;
   private readonly onUnavailable: (reason: string) => void;
   private readonly spaces = new Map<string, SpaceEntry>();
+  private readonly revisions = new Map<string, string>();
+  private readonly recalls = new Map<string, Promise<unknown>>();
   private loaded: Promise<RecallIndexDatabaseConstructor | null> | null = null;
   private disabled = false;
   private notified = false;
@@ -141,6 +143,31 @@ export class MemoryRecallIndex {
 
   hasSlice(spaceId: string, sliceKey: string): boolean {
     return this.spaces.get(spaceId)?.slices.has(sliceKey) ?? false;
+  }
+
+  /** Serialize recalls so an older snapshot cannot finish over a newer slice refresh. */
+  async withRecallLock<T>(spaceId: string, action: () => Promise<T>): Promise<T> {
+    const previous = this.recalls.get(spaceId) ?? Promise.resolve();
+    const next = previous.catch(() => undefined).then(action);
+    this.recalls.set(spaceId, next);
+    try {
+      return await next;
+    } finally {
+      if (this.recalls.get(spaceId) === next) this.recalls.delete(spaceId);
+    }
+  }
+
+  /** Unknown watermarks deliberately never authorize reuse of a cached slice. */
+  synchronize(spaceId: string, revision: string | null): void {
+    if (revision !== null && this.revisions.get(spaceId) === revision) return;
+    this.invalidate(spaceId);
+    if (revision !== null) this.revisions.set(spaceId, revision);
+  }
+
+  invalidate(spaceId: string): void {
+    this.spaces.get(spaceId)?.db?.close();
+    this.spaces.delete(spaceId);
+    this.revisions.delete(spaceId);
   }
 
   /**

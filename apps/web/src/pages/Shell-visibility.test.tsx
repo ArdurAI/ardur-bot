@@ -6,6 +6,7 @@
 import type {
   Bot,
   ComputerStatus,
+  Group,
   ProductEvent,
   ThreadMessage,
   ThreadSnapshot,
@@ -81,16 +82,20 @@ const state = vi.hoisted(
   () =>
     ({}) as {
       bots: Bot[];
+      groups: Group[];
       threads: Record<string, ThreadSnapshot>;
       calls: string[];
       screenRequestedBots: string[];
       bootstrapBotId?: string;
+      bootstrapGate?: Promise<void>;
+      bootstrapThread?: ThreadSnapshot;
       takeoverRejections: number;
       takeoverFailures: number;
       terminalAvailable: boolean;
     },
 );
 state.bots = [botFor("bot-1", "Graphical"), botFor("bot-2", "Plain")];
+state.groups = [];
 state.threads = {
   "bot-1": snapshotFor("bot-1", true),
   "bot-2": snapshotFor("bot-2", false),
@@ -156,6 +161,7 @@ vi.mock("../lib/rpc", () => {
     rpc: {
       bootstrap: async () => {
         state.calls.push("bootstrap");
+        await state.bootstrapGate;
         return {
           me: {
             userId: "user-1",
@@ -172,13 +178,23 @@ vi.mock("../lib/rpc", () => {
             avatarStyle: "robot",
           },
           bots: state.bots,
-          groups: [],
+          groups: state.groups,
           botSections: [],
           archivedBots: [],
           archivedGroups: [],
-          thread: state.threads[state.bootstrapBotId ?? "bot-1"] ?? null,
+          thread: state.bootstrapThread ?? state.threads[state.bootstrapBotId ?? "bot-1"] ?? null,
           routines: [],
-          spaces: [{ id: "space-1", name: "Space", isDefault: true, hasContent: true }],
+          spaces: [
+            {
+              id: "space-1",
+              name: "Space",
+              isDefault: true,
+              hasContent: true,
+              bots: state.bots,
+              groups: state.groups,
+              botSections: [],
+            },
+          ],
         };
       },
       spaces: {
@@ -187,17 +203,27 @@ vi.mock("../lib/rpc", () => {
             id: "space-1",
             name: "Space",
             bots: state.bots,
-            groups: [],
+            groups: state.groups,
             externalConversations: [],
             botSections: [],
           },
-          spaces: [{ id: "space-1", name: "Space", isDefault: true, hasContent: true }],
+          spaces: [
+            {
+              id: "space-1",
+              name: "Space",
+              isDefault: true,
+              hasContent: true,
+              bots: state.bots,
+              groups: state.groups,
+              botSections: [],
+            },
+          ],
         }),
       },
       threads: {
-        get: async (input: { botId?: string }) => {
+        get: async (input: { botId?: string; groupId?: string }) => {
           state.calls.push("threads.get");
-          return state.threads[input.botId ?? "bot-1"] ?? null;
+          return state.threads[input.groupId ?? input.botId ?? "bot-1"] ?? null;
         },
         head: record("threads.head"),
         subscribe: async () => {
@@ -216,6 +242,8 @@ vi.mock("../lib/rpc", () => {
         restart: record("threads.restart"),
       },
       computer: {
+        connections: async () => [],
+        list: async () => [],
         status: async (input?: { botId?: string }) => {
           state.calls.push("computer.status");
           const botId = input?.botId ?? "bot-1";
@@ -230,7 +258,7 @@ vi.mock("../lib/rpc", () => {
         recover: record("computer.recover"),
         reset: record("computer.reset"),
         update: record("computer.update"),
-        updates: record("computer.updates"),
+        updates: async () => [],
         release: record("computer.release"),
         takeover: async () => {
           state.calls.push("computer.takeover");
@@ -252,7 +280,7 @@ vi.mock("../lib/rpc", () => {
       notifications: { activity: record("notifications.activity") },
       voice: {
         status: record("voice.status"),
-        voices: record("voice.voices"),
+        voices: async () => [],
         catalog: record("voice.catalog"),
       },
       messaging: { status: record("messaging.status") },
@@ -271,7 +299,7 @@ vi.mock("../lib/rpc", () => {
         sandboxProvider: "fake",
         avatarStyle: "robot",
       }),
-      models: { list: record("models.list"), credentials: record("models.credentials") },
+      models: { list: async () => [], credentials: async () => [] },
       runs: { list: record("runs.list") },
       team: { board: record("team.board") },
       search: { query: record("search.query") },
@@ -285,6 +313,8 @@ vi.mock("../lib/rpc", () => {
         close: record("terminal.close"),
       },
       goals: { get: record("goals.get") },
+      botComms: { getPolicy: async () => null },
+      evidence: { runSummary: async () => null },
       onboarding: { promptFocus: record("onboarding.promptFocus") },
       agentSkills: { list: async () => [] },
       connections: {
@@ -295,9 +325,12 @@ vi.mock("../lib/rpc", () => {
       export: { bot: record("export.bot") },
       artifacts: { create: record("artifacts.create") },
       boards: { list: record("boards.list") },
+      board: { view: async () => ({ bots: [], workspaces: [] }) },
+      scratchpad: { list: async () => [] },
+      delegations: { policy: async () => ({ mode: "any" }) },
       system: { dispatch: record("system.dispatch") },
     },
-    selectedSpaceId: () => null,
+    selectedSpaceId: () => "space-1",
     selectSpace: () => true,
     clearSpaceSelection: () => undefined,
     withSpaceHeaders: (init?: HeadersInit) => new Headers(init),
@@ -413,6 +446,9 @@ beforeEach(() => {
   state.calls.length = 0;
   state.screenRequestedBots = [];
   state.bootstrapBotId = undefined;
+  state.bootstrapGate = undefined;
+  state.bootstrapThread = undefined;
+  state.groups = [];
   state.takeoverRejections = 0;
   state.takeoverFailures = 0;
   state.terminalAvailable = false;
@@ -506,6 +542,181 @@ async function deliverCapabilityFlip(botId: string, graphical: boolean) {
   await until(() => count("threads.get") > seen);
   await tick(200);
 }
+
+function addGroupConversation() {
+  state.groups = [
+    {
+      id: "group-1",
+      spaceId: "space-1",
+      name: "Review group",
+      threadId: "thread-group-1",
+      members: state.bots.map((bot) => ({ botId: bot.id, name: bot.name, color: bot.color })),
+      preview: "Group reply",
+      unread: false,
+      pinned: false,
+      sectionId: null,
+      archivedAt: null,
+      createdAt: "2026-09-28T00:00:00Z",
+      updatedAt: "2026-09-28T00:00:00Z",
+    },
+  ];
+  state.threads["group-1"] = {
+    threadId: "thread-group-1",
+    groupId: "group-1",
+    cursor: 100,
+    olderCursor: null,
+    run: null,
+    messages: [
+      {
+        id: "group-question",
+        role: "user" as const,
+        blocks: [{ kind: "text" as const, text: "Group question" }],
+      },
+      {
+        id: "group-reply",
+        role: "bot" as const,
+        botId: "bot-1",
+        blocks: [{ kind: "text" as const, text: "Group reply" }],
+      },
+    ].map((message, index) => ({
+      ...message,
+      threadId: "thread-group-1",
+      seq: index,
+      createdAt: "2026-09-28T00:00:00Z",
+    })),
+  };
+  state.threads["bot-2"]!.messages = [
+    {
+      id: "dm-reply",
+      threadId: "thread-bot-2",
+      role: "bot",
+      botId: "bot-2",
+      seq: 0,
+      createdAt: "2026-09-28T00:00:00Z",
+      blocks: [{ kind: "text", text: "Direct reply" }],
+    },
+  ];
+}
+
+const groupRow = () =>
+  [...host.querySelectorAll("button")].find(
+    (button) =>
+      button.textContent?.includes("Review group") && button.textContent?.includes("Group reply"),
+  );
+
+it("renders both sides of a group conversation after group → bot → group", async () => {
+  addGroupConversation();
+  await renderShell("/app/g/group-1");
+  await until(() => host.querySelector('[data-message-id="group-reply"]') !== null);
+  expect(host.querySelector('[data-message-id="group-question"]')?.textContent).toContain(
+    "Group question",
+  );
+  click(host.querySelector('[data-roster-bot-id="bot-2"]'));
+  await until(() => host.querySelector('[data-message-id="dm-reply"]') !== null);
+  expect(host.querySelector('[data-message-id="group-reply"]')).toBeNull();
+  expect(groupRow()).toBeDefined();
+  click(groupRow());
+  await until(() => host.querySelector('[data-message-id="group-reply"]') !== null);
+  expect(host.querySelector('[data-message-id="group-reply"]')?.textContent).toContain(
+    "Group reply",
+  );
+  expect(host.querySelector('[data-message-id="group-question"]')?.textContent).toContain(
+    "Group question",
+  );
+  expect(host.querySelector('[data-message-id="dm-reply"]')).toBeNull();
+});
+
+it("keeps the reopened group visible when the initial bot bootstrap finishes late", async () => {
+  addGroupConversation();
+  let finishBootstrap!: () => void;
+  state.bootstrapGate = new Promise<void>((resolve) => {
+    finishBootstrap = resolve;
+  });
+  const rendered = renderShell("/app/bot-1");
+  await until(() => count("bootstrap") > 0);
+  window.dispatchEvent(new Event("focus"));
+  await rendered;
+  click(groupRow());
+  await until(() => host.querySelector('[data-message-id="group-reply"]') !== null);
+  click(host.querySelector('[data-roster-bot-id="bot-2"]'));
+  await until(() => host.querySelector('[data-message-id="dm-reply"]') !== null);
+  click(groupRow());
+  await until(() => host.querySelector('[data-message-id="group-reply"]') !== null);
+  finishBootstrap();
+  await tick(200);
+  expect(host.querySelector('[data-message-id="group-reply"]')?.textContent).toContain(
+    "Group reply",
+  );
+  expect(host.querySelector('[data-message-id="group-question"]')?.textContent).toContain(
+    "Group question",
+  );
+  expect(groupRow()?.textContent).toContain("Group reply");
+});
+
+it("does not erase newer DM replies with an older bootstrap of the same thread", async () => {
+  addGroupConversation();
+  state.bootstrapBotId = "bot-2";
+  state.bootstrapThread = snapshotFor("bot-2", false);
+  state.threads["bot-2"]!.cursor = 100;
+  let finishBootstrap!: () => void;
+  state.bootstrapGate = new Promise<void>((resolve) => {
+    finishBootstrap = resolve;
+  });
+  const rendered = renderShell("/app/bot-2");
+  await until(() => count("bootstrap") > 0);
+  window.dispatchEvent(new Event("focus"));
+  await rendered;
+  await until(() => host.querySelector('[data-message-id="dm-reply"]') !== null);
+  finishBootstrap();
+  await tick(200);
+  expect(host.querySelector('[data-message-id="dm-reply"]')?.textContent).toContain("Direct reply");
+});
+
+it("retargets group settings when selecting a bot", async () => {
+  addGroupConversation();
+  await renderShell("/app/g/group-1");
+  click(host.querySelector('[data-testid="bot-settings-trigger"]'));
+  await until(() => pane()?.getAttribute("data-panel") === "group-settings");
+  click(host.querySelector('[data-roster-bot-id="bot-2"]'));
+  await until(() => host.querySelector('[data-message-id="dm-reply"]') !== null);
+  await until(() => pane()?.getAttribute("data-panel") !== "group-settings");
+  expect(pane()?.textContent).not.toContain("Group settings");
+  expect(pane()?.getAttribute("data-panel")).toBe("settings");
+  await until(() => pane()?.querySelector('input[value="Plain"]') !== null);
+  click(groupRow());
+  await until(() => pane()?.getAttribute("data-panel") === "group-settings");
+  expect(pane()?.textContent).toContain("Group settings");
+  expect(pane()?.querySelector('input[value="Review group"]')).not.toBeNull();
+});
+
+it("keeps the full bot name while the long model label truncates first", async () => {
+  const original = state.bots;
+  state.bots = [
+    {
+      ...original[0]!,
+      name: "Graphical Reviewer",
+      runtimeKind: "claude-code",
+      modelId: "a-very-long-model-label-that-must-shrink-before-the-bot-name",
+      thinkingLevel: "high",
+    },
+    original[1]!,
+  ];
+  try {
+    await renderShell("/app/bot-1");
+    const identity = host.querySelector('[data-testid="bot-settings-trigger"]')!;
+    const name = [...identity.querySelectorAll("span")].find(
+      (entry) => entry.textContent === "Graphical Reviewer" && entry.classList.contains("block"),
+    )!;
+    expect(name.textContent).toBe("Graphical Reviewer");
+    expect(name.classList.contains("truncate")).toBe(false);
+    expect(identity.classList.contains("shrink-0")).toBe(true);
+    expect(identity.classList.contains("max-w-48")).toBe(true);
+    const model = host.querySelector('[aria-label^="Change model:"] .truncate')!;
+    expect(model.textContent).toContain("a-very-long-model-label");
+  } finally {
+    state.bots = original;
+  }
+});
 
 it("runs the heartbeat only while a screen surface is really rendered across capability transitions", async () => {
   await renderShell("/app/bot-1");

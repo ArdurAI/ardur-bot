@@ -11,9 +11,14 @@ import type {
   PortableFile,
 } from "@ardurbot/adapter-kit";
 import { Prisma, type PrismaClient, withTransactionRetry } from "@ardurbot/db";
+import { readMemoryRecallRevision } from "./postgres-store.js";
 
 export class MarkdownMemoryStore implements MemoryStore {
   constructor(private readonly prisma: PrismaClient) {}
+
+  async recallRevision(context: AdapterContext) {
+    return `markdown:${await readMemoryRecallRevision(this.prisma, context.spaceId)}`;
+  }
 
   describe() {
     return {

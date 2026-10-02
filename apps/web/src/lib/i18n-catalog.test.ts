@@ -13,6 +13,36 @@ import zhCN from "../../scripts/translations-zh-CN.json";
 
 describe("lingui catalogs", () => {
   it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+    "translates evidence controls, states and downloads in %s",
+    async (locale) => {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const catalog = await formatter().parse(readFileSync(filename, "utf8"), {
+        locale,
+        sourceLocale: "en",
+        filename,
+      });
+      for (const message of [
+        "Record evidence of bot decisions",
+        "Evidence on",
+        "Evidence off",
+        "About evidence",
+        "Could not save. Try again.",
+        "Verified",
+        "Recording",
+        "Not sealed",
+        "Evidence gap",
+        "Check failed",
+        "Download evidence",
+        "{gapCount} evidence gaps",
+      ]) {
+        const entry =
+          catalog[message] ?? Object.values(catalog).find((value) => value.message === message);
+        expect(entry?.translation, `${locale}: ${message}`).toBeTruthy();
+        if (message.includes("{gapCount}")) expect(entry?.translation).toContain("{gapCount}");
+      }
+    },
+  );
+  it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
     "translates bounded chief receipts and dispatch in %s",
     async (locale) => {
       const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
