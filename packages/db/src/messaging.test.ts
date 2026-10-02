@@ -5,7 +5,8 @@ import * as reposModule from "./repos.js";
 
 describe("provisionMessagingIdentity", () => {
   it("passes the resolved provider and gives a synthetic starter bot a dedicated server-default location", async () => {
-    const createBot = vi.fn(async () => ({ id: "starter" }));
+    const createBot = vi.fn<ReturnType<typeof reposModule.createRepos>["createBot"]>();
+    createBot.mockResolvedValue({ id: "starter" } as Awaited<ReturnType<typeof createBot>>);
     const spy = vi
       .spyOn(reposModule, "createRepos")
       .mockReturnValue({ createBot } as unknown as ReturnType<typeof reposModule.createRepos>);
