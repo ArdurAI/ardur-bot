@@ -4122,9 +4122,6 @@ msgstr "Развернуть"
 msgid "Expand {0}"
 msgstr "Развернуть {0}"
 
-#~ msgid "Expand workspace"
-#~ msgstr "Развернуть рабочую область"
-
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
 msgstr ""
@@ -6826,9 +6823,6 @@ msgstr ""
 msgid "Privacy"
 msgstr ""
 
-#~ msgid "Private"
-#~ msgstr "Личный"
-
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Private key"
 msgstr ""
@@ -7545,9 +7539,6 @@ msgstr "Повторить загрузку экрана"
 #: src/pages/McpOAuthCallback.tsx
 msgid "Return to Ardur"
 msgstr "Вернуться в Ardur"
-
-#~ msgid "Return to conversation"
-#~ msgstr "Вернуться к беседе"
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "Return to setup"

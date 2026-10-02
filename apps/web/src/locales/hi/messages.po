@@ -4122,9 +4122,6 @@ msgstr "विस्तृत करें"
 msgid "Expand {0}"
 msgstr ""
 
-#~ msgid "Expand workspace"
-#~ msgstr "कार्यक्षेत्र का विस्तार करें"
-
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
 msgstr ""
@@ -6826,9 +6823,6 @@ msgstr ""
 msgid "Privacy"
 msgstr ""
 
-#~ msgid "Private"
-#~ msgstr "निजी"
-
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Private key"
 msgstr ""
@@ -7545,9 +7539,6 @@ msgstr ""
 #: src/pages/McpOAuthCallback.tsx
 msgid "Return to Ardur"
 msgstr "Ardur पर लौटें"
-
-#~ msgid "Return to conversation"
-#~ msgstr "बातचीत पर लौटें"
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "Return to setup"

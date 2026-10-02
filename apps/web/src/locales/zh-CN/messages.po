@@ -4122,9 +4122,6 @@ msgstr "展开"
 msgid "Expand {0}"
 msgstr "展开 {0}"
 
-#~ msgid "Expand workspace"
-#~ msgstr "展开工作区"
-
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
 msgstr ""
@@ -6826,9 +6823,6 @@ msgstr ""
 msgid "Privacy"
 msgstr ""
 
-#~ msgid "Private"
-#~ msgstr "私有"
-
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Private key"
 msgstr ""
@@ -7545,9 +7539,6 @@ msgstr ""
 #: src/pages/McpOAuthCallback.tsx
 msgid "Return to Ardur"
 msgstr "返回 Ardur"
-
-#~ msgid "Return to conversation"
-#~ msgstr "返回对话"
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "Return to setup"

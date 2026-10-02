@@ -4122,9 +4122,6 @@ msgstr "Genişlet"
 msgid "Expand {0}"
 msgstr ""
 
-#~ msgid "Expand workspace"
-#~ msgstr "Çalışma alanını genişlet"
-
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
 msgstr ""
@@ -6826,9 +6823,6 @@ msgstr ""
 msgid "Privacy"
 msgstr ""
 
-#~ msgid "Private"
-#~ msgstr "Özel"
-
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Private key"
 msgstr ""
@@ -7545,9 +7539,6 @@ msgstr ""
 #: src/pages/McpOAuthCallback.tsx
 msgid "Return to Ardur"
 msgstr "Ardur'ya dön"
-
-#~ msgid "Return to conversation"
-#~ msgstr "Sohbete dön"
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "Return to setup"
