@@ -1,4 +1,9 @@
-import type { ComputerMode, NewBotLocation, NewBotTeamComputer } from "@ardurbot/contracts";
+import type {
+  ComputerMode,
+  NewBotComputerOptions,
+  NewBotLocation,
+  NewBotTeamComputer,
+} from "@ardurbot/contracts";
 import {
   BOT_DESCRIPTION_MAX_LENGTH,
   BOT_NAME_MAX_LENGTH,
@@ -29,11 +34,18 @@ export default function NewBot() {
   const [description, setDescription] = useState("");
   const [computerMode, setComputerMode] = useState<ComputerMode>("dedicated");
   const [container, setContainer] = useState<{ connectionId: string | null } | null>(null);
+  const [sandboxAvailable, setSandboxAvailable] = useState(false);
   const [chosenLocation, setComputerLocation] = useState<NewBotLocation>("sandbox");
   const [team, setTeam] = useState<NewBotTeamComputer | null>(null);
   const teamComputer = computerMode === "team" ? team : null;
   const computerLocation = teamComputer?.location ?? chosenLocation;
-  const sandboxConnection = teamComputer ? { connectionId: teamComputer.connectionId } : container;
+  const sandboxConnection = teamComputer
+    ? teamComputer.connectionId
+      ? { connectionId: teamComputer.connectionId }
+      : container?.connectionId === null
+        ? container
+        : null
+    : container;
   const [hostAvailable, setHostAvailable] = useState(false);
   const [locationReady, setLocationReady] = useState(false);
   const [locationRevision, setLocationRevision] = useState(0);
@@ -41,18 +53,15 @@ export default function NewBot() {
     let active = true;
     setLocationReady(false);
     setContainer(null);
+    setSandboxAvailable(false);
     setTeam(null);
-    void rpc<{
-      defaultLocation: NewBotLocation;
-      hostAvailable: boolean;
-      container: { connectionId: string | null } | null;
-      team: NewBotTeamComputer | null;
-    }>("computer/creationOptions")
+    void rpc<NewBotComputerOptions>("computer/creationOptions")
       .then((options) => {
         if (active) {
           setComputerLocation(options.defaultLocation);
           setHostAvailable(options.hostAvailable);
           setContainer(options.container);
+          setSandboxAvailable(options.sandboxAvailable);
           setTeam(options.team);
           setLocationReady(true);
         }
@@ -67,7 +76,7 @@ export default function NewBot() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const computerReady =
-    locationReady && (computerLocation === "host" ? hostAvailable : Boolean(sandboxConnection));
+    locationReady && (computerLocation === "host" ? hostAvailable : sandboxAvailable);
 
   function close() {
     if (router.canDismiss()) {
@@ -209,12 +218,12 @@ export default function NewBot() {
             value={computerLocation}
             onChange={setComputerLocation}
             hostAvailable={hostAvailable}
-            sandboxAvailable={Boolean(sandboxConnection)}
+            sandboxAvailable={sandboxAvailable}
             teamLocation={teamComputer?.location}
             disabled={!locationReady || pending}
           />
           <ComputerModePicker value={computerMode} onChange={setComputerMode} />
-          {computerLocation === "sandbox" && locationReady && !container ? (
+          {computerLocation === "sandbox" && locationReady && !sandboxAvailable ? (
             <>
               <Pressable
                 accessibilityRole="button"

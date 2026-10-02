@@ -16,7 +16,9 @@ import {
   IsolatedComputerUnavailableError,
   NewBotHostUnavailableError,
   NewBotTeamLocationConflictError,
+  newBotSandboxAvailable,
   RuntimeKindSchema,
+  recommendedContainer,
 } from "@ardurbot/contracts";
 import type { HistoricalHermesRuntimeConfig } from "@ardurbot/contracts/runtime-config";
 import { userVisibleMessages } from "@ardurbot/core";
@@ -510,6 +512,24 @@ export function createRepos(
       const delegatedCreation = Boolean(input.parentBotId && input.spawnKey && input.onCreated);
       let computerMode = input.computerMode;
       let isolatedComputer = input.isolatedComputer;
+      let container: { connectionId: string | null } | null = isolatedComputer ?? null;
+      if (
+        !input.computerLocation &&
+        !isolatedComputer &&
+        provider === "desktop" &&
+        !delegatedCreation
+      ) {
+        const connections = await prisma.connection.findMany({
+          where: { spaceId: actor.spaceId, connectorId: "computer" },
+        });
+        container = recommendedContainer(
+          provider,
+          connections.flatMap((entry) => {
+            const parsed = ComputerConnectionSettingsSchema.safeParse(entry.metadata);
+            return parsed.success ? [{ id: entry.id, settings: parsed.data }] : [];
+          }),
+        );
+      }
       let inheritedLocation: NewBotLocation | undefined;
       // Automatic creation joins the saved Team location when usable, never an unavailable host.
       if (
@@ -552,7 +572,15 @@ export function createRepos(
               hostConnected: hostAvailable,
               hostPaired: hostAvailable,
               computerHost: settings?.computerHost as "docker" | "this-mac" | null | undefined,
+              sandboxAvailable: newBotSandboxAvailable(provider, container),
             }));
+      if (
+        location === "sandbox" &&
+        !isolatedComputer &&
+        !inheritedLocation &&
+        !input.computerLocation
+      )
+        isolatedComputer = container ?? undefined;
       if (location === "host" && !hostAvailable) throw new NewBotHostUnavailableError();
       if (location === "host" && isolatedComputer) throw new IsolatedComputerUnavailableError();
       let kind = location === "host" ? "desktop" : provider;
@@ -560,8 +588,10 @@ export function createRepos(
       // They do not choose a new execution location through the human creation policy.
       if (
         location === "sandbox" &&
-        kind === "desktop" &&
-        !isolatedComputer?.connectionId &&
+        !newBotSandboxAvailable(
+          provider,
+          isolatedComputer?.connectionId ? isolatedComputer : null,
+        ) &&
         !delegatedCreation
       )
         throw new IsolatedComputerUnavailableError();

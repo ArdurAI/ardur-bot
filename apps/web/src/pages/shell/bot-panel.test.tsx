@@ -27,6 +27,7 @@ const api = vi.hoisted(() => ({
       defaultLocation: "sandbox",
       hostAvailable: false,
       container: { connectionId: null },
+      sandboxAvailable: true,
       team: null,
     }),
   ),
@@ -462,6 +463,7 @@ describe("new isolated work", () => {
       defaultLocation: "sandbox",
       hostAvailable: false,
       container: { connectionId: null },
+      sandboxAvailable: true,
       team: null,
     });
     const onCreate = vi.fn();
@@ -481,11 +483,39 @@ describe("new isolated work", () => {
       isolatedComputer: { connectionId: null },
     });
   });
+  it.each(["team", "dedicated"] as const)(
+    "creates on a non-container deployment sandbox with %s sharing",
+    async (mode) => {
+      api.creationOptions.mockResolvedValue({
+        defaultLocation: "sandbox",
+        hostAvailable: false,
+        sandboxAvailable: true,
+        container: null,
+        team: { location: "sandbox", connectionId: null },
+      });
+      const onCreate = vi.fn();
+      await act(async () => root.render(<CreateBotForm onCreate={onCreate} onCancel={() => {}} />));
+      if (mode === "team")
+        await act(async () =>
+          container.querySelector<HTMLButtonElement>('[data-testid="create-bot-team"]')!.click(),
+        );
+      await enterName();
+      expect(createButton().disabled).toBe(false);
+      expect(container.textContent).not.toContain("Set up a container for isolated work.");
+      await act(async () => createButton().click());
+      expect(onCreate.mock.calls[0]?.[0]).toMatchObject({
+        computerMode: mode,
+        computerLocation: "sandbox",
+      });
+      expect(onCreate.mock.calls[0]?.[0]).not.toHaveProperty("isolatedComputer");
+    },
+  );
   it("offers setup rather than silently creating on the host", async () => {
     api.creationOptions.mockResolvedValue({
       defaultLocation: "sandbox",
       hostAvailable: false,
       container: null,
+      sandboxAvailable: false,
       team: null,
     });
     const onCreate = vi.fn();
@@ -515,6 +545,7 @@ describe("new isolated work", () => {
       defaultLocation: "host",
       hostAvailable: true,
       container: { connectionId: null },
+      sandboxAvailable: true,
       team: null,
     });
     const onCreate = vi.fn();
@@ -539,6 +570,7 @@ describe("new isolated work", () => {
       defaultLocation: "sandbox",
       hostAvailable: false,
       container: { connectionId: "saved" },
+      sandboxAvailable: true,
       team: null,
     });
     api.me.mockResolvedValue({ ...me, sandboxProvider: "desktop" });
@@ -558,6 +590,7 @@ describe("new isolated work", () => {
         defaultLocation: location === "host" ? "sandbox" : "host",
         hostAvailable: true,
         container: { connectionId: null },
+        sandboxAvailable: true,
         team: { location, connectionId: location === "sandbox" ? "saved" : null },
       });
       const onCreate = vi.fn();
@@ -598,6 +631,7 @@ describe("new isolated work", () => {
       defaultLocation: "sandbox",
       hostAvailable: false,
       container: { connectionId: null },
+      sandboxAvailable: true,
       team: null,
     });
     api.connections.mockResolvedValue([

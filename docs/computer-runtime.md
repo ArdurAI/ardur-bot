@@ -24,20 +24,27 @@ sandbox default. Explicit local desktop deployments keep their owner-only local 
 path; they do not need a separate paired registration. The server applies this policy
 and rechecks an explicit host choice when creating the bot. The existing deployment
 `computerHost` setting is the one override: `this-mac` prefers the host and `docker`
-prefers the sandbox. An unavailable host always falls back to the sandbox.
+prefers the sandbox. An unavailable host always falls back to the sandbox. If the
+sandbox preference is unavailable but the owner can use the host, creation selects the host.
 
 The new-bot form and **Where this bot runs → Change location** offer **This computer**
 and **Sandbox** side by side, with equal weight. A bot on This computer runs as the
 person and can reach their files and signed-in tools, within the existing host guards.
 The sandbox is the choice for separation: it has a separate home, but can still reach
-allowed network services and granted credentials. Sharing (**Shared with team** or
+allowed network services and granted credentials. Sandbox is available with any
+non-host deployment provider, including hosted sandboxes, or a saved container engine.
+Sharing (**Shared with team** or
 **Only this bot**) is a separate choice, not the execution boundary.
 
 Codex, Claude Code, Antigravity and Hermes require the host. Sandbox stays visible
 but disabled with the runtime's reason; This computer stays visible but disabled
 when the owner's host service is unavailable. Existing bots never move because a
-default changed. Joining the Team computer preserves its saved location; choosing
-a different location requires Only this bot. A saved runtime/location mismatch
+default changed. Shared with team selects the Team computer's actual location and
+saved connection before submission and disables the other location; choosing a
+different location requires Only this bot. Duplicates inherit the source's location
+and sharing. Automatic first-run and quick creation join a usable Team computer;
+otherwise they use the server default, with a dedicated sandbox instead of an
+unavailable host Team computer. A saved runtime/location mismatch
 offers **Move to This computer** at the top of bot settings, with the existing
 confirmed move and workspace checkpoint flow.
 

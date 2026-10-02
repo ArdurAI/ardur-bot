@@ -338,7 +338,9 @@ export function dashboardFixture(botCount = 1) {
         "computer/creationOptions": {
           defaultLocation: "sandbox",
           hostAvailable: false,
+          sandboxAvailable: true,
           container: { connectionId: null },
+          team: null,
         },
         "integrations/list": { catalog: [], connections: [] },
         "mcp/servers/list": [],

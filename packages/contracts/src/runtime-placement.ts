@@ -11,6 +11,22 @@ export type NewBotTeamComputer = {
   name?: string;
 };
 
+export type NewBotComputerOptions = {
+  defaultLocation: NewBotLocation;
+  hostAvailable: boolean;
+  sandboxAvailable: boolean;
+  container: { connectionId: string | null } | null;
+  team: NewBotTeamComputer | null;
+};
+
+/** Sandbox is the deployment's non-host provider, or a saved container engine. */
+export function newBotSandboxAvailable(
+  provider: string,
+  container: { connectionId: string | null } | null,
+): boolean {
+  return provider !== "desktop" || container !== null;
+}
+
 /** The deployment's existing computerHost setting is the single default override. */
 export const NEW_BOT_LOCATION_POLICY = {
   default: "host",
@@ -27,12 +43,14 @@ export function defaultNewBotLocation(input: {
   hostConnected: boolean;
   hostPaired: boolean;
   computerHost?: "docker" | "this-mac" | null;
+  sandboxAvailable?: boolean;
 }): NewBotLocation {
   const preferred = input.computerHost
     ? NEW_BOT_LOCATION_POLICY.overrides[input.computerHost]
     : NEW_BOT_LOCATION_POLICY.default;
-  return preferred === "host" &&
-    !(input.isDeploymentOwner && input.hostConnected && input.hostPaired)
+  const hostAvailable = input.isDeploymentOwner && input.hostConnected && input.hostPaired;
+  if (preferred === "sandbox" && input.sandboxAvailable === false && hostAvailable) return "host";
+  return preferred === "host" && !hostAvailable
     ? NEW_BOT_LOCATION_POLICY.unavailableHost
     : preferred;
 }

@@ -505,6 +505,7 @@ describe("createRepos.createBot computer kind", () => {
         findUnique: vi.fn(async () => ({ computerHost, ownerUserId: actor.userId })),
       },
       computer: tx.computer,
+      connection: { findMany: vi.fn(async () => []) },
       $transaction: vi.fn((work: (client: typeof tx) => Promise<unknown>) => work(tx)),
     };
     await createRepos(prisma as unknown as PrismaClient, {

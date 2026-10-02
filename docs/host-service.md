@@ -43,8 +43,10 @@ host availability or ownership checks. No existing bot changes location automati
 location settings. A bot on This computer runs as the person and can reach their files
 and signed-in tools, subject to the host's existing command and folder guards. The
 sandbox is the choice for separation: a separate home with allowed network services
-and granted credentials. Team sharing is independent of location and does not move an
-existing Team computer.
+and granted credentials. Sandbox can be the deployment's non-host provider or a saved
+container engine. Team sharing does not move an existing Team computer: the form
+selects its actual location and saved connection, disabling the other location until
+Only this bot is chosen. Duplicates preserve the source's location and sharing.
 
 Host-only runtimes keep the Sandbox choice visible but disabled with a reason. A
 saved runtime/location mismatch offers **Move to This computer** in bot settings;

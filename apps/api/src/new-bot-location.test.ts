@@ -118,11 +118,26 @@ it.each([
   });
   expect(f.prisma.computer.findFirst).not.toHaveBeenCalled();
 });
+it("returns the Team location and sandbox availability through the real options RPC", async () => {
+  const f = fixture({
+    sandboxProvider: "fake",
+    connected: false,
+    team: { id: "team", kind: "fake", connectionId: null },
+  });
+  const result = await f.call("computer/creationOptions", undefined);
+  expect(result.status, JSON.stringify(result.body)).toBe(200);
+  expect(result.body.json).toMatchObject({
+    sandboxAvailable: true,
+    container: null,
+    team: { location: "sandbox", connectionId: null },
+  });
+});
 it("publishes the same default and revalidates an explicit host choice after disconnect", async () => {
   const f = fixture();
   expect(await newBotComputerOptions(f.deps, owner, "docker")).toEqual({
     defaultLocation: "host",
     hostAvailable: true,
+    sandboxAvailable: true,
     container: { connectionId: null },
     team: null,
   });
@@ -255,6 +270,57 @@ it.each([
     });
   },
 );
+it.each(["fake", "e2b", "daytona", "box"])(
+  "offers and creates a team bot on the deployment's %s sandbox",
+  async (sandboxProvider) => {
+    const f = fixture({ sandboxProvider, connected: false, configured: false });
+    expect(await newBotComputerOptions(f.deps, owner, sandboxProvider)).toMatchObject({
+      defaultLocation: "sandbox",
+      sandboxAvailable: true,
+      container: null,
+    });
+    const result = await f.call("bots/create", {
+      name: "Bot",
+      color: "#000",
+      computerMode: "team",
+      computerLocation: "sandbox",
+    });
+    expect(result.status, JSON.stringify(result.body)).toBe(200);
+    expect(f.upsert.mock.calls[0]![0].create).toMatchObject({
+      kind: sandboxProvider,
+      scope: "team",
+    });
+  },
+);
+it("uses the host when a host-only deployment has a sandbox override but no sandbox", async () => {
+  const f = fixture({ sandboxProvider: "desktop", computerHost: "docker" });
+  expect(await newBotComputerOptions(f.deps, owner, "desktop")).toMatchObject({
+    defaultLocation: "host",
+    sandboxAvailable: false,
+  });
+  const result = await f.call("bots/create", {
+    name: "Bot",
+    color: "#000",
+    computerMode: "dedicated",
+  });
+  expect(result.status, JSON.stringify(result.body)).toBe(200);
+  expect(f.upsert.mock.calls[0]![0].create.kind).toBe("desktop");
+});
+it("automatic creation uses a saved container when only sandbox is available", async () => {
+  const f = fixture({
+    sandboxProvider: "desktop",
+    actor: { ...owner, userId: "member", isDeploymentOwner: false },
+  });
+  f.prisma.connection.findMany.mockResolvedValue([
+    { id: "saved", metadata: { engine: "docker" }, displayName: "Saved", status: "connected" },
+  ] as never);
+  const result = await f.call("bots/create", { name: "Starter", color: "#000" });
+  expect(result.status, JSON.stringify(result.body)).toBe(200);
+  expect(f.upsert.mock.calls[0]![0].create).toMatchObject({
+    kind: "remote-docker",
+    connectionId: "saved",
+  });
+});
 it("honors an explicit sandbox choice even with a connected host", async () => {
   const f = fixture();
   expect(

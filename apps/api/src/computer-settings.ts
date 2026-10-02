@@ -4,7 +4,12 @@ import path from "node:path";
 import type { AdapterContext } from "@ardurbot/adapter-kit";
 import type { EncryptedSecretStore } from "@ardurbot/adapters";
 import { DockerSandboxProvider, kubernetesContexts, snapshotKubeconfig } from "@ardurbot/adapters";
-import type { Actor, RuntimeComputerLocation, RuntimeKind } from "@ardurbot/contracts";
+import type {
+  Actor,
+  NewBotComputerOptions,
+  RuntimeComputerLocation,
+  RuntimeKind,
+} from "@ardurbot/contracts";
 import {
   ComputerConfigurationSchema,
   ComputerConnectionInputSchema,
@@ -17,6 +22,7 @@ import {
   failureCategoryMessage,
   HOST_MOVE_UNAVAILABLE_CODE,
   HOST_MOVE_UNAVAILABLE_MESSAGE,
+  newBotSandboxAvailable,
   recommendedContainer,
   runtimeNames,
   runtimeSupportsLocation,
@@ -51,7 +57,7 @@ export async function newBotComputerOptions(
   deps: { prisma: PrismaClient; hostBridge?: HostBridge },
   actor: Actor,
   sandboxProvider: string,
-) {
+): Promise<NewBotComputerOptions> {
   const [settings, hostAvailable, connections, teamComputer] = await Promise.all([
     deps.prisma.deploymentSettings.findUnique({ where: { id: "default" } }),
     newBotHostAvailable(deps, actor, sandboxProvider),
@@ -68,15 +74,19 @@ export async function newBotComputerOptions(
           ?.settings,
       })
     : null;
+  const container = recommendedContainer(sandboxProvider, connections);
+  const sandboxAvailable = newBotSandboxAvailable(sandboxProvider, container);
   return {
     hostAvailable,
+    sandboxAvailable,
     defaultLocation: defaultNewBotLocation({
       isDeploymentOwner: actor.isDeploymentOwner,
       hostConnected: hostAvailable,
       hostPaired: hostAvailable,
       computerHost: settings?.computerHost as "docker" | "this-mac" | null | undefined,
+      sandboxAvailable,
     }),
-    container: recommendedContainer(sandboxProvider, connections),
+    container,
     team:
       teamComputer && teamKind
         ? {

@@ -212,7 +212,19 @@ test("onboarding: prepare a required connection", async ({ page }) => {
 });
 
 test("bots-create: select a computer mode before creating", async ({ page }) => {
-  await useDashboard(page, { sandboxProvider: "docker" });
+  await useDashboard(page, {
+    sandboxProvider: "docker",
+    rpc: (procedure) =>
+      procedure === "computer/creationOptions"
+        ? {
+            defaultLocation: "sandbox",
+            hostAvailable: false,
+            sandboxAvailable: true,
+            container: { connectionId: null },
+            team: { location: "sandbox", connectionId: "saved" },
+          }
+        : undefined,
+  });
   await page.goto("/app/bot");
   await expectModelReady(page);
   const create = page.getByTestId("create-menu-trigger");
@@ -235,6 +247,10 @@ test("bots-create: select a computer mode before creating", async ({ page }) => 
   );
   await expect(locations).toContainText("Connect the host service to choose This computer.");
   await expect(form.getByRole("button", { name: "Only this bot", exact: true })).toBeVisible();
+  await form.getByTestId("create-bot-team").click();
+  await expect(locations).toContainText(
+    "Choose Only this bot to use a different location from the Team computer.",
+  );
   await capture(page, "docs-bots-create-form");
   await form.getByRole("textbox", { name: "Name" }).fill("Planner");
   const privateMode = form.getByRole("button", { name: "Only this bot", exact: true });

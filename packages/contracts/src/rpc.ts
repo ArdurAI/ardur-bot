@@ -737,7 +737,15 @@ export const appContract = {
       z.object({
         defaultLocation: z.enum(["host", "sandbox"]),
         hostAvailable: z.boolean(),
+        sandboxAvailable: z.boolean(),
         container: z.object({ connectionId: Id.nullable() }).nullable(),
+        team: z
+          .object({
+            location: z.enum(["host", "sandbox"]),
+            connectionId: Id.nullable(),
+            name: z.string().optional(),
+          })
+          .nullable(),
       }),
     ),
     engine: oc.input(z.object({ connectionId: Id.nullable() })).output(

@@ -325,6 +325,7 @@ it.each(["host", "sandbox"] as const)(
             defaultLocation: location === "host" ? "sandbox" : "host",
             hostAvailable: true,
             container: { connectionId: null },
+            sandboxAvailable: true,
             team: { location, connectionId: location === "sandbox" ? "saved" : null },
           }
         : procedure === "bots/create"
@@ -365,7 +366,12 @@ it.each(["host", "sandbox"] as const)(
 it("keeps the server-selected sandbox independent from sharing on phone", async () => {
   request.mockImplementation(async (procedure) =>
     procedure === "computer/creationOptions"
-      ? { defaultLocation: "sandbox", hostAvailable: false, container: { connectionId: "saved" } }
+      ? {
+          defaultLocation: "sandbox",
+          hostAvailable: false,
+          sandboxAvailable: true,
+          container: { connectionId: "saved" },
+        }
       : procedure === "computer/connections"
         ? [{ id: "saved", name: "Team engine", settings: { engine: "docker" } }]
         : procedure === "computer/list"
@@ -385,10 +391,47 @@ it("keeps the server-selected sandbox independent from sharing on phone", async 
   );
   expect(request.mock.calls.some((call) => call[0] === "bots/create")).toBe(false);
 });
+it.each(["team", "dedicated"] as const)(
+  "creates on the non-container deployment sandbox with %s sharing on phone",
+  async (mode) => {
+    request.mockImplementation(async (procedure) =>
+      procedure === "computer/creationOptions"
+        ? {
+            defaultLocation: "sandbox",
+            hostAvailable: false,
+            sandboxAvailable: true,
+            container: null,
+            team: { location: "sandbox", connectionId: null },
+          }
+        : procedure === "bots/create"
+          ? { id: "new-bot", name: "Builder" }
+          : [],
+    );
+    await act(async () => root.render(createElement(NewBot)));
+    if (mode === "team")
+      await act(async () =>
+        [...container.querySelectorAll("button")]
+          .find((button) => button.textContent === "Shared with team")!
+          .click(),
+      );
+    await enterName();
+    expect(createButton().disabled).toBe(false);
+    expect(container.textContent).not.toContain("Set up a container for isolated work.");
+    await act(async () => createButton().click());
+    const input = request.mock.calls.find((call) => call[0] === "bots/create")?.[1];
+    expect(input).toMatchObject({ computerMode: mode, computerLocation: "sandbox" });
+    expect(input).not.toHaveProperty("isolatedComputer");
+  },
+);
 it("offers setup for new isolated work when no container is configured", async () => {
   request.mockImplementation(async (procedure) =>
     procedure === "computer/creationOptions"
-      ? { defaultLocation: "sandbox", hostAvailable: false, container: null }
+      ? {
+          defaultLocation: "sandbox",
+          hostAvailable: false,
+          sandboxAvailable: false,
+          container: null,
+        }
       : [],
   );
   await act(async () => root.render(createElement(NewBot)));
@@ -400,7 +443,12 @@ it("offers setup for new isolated work when no container is configured", async (
 it("allows an explicit team choice only after showing the host and sharing warning", async () => {
   request.mockImplementation(async (procedure) =>
     procedure === "computer/creationOptions"
-      ? { defaultLocation: "host", hostAvailable: true, container: { connectionId: null } }
+      ? {
+          defaultLocation: "host",
+          hostAvailable: true,
+          sandboxAvailable: true,
+          container: { connectionId: null },
+        }
       : procedure === "bots/create"
         ? { id: "new-bot", name: "Builder" }
         : [],
@@ -427,6 +475,7 @@ it.each(["docker", "desktop"])(
             defaultLocation: "sandbox",
             hostAvailable: false,
             container: { connectionId: provider === "docker" ? null : "saved" },
+            sandboxAvailable: true,
           }
         : procedure === "computer/connections"
           ? provider === "desktop"

@@ -8,6 +8,7 @@ import { RuntimeKindSchema } from "./runtime-pins.js";
 import {
   computerExecutionKind,
   defaultNewBotLocation,
+  newBotSandboxAvailable,
   RUNTIME_PLACEMENT_RULES,
   runtimeSupportsLocation,
 } from "./runtime-placement.js";
@@ -26,6 +27,17 @@ const locations = [
 ];
 
 describe("new bot location default", () => {
+  it("defaults to the usable host when the sandbox override has no sandbox", () => {
+    expect(
+      defaultNewBotLocation({
+        isDeploymentOwner: true,
+        hostConnected: true,
+        hostPaired: true,
+        computerHost: "docker",
+        sandboxAvailable: false,
+      }),
+    ).toBe("host");
+  });
   for (const isDeploymentOwner of [true, false])
     for (const hostConnected of [true, false])
       for (const hostPaired of [true, false])
@@ -37,6 +49,13 @@ describe("new bot location default", () => {
           expect(defaultNewBotLocation({ ...facts, computerHost: "docker" })).toBe("sandbox");
         });
 });
+it.each(Object.keys(COMPUTER_KINDS))(
+  "Sandbox availability uses the deployment provider without relabeling %s",
+  (provider) => {
+    expect(newBotSandboxAvailable(provider, null)).toBe(provider !== "desktop");
+    expect(newBotSandboxAvailable(provider, { connectionId: "saved" })).toBe(true);
+  },
+);
 describe.each(RuntimeKindSchema.options)("%s placement", (runtime) => {
   it.each(locations)("admits only the supported concrete location: %j", (location) => {
     const kind = computerExecutionKind(location);
