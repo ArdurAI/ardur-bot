@@ -1,16 +1,16 @@
 msgid ""
 msgstr ""
-"POT-Creation-Date: 2026-08-26 00:00+0000\n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=utf-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"X-Generator: @lingui/cli\n"
-"Language: zh-CN\n"
 "Project-Id-Version: ardurbot-web\n"
 "Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-08-26 00:00+0000\n"
+"MIME-Version: 1.0\n"
+"X-Generator: @lingui/cli\n"
 "PO-Revision-Date: \n"
 "Last-Translator: \n"
+"Language: zh-CN\n"
 "Language-Team: \n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: \n"
 
 #: src/pages/shell/model-pin-select.tsx
@@ -1272,6 +1272,10 @@ msgstr "返回"
 msgid "Back to capabilities"
 msgstr ""
 
+#: src/pages/workspace/WorkspacePane.tsx
+msgid "Back to chat"
+msgstr "返回聊天"
+
 #: src/pages/NotFound.tsx
 msgid "Back to home"
 msgstr ""
@@ -1927,6 +1931,10 @@ msgstr "关闭"
 msgid "Close {0}"
 msgstr ""
 
+#: src/pages/workspace/WorkspacePane.tsx
+msgid "Close {name}"
+msgstr "关闭{name}"
+
 #: src/pages/shell/message-cards.tsx
 msgid "Close chart"
 msgstr "关闭图表"
@@ -2102,7 +2110,7 @@ msgstr ""
 #: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
-#: src/pages/workspace/WorkspacePane.tsx
+#: src/pages/workspace/view-registry.ts
 msgid "Computer"
 msgstr "电脑"
 
@@ -4109,6 +4117,7 @@ msgid "Existing documents keep their scope."
 msgstr ""
 
 #: src/pages/shell/message-cards.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Expand"
 msgstr "展开"
 
@@ -4116,10 +4125,6 @@ msgstr "展开"
 #: src/pages/Shell.tsx
 msgid "Expand {0}"
 msgstr "展开 {0}"
-
-#: src/pages/Shell.tsx
-msgid "Expand workspace"
-msgstr "展开工作区"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
@@ -4232,15 +4237,15 @@ msgstr ""
 msgid "Filed by {name}"
 msgstr "由机器人 {name} 记录"
 
-#: src/pages/Shell.tsx
+#: src/pages/workspace/view-registry.ts
 #: src/pages/workspace/WorkspaceFiles.tsx
-#: src/pages/workspace/WorkspacePane.tsx
 msgid "Files"
 msgstr "文件"
 
+#: src/pages/workspace/view-registry.ts
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Files are unavailable on this computer."
-msgstr ""
+msgstr "此计算机上的文件不可用。"
 
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Filter"
@@ -5286,6 +5291,7 @@ msgstr ""
 #: src/pages/SharedCommand.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Loading…"
 msgstr "加载中…"
 
@@ -5751,6 +5757,18 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Move bots first: {0}"
 msgstr "请先移动这些机器人：{0}"
+
+#: src/pages/workspace/ViewControls.tsx
+msgid "Move split view down"
+msgstr "将分屏移至下方"
+
+#: src/pages/workspace/ViewControls.tsx
+msgid "Move split view left"
+msgstr "将分屏移至左侧"
+
+#: src/pages/workspace/ViewControls.tsx
+msgid "Move split view right"
+msgstr "将分屏移至右侧"
 
 #: src/pages/shell/dialogs.tsx
 msgid "Move them to your shared memory."
@@ -6452,6 +6470,10 @@ msgstr ""
 msgid "Open screen to view this computer."
 msgstr "打开屏幕以查看此计算机。"
 
+#: src/pages/workspace/view-registry.ts
+msgid "Open Screen to view this computer."
+msgstr "打开“屏幕”以查看此计算机。"
+
 #: src/components/composer/command-description.ts
 #: src/pages/shell/provider-error-message.tsx
 msgid "Open Settings"
@@ -6462,8 +6484,9 @@ msgid "Open System Settings"
 msgstr ""
 
 #: src/pages/shell/command-palette.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Open terminal"
-msgstr ""
+msgstr "打开终端"
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Open the desktop app to check this computer."
@@ -7498,6 +7521,7 @@ msgstr "恢复团队消息"
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/shell/runtime-summary.tsx
 #: src/pages/system/SystemPage.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Retry"
 msgstr "重试"
@@ -7519,10 +7543,6 @@ msgstr ""
 #: src/pages/McpOAuthCallback.tsx
 msgid "Return to Ardur"
 msgstr "返回 Ardur"
-
-#: src/pages/Shell.tsx
-msgid "Return to conversation"
-msgstr "返回对话"
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "Return to setup"
@@ -7634,8 +7654,7 @@ msgstr "例行任务"
 #: src/pages/dashboard/panels.ts
 #: src/pages/RoutineEditor.tsx
 #: src/pages/settings/GeneralSettings.tsx
-#: src/pages/Shell.tsx
-#: src/pages/workspace/WorkspacePane.tsx
+#: src/pages/workspace/view-registry.ts
 msgid "Routines"
 msgstr "例行任务"
 
@@ -7893,15 +7912,18 @@ msgstr "回答是或否，或一句话说明。"
 msgid "Scopes"
 msgstr ""
 
-#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
-#: src/pages/workspace/WorkspacePane.tsx
+#: src/pages/workspace/view-registry.ts
 msgid "Screen"
 msgstr "屏幕"
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Screen and terminal: Not available on this computer"
 msgstr ""
+
+#: src/pages/workspace/view-registry.ts
+msgid "Screen is unavailable on this computer."
+msgstr "此计算机不支持屏幕。"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Screen recording"
@@ -8711,8 +8733,7 @@ msgid "Task contracts"
 msgstr ""
 
 #: src/pages/settings/GeneralSettings.tsx
-#: src/pages/Shell.tsx
-#: src/pages/workspace/WorkspacePane.tsx
+#: src/pages/workspace/view-registry.ts
 msgid "Tasks"
 msgstr "任务"
 
@@ -8760,12 +8781,11 @@ msgid "Tell your bot what to change or remove"
 msgstr ""
 
 #: src/pages/ide/IdePage.tsx
-#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
-#: src/pages/workspace/WorkspacePane.tsx
+#: src/pages/workspace/view-registry.ts
 msgid "Terminal"
-msgstr ""
+msgstr "终端"
 
 #: src/pages/shell/computer-terminal.tsx
 msgid "Terminal could not open; try again"
@@ -8774,6 +8794,10 @@ msgstr ""
 #: src/pages/workspace/terminal-controller.ts
 msgid "Terminal is not available on this computer"
 msgstr ""
+
+#: src/pages/workspace/view-registry.ts
+msgid "Terminal is unavailable on this computer."
+msgstr "此计算机不支持终端。"
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/components/OllamaSettings.tsx
@@ -9618,6 +9642,11 @@ msgstr ""
 #: src/pages/customize/McpDiagnostics.tsx
 msgid "View logs"
 msgstr ""
+
+#: src/pages/workspace/ViewControls.tsx
+#: src/pages/workspace/WorkspacePane.tsx
+msgid "Views"
+msgstr "视图"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Visuals"

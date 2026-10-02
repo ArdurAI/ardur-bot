@@ -5,6 +5,7 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import { listPiCatalog } from "../../../packages/adapters/src/pi-models";
 import { dashboardFixture } from "./dashboard-fixture";
+import { openWorkspaceView } from "./workspace-view";
 
 const outputDir = process.env.SITE_SCREENSHOTS_DIR;
 test.skip(!outputDir, "Website screenshots run in the site assets publish job.");
@@ -465,7 +466,7 @@ test("captures bot chat, group collaboration, and routines from seeded demo data
 
   await page.goto("/app/bot");
   await page.getByTitle("Agent computer").click();
-  await page.getByRole("tab", { name: "Routines", exact: true }).click();
+  await openWorkspaceView(page, "Routines");
   await expect(page.getByText("Morning brief")).toBeVisible();
   await expect(page.getByText("Every day at 4:00 PM")).toBeVisible();
   await expect(page.getByTestId("side-panel")).toHaveAttribute("data-panel", "computer");

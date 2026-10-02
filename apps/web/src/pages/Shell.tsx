@@ -26,6 +26,8 @@ import type {
   ThreadSnapshot,
   VoiceStatus,
   WorkspaceContext,
+  WorkspaceLayout,
+  WorkspaceViewId,
 } from "@ardurbot/contracts";
 import {
   ATTACHMENT_ALLOWED_MIME_TYPES,
@@ -96,7 +98,6 @@ import {
   Clock,
   Copy,
   Lock,
-  Maximize2,
   Menu,
   Mic,
   Monitor,
@@ -286,7 +287,14 @@ import { useTakeControl } from "./shell/use-take-control";
 import { handleWorkspaceOpenRun } from "./shell/workspace-run";
 import { SystemDictation } from "./system/SystemDictation";
 import { WindowChrome } from "./WindowChrome";
+import {
+  closeWorkspaceView,
+  openWorkspaceView,
+  useWorkspaceLayout,
+  workspaceLayoutKey,
+} from "./workspace/layout-state";
 import { terminalSupported } from "./workspace/terminal-controller";
+import { availableWorkspaceViews, isWorkspaceViewId } from "./workspace/view-registry";
 import { WorkspaceFileGuard } from "./workspace/WorkspaceFileGuard";
 
 const ChiefResultBubble = lazy(() =>
@@ -389,6 +397,9 @@ const WorkspacePane = lazy(() =>
   import("./workspace/WorkspacePane").then((module) => ({ default: module.WorkspacePane })),
 );
 const SlashPicker = lazy(() => import("../components/composer/SlashPicker"));
+const ViewControls = lazy(() =>
+  import("./workspace/ViewControls").then((module) => ({ default: module.ViewControls })),
+);
 
 const ATTACHMENT_ACCEPT = ATTACHMENT_ALLOWED_MIME_TYPES.join(",");
 /** Identity colour for bots the roster no longer knows about. */
@@ -518,6 +529,9 @@ export function ShellPage({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [panel, setPanelUnchecked] = useState<Panel>(null);
   const terminalCloseGuard = useRef<(() => boolean) | null>(null);
+  const workspaceLayoutUpdateRef = useRef<
+    ((change: (layout: WorkspaceLayout) => WorkspaceLayout) => void) | null
+  >(null);
   const panelRef = useRef(panel);
   panelRef.current = panel;
   const registerTerminalCloseGuard = useCallback((guard: (() => boolean) | null) => {
@@ -525,27 +539,47 @@ export function ShellPage({
   }, []);
   const setPanel = useCallback((next: Panel | ((current: Panel) => Panel)) => {
     const target = typeof next === "function" ? next(panelRef.current) : next;
+    if (target === null && panelRef.current === "computer") {
+      workspaceLayoutUpdateRef.current?.((layout) => ({
+        ...layout,
+        visible: false,
+        expanded: false,
+      }));
+      return true;
+    }
     if (target !== panelRef.current && terminalCloseGuard.current && !terminalCloseGuard.current())
       return false;
     panelRef.current = target;
     setPanelUnchecked(target);
+    workspaceLayoutUpdateRef.current?.((layout) =>
+      target === "computer"
+        ? { ...(layout.open.length ? layout : openWorkspaceView(layout, "tasks")), visible: true }
+        : { ...layout, visible: false, expanded: false },
+    );
     return true;
   }, []);
-  const [workspaceTab, setWorkspaceTab] = useState("tasks");
-  const [workspaceExpanded, setWorkspaceExpanded] = useState(false);
   const paneReturnFocus = useRef<HTMLElement | null>(null);
+  const workspaceVisibleRef = useRef(false);
+  const workspaceScopeRef = useRef<string | null>(null);
+  const [workspaceOverlay, setWorkspaceOverlay] = useState(false);
+  const [workspaceControlsHost, setWorkspaceControlsHost] = useState<HTMLDivElement | null>(null);
+  const [workspaceFocusRequest, setWorkspaceFocusRequest] = useState<{
+    scope: string | null;
+    view: WorkspaceViewId | null;
+  } | null>(null);
+  const [terminalRequestedKey, setTerminalRequestedKey] = useState<string | null>(null);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (
         event.key === "Escape" &&
-        panel === "computer" &&
+        workspaceVisibleRef.current &&
         event.target instanceof Element &&
         event.target.closest("[data-workspace-chrome]")
       ) {
         event.preventDefault();
         if (!setPanel(null)) return;
         setWorkspaceExpanded(false);
-        paneReturnFocus.current?.focus();
+        setWorkspaceFocusRequest({ scope: workspaceScopeRef.current, view: null });
         return;
       }
       if (
@@ -564,21 +598,15 @@ export function ShellPage({
         return;
       if (!activeBotId.current) return;
       event.preventDefault();
-      if (panel === "computer") {
+      if (workspaceVisibleRef.current) {
         if (!setPanel(null)) return;
         setWorkspaceExpanded(false);
-        paneReturnFocus.current?.focus();
+        setWorkspaceFocusRequest({ scope: workspaceScopeRef.current, view: null });
       } else {
         paneReturnFocus.current =
           document.activeElement instanceof HTMLElement ? document.activeElement : null;
         setPanel("computer");
-        requestAnimationFrame(() =>
-          document
-            .querySelector<HTMLElement>(
-              '[data-panel="computer"] [role="tab"][aria-selected="true"]',
-            )
-            ?.focus(),
-        );
+        setWorkspaceFocusRequest({ scope: workspaceScopeRef.current, view: "tasks" });
       }
     };
     window.addEventListener("keydown", onKey);
@@ -677,7 +705,7 @@ export function ShellPage({
       if (modalBotId !== targetBotId) return false;
       return computerTabRef.current === "screen";
     }
-    if (panelRef.current !== "computer") return false;
+    if (panelRef.current !== "computer" || !workspaceVisibleRef.current) return false;
     const computer = computerRef.current;
     if (computer?.botId !== targetBotId) return false;
     const effectiveTab = getEffectiveWorkspaceTab(
@@ -816,7 +844,7 @@ export function ShellPage({
   const computerBotIdRef = useRef<string | undefined>(undefined);
   const computerTabRef = useRef<"screen" | "terminal">("screen");
   // Latest panel/tab identity for guards that run before React re-renders.
-  const workspaceTabRef = useRef(workspaceTab);
+  const workspaceTabRef = useRef<string>("tasks");
   const computerBootEpoch = useRef(0);
   const openComputerRef = useRef<(botId?: string) => Promise<void>>(async () => {});
   const [computerViewport, setComputerViewport] = useState<{
@@ -910,7 +938,80 @@ export function ShellPage({
       : (bots.find((b) => b.id === botId) ?? bots[0]);
   const computerBot =
     (computerBotId ? bots.find((bot) => bot.id === computerBotId) : undefined) ?? active;
+  const workspaceKey =
+    userId && active ? workspaceLayoutKey(userId, active.spaceId, active.id) : null;
+  workspaceScopeRef.current = workspaceKey;
+  const { layout: workspaceLayout, update: updateWorkspaceLayout } =
+    useWorkspaceLayout(workspaceKey);
+  workspaceLayoutUpdateRef.current = updateWorkspaceLayout;
+  const workspaceTab = workspaceLayout.active ?? "tasks";
+  const workspaceExpanded = workspaceLayout.expanded;
+  const workspaceShown = panel === "computer" && workspaceLayout.visible;
+  workspaceVisibleRef.current = workspaceShown;
+  const backToChat = () => {
+    updateWorkspaceLayout((layout) => ({ ...layout, visible: false, expanded: false }));
+    setWorkspaceFocusRequest({ scope: workspaceKey, view: null });
+  };
+  const setWorkspaceExpanded = (next: boolean | ((current: boolean) => boolean)) =>
+    updateWorkspaceLayout((layout) => ({
+      ...layout,
+      expanded: typeof next === "function" ? next(layout.expanded) : next,
+    }));
+  const setWorkspaceTab = (tab: string) => {
+    if (tab === "terminal") setTerminalRequestedKey(workspaceKey);
+    if (isWorkspaceViewId(tab)) updateWorkspaceLayout((layout) => openWorkspaceView(layout, tab));
+  };
+  const [workspacePanelKey, setWorkspacePanelKey] = useState(workspaceKey);
+  if (workspacePanelKey !== workspaceKey) {
+    setWorkspacePanelKey(workspaceKey);
+    if (panel === null || panel === "computer")
+      setPanelUnchecked(workspaceLayout.visible ? "computer" : null);
+    setTerminalRequestedKey(null);
+  }
+  const openWorkspace = (tab: string) => {
+    if (!isWorkspaceViewId(tab) || !setPanel("computer")) return;
+    paneReturnFocus.current =
+      document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+        ? document.activeElement
+        : null;
+    setWorkspaceTab(tab);
+    setWorkspaceFocusRequest({ scope: workspaceKey, view: tab });
+  };
+  const closeWorkspace = (tab: string) => {
+    if (!isWorkspaceViewId(tab)) return;
+    if (tab === "terminal" && terminalCloseGuard.current && !terminalCloseGuard.current()) return;
+    const next = closeWorkspaceView(workspaceLayout, tab);
+    updateWorkspaceLayout(() => next);
+    if (!next.open.length) setPanelUnchecked(null);
+    setWorkspaceFocusRequest({ scope: workspaceKey, view: next.active });
+  };
+  useLayoutEffect(() => {
+    const requested = workspaceFocusRequest?.scope === workspaceKey;
+    if (!requested && !(workspaceShown && workspaceOverlay)) return;
+    if (!workspaceShown || (requested && !workspaceFocusRequest?.view)) {
+      if (paneReturnFocus.current?.isConnected) paneReturnFocus.current.focus();
+      else document.querySelector<HTMLElement>("[data-workspace-toggle]")?.focus();
+      setWorkspaceFocusRequest(null);
+      return;
+    }
+    const pane = document.querySelector<HTMLElement>('[data-panel="computer"]');
+    if (!requested && pane?.contains(document.activeElement)) return;
+    const focus = () => {
+      const selected = pane?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+      if (!selected) return false;
+      selected.focus();
+      if (requested) setWorkspaceFocusRequest(null);
+      return true;
+    };
+    if (focus() || !pane) return;
+    const observer = new MutationObserver(() => {
+      if (focus()) observer.disconnect();
+    });
+    observer.observe(pane, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [workspaceFocusRequest, workspaceKey, workspaceShown, workspaceOverlay]);
   const workspaceBotId = inGroup ? undefined : active?.id;
+  const [workspaceRevision, setWorkspaceRevision] = useState(0);
   const workspaceLocationKey = JSON.stringify([
     workspaceBotId,
     computer?.computerId,
@@ -918,10 +1019,11 @@ export function ShellPage({
     computer?.kind,
     computer?.state,
     computer?.homeRevision,
+    workspaceRevision,
   ]);
   const [workspaceState, setWorkspaceState] = useState<{
     key: string;
-    context: WorkspaceContext;
+    context: WorkspaceContext | null;
   } | null>(null);
   useEffect(() => {
     if (!workspaceBotId) return;
@@ -932,23 +1034,27 @@ export function ShellPage({
         if (!abort.signal.aborted) setWorkspaceState({ key: workspaceLocationKey, context });
       })
       .catch(() => {
-        if (!abort.signal.aborted) setWorkspaceState(null);
+        if (!abort.signal.aborted) setWorkspaceState({ key: workspaceLocationKey, context: null });
       });
     return () => abort.abort();
   }, [workspaceBotId, workspaceLocationKey]);
   const workspaceContext =
     workspaceState?.key === workspaceLocationKey &&
+    workspaceState.context &&
     workspaceState.context.botId === workspaceBotId &&
     workspaceState.context.computerId === (computer?.computerId ?? null)
       ? workspaceState.context
       : null;
+  const workspaceContextLoading =
+    Boolean(workspaceBotId) && workspaceState?.key !== workspaceLocationKey;
   const effectiveWorkspaceTab = getEffectiveWorkspaceTab(
     workspaceTab,
     computer?.capabilities?.graphical,
     true,
     terminalSupported(computer),
   );
-  const isVisible = isComputerVisible(computerOpen, panel, effectiveWorkspaceTab);
+  const visiblePanel = panel === "computer" && !workspaceShown ? null : panel;
+  const isVisible = isComputerVisible(computerOpen, visiblePanel, effectiveWorkspaceTab);
   computerVisible.current = isVisible;
   computerOpenRef.current = computerOpen;
   computerBotIdRef.current = computerBotId ?? active?.id;
@@ -2822,7 +2928,7 @@ export function ShellPage({
   useEffect(() => {
     const heartbeatBotId = computerBot?.id ?? active?.id;
     if (
-      !isComputerVisible(computerOpen, panel, effectiveWorkspaceTab) ||
+      !isComputerVisible(computerOpen, visiblePanel, effectiveWorkspaceTab) ||
       !heartbeatBotId ||
       computer?.state !== "running"
     )
@@ -2835,7 +2941,14 @@ export function ShellPage({
     // The capability-driven tab resolution decides visibility: a computer that
     // stops being graphical resolves a retained Screen tab to Tasks and must
     // stop the heartbeat, and one that gains a capability must start it again.
-  }, [panel, effectiveWorkspaceTab, computerOpen, computerBot?.id, active?.id, computer?.state]);
+  }, [
+    visiblePanel,
+    effectiveWorkspaceTab,
+    computerOpen,
+    computerBot?.id,
+    active?.id,
+    computer?.state,
+  ]);
 
   async function openComputer(botId?: string, viewOnly = false) {
     const id = botId ?? active?.id;
@@ -3580,852 +3693,892 @@ export function ShellPage({
         }}
       />
 
-      {dashboard ? (
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <DashboardPage
-            key={bootstrapMe?.spaceId}
-            scope={bootstrapMe ? `${userId}:${bootstrapMe.spaceId}` : ""}
-            spaceId={bootstrapMe?.spaceId}
-            account={{
-              name: userName,
-              menuOpen: accountMenuOpen,
-              onMenuOpenChange: setAccountMenuOpen,
-              onUsage: () => {
-                void rpc.usage
-                  .summary()
-                  .then(setUsage)
-                  .catch(() => undefined);
-                openSettings("usage");
-              },
-              onSignOut: () => {
-                void authClient.signOut().then(() => {
-                  clearSpaceSelection();
-                  navigate("/");
-                });
-              },
-            }}
-            openSettings={(section) =>
-              section === "messaging" ? setMessagingSettingsOpen(true) : openSettings(section)
-            }
-          />
-        </main>
-      ) : null}
-      {team ? (
-        <main
-          aria-hidden={mobileSidebarOpen || undefined}
-          inert={mobileSidebarOpen}
-          className="flex min-w-0 flex-1 flex-col bg-background"
-        >
-          <Suspense
-            fallback={
-              <div className="m-4 h-20 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
-            }
-          >
-            <TaskPage
+      <div
+        className={`relative flex min-h-0 min-w-0 flex-1 ${workspaceShown && workspaceLayout.position === "bottom" && !workspaceOverlay ? "flex-col" : ""}`}
+      >
+        {dashboard ? (
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <DashboardPage
               key={bootstrapMe?.spaceId}
-              navigation={
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={botsSidebarCollapsed ? "" : "md:hidden"}
-                  aria-label={t`Open navigation`}
-                  onClick={() => {
-                    setMobileSidebarOpen(window.matchMedia("(max-width: 767px)").matches);
-                    setBotsSidebarCollapsedPref(false);
-                  }}
-                >
-                  <Menu size={19} />
-                </Button>
+              scope={bootstrapMe ? `${userId}:${bootstrapMe.spaceId}` : ""}
+              spaceId={bootstrapMe?.spaceId}
+              account={{
+                name: userName,
+                menuOpen: accountMenuOpen,
+                onMenuOpenChange: setAccountMenuOpen,
+                onUsage: () => {
+                  void rpc.usage
+                    .summary()
+                    .then(setUsage)
+                    .catch(() => undefined);
+                  openSettings("usage");
+                },
+                onSignOut: () => {
+                  void authClient.signOut().then(() => {
+                    clearSpaceSelection();
+                    navigate("/");
+                  });
+                },
+              }}
+              openSettings={(section) =>
+                section === "messaging" ? setMessagingSettingsOpen(true) : openSettings(section)
               }
             />
-          </Suspense>
-        </main>
-      ) : null}
-      <main
-        aria-hidden={mobileSidebarOpen || undefined}
-        inert={mobileSidebarOpen}
-        className={`${team || board || dashboard ? "hidden" : "flex"} min-w-0 flex-1 flex-col bg-background`}
-      >
-        <div className="app-drag flex items-center justify-between border-b border-sidebar-border px-3 py-[17px] md:px-[22px]">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            {/* Collapsed bots sidebar: this header is the leading edge for window chrome. */}
-            {botsSidebarCollapsed && desktopBridge() ? <WindowChrome /> : null}
-            <button
-              type="button"
-              aria-label={t`Open navigation`}
-              onClick={() => setMobileSidebarOpen(true)}
-              className="app-no-drag grid h-8 w-8 shrink-0 place-items-center rounded-lg text-foreground/75 hover:bg-accent md:hidden"
+          </main>
+        ) : null}
+        {team ? (
+          <main
+            aria-hidden={mobileSidebarOpen || undefined}
+            inert={mobileSidebarOpen}
+            className="flex min-h-0 min-w-0 flex-1 flex-col bg-background"
+          >
+            <Suspense
+              fallback={
+                <div className="m-4 h-20 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" />
+              }
             >
-              <Menu size={19} strokeWidth={1.7} />
-            </button>
-            {botsSidebarCollapsed ? (
+              <TaskPage
+                key={bootstrapMe?.spaceId}
+                navigation={
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={botsSidebarCollapsed ? "" : "md:hidden"}
+                    aria-label={t`Open navigation`}
+                    onClick={() => {
+                      setMobileSidebarOpen(window.matchMedia("(max-width: 767px)").matches);
+                      setBotsSidebarCollapsedPref(false);
+                    }}
+                  >
+                    <Menu size={19} />
+                  </Button>
+                }
+              />
+            </Suspense>
+          </main>
+        ) : null}
+        <main
+          aria-hidden={mobileSidebarOpen || (workspaceShown && workspaceOverlay) || undefined}
+          inert={mobileSidebarOpen || (workspaceShown && workspaceOverlay)}
+          className={`${team || board || dashboard ? "hidden" : "flex"} min-h-0 min-w-0 flex-1 flex-col bg-background`}
+        >
+          <div className="app-drag flex items-center justify-between border-b border-sidebar-border px-3 py-[17px] md:px-[22px]">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              {/* Collapsed bots sidebar: this header is the leading edge for window chrome. */}
+              {botsSidebarCollapsed && desktopBridge() ? <WindowChrome /> : null}
               <button
                 type="button"
-                data-testid="restore-bots-sidebar"
-                aria-label={t`Show bots`}
-                aria-keyshortcuts={shortcutAria("toggleSidebar")}
-                title={t`Show bots`}
-                onClick={() => setBotsSidebarCollapsedPref(false)}
-                className="app-no-drag hidden h-8 w-8 shrink-0 place-items-center rounded-lg text-foreground/75 hover:bg-accent md:grid"
+                aria-label={t`Open navigation`}
+                onClick={() => setMobileSidebarOpen(true)}
+                className="app-no-drag grid h-8 w-8 shrink-0 place-items-center rounded-lg text-foreground/75 hover:bg-accent md:hidden"
               >
-                <PanelLeftOpen size={19} strokeWidth={1.7} aria-hidden="true" />
+                <Menu size={19} strokeWidth={1.7} />
               </button>
-            ) : null}
-            <button
-              type="button"
-              data-testid="bot-settings-trigger"
-              onClick={() => {
-                setModelFocusRequest(0);
-                setPanel(inGroup ? "group-settings" : "settings");
-              }}
-              className="app-no-drag flex max-w-48 shrink-0 items-center gap-3"
-            >
-              {inGroup ? (
-                <GroupAvatar
-                  members={activeSnapshot?.members ?? activeGroup?.members ?? []}
-                  size={26}
-                />
-              ) : active ? (
-                <BotAvatar
-                  color={active.color}
-                  identity={active.id}
-                  label={active.name}
-                  size={26}
-                  status={active.status}
+              {botsSidebarCollapsed ? (
+                <button
+                  type="button"
+                  data-testid="restore-bots-sidebar"
+                  aria-label={t`Show bots`}
+                  aria-keyshortcuts={shortcutAria("toggleSidebar")}
+                  title={t`Show bots`}
+                  onClick={() => setBotsSidebarCollapsedPref(false)}
+                  className="app-no-drag hidden h-8 w-8 shrink-0 place-items-center rounded-lg text-foreground/75 hover:bg-accent md:grid"
+                >
+                  <PanelLeftOpen size={19} strokeWidth={1.7} aria-hidden="true" />
+                </button>
+              ) : null}
+              <button
+                type="button"
+                data-testid="bot-settings-trigger"
+                onClick={() => {
+                  setModelFocusRequest(0);
+                  setPanel(inGroup ? "group-settings" : "settings");
+                }}
+                className="app-no-drag flex max-w-48 shrink-0 items-center gap-3"
+              >
+                {inGroup ? (
+                  <GroupAvatar
+                    members={activeSnapshot?.members ?? activeGroup?.members ?? []}
+                    size={26}
+                  />
+                ) : active ? (
+                  <BotAvatar
+                    color={active.color}
+                    identity={active.id}
+                    label={active.name}
+                    size={26}
+                    status={active.status}
+                  />
+                ) : null}
+                <span className="min-w-0">
+                  <span
+                    className="block break-words text-[16px] font-medium text-foreground"
+                    dir="auto"
+                  >
+                    {inGroup
+                      ? (activeGroup?.name ?? activeSnapshot?.groupName ?? t`Group`)
+                      : (active?.name ?? t`Select a bot`)}
+                  </span>
+                </span>
+              </button>
+              {active ? (
+                <BotModelChip
+                  key={bootstrapMe?.spaceId}
+                  bot={active}
+                  settings={modelSettings}
+                  run={activeSnapshot?.run?.botId === active.id ? activeSnapshot.run : null}
+                  onClick={openBotModelSettings}
                 />
               ) : null}
-              <span className="min-w-0">
-                <span
-                  className="block break-words text-[16px] font-medium text-foreground"
-                  dir="auto"
-                >
-                  {inGroup
-                    ? (activeGroup?.name ?? activeSnapshot?.groupName ?? t`Group`)
-                    : (active?.name ?? t`Select a bot`)}
-                </span>
-              </span>
-            </button>
-            {active ? (
-              <BotModelChip
-                key={bootstrapMe?.spaceId}
-                bot={active}
-                settings={modelSettings}
-                run={activeSnapshot?.run?.botId === active.id ? activeSnapshot.run : null}
-                onClick={openBotModelSettings}
-              />
-            ) : null}
-            {inGroup && activeGroup ? (
-              <GroupParticipantModels
-                activeGroup={activeGroup}
-                bots={bots}
-                currentRuns={currentRuns}
-                modelSettings={modelSettings}
-              />
-            ) : null}
-            <RunContext run={activeSnapshot?.contextRun ?? activeSnapshot?.run} />
-          </div>
-          <div className="flex shrink-0 items-center gap-1">
-            {(inGroup ? activeGroup : active) ? (
-              <ThreadSettingsButton
-                group={inGroup}
-                panel={panel}
-                onPanel={(next) => {
-                  setModelFocusRequest(0);
-                  setPanel(next);
-                }}
-              />
-            ) : null}
-            {!inGroup && active ? (
-              <button
-                type="button"
-                title={t`Agent computer`}
-                onClick={() => {
-                  const next = panel === "computer" ? null : "computer";
-                  setPanel(next);
-                  if (next === "computer" && active) {
-                    // Refresh run/computer so Take control isn't stuck on a stale busyBotName.
-                    void refreshThread(active.id).catch(() => undefined);
-                  }
-                }}
-                data-active={panel === "computer" ? "" : undefined}
-                className="app-no-drag grid h-[30px] w-[34px] place-items-center rounded-[9px] hover:bg-accent data-active:bg-accent"
-              >
-                <Monitor size={18} strokeWidth={1.6} className="text-foreground/75" />
-              </button>
-            ) : null}
-          </div>
-        </div>
-        {inGroup && goal && goal.groupId === groupId ? (
-          <GroupGoalStrip
-            goal={goal}
-            onStop={async () => {
-              setGoal(await rpc.goals.stop({ goalId: goal.id }));
-            }}
-          />
-        ) : null}
-        {bootstrapMe?.isDeploymentOwner
-          ? currentRuns.map((run) =>
-              run.status === "waiting_input" && run.placement?.status === "pending" ? (
-                <Suspense key={run.id} fallback={null}>
-                  <PlacementNotice
-                    run={run}
-                    hostLabel={computer?.hostLabel}
-                    onOpen={() => openSettings("computer")}
+              {inGroup && activeGroup ? (
+                <GroupParticipantModels
+                  activeGroup={activeGroup}
+                  bots={bots}
+                  currentRuns={currentRuns}
+                  modelSettings={modelSettings}
+                />
+              ) : null}
+              <RunContext run={activeSnapshot?.contextRun ?? activeSnapshot?.run} />
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              {!inGroup && active ? (
+                <Suspense fallback={null}>
+                  <ViewControls
+                    capabilities={{ computer, context: workspaceContext }}
+                    layout={workspaceLayout}
+                    visible={workspaceShown}
+                    onOpen={openWorkspace}
+                    onPosition={(position) =>
+                      updateWorkspaceLayout((layout) => ({ ...layout, position }))
+                    }
                   />
                 </Suspense>
-              ) : null,
-            )
-          : null}
-        {!active && !activeGroup && initialBotsLoaded ? (
-          <div className="grid flex-1 place-items-center">
-            <Button onClick={() => setPanel("create")}>
-              <Plus size={16} aria-hidden="true" />
-              <Trans>Create new Bot</Trans>
-            </Button>
+              ) : null}
+              {(inGroup ? activeGroup : active) ? (
+                <ThreadSettingsButton
+                  group={inGroup}
+                  panel={panel}
+                  onPanel={(next) => {
+                    setModelFocusRequest(0);
+                    setPanel(next);
+                  }}
+                />
+              ) : null}
+              {!inGroup && active ? (
+                <button
+                  type="button"
+                  title={t`Agent computer`}
+                  data-workspace-toggle
+                  onClick={() => {
+                    const next = workspaceShown ? null : "computer";
+                    if (workspaceShown) backToChat();
+                    else openWorkspace(workspaceTab);
+                    if (next === "computer" && active) {
+                      // Refresh run/computer so Take control isn't stuck on a stale busyBotName.
+                      void refreshThread(active.id).catch(() => undefined);
+                    }
+                  }}
+                  data-active={workspaceShown ? "" : undefined}
+                  className="app-no-drag grid h-[30px] w-[34px] place-items-center rounded-[9px] hover:bg-accent data-active:bg-accent"
+                >
+                  <Monitor size={18} strokeWidth={1.6} className="text-foreground/75" />
+                </button>
+              ) : null}
+            </div>
           </div>
-        ) : (
-          <Transcript
-            key={activeSnapshot?.threadId}
-            scrollRef={messageScroll}
-            artifactTarget={transcriptArtifactTarget}
-            messages={transcriptMessages}
-            olderCursor={activeSnapshot?.olderCursor ?? null}
-            loadingOlder={loadingOlder}
-            answerableAskIds={answerableAskIds}
-            running={transcriptRunning}
-            workingBots={workingBots}
-            room={inGroup}
-            onLoadOlder={loadOlder}
-            onOpenBot={openBot}
-            onAnswer={answerMessage}
-            onReply={(message) => {
-              setReplyTarget(message);
-              setReplyQuote(null);
-            }}
-            onQuote={(message, quote) => {
-              setReplyTarget(message);
-              setReplyQuote(quote);
-            }}
-            onReact={reactToMessage}
-            onJumpToMessage={jumpToReplyMessage}
-            onOpenPeerMessages={(peer) => {
-              setPeerConversation(peer);
-            }}
-            memberName={resolveTranscriptMemberName}
-            peerBot={resolveTranscriptBot}
-            onRefresh={refreshActiveThread}
-            onBotChanged={refreshBots}
-            onAddRoutine={addSkillRoutine}
-            voiceReady={Boolean(voiceStatus?.ready)}
-            speakingMessageId={speakingMessageId}
-            onSpeak={speakMessage}
-            onOpenComputer={onOpenComputer}
-            onOpenMcp={(serverId) => openSettings("mcp", undefined, serverId)}
-            onOpenMemberModelSettings={(botId) => openInsightAction({ kind: "bot-model", botId })}
-          />
-        )}
-        {recordingSkill ? (
-          <div className="px-6 pb-2 text-center text-[13px] text-destructive">
-            <Trans>Teaching in progress. Stop teaching before sending a new message.</Trans>
-          </div>
-        ) : null}
-        {active || activeGroup ? (
-          <Composer
-            key={inGroup ? `group:${groupId}` : `bot:${active?.id}`}
-            comparisonBotId={!inGroup && bots.length >= 2 ? active?.id : undefined}
-            activeName={inGroup ? (activeGroup?.name ?? activeSnapshot?.groupName) : active?.name}
-            refusalBotName={refusalRunBotName(activeSnapshot, bots, transcriptMembers)}
-            running={composerRunning}
-            disabled={Boolean(recordingSkill)}
-            pendingAttachments={activePendingAttachments}
-            attachmentNotice={attachmentNotice}
-            sendError={sendError}
-            runError={displayedRunError}
-            providerErrorKind={sendError ? undefined : activeSnapshot?.run?.providerErrorKind}
-            runtimeProblem={sendError ? undefined : activeSnapshot?.run?.runtimeProblem}
-            modelCatalog={modelSettings?.catalog}
-            onConnectPin={() =>
-              openSettings("models", activeSnapshot?.run?.runtimeProblem?.pin.provider ?? undefined)
-            }
-            onEnableExperimental={() => {
-              const botId = activeSnapshot?.run?.botId ?? active?.id;
-              const bot = botId ? bots.find((candidate) => candidate.id === botId) : undefined;
-              if (!botId || !bot) {
-                // The refusing bot is gone, so the save has nothing to land on; say so
-                // instead of dropping the click silently.
-                setSendError(t`Could not save. Try again.`);
-                return;
+          <div ref={setWorkspaceControlsHost} />
+          {inGroup && goal && goal.groupId === groupId ? (
+            <GroupGoalStrip
+              goal={goal}
+              onStop={async () => {
+                setGoal(await rpc.goals.stop({ goalId: goal.id }));
+              }}
+            />
+          ) : null}
+          {bootstrapMe?.isDeploymentOwner
+            ? currentRuns.map((run) =>
+                run.status === "waiting_input" && run.placement?.status === "pending" ? (
+                  <Suspense key={run.id} fallback={null}>
+                    <PlacementNotice
+                      run={run}
+                      hostLabel={computer?.hostLabel}
+                      onOpen={() => openSettings("computer")}
+                    />
+                  </Suspense>
+                ) : null,
+              )
+            : null}
+          {!active && !activeGroup && initialBotsLoaded ? (
+            <div className="grid flex-1 place-items-center">
+              <Button onClick={() => setPanel("create")}>
+                <Plus size={16} aria-hidden="true" />
+                <Trans>Create new Bot</Trans>
+              </Button>
+            </div>
+          ) : (
+            <Transcript
+              key={activeSnapshot?.threadId}
+              scrollRef={messageScroll}
+              artifactTarget={transcriptArtifactTarget}
+              messages={transcriptMessages}
+              olderCursor={activeSnapshot?.olderCursor ?? null}
+              loadingOlder={loadingOlder}
+              answerableAskIds={answerableAskIds}
+              running={transcriptRunning}
+              workingBots={workingBots}
+              room={inGroup}
+              onLoadOlder={loadOlder}
+              onOpenBot={openBot}
+              onAnswer={answerMessage}
+              onReply={(message) => {
+                setReplyTarget(message);
+                setReplyQuote(null);
+              }}
+              onQuote={(message, quote) => {
+                setReplyTarget(message);
+                setReplyQuote(quote);
+              }}
+              onReact={reactToMessage}
+              onJumpToMessage={jumpToReplyMessage}
+              onOpenPeerMessages={(peer) => {
+                setPeerConversation(peer);
+              }}
+              memberName={resolveTranscriptMemberName}
+              peerBot={resolveTranscriptBot}
+              onRefresh={refreshActiveThread}
+              onBotChanged={refreshBots}
+              onAddRoutine={addSkillRoutine}
+              voiceReady={Boolean(voiceStatus?.ready)}
+              speakingMessageId={speakingMessageId}
+              onSpeak={speakMessage}
+              onOpenComputer={onOpenComputer}
+              onOpenMcp={(serverId) => openSettings("mcp", undefined, serverId)}
+              onOpenMemberModelSettings={(botId) => openInsightAction({ kind: "bot-model", botId })}
+            />
+          )}
+          {recordingSkill ? (
+            <div className="px-6 pb-2 text-center text-[13px] text-destructive">
+              <Trans>Teaching in progress. Stop teaching before sending a new message.</Trans>
+            </div>
+          ) : null}
+          {active || activeGroup ? (
+            <Composer
+              key={inGroup ? `group:${groupId}` : `bot:${active?.id}`}
+              comparisonBotId={!inGroup && bots.length >= 2 ? active?.id : undefined}
+              activeName={inGroup ? (activeGroup?.name ?? activeSnapshot?.groupName) : active?.name}
+              refusalBotName={refusalRunBotName(activeSnapshot, bots, transcriptMembers)}
+              running={composerRunning}
+              disabled={Boolean(recordingSkill)}
+              pendingAttachments={activePendingAttachments}
+              attachmentNotice={attachmentNotice}
+              sendError={sendError}
+              runError={displayedRunError}
+              providerErrorKind={sendError ? undefined : activeSnapshot?.run?.providerErrorKind}
+              runtimeProblem={sendError ? undefined : activeSnapshot?.run?.runtimeProblem}
+              modelCatalog={modelSettings?.catalog}
+              onConnectPin={() =>
+                openSettings(
+                  "models",
+                  activeSnapshot?.run?.runtimeProblem?.pin.provider ?? undefined,
+                )
               }
-              void (async () => {
-                try {
-                  await rpc.bots.update({ botId, runtimeExperimental: true });
-                  await refreshBots();
-                } catch {
+              onEnableExperimental={() => {
+                const botId = activeSnapshot?.run?.botId ?? active?.id;
+                const bot = botId ? bots.find((candidate) => candidate.id === botId) : undefined;
+                if (!botId || !bot) {
+                  // The refusing bot is gone, so the save has nothing to land on; say so
+                  // instead of dropping the click silently.
                   setSendError(t`Could not save. Try again.`);
                   return;
                 }
-                // The banner leaves with the setting it named; a fresh run needs a fresh send.
-                dismissComposerError();
-              })();
-            }}
-            onOpenBotDestinations={() => {
-              const botId = activeSnapshot?.run?.botId ?? active?.id;
-              if (botId && botId !== active?.id) navigate(`/app/${botId}`);
-              openBotDestinationsSettings();
-            }}
-            onOpenBotComputer={() => {
-              const botId = activeSnapshot?.run?.botId ?? active?.id;
-              if (botId && botId !== active?.id) navigate(`/app/${botId}`);
-              openBotComputerSettings();
-            }}
-            onOpenSpaceModels={() => openSettings("models")}
-            runErrorId={displayedRunErrorId}
-            onRunErrorPresented={handleRunErrorPresented}
-            onDismissError={dismissComposerError}
-            onChangeModel={() => {
-              const source = activeSnapshot?.run?.runtimeProblem?.source;
-              if (source?.kind === "group-member") {
-                if (groupId !== source.groupId) navigate(`/app/g/${source.groupId}`);
-                setPanel("group-settings");
-                return;
-              }
-              const botId = activeSnapshot?.run?.runtimeProblem
-                ? activeSnapshot.run.botId
-                : active?.id;
-              if (botId && botId !== active?.id) navigate(`/app/${botId}`);
-              openBotModelSettings();
-            }}
-            sending={sending}
-            fileInputRef={fileInputRef}
-            onAttachmentPick={onAttachmentPick}
-            onRemoveAttachment={removeAttachment}
-            onSend={sendMessage}
-            onStop={stopRun}
-            onVoice={
-              !inGroup && active
-                ? () => {
-                    if (!voiceStatus?.ready) {
-                      openSettings("voice");
-                      return;
-                    }
-                    setCallOpen(true);
+                void (async () => {
+                  try {
+                    await rpc.bots.update({ botId, runtimeExperimental: true });
+                    await refreshBots();
+                  } catch {
+                    setSendError(t`Could not save. Try again.`);
+                    return;
                   }
-                : undefined
-            }
-            replyTarget={activeReplyTarget}
-            replyQuote={activeReplyQuote}
-            replyTargetName={replyTargetName}
-            onClearReply={clearReply}
-            mentionTargets={composerMentionTargets}
-            skills={composerSkills(agentSkills, activeTaughtSkills, active?.id)}
-            routines={activeRoutines}
-            runsOnHost={workspaceContext?.runsOnHost === true}
-            botAvailable={!inGroup}
-            onComposerError={setAttachmentNotice}
-            onManage={(connectionId) => openSettings("integrations", undefined, connectionId)}
-            onRoutine={(routineId) => {
-              return rpc.routines
-                .testRun({ routineId, clientNonce: newClientNonce() })
-                .then(() => true)
-                .catch(() => {
-                  setSendError(t`Could not run routine`);
-                  return false;
-                });
-            }}
-            onSlashOpen={refreshAgentSkills}
-            onSlashAction={(action, argument) =>
-              runComposerAction(action, argument, {
-                botId: !inGroup ? active?.id : undefined,
-                onRefresh: refreshThreadRef.current,
-                onStop: stopRun,
-                onRoutines: () => setPanel("routines"),
-                onModel: openBotModelSettings,
-                onChatSettings: () => setPanel(inGroup ? "group-settings" : "settings"),
-                onSettings: openSettings,
-                onUsage: setUsage,
-                onError: setSendError,
-              })
-            }
-          />
-        ) : null}
-      </main>
+                  // The banner leaves with the setting it named; a fresh run needs a fresh send.
+                  dismissComposerError();
+                })();
+              }}
+              onOpenBotDestinations={() => {
+                const botId = activeSnapshot?.run?.botId ?? active?.id;
+                if (botId && botId !== active?.id) navigate(`/app/${botId}`);
+                openBotDestinationsSettings();
+              }}
+              onOpenBotComputer={() => {
+                const botId = activeSnapshot?.run?.botId ?? active?.id;
+                if (botId && botId !== active?.id) navigate(`/app/${botId}`);
+                openBotComputerSettings();
+              }}
+              onOpenSpaceModels={() => openSettings("models")}
+              runErrorId={displayedRunErrorId}
+              onRunErrorPresented={handleRunErrorPresented}
+              onDismissError={dismissComposerError}
+              onChangeModel={() => {
+                const source = activeSnapshot?.run?.runtimeProblem?.source;
+                if (source?.kind === "group-member") {
+                  if (groupId !== source.groupId) navigate(`/app/g/${source.groupId}`);
+                  setPanel("group-settings");
+                  return;
+                }
+                const botId = activeSnapshot?.run?.runtimeProblem
+                  ? activeSnapshot.run.botId
+                  : active?.id;
+                if (botId && botId !== active?.id) navigate(`/app/${botId}`);
+                openBotModelSettings();
+              }}
+              sending={sending}
+              fileInputRef={fileInputRef}
+              onAttachmentPick={onAttachmentPick}
+              onRemoveAttachment={removeAttachment}
+              onSend={sendMessage}
+              onStop={stopRun}
+              onVoice={
+                !inGroup && active
+                  ? () => {
+                      if (!voiceStatus?.ready) {
+                        openSettings("voice");
+                        return;
+                      }
+                      setCallOpen(true);
+                    }
+                  : undefined
+              }
+              replyTarget={activeReplyTarget}
+              replyQuote={activeReplyQuote}
+              replyTargetName={replyTargetName}
+              onClearReply={clearReply}
+              mentionTargets={composerMentionTargets}
+              skills={composerSkills(agentSkills, activeTaughtSkills, active?.id)}
+              routines={activeRoutines}
+              runsOnHost={workspaceContext?.runsOnHost === true}
+              botAvailable={!inGroup}
+              onComposerError={setAttachmentNotice}
+              onManage={(connectionId) => openSettings("integrations", undefined, connectionId)}
+              onRoutine={(routineId) => {
+                return rpc.routines
+                  .testRun({ routineId, clientNonce: newClientNonce() })
+                  .then(() => true)
+                  .catch(() => {
+                    setSendError(t`Could not run routine`);
+                    return false;
+                  });
+              }}
+              onSlashOpen={refreshAgentSkills}
+              onSlashAction={(action, argument) =>
+                runComposerAction(action, argument, {
+                  botId: !inGroup ? active?.id : undefined,
+                  onRefresh: refreshThreadRef.current,
+                  onStop: stopRun,
+                  onRoutines: () => setPanel("routines"),
+                  onModel: openBotModelSettings,
+                  onChatSettings: () => setPanel(inGroup ? "group-settings" : "settings"),
+                  onSettings: openSettings,
+                  onUsage: setUsage,
+                  onError: setSendError,
+                })
+              }
+            />
+          ) : null}
+        </main>
 
-      <SlidingPanel
-        open={Boolean(panel && (active || activeGroup || panel === "create"))}
-        panel={panel ?? "closed"}
-        size={isSettingsPanel(panel) ? "wide" : "narrow"}
-        workspace={panel === "computer"}
-        expanded={panel === "computer" && workspaceExpanded}
-        resizeLabel={t`Resize pane`}
-      >
-        {panel && (active || activeGroup || panel === "create") ? (
-          <div
-            className={
-              panel === "computer"
-                ? "flex h-full min-h-0 w-full flex-col overflow-hidden px-3 py-3"
-                : "rk-scroll h-full min-w-0 w-full overflow-y-auto px-5 py-[17px]"
-            }
-          >
-            {hasSharedPanelHeader(panel) ? (
-              <div
-                data-workspace-chrome={panel === "computer" ? "" : undefined}
-                className="mb-4 flex shrink-0 items-center justify-between gap-2"
-              >
-                <PanelHeaderTitle
-                  panel={panel}
-                  activeBot={active}
-                  computerState={computer?.state}
-                />
-                <div className="flex gap-1">
-                  {panel === "computer" ? (
+        <SlidingPanel
+          open={
+            Boolean(panel && (active || activeGroup || panel === "create")) &&
+            (panel !== "computer" || workspaceShown)
+          }
+          panel={panel ?? "closed"}
+          size={isSettingsPanel(panel) ? "wide" : "narrow"}
+          workspace={panel === "computer"}
+          expanded={panel === "computer" && workspaceExpanded}
+          width={panel === "computer" ? workspaceLayout.width : undefined}
+          height={workspaceLayout.height}
+          position={panel === "computer" ? workspaceLayout.position : "right"}
+          onWidthChange={(width) => updateWorkspaceLayout((layout) => ({ ...layout, width }))}
+          onHeightChange={(height) => updateWorkspaceLayout((layout) => ({ ...layout, height }))}
+          onOverlayChange={setWorkspaceOverlay}
+          keepMounted={panel === "computer" && workspaceLayout.open.length > 0}
+          resizeLabel={t`Resize pane`}
+        >
+          {panel && (active || activeGroup || panel === "create") ? (
+            <div
+              className={
+                panel === "computer"
+                  ? "flex h-full min-h-0 w-full flex-col overflow-hidden px-3 py-3"
+                  : "rk-scroll h-full min-w-0 w-full overflow-y-auto px-5 py-[17px]"
+              }
+            >
+              {hasSharedPanelHeader(panel) && panel !== "computer" ? (
+                <div className="mb-4 flex shrink-0 items-center justify-between gap-2">
+                  <PanelHeaderTitle
+                    panel={panel}
+                    activeBot={active}
+                    computerState={computer?.state}
+                  />
+                  <div className="flex gap-1">
+                    {active ? (
+                      <SettingsPanelToggle
+                        open={panel === "settings"}
+                        onToggle={() => setPanel(panel === "settings" ? "computer" : "settings")}
+                      />
+                    ) : null}
                     <Button
                       variant="ghost"
                       size="icon-sm"
-                      aria-label={
-                        workspaceExpanded ? t`Return to conversation` : t`Expand workspace`
-                      }
-                      onClick={() => setWorkspaceExpanded((value) => !value)}
-                    >
-                      {workspaceExpanded ? <X size={16} /> : <Maximize2 size={16} />}
-                    </Button>
-                  ) : null}
-                  {active &&
-                  panel === "computer" &&
-                  !computerOpen &&
-                  computerPanelNeedsMaintenance(
-                    computer?.state,
-                    booting,
-                    Boolean(computerErrorState.operation),
-                  ) ? (
-                    <ComputerMaintenanceActions
-                      botId={active.id}
-                      computer={computer}
-                      onChanged={async () => {
-                        await refreshThread(active.id);
+                      aria-label={t`Close panel`}
+                      onClick={() => {
+                        if (!setPanel(null)) return;
+                        setWorkspaceExpanded(false);
                       }}
-                    />
-                  ) : null}
-                  {active ? (
-                    <SettingsPanelToggle
-                      open={panel === "settings"}
-                      onToggle={() => setPanel(panel === "settings" ? "computer" : "settings")}
-                    />
-                  ) : null}
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={t`Close panel`}
-                    onClick={() => {
-                      if (!setPanel(null)) return;
-                      setWorkspaceExpanded(false);
-                    }}
-                  >
-                    <X size={16} strokeWidth={1.8} />
-                  </Button>
+                    >
+                      <X size={16} strokeWidth={1.8} />
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            ) : null}
-            {panel === "computer" && active ? (
-              <Suspense fallback={null}>
-                <WorkspacePane
-                  bot={active}
-                  computer={computer}
-                  context={workspaceContext}
-                  tab={workspaceTab}
-                  onTabChange={setWorkspaceTab}
-                  terminal={
-                    computer
-                      ? {
-                          working: composerRunning,
-                          registerCloseGuard: registerTerminalCloseGuard,
-                          onTakeControl: async () => {
-                            await rpc.computer.takeover({ botId: active.id });
-                            await refreshComputerFor(active.id);
-                          },
-                          onStop: stopRun,
-                          onStart: async () => {
-                            await bootComputer({
-                              botId: active.id,
-                              takeControl: false,
-                              overlay: false,
-                            });
-                          },
-                          onReleased: () => {
-                            void refreshComputerFor(active.id).catch(() => undefined);
-                          },
-                        }
-                      : null
-                  }
-                  onOpenRun={(run) =>
-                    handleWorkspaceOpenRun({
-                      run,
-                      navigate,
-                      closePanel: () => setPanel(null),
-                    })
-                  }
-                  screen={{
-                    computer,
-                    open: computerOpen,
-                    url: embeddedScreenUrl,
-                    error: computerScreenError,
-                    status:
-                      !embeddedScreenUrl || computer?.state !== "running" ? (
-                        computersAreUnavailable(bootstrapMe?.sandboxProvider) ? (
-                          <ComputersUnavailableHint />
-                        ) : (
-                          computerPlaceholder(
-                            computer?.state,
-                            booting,
-                            computerLabel(computer?.mode, active.name),
-                            computer?.imagePulling ? computer.imagePullPercent : undefined,
-                          )
-                        )
-                      ) : null,
-                    onOpen: () => void openComputer(undefined, true),
-                  }}
-                  routines={
-                    <div>
-                      <RoutineListHeader
-                        onCreate={() => {
-                          setRoutineDraft(emptyRoutineDraft());
-                          setRoutineWebhookSecret(null);
-                          setEditingRoutine(null);
-                          setRoutineError(null);
-                          setPanel("routine");
-                        }}
-                      />
-                      {activeRoutines.map((routine) => (
-                        <RoutineListRow
-                          key={routine.id}
-                          routine={routine}
-                          running={
-                            snapshot?.run?.routineId === routine.id && isActive(snapshot.run.status)
+              ) : null}
+              {panel === "computer" && active ? (
+                <Suspense fallback={null}>
+                  <WorkspacePane
+                    key={workspaceKey}
+                    bot={active}
+                    computer={computer}
+                    context={workspaceContext}
+                    contextLoading={workspaceContextLoading}
+                    tab={workspaceTab}
+                    onTabChange={setWorkspaceTab}
+                    openViews={workspaceLayout.open}
+                    visible={workspaceShown}
+                    compact={workspaceOverlay || workspaceLayout.width < 480}
+                    onBackToChat={workspaceOverlay && !workspaceExpanded ? backToChat : undefined}
+                    hiddenControlsHost={workspaceControlsHost}
+                    allowTerminalStart={terminalRequestedKey === workspaceKey}
+                    expanded={workspaceExpanded}
+                    onExpand={() => setWorkspaceExpanded((value) => !value)}
+                    onClose={closeWorkspace}
+                    onRetry={() => {
+                      setWorkspaceRevision((value) => value + 1);
+                      void refreshThread(active.id).catch(() => undefined);
+                    }}
+                    headerActions={
+                      <>
+                        {!computerOpen &&
+                        computerPanelNeedsMaintenance(
+                          computer?.state,
+                          booting,
+                          Boolean(computerErrorState.operation),
+                        ) ? (
+                          <ComputerMaintenanceActions
+                            botId={active.id}
+                            computer={computer}
+                            onChanged={async () => {
+                              await refreshThread(active.id);
+                            }}
+                          />
+                        ) : null}
+                        <SettingsPanelToggle open={false} onToggle={() => setPanel("settings")} />
+                      </>
+                    }
+                    terminal={
+                      computer
+                        ? {
+                            working: composerRunning,
+                            registerCloseGuard: registerTerminalCloseGuard,
+                            onTakeControl: async () => {
+                              await rpc.computer.takeover({ botId: active.id });
+                              await refreshComputerFor(active.id);
+                            },
+                            onStop: stopRun,
+                            onStart: async () => {
+                              await bootComputer({
+                                botId: active.id,
+                                takeControl: false,
+                                overlay: false,
+                              });
+                            },
+                            onReleased: () => {
+                              void refreshComputerFor(active.id).catch(() => undefined);
+                            },
                           }
-                          onOpen={() => {
-                            setRoutineDraft(draftFromRoutine(routine));
+                        : null
+                    }
+                    onOpenRun={(run) =>
+                      handleWorkspaceOpenRun({
+                        run,
+                        navigate,
+                        closePanel: () => setPanel(null),
+                      })
+                    }
+                    screen={{
+                      computer,
+                      open: computerOpen,
+                      url: embeddedScreenUrl,
+                      error: computerScreenError,
+                      status:
+                        !embeddedScreenUrl || computer?.state !== "running" ? (
+                          computersAreUnavailable(bootstrapMe?.sandboxProvider) ? (
+                            <ComputersUnavailableHint />
+                          ) : (
+                            computerPlaceholder(
+                              computer?.state,
+                              booting,
+                              computerLabel(computer?.mode, active.name),
+                              computer?.imagePulling ? computer.imagePullPercent : undefined,
+                            )
+                          )
+                        ) : null,
+                      onOpen: () => void openComputer(undefined, true),
+                    }}
+                    routines={
+                      <div>
+                        <RoutineListHeader
+                          onCreate={() => {
+                            setRoutineDraft(emptyRoutineDraft());
                             setRoutineWebhookSecret(null);
-                            setEditingRoutine(routine);
+                            setEditingRoutine(null);
                             setRoutineError(null);
                             setPanel("routine");
                           }}
-                          onStop={() => void stopRun()}
                         />
-                      ))}
-                    </div>
-                  }
-                />
-              </Suspense>
-            ) : null}
-            {panel === "create-group" ? (
-              <CreateGroupForm
-                bots={bots}
-                onCancel={() => setPanel(null)}
-                onCreate={(input) => createGroup(input)}
-              />
-            ) : null}
-            {panel === "group-settings" && activeGroup ? (
-              <GroupSettings
-                key={activeGroup.id}
-                group={activeGroup}
-                bots={bots}
-                modelSettings={modelSettings}
-                onModelPin={async (member, pin, expectedBotModelPinRevision) => {
-                  if (!member.memberId) return;
-                  const target = {
-                    groupId: activeGroup.id,
-                    botId: member.botId,
-                    memberId: member.memberId,
-                    expectedRevision: member.modelPinRevision ?? 0,
-                  };
-                  const updated = pin
-                    ? await rpc.groups.setMemberModelPin({
-                        ...target,
-                        expectedBotModelPinRevision:
-                          expectedBotModelPinRevision ??
-                          bots.find((b) => b.id === member.botId)?.modelPinRevision ??
-                          0,
-                        pin,
-                      })
-                    : await rpc.groups.clearMemberModelPin(target);
-                  setGroups((current) =>
-                    current.map((group) => (group.id === updated.id ? updated : group)),
-                  );
-                  await refreshGroupThread(activeGroup.id).catch(() => undefined);
-                }}
-                onReloadMember={async (member) => {
-                  const [groups] = await Promise.all([rpc.groups.list(), refreshBots()]);
-                  const latest = groups.find((group) => group.id === activeGroup.id);
-                  if (!latest) return undefined;
-                  setGroups((current) =>
-                    current.map((group) => (group.id === latest.id ? latest : group)),
-                  );
-                  return latest.members.find(
-                    (item) => item.memberId === member.memberId || item.botId === member.botId,
-                  );
-                }}
-                goal={goal?.groupId === activeGroup.id ? goal : null}
-                canManageGoal={Boolean(bootstrapMe?.isDeploymentOwner)}
-                onStartGoal={async (input) => {
-                  setGoal(await rpc.goals.start(input));
-                  setPanel(null);
-                }}
-                onSave={async (input) => {
-                  const updated = await rpc.groups.update({ groupId: activeGroup.id, ...input });
-                  setGroups((current) =>
-                    current.map((group) => (group.id === updated.id ? updated : group)),
-                  );
-                  setPanel(null);
-                  await Promise.all([refreshBots(), refreshGroupThread(activeGroup.id)]).catch(
-                    () => undefined,
-                  );
-                }}
-                onRemove={async () => {
-                  await rpc.groups.remove({ groupId: activeGroup.id });
-                  const remainingGroups = groups.filter((group) => group.id !== activeGroup.id);
-                  setGroups(remainingGroups);
-                  setPanel(null);
-                  navigate(firstThreadRoute(bots, remainingGroups), { replace: true });
-                  await refreshBots().catch(() => undefined);
-                }}
-              />
-            ) : null}
-            {panel === "create" ? (
-              <Suspense fallback={null}>
-                <CreateBotForm
+                        {activeRoutines.map((routine) => (
+                          <RoutineListRow
+                            key={routine.id}
+                            routine={routine}
+                            running={
+                              snapshot?.run?.routineId === routine.id &&
+                              isActive(snapshot.run.status)
+                            }
+                            onOpen={() => {
+                              setRoutineDraft(draftFromRoutine(routine));
+                              setRoutineWebhookSecret(null);
+                              setEditingRoutine(routine);
+                              setRoutineError(null);
+                              setPanel("routine");
+                            }}
+                            onStop={() => void stopRun()}
+                          />
+                        ))}
+                      </div>
+                    }
+                  />
+                </Suspense>
+              ) : null}
+              {panel === "create-group" ? (
+                <CreateGroupForm
+                  bots={bots}
                   onCancel={() => setPanel(null)}
-                  onCreate={(input) => createBot(input)}
-                  onSetupComputer={() => openSettings("computer")}
+                  onCreate={(input) => createGroup(input)}
                 />
-              </Suspense>
-            ) : null}
-            {panel === "settings" && active ? (
-              <Suspense fallback={null}>
-                <BotSettings
-                  key={active.id}
-                  bot={active}
-                  modelFocusRequest={modelFocusRequest}
-                  runtimeFocusRequest={runtimeFocusRequest}
-                  destinationsFocusRequest={destinationsFocusRequest}
-                  computerFocusRequest={computerFocusRequest}
+              ) : null}
+              {panel === "group-settings" && activeGroup ? (
+                <GroupSettings
+                  key={activeGroup.id}
+                  group={activeGroup}
+                  bots={bots}
                   modelSettings={modelSettings}
-                  overrideGroups={groups}
-                  onOpenGroup={(id) => {
-                    navigate(`/app/g/${id}`);
-                    setPanel("group-settings");
+                  onModelPin={async (member, pin, expectedBotModelPinRevision) => {
+                    if (!member.memberId) return;
+                    const target = {
+                      groupId: activeGroup.id,
+                      botId: member.botId,
+                      memberId: member.memberId,
+                      expectedRevision: member.modelPinRevision ?? 0,
+                    };
+                    const updated = pin
+                      ? await rpc.groups.setMemberModelPin({
+                          ...target,
+                          expectedBotModelPinRevision:
+                            expectedBotModelPinRevision ??
+                            bots.find((b) => b.id === member.botId)?.modelPinRevision ??
+                            0,
+                          pin,
+                        })
+                      : await rpc.groups.clearMemberModelPin(target);
+                    setGroups((current) =>
+                      current.map((group) => (group.id === updated.id ? updated : group)),
+                    );
+                    await refreshGroupThread(activeGroup.id).catch(() => undefined);
                   }}
-                  memoryProviderConfigured={memoryProviderConfig != null}
-                  onSkillsChange={setAgentSkills}
-                  onSave={async ({ computerMode, ...patch }) => {
-                    if (computerMode !== active.computerMode) {
-                      await rpc.bots.setComputer({
-                        botId: active.id,
-                        mode: computerMode,
-                      });
-                    }
-                    const updated = await rpc.bots.update({ botId: active.id, ...patch });
-                    await refreshBots();
-                    return updated;
+                  onReloadMember={async (member) => {
+                    const [groups] = await Promise.all([rpc.groups.list(), refreshBots()]);
+                    const latest = groups.find((group) => group.id === activeGroup.id);
+                    if (!latest) return undefined;
+                    setGroups((current) =>
+                      current.map((group) => (group.id === latest.id ? latest : group)),
+                    );
+                    return latest.members.find(
+                      (item) => item.memberId === member.memberId || item.botId === member.botId,
+                    );
                   }}
-                  onExport={async () => {
-                    const { path } = await rpc.export.bot({ botId: active.id });
-                    const anchor = document.createElement("a");
-                    anchor.href = path;
-                    anchor.download = "bot-v2.tar.gz";
-                    anchor.click();
+                  goal={goal?.groupId === activeGroup.id ? goal : null}
+                  canManageGoal={Boolean(bootstrapMe?.isDeploymentOwner)}
+                  onStartGoal={async (input) => {
+                    setGoal(await rpc.goals.start(input));
+                    setPanel(null);
                   }}
-                  onClear={() => setClearTarget({ kind: "bot", chat: active })}
+                  onSave={async (input) => {
+                    const updated = await rpc.groups.update({ groupId: activeGroup.id, ...input });
+                    setGroups((current) =>
+                      current.map((group) => (group.id === updated.id ? updated : group)),
+                    );
+                    setPanel(null);
+                    await Promise.all([refreshBots(), refreshGroupThread(activeGroup.id)]).catch(
+                      () => undefined,
+                    );
+                  }}
+                  onRemove={async () => {
+                    await rpc.groups.remove({ groupId: activeGroup.id });
+                    const remainingGroups = groups.filter((group) => group.id !== activeGroup.id);
+                    setGroups(remainingGroups);
+                    setPanel(null);
+                    navigate(firstThreadRoute(bots, remainingGroups), { replace: true });
+                    await refreshBots().catch(() => undefined);
+                  }}
                 />
-              </Suspense>
-            ) : null}
-            {panel === "routines" && active ? (
-              <Suspense fallback={null}>
-                <RoutinesPanel
-                  routines={activeRoutines}
-                  runningId={
-                    snapshot?.run && isActive(snapshot.run.status)
-                      ? (snapshot.run.routineId ?? undefined)
-                      : undefined
-                  }
-                  onStop={() => void stopRun()}
-                  onCreate={() => {
-                    setRoutineDraft(emptyRoutineDraft());
-                    setEditingRoutine(null);
-                    setRoutineWebhookSecret(null);
-                    setPanel("routine");
-                  }}
-                  onOpen={(routine) => {
-                    setRoutineDraft(draftFromRoutine(routine));
-                    setEditingRoutine(routine);
-                    setRoutineWebhookSecret(null);
-                    setPanel("routine");
-                  }}
-                />
-              </Suspense>
-            ) : null}
-            {panel === "routine" && active ? (
-              <RoutineEditor
-                draft={routineDraft}
-                onChange={setRoutineDraft}
-                editing={editingRoutine}
-                timezone={editingRoutine?.timezone ?? localTimezone()}
-                webhook={{
-                  path:
-                    typeof window !== "undefined"
-                      ? `${window.location.origin}/api/v1/bots/${active.id}/webhook`
-                      : `/api/v1/bots/${active.id}/webhook`,
-                  secret: routineWebhookSecret,
-                  configured: active.webhookConfigured || Boolean(routineWebhookSecret),
-                }}
-                githubPath={
-                  typeof window !== "undefined"
-                    ? `${window.location.origin}/api/v1/bots/${active.id}/github`
-                    : `/api/v1/bots/${active.id}/github`
-                }
-                messageProviders={messagingProviders}
-                saving={savingRoutine}
-                running={runningRoutine}
-                error={routineError}
-                onBack={() => {
-                  setWorkspaceTab("routines");
-                  setPanel("computer");
-                }}
-                onClose={() => setPanel(null)}
-                onEnsureWebhook={async () => {
-                  await ensureWebhookSecret(active.id);
-                }}
-                onSave={async () => {
-                  if (routineSavePending.current) return;
-                  const targetBotId = active.id;
-                  const targetRoutine = editingRoutine;
-                  if (targetRoutine && targetRoutine.botId !== targetBotId) return;
-                  if (
-                    !routineDraft.schedules.length &&
-                    !routineDraft.webhookEnabled &&
-                    !routineDraft.githubEnabled &&
-                    !routineDraft.messageProvider
-                  ) {
-                    setRoutineError(t`Add a schedule, webhook, GitHub, or message trigger`);
-                    return;
-                  }
-                  const saveRequest = ++routineSaveRequest.current;
-                  routineSavePending.current = true;
-                  setSavingRoutine(true);
-                  setRoutineError(null);
-                  try {
-                    if (
-                      (routineDraft.webhookEnabled || routineDraft.githubEnabled) &&
-                      !active.webhookConfigured &&
-                      !routineWebhookSecret
-                    ) {
-                      await ensureWebhookSecret(targetBotId);
-                    }
-                    const crons = routineDraft.schedules.map(cronFromPreset);
-                    let saved: Routine;
-                    if (targetRoutine) {
-                      const armOneShot = routineNeedsOneShotArm(targetRoutine, crons);
-                      let runAt: string | undefined;
-                      if (armOneShot) {
-                        if (!routineDraft.runAtLocal) {
-                          setRoutineError(t`Add a run time for this one-shot.`);
-                          return;
-                        }
-                        const parsed = new Date(routineDraft.runAtLocal);
-                        if (!Number.isFinite(parsed.getTime()) || parsed.getTime() <= Date.now()) {
-                          setRoutineError(t`Run time must be in the future.`);
-                          return;
-                        }
-                        runAt = parsed.toISOString();
+              ) : null}
+              {panel === "create" ? (
+                <Suspense fallback={null}>
+                  <CreateBotForm
+                    onCancel={() => setPanel(null)}
+                    onCreate={(input) => createBot(input)}
+                    onSetupComputer={() => openSettings("computer")}
+                  />
+                </Suspense>
+              ) : null}
+              {panel === "settings" && active ? (
+                <Suspense fallback={null}>
+                  <BotSettings
+                    key={active.id}
+                    bot={active}
+                    modelFocusRequest={modelFocusRequest}
+                    runtimeFocusRequest={runtimeFocusRequest}
+                    destinationsFocusRequest={destinationsFocusRequest}
+                    computerFocusRequest={computerFocusRequest}
+                    modelSettings={modelSettings}
+                    overrideGroups={groups}
+                    onOpenGroup={(id) => {
+                      navigate(`/app/g/${id}`);
+                      setPanel("group-settings");
+                    }}
+                    memoryProviderConfigured={memoryProviderConfig != null}
+                    onSkillsChange={setAgentSkills}
+                    onSave={async ({ computerMode, ...patch }) => {
+                      if (computerMode !== active.computerMode) {
+                        await rpc.bots.setComputer({
+                          botId: active.id,
+                          mode: computerMode,
+                        });
                       }
-                      saved = await rpc.routines.update({
-                        routineId: targetRoutine.id,
-                        name: routineDraft.name || t`Routine`,
-                        prompt: routineDraft.prompt || t`Check in.`,
-                        crons,
-                        active: armOneShot ? true : routineDraft.active,
-                        webhookEnabled: routineDraft.webhookEnabled,
-                        githubEnabled: routineDraft.githubEnabled,
-                        messageProvider: routineDraft.messageProvider,
-                        ...(runAt ? { runAt } : {}),
-                      });
-                    } else {
-                      saved = await rpc.routines.create({
-                        botId: targetBotId,
-                        name: routineDraft.name || t`Routine`,
-                        prompt: routineDraft.prompt || t`Check in.`,
-                        crons,
-                        timezone: localTimezone(),
-                        active: routineDraft.active,
-                        notify: true,
-                        webhookEnabled: routineDraft.webhookEnabled,
-                        githubEnabled: routineDraft.githubEnabled,
-                        messageProvider: routineDraft.messageProvider,
-                      });
+                      const updated = await rpc.bots.update({ botId: active.id, ...patch });
+                      await refreshBots();
+                      return updated;
+                    }}
+                    onExport={async () => {
+                      const { path } = await rpc.export.bot({ botId: active.id });
+                      const anchor = document.createElement("a");
+                      anchor.href = path;
+                      anchor.download = "bot-v2.tar.gz";
+                      anchor.click();
+                    }}
+                    onClear={() => setClearTarget({ kind: "bot", chat: active })}
+                  />
+                </Suspense>
+              ) : null}
+              {panel === "routines" && active ? (
+                <Suspense fallback={null}>
+                  <RoutinesPanel
+                    routines={activeRoutines}
+                    runningId={
+                      snapshot?.run && isActive(snapshot.run.status)
+                        ? (snapshot.run.routineId ?? undefined)
+                        : undefined
                     }
+                    onStop={() => void stopRun()}
+                    onCreate={() => {
+                      setRoutineDraft(emptyRoutineDraft());
+                      setEditingRoutine(null);
+                      setRoutineWebhookSecret(null);
+                      setPanel("routine");
+                    }}
+                    onOpen={(routine) => {
+                      setRoutineDraft(draftFromRoutine(routine));
+                      setEditingRoutine(routine);
+                      setRoutineWebhookSecret(null);
+                      setPanel("routine");
+                    }}
+                  />
+                </Suspense>
+              ) : null}
+              {panel === "routine" && active ? (
+                <RoutineEditor
+                  draft={routineDraft}
+                  onChange={setRoutineDraft}
+                  editing={editingRoutine}
+                  timezone={editingRoutine?.timezone ?? localTimezone()}
+                  webhook={{
+                    path:
+                      typeof window !== "undefined"
+                        ? `${window.location.origin}/api/v1/bots/${active.id}/webhook`
+                        : `/api/v1/bots/${active.id}/webhook`,
+                    secret: routineWebhookSecret,
+                    configured: active.webhookConfigured || Boolean(routineWebhookSecret),
+                  }}
+                  githubPath={
+                    typeof window !== "undefined"
+                      ? `${window.location.origin}/api/v1/bots/${active.id}/github`
+                      : `/api/v1/bots/${active.id}/github`
+                  }
+                  messageProviders={messagingProviders}
+                  saving={savingRoutine}
+                  running={runningRoutine}
+                  error={routineError}
+                  onBack={() => {
+                    setWorkspaceTab("routines");
+                    setPanel("computer");
+                  }}
+                  onClose={() => setPanel(null)}
+                  onEnsureWebhook={async () => {
+                    await ensureWebhookSecret(active.id);
+                  }}
+                  onSave={async () => {
+                    if (routineSavePending.current) return;
+                    const targetBotId = active.id;
+                    const targetRoutine = editingRoutine;
+                    if (targetRoutine && targetRoutine.botId !== targetBotId) return;
                     if (
-                      routineSaveRequest.current === saveRequest &&
-                      activeBotId.current === targetBotId
+                      !routineDraft.schedules.length &&
+                      !routineDraft.webhookEnabled &&
+                      !routineDraft.githubEnabled &&
+                      !routineDraft.messageProvider
                     ) {
-                      setEditingRoutine(saved);
-                      setRoutineDraft(draftFromRoutine(saved));
+                      setRoutineError(t`Add a schedule, webhook, GitHub, or message trigger`);
+                      return;
                     }
-                  } catch (error) {
+                    const saveRequest = ++routineSaveRequest.current;
+                    routineSavePending.current = true;
+                    setSavingRoutine(true);
+                    setRoutineError(null);
+                    try {
+                      if (
+                        (routineDraft.webhookEnabled || routineDraft.githubEnabled) &&
+                        !active.webhookConfigured &&
+                        !routineWebhookSecret
+                      ) {
+                        await ensureWebhookSecret(targetBotId);
+                      }
+                      const crons = routineDraft.schedules.map(cronFromPreset);
+                      let saved: Routine;
+                      if (targetRoutine) {
+                        const armOneShot = routineNeedsOneShotArm(targetRoutine, crons);
+                        let runAt: string | undefined;
+                        if (armOneShot) {
+                          if (!routineDraft.runAtLocal) {
+                            setRoutineError(t`Add a run time for this one-shot.`);
+                            return;
+                          }
+                          const parsed = new Date(routineDraft.runAtLocal);
+                          if (
+                            !Number.isFinite(parsed.getTime()) ||
+                            parsed.getTime() <= Date.now()
+                          ) {
+                            setRoutineError(t`Run time must be in the future.`);
+                            return;
+                          }
+                          runAt = parsed.toISOString();
+                        }
+                        saved = await rpc.routines.update({
+                          routineId: targetRoutine.id,
+                          name: routineDraft.name || t`Routine`,
+                          prompt: routineDraft.prompt || t`Check in.`,
+                          crons,
+                          active: armOneShot ? true : routineDraft.active,
+                          webhookEnabled: routineDraft.webhookEnabled,
+                          githubEnabled: routineDraft.githubEnabled,
+                          messageProvider: routineDraft.messageProvider,
+                          ...(runAt ? { runAt } : {}),
+                        });
+                      } else {
+                        saved = await rpc.routines.create({
+                          botId: targetBotId,
+                          name: routineDraft.name || t`Routine`,
+                          prompt: routineDraft.prompt || t`Check in.`,
+                          crons,
+                          timezone: localTimezone(),
+                          active: routineDraft.active,
+                          notify: true,
+                          webhookEnabled: routineDraft.webhookEnabled,
+                          githubEnabled: routineDraft.githubEnabled,
+                          messageProvider: routineDraft.messageProvider,
+                        });
+                      }
+                      if (
+                        routineSaveRequest.current === saveRequest &&
+                        activeBotId.current === targetBotId
+                      ) {
+                        setEditingRoutine(saved);
+                        setRoutineDraft(draftFromRoutine(saved));
+                      }
+                    } catch (error) {
+                      if (
+                        routineSaveRequest.current !== saveRequest ||
+                        activeBotId.current !== targetBotId
+                      ) {
+                        return;
+                      }
+                      setRoutineError(
+                        error instanceof Error ? error.message : t`Could not save routine`,
+                      );
+                      return;
+                    } finally {
+                      routineSavePending.current = false;
+                      setSavingRoutine(false);
+                    }
                     if (
                       routineSaveRequest.current !== saveRequest ||
                       activeBotId.current !== targetBotId
                     ) {
                       return;
                     }
-                    setRoutineError(
-                      error instanceof Error ? error.message : t`Could not save routine`,
-                    );
-                    return;
-                  } finally {
-                    routineSavePending.current = false;
-                    setSavingRoutine(false);
-                  }
-                  if (
-                    routineSaveRequest.current !== saveRequest ||
-                    activeBotId.current !== targetBotId
-                  ) {
-                    return;
-                  }
-                  await refreshThread(targetBotId).catch(() => undefined);
-                }}
-                onTestRun={async () => {
-                  if (routineRunPending.current) return;
-                  const targetBotId = active.id;
-                  const targetRoutine = editingRoutine;
-                  if (!targetRoutine) return;
-                  routineRunPending.current = true;
-                  setRunningRoutine(true);
-                  setRoutineError(null);
-                  try {
-                    await rpc.routines.testRun({ routineId: targetRoutine.id });
-                    await refreshThread(targetBotId);
-                  } catch (error) {
-                    if (activeBotId.current === targetBotId) {
-                      setRoutineError(
-                        error instanceof Error ? error.message : t`Could not run routine`,
-                      );
+                    await refreshThread(targetBotId).catch(() => undefined);
+                  }}
+                  onTestRun={async () => {
+                    if (routineRunPending.current) return;
+                    const targetBotId = active.id;
+                    const targetRoutine = editingRoutine;
+                    if (!targetRoutine) return;
+                    routineRunPending.current = true;
+                    setRunningRoutine(true);
+                    setRoutineError(null);
+                    try {
+                      await rpc.routines.testRun({ routineId: targetRoutine.id });
+                      await refreshThread(targetBotId);
+                    } catch (error) {
+                      if (activeBotId.current === targetBotId) {
+                        setRoutineError(
+                          error instanceof Error ? error.message : t`Could not run routine`,
+                        );
+                      }
+                    } finally {
+                      routineRunPending.current = false;
+                      setRunningRoutine(false);
                     }
-                  } finally {
-                    routineRunPending.current = false;
-                    setRunningRoutine(false);
-                  }
-                }}
-                onDelete={() => {
-                  if (editingRoutine) {
-                    setDeleteRoutineTarget(editingRoutine);
-                    return;
-                  }
-                  setWorkspaceTab("routines");
-                  setPanel("computer");
-                }}
-              />
-            ) : null}
-          </div>
-        ) : null}
-      </SlidingPanel>
+                  }}
+                  onDelete={() => {
+                    if (editingRoutine) {
+                      setDeleteRoutineTarget(editingRoutine);
+                      return;
+                    }
+                    setWorkspaceTab("routines");
+                    setPanel("computer");
+                  }}
+                />
+              ) : null}
+            </div>
+          ) : null}
+        </SlidingPanel>
+      </div>
 
       <Suspense fallback={null}>
         {contextChat && botMenu ? (
@@ -4728,25 +4881,15 @@ export function ShellPage({
               onOpenTerminal={terminalSurface.open}
               workspaceTabs={
                 active
-                  ? [
-                      { id: "tasks", label: t`Tasks` },
-                      ...(workspaceContext?.computerId && workspaceContext.files !== "unavailable"
-                        ? [{ id: "files", label: t`Files` }]
-                        : []),
-                      ...(terminalSupported(computer)
-                        ? [{ id: "terminal", label: t`Terminal` }]
-                        : []),
-                      { id: "routines", label: t`Routines` },
-                      ...(computer?.capabilities?.graphical === true
-                        ? [{ id: "screen", label: t`Screen` }]
-                        : []),
-                    ]
+                  ? availableWorkspaceViews({ computer, context: workspaceContext }).map(
+                      (view) => ({
+                        id: view.id,
+                        label: view.label(t),
+                      }),
+                    )
                   : []
               }
-              onOpenWorkspaceTab={(tab) => {
-                setWorkspaceTab(tab);
-                setPanel("computer");
-              }}
+              onOpenWorkspaceTab={openWorkspace}
               onSelectBot={(id) => {
                 setMobileSidebarOpen(false);
                 navigate(`/app/${id}`);

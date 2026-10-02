@@ -1,16 +1,16 @@
 msgid ""
 msgstr ""
-"POT-Creation-Date: 2026-08-26 00:00+0000\n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=utf-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"X-Generator: @lingui/cli\n"
-"Language: ko\n"
 "Project-Id-Version: ardurbot-web\n"
 "Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-08-26 00:00+0000\n"
+"MIME-Version: 1.0\n"
+"X-Generator: @lingui/cli\n"
 "PO-Revision-Date: \n"
 "Last-Translator: \n"
+"Language: ko\n"
 "Language-Team: \n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: \n"
 
 #: src/pages/shell/model-pin-select.tsx
@@ -1272,6 +1272,10 @@ msgstr "뒤로"
 msgid "Back to capabilities"
 msgstr ""
 
+#: src/pages/workspace/WorkspacePane.tsx
+msgid "Back to chat"
+msgstr "채팅으로 돌아가기"
+
 #: src/pages/NotFound.tsx
 msgid "Back to home"
 msgstr ""
@@ -1927,6 +1931,10 @@ msgstr "닫기"
 msgid "Close {0}"
 msgstr ""
 
+#: src/pages/workspace/WorkspacePane.tsx
+msgid "Close {name}"
+msgstr "{name} 닫기"
+
 #: src/pages/shell/message-cards.tsx
 msgid "Close chart"
 msgstr "차트 닫기"
@@ -2102,7 +2110,7 @@ msgstr ""
 #: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
-#: src/pages/workspace/WorkspacePane.tsx
+#: src/pages/workspace/view-registry.ts
 msgid "Computer"
 msgstr "컴퓨터"
 
@@ -4109,6 +4117,7 @@ msgid "Existing documents keep their scope."
 msgstr ""
 
 #: src/pages/shell/message-cards.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Expand"
 msgstr "펼치기"
 
@@ -4116,10 +4125,6 @@ msgstr "펼치기"
 #: src/pages/Shell.tsx
 msgid "Expand {0}"
 msgstr "{0} 펼치기"
-
-#: src/pages/Shell.tsx
-msgid "Expand workspace"
-msgstr "작업 공간 확장"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
@@ -4232,15 +4237,15 @@ msgstr ""
 msgid "Filed by {name}"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/pages/workspace/view-registry.ts
 #: src/pages/workspace/WorkspaceFiles.tsx
-#: src/pages/workspace/WorkspacePane.tsx
 msgid "Files"
 msgstr "파일"
 
+#: src/pages/workspace/view-registry.ts
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Files are unavailable on this computer."
-msgstr ""
+msgstr "이 컴퓨터에서는 파일을 사용할 수 없습니다."
 
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Filter"
@@ -5286,6 +5291,7 @@ msgstr ""
 #: src/pages/SharedCommand.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Loading…"
 msgstr "불러오는 중…"
 
@@ -5751,6 +5757,18 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Move bots first: {0}"
 msgstr "먼저 이 봇들을 이동하세요: {0}"
+
+#: src/pages/workspace/ViewControls.tsx
+msgid "Move split view down"
+msgstr "분할 보기를 아래로 이동"
+
+#: src/pages/workspace/ViewControls.tsx
+msgid "Move split view left"
+msgstr "분할 보기를 왼쪽으로 이동"
+
+#: src/pages/workspace/ViewControls.tsx
+msgid "Move split view right"
+msgstr "분할 보기를 오른쪽으로 이동"
 
 #: src/pages/shell/dialogs.tsx
 msgid "Move them to your shared memory."
@@ -6452,6 +6470,10 @@ msgstr ""
 msgid "Open screen to view this computer."
 msgstr "이 컴퓨터를 보려면 화면을 여세요."
 
+#: src/pages/workspace/view-registry.ts
+msgid "Open Screen to view this computer."
+msgstr "이 컴퓨터를 보려면 화면을 여세요."
+
 #: src/components/composer/command-description.ts
 #: src/pages/shell/provider-error-message.tsx
 msgid "Open Settings"
@@ -6462,8 +6484,9 @@ msgid "Open System Settings"
 msgstr ""
 
 #: src/pages/shell/command-palette.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Open terminal"
-msgstr ""
+msgstr "터미널 열기"
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Open the desktop app to check this computer."
@@ -7498,6 +7521,7 @@ msgstr "팀 메시지 다시 시작"
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/shell/runtime-summary.tsx
 #: src/pages/system/SystemPage.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Retry"
 msgstr "다시 시도"
@@ -7519,10 +7543,6 @@ msgstr ""
 #: src/pages/McpOAuthCallback.tsx
 msgid "Return to Ardur"
 msgstr "Ardur로 돌아가기"
-
-#: src/pages/Shell.tsx
-msgid "Return to conversation"
-msgstr "대화로 돌아가기"
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "Return to setup"
@@ -7634,8 +7654,7 @@ msgstr "자동 실행"
 #: src/pages/dashboard/panels.ts
 #: src/pages/RoutineEditor.tsx
 #: src/pages/settings/GeneralSettings.tsx
-#: src/pages/Shell.tsx
-#: src/pages/workspace/WorkspacePane.tsx
+#: src/pages/workspace/view-registry.ts
 msgid "Routines"
 msgstr "자동 실행"
 
@@ -7893,15 +7912,18 @@ msgstr "예 또는 아니요로 답하거나 문장으로 답해 주세요."
 msgid "Scopes"
 msgstr ""
 
-#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
-#: src/pages/workspace/WorkspacePane.tsx
+#: src/pages/workspace/view-registry.ts
 msgid "Screen"
 msgstr "화면"
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Screen and terminal: Not available on this computer"
 msgstr ""
+
+#: src/pages/workspace/view-registry.ts
+msgid "Screen is unavailable on this computer."
+msgstr "이 컴퓨터에서는 화면을 사용할 수 없습니다."
 
 #: src/pages/system/SystemPage.tsx
 msgid "Screen recording"
@@ -8711,8 +8733,7 @@ msgid "Task contracts"
 msgstr ""
 
 #: src/pages/settings/GeneralSettings.tsx
-#: src/pages/Shell.tsx
-#: src/pages/workspace/WorkspacePane.tsx
+#: src/pages/workspace/view-registry.ts
 msgid "Tasks"
 msgstr "작업"
 
@@ -8760,12 +8781,11 @@ msgid "Tell your bot what to change or remove"
 msgstr ""
 
 #: src/pages/ide/IdePage.tsx
-#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
-#: src/pages/workspace/WorkspacePane.tsx
+#: src/pages/workspace/view-registry.ts
 msgid "Terminal"
-msgstr ""
+msgstr "터미널"
 
 #: src/pages/shell/computer-terminal.tsx
 msgid "Terminal could not open; try again"
@@ -8774,6 +8794,10 @@ msgstr ""
 #: src/pages/workspace/terminal-controller.ts
 msgid "Terminal is not available on this computer"
 msgstr ""
+
+#: src/pages/workspace/view-registry.ts
+msgid "Terminal is unavailable on this computer."
+msgstr "이 컴퓨터에서는 터미널을 사용할 수 없습니다."
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/components/OllamaSettings.tsx
@@ -9618,6 +9642,11 @@ msgstr ""
 #: src/pages/customize/McpDiagnostics.tsx
 msgid "View logs"
 msgstr ""
+
+#: src/pages/workspace/ViewControls.tsx
+#: src/pages/workspace/WorkspacePane.tsx
+msgid "Views"
+msgstr "보기"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Visuals"

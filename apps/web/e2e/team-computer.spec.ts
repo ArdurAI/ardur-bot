@@ -9,6 +9,7 @@ import {
   rpc,
   signup,
 } from "./helpers";
+import { openWorkspaceView } from "./workspace-view";
 
 test("Team Computer gives bots a home folder plus shared space while Private stays isolated", async ({
   page,
@@ -93,7 +94,7 @@ test("user control leaves another Team bot's screen available", async ({ page },
 
   await openBot(page, "Chief");
   await page.getByTitle("Agent computer").click();
-  await page.getByTestId("side-panel").getByRole("tab", { name: "Screen", exact: true }).click();
+  await openWorkspaceView(page, "Screen");
   await page.getByTestId("computer-preview").hover();
   await page.getByTestId("computer-preview-open").click();
   await expect(page.getByRole("button", { name: "Close computer" })).toBeVisible();
@@ -139,7 +140,7 @@ test("a failed control release keeps the computer open for retry", async ({ page
   await signup(page, `team-release-${Date.now()}@example.test`, "password12", "Team Release");
   await completeOnboarding(page);
   await page.getByTitle("Agent computer").click();
-  await page.getByTestId("side-panel").getByRole("tab", { name: "Screen", exact: true }).click();
+  await openWorkspaceView(page, "Screen");
   await page.getByTestId("computer-preview").hover();
   await page.getByTestId("computer-preview-open").click();
   const chrome = page.getByTestId("computer-chrome");
@@ -200,7 +201,7 @@ test("an active Team bot must be stopped before user takeover", async ({ page },
 
   await page.getByTitle("Agent computer").click();
   const sidePanel = page.getByTestId("side-panel");
-  await sidePanel.getByRole("tab", { name: "Screen", exact: true }).click();
+  await openWorkspaceView(page, "Screen");
   await expect(sidePanel.getByRole("button", { name: /Take control/i })).toHaveCount(0);
   await page.getByTestId("computer-preview").hover();
   const openBusy = sidePanel.getByTestId("computer-preview-open");
@@ -286,7 +287,7 @@ async function openBot(page: Page, name: string) {
 
 async function openComputerPanel(page: Page) {
   await page.getByTitle("Agent computer").click();
-  await page.getByTestId("side-panel").getByRole("tab", { name: "Screen", exact: true }).click();
+  await openWorkspaceView(page, "Screen");
   await expect(page.getByTestId("computer-preview")).toBeVisible();
   await expect(page.getByTestId("computer-preview-open")).toHaveCount(1);
 }

@@ -28,7 +28,15 @@ function exactNotice(role: "alert" | "status", className: string, text: string) 
   return createElement("p", { role, className }, text);
 }
 
-export function WorkspaceFiles({ bot, context }: { bot: Bot; context: WorkspaceContext }) {
+export function WorkspaceFiles({
+  bot,
+  context,
+  compact = false,
+}: {
+  bot: Bot;
+  context: WorkspaceContext;
+  compact?: boolean;
+}) {
   const { t } = useLingui();
   const computerId = context.computerId;
   const generation = context.generation;
@@ -61,6 +69,7 @@ export function WorkspaceFiles({ bot, context }: { bot: Bot; context: WorkspaceC
     sessionId ? readWorkspaceFileSession(sessionId) : emptySession,
   );
   const [quick, setQuick] = useState(false);
+  const [treeExpanded, setTreeExpanded] = useState(false);
   const [ask, setAsk] = useState<{ selection: EditorSelection; path: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -299,7 +308,18 @@ export function WorkspaceFiles({ bot, context }: { bot: Bot; context: WorkspaceC
           ? exactNotice("status", "px-2 py-1 text-xs text-muted-foreground", status)
           : null}
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="h-40 shrink-0 overflow-auto border-b border-border">
+        {compact && current ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-expanded={treeExpanded}
+            onClick={() => setTreeExpanded((value) => !value)}
+          >{t`Files`}</Button>
+        ) : null}
+        <div
+          hidden={compact && !!current && !treeExpanded}
+          className="h-40 shrink-0 overflow-auto border-b border-border"
+        >
           <FileTree
             key={`${computerId}:${revision}`}
             label={t`Files`}

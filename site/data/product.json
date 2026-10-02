@@ -16,7 +16,7 @@
       "id": "team",
       "eyebrow": "TEAM",
       "title": "Named bots, together",
-      "body": "Give each bot its own conversation and history, bring bots together in group chats whose members answer at the same time — the owner sets how many bots answer at once (1-8) in group settings — and see current tasks and availability in Team. On web and desktop, inspect tasks and edit the selected computer's workspace files beside a conversation; container bots cannot reference host folders or use host-only Board and CLI integrations. An opened workspace terminal keeps its shell and scrollback when switching views; control stays visible until released. Closing the pane or leaving the bot asks before ending the terminal. Mobile reads workspace files in its own screens; the native app has no interactive terminal.",
+      "body": "Give each bot its own conversation and history, bring bots together in group chats whose members answer at the same time — the owner sets how many bots answer at once (1-8) in group settings — and see current tasks and availability in Team. On web and desktop, open and close workspace views beside a conversation, with a layout remembered locally for each bot. Inspect tasks and edit the selected computer's workspace files; container bots cannot reference host folders or use host-only Board and CLI integrations. Tasks and Routines are initially open, and bot settings remain reachable from the workspace header. Position the split left, right or below chat, or expand a view; narrow windows offer a return to chat. An opened workspace terminal keeps its shell and scrollback while switching or hiding views; control stays visible until released. Closing the terminal or leaving the bot asks before ending it. Restored views never start a terminal automatically. Mobile reads workspace files in its own screens; the native app has no interactive terminal.",
       "source": "README.md#What you get today"
     },
     {
@@ -919,7 +919,7 @@
     {
       "id": "routines",
       "file": "screenshots/routines.png",
-      "alt": "Chief of Staff bot conversation beside the workspace Routines tab with Morning brief, Inbox triage, and Evening wrap-up.",
+      "alt": "Chief of Staff bot conversation beside a closeable workspace Routines view with Morning brief, Inbox triage, and Evening wrap-up.",
       "width": 2880,
       "height": 1800,
       "theme": "light"
