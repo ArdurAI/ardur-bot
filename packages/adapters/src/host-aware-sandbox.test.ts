@@ -7,6 +7,7 @@ import type { PrismaClient } from "@ardurbot/db";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { ComputerBrowserProvider } from "./computer-browser.js";
 import { MissingComputerProviderError } from "./computer-connections.js";
+import { toComputerRef } from "./computer-support.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import { DockerSandboxProvider } from "./docker-sandbox.js";
 import { FakeSandboxProvider } from "./fake-sandbox.js";
@@ -27,6 +28,44 @@ const ctx = {
 };
 
 describe("host-aware sandbox", () => {
+  it.each([
+    ["desktop", null, "host"],
+    ["desktop", "docker", "isolated"],
+    ["desktop", "podman", "isolated"],
+    ["desktop", "kubernetes", "isolated"],
+    ["desktop", "ssh", "isolated"],
+    ["desktop", "missing", "isolated"],
+    ["desktop", "", "isolated"],
+    ["remote-docker", "docker", "isolated"],
+    ["docker", null, "isolated"],
+  ] as const)("routes persisted %s with connection %s to %s", async (kind, connectionId, owner) => {
+    const providers = { isolated: new FakeSandboxProvider(), host: new FakeSandboxProvider() };
+    const sandbox = new HostAwareSandbox(providers.isolated, providers.host, async () => true);
+    const ref = toComputerRef({ homeKey: "home", providerRef: "ref", kind, connectionId });
+    expect(ref.connectionId).toBe(connectionId);
+    expect(await owningSandbox(sandbox, ref, ctx)).toBe(providers[owner]);
+  });
+
+  it.each([null, "docker", "podman", "missing", ""])(
+    "routes desktop with connection %s without host fallback",
+    async (connectionId) => {
+      const isolated = new FakeSandboxProvider();
+      const host = new FakeSandboxProvider();
+      const isolatedCwd = vi.spyOn(isolated, "resolveCommandCwd");
+      const hostCwd = vi.spyOn(host, "resolveCommandCwd");
+      const sandbox = new HostAwareSandbox(isolated, host, async () => true);
+      const computer: ComputerRef = {
+        id: "computer",
+        providerRef: "ref",
+        botId: "bot",
+        kind: "desktop",
+        connectionId,
+      };
+      await sandbox.resolveCommandCwd(computer, undefined, ctx);
+      expect(hostCwd).toHaveBeenCalledTimes(connectionId === null ? 1 : 0);
+      expect(isolatedCwd).toHaveBeenCalledTimes(connectionId === null ? 0 : 1);
+    },
+  );
   const hostRoot = mkdtempSync(path.join(tmpdir(), "ardurbot-host-root-"));
 
   afterAll(() => {

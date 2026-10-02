@@ -114,6 +114,6 @@ export function composerCommands(input: {
   );
 }
 
-export function canAddComposerFolder(desktop: boolean, computerProvider?: string): boolean {
-  return desktop && computerProvider === "desktop";
+export function canAddComposerFolder(desktop: boolean, runsOnHost = false): boolean {
+  return desktop && runsOnHost;
 }

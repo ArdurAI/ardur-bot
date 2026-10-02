@@ -54,6 +54,45 @@ function fixture() {
     bridge: new HostBridge(prisma as unknown as PrismaClient, "fixture-encryption-material"),
   };
 }
+describe.each([
+  { name: "host", kind: "desktop", connectionId: null, host: true },
+  { name: "legacy Docker", kind: "desktop", connectionId: "docker", host: false },
+  { name: "legacy Podman", kind: "desktop", connectionId: "podman", host: false },
+  { name: "remote Docker", kind: "remote-docker", connectionId: "docker", host: false },
+  { name: "missing", kind: "desktop", connectionId: "missing", host: false },
+  { name: "empty", kind: "desktop", connectionId: "", host: false },
+])("$name bridge host authority", (row) => {
+  it.each(["board", "files"])("gates %s forwarding", async (gate) => {
+    const { bridge, prisma } = fixture();
+    await bridge.pair("owner");
+    const registration = (await prisma.hostRegistration.findUnique())!;
+    prisma.run.findFirst.mockResolvedValue({
+      id: "run",
+      bot: { name: "Builder", spaceId: "space", computer: { ...row, homeKey: "computer" } },
+    } as never);
+    const host = { send: vi.fn(async (_frame: HostFrame) => {}), close: vi.fn() };
+    const worker = { send: vi.fn(async (_frame: HostFrame) => {}), close: vi.fn() };
+    const request: HostRequest = {
+      v: 1,
+      type: "request",
+      id: "gate",
+      scope: { userId: "owner", spaceId: "space", botId: "bot", runId: "run" },
+      operation:
+        gate === "board"
+          ? { op: "board.run", request: { action: "discover", actor: "bot:Builder", argv: [] } }
+          : { op: "computer.files.read", homeKey: "computer", path: "/workspace/test.txt" },
+    };
+    bridge.hub.attach(host, "owner", registration.generation);
+    try {
+      await bridge.hub.request(request, worker);
+      expect(host.send).toHaveBeenCalledTimes(row.host ? 1 : 0);
+      if (row.host) await bridge.hub.fromHost(host, { v: 1, type: "end", id: request.id });
+    } finally {
+      bridge.hub.detach();
+    }
+  });
+});
+
 describe("host pairing and grants", () => {
   it("allows owner import jobs without a bot run and rejects members, run scopes and revoked hosts", async () => {
     const { bridge, prisma } = fixture();

@@ -13,9 +13,10 @@ const actor = { spaceId: "space", userId: "owner" } as Actor;
 function fixture(role = "owner") {
   const computer = {
     id: "computer",
+    spaceId: "space",
     homeKey: "home",
     kind: "docker",
-    connectionId: "engine",
+    connectionId: null as string | null,
     providerRef: "container",
     networkEgress: true,
     maintenanceId: null,
@@ -27,6 +28,7 @@ function fixture(role = "owner") {
     inlineVisualizations: true,
   };
   const prisma = {
+    connection: { findFirst: vi.fn(async () => ({ metadata: { engine: "docker" } })) },
     spaceMember: { findUnique: vi.fn(async () => ({ role })) },
     space: {
       findUniqueOrThrow: vi.fn(async () => space),
@@ -39,6 +41,23 @@ function fixture(role = "owner") {
   return { service, prisma, computer };
 }
 describe("space capability authority", () => {
+  it.each(["docker", "podman"])(
+    "uses the saved %s execution kind on legacy desktop rows",
+    async (engine) => {
+      const f = fixture();
+      f.computer.kind = "desktop";
+      f.computer.connectionId = "engine";
+      f.prisma.connection.findFirst.mockResolvedValue({ metadata: { engine } } as never);
+      expect((await f.service.settings(actor)).computers[0]?.supported).toBe(true);
+      expect(f.prisma.connection.findFirst).toHaveBeenCalledWith({
+        where: { id: "engine", spaceId: "space", connectorId: "computer" },
+      });
+      f.prisma.connection.findFirst.mockResolvedValue(null as never);
+      expect((await f.service.settings(actor)).computers[0]?.supported).toBe(false);
+      f.computer.connectionId = null;
+      expect((await f.service.settings(actor)).computers[0]?.supported).toBe(false);
+    },
+  );
   it("defaults connector search off and persists an owner's choice", async () => {
     const f = fixture();
     expect((await f.service.settings(actor)).settings.connectorSearch).toBe(false);

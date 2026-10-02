@@ -354,7 +354,7 @@ export function ComputerProfile({
           </NativeSelect>
         </label>
       )}
-      {unavailableLocations ? (
+      {unavailableLocations && !hostComputer ? (
         <p className="text-sm text-muted-foreground">{t`Other locations are unavailable for ${runtime}. Choose This computer.`}</p>
       ) : null}
       {unavailableLocations && !hostComputer && !hostConnected ? (

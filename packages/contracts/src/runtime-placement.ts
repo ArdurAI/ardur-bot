@@ -72,6 +72,13 @@ export function computerExecutionKind(location: RuntimeComputerLocation): Sandbo
   return kind && Object.hasOwn(COMPUTER_KINDS, kind) ? (kind as SandboxKind) : null;
 }
 
+/** Host authority requires a connectionless row; unresolved connections never grant it. */
+export function computerRunsOnHost(location: RuntimeComputerLocation | null | undefined): boolean {
+  return (
+    !!location && location.connectionId == null && computerExecutionKind(location) === "desktop"
+  );
+}
+
 export function computerConnectionKind(
   settings: Pick<ComputerConnectionSettings, "engine">,
 ): SandboxKind {

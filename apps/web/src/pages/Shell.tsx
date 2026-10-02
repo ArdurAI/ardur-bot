@@ -25,6 +25,7 @@ import type {
   ThreadMessage,
   ThreadSnapshot,
   VoiceStatus,
+  WorkspaceContext,
 } from "@ardurbot/contracts";
 import {
   ATTACHMENT_ALLOWED_MIME_TYPES,
@@ -909,6 +910,38 @@ export function ShellPage({
       : (bots.find((b) => b.id === botId) ?? bots[0]);
   const computerBot =
     (computerBotId ? bots.find((bot) => bot.id === computerBotId) : undefined) ?? active;
+  const workspaceBotId = inGroup ? undefined : active?.id;
+  const workspaceLocationKey = JSON.stringify([
+    workspaceBotId,
+    computer?.computerId,
+    computer?.connectionId,
+    computer?.kind,
+    computer?.state,
+    computer?.homeRevision,
+  ]);
+  const [workspaceState, setWorkspaceState] = useState<{
+    key: string;
+    context: WorkspaceContext;
+  } | null>(null);
+  useEffect(() => {
+    if (!workspaceBotId) return;
+    const abort = new AbortController();
+    void rpc.workspace
+      .describe({ botId: workspaceBotId }, { signal: abort.signal })
+      .then((context) => {
+        if (!abort.signal.aborted) setWorkspaceState({ key: workspaceLocationKey, context });
+      })
+      .catch(() => {
+        if (!abort.signal.aborted) setWorkspaceState(null);
+      });
+    return () => abort.abort();
+  }, [workspaceBotId, workspaceLocationKey]);
+  const workspaceContext =
+    workspaceState?.key === workspaceLocationKey &&
+    workspaceState.context.botId === workspaceBotId &&
+    workspaceState.context.computerId === (computer?.computerId ?? null)
+      ? workspaceState.context
+      : null;
   const effectiveWorkspaceTab = getEffectiveWorkspaceTab(
     workspaceTab,
     computer?.capabilities?.graphical,
@@ -3886,7 +3919,7 @@ export function ShellPage({
             mentionTargets={composerMentionTargets}
             skills={composerSkills(agentSkills, activeTaughtSkills, active?.id)}
             routines={activeRoutines}
-            computerKind={!inGroup ? computer?.kind : undefined}
+            runsOnHost={workspaceContext?.runsOnHost === true}
             botAvailable={!inGroup}
             onComposerError={setAttachmentNotice}
             onManage={(connectionId) => openSettings("integrations", undefined, connectionId)}
@@ -3997,6 +4030,7 @@ export function ShellPage({
                 <WorkspacePane
                   bot={active}
                   computer={computer}
+                  context={workspaceContext}
                   tab={workspaceTab}
                   onTabChange={setWorkspaceTab}
                   terminal={
@@ -4696,11 +4730,7 @@ export function ShellPage({
                 active
                   ? [
                       { id: "tasks", label: t`Tasks` },
-                      ...(computer?.computerId &&
-                      computer.kind !== "fake" &&
-                      computer.kind !== "desktop" &&
-                      (computer.state === "running" ||
-                        (computer.homeRevision && computer.homeRevision !== "empty"))
+                      ...(workspaceContext?.computerId && workspaceContext.files !== "unavailable"
                         ? [{ id: "files", label: t`Files` }]
                         : []),
                       ...(terminalSupported(computer)
@@ -5044,7 +5074,7 @@ export function ShellPage({
               {terminalSurface.content ??
                 (computer?.capabilities?.graphical === false ? (
                   <p className="p-4 text-muted-foreground">{t`Not available on this computer`}</p>
-                ) : computer?.kind === "desktop" ? (
+                ) : computer?.runsOnHost === true ? (
                   <DesktopKindEmptyState className="grid h-full place-items-center px-8 text-center text-sm text-muted-foreground/80" />
                 ) : computer?.state === "running" && embeddedScreenUrl ? (
                   <>
@@ -5656,7 +5686,7 @@ export const Composer = memo(function Composer({
   mentionTargets,
   skills = [],
   routines = [],
-  computerKind,
+  runsOnHost = false,
   onComposerError,
   onManage,
   onRoutine,
@@ -5700,7 +5730,7 @@ export const Composer = memo(function Composer({
   mentionTargets?: ComposerMention[];
   skills?: ComposerSkill[];
   routines?: Routine[];
-  computerKind?: string;
+  runsOnHost?: boolean;
   onComposerError: (message: string) => void;
   onManage: (connectionId?: string) => void;
   onRoutine: (id: string) => void | Promise<void> | Promise<boolean>;
@@ -5835,10 +5865,10 @@ export const Composer = memo(function Composer({
     focus: focusComposer,
   });
   const desktop = desktopBridge();
-  const folderAvailable = canAddComposerFolder(Boolean(desktop?.host), computerKind);
+  const folderAvailable = canAddComposerFolder(Boolean(desktop?.host), runsOnHost);
   async function addFolder(dropped?: File) {
     try {
-      if (computerKind !== "desktop") throw new Error("Folders require this computer.");
+      if (!runsOnHost) throw new Error("Folders require this computer.");
       const folder = await pickComposerFolder(desktop?.host, dropped);
       if (folder) insertMention(folder);
     } catch (error) {

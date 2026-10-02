@@ -7,8 +7,8 @@ import type {
   JobPublisher,
   SandboxProvider,
 } from "@ardurbot/adapter-kit";
-import type { ComputerUpdate } from "@ardurbot/contracts";
-import { HostMoveUnavailableError } from "@ardurbot/contracts";
+import type { ComputerUpdate, RuntimeComputerLocation } from "@ardurbot/contracts";
+import { computerRunsOnHost, HostMoveUnavailableError } from "@ardurbot/contracts";
 import {
   ACTIVE_RUN_STATUSES,
   parseScreenLeaseId,
@@ -812,8 +812,10 @@ async function noteRestoredWorkspace(
   await deps.events.notify(thread.id, event.seq);
 }
 
-export function computerSupportsUpdate(kind: string): boolean {
-  return kind !== "desktop";
+export function computerSupportsUpdate(
+  computer: RuntimeComputerLocation | null | undefined,
+): boolean {
+  return !computerRunsOnHost(computer);
 }
 
 export async function replaceComputer(

@@ -75,12 +75,11 @@ describe("composer commands", () => {
     ]);
   });
   it.each([
-    [false, "desktop", false],
-    [true, "docker", false],
-    [true, "e2b", false],
+    [false, true, false],
+    [true, false, false],
     [true, undefined, false],
-    [true, "desktop", true],
-  ] as const)("folder availability (%s, %s)", (desktop, provider, expected) => {
-    expect(canAddComposerFolder(desktop, provider)).toBe(expected);
+    [true, true, true],
+  ] as const)("folder availability (%s, %s)", (desktop, runsOnHost, expected) => {
+    expect(canAddComposerFolder(desktop, runsOnHost)).toBe(expected);
   });
 });

@@ -12,6 +12,7 @@ import type {
   ScreenRequest,
 } from "@ardurbot/adapter-kit";
 import type { HostLabel } from "@ardurbot/contracts";
+import { computerRunsOnHost } from "@ardurbot/contracts";
 import { hostLabel, unknownCapacity } from "@ardurbot/contracts/fleet";
 import { sandboxKindForBot } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
@@ -145,9 +146,9 @@ export class HostAwareSandbox implements SandboxProvider {
    * own provider. Pass the This Mac setting only while choosing where a new computer starts.
    */
   private async route(subject: ComputerIdentity, hostSelected?: boolean) {
-    if (subject.connectionId) return this.isolated;
+    if (subject.connectionId != null) return this.isolated;
     if (hostSelected !== undefined) return hostSelected ? this.host : this.isolated;
-    if (subject.kind !== "desktop") return this.isolated;
+    if (!computerRunsOnHost(subject)) return this.isolated;
     if (await this.hostAvailable()) return this.host;
     throw new MissingComputerProviderError("desktop", { hostLabel: await this.hostName() });
   }

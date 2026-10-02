@@ -1,10 +1,11 @@
 import type { JobPublisher, SandboxProvider } from "@ardurbot/adapter-kit";
-import { queueComputerUpdate } from "@ardurbot/adapters";
+import { queueComputerUpdate, runtimeComputerLocation } from "@ardurbot/adapters";
 import type { Actor, CapabilityPreferences } from "@ardurbot/contracts";
 import {
   CapabilityPreferencesPatchSchema,
   CapabilityPreferencesSchema,
   ComputerNetworkInputSchema,
+  computerExecutionKind,
 } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { ORPCError } from "@orpc/server";
@@ -24,6 +25,7 @@ export function createCapabilitySettings(deps: Dependencies) {
   async function supported(
     computer: {
       id: string;
+      spaceId: string;
       homeKey: string;
       kind: string;
       providerRef: string | null;
@@ -32,8 +34,9 @@ export function createCapabilitySettings(deps: Dependencies) {
     actor: Actor,
     botId: string,
   ) {
-    if (computer.kind === "docker" || computer.kind === "remote-docker") return true;
-    if (computer.kind !== "kubernetes" || !deps.sandbox.supportsNetworkEgress) return false;
+    const kind = computerExecutionKind(await runtimeComputerLocation(deps.prisma, computer));
+    if (kind === "docker" || kind === "remote-docker") return true;
+    if (kind !== "kubernetes" || !deps.sandbox.supportsNetworkEgress) return false;
     return deps.sandbox
       .supportsNetworkEgress(
         {

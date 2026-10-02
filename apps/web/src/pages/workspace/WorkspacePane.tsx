@@ -21,6 +21,7 @@ const WorkspaceTerminal = lazy(() =>
 export function WorkspacePane({
   bot,
   computer,
+  context: suppliedContext,
   routines,
   screen,
   terminal,
@@ -30,6 +31,7 @@ export function WorkspacePane({
 }: {
   bot: Bot;
   computer: ComputerStatus | null;
+  context?: WorkspaceContext | null;
   routines: ReactNode;
   screen: {
     computer: ComputerStatus | null;
@@ -55,6 +57,7 @@ export function WorkspacePane({
   const [context, setContext] = useState<WorkspaceContext | null>(null);
   const [controlsHost, setControlsHost] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
+    if (suppliedContext !== undefined) return;
     const abort = new AbortController();
     setContext(null);
     void rpc.workspace
@@ -66,10 +69,20 @@ export function WorkspacePane({
         if (!abort.signal.aborted) setContext(null);
       });
     return () => abort.abort();
-  }, [bot.id, computer?.computerId, computer?.state, computer?.homeRevision]);
+  }, [
+    bot.id,
+    computer?.computerId,
+    computer?.connectionId,
+    computer?.kind,
+    computer?.state,
+    computer?.homeRevision,
+    suppliedContext,
+  ]);
+  const describedContext = suppliedContext === undefined ? context : suppliedContext;
   const currentContext =
-    context?.botId === bot.id && context.computerId === (computer?.computerId ?? null)
-      ? context
+    describedContext?.botId === bot.id &&
+    describedContext.computerId === (computer?.computerId ?? null)
+      ? describedContext
       : null;
   const filesAvailable = currentContext?.files !== "unavailable" && currentContext?.computerId;
   const terminalAvailable = terminal !== null && terminalSupported(computer);

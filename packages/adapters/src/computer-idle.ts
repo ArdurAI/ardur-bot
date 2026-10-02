@@ -11,6 +11,7 @@ import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { expireComputerControl, hasActiveComputerControl } from "./computer-control.js";
 import { toComputerRef } from "./computer-lifecycle.js";
 import { checkpointComputerWorkspace } from "./computer-workspace.js";
+import { owningSandbox } from "./host-aware-sandbox.js";
 
 export const DEFAULT_SANDBOX_IDLE_MS = 10 * 60 * 1000;
 const BACKGROUND_WORK_IDLE_SENTINEL = "ardurbot-background-idle";
@@ -210,10 +211,29 @@ export function scheduleComputerSleep(jobs: JobPublisher, computerId: string): v
 
 export async function touchRunningComputer(
   deps: { sandbox: SandboxProvider; jobs: JobPublisher },
-  computer: { id: string; homeKey: string; providerRef: string; kind: string },
+  computer: Parameters<typeof toComputerRef>[0] & {
+    id: string;
+    spaceId: string;
+    userId: string;
+    connectionId: string | null;
+  },
 ): Promise<void> {
   scheduleComputerSleep(deps.jobs, computer.id);
-  await deps.sandbox.keepAlive?.(toComputerRef(computer));
+  await keepComputerAlive(deps.sandbox, toComputerRef(computer), {
+    operationId: "computer.heartbeat",
+    traceId: "computer.heartbeat",
+    spaceId: computer.spaceId,
+    userId: computer.userId,
+    signal: new AbortController().signal,
+  });
+}
+
+async function keepComputerAlive(
+  sandbox: SandboxProvider,
+  computer: ComputerRef,
+  context: AdapterContext,
+) {
+  await (await owningSandbox(sandbox, computer, context)).keepAlive?.(computer);
 }
 
 export async function sleepComputerIfIdle(
@@ -254,7 +274,7 @@ export async function sleepComputerIfIdle(
   };
   if (await hasActiveBackgroundWork(deps.sandbox, ref, ctx, computerId)) {
     scheduleComputerSleep(deps.jobs, computerId);
-    await deps.sandbox.keepAlive?.(ref);
+    await keepComputerAlive(deps.sandbox, ref, ctx);
     return;
   }
 
@@ -325,7 +345,7 @@ export async function sleepComputerIfIdle(
       data: { state: "running" },
     });
     scheduleComputerSleep(deps.jobs, computerId);
-    if (backgroundAfterCheckpoint) await deps.sandbox.keepAlive?.(ref);
+    if (backgroundAfterCheckpoint) await keepComputerAlive(deps.sandbox, ref, ctx);
     return;
   }
   if (
@@ -385,6 +405,9 @@ function loadComputer(prisma: PrismaClient, computerId: string) {
       homeKey: true,
       providerRef: true,
       kind: true,
+      connectionId: true,
+      imageProfile: true,
+      networkEgress: true,
       state: true,
       spaceId: true,
       userId: true,

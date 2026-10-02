@@ -12,6 +12,7 @@ function computerFor(botId: string) {
     computerId: "fixture-computer",
     mode: "team",
     kind: "kubernetes",
+    runsOnHost: false,
     state: "running",
     capabilities: { graphical: false, interactiveTerminal: false },
     controlHolder: "none",
@@ -38,16 +39,31 @@ function fileBody(context: { files: string }, content: string) {
   };
 }
 
-async function installWorkspace(page: Page, files: "live" | "saved", saveReason?: string) {
+async function installWorkspace(
+  page: Page,
+  files: "live" | "saved",
+  saveReason?: string,
+  legacyContainer = false,
+) {
   const botId = bots[0]!.id;
   const context = {
     botId,
     computerId: "fixture-computer",
     generation: 1,
     files,
+    runsOnHost: false,
     observedAt: "2026-09-28T00:00:00.000Z",
   };
-  await installPerformanceFixture(page, false, false, {}, computerFor(botId));
+  await installPerformanceFixture(
+    page,
+    false,
+    false,
+    {},
+    {
+      ...computerFor(botId),
+      ...(legacyContainer ? { kind: "desktop", connectionId: "container-connection" } : {}),
+    },
+  );
   const run = {
     runId: "fixture-run",
     botId,
@@ -147,6 +163,15 @@ test("workspace pane opens Tasks and bot files without starting the computer", a
   expect(unexpected).toEqual([]);
   await page.keyboard.press("ControlOrMeta+Shift+E");
   await expect(pane).toHaveAttribute("aria-hidden", "true");
+});
+
+test("legacy desktop container opens its workspace files", async ({ page }, testInfo) => {
+  const { botId, unexpected } = await installWorkspace(page, "live", undefined, true);
+  await page.goto(`/app/${botId}`);
+  await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
+  await openFiles(page);
+  await captureScreenshot(page, testInfo, "workspace-files-legacy-container");
+  expect(unexpected).toEqual([]);
 });
 
 test("workspace pane shows saved files that can be edited", async ({ page }, testInfo) => {

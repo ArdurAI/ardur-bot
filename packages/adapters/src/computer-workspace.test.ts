@@ -25,6 +25,23 @@ afterEach(async () => {
 });
 
 describe("provider-neutral computer workspace", () => {
+  it.each([null, "docker", "podman", "missing", ""])(
+    "preserves host absolute paths only without connection %s",
+    (connectionId) => {
+      expect(
+        isRemoteHostAbsolutePath(
+          {
+            id: "computer",
+            botId: "bot",
+            kind: "desktop",
+            connectionId,
+            providerRef: "host:computer",
+          },
+          "/fixture/project",
+        ),
+      ).toBe(connectionId === null);
+    },
+  );
   it("preserves registered host paths through Team Computer path mapping on every platform", () => {
     const computer = {
       id: "host:computer",

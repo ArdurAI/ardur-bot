@@ -774,7 +774,7 @@ export async function sendThreadMessage(
             tx,
             actor,
             contextReferences,
-            target.kind === "bot" ? target.bot.computer?.kind : undefined,
+            target.kind === "bot" ? target.bot.computer : undefined,
           )
         : { note: "", blocks: [] };
       const promptText = [input.text, composerContext.note].filter(Boolean).join("\n\n");
@@ -1540,6 +1540,9 @@ export async function stopThreadRuns(
               homeKey: true,
               kind: true,
               providerRef: true,
+              connectionId: true,
+              imageProfile: true,
+              networkEgress: true,
               executionBotId: true,
               executionRunId: true,
             },

@@ -7,6 +7,7 @@ import type {
   RuntimeProblem,
 } from "@ardurbot/contracts";
 import {
+  computerRunsOnHost,
   failureCategoryMessage,
   nativeRuntimeHealthKeys,
   runtimeNames,
@@ -138,12 +139,12 @@ export type DetachedRuntime = {
  */
 export function detachedRuntimeRequest(
   pin: RuntimePin,
-  computer: { kind: string; providerRef: string | null } | null | undefined,
+  computer: (RuntimeComputerLocation & { providerRef: string | null }) | null | undefined,
 ): DetachedRuntime["request"] {
   if (pin.runtimeKind === "pi") return {};
   if (pin.runtimeKind === "antigravity")
     return {
-      nativeCwd: computer?.kind === "desktop" ? (computer.providerRef ?? undefined) : undefined,
+      nativeCwd: computerRunsOnHost(computer) ? (computer?.providerRef ?? undefined) : undefined,
     };
   return { controlledComparison: true };
 }

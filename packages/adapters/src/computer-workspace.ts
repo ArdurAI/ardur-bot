@@ -9,6 +9,7 @@ import type {
   SandboxProvider,
 } from "@ardurbot/adapter-kit";
 import type { ComputerMode } from "@ardurbot/contracts";
+import { computerRunsOnHost } from "@ardurbot/contracts";
 import { parseScreenLeaseId } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import { normalizeWorkspacePath, teamBotWorkspaceDirectory } from "./computer-support.js";
@@ -55,7 +56,7 @@ export async function restoreComputerWorkspace(
   context: AdapterContext,
   portableHost = false,
 ): Promise<void> {
-  if (!portableHost && computer.kind === "desktop" && computer.providerRef.startsWith("host:"))
+  if (!portableHost && computerRunsOnHost(computer) && computer.providerRef.startsWith("host:"))
     return;
   if (computer.kind === "docker" && home instanceof LocalAgentHomeStore) return;
   await sandbox.importWorkspace(computer, home.exportHome(homeKey, context), context);
@@ -64,7 +65,7 @@ export async function restoreComputerWorkspace(
 /** Preserve OS paths until the host process checks its registered roots. */
 export function isRemoteHostAbsolutePath(computer: ComputerRef, value: string) {
   return (
-    computer.kind === "desktop" &&
+    computerRunsOnHost(computer) &&
     computer.providerRef.startsWith("host:") &&
     (path.posix.isAbsolute(value) || path.win32.isAbsolute(value))
   );
@@ -78,7 +79,7 @@ export async function ensureComputerWorkspaceLayout(
   context: AdapterContext,
 ): Promise<void> {
   if (scope !== "team" || !botId) return;
-  if (computer.kind === "desktop" && computer.providerRef.startsWith("host:") && !context.runId)
+  if (computerRunsOnHost(computer) && computer.providerRef.startsWith("host:") && !context.runId)
     return;
   let exitCode: number | undefined;
   let stderr = "";
@@ -106,7 +107,7 @@ export async function checkpointComputerWorkspace(
   if (
     !portableHost &&
     (computer.kind === "docker" ||
-      (computer.kind === "desktop" && computer.providerRef.startsWith("host:"))) &&
+      (computerRunsOnHost(computer) && computer.providerRef.startsWith("host:"))) &&
     home instanceof LocalAgentHomeStore
   ) {
     return home.revise(homeKey);

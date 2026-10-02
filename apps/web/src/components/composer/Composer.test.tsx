@@ -245,22 +245,24 @@ describe("composer controls", () => {
     await click(button("Remove photo-0.png"));
     expect(document.querySelectorAll('button[aria-label^="Remove photo-"]')).toHaveLength(3);
   });
-  it.each(["desktop", "docker"])(
-    "only offers folders for host computers (%s)",
-    async (computerKind) => {
+  it.each([true, false, undefined])(
+    "only offers folders when API policy confirms host execution (%s)",
+    async (runsOnHost) => {
       const addRoot = vi.fn().mockResolvedValue("/fixture/reports");
       window.ardurbotDesktop = { platform: "darwin", host: { addRoot } } as unknown as NonNullable<
         Window["ardurbotDesktop"]
       >;
-      await mount({ computerKind });
+      await mount({ runsOnHost });
       await openMenu();
-      expect(document.body.textContent?.includes("Add folder")).toBe(computerKind === "desktop");
-      if (computerKind === "desktop") {
+      expect(document.body.textContent?.includes("Add folder")).toBe(runsOnHost === true);
+      if (runsOnHost) {
         await click(menuItem("Add folder"));
         expect(addRoot).toHaveBeenCalledOnce();
         expect(document.querySelector('[data-mention-kind="folder"]')?.textContent).toContain(
           "reports",
         );
+      } else {
+        expect(addRoot).not.toHaveBeenCalled();
       }
     },
   );

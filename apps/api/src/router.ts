@@ -123,6 +123,7 @@ import {
   ComputerImageDownloadError,
   computerExecutionKind,
   computerKindFacts,
+  computerRunsOnHost,
   ENGINE_MISSING_CODE,
   HOST_MOVE_UNAVAILABLE_CODE,
   HostMoveUnavailableError,
@@ -2409,11 +2410,12 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           if (!bot.computer || seen.has(bot.computer.id)) return [];
           seen.add(bot.computer.id);
           const status = toComputerStatus(bot.id, bot.computer, null, hostLabel);
+          const runtimeKind = RuntimeKindSchema.safeParse(bot.runtimeKind);
           return [
             {
               botId: bot.id,
               name: bot.name,
-              runtimeKind: RuntimeKindSchema.parse(bot.runtimeKind),
+              ...(runtimeKind.success ? { runtimeKind: runtimeKind.data } : {}),
               status,
             },
           ];
@@ -2608,7 +2610,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       update: authed.computer.update.handler(async ({ context, input }) => {
         const bot = await repos.getBot(context.actor, input.botId);
         if (!bot.computer) throw new IsolationError();
-        if (!computerSupportsUpdate(bot.computer.kind))
+        if (!computerSupportsUpdate(bot.computer))
           throw new ORPCError("BAD_REQUEST", {
             message: "Computer update is not available on this device",
           });
@@ -3070,12 +3072,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           });
           await touchRunningComputer(
             { sandbox: deps.sandbox, jobs: deps.jobs },
-            {
-              id: bot.computer.id,
-              homeKey: bot.computer.homeKey,
-              providerRef: bot.computer.providerRef,
-              kind: bot.computer.kind,
-            },
+            bot.computer,
           ).catch(() => undefined);
         }
         return { ok: true as const };
@@ -4051,7 +4048,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             userId: context.actor.userId,
             archivedAt: null,
           },
-          select: { id: true, computer: { select: { kind: true } } },
+          select: { id: true, computer: { select: { kind: true, connectionId: true } } },
         });
         if (!bot) throw new IsolationError();
         const servers = await deps.prisma.mcpServer.findMany({
@@ -4068,7 +4065,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         });
         return servers
           .filter((server) => {
-            if (server.transport === "host-cli" && bot.computer?.kind !== "desktop") return false;
+            if (server.transport === "host-cli" && !computerRunsOnHost(bot.computer)) return false;
             const row = server.assignments[0];
             const grant = row ?? {
               access: "inherit",
@@ -6638,7 +6635,7 @@ async function runComputerReplace(
   const repos = createRepos(deps.prisma, { sandboxProvider: deps.env.sandboxProvider });
   const bot = await repos.getBot(context.actor, botId);
   if (!bot.computer) throw new IsolationError();
-  if (mode === "update" && !computerSupportsUpdate(bot.computer.kind)) {
+  if (mode === "update" && !computerSupportsUpdate(bot.computer)) {
     throw new ORPCError("BAD_REQUEST", {
       message: "Computer update is not available on this device",
     });

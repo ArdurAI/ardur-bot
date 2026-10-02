@@ -26,7 +26,11 @@ const choice = {
   credentialId: "scripted",
 };
 
-function fixture(initialConfig: unknown = null, runtimeExperimental = false) {
+function fixture(
+  initialConfig: unknown = null,
+  runtimeExperimental = false,
+  computer = { kind: "desktop", connectionId: null as string | null },
+) {
   let runtimeConfig = initialConfig;
   let botRevision = 1;
   let revision = 0;
@@ -101,7 +105,7 @@ function fixture(initialConfig: unknown = null, runtimeExperimental = false) {
                   ? [
                       {
                         id: memberId,
-                        bot: { runtimeExperimental, computer: { kind: "desktop" } },
+                        bot: { runtimeExperimental, computer },
                       },
                     ]
                   : [],
@@ -151,6 +155,21 @@ function fixture(initialConfig: unknown = null, runtimeExperimental = false) {
 }
 
 describe("group model owner mutation", () => {
+  it.each([null, "docker", "podman", "missing", ""])(
+    "admits a host runtime only without connection %s",
+    async (connectionId) => {
+      const f = fixture(null, true, { kind: "desktop", connectionId });
+      const request = updateGroupMemberModelPin(f.deps, actor, target, {
+        ...choice,
+        runtimeKind: "hermes",
+      });
+      if (connectionId === null) await expect(request).resolves.toBeDefined();
+      else {
+        await expect(request).rejects.toMatchObject({ code: "BAD_REQUEST" });
+        expect(f.update).not.toHaveBeenCalled();
+      }
+    },
+  );
   it("snapshots bot-owned Hermes limits with the admitted group connection", async () => {
     const config = { version: 1, maxProviderRequests: 4, timeoutMs: 90_000 };
     const f = fixture(config, true);

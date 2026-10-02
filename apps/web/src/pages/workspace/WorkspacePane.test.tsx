@@ -127,6 +127,41 @@ afterEach(async () => {
 });
 
 describe("WorkspacePane tab selection and content rendering", () => {
+  it.each([
+    { connectionId: "saved-docker", files: "live" as const, selected: "Files" },
+    { connectionId: "saved-podman", files: "saved" as const, selected: "Files" },
+    { connectionId: null, files: "unavailable" as const, selected: "Tasks" },
+  ])(
+    "uses supplied API file policy for a desktop row on $connectionId",
+    async ({ connectionId, files, selected }) => {
+      const computer: ComputerStatus = { ...graphicalComputer, kind: "desktop", connectionId };
+      await act(async () =>
+        root.render(
+          <WorkspacePane
+            bot={bot}
+            computer={computer}
+            context={{
+              botId: bot.id,
+              computerId: "computer-1",
+              generation: 1,
+              files,
+              runsOnHost: connectionId === null,
+              observedAt: "2026-09-28T00:00:00.000Z",
+            }}
+            tab="files"
+            terminal={null}
+            onTabChange={vi.fn()}
+            onOpenRun={vi.fn()}
+            routines={<div>Routines content</div>}
+            screen={{ computer, open: false, url: null, error: null, onOpen: vi.fn() }}
+          />,
+        ),
+      );
+      expect(container.querySelector('[role="tab"][data-active]')?.textContent).toBe(selected);
+      expect(describeCall).not.toHaveBeenCalled();
+    },
+  );
+
   it("defaults to Tasks tab on graphical computers when tab is empty", async () => {
     await act(async () =>
       root.render(

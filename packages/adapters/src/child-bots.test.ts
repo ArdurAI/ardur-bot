@@ -325,7 +325,12 @@ describe("destroyBot", () => {
         taskId: "group-task",
         botId: "bot-2",
         bot: {
-          computer: { homeKey: "team-home", kind: "fake", providerRef: "screen-1" },
+          computer: {
+            homeKey: "team-home",
+            kind: "desktop",
+            providerRef: "screen-1",
+            connectionId: "saved-container",
+          },
         },
       },
     ]);
@@ -423,6 +428,11 @@ describe("destroyBot", () => {
         where: expect.objectContaining({
           threadId: { in: ["thread-1", "thread-3"] },
         }),
+        select: expect.objectContaining({
+          bot: {
+            select: { computer: { select: expect.objectContaining({ connectionId: true }) } },
+          },
+        }),
       }),
     );
     expect(cancelRuns).toHaveBeenCalledWith({
@@ -460,7 +470,8 @@ describe("destroyBot", () => {
       expect.objectContaining({
         id: "screen-1",
         botId: "team-home",
-        kind: "fake",
+        kind: "desktop",
+        connectionId: "saved-container",
         providerRef: "screen-1",
       }),
       expect.objectContaining({

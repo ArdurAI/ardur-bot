@@ -68,7 +68,7 @@ export function IntegrationManage({
       setCredentialServer(servers.find((server) => server.id === connection.id) ?? null);
       const localBots = new Set(
         computers
-          .filter((computer) => computer.status.kind === "desktop")
+          .filter((computer) => computer.status.runsOnHost === true)
           .map((computer) => computer.botId),
       );
       const editableBots = bots.filter(
