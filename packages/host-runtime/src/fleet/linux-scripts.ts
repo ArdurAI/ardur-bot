@@ -161,11 +161,21 @@ for pid in os.listdir(state):
 os.close(state)
 `;
 
+/**
+ * Archives the workspace to stdout. With a second argument (the number of files already
+ * exported) it writes one batch: files are walked in a fixed order, the first N are skipped,
+ * and the batch stops before it would pass 48 MiB or 9,000 files, so a workspace larger than
+ * one archive is exported in several calls. An empty archive means there is nothing left.
+ */
 export const LINUX_ARCHIVE_SCRIPT = `${LINUX_ROOT}
 import tarfile
+start=int(sys.argv[2]) if len(sys.argv)>2 else -1
+seen=0; count=0; total=0; full=False
 with tarfile.open(fileobj=sys.stdout.buffer,mode='w|',format=tarfile.USTAR_FORMAT) as archive:
  def walk(parent,prefix):
+  global seen,count,total,full
   for name in sorted(os.listdir(parent)):
+   if full: return
    if name=='.ardurbot-runtime': continue
    info=os.stat(name,dir_fd=parent,follow_symlinks=False)
    rel=prefix+name
@@ -174,12 +184,16 @@ with tarfile.open(fileobj=sys.stdout.buffer,mode='w|',format=tarfile.USTAR_FORMA
     try: walk(child,rel+'/')
     finally: os.close(child)
    elif stat.S_ISREG(info.st_mode):
+    seen+=1
+    if start>=0 and seen<=start: continue
     source=os.open(name,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK,dir_fd=parent)
     with os.fdopen(source,'rb') as stream:
      actual=os.fstat(stream.fileno())
      if not stat.S_ISREG(actual.st_mode) or actual.st_size>16*1024*1024: raise ValueError('File exceeds limit')
+     need=512+((actual.st_size+511)//512)*512
+     if start>=0 and count>0 and (total+need>48*1024*1024 or count>=9000): full=True; return
      entry=tarfile.TarInfo(rel); entry.size=actual.st_size; entry.mode=0o755 if actual.st_mode & 0o111 else 0o644
-     archive.addfile(entry,stream)
+     archive.addfile(entry,stream); count+=1; total+=need
  walk(fd,'')
 `;
 
