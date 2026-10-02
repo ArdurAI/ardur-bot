@@ -13,15 +13,6 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: \n"
 
-#: src/pages/workspace/view-registry.ts
-#: src/pages/workspace/WorkspaceChanges.tsx
-msgid "Recorded changes"
-msgstr "Aufgezeichnete Änderungen"
-
-#: src/pages/workspace/WorkspaceChanges.tsx
-msgid "No changes to show"
-msgstr "Keine Änderungen anzuzeigen"
-
 #: src/pages/shell/model-pin-select.tsx
 msgid " — May not be available on your plan"
 msgstr ""
@@ -2918,6 +2909,8 @@ msgid "Could not load your bots; reopen quick access."
 msgstr ""
 
 #: src/components/ai/ChiefResultBubble.tsx
+#: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspaceChanges.tsx
 msgid "Could not open file"
 msgstr "Datei konnte nicht geöffnet werden"
 
@@ -4656,6 +4649,7 @@ msgstr "Ich bin fertig"
 
 #: src/pages/ide/IdePage.tsx
 #: src/pages/shell/ide-nav.ts
+#: src/pages/workspace/view-registry.ts
 msgid "IDE"
 msgstr "IDE"
 
@@ -5296,6 +5290,7 @@ msgstr ""
 #: src/pages/SharedCommand.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/workspace/WorkspaceChanges.tsx
 #: src/pages/workspace/WorkspacePane.tsx
 msgid "Loading…"
 msgstr "Wird geladen…"
@@ -5985,6 +5980,10 @@ msgstr ""
 #: src/pages/shell/bot-picker.tsx
 msgid "No bots match"
 msgstr ""
+
+#: src/pages/workspace/WorkspaceChanges.tsx
+msgid "No changes to show"
+msgstr "Keine Änderungen anzuzeigen"
 
 #: src/pages/customize/McpConfigEditor.tsx
 msgid "No changes."
@@ -7068,6 +7067,11 @@ msgstr "Verbindung wird wiederhergestellt"
 #: src/pages/dashboard/GovernancePanel.tsx
 msgid "Record evidence of bot decisions"
 msgstr "Nachweise für Bot-Entscheidungen aufzeichnen"
+
+#: src/pages/workspace/view-registry.ts
+#: src/pages/workspace/WorkspaceChanges.tsx
+msgid "Recorded changes"
+msgstr "Aufgezeichnete Änderungen"
 
 #: src/components/RunEvidence.tsx
 msgid "Recording"
@@ -9403,6 +9407,7 @@ msgid "Unpin"
 msgstr "Lösen"
 
 #: src/pages/ide/IdePage.tsx
+#: src/pages/Shell.tsx
 #: src/pages/workspace/WorkspaceFileGuard.tsx
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Unsaved changes"

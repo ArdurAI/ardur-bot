@@ -13,15 +13,6 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
 
-#: src/pages/workspace/view-registry.ts
-#: src/pages/workspace/WorkspaceChanges.tsx
-msgid "Recorded changes"
-msgstr "Записанные изменения"
-
-#: src/pages/workspace/WorkspaceChanges.tsx
-msgid "No changes to show"
-msgstr "Нет изменений для отображения"
-
 #: src/pages/shell/model-pin-select.tsx
 msgid " — May not be available on your plan"
 msgstr ""
@@ -2918,6 +2909,8 @@ msgid "Could not load your bots; reopen quick access."
 msgstr ""
 
 #: src/components/ai/ChiefResultBubble.tsx
+#: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspaceChanges.tsx
 msgid "Could not open file"
 msgstr "Не удалось открыть файл"
 
@@ -4656,6 +4649,7 @@ msgstr "Готово"
 
 #: src/pages/ide/IdePage.tsx
 #: src/pages/shell/ide-nav.ts
+#: src/pages/workspace/view-registry.ts
 msgid "IDE"
 msgstr "IDE"
 
@@ -5296,6 +5290,7 @@ msgstr ""
 #: src/pages/SharedCommand.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/workspace/WorkspaceChanges.tsx
 #: src/pages/workspace/WorkspacePane.tsx
 msgid "Loading…"
 msgstr "Загрузка…"
@@ -5985,6 +5980,10 @@ msgstr "Нет ботов"
 #: src/pages/shell/bot-picker.tsx
 msgid "No bots match"
 msgstr "Ни один бот не подходит"
+
+#: src/pages/workspace/WorkspaceChanges.tsx
+msgid "No changes to show"
+msgstr "Нет изменений для отображения"
 
 #: src/pages/customize/McpConfigEditor.tsx
 msgid "No changes."
@@ -7068,6 +7067,11 @@ msgstr "Повторное подключение"
 #: src/pages/dashboard/GovernancePanel.tsx
 msgid "Record evidence of bot decisions"
 msgstr "Записывать свидетельства решений ботов"
+
+#: src/pages/workspace/view-registry.ts
+#: src/pages/workspace/WorkspaceChanges.tsx
+msgid "Recorded changes"
+msgstr "Записанные изменения"
 
 #: src/components/RunEvidence.tsx
 msgid "Recording"
@@ -9403,6 +9407,7 @@ msgid "Unpin"
 msgstr "Открепить"
 
 #: src/pages/ide/IdePage.tsx
+#: src/pages/Shell.tsx
 #: src/pages/workspace/WorkspaceFileGuard.tsx
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Unsaved changes"

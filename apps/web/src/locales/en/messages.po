@@ -17,15 +17,6 @@ msgstr ""
 msgid " — May not be available on your plan"
 msgstr " — May not be available on your plan"
 
-#: src/pages/workspace/view-registry.ts
-#: src/pages/workspace/WorkspaceChanges.tsx
-msgid "Recorded changes"
-msgstr "Recorded changes"
-
-#: src/pages/workspace/WorkspaceChanges.tsx
-msgid "No changes to show"
-msgstr "No changes to show"
-
 #: src/pages/shell/bot-panel.tsx
 msgid " — not available on your account"
 msgstr " — not available on your account"
@@ -2918,6 +2909,8 @@ msgid "Could not load your bots; reopen quick access."
 msgstr "Could not load your bots; reopen quick access."
 
 #: src/components/ai/ChiefResultBubble.tsx
+#: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspaceChanges.tsx
 msgid "Could not open file"
 msgstr "Could not open file"
 
@@ -4656,6 +4649,7 @@ msgstr "I’m done"
 
 #: src/pages/ide/IdePage.tsx
 #: src/pages/shell/ide-nav.ts
+#: src/pages/workspace/view-registry.ts
 msgid "IDE"
 msgstr "IDE"
 
@@ -5296,6 +5290,7 @@ msgstr "Loading your tools."
 #: src/pages/SharedCommand.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/workspace/WorkspaceChanges.tsx
 #: src/pages/workspace/WorkspacePane.tsx
 msgid "Loading…"
 msgstr "Loading…"
@@ -5985,6 +5980,10 @@ msgstr "No bots"
 #: src/pages/shell/bot-picker.tsx
 msgid "No bots match"
 msgstr "No bots match"
+
+#: src/pages/workspace/WorkspaceChanges.tsx
+msgid "No changes to show"
+msgstr "No changes to show"
 
 #: src/pages/customize/McpConfigEditor.tsx
 msgid "No changes."
@@ -7068,6 +7067,11 @@ msgstr "Reconnecting"
 #: src/pages/dashboard/GovernancePanel.tsx
 msgid "Record evidence of bot decisions"
 msgstr "Record evidence of bot decisions"
+
+#: src/pages/workspace/view-registry.ts
+#: src/pages/workspace/WorkspaceChanges.tsx
+msgid "Recorded changes"
+msgstr "Recorded changes"
 
 #: src/components/RunEvidence.tsx
 msgid "Recording"
@@ -9403,6 +9407,7 @@ msgid "Unpin"
 msgstr "Unpin"
 
 #: src/pages/ide/IdePage.tsx
+#: src/pages/Shell.tsx
 #: src/pages/workspace/WorkspaceFileGuard.tsx
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Unsaved changes"
