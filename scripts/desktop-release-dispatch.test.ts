@@ -51,6 +51,18 @@ describe("non-publishing desktop dispatch", () => {
     expect(workflow.jobs["install-acceptance"].if).toBeUndefined();
   });
 
+  it("runs acceptance scripts from the workflow's own commit and proves it is the validated one", () => {
+    const steps = workflow.jobs["install-acceptance"].steps;
+    expect(steps[0].uses).toMatch(/^actions\/checkout@/);
+    expect(steps[0].with).toEqual({ "persist-credentials": false });
+    expect(steps[1]).toMatchObject({
+      name: "Require the validated commit",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: Literal workflow expression.
+      env: { VALIDATED_SHA: "${{ needs.validate.outputs.sha }}" },
+      run: '[[ "$(git rev-parse HEAD)" == "$VALIDATED_SHA" ]]',
+    });
+  });
+
   it.each([
     ["push", "refs/tags/v1.2.3", false, true],
     ["workflow_dispatch", "refs/tags/v1.2.3", true, true],

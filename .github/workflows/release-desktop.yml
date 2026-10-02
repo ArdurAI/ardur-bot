@@ -223,10 +223,16 @@ jobs:
           - { os: ubuntu-24.04-arm, platform: linux, arch: arm64, debArch: arm64, imageArch: arm64, optional: true }
           - { os: windows-2022, platform: win, arch: x64 }
     steps:
+      # The acceptance scripts come from the commit this workflow runs on, which is the
+      # validated commit for a tag and for a branch preview; the next step proves it.
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
-          ref: ${{ needs.validate.outputs.sha }}
           persist-credentials: false
+      - name: Require the validated commit
+        shell: bash
+        env:
+          VALIDATED_SHA: ${{ needs.validate.outputs.sha }}
+        run: '[[ "$(git rev-parse HEAD)" == "$VALIDATED_SHA" ]]'
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
