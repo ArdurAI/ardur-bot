@@ -121,6 +121,7 @@ import type {
 import {
   COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE,
   ComputerImageDownloadError,
+  computerRunsOnHost,
   ENGINE_MISSING_CODE,
   HOST_MOVE_UNAVAILABLE_CODE,
   HostMoveUnavailableError,
@@ -3989,7 +3990,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             userId: context.actor.userId,
             archivedAt: null,
           },
-          select: { id: true, computer: { select: { kind: true } } },
+          select: { id: true, computer: { select: { kind: true, connectionId: true } } },
         });
         if (!bot) throw new IsolationError();
         const servers = await deps.prisma.mcpServer.findMany({
@@ -4006,7 +4007,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         });
         return servers
           .filter((server) => {
-            if (server.transport === "host-cli" && bot.computer?.kind !== "desktop") return false;
+            if (server.transport === "host-cli" && !computerRunsOnHost(bot.computer)) return false;
             const row = server.assignments[0];
             const grant = row ?? {
               access: "inherit",
