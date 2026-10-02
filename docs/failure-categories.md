@@ -22,6 +22,7 @@ mobile through its own catalogs (English source plus ru and zh).
 | `destinations-bot` | the bot's allowed model destinations block the model | open the bot's destinations settings (or the model pin settings) |
 | `destinations-space` | the space's model policy blocks the model | open Settings at Models (or the model pin settings) |
 | `stopped` | the run or worker was stopped before finishing | none |
+| `model-context-too-small` | the pinned runtime needs a model with at least 64K context | open the model pin settings |
 | `session-start-failed` | the runtime did not complete its session handshake | retry after checking the runtime |
 | `other` | any failure the signals above do not name | none |
 

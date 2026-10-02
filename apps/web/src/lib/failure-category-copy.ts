@@ -19,6 +19,7 @@ export const failureCategoryMessages: Record<FailureCategoryId, ReturnType<typeo
   "destinations-bot": msg`{bot}'s allowed model destinations block this model. Change them in {bot}'s settings.`,
   "destinations-space": msg`This space's model policy blocks this model. Change it in Settings, under Models.`,
   stopped: msg`{runtime} stopped before finishing this run.`,
+  "model-context-too-small": msg`{runtime} needs a model with at least 64K context; change the model and try again.`,
   "session-start-failed": msg`{runtime} could not start a session. Check the runtime and try again.`,
   other: msg`{runtime} could not finish this run. Check the runtime or change the pin.`,
 };

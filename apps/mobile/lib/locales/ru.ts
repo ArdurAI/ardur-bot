@@ -1,4 +1,6 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "{runtime} needs a model with at least 64K context; change the model and try again.":
+    "Для {runtime} нужна модель с контекстом не менее 64K; смените модель и повторите попытку.",
   "{runtime} could not start a session. Check the runtime and try again.":
     "{runtime} не удалось запустить сессию. Проверьте среду выполнения и повторите попытку.",
   Sandbox: "Песочница",

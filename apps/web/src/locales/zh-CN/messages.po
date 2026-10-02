@@ -356,6 +356,10 @@ msgid "{runtime} loads all connected tools because deferred loading is unavailab
 msgstr ""
 
 #: src/lib/failure-category-copy.ts
+msgid "{runtime} needs a model with at least 64K context; change the model and try again."
+msgstr "{runtime} 需要上下文至少为 64K 的模型；请更换模型后重试。"
+
+#: src/lib/failure-category-copy.ts
 msgid "{runtime} reached this run's turn limit. Narrow the task and try again."
 msgstr "{runtime} 已达到此次运行的轮次上限。请缩小任务范围后重试。"
 

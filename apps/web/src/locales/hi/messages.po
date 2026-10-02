@@ -356,6 +356,10 @@ msgid "{runtime} loads all connected tools because deferred loading is unavailab
 msgstr ""
 
 #: src/lib/failure-category-copy.ts
+msgid "{runtime} needs a model with at least 64K context; change the model and try again."
+msgstr "{runtime} को कम से कम 64K संदर्भ वाला मॉडल चाहिए; मॉडल बदलें और फिर कोशिश करें।"
+
+#: src/lib/failure-category-copy.ts
 msgid "{runtime} reached this run's turn limit. Narrow the task and try again."
 msgstr "{runtime} इस रन की टर्न सीमा तक पहुँच गया। काम को सीमित करें और फिर कोशिश करें।"
 

@@ -34,6 +34,20 @@ describe("failure-category mobile completeness", () => {
     expect(text).not.toContain("{runtime}");
     expect(text).not.toBe(problem.reason);
   });
+  it.each(["ru", "zh-CN"] as const)("translates the pinned context floor in %s", (locale) => {
+    activateUiLocale(locale);
+    const problem = runtimePinProblem(
+      { ...pinFor(), runtimeKind: "hermes" },
+      "runtime-unavailable",
+      "Hermes needs a model with at least 64K context; change the model and try again.",
+      "model-context-too-small",
+    );
+    const text = runtimeProblemText(problem);
+    expect(text).toContain("Hermes");
+    expect(text).toContain("64K");
+    expect(text).not.toContain("{runtime}");
+    expect(text).not.toBe(problem.reason);
+  });
   it("gives every table id a non-empty ru and zh catalog entry", () => {
     for (const entry of FAILURE_CATEGORIES) {
       expect(RU_MESSAGES[entry.message], `ru: ${entry.id}`).toBeTruthy();

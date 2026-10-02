@@ -156,6 +156,41 @@ it("renders a translated Hermes session-start failure without protocol detail", 
   }
 });
 
+it("renders the pinned context floor with model recovery and no protocol detail", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const message =
+    "{runtime} needs a model with at least 64K context; change the model and try again.";
+  i18n.load("zh-CN", { [message]: "{runtime} 需要上下文至少为 64K 的模型；请更换模型后重试。" });
+  i18n.activate("zh-CN");
+  const element = document.createElement("div");
+  const root = createRoot(element);
+  const onChangeModel = vi.fn();
+  try {
+    await act(async () =>
+      root.render(
+        <ProviderErrorMessage
+          text="private protocol detail"
+          onChangeModel={onChangeModel}
+          runtimeProblem={runtimePinProblem(
+            nativePin("hermes"),
+            "runtime-unavailable",
+            "Hermes needs a model with at least 64K context; change the model and try again.",
+            "model-context-too-small",
+          )}
+        />,
+      ),
+    );
+    expect(element.textContent).toContain("Hermes 需要上下文至少为 64K 的模型；请更换模型后重试。");
+    expect(element.textContent).not.toContain("private protocol detail");
+    const button = element.querySelector("button");
+    expect(button).not.toBeNull();
+    await act(async () => button?.click());
+    expect(onChangeModel).toHaveBeenCalledOnce();
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
 it.each([
   ["claude-code", "Claude Code"],
   ["codex-app-server", "Codex"],

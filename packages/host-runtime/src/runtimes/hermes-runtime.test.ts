@@ -82,6 +82,69 @@ function turnFinishSignal(runId: string) {
 
 describe("HermesRuntime M0 ACP seam", () => {
   afterEach(() => vi.unstubAllEnvs());
+
+  it("keeps the session request compatible with the pinned ACP stdio schema", async () => {
+    const events = await collect(runtime("pinned-session-schema"), request());
+    expect(events.at(-1)).toEqual({ type: "done" });
+  });
+
+  it.each([false, true])(
+    "explains the pinned context floor without exposing private details (pinned=%s)",
+    async (pinned) => {
+      vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", undefined);
+      const records: string[] = [];
+      const sink = new Writable({
+        write(chunk, _encoding, done) {
+          records.push(String(chunk));
+          done();
+        },
+      });
+      const run = request();
+      if (pinned)
+        run.model.runtimePin = {
+          runtimeKind: "hermes",
+          provider: "fixture",
+          modelId: "fixture-model",
+          effort: "high",
+          credentialId: "fixture-connection",
+          revision: 1,
+        };
+      const adapter = new HermesRuntime({
+        command: process.execPath,
+        args: [fixture, "session-new-context-error"],
+        launch: launchUnconfinedProcess,
+        logger: createChildProcessLogger(sink),
+      });
+      const failure = await collect(adapter, run).catch((error: unknown) => error);
+      expect(failure).toMatchObject({
+        message: "Hermes needs a model with at least 64K context; change the model and try again.",
+      });
+      if (pinned)
+        expect(failure).toMatchObject({
+          name: "RuntimePinError",
+          problem: {
+            reasonId: "model-context-too-small",
+            pin: run.model.runtimePin,
+            actions: ["change-pin"],
+          },
+        });
+      const logs = records.join("");
+      expect(logs).toContain("Internal error");
+      expect(logs).not.toContain("fixture-private-model");
+      expect(logs).not.toContain("fixture private prompt");
+      expect(logs).not.toContain("fixture traceback detail");
+      expect(logs).not.toContain("data");
+    },
+  );
+
+  it.each(["session-new-context-wrong-code", "session-new-context-other-floor"])(
+    "does not guess the context floor for %s",
+    async (scenario) => {
+      await expect(collect(runtime(scenario), request())).rejects.toThrow(
+        "Hermes could not start a session. Check the runtime and try again.",
+      );
+    },
+  );
   it.each([
     ["session-new-error", false],
     ["session-new-error", true],

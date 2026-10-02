@@ -19,6 +19,7 @@ export const FailureCategoryIdSchema = z.enum([
   "destinations-space",
   "stopped",
   "session-start-failed",
+  "model-context-too-small",
   "other",
 ]);
 export type FailureCategoryId = z.infer<typeof FailureCategoryIdSchema>;
@@ -152,6 +153,12 @@ export const FAILURE_CATEGORIES: readonly FailureCategory[] = [
     memberMessage: "{member} failed.",
     action: { kind: "none" },
     legacy: ["{runtime} could not finish this run — connect it or change the pin."],
+  },
+  {
+    id: "model-context-too-small",
+    message: "{runtime} needs a model with at least 64K context; change the model and try again.",
+    action: { kind: "open-settings", target: "model-pin" },
+    legacy: [],
   },
   {
     id: "session-start-failed",
