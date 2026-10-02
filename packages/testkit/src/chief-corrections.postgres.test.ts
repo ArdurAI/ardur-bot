@@ -121,6 +121,7 @@ describe.skipIf(!enabled).sequential("chief correction cross-run Postgres journe
           ],
         },
         spaceAllowedTools: ["fetch_page"],
+        spaceToolPolicies: { fetch_page: "allow" },
         assignments: {
           create: [worker, replacement, chief].map((bot) => ({
             ...scope,
@@ -628,6 +629,13 @@ describe.skipIf(!enabled).sequential("chief correction cross-run Postgres journe
       }),
     ).toMatchObject({ error: expect.stringContaining("Read back") });
     // Script the granted connector's read-back; the durable admission proves a successful read.
+    const verificationRead = await chiefVerificationRead(db.prisma, checking.runId, {
+      connectorId: "mcp",
+      resourceId: f.server.id,
+      resourceRevision: f.server.revision,
+      toolName: "fetch_page",
+    });
+    expect(verificationRead).toBe(true);
     const read = await admitChiefAction(db.prisma, {
       runId: checking.runId,
       attempt: 1,
@@ -635,14 +643,9 @@ describe.skipIf(!enabled).sequential("chief correction cross-run Postgres journe
       consequential: true,
       remote: true,
       tool: "fetch_page",
-      verificationRead: await chiefVerificationRead(db.prisma, checking.runId, {
-        connectorId: "mcp",
-        resourceId: f.server.id,
-        resourceRevision: f.server.revision,
-        toolName: "fetch_page",
-      }),
+      verificationRead,
     });
-    expect(read.admissionId).toBeTruthy();
+    expect(read).toMatchObject({ admissionId: expect.any(String) });
     await settleChiefAction(db.prisma, read.admissionId, false);
     const verified = {
       runId: f.run.id,
