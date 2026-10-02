@@ -53,7 +53,7 @@ export async function queueComputerUpdate(
   configuration?: {
     imageProfile?: "base" | "developer";
     connectionId?: string | null;
-    destination?: "host";
+    destination?: "host" | "sandbox";
     networkEgress?: boolean;
     confirmed: boolean;
   },
@@ -149,6 +149,7 @@ export async function performComputerUpdate(deps: Deps, updateId: string) {
       signal: controller.signal,
     };
     if (
+      configuration?.destination === undefined &&
       connectionlessConfigurationUnchanged(update.computer, configuration) &&
       (await staysOnDeploymentEngine(deps, update.computer, context))
     ) {

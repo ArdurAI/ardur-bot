@@ -13,6 +13,8 @@ import {
   computerKindFacts,
   defaultNewBotLocation,
   IsolatedComputerUnavailableError,
+  NewBotHostUnavailableError,
+  NewBotTeamLocationConflictError,
   RuntimeKindSchema,
 } from "@ardurbot/contracts";
 import type { HistoricalHermesRuntimeConfig } from "@ardurbot/contracts/runtime-config";
@@ -514,11 +516,12 @@ export function createRepos(
               hostPaired: hostAvailable,
               computerHost: settings?.computerHost as "docker" | "this-mac" | null | undefined,
             }));
-      if (location === "host" && !hostAvailable)
-        throw new Error("Connect the host service to choose This computer.");
+      if (location === "host" && !hostAvailable) throw new NewBotHostUnavailableError();
       if (location === "host" && input.isolatedComputer)
         throw new IsolatedComputerUnavailableError();
       let kind = location === "host" ? "desktop" : provider;
+      if (location === "sandbox" && kind === "desktop" && !input.isolatedComputer?.connectionId)
+        throw new IsolatedComputerUnavailableError();
       const privateDockerComputer =
         input.computerMode === "dedicated" ||
         (input.computerMode === undefined && Boolean(input.isolatedComputer));
@@ -573,12 +576,10 @@ export function createRepos(
           if (
             !privateDockerComputer &&
             options.hostAvailable &&
-            (computer.kind !== kind ||
-              (computer.connectionId ?? null) !== (input.isolatedComputer?.connectionId ?? null))
+            ((computer.connectionId ?? null) !== (input.isolatedComputer?.connectionId ?? null) ||
+              (!computer.connectionId && computer.kind !== kind))
           )
-            throw new Error(
-              "Choose Only this bot to use a different location from the Team computer.",
-            );
+            throw new NewBotTeamLocationConflictError();
           const created = await tx.bot.create({
             data: {
               ...(botId ? { id: botId } : {}),

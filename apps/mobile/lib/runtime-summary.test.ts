@@ -46,14 +46,30 @@ vi.mock("react-native", () => ({
     children,
     onPress,
     disabled,
+    accessibilityLabel,
+    accessibilityState,
   }: {
     children: ReactNode;
     onPress: () => void;
     disabled?: boolean;
-  }) => createElement("button", { type: "button", onClick: onPress, disabled }, children),
+    accessibilityLabel?: string;
+    accessibilityState?: { selected?: boolean };
+  }) =>
+    createElement(
+      "button",
+      {
+        type: "button",
+        onClick: onPress,
+        disabled,
+        "aria-label": accessibilityLabel,
+        "aria-pressed": accessibilityState?.selected,
+      },
+      children,
+    ),
 }));
 
 import NewBot from "../app/new";
+import { ComputerLocationPicker } from "../components/computer-location-picker";
 import { ComputerModePicker } from "../components/computer-mode-picker";
 import { BotRuntimeSettings, RuntimeSummary } from "../components/runtime-summary";
 
@@ -63,6 +79,59 @@ const status = {
   mode: "dedicated",
   state: "stopped",
 } as ComputerStatus;
+it.each(["host", "sandbox"] as const)(
+  "preselects the same %s location on phone with equal structure",
+  async (value) => {
+    await act(async () =>
+      root.render(
+        createElement(ComputerLocationPicker, {
+          value,
+          hostAvailable: true,
+          sandboxAvailable: true,
+          onChange: vi.fn(),
+        }),
+      ),
+    );
+    const buttons = [...container.querySelectorAll("button")];
+    expect(buttons).toHaveLength(2);
+    expect(buttons.map((button) => button.childElementCount)).toEqual([2, 2]);
+    expect(buttons.map((button) => button.getAttribute("aria-pressed"))).toEqual(
+      value === "host" ? ["true", "false"] : ["false", "true"],
+    );
+  },
+);
+it("keeps the unavailable host visible with its reason on phone", async () => {
+  await act(async () =>
+    root.render(
+      createElement(ComputerLocationPicker, {
+        value: "sandbox",
+        hostAvailable: false,
+        sandboxAvailable: true,
+        onChange: vi.fn(),
+      }),
+    ),
+  );
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="This computer"]')?.disabled).toBe(
+    true,
+  );
+  expect(container.textContent).toContain("Connect the host service to choose This computer.");
+});
+it("points a saved runtime/location mismatch to desktop rather than moving on phone", async () => {
+  request.mockImplementation(async (procedure) =>
+    procedure === "computer/status" ? { ...status, kind: "docker" } : [],
+  );
+  await act(async () =>
+    root.render(
+      createElement(BotRuntimeSettings, { botId: "bot", mode: "dedicated", runtimeKind: "hermes" }),
+    ),
+  );
+  const repair = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Move to This computer",
+  )!;
+  await act(async () => repair.click());
+  expect(Alert.alert).toHaveBeenCalledWith("Move to This computer", "Change location on desktop.");
+  expect(request.mock.calls.some((call) => call[0] === "computer/configure")).toBe(false);
+});
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 beforeEach(() => {
@@ -247,10 +316,10 @@ const createButton = () =>
   [...container.querySelectorAll<HTMLButtonElement>("button")].find(
     (button) => button.textContent === "Create",
   )!;
-it("describes the existing Team container by connection when creating a bot on phone", async () => {
+it("keeps the server-selected sandbox independent from sharing on phone", async () => {
   request.mockImplementation(async (procedure) =>
-    procedure === "me"
-      ? { sandboxProvider: "desktop" }
+    procedure === "computer/creationOptions"
+      ? { defaultLocation: "sandbox", hostAvailable: false, container: { connectionId: "saved" } }
       : procedure === "computer/connections"
         ? [{ id: "saved", name: "Team engine", settings: { engine: "docker" } }]
         : procedure === "computer/list"
@@ -262,13 +331,19 @@ it("describes the existing Team container by connection when creating a bot on p
     (button) => button.textContent === "Shared with team",
   )!;
   await act(async () => team.click());
-  expect(container.textContent).toContain("Container · Team engine");
-  expect(container.textContent).not.toContain("Runs as you");
+  expect(container.querySelector('[aria-label="Sandbox"]')?.getAttribute("aria-pressed")).toBe(
+    "true",
+  );
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="This computer"]')?.disabled).toBe(
+    true,
+  );
   expect(request.mock.calls.some((call) => call[0] === "bots/create")).toBe(false);
 });
 it("offers setup for new isolated work when no container is configured", async () => {
   request.mockImplementation(async (procedure) =>
-    procedure === "me" ? { sandboxProvider: "desktop" } : [],
+    procedure === "computer/creationOptions"
+      ? { defaultLocation: "sandbox", hostAvailable: false, container: null }
+      : [],
   );
   await act(async () => root.render(createElement(NewBot)));
   await enterName();
@@ -278,15 +353,14 @@ it("offers setup for new isolated work when no container is configured", async (
 });
 it("allows an explicit team choice only after showing the host and sharing warning", async () => {
   request.mockImplementation(async (procedure) =>
-    procedure === "me"
-      ? { sandboxProvider: "desktop" }
+    procedure === "computer/creationOptions"
+      ? { defaultLocation: "host", hostAvailable: true, container: { connectionId: null } }
       : procedure === "bots/create"
         ? { id: "new-bot", name: "Builder" }
         : [],
   );
   await act(async () => root.render(createElement(NewBot)));
   await enterName();
-  expect(createButton().disabled).toBe(true);
   const team = [...container.querySelectorAll<HTMLButtonElement>("button")].find(
     (button) => button.textContent === "Shared with team",
   )!;
@@ -295,15 +369,19 @@ it("allows an explicit team choice only after showing the host and sharing warni
   expect(container.textContent).toContain("Bots share files and installed tools");
   await act(async () => createButton().click());
   const input = request.mock.calls.find((call) => call[0] === "bots/create")?.[1];
-  expect(input).toMatchObject({ computerMode: "team" });
+  expect(input).toMatchObject({ computerMode: "team", computerLocation: "host" });
   expect(input).not.toHaveProperty("isolatedComputer");
 });
 it.each(["docker", "desktop"])(
   "uses the dedicated container recommendation on a %s deployment",
   async (provider) => {
     request.mockImplementation(async (procedure) =>
-      procedure === "me"
-        ? { sandboxProvider: provider }
+      procedure === "computer/creationOptions"
+        ? {
+            defaultLocation: "sandbox",
+            hostAvailable: false,
+            container: { connectionId: provider === "docker" ? null : "saved" },
+          }
         : procedure === "computer/connections"
           ? provider === "desktop"
             ? [{ id: "saved", name: "Container engine", settings: { engine: "podman" } }]

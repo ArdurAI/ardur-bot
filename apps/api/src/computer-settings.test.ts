@@ -10,6 +10,7 @@ import {
   listComputerConnections,
   saveComputerConnection,
   validateComputerConfiguration,
+  validateRuntimeComputerConfiguration,
 } from "./computer-settings.js";
 
 const context = {
@@ -20,6 +21,41 @@ const context = {
   signal: new AbortController().signal,
 };
 describe("computer connection settings", () => {
+  it("accepts an explicit confirmed sandbox even when the host is the deployment default", async () => {
+    const prisma = {
+      deploymentSettings: { findUnique: vi.fn(async () => ({ computerHost: "this-mac" })) },
+    } as unknown as PrismaClient;
+    const configuration = await validateComputerConfiguration(prisma, "space", {
+      botId: "bot",
+      destination: "sandbox",
+      connectionId: null,
+      confirmed: true,
+    });
+    await expect(
+      validateRuntimeComputerConfiguration(
+        prisma,
+        {
+          runtimeKind: "pi",
+          computer: { kind: "desktop", connectionId: null, spaceId: "space" },
+        },
+        configuration,
+        "docker",
+        true,
+      ),
+    ).resolves.toBeUndefined();
+    await expect(
+      validateRuntimeComputerConfiguration(
+        prisma,
+        {
+          runtimeKind: "hermes",
+          computer: { kind: "desktop", connectionId: null, spaceId: "space" },
+        },
+        configuration,
+        "docker",
+        true,
+      ),
+    ).rejects.toMatchObject({ data: { code: "computer-unsupported" } });
+  });
   it("returns the saved connection state without an owner-only engine probe", async () => {
     const findMany = vi.fn(async () => [
       {

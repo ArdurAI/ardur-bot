@@ -834,7 +834,7 @@ export async function replaceComputer(
     placementRunId?: string;
     imageProfile?: "base" | "developer";
     connectionId?: string | null;
-    destination?: "host";
+    destination?: "host" | "sandbox";
     networkEgress?: boolean;
   },
   /** An automatic move's destination; a Settings change is routed by the saved connection. */
@@ -940,7 +940,11 @@ export async function replaceComputer(
     (choosingHost
       ? await owningSandbox(deps.sandbox, { kind: "desktop", connectionId: null }, context)
       : chosenDefault || lostEngine
-        ? await deploymentEngine(deps, chosenDefault, context)
+        ? await deploymentEngine(
+            deps,
+            chosenDefault && configuration?.destination !== "sandbox",
+            context,
+          )
         : undefined);
   if (choosingHost && destination?.describe().kind !== "desktop")
     throw new MissingComputerProviderError("desktop", { resetAvailable: false });

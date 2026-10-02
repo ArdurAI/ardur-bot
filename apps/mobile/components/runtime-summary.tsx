@@ -3,6 +3,7 @@ import type {
   ComputerMode,
   ComputerStatus,
   ComputerUpdate,
+  RuntimeKind,
 } from "@ardurbot/contracts";
 import {
   COMPUTER_BOUNDARY_MESSAGES,
@@ -10,6 +11,7 @@ import {
   computerKindFacts,
   computerRuntimeSummary,
   interruptedComputerUpdate,
+  runtimeSupportsLocation,
 } from "@ardurbot/contracts";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
@@ -77,10 +79,12 @@ export function BotRuntimeSettings({
   botId,
   mode,
   children,
+  runtimeKind = "pi",
 }: {
   botId: string;
   mode: ComputerMode;
   children?: ReactNode;
+  runtimeKind?: RuntimeKind;
 }) {
   const { t } = useI18n();
   const tokens = useMobileTokens();
@@ -122,6 +126,19 @@ export function BotRuntimeSettings({
   const interrupted = data ? interruptedComputerUpdate(data.status, data.updates) : undefined;
   return (
     <View style={[styles.card, { borderColor: tokens.border }]}>
+      {data &&
+      !runtimeSupportsLocation(runtimeKind, {
+        ...data.status,
+        connectionSettings: data.connections.find((entry) => entry.id === data.status.connectionId)
+          ?.settings,
+      }) ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => Alert.alert(t("Move to This computer"), t("Change location on desktop."))}
+        >
+          <Text style={{ color: tokens.foreground }}>{t("Move to This computer")}</Text>
+        </Pressable>
+      ) : null}
       <Text style={{ color: tokens.foreground, fontWeight: "600" }}>
         {t("Where this bot runs")}
       </Text>

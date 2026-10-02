@@ -10,11 +10,12 @@ import {
   computerConnectionKind,
   computerExecutionKind,
   computerKindFacts,
+  recommendedContainer,
   runtimeNames,
   runtimeSupportsLocation,
 } from "@ardurbot/contracts";
 import { ENGINE_LABELS } from "@ardurbot/contracts/fleet";
-import { computerRefusalMessage, sandboxKindForBot } from "@ardurbot/core";
+import { computerRefusalMessage } from "@ardurbot/core";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,17 +32,17 @@ import {
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
 import { rpc } from "../lib/rpc";
+import { ComputerLocationPicker } from "./shell/computer-location-picker";
+import { MoveToHost } from "./shell/move-to-host";
 import { RuntimeBoundary, RuntimeSummary } from "./shell/runtime-summary";
 
 type Connection = { id: string; name: string; settings: ComputerConnectionSettings };
 
-/** The engine new computers start on, or null while that is the host. */
+/** The optional sandbox engine, independent of the new-bot location default. */
 export function deploymentDefaultEngine(
   me: Pick<Me, "computerHost" | "sandboxProvider">,
 ): string | null {
-  return sandboxKindForBot(me.sandboxProvider, me.computerHost) === "desktop"
-    ? null
-    : me.sandboxProvider;
+  return me.sandboxProvider === "desktop" ? null : me.sandboxProvider;
 }
 
 const DEPLOYMENT_DEFAULT = "deployment-default";
@@ -231,6 +232,7 @@ export function ComputerProfile({
   const unavailableLocations =
     eligibleConnections.length !== connections.length ||
     !runtimeSupportsLocation(runtimeKind, { kind: "docker" });
+  const sandbox = recommendedContainer(deploymentDefault ?? "", connections);
   async function save() {
     setPending(true);
     setError("");
@@ -242,7 +244,12 @@ export function ComputerProfile({
           ? {}
           : choosingHost
             ? { destination: "host" as const }
-            : { connectionId: choosingDefault ? null : selection }),
+            : {
+                connectionId: choosingDefault ? null : selection,
+                ...(choosingDefault && selectedFacts?.boundary === "container"
+                  ? { destination: "sandbox" as const }
+                  : {}),
+              }),
         confirmed: true,
       });
       setConfirm(false);
@@ -262,6 +269,16 @@ export function ComputerProfile({
   return (
     <section className="space-y-3 rounded-xl border border-border p-4">
       {!choicesOnly ? (
+        <MoveToHost
+          botId={botId}
+          runtimeKind={runtimeKind}
+          location={{ ...status, connectionSettings: savedConnection?.settings }}
+          hostAvailable={hostConnected}
+          state={status.state}
+          onChanged={onChanged}
+        />
+      ) : null}
+      {!choicesOnly ? (
         <>
           <h4>{status.mode === "team" ? t`Team Computer` : name}</h4>
           <p className="text-sm text-muted-foreground">
@@ -274,6 +291,19 @@ export function ComputerProfile({
           />
         </>
       ) : null}
+      <ComputerLocationPicker
+        value={selectedKind === "desktop" ? "host" : "sandbox"}
+        hostAvailable={hostConnected}
+        sandboxAvailable={Boolean(sandbox) || selectedFacts?.boundary === "container"}
+        runtimeKind={runtimeKind}
+        disabled={pending}
+        onChange={(location) => {
+          if (location === "host") setSelection(hostComputer ? savedConnectionId : HOST_COMPUTER);
+          else if (currentKind && computerKindFacts(currentKind)?.boundary === "container")
+            setSelection(savedConnectionId);
+          else if (sandbox) setSelection(sandbox.connectionId ?? DEPLOYMENT_DEFAULT);
+        }}
+      />
       {selection !== savedConnectionId && selectedKind && selectedFacts ? (
         <div className="space-y-2 text-sm">
           <p>

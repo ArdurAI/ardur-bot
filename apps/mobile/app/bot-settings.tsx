@@ -504,7 +504,11 @@ export default function BotSettingsScreen() {
             />
           ))}
         </ScrollView>
-        <BotRuntimeSettings botId={botId} mode={computerMode}>
+        <BotRuntimeSettings
+          botId={botId}
+          mode={computerMode}
+          runtimeKind={bot?.runtimeKind ?? "pi"}
+        >
           <ComputerModePicker
             value={computerMode}
             onChange={setComputerMode}

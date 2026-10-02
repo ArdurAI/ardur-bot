@@ -4,6 +4,7 @@ import type {
   ComputerMode,
   Group,
   ModelCatalogEntry,
+  NewBotLocation,
   RuntimeKind,
   ThinkingLevel,
   VoiceInfo,
@@ -12,12 +13,11 @@ import {
   BOT_DESCRIPTION_MAX_LENGTH,
   BOT_NAME_MAX_LENGTH,
   BOT_TITLE_MAX_LENGTH,
-  computerExecutionKind,
-  computerKindFacts,
   computerModeFacts,
   errorDataCode,
   ISOLATED_COMPUTER_UNAVAILABLE_CODE,
-  recommendedContainer,
+  NEW_BOT_HOST_UNAVAILABLE_CODE,
+  NEW_BOT_TEAM_LOCATION_CONFLICT_CODE,
 } from "@ardurbot/contracts";
 import type {
   HermesRuntimeConfigV2,
@@ -53,9 +53,10 @@ import type { ModelSettings } from "../../lib/use-model-settings";
 import { useModelSettings } from "../../lib/use-model-settings";
 import { ModelDestinations } from "../ModelDestinations";
 import { AvatarStudioPopover } from "./avatar-studio-popover";
+import { ComputerLocationPicker } from "./computer-location-picker";
 import { ModelEffortSelect, ModelPinSelect } from "./model-pin-select";
 import { RuntimeSettings } from "./runtime-settings";
-import { BotRuntimeSettings, RuntimeBoundary } from "./runtime-summary";
+import { BotRuntimeSettings } from "./runtime-summary";
 
 const ScratchpadSection = lazy(() =>
   import("../ScratchpadSection").then((module) => ({ default: module.ScratchpadSection })),
@@ -113,6 +114,7 @@ export function CreateBotForm({
     description: string;
     computerMode: ComputerMode;
     isolatedComputer?: { connectionId: string | null };
+    computerLocation: NewBotLocation;
   }) => Promise<void>;
   onCancel: () => void;
   onSetupComputer?: () => void;
@@ -125,9 +127,8 @@ export function CreateBotForm({
   const [computerMode, setComputerMode] = useState<ComputerMode>("dedicated");
   const [container, setContainer] = useState<{ connectionId: string | null } | null>(null);
   const [locationReady, setLocationReady] = useState(false);
-  const [containerName, setContainerName] = useState("");
-  const [teamKind, setTeamKind] = useState("");
-  const [teamName, setTeamName] = useState<string>();
+  const [computerLocation, setComputerLocation] = useState<NewBotLocation>("sandbox");
+  const [hostAvailable, setHostAvailable] = useState(false);
   const [locationRevision, setLocationRevision] = useState(0);
   useEffect(() => {
     const reload = () => setLocationRevision((value) => value + 1);
@@ -138,23 +139,13 @@ export function CreateBotForm({
     let active = true;
     setLocationReady(false);
     setContainer(null);
-    void Promise.all([rpc.me(), rpc.computer.connections(), rpc.computer.list()])
-      .then(([me, connections, computers]) => {
+    void rpc.computer
+      .creationOptions()
+      .then((options) => {
         if (active) {
-          const recommendation = recommendedContainer(me.sandboxProvider, connections);
-          const team = computers.find((entry) => entry.status.mode === "team")?.status;
-          const connection = connections.find((entry) => entry.id === team?.connectionId);
-          setTeamKind(
-            team
-              ? (computerExecutionKind({ ...team, connectionSettings: connection?.settings }) ?? "")
-              : me.sandboxProvider,
-          );
-          setTeamName(connection?.name);
-          setContainer(recommendation);
-          setContainerName(
-            connections.find((entry) => entry.id === recommendation?.connectionId)?.name ??
-              me.sandboxProvider,
-          );
+          setComputerLocation(options.defaultLocation);
+          setHostAvailable(options.hostAvailable);
+          setContainer(options.container);
           setLocationReady(true);
         }
       })
@@ -169,8 +160,7 @@ export function CreateBotForm({
   const [error, setError] = useState<string | null>(null);
 
   const computerReady =
-    locationReady &&
-    (computerMode === "dedicated" ? Boolean(container) : Boolean(computerKindFacts(teamKind)));
+    locationReady && (computerLocation === "host" ? hostAvailable : Boolean(container));
   async function handleSubmit() {
     if (!name.trim() || submitting || !computerReady) return;
     setError(null);
@@ -181,16 +171,21 @@ export function CreateBotForm({
         title: title.trim(),
         description: description.trim(),
         computerMode,
-        ...(computerMode === "dedicated" && container ? { isolatedComputer: container } : {}),
+        computerLocation,
+        ...(computerLocation === "sandbox" && container ? { isolatedComputer: container } : {}),
       });
     } catch (err) {
       const refusal = errorDataCode(err) === ISOLATED_COMPUTER_UNAVAILABLE_CODE;
       setError(
-        refusal
-          ? t`Set up a container for isolated work.`
-          : err instanceof Error
-            ? err.message
-            : t`Could not create bot`,
+        errorDataCode(err) === NEW_BOT_TEAM_LOCATION_CONFLICT_CODE
+          ? t`Choose Only this bot to use a different location from the Team computer.`
+          : errorDataCode(err) === NEW_BOT_HOST_UNAVAILABLE_CODE
+            ? t`Connect the host service to choose This computer.`
+            : refusal
+              ? t`Set up a container for isolated work.`
+              : err instanceof Error
+                ? err.message
+                : t`Could not create bot`,
       );
       if (refusal) setLocationRevision((value) => value + 1);
     } finally {
@@ -256,11 +251,16 @@ export function CreateBotForm({
         <div className="mb-2 text-[14px] text-muted-foreground">
           <Trans>Where this bot runs</Trans>
         </div>
-        {container && computerMode === "dedicated" ? (
-          <div className="mb-3 text-sm">
-            <RuntimeBoundary kind="docker" locationName={containerName} />
-          </div>
-        ) : null}
+        <ComputerLocationPicker
+          value={computerLocation}
+          onChange={setComputerLocation}
+          hostAvailable={hostAvailable}
+          sandboxAvailable={Boolean(container)}
+          disabled={!locationReady || submitting}
+        />
+        <div className="mb-2 mt-4 text-[14px] text-muted-foreground">
+          <Trans>Sharing</Trans>
+        </div>
         <ComputerModePicker
           value={computerMode}
           onChange={setComputerMode}
@@ -272,12 +272,7 @@ export function CreateBotForm({
             <Trans>Bots share files and installed tools</Trans>
           </p>
         ) : null}
-        {computerMode === "team" && teamKind ? (
-          <div className="mt-2 text-sm">
-            <RuntimeBoundary kind={teamKind} locationName={teamName} />
-          </div>
-        ) : null}
-        {computerMode === "dedicated" && locationReady && !container ? (
+        {computerLocation === "sandbox" && locationReady && !container ? (
           <div className="mt-2 text-sm">
             <p>
               <Trans>Set up a container for isolated work.</Trans>
@@ -833,7 +828,7 @@ export function BotSettings({
             botId={bot.id}
             name={bot.name}
             mode={computerMode}
-            runtimeKind={runtimeKind}
+            runtimeKind={bot.runtimeKind ?? "pi"}
           >
             <ComputerModePicker value={computerMode} onChange={setComputerMode} />
           </BotRuntimeSettings>

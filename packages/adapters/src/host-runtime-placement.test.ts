@@ -23,6 +23,17 @@ it.each(["team", "dedicated"])(
   async (scope) => {
     const dataDir = await mkdtemp(path.join(tmpdir(), "placement-"));
     const source = new FakeSandboxProvider();
+    const sourceDescription = source.describe();
+    vi.spyOn(source, "describe").mockReturnValue({
+      ...sourceDescription,
+      id: "docker",
+      kind: "docker",
+    });
+    const sourceProvision = source.provision.bind(source);
+    vi.spyOn(source, "provision").mockImplementation(async (request, ctx) => ({
+      ...(await sourceProvision(request, ctx)),
+      kind: "docker",
+    }));
     const host = new FakeSandboxProvider();
     const hostDescription = host.describe();
     vi.spyOn(host, "describe").mockReturnValue({
@@ -65,6 +76,7 @@ it.each(["team", "dedicated"])(
     });
     const prisma = {
       computer: { findUniqueOrThrow: vi.fn(async () => ({ ...row })), updateMany },
+      deploymentSettings: { findUnique: vi.fn(async () => ({ computerHost: "this-mac" })) },
       run: { findFirst: vi.fn(async () => null) },
     } as unknown as PrismaClient;
     const connections = { resolve: vi.fn(async () => source) } as unknown as ComputerConnections;
@@ -91,6 +103,18 @@ it.each(["team", "dedicated"])(
       );
       expect(host.provision).toHaveBeenCalledWith(
         expect.objectContaining({ connectionId: null, providerKind: "desktop" }),
+        expect.anything(),
+      );
+      const separated = await replaceComputer(deps, row.id, "update", context, "none", undefined, {
+        destination: "sandbox",
+        connectionId: null,
+      });
+      expect(row).toMatchObject({ kind: "docker", connectionId: null, scope });
+      expect(separated.kind).toBe("docker");
+      // Local containers mount the portable home rather than importing into fake memory.
+      expect(await deps.home.readFile("home", "work.txt", context)).toBe("saved work");
+      expect(source.provision).toHaveBeenLastCalledWith(
+        expect.objectContaining({ homePath: deps.home.pathFor("home"), providerKind: "docker" }),
         expect.anything(),
       );
     } finally {

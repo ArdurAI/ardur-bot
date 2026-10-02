@@ -1,7 +1,7 @@
 import type { Actor } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { RPCHandler } from "@orpc/server/fetch";
-import { expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { newBotComputerOptions } from "./computer-settings.js";
 import type { HostBridge } from "./host-bridge.js";
 import type { RouterDeps } from "./router.js";
@@ -13,24 +13,31 @@ const owner: Actor = {
   email: "owner@example.test",
   isDeploymentOwner: true,
 };
+beforeEach(() => vi.stubEnv("ARDURBOT_HOST_BRIDGE", "api"));
+afterEach(() => vi.unstubAllEnvs());
 function fixture({
   connected = true,
   configured = true,
   computerHost = null,
   actor = owner,
   team = null,
+  sandboxProvider = "docker",
 }: {
   connected?: boolean;
   configured?: boolean;
   computerHost?: "docker" | "this-mac" | null;
   actor?: Actor;
+  sandboxProvider?: string;
   team?: { id: string; kind: string; connectionId: string | null } | null;
 } = {}) {
   const upsert = vi.fn(async ({ create }) => ({ id: "computer", ...create }));
   const create = vi.fn(async ({ data }) => ({ id: "bot", ...data }));
   const prisma = {
     deploymentSettings: { findUnique: vi.fn(async () => ({ ownerUserId: "owner", computerHost })) },
-    connection: { findMany: vi.fn(async () => []) },
+    connection: {
+      findMany: vi.fn(async () => []),
+      findFirst: vi.fn(async () => ({ metadata: { engine: "docker" } })),
+    },
     $queryRaw: vi.fn(async () => []),
     spaceMember: {
       findUnique: vi.fn(async () => ({ organizationId: "org", space: { deletingAt: null } })),
@@ -70,7 +77,7 @@ function fixture({
   const deps = {
     prisma: prisma as unknown as PrismaClient,
     hostBridge,
-    env: { sandboxProvider: "docker" },
+    env: { sandboxProvider },
   } as RouterDeps;
   const handler = new RPCHandler(createRouter(deps));
   async function call(procedure: string, input: unknown) {
@@ -157,4 +164,41 @@ it("honors an explicit sandbox choice even with a connected host", async () => {
     ).status,
   ).toBe(200);
   expect(f.upsert.mock.calls[0]![0].create.kind).toBe("docker");
+});
+it.each([true, false])(
+  "preserves explicitly local desktop creation only for its owner: %s",
+  async (isDeploymentOwner) => {
+    vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
+    const f = fixture({
+      sandboxProvider: "desktop",
+      connected: false,
+      configured: false,
+      actor: { ...owner, isDeploymentOwner },
+    });
+    expect(await newBotComputerOptions(f.deps, f.actor, "desktop")).toMatchObject({
+      hostAvailable: isDeploymentOwner,
+      defaultLocation: isDeploymentOwner ? "host" : "sandbox",
+    });
+    const result = await f.call("bots/create", {
+      name: "Bot",
+      color: "#000",
+      computerMode: "dedicated",
+    });
+    expect(result.status).toBe(isDeploymentOwner ? 200 : 400);
+    if (isDeploymentOwner) expect(f.upsert.mock.calls[0]![0].create.kind).toBe("desktop");
+    else expect(f.create).not.toHaveBeenCalled();
+  },
+);
+it("joins a legacy Team row on the identical saved sandbox without rewriting it", async () => {
+  const f = fixture({ team: { id: "team", kind: "desktop", connectionId: "saved" } });
+  const result = await f.call("bots/create", {
+    name: "Bot",
+    color: "#000",
+    computerMode: "team",
+    computerLocation: "sandbox",
+    isolatedComputer: { connectionId: "saved" },
+  });
+  expect(result.status, JSON.stringify(result.body)).toBe(200);
+  expect(f.create.mock.calls[0]![0].data.computerId).toBe("team");
+  expect(f.upsert).not.toHaveBeenCalled();
 });

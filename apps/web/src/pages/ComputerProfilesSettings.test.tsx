@@ -235,10 +235,10 @@ it("moves a connectionless computer to a saved connection and hides the control 
   await act(async () => root.unmount());
 });
 
-it("names the engine new computers start on, and none while that is the host", () => {
-  expect(
-    deploymentDefaultEngine({ sandboxProvider: "docker", computerHost: "this-mac" }),
-  ).toBeNull();
+it("keeps the sandbox engine available independently from a host default", () => {
+  expect(deploymentDefaultEngine({ sandboxProvider: "docker", computerHost: "this-mac" })).toBe(
+    "docker",
+  );
   expect(deploymentDefaultEngine({ sandboxProvider: "desktop", computerHost: null })).toBeNull();
   expect(deploymentDefaultEngine({ sandboxProvider: "docker", computerHost: null })).toBe("docker");
   expect(deploymentDefaultEngine({ sandboxProvider: "docker", computerHost: "docker" })).toBe(
@@ -800,7 +800,9 @@ it("keeps a connected desktop row on its real container location without a mutat
     ]);
     expect(api.engine).toHaveBeenCalledWith({ connectionId: "container" });
     expect(element.textContent).not.toContain("Move to a container");
-    expect(element.textContent).not.toContain("Runs as you");
+    expect(element.querySelector('[aria-label="Sandbox"]')?.getAttribute("aria-pressed")).toBe(
+      "true",
+    );
     const button = (label: string) =>
       [...element.querySelectorAll("button")].find((entry) => entry.textContent === label)!;
     expect(button("Apply").disabled).toBe(true);
@@ -831,7 +833,9 @@ it("renders only destination choices and consequences inside Change location", a
     );
     expect(element.querySelector('[data-testid="runtime-summary"]')).toBeNull();
     expect(element.textContent).not.toContain("Engine:");
-    expect(element.textContent).not.toContain("Runs as you");
+    expect(
+      element.querySelector('[aria-label="This computer"]')?.getAttribute("aria-pressed"),
+    ).toBe("true");
     const select = element.querySelector<HTMLSelectElement>('[aria-label="Connection"]')!;
     expect(select.options[0]?.textContent).toBe("Keep current location");
     await act(async () => {

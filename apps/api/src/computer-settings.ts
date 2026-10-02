@@ -10,6 +10,8 @@ import {
   ComputerConnectionInputSchema,
   ComputerConnectionSettingsSchema,
   ComputerEngineUnavailableError,
+  computerExecutionKind,
+  computerKindFacts,
   defaultNewBotLocation,
   FLEET_ACTIVE_RUN_CONFLICT_CODE,
   failureCategoryMessage,
@@ -27,22 +29,34 @@ import { cleanupFleetSecret, importFleetSecret } from "./fleet.js";
 import type { HostBridge } from "./host-bridge.js";
 
 /** Pairing is owner-scoped; no process probes or engine access are needed for this policy. */
+export async function newBotHostAvailable(
+  deps: { prisma: PrismaClient; hostBridge?: HostBridge },
+  actor: Actor,
+  sandboxProvider: string,
+) {
+  if (!actor.isDeploymentOwner) return false;
+  const [settings, host] = await Promise.all([
+    deps.prisma.deploymentSettings.findUnique({ where: { id: "default" } }),
+    deps.hostBridge?.status(actor.userId),
+  ]);
+  if (settings?.ownerUserId !== actor.userId) return false;
+  // Explicit local-host deployments use direct adapters, never a paired API bridge.
+  const localHost =
+    process.env.ARDURBOT_HOST_BRIDGE !== "api" &&
+    sandboxKindForBot(sandboxProvider, settings?.computerHost) === "desktop";
+  return localHost || Boolean(host?.configured && host.connected);
+}
+
 export async function newBotComputerOptions(
   deps: { prisma: PrismaClient; hostBridge?: HostBridge },
   actor: Actor,
   sandboxProvider: string,
 ) {
-  const [settings, host, connections] = await Promise.all([
+  const [settings, hostAvailable, connections] = await Promise.all([
     deps.prisma.deploymentSettings.findUnique({ where: { id: "default" } }),
-    actor.isDeploymentOwner ? deps.hostBridge?.status(actor.userId) : undefined,
+    newBotHostAvailable(deps, actor, sandboxProvider),
     listComputerConnections(deps.prisma, actor.spaceId),
   ]);
-  const hostAvailable = Boolean(
-    actor.isDeploymentOwner &&
-      settings?.ownerUserId === actor.userId &&
-      host?.configured &&
-      host.connected,
-  );
   return {
     hostAvailable,
     defaultLocation: defaultNewBotLocation({
@@ -429,7 +443,7 @@ export async function validateComputerConfiguration(
       message: "This replaces the computer's files. Continue?",
     });
   // Null chooses the deployment default, which is refused while new computers start on the host.
-  if (configuration.connectionId === null) {
+  if (configuration.connectionId === null && configuration.destination !== "sandbox") {
     const deployment =
       sandboxProvider === "docker"
         ? await prisma.deploymentSettings.findUnique({ where: { id: "default" } })
@@ -487,6 +501,11 @@ export async function validateRuntimeComputerConfiguration(
     connectionId,
     connectionSettings: parsed.success ? parsed.data : null,
   };
+  if (
+    configuration.destination === "sandbox" &&
+    computerKindFacts(computerExecutionKind(location) ?? "")?.boundary !== "container"
+  )
+    throw new ORPCError("BAD_REQUEST", { message: "Set up a container for isolated work." });
   const runtime = bot.runtimeKind as RuntimeKind;
   if (!runtimeSupportsLocation(runtime, location))
     throw new ORPCError("BAD_REQUEST", {

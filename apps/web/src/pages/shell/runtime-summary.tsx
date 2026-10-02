@@ -18,6 +18,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { ReleaseInterruptedComputer } from "../../components/ReleaseInterruptedComputer";
 import { useComputerStateLabels } from "../../lib/computer-state-labels";
 import { rpc } from "../../lib/rpc";
+import { MoveToHost } from "./move-to-host";
 
 const ComputerProfile = lazy(() =>
   import("../ComputerProfilesSettings").then((module) => ({ default: module.ComputerProfile })),
@@ -139,10 +140,7 @@ export function BotRuntimeSettings({
             updates,
             hostConnected: host.connected && me.isDeploymentOwner,
 
-            deploymentDefault:
-              me.sandboxProvider === "docker" && me.computerHost === "this-mac"
-                ? null
-                : me.sandboxProvider,
+            deploymentDefault: me.sandboxProvider === "desktop" ? null : me.sandboxProvider,
           });
       })
       .catch(() => {
@@ -155,6 +153,21 @@ export function BotRuntimeSettings({
   const interrupted = data ? interruptedComputerUpdate(data.status, data.updates) : undefined;
   return (
     <>
+      {data ? (
+        <MoveToHost
+          botId={botId}
+          runtimeKind={runtimeKind}
+          location={{
+            ...data.status,
+            connectionSettings: data.connections.find(
+              (entry) => entry.id === data.status.connectionId,
+            )?.settings,
+          }}
+          hostAvailable={data.hostConnected}
+          state={data.status.state}
+          onChanged={async () => setRevision((value) => value + 1)}
+        />
+      ) : null}
       {data ? (
         <RuntimeSummary
           status={data.status}

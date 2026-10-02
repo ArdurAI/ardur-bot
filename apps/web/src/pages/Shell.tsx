@@ -2570,12 +2570,14 @@ export function ShellPage({
     description: string;
     computerMode: ComputerMode;
     isolatedComputer?: { connectionId: string | null };
+    computerLocation: "host" | "sandbox";
   }) {
     const isFirstBot = botsRef.current.length === 0;
     const bot = await rpc.bots.create({
       ...normalizeCreateBotProfile(input),
       notifyOnFinish: true,
       computerMode: input.computerMode,
+      computerLocation: input.computerLocation,
       isolatedComputer: input.isolatedComputer,
     });
     setBots((current) =>

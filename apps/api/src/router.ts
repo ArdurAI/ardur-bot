@@ -128,6 +128,10 @@ import {
   IntegrationProviderIdSchema,
   ISOLATED_COMPUTER_UNAVAILABLE_CODE,
   IsolatedComputerUnavailableError,
+  NEW_BOT_HOST_UNAVAILABLE_CODE,
+  NEW_BOT_TEAM_LOCATION_CONFLICT_CODE,
+  NewBotHostUnavailableError,
+  NewBotTeamLocationConflictError,
   nativeRuntimeHealthKeys,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   RuntimeKindSchema,
@@ -235,6 +239,7 @@ import {
   computerEngineInfo,
   listComputerConnections,
   newBotComputerOptions,
+  newBotHostAvailable,
   saveComputerConnection,
   updateComputerConnection,
   validateComputerConfiguration,
@@ -632,10 +637,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
   const account = createAccountService({ ...deps, remoteDevices });
   const repos = createRepos(deps.prisma, {
     sandboxProvider: deps.env.sandboxProvider,
-    hostAvailable: async (actor) => {
-      const host = await deps.hostBridge?.status(actor.userId);
-      return Boolean(host?.configured && host.connected);
-    },
+    hostAvailable: (actor) => newBotHostAvailable(deps, actor, deps.env.sandboxProvider),
   });
   const onboardingDeps = { prisma: deps.prisma, events: deps.events, connectors: deps.connectors };
   const mcpOAuth = deps.mcpOAuth ?? new McpOAuthBroker(deps.prisma, deps.secrets);
@@ -1579,6 +1581,19 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         try {
           return await repos.createBot(context.actor, input);
         } catch (error) {
+          if (
+            error instanceof NewBotTeamLocationConflictError ||
+            error instanceof NewBotHostUnavailableError
+          )
+            throw new ORPCError("BAD_REQUEST", {
+              message: error.message,
+              data: {
+                code:
+                  error instanceof NewBotTeamLocationConflictError
+                    ? NEW_BOT_TEAM_LOCATION_CONFLICT_CODE
+                    : NEW_BOT_HOST_UNAVAILABLE_CODE,
+              },
+            });
           if (error instanceof IsolatedComputerUnavailableError)
             throw new ORPCError("BAD_REQUEST", {
               message: error.message,

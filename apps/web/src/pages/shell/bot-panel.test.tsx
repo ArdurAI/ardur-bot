@@ -12,6 +12,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { rpc } from "../../lib/rpc";
 
 const api = vi.hoisted(() => ({
   list: vi.fn(),
@@ -21,6 +22,13 @@ const api = vi.hoisted(() => ({
   connections: vi.fn(),
   computers: vi.fn(),
   status: vi.fn(),
+  creationOptions: vi.fn(
+    async (): Promise<Awaited<ReturnType<typeof rpc.computer.creationOptions>>> => ({
+      defaultLocation: "sandbox",
+      hostAvailable: false,
+      container: { connectionId: null },
+    }),
+  ),
 }));
 vi.mock("../../lib/rpc", () => ({
   rpc: {
@@ -34,6 +42,7 @@ vi.mock("../../lib/rpc", () => ({
       list: api.computers,
       status: api.status,
       updates: async () => [],
+      creationOptions: api.creationOptions,
     },
     voice: { voices: async () => [] },
   },
@@ -448,13 +457,17 @@ describe("new isolated work", () => {
       (button) => button.textContent === "Create",
     )!;
   it("defaults to a dedicated container and submits an explicit pin", async () => {
-    api.me.mockResolvedValue({ ...me, sandboxProvider: "docker", computerHost: "this-mac" });
+    api.creationOptions.mockResolvedValue({
+      defaultLocation: "sandbox",
+      hostAvailable: false,
+      container: { connectionId: null },
+    });
     const onCreate = vi.fn();
     await act(async () => root.render(<CreateBotForm onCreate={onCreate} onCancel={() => {}} />));
     expect(
       container.querySelector('[data-testid="create-bot-private"]')?.getAttribute("aria-pressed"),
     ).toBe("true");
-    expect(container.textContent).toContain("Container");
+    expect(container.textContent).toContain("Sandbox");
     await enterName();
     await act(async () => createButton().click());
     expect(onCreate).toHaveBeenCalledWith({
@@ -462,11 +475,16 @@ describe("new isolated work", () => {
       title: "",
       description: "",
       computerMode: "dedicated",
+      computerLocation: "sandbox",
       isolatedComputer: { connectionId: null },
     });
   });
   it("offers setup rather than silently creating on the host", async () => {
-    api.me.mockResolvedValue({ ...me, sandboxProvider: "desktop" });
+    api.creationOptions.mockResolvedValue({
+      defaultLocation: "sandbox",
+      hostAvailable: false,
+      container: null,
+    });
     const onCreate = vi.fn();
     const onSetupComputer = vi.fn();
     await act(async () =>
@@ -484,11 +502,14 @@ describe("new isolated work", () => {
     expect(onCreate).not.toHaveBeenCalled();
   });
   it("allows an explicit team choice with the host warning and no isolated claim", async () => {
-    api.me.mockResolvedValue({ ...me, sandboxProvider: "desktop" });
+    api.creationOptions.mockResolvedValue({
+      defaultLocation: "host",
+      hostAvailable: true,
+      container: { connectionId: null },
+    });
     const onCreate = vi.fn();
     await act(async () => root.render(<CreateBotForm onCreate={onCreate} onCancel={() => {}} />));
     await enterName();
-    expect(createButton().disabled).toBe(true);
     await act(async () =>
       container.querySelector<HTMLButtonElement>('[data-testid="create-bot-team"]')!.click(),
     );
@@ -500,9 +521,15 @@ describe("new isolated work", () => {
       title: "",
       description: "",
       computerMode: "team",
+      computerLocation: "host",
     });
   });
   it("uses a saved container on a host-only deployment", async () => {
+    api.creationOptions.mockResolvedValue({
+      defaultLocation: "sandbox",
+      hostAvailable: false,
+      container: { connectionId: "saved" },
+    });
     api.me.mockResolvedValue({ ...me, sandboxProvider: "desktop" });
     api.connections.mockResolvedValue([
       { id: "saved", name: "Container engine", settings: { engine: "podman" } },
@@ -513,7 +540,12 @@ describe("new isolated work", () => {
     await act(async () => createButton().click());
     expect(onCreate.mock.calls[0]?.[0].isolatedComputer).toEqual({ connectionId: "saved" });
   });
-  it("describes the existing Team container by connection, not its legacy desktop kind", async () => {
+  it("keeps the server-selected location independent from sharing", async () => {
+    api.creationOptions.mockResolvedValue({
+      defaultLocation: "sandbox",
+      hostAvailable: false,
+      container: { connectionId: null },
+    });
     api.connections.mockResolvedValue([
       { id: "saved", name: "Team engine", settings: { engine: "docker" } },
     ]);
@@ -525,8 +557,12 @@ describe("new isolated work", () => {
     await act(async () =>
       container.querySelector<HTMLButtonElement>('[data-testid="create-bot-team"]')!.click(),
     );
-    expect(container.textContent).toContain("Container · Team engine");
-    expect(container.textContent).not.toContain("Runs as you");
+    expect(container.querySelector('[aria-label="Sandbox"]')?.getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(
+      container.querySelector<HTMLButtonElement>('[aria-label="This computer"]')?.disabled,
+    ).toBe(true);
     expect(onCreate).not.toHaveBeenCalled();
   });
 });
