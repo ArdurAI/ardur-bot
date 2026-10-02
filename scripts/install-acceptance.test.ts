@@ -1,0 +1,146 @@
+import { spawnSync } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { describe, expect, it } from "vitest";
+
+const mac = new URL("./release/install-acceptance-mac.sh", import.meta.url);
+
+describe("macOS install verdict", () => {
+  it("installs a fully qualified cask from an owned temporary tap", async () => {
+    const script = await readFile(mac, "utf8");
+    expect(script).not.toContain("brew trust --cask");
+    expect(script).not.toContain("brew install --cask --no-quarantine");
+    expect(script).toContain('xattr -dr com.apple.quarantine "$work/BrewApplications/Ardur.app"');
+    expect(script).toContain('brew tap-new --no-git "$tap_name"');
+    expect(script).toContain('"$tap_dir/Casks/ardur.rb"');
+    expect(script).toContain('brew untap "$tap_name"');
+    expect(script).toContain(
+      'brew install --cask --appdir="$work/BrewApplications" "$tap_name/ardur"',
+    );
+    expect(script).not.toContain("ArdurAI/tap");
+    expect(script).toContain('cp -R "$profile/logs"');
+  });
+
+  it.each([
+    [false, 3, "Ardur.app: rejected\nsource=no usable signature\n", true],
+    [false, 3, "Ardur.app: rejected\n", true],
+    [true, 3, "Ardur.app: rejected\n", false],
+    [true, 0, "Ardur.app: accepted\nsource=Notarized Developer ID\n", true],
+    [false, 3, "Ardur.app: rejected\nsource=no resources\n", false],
+    [false, 3, "Ardur.app: rejected\nsource=no usable signature\ndamaged\n", false],
+    [true, 3, "Ardur.app: rejected\nsource=no usable signature\n", false],
+    [true, 0, "Ardur.app: accepted\nsource=Developer ID\n", false],
+    [false, 0, "Ardur.app: rejected\nsource=no usable signature\n", false],
+    [false, 3, "assessment unavailable\n", false],
+  ])("signed=%s, status=%s, output=%s", async (signed, status, output, accepted) => {
+    const script = await readFile(mac, "utf8");
+    const predicate = script.match(/verdict\(\) \{[\s\S]*?\n\}/)?.[0];
+    expect(predicate).toBeTruthy();
+    const dir = await mkdtemp(path.join(os.tmpdir(), "install-verdict-"));
+    try {
+      await writeFile(path.join(dir, "spctl.log"), output);
+      const result = spawnSync("bash", ["-c", `${predicate}\nverdict`], {
+        encoding: "utf8",
+        env: { ...process.env, logs: dir, signed: String(signed), spctl_status: String(status) },
+      });
+      expect(result.status === 0).toBe(accepted);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("uses Homebrew's command wrapper to execute the installed bundle path", async () => {
+    const template = await readFile(new URL("../homebrew/Casks/ardur.rb", import.meta.url), "utf8");
+    expect(template).toContain(
+      'command_wrapper "ardur", executable: "#{appdir}/Ardur.app/Contents/MacOS/Ardur"',
+    );
+    expect(template).not.toMatch(/\bpreflight do|\bbinary "/);
+  });
+});
+
+describe("macOS install launch verdict", () => {
+  it.each([
+    [0, "ARDUR_INSTALL_SMOKE_PASS\n", "", true],
+    [
+      0,
+      "ARDUR_INSTALL_SMOKE_PASS\n",
+      "UnhandledPromiseRejectionWarning: TypeError: done is not a function\n",
+      true,
+    ],
+    [
+      1,
+      "ARDUR_INSTALL_SMOKE_PASS\n",
+      "UnhandledPromiseRejectionWarning: TypeError: done is not a function\n",
+      false,
+    ],
+    [
+      0,
+      "ARDUR_INSTALL_SMOKE_PASS\n",
+      "UnhandledPromiseRejectionWarning: TypeError: another error\n",
+      false,
+    ],
+    [0, "", "UnhandledPromiseRejectionWarning: TypeError: done is not a function\n", false],
+    [0, "", "", false],
+    [1, "ARDUR_INSTALL_SMOKE_PASS\n", "", false],
+    [0, "ARDUR_INSTALL_SMOKE_PASS\n", "FATAL: renderer crashed\n", false],
+    [0, "ARDUR_INSTALL_SMOKE_PASS\n", "Unable to find helper app\n", false],
+    [0, "ARDUR_INSTALL_SMOKE_PASS\nFATAL\n", "", false],
+  ])("checks status %s and both output streams", async (status, stdout, stderr, accepted) => {
+    const script = await readFile(mac, "utf8");
+    const smoke = script.match(/smoke\(\) \{[\s\S]*?\n\}/)?.[0];
+    expect(smoke).toBeTruthy();
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mac-install-launch-"));
+    try {
+      const executable = path.join(dir, "fixture-app");
+      await writeFile(
+        executable,
+        '#!/bin/sh\nprintf "%s" "$FIXTURE_STDOUT"\nprintf "%s" "$FIXTURE_STDERR" >&2\nexit "$FIXTURE_STATUS"\n',
+        { mode: 0o755 },
+      );
+      const result = spawnSync("bash", ["-c", `${smoke}\nsmoke fixture "$executable"`], {
+        env: {
+          ...process.env,
+          logs: dir,
+          work: dir,
+          executable,
+          FIXTURE_STATUS: String(status),
+          FIXTURE_STDOUT: stdout,
+          FIXTURE_STDERR: stderr,
+        },
+      });
+      expect(result.status === 0).toBe(accepted);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("Linux install launch verdict", () => {
+  it.each([
+    [0, "ARDUR_INSTALL_SMOKE_PASS\n", "", true],
+    [0, "", "", false],
+    [1, "ARDUR_INSTALL_SMOKE_PASS\n", "", false],
+    [0, "ARDUR_INSTALL_SMOKE_PASS\n", "FATAL: renderer crashed\n", false],
+    [0, "ARDUR_INSTALL_SMOKE_PASS\n", "Unable to find helper app\n", false],
+    [0, "ARDUR_INSTALL_SMOKE_PASS\nFATAL\n", "", false],
+  ])("checks status %s and both output streams", async (status, stdout, stderr, accepted) => {
+    const script = await readFile(
+      new URL("./release/install-acceptance-linux.sh", import.meta.url),
+      "utf8",
+    );
+    const predicate = script.match(/if \[\[ "\$status" != 0 \]\][\s\S]*?\nfi/)?.[0];
+    expect(predicate).toBeTruthy();
+    const dir = await mkdtemp(path.join(os.tmpdir(), "linux-install-verdict-"));
+    try {
+      await writeFile(path.join(dir, "app.stdout.log"), stdout);
+      await writeFile(path.join(dir, "app.stderr.log"), stderr);
+      const result = spawnSync("bash", ["-c", predicate!.replaceAll("/evidence", "$logs")], {
+        env: { ...process.env, logs: dir, status: String(status) },
+      });
+      expect(result.status === 0).toBe(accepted);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});

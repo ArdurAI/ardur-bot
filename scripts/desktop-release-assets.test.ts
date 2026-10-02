@@ -50,12 +50,17 @@ it.each(["false", "true"])(
     const version = "0.1.0-alpha.1";
     try {
       await stageSource(source, version);
+      await writeFile(
+        path.join(source, "mac-arm64/install-build-mac-arm64.json"),
+        JSON.stringify({ signed: signed === "true" }),
+      );
       execFileSync(
         process.execPath,
         ["scripts/desktop-release-assets.mjs", version, source, output, signed],
         { stdio: "pipe" },
       );
       const feed = await readFile(path.join(output, "latest-mac.yml"), "utf8");
+      expect((await readdir(output)).some((file) => file.startsWith("install-build-"))).toBe(false);
       expect(feed).toContain("mac-arm64.zip");
       expect(feed).toContain("mac-x64.zip");
       expect(await readFile(path.join(output, "ardur.rb"), "utf8")).not.toContain("@ARM64_SHA256@");

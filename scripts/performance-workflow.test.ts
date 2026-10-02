@@ -124,7 +124,16 @@ async function compareTimings({ dependencies = true } = {}) {
     path.join(REPO, "scripts/performance-budget.mjs"),
     path.join(root, "scripts/performance-budget.mjs"),
   );
-  if (dependencies) await symlink(path.join(REPO, "node_modules"), path.join(root, "node_modules"));
+  if (dependencies) {
+    await symlink(path.join(REPO, "node_modules"), path.join(root, "node_modules"));
+  } else {
+    // Block ancestor resolution when the temporary fixture is inside a checkout.
+    await mkdir(path.join(root, "node_modules/tsx"), { recursive: true });
+    await writeFile(
+      path.join(root, "node_modules/tsx/package.json"),
+      '{"name":"tsx","exports":{}}',
+    );
+  }
   const proxy = timingReport("offline-proxy", { shellPrepareMs: 100, submitToFirstTokenMs: 50 });
   const reports = {
     [path.join(runnerTemp, "proxy-before.json")]: proxy,
