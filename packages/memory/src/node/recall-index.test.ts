@@ -5,7 +5,7 @@ import { JournalDocumentStore } from "../journal.js";
 import type { MemoryRecallIndexSink } from "../service.js";
 import { MemoryService } from "../service.js";
 import type { RecallIndexDocument } from "./recall-index.js";
-import { MemoryRecallIndex } from "./recall-index.js";
+import { MemoryRecallIndex, rankRecallScan } from "./recall-index.js";
 
 const ftsAvailable = await new MemoryRecallIndex().indexSlice("probe", "probe", []);
 
@@ -65,6 +65,79 @@ function scanOrder(docs: RecallIndexDocument[], words: string[]): string[] {
 }
 
 describe.skipIf(!ftsAvailable)("space recall index", () => {
+  it("ranks coverage before BM25 and the candidate limit, with the same order as the scan", async () => {
+    const documents = Array.from({ length: 400 }, (_, i) =>
+      doc({
+        id: `import-${i}`,
+        path: `imported/memories/note-${i}.md`,
+        content: "You test the code with the ordinary team. ".repeat(100 + i),
+        scope: "user",
+        owner: "user-a",
+      }),
+    );
+    documents.push(doc({ id: "release-note", content: "The release code word is heliotrope." }));
+    const words = ["release", "code", "word", "test"];
+    const index = new MemoryRecallIndex();
+    expect(await index.indexSlice("space-a", "fixture", documents)).toBe(true);
+    const hits = await index.query("space-a", {
+      words,
+      botId: "bot-a",
+      userId: "user-a",
+      limit: 5,
+    });
+    const scanned = rankRecallScan(documents, words).slice(0, 5);
+    expect(hits?.[0]?.id).toBe("release-note");
+    expect(hits?.map((hit) => hit.id)).toEqual(scanned.map((hit) => hit.id));
+    hits?.forEach((hit, i) => {
+      expect(hit.score).toBeCloseTo(scanned[i]!.score, 12);
+    });
+  });
+
+  it("keeps matching and BM25 ties consistent across punctuation, diacritics and scope", async () => {
+    const documents = [
+      doc({ id: "padded", content: `café deadline ${"ordinary prose ".repeat(20)}` }),
+      doc({ id: "focused", path: "facts/cafe-deadline.md", content: "Café deadline" }),
+      doc({ id: "substring", content: "cafeteria deadlines" }),
+      doc({ id: "user", content: "cafe deadline", scope: "user", owner: "user-a" }),
+      doc({ id: "shared", content: "cafe deadline", scope: "shared", owner: "" }),
+    ];
+    const index = new MemoryRecallIndex();
+    await index.indexSlice("space-a", "fixture", documents);
+    const words = ["cafe", "deadline"];
+    const hits = await index.query("space-a", {
+      words,
+      botId: "bot-a",
+      userId: "user-a",
+      limit: 5,
+    });
+    expect(hits?.map((hit) => hit.id)).toEqual(
+      rankRecallScan(documents, words).map((hit) => hit.id),
+    );
+    expect(hits?.map((hit) => hit.id)).not.toContain("substring");
+  });
+
+  it("does not let cached private libraries change another bot's BM25 ordering", async () => {
+    const documents = [
+      doc({ id: "one", content: `orchid ${"ordinary prose ".repeat(20)}` }),
+      doc({ id: "two", content: `orchid orchid ${"ordinary prose ".repeat(50)}` }),
+    ];
+    const index = new MemoryRecallIndex();
+    await index.indexSlice("space-a", "bot:bot-a", documents);
+    const request = { words: ["orchid"], botId: "bot-a", userId: "user-a", limit: 5 };
+    const before = await index.query("space-a", request);
+    await index.indexSlice(
+      "space-a",
+      "bot:other",
+      Array.from({ length: 40 }, (_, i) =>
+        doc({ id: `other-${i}`, owner: "other", content: "unrelated lengthy prose ".repeat(100) }),
+      ),
+    );
+    expect(await index.query("space-a", request)).toEqual(before);
+    expect(before?.map((hit) => hit.id)).toEqual(
+      rankRecallScan(documents, request.words).map((hit) => hit.id),
+    );
+  });
+
   it("ranks the focused note first where the word-count scan ties on padded notes", async () => {
     const padding =
       "miscellaneous filler remarks about nothing relevant keep coming and going ".repeat(8);

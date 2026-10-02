@@ -1,5 +1,8 @@
 import type { MemoryDocumentHead } from "@ardurbot/adapter-kit";
 import { getLogger } from "@ardurbot/logging";
+import { rankRecallCandidates, recallPartition } from "./recall-ranking.js";
+
+export { rankRecallScan, recallTokens } from "./recall-ranking.js";
 
 /** The scopes recall can answer for; "shared" is the space-shared scope visible to every member. */
 export type RecallIndexScope = "bot" | "user" | "shared";
@@ -22,6 +25,7 @@ export interface RecallIndexHit {
   owner: string;
   /** BM25 score normalized so higher ranks better. */
   score: number;
+  coverage: number;
 }
 
 export interface RecallIndexQuery {
@@ -55,14 +59,23 @@ const TABLE_SCHEMA = `CREATE VIRTUAL TABLE documents USING fts5(
   revision UNINDEXED,
   scope UNINDEXED,
   owner UNINDEXED,
-  tokenize = 'porter unicode61'
+  tokenize = 'unicode61'
 )`;
-const RECALL_QUERY = `SELECT id, revision, scope, owner, path, bm25(documents, 3.0, 1.0) AS rank
-FROM documents
-WHERE documents MATCH ?
-  AND ((scope = 'bot' AND owner = ?) OR (scope = 'user' AND owner = ?) OR scope = 'shared')
-ORDER BY rank ASC, path ASC
+
+/** Rank coverage before LIMIT, so even a large library cannot hide an exact short note. */
+function recallQuery(table: string, termCount: number) {
+  const matches = Array.from(
+    { length: termCount },
+    () => `SELECT rowid AS document FROM ${table} WHERE ${table} MATCH ?`,
+  ).join(" UNION ALL ");
+  return `WITH term_matches AS (${matches}),
+coverage AS (SELECT document, count(*) AS coverage FROM term_matches GROUP BY document)
+SELECT id, revision, scope, owner, path, coverage, bm25(${table}, 3.0, 1.0) AS rank
+FROM ${table} JOIN coverage ON ${table}.rowid = coverage.document
+WHERE ${table} MATCH ?
+ORDER BY coverage DESC, rank ASC, path COLLATE BINARY ASC, id COLLATE BINARY ASC
 LIMIT ?`;
+}
 
 /** Procedures and typed settings are never recall knowledge. */
 const EXCLUDED_PATH = /^(?:skills|preferences)\//u;
@@ -103,6 +116,9 @@ interface SpaceEntry {
   building: Set<string>;
   slices: Set<string>;
   pending: Array<{ id: string; document: RecallIndexDocument | null }>;
+  /** Separate term statistics keep other owners' cached libraries out of BM25 ties. */
+  partitions: Map<string, string>;
+  documentPartitions: Map<string, string>;
 }
 
 function newEntry(): SpaceEntry {
@@ -113,6 +129,8 @@ function newEntry(): SpaceEntry {
     building: new Set(),
     slices: new Set(),
     pending: [],
+    partitions: new Map(),
+    documentPartitions: new Map(),
   };
 }
 
@@ -224,12 +242,12 @@ export class MemoryRecallIndex {
         try {
           for (const document of documents)
             if (document.id && !EXCLUDED_PATH.test(document.path))
-              this.replace(db, { id: document.id, document });
+              this.replace(db, entry, { id: document.id, document });
           entry.slices.add(sliceKey);
           // Writes that committed before or during the build replay after the bulk load, so
           // the index and the store never diverge across the first build. They stay buffered
           // while another build is still reading: its older snapshot must not win over them.
-          for (const write of entry.pending) this.replace(db, write);
+          for (const write of entry.pending) this.replace(db, entry, write);
         } finally {
           db.exec("COMMIT");
         }
@@ -265,7 +283,7 @@ export class MemoryRecallIndex {
     this.write(spaceId, id, null);
   }
 
-  /** BM25-ranked candidates, or null when the index is unavailable and the caller must scan. */
+  /** Coverage-ranked candidates, or null when the index is unavailable and the caller must scan. */
   async query(spaceId: string, request: RecallIndexQuery): Promise<RecallIndexHit[] | null> {
     if (this.disabled) return null;
     const entry = this.spaces.get(spaceId);
@@ -273,19 +291,30 @@ export class MemoryRecallIndex {
     const db = await this.database(spaceId, entry);
     if (!db) return null;
     if (!request.words.length) return [];
-    const match = request.words.map((word) => `"${word.replaceAll('"', '""')}"`).join(" OR ");
+    const terms = [...new Set(request.words)].map((word) => `"${word.replaceAll('"', '""')}"`);
+    const match = terms.join(" OR ");
     try {
-      const rows = db
-        .prepare(RECALL_QUERY)
-        .all(match, request.botId, request.userId, request.limit);
-      return rows.map((row) => ({
-        id: String(row.id),
-        path: String(row.path),
-        revision: Number(row.revision),
-        scope: row.scope as RecallIndexScope,
-        owner: String(row.owner),
-        score: -Number(row.rank),
-      }));
+      const partitions = [
+        recallPartition("bot", request.botId),
+        recallPartition("user", request.userId),
+        recallPartition("shared", ""),
+      ];
+      const rows = partitions.flatMap((partition) => {
+        const table = entry.partitions.get(partition);
+        if (!table) return [];
+        return db.prepare(recallQuery(table, terms.length)).all(...terms, match, request.limit);
+      });
+      return rankRecallCandidates(
+        rows.map((row) => ({
+          id: String(row.id),
+          path: String(row.path),
+          revision: Number(row.revision),
+          scope: row.scope as RecallIndexScope,
+          owner: String(row.owner),
+          score: -Number(row.rank),
+          coverage: Number(row.coverage),
+        })),
+      ).slice(0, request.limit);
     } catch {
       return null;
     }
@@ -305,7 +334,7 @@ export class MemoryRecallIndex {
     }
     if (!entry.db) return;
     try {
-      this.replace(entry.db, row);
+      this.replace(entry.db, entry, row);
     } catch {
       // The store stays authoritative; a failed upsert is dropped at re-verification.
     }
@@ -313,12 +342,23 @@ export class MemoryRecallIndex {
 
   private replace(
     db: RecallIndexDatabase,
+    entry: SpaceEntry,
     row: { id: string; document: RecallIndexDocument | null },
   ): void {
-    db.prepare("DELETE FROM documents WHERE id = ?").run(row.id);
-    if (row.document)
+    const previous = entry.documentPartitions.get(row.id);
+    if (previous) db.prepare(`DELETE FROM ${previous} WHERE id = ?`).run(row.id);
+    entry.documentPartitions.delete(row.id);
+    if (row.document) {
+      const partition = recallPartition(row.document.scope, row.document.owner);
+      let table = entry.partitions.get(partition);
+      if (!table) {
+        // Identifiers are generated here, never from document paths or owner input.
+        table = `partition_${entry.partitions.size}`;
+        db.exec(TABLE_SCHEMA.replace("documents", table));
+        entry.partitions.set(partition, table);
+      }
       db.prepare(
-        "INSERT INTO documents(path, content, id, revision, scope, owner) VALUES (?, ?, ?, ?, ?, ?)",
+        `INSERT INTO ${table}(path, content, id, revision, scope, owner) VALUES (?, ?, ?, ?, ?, ?)`,
       ).run(
         row.document.path,
         row.document.content,
@@ -327,6 +367,8 @@ export class MemoryRecallIndex {
         row.document.scope,
         row.document.owner,
       );
+      entry.documentPartitions.set(row.id, table);
+    }
   }
 
   private async database(spaceId: string, entry: SpaceEntry): Promise<RecallIndexDatabase | null> {
