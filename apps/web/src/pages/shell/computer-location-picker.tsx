@@ -9,6 +9,7 @@ export function ComputerLocationPicker({
   hostAvailable,
   sandboxAvailable,
   runtimeKind = "pi",
+  teamLocation,
   disabled = false,
 }: {
   value: NewBotLocation;
@@ -16,6 +17,7 @@ export function ComputerLocationPicker({
   hostAvailable: boolean;
   sandboxAvailable: boolean;
   runtimeKind?: RuntimeKind;
+  teamLocation?: NewBotLocation;
   disabled?: boolean;
 }) {
   const { t } = useLingui();
@@ -25,15 +27,17 @@ export function ComputerLocationPicker({
     <div data-testid="computer-location-picker" className="grid grid-cols-2 gap-2">
       {(["host", "sandbox"] as const).map((location) => {
         const reason =
-          location === "host"
-            ? !hostAvailable
-              ? t`Connect the host service to choose This computer.`
-              : null
-            : !supportsSandbox
-              ? t`Other locations are unavailable for ${runtime}. Choose This computer.`
-              : !sandboxAvailable
-                ? t`Set up a container for isolated work.`
-                : null;
+          teamLocation && location !== teamLocation
+            ? t`Choose Only this bot to use a different location from the Team computer.`
+            : location === "host"
+              ? !hostAvailable
+                ? t`Connect the host service to choose This computer.`
+                : null
+              : !supportsSandbox
+                ? t`Other locations are unavailable for ${runtime}. Choose This computer.`
+                : !sandboxAvailable
+                  ? t`Set up a container for isolated work.`
+                  : null;
         return (
           <div key={location} className="space-y-2">
             <Button

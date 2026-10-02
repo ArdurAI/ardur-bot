@@ -316,6 +316,52 @@ const createButton = () =>
   [...container.querySelectorAll<HTMLButtonElement>("button")].find(
     (button) => button.textContent === "Create",
   )!;
+it.each(["host", "sandbox"] as const)(
+  "follows the Team %s before submit on phone",
+  async (location) => {
+    request.mockImplementation(async (procedure) =>
+      procedure === "computer/creationOptions"
+        ? {
+            defaultLocation: location === "host" ? "sandbox" : "host",
+            hostAvailable: true,
+            container: { connectionId: null },
+            team: { location, connectionId: location === "sandbox" ? "saved" : null },
+          }
+        : procedure === "bots/create"
+          ? { id: "new-bot", name: "Builder" }
+          : [],
+    );
+    await act(async () => root.render(createElement(NewBot)));
+    const team = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Shared with team",
+    )!;
+    await act(async () => team.click());
+    const selected = location === "host" ? "This computer" : "Sandbox";
+    const other = location === "host" ? "Sandbox" : "This computer";
+    expect(
+      container.querySelector(`[aria-label="${selected}"]`)?.getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(container.querySelector<HTMLButtonElement>(`[aria-label="${other}"]`)?.disabled).toBe(
+      true,
+    );
+    expect(
+      container.querySelector(`[aria-label="${other}"]`)?.parentElement?.textContent,
+    ).toContain("Choose Only this bot to use a different location from the Team computer.");
+    await enterName();
+    expect(createButton().disabled).toBe(false);
+    await act(async () => createButton().click());
+    const input = request.mock.calls.find((call) => call[0] === "bots/create")?.[1];
+    expect(input).toMatchObject({ computerMode: "team", computerLocation: location });
+    if (location === "sandbox") expect(input.isolatedComputer).toEqual({ connectionId: "saved" });
+    const dedicated = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Only this bot",
+    )!;
+    await act(async () => dedicated.click());
+    expect(container.querySelector<HTMLButtonElement>(`[aria-label="${other}"]`)?.disabled).toBe(
+      false,
+    );
+  },
+);
 it("keeps the server-selected sandbox independent from sharing on phone", async () => {
   request.mockImplementation(async (procedure) =>
     procedure === "computer/creationOptions"

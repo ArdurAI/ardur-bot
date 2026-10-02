@@ -27,6 +27,7 @@ const api = vi.hoisted(() => ({
       defaultLocation: "sandbox",
       hostAvailable: false,
       container: { connectionId: null },
+      team: null,
     }),
   ),
 }));
@@ -461,6 +462,7 @@ describe("new isolated work", () => {
       defaultLocation: "sandbox",
       hostAvailable: false,
       container: { connectionId: null },
+      team: null,
     });
     const onCreate = vi.fn();
     await act(async () => root.render(<CreateBotForm onCreate={onCreate} onCancel={() => {}} />));
@@ -484,6 +486,7 @@ describe("new isolated work", () => {
       defaultLocation: "sandbox",
       hostAvailable: false,
       container: null,
+      team: null,
     });
     const onCreate = vi.fn();
     const onSetupComputer = vi.fn();
@@ -512,6 +515,7 @@ describe("new isolated work", () => {
       defaultLocation: "host",
       hostAvailable: true,
       container: { connectionId: null },
+      team: null,
     });
     const onCreate = vi.fn();
     await act(async () => root.render(<CreateBotForm onCreate={onCreate} onCancel={() => {}} />));
@@ -535,6 +539,7 @@ describe("new isolated work", () => {
       defaultLocation: "sandbox",
       hostAvailable: false,
       container: { connectionId: "saved" },
+      team: null,
     });
     api.me.mockResolvedValue({ ...me, sandboxProvider: "desktop" });
     api.connections.mockResolvedValue([
@@ -546,11 +551,54 @@ describe("new isolated work", () => {
     await act(async () => createButton().click());
     expect(onCreate.mock.calls[0]?.[0].isolatedComputer).toEqual({ connectionId: "saved" });
   });
+  it.each(["host", "sandbox"] as const)(
+    "follows the Team %s before submit and frees dedicated choices",
+    async (location) => {
+      api.creationOptions.mockResolvedValue({
+        defaultLocation: location === "host" ? "sandbox" : "host",
+        hostAvailable: true,
+        container: { connectionId: null },
+        team: { location, connectionId: location === "sandbox" ? "saved" : null },
+      });
+      const onCreate = vi.fn();
+      await act(async () => root.render(<CreateBotForm onCreate={onCreate} onCancel={() => {}} />));
+      await act(async () =>
+        container.querySelector<HTMLButtonElement>('[data-testid="create-bot-team"]')!.click(),
+      );
+      const selected = location === "host" ? "This computer" : "Sandbox";
+      const other = location === "host" ? "Sandbox" : "This computer";
+      expect(
+        container.querySelector(`[aria-label="${selected}"]`)?.getAttribute("aria-pressed"),
+      ).toBe("true");
+      expect(container.querySelector<HTMLButtonElement>(`[aria-label="${other}"]`)?.disabled).toBe(
+        true,
+      );
+      expect(
+        container.querySelector(`[aria-label="${other}"]`)?.parentElement?.textContent,
+      ).toContain("Choose Only this bot to use a different location from the Team computer.");
+      await enterName();
+      expect(createButton().disabled).toBe(false);
+      await act(async () => createButton().click());
+      expect(onCreate.mock.calls[0]?.[0]).toMatchObject({
+        computerMode: "team",
+        computerLocation: location,
+      });
+      if (location === "sandbox")
+        expect(onCreate.mock.calls[0]?.[0].isolatedComputer).toEqual({ connectionId: "saved" });
+      await act(async () =>
+        container.querySelector<HTMLButtonElement>('[data-testid="create-bot-private"]')!.click(),
+      );
+      expect(container.querySelector<HTMLButtonElement>(`[aria-label="${other}"]`)?.disabled).toBe(
+        false,
+      );
+    },
+  );
   it("keeps the server-selected location independent from sharing", async () => {
     api.creationOptions.mockResolvedValue({
       defaultLocation: "sandbox",
       hostAvailable: false,
       container: { connectionId: null },
+      team: null,
     });
     api.connections.mockResolvedValue([
       { id: "saved", name: "Team engine", settings: { engine: "docker" } },

@@ -9,12 +9,14 @@ export function ComputerLocationPicker({
   onChange,
   hostAvailable,
   sandboxAvailable,
+  teamLocation,
   disabled = false,
 }: {
   value: NewBotLocation;
   onChange: (location: NewBotLocation) => void;
   hostAvailable: boolean;
   sandboxAvailable: boolean;
+  teamLocation?: NewBotLocation;
   disabled?: boolean;
 }) {
   const { t } = useI18n();
@@ -23,13 +25,15 @@ export function ComputerLocationPicker({
     <View testID="computer-location-picker" style={styles.row}>
       {(["host", "sandbox"] as const).map((location) => {
         const reason =
-          location === "host"
-            ? !hostAvailable
-              ? "Connect the host service to choose This computer."
-              : null
-            : !sandboxAvailable
-              ? "Set up a container for isolated work."
-              : null;
+          teamLocation && location !== teamLocation
+            ? "Choose Only this bot to use a different location from the Team computer."
+            : location === "host"
+              ? !hostAvailable
+                ? "Connect the host service to choose This computer."
+                : null
+              : !sandboxAvailable
+                ? "Set up a container for isolated work."
+                : null;
         return (
           <View key={location} style={styles.option}>
             <Pressable

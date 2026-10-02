@@ -122,6 +122,7 @@ it("publishes the same default and revalidates an explicit host choice after dis
     defaultLocation: "host",
     hostAvailable: true,
     container: { connectionId: null },
+    team: null,
   });
   vi.mocked(f.hostBridge.status).mockResolvedValue({
     configured: true,
@@ -150,6 +151,28 @@ it("does not repurpose a saved Team container to satisfy the new host default", 
   expect(f.upsert).not.toHaveBeenCalled();
   expect(f.create).not.toHaveBeenCalled();
 });
+it.each([
+  ["desktop", null, "host"],
+  ["docker", null, "sandbox"],
+  ["desktop", "saved", "sandbox"],
+] as const)(
+  "publishes the Team execution location: %s / %s",
+  async (kind, connectionId, location) => {
+    const f = fixture({ team: { id: "team", kind, connectionId } });
+    f.prisma.connection.findMany.mockResolvedValue([
+      {
+        id: "saved",
+        displayName: "Saved engine",
+        status: "connected",
+        metadata: { engine: "docker" },
+      },
+    ] as never);
+    expect((await newBotComputerOptions(f.deps, owner, "docker")).team).toMatchObject({
+      location,
+      connectionId,
+    });
+  },
+);
 it("honors an explicit sandbox choice even with a connected host", async () => {
   const f = fixture();
   expect(

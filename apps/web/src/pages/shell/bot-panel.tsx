@@ -5,6 +5,7 @@ import type {
   Group,
   ModelCatalogEntry,
   NewBotLocation,
+  NewBotTeamComputer,
   RuntimeKind,
   ThinkingLevel,
   VoiceInfo,
@@ -127,7 +128,11 @@ export function CreateBotForm({
   const [computerMode, setComputerMode] = useState<ComputerMode>("dedicated");
   const [container, setContainer] = useState<{ connectionId: string | null } | null>(null);
   const [locationReady, setLocationReady] = useState(false);
-  const [computerLocation, setComputerLocation] = useState<NewBotLocation>("sandbox");
+  const [chosenLocation, setComputerLocation] = useState<NewBotLocation>("sandbox");
+  const [team, setTeam] = useState<NewBotTeamComputer | null>(null);
+  const teamComputer = computerMode === "team" ? team : null;
+  const computerLocation = teamComputer?.location ?? chosenLocation;
+  const sandboxConnection = teamComputer ? { connectionId: teamComputer.connectionId } : container;
   const [hostAvailable, setHostAvailable] = useState(false);
   const [locationRevision, setLocationRevision] = useState(0);
   useEffect(() => {
@@ -139,6 +144,7 @@ export function CreateBotForm({
     let active = true;
     setLocationReady(false);
     setContainer(null);
+    setTeam(null);
     void rpc.computer
       .creationOptions()
       .then((options) => {
@@ -146,6 +152,7 @@ export function CreateBotForm({
           setComputerLocation(options.defaultLocation);
           setHostAvailable(options.hostAvailable);
           setContainer(options.container);
+          setTeam(options.team);
           setLocationReady(true);
         }
       })
@@ -160,7 +167,7 @@ export function CreateBotForm({
   const [error, setError] = useState<string | null>(null);
 
   const computerReady =
-    locationReady && (computerLocation === "host" ? hostAvailable : Boolean(container));
+    locationReady && (computerLocation === "host" ? hostAvailable : Boolean(sandboxConnection));
   async function handleSubmit() {
     if (!name.trim() || submitting || !computerReady) return;
     setError(null);
@@ -172,7 +179,9 @@ export function CreateBotForm({
         description: description.trim(),
         computerMode,
         computerLocation,
-        ...(computerLocation === "sandbox" && container ? { isolatedComputer: container } : {}),
+        ...(computerLocation === "sandbox" && sandboxConnection
+          ? { isolatedComputer: sandboxConnection }
+          : {}),
       });
     } catch (err) {
       const refusal = errorDataCode(err) === ISOLATED_COMPUTER_UNAVAILABLE_CODE;
@@ -255,7 +264,8 @@ export function CreateBotForm({
           value={computerLocation}
           onChange={setComputerLocation}
           hostAvailable={hostAvailable}
-          sandboxAvailable={Boolean(container)}
+          sandboxAvailable={Boolean(sandboxConnection)}
+          teamLocation={teamComputer?.location}
           disabled={!locationReady || submitting}
         />
         <div className="mb-2 mt-4 text-[14px] text-muted-foreground">

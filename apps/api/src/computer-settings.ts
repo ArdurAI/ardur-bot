@@ -52,11 +52,22 @@ export async function newBotComputerOptions(
   actor: Actor,
   sandboxProvider: string,
 ) {
-  const [settings, hostAvailable, connections] = await Promise.all([
+  const [settings, hostAvailable, connections, teamComputer] = await Promise.all([
     deps.prisma.deploymentSettings.findUnique({ where: { id: "default" } }),
     newBotHostAvailable(deps, actor, sandboxProvider),
     listComputerConnections(deps.prisma, actor.spaceId),
+    deps.prisma.computer.findFirst({
+      where: { spaceId: actor.spaceId, scope: "team" },
+      orderBy: [{ bots: { _count: "desc" } }, { createdAt: "asc" }, { id: "asc" }],
+    }),
   ]);
+  const teamKind = teamComputer
+    ? computerExecutionKind({
+        ...teamComputer,
+        connectionSettings: connections.find((entry) => entry.id === teamComputer.connectionId)
+          ?.settings,
+      })
+    : null;
   return {
     hostAvailable,
     defaultLocation: defaultNewBotLocation({
@@ -66,6 +77,14 @@ export async function newBotComputerOptions(
       computerHost: settings?.computerHost as "docker" | "this-mac" | null | undefined,
     }),
     container: recommendedContainer(sandboxProvider, connections),
+    team:
+      teamComputer && teamKind
+        ? {
+            location: teamKind === "desktop" ? ("host" as const) : ("sandbox" as const),
+            connectionId: teamComputer.connectionId,
+            name: teamComputer.name ?? undefined,
+          }
+        : null,
   };
 }
 

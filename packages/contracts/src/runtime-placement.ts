@@ -5,6 +5,12 @@ import type { RuntimeKind } from "./runtime-pins.js";
 
 export type NewBotLocation = "host" | "sandbox";
 
+export type NewBotTeamComputer = {
+  location: NewBotLocation;
+  connectionId: string | null;
+  name?: string;
+};
+
 /** The deployment's existing computerHost setting is the single default override. */
 export const NEW_BOT_LOCATION_POLICY = {
   default: "host",
