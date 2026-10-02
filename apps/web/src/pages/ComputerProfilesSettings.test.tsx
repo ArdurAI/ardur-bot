@@ -850,6 +850,38 @@ it("renders only destination choices and consequences inside Change location", a
   }
 });
 
+it.each([
+  { kind: "desktop" as const, showGuidance: false },
+  { kind: "docker" as const, showGuidance: true },
+])(
+  "shows host-only runtime guidance only away from This computer: $kind",
+  async ({ kind, showGuidance }) => {
+    const element = document.createElement("div");
+    const root = createRoot(element);
+    try {
+      await act(async () =>
+        root.render(
+          <ComputerProfile
+            botId="bot"
+            name="Builder"
+            runtimeKind="codex-app-server"
+            status={{ ...status, kind, hostLabel: "This computer" }}
+            connections={[]}
+            hostConnected
+            onChanged={async () => {}}
+          />,
+        ),
+      );
+      const guidance = "Other locations are unavailable for Codex. Choose This computer.";
+      expect(element.textContent?.includes(guidance)).toBe(showGuidance);
+      expect(api.engine).not.toHaveBeenCalled();
+      expect(api.configure).not.toHaveBeenCalled();
+    } finally {
+      await act(async () => root.unmount());
+    }
+  },
+);
+
 it("refuses configuration on an unknown computer kind", async () => {
   const element = document.createElement("div");
   const root = createRoot(element);

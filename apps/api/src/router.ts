@@ -2351,11 +2351,12 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           if (!bot.computer || seen.has(bot.computer.id)) return [];
           seen.add(bot.computer.id);
           const status = toComputerStatus(bot.id, bot.computer, null, hostLabel);
+          const runtimeKind = RuntimeKindSchema.safeParse(bot.runtimeKind);
           return [
             {
               botId: bot.id,
               name: bot.name,
-              runtimeKind: RuntimeKindSchema.parse(bot.runtimeKind),
+              ...(runtimeKind.success ? { runtimeKind: runtimeKind.data } : {}),
               status,
             },
           ];
