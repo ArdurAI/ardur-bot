@@ -774,7 +774,7 @@ export async function sendThreadMessage(
             tx,
             actor,
             contextReferences,
-            target.kind === "bot" ? target.bot.computer?.kind : undefined,
+            target.kind === "bot" ? target.bot.computer : undefined,
           )
         : { note: "", blocks: [] };
       const promptText = [input.text, composerContext.note].filter(Boolean).join("\n\n");

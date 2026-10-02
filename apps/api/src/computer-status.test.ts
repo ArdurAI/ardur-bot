@@ -2,6 +2,24 @@ import { describe, expect, it } from "vitest";
 import { executionBlocksUserTakeover, toComputerStatus } from "./computer-status.js";
 
 describe("toComputerStatus", () => {
+  it.each([
+    { kind: "desktop", connectionId: null, host: true },
+    { kind: "desktop", connectionId: "docker", host: false },
+    { kind: "desktop", connectionId: "podman", host: false },
+    { kind: "remote-docker", connectionId: "docker", host: false },
+    { kind: "desktop", connectionId: "missing", host: false },
+    { kind: "desktop", connectionId: "", host: false },
+  ])("projects host policy for $kind / $connectionId", (row) => {
+    expect(
+      toComputerStatus("bot", {
+        ...row,
+        state: "running",
+        scope: "team",
+        controlHolder: "none",
+        homeRevision: "saved",
+      }).runsOnHost,
+    ).toBe(row.host);
+  });
   it.each([null, "update"])(
     "preserves a suspending computer with reservation %s",
     (maintenanceId) => {

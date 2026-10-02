@@ -3,7 +3,12 @@ import path from "node:path";
 import type { AdapterContext, ComputerFileEntry } from "@ardurbot/adapter-kit";
 import { DesktopSandboxProvider, toComputerRef } from "@ardurbot/adapters";
 import type { Actor, IdeFile, IdeRoot } from "@ardurbot/contracts";
-import { IDE_FILE_BYTES, IdeEntrySchema, IdePathSchema } from "@ardurbot/contracts";
+import {
+  computerRunsOnHost,
+  IDE_FILE_BYTES,
+  IdeEntrySchema,
+  IdePathSchema,
+} from "@ardurbot/contracts";
 import type { HostOperation } from "@ardurbot/contracts/host-bridge";
 import { resolveActionApproval } from "@ardurbot/core";
 import { IsolationError, requireMembership } from "@ardurbot/db";
@@ -113,7 +118,7 @@ export function createIdeFiles(deps: Deps) {
       const computer = bot.computer;
       if (
         !computer ||
-        computer.kind === "desktop" ||
+        computerRunsOnHost(computer) ||
         seen.has(computer.id) ||
         computer.spaceId !== actor.spaceId ||
         (computer.scope === "dedicated" && computer.userId !== actor.userId) ||

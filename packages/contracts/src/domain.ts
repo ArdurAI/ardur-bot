@@ -912,6 +912,7 @@ export const ComputerUpdateSchema = z.object({
 export type ComputerUpdate = z.infer<typeof ComputerUpdateSchema>;
 
 export const ComputerStatusSchema = z.object({
+  runsOnHost: z.boolean().optional(),
   imageProfile: ComputerProfileSchema.optional(),
   connectionId: Id.nullable().optional(),
   capabilities: z.object({ graphical: z.boolean(), interactiveTerminal: z.boolean() }).optional(),

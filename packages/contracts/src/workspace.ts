@@ -9,6 +9,7 @@ export const WorkspaceContextSchema = z.object({
   computerId: Id.nullable(),
   generation: z.number().int().nonnegative().nullable(),
   files: z.enum(["live", "saved", "unavailable"]),
+  runsOnHost: z.boolean().optional(),
   observedAt: z.iso.datetime(),
 });
 export type WorkspaceContext = z.infer<typeof WorkspaceContextSchema>;
