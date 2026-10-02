@@ -1564,6 +1564,7 @@ msgstr "서버에 연결할 수 없습니다."
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/shell/dialogs.tsx
+#: src/pages/shell/move-to-host.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Cancel"
 msgstr "취소"
@@ -1625,8 +1626,9 @@ msgstr ""
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/shell/move-to-host.tsx
 msgid "Change computer"
-msgstr ""
+msgstr "컴퓨터 변경"
 
 #: src/pages/shell/runtime-summary.tsx
 msgid "Change location"
@@ -1827,6 +1829,10 @@ msgstr ""
 #: src/pages/McpServersOverlay.tsx
 msgid "Choose one credential: a token or a header."
 msgstr ""
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Choose Only this bot to use a different location from the Team computer."
+msgstr "팀 컴퓨터와 다른 위치를 사용하려면 이 봇만을 선택하세요."
 
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "Choose Trim older context or Stop the run."
@@ -2270,6 +2276,9 @@ msgid "Connect remote account"
 msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/computer-location-picker.tsx
+#: src/pages/shell/move-to-host.tsx
 msgid "Connect the host service to choose This computer."
 msgstr "이 컴퓨터를 선택하려면 호스트 서비스를 연결하세요."
 
@@ -2396,6 +2405,7 @@ msgstr "컨텍스트 제한 (KiB)"
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/shell/move-to-host.tsx
 msgid "Continue"
 msgstr "계속"
 
@@ -2526,8 +2536,9 @@ msgid "Could not change password"
 msgstr "비밀번호를 변경할 수 없습니다"
 
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/shell/move-to-host.tsx
 msgid "Could not change the computer; stop its bots and try again."
-msgstr ""
+msgstr "컴퓨터를 변경하지 못했습니다. 해당 봇들을 중지하고 다시 시도하세요."
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Could not change the computer. Stop its bots and try again."
@@ -5757,6 +5768,10 @@ msgstr ""
 msgid "Move to a container"
 msgstr "컨테이너로 이동"
 
+#: src/pages/shell/move-to-host.tsx
+msgid "Move to This computer"
+msgstr "이 컴퓨터로 이동"
+
 #. placeholder {0}: value.minimumFreeGb
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Move when this Mac has under {0} GB free"
@@ -6535,6 +6550,7 @@ msgid "Other files"
 msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/shell/computer-location-picker.tsx
 msgid "Other locations are unavailable for {runtime}. Choose This computer."
 msgstr "{runtime}에서는 다른 위치를 사용할 수 없습니다. 이 컴퓨터를 선택하세요."
 
@@ -7682,6 +7698,8 @@ msgstr "실행 중…"
 msgid "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?"
 msgstr "이 컴퓨터에서 실행 중인 작업이 있습니다. 연결을 바꾸면 중단될 수 있습니다. 그래도 저장할까요?"
 
+#: src/pages/shell/computer-location-picker.tsx
+#: src/pages/shell/move-to-host.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "Runs as you; can use your files and signed-in tools"
 msgstr "내 권한으로 실행되며 내 파일과 로그인된 도구를 사용할 수 있습니다"
@@ -7734,6 +7752,10 @@ msgstr ""
 #: src/pages/ComparePanel.tsx
 msgid "Same task, {count} bots"
 msgstr ""
+
+#: src/pages/shell/computer-location-picker.tsx
+msgid "Sandbox"
+msgstr "샌드박스"
 
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Sans"
@@ -8035,6 +8057,7 @@ msgstr "{peer}에게 보냄"
 msgid "Sentry alert"
 msgstr "Sentry 알림"
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "Separate home; can reach allowed network services and granted credentials."
 msgstr "별도의 홈 폴더를 사용하며 허용된 네트워크 서비스와 부여된 자격 증명에 접근할 수 있습니다."
@@ -8101,6 +8124,7 @@ msgid "Set up a board"
 msgstr "보드 설정"
 
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/computer-location-picker.tsx
 msgid "Set up a container for isolated work."
 msgstr "격리된 작업을 위해 컨테이너를 설정하세요."
 
@@ -8171,6 +8195,10 @@ msgstr ""
 #: src/pages/shell/runtime-summary.tsx
 msgid "Shared with team"
 msgstr "팀과 공유"
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Sharing"
+msgstr "공유"
 
 #: src/components/ShowAllModels.tsx
 msgid "Show all models"
@@ -8947,6 +8975,7 @@ msgstr "이 컴퓨터"
 #: src/pages/fleet/target-name.ts
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "This computer"
 msgstr "이 컴퓨터"
@@ -9027,8 +9056,9 @@ msgstr "모든 메시지를 영구적으로 삭제하고 진행 중인 작업을
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/shell/move-to-host.tsx
 msgid "This replaces the computer's files. Continue?"
-msgstr ""
+msgstr "컴퓨터의 파일이 교체됩니다. 계속할까요?"
 
 #: src/pages/Auth.tsx
 msgid "This reset link is invalid or expired"

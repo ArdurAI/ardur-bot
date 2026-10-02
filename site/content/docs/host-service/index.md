@@ -36,6 +36,28 @@ sequenceDiagram
 
 ## Boundaries and limits
 
+### Choosing the host or a sandbox
+
+For the deployment owner, new bots default to **This computer** once the host service
+is paired to them and connected. Otherwise the server uses the deployment's sandbox
+default. Explicit local desktop mode keeps its existing owner-only local host path
+without a paired registration. The deployment's existing `computerHost` setting
+overrides the preference (`this-mac` for host, `docker` for sandbox); it never bypasses
+host availability or ownership checks. No existing bot changes location automatically.
+
+**This computer** and **Sandbox** have equal visual weight in creation and web/desktop
+location settings. A bot on This computer runs as the person and can reach their files
+and signed-in tools, subject to the host's existing command and folder guards. The
+sandbox is the choice for separation: a separate home with allowed network services
+and granted credentials. Team sharing is independent of location and does not move an
+existing Team computer.
+
+Host-only runtimes keep the Sandbox choice visible but disabled with a reason. A
+saved runtime/location mismatch offers **Move to This computer** in bot settings;
+moving still requires the owner's connected host and explicit confirmation. The
+phone offers the same two choices at creation, but existing location changes and
+mismatch repair say **Change location on desktop** rather than silently migrating.
+
 - One owner and one paired host per deployment. `host_registrations` stores the
   token's SHA-256 digest, registration generation and registered folders. Pairing
   cannot overwrite an existing host. Disconnect deletes the registration and closes

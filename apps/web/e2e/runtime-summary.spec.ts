@@ -78,6 +78,11 @@ test("bot settings show execution location outside Advanced before saving", asyn
   await expect(settings.getByTestId("bot-settings-advanced")).not.toHaveAttribute("open", "");
   await summary.scrollIntoViewIfNeeded();
   await settings.getByText("Change location", { exact: true }).click();
+  const locations = settings.getByTestId("computer-location-picker");
+  await expect(
+    locations.getByRole("button", { name: "This computer", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(locations.getByRole("button", { name: "Sandbox", exact: true })).toBeEnabled();
   await expect(settings.getByRole("combobox", { name: "Connection", exact: true })).toBeVisible();
   await settings
     .getByRole("combobox", { name: "Connection", exact: true })
@@ -91,7 +96,7 @@ test("bot settings show execution location outside Advanced before saving", asyn
     "Bots share files and installed tools",
     "Paused for an update",
   ]) {
-    await expect(settings.getByText(fact, { exact: true })).toHaveCount(1);
+    await expect(summary.getByText(fact, { exact: true })).toHaveCount(1);
   }
   await captureScreenshot(page, testInfo, "bot-runtime-settings-host");
   await settings.getByRole("button", { name: "Only this bot", exact: true }).click();

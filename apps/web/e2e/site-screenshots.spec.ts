@@ -307,6 +307,10 @@ test("captures bot chat, group collaboration, and routines from seeded demo data
     }
     if (procedure === "models/credentials")
       return route.fulfill({ json: { json: data.credentials } });
+    if (procedure === "host/status")
+      return route.fulfill({
+        json: { json: { configured: true, connected: true, roots: [], health: null } },
+      });
     if (procedure === "computer/status")
       return route.fulfill({
         json: {
@@ -435,6 +439,14 @@ test("captures bot chat, group collaboration, and routines from seeded demo data
   await expect(runtimeSummary).not.toContainText("Runs as you");
   await expect(runtimeSummary).toContainText("Bots share files and installed tools");
   await runtimeSummary.scrollIntoViewIfNeeded();
+  await botSettings.getByText("Change location", { exact: true }).click();
+  const locations = botSettings.getByTestId("computer-location-picker");
+  await expect(locations.getByRole("button", { name: "This computer", exact: true })).toBeEnabled();
+  await expect(locations.getByRole("button", { name: "Sandbox", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await locations.scrollIntoViewIfNeeded();
   await captureSiteScreenshot(page, "bot-runtime-settings");
 
   await page.goto("/app/g/operations-group");

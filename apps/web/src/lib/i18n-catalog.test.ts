@@ -13,6 +13,40 @@ import zhCN from "../../scripts/translations-zh-CN.json";
 
 describe("lingui catalogs", () => {
   it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+    "translates both location choices, consequences, refusals and repair in %s",
+    async (locale) => {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const catalog = await formatter().parse(readFileSync(filename, "utf8"), {
+        locale,
+        sourceLocale: "en",
+        filename,
+      });
+      for (const message of [
+        "This computer",
+        "Sandbox",
+        "Sharing",
+        "Where this bot runs",
+        "Change location",
+        "Runs as you; can use your files and signed-in tools",
+        "Separate home; can reach allowed network services and granted credentials.",
+        "Connect the host service to choose This computer.",
+        "Other locations are unavailable for {runtime}. Choose This computer.",
+        "Set up a container for isolated work.",
+        "Choose Only this bot to use a different location from the Team computer.",
+        "Move to This computer",
+        "Change computer",
+        "This replaces the computer's files. Continue?",
+        "Could not change the computer; stop its bots and try again.",
+        "Cancel",
+        "Continue",
+      ]) {
+        const entry = Object.values(catalog).find((value) => value.message === message);
+        expect(entry?.translation, `${locale}: ${message}`).toBeTruthy();
+        if (message.includes("{runtime}")) expect(entry?.translation).toContain("{runtime}");
+      }
+    },
+  );
+  it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
     "translates evidence controls, states and downloads in %s",
     async (locale) => {
       const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));

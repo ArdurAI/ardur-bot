@@ -71,7 +71,13 @@ test("a host runtime offers This computer without mislabeling its current contai
   }
   await expect(summary).toContainText("Docker Desktop");
   await expect(summary).not.toContainText("Runs as you");
+  await expect(
+    settings.getByRole("button", { name: "Move to This computer", exact: true }),
+  ).toBeEnabled();
   await settings.getByText("Change location", { exact: true }).click();
+  const locations = settings.getByTestId("computer-location-picker");
+  await expect(locations.getByRole("button", { name: "This computer", exact: true })).toBeEnabled();
+  await expect(locations.getByRole("button", { name: "Sandbox", exact: true })).toBeDisabled();
   const select = settings.getByRole("combobox", { name: "Connection", exact: true });
   await expect(select.locator("option")).toHaveText(["Keep current location", "This computer"]);
   await expect(settings).toContainText(

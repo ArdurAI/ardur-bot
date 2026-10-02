@@ -1564,6 +1564,7 @@ msgstr "Can't reach the server."
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/shell/dialogs.tsx
+#: src/pages/shell/move-to-host.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Cancel"
 msgstr "Cancel"
@@ -1625,6 +1626,7 @@ msgstr "Change"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/shell/move-to-host.tsx
 msgid "Change computer"
 msgstr "Change computer"
 
@@ -1827,6 +1829,10 @@ msgstr "Choose folder"
 #: src/pages/McpServersOverlay.tsx
 msgid "Choose one credential: a token or a header."
 msgstr "Choose one credential: a token or a header."
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Choose Only this bot to use a different location from the Team computer."
+msgstr "Choose Only this bot to use a different location from the Team computer."
 
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "Choose Trim older context or Stop the run."
@@ -2270,6 +2276,9 @@ msgid "Connect remote account"
 msgstr "Connect remote account"
 
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/computer-location-picker.tsx
+#: src/pages/shell/move-to-host.tsx
 msgid "Connect the host service to choose This computer."
 msgstr "Connect the host service to choose This computer."
 
@@ -2396,6 +2405,7 @@ msgstr "Context limit (KiB)"
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/shell/move-to-host.tsx
 msgid "Continue"
 msgstr "Continue"
 
@@ -2526,6 +2536,7 @@ msgid "Could not change password"
 msgstr "Could not change password"
 
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/shell/move-to-host.tsx
 msgid "Could not change the computer; stop its bots and try again."
 msgstr "Could not change the computer; stop its bots and try again."
 
@@ -5757,6 +5768,10 @@ msgstr "Move to {name}?"
 msgid "Move to a container"
 msgstr "Move to a container"
 
+#: src/pages/shell/move-to-host.tsx
+msgid "Move to This computer"
+msgstr "Move to This computer"
+
 #. placeholder {0}: value.minimumFreeGb
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Move when this Mac has under {0} GB free"
@@ -6535,6 +6550,7 @@ msgid "Other files"
 msgstr "Other files"
 
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/shell/computer-location-picker.tsx
 msgid "Other locations are unavailable for {runtime}. Choose This computer."
 msgstr "Other locations are unavailable for {runtime}. Choose This computer."
 
@@ -7682,6 +7698,8 @@ msgstr "Running…"
 msgid "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?"
 msgstr "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?"
 
+#: src/pages/shell/computer-location-picker.tsx
+#: src/pages/shell/move-to-host.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "Runs as you; can use your files and signed-in tools"
 msgstr "Runs as you; can use your files and signed-in tools"
@@ -7734,6 +7752,10 @@ msgstr "Same task, {0} bots"
 #: src/pages/ComparePanel.tsx
 msgid "Same task, {count} bots"
 msgstr "Same task, {count} bots"
+
+#: src/pages/shell/computer-location-picker.tsx
+msgid "Sandbox"
+msgstr "Sandbox"
 
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Sans"
@@ -8035,6 +8057,7 @@ msgstr "Sent to {peer}"
 msgid "Sentry alert"
 msgstr "Sentry alert"
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "Separate home; can reach allowed network services and granted credentials."
 msgstr "Separate home; can reach allowed network services and granted credentials."
@@ -8101,6 +8124,7 @@ msgid "Set up a board"
 msgstr "Set up a board"
 
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/computer-location-picker.tsx
 msgid "Set up a container for isolated work."
 msgstr "Set up a container for isolated work."
 
@@ -8171,6 +8195,10 @@ msgstr "Shared recall will use proposed facts after merge."
 #: src/pages/shell/runtime-summary.tsx
 msgid "Shared with team"
 msgstr "Shared with team"
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Sharing"
+msgstr "Sharing"
 
 #: src/components/ShowAllModels.tsx
 msgid "Show all models"
@@ -8947,6 +8975,7 @@ msgstr "this computer"
 #: src/pages/fleet/target-name.ts
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "This computer"
 msgstr "This computer"
@@ -9027,6 +9056,7 @@ msgstr "This permanently removes every message and stops current work. The chat 
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/shell/move-to-host.tsx
 msgid "This replaces the computer's files. Continue?"
 msgstr "This replaces the computer's files. Continue?"
 

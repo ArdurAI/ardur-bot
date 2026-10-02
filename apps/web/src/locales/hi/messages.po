@@ -1564,6 +1564,7 @@ msgstr "सर्वर तक नहीं पहुंचा जा सका�
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/shell/dialogs.tsx
+#: src/pages/shell/move-to-host.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Cancel"
 msgstr "रद्द करें"
@@ -1625,8 +1626,9 @@ msgstr ""
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/shell/move-to-host.tsx
 msgid "Change computer"
-msgstr ""
+msgstr "कंप्यूटर बदलें"
 
 #: src/pages/shell/runtime-summary.tsx
 msgid "Change location"
@@ -1827,6 +1829,10 @@ msgstr ""
 #: src/pages/McpServersOverlay.tsx
 msgid "Choose one credential: a token or a header."
 msgstr ""
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Choose Only this bot to use a different location from the Team computer."
+msgstr "टीम के कंप्यूटर से अलग स्थान इस्तेमाल करने के लिए केवल यह बॉट चुनें।"
 
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "Choose Trim older context or Stop the run."
@@ -2270,6 +2276,9 @@ msgid "Connect remote account"
 msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/computer-location-picker.tsx
+#: src/pages/shell/move-to-host.tsx
 msgid "Connect the host service to choose This computer."
 msgstr "यह कंप्यूटर चुनने के लिए होस्ट सेवा कनेक्ट करें।"
 
@@ -2396,6 +2405,7 @@ msgstr "कॉन्टेक्स्ट सीमा (KiB)"
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/shell/move-to-host.tsx
 msgid "Continue"
 msgstr "जारी रखें"
 
@@ -2526,8 +2536,9 @@ msgid "Could not change password"
 msgstr "पासवर्ड बदला नहीं जा सका"
 
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/shell/move-to-host.tsx
 msgid "Could not change the computer; stop its bots and try again."
-msgstr ""
+msgstr "कंप्यूटर नहीं बदला जा सका; उसके बॉट रोकें और फिर कोशिश करें।"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Could not change the computer. Stop its bots and try again."
@@ -5757,6 +5768,10 @@ msgstr ""
 msgid "Move to a container"
 msgstr "कंटेनर में ले जाएँ"
 
+#: src/pages/shell/move-to-host.tsx
+msgid "Move to This computer"
+msgstr "इस कंप्यूटर पर ले जाएँ"
+
 #. placeholder {0}: value.minimumFreeGb
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Move when this Mac has under {0} GB free"
@@ -6535,6 +6550,7 @@ msgid "Other files"
 msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/shell/computer-location-picker.tsx
 msgid "Other locations are unavailable for {runtime}. Choose This computer."
 msgstr "{runtime} के लिए अन्य स्थान उपलब्ध नहीं हैं। यह कंप्यूटर चुनें।"
 
@@ -7682,6 +7698,8 @@ msgstr "चल रहा है…"
 msgid "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?"
 msgstr "इस कंप्यूटर पर रन सक्रिय हैं। कनेक्शन बदलने से वे रुक सकते हैं। फिर भी सहेजें?"
 
+#: src/pages/shell/computer-location-picker.tsx
+#: src/pages/shell/move-to-host.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "Runs as you; can use your files and signed-in tools"
 msgstr "आपकी अनुमतियों से चलता है; आपकी फ़ाइलें और साइन-इन किए हुए टूल इस्तेमाल कर सकता है"
@@ -7734,6 +7752,10 @@ msgstr ""
 #: src/pages/ComparePanel.tsx
 msgid "Same task, {count} bots"
 msgstr ""
+
+#: src/pages/shell/computer-location-picker.tsx
+msgid "Sandbox"
+msgstr "सैंडबॉक्स"
 
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Sans"
@@ -8035,6 +8057,7 @@ msgstr "{peer} को भेजा गया"
 msgid "Sentry alert"
 msgstr ""
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "Separate home; can reach allowed network services and granted credentials."
 msgstr "अलग होम फ़ोल्डर; अनुमत नेटवर्क सेवाओं और दिए गए क्रेडेंशियल तक पहुँच सकता है।"
@@ -8101,6 +8124,7 @@ msgid "Set up a board"
 msgstr "बोर्ड सेट अप करें"
 
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/computer-location-picker.tsx
 msgid "Set up a container for isolated work."
 msgstr "अलग वातावरण में काम करने के लिए कंटेनर सेट अप करें।"
 
@@ -8171,6 +8195,10 @@ msgstr ""
 #: src/pages/shell/runtime-summary.tsx
 msgid "Shared with team"
 msgstr "टीम के साथ साझा"
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Sharing"
+msgstr "साझा करना"
 
 #: src/components/ShowAllModels.tsx
 msgid "Show all models"
@@ -8947,6 +8975,7 @@ msgstr "यह कंप्यूटर"
 #: src/pages/fleet/target-name.ts
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "This computer"
 msgstr "यह कंप्यूटर"
@@ -9027,8 +9056,9 @@ msgstr ""
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/shell/move-to-host.tsx
 msgid "This replaces the computer's files. Continue?"
-msgstr ""
+msgstr "इससे कंप्यूटर की फ़ाइलें बदल जाएँगी। जारी रखें?"
 
 #: src/pages/Auth.tsx
 msgid "This reset link is invalid or expired"
