@@ -336,9 +336,13 @@ against the cask's SHA-256. For previews without an identified developer, use **
 or install with `brew install --cask --no-quarantine ArdurAI/tap/ardur`.
 Signed and notarized builds omit these caveats and open normally.
 
-## Platform acceptance still required
+## Window placement
 
-The main window remembers its normal size, position, display, maximized and full-screen state across restarts; if its top area is no longer reachable, it opens centred at the default size on the display containing its saved centre, or the primary display. Linux Wayland may let the compositor choose its position.
+The main window remembers its normal size, position, display, maximized and full-screen state across restarts. It uses the saved display when still connected and keeps usable bounds fully inside its work area, shrinking only when needed. If the saved top area is unreachable, it centres the default size on the saved display, the display containing the saved centre, or the primary display, in that order. Linux Wayland may let the compositor choose its position.
+
+Full-screen restore starts after the window is shown. Placement saves wait for full-screen entry to finish. Closing saves immediately; quitting waits up to two seconds for a pending write, then exits even if storage stalls.
+
+## Platform acceptance still required
 
 Windows and Linux use native window frames plus a tray with Open and Quit actions. Closing the
 main window keeps it reachable through the tray; its retained renderer is destroyed after the
