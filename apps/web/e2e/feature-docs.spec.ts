@@ -459,6 +459,15 @@ test("integrations: inspect the catalog, tool access, and connection form", asyn
   const permission = manage.getByRole("combobox", { name: "Permission for read_notes" });
   await expect(permission).toHaveValue("ask");
   await capture(page, "docs-integrations-access");
+  await manage.getByRole("button", { name: "Review tools", exact: true }).first().click();
+  const review = page.getByTestId("bot-tool-review");
+  await expect(review.getByRole("checkbox", { name: "read_notes", exact: true })).toBeChecked();
+  await expect(
+    review.getByRole("checkbox", { name: "update_notes", exact: true }),
+  ).not.toBeChecked();
+  await capture(page, "docs-integrations-review");
+  await page.keyboard.press("Escape");
+  await expect(review).toHaveCount(0);
   await permission.selectOption("allow");
   await expect(permission).toHaveValue("allow");
   await capture(page, "docs-integrations-allow");

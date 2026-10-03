@@ -43,6 +43,7 @@ describe("mobile trusted integration catalog", () => {
     expect(
       integrationCardMessage(integrationCatalog.find((entry) => entry.id === "notion")!, {
         state,
+        spaceAllowedTools: ["read_item"],
       } as IntegrationConnection),
     ).toBe(sentence);
   });
@@ -58,4 +59,14 @@ describe("mobile trusted integration catalog", () => {
       } as IntegrationConnection),
     ).toContain("Review tools");
   });
+});
+
+it("shows review for a connected integration with no allowed tools", () => {
+  expect(
+    integrationCardMessage(integrationCatalog[0]!, {
+      state: "connected",
+      needsReview: false,
+      spaceAllowedTools: [],
+    } as unknown as IntegrationConnection),
+  ).toBe("Review tools before your bots can use this account.");
 });

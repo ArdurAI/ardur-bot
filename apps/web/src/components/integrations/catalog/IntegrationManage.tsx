@@ -86,7 +86,11 @@ export function IntegrationManage({
       const editableBotIds = new Set(editableBots.map((bot) => bot.id));
       setOverrides(grants.filter((grant) => editableBotIds.has(grant.botId)));
       setSpaceToolPolicies(connection.spaceToolPolicies);
-      setToolIds(connection.spaceAllowedTools ?? []);
+      setToolIds(
+        servers.find((server) => server.id === connection.id)?.spaceAllowedTools ??
+          connection.spaceAllowedTools ??
+          [],
+      );
     } catch {
       setError(true);
     } finally {

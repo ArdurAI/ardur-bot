@@ -957,11 +957,12 @@ export class IntegrationConnections {
     const member = await this.prisma.spaceMember.findUnique({
       where: { spaceId_userId: { spaceId: actor.spaceId, userId: actor.userId } },
     });
+    const manifest = IntegrationManifestSchema.parse(server.manifest);
     return {
       revision: server.revision,
       manifest: {
-        ...IntegrationManifestSchema.parse(server.manifest),
-        tools: IntegrationManifestSchema.parse(server.manifest).tools.filter(
+        ...manifest,
+        tools: manifest.tools.filter(
           (tool) =>
             !server.catalogId ||
             integrationById(server.catalogId)?.toolPolicies[tool.id]?.approval !== "disabled",

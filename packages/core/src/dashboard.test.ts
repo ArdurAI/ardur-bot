@@ -99,3 +99,32 @@ it.each([
     },
   ]);
 });
+
+it("keeps connection health while flagging space tools awaiting review", () => {
+  for (const [spaceAllowedTools, needsReview, expected] of [
+    [["read_item"], false, false],
+    [[], false, true],
+    [["read_item"], true, true],
+  ] as const) {
+    const rows = connectionOverview({
+      integrations: {
+        catalog: [],
+        connections: [
+          {
+            id: "notes",
+            catalogId: "notes",
+            state: "connected",
+            spaceAllowedTools: [...spaceAllowedTools],
+            needsReview,
+            manifest: null,
+            spaceToolPolicies: {},
+          },
+        ],
+      },
+      servers: [],
+      channels: [],
+      devices: [],
+    });
+    expect(rows[0]).toMatchObject({ state: "connected", toolsNeedReview: expected });
+  }
+});

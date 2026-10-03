@@ -22,6 +22,7 @@ export function BotToolReview({
   const [approveSpace, setApproveSpace] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  const [version, setVersion] = useState(0);
   useEffect(() => {
     let active = true;
     setReview(undefined);
@@ -48,7 +49,7 @@ export function BotToolReview({
     return () => {
       active = false;
     };
-  }, [connectionId, botId]);
+  }, [connectionId, botId, version]);
   async function save(all = false) {
     if (!review) return;
     setBusy(true);
@@ -84,7 +85,12 @@ export function BotToolReview({
     >
       <DialogContent className="max-h-[80vh] overflow-y-auto" data-testid="bot-tool-review">
         <DialogTitle>{t`Review tools`}</DialogTitle>
-        {error ? <p role="alert">{t`Could not load or save tools.`}</p> : null}
+        {error ? (
+          <div role="alert">
+            <p>{t`Could not load or save tools.`}</p>
+            <Button disabled={busy} onClick={() => setVersion((v) => v + 1)}>{t`Try again`}</Button>
+          </div>
+        ) : null}
         {review ? (
           <>
             {botId && review.canApproveSpace ? (
@@ -170,9 +176,9 @@ export function BotToolReview({
               >{t`Allow all`}</Button>
             </div>
           </>
-        ) : (
+        ) : !error ? (
           <p>{t`Loading your tools.`}</p>
-        )}
+        ) : null}
       </DialogContent>
     </Dialog>
   );
