@@ -264,6 +264,55 @@ describe("Electron edge without Electron", () => {
     },
   );
 
+  it.each(["ready-to-show", "fallback", "early activation"] as const)(
+    "shows before requesting full-screen at %s and preserves state until entry settles",
+    (trigger) => {
+      vi.useFakeTimers();
+      const win = new WindowFake();
+      const order: string[] = [];
+      win.show.mockImplementation(() => {
+        order.push("show");
+        win.visible = true;
+        win.emit("resize");
+        win.emit("show");
+      });
+      win.setFullScreen.mockImplementation(() => {
+        expect(win.isVisible()).toBe(true);
+        order.push("full-screen");
+        // Model a macOS transition longer than the save debounce.
+        win.emit("resize");
+      });
+      const store = new WindowPlaceStore("/unused");
+      store.current = { ...normal, fullScreen: true };
+      const save = vi.spyOn(store, "save").mockResolvedValue();
+      watchWindowPlace(win, store, displayScreen, () => true);
+      const placed = windowWithRestoredState(win, store.current);
+      showMainWindowWhenPainted(placed);
+      win.emit("move");
+      vi.advanceTimersByTime(WINDOW_PLACE_DEBOUNCE_MS);
+      expect(save).not.toHaveBeenCalled();
+      if (trigger === "ready-to-show") win.emit("ready-to-show");
+      if (trigger === "fallback") vi.advanceTimersByTime(MAIN_WINDOW_SHOW_FALLBACK_MS);
+      if (trigger === "early activation") win.show();
+      expect(order).toEqual(["show", "full-screen"]);
+      vi.advanceTimersByTime(WINDOW_PLACE_DEBOUNCE_MS * 2);
+      win.emit("close");
+      expect(save).not.toHaveBeenCalled();
+      expect(store.current.fullScreen).toBe(true);
+      win.fullScreen = true;
+      win.emit("enter-full-screen");
+      vi.advanceTimersByTime(WINDOW_PLACE_DEBOUNCE_MS);
+      expect(save).toHaveBeenCalledExactlyOnceWith({ ...normal, fullScreen: true, displayId: 2 });
+      win.fullScreen = false;
+      win.emit("leave-full-screen");
+      vi.advanceTimersByTime(WINDOW_PLACE_DEBOUNCE_MS);
+      expect(save).toHaveBeenLastCalledWith({ ...normal, fullScreen: false, displayId: 2 });
+      expect(win.setFullScreen).toHaveBeenCalledOnce();
+      win.emit("closed");
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
   it("does not restore state after a window is destroyed", () => {
     vi.useFakeTimers();
     const win = new WindowFake();

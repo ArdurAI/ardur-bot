@@ -7,6 +7,9 @@ import { readPrivateFile, writePrivateFile } from "./setup-store.js";
 export const WINDOW_PLACE_FILE = "window-place.json";
 export const WINDOW_PLACE_DEBOUNCE_MS = 500;
 
+// Native full-screen entry is asynchronous. Keep the saved state until Electron confirms it.
+const restoringFullScreen = new WeakSet<object>();
+
 export type WindowPlace = Rectangle & {
   maximized: boolean;
   fullScreen: boolean;
@@ -167,7 +170,8 @@ export function watchWindowPlace(
   };
   const save = () => {
     stop();
-    if (!win.isDestroyed() && isCurrent()) void store.save(captureWindowPlace(win, displayScreen));
+    if (!win.isDestroyed() && isCurrent() && !restoringFullScreen.has(win))
+      void store.save(captureWindowPlace(win, displayScreen));
   };
   const schedule = () => {
     stop();
@@ -187,14 +191,20 @@ export function watchWindowPlace(
 /**
  * maximize() also reveals hidden Electron windows. Apply saved state at the first
  * reveal, not during construction, so the existing paint wait and fallback own timing.
+ * Full-screen entry must follow show; ordered-out macOS windows can drop that toggle.
  */
 export function windowWithRestoredState(
   win: ShowableWindow & Pick<BrowserWindow, "maximize" | "setFullScreen">,
   place: Pick<WindowPlace, "maximized" | "fullScreen">,
 ): ShowableWindow {
   let restored = false;
+  if (place.fullScreen) {
+    restoringFullScreen.add(win);
+    win.once("enter-full-screen", () => restoringFullScreen.delete(win));
+    win.once("closed", () => restoringFullScreen.delete(win));
+  }
   const restore = () => {
-    if (restored || win.isDestroyed()) return;
+    if (restored || win.isDestroyed() || !win.isVisible()) return;
     restored = true;
     if (place.maximized) win.maximize();
     if (place.fullScreen) win.setFullScreen(true);
@@ -203,8 +213,9 @@ export function windowWithRestoredState(
   win.once("show", restore);
   return {
     show: () => {
-      restore();
+      if (win.isDestroyed()) return;
       if (!win.isVisible()) win.show();
+      restore();
     },
     focus: () => win.focus(),
     isDestroyed: () => win.isDestroyed(),
