@@ -1,4 +1,6 @@
 import { modelPinOptionKey, parseModelPinOptionKey } from "@ardurbot/core";
+import { i18n } from "@lingui/core";
+
 // @vitest-environment jsdom
 
 import type {
@@ -8,6 +10,7 @@ import type {
   ModelCredential,
   RuntimeAvailability,
 } from "@ardurbot/contracts";
+import { failureCategoryMessage, HERMES_CONTEXT_LIMIT_MESSAGE } from "@ardurbot/contracts";
 import type { ComponentProps, ReactNode } from "react";
 import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -97,7 +100,18 @@ vi.mock("@ardurbot/ui-web", () => ({
       {children}
     </button>
   ),
-  Switch: () => null,
+  Switch: ({
+    checked,
+    onCheckedChange,
+    ...props
+  }: Omit<ComponentProps<"input">, "onChange"> & { onCheckedChange: (value: boolean) => void }) => (
+    <input
+      {...props}
+      type="checkbox"
+      checked={checked}
+      onChange={(event) => onCheckedChange(event.target.checked)}
+    />
+  ),
 }));
 
 import { useModelSettings } from "../../lib/use-model-settings";
@@ -167,6 +181,8 @@ const me = { defaultProvider: "openai-codex", defaultModel: "gpt-6-astra" };
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 beforeEach(() => {
+  i18n.load("en", {});
+  i18n.activate("en");
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.clearAllMocks();
   api.list.mockResolvedValue(catalog);
@@ -2005,3 +2021,80 @@ it("advances draft revision from the save response", async () => {
     expect.objectContaining({ expectedModelPinRevision: 5, title: "second edit" }),
   );
 });
+
+it.each([
+  failureCategoryMessage("experimental-off", { runtime: "Codex", bot: "this bot" }),
+  failureCategoryMessage("computer-unsupported", { runtime: "Codex", bot: "this bot" }),
+  failureCategoryMessage("destinations-space", { runtime: "Codex", bot: "this bot" }),
+  failureCategoryMessage("connection-missing", { runtime: "Ardur", bot: "this bot" }),
+  HERMES_CONTEXT_LIMIT_MESSAGE,
+])("blocks bot Save with the exact server sentence: %s", async (sentence) => {
+  api.validatePin.mockRejectedValue({ code: "BAD_REQUEST", message: sentence });
+  await act(async () => root.render(settings()));
+  const button = [...container.querySelectorAll("button")].find(
+    (item) => item.textContent === "Save",
+  )!;
+  expect(button.disabled).toBe(true);
+  expect(
+    [...container.querySelectorAll('[role="alert"]')].some((item) => item.textContent === sentence),
+  ).toBe(true);
+  onSave.mockClear();
+  await save();
+  expect(onSave).not.toHaveBeenCalled();
+  expect(api.validatePin).toHaveBeenCalledWith(
+    expect.objectContaining({ botId: bot.id, runtimeKind: "pi" }),
+  );
+});
+
+it("keeps new-bot Create disabled when the space default cannot run", async () => {
+  const sentence = failureCategoryMessage("connection-missing", { runtime: "Ardur" });
+  api.validatePin.mockRejectedValue({ code: "BAD_REQUEST", message: sentence });
+  const create = vi.fn();
+  await act(async () =>
+    root.render(<CreateBotForm onCreate={create} onCancel={() => undefined} />),
+  );
+  expect(container.querySelector('[role="alert"]')?.textContent).toBe(sentence);
+  const button = [...container.querySelectorAll("button")].find(
+    (item) => item.textContent === "Create",
+  )!;
+  expect(button.disabled).toBe(true);
+  expect(api.validatePin).toHaveBeenCalledWith(
+    expect.objectContaining({ computerLocation: "sandbox", provider: null }),
+  );
+});
+
+it.each(["hermes", "codex-app-server", "claude-code", "antigravity"] as const)(
+  "choosing %s visibly turns Experimental on without silently moving the computer",
+  async (kind) => {
+    function Form() {
+      const [runtimeKind, setKind] = useState<RuntimeAvailability["runtimeKind"]>("pi");
+      const [experimental, setExperimental] = useState(false);
+      return (
+        <RuntimeSettings
+          kind={runtimeKind}
+          onKind={setKind}
+          experimental={experimental}
+          onExperimental={setExperimental}
+          modelKey=""
+          onModel={() => undefined}
+          effort=""
+          onEffort={() => undefined}
+        />
+      );
+    }
+    api.availability.mockResolvedValue({ runtimeKind: kind, available: true, models: [] });
+    await act(async () => root.render(<Form />));
+    const select = container.querySelector<HTMLSelectElement>('select[id$="-runtime"]')!;
+    await act(async () => {
+      select.value = kind;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(container.textContent).toContain("Experimental turned on for this runtime");
+    expect(container.textContent).toContain("Experimental");
+    const toggle = container.querySelector<HTMLInputElement>('input[aria-label="Experimental"]')!;
+    expect(toggle.checked).toBe(true);
+    await act(async () => toggle.click());
+    expect(toggle.checked).toBe(false);
+    expect(container.textContent).not.toContain("Experimental turned on for this runtime");
+  },
+);

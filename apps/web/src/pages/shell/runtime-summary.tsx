@@ -165,7 +165,10 @@ export function BotRuntimeSettings({
           }}
           hostAvailable={data.hostConnected}
           state={data.status.state}
-          onChanged={async () => setRevision((value) => value + 1)}
+          onChanged={async () => {
+            setRevision((value) => value + 1);
+            window.dispatchEvent(new Event("fleet:changed"));
+          }}
         />
       ) : null}
       {data ? (
@@ -220,7 +223,10 @@ export function BotRuntimeSettings({
                 deploymentDefault={data.deploymentDefault}
                 hostConnected={data.hostConnected}
                 runtimeKind={runtimeKind}
-                onChanged={async () => setRevision((value) => value + 1)}
+                onChanged={async () => {
+                  setRevision((value) => value + 1);
+                  window.dispatchEvent(new Event("fleet:changed"));
+                }}
               />
             </Suspense>
           ) : null}

@@ -306,6 +306,7 @@ vi.mock("../lib/rpc", () => {
         avatarStyle: "robot",
       }),
       models: {
+        validatePin: async () => ({ ok: true }),
         list: async () => {
           state.calls.push("models.list");
           return [];

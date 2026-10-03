@@ -21,6 +21,7 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { ShowAllModels } from "../components/ShowAllModels";
 import { hermesRefusalMessage } from "../lib/hermes-refusal";
 import { actionMessage } from "../lib/orpc-action-message";
+import { useCanRun } from "../lib/use-can-run";
 import type { ModelSettings } from "../lib/use-model-settings";
 import { ModelEffortSelect, ModelPinSelect } from "./shell/model-pin-select";
 import { RuntimeSettings } from "./shell/runtime-settings";
@@ -106,8 +107,26 @@ export function GroupModelControl({
     setEffort(confirmed?.effort ?? "");
   }, [activeMember?.memberId, activeMember?.modelPinRevision]);
 
+  const canRun = useCanRun(
+    !inherit
+      ? {
+          botId: bot.id,
+          runtimeKind: kind,
+          provider: selectedModel?.provider ?? null,
+          modelId: selectedModel?.modelId ?? null,
+          credentialId: selectedModel?.credentialId ?? null,
+          effort:
+            selectedModel?.provider === "ollama" &&
+            (selectedCredential?.reasoning ?? selectedEntry?.reasoning) === false
+              ? null
+              : effort || (kind === "pi" || kind === "hermes" ? defaultEffort : null),
+          runtimeExperimental: bot.runtimeExperimental ?? false,
+        }
+      : null,
+  );
+
   async function save() {
-    if (!activeMember?.memberId || saving) return;
+    if (!activeMember?.memberId || saving || canRun.blocked) return;
     const selected = parseModelPinOptionKey(key);
     if (
       !inherit &&
@@ -333,6 +352,16 @@ export function GroupModelControl({
           </div>
         </details>
       ) : null}
+      {canRun.error ? (
+        <Button variant="ghost" size="sm" onClick={canRun.recheck}>
+          <Trans>Check again</Trans>
+        </Button>
+      ) : null}
+      {canRun.error ? (
+        <p role="alert" className="mt-2 text-xs text-destructive">
+          {canRun.error}
+        </p>
+      ) : null}
       {error ? (
         <p role="alert" className="mt-2 text-xs text-destructive">
           {error}
@@ -344,9 +373,9 @@ export function GroupModelControl({
         disabled={
           !activeMember?.memberId ||
           saving ||
+          canRun.blocked ||
           (!inherit && !key) ||
-          incompatibleHermes ||
-          (!inherit && kind !== "pi" && !bot.runtimeExperimental)
+          incompatibleHermes
         }
         onClick={() => void save()}
       >

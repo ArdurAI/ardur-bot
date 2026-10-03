@@ -51,6 +51,7 @@ import { hermesContextMessage, hermesRefusalMessage } from "../../lib/hermes-ref
 import { modelUnavailable, spaceDefaultUnavailable } from "../../lib/model-availability";
 import { unavailableSubscriptionModel } from "../../lib/model-options";
 import { rpc } from "../../lib/rpc";
+import { useCanRun } from "../../lib/use-can-run";
 import type { ModelSettings } from "../../lib/use-model-settings";
 import { useModelSettings } from "../../lib/use-model-settings";
 import { ModelDestinations } from "../ModelDestinations";
@@ -180,8 +181,21 @@ export function CreateBotForm({
 
   const computerReady =
     locationReady && (computerLocation === "host" ? hostAvailable : sandboxAvailable);
+  const canRun = useCanRun(
+    computerReady
+      ? {
+          runtimeKind: "pi",
+          provider: null,
+          modelId: null,
+          credentialId: null,
+          effort: null,
+          computerLocation,
+          runtimeExperimental: false,
+        }
+      : null,
+  );
   async function handleSubmit() {
-    if (!name.trim() || submitting || !computerReady) return;
+    if (!name.trim() || submitting || !computerReady || canRun.blocked) return;
     setError(null);
     setSubmitting(true);
     try {
@@ -303,9 +317,19 @@ export function CreateBotForm({
           </div>
         ) : null}
       </div>
+      {canRun.error ? (
+        <Button variant="ghost" size="sm" onClick={canRun.recheck}>
+          <Trans>Check again</Trans>
+        </Button>
+      ) : null}
+      {canRun.error ? (
+        <p role="alert" className="mt-2 text-sm text-destructive">
+          {canRun.error}
+        </p>
+      ) : null}
       <Button
         className="mt-5"
-        disabled={!name.trim() || submitting || !computerReady}
+        disabled={!name.trim() || submitting || !computerReady || canRun.blocked}
         onClick={() => void handleSubmit()}
       >
         {submitting ? <Trans>Creating…</Trans> : <Trans>Create</Trans>}
@@ -547,7 +571,20 @@ export function BotSettings({
     (modelMetaReady &&
       modelUnavailable({ catalog, credentials }, selectedModel?.provider, selectedModel?.modelId));
 
-  const activeValidationError = runtimeKind === "hermes" ? validationError : null;
+  const canRun = useCanRun({
+    botId: bot.id,
+    runtimeKind,
+    runtimeExperimental,
+    provider: selectedModel?.provider ?? null,
+    modelId: selectedModel?.modelId ?? null,
+    credentialId: selectedModel?.credentialId ?? null,
+    effort: selectedModel
+      ? isOllama && effectiveEntry?.reasoning === false
+        ? null
+        : thinkingLevel || defaultThinkingLevel
+      : thinkingLevel || null,
+  });
+  const activeValidationError = canRun.error || (runtimeKind === "hermes" ? validationError : null);
   const hermesRefusal =
     runtimeKind === "hermes"
       ? hermesConnectionRefusal(selectedModel?.provider, effectiveCredential)
@@ -560,7 +597,7 @@ export function BotSettings({
     color?: string;
     notifyOnFinish?: boolean;
   }) {
-    if (activeValidationError) return;
+    if (activeValidationError || canRun.pending) return;
     const selected = modelKey ? parseModelOptionKey(modelKey) : null;
     const nextName = (patchOverrides?.name !== undefined ? patchOverrides.name : name).trim();
     const nextTitle = (patchOverrides?.title !== undefined ? patchOverrides.title : title).trim();
@@ -786,6 +823,7 @@ export function BotSettings({
                   <Suspense fallback={null}>
                     <RuntimeConfigPanel
                       value={runtimeConfig}
+                      checkPin={false}
                       pin={{
                         runtimeKind: "hermes",
                         provider: selectedModel?.provider ?? null,
@@ -848,7 +886,7 @@ export function BotSettings({
             botId={bot.id}
             name={bot.name}
             mode={computerMode}
-            runtimeKind={bot.runtimeKind ?? "pi"}
+            runtimeKind={runtimeKind}
           >
             <ComputerModePicker value={computerMode} onChange={setComputerMode} />
           </BotRuntimeSettings>
@@ -971,8 +1009,18 @@ export function BotSettings({
         </p>
       ) : null}
       <div className="mt-5 flex flex-col items-start gap-3">
+        {canRun.error ? (
+          <Button variant="ghost" size="sm" onClick={canRun.recheck}>
+            <Trans>Check again</Trans>
+          </Button>
+        ) : null}
+        {activeValidationError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {activeValidationError}
+          </p>
+        ) : null}
         <Button
-          disabled={saving || Boolean(activeValidationError)}
+          disabled={saving || canRun.pending || Boolean(activeValidationError)}
           onClick={() => {
             void enqueueSave({
               name,
