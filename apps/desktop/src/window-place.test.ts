@@ -72,7 +72,7 @@ describe("display-aware normal bounds", () => {
       name: "200 pixels of title area at right edge",
       saved: { ...normal, x: 1720 },
       displays: [a],
-      bounds: { x: 1720, y: 120, width: 1000, height: 700 },
+      bounds: { x: 920, y: 120, width: 1000, height: 700 },
     },
     {
       name: "199 pixels at right edge",
@@ -87,10 +87,10 @@ describe("display-aware normal bounds", () => {
       bounds: centred,
     },
     {
-      name: "unreachable title but centre in B",
+      name: "partly reachable top band in B",
       saved: { ...normal, x: 2000, y: -50 },
       displays: [a, b],
-      bounds: { x: 2160, y: 70, ...defaults },
+      bounds: { x: 2000, y: 0, width: 1000, height: 700 },
     },
     {
       name: "saved maximized",
@@ -103,6 +103,42 @@ describe("display-aware normal bounds", () => {
       saved: { ...normal, fullScreen: true },
       displays: [a],
       bounds: { x: 100, y: 120, width: 1000, height: 700 },
+    },
+    {
+      name: "bottom overflow keeps size and shifts up",
+      saved: { ...normal, y: 900 },
+      displays: [a],
+      bounds: { x: 100, y: 340, width: 1000, height: 700 },
+    },
+    {
+      name: "right and bottom overflow shift both edges",
+      saved: { ...normal, x: 1720, y: 900 },
+      displays: [a],
+      bounds: { x: 920, y: 340, width: 1000, height: 700 },
+    },
+    {
+      name: "top band partly under menu keeps size and shifts down",
+      saved: { ...normal, y: 10 },
+      displays: [a],
+      bounds: { x: 100, y: 24, width: 1000, height: 700 },
+    },
+    {
+      name: "left overflow shifts right",
+      saved: { ...normal, x: -50 },
+      displays: [a],
+      bounds: { x: 0, y: 120, width: 1000, height: 700 },
+    },
+    {
+      name: "oversized width shrinks but usable height is retained",
+      saved: { ...normal, width: 3000, y: 900 },
+      displays: [a],
+      bounds: { x: 0, y: 340, width: 1920, height: 700 },
+    },
+    {
+      name: "negative-origin bottom and right overflow",
+      saved: { ...normal, x: -300, y: -150 },
+      displays: [{ ...a, workArea: { x: -1920, y: -1040, width: 1920, height: 1016 } }],
+      bounds: { x: -1000, y: -724, width: 1000, height: 700 },
     },
     { name: "missing state", saved: null, displays: [b, a], bounds: centred },
     {

@@ -52,7 +52,7 @@ function titleAreaVisible(saved: Rectangle, area: Rectangle): boolean {
   const width = Math.min(saved.x + saved.width, area.x + area.width) - Math.max(saved.x, area.x);
   const topHeight = Math.min(100, saved.height);
   const height = Math.min(saved.y + topHeight, area.y + area.height) - Math.max(saved.y, area.y);
-  return width >= Math.min(200, saved.width) && height >= topHeight;
+  return width >= Math.min(200, saved.width) && height > 0;
 }
 
 function containsCentre(area: Rectangle, saved: Rectangle): boolean {
@@ -85,9 +85,9 @@ export function restoreWindowPlace(
   const height = Math.min(size.height, area.height);
   let x = visible && valid ? valid.x : area.x + Math.floor((area.width - width) / 2);
   let y = visible && valid ? valid.y : area.y + Math.floor((area.height - height) / 2);
-  // A normal rectangle larger than its new display must also fit after un-maximizing.
-  if (size.width > area.width) x = area.x;
-  if (size.height > area.height) y = area.y;
+  // Shift a usable rectangle before shrinking it, keeping every edge (and the composer) reachable.
+  x = Math.max(area.x, Math.min(x, area.x + area.width - width));
+  y = Math.max(area.y, Math.min(y, area.y + area.height - height));
   return {
     bounds: { x, y, width, height },
     maximized: valid?.maximized ?? false,
