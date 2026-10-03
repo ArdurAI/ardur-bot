@@ -780,6 +780,10 @@ msgstr "Разрешать {tool} для {bot} без вопроса?"
 msgid "Allow actions after presence confirmation"
 msgstr ""
 
+#: src/components/integrations/catalog/BotToolReview.tsx
+msgid "Allow all"
+msgstr "Разрешить все"
+
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Allow approvals once"
 msgstr ""
@@ -821,6 +825,10 @@ msgstr "Разрешить подготовку"
 msgid "Allow purchase actions without asking"
 msgstr "Разрешить действия по покупке без запроса"
 
+#: src/components/integrations/catalog/BotToolReview.tsx
+msgid "Allow selected"
+msgstr "Разрешить выбранные"
+
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Allow the assistant to directly interact with apps, data, and tools on your computer"
 msgstr ""
@@ -857,6 +865,10 @@ msgstr "Разрешено один раз"
 #: src/pages/Auth.tsx
 msgid "Already have an account?"
 msgstr "У вас уже есть аккаунт?"
+
+#: src/components/integrations/catalog/BotToolReview.tsx
+msgid "Also allow these tools for the space"
+msgstr "Также разрешить эти инструменты для пространства"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Always act"
@@ -1160,6 +1172,10 @@ msgstr ""
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Ask the server owner to configure this provider."
 msgstr "Попросите владельца сервера настроить этого провайдера."
+
+#: src/components/integrations/catalog/BotToolReview.tsx
+msgid "Ask the space owner to review these tools in Settings."
+msgstr "Попросите владельца пространства проверить эти инструменты в настройках."
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Asked {asked, plural, one {# bot} other {# bots}} · {answered, plural, one {# answered} other {# answered}}"
@@ -2307,6 +2323,9 @@ msgid "Connect Treg"
 msgstr "Подключить Treg"
 
 #: src/components/composer/ComposerMenu.tsx
+#: src/components/Context.tsx
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -2326,6 +2345,15 @@ msgstr "Подключено"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Connected · {0}"
 msgstr "Подключено · {0}"
+
+#: src/components/Context.tsx
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/pages/customize/IntegrationTable.tsx
+#: src/pages/dashboard/ConnectionsPanel.tsx
+msgid "Connected · tools need review"
+msgstr "Подключено · инструменты требуют проверки"
 
 #. placeholder {0}: selected.name
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -2845,6 +2873,7 @@ msgstr ""
 msgid "Could not load Ollama."
 msgstr ""
 
+#: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Could not load or save tools."
 msgstr ""
@@ -5299,6 +5328,7 @@ msgstr "Загрузка инструментов…"
 msgid "Loading voice providers…"
 msgstr "Загрузка поставщиков голосовой связи…"
 
+#: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Loading your tools."
 msgstr ""
@@ -6990,6 +7020,7 @@ msgstr ""
 msgid "Reactions"
 msgstr ""
 
+#: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/ToolPicker.tsx
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
@@ -7615,6 +7646,8 @@ msgstr ""
 msgid "Review saved copy"
 msgstr ""
 
+#: src/components/Context.tsx
+#: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/pages/customize/McpDefaults.tsx
@@ -9338,6 +9371,7 @@ msgid "Trusted folders"
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/integrations/catalog/ResourcePicker.tsx
@@ -9914,6 +9948,7 @@ msgstr "Рабочая область"
 msgid "Workspace or server ID"
 msgstr ""
 
+#: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Write"
 msgstr ""
@@ -10003,18 +10038,3 @@ msgstr "Ваша команда постоянно работающих аген
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
-
-msgid "Connected · tools need review"
-msgstr "Подключено · инструменты требуют проверки"
-
-msgid "Also allow these tools for the space"
-msgstr "Также разрешить эти инструменты для пространства"
-
-msgid "Allow selected"
-msgstr "Разрешить выбранные"
-
-msgid "Allow all"
-msgstr "Разрешить все"
-
-msgid "Ask the space owner to review these tools in Settings."
-msgstr "Попросите владельца пространства проверить эти инструменты в настройках."
