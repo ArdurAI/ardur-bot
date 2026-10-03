@@ -1,9 +1,11 @@
 import type { AgentRunRequest, AgentRuntime, AgentUsage } from "@ardurbot/adapter-kit";
+import { RuntimePinError, runtimePinProblem } from "@ardurbot/contracts/runtime-pins";
 import type { PrismaClient } from "@ardurbot/db";
 import type { HostClient } from "@ardurbot/host-runtime/host-client";
 import type { MemoryService } from "@ardurbot/memory";
 import { maintainBriefs, markBriefPending, refreshRunBrief } from "@ardurbot/memory";
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
+import { ProviderError } from "../provider-error.js";
 import { RemoteHostRuntime } from "../remote-host-runtime.js";
 import { claimBotRun } from "./concurrency.js";
 
@@ -11,7 +13,9 @@ function fixture() {
   const state = {
     id: "brief",
     pendingRunId: "run",
-    attemptedAt: null,
+    attemptedAt: null as Date | null,
+    failureCount: 0,
+    nextAttemptAt: null as Date | null,
     rewrittenAt: null as Date | null,
     historyGeneration: 0,
     lastMessageSeq: -1,
@@ -583,6 +587,7 @@ it("leaves unavailable runs pending with a reason and never rewrites an active t
 it("bounds idle maintenance to five changed briefs", async () => {
   const query = vi.fn(async (sql: TemplateStringsArray) => {
     expect(sql.join("")).toContain("LIMIT 5");
+    expect(sql.join("")).toContain('b."nextAttemptAt" <= NOW()');
     expect(sql.join("")).toContain('b."lastMessageSeq" < t."nextMessageSeq" - 1');
     // Only the brief's own bot working in the thread postpones it; another room
     // member's run must not freeze every member's brief.
@@ -615,4 +620,138 @@ it("does not use the model when the source task budget is exhausted", async () =
     lastMessageSeq: -1,
     leaseExpiresAt: null,
   });
+});
+
+afterEach(() => vi.useRealTimers());
+const refusedPin = {
+  runtimeKind: "hermes" as const,
+  provider: "fixture",
+  modelId: "pinned",
+  effort: "high",
+  credentialId: "connection",
+  revision: 1,
+};
+
+it("attempts a typed deterministic failure once, retaining its sentence until daily eligibility", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-10-03T08:00:00Z"));
+  const f = fixture();
+  const reason = "Hermes needs a model with at least 64K context; change the model and try again.";
+  const launch = vi.fn();
+  f.resolve.mockResolvedValue({
+    runtime: {
+      ...f.runtime,
+      async *run() {
+        yield { type: "text" as const, text: "" };
+        launch();
+        throw new RuntimePinError(
+          runtimePinProblem(refusedPin, "runtime-unavailable", reason, "model-context-too-small"),
+        );
+      },
+    },
+    model: { provider: "fixture", id: "pinned", thinkingLevel: "high" },
+  });
+  await refreshRunBrief(f.deps, "run");
+  expect(f.state).toMatchObject({
+    failureCount: 4,
+    nextAttemptAt: new Date("2026-10-04T08:00:00Z"),
+    reason,
+  });
+  const query = vi.fn(async (sql: TemplateStringsArray) => {
+    expect(sql.join("")).toContain('b."nextAttemptAt" <= NOW()');
+    return f.state.nextAttemptAt && f.state.nextAttemptAt > new Date()
+      ? []
+      : [{ pendingRunId: "run" }];
+  });
+  const refresh = (id: string) => refreshRunBrief(f.deps, id);
+  expect(await maintainBriefs({ $queryRaw: query } as unknown as PrismaClient, refresh)).toBe(0);
+  await refresh("run"); // Duplicate targeted jobs obey the same deadline.
+  expect(launch).toHaveBeenCalledOnce();
+  vi.advanceTimersByTime(24 * 3_600_000);
+  expect(await maintainBriefs({ $queryRaw: query } as unknown as PrismaClient, refresh)).toBe(1);
+  expect(launch).toHaveBeenCalledTimes(2);
+});
+
+it("backs off transient failures through 10 minutes, 30 minutes, 2 hours and daily, then resets on success", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-10-03T08:00:00Z"));
+  const f = fixture();
+  f.resolve.mockRejectedValue(new Error("Temporary transport failure"));
+  for (const delay of [600_000, 1_800_000, 7_200_000, 86_400_000, 86_400_000]) {
+    const now = Date.now();
+    await refreshRunBrief(f.deps, "run");
+    expect(f.state.nextAttemptAt?.getTime()).toBe(now + delay);
+    const calls = f.resolve.mock.calls.length;
+    await refreshRunBrief(f.deps, "run");
+    expect(f.resolve).toHaveBeenCalledTimes(calls);
+    vi.advanceTimersByTime(delay);
+  }
+  f.resolve.mockResolvedValue({
+    runtime: f.runtime,
+    model: { provider: "fixture", id: "pinned", thinkingLevel: "high" },
+  });
+  await refreshRunBrief(f.deps, "run");
+  expect(f.state).toMatchObject({ failureCount: 0, nextAttemptAt: null, lastMessageSeq: 1 });
+  expect(f.commit).toHaveBeenCalledOnce();
+});
+
+it("returns a missing model outcome directly to daily back-off", async () => {
+  const f = fixture();
+  await refreshRunBrief({ ...f.deps, resolve: async () => null }, "run");
+  expect(f.state.failureCount).toBe(4);
+  expect(f.state.nextAttemptAt?.getTime()).toBeGreaterThan(Date.now() + 86_390_000);
+});
+
+it("allows new pending source work but not redelivery of the old run to clear back-off", async () => {
+  const f = fixture();
+  f.state.failureCount = 4;
+  f.state.nextAttemptAt = new Date(Date.now() + 86_400_000);
+  f.tx.botBrief.updateMany.mockImplementation(async ({ where, data }: any) => {
+    if (where.pendingRunId?.not === f.state.pendingRunId) return { count: 0 };
+    Object.assign(f.state, data);
+    return { count: 1 };
+  });
+  f.tx.botBrief.upsert.mockImplementation(async ({ update }) => Object.assign(f.state, update));
+  await markBriefPending(f.deps.prisma, "run");
+  await refreshRunBrief(f.deps, "run");
+  expect(f.resolve).not.toHaveBeenCalled();
+  f.run.id = "new-run";
+  await markBriefPending(f.deps.prisma, "new-run");
+  await refreshRunBrief(f.deps, "new-run");
+  expect(f.resolve).toHaveBeenCalledOnce();
+  expect(f.state).toMatchObject({ pendingRunId: "new-run", failureCount: 0, nextAttemptAt: null });
+});
+
+it("does not let an in-flight failure overwrite a settings reset", async () => {
+  const f = fixture();
+  f.tx.botBrief.updateMany.mockImplementation(async ({ where, data }: any) => {
+    if (where.attemptedAt && where.attemptedAt !== f.state.attemptedAt) return { count: 0 };
+    Object.assign(f.state, data);
+    return { count: 1 };
+  });
+  f.resolve.mockImplementation(async () => {
+    f.state.attemptedAt = null; // Settings invalidates the old claim without removing its lease.
+    throw new Error("Late failure");
+  });
+  await refreshRunBrief(f.deps, "run");
+  expect(f.state).toMatchObject({ failureCount: 0, nextAttemptAt: null });
+});
+
+it.each(["auth", "model-unavailable", "rate-limit", "other"] as const)(
+  "uses the provider's typed %s category rather than guessing from its sentence",
+  async (kind) => {
+    const f = fixture();
+    f.resolve.mockRejectedValue(new ProviderError("Provider refused this call", kind));
+    await refreshRunBrief(f.deps, "run");
+    expect(f.state.failureCount).toBe(kind === "auth" || kind === "model-unavailable" ? 4 : 1);
+    expect(f.state.nextAttemptAt).not.toBeNull();
+  },
+);
+it("caps the wait, not the count of repeated failures", async () => {
+  const f = fixture();
+  f.state.failureCount = 7;
+  f.resolve.mockRejectedValue(new Error("Temporary transport failure"));
+  await refreshRunBrief(f.deps, "run");
+  expect(f.state.failureCount).toBe(8);
+  expect(f.state.nextAttemptAt?.getTime()).toBeGreaterThan(Date.now() + 86_390_000);
 });

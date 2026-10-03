@@ -109,3 +109,17 @@ it("queries only the caller's requested bot and group in the seven-day window", 
     }),
   );
 });
+
+it("returns persisted retry eligibility and the last reason in the brief contract", async () => {
+  const f = fixture();
+  f.tx.botBrief.findUnique.mockResolvedValue({
+    nextAttemptAt: new Date("2026-10-04T08:00:00Z"),
+    rewrittenAt: null,
+    reason: "Model unavailable",
+  } as never);
+  const briefs = await f.service.briefs(actor, { botId: "chief" });
+  expect(briefs[0]).toMatchObject({
+    reason: "Model unavailable",
+    nextAttemptAt: "2026-10-04T08:00:00.000Z",
+  });
+});

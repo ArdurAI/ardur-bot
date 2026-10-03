@@ -79,6 +79,7 @@ export function BriefDocument({ brief, saved }: { brief: Brief; saved: () => voi
   const [error, setError] = useState(false);
   const label = brief.groupId ? (brief.groupName ?? t`Group brief`) : t`Brief`;
   const time = brief.rewrittenAt ? new Date(brief.rewrittenAt).toLocaleString() : "";
+  const nextTime = brief.nextAttemptAt ? new Date(brief.nextAttemptAt).toLocaleString() : "";
   const reason =
     brief.reason === "Task budget reached"
       ? t`Task budget reached`
@@ -131,6 +132,11 @@ export function BriefDocument({ brief, saved }: { brief: Brief; saved: () => voi
       {reason ? (
         <p className="text-xs text-muted-foreground">
           <Trans>Left unchanged: {reason}</Trans>
+        </p>
+      ) : null}
+      {nextTime ? (
+        <p className="text-xs text-muted-foreground" data-testid="brief-next-try">
+          <BriefNextTry time={nextTime} />
         </p>
       ) : null}
       {error ? (
@@ -301,4 +307,8 @@ export function BotContext({
       </div>
     </details>
   );
+}
+
+function BriefNextTry({ time }: { time: string }) {
+  return <Trans>Next try at {time}</Trans>;
 }

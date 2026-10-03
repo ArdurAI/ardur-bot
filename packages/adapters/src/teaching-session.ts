@@ -328,7 +328,7 @@ async function releaseTeachingComputerControl(
     holder: "bot",
     reason: "released",
   });
-  await scheduleComputerSleep(deps.jobs, computer.id);
+  await scheduleComputerSleep(deps, computer.id);
 }
 
 function skillDraftBlocks(skill: TaughtSkillRow): MessageBlock[] {

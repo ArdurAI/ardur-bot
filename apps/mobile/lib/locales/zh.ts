@@ -1056,6 +1056,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Time to first token": "首个词元延迟",
   "Cache hits": "缓存命中",
   "Queue wait": "排队等待",
+  "Next try at {time}": "下次尝试时间：{time}",
   "Rewritten {time}": "已于 {time} 重写",
   "Left unchanged: {reason}": "保持不变：{reason}",
   "Task budget reached": "已达到任务预算",

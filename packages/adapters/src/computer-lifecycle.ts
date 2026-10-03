@@ -446,6 +446,7 @@ export async function provisionComputer(
         provisioningId: null,
         providerRef: ref.providerRef,
         kind: ref.kind,
+        sleepFailureReason: null,
         updatedAt: activationStamp,
       },
     });
@@ -1070,6 +1071,7 @@ export async function replaceComputer(
                 : {}),
             }
           : {}),
+        sleepFailureReason: null,
         // Once the source is gone, a retry must reach the chosen destination, not revive it.
         ...(destination ? { kind: destination.describe().kind ?? existing.kind } : {}),
         state: "stopped",

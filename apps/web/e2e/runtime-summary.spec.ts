@@ -102,4 +102,11 @@ test("bot settings show execution location outside Advanced before saving", asyn
   await settings.getByRole("button", { name: "Only this bot", exact: true }).click();
   await expect(summary).toContainText("Runs as you; can use your files and signed-in tools");
   expect(mutations).toEqual([]);
+  status.state = "running";
+  status.sleepFailureReason =
+    "This computer runs on Docker, which is not configured here. Reset it in Settings, Computers to start it on this deployment's engine, or configure Docker again.";
+  await page.reload();
+  await page.getByTestId("bot-settings-trigger").click();
+  await expect(page.getByTestId("runtime-summary")).toContainText(status.sleepFailureReason);
+  await captureScreenshot(page, testInfo, "computer-sleep-missing-engine");
 });

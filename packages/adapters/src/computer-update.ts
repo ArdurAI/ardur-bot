@@ -177,7 +177,7 @@ export async function performComputerUpdate(deps: Deps, updateId: string) {
       configuration,
     );
     await finishUpdate(deps.prisma, updateId, update.computerId, "completed");
-    scheduleComputerSleep(deps.jobs, update.computerId);
+    await scheduleComputerSleep(deps, update.computerId);
   } catch (error) {
     getLogger().error(
       "computer update failed",
