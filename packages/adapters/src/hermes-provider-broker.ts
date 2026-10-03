@@ -1,5 +1,13 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
+import {
+  HermesProviderRelayError,
+  hermesProviderFailure,
+} from "@ardurbot/host-runtime/runtimes/hermes-provider-failure";
+import { hermesToolName } from "@ardurbot/host-runtime/runtimes/hermes-tool-names";
+
+export { hermesToolName } from "@ardurbot/host-runtime/runtimes/hermes-tool-names";
+
 import type { AgentUsage, UsagePurpose } from "@ardurbot/adapter-kit";
 import { RequestUsageCollector } from "@ardurbot/adapter-kit";
 import type { RuntimePin } from "@ardurbot/contracts";
@@ -200,11 +208,6 @@ export type BrokerOptions = {
     options?: SimpleStreamOptions,
   ) => AsyncIterable<AssistantMessageEvent> | Promise<AsyncIterable<AssistantMessageEvent>>;
 };
-
-/** Hermes's pinned MCP wire-name transformation. Collisions are fatal. */
-export function hermesToolName(name: string): string {
-  return `mcp__ardur__${name}`.replace(/[^A-Za-z0-9_]/g, "_");
-}
 
 function catalog(tools: readonly BrokerTool[]): Map<string, JsonObject> {
   const result = new Map<string, JsonObject>();
@@ -451,12 +454,12 @@ function admittedTranslatedBody(
 ): JsonObject {
   const body = object(input);
   if (!body) return denied();
-  if (Object.hasOwn(body, "stream_options") && object(body.stream_options)) denied();
+
   const admitted = admittedBody(
     {
       ...body,
       // The provider layer owns these wire fields on the translated route.
-      stream_options: body.stream === true ? { include_usage: true } : undefined,
+      stream_options: body.stream_options,
       max_tokens: Object.hasOwn(body, "max_tokens")
         ? body.max_tokens
         : Object.hasOwn(body, "max_completion_tokens")
@@ -778,7 +781,7 @@ export class HermesProviderBroker {
           status: response.status,
           headers: { "content-type": response.ok ? mime : "text/plain" },
         });
-      } catch {
+      } catch (error) {
         const outcome = controller.signal.aborted
           ? Date.now() >= this.grant.expiresAt
             ? "timed-out"
@@ -792,7 +795,7 @@ export class HermesProviderBroker {
         } catch {
           // The started reservation remains durable when a terminal write fails.
         }
-        throw new Error("Provider request failed.");
+        throw new HermesProviderRelayError(hermesProviderFailure(error));
       }
     } finally {
       clearTimeout(expiry);
@@ -966,7 +969,8 @@ export class HermesRelayDispatcher {
           body: args[0],
           signal: this.abortSignal,
         });
-        if (!opened.ok) throw new Error("Provider request failed.");
+        if (!opened.ok)
+          throw new HermesProviderRelayError({ kind: "provider-http", status: opened.status });
         this.responseStatus = opened.status;
         this.responseType = opened.headers.get("content-type")?.includes("text/event-stream")
           ? "text/event-stream"

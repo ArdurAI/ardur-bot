@@ -305,10 +305,13 @@ describe("worker provider broker translated route", () => {
   it.each(["summary", "main"] as const)(
     "accepts the pinned Hermes streaming usage option for %s turns",
     async (purpose) => {
-      const f = translatedFixture([startEvent, doneEvent([text("completed")])], {
-        purpose,
-        tools: [],
-      });
+      const f = translatedFixture(
+        [startEvent, ...textDeltaEvents("completed"), doneEvent([text("completed")])],
+        {
+          purpose,
+          tools: [],
+        },
+      );
       const response = await f.broker.open(
         f.request({
           body: { ...f.body, stream: true, stream_options: { include_usage: true } },
@@ -321,6 +324,42 @@ describe("worker provider broker translated route", () => {
       expect(f.records.at(-1)?.request?.purpose).toBe(purpose);
     },
   );
+
+  it.each([{ include_usage: false }, { include_usage: true, private: "fixture" }, null, "fixture"])(
+    "still refuses unsupported streaming options: %j",
+    async (streamOptions) => {
+      const f = translatedFixture([startEvent, doneEvent([text("unused")])]);
+      await expect(
+        f.broker.open(
+          f.request({
+            body: {
+              ...f.body,
+              stream: true,
+              stream_options: streamOptions,
+            },
+          }),
+        ),
+      ).rejects.toThrow("Provider request is outside this run's grant.");
+      expect(f.captured).toHaveLength(0);
+      expect(f.records).toHaveLength(0);
+    },
+  );
+
+  it("refuses a streaming option on a non-streaming request", async () => {
+    const f = translatedFixture([startEvent, doneEvent([text("unused")])]);
+    await expect(
+      f.broker.open(
+        f.request({
+          body: {
+            ...f.body,
+            stream: false,
+            stream_options: { include_usage: true },
+          },
+        }),
+      ),
+    ).rejects.toThrow("Provider request is outside this run's grant.");
+    expect(f.captured).toHaveLength(0);
+  });
 
   it("streams text as Chat Completions SSE with a usage chunk and [DONE]", async () => {
     const f = translatedFixture([

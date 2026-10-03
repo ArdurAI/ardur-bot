@@ -108,7 +108,6 @@ describe("HermesRuntime M0 ACP seam", () => {
       })),
       model: {
         provider: "fixture",
-        id: "fixture-model",
         baseUrl: "http://127.0.0.1:9/v1",
         apiKey: "fixture-grant",
         ...profile.effectiveRuntimeConfig.model,
@@ -119,6 +118,82 @@ describe("HermesRuntime M0 ACP seam", () => {
       names.map((name) => `mcp__ardur__${name.replace(/[^A-Za-z0-9_]/g, "_")}`).sort(),
     );
   });
+
+  it.each([
+    ["session-new-catalog-match", "runtime-tool-catalog-mismatch"],
+    ["session-new-catalog-wrong-code", "session-start-failed"],
+    ["session-new-catalog-other", "session-start-failed"],
+  ])("classifies only the owned catalog check: %s", async (scenario, reasonId) => {
+    const run = request();
+    run.model.runtimePin = {
+      runtimeKind: "hermes",
+      provider: "fixture",
+      modelId: "fixture-model",
+      effort: "high",
+      credentialId: "fixture-connection",
+      revision: 1,
+    };
+    await expect(collect(runtime(scenario!), run)).rejects.toMatchObject({
+      name: "RuntimePinError",
+      problem: { reasonId },
+    });
+  });
+
+  it("refuses a colliding catalog before launching any process", async () => {
+    const launch = vi.fn(launchUnconfinedProcess);
+    const adapter = new HermesRuntime({ command: process.execPath, args: [fixture], launch });
+    await expect(
+      collect(
+        adapter,
+        request({
+          tools: ["read-file", "read_file"].map((name) => ({
+            name,
+            description: "Read",
+            inputSchema: { type: "object" },
+          })),
+        }),
+      ),
+    ).rejects.toThrow("Hermes tool names collide.");
+    expect(launch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ kind: "profile-unacknowledged" }, "runtime-profile-unacknowledged"],
+    [{ kind: "response-limit" }, "provider-response-too-large"],
+    [{ kind: "request-limit" }, "provider-request-too-large"],
+    [{ kind: "grant-refused" }, "provider-grant-refused"],
+    [{ kind: "provider-http", status: 401 }, "provider-auth-failed"],
+    [{ kind: "provider-http", status: 429 }, "usage-limit"],
+    [{ kind: "provider-failed" }, "provider-request-failed"],
+  ] as const)(
+    "carries the safe relay cause into a pinned failure: %j",
+    async (failure, reasonId) => {
+      const run = request();
+      run.model.runtimePin = {
+        runtimeKind: "hermes",
+        provider: "fixture",
+        modelId: "fixture-model",
+        effort: "high",
+        credentialId: "fixture-connection",
+        revision: 1,
+      };
+      const adapter = new HermesRuntime({
+        command: process.execPath,
+        args: [fixture, "hold"],
+        launch: launchUnconfinedProcess,
+        onTurnFinished: () => {},
+      });
+      let ready!: () => void;
+      const sessionReady = new Promise<void>((resolve) => {
+        ready = resolve;
+      });
+      run.onRuntimeInfo = async () => ready();
+      const pending = collect(adapter, run).catch((error: unknown) => error);
+      await sessionReady;
+      await adapter.fail(run.runId, failure);
+      expect(await pending).toMatchObject({ name: "RuntimePinError", problem: { reasonId } });
+    },
+  );
 
   it("keeps the session request compatible with the pinned ACP stdio schema", async () => {
     const events = await collect(runtime("pinned-session-schema"), request());

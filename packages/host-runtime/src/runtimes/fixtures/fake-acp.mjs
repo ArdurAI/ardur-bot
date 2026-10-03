@@ -77,6 +77,23 @@ async function handle(value) {
       });
       return;
     }
+    if (scenario.startsWith("session-new-catalog-")) {
+      send({
+        id: value.id,
+        error: {
+          code: scenario === "session-new-catalog-wrong-code" ? -32602 : -32603,
+          message: "Internal error",
+          data: {
+            details:
+              scenario === "session-new-catalog-other"
+                ? "fixture unrelated failure"
+                : "Constructed tool catalog changed",
+            prompt: "private fixture prompt",
+          },
+        },
+      });
+      return;
+    }
     if (scenario === "session-new-closed") process.exit(4);
     if (
       scenario === "session-new-error" ||
@@ -211,6 +228,7 @@ async function handle(value) {
     return;
   }
   if (value.method !== "session/prompt") return;
+  if (scenario === "hold") return;
   if (scenario === "pending-tool-malformed") pendingPromptId = value.id;
   if (scenario === "malformed") {
     process.stdout.write("{broken\n");

@@ -11,6 +11,7 @@ import {
   buildHermesRuntime,
   localHermesStaging,
 } from "@ardurbot/host-runtime/runtimes/hermes-install";
+import type { HermesProviderFailure } from "@ardurbot/host-runtime/runtimes/hermes-provider-failure";
 import { startHermesProviderRelay } from "@ardurbot/host-runtime/runtimes/hermes-provider-relay";
 import type { HermesRuntime } from "@ardurbot/host-runtime/runtimes/hermes-runtime";
 import type { BrokerScope, HermesProviderBroker } from "../hermes-provider-broker.js";
@@ -51,8 +52,8 @@ export class LocalHermesRuntime implements AgentRuntime {
     await this.running.get(runId)?.abort(runId);
   }
 
-  async fail(runId: string) {
-    await this.running.get(runId)?.fail(runId);
+  async fail(runId: string, failure?: HermesProviderFailure) {
+    await this.running.get(runId)?.fail(runId, failure);
   }
 
   async *run(
@@ -154,8 +155,8 @@ export class LocalHermesRuntime implements AgentRuntime {
           if (method === "provider.open" || method === "provider.read") assertProfileAcknowledged();
           return relayDispatcher.dispatch(method, args);
         },
-        () => {
-          void this.fail(request.runId);
+        (failure) => {
+          void this.fail(request.runId, failure).catch(() => {});
         },
       );
 

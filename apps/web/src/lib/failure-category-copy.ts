@@ -21,6 +21,13 @@ export const failureCategoryMessages: Record<FailureCategoryId, ReturnType<typeo
   stopped: msg`{runtime} stopped before finishing this run.`,
   "model-context-too-small": msg`{runtime} needs a model with at least 64K context; change the model and try again.`,
   "session-start-failed": msg`{runtime} could not start a session. Check the runtime and try again.`,
+  "runtime-tool-catalog-mismatch": msg`{runtime}'s tool list changed during startup. Check the connected tools and try again.`,
+  "runtime-profile-unacknowledged": msg`{runtime}'s settings were not confirmed. Check this bot's settings and try again.`,
+  "provider-request-too-large": msg`{runtime}'s model request was too large. Narrow the task and try again.`,
+  "provider-response-too-large": msg`{runtime}'s model response was too large. Narrow the task and try again.`,
+  "provider-grant-refused": msg`{runtime}'s model request was outside this run's allowance. Narrow the task and try again.`,
+  "provider-auth-failed": msg`{runtime}'s model provider rejected the connection key. Check it in Settings, under Models.`,
+  "provider-request-failed": msg`{runtime}'s model request failed. Check the connection in Settings, under Models, and try again.`,
   other: msg`{runtime} could not finish this run. Check the runtime or change the pin.`,
 };
 
