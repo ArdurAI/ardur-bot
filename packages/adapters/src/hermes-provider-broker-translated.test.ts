@@ -302,6 +302,26 @@ function parseFrames(payload: string) {
 }
 
 describe("worker provider broker translated route", () => {
+  it.each(["summary", "main"] as const)(
+    "accepts the pinned Hermes streaming usage option for %s turns",
+    async (purpose) => {
+      const f = translatedFixture([startEvent, doneEvent([text("completed")])], {
+        purpose,
+        tools: [],
+      });
+      const response = await f.broker.open(
+        f.request({
+          body: { ...f.body, stream: true, stream_options: { include_usage: true } },
+        }),
+      );
+      expect(response.status).toBe(200);
+      expect(await response.text()).toContain("completed");
+      expect(f.captured).toHaveLength(1);
+      expect(f.captured[0]?.options).not.toHaveProperty("stream_options");
+      expect(f.records.at(-1)?.request?.purpose).toBe(purpose);
+    },
+  );
+
   it("streams text as Chat Completions SSE with a usage chunk and [DONE]", async () => {
     const f = translatedFixture([
       startEvent,

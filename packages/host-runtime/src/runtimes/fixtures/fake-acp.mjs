@@ -139,7 +139,34 @@ async function handle(value) {
       );
       await client.close();
     }
-    if (scenario === "profile-ack" || scenario === "profile-stale")
+    if (scenario === "profile-normalized-catalog") {
+      // Pinned tools/mcp_tool.py normalizes each component before registration;
+      // the owned launcher checks that exact resulting catalog after new_session.
+      const client = new Client({ name: "fixture", version: "0.1.0" });
+      const transport = new StdioClientTransport({
+        command: mcp.command,
+        args: mcp.args,
+        env: Object.fromEntries(mcp.env.map(({ name, value }) => [name, value])),
+      });
+      await client.connect(transport);
+      const listed = await client.listTools();
+      const actual = listed.tools
+        .map(({ name }) => `mcp__ardur__${name.replace(/[^A-Za-z0-9_]/g, "_")}`)
+        .sort();
+      await client.close();
+      if (JSON.stringify(actual) !== process.env.ARDUR_HERMES_ALLOWED_TOOLS) {
+        send({
+          id: value.id,
+          error: {
+            code: -32603,
+            message: "Internal error",
+            data: { details: "Constructed tool catalog changed" },
+          },
+        });
+        return;
+      }
+    }
+    if (["profile-ack", "profile-stale", "profile-normalized-catalog"].includes(scenario))
       writeFileSync(
         join(process.env.HERMES_HOME, "runtime-ack.json"),
         JSON.stringify({

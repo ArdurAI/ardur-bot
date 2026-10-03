@@ -213,3 +213,35 @@ it("refuses request bodies above the broker limit before a callback", async () =
     relay.close();
   }
 });
+
+it.each([
+  ["Hermes configuration is not acknowledged.", "profile-unacknowledged"],
+  ["Provider response exceeded the limit.", "response-limit"],
+  ["Provider request is outside this run's grant.", "grant-refused"],
+])("reports a safe reason for %s without leaking exception data", async (message, kind) => {
+  const authorized = grant();
+  const failed = vi.fn();
+  const relay = await startHermesProviderRelay(
+    authorized,
+    async () => {
+      throw new Error(message, {
+        cause: { body: "private fixture body", headers: "private fixture headers" },
+      });
+    },
+    failed,
+  );
+  try {
+    const response = await fetch(`${relay.url}/chat/completions`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${authorized.token}` },
+      body: "{}",
+    });
+    expect(response.status).toBe(502);
+    expect(await response.text()).toBe("Provider request failed.");
+    expect(failed).toHaveBeenCalledWith({ kind });
+    expect(JSON.stringify(failed.mock.calls)).not.toContain("private fixture");
+    expect(JSON.stringify(failed.mock.calls)).not.toContain(authorized.token);
+  } finally {
+    relay.close();
+  }
+});
