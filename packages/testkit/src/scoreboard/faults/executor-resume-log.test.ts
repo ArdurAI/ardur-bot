@@ -33,11 +33,13 @@ import {
 } from "@ardurbot/core";
 import { approvalEffectKey, stableJsonValue } from "@ardurbot/core/node/approval-effect-key";
 import { afterEach, expect, it, vi } from "vitest";
+import { IntegrationConnections } from "../../../../../apps/api/src/integration-connections.js";
 import type * as AutoReviewModule from "../../../../adapters/src/auto-review.js";
 import type * as ComputerLifecycleModule from "../../../../adapters/src/computer-lifecycle.js";
 import { checkDelegationExecution } from "../../../../adapters/src/delegation-execution.js";
 import { taskWorkspacePath } from "../../../../adapters/src/delegation-workspace.js";
 import { createRunExecutor } from "../../../../adapters/src/executor.js";
+import { MCP_TOOLS_NEED_REVIEW_SENTENCE } from "../../../../adapters/src/integration-access.js";
 import { recordRunUsage } from "../../../../adapters/src/run-usage.js";
 import { startScoreboardTrace } from "../../../../adapters/src/scoreboard-trace.js";
 import { EncryptedSecretStore } from "../../../../adapters/src/secrets.js";
@@ -369,7 +371,7 @@ function harness(mode: Mode, encryptionKey = "resume-log-encryption-key") {
         return { count: 1 };
       }),
     },
-    mcpServer: { findMany: vi.fn(async () => []) },
+    mcpServer: { findMany: vi.fn(async (): Promise<unknown[]> => []) },
     bot: {
       findFirst: vi.fn(async () => ({ id: run.botId, computer })),
       findUniqueOrThrow: vi.fn(async () => ({
@@ -633,6 +635,8 @@ function harness(mode: Mode, encryptionKey = "resume-log-encryption-key") {
   }
 
   return {
+    prisma,
+    runtimeRun,
     log,
     run,
     effects,
@@ -709,6 +713,98 @@ function harness(mode: Mode, encryptionKey = "resume-log-encryption-key") {
 
 const at = (type: string, executionId?: string) => (event: Logged) =>
   event.type === type && (executionId === undefined || executionIdOf(event) === executionId);
+
+it("supplies the pending integration sentence to the runtime until reviewTools allows tools", async () => {
+  const h = harness("production");
+  const actor = { spaceId: h.run.spaceId, userId: h.run.userId };
+  const server = {
+    id: "pending-server",
+    ...actor,
+    slug: "synthetic-pending",
+    enabled: true,
+    transport: "streamable_http",
+    connectionState: "connected",
+    catalogId: null,
+    revision: 1,
+    needsReview: true,
+    spaceAllowedTools: [] as string[],
+    manifest: {
+      capturedAt: "2026-10-03T00:00:00.000Z",
+      serverVersion: null,
+      account: null,
+      tools: [
+        {
+          id: "synthetic_read",
+          description: "Offline read fixture",
+          inputSchemaDigest: "a".repeat(64),
+        },
+      ],
+    },
+  };
+  h.prisma.mcpServer.findMany.mockImplementation(async () => [{ ...server, assignments: [] }]);
+  const reviewDb = {
+    mcpServer: {
+      findFirst: vi.fn(
+        async ({ where }: { where: { id: string; spaceId: string; userId: string } }) =>
+          where.id === server.id && where.spaceId === actor.spaceId && where.userId === actor.userId
+            ? { ...server }
+            : null,
+      ),
+      updateMany: vi.fn(
+        async ({
+          data,
+        }: {
+          data: {
+            spaceAllowedTools?: string[];
+            needsReview?: boolean;
+            revision: { increment: number };
+          };
+        }) => {
+          const { revision, ...changes } = data;
+          Object.assign(server, changes);
+          server.revision += revision.increment;
+          return { count: 1 };
+        },
+      ),
+    },
+    spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) },
+    externalEffect: { updateMany: vi.fn(async () => ({ count: 0 })) },
+    $executeRaw: vi.fn(async () => 1),
+    $transaction: vi.fn(),
+  };
+  reviewDb.$transaction.mockImplementation(async (callback) => callback(reviewDb));
+  const service = new IntegrationConnections(
+    reviewDb as never,
+    {} as never,
+    new EncryptedSecretStore("offline-review-fixture"),
+    "https://app.example.test",
+  );
+  const sentence = `Tool discovery: ${MCP_TOOLS_NEED_REVIEW_SENTENCE.slice(0, -1)}`;
+
+  await h.resume([]);
+  expect(h.runtimeRun).toHaveBeenCalledOnce();
+  expect(h.runtimeRun.mock.calls[0]![0].instructions).toContain(sentence);
+  expect(h.prisma.mcpServer.findMany).toHaveBeenCalledWith(
+    expect.objectContaining({
+      where: { ...actor, enabled: true, connectionState: "connected" },
+      include: { assignments: { where: { ...actor, botId: h.run.botId } } },
+    }),
+  );
+
+  await service.reviewTools(actor, {
+    connectionId: server.id,
+    revision: 1,
+    toolIds: ["synthetic_read"],
+    approveSpace: true,
+  });
+  expect(server.spaceAllowedTools).toEqual(["synthetic_read"]);
+  expect(server.needsReview).toBe(false);
+  expect(reviewDb.externalEffect.updateMany).toHaveBeenCalledOnce();
+  h.runtimeRun.mockClear();
+  await h.resume([]);
+  expect(h.runtimeRun).toHaveBeenCalledOnce();
+  expect(h.runtimeRun.mock.calls[0]![0].instructions).not.toContain(sentence);
+});
 
 it("links a resumed call and pairs the killed start with the resumed finish", async () => {
   const h = harness("scripted");

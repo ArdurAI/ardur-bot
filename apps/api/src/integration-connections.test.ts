@@ -1495,6 +1495,29 @@ describe("explicit tool review", () => {
     expect(f.db.botMcpServer.upsert).not.toHaveBeenCalled();
     expect(f.db.mcpServer.update).not.toHaveBeenCalled();
   });
+  it("refuses a member bot-only review while the server needs review even inside the space ceiling", async () => {
+    const f = fixture();
+    f.setRow({ needsReview: true, spaceAllowedTools: ["synthetic_read"] });
+    f.db.spaceMember.findUnique.mockResolvedValue({ role: "member" });
+    await expect(
+      f.service.reviewTools(actor, {
+        connectionId: "connection",
+        revision: 1,
+        botId: "bot",
+        toolIds: ["synthetic_read"],
+        approveSpace: false,
+      }),
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message: "Ask the space owner to review these tools in Settings.",
+    });
+    expect(f.db.botMcpServer.upsert).not.toHaveBeenCalled();
+    expect(f.db.mcpServer.update).not.toHaveBeenCalled();
+    expect(f.db.mcpServer.updateMany).not.toHaveBeenCalled();
+    expect(f.db.externalEffect.updateMany).not.toHaveBeenCalled();
+    expect(f.row().spaceAllowedTools).toEqual(["synthetic_read"]);
+    expect(f.row().needsReview).toBe(true);
+  });
   it("refuses a bot selection outside the space ceiling and uncaptured tools", async () => {
     const f = fixture();
     await expect(
