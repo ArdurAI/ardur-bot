@@ -9091,6 +9091,10 @@ msgstr "esta computadora"
 msgid "This computer"
 msgstr "Esta computadora"
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This computer · {botName}'s folder"
+msgstr "Esta computadora · Carpeta de {botName}"
+
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "This configuration is too complex."
 msgstr "Esta configuración es demasiado compleja."

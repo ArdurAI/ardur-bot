@@ -9091,6 +9091,10 @@ msgstr "이 컴퓨터"
 msgid "This computer"
 msgstr "이 컴퓨터"
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This computer · {botName}'s folder"
+msgstr "이 컴퓨터 · {botName}의 폴더"
+
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "This configuration is too complex."
 msgstr "이 구성은 너무 복잡합니다."
