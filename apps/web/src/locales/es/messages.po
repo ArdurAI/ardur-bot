@@ -10003,3 +10003,7 @@ msgstr "Tu equipo de agentes siempre activos<0/>a los que puedes dar trabajo rea
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: src/components/Context.tsx
+msgid "Next try at {time}"
+msgstr "Próximo intento a las {time}"

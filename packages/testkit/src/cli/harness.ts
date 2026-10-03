@@ -138,6 +138,7 @@ async function main() {
         "packages/memory/src/commit.postgres.test.ts",
         "packages/memory/src/scoped-reads.postgres.test.ts",
         "packages/adapters/src/memory/scoped-reads-wrapper.postgres.test.ts",
+        "packages/adapters/src/memory/lifecycle.postgres.test.ts",
         "packages/adapters/src/wakeup.postgres.test.ts",
         "packages/adapters/src/realtime.postgres.test.ts",
         "packages/adapters/src/run-usage.postgres.test.ts",

@@ -10003,3 +10003,7 @@ msgstr "Ваша команда постоянно работающих аген
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: src/components/Context.tsx
+msgid "Next try at {time}"
+msgstr "Следующая попытка: {time}"

@@ -10003,3 +10003,7 @@ msgstr "हमेशा चालू रहने वाले एजेंट�
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: src/components/Context.tsx
+msgid "Next try at {time}"
+msgstr "अगला प्रयास {time} पर"

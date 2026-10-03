@@ -10003,3 +10003,7 @@ msgstr "你的一支随时在线的 Agent 团队<0/>可以交给它们真正的�
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: src/components/Context.tsx
+msgid "Next try at {time}"
+msgstr "下次尝试时间：{time}"

@@ -55,6 +55,22 @@ describe("web catalogs", () => {
     expect(broken).toEqual([]);
   });
 
+  it.each(locales)("renders the retry time through the compiled %s catalog", async (locale) => {
+    const sources = await sourceMessages;
+    const id = [...sources].find(([, text]) => text === "Next try at {time}")?.[0];
+    expect(id).toBeDefined();
+    const { source, errors } = createCompiledCatalog(locale, await translations(locale), {
+      namespace: "json",
+    });
+    expect(errors).toEqual([]);
+    i18n.load(locale, JSON.parse(source).messages);
+    i18n.activate(locale);
+    const shown = i18n._(id!, { time: "09:30" });
+    expect(shown).toContain("09:30");
+    expect(shown).not.toContain("{time}");
+    if (locale !== "en") expect(shown).not.toBe("Next try at 09:30");
+  });
+
   it("maps every English message to its own text", async () => {
     const sources = await sourceMessages;
     const messages = await translations(config.sourceLocale);

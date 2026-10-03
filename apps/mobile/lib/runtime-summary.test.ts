@@ -572,3 +572,15 @@ it.each(["docker", "desktop"])(
     );
   },
 );
+
+it("shows the stored missing-engine reason on the phone", async () => {
+  const reason = "This computer runs on Docker, which is not configured here.";
+  await act(async () =>
+    root.render(
+      createElement(RuntimeSummary, {
+        status: { ...status, state: "running", sleepFailureReason: reason },
+      }),
+    ),
+  );
+  expect(container.textContent).toContain(reason);
+});

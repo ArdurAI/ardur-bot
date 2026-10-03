@@ -421,7 +421,7 @@ export async function refreshRunBrief(deps: BriefMaintenanceDeps, runId: string)
       }
     }
   } catch (error) {
-    deterministic = error instanceof RuntimePinError && deterministicBriefFailure(error.problem);
+    deterministic = deterministicBriefFailure(error);
     reason = redactSecrets(
       error instanceof RuntimePinError
         ? error.problem.reason
@@ -497,7 +497,15 @@ export async function maintainBriefs(
 }
 
 /** Unknown failures remain retryable; only typed configuration refusals jump to daily. */
-export function deterministicBriefFailure(problem: RuntimeProblem): boolean {
+export function deterministicBriefFailure(error: unknown): boolean {
+  if (!(error instanceof RuntimePinError)) {
+    return (
+      error instanceof Error &&
+      "providerErrorKind" in error &&
+      (error.providerErrorKind === "auth" || error.providerErrorKind === "model-unavailable")
+    );
+  }
+  const problem = error.problem;
   return (
     [
       "model-context-too-small",
@@ -527,7 +535,7 @@ export function briefRetryAfter(failures: number, deterministic: boolean, now: D
   const delays = [10 * 60_000, 30 * 60_000, 2 * 3_600_000, 24 * 3_600_000];
   const failureCount = deterministic ? Math.max(4, failures + 1) : failures + 1;
   return {
-    failureCount: Math.min(failureCount, 4),
+    failureCount: Math.min(failureCount, 2_147_483_647),
     nextAttemptAt: new Date(now.getTime() + delays[Math.min(failureCount - 1, 3)]!),
   };
 }

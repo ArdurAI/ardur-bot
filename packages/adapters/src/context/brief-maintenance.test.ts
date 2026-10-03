@@ -5,6 +5,7 @@ import type { HostClient } from "@ardurbot/host-runtime/host-client";
 import type { MemoryService } from "@ardurbot/memory";
 import { maintainBriefs, markBriefPending, refreshRunBrief } from "@ardurbot/memory";
 import { afterEach, expect, it, vi } from "vitest";
+import { ProviderError } from "../provider-error.js";
 import { RemoteHostRuntime } from "../remote-host-runtime.js";
 import { claimBotRun } from "./concurrency.js";
 
@@ -734,4 +735,23 @@ it("does not let an in-flight failure overwrite a settings reset", async () => {
   });
   await refreshRunBrief(f.deps, "run");
   expect(f.state).toMatchObject({ failureCount: 0, nextAttemptAt: null });
+});
+
+it.each(["auth", "model-unavailable", "rate-limit", "other"] as const)(
+  "uses the provider's typed %s category rather than guessing from its sentence",
+  async (kind) => {
+    const f = fixture();
+    f.resolve.mockRejectedValue(new ProviderError("Provider refused this call", kind));
+    await refreshRunBrief(f.deps, "run");
+    expect(f.state.failureCount).toBe(kind === "auth" || kind === "model-unavailable" ? 4 : 1);
+    expect(f.state.nextAttemptAt).not.toBeNull();
+  },
+);
+it("caps the wait, not the count of repeated failures", async () => {
+  const f = fixture();
+  f.state.failureCount = 7;
+  f.resolve.mockRejectedValue(new Error("Temporary transport failure"));
+  await refreshRunBrief(f.deps, "run");
+  expect(f.state.failureCount).toBe(8);
+  expect(f.state.nextAttemptAt?.getTime()).toBeGreaterThan(Date.now() + 86_390_000);
 });

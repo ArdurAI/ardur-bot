@@ -1095,6 +1095,7 @@ export const RU_MESSAGES: Record<string, string> = {
   "Time to first token": "Время до первого токена",
   "Cache hits": "Попадания в кэш",
   "Queue wait": "Ожидание в очереди",
+  "Next try at {time}": "Следующая попытка: {time}",
   "Rewritten {time}": "Перезаписано {time}",
   "Left unchanged: {reason}": "Без изменений: {reason}",
   "Task budget reached": "Бюджет задачи исчерпан",

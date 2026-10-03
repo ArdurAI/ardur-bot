@@ -33,6 +33,11 @@ export function MobileBrief({ brief }: { brief: Brief }) {
               {t("Rewritten {time}", { time: new Date(brief.rewrittenAt).toLocaleString() })}
             </Text>
           ) : null}
+          {brief.nextAttemptAt ? (
+            <Text style={{ color: tokens.mutedForeground }}>
+              {t("Next try at {time}", { time: new Date(brief.nextAttemptAt).toLocaleString() })}
+            </Text>
+          ) : null}
           {brief.reason ? (
             <Text style={{ color: tokens.mutedForeground }}>
               {t("Left unchanged: {reason}", { reason: t(brief.reason) })}

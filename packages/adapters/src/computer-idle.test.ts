@@ -827,7 +827,7 @@ it.each(["probe", "checkpoint", "stop"])(
     const error = new MissingComputerProviderError("docker");
     if (stage === "probe")
       h.sandbox.execute.mockImplementation(async function* () {
-        yield { type: "stdout" as const, data: "" };
+        yield { type: "stdout" as const, data: "ardurbot-background-idle\n" as const };
         throw error;
       });
     if (stage === "checkpoint")

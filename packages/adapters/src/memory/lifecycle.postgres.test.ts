@@ -163,6 +163,30 @@ describe.skipIf(!hasDb)("brief authorization and history clearing (PostgreSQL)",
     ).rejects.toMatchObject({ code: "MEMORY_ACCESS" });
   });
 
+  it("skips dirty briefs before retry eligibility and admits them after the deadline", async () => {
+    const f = await fixture();
+    await createThreadMessage(f.prisma, {
+      threadId: f.thread.id,
+      role: "user",
+      blocks: [{ kind: "text", text: "A new release decision" }],
+    });
+    await markBriefPending(f.prisma, f.run.id);
+    const where = { botId_threadId: { botId: f.bot.id, threadId: f.thread.id } };
+    await f.prisma.botBrief.update({
+      where,
+      data: {
+        failureCount: 4,
+        nextAttemptAt: new Date(Date.now() + 86_400_000),
+      },
+    });
+    const refresh = vi.fn(async () => undefined);
+    await maintainBriefs(f.prisma, refresh);
+    expect(refresh).not.toHaveBeenCalledWith(f.run.id);
+    await f.prisma.botBrief.update({ where, data: { nextAttemptAt: new Date(0) } });
+    await maintainBriefs(f.prisma, refresh);
+    expect(refresh).toHaveBeenCalledWith(f.run.id);
+  });
+
   it("excludes removed group members from the periodic drain", async () => {
     const f = await fixture(true);
     await createThreadMessage(f.prisma, {
