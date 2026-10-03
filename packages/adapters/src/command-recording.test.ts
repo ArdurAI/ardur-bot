@@ -75,6 +75,81 @@ function fixture(
 
 describe("credential-read output suppression", () => {
   it.each([
+    ["sh -c 'printenv'", true],
+    ['sh -c "env"', true],
+    ["sh -lc 'printenv'", true],
+    ['sh -lc "env"', true],
+    ["sh -ic 'printenv'", true],
+    ['sh -ic "env"', true],
+    ["bash -c 'printenv'", true],
+    ['bash -c "env"', true],
+    ["bash -lc 'printenv'", true],
+    ['bash -lc "env"', true],
+    ["bash -ic 'printenv'", true],
+    ['bash -ic "env"', true],
+    ["zsh -c 'printenv'", true],
+    ['zsh -c "env"', true],
+    ["zsh -lc 'printenv'", true],
+    ['zsh -lc "env"', true],
+    ["zsh -ic 'printenv'", true],
+    ['zsh -ic "env"', true],
+    ["dash -c 'printenv'", true],
+    ['dash -c "env"', true],
+    ["dash -lc 'printenv'", true],
+    ['dash -lc "env"', true],
+    ["dash -ic 'printenv'", true],
+    ['dash -ic "env"', true],
+    ["ksh -c 'printenv'", true],
+    ['ksh -c "env"', true],
+    ["ksh -lc 'printenv'", true],
+    ['ksh -lc "env"', true],
+    ["ksh -ic 'printenv'", true],
+    ['ksh -ic "env"', true],
+    ['zsh -c "set"', true],
+    ["eval 'printenv'", true],
+    ['eval "env"', true],
+    ["xargs printenv", true],
+    ["xargs node scripts/export-site.mjs", false],
+    ["sudo printenv", true],
+    ["sudo node scripts/export-site.mjs", false],
+    ["doas printenv", true],
+    ["doas node scripts/export-site.mjs", false],
+    ["nohup printenv", true],
+    ["nohup node scripts/export-site.mjs", false],
+    ["time printenv", true],
+    ["time node scripts/export-site.mjs", false],
+    ["nice printenv", true],
+    ["nice node scripts/export-site.mjs", false],
+    ["exec printenv", true],
+    ["exec node scripts/export-site.mjs", false],
+    ["command printenv", true],
+    ["command node scripts/export-site.mjs", false],
+    ["builtin printenv", true],
+    ["builtin node scripts/export-site.mjs", false],
+    ["timeout 10 printenv", true],
+    ["timeout 10 node scripts/export-site.mjs", false],
+    ["env FOO=1 printenv", true],
+    ["env FOO=1 node scripts/export-site.mjs", false],
+    ["env printenv", true],
+    ["env node scripts/export-site.mjs", false],
+    ["sudo env", true],
+    ["nohup env", true],
+    ["time env", true],
+    ["exec env", true],
+    ["env FOO=1 BAR=2 env", true],
+    ["sudo nohup bash -lc 'printenv'", true],
+    ["/usr/bin/sudo /usr/bin/printenv", true],
+    ["bash -c 'gh auth token'", true],
+    ["eval 'git credential fill'", true],
+    ["bash -c 'pnpm test'", false],
+    ["sh -lc 'env FOO=1 node x.js'", false],
+    ["zsh -c 'set -e; pnpm test'", false],
+    ["eval 'echo printenv'", false],
+    ['echo "bash -c printenv"', false],
+    ["echo \"bash -c 'printenv'\"", false],
+    ["xargs echo printenv", false],
+    ["sudo gh auth status", false],
+    ["sudo git credential-osxkeychain --help", false],
     ["gh auth token", true],
     ["git credential fill", true],
     ["git credential get", true],
@@ -149,21 +224,25 @@ describe("credential-read output suppression", () => {
     expect(sensitiveShellCommand(command)).toBe(hidden);
   });
 
-  it.each(["gh auth token", "git credential fill", "gpg --export-secret-keys"])(
-    "never retains opaque reader output for %s",
-    async (command) => {
-      const opaque = "fixture-unstructured-output";
-      const f = fixture([
-        { type: "stdout", data: opaque },
-        { type: "stderr", data: opaque },
-        { type: "exit", code: 0 },
-      ]);
-      const result = await f.invoke(command);
-      expect(result).toMatchObject({ stdout: COMMAND_SUPPRESSED, stderr: COMMAND_SUPPRESSED });
-      expect(JSON.stringify(f.events)).not.toContain(opaque);
-      expect(f.blocks()[0]?.stdout).toBe(COMMAND_SUPPRESSED);
-    },
-  );
+  it.each([
+    "gh auth token",
+    "git credential fill",
+    "gpg --export-secret-keys",
+    "bash -c 'printenv'",
+    "eval 'printenv'",
+    "sudo env",
+  ])("never retains opaque reader output for %s", async (command) => {
+    const opaque = "fixture-unstructured-output";
+    const f = fixture([
+      { type: "stdout", data: opaque },
+      { type: "stderr", data: opaque },
+      { type: "exit", code: 0 },
+    ]);
+    const result = await f.invoke(command);
+    expect(result).toMatchObject({ stdout: COMMAND_SUPPRESSED, stderr: COMMAND_SUPPRESSED });
+    expect(JSON.stringify(f.events)).not.toContain(opaque);
+    expect(f.blocks()[0]?.stdout).toBe(COMMAND_SUPPRESSED);
+  });
 
   it.each([
     "set -e; pnpm test",

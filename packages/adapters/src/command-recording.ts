@@ -37,7 +37,11 @@ export function redactCommandText(text: string, secrets: string[]): string {
  * This is an output safeguard, not a shell authorization grammar; other output is redacted.
  */
 export function sensitiveShellCommand(command: string): boolean {
-  const position = "(?:^|[;&|()\\n])\\s*(?:command\\s+|builtin\\s+)?(?:[^\\s;&|()]+/)?";
+  const wrapperPrefix =
+    "(?:(?:[^\\s;&|()]+/)?(?:eval|xargs|sudo|doas|nohup|time|nice|exec|command|builtin)\\s+|" +
+    "(?:[^\\s;&|()]+/)?timeout\\s+[^\\s;&|()]+\\s+|" +
+    "(?:[^\\s;&|()]+/)?env\\s+(?:[A-Za-z_]\\w*=[^\\s;&|()]+\\s+)*)";
+  const position = `(?:^|[;&|()\\n])\\s*(?:${wrapperPrefix})*(?:[^\\s;&|()]+/)?`;
   const environmentRead = new RegExp(
     position +
       "(?:printenv\\b|(?:set|export(?:\\s+-p)?)\\s*(?=$|[;&|)\\n])|" +
@@ -68,13 +72,23 @@ export function sensitiveShellCommand(command: string): boolean {
       "(?:cat|head|tail|less|more|sed|awk|grep|rg|source|\\.)\\s+[^;&|\\n]*?(?<![\\w.-])\\.env(?:[.\\s/\"']|$)",
     "i",
   );
-  return (
-    environmentRead.test(command) ||
-    keychainRead.test(command) ||
-    credentialToolRead.test(command) ||
-    environmentFileRead.test(command) ||
-    /<\s*["']?[^;&|\n]*\.env(?:[.\s/"']|$)/i.test(command) ||
-    sensitiveCredentialDirectory(command)
+  // Inspect one quoted shell/eval layer, without treating quoted prose as commands.
+  const quotedReader = new RegExp(
+    `${position}(?:(?:sh|bash|zsh|dash|ksh)\\s+-(?:c|lc|ic)|eval)\\s+(["'])([\\s\\S]*?)\\1`,
+    "gi",
+  );
+  const candidates = [
+    command,
+    ...Array.from(command.matchAll(quotedReader), (match) => match[2] ?? ""),
+  ];
+  return candidates.some(
+    (text) =>
+      environmentRead.test(text) ||
+      keychainRead.test(text) ||
+      credentialToolRead.test(text) ||
+      environmentFileRead.test(text) ||
+      /<\s*["']?[^;&|\n]*\.env(?:[.\s/"']|$)/i.test(text) ||
+      sensitiveCredentialDirectory(text),
   );
 }
 
