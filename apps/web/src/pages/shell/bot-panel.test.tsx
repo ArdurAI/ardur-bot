@@ -2177,3 +2177,36 @@ it.each([null, "high"] as const)(
     );
   },
 );
+
+it("new-bot Create uses the inherited Ollama choice checked by the creation endpoint", async () => {
+  api.me.mockResolvedValue({ defaultProvider: "ollama", defaultModel: "fixture-model" });
+  api.validatePin.mockImplementation(async (choice) => {
+    expect(choice).toMatchObject({
+      runtimeKind: "pi",
+      provider: null,
+      modelId: null,
+      credentialId: null,
+    });
+    expect(choice.botId).toBeUndefined();
+    return { ok: true };
+  });
+  const create = vi.fn();
+  await act(async () =>
+    root.render(<CreateBotForm onCreate={create} onCancel={() => undefined} />),
+  );
+  const input = container.querySelector<HTMLInputElement>("input")!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+      input,
+      "Local bot",
+    );
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const button = [...container.querySelectorAll("button")].find(
+    (item) => item.textContent === "Create",
+  )!;
+  expect(button.disabled).toBe(false);
+  await act(async () => button.click());
+  expect(create).toHaveBeenCalledOnce();
+  expect(container.querySelector('[role="alert"]')).toBeNull();
+});

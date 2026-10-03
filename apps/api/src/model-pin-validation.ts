@@ -432,14 +432,17 @@ export async function validateBotCanRun(
   };
   const placementProblem = canBotRun({ pin, placement });
   if (placementProblem) throw new ORPCError("BAD_REQUEST", { message: placementProblem.reason });
+  const inheritedNewBotDefault =
+    !bot && pin.runtimeKind === "pi" && pin.provider === null && pin.modelId === null;
   const unchangedChoice =
-    bot &&
-    (context.inheritBotPin ||
-      (pin.runtimeKind === bot.runtimeKind &&
-        pin.provider === bot.modelProvider &&
-        pin.modelId === bot.modelId &&
-        pin.credentialId === bot.modelCredentialId &&
-        normalizedThinkingLevel(pin.effort) === normalizedThinkingLevel(bot.thinkingLevel)));
+    inheritedNewBotDefault ||
+    (bot &&
+      (context.inheritBotPin ||
+        (pin.runtimeKind === bot.runtimeKind &&
+          pin.provider === bot.modelProvider &&
+          pin.modelId === bot.modelId &&
+          pin.credentialId === bot.modelCredentialId &&
+          normalizedThinkingLevel(pin.effort) === normalizedThinkingLevel(bot.thinkingLevel))));
   let credential = null;
   if (pin.runtimeKind === "pi" && pin.provider === null && pin.modelId === null) {
     credential = await findDefaultModelCredential(deps.prisma, actor);

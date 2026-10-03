@@ -604,3 +604,40 @@ it("an unchanged inherited Ollama default is checked without probing", async () 
   expect(listOllamaModels).not.toHaveBeenCalled();
   expect(showOllamaModel).not.toHaveBeenCalled();
 });
+
+it("new-bot preview and creation accept an inherited offline Ollama default without probing", async () => {
+  const f = ollamaFixture("pi");
+  f.bot.modelProvider = null as never;
+  f.bot.modelId = null as never;
+  f.bot.modelCredentialId = null as never;
+  f.bot.thinkingLevel = null as never;
+  f.prisma.spaceModelPreference.findFirst.mockResolvedValue({
+    modelId: "fixture-model",
+    isDefault: true,
+    credential: {
+      id: "connection",
+      provider: "ollama",
+      userId: "user",
+      label: "Fixture",
+      secretId: "secret",
+    },
+  } as never);
+  const preview = await f.call("models/validatePin", {
+    runtimeKind: "pi",
+    provider: null,
+    modelId: null,
+    credentialId: null,
+    effort: null,
+    computerLocation: "sandbox",
+  });
+  expect(preview.status).toBe(200);
+  const created = await f.call("bots/create", {
+    name: "Local bot",
+    color: "#000000",
+    computerLocation: "sandbox",
+  });
+  expect(created.status).toBe(200);
+  expect(f.prisma.bot.create).toHaveBeenCalledOnce();
+  expect(listOllamaModels).not.toHaveBeenCalled();
+  expect(showOllamaModel).not.toHaveBeenCalled();
+});
