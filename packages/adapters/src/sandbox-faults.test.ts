@@ -50,6 +50,10 @@ describe.each([
       },
       context,
     );
+    const fileRefusal =
+      provider instanceof DesktopSandboxProvider
+        ? "Use a path inside this bot's folder or a registered folder."
+        : /escapes the computer workspace/i;
     const escapingFile = {
       path: "safe/../../outside.txt",
       content: new TextEncoder().encode("nope"),
@@ -59,14 +63,12 @@ describe.each([
       /escapes the computer workspace/i,
     );
     await expect(provider.readFile(computer, "..\\outside.txt", context)).rejects.toThrow(
-      /escapes the computer workspace/i,
+      fileRefusal,
     );
-    await expect(provider.writeFile(computer, escapingFile, context)).rejects.toThrow(
-      /escapes the computer workspace/i,
-    );
+    await expect(provider.writeFile(computer, escapingFile, context)).rejects.toThrow(fileRefusal);
     await expect(
       provider.importWorkspace(computer, portableFiles([escapingFile]), context),
-    ).rejects.toThrow(/escapes the computer workspace/i);
+    ).rejects.toThrow(fileRefusal);
   });
 
   it("reports missing and oversized reads without returning partial data", async () => {

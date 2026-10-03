@@ -30,25 +30,52 @@ it("bounds and redacts recorded file content without claiming a binary before-im
   );
 });
 
-it.each([".env", ".ssh/config", ".aws/credentials"])(
-  "never reads or records snapshots for %s",
-  async (path) => {
-    const readFile = vi.fn(async () => new TextEncoder().encode("unmanaged fixture credential"));
-    expect(
-      await beforeFileChange({ readFile } as never, {} as never, path, {} as never, []),
-    ).toBeNull();
-    expect(readFile).not.toHaveBeenCalled();
-    const append = vi.fn();
-    await recordFileChange(
-      { append } as never,
-      { spaceId: "space", threadId: "thread", botId: "bot", id: "run" },
-      { computerId: "computer", path, source: "tool", before: "old fixture", after: "new fixture" },
-      [],
-    );
-    expect(append).toHaveBeenCalledWith(
-      expect.objectContaining({
-        payload: expect.objectContaining({ path, before: null, after: null }),
-      }),
-    );
-  },
-);
+it.each([
+  ".env",
+  ".env.local",
+  "project/.env",
+  "project\\\\.env",
+  ".ssh/config",
+  ".aws/credentials",
+  ".kube/config",
+  ".gnupg/private-keys-v1.d/key",
+  "/proc/123/environ",
+])("never reads or records snapshots for %s", async (path) => {
+  const readFile = vi.fn(async () => new TextEncoder().encode("unmanaged fixture credential"));
+  expect(
+    await beforeFileChange({ readFile } as never, {} as never, path, {} as never, []),
+  ).toBeNull();
+  expect(readFile).not.toHaveBeenCalled();
+  const append = vi.fn();
+  await recordFileChange(
+    { append } as never,
+    { spaceId: "space", threadId: "thread", botId: "bot", id: "run" },
+    { computerId: "computer", path, source: "tool", before: "old fixture", after: "new fixture" },
+    [],
+  );
+  expect(append).toHaveBeenCalledWith(
+    expect.objectContaining({
+      payload: expect.objectContaining({ path, before: null, after: null }),
+    }),
+  );
+});
+
+it("retains ordinary source snapshots even when the filename mentions a credential name", async () => {
+  const readFile = vi.fn(async () => new TextEncoder().encode("public source"));
+  expect(
+    await beforeFileChange({ readFile } as never, {} as never, "src/token.ts", {} as never, []),
+  ).toBe("public source");
+  expect(readFile).toHaveBeenCalledOnce();
+  const append = vi.fn();
+  await recordFileChange(
+    { append } as never,
+    { spaceId: "space", threadId: "thread", botId: "bot", id: "run" },
+    { computerId: "computer", path: "src/token.ts", source: "tool", before: "old", after: "new" },
+    [],
+  );
+  expect(append).toHaveBeenCalledWith(
+    expect.objectContaining({
+      payload: expect.objectContaining({ before: "old", after: "new" }),
+    }),
+  );
+});

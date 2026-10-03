@@ -177,7 +177,7 @@ describe("Windows relative-handle writer with a stubbed addon", () => {
     const { desktop, computer } = await fixture();
     await expect(
       desktop.writeFile(computer, { path: file, content: Buffer.from("after") }),
-    ).rejects.toThrow(/escapes/);
+    ).rejects.toThrow("Use a path inside this bot's folder or a registered folder.");
     expect(calls).toEqual([]);
   });
 
@@ -212,7 +212,7 @@ describe("Windows relative-handle writer with a stubbed addon", () => {
     await symlink(outside, path.join(home, "junction"), "junction");
     await expect(
       desktop.writeFile(computer, { path: "junction/result.txt", content: Buffer.from("after") }),
-    ).rejects.toThrow(/escapes/);
+    ).rejects.toThrow("Use a path inside this bot's folder or a registered folder.");
     await expect(createDirectory(desktop, computer, "junction/new")).rejects.toThrow(/escapes/);
     expect(existsSync(path.join(outside, "result.txt"))).toBe(false);
     expect(existsSync(path.join(outside, "new"))).toBe(false);

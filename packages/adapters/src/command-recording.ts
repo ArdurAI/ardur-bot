@@ -59,8 +59,18 @@ export function sensitiveShellCommand(command: string): boolean {
     keychainRead.test(command) ||
     environmentFileRead.test(command) ||
     /<\s*["']?[^;&|\n]*\.env(?:[.\s/"']|$)/i.test(command) ||
-    /(?:\.(?:ssh|aws|kube|gnupg)[/\\]|[/\\]proc[/\\][^\s;|&]+[/\\]environ\b)/i.test(command)
+    sensitiveCredentialDirectory(command)
   );
+}
+
+/** Snapshot paths are data, not shell commands: credential files never get before/after images. */
+export function sensitiveFilePath(value: string): boolean {
+  const portable = value.replaceAll("\\", "/");
+  return /(?:^|\/)\.env(?:[./]|$)/i.test(portable) || sensitiveCredentialDirectory(portable);
+}
+
+function sensitiveCredentialDirectory(value: string): boolean {
+  return /(?:\.(?:ssh|aws|kube|gnupg)[/\\]|[/\\]proc[/\\][^\s;|&]+[/\\]environ\b)/i.test(value);
 }
 
 type Tool = (name: string, args: Record<string, unknown>, executionId: string) => Promise<unknown>;
