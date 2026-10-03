@@ -9984,3 +9984,9 @@ msgstr "你的一支随时在线的 Agent 团队<0/>可以交给它们真正的�
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+msgid "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models."
+msgstr "Hermes 需要至少 64K 个 token 的上下文限制。请在设置 → 模型中为此连接设置。"
+
+msgid "Could not check the model. Try again."
+msgstr "无法检查模型。请重试。"

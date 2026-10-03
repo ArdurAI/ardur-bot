@@ -47,7 +47,7 @@ import { BotContext } from "../../components/ContextEntry";
 import { FeatureDocsLink } from "../../components/FeatureDocsLink";
 import { SettingsGroup } from "../../components/SettingsRow";
 import { ShowAllModels } from "../../components/ShowAllModels";
-import { hermesRefusalMessage } from "../../lib/hermes-refusal";
+import { hermesContextMessage, hermesRefusalMessage } from "../../lib/hermes-refusal";
 import { modelUnavailable, spaceDefaultUnavailable } from "../../lib/model-availability";
 import { unavailableSubscriptionModel } from "../../lib/model-options";
 import { rpc } from "../../lib/rpc";
@@ -621,7 +621,7 @@ export function BotSettings({
         }));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t`Could not save`);
+      setError(err instanceof Error ? hermesContextMessage(err.message) : t`Could not save`);
     } finally {
       setSaving(false);
     }

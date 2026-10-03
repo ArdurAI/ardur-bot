@@ -9984,3 +9984,9 @@ msgstr "Your team of always-on agents<0/>that you can give real work to."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr "Yours"
+
+msgid "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models."
+msgstr "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models."
+
+msgid "Could not check the model. Try again."
+msgstr "Could not check the model. Try again."

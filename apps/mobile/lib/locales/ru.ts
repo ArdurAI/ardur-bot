@@ -1487,4 +1487,7 @@ export const RU_MESSAGES: Record<string, string> = {
   "{name} stood down": "{name} прекратил работу",
   "The previous action may have finished. I’ll check before retrying.":
     "Предыдущее действие могло завершиться. Проверю перед повторной попыткой.",
+  "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models.":
+    "Hermes нужен лимит контекста не менее 64K токенов. Задайте его для этого подключения в Настройки → Модели.",
+  "Could not check the model. Try again.": "Не удалось проверить модель. Попробуйте ещё раз.",
 };

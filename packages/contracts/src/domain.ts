@@ -1081,6 +1081,12 @@ export function resolveCompletionMaxTokens(
 /** Largest completion-token limit exposed by model settings. */
 export const MAX_MODEL_MAX_TOKENS = 131_072;
 
+/** Minimum declared model context accepted by the pinned Hermes runtime. */
+export const HERMES_MINIMUM_CONTEXT_TOKENS = 64_000;
+
+export const HERMES_CONTEXT_LIMIT_MESSAGE =
+  "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models.";
+
 /** Default context window for an OpenAI-compatible connection. */
 export const DEFAULT_MODEL_CONTEXT_WINDOW = 32_768;
 

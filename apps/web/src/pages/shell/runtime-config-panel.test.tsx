@@ -5,8 +5,9 @@ import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { previewMock } = vi.hoisted(() => ({
+const { previewMock, validatePinMock } = vi.hoisted(() => ({
   previewMock: vi.fn(),
+  validatePinMock: vi.fn(),
 }));
 
 vi.mock("@lingui/core/macro", () => ({
@@ -31,6 +32,7 @@ vi.mock("@ardurbot/ui-web", () => ({
 }));
 vi.mock("../../lib/rpc", () => ({
   rpc: {
+    models: { validatePin: (...args: unknown[]) => validatePinMock(...args) },
     runtimeConfig: {
       preview: (...args: unknown[]) => previewMock(...args),
     },
@@ -59,6 +61,8 @@ const successPreview = {
 };
 
 beforeEach(() => {
+  validatePinMock.mockReset();
+  validatePinMock.mockResolvedValue({ ok: true });
   previewMock.mockReset();
   previewMock.mockResolvedValue(successPreview);
 });
@@ -393,6 +397,8 @@ describe("RuntimeConfigPanel", () => {
     // The server rejects the model key, so Save stays disabled; a later
     // short-panel edit replaces the editor text with a normalized value and
     // must not keep that stale error.
+    validatePinMock.mockReset();
+    validatePinMock.mockResolvedValue({ ok: true });
     previewMock.mockReset();
     previewMock.mockResolvedValueOnce({
       preview: undefined,
@@ -506,4 +512,84 @@ describe("RuntimeConfigPanel", () => {
       expect(contextInput.getAttribute("aria-describedby")).toBeNull();
     });
   });
+});
+
+it("shows the server's pin refusal before Advanced is opened", async () => {
+  const sentence =
+    "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models.";
+  validatePinMock.mockRejectedValue({ code: "BAD_REQUEST", message: sentence });
+  const onError = vi.fn();
+  await act(async () => {
+    root.render(
+      <RuntimeConfigPanel
+        value={null}
+        onChange={() => {}}
+        onError={onError}
+        pin={{
+          runtimeKind: "hermes",
+          provider: "openai-compatible",
+          modelId: "fixture-model",
+          credentialId: "connection",
+          effort: "off",
+        }}
+      />,
+    );
+  });
+  expect(container.querySelector('[role="alert"]')?.textContent).toBe(sentence);
+  expect(onError).toHaveBeenLastCalledWith(sentence);
+  expect(previewMock).not.toHaveBeenCalled();
+  await act(async () => {
+    root.render(
+      <RuntimeConfigPanel
+        value={null}
+        onChange={() => {}}
+        onError={onError}
+        pin={{
+          runtimeKind: "hermes",
+          provider: "openai-compatible",
+          modelId: "other-model",
+          credentialId: "connection",
+          effort: "off",
+        }}
+      />,
+    );
+  });
+  expect(validatePinMock).toHaveBeenCalledTimes(2);
+});
+
+it("ignores a stale pin refusal after the picker changes", async () => {
+  let refuse!: (reason: unknown) => void;
+  validatePinMock.mockReturnValueOnce(
+    new Promise((_, reject) => {
+      refuse = reject;
+    }),
+  );
+  const onError = vi.fn();
+  const selected = {
+    runtimeKind: "hermes" as const,
+    provider: "openai-compatible",
+    modelId: "old",
+    credentialId: "connection",
+    effort: "off",
+  };
+  await act(async () => {
+    root.render(
+      <RuntimeConfigPanel value={null} onChange={() => {}} onError={onError} pin={selected} />,
+    );
+  });
+  await act(async () => {
+    root.render(
+      <RuntimeConfigPanel
+        value={null}
+        onChange={() => {}}
+        onError={onError}
+        pin={{ ...selected, modelId: "new" }}
+      />,
+    );
+  });
+  await act(async () => {
+    refuse({ code: "BAD_REQUEST", message: "Old refusal" });
+  });
+  expect(container.textContent).not.toContain("Old refusal");
+  expect(onError).toHaveBeenLastCalledWith(null);
 });

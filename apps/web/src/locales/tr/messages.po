@@ -9984,3 +9984,9 @@ msgstr "Gerçek işler verebileceğin,<0/>her zaman açık agent takımın."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+msgid "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models."
+msgstr "Hermes en az 64K belirteçlik bağlam sınırı gerektirir. Bu bağlantı için Ayarlar → Modeller bölümünde sınırı ayarlayın."
+
+msgid "Could not check the model. Try again."
+msgstr "Model kontrol edilemedi. Tekrar deneyin."

@@ -40,7 +40,7 @@ function fixture(owner = true) {
           kind: "openai_compatible",
           baseUrl: "http://localhost:8080/v1",
           reasoning: false,
-          contextWindow: 32768,
+          contextWindow: 65536,
           maxTokens: 4096,
         }),
       ),

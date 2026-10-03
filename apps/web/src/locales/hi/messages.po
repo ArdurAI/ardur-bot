@@ -9984,3 +9984,9 @@ msgstr "हमेशा चालू रहने वाले एजेंट�
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+msgid "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models."
+msgstr "Hermes के लिए कम से कम 64K टोकन की संदर्भ सीमा चाहिए। इस कनेक्शन के लिए इसे सेटिंग्स → मॉडल में तय करें।"
+
+msgid "Could not check the model. Try again."
+msgstr "मॉडल की जाँच नहीं हो सकी। फिर कोशिश करें।"

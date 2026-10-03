@@ -1324,6 +1324,10 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       }),
     },
     models: {
+      validatePin: authed.models.validatePin.handler(async ({ context, input }) => {
+        await validateModelPinSelection(deps, context.actor, input);
+        return { ok: true };
+      }),
       list: authed.models.list.handler(async ({ context }) => {
         const state = await ollamaStatus(deps, context.actor, context.signal);
         return [

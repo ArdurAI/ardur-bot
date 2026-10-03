@@ -9984,3 +9984,9 @@ msgstr "Dein Team aus jederzeit verfügbaren Agents<0/>für echte Aufgaben."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+msgid "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models."
+msgstr "Hermes benötigt ein Kontextlimit von mindestens 64K Tokens. Lege es für diese Verbindung unter Einstellungen → Modelle fest."
+
+msgid "Could not check the model. Try again."
+msgstr "Das Modell konnte nicht geprüft werden. Versuche es erneut."
