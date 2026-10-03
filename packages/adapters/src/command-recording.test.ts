@@ -183,6 +183,72 @@ describe("command recording boundary", () => {
     expect(JSON.stringify(cwd.events)).not.toContain(secret);
     expect(cwd.sandbox.execute).not.toHaveBeenCalled();
   });
+  it("runs credential-looking fixtures unchanged while retaining only redacted arguments", async () => {
+    const fake = "sk-" + "f".repeat(40);
+    const command = `echo ${fake}`;
+    const f = fixture([
+      { type: "stdout", data: fake + " fixture output" },
+      { type: "exit", code: 0 },
+    ]);
+    const tool = vi.fn(async (_name, args) => {
+      expect(args.command).toBe(command);
+      return f.execute();
+    });
+    const result = await f.recording.invoke("shell", { command }, "execution-1", tool);
+    expect(tool).toHaveBeenCalledOnce();
+    expect(f.sandbox.execute).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ stdout: "[Redacted] fixture output", code: 0 });
+    expect(JSON.stringify(f.events)).not.toContain(fake);
+    expect(f.blocks()[0]).toMatchObject({
+      command: "echo [Redacted]",
+      redacted: true,
+      rerunDisabledReason: "This command cannot be retained safely for rerun.",
+    });
+    expect(f.events[0]?.payload.replay).toBeNull();
+  });
+  it("refuses a known value with the existing sentence before calling the tool", async () => {
+    const known = "fixture-managed-value";
+    const f = fixture([], [known]);
+    const tool = vi.fn();
+    const result = await f.recording.invoke(
+      "shell",
+      { command: `echo ${known}` },
+      "execution-1",
+      tool,
+    );
+    expect(result).toEqual({
+      error:
+        "This command was not run because its arguments could not be retained safely; use managed credential variables.",
+    });
+    expect(tool).not.toHaveBeenCalled();
+    expect(JSON.stringify(f.events)).not.toContain(known);
+  });
+  it("runs a 40 KB command", async () => {
+    const command = "echo " + "x".repeat(40 * 1024);
+    const f = fixture();
+    const tool = vi.fn(async (_name, args) => {
+      expect(args.command).toBe(command);
+      return f.execute();
+    });
+    await f.recording.invoke("shell", { command }, "execution-1", tool);
+    expect(tool).toHaveBeenCalledOnce();
+    expect(f.blocks()[0]?.command).toBe(command);
+  });
+  it.each(["x".repeat(70 * 1024), "é".repeat(40 * 1024)])(
+    "refuses commands over the byte limit with a clear reason",
+    async (command) => {
+      const f = fixture();
+      const tool = vi.fn();
+      const result = await f.recording.invoke("shell", { command }, "execution-1", tool);
+      expect(result).toEqual({
+        error:
+          "This command was not run because it exceeds 64 KB. Put code in a file and run that file.",
+      });
+      expect(tool).not.toHaveBeenCalled();
+      expect(f.sandbox.execute).not.toHaveBeenCalled();
+      expect(f.blocks()[0]?.command).toBe("[Invalid command]");
+    },
+  );
   it("strips active controls and masks structured credentials even when not registered", async () => {
     const credential = randomUUID();
     const f = fixture([

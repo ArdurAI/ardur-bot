@@ -3,6 +3,7 @@ import type { AdapterContext, ComputerRef, SandboxProvider } from "@ardurbot/ada
 import type { CommandBlock, CommandEventPayload } from "@ardurbot/contracts";
 import {
   COMMAND_SUPPRESSED,
+  COMMAND_TEXT_LIMIT,
   COMMAND_TRUNCATED,
   CommandEventPayloadSchema,
   CommandRequestSchema,
@@ -250,7 +251,17 @@ export function createCommandRecording(input: {
       command === request.command &&
       cwd === resolvedCwd &&
       (request.cwd === undefined || safe(request.cwd) === request.cwd);
-    const suppress = sensitiveShellCommand(request?.command ?? "") || !unchanged;
+    const containsKnownSecret = [request?.command, request?.cwd, resolvedCwd].some(
+      (value) =>
+        typeof value === "string" &&
+        input.secrets.some((secret) => secret.length > 0 && value.includes(secret)),
+    );
+    const rawCommand = args.command ?? args.cmd;
+    const oversized =
+      typeof rawCommand === "string" &&
+      (rawCommand.length > COMMAND_TEXT_LIMIT ||
+        new TextEncoder().encode(rawCommand).byteLength > COMMAND_TEXT_LIMIT);
+    const suppress = sensitiveShellCommand(request?.command ?? "");
     // The same call resuming on its own id finishes the card the killed attempt published.
     const resumeCard = input.openCommands?.get(executionId);
     const commandId = commandIdFor(executionId);
@@ -317,10 +328,11 @@ export function createCommandRecording(input: {
     }
     try {
       const result =
-        !request || !unchanged || cwdError
+        !request || containsKnownSecret || cwdError
           ? {
-              error:
-                "This command was not run because its arguments could not be retained safely; use managed credential variables.",
+              error: oversized
+                ? "This command was not run because it exceeds 64 KB. Put code in a file and run that file."
+                : "This command was not run because its arguments could not be retained safely; use managed credential variables.",
             }
           : await tool("shell", { ...request }, executionId);
       // The earlier attempt's card already shows a finished call.
