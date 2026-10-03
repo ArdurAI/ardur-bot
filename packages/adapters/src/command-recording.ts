@@ -31,10 +31,32 @@ export function redactCommandText(text: string, secrets: string[]): string {
   return stripCommandControls(String(redactBindings({ value: masked }).value));
 }
 
-/** Known sensitive operations suppress output, including transformed/unknown credentials. */
+/**
+ * Suppress credential reads, not development commands that merely mention credential names.
+ * This is an output safeguard, not a shell authorization grammar; other output is redacted.
+ */
 export function sensitiveShellCommand(command: string): boolean {
-  return /(?:\b(?:printenv|env|set|export|security|keychain|secret|password|passwd|token|credential)\b|\.env\b|\.ssh\/|\.aws\/|\/proc\/.*environ)/i.test(
-    command,
+  const position = "(?:^|[;&|()\\n])\\s*(?:command\\s+|builtin\\s+)?";
+  const environmentRead = new RegExp(
+    position + "(?:printenv\\b|(?:env|set|export)\\s*(?=$|[;&|)\\n]))",
+    "i",
+  );
+  const keychainRead = new RegExp(
+    position +
+      "(?:security\\s+(?:find-[\\w-]+|dump-keychain|show-keychain-info|list-keychains)\\b|keychain\\b)",
+    "i",
+  );
+  const environmentFileRead = new RegExp(
+    position +
+      "(?:cat|head|tail|less|more|sed|awk|grep|rg|source|\\.)\\s+[^;&|\\n]*?(?<![\\w.-])\\.env(?:[.\\s/\"']|$)",
+    "i",
+  );
+  return (
+    environmentRead.test(command) ||
+    keychainRead.test(command) ||
+    environmentFileRead.test(command) ||
+    /<\s*["']?[^;&|\n]*\.env(?:[.\s/"']|$)/i.test(command) ||
+    /(?:\.(?:ssh|aws|kube|gnupg)[/\\]|[/\\]proc[/\\][^\s;|&]+[/\\]environ\b)/i.test(command)
   );
 }
 

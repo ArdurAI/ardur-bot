@@ -6,7 +6,11 @@ import { projectCommandBlocks } from "@ardurbot/core";
 import type { AppendEventInput, ThreadEvents } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
 import { approvalPausedToolResult } from "./approval-effect.js";
-import { adoptOpenCommands, createCommandRecording } from "./command-recording.js";
+import {
+  adoptOpenCommands,
+  createCommandRecording,
+  sensitiveShellCommand,
+} from "./command-recording.js";
 
 function fixture(
   output: ProcessEvent[] = [{ type: "exit", code: 7 }],
@@ -68,6 +72,53 @@ function fixture(
     );
   return { events, order, append, recording, execute, invoke, blocks, sandbox, abort };
 }
+
+describe("credential-read output suppression", () => {
+  it.each([
+    ["set -e; pnpm test", false],
+    ["grep -n token src/a.ts", false],
+    ["grep -n sensitiveShellCommand src/a.ts", false],
+    ["printenv", true],
+    ["env", true],
+    ["set", true],
+    ["export", true],
+    ["cat .env", true],
+    ["cat project/.env.local", true],
+    ["source .env", true],
+    ["node x.js < .env", true],
+    ["security find-generic-password -s x", true],
+    ["security dump-keychain", true],
+    ["security add-generic-password -s x", false],
+    ["export FOO=1 && node x.js", false],
+    // Assignments with a program set its environment; they do not print it.
+    ["env FOO=1 node x.js", false],
+    ["echo password token credential", false],
+    ["cat fixture/.ssh/config", true],
+    ["cat fixture/.aws/config", true],
+    ["cat fixture/.kube/config", true],
+    ["cat fixture/.gnupg/private-keys-v1.d/key", true],
+    ["cat /proc/123/environ", true],
+    ["pnpm test; printenv", true],
+    ["pnpm test\nexport", true],
+  ])("%s suppresses output: %s", (command, hidden) => {
+    expect(sensitiveShellCommand(command)).toBe(hidden);
+  });
+
+  it.each([
+    "set -e; pnpm test",
+    "grep -n token src/a.ts",
+    "export FOO=1 && node x.js",
+    "env FOO=1 node x.js",
+  ])("keeps ordinary output for %s", async (command) => {
+    const f = fixture([
+      { type: "stdout", data: "development output" },
+      { type: "exit", code: 0 },
+    ]);
+    const result = await f.invoke(command);
+    expect(result).toMatchObject({ stdout: "development output", code: 0 });
+    expect(f.blocks()[0]?.stdout).toBe("development output");
+  });
+});
 
 describe("command recording boundary", () => {
   it("persists launch intent before execution and captures resolved cwd and exit", async () => {
