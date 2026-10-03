@@ -326,9 +326,7 @@ test("Find apps connects a token app, waits for an OAuth app, and manages custom
   await github.getByLabel("Credential", { exact: true }).fill("fake-github-pat");
   await captureScreenshot(page, testInfo, "find-apps-credential-field");
   await github.getByRole("button", { name: "Connect", exact: true }).click();
-  await expect(
-    github.getByRole("button", { name: "Connected · tools need review", exact: true }),
-  ).toBeVisible();
+  await expect(github.getByRole("button", { name: "Connected", exact: true })).toBeVisible();
 
   // A pure sign-in app waits for the popup and can be cancelled from this page.
   const notion = resultRow(finder, "Notion");

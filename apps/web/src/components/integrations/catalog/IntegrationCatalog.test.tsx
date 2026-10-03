@@ -6,6 +6,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DirectMcpSearch } from "../DirectMcpSearch";
 import { IntegrationCatalog } from "./IntegrationCatalog";
 
 const api = vi.hoisted(() => ({
@@ -1529,6 +1530,55 @@ describe("Settings integration catalog", () => {
       expect(api.connect).toHaveBeenCalledExactlyOnceWith(
         expect.objectContaining({ catalogId: "notion", authKind: "oauth", token: undefined }),
       );
+    },
+  );
+
+  it.each([
+    { needsReview: true, spaceAllowedTools: ["synthetic_read"] },
+    { needsReview: false, spaceAllowedTools: [] },
+  ])("shows space-pending tools on an existing Find apps connection: %j", async (pending) => {
+    const notion = remoteApp("notion", "Notion", "https://mcp.notion.example.test/mcp");
+    connections = [{ ...connected, catalogId: "notion", ...pending }];
+    api.list.mockImplementation(async () => ({ catalog: [notion], connections }));
+    await openResults([listing("Notion directory", notion.endpoint!)]);
+    expect(resultBlock("Notion")?.textContent).toContain("Connected · tools need review");
+    expect(resultConnect("Notion")).toBeUndefined();
+    expect(button("Manage", resultBlock("Notion")!)).toBeDefined();
+    expect(api.connect).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])(
+    "uses the Find apps connect outcome for space-pending status: %s",
+    async (needsReview) => {
+      const notion = remoteApp("notion", "Notion", "https://mcp.notion.example.test/mcp");
+      const outcome = {
+        ...connected,
+        catalogId: "notion",
+        needsReview,
+        spaceAllowedTools: needsReview ? [] : connected.spaceAllowedTools,
+      };
+      const onConnectCatalog = vi.fn(async () => outcome);
+      api.catalogSearch.mockResolvedValue({
+        enabled: true,
+        results: [listing("Notion directory", notion.endpoint!)],
+      });
+      // Keep the connection lookup empty: the immediate result must use the returned facts.
+      await act(async () =>
+        root.render(
+          <DirectMcpSearch
+            catalog={[notion]}
+            connections={[]}
+            onConnectCatalog={onConnectCatalog}
+          />,
+        ),
+      );
+      await fill("Search apps", "Notion");
+      await click(button("Search integrations.sh"));
+      await click(resultConnect("Notion")!);
+      const label = needsReview ? "Connected · tools need review" : "Connected";
+      expect(button(label, resultBlock("Notion")!)?.disabled).toBe(true);
+      expect(onConnectCatalog).toHaveBeenCalledOnce();
+      expect(resultConnect("Notion")).toBeUndefined();
     },
   );
 

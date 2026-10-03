@@ -4,6 +4,7 @@ import type {
   IntegrationConnection,
   IntegrationDescriptor,
 } from "@ardurbot/contracts";
+import { integrationToolsNeedReview } from "@ardurbot/contracts";
 import { Button, Input } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useRef, useState } from "react";
@@ -68,7 +69,7 @@ export function DirectMcpSearch({
   const [urlToken, setUrlToken] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<"search" | "connect" | null>(null);
-  const [connected, setConnected] = useState<string[]>([]);
+  const [connected, setConnected] = useState<Record<string, { toolsNeedReview: boolean }>>({});
   // A credential belongs to the one result it was typed for.
   const [credential, setCredential] = useState<{ endpoint: string; value: string } | null>(null);
   const [rejectedEndpoint, setRejectedEndpoint] = useState<string | null>(null);
@@ -179,7 +180,10 @@ export function DirectMcpSearch({
         if (connection.state === "awaiting-consent") return;
         setWaiting(null);
         if (connection.state === "connected") {
-          setConnected((current) => [...current, target.endpoint]);
+          setConnected((current) => ({
+            ...current,
+            [target.endpoint]: { toolsNeedReview: integrationToolsNeedReview(connection) },
+          }));
           setCredential(null);
           return;
         }
@@ -206,7 +210,10 @@ export function DirectMcpSearch({
       if (mine !== attempt.current) return;
       setWaiting(null);
       if (outcome.result === "connected") {
-        setConnected((current) => [...current, target.endpoint]);
+        setConnected((current) => ({
+          ...current,
+          [target.endpoint]: { toolsNeedReview: false },
+        }));
         setCredential(null);
         setUrlToken("");
         await onConnected?.(outcome.serverId);
@@ -228,6 +235,10 @@ export function DirectMcpSearch({
     }
   }
 
+  function connectedLabel(toolsNeedReview: boolean) {
+    return toolsNeedReview ? t`Connected · tools need review` : t`Connected`;
+  }
+
   /** "Connected" and Manage for a built-in app that already has a connection, as its card shows. */
   function existing(descriptor: IntegrationDescriptor | undefined) {
     const connection = descriptor ? remoteConnection(connections, descriptor.id) : undefined;
@@ -235,7 +246,9 @@ export function DirectMcpSearch({
     return (
       <>
         <span className="text-sm text-muted-foreground">
-          {connection.state === "connected" ? t`Connected` : t`Needs sign-in`}
+          {connection.state === "connected"
+            ? connectedLabel(integrationToolsNeedReview(connection))
+            : t`Needs sign-in`}
         </span>
         {onManage ? (
           <Button variant="outline" onClick={() => onManage(connection)}>{t`Manage`}</Button>
@@ -277,7 +290,7 @@ export function DirectMcpSearch({
                 variant="outline"
                 disabled={
                   (busy && !waiting) ||
-                  connected.includes(result.endpoint) ||
+                  !!connected[result.endpoint] ||
                   (result.descriptor?.authKind === "token" &&
                     credential?.endpoint === result.endpoint &&
                     !credential.value.trim())
@@ -289,7 +302,9 @@ export function DirectMcpSearch({
                   )
                 }
               >
-                {connected.includes(result.endpoint) ? t`Connected` : t`Connect`}
+                {connected[result.endpoint]
+                  ? connectedLabel(connected[result.endpoint]!.toolsNeedReview)
+                  : t`Connect`}
               </Button>
             )}
           </div>
