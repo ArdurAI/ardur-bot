@@ -66,7 +66,8 @@ export async function normalizeModelPinUpdate(
   )
     return {};
   if (
-    (input.runtimeKind ?? existing.runtimeKind ?? "pi") !== "hermes" &&
+    ((input.runtimeKind ?? existing.runtimeKind ?? "pi") !== "hermes" ||
+      (input.modelProvider ?? existing.modelProvider) === "ollama") &&
     (input.runtimeKind === undefined || input.runtimeKind === (existing.runtimeKind ?? "pi")) &&
     (input.modelProvider === undefined || input.modelProvider === existing.modelProvider) &&
     (input.modelId === undefined || input.modelId === existing.modelId) &&
@@ -200,9 +201,15 @@ export async function normalizeModelPinUpdate(
         modelPinRevision: { increment: 1 },
       };
     } catch (error) {
-      throw new ORPCError("BAD_REQUEST", {
-        message: ollamaErrorMessage(error),
-      });
+      const message = ollamaErrorMessage(error);
+      const unavailable = [
+        "Ollama is not running. Start it and try again.",
+        "Could not reach Ollama. Check the server URL and try again.",
+        "Ollama took too long. Try again.",
+        "Ollama could not complete the request. Try again.",
+      ].includes(message);
+      // A temporarily unavailable server is not an impossible settings combination.
+      throw new ORPCError(unavailable ? "PRECONDITION_FAILED" : "BAD_REQUEST", { message });
     }
   }
   const entry = listPiCatalog().find((item) => item.provider === provider && item.id === modelId);
@@ -475,10 +482,18 @@ export async function validateBotCanRun(
     const problem = canBotRun({ pin, connection: { credential } });
     if (problem) throw new ORPCError("BAD_REQUEST", { message: problem.reason });
   }
+  const unchangedOllamaPin =
+    bot &&
+    pin.provider === "ollama" &&
+    pin.runtimeKind === bot.runtimeKind &&
+    pin.provider === bot.modelProvider &&
+    pin.modelId === bot.modelId &&
+    pin.credentialId === bot.modelCredentialId &&
+    normalizedThinkingLevel(pin.effort) === normalizedThinkingLevel(bot.thinkingLevel);
   let checked: ValidatedModelPinChoice;
   if (
     (pin.runtimeKind === "pi" || pin.runtimeKind === "hermes") &&
-    pin.provider !== "ollama" &&
+    (pin.provider !== "ollama" || unchangedOllamaPin) &&
     (pin.provider !== "scripted" || deps.env.agentRuntime === "scripted")
   ) {
     const selected = selectConfiguredModel({ pin, credential });
@@ -509,25 +524,20 @@ export async function validateBotCanRun(
       });
     metadata = modelCredentialDto(credential, deps.secrets.load(secret.ciphertext, secret.id));
   }
-  const ollamaModel =
-    checked.provider === "ollama" && metadata?.baseUrl
-      ? await showOllamaModel(metadata.baseUrl.replace(/\/v1\/?$/, ""), checked.modelId)
-      : undefined;
   const problem = canBotRun({
     pin: { ...pin, ...checked },
     model: {
       provider: checked.provider,
       id: checked.modelId,
       baseUrl: metadata?.baseUrl,
-      reasoning: ollamaModel?.reasoning ?? metadata?.reasoning,
+      reasoning: metadata?.reasoning,
       ...(metadata?.oauth || metadata?.connectionIssue === "api-key-required"
         ? { oauth: { credential: { type: "oauth" as const, access: "", refresh: "", expires: 0 } } }
         : {}),
       contextWindow:
-        ollamaModel?.contextWindow ??
-        (checked.provider === "openai-compatible"
+        checked.provider === "openai-compatible"
           ? metadata?.contextWindow
-          : (piModelContextWindow(checked.provider, checked.modelId) ?? metadata?.contextWindow)),
+          : (piModelContextWindow(checked.provider, checked.modelId) ?? metadata?.contextWindow),
       maxTokens: metadata?.maxTokens,
       thinkingLevel: ThinkingLevelSchema.parse(normalizedThinkingLevel(checked.effort)),
     },

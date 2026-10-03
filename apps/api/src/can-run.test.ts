@@ -1,4 +1,4 @@
-import { nativeRuntimeAvailability } from "@ardurbot/adapters";
+import { listOllamaModels, nativeRuntimeAvailability, showOllamaModel } from "@ardurbot/adapters";
 import type { Actor, RuntimeKind } from "@ardurbot/contracts";
 import { failureCategoryMessage, HERMES_CONTEXT_LIMIT_MESSAGE } from "@ardurbot/contracts";
 import { RPCHandler } from "@orpc/server/fetch";
@@ -9,6 +9,8 @@ import { createRouter } from "./router.js";
 
 vi.mock("@ardurbot/adapters", async (original) => ({
   ...(await original<object>()),
+  listOllamaModels: vi.fn(),
+  showOllamaModel: vi.fn(),
   nativeRuntimeAvailability: vi.fn(async () => ({
     runtimeKind: "codex-app-server",
     available: true,
@@ -62,7 +64,21 @@ function fixture(row: (typeof rows)[number]) {
     runtimeExperimental: row.experimental ?? true,
     runtimeConfig: null,
     modelPinRevision: 1,
-    thread: { id: "thread" },
+    name: "Renamed",
+    title: "",
+    description: "",
+    instructions: "",
+    color: "#000",
+    notifyOnFinish: true,
+    pinned: false,
+    sectionId: null,
+    parentBotId: null,
+    archivedAt: null,
+    memoryScope: null,
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+    runs: [],
+    thread: { id: "thread", unread: false, messages: [] },
     computer: {
       kind: row.computer ?? "desktop",
       connectionId: null,
@@ -88,7 +104,15 @@ function fixture(row: (typeof rows)[number]) {
       findUnique: vi.fn(async () => null),
     },
     chatGroup: { findFirst: vi.fn(async () => ({ members: [{ id: "member", bot }] })) },
-    bot: { findFirst: vi.fn(async () => bot), updateMany: vi.fn() },
+    bot: {
+      findFirst: vi.fn(async () => bot),
+      findMany: vi.fn(async () => [bot]),
+      updateMany: vi.fn(),
+      update: vi.fn(async () => ({ id: "bot", name: "Renamed", title: "", description: "" })),
+    },
+    botBrief: { updateMany: vi.fn() },
+    thread: { update: vi.fn(async () => ({ nextEventSeq: 1 })) },
+    event: { create: vi.fn(async () => ({ seq: 1 })) },
     space: {
       findUnique: vi.fn(async () => ({
         allowedModelDestinations: { mode: row.local ? "local" : "any" },
@@ -99,11 +123,13 @@ function fixture(row: (typeof rows)[number]) {
       findFirst: vi.fn(async () => ({ modelId: "fixture-model", isDefault: false })),
     },
     secret: { findFirst: vi.fn(async () => ({ id: "secret", ciphertext: "fixture" })) },
-    $transaction: vi.fn(),
+    $transaction: vi.fn<(callback: (tx: unknown) => Promise<unknown>) => Promise<unknown>>(),
   };
+  prisma.$transaction.mockImplementation(async (callback) => callback(prisma));
   const deps = {
     env: { webOrigin: "http://localhost" },
     prisma,
+    events: { notify: vi.fn(async () => {}) },
     secrets: {
       load: () =>
         JSON.stringify({
@@ -302,4 +328,107 @@ it.each(rows)("clearing a group override cannot inherit $name", async (row) => {
     ),
   ).rejects.toThrow();
   expect(f.prisma.$transaction).not.toHaveBeenCalled();
+});
+
+function ollamaFixture(kind: "pi" | "hermes") {
+  const f = fixture({ name: "saved Ollama", kind });
+  f.bot.modelProvider = "ollama";
+  f.bot.thinkingLevel = "off";
+  f.prisma.userModelCredential.findFirst.mockResolvedValue({
+    id: "connection",
+    userId: "user",
+    provider: "ollama",
+    label: "Fixture",
+    secretId: "secret",
+  });
+  f.deps.secrets.load = () =>
+    JSON.stringify({
+      kind: "openai_compatible",
+      baseUrl: "http://localhost:11434/v1",
+    });
+  vi.mocked(listOllamaModels)
+    .mockReset()
+    .mockRejectedValue(new Error("Ollama is not running. Start it and try again."));
+  vi.mocked(showOllamaModel)
+    .mockReset()
+    .mockRejectedValue(new Error("Ollama is not running. Start it and try again."));
+  return { ...f, pin: { ...f.pin, provider: "ollama" } };
+}
+
+it.each(["pi", "hermes"] as const)(
+  "an unchanged %s Ollama pin never probes, including a name-only form save",
+  async (kind) => {
+    const f = ollamaFixture(kind);
+    expect((await f.call("models/validatePin", { ...f.pin, botId: "bot" })).status).toBe(200);
+    const result = await f.call("bots/update", {
+      botId: "bot",
+      name: "Renamed",
+      runtimeKind: kind,
+      modelProvider: "ollama",
+      modelId: f.pin.modelId,
+      modelCredentialId: f.pin.credentialId,
+      thinkingLevel: "off",
+      runtimeExperimental: true,
+    });
+    expect(result).toMatchObject({ status: 200 });
+    expect(f.prisma.bot.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ name: "Renamed" }),
+      }),
+    );
+    expect(listOllamaModels).not.toHaveBeenCalled();
+    expect(showOllamaModel).not.toHaveBeenCalled();
+  },
+);
+
+it.each(["models/validatePin", "bots/update"])(
+  "%s treats an unreachable changed Ollama pin as cannot check now, not invalid settings",
+  async (procedure) => {
+    const f = ollamaFixture("pi");
+    const result = await f.call(
+      procedure,
+      procedure === "models/validatePin"
+        ? { ...f.pin, modelId: "another-model", botId: "bot" }
+        : {
+            botId: "bot",
+            modelProvider: "ollama",
+            modelId: "another-model",
+            modelCredentialId: "connection",
+            thinkingLevel: "off",
+          },
+    );
+    expect(result).toMatchObject({
+      status: 412,
+      body: {
+        json: {
+          code: "PRECONDITION_FAILED",
+          message: "Ollama is not running. Start it and try again.",
+        },
+      },
+    });
+    expect(f.prisma.bot.update).not.toHaveBeenCalled();
+  },
+);
+
+it("a changed Ollama pin still checks installed models and the Hermes floor", async () => {
+  const f = ollamaFixture("hermes");
+  vi.mocked(listOllamaModels).mockResolvedValue([{ name: "another-model" }]);
+  vi.mocked(showOllamaModel).mockResolvedValue({
+    id: "another-model",
+    reasoning: false,
+    acceptsImages: false,
+    supportsThinkingOff: true,
+    contextWindow: 8192,
+  });
+  const result = await f.call("models/validatePin", {
+    ...f.pin,
+    modelId: "another-model",
+    effort: null,
+    botId: "bot",
+  });
+  expect(result).toMatchObject({
+    status: 400,
+    body: { json: { message: HERMES_CONTEXT_LIMIT_MESSAGE } },
+  });
+  expect(showOllamaModel).toHaveBeenCalledTimes(1);
 });

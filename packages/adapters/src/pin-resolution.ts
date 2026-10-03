@@ -97,8 +97,9 @@ export function validateRuntimePin(
   model: AgentRunModel,
   pin: RuntimePin,
 ): RuntimeProblem | undefined {
-  // Ollama capabilities and effort are checked against a fresh /api/show by resolveModelKey.
-  if (model.provider === "ollama" && model.baseUrl && model.contextWindow) return undefined;
+  // Run resolution checks Ollama capabilities against a fresh /api/show before admission.
+  // Editing an unchanged pin must not probe for capabilities or invent a context limit.
+  if (model.provider === "ollama" && model.baseUrl) return undefined;
   if (model.provider === "scripted" && model.id === "scripted") return undefined;
   if (model.provider === "openai-compatible" && !model.baseUrl) {
     return runtimePinProblem(

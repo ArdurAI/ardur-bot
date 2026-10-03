@@ -128,3 +128,17 @@ it("does not check an inherited group override and ignores its previous request"
   expect(node.querySelector("button")!.disabled).toBe(false);
   expect(node.textContent).not.toContain("old");
 });
+
+it("shows the existing Ollama unavailable sentence and permits a recheck without calling it impossible", async () => {
+  validatePin
+    .mockRejectedValueOnce({
+      code: "PRECONDITION_FAILED",
+      message: "Ollama is not running. Start it and try again.",
+    })
+    .mockResolvedValueOnce({ ok: true });
+  await render({ ...choice, provider: "ollama" });
+  expect(node.textContent).toContain("Ollama is not running. Start it and try again.");
+  expect(node.textContent).not.toContain("Could not check the model.");
+  await act(async () => window.dispatchEvent(new Event("models:changed")));
+  expect(node.querySelector("button")!.disabled).toBe(false);
+});
