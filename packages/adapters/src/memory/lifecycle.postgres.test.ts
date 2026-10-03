@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
+import { RuntimePinSchema } from "@ardurbot/contracts/runtime-pins";
 import {
   clearThread,
   createDb,
@@ -206,7 +207,17 @@ describe.skipIf(!hasDb)("brief authorization and history clearing (PostgreSQL)",
     ] as const) {
       await f.prisma.chatGroupMember.update({
         where: { groupId_botId: { groupId: f.chat!.id, botId: f.bot.id } },
-        data: { runtimePin: { provider, credentialId } },
+        data: {
+          modelPinRevision: 1,
+          runtimePin: RuntimePinSchema.parse({
+            runtimeKind: "pi",
+            provider,
+            modelId: "fixture-model",
+            effort: "off",
+            credentialId,
+            revision: 1,
+          }),
+        },
       });
       await f.prisma.botBrief.update({ where, data: retry });
       await resetBriefRetriesForConnection(f.prisma, {
