@@ -11,7 +11,7 @@ const actor = { userId: "user", spaceId: "space" } as Actor;
 function fixture(
   reasoning: boolean,
   effort: "high" | "off",
-  contextWindow: number | undefined = 65_536,
+  contextWindow: number | null = 65_536,
 ) {
   const credential = {
     id: "connection",
@@ -36,7 +36,7 @@ function fixture(
           baseUrl: "http://localhost:8080/v1",
           reasoning,
           thinkingLevel: effort,
-          contextWindow,
+          ...(contextWindow === null ? {} : { contextWindow }),
           maxTokens: 4096,
         }),
     },
@@ -137,4 +137,9 @@ it("revalidates a resubmitted Hermes pin after connection limits were lowered", 
       },
     ),
   ).rejects.toThrow(HERMES_CONTEXT_LIMIT_MESSAGE);
+});
+
+it("accepts an unknown compatible model using the honest unsaved default", async () => {
+  const deps = fixture(false, "off", null);
+  expect((await checkPin(deps, choice)).status).toBe(200);
 });

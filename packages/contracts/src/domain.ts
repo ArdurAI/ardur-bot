@@ -1087,11 +1087,30 @@ export const HERMES_MINIMUM_CONTEXT_TOKENS = 64_000;
 export const HERMES_CONTEXT_LIMIT_MESSAGE =
   "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models.";
 
-/** Default context window for an OpenAI-compatible connection. */
+/** Conservative reservation cap retained for built-in delegation budgeting. */
 export const DEFAULT_MODEL_CONTEXT_WINDOW = 32_768;
 
 /** Largest context window exposed by model settings. */
 export const MAX_MODEL_CONTEXT_WINDOW = 1_048_576;
+
+/** Last-resort connection estimate, not a claim about a provider's actual capacity. */
+export const DEFAULT_CONNECTION_CONTEXT_WINDOW = 65_536;
+
+export const ModelContextWindowSourceSchema = z.enum(["metadata", "catalog", "default"]);
+export type ModelContextWindowSource = z.infer<typeof ModelContextWindowSourceSchema>;
+
+/** Saved metadata wins; catalog/provider facts are next; unknown capacity is explicitly estimated. */
+export function resolveModelContextWindow(
+  metadata?: number,
+  catalog?: number,
+): { contextWindow: number; contextWindowSource: ModelContextWindowSource } {
+  const valid = (value: number | undefined): value is number =>
+    value !== undefined && Number.isSafeInteger(value) && value > 0;
+  if (valid(metadata)) return { contextWindow: metadata, contextWindowSource: "metadata" };
+  if (valid(catalog)) return { contextWindow: catalog, contextWindowSource: "catalog" };
+  return { contextWindow: DEFAULT_CONNECTION_CONTEXT_WINDOW, contextWindowSource: "default" };
+}
+
 /** Parse the optional per-connection image limit entered in model settings. */
 export function parseModelMaxImagesPerPrompt(
   value: string,
@@ -1143,7 +1162,8 @@ export const ModelCredentialSchema = z.object({
   reasoning: z.boolean().optional(),
   thinkingLevel: ThinkingLevelSchema.nullable().optional(),
   maxTokens: z.number().int().min(1).max(MAX_MODEL_MAX_TOKENS).optional(),
-  contextWindow: z.number().int().min(1).max(MAX_MODEL_CONTEXT_WINDOW).optional(),
+  contextWindow: z.number().int().positive().optional(),
+  contextWindowSource: ModelContextWindowSourceSchema.optional(),
   supportsImages: z.boolean().optional(),
   maxImagesPerPrompt: z.number().int().min(1).max(1000).optional(),
   thinkingLevels: z.array(ThinkingLevelSchema).optional(),

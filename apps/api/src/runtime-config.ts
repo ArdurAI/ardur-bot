@@ -5,7 +5,11 @@ import {
   parseModelSecret,
   showOllamaModel,
 } from "@ardurbot/adapters";
-import { ThinkingLevelSchema } from "@ardurbot/contracts";
+import {
+  DEFAULT_CONNECTION_CONTEXT_WINDOW,
+  resolveModelContextWindow,
+  ThinkingLevelSchema,
+} from "@ardurbot/contracts";
 import { appContract } from "@ardurbot/contracts/rpc";
 import { parseRuntimeConfigText } from "@ardurbot/contracts/runtime-config-editor";
 import { normalizeHermesRuntimeConfig } from "@ardurbot/core/runtime-config";
@@ -60,7 +64,7 @@ export function createRuntimeConfigRoutes(
           throw new ORPCError("BAD_REQUEST", { message: "Connection not found." });
         }
 
-        let contextWindow = 8192;
+        let contextWindow = DEFAULT_CONNECTION_CONTEXT_WINDOW;
         let maxTokens = 4096;
         let reasoning = false;
         let acceptsImages = false;
@@ -77,7 +81,10 @@ export function createRuntimeConfigRoutes(
           const connection = parseModelSecret(deps.secrets.load(secret.ciphertext, secret.id));
           if (connection.kind === "openai_compatible") {
             const ollamaModel = await showOllamaModel(connection.baseUrl, modelId);
-            contextWindow = ollamaModel.contextWindow || 8192;
+            contextWindow = resolveModelContextWindow(
+              undefined,
+              ollamaModel.contextWindow,
+            ).contextWindow;
             maxTokens = Math.max(1, Math.min(4096, Math.floor(contextWindow / 4)));
             reasoning = ollamaModel.reasoning;
           }
@@ -90,7 +97,7 @@ export function createRuntimeConfigRoutes(
             credential,
             deps.secrets.load(secret.ciphertext, secret.id),
           );
-          contextWindow = metadata.contextWindow ?? 8192;
+          contextWindow = metadata.contextWindow ?? DEFAULT_CONNECTION_CONTEXT_WINDOW;
           maxTokens = metadata.maxTokens ?? 4096;
           reasoning = metadata.reasoning ?? false;
           acceptsImages = metadata.supportsImages ?? false;

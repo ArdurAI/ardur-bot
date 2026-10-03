@@ -13,7 +13,7 @@ import {
 } from "@ardurbot/adapters";
 import type { Actor, RuntimeKind, RuntimePin, UpdateBotInput } from "@ardurbot/contracts";
 import {
-  DEFAULT_MODEL_CONTEXT_WINDOW,
+  DEFAULT_CONNECTION_CONTEXT_WINDOW,
   HERMES_CONTEXT_LIMIT_MESSAGE,
   HERMES_MINIMUM_CONTEXT_TOKENS,
   nativeRuntimeProviders,
@@ -212,7 +212,7 @@ export async function normalizeModelPinUpdate(
     requireHermesContext(
       compatible?.contextWindow ??
         piModelContextWindow(provider, modelId) ??
-        DEFAULT_MODEL_CONTEXT_WINDOW,
+        DEFAULT_CONNECTION_CONTEXT_WINDOW,
     );
     // Hermes refuses sign-in connections; detect them from the stored secret so
     // editing fails with the same reason a run would.

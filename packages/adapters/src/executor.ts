@@ -55,6 +55,7 @@ import {
   RoutingRuleSchema,
   RuntimeKindSchema,
   RuntimePinError,
+  resolveModelContextWindow,
   runtimePinProblem,
   runtimeSupportsTools,
   TaskCardRequestSchema,
@@ -8391,7 +8392,9 @@ export async function resolveModelKey(
         maxTokens:
           resolved.secret.kind === "openai_compatible" ? resolved.secret.maxTokens : undefined,
         contextWindow:
-          resolved.secret.kind === "openai_compatible" ? resolved.secret.contextWindow : undefined,
+          resolved.secret.kind === "openai_compatible"
+            ? resolveModelContextWindow(resolved.secret.contextWindow).contextWindow
+            : undefined,
         thinkingLevel:
           resolved.secret.kind === "openai_compatible" ? resolved.secret.thinkingLevel : undefined,
         acceptsImages,

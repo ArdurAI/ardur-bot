@@ -1,6 +1,6 @@
 import { lookup } from "node:dns/promises";
 import { isIP, type LookupFunction } from "node:net";
-import { DEFAULT_MODEL_CONTEXT_WINDOW, DEFAULT_MODEL_MAX_TOKENS } from "@ardurbot/contracts";
+import { DEFAULT_CONNECTION_CONTEXT_WINDOW, DEFAULT_MODEL_MAX_TOKENS } from "@ardurbot/contracts";
 import {
   createProvider,
   type Model,
@@ -54,7 +54,7 @@ export function openAiCompatibleModel(
   reasoning = false,
   acceptsImages = false,
   maxTokens = DEFAULT_MODEL_MAX_TOKENS,
-  contextWindow = DEFAULT_MODEL_CONTEXT_WINDOW,
+  contextWindow = DEFAULT_CONNECTION_CONTEXT_WINDOW,
 ): Model<"openai-completions"> {
   return {
     id,

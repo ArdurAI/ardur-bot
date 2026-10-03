@@ -13,7 +13,7 @@ const pin = {
   effort: "off",
 };
 
-function fixture(owner = true) {
+function fixture(owner = true, contextWindow: number | null = 65_536) {
   const credential = {
     id: "connection",
     userId: "owner",
@@ -40,7 +40,7 @@ function fixture(owner = true) {
           kind: "openai_compatible",
           baseUrl: "http://localhost:8080/v1",
           reasoning: false,
-          contextWindow: 65536,
+          ...(contextWindow === null ? {} : { contextWindow }),
           maxTokens: 4096,
         }),
       ),
@@ -131,4 +131,17 @@ describe("runtime configuration preview route", () => {
       ).status,
     ).toBe(400);
   });
+});
+
+it("previews a connection without saved context using the same resolved default", async () => {
+  const { preview } = fixture(true, null);
+  expect(
+    (
+      await preview({
+        runtimeKind: "hermes",
+        pin,
+        runtimeConfig: { version: 2, runtimeKind: "hermes" },
+      })
+    ).status,
+  ).toBe(200);
 });
