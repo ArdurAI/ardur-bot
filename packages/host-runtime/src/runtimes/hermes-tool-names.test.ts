@@ -9,6 +9,10 @@ describe("pinned Hermes MCP name contract", () => {
       "mcp__ardur__mcp__fixture_app__read_file",
     );
   });
+  it("replaces one character, not one UTF-16 unit, like the pinned Python rule", () => {
+    expect(hermesToolName("a\u{1F600}b")).toBe("mcp__ardur__a_b");
+    expect(hermesToolName("café-x")).toBe("mcp__ardur__caf__x");
+  });
   it("keeps plain names, excludes helpers and sorts the exact attested surface", () => {
     expect(hermesToolNames([{ name: "z" }, { name: "run_subagent" }, { name: "a" }])).toEqual([
       "mcp__ardur__a",
@@ -19,6 +23,7 @@ describe("pinned Hermes MCP name contract", () => {
   it.each([
     ["read-file", "read_file"],
     ["read.file", "read_file"],
+    ["a\u{1F600}b", "a_b"],
     ["same", "same"],
   ])("refuses %s colliding with %s", (first, second) => {
     expect(() => hermesToolNames([{ name: first }, { name: second }])).toThrow(
