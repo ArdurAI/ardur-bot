@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import {
+  HERMES_GRANT_REFUSAL_CATEGORIES,
   HermesProviderRelayError,
   hermesProviderFailure,
   hermesProviderFailureCategory,
@@ -63,4 +64,43 @@ it("copies only fixed typed failure facts", () => {
   expect(hermesProviderFailure(new HermesProviderRelayError(failure))).toEqual({
     kind: "response-limit",
   });
+});
+
+it.each(HERMES_GRANT_REFUSAL_CATEGORIES)(
+  "preserves fixed grant category %s across typed and message-only boundaries",
+  (category) => {
+    const original = new HermesProviderRelayError({ kind: "grant-refused", category });
+    const expected = { kind: "grant-refused" as const, category };
+    expect(hermesProviderFailure(original)).toEqual(expected);
+    expect(hermesProviderFailure(new Error(original.message))).toEqual(expected);
+    expect(hermesProviderFailureCategory(expected)).toBe("provider-grant-refused");
+  },
+);
+
+it.each(["private value", "unknown-field:private_name", "__proto__", "constructor"])(
+  "drops an unrecognized grant category %s rather than echoing it",
+  (category) => {
+    const original = new HermesProviderRelayError({
+      kind: "grant-refused",
+      category: category as never,
+    });
+    expect(hermesProviderFailure(original)).toEqual({ kind: "grant-refused" });
+    expect(original.message).toBe("Provider request is outside this run's grant.");
+    expect(
+      hermesProviderFailure(
+        new Error(`Provider request is outside this run's grant (${category}).`),
+      ),
+    ).toEqual({ kind: "provider-failed" });
+  },
+);
+
+it("does not copy grant category onto another failure kind", () => {
+  expect(
+    hermesProviderFailure(
+      new HermesProviderRelayError({
+        kind: "response-limit",
+        category: "model",
+      }),
+    ),
+  ).toEqual({ kind: "response-limit" });
 });

@@ -1,4 +1,5 @@
 import type { AgentUsage } from "@ardurbot/adapter-kit";
+import { hermesProviderFailure } from "@ardurbot/host-runtime/runtimes/hermes-provider-failure";
 import type {
   Api,
   AssistantMessageEvent,
@@ -302,6 +303,49 @@ function parseFrames(payload: string) {
 }
 
 describe("worker provider broker translated route", () => {
+  it.each([
+    [{ model: "different-model" }, "model"],
+    [{ max_tokens: 21 }, "output-tokens"],
+    [{ reasoning: { enabled: true, effort: "high" } }, "unknown-field:reasoning"],
+    [{ n: 2 }, "unknown-field:n"],
+    [{ private_fixture_field: "private value" }, "unknown-field"],
+    [{ messages: [] }, "messages"],
+    [{ "": "private fixture" }, "unknown-field"],
+    [{ tools: [{ type: "function", function: { name: "ungranted", parameters: {} } }] }, "tools"],
+    [{ stream: true, stream_options: { include_usage: false } }, "stream-options"],
+  ])("reports only the refused field category %s", async (patch, category) => {
+    const f = translatedFixture([startEvent, doneEvent([text("completed")])]);
+    let caught: unknown;
+    try {
+      await f.broker.open(f.request({ body: { ...f.body, ...patch } }));
+    } catch (error) {
+      caught = error;
+    }
+    expect(hermesProviderFailure(caught)).toEqual({ kind: "grant-refused", category });
+    expect(f.captured).toHaveLength(0);
+    expect(f.records).toHaveLength(0);
+  });
+
+  it("keeps missing required context distinct from a rejected run reservation", async () => {
+    const context = translatedFixture([startEvent, doneEvent([text("completed")])], {
+      requiredContext: "Required fixture instructions.",
+    });
+    await expect(context.broker.open(context.request())).rejects.toMatchObject({
+      failure: { kind: "grant-refused", category: "context" },
+    });
+    expect(context.captured).toHaveLength(0);
+    const budget = translatedFixture([startEvent, doneEvent([text("completed")])]);
+    budget.options.record = async () => {
+      throw new Error("private reservation details");
+    };
+    // Broker copies options at construction; build a new broker with the rejecting recorder.
+    const broker = new HermesProviderBroker(budget.options);
+    await expect(broker.open(budget.request({ grant: broker.grant }))).rejects.toMatchObject({
+      failure: { kind: "grant-refused", category: "run-budget" },
+    });
+    expect(budget.captured).toHaveLength(0);
+  });
+
   it.each(["main", "summary"] as const)(
     "admits the source-confirmed pinned custom GLM request for %s",
     async (purpose) => {
@@ -407,7 +451,7 @@ describe("worker provider broker translated route", () => {
             },
           }),
         ),
-      ).rejects.toThrow("Provider request is outside this run's grant.");
+      ).rejects.toMatchObject({ failure: { kind: "grant-refused", category: "stream-options" } });
       expect(f.captured).toHaveLength(0);
       expect(f.records).toHaveLength(0);
     },
@@ -425,7 +469,7 @@ describe("worker provider broker translated route", () => {
           },
         }),
       ),
-    ).rejects.toThrow("Provider request is outside this run's grant.");
+    ).rejects.toMatchObject({ failure: { kind: "grant-refused", category: "stream-options" } });
     expect(f.captured).toHaveLength(0);
   });
 
