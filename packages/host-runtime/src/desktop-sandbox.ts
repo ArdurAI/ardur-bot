@@ -370,21 +370,33 @@ export class DesktopSandboxProvider implements SandboxProvider {
     _context: AdapterContext,
   ): Promise<ComputerFileEntry[]> {
     const box = this.requiredBox(computer);
-    const relative = normalizeWorkspacePath(directory);
-    const target = await localWorkspaceTarget(box.home, relative, true);
-    this.assertNotGuarded((await this.guardrail()).paths, target);
+    const { root, target } = await this.fileTarget(box.home, directory, true);
+    const resolvedRoot = await realpath(root);
+    const relative = path.isAbsolute(directory) ? directory : normalizeWorkspacePath(directory);
+    const guarded = (await this.guardrail()).paths;
+    this.assertNotGuarded(guarded, target);
     const entries = this.opts.restricted
       ? await boundedDirectoryEntries(target)
       : await readdir(target, { withFileTypes: true });
     const listed = await Promise.all(
       entries.map(async (entry) => {
-        const listedPath = relative ? `${relative}/${entry.name}` : entry.name;
+        const listedPath = path.isAbsolute(directory)
+          ? path.join(directory, entry.name)
+          : relative
+            ? `${relative}/${entry.name}`
+            : entry.name;
         // POSIX permits literal backslashes. List their metadata without treating them as
         // separators or following a link; clients can reject unsupported names individually.
         const literalName = process.platform !== "win32" && entry.name.includes("\\");
         const child = literalName
           ? path.join(target, entry.name)
-          : await localWorkspaceTarget(box.home, listedPath, true);
+          : await localWorkspaceTarget(
+              resolvedRoot,
+              path.relative(resolvedRoot, path.join(target, entry.name)),
+              true,
+              (candidate) => this.assertNotGuarded(guarded, candidate),
+            );
+        this.assertNotGuarded(guarded, child);
         const info = literalName ? await lstat(child) : await stat(child);
         return {
           path: listedPath,

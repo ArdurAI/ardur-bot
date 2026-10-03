@@ -55,6 +55,50 @@ describe.each([false, true])("registered local files (restricted: %s)", (restric
     expect(await provider.readFile(computer, target)).toEqual(bytes("project"));
     expect(await readFile(target, "utf8")).toBe("project");
   });
+  it("lists absolute registered paths and preserves own-folder listings", async () => {
+    const { registered, provider, computer } = await fixture(restricted);
+    const folder = path.join(registered, "notes");
+    await mkdir(folder);
+    await writeFile(path.join(folder, "result.txt"), "project");
+    expect(await provider.listFiles(computer, folder, context)).toEqual([
+      { path: path.join(folder, "result.txt"), kind: "file", size: 7 },
+    ]);
+    await provider.writeFile(computer, { path: "notes/result.txt", content: bytes("own") });
+    expect(await provider.listFiles(computer, "notes", context)).toEqual([
+      { path: "notes/result.txt", kind: "file", size: 3 },
+    ]);
+    expect(await provider.listFiles(computer, computer.providerRef, context)).toContainEqual({
+      path: path.join(computer.providerRef, "notes"),
+      kind: "dir",
+      size: expect.any(Number),
+    });
+  });
+  it("refuses outside, traversing, NUL and escaping directory listings", async () => {
+    const { registered, outside, protectedPath, provider, computer } = await fixture(restricted);
+    await symlink(outside, path.join(registered, "escape"), "junction");
+    for (const directory of [
+      outside,
+      `${registered}/../outside`,
+      "../outside",
+      "bad\0path",
+      path.join(registered, "escape"),
+    ]) {
+      await expect(provider.listFiles(computer, directory, context)).rejects.toThrow(
+        FILE_LOCATION_REFUSAL,
+      );
+    }
+    await expect(provider.listFiles(computer, protectedPath, context)).rejects.toThrow("protected");
+  });
+  it("rechecks registration before listing a folder", async () => {
+    const { registered, foldersFile, provider, computer } = await fixture(restricted);
+    const folder = path.join(registered, "visible");
+    await mkdir(folder);
+    expect(await provider.listFiles(computer, folder, context)).toEqual([]);
+    await writeFile(foldersFile, "[]");
+    await expect(provider.listFiles(computer, folder, context)).rejects.toThrow(
+      FILE_LOCATION_REFUSAL,
+    );
+  });
   it("refuses a path outside both roots without changing it", async () => {
     const { outside, provider, computer } = await fixture(restricted);
     const target = path.join(outside, "result.txt");

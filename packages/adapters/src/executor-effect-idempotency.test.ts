@@ -6,7 +6,15 @@ vi.mock("./context/concurrency.js", () => ({
 // Ledger transactions have disposable-PostgreSQL coverage; this fixture isolates effect fences.
 vi.mock("./run-usage.js", () => ({ recordRunUsage: vi.fn(async () => null) }));
 
-import type { AgentRunRequest, AgentRuntimeEvent, ProcessEvent } from "@ardurbot/adapter-kit";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import type {
+  AgentRunRequest,
+  AgentRuntimeEvent,
+  ProcessEvent,
+  SandboxProvider,
+} from "@ardurbot/adapter-kit";
 import type { CommandBlock as FixtureCommandBlock, MessageBlock } from "@ardurbot/contracts";
 import { RuntimePinError, runtimePinProblem } from "@ardurbot/contracts";
 import type { ActionApprovalRule } from "@ardurbot/core";
@@ -24,7 +32,9 @@ import { commandComputerFingerprint } from "./command-replay.js";
 import { MissingComputerProviderError } from "./computer-connections.js";
 import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
 import { acquireComputerExecutionLease, provisionComputer } from "./computer-lifecycle.js";
+import type * as ComputerWorkspaceModule from "./computer-workspace.js";
 import { checkpointRunComputerWorkspace } from "./computer-workspace.js";
+import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import { createRunExecutor } from "./executor.js";
 import { ProviderError } from "./provider-error.js";
 import { recordRunUsage } from "./run-usage.js";
@@ -50,7 +60,8 @@ vi.mock("./auto-review.js", async (importOriginal) => ({
   runAutoReviewJudge: vi.fn(),
 }));
 
-vi.mock("./computer-workspace.js", () => ({
+vi.mock("./computer-workspace.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof ComputerWorkspaceModule>()),
   checkpointRunComputerWorkspace: vi.fn(async () => undefined),
 }));
 
@@ -77,7 +88,7 @@ type ToolCall = {
   executionId: string;
 };
 
-function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
+function fixture(runId = "run-1", memoryDocuments?: MemoryService, sandbox?: SandboxProvider) {
   vi.mocked(recordRunUsage).mockClear();
   const effects: Effect[] = [];
   const results: unknown[] = [];
@@ -411,7 +422,7 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
       resolveCall: async () => undefined,
       execute: async function* () {},
     },
-    sandbox: {
+    sandbox: sandbox ?? {
       describe: () => sandboxDescription,
       resolveCommandCwd,
       environmentNote,
@@ -466,6 +477,92 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
     },
   };
 }
+
+describe("registered local file tools through the executor", () => {
+  it.each([false, true])(
+    "refuses another bot's sibling home for reads and writes (%s)",
+    async (restricted) => {
+      const root = await realpath(await mkdtemp(path.join(tmpdir(), "executor-host-files-")));
+      try {
+        const registered = path.join(root, "project");
+        await mkdir(registered);
+        await mkdir(path.join(root, "homes"));
+        const desktop = new DesktopSandboxProvider({
+          root: path.join(root, "homes"),
+          restricted,
+          hostRoots: [registered],
+        });
+        vi.spyOn(desktop, "environmentNote").mockResolvedValue("");
+        const context = {
+          operationId: "files",
+          traceId: "files",
+          spaceId: "space-1",
+          userId: "user-1",
+          signal: new AbortController().signal,
+        };
+        const own = await desktop.provision({ botId: "bot-1", homePath: "" }, context);
+        const sibling = await desktop.provision({ botId: "bot-2", homePath: "" }, context);
+        expect(path.dirname(own.providerRef)).toBe(path.dirname(sibling.providerRef));
+        const target = path.join(sibling.providerRef, "private.txt");
+        await writeFile(target, "sibling fixture");
+        const allowed = path.join(registered, "result.txt");
+        await writeFile(allowed, "project fixture");
+        const f = fixture("file-isolation", undefined, desktop);
+        f.computer.providerRef = own.providerRef;
+        vi.mocked(provisionComputer).mockResolvedValueOnce(own);
+        const read = vi.spyOn(desktop, "readFile");
+        const write = vi.spyOn(desktop, "writeFile");
+        const fileCalls: ToolCall[] = [
+          { name: "read_file", args: { path: allowed }, executionId: "allowed-read" },
+          {
+            name: "write_file",
+            args: { path: allowed, content: "updated" },
+            executionId: "allowed-write",
+          },
+          { name: "read_file", args: { path: target }, executionId: "sibling-read" },
+          {
+            name: "write_file",
+            args: { path: target, content: "changed" },
+            executionId: "sibling-write",
+          },
+        ];
+        f.runtimeRun.mockImplementation(async function* (request) {
+          for (const call of fileCalls) {
+            try {
+              f.results.push(await request.executeTool!(call.name, call.args, call.executionId));
+            } catch (error) {
+              f.results.push({
+                error: error instanceof Error ? error.message : "Unexpected failure",
+              });
+            }
+          }
+          yield { type: "done", text: "Done" };
+        });
+        await f.run();
+        expect(f.results).toHaveLength(4);
+        expect(f.results[0]).toMatchObject({ content: "project fixture" });
+        expect(f.results[1]).toMatchObject({ ok: true });
+        for (const result of f.results.slice(2)) {
+          expect(result).toMatchObject({
+            error: "Use a path inside this bot's folder or a registered folder.",
+          });
+        }
+        expect(read).toHaveBeenCalledWith(own, target, expect.anything(), expect.anything());
+        expect(write).toHaveBeenCalledWith(
+          own,
+          expect.objectContaining({ path: target }),
+          expect.anything(),
+        );
+        expect(await readFile(target, "utf8")).toBe("sibling fixture");
+        expect(await readFile(allowed, "utf8")).toBe("updated");
+        expect(JSON.stringify(f.events.append.mock.calls)).not.toContain("sibling fixture");
+      } finally {
+        await rm(root, { recursive: true, force: true });
+        vi.restoreAllMocks();
+      }
+    },
+  );
+});
 
 it("does not access evidence storage or count gaps without an injected recorder", async () => {
   const f = fixture();
