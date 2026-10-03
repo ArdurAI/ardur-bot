@@ -237,3 +237,45 @@ host callbacks preserve the category; unknown exception text still becomes a
 generic provider failure. The HTTP response and conversation do not expose the
 category, request body, headers or private error data. Old peers can retain the
 generic provider failure when they do not recognize the newer fixed signature.
+
+### Standalone run budgets — 2026-10-03
+
+A standalone turn is not a delegated worker or a token-budgeted goal. Its pinned
+allowance is the model-call limit multiplied by the sum of the model context
+window and the output cap, bounded to the ledger's integer range. The first durable
+admission fixes that allowance for the source run; brief maintenance inherits it.
+
+Previously the root ledger also imposed the implicit 120,000-token delegation
+default on the coordinator's own requests. An offline fixture using the actual
+56-tool host catalog and a fake prior conversation bounded to the default 16 KiB
+supplied-context limit reproduces that refusal. The admitted body is 56,355
+UTF-8 bytes after the broker applies pinned effort. Its conservative reservation
+is 121,891 units including the unchanged 65,536 output cap. It is below the
+256 KiB request boundary and the existing 17,048,576-unit pinned run allowance,
+but above the unrelated delegation default. This fixture is not a capture of
+an installed failed request.
+
+For a non-goal coordinator with the default root policy, admission now uses the
+larger of that default and the already-pinned run allowance. It does not rewrite
+the root policy or enlarge worker reservations. A configured goal, a non-default
+root policy, worker-attempt allowances, cumulative run reservations, request
+count, leases, cancellation and deadline checks retain their limits.
+The built-in runtime and other native runtimes do not use this broker admission.
+
+The UTF-8-byte input upper bound is unchanged: dividing JSON bytes by a guessed
+tokens-per-byte ratio could under-reserve arbitrary text. Provider measurements,
+not reservations, still populate usage and cost. The model, effort, output cap,
+tool consent, context preparation, transport byte limit and runtime pin are
+unchanged.
+
+**Trade-off:** standalone Hermes turns can now continue beyond the incidental
+delegation default, within their existing model-call and time limits. This can
+increase actual spend compared with an early refusal. A token-budgeted goal still
+stops at the person's explicit whole-task limit.
+
+The same fixture completes on both broker routes after the repair. Reverting
+the production change fails six offline assertions while preserving the negative
+budget cases. Separate PostgreSQL tests verify persistence, unchanged root
+policy, configured goal refusal, cancellation and deadline handling in CI.
+No native-install acceptance or explanation of an installed turn's elapsed time
+is inferred from these fixtures.
