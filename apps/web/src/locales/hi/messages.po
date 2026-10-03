@@ -9988,3 +9988,6 @@ msgstr "हमेशा चालू रहने वाले एजेंट�
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+msgid "Connected · tools need review"
+msgstr "कनेक्ट है · टूल की समीक्षा ज़रूरी है"

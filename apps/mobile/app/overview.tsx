@@ -258,7 +258,9 @@ function Connections({ data }: { data: ConnectionOverview[] }) {
         <Line key={`${row.kind}:${row.id}`}>
           {row.name}
           {" · "}
-          {states[row.state]}
+          {row.state === "connected" && row.toolsNeedReview
+            ? t("Connected · tools need review")
+            : states[row.state]}
         </Line>
       ))}
     </View>

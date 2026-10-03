@@ -9988,3 +9988,6 @@ msgstr "Sua equipe de agentes sempre ativos<0/>, a quem você pode dar trabalho 
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+msgid "Connected · tools need review"
+msgstr "Conectado · as ferramentas precisam de revisão"

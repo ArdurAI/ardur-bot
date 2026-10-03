@@ -9988,3 +9988,6 @@ msgstr "Gerçek işler verebileceğin,<0/>her zaman açık agent takımın."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+msgid "Connected · tools need review"
+msgstr "Bağlı · araçların incelenmesi gerekiyor"

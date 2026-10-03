@@ -8,7 +8,11 @@ import type {
   McpServer,
   SpaceToolPolicies,
 } from "@ardurbot/contracts";
-import { IntegrationResourceConstraintsSchema, notionResourceId } from "@ardurbot/contracts";
+import {
+  IntegrationResourceConstraintsSchema,
+  integrationToolsNeedReview,
+  notionResourceId,
+} from "@ardurbot/contracts";
 import { Button, Checkbox, Input } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { useEffect, useId, useState } from "react";
@@ -254,6 +258,13 @@ export function IntegrationManage({
                       }}
                     />
                     {bot.name}
+                    {!removed ? (
+                      <span className="text-muted-foreground">
+                        {integrationToolsNeedReview(connection, override)
+                          ? t`Connected · tools need review`
+                          : t`Connected`}
+                      </span>
+                    ) : null}
                     {removed ? <span className="text-muted-foreground">{t`Removed`}</span> : null}
                   </label>
                   {!removed && connection.manifest ? (

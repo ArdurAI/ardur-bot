@@ -163,6 +163,12 @@ export function ContextSection({
               </Text>
             </Pressable>
           ) : null}
+          {value?.integrations.map((item) => (
+            <Text key={item.id} style={{ color: tokens.mutedForeground }}>
+              {item.name} —{" "}
+              {t(item.toolsNeedReview ? "Connected · tools need review" : "Connected")}
+            </Text>
+          ))}
           {value?.briefs.map((brief) => (
             <MobileBrief key={brief.threadId} brief={brief} />
           ))}

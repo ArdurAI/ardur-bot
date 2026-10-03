@@ -42,7 +42,11 @@ export default function ConnectionsPanel({
           }
         >
           <span>{row.name}</span>
-          <span className="text-muted-foreground">{states[row.state]}</span>
+          <span className="text-muted-foreground">
+            {row.state === "connected" && row.toolsNeedReview
+              ? t`Connected · tools need review`
+              : states[row.state]}
+          </span>
         </Button>
       ))}
     </div>

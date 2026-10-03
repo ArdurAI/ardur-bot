@@ -112,3 +112,22 @@ it("loads two named group briefs and the concurrency setting on demand", async (
   expect(rpc.briefs.list).toHaveBeenCalledWith({ botId: "chief", groupId: undefined });
   await act(async () => root.unmount());
 });
+
+it("keeps a connected integration visible when its tools need review", async () => {
+  vi.mocked(rpc.integrations.available).mockResolvedValueOnce([
+    { id: "one", name: "Notes", toolsNeedReview: true },
+  ]);
+  vi.mocked(rpc.briefs.list).mockResolvedValueOnce([]);
+  vi.mocked(rpc.metrics.context).mockResolvedValueOnce({ today: [], sevenDays: [] });
+  vi.mocked(rpc.context.settings).mockResolvedValueOnce({ concurrentRuns: 3 } as never);
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  await act(async () => root.render(<BotContext botId="bot" />));
+  await act(async () => {
+    node.querySelector("details")!.open = true;
+    node.querySelector("details")!.dispatchEvent(new Event("toggle"));
+  });
+  expect(node.textContent).toContain("Notes — Connected · tools need review");
+  expect(node.textContent).not.toContain("None available");
+  await act(async () => root.unmount());
+});

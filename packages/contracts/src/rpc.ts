@@ -1278,7 +1278,13 @@ export const appContract = {
       )
       .output(z.array(IntegrationResourceChoiceSchema)),
     grants: oc.input(z.object({ connectionId: Id })).output(z.array(IntegrationGrantSchema)),
-    available: oc.input(botId).output(z.array(z.object({ id: Id, name: z.string() }))),
+    available: oc
+      .input(botId)
+      .output(
+        z.array(
+          z.object({ id: Id, name: z.string(), toolsNeedReview: z.boolean().default(false) }),
+        ),
+      ),
     revoke: oc.input(z.object({ connectionId: Id })).output(z.object({ ok: z.literal(true) })),
     cancel: oc.input(z.object({ connectionId: Id })).output(z.object({ ok: z.literal(true) })),
     discover: oc.input(z.object({ connectionId: Id })).output(z.object({ ok: z.literal(true) })),

@@ -75,7 +75,9 @@ it("loads scoped context through the shared schemas and does not render unknown 
       ? [brief]
       : procedure === "metrics/context"
         ? { today: [], sevenDays: [] }
-        : { budgets: {}, concurrentRuns: 3, spaceConcurrentRuns: 3, coordinatorBotId: null },
+        : procedure === "integrations/available"
+          ? []
+          : { budgets: {}, concurrentRuns: 3, spaceConcurrentRuns: 3, coordinatorBotId: null },
   );
   expect((await loadContext("chief", "alpha")).briefs).toEqual([brief]);
   expect(rpc).toHaveBeenCalledWith("briefs/list", { botId: "chief", groupId: "alpha" });

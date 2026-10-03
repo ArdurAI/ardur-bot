@@ -1,4 +1,5 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "Connected · tools need review": "已连接 · 工具需要审核",
   "{runtime} needs a model with at least 64K context; change the model and try again.":
     "{runtime} 需要上下文至少为 64K 的模型；请更换模型后重试。",
   "{runtime} could not start a session. Check the runtime and try again.":

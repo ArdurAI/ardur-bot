@@ -231,3 +231,24 @@ export const IntegrationCatalogListSchema = z.object({
   hostSignIns: z.array(HostIntegrationSchema).optional(),
 });
 export type IntegrationCatalogList = z.infer<typeof IntegrationCatalogListSchema>;
+
+/** Connection health and permission to use tools are separate facts. */
+export function integrationToolsNeedReview(
+  connection: { needsReview?: boolean; spaceAllowedTools?: readonly string[] },
+  grant?: { access?: string; needsReview?: boolean; toolIds?: readonly string[] },
+): boolean {
+  if (grant?.access === "none") return false;
+  return Boolean(
+    connection.needsReview ||
+      grant?.needsReview ||
+      !connection.spaceAllowedTools?.length ||
+      (grant?.access === "custom" &&
+        !grant.toolIds?.some((id) => connection.spaceAllowedTools?.includes(id))),
+  );
+}
+export const BotIntegrationAvailabilitySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  toolsNeedReview: z.boolean().default(false),
+});
+export type BotIntegrationAvailability = z.infer<typeof BotIntegrationAvailabilitySchema>;

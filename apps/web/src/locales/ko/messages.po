@@ -9988,3 +9988,6 @@ msgstr "언제든 실제 작업을 맡길 수 있는<0/>나만의 Agent 팀"
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+msgid "Connected · tools need review"
+msgstr "연결됨 · 도구 검토 필요"

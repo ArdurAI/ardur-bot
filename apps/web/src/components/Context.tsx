@@ -169,7 +169,9 @@ export function BotContext({
   const [open, setOpen] = useState(false);
   const [version, setVersion] = useState(0);
   const [briefs, setBriefs] = useState<Brief[]>([]);
-  const [integrations, setIntegrations] = useState<Array<{ id: string; name: string }>>([]);
+  const [integrations, setIntegrations] = useState<
+    Array<{ id: string; name: string; toolsNeedReview?: boolean }>
+  >([]);
   const [metrics, setMetrics] = useState<Awaited<ReturnType<typeof rpc.metrics.context>> | null>(
     null,
   );
@@ -222,11 +224,16 @@ export function BotContext({
           <p className="font-medium">
             <Trans>Integrations</Trans>
           </p>
-          <p className="text-muted-foreground">
-            {integrations.length
-              ? integrations.map((item) => item.name).join(", ")
-              : t`None available`}
-          </p>
+          {integrations.length ? (
+            integrations.map((item) => (
+              <p key={item.id} className="text-muted-foreground">
+                {item.name} —{" "}
+                {item.toolsNeedReview ? t`Connected · tools need review` : t`Connected`}
+              </p>
+            ))
+          ) : (
+            <p className="text-muted-foreground">{t`None available`}</p>
+          )}
         </div>
         <div className="flex gap-2">
           <Button

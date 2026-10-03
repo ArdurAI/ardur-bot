@@ -1,5 +1,5 @@
 import type { IntegrationCatalogList } from "@ardurbot/contracts";
-import { McpServerSchema } from "@ardurbot/contracts";
+import { integrationToolsNeedReview, McpServerSchema } from "@ardurbot/contracts";
 import type { ConnectorRow } from "@ardurbot/core";
 import { connectorRows } from "@ardurbot/core";
 import { useEffect, useState } from "react";
@@ -67,7 +67,7 @@ export function IntegrationCatalog() {
               <Text style={styles.secondary}>{t("Included")}</Text>
               <Text style={styles.secondary}>
                 {row?.status === "connected"
-                  ? `✓ ${t("Connected")}`
+                  ? `✓ ${t(connection && integrationToolsNeedReview(connection) ? "Connected · tools need review" : "Connected")}`
                   : row?.status === "reconnect"
                     ? `⚠ ${t("Needs reconnection")}`
                     : t("Disconnected")}
