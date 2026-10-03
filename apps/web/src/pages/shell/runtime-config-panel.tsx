@@ -40,8 +40,10 @@ export function RuntimeConfigPanel({
   const [pinError, setPinError] = useState<string | null>(null);
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
-  const tRef = useRef(t);
-  tRef.current = t;
+  // Translated at render so the extractor sees the macro; the effect reads the latest text.
+  const checkFailed = t`Could not check the model. Try again.`;
+  const checkFailedRef = useRef(checkFailed);
+  checkFailedRef.current = checkFailed;
   const pinKey = JSON.stringify(pin ?? null);
   useEffect(() => {
     let active = true;
@@ -54,11 +56,7 @@ export function RuntimeConfigPanel({
         },
         (error: { code?: string; message: string }) => {
           if (active)
-            setPinError(
-              hermesContextMessage(
-                rpcErrorMessage(error, tRef.current`Could not check the model. Try again.`),
-              ),
-            );
+            setPinError(hermesContextMessage(rpcErrorMessage(error, checkFailedRef.current)));
         },
       );
     }
