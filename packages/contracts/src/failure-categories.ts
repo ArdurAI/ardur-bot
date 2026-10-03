@@ -20,6 +20,13 @@ export const FailureCategoryIdSchema = z.enum([
   "stopped",
   "session-start-failed",
   "model-context-too-small",
+  "runtime-tool-catalog-mismatch",
+  "runtime-profile-unacknowledged",
+  "provider-request-too-large",
+  "provider-response-too-large",
+  "provider-grant-refused",
+  "provider-auth-failed",
+  "provider-request-failed",
   "other",
 ]);
 export type FailureCategoryId = z.infer<typeof FailureCategoryIdSchema>;
@@ -64,6 +71,52 @@ export type FailureCategory = {
 };
 
 export const FAILURE_CATEGORIES: readonly FailureCategory[] = [
+  {
+    id: "runtime-tool-catalog-mismatch",
+    message:
+      "{runtime}'s tool list changed during startup. Check the connected tools and try again.",
+    action: { kind: "retry" },
+    legacy: [],
+  },
+  {
+    id: "runtime-profile-unacknowledged",
+    message: "{runtime}'s settings were not confirmed. Check this bot's settings and try again.",
+    action: { kind: "retry" },
+    legacy: [],
+  },
+  {
+    id: "provider-request-too-large",
+    message: "{runtime}'s model request was too large. Narrow the task and try again.",
+    action: { kind: "retry" },
+    legacy: [],
+  },
+  {
+    id: "provider-response-too-large",
+    message: "{runtime}'s model response was too large. Narrow the task and try again.",
+    action: { kind: "retry" },
+    legacy: [],
+  },
+  {
+    id: "provider-grant-refused",
+    message:
+      "{runtime}'s model request was outside this run's allowance. Narrow the task and try again.",
+    action: { kind: "retry" },
+    legacy: [],
+  },
+  {
+    id: "provider-auth-failed",
+    message:
+      "{runtime}'s model provider rejected the connection key. Check it in Settings, under Models.",
+    action: { kind: "open-settings", target: "model-pin" },
+    legacy: [],
+  },
+  {
+    id: "provider-request-failed",
+    message:
+      "{runtime}'s model request failed. Check the connection in Settings, under Models, and try again.",
+    action: { kind: "retry" },
+    legacy: [],
+  },
   {
     id: "usage-limit",
     message: "{runtime}'s usage limit is reached. Try again after it resets.",

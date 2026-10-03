@@ -380,8 +380,36 @@ msgid "{runtime}'s model connection is missing. Connect it or change the pin."
 msgstr "{runtime}'s model connection is missing. Connect it or change the pin."
 
 #: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model provider rejected the connection key. Check it in Settings, under Models."
+msgstr "{runtime}'s model provider rejected the connection key. Check it in Settings, under Models."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model request failed. Check the connection in Settings, under Models, and try again."
+msgstr "{runtime}'s model request failed. Check the connection in Settings, under Models, and try again."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model request was outside this run's allowance. Narrow the task and try again."
+msgstr "{runtime}'s model request was outside this run's allowance. Narrow the task and try again."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model request was too large. Narrow the task and try again."
+msgstr "{runtime}'s model request was too large. Narrow the task and try again."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model response was too large. Narrow the task and try again."
+msgstr "{runtime}'s model response was too large. Narrow the task and try again."
+
+#: src/lib/failure-category-copy.ts
 msgid "{runtime}'s pinned model is unavailable. Change the pin and try again."
 msgstr "{runtime}'s pinned model is unavailable. Change the pin and try again."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s settings were not confirmed. Check this bot's settings and try again."
+msgstr "{runtime}'s settings were not confirmed. Check this bot's settings and try again."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s tool list changed during startup. Check the connected tools and try again."
+msgstr "{runtime}'s tool list changed during startup. Check the connected tools and try again."
 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime}'s usage limit is reached. Try again after it resets."

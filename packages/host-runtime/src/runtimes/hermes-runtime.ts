@@ -11,7 +11,7 @@ import type {
 } from "@ardurbot/adapter-kit";
 import { failureCategoryMessage } from "@ardurbot/contracts/failure-categories";
 import type { HermesExecutionEnvelopeSchema } from "@ardurbot/contracts/runtime-config";
-import type { RuntimeInfo } from "@ardurbot/contracts/runtime-pins";
+import type { RuntimeInfo, RuntimePin } from "@ardurbot/contracts/runtime-pins";
 import {
   HERMES_RUNTIME_DEFAULTS,
   HermesRuntimeConfigSchema,
@@ -31,6 +31,9 @@ import { AcpClient, AcpClientError } from "./acp-client.js";
 import { startArdurMcpServer } from "./ardur-mcp-server.js";
 import { createArdurToolBridge } from "./claude-mcp-bridge.js";
 import { validateCompiledHermesProfile } from "./hermes-config.js";
+import type { HermesProviderFailure } from "./hermes-provider-failure.js";
+import { hermesProviderFailureCategory } from "./hermes-provider-failure.js";
+import { hermesToolNames } from "./hermes-tool-names.js";
 import {
   nativeFailureCategory,
   nativeFailureDetail,
@@ -270,6 +273,7 @@ export function createHermesTextRedactor(secrets: readonly string[], emit: (text
 }
 
 interface ActiveTurn {
+  pin?: RuntimePin;
   active: boolean;
   stopReason?: "done" | "cancel" | "pause" | "failure";
   flushText?: () => void;
@@ -456,14 +460,25 @@ export class HermesRuntime implements AgentRuntime {
     await this.finishTurn(runId, "cancel");
   }
 
-  async fail(runId: string) {
-    await this.finishTurn(runId, "failure", new Error("Hermes provider request was refused."));
+  async fail(runId: string, failure: HermesProviderFailure = { kind: "provider-failed" }) {
+    const turn = this.running.get(runId);
+    if (!turn?.active) return;
+    turn.failureKind = `provider ${failure.kind}`;
+    const category = hermesProviderFailureCategory(failure);
+    await this.finishTurn(
+      runId,
+      "failure",
+      turn.pin
+        ? new RuntimePinError(nativeFailureProblem(turn.pin, category))
+        : new Error(failureCategoryMessage(category, { runtime: "Hermes" })),
+    );
   }
 
   async *run(
     request: AgentRunRequest,
     context?: Partial<AdapterContext>,
   ): AsyncIterable<AgentRuntimeEvent> {
+    const toolNames = hermesToolNames(request.tools);
     if (this.running.has(request.runId)) throw new Error("This Hermes run is already active.");
     const profile = this.options.executionEnvelope
       ? validateCompiledHermesProfile(this.options.executionEnvelope, {
@@ -495,6 +510,7 @@ export class HermesRuntime implements AgentRuntime {
     const queue = new RuntimeQueue<AgentRuntimeEvent>(undefined, false);
     const turn: ActiveTurn = { active: true, queue };
     let profileAcknowledged = !profile;
+    turn.pin = request.model.runtimePin;
     this.running.set(request.runId, turn);
     const stopOnSignal = () => {
       // The generator finalizer awaits the same cleanup promise and surfaces a failure.
@@ -572,13 +588,7 @@ export class HermesRuntime implements AgentRuntime {
         ...argumentSecrets(this.options.args ?? []),
       ];
       turn.secrets = secrets;
-      const allowedToolTitles = new Set(
-        Array.isArray(request.tools)
-          ? request.tools
-              .filter((tool) => tool.name !== "run_subagent")
-              .map((tool) => `mcp__ardur__${tool.name}`)
-          : [],
-      );
+      const allowedToolTitles = new Set(toolNames);
       const emitText = createHermesTextRedactor(secrets, (safe) => {
         if (!turn.active) return;
         pendingText += safe;
@@ -607,14 +617,7 @@ export class HermesRuntime implements AgentRuntime {
             ? {
                 ARDUR_HERMES_PROFILE: "hermes-ardur-v2",
                 ARDUR_HERMES_EXPECTED_HASH: profile.envelope.effectiveRuntimeConfigHash,
-                ARDUR_HERMES_ALLOWED_TOOLS: JSON.stringify(
-                  request.tools === "none"
-                    ? []
-                    : request.tools
-                        .filter((tool) => tool.name !== "run_subagent")
-                        .map((tool) => `mcp__ardur__${tool.name}`)
-                        .sort(),
-                ),
+                ARDUR_HERMES_ALLOWED_TOOLS: JSON.stringify(toolNames),
               }
             : {}),
           ...(this.options.pinned
@@ -811,7 +814,13 @@ export class HermesRuntime implements AgentRuntime {
                 "tokens, which is below the minimum 64,000 required by Hermes Agent.",
               )
                 ? "model-context-too-small"
-                : "session-start-failed";
+                : turn.phase === "session/new" &&
+                    error instanceof AcpClientError &&
+                    error.kind === "protocol-error" &&
+                    error.protocolError?.code === -32603 &&
+                    error.detail?.split("\n").includes("Constructed tool catalog changed")
+                  ? "runtime-tool-catalog-mismatch"
+                  : "session-start-failed";
             // Stdout ends a tick before the process 'close', so the exit code
             // is often still unknown here; stop the child and settle the exit
             // facts before the failure is recorded.

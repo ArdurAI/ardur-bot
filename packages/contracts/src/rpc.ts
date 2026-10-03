@@ -405,10 +405,12 @@ export const threadsContract = {
 };
 export type ThreadsContract = typeof threadsContract;
 
+type DashboardContract = typeof dashboardContract;
+
 export const appContract = {
   features: featuresContract,
   evidence: evidenceContract,
-  dashboard: dashboardContract,
+  dashboard: dashboardContract as DashboardContract,
   board: boardContract,
   localImport: {
     credentials: oc

@@ -178,3 +178,36 @@ This is separate from a bot's **Context limit (KiB)**, which bounds the text Ard
 supplies to a turn. Changing that byte limit does not change the model's capacity.
 An estimate is not proof of actual capacity; set the provider's documented limit
 if it differs. No provider, model, effort, source pin or runtime fallback changes.
+
+## Failure recovery
+
+Only confirmed safe causes receive a specific sentence. An unknown startup
+exception keeps the generic session-start message; a tool count alone is not a
+diagnosis.
+
+| Confirmed cause | Sentence | Next step |
+| --- | --- | --- |
+| Model context below 64,000 tokens | Hermes needs a model with at least 64K context; change the model and try again. | Change the model. |
+| the tool list differs from the confirmed startup list | Hermes's tool list changed during startup. Check the connected tools and try again. | Check the named cause and try again. |
+| the runtime did not confirm its effective settings | Hermes's settings were not confirmed. Check this bot's settings and try again. | Check the named cause and try again. |
+| the model request exceeded a byte limit | Hermes's model request was too large. Narrow the task and try again. | Check the named cause and try again. |
+| the model response exceeded a byte limit | Hermes's model response was too large. Narrow the task and try again. | Check the named cause and try again. |
+| the model request was outside the run grant or its grant expired | Hermes's model request was outside this run's allowance. Narrow the task and try again. | Check the named cause and try again. |
+| the provider returned HTTP 401 or 403 | Hermes's model provider rejected the connection key. Check it in Settings, under Models. | Check the connection key. |
+| the provider failed with an HTTP error other than 401, 403 or 429, or an unknown safe reason | Hermes's model request failed. Check the connection in Settings, under Models, and try again. | Check the named cause and try again. |
+
+Tool names in the profile allow-list, progress gate and provider broker share the
+pinned MCP naming rule. Connected names containing punctuation use the same
+underscores Hermes registers. Collisions are refused before a child is launched;
+this does not grant any additional tool access.
+
+Both main and tools-free summary requests accept the pinned streaming
+`stream_options: { include_usage: true }`. Other streaming options and a streaming
+option on a non-streaming request remain refused. Profile acknowledgment is still
+required for summary turns.
+
+Provider failure logs contain only a fixed reason and, when available, a validated
+HTTP status. They never include the request body, headers, raw exception text,
+cause, or private ACP error data. Normal ACP summaries keep their existing
+redaction boundary. Unknown provider errors remain unknown rather than being
+guessed from their prose.

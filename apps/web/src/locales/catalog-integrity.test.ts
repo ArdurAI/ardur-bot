@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { FAILURE_CATEGORIES } from "@ardurbot/contracts/failure-categories";
 import { createCompiledCatalog, getCatalogForFile, getCatalogs } from "@lingui/cli/api";
 import { getConfig } from "@lingui/conf";
 import { i18n } from "@lingui/core";
@@ -53,6 +54,34 @@ describe("web catalogs", () => {
         return ids !== 1 || strs !== 1;
       });
     expect(broken).toEqual([]);
+  });
+
+  it.each(locales)("renders every new safe Hermes failure in %s", async (locale) => {
+    const sources = await sourceMessages;
+    const { source, errors } = createCompiledCatalog(locale, await translations(locale), {
+      namespace: "json",
+    });
+    expect(errors).toEqual([]);
+    i18n.load(locale, JSON.parse(source).messages);
+    i18n.activate(locale);
+    const ids = new Set([
+      "runtime-tool-catalog-mismatch",
+      "runtime-profile-unacknowledged",
+      "provider-request-too-large",
+      "provider-response-too-large",
+      "provider-grant-refused",
+      "provider-auth-failed",
+      "provider-request-failed",
+    ]);
+    for (const entry of FAILURE_CATEGORIES.filter((entry) => ids.has(entry.id))) {
+      const id = [...sources].find(([, text]) => text === entry.message)?.[0];
+      expect(id, entry.id).toBeTruthy();
+      const rendered = i18n._({ id: id!, values: { runtime: "Hermes" } });
+      expect(rendered, entry.id).toContain("Hermes");
+      expect(rendered, entry.id).not.toContain("{runtime}");
+      if (locale !== "en")
+        expect(rendered, entry.id).not.toBe(entry.message.replace("{runtime}", "Hermes"));
+    }
   });
 
   it("maps every English message to its own text", async () => {
