@@ -380,8 +380,36 @@ msgid "{runtime}'s model connection is missing. Connect it or change the pin."
 msgstr "Falta la conexión del modelo de {runtime}. Conéctala o cambia el modelo fijado."
 
 #: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model provider rejected the connection key. Check it in Settings, under Models."
+msgstr "El proveedor del modelo de {runtime} rechazó la clave de conexión. Revísala en Ajustes, en Modelos."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model request failed. Check the connection in Settings, under Models, and try again."
+msgstr "La solicitud al modelo de {runtime} falló. Revisa la conexión en Ajustes, en Modelos, e inténtalo de nuevo."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model request was outside this run's allowance. Narrow the task and try again."
+msgstr "La solicitud al modelo de {runtime} estaba fuera de lo permitido para esta ejecución. Reduce el alcance de la tarea e inténtalo de nuevo."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model request was too large. Narrow the task and try again."
+msgstr "La solicitud al modelo de {runtime} era demasiado grande. Reduce el alcance de la tarea e inténtalo de nuevo."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model response was too large. Narrow the task and try again."
+msgstr "La respuesta del modelo de {runtime} era demasiado grande. Reduce el alcance de la tarea e inténtalo de nuevo."
+
+#: src/lib/failure-category-copy.ts
 msgid "{runtime}'s pinned model is unavailable. Change the pin and try again."
 msgstr "El modelo fijado de {runtime} no está disponible. Cambia el modelo fijado y vuelve a intentarlo."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s settings were not confirmed. Check this bot's settings and try again."
+msgstr "No se confirmaron los ajustes de {runtime}. Revisa los ajustes de este bot e inténtalo de nuevo."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s tool list changed during startup. Check the connected tools and try again."
+msgstr "La lista de herramientas de {runtime} cambió durante el inicio. Revisa las herramientas conectadas e inténtalo de nuevo."
 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime}'s usage limit is reached. Try again after it resets."

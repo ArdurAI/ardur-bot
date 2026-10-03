@@ -380,8 +380,36 @@ msgid "{runtime}'s model connection is missing. Connect it or change the pin."
 msgstr "{runtime} का मॉडल कनेक्शन मौजूद नहीं है। उसे कनेक्ट करें या पिन बदलें।"
 
 #: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model provider rejected the connection key. Check it in Settings, under Models."
+msgstr "{runtime} के मॉडल प्रदाता ने कनेक्शन कुंजी अस्वीकार कर दी। सेटिंग में मॉडल के तहत इसे जाँचें।"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model request failed. Check the connection in Settings, under Models, and try again."
+msgstr "{runtime} का मॉडल अनुरोध विफल हो गया। सेटिंग में मॉडल के तहत कनेक्शन जाँचें और फिर से कोशिश करें।"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model request was outside this run's allowance. Narrow the task and try again."
+msgstr "{runtime} का मॉडल अनुरोध इस रन की अनुमति से बाहर था। काम का दायरा छोटा करें और फिर से कोशिश करें।"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model request was too large. Narrow the task and try again."
+msgstr "{runtime} का मॉडल अनुरोध बहुत बड़ा था। काम का दायरा छोटा करें और फिर से कोशिश करें।"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model response was too large. Narrow the task and try again."
+msgstr "{runtime} के मॉडल का जवाब बहुत बड़ा था। काम का दायरा छोटा करें और फिर से कोशिश करें।"
+
+#: src/lib/failure-category-copy.ts
 msgid "{runtime}'s pinned model is unavailable. Change the pin and try again."
 msgstr "{runtime} का पिन किया गया मॉडल उपलब्ध नहीं है। पिन बदलें और फिर प्रयास करें।"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s settings were not confirmed. Check this bot's settings and try again."
+msgstr "{runtime} की सेटिंग की पुष्टि नहीं हुई। इस बॉट की सेटिंग जाँचें और फिर से कोशिश करें।"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s tool list changed during startup. Check the connected tools and try again."
+msgstr "शुरू होते समय {runtime} की टूल सूची बदल गई। जुड़े हुए टूल जाँचें और फिर से कोशिश करें।"
 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime}'s usage limit is reached. Try again after it resets."

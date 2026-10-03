@@ -48,6 +48,31 @@ describe("failure-category mobile completeness", () => {
     expect(text).not.toContain("{runtime}");
     expect(text).not.toBe(problem.reason);
   });
+  it.each(["ru", "zh-CN"] as const)("renders every new pinned Hermes cause in %s", (locale) => {
+    activateUiLocale(locale);
+    const ids = new Set([
+      "runtime-tool-catalog-mismatch",
+      "runtime-profile-unacknowledged",
+      "provider-request-too-large",
+      "provider-response-too-large",
+      "provider-grant-refused",
+      "provider-auth-failed",
+      "provider-request-failed",
+    ]);
+    for (const entry of FAILURE_CATEGORIES.filter((entry) => ids.has(entry.id))) {
+      const problem = runtimePinProblem(
+        { ...pinFor(), runtimeKind: "hermes" },
+        "runtime-unavailable",
+        entry.message.replace("{runtime}", "Hermes"),
+        entry.id,
+      );
+      const rendered = runtimeProblemText(problem);
+      expect(rendered, entry.id).toContain("Hermes");
+      expect(rendered, entry.id).not.toContain("{runtime}");
+      expect(rendered, entry.id).not.toBe(problem.reason);
+    }
+  });
+
   it("gives every table id a non-empty ru and zh catalog entry", () => {
     for (const entry of FAILURE_CATEGORIES) {
       expect(RU_MESSAGES[entry.message], `ru: ${entry.id}`).toBeTruthy();
