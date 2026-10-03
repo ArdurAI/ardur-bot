@@ -590,38 +590,64 @@ postgres("request ledger on disposable PostgreSQL", () => {
     expect(await f.rows()).toHaveLength(2);
     expect(await f.root()).toMatchObject({ usedTokens: 210, reservedTokens: 0 });
   });
-  it("rejects a broker reservation beyond the persisted root token limit", async () => {
-    const f = await fixture();
-    await db.prisma.run.update({
-      where: { id: f.run.id },
-      data: { leaseOwner: "worker", leaseFence: 2 },
-    });
-    await db.prisma.delegationRoot.update({
-      where: { rootTaskId: f.id },
-      data: { tokenLimit: 99 },
-    });
-    const collector = new RequestUsageCollector({
-      provider: "fixture",
-      model: "fixture",
-      purpose: "unknown",
-      mappingVersion: "broker-chat-completions-v1",
-      inputSemantics: "total-with-cache-subsets",
-      admission: {
-        kind: "worker-provider-broker",
-        reservedTokens: 100,
-        maxRequests: 1,
-        maxReservedTokens: 100,
-      },
-    });
-    await expect(
-      recordBrokerRunUsage({ prisma: db.prisma, events: f.events }, f.run, collector.start(), {
-        leaseOwner: "worker",
-        leaseFence: 2,
-        runtimePin: f.pin,
-      }),
-    ).rejects.toThrow("root task allowance exhausted");
-    expect(await f.rows()).toHaveLength(0);
-  });
+  it.each([
+    { memberTokens: [36_864], runAllowance: 200_000 },
+    { memberTokens: [100_000], runAllowance: 150_000 },
+  ])(
+    "bounds coordinator spend by the larger task or run allowance: %j",
+    async ({ memberTokens, runAllowance }) => {
+      const f = await fixture();
+      await db.prisma.run.update({
+        where: { id: f.run.id },
+        data: { leaseOwner: "worker", leaseFence: 2 },
+      });
+      await db.prisma.delegationRoot.update({
+        where: { rootTaskId: f.id },
+        data: { usedTokens: 100_000 },
+      });
+      const resized = await db.prisma.$transaction((tx) =>
+        sizeDelegationRootForAsk(tx, { runId: f.run.id, memberTokens }),
+      );
+      const remaining = Math.max(resized.tokenLimit, runAllowance) - 100_000;
+      const make = (reservedTokens: number) =>
+        new RequestUsageCollector({
+          provider: "fixture",
+          model: "fixture",
+          purpose: "main",
+          mappingVersion: "broker-chat-completions-v1",
+          inputSemantics: "total-with-cache-subsets",
+          admission: {
+            kind: "worker-provider-broker",
+            reservedTokens,
+            maxRequests: 2,
+            maxReservedTokens: runAllowance,
+          },
+        });
+      const record = (usage: AgentUsage) =>
+        recordBrokerRunUsage({ prisma: db.prisma, events: f.events }, f.run, usage, {
+          leaseOwner: "worker",
+          leaseFence: 2,
+          runtimePin: f.pin,
+        });
+      // The request fits its run allowance but exceeds the effective root ceiling.
+      await expect(record(make(remaining + 1).start())).rejects.toThrow(
+        "root task allowance exhausted",
+      );
+      expect(await f.rows()).toHaveLength(0);
+      // The exact ceiling is admitted, measured and settled before the next refusal.
+      const exact = make(remaining);
+      await record(exact.start());
+      await record(exact.snapshot({ input: remaining, output: 0 }));
+      await record(exact.finish("success"));
+      expect(await f.root()).toMatchObject({
+        tokenLimit: resized.tokenLimit,
+        usedTokens: Math.max(resized.tokenLimit, runAllowance),
+        reservedTokens: 0,
+      });
+      await expect(record(make(1).start())).rejects.toThrow("root task allowance exhausted");
+      expect(await f.rows()).toHaveLength(1);
+    },
+  );
 
   async function admittedWorker(parent: Awaited<ReturnType<typeof fixture>>) {
     await db.prisma.run.update({

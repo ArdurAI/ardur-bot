@@ -119,3 +119,29 @@ it("does not shrink a stored non-goal root limit larger than the run allowance",
   await f.record(request().start());
   expect(f.rows.size).toBe(1);
 });
+
+it.each([
+  { memberTokens: [36_864], runAllowance: 200_000 },
+  { memberTokens: [100_000], runAllowance: 150_000 },
+])(
+  "settles at the effective coordinator ceiling and refuses the next token: %j",
+  async ({ memberTokens, runAllowance }) => {
+    const f = brokerLedgerFixture({ used: 100_000 });
+    const resized = await f.ask(memberTokens);
+    const remaining = Math.max(resized.tokenLimit, runAllowance) - 100_000;
+    const make = (reservedTokens: number) =>
+      request({ reservedTokens, maxReservedTokens: runAllowance, maxRequests: 2 });
+    await expect(f.record(make(remaining + 1).start())).rejects.toThrow(
+      "Broker root task allowance exhausted",
+    );
+    expect(f.rows.size).toBe(0);
+    const exact = make(remaining);
+    await f.record(exact.start());
+    await f.record(exact.snapshot({ input: remaining, output: 0 }));
+    await f.record(exact.finish("success"));
+    expect(f.root.usedTokens).toBe(Math.max(resized.tokenLimit, runAllowance));
+    expect(f.root.reservedTokens).toBe(0);
+    await expect(f.record(make(1).start())).rejects.toThrow("Broker root task allowance exhausted");
+    expect(f.rows.size).toBe(1);
+  },
+);
