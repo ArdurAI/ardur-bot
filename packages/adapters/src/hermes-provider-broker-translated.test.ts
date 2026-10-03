@@ -302,6 +302,74 @@ function parseFrames(payload: string) {
 }
 
 describe("worker provider broker translated route", () => {
+  it.each(["main", "summary"] as const)(
+    "admits the source-confirmed pinned custom GLM request for %s",
+    async (purpose) => {
+      const tools =
+        purpose === "main"
+          ? Array.from({ length: 56 }, (_, index) => ({
+              name: `fixture_tool_${index}`,
+              description: "Fixture tool",
+              parameters: { type: "object", properties: {} },
+            }))
+          : [];
+      const requiredContext = "Use only the supplied tools.";
+      const f = translatedFixture(
+        [startEvent, ...textDeltaEvents("completed"), doneEvent([text("completed")])],
+        {
+          provider: "zai",
+          modelId: "glm-5.3",
+          purpose,
+          tools,
+          requiredContext,
+          maxReservedTokens: 10_000_000,
+          catalog: {
+            ...ANTHROPIC_CATALOG,
+            model: {
+              ...ANTHROPIC_CATALOG!.model,
+              id: "glm-5.3",
+              provider: "zai",
+              api: "openai-completions",
+              contextWindow: 1_000_000,
+              maxTokens: 65_536,
+            },
+          },
+          connection: {
+            ...fixture().options.connection,
+            contextWindow: 1_000_000,
+            maxOutputTokens: 65_536,
+          },
+        },
+      );
+      // Pinned custom profile + explicit launcher cap. The loopback route
+      // disables extra_body.reasoning; the launcher supplies no reasoning_config.
+      const body = {
+        model: "glm-5.3",
+        messages: [
+          { role: "system", content: requiredContext },
+          { role: "user", content: "Complete the fixture." },
+        ],
+        ...(tools.length
+          ? {
+              tools: tools.map((tool) => ({
+                type: "function",
+                function: { ...tool, name: hermesToolName(tool.name) },
+              })),
+            }
+          : {}),
+        max_tokens: 65_536,
+        stream: true,
+        stream_options: { include_usage: true },
+      };
+      const response = await f.broker.open(f.request({ body }));
+      expect(response.status).toBe(200);
+      expect(await response.text()).toContain("completed");
+      expect(f.captured).toHaveLength(1);
+      expect(f.captured[0]?.options?.maxTokens).toBe(65_536);
+      expect(f.captured[0]?.options?.reasoning).toBe("high");
+    },
+  );
+
   it.each(["summary", "main"] as const)(
     "accepts the pinned Hermes streaming usage option for %s turns",
     async (purpose) => {
