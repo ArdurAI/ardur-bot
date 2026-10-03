@@ -1428,4 +1428,6 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models.":
     "Hermes 需要至少 64K 个 token 的上下文限制。请在设置 → 模型中为此连接设置。",
   "Could not check the model. Try again.": "无法检查模型。请重试。",
+  "Context limit (estimated)": "上下文限制（估计）",
+  "Context limit (from the provider)": "上下文限制（来自提供商）",
 };

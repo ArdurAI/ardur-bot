@@ -9990,3 +9990,9 @@ msgstr "Hermes 需要至少 64K 个 token 的上下文限制。请在设置 → 
 
 msgid "Could not check the model. Try again."
 msgstr "无法检查模型。请重试。"
+
+msgid "Context limit (estimated)"
+msgstr "上下文限制（估计）"
+
+msgid "Context limit (from the provider)"
+msgstr "上下文限制（来自提供商）"

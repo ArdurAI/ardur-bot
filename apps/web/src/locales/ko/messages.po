@@ -9990,3 +9990,9 @@ msgstr "Hermes에는 최소 64K 토큰의 컨텍스트 한도가 필요합니다
 
 msgid "Could not check the model. Try again."
 msgstr "모델을 확인하지 못했습니다. 다시 시도하세요."
+
+msgid "Context limit (estimated)"
+msgstr "컨텍스트 한도 (추정)"
+
+msgid "Context limit (from the provider)"
+msgstr "컨텍스트 한도 (공급자 제공)"

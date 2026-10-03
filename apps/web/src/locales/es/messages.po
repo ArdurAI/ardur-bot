@@ -9990,3 +9990,9 @@ msgstr "Hermes necesita un límite de contexto de al menos 64K tokens. Configúr
 
 msgid "Could not check the model. Try again."
 msgstr "No se pudo comprobar el modelo. Inténtalo de nuevo."
+
+msgid "Context limit (estimated)"
+msgstr "Límite de contexto (estimado)"
+
+msgid "Context limit (from the provider)"
+msgstr "Límite de contexto (del proveedor)"

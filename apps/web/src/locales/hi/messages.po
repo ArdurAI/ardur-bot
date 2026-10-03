@@ -9990,3 +9990,9 @@ msgstr "Hermes के लिए कम से कम 64K टोकन की स
 
 msgid "Could not check the model. Try again."
 msgstr "मॉडल की जाँच नहीं हो सकी। फिर कोशिश करें।"
+
+msgid "Context limit (estimated)"
+msgstr "संदर्भ सीमा (अनुमानित)"
+
+msgid "Context limit (from the provider)"
+msgstr "संदर्भ सीमा (प्रदाता से)"

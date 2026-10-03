@@ -9990,3 +9990,9 @@ msgstr "Hermes нужен лимит контекста не менее 64K то
 
 msgid "Could not check the model. Try again."
 msgstr "Не удалось проверить модель. Попробуйте ещё раз."
+
+msgid "Context limit (estimated)"
+msgstr "Лимит контекста (оценка)"
+
+msgid "Context limit (from the provider)"
+msgstr "Лимит контекста (от провайдера)"

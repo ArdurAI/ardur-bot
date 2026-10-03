@@ -1099,6 +1099,13 @@ export const DEFAULT_CONNECTION_CONTEXT_WINDOW = 65_536;
 export const ModelContextWindowSourceSchema = z.enum(["metadata", "catalog", "default"]);
 export type ModelContextWindowSource = z.infer<typeof ModelContextWindowSourceSchema>;
 
+/** Compact field labels keep inferred capacity distinct from a saved limit. */
+export function modelContextWindowLabel(source: ModelContextWindowSource): string {
+  if (source === "default") return "Context limit (estimated)";
+  if (source === "catalog") return "Context limit (from the provider)";
+  return "Context limit";
+}
+
 /** Saved metadata wins; catalog/provider facts are next; unknown capacity is explicitly estimated. */
 export function resolveModelContextWindow(
   metadata?: number,

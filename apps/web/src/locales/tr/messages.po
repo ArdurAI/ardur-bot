@@ -9990,3 +9990,9 @@ msgstr "Hermes en az 64K belirteçlik bağlam sınırı gerektirir. Bu bağlant�
 
 msgid "Could not check the model. Try again."
 msgstr "Model kontrol edilemedi. Tekrar deneyin."
+
+msgid "Context limit (estimated)"
+msgstr "Bağlam sınırı (tahmini)"
+
+msgid "Context limit (from the provider)"
+msgstr "Bağlam sınırı (sağlayıcıdan)"

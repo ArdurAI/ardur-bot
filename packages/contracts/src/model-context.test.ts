@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_MODEL_CONTEXT_WINDOW, resolveModelContextWindow } from "./domain.js";
+import {
+  DEFAULT_MODEL_CONTEXT_WINDOW,
+  HERMES_CONTEXT_LIMIT_MESSAGE,
+  modelContextWindowLabel,
+  resolveModelContextWindow,
+} from "./domain.js";
 
 describe("connection context resolution", () => {
   it.each([
@@ -23,4 +28,18 @@ describe("connection context resolution", () => {
   it("does not raise the built-in delegation reservation cap", () => {
     expect(DEFAULT_MODEL_CONTEXT_WINDOW).toBe(32_768);
   });
+});
+
+it("keeps the pin-time refusal exact", () => {
+  expect(HERMES_CONTEXT_LIMIT_MESSAGE).toBe(
+    "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models.",
+  );
+});
+
+it.each([
+  ["default", "Context limit (estimated)"],
+  ["catalog", "Context limit (from the provider)"],
+  ["metadata", "Context limit"],
+] as const)("labels the %s source", (source, label) => {
+  expect(modelContextWindowLabel(source)).toBe(label);
 });
