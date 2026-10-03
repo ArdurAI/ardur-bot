@@ -67,3 +67,39 @@ test("can-run-settings", async ({ page }, testInfo) => {
   await expect(settings.getByRole("switch", { name: "Experimental" })).not.toBeChecked();
   await expect(settings.getByText("Experimental turned on for this runtime")).not.toBeVisible();
 });
+
+test("can-run-policy-refusal", async ({ page }, testInfo) => {
+  await installPerformanceFixture(page);
+  await page.route("**/rpc/delegations/policy**", (route) =>
+    route.fulfill({ json: { json: { mode: "any" } } }),
+  );
+  const sentence = failureCategoryMessage("destinations-space");
+  await page.route("**/rpc/delegations/setPolicy", (route) =>
+    route.fulfill({
+      status: 400,
+      json: {
+        json: {
+          code: "BAD_REQUEST",
+          status: 400,
+          defined: false,
+          message: sentence,
+          data: {
+            blockedBots: [
+              { id: "fixture-bot-0", name: "Alpha" },
+              { id: "fixture-bot-1", name: "Beta" },
+            ],
+          },
+        },
+      },
+    }),
+  );
+  await page.goto("/app/fixture-bot-0");
+  await page.getByRole("banner").getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByTestId("settings-nav-models").click();
+  const select = page.getByRole("combobox", { name: "Allowed model destinations" });
+  await select.selectOption("local");
+  await expect(page.getByRole("alert").filter({ hasText: sentence })).toBeVisible();
+  await expect(page.getByText("Change these bots' models first: Alpha, Beta")).toBeVisible();
+  await expect(select).toHaveValue("any");
+  await captureScreenshot(page, testInfo, "can-run-policy-refusal");
+});

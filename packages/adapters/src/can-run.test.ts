@@ -75,3 +75,20 @@ describe("one run settings rule", () => {
     },
   );
 });
+
+it("a destination-only policy check does not revalidate unrelated runtime capabilities", () => {
+  expect(
+    canBotRun({
+      pin,
+      destinationModel: {
+        provider: "openai-compatible",
+        id: "fixture-model",
+        baseUrl: "http://localhost:8080/v1",
+      },
+      spacePolicy: { mode: "local" },
+    }),
+  ).toBeUndefined();
+  expect(canBotRun({ pin, destinationModel: model, spacePolicy: { mode: "local" } })).toMatchObject(
+    { reasonId: "destinations-space" },
+  );
+});

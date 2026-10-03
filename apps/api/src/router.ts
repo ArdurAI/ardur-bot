@@ -6413,7 +6413,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         getModelDestinations(deps.prisma, context.actor, input.botId),
       ),
       setPolicy: authed.delegations.setPolicy.handler(({ context, input }) =>
-        setModelDestinations(deps.prisma, context.actor, input),
+        setModelDestinations(deps, context.actor, input),
       ),
       protectedLocations: authed.delegations.protectedLocations.handler(({ context, input }) =>
         getProtectedLocations(deps.prisma, context.actor, input.botId),

@@ -1707,6 +1707,11 @@ msgstr "Cambiar contraseña"
 msgid "Change pin"
 msgstr ""
 
+#. placeholder {0}: blockedNames.join(", ")
+#: src/pages/ModelDestinations.tsx
+msgid "Change these bots' models first: {0}"
+msgstr "Cambia primero los modelos de estos bots: {0}"
+
 #: src/components/composer/command-description.ts
 msgid "Change this bot’s pin"
 msgstr ""

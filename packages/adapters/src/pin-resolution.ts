@@ -182,6 +182,8 @@ export function canBotRun(input: {
   placement?: { computer: RuntimeComputerLocation; experimental: boolean };
   connection?: { credential: { id: string; provider: string } | null };
   model?: AgentRunModel;
+  /** Policy edits need only the saved destination, never live capability discovery. */
+  destinationModel?: Pick<AgentRunModel, "provider" | "id" | "baseUrl">;
   botPolicy?: unknown;
   spacePolicy?: unknown;
 }): RuntimeProblem | undefined {
@@ -220,15 +222,18 @@ export function canBotRun(input: {
       failureCategoryMessage("connection-missing", params),
       "connection-missing",
     );
-  if (model) {
+  const destinationModel = model ?? input.destinationModel;
+  if (destinationModel) {
     const refusedBy =
       input.botPolicy !== undefined || input.spacePolicy !== undefined
-        ? modelLocalityRefusedBy(input.botPolicy, input.spacePolicy, model)
+        ? modelLocalityRefusedBy(input.botPolicy, input.spacePolicy, destinationModel)
         : null;
     if (refusedBy) {
       const id = refusedBy === "space" ? "destinations-space" : "destinations-bot";
       return runtimePinProblem(pin, "locality-denied", failureCategoryMessage(id, params), id);
     }
+  }
+  if (model) {
     if (
       pin.runtimeKind === "hermes" &&
       model.contextWindow !== undefined &&
