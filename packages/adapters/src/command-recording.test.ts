@@ -92,6 +92,19 @@ it.each([
 
 describe("credential-read output suppression", () => {
   it.each([
+    ["git -C project credential fill", true],
+    ["git -c k=v credential fill", true],
+    ["git --git-dir=project/.git credential fill", true],
+    ["git --git-dir project/.git credential fill", true],
+    ["git --work-tree=project credential fill", true],
+    ["git --work-tree project credential fill", true],
+    ["git --no-pager credential fill", true],
+    ["git -C project -c k=v --no-pager credential fill", true],
+    ['git commit -m "credential update"', false],
+    ["git log --grep credential", false],
+    ['git -C project commit -m "credential update"', false],
+    ["git -c k=v log --grep credential", false],
+    ["git --no-pager credential-osxkeychain --help", false],
     [`${"FOO=1 ".repeat(128)}pnpm test`, false],
     [`${"FOO=1 ".repeat(128)}env`, true],
     ["FOO=1 env", true],
@@ -314,6 +327,8 @@ describe("credential-read output suppression", () => {
   });
 
   it.each([
+    "git -C project credential fill",
+    "git -c k=v credential fill",
     "FOO=1 env",
     "env > /tmp/x",
     "docker exec c printenv",

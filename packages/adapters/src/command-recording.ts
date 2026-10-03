@@ -71,10 +71,15 @@ export function sensitiveShellCommand(command: string): boolean {
       "(?:security\\s+(?:find-[\\w-]+|dump-keychain|show-keychain-info|list-keychains)\\b|keychain\\b)",
     "i",
   );
+  const gitGlobalOption =
+    "(?:(?:-C|-c|--git-dir|--work-tree)\\s+[^\\s;&|()]+\\s+|" +
+    "(?:--git-dir|--work-tree)=[^\\s;&|()]+\\s+|--no-pager\\s+)";
   const credentialToolRead = new RegExp(
     position +
       "(?:gh\\s+auth\\s+token\\b|" +
-      "git\\s+credential(?:-[\\w-]+)?\\b(?![\\w-]|\\s+--help\\s*(?:$|[;&|\\n]))|" +
+      "git\\s+(?:" +
+      gitGlobalOption +
+      ")*credential(?:-[\\w-]+)?\\b(?![\\w-]|\\s+--help\\s*(?:$|[;&|\\n]))|" +
       "gpg\\s+[^;&|\\n]*--export-secret-(?:sub)?keys\\b|" +
       "security\\s+export\\b|" +
       "aws\\s+(?:configure\\s+export-credentials|sts\\s+(?:get-session-token|assume-role))\\b|" +
