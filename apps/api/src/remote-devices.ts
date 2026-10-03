@@ -75,6 +75,7 @@ export function createRemoteDevices(deps: RemoteDevicesDeps) {
         devices: devices.map((device) => ({
           id: device.id,
           deviceName: device.deviceName,
+          platform: device.platform,
           scopes: DeviceScopeSchema.array().parse(device.scopes),
           createdAt: device.createdAt.toISOString(),
           lastUsedAt: device.lastUsedAt?.toISOString() ?? null,
@@ -161,7 +162,7 @@ export function createRemoteDevices(deps: RemoteDevicesDeps) {
   };
 }
 const pairInput = z.strictObject({
-  platform: z.enum(["ios", "android", "darwin", "linux", "win32", "web"]).optional(),
+  platform: z.enum(["ios", "android", "darwin", "linux", "win32", "web", "cli"]).optional(),
   challenge: z.string().min(8).max(128),
   instanceId: z.string().max(128),
   deviceName: z.string().trim().min(1).max(80),
