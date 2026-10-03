@@ -50,8 +50,10 @@ export function workspaceFileSource(
 ): WorkspaceContext["files"] {
   if (!computer || computer.kind === "fake") return "unavailable";
   const host = computerRunsOnHost(computer);
-  // The paired bridge requires run or maintenance authorization, not a pane request.
-  if (host && computer.providerRef?.startsWith("host:")) return "unavailable";
+  // The paired bridge requires run or maintenance authorization, not a pane request. A host
+  // computer without a location cannot be told apart from a stopped bridge, so it shows nothing.
+  if (host && (!computer.providerRef || computer.providerRef.startsWith("host:")))
+    return "unavailable";
   if (
     (computer.state === "running" || (host && computer.state === "suspended")) &&
     computer.providerRef &&

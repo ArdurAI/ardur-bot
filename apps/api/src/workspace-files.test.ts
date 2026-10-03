@@ -175,6 +175,15 @@ describe("bot workspace files", () => {
     { kind: "fake", state: "running", expected: "unavailable" },
     { kind: "desktop", providerRef: "host:home", expected: "unavailable" },
     { kind: "desktop", providerRef: null, homeRevision: "empty", expected: "unavailable" },
+    // A stopped paired bridge keeps a server-side checkpoint but no location to tell it apart.
+    {
+      kind: "desktop",
+      connectionId: null,
+      providerRef: null,
+      homeRevision: "rev-1",
+      state: "stopped",
+      expected: "unavailable",
+    },
     { kind: "desktop", state: "stopped", expected: "saved" },
   ])(
     "describes the saved location without activating it: %s",
