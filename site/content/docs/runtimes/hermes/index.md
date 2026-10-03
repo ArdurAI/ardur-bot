@@ -107,6 +107,10 @@ pinned to one is refused, and any other sign-in connection is refused the same
 way. A run on an Anthropic sign-in saved by an older version is refused with
 "Reconnect with an API key." The chosen connection
 must have a bounded context window and an output limit at most 65,536 tokens.
+The pinned runtime rejects a model context window below 64,000 tokens. That
+session-start refusal shows “Hermes needs a model with at least 64K context;
+change the model and try again.” The context limit in bot settings controls
+Ardur’s supplied instructions, not the model’s context window.
 Effort is a requested value; seeing the outbound field does not prove the provider
 applied it. The bot and run keep their exact credential, model, effort and revision.
 Group member model choices must pass the same compatibility check. An admitted run

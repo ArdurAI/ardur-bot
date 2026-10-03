@@ -1,4 +1,6 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "{runtime} needs a model with at least 64K context; change the model and try again.":
+    "{runtime} 需要上下文至少为 64K 的模型；请更换模型后重试。",
   "{runtime} could not start a session. Check the runtime and try again.":
     "{runtime} 无法启动会话。请检查运行环境后重试。",
   Sandbox: "沙盒",

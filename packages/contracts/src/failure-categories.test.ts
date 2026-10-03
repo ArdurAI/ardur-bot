@@ -114,6 +114,11 @@ describe("failure categories table", () => {
       "configuration-invalid",
       { bot: "Reviewer" },
     ],
+    [
+      "Hermes needs a model with at least 64K context; change the model and try again.",
+      "model-context-too-small",
+      { runtime: "Hermes" },
+    ],
     ["Worker stopped.", "stopped", {}],
     [
       "Hermes could not start a session. Check the runtime and try again.",

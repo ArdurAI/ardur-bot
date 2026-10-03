@@ -47,6 +47,36 @@ async function handle(value) {
     if (!value.params?.cwd || !Array.isArray(value.params?.mcpServers)) process.exit(3);
     sessionId = `fixture-${process.pid}`;
     mcp = value.params.mcpServers[0];
+    if (scenario === "pinned-session-schema") {
+      // The pinned ACP stdio schema requires argv and a list of named strings.
+      if (
+        typeof value.params.cwd !== "string" ||
+        typeof mcp?.name !== "string" ||
+        typeof mcp.command !== "string" ||
+        !Array.isArray(mcp.args) ||
+        !mcp.args.every((arg) => typeof arg === "string") ||
+        !Array.isArray(mcp.env) ||
+        !mcp.env.every((item) => typeof item.name === "string" && typeof item.value === "string")
+      ) {
+        send({ id: value.id, error: { code: -32602, message: "Invalid params" } });
+        return;
+      }
+    }
+    if (scenario.startsWith("session-new-context-")) {
+      process.stderr.write("fixture traceback detail\n".repeat(9));
+      send({
+        id: value.id,
+        error: {
+          code: scenario === "session-new-context-wrong-code" ? -32602 : -32603,
+          message: "Internal error",
+          data: {
+            details: `Model fixture-private-model has a context window of 32,768 tokens, which is below the minimum ${scenario === "session-new-context-other-floor" ? "128,000" : "64,000"} required by Hermes Agent. Choose a model with at least 64K context.`,
+            prompt: "fixture private prompt",
+          },
+        },
+      });
+      return;
+    }
     if (scenario === "session-new-closed") process.exit(4);
     if (
       scenario === "session-new-error" ||
