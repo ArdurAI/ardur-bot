@@ -18,7 +18,7 @@ import {
 import { getLogger } from "@ardurbot/logging";
 import { ORPCError } from "@orpc/server";
 import type { ValidatedModelPinChoice } from "./model-pin-validation.js";
-import { validateBotCanRun } from "./model-pin-validation.js";
+import { validateBotCanRun, validateModelPinSelection } from "./model-pin-validation.js";
 import type { RouterDeps } from "./router.js";
 
 type Target = {
@@ -108,6 +108,9 @@ export async function updateGroupMemberModelPin(
     choice = await validateBotCanRun(deps, actor, requested, { botId: target.botId });
     if (requested.runtimeKind !== "pi" && !(await nativeHostOwner(deps.prisma, actor.userId)))
       throw new ORPCError("FORBIDDEN", { message: NATIVE_HOST_OWNER_MESSAGE });
+    // Reuse the probed Ollama choice; other providers retain their edit-time selection checks.
+    if (choice.provider !== "ollama")
+      choice = await validateModelPinSelection(deps, actor, requested);
   } else {
     await validateBotCanRun(
       deps,

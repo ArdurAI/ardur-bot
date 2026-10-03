@@ -804,3 +804,16 @@ it("a preview cannot claim the server-only Ollama validation flag to bypass prob
   expect(result.status).toBe(412);
   expect(listOllamaModels).toHaveBeenCalledOnce();
 });
+
+it("reusing admission for room saves does not bypass custom-model choice validation", async () => {
+  const f = fixture({ name: "new room choice", kind: "pi" });
+  await expect(
+    updateGroupMemberModelPin(
+      f.deps,
+      actor,
+      { groupId: "group", botId: "bot", memberId: "member", expectedRevision: 0 },
+      { ...f.pin, modelId: "not-a-connected-choice" },
+    ),
+  ).rejects.toThrow("Unknown model for that provider");
+  expect(f.prisma.$transaction).not.toHaveBeenCalled();
+});
