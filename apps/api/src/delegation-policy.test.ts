@@ -230,3 +230,42 @@ it("a bot policy cannot target another owner's bot", async () => {
   expect(f.prisma.secret.findFirst).not.toHaveBeenCalled();
   expect(f.prisma.bot.update).not.toHaveBeenCalled();
 });
+
+it.each(["no default", "disconnected pin", "missing secret"])(
+  "a bot with %s does not block saving a space destinations policy",
+  async (missing) => {
+    const f = fixture({ inherited: missing === "no default" });
+    if (missing === "no default") f.prisma.spaceModelPreference.findFirst.mockResolvedValue(null);
+    else if (missing === "disconnected pin")
+      f.prisma.userModelCredential.findFirst.mockResolvedValue(null);
+    else f.prisma.secret.findFirst.mockResolvedValue(null);
+    expect((await f.call({ mode: "local" })).status).toBe(200);
+    expect(f.prisma.space.update).toHaveBeenCalledOnce();
+  },
+);
+it("only connected bots newly blocked by the space policy are named", async () => {
+  const f = fixture({ inherited: true });
+  f.prisma.spaceModelPreference.findFirst.mockImplementation(async ({ where }) =>
+    where.userId === "owner-0"
+      ? null
+      : {
+          modelId: "fixture-model",
+          isDefault: true,
+          credential: {
+            id: "connection-1",
+            provider: "openai-compatible",
+            userId: "owner-1",
+            label: "Fixture",
+            secretId: "secret-1",
+            defaultModel: "fixture-model",
+            isDefault: true,
+          },
+        },
+  );
+  const result = await f.call({ mode: "local" });
+  expect(result).toMatchObject({
+    status: 400,
+    body: { json: { data: { blockedBots: [{ id: "bot-1", name: "Beta" }] } } },
+  });
+  expect(f.prisma.space.update).not.toHaveBeenCalled();
+});

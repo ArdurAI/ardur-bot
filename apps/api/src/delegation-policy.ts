@@ -56,16 +56,19 @@ export async function setModelDestinations(
         credentialId: credential.id,
       };
     }
+    // A policy cannot strand a bot that has no model connection to run with.
+    if (!pin.provider || !pin.modelId) continue;
+    if ((pin.runtimeKind === "pi" || pin.runtimeKind === "hermes") && !credential) continue;
     let baseUrl: string | undefined;
     if (credential) {
       const secret = await prisma.secret.findFirst({
         where: { id: credential.secretId, userId: bot.userId, spaceId: null },
       });
-      if (secret)
-        baseUrl = modelCredentialDto(
-          credential,
-          deps.secrets.load(secret.ciphertext, secret.id),
-        ).baseUrl;
+      if (!secret) continue;
+      baseUrl = modelCredentialDto(
+        credential,
+        deps.secrets.load(secret.ciphertext, secret.id),
+      ).baseUrl;
     }
     const problem = canBotRun({
       pin,
