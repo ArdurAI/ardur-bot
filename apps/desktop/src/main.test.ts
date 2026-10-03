@@ -10,18 +10,29 @@ import { MAIN_WINDOW_SHOW_FALLBACK_MS, showMainWindowWhenPainted } from "./main-
 import { managedLocalOpenUrl, parseSetupInput } from "./setup-config.js";
 import { systemSenderAllowed } from "./system/install.js";
 import { UnsavedFiles } from "./unsaved-files.js";
-import { windowBackgroundColor } from "./window-options.js";
+import { browserWindowOptions, windowBackgroundColor } from "./window-options.js";
+import type { WindowPlace } from "./window-place.js";
+import { restoreWindowPlace, windowWithRestoredState } from "./window-place.js";
 
 class WindowFake extends EventEmitter {
-  constructor(readonly options: { backgroundColor?: string } = {}) {
+  constructor(readonly options: { backgroundColor?: string; show?: boolean } = {}) {
     super();
+    this.visible = options.show !== false;
   }
   destroyed = false;
   webContents = Object.assign(new EventEmitter(), { setWindowOpenHandler: vi.fn() });
-  hide = vi.fn();
-  show = vi.fn();
+  visible = true;
+  hide = vi.fn(() => {
+    this.visible = false;
+  });
+  show = vi.fn(() => {
+    this.visible = true;
+    this.emit("show");
+  });
   focus = vi.fn();
-  isVisible = () => true;
+  isVisible = () => this.visible;
+  maximize = vi.fn();
+  setFullScreen = vi.fn();
   isDestroyed = () => this.destroyed;
   destroy() {
     this.destroyed = true;
@@ -81,7 +92,21 @@ function fixture() {
     __dirname: "/fixture",
     process: { platform: "linux", env: {} },
     developmentIcon: () => undefined,
-    browserWindowOptions: () => ({}),
+    browserWindowOptions,
+    screen: {
+      getPrimaryDisplay: () => ({ id: 1 }),
+      getAllDisplays: () => [
+        {
+          id: 1,
+          bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+          workArea: { x: 0, y: 0, width: 1920, height: 1040 },
+        },
+      ],
+    },
+    windowPlace: undefined as { current: WindowPlace } | undefined,
+    restoreWindowPlace,
+    watchWindowPlace: vi.fn(),
+    windowWithRestoredState,
     windowBackgroundColor,
     bootSnapshot: undefined as { current: { theme: string; language: string } } | undefined,
     nativeTheme: { shouldUseDarkColors: true },
@@ -778,6 +803,7 @@ describe("quitting while local mode runs", () => {
       mainWindow: new WindowFake() as WindowFake | null,
       unsavedFiles: new UnsavedFiles<WindowFake>(),
       dialog: { showMessageBoxSync: vi.fn(() => 0) },
+      windowPlace: undefined,
       legacyCompose: false,
       guidedEngine: null,
       guidedIpcCleanup: null,
@@ -941,5 +967,56 @@ describe("main window ready-to-show wiring", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("main window placement wiring", () => {
+  it("passes restored normal bounds into the real createWindow before any reveal", async () => {
+    const f = fixture();
+    f.windowPlace = {
+      current: {
+        x: 150,
+        y: 120,
+        width: 1000,
+        height: 700,
+        maximized: true,
+        fullScreen: true,
+        displayId: 1,
+      },
+    };
+    expect(await f.openAppOnce(url)).toBe(true);
+    expect(f.mainWindow!.options).toMatchObject({
+      x: 150,
+      y: 120,
+      width: 1000,
+      height: 700,
+      show: false,
+    });
+    expect(f.mainWindow!.maximize).not.toHaveBeenCalled();
+    expect(f.mainWindow!.setFullScreen).not.toHaveBeenCalled();
+    expect(f.showMainWindowWhenPainted).toHaveBeenCalledOnce();
+  });
+
+  it("opens safely after the saved display is unplugged", async () => {
+    const f = fixture();
+    f.windowPlace = {
+      current: {
+        x: 9000,
+        y: 120,
+        width: 1000,
+        height: 700,
+        maximized: false,
+        fullScreen: false,
+        displayId: 2,
+      },
+    };
+    expect(await f.openAppOnce(url)).toBe(true);
+    expect(f.mainWindow!.options).toMatchObject({
+      x: 240,
+      y: 70,
+      width: 1440,
+      height: 900,
+      show: false,
+    });
   });
 });

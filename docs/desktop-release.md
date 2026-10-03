@@ -332,6 +332,8 @@ Signed and notarized builds omit these caveats and open normally.
 
 ## Platform acceptance still required
 
+The main window remembers its normal size, position, display, maximized and full-screen state across restarts; if its top area is no longer reachable, it opens centred at the default size on the display containing its saved centre, or the primary display. Linux Wayland may let the compositor choose its position.
+
 Windows and Linux use native window frames plus a tray with Open and Quit actions. Closing the
 main window keeps it reachable through the tray; its retained renderer is destroyed after the
 existing warm-window timeout. Reopening restores the window, and a second launch activates the

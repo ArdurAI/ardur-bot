@@ -15,6 +15,7 @@ import {
   Menu,
   nativeTheme,
   net,
+  screen,
   session,
   shell,
 } from "electron";
@@ -125,6 +126,12 @@ import {
   warmWindowTtlMs,
   windowBackgroundColor,
 } from "./window-options.js";
+import {
+  restoreWindowPlace,
+  WindowPlaceStore,
+  watchWindowPlace,
+  windowWithRestoredState,
+} from "./window-place.js";
 
 const versionOutput = cliVersion(process.argv, app.getVersion());
 if (versionOutput !== null) {
@@ -156,6 +163,7 @@ let mainWindow: BrowserWindow | null = null;
 let dockBadge: ReturnType<typeof installDockBadge> | null = null;
 /** The theme the app page last showed; new main windows open in that colour. */
 let bootSnapshot: BootSnapshotStore | undefined;
+let windowPlace: WindowPlaceStore | undefined;
 const unsavedFiles = new UnsavedFiles<BrowserWindow>();
 const appWindowTargets = new WeakMap<BrowserWindow, string>();
 let setupWindow: BrowserWindow | null = null;
@@ -380,8 +388,16 @@ async function defaultSessionHasOriginData(origin: string): Promise<boolean> {
 function createWindow(url: string, partition: string | null) {
   markOnce("rk:main:window-create-start");
   const icon = developmentIcon();
+  const defaults = browserWindowOptions(process.platform);
+  const primaryId = screen.getPrimaryDisplay().id;
+  const placement = restoreWindowPlace(
+    windowPlace?.current,
+    screen.getAllDisplays().map((display) => ({ ...display, primary: display.id === primaryId })),
+    defaults,
+  );
   const win = new BrowserWindow({
-    ...browserWindowOptions(process.platform),
+    ...defaults,
+    ...placement.bounds,
     backgroundColor: windowBackgroundColor(bootSnapshot?.current, nativeTheme.shouldUseDarkColors),
     ...(icon ? { icon } : {}),
     webPreferences: {
@@ -398,6 +414,7 @@ function createWindow(url: string, partition: string | null) {
     },
   });
   mainWindow = win;
+  if (windowPlace) watchWindowPlace(win, windowPlace, screen, () => mainWindow === win);
   watchAppShortcutMenu(
     win.webContents,
     () => Menu.getApplicationMenu(),
@@ -508,7 +525,7 @@ function createWindow(url: string, partition: string | null) {
   if (win.isVisible()) markOnce("rk:main:window-shown");
   win.once("show", () => markOnce("rk:main:window-shown"));
   win.once("ready-to-show", () => markOnce("rk:main:ready-to-show"));
-  showMainWindowWhenPainted(win);
+  showMainWindowWhenPainted(windowWithRestoredState(win, placement));
   win.webContents.once("dom-ready", () => markOnce("rk:main:dom-ready"));
   win.webContents.once("did-finish-load", () => markOnce("rk:main:did-finish-load"));
   win.webContents.once("did-stop-loading", () => markOnce("rk:main:did-stop-loading"));
@@ -1434,6 +1451,8 @@ const startup = app.whenReady().then(async () => {
   installDesktopNotifications({ window: () => mainWindow, target: () => currentTargetUrl });
   dockBadge = installDockBadge({ window: () => mainWindow, tray: () => desktopTray });
   const userDataDir = app.getPath("userData");
+  windowPlace = new WindowPlaceStore(userDataDir);
+  await windowPlace.load();
   hostService = installHostService({
     window: () => mainWindow,
     target: () => currentTargetUrl,
@@ -2164,6 +2183,11 @@ app.on("before-quit", (event) => {
  * is still open and usable.
  */
 app.on("will-quit", (event) => {
+  if (windowPlace?.writing) {
+    event.preventDefault();
+    void windowPlace.flush().then(() => app.quit());
+    return;
+  }
   if (guidedEngine?.running()) {
     event.preventDefault();
     void guidedEngine.cancel().finally(() => app.quit());
