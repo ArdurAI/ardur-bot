@@ -476,6 +476,24 @@ describe("command recording boundary", () => {
     expect(tool).not.toHaveBeenCalled();
     expect(JSON.stringify(f.events)).not.toContain(known);
   });
+  it.each([
+    ['echo "managed-" "value123"', "managed-value123"],
+    ['echo "a" "b"', "ab"],
+    ['echo a""b', "ab"],
+    ["echo a\\b", "ab"],
+    ["echo a' 'b", "ab"],
+    ["echo $'a'$'b'", "ab"],
+  ])("refuses split known values in %s before calling the tool", async (command, known) => {
+    const f = fixture([], [known]);
+    const tool = vi.fn();
+    const result = await f.recording.invoke("shell", { command }, "execution-1", tool);
+    expect(result).toEqual({
+      error:
+        "This command was not run because its arguments could not be retained safely; use managed credential variables.",
+    });
+    expect(tool).not.toHaveBeenCalled();
+    expect(f.sandbox.execute).not.toHaveBeenCalled();
+  });
   it("runs a 40 KB command", async () => {
     const command = `echo ${"x".repeat(40 * 1024)}`;
     const f = fixture();

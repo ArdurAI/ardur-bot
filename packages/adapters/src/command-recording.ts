@@ -302,11 +302,16 @@ export function createCommandRecording(input: {
       command === request.command &&
       cwd === resolvedCwd &&
       (request.cwd === undefined || safe(request.cwd) === request.cwd);
-    const containsKnownSecret = [request?.command, request?.cwd, resolvedCwd].some(
-      (value) =>
-        typeof value === "string" &&
-        input.secrets.some((secret) => secret.length > 0 && value.includes(secret)),
-    );
+    const containsKnownSecret = [request?.command, request?.cwd, resolvedCwd].some((value) => {
+      if (typeof value !== "string") return false;
+      const normalized = normalizeShellText(value);
+      const compact = normalized.replace(/\s/g, "");
+      return input.secrets.some(
+        (secret) =>
+          secret.length > 0 &&
+          (value.includes(secret) || normalized.includes(secret) || compact.includes(secret)),
+      );
+    });
     const rawCommand = args.command ?? args.cmd;
     const oversized =
       typeof rawCommand === "string" &&
