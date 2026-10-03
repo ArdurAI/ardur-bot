@@ -154,5 +154,8 @@ test("can-run-bot-policy-refusal", async ({ page }, testInfo) => {
   await expect(settings.getByRole("combobox", { name: "Allowed model destinations" })).toHaveValue(
     "any",
   );
+  const refusal = settings.getByRole("alert").filter({ hasText: "Change this bot's model first." });
+  await refusal.scrollIntoViewIfNeeded();
+  await expect(refusal).toBeInViewport();
   await captureScreenshot(page, testInfo, "can-run-bot-policy-refusal");
 });
