@@ -1655,6 +1655,12 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       }),
       duplicate: authed.bots.duplicate.handler(async ({ context, input }) => {
         const source = await repos.getBot(context.actor, input.botId);
+        // Refuse the source with the same run sentence before legacy container guards.
+        // The creation hook still checks the final allocated computer inside the transaction.
+        await validateBotCanRun(deps, context.actor, requestedBotPin(source), {
+          botId: source.id,
+          inheritBotPin: true,
+        });
         const sourceKind = computerExecutionKind(
           await runtimeComputerLocation(deps.prisma, source.computer),
         );

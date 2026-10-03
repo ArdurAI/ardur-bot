@@ -47,7 +47,7 @@ function fixture(row: (typeof rows)[number]) {
   const native = row.kind === "codex-app-server";
   const pin = {
     runtimeKind: row.kind,
-    provider: native ? "openai" : "openai-compatible",
+    provider: native ? "openai-codex" : "openai-compatible",
     modelId: native ? "fixture-native" : "fixture-model",
     effort: "off",
     credentialId: native ? "native:codex-app-server" : "connection",
@@ -452,35 +452,29 @@ it("a changed Ollama pin still checks installed models and the Hermes floor", as
   expect(showOllamaModel).toHaveBeenCalledTimes(1);
 });
 
-it.each(rows)(
-  "duplicate refuses legacy $name using the final transaction's bot and computer",
-  async (row) => {
-    const f = fixture(row);
-    // Use a hosted sandbox so creation reaches the final admission hook rather than
-    // the older isolated-container restriction, which rejects native runtimes first.
-    if (row.computer === "docker") f.bot.computer.kind = "fake";
-    f.prisma.bot.findFirst.mockImplementation(async ({ where }: { where: { id: string } }) =>
-      where.id === "duplicate" ? { ...f.bot, id: "duplicate" } : f.bot,
-    );
-    const result = await f.call("bots/duplicate", { botId: "bot" });
-    const runtime =
-      row.kind === "codex-app-server" ? "Codex" : row.kind === "pi" ? "Ardur" : "Hermes";
-    const sentence = row.category
-      ? failureCategoryMessage(row.category, { runtime, bot: "this bot" })
-      : HERMES_CONTEXT_LIMIT_MESSAGE;
-    expect(result).toMatchObject({ status: 400, body: { json: { message: sentence } } });
-    expect(f.prisma.bot.create).toHaveBeenCalledOnce();
-    expect(f.prisma.$transaction).toHaveBeenCalledOnce();
-    expect(f.prisma.bot.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: "duplicate", spaceId: "space", userId: "user", archivedAt: null },
-      }),
-    );
-    expect(f.prisma.browserProfile.create).not.toHaveBeenCalled();
-    expect(f.prisma.memoryDocument.create).not.toHaveBeenCalled();
-    expect(f.prisma.botMcpServer.findMany).not.toHaveBeenCalled();
-  },
-);
+it.each(rows)("duplicate refuses legacy $name before creating anything", async (row) => {
+  const f = fixture(row);
+  f.prisma.bot.findFirst.mockImplementation(async ({ where }: { where: { id: string } }) =>
+    where.id === "duplicate" ? { ...f.bot, id: "duplicate" } : f.bot,
+  );
+  const result = await f.call("bots/duplicate", { botId: "bot" });
+  const runtime =
+    row.kind === "codex-app-server" ? "Codex" : row.kind === "pi" ? "Ardur" : "Hermes";
+  const sentence = row.category
+    ? failureCategoryMessage(row.category, { runtime, bot: "this bot" })
+    : HERMES_CONTEXT_LIMIT_MESSAGE;
+  expect(result).toMatchObject({ status: 400, body: { json: { message: sentence } } });
+  expect(f.prisma.bot.create).not.toHaveBeenCalled();
+  expect(f.prisma.$transaction).not.toHaveBeenCalled();
+  expect(f.prisma.bot.findFirst).toHaveBeenCalledWith(
+    expect.objectContaining({
+      where: { id: "bot", spaceId: "space", userId: "user", archivedAt: null },
+    }),
+  );
+  expect(f.prisma.browserProfile.create).not.toHaveBeenCalled();
+  expect(f.prisma.memoryDocument.create).not.toHaveBeenCalled();
+  expect(f.prisma.botMcpServer.findMany).not.toHaveBeenCalled();
+});
 
 it("duplicate checks the final allocated computer rather than only the source's valid host", async () => {
   const f = fixture({ name: "valid source", kind: "codex-app-server" });
