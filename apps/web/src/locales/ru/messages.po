@@ -2406,10 +2406,17 @@ msgstr "Контейнер"
 msgid "Context"
 msgstr "Контекст"
 
-#: src/pages/ModelSettingsOverlay.tsx
-#: src/pages/Onboarding.tsx
+#: src/lib/model-context-label.ts
 msgid "Context limit"
 msgstr ""
+
+#: src/lib/model-context-label.ts
+msgid "Context limit (estimated)"
+msgstr "Лимит контекста (оценка)"
+
+#: src/lib/model-context-label.ts
+msgid "Context limit (from the provider)"
+msgstr "Лимит контекста (от провайдера)"
 
 #: src/pages/group-model-control.tsx
 #: src/pages/shell/runtime-config-advanced.tsx
@@ -2583,6 +2590,10 @@ msgstr ""
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Could not check teaching status. Refresh the view to continue."
 msgstr "Не удалось проверить статус преподавания. Обновите вид, чтобы продолжить."
+
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Could not check the model. Try again."
+msgstr "Не удалось проверить модель. Попробуйте ещё раз."
 
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/HostComputerSettings.tsx
@@ -4567,6 +4578,10 @@ msgstr "Hermes не установлен на этом компьютере."
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes isn't available on Windows yet."
 msgstr "Hermes пока недоступен в Windows."
+
+#: src/lib/hermes-refusal.ts
+msgid "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models."
+msgstr "Hermes нужен лимит контекста не менее 64K токенов. Задайте его для этого подключения в Настройки → Модели."
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."

@@ -283,6 +283,7 @@ test("models: inspect a connection, default control, and connection form", async
   await expect(panel.getByRole("heading", { name: "Models", exact: true })).toBeVisible();
   await expect(panel.getByText("Connected · Personal connection")).toBeVisible();
   await expect(panel.getByText(connected.label, { exact: true }).first()).toBeVisible();
+  await expect(panel.getByText(/Context limit \(from the provider\)/)).toBeVisible();
   await capture(page, "docs-models-open");
   const otherModel = panel.getByRole("combobox", { name: "Model", exact: true });
   await otherModel.click();

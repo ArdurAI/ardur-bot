@@ -2406,10 +2406,17 @@ msgstr "कंटेनर"
 msgid "Context"
 msgstr "संदर्भ"
 
-#: src/pages/ModelSettingsOverlay.tsx
-#: src/pages/Onboarding.tsx
+#: src/lib/model-context-label.ts
 msgid "Context limit"
 msgstr "कॉन्टेक्स्ट सीमा"
+
+#: src/lib/model-context-label.ts
+msgid "Context limit (estimated)"
+msgstr "संदर्भ सीमा (अनुमानित)"
+
+#: src/lib/model-context-label.ts
+msgid "Context limit (from the provider)"
+msgstr "संदर्भ सीमा (प्रदाता से)"
 
 #: src/pages/group-model-control.tsx
 #: src/pages/shell/runtime-config-advanced.tsx
@@ -2583,6 +2590,10 @@ msgstr ""
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Could not check teaching status. Refresh the view to continue."
 msgstr ""
+
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Could not check the model. Try again."
+msgstr "मॉडल की जाँच नहीं हो सकी। फिर कोशिश करें।"
 
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/HostComputerSettings.tsx
@@ -4567,6 +4578,10 @@ msgstr "इस कंप्यूटर पर Hermes इंस्टॉल न�
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes isn't available on Windows yet."
 msgstr "Hermes अभी Windows पर उपलब्ध नहीं है।"
+
+#: src/lib/hermes-refusal.ts
+msgid "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models."
+msgstr "Hermes के लिए कम से कम 64K टोकन की संदर्भ सीमा चाहिए। इस कनेक्शन के लिए इसे सेटिंग्स → मॉडल में तय करें।"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."

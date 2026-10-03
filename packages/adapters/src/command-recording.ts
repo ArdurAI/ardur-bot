@@ -3,6 +3,7 @@ import type { AdapterContext, ComputerRef, SandboxProvider } from "@ardurbot/ada
 import type { CommandBlock, CommandEventPayload } from "@ardurbot/contracts";
 import {
   COMMAND_SUPPRESSED,
+  COMMAND_TEXT_LIMIT,
   COMMAND_TRUNCATED,
   CommandEventPayloadSchema,
   CommandRequestSchema,
@@ -31,10 +32,88 @@ export function redactCommandText(text: string, secrets: string[]): string {
   return stripCommandControls(String(redactBindings({ value: masked }).value));
 }
 
-/** Known sensitive operations suppress output, including transformed/unknown credentials. */
+/**
+ * Conservative text matching, not shell evaluation. Remove quote/escape spelling tricks
+ * once so output suppression and known-value refusal share the same view of a command.
+ */
+export function normalizeShellText(value: string): string {
+  return value
+    .replace(/\$(['"])/g, "$1")
+    .replace(/\\([\s\S])/g, "$1")
+    .replace(/['"]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Suppress credential reads, not development commands that merely mention credential names.
+ * This is an output safeguard, not a shell authorization grammar; other output is redacted.
+ */
 export function sensitiveShellCommand(command: string): boolean {
-  return /(?:\b(?:printenv|env|set|export|security|keychain|secret|password|passwd|token|credential)\b|\.env\b|\.ssh\/|\.aws\/|\/proc\/.*environ)/i.test(
-    command,
+  const wrapperPrefix =
+    "(?:(?:[A-Za-z_]\\w*=[^\\s;&|()]+\\s+)|" +
+    "(?:[^\\s;&|()]+/)?(?:eval|xargs|sudo|doas|nohup|time|nice|exec|command|builtin)\\s+|" +
+    "(?:[^\\s;&|()]+/)?(?:sh|bash|zsh|dash|ksh)\\s+-(?:c|lc|ic)\\s+|" +
+    "(?:[^\\s;&|()]+/)?docker\\s+exec\\s+[^\\s;&|()]+\\s+|" +
+    "(?:[^\\s;&|()]+/)?kubectl\\s+exec\\s+[^;&|()\\n]*?\\s+--\\s+|" +
+    "(?:[^\\s;&|()]+/)?ssh\\s+[^\\s;&|()]+\\s+|" +
+    "(?:[^\\s;&|()]+/)?timeout\\s+[^\\s;&|()]+\\s+|" +
+    "(?:[^\\s;&|()]+/)?env\\s+)";
+  const position = `(?:^|[;&|()\\n])\\s*(?:${wrapperPrefix})*(?:[^\\s;&|()]+/)?`;
+  const environmentRead = new RegExp(
+    position +
+      "(?:printenv\\b|(?:(?:declare|typeset)\\s+-(?:x|p)|set|export(?:\\s+-p)?)\\s*(?=$|[;&|)<>\\n])|" +
+      "env(?:\\s+(?:-[0i]+|--null|--ignore-environment|(?:-u|--unset)\\s+\\w+|--unset=\\w+|[A-Za-z_]\\w*=[^\\s;&|()]+))*\\s*(?=$|[;&|)<>\\n]))",
+    "i",
+  );
+  const keychainRead = new RegExp(
+    position +
+      "(?:security\\s+(?:find-[\\w-]+|dump-keychain|show-keychain-info|list-keychains)\\b|keychain\\b)",
+    "i",
+  );
+  const gitGlobalOption =
+    "(?:(?:-C|-c|--git-dir|--work-tree)\\s+[^\\s;&|()]+\\s+|" +
+    "(?:--git-dir|--work-tree)=[^\\s;&|()]+\\s+|--no-pager\\s+)";
+  const credentialToolRead = new RegExp(
+    position +
+      "(?:gh\\s+auth\\s+token\\b|" +
+      "git\\s+(?:" +
+      gitGlobalOption +
+      ")*credential(?:-[\\w-]+)?\\b(?![\\w-]|\\s+--help\\s*(?:$|[;&|\\n]))|" +
+      "gpg\\s+[^;&|\\n]*--export-secret-(?:sub)?keys\\b|" +
+      "security\\s+export\\b|" +
+      "aws\\s+(?:configure\\s+export-credentials|sts\\s+(?:get-session-token|assume-role))\\b|" +
+      "gcloud\\s+auth\\s+print-(?:access|identity)-token\\b|" +
+      "az\\s+account\\s+get-access-token\\b|" +
+      "vault\\s+(?:read|kv\\s+get|token)\\b|" +
+      "op\\s+(?:read|item\\s+get)\\b|" +
+      "kubectl\\s+get\\s+secrets?\\b)",
+    "i",
+  );
+  // Retain the raw view for newlines and native path separators as well.
+  const candidates = [command, normalizeShellText(command)];
+  return candidates.some(
+    (text) =>
+      environmentRead.test(text) ||
+      keychainRead.test(text) ||
+      credentialToolRead.test(text) ||
+      /(?<![\w.-])\.env(?:[.,\s/;&|()<>"]|$)/i.test(text) ||
+      sensitiveCredentialDirectory(text),
+  );
+}
+
+/** Snapshot paths are data, not shell commands: credential files never get before/after images. */
+export function sensitiveFilePath(value: string): boolean {
+  const portable = value.replaceAll("\\", "/");
+  return /(?:^|\/)\.env(?:[./]|$)/i.test(portable) || sensitiveCredentialDirectory(portable);
+}
+
+function sensitiveCredentialDirectory(value: string): boolean {
+  return (
+    /(?:\.(?:ssh|aws|kube|gnupg)[/\\]|[/\\]proc[/\\][^\s;|&]+[/\\]environ\b)/i.test(value) ||
+    /(?:^|[/\\\s"'<>=])(?:\.(?:git-credentials|netrc|npmrc|pgpass)|\.docker[/\\]config\.json|\.config[/\\]gh[/\\]hosts\.yml|\.terraform\.d[/\\]credentials[\w.-]*)(?=$|[/\\\s"';&|)])/i.test(
+      value,
+    )
   );
 }
 
@@ -228,7 +307,22 @@ export function createCommandRecording(input: {
       command === request.command &&
       cwd === resolvedCwd &&
       (request.cwd === undefined || safe(request.cwd) === request.cwd);
-    const suppress = sensitiveShellCommand(request?.command ?? "") || !unchanged;
+    const containsKnownSecret = [request?.command, request?.cwd, resolvedCwd].some((value) => {
+      if (typeof value !== "string") return false;
+      const normalized = normalizeShellText(value);
+      const compact = normalized.replace(/\s/g, "");
+      return input.secrets.some(
+        (secret) =>
+          secret.length > 0 &&
+          (value.includes(secret) || normalized.includes(secret) || compact.includes(secret)),
+      );
+    });
+    const rawCommand = args.command ?? args.cmd;
+    const oversized =
+      typeof rawCommand === "string" &&
+      (rawCommand.length > COMMAND_TEXT_LIMIT ||
+        new TextEncoder().encode(rawCommand).byteLength > COMMAND_TEXT_LIMIT);
+    const suppress = sensitiveShellCommand(request?.command ?? "");
     // The same call resuming on its own id finishes the card the killed attempt published.
     const resumeCard = input.openCommands?.get(executionId);
     const commandId = commandIdFor(executionId);
@@ -295,10 +389,11 @@ export function createCommandRecording(input: {
     }
     try {
       const result =
-        !request || !unchanged || cwdError
+        !request || containsKnownSecret || cwdError
           ? {
-              error:
-                "This command was not run because its arguments could not be retained safely; use managed credential variables.",
+              error: oversized
+                ? "This command was not run because it exceeds 64 KB. Put code in a file and run that file."
+                : "This command was not run because its arguments could not be retained safely; use managed credential variables.",
             }
           : await tool("shell", { ...request }, executionId);
       // The earlier attempt's card already shows a finished call.

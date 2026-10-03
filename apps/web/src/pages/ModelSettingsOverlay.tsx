@@ -1,6 +1,6 @@
-import type { Me, ThinkingLevel } from "@ardurbot/contracts";
+import type { Me, ModelContextWindowSource, ThinkingLevel } from "@ardurbot/contracts";
 import {
-  DEFAULT_MODEL_CONTEXT_WINDOW,
+  DEFAULT_CONNECTION_CONTEXT_WINDOW,
   DEFAULT_MODEL_MAX_TOKENS,
   MAX_MODEL_CONTEXT_WINDOW,
   MAX_MODEL_MAX_TOKENS,
@@ -38,6 +38,7 @@ import { OllamaSettings } from "../components/OllamaSettings";
 import { ShowAllModels } from "../components/ShowAllModels";
 import { localizedProviderHint } from "../lib/localized-provider-hint";
 import type { ModelCatalogEntry, ModelCredential } from "../lib/model-auth";
+import { modelContextLabel } from "../lib/model-context-label";
 import { availableProviderModels, unavailableSubscriptionModel } from "../lib/model-options";
 import { rpc } from "../lib/rpc";
 import { thinkingLevelOptions } from "../lib/thinking-level-options";
@@ -72,7 +73,10 @@ export function ModelSettingsOverlay({
   const [reasoning, setReasoning] = useState(false);
   const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel | null>(null);
   const [maxTokens, setMaxTokens] = useState(String(DEFAULT_MODEL_MAX_TOKENS));
-  const [contextWindow, setContextWindow] = useState(String(DEFAULT_MODEL_CONTEXT_WINDOW));
+  const [contextWindow, setContextWindow] = useState(String(DEFAULT_CONNECTION_CONTEXT_WINDOW));
+  const [contextWindowSource, setContextWindowSource] =
+    useState<ModelContextWindowSource>("default");
+  const [contextWindowEdited, setContextWindowEdited] = useState(false);
   const [supportsImages, setSupportsImages] = useState(false);
   const [maxImagesPerPrompt, setMaxImagesPerPrompt] = useState("");
   const [{ models: probeModels, probing }, setProbe] = useState(initialModelProbeState);
@@ -152,7 +156,14 @@ export function ModelSettingsOverlay({
         setReasoning(nextCredential?.reasoning ?? false);
         setThinkingLevel(nextCredential?.thinkingLevel ?? null);
         setMaxTokens(String(nextCredential?.maxTokens ?? DEFAULT_MODEL_MAX_TOKENS));
-        setContextWindow(String(nextCredential?.contextWindow ?? DEFAULT_MODEL_CONTEXT_WINDOW));
+        setContextWindow(
+          String(nextCredential?.contextWindow ?? DEFAULT_CONNECTION_CONTEXT_WINDOW),
+        );
+        setContextWindowSource(
+          nextCredential?.contextWindowSource ??
+            (nextCredential?.contextWindow ? "metadata" : "default"),
+        );
+        setContextWindowEdited(false);
         setSupportsImages(nextCredential?.supportsImages ?? false);
         setMaxImagesPerPrompt(String(nextCredential?.maxImagesPerPrompt ?? ""));
       }
@@ -249,7 +260,12 @@ export function ModelSettingsOverlay({
     setReasoning(nextCredential?.reasoning ?? false);
     setThinkingLevel(nextCredential?.thinkingLevel ?? null);
     setMaxTokens(String(nextCredential?.maxTokens ?? DEFAULT_MODEL_MAX_TOKENS));
-    setContextWindow(String(nextCredential?.contextWindow ?? DEFAULT_MODEL_CONTEXT_WINDOW));
+    setContextWindow(String(nextCredential?.contextWindow ?? DEFAULT_CONNECTION_CONTEXT_WINDOW));
+    setContextWindowSource(
+      nextCredential?.contextWindowSource ??
+        (nextCredential?.contextWindow ? "metadata" : "default"),
+    );
+    setContextWindowEdited(false);
     setSupportsImages(nextCredential?.supportsImages ?? false);
     setMaxImagesPerPrompt(String(nextCredential?.maxImagesPerPrompt ?? ""));
     setModelId(
@@ -350,7 +366,7 @@ export function ModelSettingsOverlay({
               reasoning,
               thinkingLevel: reasoning ? thinkingLevel : null,
               maxTokens: parsedMaxTokens,
-              contextWindow: parsedContextWindow,
+              ...(contextWindowEdited ? { contextWindow: parsedContextWindow } : {}),
               supportsImages,
               maxImagesPerPrompt: maxImagesPerPromptInput,
               apiKey: apiKey.trim() || undefined,
@@ -622,9 +638,12 @@ export function ModelSettingsOverlay({
                       onContextWindowChange={(value) => {
                         selectionRevisionRef.current += 1;
                         setContextWindow(value);
+                        setContextWindowEdited(true);
                         setNotice(null);
                       }}
-                      contextWindowLabel={t`Context limit`}
+                      contextWindowLabel={modelContextLabel(
+                        contextWindowEdited ? "metadata" : contextWindowSource,
+                      )}
                       supportsImages={supportsImages}
                       onSupportsImagesChange={(value) => {
                         selectionRevisionRef.current += 1;
@@ -643,6 +662,11 @@ export function ModelSettingsOverlay({
                   </>
                 ) : (
                   <>
+                    {selected?.contextWindow ? (
+                      <p className="text-sm text-muted-foreground">
+                        {modelContextLabel("catalog")}: {selected.contextWindow.toLocaleString()}
+                      </p>
+                    ) : null}
                     <span>
                       <Trans>Model</Trans>
                     </span>

@@ -1,9 +1,15 @@
-import type { ModelOAuthBegin, OllamaStatus, ThinkingLevel } from "@ardurbot/contracts";
+import type {
+  ModelContextWindowSource,
+  ModelOAuthBegin,
+  OllamaStatus,
+  ThinkingLevel,
+} from "@ardurbot/contracts";
 import {
-  DEFAULT_MODEL_CONTEXT_WINDOW,
+  DEFAULT_CONNECTION_CONTEXT_WINDOW,
   DEFAULT_MODEL_MAX_TOKENS,
   MAX_MODEL_CONTEXT_WINDOW,
   MAX_MODEL_MAX_TOKENS,
+  modelContextWindowLabel,
   OPENAI_COMPATIBLE_BASE_URL_HINT,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   openAiCompatibleConnectReady,
@@ -84,7 +90,10 @@ export default function Models() {
   const [reasoning, setReasoning] = useState(false);
   const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel | null>(null);
   const [maxTokens, setMaxTokens] = useState(String(DEFAULT_MODEL_MAX_TOKENS));
-  const [contextWindow, setContextWindow] = useState(String(DEFAULT_MODEL_CONTEXT_WINDOW));
+  const [contextWindow, setContextWindow] = useState(String(DEFAULT_CONNECTION_CONTEXT_WINDOW));
+  const [contextWindowSource, setContextWindowSource] =
+    useState<ModelContextWindowSource>("default");
+  const [contextWindowEdited, setContextWindowEdited] = useState(false);
   const [supportsImages, setSupportsImages] = useState(false);
   const [maxImagesPerPrompt, setMaxImagesPerPrompt] = useState("");
   const [showEndpointHelp, setShowEndpointHelp] = useState(false);
@@ -155,7 +164,12 @@ export default function Models() {
       setReasoning(nextCredential?.reasoning ?? false);
       setThinkingLevel(nextCredential?.thinkingLevel ?? null);
       setMaxTokens(String(nextCredential?.maxTokens ?? DEFAULT_MODEL_MAX_TOKENS));
-      setContextWindow(String(nextCredential?.contextWindow ?? DEFAULT_MODEL_CONTEXT_WINDOW));
+      setContextWindow(String(nextCredential?.contextWindow ?? DEFAULT_CONNECTION_CONTEXT_WINDOW));
+      setContextWindowSource(
+        nextCredential?.contextWindowSource ??
+          (nextCredential?.contextWindow ? "metadata" : "default"),
+      );
+      setContextWindowEdited(false);
       setSupportsImages(nextCredential?.supportsImages ?? false);
       setMaxImagesPerPrompt(String(nextCredential?.maxImagesPerPrompt ?? ""));
     }
@@ -240,7 +254,12 @@ export default function Models() {
     setReasoning(nextCredential?.reasoning ?? false);
     setThinkingLevel(nextCredential?.thinkingLevel ?? null);
     setMaxTokens(String(nextCredential?.maxTokens ?? DEFAULT_MODEL_MAX_TOKENS));
-    setContextWindow(String(nextCredential?.contextWindow ?? DEFAULT_MODEL_CONTEXT_WINDOW));
+    setContextWindow(String(nextCredential?.contextWindow ?? DEFAULT_CONNECTION_CONTEXT_WINDOW));
+    setContextWindowSource(
+      nextCredential?.contextWindowSource ??
+        (nextCredential?.contextWindow ? "metadata" : "default"),
+    );
+    setContextWindowEdited(false);
     setSupportsImages(nextCredential?.supportsImages ?? false);
     setMaxImagesPerPrompt(String(nextCredential?.maxImagesPerPrompt ?? ""));
     setModelId(
@@ -352,7 +371,7 @@ export default function Models() {
               reasoning,
               thinkingLevel: reasoning ? thinkingLevel : null,
               maxTokens: parsedMaxTokens,
-              contextWindow: parsedContextWindow,
+              ...(contextWindowEdited ? { contextWindow: parsedContextWindow } : {}),
               supportsImages,
               maxImagesPerPrompt: maxImagesPerPromptInput,
               apiKey: apiKey.trim() || undefined,
@@ -695,13 +714,26 @@ export default function Models() {
                 ) : null}
                 {showAdvanced ? (
                   <View style={styles.modelRow}>
-                    <Text style={styles.modelLabel}>{t("Context limit")}</Text>
+                    <Text style={styles.modelLabel}>
+                      {t(
+                        modelContextWindowLabel(
+                          contextWindowEdited ? "metadata" : contextWindowSource,
+                        ),
+                      )}
+                    </Text>
                     <TextInput
-                      accessibilityLabel={t("Context limit")}
+                      accessibilityLabel={t(
+                        modelContextWindowLabel(
+                          contextWindowEdited ? "metadata" : contextWindowSource,
+                        ),
+                      )}
                       editable={!busy}
                       keyboardType="number-pad"
                       maxLength={7}
-                      onChangeText={setContextWindow}
+                      onChangeText={(value) => {
+                        setContextWindow(value);
+                        setContextWindowEdited(true);
+                      }}
                       style={[styles.keyInput, styles.maxImagesInput]}
                       value={contextWindow}
                     />
@@ -774,6 +806,11 @@ export default function Models() {
                 ))}
               </View>
             )}
+            {!isOpenAiCompatible && selected.contextWindow ? (
+              <Text style={styles.helpLabel}>
+                {t(modelContextWindowLabel("catalog"))}: {selected.contextWindow.toLocaleString()}
+              </Text>
+            ) : null}
             {!isOpenAiCompatible && selected.billing ? (
               <Text style={styles.billing}>
                 {provider === "anthropic"

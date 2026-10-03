@@ -3,6 +3,8 @@ import type { CommandRequest } from "@ardurbot/adapter-kit";
 import { isAllowedDesktopPath } from "./desktop-sandbox-paths.js";
 import { getHostEnvironment, resolveHostBinary } from "./host-environment.js";
 
+export const FILE_LOCATION_REFUSAL = "Use a path inside this bot's folder or a registered folder.";
+
 export async function confinedHostCwd(candidate: string, roots: string[]) {
   if (candidate.includes("\0") || candidate.split(/[/\\]/u).includes(".."))
     throw new Error("Path escapes registered folders.");

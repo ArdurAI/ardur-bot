@@ -64,7 +64,12 @@ import {
   seatbeltProfile,
 } from "./host-guardrails.js";
 import { verifyHostIntegration } from "./host-integrations.js";
-import { confinedHostCwd, hostCommand, resolvedRoots } from "./host-policy.js";
+import {
+  confinedHostCwd,
+  FILE_LOCATION_REFUSAL,
+  hostCommand,
+  resolvedRoots,
+} from "./host-policy.js";
 
 const O_NOFOLLOW = constants.O_NOFOLLOW ?? 0;
 
@@ -365,21 +370,33 @@ export class DesktopSandboxProvider implements SandboxProvider {
     _context: AdapterContext,
   ): Promise<ComputerFileEntry[]> {
     const box = this.requiredBox(computer);
-    const relative = normalizeWorkspacePath(directory);
-    const target = await localWorkspaceTarget(box.home, relative, true);
-    this.assertNotGuarded((await this.guardrail()).paths, target);
+    const { root, target } = await this.fileTarget(box.home, directory, true);
+    const resolvedRoot = await realpath(root);
+    const relative = path.isAbsolute(directory) ? directory : normalizeWorkspacePath(directory);
+    const guarded = (await this.guardrail()).paths;
+    this.assertNotGuarded(guarded, target);
     const entries = this.opts.restricted
       ? await boundedDirectoryEntries(target)
       : await readdir(target, { withFileTypes: true });
     const listed = await Promise.all(
       entries.map(async (entry) => {
-        const listedPath = relative ? `${relative}/${entry.name}` : entry.name;
+        const listedPath = path.isAbsolute(directory)
+          ? path.join(directory, entry.name)
+          : relative
+            ? `${relative}/${entry.name}`
+            : entry.name;
         // POSIX permits literal backslashes. List their metadata without treating them as
         // separators or following a link; clients can reject unsupported names individually.
         const literalName = process.platform !== "win32" && entry.name.includes("\\");
         const child = literalName
           ? path.join(target, entry.name)
-          : await localWorkspaceTarget(box.home, listedPath, true);
+          : await localWorkspaceTarget(
+              resolvedRoot,
+              path.relative(resolvedRoot, path.join(target, entry.name)),
+              true,
+              (candidate) => this.assertNotGuarded(guarded, candidate),
+            );
+        this.assertNotGuarded(guarded, child);
         const info = literalName ? await lstat(child) : await stat(child);
         return {
           path: listedPath,
@@ -399,11 +416,11 @@ export class DesktopSandboxProvider implements SandboxProvider {
     options?: { maxBytes?: number; preview?: boolean },
   ) {
     const box = this.requiredBox(computer);
-    const target = await localWorkspaceTarget(box.home, filePath, true);
+    const { root, target } = await this.fileTarget(box.home, filePath, true);
     this.assertNotGuarded((await this.guardrail()).paths, target);
     if (this.opts.restricted)
       return readContainedWorkspaceFile(
-        box.home,
+        root,
         target,
         Math.min(
           options?.maxBytes ?? HOST_FILE_BYTES,
@@ -415,20 +432,22 @@ export class DesktopSandboxProvider implements SandboxProvider {
     if (options?.maxBytes !== undefined && info.size > options.maxBytes) {
       throw new Error(`computer file exceeds ${options.maxBytes} bytes`);
     }
-    return new Uint8Array(await readFile(target));
+    // Source mode uses the same held-handle containment checks as a paired host.
+    return readContainedWorkspaceFile(
+      root,
+      target,
+      options?.maxBytes ?? info.size,
+      options?.preview,
+    );
   }
 
   async writeFile(computer: ComputerRef, file: PortableFile) {
     if (this.opts.restricted && process.platform === "win32" && !win32NtRelativeAvailable())
       throw new Error("Host file writes require native directory handles on Windows.");
     const box = this.requiredBox(computer);
-    const target = await localWorkspaceTarget(box.home, file.path, false);
+    const { root, target } = await this.fileTarget(box.home, file.path, false);
     this.assertNotGuarded((await this.guardrail()).paths, target);
-    const handle = await openContainedWorkspaceFile(
-      box.home,
-      target,
-      file.executable ? 0o700 : 0o600,
-    );
+    const handle = await openContainedWorkspaceFile(root, target, file.executable ? 0o700 : 0o600);
     try {
       await handle.truncate(0);
       await handle.writeFile(file.content);
@@ -495,6 +514,36 @@ export class DesktopSandboxProvider implements SandboxProvider {
     const box = this.boxFor(computer);
     if (!box) throw new Error("computer not found");
     return box;
+  }
+
+  /** Select a trusted root before using the existing race-resistant contained file helpers. */
+  private async fileTarget(home: string, requested: string, mustExist: boolean) {
+    if (requested.includes("\0") || requested.split(/[/\\]/u).includes(".."))
+      throw new Error(FILE_LOCATION_REFUSAL);
+    let root = home;
+    let relative = requested;
+    if (path.isAbsolute(requested)) {
+      const roots = await this.allowedRoots(home);
+      const available = [...roots, ...(await resolvedRoots(roots))];
+      const match = available.find((candidate) => isAllowedDesktopPath(requested, [candidate]));
+      if (!match) throw new Error(FILE_LOCATION_REFUSAL);
+      root = match;
+      relative = path.relative(root, requested);
+    }
+    const guarded = (await this.guardrail()).paths;
+    // Check before creating missing parents, as well as after realpath resolution.
+    this.assertNotGuarded(guarded, path.resolve(await realpath(root), relative));
+    try {
+      const target = await localWorkspaceTarget(root, relative, mustExist, (candidate) =>
+        this.assertNotGuarded(guarded, candidate),
+      );
+      this.assertNotGuarded(guarded, target);
+      return { root, target };
+    } catch (error) {
+      if (error instanceof Error && error.message === "Path escapes the computer workspace")
+        throw new Error(FILE_LOCATION_REFUSAL);
+      throw error;
+    }
   }
 
   private async allowedRoots(home: string) {
@@ -577,7 +626,12 @@ async function readContainedWorkspaceFile(
   }
 }
 
-async function localWorkspaceTarget(home: string, relative: string, mustExist: boolean) {
+async function localWorkspaceTarget(
+  home: string,
+  relative: string,
+  mustExist: boolean,
+  assertTarget?: (target: string) => void,
+) {
   const normalized = normalizeDesktopWorkspacePath(relative);
   const candidate = path.resolve(home, normalized);
   if (!isAllowedDesktopPath(candidate, [home]))
@@ -598,6 +652,7 @@ async function localWorkspaceTarget(home: string, relative: string, mustExist: b
         // Re-bind the held parent immediately before create so a junction swap cannot
         // redirect pathname mkdir outside the workspace.
         current = await assertContainedDirectoryHandle(parentHandle, current, resolvedHome);
+        assertTarget?.(path.join(current, segment));
         let created: { path: string; dev: number; ino: number } | undefined;
         try {
           if (useWin32Relative) {

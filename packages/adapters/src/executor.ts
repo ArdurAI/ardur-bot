@@ -55,6 +55,7 @@ import {
   RoutingRuleSchema,
   RuntimeKindSchema,
   RuntimePinError,
+  resolveModelContextWindow,
   runtimePinProblem,
   runtimeSupportsTools,
   TaskCardRequestSchema,
@@ -289,7 +290,7 @@ import {
   teamBotWorkspaceDirectory,
 } from "./computer-support.js";
 import { observationToolResult, parseComputerActions } from "./computer-tools.js";
-import { checkpointRunComputerWorkspace, isRemoteHostAbsolutePath } from "./computer-workspace.js";
+import { checkpointRunComputerWorkspace, isHostAbsolutePath } from "./computer-workspace.js";
 import { sanitizeConnectorError } from "./connector-safety.js";
 import { assembleTurnContext } from "./context/assemble.js";
 import { claimBotRun } from "./context/concurrency.js";
@@ -1343,6 +1344,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
       reasoning: resolved.reasoning,
       maxTokens: resolved.maxTokens,
       contextWindow: resolved.contextWindow,
+      contextWindowSource: resolved.contextWindowSource,
       acceptsImages: resolved.acceptsImages,
       maxImagesPerPrompt: resolved.maxImagesPerPrompt,
       thinkingLevel: resolved.thinkingLevel ?? null,
@@ -3242,7 +3244,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           const toolDirectory =
             helperWorkspaces.get(helperToolDelegations.get(executionId) ?? "") ?? taskDirectory;
           const toolWorkspacePath = (value: string) =>
-            isRemoteHostAbsolutePath(computer, value)
+            isHostAbsolutePath(computer, value)
               ? value
               : toolDirectory
                 ? taskWorkspacePath(toolDirectory, value)
@@ -4179,7 +4181,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               path: requestedPath,
               entries: entries.map((entry) => ({
                 ...entry,
-                path: isRemoteHostAbsolutePath(computer, entry.path)
+                path: isHostAbsolutePath(computer, entry.path)
                   ? entry.path
                   : displayBotWorkspacePath(computerMode, bot.id, requestedPath, entry.path),
               })),
@@ -8277,6 +8279,7 @@ export async function resolveModelKey(
   reasoning?: boolean;
   maxTokens?: number;
   contextWindow?: number;
+  contextWindowSource?: AgentRunRequest["model"]["contextWindowSource"];
   thinkingLevel?: AgentRunRequest["model"]["thinkingLevel"];
   acceptsImages?: boolean;
   maxImagesPerPrompt?: number;
@@ -8396,8 +8399,9 @@ export async function resolveModelKey(
           resolved.secret.kind === "openai_compatible" ? resolved.secret.reasoning : undefined,
         maxTokens:
           resolved.secret.kind === "openai_compatible" ? resolved.secret.maxTokens : undefined,
-        contextWindow:
-          resolved.secret.kind === "openai_compatible" ? resolved.secret.contextWindow : undefined,
+        ...(resolved.secret.kind === "openai_compatible"
+          ? resolveModelContextWindow(resolved.secret.contextWindow)
+          : {}),
         thinkingLevel:
           resolved.secret.kind === "openai_compatible" ? resolved.secret.thinkingLevel : undefined,
         acceptsImages,
