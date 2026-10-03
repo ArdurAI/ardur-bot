@@ -12,29 +12,18 @@ vi.mock("../../../lib/rpc", () => ({
 vi.mock("@lingui/react/macro", () => ({
   useLingui: () => ({ t: (s: TemplateStringsArray) => s.join("") }),
 }));
-vi.mock("@ardurbot/ui-web", () => ({
-  Dialog: ({ children }: { children: ReactNode }) => children,
-  DialogContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  DialogTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
-  Button: ({ variant: _variant, ...props }: ComponentProps<"button"> & { variant?: string }) => (
-    <button {...props} />
-  ),
-  Checkbox: ({
-    checked,
-    onCheckedChange,
-    ...props
-  }: { checked: boolean; onCheckedChange: (v: boolean) => void } & Omit<
-    ComponentProps<"input">,
-    "onChange"
-  >) => (
-    <input
-      type="checkbox"
-      checked={checked}
-      onChange={(e) => onCheckedChange(e.target.checked)}
-      {...props}
-    />
-  ),
-}));
+vi.mock("@ardurbot/ui-web", async () => {
+  const { Checkbox } = await import("@ardurbot/ui-web/components/ui/checkbox");
+  return {
+    Dialog: ({ children }: { children: ReactNode }) => children,
+    DialogContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+    DialogTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
+    Button: ({ variant: _variant, ...props }: ComponentProps<"button"> & { variant?: string }) => (
+      <button {...props} />
+    ),
+    Checkbox,
+  };
+});
 afterEach(() => vi.clearAllMocks());
 const facts = {
   revision: 1,
@@ -60,6 +49,7 @@ const facts = {
 it("preselects only annotated reads and grants nothing until selected is saved", async () => {
   vi.mocked(rpc.integrations.toolReview).mockResolvedValue(facts);
   const node = document.createElement("div");
+  document.body.append(node);
   const root = createRoot(node);
   const saved = vi.fn();
   await act(async () =>
@@ -67,9 +57,15 @@ it("preselects only annotated reads and grants nothing until selected is saved",
       <BotToolReview connectionId="connection" botId="bot" onClose={() => {}} onSaved={saved} />,
     ),
   );
-  expect(node.querySelector<HTMLInputElement>('[aria-label="read_item"]')?.checked).toBe(true);
-  expect(node.querySelector<HTMLInputElement>('[aria-label="write_item"]')?.checked).toBe(false);
-  expect(node.querySelector<HTMLInputElement>('[aria-label="get_unknown"]')?.checked).toBe(false);
+  expect(node.querySelector<HTMLInputElement>('input[id$="-read_item"]')?.checked).toBe(true);
+  expect(node.querySelector<HTMLInputElement>('input[id$="-write_item"]')?.checked).toBe(false);
+  expect(node.querySelector<HTMLInputElement>('input[id$="-get_unknown"]')?.checked).toBe(false);
+  const readInput = node.querySelector<HTMLInputElement>('input[id$="-read_item"]')!;
+  const label = readInput.closest("label")!;
+  const checkbox = label.querySelector('[role="checkbox"]')!;
+  expect(checkbox.getAttribute("aria-labelledby")).toBe(label.id);
+  expect(checkbox.hasAttribute("aria-label")).toBe(false);
+  expect(label.textContent?.trim()).toBe("read_item");
   expect(rpc.integrations.reviewTools).not.toHaveBeenCalled();
   await act(async () =>
     Array.from(node.querySelectorAll("button"))
@@ -85,10 +81,12 @@ it("preselects only annotated reads and grants nothing until selected is saved",
   });
   expect(saved).toHaveBeenCalledOnce();
   await act(async () => root.unmount());
+  node.remove();
 });
 it("saves all captured tools only after the explicit Allow all action", async () => {
   vi.mocked(rpc.integrations.toolReview).mockResolvedValue(facts);
   const node = document.createElement("div");
+  document.body.append(node);
   const root = createRoot(node);
   await act(async () =>
     root.render(<BotToolReview connectionId="connection" onClose={() => {}} onSaved={() => {}} />),
@@ -107,6 +105,7 @@ it("saves all captured tools only after the explicit Allow all action", async ()
     approveSpace: false,
   });
   await act(async () => root.unmount());
+  node.remove();
 });
 it("requires a separate explicit choice before widening an empty space ceiling", async () => {
   vi.mocked(rpc.integrations.toolReview).mockResolvedValue({
@@ -115,6 +114,7 @@ it("requires a separate explicit choice before widening an empty space ceiling",
     spaceNeedsReview: true,
   });
   const node = document.createElement("div");
+  document.body.append(node);
   const root = createRoot(node);
   await act(async () =>
     root.render(
@@ -133,4 +133,5 @@ it("requires a separate explicit choice before widening an empty space ceiling",
     expect.objectContaining({ approveSpace: true, toolIds: ["read_item"] }),
   );
   await act(async () => root.unmount());
+  node.remove();
 });

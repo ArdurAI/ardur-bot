@@ -123,7 +123,6 @@ export function BotToolReview({
                     >
                       <Checkbox
                         id={`${controlId}-${tool.id}`}
-                        aria-label={tool.id}
                         checked={selected.includes(tool.id)}
                         disabled={
                           busy ||

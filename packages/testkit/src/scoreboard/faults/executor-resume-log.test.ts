@@ -369,7 +369,9 @@ function harness(mode: Mode, encryptionKey = "resume-log-encryption-key") {
         return { count: 1 };
       }),
     },
+    mcpServer: { findMany: vi.fn(async () => []) },
     bot: {
+      findFirst: vi.fn(async () => ({ id: run.botId, computer })),
       findUniqueOrThrow: vi.fn(async () => ({
         id: run.botId,
         name: "Assistant",

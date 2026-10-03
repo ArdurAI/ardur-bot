@@ -271,7 +271,9 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
         return { count: 1 };
       }),
     },
+    mcpServer: { findMany: vi.fn(async () => []) },
     bot: {
+      findFirst: vi.fn(async () => ({ id: run.botId, computer })),
       findUniqueOrThrow: vi.fn(async () => ({
         id: run.botId,
         name: "Assistant",
