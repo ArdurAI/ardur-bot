@@ -3,7 +3,7 @@ import { IDE_DIFF_BYTES } from "@ardurbot/contracts";
 import { redactSecrets } from "@ardurbot/core";
 import type { ThreadEvents } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
-import { sensitiveShellCommand } from "./command-recording.js";
+import { sensitiveFilePath } from "./command-recording.js";
 
 export function fileChangeText(bytes: Uint8Array, secrets: string[] = []) {
   if (bytes.length > IDE_DIFF_BYTES || bytes.includes(0)) return null;
@@ -20,7 +20,7 @@ export async function beforeFileChange(
   context: AdapterContext,
   secrets: string[],
 ) {
-  if (sensitiveShellCommand(path.replaceAll("\\", "/"))) return null;
+  if (sensitiveFilePath(path)) return null;
   try {
     return fileChangeText(
       await sandbox.readFile(computer, path, context, { maxBytes: IDE_DIFF_BYTES }),
@@ -52,9 +52,7 @@ export async function recordFileChange(
       type: "computer.file.changed",
       payload: {
         ...change,
-        ...(sensitiveShellCommand(change.path.replaceAll("\\", "/"))
-          ? { before: null, after: null }
-          : {}),
+        ...(sensitiveFilePath(change.path) ? { before: null, after: null } : {}),
         path: redactSecrets(change.path, secrets),
       },
     });

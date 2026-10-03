@@ -16,6 +16,7 @@ import {
 import { getLogger } from "@ardurbot/logging";
 import type { PoolClient } from "pg";
 import { returnBotMessageOutcome } from "./bot-messages.js";
+import { wakeChiefAfterControl } from "./chief-control.js";
 import { scheduleComputerControlExpiry } from "./computer-control.js";
 import { wakeGoalAfterDelegation } from "./goal-wake.js";
 import { wakeCoordinatorAfterAsk } from "./group-ask.js";
@@ -188,6 +189,14 @@ export function createJobReconciler(
     }
 
     const now = new Date();
+    if (deps.prisma.chiefAssignment) {
+      const assignments = await deps.prisma.chiefAssignment.findMany({
+        where: { plan: { control: { path: ["pendingReplan"], equals: true } } },
+        take: batchSize,
+        orderBy: { runId: "asc" },
+      });
+      for (const assignment of assignments) await wakeChiefAfterControl(deps, assignment.runId);
+    }
     controlScanDeadline ??= new Date(now.getTime() + CONTROL_LOOKAHEAD_MS);
     const runCursorFilter = runCursor
       ? {

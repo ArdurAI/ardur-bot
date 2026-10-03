@@ -199,6 +199,40 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 describe("IDE page", () => {
+  it("keeps authorized host roots editable on the legacy IDE route", async () => {
+    api.roots.mockResolvedValue([
+      {
+        id: "host-project",
+        kind: "host",
+        path: "/workspace/project",
+        computerId: null,
+        botId: null,
+        name: "Project",
+      },
+    ]);
+    await act(async () => renderer.render(null));
+    await act(async () =>
+      renderer.render(
+        <BrowserRouter>
+          <Routes>
+            <Route path="/app/ide" element={<IdePageWithShortcuts />} />
+          </Routes>
+        </BrowserRouter>,
+      ),
+    );
+    await tick();
+    await click("readme.md");
+    expect(window.location.pathname).toBe("/app/ide");
+    expect(host.querySelector('select[aria-label="Computer"]')?.textContent).toContain(
+      "This computer · /workspace/project",
+    );
+    expect(api.read).toHaveBeenLastCalledWith({ rootId: "host-project", path: "readme.md" });
+    await type(host.querySelector("textarea[data-editor]")!, "host draft");
+    await click("Save");
+    expect(api.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({ rootId: "host-project", content: "host draft" }),
+    );
+  });
   it("preserves mounted nested folders and their expansion while refreshed rows load", async () => {
     api.list.mockImplementation(async ({ path }) => ({
       hiddenCount: 0,

@@ -22,6 +22,15 @@ mobile through its own catalogs (English source plus ru and zh).
 | `destinations-bot` | the bot's allowed model destinations block the model | open the bot's destinations settings (or the model pin settings) |
 | `destinations-space` | the space's model policy blocks the model | open Settings at Models (or the model pin settings) |
 | `stopped` | the run or worker was stopped before finishing | none |
+| `model-context-too-small` | the pinned runtime needs a model with at least 64K context | open the model pin settings |
+| `session-start-failed` | the runtime did not complete its session handshake | retry after checking the runtime |
+| `runtime-tool-catalog-mismatch` | the tool list differs from the confirmed startup list | retry after checking the cause |
+| `runtime-profile-unacknowledged` | the runtime did not confirm its effective settings | retry after checking the cause |
+| `provider-request-too-large` | the model request exceeded a byte limit | retry after checking the cause |
+| `provider-response-too-large` | the model response exceeded a byte limit | retry after checking the cause |
+| `provider-grant-refused` | the model request was outside the run grant or its grant expired | retry after checking the cause |
+| `provider-auth-failed` | the provider returned HTTP 401 or 403 | open the model pin settings |
+| `provider-request-failed` | the provider failed with an HTTP error other than 401, 403 or 429, or an unknown safe reason | retry after checking the cause |
 | `other` | any failure the signals above do not name | none |
 
 A category's entry also carries the sentences for the group-model and handoff contexts

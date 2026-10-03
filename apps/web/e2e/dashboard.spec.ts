@@ -217,9 +217,7 @@ test("Dashboard opens first, preserves Bots navigation and approves through the 
   await expect(page.getByText("Waiting for your approval", { exact: true })).toBeVisible();
   await expect(page.getByText("Partially reported").first()).toBeVisible();
   const governance = page.locator('[data-panel="governance"]');
-  await expect(governance.getByRole("link")).toHaveText(
-    "Governance and encryption are not part of this build yet.",
-  );
+  await expect(governance.getByRole("link")).toHaveText("About evidence");
   await expect(governance.getByRole("button")).toHaveCount(0);
   await captureScreenshot(page, testInfo, "dashboard-overview");
   await page.getByRole("button", { name: "Allow once", exact: true }).click();

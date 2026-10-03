@@ -107,6 +107,10 @@ pinned to one is refused, and any other sign-in connection is refused the same
 way. A run on an Anthropic sign-in saved by an older version is refused with
 "Reconnect with an API key." The chosen connection
 must have a bounded context window and an output limit at most 65,536 tokens.
+The pinned runtime rejects a model context window below 64,000 tokens. That
+session-start refusal shows “Hermes needs a model with at least 64K context;
+change the model and try again.” The context limit in bot settings controls
+Ardur’s supplied instructions, not the model’s context window.
 Effort is a requested value; seeing the outbound field does not prove the provider
 applied it. The bot and run keep their exact credential, model, effort and revision.
 Group member model choices must pass the same compatibility check. An admitted run
@@ -159,3 +163,83 @@ unavailable. Browser screenshot execution and packaged desktop acceptance also
 require their own lanes. No benchmark result should mix Ardur/Hermes with the
 built-in runtime or Hermes standalone. The five comparison identities are
 Ardur/built-in, Ardur/Hermes, Hermes standalone, Ardur/Prime and Prime standalone.
+
+
+## Model context limit
+
+Hermes needs a model context limit of at least 64,000 tokens. The model picker
+checks the connection on the server before saving and names **Settings → Models**
+when the limit is too small. Exactly 64,000 is accepted. The built-in runtime can
+still use a smaller saved window.
+
+In **Settings → Models**, the context field shows the resolved connection limit.
+Saved metadata wins over provider catalog facts. When neither is known, compatible
+connections use 65,536 with **Context limit (estimated)**. An untouched estimate is
+not saved as metadata. Hermes uses that estimate; the built-in runtime keeps its
+conservative 32,768 budget until metadata or catalog capacity is known. Known catalog limits show **Context limit (from the provider)**.
+The compatible endpoint catalog currently lists model IDs, not endpoint-qualified
+context lengths, so those connections use saved metadata or the explicit estimate.
+
+This is separate from a bot's **Context limit (KiB)**, which bounds the text Ardur
+supplies to a turn. Changing that byte limit does not change the model's capacity.
+An estimate is not proof of actual capacity; set the provider's documented limit
+if it differs. No provider, model, effort, source pin or runtime fallback changes.
+
+## Failure recovery
+
+Only confirmed safe causes receive a specific sentence. An unknown startup
+exception keeps the generic session-start message; a tool count alone is not a
+diagnosis.
+
+| Confirmed cause | Sentence | Next step |
+| --- | --- | --- |
+| Model context below 64,000 tokens | Hermes needs a model with at least 64K context; change the model and try again. | Change the model. |
+| the tool list differs from the confirmed startup list | Hermes's tool list changed during startup. Check the connected tools and try again. | Check the named cause and try again. |
+| the runtime did not confirm its effective settings | Hermes's settings were not confirmed. Check this bot's settings and try again. | Check the named cause and try again. |
+| the model request exceeded a byte limit | Hermes's model request was too large. Narrow the task and try again. | Check the named cause and try again. |
+| the model response exceeded a byte limit | Hermes's model response was too large. Narrow the task and try again. | Check the named cause and try again. |
+| the model request was outside the run grant or its grant expired | Hermes's model request was outside this run's allowance. Narrow the task and try again. | Check the named cause and try again. |
+| the provider returned HTTP 401 or 403 | Hermes's model provider rejected the connection key. Check it in Settings, under Models. | Check the connection key. |
+| the provider failed with an HTTP error other than 401, 403 or 429, or an unknown safe reason | Hermes's model request failed. Check the connection in Settings, under Models, and try again. | Check the named cause and try again. |
+
+Tool names in the profile allow-list, progress gate and provider broker share the
+pinned MCP naming rule. Connected names containing punctuation use the same
+underscores Hermes registers. Collisions are refused before a child is launched;
+this does not grant any additional tool access.
+
+Both main and tools-free summary requests accept the pinned streaming
+`stream_options: { include_usage: true }`. Other streaming options and a streaming
+option on a non-streaming request remain refused. Profile acknowledgment is still
+required for summary turns.
+
+Provider failure logs contain only a fixed reason, a fixed grant-refusal category
+when known, and a validated HTTP status when available. They never include the request body, headers, raw exception text,
+cause, or private ACP error data. Normal ACP summaries keep their existing
+redaction boundary. Unknown provider errors remain unknown rather than being
+guessed from their prose.
+
+### Grant-refusal diagnostics
+
+The visible allowance sentence remains unchanged. A category in the safe log
+identifies the failed check, not the private value or a confirmed incident cause.
+
+| Safe category | Failed check | Investigation |
+| --- | --- | --- |
+| `model` | Exact pinned model | Compare the launcher and grant model identities without recording their values. |
+| `output-tokens` | Output cap or conflicting cap fields | Compare the launcher cap with the grant; do not raise the grant. |
+| `tools`, `tool-choice` | Granted tool list or selection | Check the consented catalog and pinned name translation. |
+| `messages` | Message shape or supported roles/content | Reproduce the unsupported shape with fake content. |
+| `effort` | Shared effort validation | Check the pinned effort and route before changing the request. |
+| `stream-options`, `sampling` | Strict streaming or sampling fields | Reproduce the unsupported shape; keep validation strict. |
+| `context` | Required Ardur context absent from prepared messages | Check whether context loading, scanning or truncation changed the supplied document. |
+| `request-bytes` | Encoded admitted body over its byte limit | Narrow the task; keep the byte limit. |
+| `run-budget` | Reservation invalid or started receipt could not commit | Inspect admission/persistence safely; this category alone does not prove budget exhaustion. |
+| `grant` | Grant identity, scope, lifecycle or active-run check | Check expiry, lease and revocation; never reuse another run's grant. |
+| `unknown-field:<fixed name>` | Unsupported known request field | Reproduce that field with fake data before admitting it. |
+| `unknown-field` | Any other unsupported field | Arbitrary names and all values stay out of the log. |
+
+Known field names come from a fixed list. Typed failures and message-only paired
+host callbacks preserve the category; unknown exception text still becomes a
+generic provider failure. The HTTP response and conversation do not expose the
+category, request body, headers or private error data. Old peers can retain the
+generic provider failure when they do not recognize the newer fixed signature.

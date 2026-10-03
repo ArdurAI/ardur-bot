@@ -147,7 +147,7 @@ test("later bot waits before showing the focus card; sending cancels it", async 
   await expect(page.getByText("What do you want me on first?", { exact: true })).toHaveCount(0);
 });
 
-test("plus picker offers setup instead of treating the fake engine as isolated", async ({
+test("plus picker creates a dedicated bot on the deployment sandbox without a container claim", async ({
   page,
 }, testInfo) => {
   const stamp = Date.now();
@@ -159,14 +159,27 @@ test("plus picker offers setup instead of treating the fake engine as isolated",
   const form = page.getByTestId("create-bot-form");
   await form.locator("label:has-text('Name') input").fill("New Bot");
   await expect(form.getByTestId("create-bot-private")).toHaveAttribute("aria-pressed", "true");
-  await expect(
-    form.getByText("Set up a container for isolated work.", { exact: true }),
-  ).toBeVisible();
-  await expect(form.getByRole("button", { name: "Create", exact: true })).toBeDisabled();
+  await expect(form.getByRole("button", { name: "Sandbox", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(form.getByRole("button", { name: "Create", exact: true })).toBeEnabled();
+  await expect(form.getByRole("button", { name: "Sandbox", exact: true })).toContainText(
+    "For testing only; not an isolation boundary.",
+  );
   await captureScreenshot(page, testInfo, "create-private-computer-bot");
-
+  const created = page.waitForResponse(
+    (response) => response.url().includes("/rpc/bots/create") && response.ok(),
+  );
+  await form.getByRole("button", { name: "Create", exact: true }).click();
+  const response = await created;
+  expect(response.request().postDataJSON().json).not.toHaveProperty("isolatedComputer");
+  await expect(page.getByPlaceholder("Message New Bot")).toBeVisible();
   const bots = await rpc<Array<{ id: string; computerMode: string }>>(page, "bots/list", {});
-  expect(bots).toHaveLength(1);
+  expect(bots).toHaveLength(2);
+  const bot = (await response.json()).json as { id: string };
+  expect(bots.find((entry) => entry.id === bot.id)?.computerMode).toBe("dedicated");
+  expect(await rpc(page, "computer/status", { botId: bot.id })).toMatchObject({ kind: "fake" });
 });
 
 test("second bot from plus opens create form before persist", async ({ page }, testInfo) => {

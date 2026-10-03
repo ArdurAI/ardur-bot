@@ -108,6 +108,13 @@ export const IntegrationManifestSchema = z
             id: z.string().min(1).max(200),
             description: z.string().max(8000),
             inputSchemaDigest: z.string().regex(/^[a-f0-9]{64}$/),
+            annotations: z
+              .object({
+                readOnlyHint: z.boolean().optional(),
+                destructiveHint: z.boolean().optional(),
+              })
+              .strict()
+              .optional(),
           })
           .strict(),
       )
@@ -231,3 +238,38 @@ export const IntegrationCatalogListSchema = z.object({
   hostSignIns: z.array(HostIntegrationSchema).optional(),
 });
 export type IntegrationCatalogList = z.infer<typeof IntegrationCatalogListSchema>;
+
+/** Connection health and permission to use tools are separate facts. */
+export function integrationToolsNeedReview(
+  connection: { needsReview?: boolean; spaceAllowedTools?: readonly string[] },
+  grant?: { access?: string; needsReview?: boolean; toolIds?: readonly string[] },
+): boolean {
+  if (grant?.access === "none") return false;
+  return Boolean(
+    connection.needsReview ||
+      grant?.needsReview ||
+      !connection.spaceAllowedTools?.length ||
+      (grant?.access === "custom" &&
+        !grant.toolIds?.some((id) => connection.spaceAllowedTools?.includes(id))),
+  );
+}
+export const BotIntegrationAvailabilitySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  toolsNeedReview: z.boolean().default(false),
+});
+export type BotIntegrationAvailability = z.infer<typeof BotIntegrationAvailabilitySchema>;
+
+/** Hints describe defaults only; they never confer permission or bypass approval. */
+export function mcpReviewToolKind(tool: IntegrationManifest["tools"][number]): "read" | "write" {
+  return tool.annotations?.readOnlyHint === true && tool.annotations.destructiveHint !== true
+    ? "read"
+    : "write";
+}
+export const IntegrationToolReviewSchema = z.object({
+  revision: z.number().int().nonnegative(),
+  manifest: IntegrationManifestSchema,
+  spaceAllowedTools: z.array(z.string()),
+  canApproveSpace: z.boolean(),
+  spaceNeedsReview: z.boolean(),
+});

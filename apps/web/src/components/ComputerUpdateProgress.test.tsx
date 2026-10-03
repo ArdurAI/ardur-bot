@@ -82,6 +82,24 @@ async function mounted(update: ComputerUpdate, run: (container: HTMLDivElement) 
   }
 }
 
+it("keeps the existing release confirmation in the update banner", async () => {
+  await mounted(
+    { ...base, status: "interrupted", canReleaseReservation: true },
+    async (container) => {
+      const button = (label: string) =>
+        [...container.querySelectorAll("button")].find((entry) => entry.textContent === label)!;
+      await act(async () => button("Release computer").click());
+      expect(container.textContent).toContain("Release interrupted computer?");
+      expect(container.textContent).toContain(
+        "Make sure nothing is still running on this computer.",
+      );
+      expect(client.releaseInterrupted).not.toHaveBeenCalled();
+      await act(async () => button("Nothing is still running").click());
+      expect(client.releaseInterrupted).toHaveBeenCalledExactlyOnceWith(base.id);
+    },
+  );
+});
+
 it("offers Recover and the generic warning for a failure with no reason", async () => {
   await mounted(base, async (container) => {
     expect(container.textContent).toContain(
@@ -90,6 +108,29 @@ it("offers Recover and the generic warning for a failure with no reason", async 
     expect(
       [...container.querySelectorAll("button")].some((b) => b.textContent === "Recover computer"),
     ).toBe(true);
+  });
+});
+
+it.each([
+  ["source-not-running", "The computer stopped before its workspace could be saved."],
+  ["source-missing", "The computer or its workspace could not be found."],
+  ["engine-unreachable", "The computer's engine could not be reached to save its workspace."],
+  ["too-large", "The workspace is too large to save."],
+  ["save-failed", "The workspace could not be saved."],
+])("shows one cause sentence and offers recovery for %s", async (failureReason, sentence) => {
+  await mounted({ ...base, stage: "saving", failureReason }, async (container) => {
+    expect(
+      [...container.querySelectorAll('[role="alert"]')].map((node) => node.textContent),
+    ).toEqual([sentence]);
+    expect(container.textContent).not.toContain(failureReason);
+    expect(container.textContent).not.toContain("Unsaved work may be lost.");
+    const recover = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Recover computer",
+    )!;
+    expect(recover.disabled).toBe(false);
+    client.start.mockResolvedValue({ ...base, action: "recover", status: "running" });
+    await act(async () => recover.click());
+    expect(client.start).toHaveBeenCalledExactlyOnceWith(base.botId, "recover");
   });
 });
 

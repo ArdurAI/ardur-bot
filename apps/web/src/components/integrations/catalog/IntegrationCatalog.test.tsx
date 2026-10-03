@@ -6,7 +6,9 @@ import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DirectMcpSearch } from "../DirectMcpSearch";
 import { IntegrationCatalog } from "./IntegrationCatalog";
+import { IntegrationManage } from "./IntegrationManage";
 
 const api = vi.hoisted(() => ({
   list: vi.fn(),
@@ -293,6 +295,32 @@ const click = async (element: HTMLElement) => {
 };
 
 describe("Settings integration catalog", () => {
+  it.each(["connected", "needs-sign-in", "discovery-failed"] as const)(
+    "shows per-bot pending status only for a connected managed account, not %s",
+    async (state) => {
+      await act(async () =>
+        root.render(
+          <IntegrationManage
+            descriptor={catalog[0]!}
+            connection={{ ...connected, state, needsReview: true, spaceAllowedTools: [] }}
+            onBack={vi.fn()}
+            onChanged={vi.fn(async () => undefined)}
+          />,
+        ),
+      );
+      const botLabel = [...container.querySelectorAll("label")].find((label) =>
+        label.textContent?.includes("Helper"),
+      );
+      expect(botLabel).toBeDefined();
+      if (state === "connected") {
+        expect(botLabel!.textContent).toContain("Connected · tools need review");
+      } else {
+        expect(botLabel!.textContent).not.toContain("Connected");
+      }
+      expect(api.assign).not.toHaveBeenCalled();
+    },
+  );
+
   it("shows local and remote accounts once and reconnects through the selected Manage view", async () => {
     const local = { ...connected, id: "local", transport: "host-cli" as const };
     const remote = {
@@ -1529,6 +1557,55 @@ describe("Settings integration catalog", () => {
       expect(api.connect).toHaveBeenCalledExactlyOnceWith(
         expect.objectContaining({ catalogId: "notion", authKind: "oauth", token: undefined }),
       );
+    },
+  );
+
+  it.each([
+    { needsReview: true, spaceAllowedTools: ["synthetic_read"] },
+    { needsReview: false, spaceAllowedTools: [] },
+  ])("shows space-pending tools on an existing Find apps connection: %j", async (pending) => {
+    const notion = remoteApp("notion", "Notion", "https://mcp.notion.example.test/mcp");
+    connections = [{ ...connected, catalogId: "notion", ...pending }];
+    api.list.mockImplementation(async () => ({ catalog: [notion], connections }));
+    await openResults([listing("Notion directory", notion.endpoint!)]);
+    expect(resultBlock("Notion")?.textContent).toContain("Connected · tools need review");
+    expect(resultConnect("Notion")).toBeUndefined();
+    expect(button("Manage", resultBlock("Notion")!)).toBeDefined();
+    expect(api.connect).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])(
+    "uses the Find apps connect outcome for space-pending status: %s",
+    async (needsReview) => {
+      const notion = remoteApp("notion", "Notion", "https://mcp.notion.example.test/mcp");
+      const outcome = {
+        ...connected,
+        catalogId: "notion",
+        needsReview,
+        spaceAllowedTools: needsReview ? [] : connected.spaceAllowedTools,
+      };
+      const onConnectCatalog = vi.fn(async () => outcome);
+      api.catalogSearch.mockResolvedValue({
+        enabled: true,
+        results: [listing("Notion directory", notion.endpoint!)],
+      });
+      // Keep the connection lookup empty: the immediate result must use the returned facts.
+      await act(async () =>
+        root.render(
+          <DirectMcpSearch
+            catalog={[notion]}
+            connections={[]}
+            onConnectCatalog={onConnectCatalog}
+          />,
+        ),
+      );
+      await fill("Search apps", "Notion");
+      await click(button("Search integrations.sh"));
+      await click(resultConnect("Notion")!);
+      const label = needsReview ? "Connected · tools need review" : "Connected";
+      expect(button(label, resultBlock("Notion")!)?.disabled).toBe(true);
+      expect(onConnectCatalog).toHaveBeenCalledOnce();
+      expect(resultConnect("Notion")).toBeUndefined();
     },
   );
 

@@ -18,6 +18,32 @@ function fixture(roots = ["/fixture/reports"]) {
   return { tx, servers, registration };
 }
 describe("composer references", () => {
+  it.each(["docker", "podman", "kubernetes", "ssh"] as const)(
+    "rejects host folders on a legacy desktop %s connection before reading registrations",
+    async (engine) => {
+      const { tx, registration } = fixture();
+      await expect(
+        resolveComposerReferences(tx, actor, [{ kind: "folder", id: "/fixture/reports" }], {
+          kind: "desktop",
+          connectionId: "saved-connection",
+          connectionSettings: { engine },
+        }),
+      ).rejects.toThrow("Folders require this computer.");
+      expect(registration).not.toHaveBeenCalled();
+    },
+  );
+
+  it("fails closed for a saved connection with missing settings", async () => {
+    const { tx, registration } = fixture();
+    await expect(
+      resolveComposerReferences(tx, actor, [{ kind: "folder", id: "/fixture/reports" }], {
+        kind: "desktop",
+        connectionId: "missing-connection",
+      }),
+    ).rejects.toThrow("Folders require this computer.");
+    expect(registration).not.toHaveBeenCalled();
+  });
+
   it("adds registered folders and owned plugins to prompt and persisted message context", async () => {
     const { tx, servers, registration } = fixture();
     const result = await resolveComposerReferences(
@@ -27,7 +53,7 @@ describe("composer references", () => {
         { kind: "folder", id: "/fixture/reports" },
         { kind: "mcp", id: "mcp" },
       ],
-      "desktop",
+      { kind: "desktop", connectionId: null },
     );
     expect(result.note).toContain('Registered folders for this message: ["/fixture/reports"]');
     expect(result.note).toContain('["Reports"]');
@@ -50,10 +76,15 @@ describe("composer references", () => {
   it("rejects unregistered folders and container computers", async () => {
     const { tx } = fixture();
     await expect(
-      resolveComposerReferences(tx, actor, [{ kind: "folder", id: "/fixture/other" }], "desktop"),
+      resolveComposerReferences(tx, actor, [{ kind: "folder", id: "/fixture/other" }], {
+        kind: "desktop",
+        connectionId: null,
+      }),
     ).rejects.toThrow("Folder is not registered");
     await expect(
-      resolveComposerReferences(tx, actor, [{ kind: "folder", id: "/fixture/reports" }], "docker"),
+      resolveComposerReferences(tx, actor, [{ kind: "folder", id: "/fixture/reports" }], {
+        kind: "docker",
+      }),
     ).rejects.toThrow("Folders require");
   });
   it("rejects another owner's or disconnected server without changing grants", async () => {

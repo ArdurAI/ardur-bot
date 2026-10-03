@@ -26,7 +26,11 @@ const choice = {
   credentialId: "scripted",
 };
 
-function fixture(initialConfig: unknown = null, runtimeExperimental = false) {
+function fixture(
+  initialConfig: unknown = null,
+  runtimeExperimental = false,
+  computer = { kind: "desktop", connectionId: null as string | null },
+) {
   let runtimeConfig = initialConfig;
   let botRevision = 1;
   let revision = 0;
@@ -101,7 +105,7 @@ function fixture(initialConfig: unknown = null, runtimeExperimental = false) {
                   ? [
                       {
                         id: memberId,
-                        bot: { runtimeExperimental, computer: { kind: "desktop" } },
+                        bot: { runtimeExperimental, computer },
                       },
                     ]
                   : [],
@@ -122,6 +126,7 @@ function fixture(initialConfig: unknown = null, runtimeExperimental = false) {
   );
   const eventCreate = vi.fn(async () => ({ seq: 4 }));
   const tx = {
+    botBrief: { updateMany: vi.fn(async () => ({ count: 1 })) },
     $queryRaw: vi.fn(async () => [{ id: "group" }]),
     chatGroup: { findFirst, update: vi.fn(async () => groupRecord()) },
     chatGroupMember: { findUnique: vi.fn(async () => memberRow()), update },
@@ -151,6 +156,21 @@ function fixture(initialConfig: unknown = null, runtimeExperimental = false) {
 }
 
 describe("group model owner mutation", () => {
+  it.each([null, "docker", "podman", "missing", ""])(
+    "admits a host runtime only without connection %s",
+    async (connectionId) => {
+      const f = fixture(null, true, { kind: "desktop", connectionId });
+      const request = updateGroupMemberModelPin(f.deps, actor, target, {
+        ...choice,
+        runtimeKind: "hermes",
+      });
+      if (connectionId === null) await expect(request).resolves.toBeDefined();
+      else {
+        await expect(request).rejects.toMatchObject({ code: "BAD_REQUEST" });
+        expect(f.update).not.toHaveBeenCalled();
+      }
+    },
+  );
   it("snapshots bot-owned Hermes limits with the admitted group connection", async () => {
     const config = { version: 1, maxProviderRequests: 4, timeoutMs: 90_000 };
     const f = fixture(config, true);
@@ -266,4 +286,33 @@ describe("group model owner mutation", () => {
     ).rejects.toThrow();
     expect(f.update).not.toHaveBeenCalled();
   });
+});
+
+it("resets only the saved room member's brief after the pin transaction", async () => {
+  const f = fixture();
+  let committed = false;
+  const transact = vi.mocked(f.deps.prisma.$transaction).getMockImplementation()!;
+  vi.mocked(f.deps.prisma.$transaction).mockImplementation(async (action) => {
+    const result = await transact(action as never);
+    committed = true;
+    return result;
+  });
+  f.tx.botBrief.updateMany.mockImplementation(async () => {
+    expect(committed).toBe(true);
+    return { count: 1 };
+  });
+  await updateGroupMemberModelPin(f.deps, actor, target, choice);
+  expect(f.tx.botBrief.updateMany).toHaveBeenCalledWith({
+    where: { botId: "bot", threadId: "room" },
+    data: { failureCount: 0, nextAttemptAt: null, attemptedAt: null },
+  });
+});
+
+it("keeps the saved room pin when retry cleanup fails", async () => {
+  const f = fixture();
+  f.tx.botBrief.updateMany.mockRejectedValueOnce(new Error("cleanup unavailable"));
+  await expect(updateGroupMemberModelPin(f.deps, actor, target, choice)).resolves.toBeDefined();
+  expect(f.update).toHaveBeenCalledOnce();
+  expect(f.eventCreate).toHaveBeenCalledOnce();
+  expect(f.notify).toHaveBeenCalledOnce();
 });

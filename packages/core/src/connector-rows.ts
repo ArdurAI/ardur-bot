@@ -1,5 +1,7 @@
 import type { IntegrationConnection, IntegrationDescriptor, McpServer } from "@ardurbot/contracts";
 
+import { integrationToolsNeedReview } from "@ardurbot/contracts";
+
 export type ConnectorRow = {
   id: string;
   name: string;
@@ -8,6 +10,7 @@ export type ConnectorRow = {
   status: "connected" | "reconnect" | "disconnected";
   catalogId?: string;
   available: boolean;
+  toolsNeedReview?: boolean;
 };
 type ManagedServer = McpServer & {
   managedBy?: "extension" | "plugin" | null;
@@ -49,6 +52,7 @@ export function connectorRows(input: {
             : "disconnected",
       catalogId: catalogId ?? undefined,
       available: descriptor?.available ?? true,
+      toolsNeedReview: integrationToolsNeedReview(connection ?? server),
     };
   });
   for (const connection of input.connections) {
@@ -69,6 +73,7 @@ export function connectorRows(input: {
             : "disconnected",
       catalogId: descriptor.id,
       available: descriptor.available,
+      toolsNeedReview: integrationToolsNeedReview(connection),
     });
   }
   if (!input.catalogTab) return rows;

@@ -7,6 +7,7 @@ import type {
 import type { HostCommandApproval } from "@ardurbot/contracts";
 import {
   canonicalDispatchJson,
+  computerRunsOnHost,
   HostIntegrationSchema,
   hostIntegrationCommand,
   IntegrationManifestSchema,
@@ -40,7 +41,7 @@ export async function hostIntegrationComputer(prisma: PrismaClient, context: Ada
     where: { id: context.botId, userId: context.userId, spaceId: context.spaceId },
     include: { computer: true },
   });
-  return bot?.computer?.kind === "desktop" && bot.computer.providerRef ? bot.computer : null;
+  return computerRunsOnHost(bot?.computer) && bot?.computer?.providerRef ? bot.computer : null;
 }
 
 export async function prepareHostCommandApproval(

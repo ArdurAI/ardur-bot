@@ -4,6 +4,11 @@ import { createServer } from "node:http";
 import type { HostProviderGrant } from "@ardurbot/contracts/host-bridge";
 import { HostProviderOpenSchema, HostProviderReadSchema } from "@ardurbot/contracts/host-bridge";
 
+import type { ChildOutputLogger } from "../child-output.js";
+import { childProcessLogger, redactChildText } from "../child-output.js";
+import type { HermesProviderFailure } from "./hermes-provider-failure.js";
+import { hermesProviderFailure } from "./hermes-provider-failure.js";
+
 type ProviderMethod = "provider.open" | "provider.read" | "provider.cancel";
 const REQUEST_BYTES = 256 * 1024;
 const RESPONSE_BYTES = 4 * 1024 * 1024;
@@ -29,7 +34,8 @@ function waitForDrain(res: ServerResponse): Promise<void> {
 export async function startHermesProviderRelay(
   grant: HostProviderGrant,
   callback: (method: ProviderMethod, args: unknown[]) => Promise<unknown>,
-  onFailure?: () => void,
+  onFailure?: (failure: HermesProviderFailure) => void,
+  logger: ChildOutputLogger = childProcessLogger(),
 ) {
   let closed = false;
   let busy = false;
@@ -125,8 +131,13 @@ export async function startHermesProviderRelay(
         }
       }
       throw new Error("Provider grant expired.");
-    } catch {
-      onFailure?.();
+    } catch (error) {
+      const failure = hermesProviderFailure(error);
+      // Project the exception to fixed safe facts, never its text, cause or data.
+      const safeError = new Error(redactChildText(JSON.stringify(failure), [grant.token]));
+      safeError.stack = undefined;
+      logger.error?.("Hermes provider request failed", safeError);
+      onFailure?.(failure);
       if (!res.destroyed && !res.writableEnded) {
         if (!res.headersSent) res.writeHead(502).end("Provider request failed.");
         else res.destroy();

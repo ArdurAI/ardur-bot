@@ -2711,7 +2711,8 @@ describe("group routing", () => {
         create: vi.fn().mockResolvedValue({ id: "event-1", seq: 1, createdAt: new Date() }),
       },
       steeringMessage: { create: vi.fn() },
-      chiefPlan: { create: vi.fn() },
+      chiefPlan: { create: vi.fn().mockResolvedValue({ id: "plan", revision: 1 }) },
+      chiefAssignment: { upsert: vi.fn() },
       bot: { findMany: vi.fn(async () => []) },
       mcpServer: { findMany: vi.fn(async () => []) },
       computerExecutionLease: { findMany: vi.fn(async () => []) },
@@ -2802,24 +2803,40 @@ describe("stopThreadRuns", () => {
       steeringMessage: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
       computer: {
         // Production team ownership is lease-only: Computer.executionRunId stays null.
-        findMany: vi.fn().mockImplementation(async ({ where }: { where: { OR?: unknown[] } }) => {
-          expect(where.OR).toEqual(
-            expect.arrayContaining([
-              { id: { in: ["computer-db-team"] } },
-              { executionRunId: { in: ["run-a", "run-b"] } },
-            ]),
-          );
-          return [
-            {
-              id: "computer-db-team",
-              homeKey: "home-team",
-              kind: "fake",
-              providerRef: "computer-team",
-              executionBotId: null,
-              executionRunId: null,
+        findMany: vi
+          .fn()
+          .mockImplementation(
+            async ({
+              where,
+              select,
+            }: {
+              where: { OR?: unknown[] };
+              select: Record<string, boolean>;
+            }) => {
+              expect(select).toMatchObject({
+                connectionId: true,
+                imageProfile: true,
+                networkEgress: true,
+              });
+              expect(where.OR).toEqual(
+                expect.arrayContaining([
+                  { id: { in: ["computer-db-team"] } },
+                  { executionRunId: { in: ["run-a", "run-b"] } },
+                ]),
+              );
+              return [
+                {
+                  id: "computer-db-team",
+                  homeKey: "home-team",
+                  kind: "desktop",
+                  connectionId: "saved-container",
+                  providerRef: "computer-team",
+                  executionBotId: null,
+                  executionRunId: null,
+                },
+              ];
             },
-          ];
-        }),
+          ),
       },
       computerExecutionLease: {
         findMany: vi.fn().mockResolvedValue([
@@ -2875,7 +2892,7 @@ describe("stopThreadRuns", () => {
     });
     expect(execute).toHaveBeenCalledTimes(2);
     expect(execute).toHaveBeenCalledWith(
-      expect.objectContaining({ providerRef: "computer-team" }),
+      expect.objectContaining({ providerRef: "computer-team", connectionId: "saved-container" }),
       expect.objectContaining({
         argv: expect.arrayContaining(["ardurbot-cancel-run-work", "computer-db-team", "run-a"]),
       }),

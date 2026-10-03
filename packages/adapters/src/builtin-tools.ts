@@ -3,6 +3,7 @@ import {
   BotSecretDestination,
   BotSecretName,
   ListBotsInputSchema,
+  ReconcileChiefActionInputSchema,
   SecretAskPurpose,
   SecretHttpRequest,
   TaskArtifactSchema,
@@ -31,6 +32,12 @@ export const DELEGATION_TOOL_NAMES = new Set([
 
 export const builtinAgentTools: ConnectorTool[] = [
   ...boardTools,
+  {
+    name: "reconcile_chief_action",
+    description:
+      "Only the current chief checking turn: record the earlier action as kept, undone or unknown after reading back its effect. This writes the plan only, never reverses or repeats an external action. End the checking turn when every outcome is recorded.",
+    inputSchema: z.toJSONSchema(ReconcileChiefActionInputSchema),
+  },
   {
     name: "list_bots",
     description:
@@ -196,7 +203,7 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "read_file",
     description:
-      "Read a UTF-8 text file from this bot's home. On a Team Computer, relative paths use the bot folder and shared/... accesses shared work. Open visual or binary files with open_path instead.",
+      "Read a UTF-8 text file from this bot's home or an absolute path in a registered folder on This computer. On a Team Computer, relative paths use the bot folder and shared/... accesses shared work. Open visual or binary files with open_path instead.",
     inputSchema: {
       type: "object",
       properties: { path: { type: "string" } },
@@ -206,7 +213,7 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "write_file",
     description:
-      "Write a UTF-8 file into this bot's home. On a Team Computer, relative paths use the bot folder; use shared/... only for work other bots should share.",
+      "Write a UTF-8 file into this bot's home or an absolute path in a registered folder on This computer. On a Team Computer, relative paths use the bot folder; use shared/... only for work other bots should share.",
     inputSchema: {
       type: "object",
       properties: {
@@ -229,7 +236,7 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "shell",
     description:
-      "Run a command inside this bot's computer. cwd defaults to the bot's folder on a Team Computer and the workspace root on a Private Computer.",
+      "Run a command inside this bot's computer. Put code in files, not in command text (64 KB maximum). cwd defaults to the bot's folder on a Team Computer and the workspace root on a Private Computer.",
     inputSchema: {
       type: "object",
       properties: {

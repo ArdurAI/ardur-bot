@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { COMPUTER_STATES } from "@ardurbot/contracts";
 import { i18n } from "@lingui/core";
 import { formatter } from "@lingui/format-po";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -12,6 +13,138 @@ import tr from "../../scripts/translations-tr.json";
 import zhCN from "../../scripts/translations-zh-CN.json";
 
 describe("lingui catalogs", () => {
+  it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+    "translates session-start failures once in %s",
+    async (locale) => {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const source = readFileSync(filename, "utf8");
+      for (const message of [
+        "{runtime} could not start a session. Check the runtime and try again.",
+        "{runtime} needs a model with at least 64K context; change the model and try again.",
+      ]) {
+        const catalog = await formatter().parse(source, { locale, sourceLocale: "en", filename });
+        expect(source.split(`msgid ${JSON.stringify(message)}\n`)).toHaveLength(2);
+        const entry = Object.values(catalog).find((value) => value.message === message);
+        expect(entry?.translation?.trim(), locale).toBeTruthy();
+        expect(entry?.translation).toContain("{runtime}");
+        if (locale === "en") expect(entry?.translation).toBe(message);
+        else expect(entry?.translation).not.toBe(message);
+      }
+    },
+  );
+  it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+    "preserves workspace and account entry point names in %s",
+    async (locale) => {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const catalog = await formatter().parse(readFileSync(filename, "utf8"), {
+        locale,
+        sourceLocale: "en",
+        filename,
+      });
+      for (const message of [
+        "Tasks",
+        "Routines",
+        "IDE",
+        "Recorded changes",
+        "No changes to show",
+        "Show settings",
+        "Show computer",
+        "Settings",
+        "Usage",
+        "Log out",
+      ]) {
+        const entry = Object.values(catalog).find((value) => value.message === message);
+        expect(entry?.translation, `${locale}: ${message}`).toBeTruthy();
+        if (locale === "ko" && message === "Routines") expect(entry?.translation).toBe("자동 실행");
+      }
+    },
+  );
+  it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+    "translates every computer state and typed workspace save failure once in %s",
+    async (locale) => {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const source = readFileSync(filename, "utf8");
+      const catalog = await formatter().parse(source, { locale, sourceLocale: "en", filename });
+      for (const message of [
+        ...Object.values(COMPUTER_STATES),
+        "The computer stopped before its workspace could be saved.",
+        "The computer or its workspace could not be found.",
+        "The computer's engine could not be reached to save its workspace.",
+        "The workspace is too large to save.",
+        "The workspace could not be saved.",
+      ]) {
+        expect(source.split(`msgid ${JSON.stringify(message)}\n`)).toHaveLength(2);
+        const entry = Object.values(catalog).find((value) => value.message === message);
+        expect(entry?.translation?.trim(), `${locale}: ${message}`).toBeTruthy();
+        if (locale === "en") expect(entry?.translation).toBe(message);
+        else expect(entry?.translation).not.toBe(message);
+      }
+    },
+  );
+  it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+    "translates both location choices, consequences, refusals and repair in %s",
+    async (locale) => {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const catalog = await formatter().parse(readFileSync(filename, "utf8"), {
+        locale,
+        sourceLocale: "en",
+        filename,
+      });
+      for (const message of [
+        "This computer",
+        "Sandbox",
+        "Sharing",
+        "Where this bot runs",
+        "Change location",
+        "Runs as you; can use your files and signed-in tools",
+        "Separate home; can reach allowed network services and granted credentials.",
+        "Connect the host service to choose This computer.",
+        "Other locations are unavailable for {runtime}. Choose This computer.",
+        "Set up a container for isolated work.",
+        "Choose Only this bot to use a different location from the Team computer.",
+        "Move to This computer",
+        "Change computer",
+        "This replaces the computer's files. Continue?",
+        "Could not change the computer; stop its bots and try again.",
+        "Cancel",
+        "Continue",
+      ]) {
+        const entry = Object.values(catalog).find((value) => value.message === message);
+        expect(entry?.translation, `${locale}: ${message}`).toBeTruthy();
+        if (message.includes("{runtime}")) expect(entry?.translation).toContain("{runtime}");
+      }
+    },
+  );
+  it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+    "translates evidence controls, states and downloads in %s",
+    async (locale) => {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const catalog = await formatter().parse(readFileSync(filename, "utf8"), {
+        locale,
+        sourceLocale: "en",
+        filename,
+      });
+      for (const message of [
+        "Record evidence of bot decisions",
+        "Evidence on",
+        "Evidence off",
+        "About evidence",
+        "Could not save. Try again.",
+        "Verified",
+        "Recording",
+        "Not sealed",
+        "Evidence gap",
+        "Check failed",
+        "Download evidence",
+        "{gapCount} evidence gaps",
+      ]) {
+        const entry =
+          catalog[message] ?? Object.values(catalog).find((value) => value.message === message);
+        expect(entry?.translation, `${locale}: ${message}`).toBeTruthy();
+        if (message.includes("{gapCount}")) expect(entry?.translation).toContain("{gapCount}");
+      }
+    },
+  );
   it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
     "translates bounded chief receipts and dispatch in %s",
     async (locale) => {
@@ -26,6 +159,13 @@ describe("lingui catalogs", () => {
         "Got it — I’ll check what’s missing and ask before installing it.",
         "Got it — I’ll check the request and choose the next step.",
         "Hi everyone.",
+        "Got it — I’ll keep {name} off this task.",
+        "Got it — I’ll check this change before the next action.",
+        "Told {name} to stand down",
+        "Stopping {name}",
+        "{name} stood down",
+        "The previous action may have finished. I’ll check before retrying.",
+        "Checking the earlier action",
         "Messaged {name}",
         "Queued for {name}",
         "Waiting for approval",
@@ -42,6 +182,7 @@ describe("lingui catalogs", () => {
       ]) {
         const entry = Object.values(catalog).find((value) => value.message === message);
         expect(entry?.translation, `${locale}: ${message}`).toBeTruthy();
+        if (locale !== "en") expect(entry?.translation).not.toBe(message);
         if (message.includes("{name}")) expect(entry?.translation).toContain("{name}");
       }
     },
@@ -787,3 +928,27 @@ describe("lingui catalogs", () => {
     }
   });
 });
+
+it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+  "translates pending tool review once in %s",
+  async (locale) => {
+    const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+    const source = readFileSync(filename, "utf8");
+    const catalog = await formatter().parse(source, { locale, sourceLocale: "en", filename });
+    for (const message of [
+      "Connected · tools need review",
+      "Also allow these tools for the space",
+      "Allow selected",
+      "Allow all",
+      "Ask the space owner to review these tools in Settings.",
+    ]) {
+      expect(
+        source.split(`msgid ${JSON.stringify(message)}
+`),
+      ).toHaveLength(2);
+      const entry = Object.values(catalog).find((value) => value.message === message);
+      expect(entry?.translation?.trim(), locale).toBeTruthy();
+      if (locale !== "en") expect(entry?.translation).not.toBe(message);
+    }
+  },
+);

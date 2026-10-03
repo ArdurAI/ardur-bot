@@ -31,6 +31,7 @@ vi.mock("@ardurbot/ui-web", () => ({
 vi.mock("../components/ShowAllModels", () => ({ ShowAllModels: () => null }));
 vi.mock("../lib/rpc", () => ({
   rpc: {
+    models: { validatePin: vi.fn(async () => ({ ok: true })) },
     runtimes: {
       availability: vi.fn(async () => ({
         runtimeKind: "antigravity",

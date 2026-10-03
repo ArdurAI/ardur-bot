@@ -36,6 +36,30 @@ sequenceDiagram
 
 ## Boundaries and limits
 
+### Choosing the host or a sandbox
+
+For the deployment owner, new bots default to **This computer** once the host service
+is paired to them and connected. Otherwise the server uses the deployment's sandbox
+default. Explicit local desktop mode keeps its existing owner-only local host path
+without a paired registration. The deployment's existing `computerHost` setting
+overrides the preference (`this-mac` for host, `docker` for sandbox); it never bypasses
+host availability or ownership checks. No existing bot changes location automatically.
+
+**This computer** and **Sandbox** have equal visual weight in creation and web/desktop
+location settings. A bot on This computer runs as the person and can reach their files
+and signed-in tools, subject to the host's existing command and folder guards. The
+sandbox is the choice for separation: a separate home with allowed network services
+and granted credentials. Sandbox can be the deployment's non-host provider or a saved
+container engine. Team sharing does not move an existing Team computer: the form
+selects its actual location and saved connection, disabling the other location until
+Only this bot is chosen. Duplicates preserve the source's location and sharing.
+
+Host-only runtimes keep the Sandbox choice visible but disabled with a reason. A
+saved runtime/location mismatch offers **Move to This computer** in bot settings;
+moving still requires the owner's connected host and explicit confirmation. The
+phone offers the same two choices at creation, but existing location changes and
+mismatch repair say **Change location on desktop** rather than silently migrating.
+
 - One owner and one paired host per deployment. `host_registrations` stores the
   token's SHA-256 digest, registration generation and registered folders. Pairing
   cannot overwrite an existing host. Disconnect deletes the registration and closes
@@ -81,7 +105,7 @@ sequenceDiagram
   worker even when the host's terminal frame arrives first.
 - Computer homes are derived locally from validated space and home identifiers.
   Their hash includes an unambiguous separator, so identifiers cannot collide across
-  spaces. Team Computer file tools preserve absolute host paths for the service to
+  spaces. File tools preserve absolute host paths for the local or paired host to
   validate; relative paths retain the existing bot workspace mapping.
   Caller-provided provider references cannot choose a host directory. Registered
   folders come only from the native picker. Cwd and files undergo realpath checks;
@@ -210,17 +234,27 @@ captured too where the protocol does not already own it.
   It stays in private bounded memory until the process ends. Failure logs contain
   only structured facts: process kind, pid, run id, exit code or signal, phase,
   duration, byte and line counts, and whether output was produced. Failure causes
-  never include output tails.
+  never include output tails. Hermes ACP request failures additionally record
+  `acpFailure` (`closed`, `timeout`, or `protocol-error`). A JSON-RPC error adds
+  `protocolErrorCode` and `protocolErrorMessage`: only the numeric code and message,
+  with known turn secrets and shared sensitive-text patterns redacted before the
+  message is capped at 300 characters. The error's `data` is never logged. This
+  diagnostic is for operators, not the conversation, and redaction is best-effort.
 - Detailed process logging requires `ARDUR_DETAILED_PROCESS_LOGS=1` and a debug
   logger. A Settings switch comes later. Known credentials are redacted on each
   stream before line framing, including credentials split across chunks or
   physical lines. Shared text redaction also covers sensitive assignments,
   scheme-prefixed credentials, credentialed URLs, GitHub tokens (including
   `github_pat_`), AWS credentials, JWTs, `sk-` and `xai-` keys, and emails.
+  For a source checkout, launch with
+  `ARDUR_DETAILED_PROCESS_LOGS=1 LOG_LEVEL=debug pnpm dev`; Turbo passes the opt-in
+  to the API and worker's shared `dev` task. Restart with these variables for a
+  diagnostic attempt, then remove the opt-in when finished.
 - Detailed mode is best-effort, not a guarantee that arbitrary text contains no
   secrets: unknown credential formats and transformations may evade recognition.
-  Leave it off for private workloads. Message and file contents never appear at
-  info or above, even with detailed mode enabled.
+  Leave it off for private workloads. Child output never appears at info or above,
+  even with detailed mode enabled. The always-logged ACP error message is a narrow
+  exception: agent-supplied context may remain after redaction.
 - Tails stay within 64 KiB and lines within 8 KiB. Oversized lines are replaced
   entirely by a size-limit marker. A credential or carry window too large to
   redact safely suppresses the rest of that stream. The fallback logger's bounded

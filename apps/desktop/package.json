@@ -4,7 +4,7 @@
   "version": "0.1.0-alpha.2",
   "license": "Apache-2.0",
   "type": "module",
-  "main": "dist/main.js",
+  "main": "dist/main-entry.js",
   "scripts": {
     "dev": "pnpm build && electron .",
     "build": "pnpm --filter @ardurbot/host-service build && node ../../scripts/desktop-version.mjs && node --import tsx scripts/generate-window-colors.mjs && tsc -p tsconfig.json && tsc -p tsconfig.guided.json && node scripts/copy-static.mjs && node scripts/build-guided-setup.mjs && node scripts/bundle-services.mjs",
@@ -45,6 +45,7 @@
       "!node_modules/@embedded-postgres/**"
     ],
     "beforePack": "./scripts/stage-embedded-postgres.mjs",
+    "afterSign": "./scripts/sign-mac-preview.mjs",
     "extraResources": [
       {
         "from": "../web/dist",
@@ -87,6 +88,10 @@
         "to": "host-service/python/hermes_sources.json"
       },
       {
+        "from": "../host-service/dist/python/hermes_compat.json",
+        "to": "host-service/python/hermes_compat.json"
+      },
+      {
         "from": "../host-service/dist/python/runtime_config_profile.json",
         "to": "host-service/python/runtime_config_profile.json"
       },
@@ -111,7 +116,7 @@
       }
     ],
     "extraMetadata": {
-      "main": "dist/main.js"
+      "main": "dist/main-entry.js"
     },
     "mac": {
       "icon": "assets/icon-macos.png",
@@ -121,7 +126,8 @@
         "zip"
       ],
       "notarize": false,
-      "identity": null
+      "identity": "-",
+      "hardenedRuntime": false
     },
     "win": {
       "icon": "assets/icon.ico",

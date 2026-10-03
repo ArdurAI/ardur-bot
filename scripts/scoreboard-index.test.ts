@@ -25,6 +25,7 @@ import {
   reportRules,
 } from "../packages/testkit/src/scoreboard/statistics.ts";
 import { releaseNotes } from "./desktop-release.mjs";
+import { INSTALL_TARGETS, recordAcceptance } from "./release/install-acceptance-record.mjs";
 import {
   appendIndexRecords,
   auditCommits,
@@ -2539,6 +2540,22 @@ describe("release publication gate", () => {
       await setStartupTier(paired);
       await writeCandidateCrashReport(paired.reportsRoot);
       await cp(paired.reportsRoot, path.join(work, "scoreboard-reports"), { recursive: true });
+      for (const target of INSTALL_TARGETS) {
+        const id = `${target.platform}-${target.arch}`;
+        const directory = path.join(work, "release-artifacts", `desktop-${id}`);
+        await mkdir(directory, { recursive: true });
+        for (const file of target.files)
+          await writeFile(path.join(directory, `ardur-0.1.0-${file}`), `fixture installer ${file}`);
+        await writeFile(path.join(directory, `install-build-${id}.json`), '{"signed":false}\n');
+        await recordAcceptance(
+          directory,
+          path.join(work, "install-approved", `${id}.json`),
+          target.platform,
+          target.arch,
+          A,
+          "0.1.0",
+        );
+      }
       const step = performanceYaml.split(
         "      - name: Assemble the exact publication files before gating\n",
       )[1];
@@ -2563,6 +2580,10 @@ node() {
     command node "${repo}/scripts/scoreboard-index.mjs" "\${@:2}"
     return
   fi
+  if [[ "$1" == *install-acceptance-record.mjs ]]; then
+    command node "${repo}/scripts/release/install-acceptance-record.mjs" "\${@:2}"
+    return
+  fi
   command node "$@"
 }
 ${script}`,
@@ -2570,10 +2591,31 @@ ${script}`,
         {
           cwd: work,
           encoding: "utf8",
-          env: { ...process.env, RELEASE_VERSION: "0.1.0" },
+          env: {
+            ...process.env,
+            RELEASE_VERSION: "0.1.0",
+            RELEASE_SIGNED: "false",
+            RELEASE_SHA: A,
+          },
         },
       );
-      expect(assembled.status).toBe(0);
+      expect(assembled.status, assembled.stderr).toBe(0);
+      expect(
+        JSON.parse(
+          await readFile(
+            path.join(work, "publication/scoreboard-publication/install-acceptance.json"),
+            "utf8",
+          ),
+        ),
+      ).toHaveLength(INSTALL_TARGETS.length);
+      expect(
+        JSON.parse(
+          await readFile(
+            path.join(work, "publication/scoreboard-publication/signing.json"),
+            "utf8",
+          ),
+        ),
+      ).toEqual({ signed: false });
       const ready = path.join(work, "publication", "release-ready");
       const listed = spawnSync(
         process.execPath,

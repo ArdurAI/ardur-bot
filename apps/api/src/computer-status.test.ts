@@ -2,6 +2,39 @@ import { describe, expect, it } from "vitest";
 import { executionBlocksUserTakeover, toComputerStatus } from "./computer-status.js";
 
 describe("toComputerStatus", () => {
+  it.each([
+    { kind: "desktop", connectionId: null, host: true },
+    { kind: "desktop", connectionId: "docker", host: false },
+    { kind: "desktop", connectionId: "podman", host: false },
+    { kind: "remote-docker", connectionId: "docker", host: false },
+    { kind: "desktop", connectionId: "missing", host: false },
+    { kind: "desktop", connectionId: "", host: false },
+  ])("projects host policy for $kind / $connectionId", (row) => {
+    const status = toComputerStatus("bot", {
+      ...row,
+      state: "running",
+      scope: "team",
+      controlHolder: "none",
+      homeRevision: "saved",
+    });
+    expect(status.runsOnHost).toBe(row.host);
+    expect(status.canUpdate).toBe(!row.host);
+  });
+  it.each([null, "update"])(
+    "preserves a suspending computer with reservation %s",
+    (maintenanceId) => {
+      expect(
+        toComputerStatus("bot", {
+          kind: "desktop",
+          state: "suspending",
+          scope: "team",
+          controlHolder: "none",
+          homeRevision: "saved",
+          maintenanceId,
+        }),
+      ).toMatchObject({ state: "suspending", screenAvailable: false });
+    },
+  );
   it("only marks control that is bound to a waiting run as a requested takeover", () => {
     const computer = {
       kind: "fake",
@@ -144,5 +177,19 @@ it("reports unavailable Kubernetes screen and terminal from shared capability fl
     connectionId: "local-kind",
     screenAvailable: false,
     capabilities: { graphical: false, interactiveTerminal: false },
+  });
+});
+
+it("carries the last idle configuration failure on the computer card", () => {
+  expect(
+    toComputerStatus("bot", {
+      id: "computer",
+      scope: "team",
+      kind: "docker",
+      state: "running",
+      sleepFailureReason: "This computer's engine is not configured.",
+    } as never),
+  ).toMatchObject({
+    sleepFailureReason: "This computer's engine is not configured.",
   });
 });

@@ -661,11 +661,43 @@ model ChiefPlan {
   checkedFacts Json
   dependencies Json @default("[]")
   dispatch Json?
+  control Json?
+  assignments ChiefAssignment[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([sourceRunId, createdAt])
   @@map("chief_plans")
+}
+
+model ChiefAssignment {
+  runId String @id
+  planId String
+  plan ChiefPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  revision Int
+  memberId String
+  coordinator Boolean @default(false)
+  supersededAt DateTime?
+  actions ChiefActionAdmission[]
+  @@index([planId])
+  @@map("chief_assignments")
+}
+
+model ChiefActionAdmission {
+  id String @id @default(cuid())
+  runId String
+  assignment ChiefAssignment @relation(fields: [runId], references: [runId], onDelete: Cascade)
+  revision Int
+  attempt Int
+  executionId String
+  consequential Boolean
+  tool String?
+  effectId String?
+  state String @default("admitted")
+  admittedAt DateTime @default(now())
+  settledAt DateTime?
+  @@unique([runId, attempt, executionId])
+  @@map("chief_action_admissions")
 }
 
 model Run {
@@ -1010,6 +1042,14 @@ model CapabilityInstall {
   @@map("capability_installs")
 }
 
+// Updated by the memory_documents trigger, not an in-process write hook.
+model MemoryRecallRevision {
+  spaceId String @id
+  revision BigInt @default(0)
+
+  @@map("memory_recall_revisions")
+}
+
 model MemoryDocument {
   kind String @default("topic")
   id        String           @id @default(cuid())
@@ -1133,6 +1173,7 @@ model Computer {
   kind                    String
   providerRef             String?
   state                   String                   @default("stopped")
+  sleepFailureReason      String?
   provisioningId          String?
   controlHolder           String                   @default("none")
   controlLeaseId          String?
@@ -2666,6 +2707,9 @@ model BotBrief {
   attemptedAt DateTime?
   leaseExpiresAt DateTime?
   reason String?
+  failureCount Int @default(0)
+  nextAttemptAt DateTime?
+  @@index([nextAttemptAt, leaseExpiresAt, attemptedAt])
   @@unique([botId, threadId])
   @@index([pendingRunId, attemptedAt])
   @@index([botId, leaseExpiresAt])

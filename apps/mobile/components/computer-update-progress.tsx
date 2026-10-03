@@ -1,4 +1,5 @@
-import { COMPUTER_UPDATE_STAGES, type ComputerUpdate } from "@ardurbot/contracts";
+import type { ComputerUpdate } from "@ardurbot/contracts";
+import { COMPUTER_UPDATE_STAGES } from "@ardurbot/contracts";
 import {
   computerUpdateAttentionMessage,
   computerUpdateNeedsAttention,
@@ -84,7 +85,7 @@ export function ComputerUpdateProgress() {
               {title(selected)}
             </Text>
             {computerUpdateNeedsAttention(selected) ? (
-              <Text style={{ color: tokens.mutedForeground }}>
+              <Text accessibilityRole="alert" style={{ color: tokens.mutedForeground }}>
                 {computerUpdateAttentionMessage(selected, {
                   interrupted: t(
                     "Recovery is unavailable until the previous operation has stopped.",
@@ -92,6 +93,17 @@ export function ComputerUpdateProgress() {
                   generic: t(
                     "Recovery restores the last saved workspace. Unsaved work may be lost.",
                   ),
+                  workspaceSave: {
+                    "source-not-running": t(
+                      "The computer stopped before its workspace could be saved.",
+                    ),
+                    "source-missing": t("The computer or its workspace could not be found."),
+                    "engine-unreachable": t(
+                      "The computer's engine could not be reached to save its workspace.",
+                    ),
+                    "too-large": t("The workspace is too large to save."),
+                    "save-failed": t("The workspace could not be saved."),
+                  },
                 })}
               </Text>
             ) : (

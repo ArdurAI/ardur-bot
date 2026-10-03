@@ -1,5 +1,6 @@
 import * as z from "zod";
 
+export const COMMAND_TEXT_LIMIT = 64 * 1024;
 export const COMMAND_OUTPUT_LIMIT = 64 * 1024;
 export const COMMAND_TRUNCATED = "[Output truncated]";
 export const COMMAND_SUPPRESSED = "[Output redacted: sensitive command]";
@@ -16,7 +17,13 @@ export const CommandOutcomeSchema = z.enum([
 /** Only this validated, unchanged request may be retained for exact replay. */
 export const CommandRequestSchema = z
   .object({
-    command: z.string().min(1).max(16_384),
+    command: z
+      .string()
+      .min(1)
+      .max(COMMAND_TEXT_LIMIT, "Command exceeds 64 KB.")
+      .refine((command) => new TextEncoder().encode(command).byteLength <= COMMAND_TEXT_LIMIT, {
+        message: "Command exceeds 64 KB.",
+      }),
     cwd: z.string().max(4096).optional(),
   })
   .strict();

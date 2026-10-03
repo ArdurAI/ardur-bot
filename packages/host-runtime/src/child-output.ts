@@ -2,7 +2,12 @@ import type { ChildProcess } from "node:child_process";
 import type { Writable } from "node:stream";
 import { redactBindings } from "../../logging/src/redaction.js";
 import { serializeError } from "../../logging/src/serialize-error.js";
-import { mcpSecretSpellings, redactMcpText } from "./mcp-diagnostics.js";
+import {
+  createMcpTextNormalizer,
+  mcpSecretSpellings,
+  redactMcpKnownSecrets,
+  redactMcpText,
+} from "./mcp-diagnostics.js";
 
 /**
  * The slice of a service logger the capture helper needs. The logging package's
@@ -46,12 +51,12 @@ export function detailedProcessLogsEnabled(): boolean {
 function knownSecretStream(secrets: readonly string[], emit: (text: string) => void) {
   let pending = "";
   let suppressed = false;
+  const normalize = createMcpTextNormalizer();
   return (text: string, final = false) => {
     if (suppressed) return;
+    text = normalize(text);
     // Keep the list live: a running transport can acquire additional bridge keys.
-    const spellings = mcpSecretSpellings(secrets)
-      .map((spelling) => spelling.replace(/[\r\n]/g, ""))
-      .filter(Boolean);
+    const spellings = mcpSecretSpellings(secrets);
     if (!spellings.length) {
       emit(text);
       return;
@@ -66,48 +71,17 @@ function knownSecretStream(secrets: readonly string[], emit: (text: string) => v
       emit(`${OVERSIZED_LINE}\n`);
       return;
     }
-    // Cover credentials wrapped over physical lines, preserving line breaks in
-    // replacements. Map folded matches back to the original text's offsets.
-    const offsets: number[] = [];
-    const characters: string[] = [];
-    for (let index = 0; index < pending.length; index++) {
-      if (pending[index] === "\r" || pending[index] === "\n") continue;
-      offsets.push(index);
-      characters.push(pending[index]!);
-    }
-    const folded = characters.join("");
-    const cutoff = final ? folded.length : Math.max(0, folded.length - longest);
-    let copied = 0;
-    let searched = 0;
-    const parts: string[] = [];
-    while (searched < cutoff) {
-      let first = -1;
-      let length = 0;
-      for (const spelling of spellings) {
-        const index = folded.indexOf(spelling, searched);
-        if (
-          index >= 0 &&
-          (first < 0 || index < first || (index === first && spelling.length > length))
-        ) {
-          first = index;
-          length = spelling.length;
-        }
-      }
-      if (first < 0 || first >= cutoff) break;
-      const start = offsets[first]!;
-      const end = offsets[first + length - 1]! + 1;
-      parts.push(
-        pending.slice(copied, start),
-        pending.slice(start, end).replace(/[^\r\n]+/g, "[redacted]"),
-      );
-      copied = end;
-      searched = first + length;
-    }
-    const end = Math.max(copied, final ? pending.length : (offsets[cutoff] ?? pending.length));
-    parts.push(pending.slice(copied, end));
-    pending = pending.slice(end);
-    emit(parts.join(""));
+    const result = redactMcpKnownSecrets(pending, spellings, final ? 0 : longest);
+    pending = result.pending;
+    emit(result.redacted);
   };
+}
+
+/** Redact a complete diagnostic with the same wrapped-secret scanner as child output. */
+export function redactChildText(text: string, secrets: readonly string[] = []): string {
+  const parts: string[] = [];
+  knownSecretStream(secrets, (part) => parts.push(part))(text, true);
+  return redactMcpText(parts.join(""), secrets);
 }
 
 /**

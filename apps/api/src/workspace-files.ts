@@ -9,15 +9,26 @@ import {
   toComputerRef,
   workspacePath,
 } from "@ardurbot/adapters";
-import type { Actor, WorkspaceContext } from "@ardurbot/contracts";
-import { IDE_FILE_BYTES, IdeEntrySchema, IdePathSchema } from "@ardurbot/contracts";
+import type { Actor, RuntimeComputerLocation, WorkspaceContext } from "@ardurbot/contracts";
+import {
+  computerRunsOnHost,
+  IDE_FILE_BYTES,
+  IdeEntrySchema,
+  IdePathSchema,
+} from "@ardurbot/contracts";
 import { resolveActionApproval } from "@ardurbot/core";
 import { IsolationError, parseComputerMode } from "@ardurbot/db";
 import { ORPCError } from "@orpc/server";
 import type { RouterDeps } from "./router.js";
 
 type Deps = Pick<RouterDeps, "prisma" | "sandbox" | "home">;
-type Request = { botId: string; computerId: string; generation: number; path: string };
+type Request = {
+  botId: string;
+  computerId: string;
+  generation: number;
+  path: string;
+  rootId?: string;
+};
 type SaveRequest = Request & { content: string; version: string; approved: boolean };
 const digest = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
 const fileTooLargeReason = "This file is larger than 2 MB. Open a copy to edit it.";
@@ -27,16 +38,18 @@ const fileMissingReason = "This file no longer exists. Save it as a new file or 
 const computerBusyMessage = "The computer is busy. Wait for it to finish.";
 
 export function workspaceFileSource(
-  computer: {
-    kind: string;
-    state: string;
-    providerRef: string | null;
-    homeRevision: string;
-    maintenanceId: string | null;
-  } | null,
+  computer:
+    | (RuntimeComputerLocation & {
+        kind: string;
+        state: string;
+        providerRef: string | null;
+        homeRevision: string;
+        maintenanceId: string | null;
+      })
+    | null,
 ): WorkspaceContext["files"] {
   // Host folders require an explicit registered-root choice; a bot has no implicit host root.
-  if (!computer || computer.kind === "fake" || computer.kind === "desktop") return "unavailable";
+  if (!computer || computer.kind === "fake" || computerRunsOnHost(computer)) return "unavailable";
   if (computer.state === "running" && computer.providerRef && !computer.maintenanceId)
     return "live";
   if (computer.homeRevision !== "empty") return "saved";
@@ -61,6 +74,10 @@ export function createWorkspaceFiles(deps: Deps) {
       computerId: computer?.id ?? null,
       generation: computer?.screenGeneration ?? null,
       files: workspaceFileSource(computer),
+      runsOnHost: computerRunsOnHost(computer ?? {}),
+      ...(!computerRunsOnHost(computer ?? {}) && computer
+        ? { rootId: `sandbox-${computer.id}` }
+        : {}),
       observedAt: new Date().toISOString(),
     };
   }
@@ -68,6 +85,8 @@ export function createWorkspaceFiles(deps: Deps) {
     IdePathSchema.parse(input.path);
     const bot = await target(actor, input.botId);
     const computer = bot.computer;
+    if (input.rootId !== undefined && input.rootId !== `sandbox-${computer?.id}`)
+      throw new IsolationError();
     if (
       !computer ||
       computer.id !== input.computerId ||

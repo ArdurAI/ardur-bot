@@ -1,30 +1,18 @@
-import { COMPUTER_UPDATE_STAGES, type ComputerUpdate } from "@ardurbot/contracts";
+import type { ComputerUpdate } from "@ardurbot/contracts";
+import { COMPUTER_UPDATE_STAGES } from "@ardurbot/contracts";
 import {
   computerUpdateAttentionMessage,
   computerUpdateNeedsAttention,
   computerUpdateOffersRecover,
   computerUpdateStages,
 } from "@ardurbot/core";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  Button,
-  cn,
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from "@ardurbot/ui-web";
+import { Button, cn, Dialog, DialogContent, DialogTitle } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { CheckCircle2, Circle, CircleAlert, LoaderCircle } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { computerUpdates } from "../lib/computer-updates";
 import { LoadingState } from "./ai/primitives";
+import { ReleaseInterruptedComputer } from "./ReleaseInterruptedComputer";
 
 export function ComputerUpdateProgress({ onCompleted }: { onCompleted: () => void }) {
   const { t } = useLingui();
@@ -37,7 +25,7 @@ export function ComputerUpdateProgress({ onCompleted }: { onCompleted: () => voi
   completed.current = onCompleted;
   const [error, setError] = useState(false);
   const [recovering, setRecovering] = useState(false);
-  const [releaseId, setReleaseId] = useState<string | null>(null);
+
   useEffect(() => computerUpdates.watch(), []);
   useEffect(() => {
     if (
@@ -166,6 +154,13 @@ export function ComputerUpdateProgress({ onCompleted }: { onCompleted: () => voi
                 {computerUpdateAttentionMessage(selected, {
                   interrupted: t`Recovery is unavailable until the previous operation has stopped.`,
                   generic: t`Recovery restores the last saved workspace. Unsaved work may be lost.`,
+                  workspaceSave: {
+                    "source-not-running": t`The computer stopped before its workspace could be saved.`,
+                    "source-missing": t`The computer or its workspace could not be found.`,
+                    "engine-unreachable": t`The computer's engine could not be reached to save its workspace.`,
+                    "too-large": t`The workspace is too large to save.`,
+                    "save-failed": t`The workspace could not be saved.`,
+                  },
                 })}
               </p>
             ) : (
@@ -180,9 +175,7 @@ export function ComputerUpdateProgress({ onCompleted }: { onCompleted: () => voi
             ) : null}
             <div className="flex justify-end gap-2 border-t border-border px-6 py-4">
               {selected.status === "interrupted" && selected.canReleaseReservation ? (
-                <Button variant="outline" onClick={() => setReleaseId(selected.id)}>
-                  <Trans>Release computer</Trans>
-                </Button>
+                <ReleaseInterruptedComputer key={selected.id} updateId={selected.id} />
               ) : null}
               {selected.status === "failed" ? (
                 <Button
@@ -217,46 +210,6 @@ export function ComputerUpdateProgress({ onCompleted }: { onCompleted: () => voi
           </DialogContent>
         ) : null}
       </Dialog>
-      <AlertDialog
-        open={releaseId !== null}
-        onOpenChange={(open) => {
-          if (!open) setReleaseId(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              <Trans>Release interrupted computer?</Trans>
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              <Trans>Make sure nothing is still running on this computer.</Trans>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>
-              <Trans>Cancel</Trans>
-            </AlertDialogCancel>
-            <AlertDialogAction
-              disabled={recovering}
-              onClick={() => {
-                if (!releaseId) return;
-                setRecovering(true);
-                setError(false);
-                void computerUpdates
-                  .releaseInterrupted(releaseId)
-                  .then(() => setReleaseId(null))
-                  .catch(() => {
-                    setReleaseId(null);
-                    setError(true);
-                  })
-                  .finally(() => setRecovering(false));
-              }}
-            >
-              <Trans>Nothing is still running</Trans>
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   );
 }

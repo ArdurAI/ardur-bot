@@ -38,4 +38,32 @@ it("renders only supported tabs and activates one through the tablist", async ()
   await act(async () => tabs[1]?.click());
   expect(onChange.mock.calls[0]?.[0]).toBe("files");
   expect(container.textContent).not.toContain("Screen");
+  const shared = [
+    {
+      id: "files",
+      contentId: "editor",
+      label: "Files",
+      content: <textarea defaultValue="draft" />,
+    },
+    {
+      id: "ide",
+      contentId: "editor",
+      label: "IDE",
+      content: <textarea defaultValue="duplicate" />,
+    },
+  ];
+  await act(async () =>
+    root.render(<WorkspaceTabs value="files" onChange={onChange} tabs={shared} />),
+  );
+  const editor = container.querySelector("textarea");
+  expect(container.querySelectorAll("textarea")).toHaveLength(1);
+  await act(async () =>
+    root.render(<WorkspaceTabs value="ide" onChange={onChange} tabs={shared} />),
+  );
+  expect(container.querySelector("textarea")).toBe(editor);
+  expect(editor?.value).toBe("draft");
+  await act(async () =>
+    root.render(<WorkspaceTabs value="ide" onChange={onChange} tabs={shared.slice(1)} />),
+  );
+  expect(container.querySelector("textarea")).toBe(editor);
 });

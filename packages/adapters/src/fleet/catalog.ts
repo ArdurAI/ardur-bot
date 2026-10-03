@@ -5,7 +5,7 @@ import type {
   FleetTarget,
   HostLabel,
 } from "@ardurbot/contracts";
-import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
+import { ComputerConnectionSettingsSchema, computerRunsOnHost } from "@ardurbot/contracts";
 import {
   ENGINE_LABELS,
   FLEET_KINDS,
@@ -80,9 +80,9 @@ export function fleetComputerTargetId(
     targets: Array<{ id: string; kind: string; connectionId: string | null }>;
   },
 ): string {
-  if (computer?.connectionId) return computer.connectionId;
+  if (computer?.connectionId != null) return computer.connectionId;
   // Host computers belong to the host row only where the host runs computers.
-  if (computer?.kind === "desktop")
+  if (computerRunsOnHost(computer))
     return fleet.defaultTargetId === "host" ? "host" : "kind:desktop";
   const kind = fleetKind(computer?.kind);
   if (kind === "default") return fleet.defaultTargetId;

@@ -48,7 +48,15 @@ export async function requireDispatchEnabled(tx: Prisma.TransactionClient, space
   if (!(await dispatchEnabled(tx, spaceId))) throw new DeviceRequestError(DISPATCH_OFF_MESSAGE);
 }
 
-const ACTIVE = ["running", "queued", "leased", "waiting_input", "waiting_takeover"];
+const ACTIVE = [
+  "running",
+  "queued",
+  "leased",
+  "waiting_input",
+  "waiting_takeover",
+  "peer_paused",
+  "peer_ready",
+];
 export function dispatchState(run: {
   status: string;
   cancelConfirmedAt?: Date | null;
@@ -484,14 +492,18 @@ export async function confirmDispatchStop(
   const confirmed = await prisma.$transaction(async (tx) => {
     const run = await tx.run.findUnique({ where: { id: runId } });
     if (!run?.cancelRequestedAt || !ACTIVE.includes(run.status)) return false;
+    const selective = tx.chiefAssignment
+      ? await tx.chiefAssignment.findUnique({ where: { runId } })
+      : null;
     if (
-      await tx.run.count({
+      !selective?.supersededAt &&
+      (await tx.run.count({
         where: {
           OR: [{ remoteRootTaskId: run.taskId }, { delegationRootTaskId: run.taskId }],
           id: { not: runId },
           status: { in: ACTIVE },
         },
-      })
+      }))
     )
       return false;
     // Canonical order: thread before the run task and any delegated root task.

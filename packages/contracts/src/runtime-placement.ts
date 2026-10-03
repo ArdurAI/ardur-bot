@@ -1,0 +1,130 @@
+import type { ComputerConnectionSettings } from "./computer-connections.js";
+import { COMPUTER_KINDS } from "./computer-connections.js";
+import type { SandboxKind } from "./ids.js";
+import type { RuntimeKind } from "./runtime-pins.js";
+
+export type NewBotLocation = "host" | "sandbox";
+export type SandboxBoundary = "container" | "account" | "hosted" | "test";
+
+export type NewBotTeamComputer = {
+  location: NewBotLocation;
+  connectionId: string | null;
+  name?: string;
+};
+
+export type NewBotComputerOptions = {
+  defaultLocation: NewBotLocation;
+  hostAvailable: boolean;
+  sandboxAvailable: boolean;
+  sandboxBoundary?: SandboxBoundary;
+  container: { connectionId: string | null } | null;
+  team: NewBotTeamComputer | null;
+};
+
+/** Sandbox is the deployment's non-host provider, or a saved container engine. */
+export function newBotSandboxAvailable(
+  provider: string,
+  container: { connectionId: string | null } | null,
+): boolean {
+  return provider !== "desktop" || container !== null;
+}
+
+/** The deployment's existing computerHost setting is the single default override. */
+export const NEW_BOT_LOCATION_POLICY = {
+  default: "host",
+  unavailableHost: "sandbox",
+  overrides: { docker: "sandbox", "this-mac": "host" },
+} as const satisfies {
+  default: NewBotLocation;
+  unavailableHost: NewBotLocation;
+  overrides: Record<"docker" | "this-mac", NewBotLocation>;
+};
+
+export function defaultNewBotLocation(input: {
+  isDeploymentOwner: boolean;
+  hostConnected: boolean;
+  hostPaired: boolean;
+  computerHost?: "docker" | "this-mac" | null;
+  sandboxAvailable?: boolean;
+}): NewBotLocation {
+  const preferred = input.computerHost
+    ? NEW_BOT_LOCATION_POLICY.overrides[input.computerHost]
+    : NEW_BOT_LOCATION_POLICY.default;
+  const hostAvailable = input.isDeploymentOwner && input.hostConnected && input.hostPaired;
+  if (preferred === "sandbox" && input.sandboxAvailable === false && hostAvailable) return "host";
+  return preferred === "host" && !hostAvailable
+    ? NEW_BOT_LOCATION_POLICY.unavailableHost
+    : preferred;
+}
+
+export type RuntimeComputerLocation = {
+  kind?: string | null;
+  connectionId?: string | null;
+  connectionSettings?: Pick<ComputerConnectionSettings, "engine"> | null;
+};
+
+/** A saved connection owns the location, even when a legacy row still says desktop. */
+export function computerExecutionKind(location: RuntimeComputerLocation): SandboxKind | null {
+  const kind =
+    location.connectionId !== undefined && location.connectionId !== null
+      ? location.connectionSettings
+        ? computerConnectionKind(location.connectionSettings)
+        : null
+      : location.kind;
+  return kind && Object.hasOwn(COMPUTER_KINDS, kind) ? (kind as SandboxKind) : null;
+}
+
+/** Host authority requires a connectionless row; unresolved connections never grant it. */
+export function computerRunsOnHost(location: RuntimeComputerLocation | null | undefined): boolean {
+  return (
+    !!location && location.connectionId == null && computerExecutionKind(location) === "desktop"
+  );
+}
+
+/** Unresolved connections save conservatively; only an actual host keeps local files. */
+export function computerSleepWorkspacePolicy(location: RuntimeComputerLocation) {
+  if (computerRunsOnHost(location)) return COMPUTER_KINDS.desktop.sleepWorkspace;
+  const kind = computerExecutionKind(location);
+  return kind ? COMPUTER_KINDS[kind].sleepWorkspace : "checkpoint";
+}
+
+/** Joining preserves the Team row; unresolved non-host rows never grant host authority. */
+export function newBotTeamLocation(location: RuntimeComputerLocation): NewBotLocation {
+  return computerRunsOnHost(location) ? "host" : "sandbox";
+}
+
+export function newBotTeamLocationConflict(
+  team: RuntimeComputerLocation,
+  requested: RuntimeComputerLocation,
+): boolean {
+  return (
+    newBotTeamLocation(team) !== newBotTeamLocation(requested) ||
+    (team.connectionId ?? null) !== (requested.connectionId ?? null)
+  );
+}
+
+export function computerConnectionKind(
+  settings: Pick<ComputerConnectionSettings, "engine">,
+): SandboxKind {
+  return settings.engine === "docker" || settings.engine === "podman"
+    ? "remote-docker"
+    : settings.engine;
+}
+
+/** Placement policy only: ownership, health, models and Experimental remain separate checks. */
+export const RUNTIME_PLACEMENT_RULES = {
+  pi: { locations: Object.keys(COMPUTER_KINDS) as SandboxKind[] },
+  "codex-app-server": { locations: ["desktop"] },
+  "claude-code": { locations: ["desktop"] },
+  antigravity: { locations: ["desktop"] },
+  hermes: { locations: ["desktop"] },
+} as const satisfies Record<RuntimeKind, { locations: readonly SandboxKind[] }>;
+
+export function runtimeSupportsLocation(
+  runtime: RuntimeKind,
+  location: RuntimeComputerLocation,
+): boolean {
+  const kind = computerExecutionKind(location);
+  const allowed: readonly SandboxKind[] = RUNTIME_PLACEMENT_RULES[runtime].locations;
+  return kind !== null && allowed.includes(kind);
+}

@@ -93,6 +93,7 @@ export async function bundleHostService(
     "hermes_launcher.py",
     "hermes_profile.py",
     "hermes_sources.json",
+    "hermes_compat.json",
     "runtime_config_profile.json",
   ])
     await copyFile(

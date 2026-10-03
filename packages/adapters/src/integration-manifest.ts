@@ -22,7 +22,12 @@ export function inputSchemaDigest(schema: unknown): string {
 }
 
 export function captureIntegrationManifest(
-  tools: Array<{ name: string; description?: string; inputSchema: unknown }>,
+  tools: Array<{
+    name: string;
+    description?: string;
+    inputSchema: unknown;
+    annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean };
+  }>,
   serverVersion: string | null,
   secrets: string[] = [],
   capturedAt = new Date().toISOString(),
@@ -45,6 +50,18 @@ export function captureIntegrationManifest(
         id: tool.name,
         description: clean(tool.description ?? ""),
         inputSchemaDigest: inputSchemaDigest(tool.inputSchema),
+        ...(tool.annotations
+          ? {
+              annotations: {
+                ...(typeof tool.annotations.readOnlyHint === "boolean"
+                  ? { readOnlyHint: tool.annotations.readOnlyHint }
+                  : {}),
+                ...(typeof tool.annotations.destructiveHint === "boolean"
+                  ? { destructiveHint: tool.annotations.destructiveHint }
+                  : {}),
+              },
+            }
+          : {}),
       };
     }),
   });

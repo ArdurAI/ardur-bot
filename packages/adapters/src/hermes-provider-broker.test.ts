@@ -111,7 +111,7 @@ describe("worker provider broker", () => {
 
     const oversized = { ...f.body, messages: [{ role: "user", content: "x".repeat(12_000) }] };
     await expect(f.broker.open(f.request({ body: oversized }))).rejects.toThrow(
-      "Provider request could not be admitted.",
+      "Provider request is outside this run's grant (run-budget).",
     );
     expect(f.fetch).toHaveBeenCalledOnce();
 
@@ -175,7 +175,9 @@ describe("worker provider broker", () => {
     f.fetch.mockResolvedValueOnce(body(4 * 1024 * 1024));
     expect((await f.broker.open(f.request())).ok).toBe(true);
     f.fetch.mockResolvedValueOnce(body(100));
-    await expect(f.broker.open(f.request())).rejects.toThrow("Provider request failed");
+    await expect(f.broker.open(f.request())).rejects.toMatchObject({
+      failure: { kind: "response-limit" },
+    });
     expect(f.records.filter((row) => row.request?.collection?.outcome === "success")).toHaveLength(
       1,
     );
@@ -188,7 +190,9 @@ describe("worker provider broker", () => {
     f.fetch.mockResolvedValueOnce(body(2 * 1024 * 1024));
     f.fetch.mockResolvedValueOnce(body(2 * 1024 * 1024));
     expect((await f.broker.open(f.request())).ok).toBe(true);
-    await expect(f.broker.open(f.request())).rejects.toThrow("Provider request failed");
+    await expect(f.broker.open(f.request())).rejects.toMatchObject({
+      failure: { kind: "response-limit" },
+    });
     expect(f.records.filter((row) => row.request?.collection?.outcome === "success")).toHaveLength(
       1,
     );
@@ -520,7 +524,9 @@ describe("worker provider broker", () => {
         throw new Error("ledger unavailable");
       },
     });
-    await expect(f.broker.open(f.request())).rejects.toThrow("could not be admitted");
+    await expect(f.broker.open(f.request())).rejects.toThrow(
+      "Provider request is outside this run's grant (run-budget).",
+    );
     expect(f.fetch).not.toHaveBeenCalled();
   });
 
@@ -546,7 +552,7 @@ describe("worker provider broker", () => {
     await first.broker.open(first.request());
     const restarted = fixture({ maxRequests: 1, maxReservedTokens: 100, record });
     await expect(restarted.broker.open(restarted.request())).rejects.toThrow(
-      "could not be admitted",
+      "Provider request is outside this run's grant (run-budget).",
     );
     expect(restarted.fetch).not.toHaveBeenCalled();
     expect(started).toHaveLength(1);

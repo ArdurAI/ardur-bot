@@ -1,6 +1,9 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { request as httpRequest } from "node:http";
 import { expect, it, vi } from "vitest";
+import { createLogger } from "../../../logging/src/logger.js";
+import { createTestSink } from "../../../logging/src/test-sink.js";
+import { HermesProviderRelayError } from "./hermes-provider-failure.js";
 import { startHermesProviderRelay } from "./hermes-provider-relay.js";
 
 function grant() {
@@ -209,6 +212,115 @@ it("refuses request bodies above the broker limit before a callback", async () =
     });
     expect(response.status).toBe(502);
     expect(callback).not.toHaveBeenCalledWith("provider.open", expect.anything());
+  } finally {
+    relay.close();
+  }
+});
+
+it.each([
+  ["Hermes configuration is not acknowledged.", "profile-unacknowledged"],
+  ["Provider response exceeded the limit.", "response-limit"],
+  ["Provider request is outside this run's grant.", "grant-refused"],
+])("reports a safe reason for %s without leaking exception data", async (message, kind) => {
+  const authorized = grant();
+  const failed = vi.fn();
+  const relay = await startHermesProviderRelay(
+    authorized,
+    async () => {
+      throw new Error(message, {
+        cause: { body: "private fixture body", headers: "private fixture headers" },
+      });
+    },
+    failed,
+  );
+  try {
+    const response = await fetch(`${relay.url}/chat/completions`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${authorized.token}` },
+      body: "{}",
+    });
+    expect(response.status).toBe(502);
+    expect(await response.text()).toBe("Provider request failed.");
+    expect(failed).toHaveBeenCalledWith({ kind });
+    expect(JSON.stringify(failed.mock.calls)).not.toContain("private fixture");
+    expect(JSON.stringify(failed.mock.calls)).not.toContain(authorized.token);
+  } finally {
+    relay.close();
+  }
+});
+
+it("logs only fixed safe facts through the real logger at the default level", async () => {
+  const authorized = grant();
+  const sink = createTestSink();
+  const logger = createLogger({ service: "fixture", sinks: [sink], level: "info" });
+  const failed = vi.fn();
+  const relay = await startHermesProviderRelay(
+    authorized,
+    async () => {
+      throw Object.assign(new Error(`private fixture prompt ${authorized.token}`), {
+        cause: { headers: "private fixture headers" },
+        data: "private fixture body",
+      });
+    },
+    failed,
+    logger,
+  );
+  try {
+    const response = await fetch(`${relay.url}/chat/completions`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${authorized.token}` },
+      body: "{}",
+    });
+    await response.text();
+    expect(failed).toHaveBeenCalledWith({ kind: "provider-failed" });
+    const recorded = JSON.stringify(sink.events);
+    expect(recorded).toContain("provider-failed");
+    expect(recorded).not.toContain("private fixture");
+    expect(recorded).not.toContain(authorized.token);
+    expect(recorded).not.toContain("stack");
+  } finally {
+    relay.close();
+  }
+});
+
+it("logs a fixed refusal category through a message-only callback without values", async () => {
+  const authorized = grant();
+  const sink = createTestSink();
+  const logger = createLogger({ service: "fixture", sinks: [sink], level: "info" });
+  const failed = vi.fn();
+  const relay = await startHermesProviderRelay(
+    authorized,
+    async () => {
+      // Remote callbacks preserve only the safe error message, not class identity.
+      const safe = new HermesProviderRelayError({
+        kind: "grant-refused",
+        category: "output-tokens",
+      });
+      throw Object.assign(new Error(safe.message), {
+        cause: { body: "private fixture body", headers: authorized.token },
+        data: "private fixture data",
+      });
+    },
+    failed,
+    logger,
+  );
+  try {
+    const response = await fetch(`${relay.url}/chat/completions`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${authorized.token}` },
+      body: JSON.stringify({ private_fixture_name: "private fixture body" }),
+    });
+    expect(response.status).toBe(502);
+    expect(await response.text()).toBe("Provider request failed.");
+    expect(failed).toHaveBeenCalledWith({
+      kind: "grant-refused",
+      category: "output-tokens",
+    });
+    const logged = JSON.stringify(sink.events);
+    expect(logged).toContain("output-tokens");
+    expect(logged).not.toContain("private fixture");
+    expect(logged).not.toContain("private_fixture_name");
+    expect(logged).not.toContain(authorized.token);
   } finally {
     relay.close();
   }

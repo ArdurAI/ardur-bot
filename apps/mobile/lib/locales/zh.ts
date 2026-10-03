@@ -1,4 +1,35 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "{runtime}'s tool list changed during startup. Check the connected tools and try again.":
+    "{runtime} 的工具列表在启动期间发生了变化。请检查已连接的工具后重试。",
+  "{runtime}'s settings were not confirmed. Check this bot's settings and try again.":
+    "{runtime} 的设置未得到确认。请检查此机器人的设置后重试。",
+  "{runtime}'s model request was too large. Narrow the task and try again.":
+    "{runtime} 的模型请求过大。请缩小任务范围后重试。",
+  "{runtime}'s model response was too large. Narrow the task and try again.":
+    "{runtime} 的模型响应过大。请缩小任务范围后重试。",
+  "{runtime}'s model request was outside this run's allowance. Narrow the task and try again.":
+    "{runtime} 的模型请求超出了本次运行的许可范围。请缩小任务范围后重试。",
+  "{runtime}'s model provider rejected the connection key. Check it in Settings, under Models.":
+    "{runtime} 的模型提供商拒绝了连接密钥。请在设置的模型部分检查密钥。",
+  "{runtime}'s model request failed. Check the connection in Settings, under Models, and try again.":
+    "{runtime} 的模型请求失败。请在设置的模型部分检查连接后重试。",
+  "Review tools on web": "在网页版审核工具",
+  "Connected · tools need review": "已连接 · 工具需要审核",
+  "{runtime} needs a model with at least 64K context; change the model and try again.":
+    "{runtime} 需要上下文至少为 64K 的模型；请更换模型后重试。",
+  "{runtime} could not start a session. Check the runtime and try again.":
+    "{runtime} 无法启动会话。请检查运行环境后重试。",
+  Sandbox: "沙盒",
+  "Move to This computer": "迁移到这台计算机",
+  "Choose Only this bot to use a different location from the Team computer.":
+    "选择仅此机器人，即可使用与团队计算机不同的位置。",
+  "Other locations are unavailable for {runtime}. Choose This computer.":
+    "{runtime} 无法使用其他位置。请选择此电脑。",
+  "Connect the host service to choose This computer.": "连接主机服务后才能选择此电脑。",
+  "Move to a container": "移至容器",
+  "Keep current location": "保留当前位置",
+  "Paused for an update": "已暂停以进行更新",
+  "The last update was interrupted.": "上次更新已中断。",
   "Reading the document": "正在读取文档",
   "Connecting to Notion": "正在连接 Notion",
   "Creating the Notion page": "正在创建 Notion 页面",
@@ -354,6 +385,12 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Could not complete action": "无法完成操作",
   Dismiss: "关闭",
   "Getting ready": "正在准备",
+  "The computer stopped before its workspace could be saved.": "电脑在工作区保存完成之前停止了。",
+  "The computer or its workspace could not be found.": "找不到电脑或其工作区。",
+  "The computer's engine could not be reached to save its workspace.":
+    "无法连接电脑的引擎来保存其工作区。",
+  "The workspace is too large to save.": "工作区过大，无法保存。",
+  "The workspace could not be saved.": "无法保存工作区。",
   Reconnecting: "正在重新连接",
   "Recovering Team Computer": "正在恢复团队电脑",
   "Recovering {name}’s Computer": "正在恢复 {name} 的电脑",
@@ -1033,6 +1070,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Time to first token": "首个词元延迟",
   "Cache hits": "缓存命中",
   "Queue wait": "排队等待",
+  "Next try at {time}": "下次尝试时间：{time}",
   "Rewritten {time}": "已于 {time} 重写",
   "Left unchanged: {reason}": "保持不变：{reason}",
   "Task budget reached": "已达到任务预算",
@@ -1389,4 +1427,26 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Change location on desktop.": "请在桌面端更改位置。",
   "Set up a container on desktop, then try again.": "请在桌面端设置容器，然后重试。",
   Sleeping: "休眠中",
+  "Evidence off": "证据记录已关闭",
+  Recording: "记录中",
+  Verified: "已验证",
+  "Not sealed": "未封存",
+  "Evidence gap": "证据缺失",
+  "Check failed": "验证失败",
+  "Download evidence": "下载证据",
+  "{gapCount} evidence gaps": "{gapCount} 处证据缺失",
+  "Checking the earlier action": "正在检查先前的操作",
+  "Got it — I’ll keep {name} off this task.": "收到 — 我不会让 {name} 参与这项任务。",
+  "Got it — I’ll check this change before the next action.":
+    "收到 — 我会在下一步操作前检查这项变更。",
+  "Told {name} to stand down": "已通知 {name} 停下",
+  "Stopping {name}": "正在停止 {name}",
+  "{name} stood down": "{name} 已停下",
+  "The previous action may have finished. I’ll check before retrying.":
+    "上一步操作可能已完成。我会先检查，再重试。",
+  "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models.":
+    "Hermes 需要至少 64K 个 token 的上下文限制。请在设置 → 模型中为此连接设置。",
+  "Could not check the model. Try again.": "无法检查模型。请重试。",
+  "Context limit (estimated)": "上下文限制（估计）",
+  "Context limit (from the provider)": "上下文限制（来自提供商）",
 };

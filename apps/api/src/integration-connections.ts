@@ -32,6 +32,7 @@ import type {
   SpaceToolPolicies,
 } from "@ardurbot/contracts";
 import {
+  computerRunsOnHost,
   IntegrationManifestSchema,
   IntegrationResourceConstraintsSchema,
   IntegrationStateSchema,
@@ -105,9 +106,7 @@ export class IntegrationConnections {
         ...descriptor,
         oauthAvailable: Boolean(this.oauthApp(descriptor.id)),
       })),
-      connections: servers.map((row) =>
-        connectionDto(row, row.needsReview || row.assignments.some((grant) => grant.needsReview)),
-      ),
+      connections: servers.map((row) => connectionDto(row)),
     };
   }
 
@@ -879,18 +878,36 @@ export class IntegrationConnections {
         )
       )
         throw new Error("Review the available tools and try again.");
-      const bots = await tx.bot.findMany({
+      const candidates = await tx.bot.findMany({
         where: {
           id: { in: botIds },
           spaceId: actor.spaceId,
           userId: actor.userId,
           archivedAt: null,
-          ...(server.transport === "host-cli" ? { computer: { kind: "desktop" } } : {}),
+          ...(server.transport === "host-cli" ? { computer: { connectionId: null } } : {}),
         },
-        select: { id: true },
+        select: { id: true, computer: { select: { kind: true, connectionId: true } } },
       });
+      const bots =
+        server.transport === "host-cli"
+          ? candidates.filter((bot) => computerRunsOnHost(bot.computer))
+          : candidates;
       if (bots.length !== botIds.length) throw new IsolationError();
       const toolIds = [...new Set(input.toolIds)];
+      const currentTools = Array.isArray(server.spaceAllowedTools) ? server.spaceAllowedTools : [];
+      if (
+        server.needsReview ||
+        toolIds.length !== currentTools.length ||
+        toolIds.some((id) => !currentTools.includes(id))
+      ) {
+        const member = await tx.spaceMember.findUnique({
+          where: { spaceId_userId: { spaceId: actor.spaceId, userId: actor.userId } },
+        });
+        if (member?.role !== "owner")
+          throw new ORPCError("FORBIDDEN", {
+            message: "Only the space owner can allow tools for the space.",
+          });
+      }
       for (const override of overrides) {
         if (override.access === "inherit") {
           await tx.botMcpServer.deleteMany({
@@ -932,6 +949,148 @@ export class IntegrationConnections {
       await this.invalidateApprovals(tx, actor, server);
     });
     return this.grants(actor, input.connectionId);
+  }
+
+  async toolReview(actor: Owner, input: { connectionId: string; botId?: string }) {
+    const server = await this.owned(actor, input.connectionId);
+    if (input.botId) await this.reviewBot(this.prisma, actor, input.botId, server);
+    const member = await this.prisma.spaceMember.findUnique({
+      where: { spaceId_userId: { spaceId: actor.spaceId, userId: actor.userId } },
+    });
+    const manifest = IntegrationManifestSchema.parse(server.manifest);
+    return {
+      revision: server.revision,
+      manifest: {
+        ...manifest,
+        tools: manifest.tools.filter(
+          (tool) =>
+            !server.catalogId ||
+            integrationById(server.catalogId)?.toolPolicies[tool.id]?.approval !== "disabled",
+        ),
+      },
+      spaceAllowedTools: Array.isArray(server.spaceAllowedTools)
+        ? server.spaceAllowedTools.filter((id): id is string => typeof id === "string")
+        : [],
+      canApproveSpace: member?.role === "owner",
+      spaceNeedsReview: server.needsReview,
+    };
+  }
+
+  private async reviewBot(
+    tx: Prisma.TransactionClient | PrismaClient,
+    actor: Owner,
+    botId: string,
+    server: McpServer,
+  ) {
+    const bots = await tx.bot.findMany({
+      where: {
+        id: { in: [botId] },
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        archivedAt: null,
+      },
+      select: { id: true, computer: { select: { kind: true, connectionId: true } } },
+    });
+    if (
+      bots.length !== 1 ||
+      (server.transport === "host-cli" && !computerRunsOnHost(bots[0]!.computer))
+    )
+      throw new IsolationError();
+  }
+
+  async reviewTools(
+    actor: Owner,
+    input: {
+      connectionId: string;
+      revision: number;
+      botId?: string;
+      toolIds: string[];
+      approveSpace: boolean;
+    },
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      await lockMcpServerRevision(tx, input.connectionId, actor);
+      const server = await tx.mcpServer.findFirst({
+        where: {
+          id: input.connectionId,
+          spaceId: actor.spaceId,
+          userId: actor.userId,
+          enabled: true,
+        },
+      });
+      if (!server) throw new IsolationError();
+      if (server.revision !== input.revision)
+        throw new ORPCError("CONFLICT", {
+          message: "Tools changed. Review them again before allowing access.",
+        });
+      if (input.botId) await this.reviewBot(tx, actor, input.botId, server);
+      const manifest = IntegrationManifestSchema.safeParse(server.manifest);
+      if (server.connectionState !== "connected" || !manifest.success)
+        throw new ORPCError("BAD_REQUEST", {
+          message: "Connect this integration before choosing tools.",
+        });
+      const descriptor = server.catalogId ? integrationById(server.catalogId) : undefined;
+      const offered = new Set(
+        manifest.data.tools
+          .filter((tool) => descriptor?.toolPolicies[tool.id]?.approval !== "disabled")
+          .map((tool) => tool.id),
+      );
+      const selected = [...new Set(input.toolIds)];
+      if (selected.some((id) => !offered.has(id)))
+        throw new ORPCError("BAD_REQUEST", {
+          message: "Review the available tools and try again.",
+        });
+      const space = Array.isArray(server.spaceAllowedTools)
+        ? server.spaceAllowedTools.filter((id): id is string => typeof id === "string")
+        : [];
+      if (!input.botId || input.approveSpace) {
+        const member = await tx.spaceMember.findUnique({
+          where: { spaceId_userId: { spaceId: actor.spaceId, userId: actor.userId } },
+        });
+        if (member?.role !== "owner")
+          throw new ORPCError("FORBIDDEN", {
+            message: "Only the space owner can allow tools for the space.",
+          });
+      } else if (server.needsReview || selected.some((id) => !space.includes(id))) {
+        throw new ORPCError("FORBIDDEN", {
+          message: "Ask the space owner to review these tools in Settings.",
+        });
+      }
+      if (input.botId) {
+        await tx.botMcpServer.upsert({
+          where: { botId_serverId: { botId: input.botId, serverId: server.id } },
+          create: {
+            spaceId: actor.spaceId,
+            userId: actor.userId,
+            serverId: server.id,
+            botId: input.botId,
+            access: "custom",
+            allowAllTools: false,
+            allowedTools: selected,
+            needsReview: false,
+          },
+          update: {
+            access: "custom",
+            allowAllTools: false,
+            allowedTools: selected,
+            needsReview: false,
+          },
+        });
+      }
+      await bumpMcpServerRevision(tx, server.id, actor, {
+        ...(!input.botId || input.approveSpace
+          ? {
+              spaceAllowedTools:
+                input.botId && !server.needsReview
+                  ? [...new Set([...space.filter((id) => offered.has(id)), ...selected])]
+                  : selected,
+              needsReview: false,
+            }
+          : {}),
+      });
+      await this.invalidateApprovals(tx, actor, server);
+    });
+    return { ok: true as const };
   }
 
   async revoke(

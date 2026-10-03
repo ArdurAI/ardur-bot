@@ -3,6 +3,14 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 describe("ChatMarkdown", () => {
+  it("preserves bot-relative file links and line targets for checked pane navigation", () => {
+    const html = renderToStaticMarkup(
+      <ChatMarkdown>{"[notes](notes.md#L2) [code](./src/main.ts#L9)"}</ChatMarkdown>,
+    );
+    expect(html).toContain('href="notes.md#L2"');
+    expect(html).toContain('href="./src/main.ts#L9"');
+  });
+
   it("renders the formatting commonly emitted by assistants", () => {
     const html = renderToStaticMarkup(
       <ChatMarkdown>{"## Capabilities\n\n- **Write files**\n- Run `commands`"}</ChatMarkdown>,

@@ -335,6 +335,24 @@ export async function bundleFleetDiscovery(
   return outfile;
 }
 
+/** Electron cannot strip TypeScript inside packaged node_modules. */
+export async function bundleHostGuardrails(
+  outfile = path.join(desktopDir, "dist", "desktop-guardrails.js"),
+) {
+  const { build } = esbuildRequire("esbuild");
+  await build({
+    absWorkingDir: repoRoot,
+    entryPoints: ["apps/desktop/scripts/host-guardrails-entry.ts"],
+    outfile,
+    bundle: true,
+    format: "esm",
+    platform: "node",
+    target: "node22",
+    logLevel: "warning",
+  });
+  return outfile;
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const staged = await bundleServices();
   process.stdout.write(
@@ -344,4 +362,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   process.stdout.write(`Migrator bundled with ${migrator.externals.join(", ")}\n`);
   await bundleFleetDiscovery();
   process.stdout.write("Fleet discovery bundled for desktop main.\n");
+  await bundleHostGuardrails();
+  process.stdout.write("Host guardrails bundled for desktop main.\n");
 }

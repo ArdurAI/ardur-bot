@@ -8,7 +8,11 @@ import {
   HERMES_SOURCE_TREE,
 } from "@ardurbot/host-runtime/runtimes/hermes-install";
 import { describe, expect, it, vi } from "vitest";
-import { nativeRuntimeAvailability, RuntimeRegistry } from "./runtime-registry.js";
+import {
+  detachedRuntimeRequest,
+  nativeRuntimeAvailability,
+  RuntimeRegistry,
+} from "./runtime-registry.js";
 
 vi.mock("../../host-runtime/python/hermes_sources.json", () => ({ default: {} }));
 
@@ -26,6 +30,18 @@ const connection = {
   modelId: "same-model",
   effort: "off",
 };
+
+it.each([null, "docker", "podman", "missing", ""])(
+  "uses a native cwd only without connection %s",
+  (connectionId) => {
+    expect(
+      detachedRuntimeRequest(
+        { ...pin, runtimeKind: "antigravity" },
+        { kind: "desktop", connectionId, providerRef: "/fixture/workspace" },
+      ).nativeCwd,
+    ).toBe(connectionId === null ? "/fixture/workspace" : undefined);
+  },
+);
 
 describe("Hermes registry admission", () => {
   const make = (available: boolean) => {

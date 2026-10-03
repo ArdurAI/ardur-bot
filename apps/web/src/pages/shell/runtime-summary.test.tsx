@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import type { ComputerStatus } from "@ardurbot/contracts";
-import { COMPUTER_KINDS, computerRuntimeSummary } from "@ardurbot/contracts";
-import type { ReactNode } from "react";
+import type { ComputerStatus, ComputerUpdate } from "@ardurbot/contracts";
+import { COMPUTER_KINDS, COMPUTER_STATES, computerRuntimeSummary } from "@ardurbot/contracts";
+import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
@@ -18,8 +18,35 @@ const api = vi.hoisted(() => ({
   status: vi.fn(),
   connections: vi.fn(async () => []),
   me: vi.fn(async () => ({ sandboxProvider: "docker" })),
+  updates: vi.fn<() => Promise<ComputerUpdate[]>>(async () => []),
+  releaseInterrupted: vi.fn(async (_id: string) => {}),
+  host: vi.fn(async () => ({ connected: true })),
 }));
-vi.mock("../../lib/rpc", () => ({ rpc: { computer: api, me: api.me } }));
+vi.mock("../../lib/rpc", () => ({
+  rpc: { computer: api, me: api.me, host: { status: api.host } },
+}));
+vi.mock("../../lib/computer-updates", () => ({
+  computerUpdates: { releaseInterrupted: api.releaseInterrupted },
+}));
+vi.mock("@ardurbot/ui-web", () => {
+  const box = ({ children }: { children: ReactNode }) => <div>{children}</div>;
+  const button = ({
+    variant: _variant,
+    ...props
+  }: ComponentProps<"button"> & { variant?: string }) => <button {...props} />;
+  return {
+    Button: button,
+    AlertDialog: ({ open, children }: { open: boolean; children: ReactNode }) =>
+      open ? <div role="alertdialog">{children}</div> : null,
+    AlertDialogContent: box,
+    AlertDialogHeader: box,
+    AlertDialogTitle: box,
+    AlertDialogDescription: box,
+    AlertDialogFooter: box,
+    AlertDialogCancel: button,
+    AlertDialogAction: button,
+  };
+});
 
 import { BotRuntimeSettings, RuntimeSummary } from "./runtime-summary";
 
@@ -31,6 +58,7 @@ const status = {
 } as ComputerStatus;
 afterEach(() => {
   vi.clearAllMocks();
+  api.updates.mockResolvedValue([]);
   vi.unstubAllGlobals();
 });
 it.each(Object.keys(COMPUTER_KINDS) as ComputerStatus["kind"][])(
@@ -55,6 +83,75 @@ it.each(Object.keys(COMPUTER_KINDS) as ComputerStatus["kind"][])(
     }
   },
 );
+it.each(Object.entries(COMPUTER_STATES))(
+  "renders the honest phrase for state %s",
+  async (state, label) => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    try {
+      await act(async () =>
+        root.render(
+          <RuntimeSummary status={{ ...status, state: state as ComputerStatus["state"] }} />,
+        ),
+      );
+      expect(container.textContent).toContain(label);
+    } finally {
+      await act(async () => root.unmount());
+    }
+  },
+);
+
+it.each([true, false])(
+  "shows an interrupted update without the banner (release allowed: %s)",
+  async (canReleaseReservation) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const current = { ...status, computerId: "computer", state: "suspending" as const };
+    const update: ComputerUpdate = {
+      id: "interrupted",
+      botId: "other-bot",
+      computerId: "computer",
+      name: "Builder",
+      mode: "team",
+      status: "interrupted",
+      stage: "saving",
+      action: "update",
+      canReleaseReservation,
+    };
+    api.status.mockResolvedValue(current);
+    api.updates.mockResolvedValue([update]);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const button = (text: string) =>
+      [...container.querySelectorAll("button")].find((entry) => entry.textContent === text);
+    try {
+      await act(async () =>
+        root.render(<BotRuntimeSettings botId="bot" name="Builder" mode="dedicated" />),
+      );
+      expect(container.textContent).toContain("Saving your workspace");
+      expect(container.textContent).not.toContain("Starting");
+      expect(container.textContent).toContain("The last update was interrupted.");
+      expect(Boolean(button("Release computer"))).toBe(canReleaseReservation);
+      if (!canReleaseReservation) return;
+      await act(async () => button("Release computer")!.click());
+      expect(container.querySelector('[role="alertdialog"]')?.textContent).toContain(
+        "Release interrupted computer?",
+      );
+      expect(container.textContent).toContain(
+        "Make sure nothing is still running on this computer.",
+      );
+      expect(api.releaseInterrupted).not.toHaveBeenCalled();
+      api.updates.mockResolvedValue([]);
+      api.status.mockResolvedValue({ ...current, state: "stopped" });
+      await act(async () => button("Nothing is still running")!.click());
+      expect(api.releaseInterrupted).toHaveBeenCalledExactlyOnceWith("interrupted");
+      expect(container.textContent).toContain("Stopped");
+      expect(container.textContent).not.toContain("The last update was interrupted.");
+    } finally {
+      await act(async () => root.unmount());
+    }
+  },
+);
+
 it("refuses unknown kinds rather than suggesting isolation", async () => {
   const container = document.createElement("div");
   const root = createRoot(container);
@@ -93,4 +190,19 @@ it("loads the existing pin read-only and ignores a late response for another bot
   } finally {
     await act(async () => root.unmount());
   }
+});
+
+it("shows an idle configuration refusal without changing the computer's reported state", async () => {
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  const reason =
+    "This computer runs on Docker, which is not configured here. Configure Docker again.";
+  await act(async () =>
+    root.render(
+      <RuntimeSummary status={{ ...status, state: "running", sleepFailureReason: reason }} />,
+    ),
+  );
+  expect(node.textContent).toContain(reason);
+  expect(node.textContent).toContain(COMPUTER_STATES.running);
+  await act(async () => root.unmount());
 });

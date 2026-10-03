@@ -258,6 +258,7 @@ test("Find apps connects a token app, waits for an OAuth app, and manages custom
               catalogId: "github",
               state: "connected",
               needsReview: false,
+              spaceAllowedTools: ["synthetic_read"],
               spaceToolPolicies: {},
               manifest: {
                 capturedAt: "2026-09-25T00:00:00.000Z",
@@ -265,7 +266,13 @@ test("Find apps connects a token app, waits for an OAuth app, and manages custom
                 account: null,
                 workspace: null,
                 scopes: [],
-                tools: [],
+                tools: [
+                  {
+                    id: "synthetic_read",
+                    description: "Synthetic fixture, not a vendor tool",
+                    inputSchemaDigest: "a".repeat(64),
+                  },
+                ],
               },
             },
             authorizationUrl: null,
@@ -344,19 +351,31 @@ test("Find apps connects a token app, waits for an OAuth app, and manages custom
   const uncheckedRow = settings.locator("tbody tr").filter({ hasText: "Unchecked Server" });
   await expect(uncheckedRow.getByText("Not checked yet", { exact: true })).toBeVisible();
   await page.route("**/rpc/mcp/servers/tools", (route) => {
-    remoteServers = remoteServers.map((server) =>
-      server.id === "unchecked-server" ? { ...server, connectionState: "connected" } : server,
-    );
-    return route.fulfill({
-      json: {
-        json: {
-          capturedAt: "2026-09-25T00:00:00.000Z",
-          serverVersion: null,
-          account: null,
-          tools: [],
+    const manifest = {
+      capturedAt: "2026-09-25T00:00:00.000Z",
+      serverVersion: null,
+      account: null,
+      tools: [
+        {
+          id: "synthetic_read",
+          description: "Synthetic fixture, not a vendor tool",
+          inputSchemaDigest: "a".repeat(64),
         },
-      },
-    });
+      ],
+    };
+    remoteServers = remoteServers.map((server) =>
+      server.id === "unchecked-server"
+        ? {
+            ...server,
+            connectionState: "connected",
+            needsReview: false,
+            spaceAllowedTools: manifest.tools.map((tool) => tool.id),
+            spaceToolPolicies: {},
+            revision: server.revision + 1,
+          }
+        : server,
+    );
+    return route.fulfill({ json: { json: manifest } });
   });
   await uncheckedRow.getByRole("button", { name: "Check", exact: true }).click();
   await expect(uncheckedRow.getByText("Connected", { exact: true })).toBeVisible();

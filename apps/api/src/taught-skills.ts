@@ -33,6 +33,7 @@ import {
   teachingControlLeaseExpiresAt,
 } from "@ardurbot/adapters";
 import type { Actor, MessageBlock, TaughtSkill } from "@ardurbot/contracts";
+import { computerRunsOnHost } from "@ardurbot/contracts";
 import {
   ACTIVE_RUN_STATUSES,
   buildPlaybookFromRecording,
@@ -146,7 +147,7 @@ async function ensureGraphicalComputer(
   actor: Actor,
   bot: Awaited<ReturnType<ReturnType<typeof createRepos>["getBot"]>>,
 ) {
-  if (bot.computer?.kind === "desktop") {
+  if (computerRunsOnHost(bot.computer)) {
     throw new ORPCError("BAD_REQUEST", {
       message: "Teaching needs a graphical sandbox computer, not a desktop host",
     });
@@ -189,7 +190,7 @@ async function ensureGraphicalComputer(
   if (!bot.computer?.providerRef || bot.computer.state !== "running") {
     throw new ORPCError("BAD_REQUEST", { message: "Computer must be running to teach" });
   }
-  if (bot.computer.kind === "desktop") {
+  if (computerRunsOnHost(bot.computer)) {
     throw new ORPCError("BAD_REQUEST", {
       message: "Teaching needs a graphical sandbox computer, not a desktop host",
     });

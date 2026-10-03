@@ -53,6 +53,39 @@ export function* readFleetArchive(bytes: Uint8Array): Iterable<PortableFile> {
   }
   throw new Error("Incomplete checkpoint.");
 }
+/** Size one file adds to a fleet archive: a header block plus its content padded to 512 bytes. */
+function archivedSize(file: PortableFile) {
+  return 512 + Math.ceil(file.content.length / 512) * 512;
+}
+
+/**
+ * Splits a workspace into groups that each fit one fleet archive, so a saved workspace larger
+ * than a single archive can still be restored. The restore script only adds files and never
+ * clears the folder, so restoring the groups one after another gives the same result as one
+ * archive. A path repeated across groups is still refused.
+ */
+export async function* fleetArchiveBatches(
+  files: AsyncIterable<PortableFile>,
+): AsyncIterable<PortableFile[]> {
+  const seen = new Set<string>();
+  let batch: PortableFile[] = [];
+  let size = 1024;
+  for await (const file of files) {
+    const name = fleetPath(file.path);
+    if (name && seen.has(name)) throw new Error("Invalid checkpoint file.");
+    if (name) seen.add(name);
+    const added = archivedSize(file);
+    if (batch.length > 0 && (size + added > MAX_FLEET_ARCHIVE || batch.length >= 10000)) {
+      yield batch;
+      batch = [];
+      size = 1024;
+    }
+    batch.push(file);
+    size += added;
+  }
+  if (batch.length > 0) yield batch;
+}
+
 export async function writeFleetArchive(files: AsyncIterable<PortableFile>) {
   const chunks: Buffer[] = [];
   const seen = new Set<string>();

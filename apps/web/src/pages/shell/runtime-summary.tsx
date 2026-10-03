@@ -1,9 +1,24 @@
-import type { ComputerConnectionSettings, ComputerMode, ComputerStatus } from "@ardurbot/contracts";
-import { computerKindFacts, computerRuntimeSummary } from "@ardurbot/contracts";
+import type {
+  ComputerConnectionSettings,
+  ComputerMode,
+  ComputerStatus,
+  ComputerUpdate,
+  RuntimeKind,
+} from "@ardurbot/contracts";
+import {
+  computerExecutionKind,
+  computerKindFacts,
+  computerRuntimeSummary,
+  interruptedComputerUpdate,
+} from "@ardurbot/contracts";
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
+import type { ReactNode } from "react";
 import { lazy, Suspense, useEffect, useState } from "react";
+import { ReleaseInterruptedComputer } from "../../components/ReleaseInterruptedComputer";
+import { useComputerStateLabels } from "../../lib/computer-state-labels";
 import { rpc } from "../../lib/rpc";
+import { MoveToHost } from "./move-to-host";
 
 const ComputerProfile = lazy(() =>
   import("../ComputerProfilesSettings").then((module) => ({ default: module.ComputerProfile })),
@@ -44,29 +59,31 @@ export function RuntimeSummary({
   status,
   mode = status.mode,
   locationName,
+  sharingControl,
+  connectionSettings,
 }: {
   status: ComputerStatus;
   mode?: ComputerMode;
   locationName?: string;
+  sharingControl?: ReactNode;
+  connectionSettings?: Pick<ComputerConnectionSettings, "engine">;
 }) {
   const { t } = useLingui();
-  const summary = computerRuntimeSummary(status, mode);
-  if (!summary) return <RuntimeBoundary kind={status.kind} />;
-  const states = {
-    stopped: t`Stopped`,
-    booting: t`Starting`,
-    running: t`Running`,
-    suspended: t`Sleeping`,
-    error: t`Could not start`,
-  };
+  const kind = computerExecutionKind({ ...status, connectionSettings });
+  const summary = kind ? computerRuntimeSummary({ ...status, kind }, mode) : null;
+  const states = useComputerStateLabels();
+  if (!summary) return <RuntimeBoundary kind="" />;
   return (
     <div data-testid="runtime-summary" className="space-y-2 text-sm">
-      <RuntimeBoundary kind={status.kind} locationName={locationName} />
-      <p>{summary.scope === "bot" ? t`Only this bot` : t`Shared with team`}</p>
+      <RuntimeBoundary kind={kind!} locationName={locationName} />
+      {sharingControl ?? <p>{summary.scope === "bot" ? t`Only this bot` : t`Shared with team`}</p>}
       {summary.sharingWarning ? (
         <p className="text-muted-foreground">{t`Bots share files and installed tools`}</p>
       ) : null}
-      <p className="text-muted-foreground">{states[summary.state]}</p>
+      <p className="text-muted-foreground">{states[summary.stateLabel]}</p>
+      {status.sleepFailureReason ? (
+        <p className="text-destructive">{status.sleepFailureReason}</p>
+      ) : null}
     </div>
   );
 }
@@ -75,17 +92,22 @@ export function BotRuntimeSettings({
   botId,
   name,
   mode,
+  children,
+  runtimeKind = "pi",
 }: {
   botId: string;
   name: string;
   mode: ComputerMode;
+  children?: ReactNode;
+  runtimeKind?: RuntimeKind;
 }) {
   const { t } = useLingui();
   const [data, setData] = useState<{
     status: ComputerStatus;
     connections: Connection[];
     deploymentDefault: string | null;
-    teamStatus?: ComputerStatus;
+    updates: ComputerUpdate[];
+    hostConnected: boolean;
   } | null>(null);
   const [error, setError] = useState(false);
   const [revision, setRevision] = useState(0);
@@ -109,19 +131,19 @@ export function BotRuntimeSettings({
           rpc.computer.status({ botId }),
           rpc.computer.connections(),
           rpc.me(),
-          rpc.computer.list(),
+          rpc.computer.updates(),
+          rpc.host.status(),
         ]),
       )
-      .then(([status, connections, me, computers]) => {
+      .then(([status, connections, me, updates, host]) => {
         if (active)
           setData({
             status,
             connections,
-            teamStatus: computers.find((entry) => entry.status.mode === "team")?.status,
-            deploymentDefault:
-              me.sandboxProvider === "docker" && me.computerHost === "this-mac"
-                ? null
-                : me.sandboxProvider,
+            updates,
+            hostConnected: host.connected && me.isDeploymentOwner,
+
+            deploymentDefault: me.sandboxProvider === "desktop" ? null : me.sandboxProvider,
           });
       })
       .catch(() => {
@@ -131,24 +153,51 @@ export function BotRuntimeSettings({
       active = false;
     };
   }, [botId, mode, revision]);
+  const interrupted = data ? interruptedComputerUpdate(data.status, data.updates) : undefined;
   return (
     <>
       {data ? (
+        <MoveToHost
+          botId={botId}
+          runtimeKind={runtimeKind}
+          location={{
+            ...data.status,
+            connectionSettings: data.connections.find(
+              (entry) => entry.id === data.status.connectionId,
+            )?.settings,
+          }}
+          hostAvailable={data.hostConnected}
+          state={data.status.state}
+          onChanged={async () => setRevision((value) => value + 1)}
+        />
+      ) : null}
+      {data ? (
         <RuntimeSummary
           status={data.status}
+          mode={mode}
+          sharingControl={children}
           locationName={
-            data.connections.find((entry) => entry.id === data.status.connectionId)?.name ??
-            (data.status.kind === "desktop" ? undefined : data.status.kind)
+            data.connections.find((entry) => entry.id === data.status.connectionId)?.name
+          }
+          connectionSettings={
+            data.connections.find((entry) => entry.id === data.status.connectionId)?.settings
           }
         />
       ) : null}
-      {data && mode === "team" && data.status.mode !== mode && data.teamStatus ? (
-        <RuntimeBoundary
-          kind={data.teamStatus.kind}
-          locationName={
-            data.connections.find((entry) => entry.id === data.teamStatus?.connectionId)?.name
-          }
-        />
+
+      {interrupted ? (
+        <div className="space-y-2 text-sm">
+          <p role="alert">
+            <Trans>The last update was interrupted.</Trans>
+          </p>
+          {interrupted.canReleaseReservation ? (
+            <ReleaseInterruptedComputer
+              key={interrupted.id}
+              updateId={interrupted.id}
+              onReleased={() => setRevision((value) => value + 1)}
+            />
+          ) : null}
+        </div>
       ) : null}
       {error ? (
         <div role="alert">
@@ -166,11 +215,14 @@ export function BotRuntimeSettings({
           {changing ? (
             <Suspense fallback={null}>
               <ComputerProfile
+                choicesOnly
                 botId={botId}
                 name={name}
                 status={data.status}
                 connections={data.connections}
                 deploymentDefault={data.deploymentDefault}
+                hostConnected={data.hostConnected}
+                runtimeKind={runtimeKind}
                 onChanged={async () => setRevision((value) => value + 1)}
               />
             </Suspense>

@@ -1,6 +1,11 @@
 import { computerSupportsUpdate } from "@ardurbot/adapters";
 import type { ComputerStatus, HostLabel } from "@ardurbot/contracts";
-import { ComputerProfileSchema, computerCapabilities } from "@ardurbot/contracts";
+import {
+  COMPUTER_STATES,
+  ComputerProfileSchema,
+  computerCapabilities,
+  computerRunsOnHost,
+} from "@ardurbot/contracts";
 import { ACTIVE_RUN_STATUSES, computerScreenSize } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 
@@ -58,6 +63,7 @@ export function toComputerStatus(
     id?: string;
     kind: string;
     state: string;
+    sleepFailureReason?: string | null;
     scope: string;
     controlHolder: string;
     controlBotId?: string | null;
@@ -69,20 +75,15 @@ export function toComputerStatus(
   hostLabel?: HostLabel,
 ): ComputerStatus {
   const state = computer?.maintenanceId
-    ? "booting"
-    : computer?.state === "suspending"
-      ? "running"
-      : computer?.state === "stopped" ||
-          computer?.state === "booting" ||
-          computer?.state === "running" ||
-          computer?.state === "suspended" ||
-          computer?.state === "error"
-        ? computer.state
-        : "stopped";
+    ? "suspending"
+    : computer && Object.hasOwn(COMPUTER_STATES, computer.state)
+      ? (computer.state as ComputerStatus["state"])
+      : "stopped";
   const screen = computerScreenSize(computer?.kind);
   const kind = (computer?.kind ?? "fake") as ComputerStatus["kind"];
   return {
     ...(computer?.id ? { computerId: computer.id } : {}),
+    runsOnHost: computerRunsOnHost(computer),
     botId,
     imageProfile: ComputerProfileSchema.parse(computer?.imageProfile ?? "base"),
     connectionId: computer?.connectionId ?? null,
@@ -90,6 +91,7 @@ export function toComputerStatus(
     mode: computer?.scope === "dedicated" ? "dedicated" : "team",
     kind,
     state,
+    sleepFailureReason: computer?.sleepFailureReason ?? null,
     controlHolder: (computer?.controlHolder ?? "none") as ComputerStatus["controlHolder"],
     controlBotId: computer?.controlBotId ?? null,
     takeoverRequested: Boolean(computer?.controlRunId),
@@ -101,7 +103,7 @@ export function toComputerStatus(
     screenHeight: screen.height,
     homeRevision: computer?.homeRevision ?? null,
     busyBotName,
-    canUpdate: computerSupportsUpdate(kind),
+    canUpdate: computerSupportsUpdate(computer),
     ...(hostLabel ? { hostLabel } : {}),
   };
 }

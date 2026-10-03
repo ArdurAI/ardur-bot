@@ -29,9 +29,13 @@ describe("overview projections", () => {
       "not-connected",
       "not-connected",
     ]);
-    expect(rows.every((row) => Object.keys(row).sort().join(",") === "id,kind,name,state")).toBe(
-      true,
-    );
+    expect(
+      rows.every((row) =>
+        Object.keys(row).every((key) =>
+          ["id", "kind", "name", "state", "toolsNeedReview"].includes(key),
+        ),
+      ),
+    ).toBe(true);
   });
   it("draws finite sparklines for empty, zero, flat and changing series", () => {
     expect(sparklinePoints([])).toBe("");
@@ -50,7 +54,13 @@ describe("overview projections", () => {
       channels: [],
     });
     expect(rows).toEqual([
-      { id: "calendar", name: "calendar", kind: "integration", state: "needs-sign-in" },
+      {
+        id: "calendar",
+        name: "calendar",
+        kind: "integration",
+        toolsNeedReview: true,
+        state: "needs-sign-in",
+      },
       { id: "paired", name: "Paired channel", kind: "device", state: "connected" },
     ]);
   });
@@ -80,6 +90,41 @@ it.each([
     channels: [],
   });
   expect(result).toEqual([
-    { id: "connection", kind: "integration", name: "calendar", state: expected },
+    {
+      id: "connection",
+      kind: "integration",
+      name: "calendar",
+      toolsNeedReview: true,
+      state: expected,
+    },
   ]);
+});
+
+it("keeps connection health while flagging space tools awaiting review", () => {
+  for (const [spaceAllowedTools, needsReview, expected] of [
+    [["read_item"], false, false],
+    [[], false, true],
+    [["read_item"], true, true],
+  ] as const) {
+    const rows = connectionOverview({
+      integrations: {
+        catalog: [],
+        connections: [
+          {
+            id: "notes",
+            catalogId: "notes",
+            state: "connected",
+            spaceAllowedTools: [...spaceAllowedTools],
+            needsReview,
+            manifest: null,
+            spaceToolPolicies: {},
+          },
+        ],
+      },
+      servers: [],
+      channels: [],
+      devices: [],
+    });
+    expect(rows[0]).toMatchObject({ state: "connected", toolsNeedReview: expected });
+  }
 });

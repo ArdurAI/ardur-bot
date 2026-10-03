@@ -5,10 +5,11 @@ on:
     tags: ["v*"]
   workflow_dispatch:
     inputs:
-      tag:
-        description: Existing v-prefixed tag to package from dev
-        required: true
-        type: string
+      publish:
+        description: Publish only when running on an existing v-prefixed tag
+        required: false
+        type: boolean
+        default: false
       evidence_waiver:
         description: >-
           Reason to publish this preview without measured performance evidence. One plain
@@ -28,7 +29,7 @@ concurrency:
 
 jobs:
   validate:
-    name: Validate preview tag
+    name: Validate preview ref
     runs-on: ubuntu-24.04
     outputs:
       tag: ${{ steps.release.outputs.tag }}
@@ -36,23 +37,49 @@ jobs:
       version: ${{ steps.release.outputs.version }}
       parent: ${{ steps.release.outputs.parent }}
       fixed_release: ${{ steps.release.outputs.fixed_release }}
+      signed: ${{ steps.signing.outputs.signed }}
     steps:
+      - name: Decide macOS signing once
+        id: signing
+        env:
+          MAC_CERTIFICATE_P12: ${{ secrets.MAC_CERTIFICATE_P12 }}
+          MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          signed=false
+          if [[ -n "$MAC_CERTIFICATE_P12" && -n "$MAC_CERTIFICATE_PASSWORD" && -n "$APPLE_ID" && -n "$APPLE_APP_SPECIFIC_PASSWORD" && -n "$APPLE_TEAM_ID" ]]; then
+            signed=true
+          fi
+          printf 'signed=%s\n' "$signed" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Resolve an existing tag on dev
+      - name: Resolve a tag on dev or a branch preview
         id: release
         env:
-          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_REF: ${{ github.ref }}
+          RELEASE_EVENT: ${{ github.event_name }}
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]
-          sha="$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")"
-          git merge-base --is-ancestor "$sha" origin/dev
-          git checkout --detach "$sha"
-          version="$(node scripts/desktop-release.mjs validate "$RELEASE_TAG")"
+          if [[ "$RELEASE_EVENT" == workflow_dispatch && "$RELEASE_REF" == refs/heads/* ]]; then
+            sha="$(git rev-parse HEAD)"
+            version="$(node scripts/desktop-release.mjs branch-version "$sha")"
+            RELEASE_TAG=""
+          else
+            [[ "$RELEASE_REF" == refs/tags/* ]]
+            [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]
+            sha="$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")"
+            git merge-base --is-ancestor "$sha" origin/dev
+            git checkout --detach "$sha"
+            version="$(node scripts/desktop-release.mjs validate "$RELEASE_TAG")"
+          fi
           parent="$(git rev-parse "${sha}^" 2>/dev/null || true)"
           if [[ ! "$parent" =~ ^[0-9a-f]{40}$ ]]; then parent=""; fi
           fixed_sha=""
@@ -73,7 +100,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
   build:
-    name: Unsigned ${{ matrix.platform }} ${{ matrix.arch }}
+    name: ${{ matrix.platform == 'mac' && needs.validate.outputs.signed == 'true' && 'Signed' || 'Unsigned' }} ${{ matrix.platform }} ${{ matrix.arch }}
     needs: validate
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -83,15 +110,17 @@ jobs:
       matrix:
         include:
           - { os: macos-15, platform: mac, arch: arm64, nodePlatform: darwin }
-          - { os: macos-15, platform: mac, arch: x64, nodePlatform: darwin }
+          - { os: macos-15-intel, platform: mac, arch: x64, nodePlatform: darwin }
           - { os: ubuntu-24.04, platform: linux, arch: x64, nodePlatform: linux }
           - { os: ubuntu-24.04-arm, platform: linux, arch: arm64, optional: true, nodePlatform: linux }
           - { os: windows-2022, platform: win, arch: x64, nodePlatform: win32 }
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
-      # Signing discovery is disabled; mac.notarize=false explicitly skips notarization.
-      # No signing/notarization credentials are passed into these unsigned builds.
     steps:
+      - name: Set temporary signing keychain path
+        if: matrix.platform == 'mac' && needs.validate.outputs.signed == 'true'
+        shell: bash
+        run: printf 'CSC_KEYCHAIN=%s/ardur-signing-%s-%s-%s.keychain-db\n' "$RUNNER_TEMP" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "${{ matrix.arch }}" >> "$GITHUB_ENV"
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ needs.validate.outputs.sha }}
@@ -108,15 +137,61 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Generate the Prisma client
         run: pnpm db:generate
+      - name: Set the branch preview version in the disposable checkout
+        if: github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/')
+        shell: bash
+        env:
+          PREVIEW_SHA: ${{ needs.validate.outputs.sha }}
+        run: node scripts/desktop-release.mjs stage-branch "$PREVIEW_SHA"
       # The desktop build also bundles the API, worker, and SQL migrator.
       - name: Build renderer and main process
         run: pnpm --filter @ardurbot/web build && pnpm --filter @ardurbot/desktop build
       # electron-builder's beforePack hook stages this architecture's embedded Postgres.
-      - name: Package without signing or publishing
+      - name: Package preview without an identified developer or publishing
+        if: matrix.platform != 'mac' || needs.validate.outputs.signed != 'true'
         run: pnpm --filter @ardurbot/desktop exec electron-builder --${{ matrix.platform }} --${{ matrix.arch }} --publish never
+      - name: Import Developer ID into a temporary keychain
+        if: matrix.platform == 'mac' && needs.validate.outputs.signed == 'true'
+        env:
+          MAC_CERTIFICATE_P12: ${{ secrets.MAC_CERTIFICATE_P12 }}
+          MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          certificate="$RUNNER_TEMP/ardur-signing-${{ matrix.arch }}.p12"
+          umask 077
+          python3 -c 'import base64, os, pathlib; pathlib.Path(os.environ["RUNNER_TEMP"], "ardur-signing-${{ matrix.arch }}.p12").write_bytes(base64.b64decode(os.environ["MAC_CERTIFICATE_P12"], validate=True))'
+          keychain_password="$(openssl rand -hex 32)"
+          security create-keychain -p "$keychain_password" "$CSC_KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$CSC_KEYCHAIN"
+          security unlock-keychain -p "$keychain_password" "$CSC_KEYCHAIN"
+          security import "$certificate" -k "$CSC_KEYCHAIN" -P "$MAC_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productbuild >/dev/null
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$CSC_KEYCHAIN" >/dev/null
+          rm -f "$certificate"
+      - name: Package with Developer ID and notarize
+        if: matrix.platform == 'mac' && needs.validate.outputs.signed == 'true'
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "true"
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: pnpm --filter @ardurbot/desktop exec electron-builder --mac --${{ matrix.arch }} --config scripts/signed-mac-config.mjs --publish never
+      - name: Delete the temporary signing keychain
+        if: always() && matrix.platform == 'mac' && needs.validate.outputs.signed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f "$CSC_KEYCHAIN" ]]; then security delete-keychain "$CSC_KEYCHAIN"; fi
+          rm -f "$RUNNER_TEMP/ardur-signing-${{ matrix.arch }}.p12"
       - name: Report unavailable optional ARM Linux toolchain
         if: failure() && matrix.optional
         run: echo "::warning title=Linux arm64::ARM Linux packaging failed; the preview will contain the required platforms only. Inspect this job before claiming ARM Linux support."
+      - name: Record the built artifact's signing mode
+        # A failed package step cannot produce a signing record.
+        shell: bash
+        env:
+          SIGNED: ${{ matrix.platform == 'mac' && needs.validate.outputs.signed == 'true' }}
+        run: printf '{"signed":%s}\n' "$SIGNED" > apps/desktop/out/install-build-${{ matrix.platform }}-${{ matrix.arch }}.json
       - name: Upload installers and channel metadata
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -130,10 +205,102 @@ jobs:
             apps/desktop/out/*.exe
             apps/desktop/out/*.blockmap
             apps/desktop/out/latest*.yml
+            apps/desktop/out/install-build-*.json
+
+  install-acceptance:
+    name: "Install ${{ matrix.platform }} ${{ matrix.arch }}${{ matrix.platform == 'win' && ' (advisory: admin runner)' || '' }}"
+    needs: [validate, build]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    continue-on-error: ${{ matrix.platform == 'win' || matrix.optional || false }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-15, platform: mac, arch: arm64 }
+          - { os: macos-15-intel, platform: mac, arch: x64 }
+          - { os: ubuntu-24.04, platform: linux, arch: x64, debArch: amd64, imageArch: x86_64 }
+          - { os: ubuntu-24.04-arm, platform: linux, arch: arm64, debArch: arm64, imageArch: arm64, optional: true }
+          - { os: windows-2022, platform: win, arch: x64 }
+    steps:
+      # The acceptance scripts come from the commit this workflow runs on, which is the
+      # validated commit for a tag and for a branch preview; the next step proves it.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Require the validated commit
+        shell: bash
+        env:
+          VALIDATED_SHA: ${{ needs.validate.outputs.sha }}
+        run: '[[ "$(git rev-parse HEAD)" == "$VALIDATED_SHA" ]]'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: desktop-${{ matrix.platform }}-${{ matrix.arch }}
+          path: installers
+      - name: Enable x64 execution on an Apple silicon runner
+        if: matrix.platform == 'mac' && matrix.arch == 'x64'
+        shell: bash
+        run: |
+          if [[ "$(uname -m)" == arm64 ]]; then
+            softwareupdate --install-rosetta --agree-to-license
+          fi
+      - name: Install and open the quarantined DMG and Homebrew command
+        if: matrix.platform == 'mac'
+        env:
+          ARDUR_INSTALL_LOG_DIR: ${{ runner.temp }}/install-acceptance
+        run: bash scripts/release/install-acceptance-mac.sh installers/ardur-${{ needs.validate.outputs.version }}-mac-${{ matrix.arch }}.dmg
+      - name: Install deb on clean Ubuntu and open under Xvfb
+        if: matrix.platform == 'linux'
+        env:
+          ARDUR_INSTALL_LOG_DIR: ${{ runner.temp }}/install-acceptance
+        run: bash scripts/release/install-acceptance-linux.sh installers/ardur-${{ needs.validate.outputs.version }}-linux-${{ matrix.debArch }}.deb
+      - name: Install AppImage on clean Ubuntu and open under Xvfb
+        if: ${{ !cancelled() && matrix.platform == 'linux' }}
+        env:
+          ARDUR_INSTALL_LOG_DIR: ${{ runner.temp }}/install-acceptance
+        run: bash scripts/release/install-acceptance-linux.sh installers/ardur-${{ needs.validate.outputs.version }}-linux-${{ matrix.imageArch }}.AppImage
+      - name: Check Windows script parsing and process failure assertions
+        if: matrix.platform == 'win'
+        shell: pwsh
+        run: ./scripts/release/install-acceptance-win.test.ps1
+      - name: Silently install, open, and uninstall NSIS on clean Windows
+        if: matrix.platform == 'win'
+        shell: pwsh
+        env:
+          ARDUR_INSTALL_LOG_DIR: ${{ runner.temp }}/install-acceptance
+        run: ./scripts/release/install-acceptance-win-ci.ps1 installers/ardur-${{ needs.validate.outputs.version }}-win-${{ matrix.arch }}.exe
+      - name: Remove temporary Windows acceptance user and profile
+        if: always() && matrix.platform == 'win'
+        shell: pwsh
+        run: ./scripts/release/install-acceptance-win-ci.ps1 -Cleanup
+      - name: Record accepted installer hashes
+        shell: bash
+        run: node scripts/release/install-acceptance-record.mjs record installers accepted/${{ matrix.platform }}-${{ matrix.arch }}.json ${{ matrix.platform }} ${{ matrix.arch }} ${{ needs.validate.outputs.sha }} ${{ needs.validate.outputs.version }}
+      - name: Upload successful install receipt
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: install-approved-${{ matrix.platform }}-${{ matrix.arch }}
+          path: accepted/*.json
+          if-no-files-found: error
+      - name: Report optional install failure
+        if: failure() && matrix.optional
+        shell: bash
+        run: echo "::warning title=Linux arm64::Optional install acceptance failed; these installers must not be published."
+      - name: Upload install logs and screenshots
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: install-acceptance-${{ matrix.platform }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/install-acceptance
+          if-no-files-found: warn
 
   evidence:
     name: Require validated scoreboard evidence
-    needs: [validate, build]
+    if: startsWith(github.ref, 'refs/tags/') && (github.event_name == 'push' || inputs.publish == true)
+    needs: [validate, build, install-acceptance]
     uses: ./.github/workflows/performance.yml
     with:
       candidate_sha: ${{ needs.validate.outputs.sha }}
@@ -143,10 +310,12 @@ jobs:
       gate: required
       release_version: ${{ needs.validate.outputs.version }}
       evidence_waiver: ${{ github.event_name == 'workflow_dispatch' && inputs.evidence_waiver || '' }}
+      mac_signed: ${{ needs.validate.outputs.signed == 'true' }}
 
   publish:
-    name: Publish unsigned pre-release
-    needs: [validate, build, evidence]
+    name: Publish ${{ needs.validate.outputs.signed == 'true' && 'signed macOS' || 'unsigned' }} pre-release
+    if: startsWith(github.ref, 'refs/tags/') && (github.event_name == 'push' || inputs.publish == true)
+    needs: [validate, build, evidence, install-acceptance]
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -171,11 +340,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ needs.validate.outputs.tag }}
           RELEASE_SHA: ${{ needs.validate.outputs.sha }}
+          RELEASE_SIGNED: ${{ needs.validate.outputs.signed }}
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/desktop-release.mjs notes "$RELEASE_TAG" publication/scoreboard-publication/gate.json > release-notes.md
+          node scripts/desktop-release.mjs notes "$RELEASE_TAG" publication/scoreboard-publication/gate.json "$RELEASE_SIGNED" > release-notes.md
           node scripts/scoreboard-index.mjs verify-publication --directory publication/release-ready --gate publication/scoreboard-publication/gate.json
           mapfile -t upload_files < <(node scripts/scoreboard-index.mjs list-upload --directory publication/release-ready)
           [[ "${#upload_files[@]}" -gt 0 ]]
-          node scripts/release-publish.mjs --tag "$RELEASE_TAG" --target "$RELEASE_SHA" --notes release-notes.md --waiver-record publication/scoreboard-publication/waiver-record.json -- "${upload_files[@]}"
+          node scripts/release-publish.mjs --tag "$RELEASE_TAG" --target "$RELEASE_SHA" --notes release-notes.md --waiver-record publication/scoreboard-publication/waiver-record.json --signed "$RELEASE_SIGNED" --signing-record publication/scoreboard-publication/signing.json -- "${upload_files[@]}"

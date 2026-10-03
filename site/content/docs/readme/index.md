@@ -19,10 +19,12 @@ Ardur is an independently maintained fork; see [NOTICE](https://github.com/Ardur
 Apache-2.0 attribution.
 
 > **Status: alpha.** Everything lands on the `dev` branch; `main` moves only after a
-> human has verified a build. The release workflow produces unsigned desktop previews;
+> human has verified a build. macOS previews are signed and notarized when release credentials exist;
 > check the release assets before choosing an installer. Running from source remains available.
 
 ## What you get today
+
+- [Command-line tool](/docs/cli/): Send a bot a task from your terminal or a script.
 
 - Persistent bots with their own conversation, memory, routines and history
 - Group chats whose members answer at the same time — the owner sets how many bots answer at
@@ -46,6 +48,9 @@ Apache-2.0 attribution.
 - Connectors: MCP servers, OpenAPI documents, Composio, Pipedream Connect
 - Approvals before consequential actions, voice mode, and web, Electron desktop and Expo
   mobile clients of the same API
+- [Bot decision evidence](/docs/governance/): space owners can opt in to signed decision records.
+  Members can inspect run verification and download sealed evidence for visible runs to check
+  independently. Evidence is not encrypted and does not prove tool execution or completeness.
 
 Experimental Antigravity text conversations can run on a connected host computer with an exact model pin; see [Antigravity runtime](/docs/antigravity-runtime/).
 
@@ -75,7 +80,7 @@ After synchronization, shared notes are Markdown files in the connected reposito
   Codex through OpenAI's documented integration, Kimi and Z.ai coding plans, Gemini with an
   API key, Ollama as a first-class choice
 - Computers on Podman and kind/Kubernetes
-- Signed and notarized downloads
+- Signed macOS releases once release credentials are provisioned
 - A fast, smooth UI on Windows, macOS and Linux
 
 Roadmap and questions live in [Discussions](https://github.com/ArdurAI/ardur-bot/discussions).
@@ -83,13 +88,14 @@ Roadmap and questions live in [Discussions](https://github.com/ArdurAI/ardur-bot
 ## Install a desktop preview
 
 Download your OS and architecture from [GitHub pre-releases](https://github.com/ArdurAI/ardur-bot/releases).
-These builds are **unsigned**; macOS builds are also **not notarized**. Signed builds come later.
+Release notes say whether macOS builds are signed and notarized. Without release credentials,
+the preview is not signed by an identified developer; use the first-open steps below.
 Only approve a download you trust from the official release page.
 
 - **macOS:** open the arm64 DMG for Apple Silicon or x64 DMG for Intel, drag **Ardur.app**
   into **Applications**, and eject the DMG. The ZIP contains the same app for manual installation.
-  Gatekeeper can say the developer cannot be verified or the app cannot be checked for malicious
-  software. Updates show **“A new version is available — download”**; download the next DMG and
+  Without an identified developer, Gatekeeper can say the developer cannot be verified or the app
+  cannot be checked for malicious software. Updates show **“A new version is available — download”**; download the next DMG and
   replace the app manually.
 - **Windows:** run the x64 NSIS `.exe`. SmartScreen may show **“Windows protected your PC”**
   and an unknown publisher.
@@ -102,13 +108,13 @@ To open the app the first time:
 <!-- Generated from site/data/product.json by pnpm site:facts; edit that file. -->
 **macOS**
 
-- In Finder, right-click the app, choose “Open”, then choose “Open” again.
-- If macOS doesn't offer “Open”, try to open the app once, then go to “System Settings”, then “Privacy & Security”, and choose “Open Anyway”.
+- For a release marked “Signed and notarized for macOS”, open the app normally.
+- Otherwise, try to open the app once. Open System Settings > Privacy & Security, scroll to the message about Ardur, and choose Open Anyway.
 - Enter your password when asked, then choose “Open”.
 - Or remove the download's quarantine flag in Terminal.
 
   ```sh
-  xattr -d com.apple.quarantine "/Applications/Ardur.app"
+  xattr -dr com.apple.quarantine /Applications/Ardur.app
   ```
 - Then open the app.
 
@@ -150,7 +156,7 @@ first launch. You can still connect the client to an existing server. See
 [what commands can do on this computer](/docs/self-host-guide/#what-commands-can-do-on-this-computer).
 For bounded coordinator work in a group, see [team goals](/docs/goals/).
 Docker remains available later as an added computer, and Compose remains the way
-to run a server. Unsigned previews use manual downloads for updates on every OS.
+to run a server. Previews use manual downloads for updates on every OS.
 
 Install the same preview with [Homebrew](/docs/desktop-release/#homebrew-tap-handoff):
 
@@ -161,8 +167,9 @@ brew install --cask ArdurAI/tap/ardur
 ```
 
 Current Homebrew requires the trust step before it loads a third-party cask; Homebrew releases
-without the trust command can skip it. Previews are unsigned and not notarized; approve the app
-once in Privacy & Security. The cask does not bypass macOS quarantine. See
+without the trust command can skip it. For previews without an identified developer, choose
+Open Anyway in Privacy & Security, or use `brew install --cask --no-quarantine ArdurAI/tap/ardur`.
+The install script removes the app's download quarantine flag after copying it. See
 [desktop releases](/docs/desktop-release/) for build and acceptance instructions.
 
 ## Run from source
@@ -227,7 +234,8 @@ pnpm test    # offline unit tests, no keys needed
 ```
 
 More checks and the branch policy are in [CONTRIBUTING.md](/docs/contributing/). Design notes
-are under [docs/](https://github.com/ArdurAI/ardur-bot/tree/__ARDUR_BOT_SOURCE_REF__/docs) where present and decisions under [docs/decisions/](https://github.com/ArdurAI/ardur-bot/tree/__ARDUR_BOT_SOURCE_REF__/docs/decisions).
+are under [docs/](https://github.com/ArdurAI/ardur-bot/tree/__ARDUR_BOT_SOURCE_REF__/docs) where present, including the [command-line guide](/docs/cli/).
+Decisions are under [docs/decisions/](https://github.com/ArdurAI/ardur-bot/tree/__ARDUR_BOT_SOURCE_REF__/docs/decisions).
 
 ## Community
 

@@ -975,13 +975,15 @@ describe("instruction file grants", () => {
         ":minimal": "read",
         [folder]: "read",
       });
-      expect(start?.params?.baseInstructions).toBe(
-        [
-          "bot instructions",
-          "Project instructions (from the folder's instruction files):",
-          "root rules\n\narea rules\n\nfolder rules",
-        ].join("\n\n"),
-      );
+      const text = start?.params?.baseInstructions as string;
+      expect(text.startsWith("Your Codex sandbox is read-only")).toBe(true);
+      expect(text.split("\n\n").slice(1)).toEqual([
+        "bot instructions",
+        "Project instructions (from the folder's instruction files):",
+        "root rules",
+        "area rules",
+        "folder rules",
+      ]);
     },
   );
   it("sends the bot's own instructions alone when the folder has no instruction files", async () => {
@@ -991,7 +993,10 @@ describe("instruction file grants", () => {
     f.request.nativeCwd = folder;
     await f.collect();
     const start = f.messages.find((event) => event.method === "thread/start");
-    expect(start?.params?.baseInstructions).toBe("bot instructions");
+    const text = start?.params?.baseInstructions as string;
+    expect(text.startsWith("Your Codex sandbox is read-only")).toBe(true);
+    expect(text.endsWith("\n\nbot instructions")).toBe(true);
+    expect(text).not.toContain("Project instructions");
     expect(start?.params?.config).toMatchObject({ project_doc_max_bytes: 0 });
   });
   it.each(["thread/start", "thread/resume"] as const)(

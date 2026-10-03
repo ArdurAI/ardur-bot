@@ -25,8 +25,10 @@ import {
   appendBotMessageAuditInTransaction,
   appendEventInTransaction,
   BotInboxFullError,
+  bindChiefAssignment,
   checkPeerTrafficLimits,
   createThreadMessageInTransaction,
+  DELEGATION_ADMISSION_TRANSACTION,
   deviceDigest,
   goalBotAuthorityFingerprint,
   lockPeerTrafficPolicy,
@@ -972,6 +974,12 @@ export async function messageBot(
         });
         await tx.message.update({ where: { id: inbound.id }, data: { runId: nextRun.id } });
         if (chiefChoice.planId && "chiefDispatch" in outboundBlock && outboundBlock.chiefDispatch) {
+          await bindChiefAssignment(tx, {
+            planId: chiefChoice.planId,
+            runId: nextRun.id,
+            memberId: target.id,
+            revision: outboundBlock.chiefDispatch.revision,
+          });
           await tx.message.update({
             where: { id: outbound.id },
             data: {
@@ -1142,7 +1150,7 @@ export async function messageBot(
           targetEventSeq: inboundEvent.seq,
           senderEventSeq: outboundEvent.seq,
         };
-      }),
+      }, DELEGATION_ADMISSION_TRANSACTION),
     );
   } catch (error) {
     if (error instanceof BotInboxFullError) {

@@ -1,5 +1,6 @@
 import type { AdapterContext, ConnectorRoute, SandboxProvider } from "@ardurbot/adapter-kit";
 import {
+  computerRunsOnHost,
   IntegrationManifestSchema,
   IntegrationResourceConstraintsSchema,
   notionResourceId,
@@ -93,15 +94,16 @@ export async function mcpGrantForBot(
       userId: context.userId,
       archivedAt: null,
     },
-    select: { id: true, computer: { select: { kind: true } } },
+    select: { id: true, computer: { select: { kind: true, connectionId: true } } },
   });
-  if (!bot || (assignment?.server.transport === "host-cli" && bot.computer?.kind !== "desktop"))
+  if (!bot || (assignment?.server.transport === "host-cli" && !computerRunsOnHost(bot.computer)))
     return null;
   if (assignment) return assignment;
   const server = await prisma.mcpServer.findFirst({
     where: { id: serverId, spaceId: context.spaceId, userId: context.userId, enabled: true },
   });
-  if (!server || (server.transport === "host-cli" && bot.computer?.kind !== "desktop")) return null;
+  if (!server || (server.transport === "host-cli" && !computerRunsOnHost(bot.computer)))
+    return null;
   return {
     id: null,
     serverId,
@@ -296,4 +298,69 @@ export function integrationResourceDenial(
   }
   walk(args);
   return invalid || !targets ? denial : undefined;
+}
+
+export const MCP_TOOLS_NEED_REVIEW_SENTENCE =
+  "Connected integration tools exist but need review in Settings → Integrations before this bot can use them.";
+
+export function mcpToolsPendingReview(assignment: McpGrant): boolean {
+  const manifest = IntegrationManifestSchema.safeParse(assignment.server.manifest);
+  return (
+    assignment.server.enabled &&
+    assignment.server.connectionState === "connected" &&
+    assignment.access !== "none" &&
+    manifest.success &&
+    manifest.data.tools.length > 0 &&
+    grantedMcpTools(
+      assignment,
+      manifest.data.tools.map((tool) => tool.id),
+    ).length === 0
+  );
+}
+
+/** Report only the acting bot's scoped connections; never reveal another space's tools. */
+export async function mcpReviewDiscoveryLine(
+  prisma: PrismaClient,
+  context: Pick<AdapterContext, "spaceId" | "userId" | "botId">,
+): Promise<string | undefined> {
+  if (!context.botId) return undefined;
+  const bot = await prisma.bot.findFirst({
+    where: {
+      id: context.botId,
+      spaceId: context.spaceId,
+      userId: context.userId,
+      archivedAt: null,
+    },
+    select: { id: true, computer: { select: { kind: true, connectionId: true } } },
+  });
+  if (!bot) return undefined;
+  const servers = await prisma.mcpServer.findMany({
+    where: {
+      spaceId: context.spaceId,
+      userId: context.userId,
+      enabled: true,
+      connectionState: "connected",
+    },
+    include: {
+      assignments: {
+        where: { botId: context.botId, spaceId: context.spaceId, userId: context.userId },
+      },
+    },
+  });
+  const pending = servers.some(
+    (server) =>
+      (server.transport !== "host-cli" || computerRunsOnHost(bot.computer)) &&
+      mcpToolsPendingReview({
+        ...(server.assignments[0] ?? {
+          access: "inherit",
+          allowAllTools: false,
+          needsReview: false,
+          allowedTools: server.spaceAllowedTools,
+        }),
+        server,
+      }),
+  );
+  return pending
+    ? `Tool discovery: ${MCP_TOOLS_NEED_REVIEW_SENTENCE.slice(0, -1)}; tell the person this sentence when they ask to use unavailable integration tools.`
+    : undefined;
 }

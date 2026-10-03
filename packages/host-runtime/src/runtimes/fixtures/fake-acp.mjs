@@ -47,6 +47,91 @@ async function handle(value) {
     if (!value.params?.cwd || !Array.isArray(value.params?.mcpServers)) process.exit(3);
     sessionId = `fixture-${process.pid}`;
     mcp = value.params.mcpServers[0];
+    if (scenario === "pinned-session-schema") {
+      // The pinned ACP stdio schema requires argv and a list of named strings.
+      if (
+        typeof value.params.cwd !== "string" ||
+        typeof mcp?.name !== "string" ||
+        typeof mcp.command !== "string" ||
+        !Array.isArray(mcp.args) ||
+        !mcp.args.every((arg) => typeof arg === "string") ||
+        !Array.isArray(mcp.env) ||
+        !mcp.env.every((item) => typeof item.name === "string" && typeof item.value === "string")
+      ) {
+        send({ id: value.id, error: { code: -32602, message: "Invalid params" } });
+        return;
+      }
+    }
+    if (scenario.startsWith("session-new-context-")) {
+      process.stderr.write("fixture traceback detail\n".repeat(9));
+      send({
+        id: value.id,
+        error: {
+          code: scenario === "session-new-context-wrong-code" ? -32602 : -32603,
+          message: "Internal error",
+          data: {
+            details: `Model fixture-private-model has a context window of 32,768 tokens, which is below the minimum ${scenario === "session-new-context-other-floor" ? "128,000" : "64,000"} required by Hermes Agent. Choose a model with at least 64K context.`,
+            prompt: "fixture private prompt",
+          },
+        },
+      });
+      return;
+    }
+    if (scenario.startsWith("session-new-catalog-")) {
+      send({
+        id: value.id,
+        error: {
+          code: scenario === "session-new-catalog-wrong-code" ? -32602 : -32603,
+          message: "Internal error",
+          data: {
+            details:
+              scenario === "session-new-catalog-other"
+                ? "fixture unrelated failure"
+                : "Constructed tool catalog changed",
+            prompt: "private fixture prompt",
+          },
+        },
+      });
+      return;
+    }
+    if (scenario === "session-new-closed") process.exit(4);
+    if (
+      scenario === "session-new-error" ||
+      scenario === "session-new-long-error" ||
+      scenario === "session-new-escaped-error" ||
+      scenario === "session-new-interleaved-error" ||
+      scenario === "session-new-control-error"
+    ) {
+      const secrets = [
+        process.env.ARDUR_HERMES_PROVIDER_KEY,
+        mcp.args.at(-1),
+        mcp.env.find(({ name }) => name === "BRIDGE_TOKEN")?.value,
+      ];
+      const sequences = ["\x1b[0m", "\x1b]0;fixture title\x07", "\x1bM"];
+      const message = `session refused: ${secrets
+        .map((secret, index) =>
+          scenario === "session-new-escaped-error"
+            ? `${secret.slice(0, 8)}${sequences[index]}${secret.slice(8)}`
+            : scenario === "session-new-interleaved-error"
+              ? [...secret].join(["\t", "\u00a0\u2028", "\u0301\u2029"][index])
+              : secret,
+        )
+        .join(" ")}`;
+      send({
+        id: value.id,
+        error: {
+          code: -32602,
+          message:
+            scenario === "session-new-control-error"
+              ? `${message}\n\r\t\x01\x7f\x1b[31mforged\rline\t\x1b[0m${" \n\r\t".repeat(200)}${"x".repeat(230)} ${secrets[0]} end`
+              : scenario === "session-new-long-error"
+                ? `${message} ${"x".repeat(500)}`
+                : message,
+          data: { message: "fixture private error data", prompt: "fixture private prompt" },
+        },
+      });
+      return;
+    }
     if (scenario === "profile-construction-tool") {
       const client = new Client({ name: "fixture", version: "0.1.0" });
       const transport = new StdioClientTransport({
@@ -71,7 +156,34 @@ async function handle(value) {
       );
       await client.close();
     }
-    if (scenario === "profile-ack" || scenario === "profile-stale")
+    if (scenario === "profile-normalized-catalog") {
+      // Pinned tools/mcp_tool.py normalizes each component before registration;
+      // the owned launcher checks that exact resulting catalog after new_session.
+      const client = new Client({ name: "fixture", version: "0.1.0" });
+      const transport = new StdioClientTransport({
+        command: mcp.command,
+        args: mcp.args,
+        env: Object.fromEntries(mcp.env.map(({ name, value }) => [name, value])),
+      });
+      await client.connect(transport);
+      const listed = await client.listTools();
+      const actual = listed.tools
+        .map(({ name }) => `mcp__ardur__${name.replace(/[^A-Za-z0-9_]/g, "_")}`)
+        .sort();
+      await client.close();
+      if (JSON.stringify(actual) !== process.env.ARDUR_HERMES_ALLOWED_TOOLS) {
+        send({
+          id: value.id,
+          error: {
+            code: -32603,
+            message: "Internal error",
+            data: { details: "Constructed tool catalog changed" },
+          },
+        });
+        return;
+      }
+    }
+    if (["profile-ack", "profile-stale", "profile-normalized-catalog"].includes(scenario))
       writeFileSync(
         join(process.env.HERMES_HOME, "runtime-ack.json"),
         JSON.stringify({
@@ -116,6 +228,7 @@ async function handle(value) {
     return;
   }
   if (value.method !== "session/prompt") return;
+  if (scenario === "hold") return;
   if (scenario === "pending-tool-malformed") pendingPromptId = value.id;
   if (scenario === "malformed") {
     process.stdout.write("{broken\n");

@@ -13,19 +13,3 @@ export function isDesktopComposeStack(env: Record<string, string | undefined> = 
 export function sandboxKindForBot(envKind: string, computerHost: string | null | undefined) {
   return envKind === "docker" && computerHost === "this-mac" ? "desktop" : envKind;
 }
-
-/**
- * The computer a newly created bot starts on. When the owner chose This Mac, new bots still
- * start on a Docker computer when the deployment has the Docker engine and the bot's runtime
- * supports non-host computers (the built-in Ardur runtime, "pi" — every native runtime is
- * host-only). A bot pinned to a native runtime keeps starting on the host. Existing bots
- * never change.
- */
-export function defaultComputerKindForNewBot(
-  envKind: string,
-  computerHost: string | null | undefined,
-  runtimeKind: string,
-) {
-  if (envKind === "docker" && computerHost === "this-mac" && runtimeKind === "pi") return "docker";
-  return sandboxKindForBot(envKind, computerHost);
-}

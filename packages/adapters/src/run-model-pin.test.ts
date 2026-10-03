@@ -157,6 +157,8 @@ describe("run pin snapshots", () => {
       f.loadKey.mockResolvedValue({
         provider: "openai-compatible",
         id: "same-model",
+        contextWindow: 65_536,
+        contextWindowSource: "default",
         baseUrl: "http://127.0.0.1:8080/v1",
         thinkingLevel: "off",
         maxTokens: 16_384,
@@ -191,7 +193,8 @@ describe("run pin snapshots", () => {
       });
       expect(result.kind).toBe("resolved");
       if (result.kind !== "resolved") return;
-      expect(result.contextWindow).toBe(32_768);
+      expect(result.contextWindow).toBe(65_536);
+      expect(result.contextWindowSource).toBe("default");
       expect(result.maxTokens).toBe(path === "delegated" ? 10_000 : 16_384);
       expect(result.pin.effectiveRuntimeConfig?.model).toMatchObject({
         contextWindow: result.contextWindow,
@@ -269,7 +272,7 @@ describe("run pin snapshots", () => {
       id: "same-model",
       baseUrl: "http://127.0.0.1:8080/v1",
       thinkingLevel: "off",
-      contextWindow: 32_768,
+      contextWindow: 65_536,
       maxTokens: 4_096,
     });
     const config = effectiveHermesConfig(null);

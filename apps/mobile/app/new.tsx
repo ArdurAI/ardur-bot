@@ -1,24 +1,24 @@
 import type {
-  ComputerConnectionSettings,
   ComputerMode,
-  ComputerStatus,
-  Me,
+  NewBotComputerOptions,
+  NewBotLocation,
+  NewBotTeamComputer,
 } from "@ardurbot/contracts";
 import {
   BOT_DESCRIPTION_MAX_LENGTH,
   BOT_NAME_MAX_LENGTH,
   BOT_TITLE_MAX_LENGTH,
-  computerKindFacts,
   errorDataCode,
   ISOLATED_COMPUTER_UNAVAILABLE_CODE,
+  NEW_BOT_HOST_UNAVAILABLE_CODE,
+  NEW_BOT_TEAM_LOCATION_CONFLICT_CODE,
   normalizeCreateBotProfile,
-  recommendedContainer,
 } from "@ardurbot/contracts";
 import { Stack, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ComputerLocationPicker } from "../components/computer-location-picker";
 import { ComputerModePicker } from "../components/computer-mode-picker";
-import { RuntimeBoundary } from "../components/runtime-summary";
 import type { MobileBot } from "../lib/api";
 import { rpc } from "../lib/api";
 import { allowFocusPrompt, scheduleFocusPrompt } from "../lib/focus-prompt";
@@ -34,34 +34,38 @@ export default function NewBot() {
   const [description, setDescription] = useState("");
   const [computerMode, setComputerMode] = useState<ComputerMode>("dedicated");
   const [container, setContainer] = useState<{ connectionId: string | null } | null>(null);
-  const [containerName, setContainerName] = useState("");
-  const [teamKind, setTeamKind] = useState("");
+  const [sandboxAvailable, setSandboxAvailable] = useState(false);
+  const [sandboxBoundary, setSandboxBoundary] =
+    useState<NonNullable<NewBotComputerOptions["sandboxBoundary"]>>("container");
+  const [chosenLocation, setComputerLocation] = useState<NewBotLocation>("sandbox");
+  const [team, setTeam] = useState<NewBotTeamComputer | null>(null);
+  const teamComputer = computerMode === "team" ? team : null;
+  const computerLocation = teamComputer?.location ?? chosenLocation;
+  const sandboxConnection = teamComputer
+    ? teamComputer.connectionId
+      ? { connectionId: teamComputer.connectionId }
+      : container?.connectionId === null
+        ? container
+        : null
+    : container;
+  const [hostAvailable, setHostAvailable] = useState(false);
   const [locationReady, setLocationReady] = useState(false);
   const [locationRevision, setLocationRevision] = useState(0);
   useEffect(() => {
     let active = true;
     setLocationReady(false);
     setContainer(null);
-    void Promise.all([
-      rpc<Me>("me"),
-      rpc<{ id: string; name: string; settings: ComputerConnectionSettings }[]>(
-        "computer/connections",
-        {},
-      ),
-      rpc<{ status: ComputerStatus }[]>("computer/list", {}),
-    ])
-      .then(([me, connections, computers]) => {
+    setSandboxAvailable(false);
+    setTeam(null);
+    void rpc<NewBotComputerOptions>("computer/creationOptions")
+      .then((options) => {
         if (active) {
-          const recommendation = recommendedContainer(me.sandboxProvider, connections);
-          setTeamKind(
-            computers.find((entry) => entry.status.mode === "team")?.status.kind ??
-              me.sandboxProvider,
-          );
-          setContainer(recommendation);
-          setContainerName(
-            connections.find((entry) => entry.id === recommendation?.connectionId)?.name ??
-              me.sandboxProvider,
-          );
+          setComputerLocation(options.defaultLocation);
+          setHostAvailable(options.hostAvailable);
+          setContainer(options.container);
+          setSandboxAvailable(options.sandboxAvailable);
+          setSandboxBoundary(options.sandboxBoundary ?? "container");
+          setTeam(options.team);
           setLocationReady(true);
         }
       })
@@ -75,8 +79,7 @@ export default function NewBot() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const computerReady =
-    locationReady &&
-    (computerMode === "dedicated" ? Boolean(container) : Boolean(computerKindFacts(teamKind)));
+    locationReady && (computerLocation === "host" ? hostAvailable : sandboxAvailable);
 
   function close() {
     if (router.canDismiss()) {
@@ -102,7 +105,10 @@ export default function NewBot() {
         ...normalizeCreateBotProfile({ name, title, description }),
         notifyOnFinish: true,
         computerMode,
-        ...(computerMode === "dedicated" && container ? { isolatedComputer: container } : {}),
+        computerLocation,
+        ...(computerLocation === "sandbox" && sandboxConnection
+          ? { isolatedComputer: sandboxConnection }
+          : {}),
       });
       allowFocusPrompt(bot.id);
       router.replace({ pathname: "/thread", params: { botId: bot.id, name: bot.name } });
@@ -116,11 +122,15 @@ export default function NewBot() {
     } catch (err) {
       const refusal = errorDataCode(err) === ISOLATED_COMPUTER_UNAVAILABLE_CODE;
       setError(
-        refusal
-          ? t("Set up a container for isolated work.")
-          : err instanceof Error
-            ? err.message
-            : t("Could not create bot"),
+        errorDataCode(err) === NEW_BOT_TEAM_LOCATION_CONFLICT_CODE
+          ? t("Choose Only this bot to use a different location from the Team computer.")
+          : errorDataCode(err) === NEW_BOT_HOST_UNAVAILABLE_CODE
+            ? t("Connect the host service to choose This computer.")
+            : refusal
+              ? t("Set up a container for isolated work.")
+              : err instanceof Error
+                ? err.message
+                : t("Could not create bot"),
       );
       if (refusal) setLocationRevision((value) => value + 1);
     } finally {
@@ -207,16 +217,19 @@ export default function NewBot() {
           <Text style={{ color: tokens.foreground, fontWeight: "600" }}>
             {t("Where this bot runs")}
           </Text>
-          {container && computerMode === "dedicated" ? (
-            <RuntimeBoundary kind="docker" locationName={containerName} />
-          ) : null}
+          <ComputerLocationPicker
+            value={computerLocation}
+            onChange={setComputerLocation}
+            hostAvailable={hostAvailable}
+            sandboxAvailable={sandboxAvailable}
+            sandboxBoundary={sandboxBoundary}
+            teamLocation={teamComputer?.location}
+            runtimeKind="pi"
+            disabled={!locationReady || pending}
+          />
           <ComputerModePicker value={computerMode} onChange={setComputerMode} />
-          {computerMode === "team" && teamKind ? <RuntimeBoundary kind={teamKind} /> : null}
-          {computerMode === "dedicated" && locationReady && !container ? (
+          {computerLocation === "sandbox" && locationReady && !sandboxAvailable ? (
             <>
-              <Text style={{ color: tokens.mutedForeground }}>
-                {t("Set up a container for isolated work.")}
-              </Text>
               <Pressable
                 accessibilityRole="button"
                 onPress={() =>

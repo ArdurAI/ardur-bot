@@ -1,3 +1,8 @@
+import {
+  ComputerWorkspaceSaveError,
+  ComputerWorkspaceSaveFailureReasonSchema,
+} from "@ardurbot/contracts";
+import { getLogger } from "@ardurbot/logging";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MissingComputerProviderError } from "./computer-connections.js";
 import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
@@ -32,6 +37,7 @@ function fixture(status = "queued") {
       | {
           imageProfile: "base" | "developer";
           connectionId: string | null;
+          destination?: "host" | "sandbox";
           confirmed: true;
         }
       | undefined,
@@ -79,6 +85,119 @@ function fixture(status = "queued") {
   return { row, computer, computerUpdate, deps, jobs };
 }
 describe("background computer maintenance", () => {
+  it("logs only the allowlisted engine failure category, never command output", async () => {
+    const { deps, row } = fixture();
+    const logged = vi.spyOn(getLogger(), "error").mockImplementation(() => {});
+    try {
+      replacement.mockRejectedValueOnce(
+        new ComputerWorkspaceSaveError("engine-unreachable", "permission-denied"),
+      );
+      await performComputerUpdate(deps, row.id);
+      expect(logged).toHaveBeenCalledWith(
+        "computer update failed",
+        undefined,
+        expect.objectContaining({
+          saveFailureReason: "engine-unreachable",
+          engineFailureCategory: "permission-denied",
+        }),
+      );
+      expect(
+        new ComputerWorkspaceSaveError("save-failed", "private-command-output")
+          .engineFailureCategory,
+      ).toBeUndefined();
+    } finally {
+      logged.mockRestore();
+    }
+  });
+  it.each(ComputerWorkspaceSaveFailureReasonSchema.options)(
+    "persists the safe workspace save reason %s",
+    async (reason) => {
+      const { row, deps } = fixture();
+      replacement.mockRejectedValueOnce(new ComputerWorkspaceSaveError(reason));
+      await performComputerUpdate(deps, row.id);
+      expect(row).toMatchObject({ status: "failed", failureReason: reason });
+      expect(computerUpdateView(row).failureReason).toBe(reason);
+    },
+  );
+  it.each(["permission-denied", "timed-out", "command-failed", "source-not-owned"])(
+    "persists and logs only the save category %s, not its local cause",
+    async (category) => {
+      const { deps, row } = fixture();
+      const logged = vi.spyOn(getLogger(), "error").mockImplementation(() => {});
+      try {
+        replacement.mockRejectedValueOnce(
+          new ComputerWorkspaceSaveError("save-failed", category, {
+            cause: new Error("private-output"),
+          }),
+        );
+        await performComputerUpdate(deps, row.id);
+        expect(row).toMatchObject({ status: "failed", failureReason: `save-failed:${category}` });
+        expect(computerUpdateView(row).failureReason).toBe(`save-failed:${category}`);
+        expect(logged).toHaveBeenCalledWith(
+          "computer update failed",
+          undefined,
+          expect.objectContaining({
+            saveFailureReason: "save-failed",
+            engineFailureCategory: category,
+          }),
+        );
+        expect(JSON.stringify(logged.mock.calls)).not.toContain("private-output");
+      } finally {
+        logged.mockRestore();
+      }
+    },
+  );
+  it("passes an explicit sandbox move through the queued worker despite a host default", async () => {
+    const { row, deps } = fixture();
+    row.computer.kind = "desktop";
+    row.configuration = {
+      imageProfile: "base",
+      connectionId: null,
+      destination: "sandbox",
+      confirmed: true,
+    };
+    Object.assign(deps, { sandbox: { describe: () => ({ id: "docker", kind: "docker" }) } });
+    Object.assign(deps.prisma, {
+      deploymentSettings: { findUnique: async () => ({ computerHost: "this-mac" }) },
+    });
+    await performComputerUpdate(deps, row.id);
+    expect(row.status).toBe("completed");
+    expect(replacement).toHaveBeenCalledWith(
+      deps,
+      row.computerId,
+      "update",
+      expect.anything(),
+      "none",
+      expect.any(Function),
+      row.configuration,
+    );
+  });
+  it.each([null, "docker", "podman", "missing", ""])(
+    "admits desktop updates only off the real host (connection %s)",
+    async (connectionId) => {
+      const { row, deps, computerUpdate, jobs } = fixture();
+      row.computer.kind = "desktop";
+      row.computer.connectionId = connectionId;
+      const update = queueComputerUpdate(deps, row.computerId, row.botId);
+      if (connectionId === null) {
+        await expect(update).rejects.toThrow("Computer update is not available on this device");
+        expect(computerUpdate.create).not.toHaveBeenCalled();
+        expect(jobs.enqueue).not.toHaveBeenCalled();
+      } else {
+        await expect(update).resolves.toMatchObject({ id: row.id, action: "update" });
+        expect(computerUpdate.create).toHaveBeenCalledOnce();
+        expect(jobs.enqueue).toHaveBeenCalledOnce();
+      }
+    },
+  );
+
+  it("includes the computer identity so shared bots can find their interrupted update", () => {
+    const { row } = fixture("interrupted");
+    expect(computerUpdateView(row, true)).toMatchObject({
+      computerId: row.computerId,
+      canReleaseReservation: true,
+    });
+  });
   it("persists stages and releases its reservation only after completion; redelivery is harmless", async () => {
     const { row, computer, deps } = fixture();
     replacement.mockImplementationOnce(async (_deps, _id, _mode, _ctx, _holder, progress) => {

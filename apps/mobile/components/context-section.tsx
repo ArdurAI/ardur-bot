@@ -1,6 +1,6 @@
 import type { Brief, ContextSnapshot } from "@ardurbot/contracts";
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { rpc } from "../lib/api";
 import { loadContext } from "../lib/context";
 import { useI18n } from "../lib/i18n";
@@ -31,6 +31,11 @@ export function MobileBrief({ brief }: { brief: Brief }) {
           {brief.rewrittenAt ? (
             <Text style={{ color: tokens.mutedForeground }}>
               {t("Rewritten {time}", { time: new Date(brief.rewrittenAt).toLocaleString() })}
+            </Text>
+          ) : null}
+          {brief.nextAttemptAt ? (
+            <Text style={{ color: tokens.mutedForeground }}>
+              {t("Next try at {time}", { time: new Date(brief.nextAttemptAt).toLocaleString() })}
             </Text>
           ) : null}
           {brief.reason ? (
@@ -163,6 +168,29 @@ export function ContextSection({
               </Text>
             </Pressable>
           ) : null}
+          {value?.integrations.map((item) => (
+            <Text key={item.id} style={{ color: tokens.mutedForeground }}>
+              {item.name} —{" "}
+              {t(item.toolsNeedReview ? "Connected · tools need review" : "Connected")}
+              {item.toolsNeedReview ? (
+                <Text
+                  accessibilityRole="link"
+                  onPress={() => {
+                    void rpc("integrations/list")
+                      .then((value) => {
+                        const url = (value as { webUrl?: string }).webUrl;
+                        if (url) return Linking.openURL(url);
+                        throw new Error("Web review unavailable");
+                      })
+                      .catch(() => setError(true));
+                  }}
+                >
+                  {" "}
+                  · {t("Review tools on web")}
+                </Text>
+              ) : null}
+            </Text>
+          ))}
           {value?.briefs.map((brief) => (
             <MobileBrief key={brief.threadId} brief={brief} />
           ))}

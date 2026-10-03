@@ -12,6 +12,7 @@ import {
   memoryDocsFixture,
   routineDocsFixture,
 } from "./feature-docs-fixtures";
+import { openWorkspaceView } from "./workspace-view";
 
 const captureRoot = process.env.FEATURE_DOCS_DIR
   ? Promise.resolve(process.env.FEATURE_DOCS_DIR)
@@ -212,7 +213,19 @@ test("onboarding: prepare a required connection", async ({ page }) => {
 });
 
 test("bots-create: select a computer mode before creating", async ({ page }) => {
-  await useDashboard(page, { sandboxProvider: "docker" });
+  await useDashboard(page, {
+    sandboxProvider: "docker",
+    rpc: (procedure) =>
+      procedure === "computer/creationOptions"
+        ? {
+            defaultLocation: "sandbox",
+            hostAvailable: false,
+            sandboxAvailable: true,
+            container: { connectionId: null },
+            team: { location: "sandbox", connectionId: "saved" },
+          }
+        : undefined,
+  });
   await page.goto("/app/bot");
   await expectModelReady(page);
   const create = page.getByTestId("create-menu-trigger");
@@ -225,7 +238,20 @@ test("bots-create: select a computer mode before creating", async ({ page }) => 
   const form = page.getByTestId("create-bot-form");
   await expect(form).toBeVisible();
   await expect(form.getByRole("textbox", { name: "Name" })).toBeVisible();
+  const locations = form.getByTestId("computer-location-picker");
+  await expect(
+    locations.getByRole("button", { name: "This computer", exact: true }),
+  ).toBeDisabled();
+  await expect(locations.getByRole("button", { name: "Sandbox", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(locations).toContainText("Connect the host service to choose This computer.");
   await expect(form.getByRole("button", { name: "Only this bot", exact: true })).toBeVisible();
+  await form.getByTestId("create-bot-team").click();
+  await expect(locations).toContainText(
+    "Choose Only this bot to use a different location from the Team computer.",
+  );
   await capture(page, "docs-bots-create-form");
   await form.getByRole("textbox", { name: "Name" }).fill("Planner");
   const privateMode = form.getByRole("button", { name: "Only this bot", exact: true });
@@ -257,6 +283,7 @@ test("models: inspect a connection, default control, and connection form", async
   await expect(panel.getByRole("heading", { name: "Models", exact: true })).toBeVisible();
   await expect(panel.getByText("Connected · Personal connection")).toBeVisible();
   await expect(panel.getByText(connected.label, { exact: true }).first()).toBeVisible();
+  await expect(panel.getByText(/Context limit \(from the provider\)/)).toBeVisible();
   await capture(page, "docs-models-open");
   const otherModel = panel.getByRole("combobox", { name: "Model", exact: true });
   await otherModel.click();
@@ -302,7 +329,7 @@ test("routines: edit a scheduled routine and inspect its result", async ({ page 
   await page.goto("/app/bot");
   await expectModelReady(page);
   await page.getByTitle("Agent computer").click();
-  await page.getByRole("tab", { name: "Routines", exact: true }).click();
+  await openWorkspaceView(page, "Routines");
   await expect(page.getByRole("button", { name: /Morning brief/ })).toBeVisible();
   await capture(page, "docs-routines-open");
   await page.getByRole("button", { name: /Morning brief/ }).click();
@@ -433,6 +460,15 @@ test("integrations: inspect the catalog, tool access, and connection form", asyn
   const permission = manage.getByRole("combobox", { name: "Permission for read_notes" });
   await expect(permission).toHaveValue("ask");
   await capture(page, "docs-integrations-access");
+  await manage.getByRole("button", { name: "Review tools", exact: true }).first().click();
+  const review = page.getByTestId("bot-tool-review");
+  await expect(review.getByRole("checkbox", { name: "read_notes", exact: true })).toBeChecked();
+  await expect(
+    review.getByRole("checkbox", { name: "update_notes", exact: true }),
+  ).not.toBeChecked();
+  await capture(page, "docs-integrations-review");
+  await page.keyboard.press("Escape");
+  await expect(review).toHaveCount(0);
   await permission.selectOption("allow");
   await expect(permission).toHaveValue("allow");
   await capture(page, "docs-integrations-allow");

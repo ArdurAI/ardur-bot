@@ -70,7 +70,7 @@ describe("bot pin editing", () => {
       acceptsImages: false,
       reasoning,
       supportsThinkingOff: true,
-      contextWindow: 32_768,
+      contextWindow: 65_536,
     });
     const update = await botModelPinUpdate(deps, actor, existing, {
       botId: "bot",
@@ -102,7 +102,7 @@ describe("bot pin editing", () => {
         kind: "openai_compatible",
         baseUrl: "http://localhost:8080/v1",
         reasoning: true,
-        contextWindow: 32_768,
+        contextWindow: 65_536,
         maxTokens: 4_096,
       }),
     );
@@ -147,6 +147,13 @@ describe("bot pin editing", () => {
       defaultModel: "same-model",
       isDefault: false,
     });
+    vi.spyOn(deps.secrets, "load").mockReturnValue(
+      JSON.stringify({
+        kind: "openai_compatible",
+        baseUrl: "http://localhost:11434/v1",
+        contextWindow: 65_536,
+      }),
+    );
     const pinned = {
       ...existing,
       runtimeKind: "pi",

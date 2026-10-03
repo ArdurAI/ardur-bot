@@ -7,6 +7,7 @@ import type { PrismaClient } from "@ardurbot/db";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { ComputerBrowserProvider } from "./computer-browser.js";
 import { MissingComputerProviderError } from "./computer-connections.js";
+import { toComputerRef } from "./computer-support.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import { DockerSandboxProvider } from "./docker-sandbox.js";
 import { FakeSandboxProvider } from "./fake-sandbox.js";
@@ -27,6 +28,44 @@ const ctx = {
 };
 
 describe("host-aware sandbox", () => {
+  it.each([
+    ["desktop", null, "host"],
+    ["desktop", "docker", "isolated"],
+    ["desktop", "podman", "isolated"],
+    ["desktop", "kubernetes", "isolated"],
+    ["desktop", "ssh", "isolated"],
+    ["desktop", "missing", "isolated"],
+    ["desktop", "", "isolated"],
+    ["remote-docker", "docker", "isolated"],
+    ["docker", null, "isolated"],
+  ] as const)("routes persisted %s with connection %s to %s", async (kind, connectionId, owner) => {
+    const providers = { isolated: new FakeSandboxProvider(), host: new FakeSandboxProvider() };
+    const sandbox = new HostAwareSandbox(providers.isolated, providers.host, async () => true);
+    const ref = toComputerRef({ homeKey: "home", providerRef: "ref", kind, connectionId });
+    expect(ref.connectionId).toBe(connectionId);
+    expect(await owningSandbox(sandbox, ref, ctx)).toBe(providers[owner]);
+  });
+
+  it.each([null, "docker", "podman", "missing", ""])(
+    "routes desktop with connection %s without host fallback",
+    async (connectionId) => {
+      const isolated = new FakeSandboxProvider();
+      const host = new FakeSandboxProvider();
+      const isolatedCwd = vi.spyOn(isolated, "resolveCommandCwd");
+      const hostCwd = vi.spyOn(host, "resolveCommandCwd");
+      const sandbox = new HostAwareSandbox(isolated, host, async () => true);
+      const computer: ComputerRef = {
+        id: "computer",
+        providerRef: "ref",
+        botId: "bot",
+        kind: "desktop",
+        connectionId,
+      };
+      await sandbox.resolveCommandCwd(computer, undefined, ctx);
+      expect(hostCwd).toHaveBeenCalledTimes(connectionId === null ? 1 : 0);
+      expect(isolatedCwd).toHaveBeenCalledTimes(connectionId === null ? 0 : 1);
+    },
+  );
   const hostRoot = mkdtempSync(path.join(tmpdir(), "ardurbot-host-root-"));
 
   afterAll(() => {
@@ -151,6 +190,7 @@ describe("host-aware sandbox", () => {
 
   it.each([
     ["desktop", true, "host"],
+
     ["docker", true, "isolated"],
     ["docker", false, "isolated"],
   ] as const)(
@@ -537,7 +577,7 @@ describe("a Docker deployment with a host bridge", () => {
   });
 
   it("starts and runs a new computer on Docker until the host is chosen", async () => {
-    const { sandbox, provisions } = await stackSandbox(null);
+    const { sandbox, provisions, RemoteHostSandboxProvider } = await stackSandbox(null);
     const execute = vi
       .spyOn(DockerSandboxProvider.prototype, "execute")
       .mockImplementation(async function* () {
@@ -550,10 +590,11 @@ describe("a Docker deployment with a host bridge", () => {
       { type: "exit", code: 0 },
     ]);
     expect(execute).toHaveBeenCalledOnce();
-    const missing = owningSandbox(sandbox, { kind: "desktop" }, ctx);
-    await expect(missing).rejects.toBeInstanceOf(MissingComputerProviderError);
-    // The sentence names the paired desktop, not the platform the API happens to run on.
-    await expect(missing).rejects.toThrow("This computer runs on This Mac");
+    // Explicit host computers can use the paired bridge without changing the default.
+    await expect(owningSandbox(sandbox, { kind: "desktop" }, ctx)).resolves.toBeInstanceOf(
+      RemoteHostSandboxProvider,
+    );
+    expect(provisions.host).not.toHaveBeenCalled();
   });
 
   it("starts a new computer on this computer through the host bridge once Set up chose it", async () => {

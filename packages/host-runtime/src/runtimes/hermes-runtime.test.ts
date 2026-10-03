@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import type { AgentRunRequest, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
 import { HermesExecutionEnvelopeSchema } from "@ardurbot/contracts/runtime-config";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createConsoleSink } from "../../../logging/src/console-sink.js";
 import { createLogger } from "../../../logging/src/logger.js";
 import { createTestSink } from "../../../logging/src/test-sink.js";
 import profileFixture from "../../python/tests/valid_profile.json" with { type: "json" };
@@ -81,6 +82,344 @@ function turnFinishSignal(runId: string) {
 
 describe("HermesRuntime M0 ACP seam", () => {
   afterEach(() => vi.unstubAllEnvs());
+
+  it("attests the pinned MCP wire names for a 56-tool connected catalog", async () => {
+    const names = [
+      "mcp__fixture-app__read",
+      ...Array.from({ length: 55 }, (_, i) => `fixture_${i}`),
+    ];
+    const profile = HermesExecutionEnvelopeSchema.parse(profileFixture);
+    let allowed: string[] = [];
+    const adapter = new HermesRuntime({
+      command: process.execPath,
+      args: [fixture, "profile-normalized-catalog"],
+      pinned: true,
+      executionEnvelope: profile,
+      launch: async (spec) => {
+        allowed = JSON.parse(spec.env.ARDUR_HERMES_ALLOWED_TOOLS!);
+        return launchUnconfinedProcess(spec);
+      },
+    });
+    const run = request({
+      tools: names.map((name) => ({
+        name,
+        description: "Synthetic tool",
+        inputSchema: { type: "object" },
+      })),
+      model: {
+        provider: "fixture",
+        baseUrl: "http://127.0.0.1:9/v1",
+        apiKey: "fixture-grant",
+        ...profile.effectiveRuntimeConfig.model,
+      },
+    });
+    expect((await collect(adapter, run)).at(-1)).toEqual({ type: "done" });
+    expect(allowed).toEqual(
+      names.map((name) => `mcp__ardur__${name.replace(/[^A-Za-z0-9_]/g, "_")}`).sort(),
+    );
+  });
+
+  it.each([
+    ["session-new-catalog-match", "runtime-tool-catalog-mismatch"],
+    ["session-new-catalog-wrong-code", "session-start-failed"],
+    ["session-new-catalog-other", "session-start-failed"],
+  ])("classifies only the owned catalog check: %s", async (scenario, reasonId) => {
+    const run = request();
+    run.model.runtimePin = {
+      runtimeKind: "hermes",
+      provider: "fixture",
+      modelId: "fixture-model",
+      effort: "high",
+      credentialId: "fixture-connection",
+      revision: 1,
+    };
+    await expect(collect(runtime(scenario!), run)).rejects.toMatchObject({
+      name: "RuntimePinError",
+      problem: { reasonId },
+    });
+  });
+
+  it("refuses a colliding catalog before launching any process", async () => {
+    const launch = vi.fn(launchUnconfinedProcess);
+    const adapter = new HermesRuntime({ command: process.execPath, args: [fixture], launch });
+    await expect(
+      collect(
+        adapter,
+        request({
+          tools: ["read-file", "read_file"].map((name) => ({
+            name,
+            description: "Read",
+            inputSchema: { type: "object" },
+          })),
+        }),
+      ),
+    ).rejects.toThrow("Hermes tool names collide.");
+    expect(launch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ kind: "profile-unacknowledged" }, "runtime-profile-unacknowledged"],
+    [{ kind: "response-limit" }, "provider-response-too-large"],
+    [{ kind: "request-limit" }, "provider-request-too-large"],
+    [{ kind: "grant-refused" }, "provider-grant-refused"],
+    [{ kind: "provider-http", status: 401 }, "provider-auth-failed"],
+    [{ kind: "provider-http", status: 429 }, "usage-limit"],
+    [{ kind: "provider-failed" }, "provider-request-failed"],
+  ] as const)(
+    "carries the safe relay cause into a pinned failure: %j",
+    async (failure, reasonId) => {
+      const run = request();
+      run.model.runtimePin = {
+        runtimeKind: "hermes",
+        provider: "fixture",
+        modelId: "fixture-model",
+        effort: "high",
+        credentialId: "fixture-connection",
+        revision: 1,
+      };
+      const adapter = new HermesRuntime({
+        command: process.execPath,
+        args: [fixture, "hold"],
+        launch: launchUnconfinedProcess,
+        onTurnFinished: () => {},
+      });
+      let ready!: () => void;
+      const sessionReady = new Promise<void>((resolve) => {
+        ready = resolve;
+      });
+      run.onRuntimeInfo = async () => ready();
+      const pending = collect(adapter, run).catch((error: unknown) => error);
+      await sessionReady;
+      await adapter.fail(run.runId, failure);
+      expect(await pending).toMatchObject({ name: "RuntimePinError", problem: { reasonId } });
+    },
+  );
+
+  it("keeps the session request compatible with the pinned ACP stdio schema", async () => {
+    const events = await collect(runtime("pinned-session-schema"), request());
+    expect(events.at(-1)).toEqual({ type: "done" });
+  });
+
+  it.each([false, true])(
+    "explains the pinned context floor without exposing private details (pinned=%s)",
+    async (pinned) => {
+      vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", undefined);
+      const records: string[] = [];
+      const sink = new Writable({
+        write(chunk, _encoding, done) {
+          records.push(String(chunk));
+          done();
+        },
+      });
+      const run = request();
+      if (pinned)
+        run.model.runtimePin = {
+          runtimeKind: "hermes",
+          provider: "fixture",
+          modelId: "fixture-model",
+          effort: "high",
+          credentialId: "fixture-connection",
+          revision: 1,
+        };
+      const adapter = new HermesRuntime({
+        command: process.execPath,
+        args: [fixture, "session-new-context-error"],
+        launch: launchUnconfinedProcess,
+        logger: createChildProcessLogger(sink),
+      });
+      const failure = await collect(adapter, run).catch((error: unknown) => error);
+      expect(failure).toMatchObject({
+        message: "Hermes needs a model with at least 64K context; change the model and try again.",
+      });
+      if (pinned)
+        expect(failure).toMatchObject({
+          name: "RuntimePinError",
+          problem: {
+            reasonId: "model-context-too-small",
+            pin: run.model.runtimePin,
+            actions: ["change-pin"],
+          },
+        });
+      const logs = records.join("");
+      expect(logs).toContain("Internal error");
+      expect(logs).not.toContain("fixture-private-model");
+      expect(logs).not.toContain("fixture private prompt");
+      expect(logs).not.toContain("fixture traceback detail");
+      expect(logs).not.toContain("data");
+    },
+  );
+
+  it.each(["session-new-context-wrong-code", "session-new-context-other-floor"])(
+    "does not guess the context floor for %s",
+    async (scenario) => {
+      await expect(collect(runtime(scenario), request())).rejects.toThrow(
+        "Hermes could not start a session. Check the runtime and try again.",
+      );
+    },
+  );
+  it.each([
+    ["session-new-error", false],
+    ["session-new-error", true],
+    ["session-new-long-error", false],
+    ["session-new-long-error", true],
+    ["session-new-escaped-error", false],
+    ["session-new-escaped-error", true],
+    ["session-new-interleaved-error", false],
+    ["session-new-interleaved-error", true],
+    ["session-new-control-error", false],
+    ["session-new-control-error", true],
+  ] as const)(
+    "logs only safe protocol metadata for %s (detailed=%s)",
+    async (scenario, detailed) => {
+      vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", detailed ? "1" : undefined);
+      vi.stubEnv("LOG_LEVEL", "debug");
+      const records: string[] = [];
+      const sink = new Writable({
+        write(chunk, _encoding, done) {
+          records.push(String(chunk));
+          done();
+        },
+      });
+      const run = request();
+      run.model.runtimePin = {
+        runtimeKind: "hermes",
+        provider: "fixture",
+        modelId: "fixture-model",
+        effort: "high",
+        credentialId: "fixture-connection",
+        revision: 1,
+      };
+      const adapter = new HermesRuntime({
+        command: process.execPath,
+        args: [fixture, scenario],
+        launch: async (spec) => ({
+          ...(await launchUnconfinedProcess(spec)),
+          mcpConfig: {
+            command: "fixture",
+            args: ["bridge", "fixture-bridge-argument"],
+            env: { BRIDGE_TOKEN: "fixture-bridge-environment" },
+          },
+        }),
+        logger: createChildProcessLogger(sink),
+      });
+      try {
+        const failure = await collect(adapter, run).catch((error: unknown) => error);
+        expect(failure).toMatchObject({
+          name: "RuntimePinError",
+          problem: {
+            reasonId: "session-start-failed",
+            reason: "Hermes could not start a session. Check the runtime and try again.",
+          },
+        });
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        const failures = records
+          .map((line) => JSON.parse(line))
+          .filter((record) => record.level === "error");
+        expect(failures).toHaveLength(1);
+        expect(failures[0].message).toBe("Hermes turn failed");
+        const facts = JSON.parse(failures[0].error.message);
+        const prefix = "session refused: [redacted] [redacted] [redacted]";
+        expect(facts).toMatchObject({
+          kind: "ACP handshake failed",
+          phase: "session/new",
+          acpFailure: "protocol-error",
+          protocolErrorCode: -32602,
+          protocolErrorMessage:
+            scenario === "session-new-control-error"
+              ? `${prefix} forged line ${"x".repeat(230)} [redacted] end`.slice(0, 300)
+              : scenario === "session-new-long-error"
+                ? `${prefix} ${"x".repeat(500)}`.slice(0, 300)
+                : prefix,
+        });
+        expect(facts.protocolErrorMessage).not.toMatch(/\p{Cc}/u);
+        expect(facts.protocolErrorMessage.length).toBeLessThanOrEqual(300);
+        const logged = records.join("");
+        for (const privateText of [
+          run.model.apiKey!,
+          "fixture-bridge-argument",
+          "fixture-bridge-environment",
+          "fixture private error data",
+          "fixture private prompt",
+        ])
+          expect(logged).not.toContain(privateText);
+        expect(JSON.stringify(failure)).not.toContain("session refused:");
+        expect((failure as Error).cause).toMatchObject({
+          message: expect.stringContaining("phase: session/new"),
+        });
+        expect(((failure as Error).cause as Error).cause).toBeUndefined();
+      } finally {
+        sink.destroy();
+      }
+    },
+  );
+
+  it("keeps protocol error bindings on one line through the pretty console sink", async () => {
+    vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", undefined);
+    const output = vi.spyOn(console, "error").mockImplementation(() => {});
+    const sink = createTestSink();
+    const run = request();
+    const adapter = new HermesRuntime({
+      command: process.execPath,
+      args: [fixture, "session-new-control-error"],
+      launch: async (spec) => ({
+        ...(await launchUnconfinedProcess(spec)),
+        mcpConfig: {
+          command: "fixture",
+          args: ["bridge", "fixture-bridge-argument"],
+          env: { BRIDGE_TOKEN: "fixture-bridge-environment" },
+        },
+      }),
+      logger: createLogger({
+        service: "fixture",
+        level: "debug",
+        sinks: [sink, createConsoleSink({ format: "pretty" })],
+      }),
+    });
+    try {
+      await expect(collect(adapter, run)).rejects.toThrow(
+        "Hermes could not start a session. Check the runtime and try again.",
+      );
+      const record = sink.events.find((event) => event.message === "Hermes turn failed");
+      expect(record?.protocolErrorMessage).toBe(
+        `session refused: [redacted] [redacted] [redacted] forged line ${"x".repeat(230)} [redacted] end`.slice(
+          0,
+          300,
+        ),
+      );
+      expect(output).toHaveBeenCalledTimes(1);
+      const line = String(output.mock.calls[0]?.[0]);
+      expect(line).not.toMatch(/\p{Cc}/u);
+      expect(line).toContain("protocolErrorMessage=session refused: [redacted]");
+      expect(line).not.toContain(run.model.apiKey!);
+      expect(line).not.toContain("fixture-bridge");
+    } finally {
+      output.mockRestore();
+    }
+  });
+
+  it("records a child closing during session/new as closed, not a protocol refusal", async () => {
+    const error = vi.fn();
+    const adapter = new HermesRuntime({
+      command: process.execPath,
+      args: [fixture, "session-new-closed"],
+      launch: launchUnconfinedProcess,
+      logger: { debug: vi.fn(), error },
+    });
+    await expect(collect(adapter, request())).rejects.toThrow(
+      "Hermes could not start a session. Check the runtime and try again.",
+    );
+    expect(error).toHaveBeenCalledExactlyOnceWith(
+      "Hermes turn failed",
+      expect.objectContaining({
+        kind: "ACP handshake failed",
+        phase: "session/new",
+        acpFailure: "closed",
+        exitCode: 4,
+        protocolErrorCode: undefined,
+        protocolErrorMessage: undefined,
+      }),
+    );
+  });
   it("redacts provider and overridden bridge credentials from child stderr", async () => {
     vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", "1");
     const debug: string[] = [];
@@ -319,11 +658,13 @@ describe("HermesRuntime M0 ACP seam", () => {
       stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: message.id, result })}\n`);
     });
     const finished = vi.fn();
+    const error = vi.fn();
     const adapter = new HermesRuntime({
       command: "fixture",
       pinned: true,
       launch: async () => ({ child, teardown: async () => undefined }),
       onTurnFinished: finished,
+      logger: { debug: vi.fn(), error },
     });
     const base = request();
     const run = request({
@@ -354,6 +695,14 @@ describe("HermesRuntime M0 ACP seam", () => {
       expect(finished).not.toHaveBeenCalled();
       await vi.advanceTimersByTimeAsync(423_200);
       await expect(completion).rejects.toThrow("Hermes could not complete this turn.");
+      expect(error).toHaveBeenCalledWith(
+        "Hermes turn failed",
+        expect.objectContaining({
+          phase: "prompt",
+          acpFailure: "timeout",
+          protocolErrorCode: undefined,
+        }),
+      );
     } finally {
       vi.useRealTimers();
     }

@@ -18,6 +18,42 @@ Pi runs in the Ardur API/worker process. It is not installed in, or executed by,
 
 ## Computer contract
 
+### Location and new-bot defaults
+
+New bots default to **This computer** when the acting user is the deployment owner
+and their host service is paired and connected. Otherwise they retain the deployment's
+sandbox default. Explicit local desktop deployments keep their owner-only local host
+path; they do not need a separate paired registration. The server applies this policy
+and rechecks an explicit host choice when creating the bot. The existing deployment
+`computerHost` setting is the one override: `this-mac` prefers the host and `docker`
+prefers the sandbox. An unavailable host always falls back to the sandbox. If the
+sandbox preference is unavailable but the owner can use the host, creation selects the host.
+
+The new-bot form and **Where this bot runs → Change location** offer **This computer**
+and **Sandbox** side by side, with equal weight. A bot on This computer runs as the
+person and can reach their files and signed-in tools, within the existing host guards.
+The sandbox is the choice for separation: it has a separate home, but can still reach
+allowed network services and granted credentials. Sandbox is available with any
+non-host deployment provider, including hosted sandboxes, or a saved container engine.
+Sharing (**Shared with team** or
+**Only this bot**) is a separate choice, not the execution boundary.
+
+Codex, Claude Code, Antigravity and Hermes require the host. Sandbox stays visible
+but disabled with the runtime's reason; This computer stays visible but disabled
+when the owner's host service is unavailable. Existing bots never move because a
+default changed. Shared with team selects the Team computer's actual location and
+saved connection before submission and disables the other location; choosing a
+different location requires Only this bot. Duplicates inherit the source's location
+and sharing. Automatic first-run and quick creation join a usable Team computer;
+otherwise they use the server default, with a dedicated sandbox instead of an
+unavailable host Team computer. A saved runtime/location mismatch
+offers **Move to This computer** at the top of bot settings, with the existing
+confirmed move and workspace checkpoint flow.
+
+Mobile creation uses the same server default and equal native location choices.
+Existing location changes, including mismatch repair, retain the safe
+**Change location on desktop** action; the phone never moves a computer implicitly.
+
 Each workspace gets one Team Computer by default. Bots share its files and installed tools. Each Team bot starts in `bots/<bot-id>/`, while deliberately shared work belongs in `shared/`. These folders organize work but are not security boundaries: every Team bot can access the full Team workspace. A bot can instead use a Private Computer, where the whole workspace is its home.
 
 Each active Team bot gets its own X display and Chrome process, with a persistent Chrome profile keyed to the bot's identity. Logins, cookies, and browser history are independent. Profiles are never cloned from another bot, merged, or deleted when a desktop is released. Both bots keep their changes; reopening a bot uses its existing profile even when its display slot changes. Team runs use fenced per-bot database leases: different bots can operate concurrently, and one bot has only one computer driver at a time.
@@ -65,6 +101,23 @@ The portable computer workspace is the durable boundary. E2B uses `/home/user/ar
 
 Before exporting a remote workspace, remote backends quiesce desktop browsers so profile databases and login state are copied consistently. Run checkpoints defer while another bot holds an execution or user-control lease; the last finishing run or idle job saves the shared workspace. Idle shutdown claims the computer before exporting, preventing a new bot from starting during the snapshot. They exclude only transient cache/lock files inside `.browser-profiles`; similarly named project files remain durable.
 
+The exhaustive computer-kind policy keeps host workspace files in place during
+idle sleep: a computer on This computer does not export or copy them. Containers,
+hosted computers, remote accounts and test computers retain their sleep checkpoint.
+Execution-kind resolution prevents a saved container connection on a legacy host
+row from bypassing that checkpoint. Moving, updating and resetting a host still
+save its workspace before replacement.
+
+An incoming message during an idle checkpoint waits: Team lease admission refuses
+the save claim, and dedicated setup retries instead of waking or failing the run.
+The status says **Saving your workspace**, not **Paused for an update**. A long
+save renews its claim; transient renewal failures retry and lost ownership cancels
+the export before releasing the fence. When work arrives, completion keeps the
+computer running and immediately republishes queued runs. Busy-run retries also
+recheck readiness after publication so a late delayed job cannot overwrite that
+wake. Messages that arrive while stop finishes are also immediately continued and
+wake the suspended computer. No run accesses the source during its export.
+
 The disposable OS image is not a portable disk snapshot. System packages installed outside the workspace are lost when moving to another provider; durable machine customization should be represented by a reproducible image or setup recipe. This is what makes a future backend switch practical instead of trying to translate vendor-specific VM snapshots.
 
 ## Verification
@@ -102,6 +155,14 @@ the computer supports that action, not that a newer image was detected. Provider
 migration and image-version discovery are not part of this UI. Updates checkpoint
 live work before teardown. Recovery can fall back to the last saved workspace,
 so its failure action warns that unsaved work may be lost.
+
+Before a replacement saves live work, a provider may resume the existing source
+through `ensureWorkspaceReady`; it must never allocate a fresh workspace there.
+Container engines start an owned stopped container only after checking its owned
+home volume. A missing source fails the save instead of replacing it with empty
+files. Failed saves persist a typed cause and show one translated sentence in the
+failed-update dialog. Save diagnostics log only failure categories, never engine
+command output.
 
 The reconciler republishes queued operations after a missed enqueue. Jobs already
 claimed are never destructively replayed. A worker that stops heartbeating for ten

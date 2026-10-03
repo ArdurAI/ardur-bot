@@ -75,7 +75,9 @@ it("loads scoped context through the shared schemas and does not render unknown 
       ? [brief]
       : procedure === "metrics/context"
         ? { today: [], sevenDays: [] }
-        : { budgets: {}, concurrentRuns: 3, spaceConcurrentRuns: 3, coordinatorBotId: null },
+        : procedure === "integrations/available"
+          ? []
+          : { budgets: {}, concurrentRuns: 3, spaceConcurrentRuns: 3, coordinatorBotId: null },
   );
   expect((await loadContext("chief", "alpha")).briefs).toEqual([brief]);
   expect(rpc).toHaveBeenCalledWith("briefs/list", { botId: "chief", groupId: "alpha" });
@@ -88,5 +90,39 @@ it("loads scoped context through the shared schemas and does not render unknown 
   expect(node.textContent).toContain(ZH_MESSAGES["Concurrent runs"]);
   expect(node.textContent).toContain("—");
   expect(node.textContent).not.toContain("0%");
+  await act(async () => root.unmount());
+});
+
+it("shows the next brief attempt in the phone's active language", async () => {
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  const at = "2026-10-04T08:00:00Z";
+  await act(async () =>
+    root.render(createElement(MobileBrief, { brief: { ...brief, nextAttemptAt: at } })),
+  );
+  await act(async () => node.querySelector("button")!.click());
+  expect(node.textContent).toContain(
+    ZH_MESSAGES["Next try at {time}"]!.replace("{time}", new Date(at).toLocaleString()),
+  );
+  await act(async () => root.unmount());
+});
+
+it("shows pending integration status and the explicit web review path on phone", async () => {
+  vi.mocked(rpc).mockImplementation(async (procedure) =>
+    procedure === "briefs/list"
+      ? []
+      : procedure === "metrics/context"
+        ? { today: [], sevenDays: [] }
+        : procedure === "integrations/available"
+          ? [{ id: "notes", name: "Notes", toolsNeedReview: true }]
+          : { budgets: {}, concurrentRuns: 3, spaceConcurrentRuns: 3, coordinatorBotId: null },
+  );
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  await act(async () => root.render(createElement(ContextSection, { botId: "bot" })));
+  await act(async () => node.querySelector("button")!.click());
+  expect(node.textContent).toContain(ZH_MESSAGES["Connected · tools need review"]);
+  expect(node.textContent).toContain(ZH_MESSAGES["Review tools on web"]);
+  expect(RU_MESSAGES["Review tools on web"]).toBeTruthy();
   await act(async () => root.unmount());
 });

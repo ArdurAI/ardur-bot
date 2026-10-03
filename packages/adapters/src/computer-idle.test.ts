@@ -2,9 +2,16 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentHomeStore, JobPublisher, SandboxProvider } from "@ardurbot/adapter-kit";
+import type {
+  AdapterContext,
+  AgentHomeStore,
+  ComputerRef,
+  JobPublisher,
+  SandboxProvider,
+} from "@ardurbot/adapter-kit";
 import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MissingComputerProviderError } from "./computer-connections.js";
 import {
   BACKGROUND_WORK_LAUNCH,
   BACKGROUND_WORK_PROBE,
@@ -12,11 +19,145 @@ import {
   CANCEL_PRIMARY_BROWSER_WORK,
   DEFAULT_SANDBOX_IDLE_MS,
   sandboxIdleMs,
+  scheduleComputerSleep,
   sleepComputerIfIdle,
 } from "./computer-idle.js";
+import { acquireComputerExecutionLease, ComputerBusyError } from "./computer-lifecycle.js";
 import { e2bCreateOptions } from "./e2b-sandbox.js";
 
+afterEach(() => vi.useRealTimers());
+
 describe("sandbox idle", () => {
+  it("sleeps a host with a large workspace without exporting or committing it", async () => {
+    const harness = idleHarness({ exportError: new Error("large workspace must not be copied") });
+    harness.computer.kind = "desktop";
+    await sleepComputerIfIdle(harness.deps, harness.computer.id);
+    expect(harness.sandbox.exportWorkspace).not.toHaveBeenCalled();
+    expect(harness.home.commit).not.toHaveBeenCalled();
+    expect(harness.computer.homeRevision).toBe("rev-before");
+    expect(harness.computer.state).toBe("suspended");
+    expect(harness.sandbox.stop).toHaveBeenCalledOnce();
+  });
+
+  it.each(["remote-docker", "docker", "desktop"])(
+    "still checkpoints a container stored as %s",
+    async (kind) => {
+      const harness = idleHarness();
+      harness.computer.kind = kind;
+      Object.assign(harness.computer, { connectionId: "container-engine" });
+      await sleepComputerIfIdle(harness.deps, harness.computer.id);
+      expect(harness.sandbox.exportWorkspace).toHaveBeenCalledOnce();
+      expect(harness.home.commit).toHaveBeenCalledOnce();
+      expect(harness.computer.state).toBe("suspended");
+    },
+  );
+
+  it.each([false, true])(
+    "queues arriving Team runs after a long idle save (transient renewal failure: %s)",
+    async (transientFailure) => {
+      const harness = idleHarness();
+      Object.assign(harness.computer, { scope: "team" });
+      let finish!: () => void;
+      const barrier = new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      harness.home.commit.mockImplementationOnce(async () => {
+        await barrier;
+        return "rev-checkpoint";
+      });
+      vi.useFakeTimers();
+      const sleep = sleepComputerIfIdle(harness.deps, harness.computer.id);
+      await vi.waitFor(() => expect(harness.home.commit).toHaveBeenCalled());
+      if (transientFailure)
+        harness.prisma.computer.updateMany.mockRejectedValueOnce(new Error("temporary failure"));
+      await vi.advanceTimersByTimeAsync(357_000);
+      expect(Date.now() - harness.computer.updatedAt.getTime()).toBeLessThan(30_000);
+      const admissionPrisma = {
+        computer: { findUniqueOrThrow: async () => ({ ...harness.computer }) },
+        computerExecutionLease: {
+          updateManyAndReturn: vi.fn(async () => []),
+          create: vi.fn(async () => ({ fence: 1 })),
+        },
+      } as unknown as PrismaClient;
+      await expect(
+        acquireComputerExecutionLease(admissionPrisma, {
+          computerId: harness.computer.id,
+          runId: "incoming",
+          botId: "bot",
+        }),
+      ).rejects.toBeInstanceOf(ComputerBusyError);
+      harness.prisma.run.findFirst.mockResolvedValue({ id: "incoming" });
+      harness.prisma.run.findMany.mockResolvedValue([{ id: "incoming" }, { id: "peer" }]);
+      finish();
+      await sleep;
+      expect(harness.computer.state).toBe("running");
+      expect(harness.sandbox.stop).not.toHaveBeenCalled();
+      expect(harness.jobs.enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "run.continue",
+          payload: { runId: "incoming" },
+          replaceKey: "run:incoming",
+        }),
+      );
+      expect(harness.jobs.enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "run.continue",
+          payload: { runId: "peer" },
+          replaceKey: "run:peer",
+        }),
+      );
+      const continuations = harness.jobs.enqueue.mock.calls
+        .map(([job]) => job)
+        .filter((job) => job.name === "run.continue");
+      expect(continuations.every((job) => job.availableAt === undefined)).toBe(true);
+      await expect(
+        acquireComputerExecutionLease(admissionPrisma, {
+          computerId: harness.computer.id,
+          runId: "incoming",
+          botId: "bot",
+        }),
+      ).resolves.toMatchObject({ runId: "incoming", fence: 1 });
+    },
+  );
+  it("aborts and settles an export when renewal loses the claim, without stopping a newer owner", async () => {
+    vi.useFakeTimers();
+    const harness = idleHarness();
+    harness.sandbox.exportWorkspace.mockImplementationOnce(async function* (_computer, context) {
+      await new Promise<void>((_resolve, reject) => {
+        context.signal.addEventListener("abort", () => reject(context.signal.reason), {
+          once: true,
+        });
+      });
+      yield { path: "unreachable", content: new Uint8Array() };
+    });
+    const sleep = sleepComputerIfIdle(harness.deps, harness.computer.id);
+    await vi.waitFor(() => expect(harness.sandbox.exportWorkspace).toHaveBeenCalled());
+    harness.computer.updatedAt = new Date(harness.computer.updatedAt.getTime() + 1);
+    const rejected = expect(sleep).rejects.toThrow("lost its lifecycle claim");
+    await vi.advanceTimersByTimeAsync(30_000);
+    await rejected;
+    expect(harness.sandbox.stop).not.toHaveBeenCalled();
+    expect(harness.home.commit).not.toHaveBeenCalled();
+    expect(harness.computer.state).toBe("suspending");
+  });
+
+  it("wakes queued work that arrives after the activity check while stop is finishing", async () => {
+    const harness = idleHarness();
+    harness.sandbox.stop.mockImplementationOnce(async () => {
+      harness.prisma.run.findMany.mockResolvedValue([{ id: "incoming" }]);
+    });
+    await sleepComputerIfIdle(harness.deps, harness.computer.id);
+    expect(harness.computer.state).toBe("suspended");
+    expect(harness.jobs.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "run.continue",
+        payload: { runId: "incoming" },
+        replaceKey: "run:incoming",
+      }),
+    );
+    expect(harness.jobs.enqueue.mock.calls[0]![0].availableAt).toBeUndefined();
+  });
+
   it("defaults to ten minutes when SANDBOX_IDLE_MS is unset", () => {
     const previous = process.env.SANDBOX_IDLE_MS;
     delete process.env.SANDBOX_IDLE_MS;
@@ -592,6 +733,8 @@ function idleHarness(
         if (args.data.updatedAt) computer.updatedAt = args.data.updatedAt;
         if (args.data.state) computer.state = args.data.state;
         if (args.data.homeRevision) computer.homeRevision = args.data.homeRevision;
+        if ("sleepFailureReason" in args.data)
+          Object.assign(computer, { sleepFailureReason: args.data.sleepFailureReason });
         return { count: 1 };
       }),
       update: vi.fn(async (args) => {
@@ -601,7 +744,7 @@ function idleHarness(
         return computer;
       }),
     },
-    run: { findFirst: vi.fn().mockResolvedValue(null) },
+    run: { findFirst: vi.fn().mockResolvedValue(null), findMany: vi.fn().mockResolvedValue([]) },
     agentHome: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
     bot: {
       findMany: vi.fn().mockResolvedValue([{ id: "bot", thread: { id: "thread" } }]),
@@ -616,7 +759,7 @@ function idleHarness(
       yield { type: "exit", code } as const;
     }),
     keepAlive: vi.fn().mockResolvedValue(undefined),
-    exportWorkspace: vi.fn(async function* () {
+    exportWorkspace: vi.fn(async function* (_computer: ComputerRef, _context: AdapterContext) {
       if (options.exportError) throw options.exportError;
       yield { path: "notes/result.txt", content: new TextEncoder().encode("durable") };
     }),
@@ -676,3 +819,89 @@ function processExit(child: ReturnType<typeof spawn>): Promise<number> {
     child.on("close", (code) => resolve(code ?? 1));
   });
 }
+
+it.each(["probe", "checkpoint", "stop"])(
+  "finishes an unconfigured engine at %s once without a replacement job",
+  async (stage) => {
+    const h = idleHarness();
+    const error = new MissingComputerProviderError("docker");
+    if (stage === "probe")
+      h.sandbox.execute.mockImplementation(async function* () {
+        yield { type: "stdout" as const, data: "ardurbot-background-idle\n" as const };
+        throw error;
+      });
+    if (stage === "checkpoint")
+      h.sandbox.exportWorkspace.mockImplementation(async function* () {
+        yield { path: "fixture", content: new Uint8Array() };
+        throw error;
+      });
+    if (stage === "stop") h.sandbox.stop.mockRejectedValue(error);
+    await expect(sleepComputerIfIdle(h.deps, h.computer.id)).resolves.toBeUndefined();
+    expect(h.computer).toMatchObject({ sleepFailureReason: error.message, state: "running" });
+    expect(h.jobs.enqueue).not.toHaveBeenCalled();
+    const attempts = h.sandbox.execute.mock.calls.length;
+    await sleepComputerIfIdle(h.deps, h.computer.id);
+    await scheduleComputerSleep(h.deps, h.computer.id);
+    expect(h.sandbox.execute).toHaveBeenCalledTimes(attempts);
+    expect(h.jobs.enqueue).not.toHaveBeenCalled();
+  },
+);
+
+it("a transient engine stop failure still escapes to the worker for retries", async () => {
+  const h = idleHarness();
+  h.sandbox.stop.mockRejectedValue(new Error("Temporary engine transport failure"));
+  await expect(sleepComputerIfIdle(h.deps, h.computer.id)).rejects.toThrow(
+    "Temporary engine transport failure",
+  );
+  expect((h.computer as { sleepFailureReason?: string }).sleepFailureReason).toBeUndefined();
+  expect(h.computer.state).toBe("running");
+});
+
+it("clearing the configuration mark allows scheduling again", async () => {
+  const h = idleHarness();
+  Object.assign(h.computer, { connectionId: "old", sleepFailureReason: "Missing engine" });
+  await scheduleComputerSleep(h.deps, h.computer.id);
+  expect(h.jobs.enqueue).not.toHaveBeenCalled();
+  Object.assign(h.computer, { connectionId: "new", sleepFailureReason: null });
+  await scheduleComputerSleep(h.deps, h.computer.id);
+  expect(h.jobs.enqueue).toHaveBeenCalledOnce();
+});
+
+it.each(["status", "queue"])(
+  "sleep scheduling failure at %s does not fail foreground work",
+  async (stage) => {
+    const h = idleHarness();
+    if (stage === "status")
+      h.prisma.computer.findUnique.mockRejectedValueOnce(new Error("status unavailable"));
+    else h.jobs.enqueue.mockRejectedValueOnce(new Error("queue unavailable"));
+    await expect(scheduleComputerSleep(h.deps, h.computer.id)).resolves.toBeUndefined();
+  },
+);
+
+it.each(["probe", "checkpoint", "stop"])(
+  "a connection save fences out a late missing-engine mark at %s",
+  async (stage) => {
+    const h = idleHarness();
+    const saved = () => {
+      h.computer.updatedAt = new Date(h.computer.updatedAt.getTime() + 1);
+      Object.assign(h.computer, { sleepFailureReason: null });
+      throw new MissingComputerProviderError("docker");
+    };
+    if (stage === "probe")
+      h.sandbox.execute.mockImplementation(async function* () {
+        yield { type: "stdout" as const, data: "ardurbot-background-idle\n" };
+        saved();
+      });
+    if (stage === "checkpoint")
+      h.sandbox.exportWorkspace.mockImplementation(async function* () {
+        yield { path: "fixture", content: new Uint8Array() };
+        saved();
+      });
+    if (stage === "stop")
+      h.sandbox.stop.mockImplementation(async () => {
+        saved();
+      });
+    await expect(sleepComputerIfIdle(h.deps, h.computer.id)).resolves.toBeUndefined();
+    expect(h.computer).toMatchObject({ sleepFailureReason: null });
+  },
+);

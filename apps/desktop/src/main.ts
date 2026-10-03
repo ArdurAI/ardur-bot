@@ -50,6 +50,7 @@ import { serviceGuidedStep } from "./guided-setup/services.js";
 import { firstGuidedSteps, systemPrerequisites } from "./guided-setup/steps.js";
 import { SetupJournalStore } from "./guided-setup/store.js";
 import { installHostService } from "./host-service-ipc.js";
+import { installSmokeEnabled, runInstallSmoke } from "./install-smoke.js";
 import {
   focusIntegration,
   integrationReturnId,
@@ -106,6 +107,7 @@ import {
   sessionPartitionForServerUrl,
 } from "./setup-config.js";
 import { clearSetup, readSetup, writeSetup } from "./setup-store.js";
+import { installSmokeProgress } from "./startup.js";
 import { collectStorageUsage } from "./storage-usage.js";
 import { systemSenderAllowed } from "./system/install.js";
 import { setStartup, startupEnabled, startupSupported } from "./system/native-controls.js";
@@ -133,6 +135,11 @@ if (versionOutput !== null) {
 const PERFORMANCE_USER_DATA =
   process.env.ARDURBOT_USER_DATA_DIR || process.env.ARDURBOT_PERFORMANCE_USER_DATA;
 const GUIDED_SETUP_ENABLED = process.env.ARDURBOT_GUIDED_SETUP === "1";
+const INSTALL_SMOKE = installSmokeEnabled(process.env);
+if (INSTALL_SMOKE && !process.env.ARDURBOT_USER_DATA_DIR) {
+  console.error("Install smoke requires an isolated user-data directory.");
+  process.exit(1);
+}
 // The Electron lifecycle spec drives a scripted setup engine inside the running main process, and
 // Playwright's evaluate cannot import modules there; expose the loaded ones only when asked.
 if (process.env.ARDURBOT_GUIDED_SETUP_TEST_HOOK === "1")
@@ -207,12 +214,17 @@ const remoteListener = new RemoteListener();
 
 markOnce("rk:main:module-evaluated");
 configureDesktopUserData(app, PERFORMANCE_USER_DATA);
+installSmokeProgress?.stage("isolated profile configured");
 // Match the installed ardur.desktop entry for Wayland/X11 grouping while
 // retaining the legacy internal name used by encrypted storage.
 if (process.platform === "linux") app.setDesktopName("ardur");
 // Chromium ignores this switch once ready; it must be appended before that.
 capDiskCacheSize(app.commandLine);
-if (!app.requestSingleInstanceLock()) process.exit(0);
+if (!app.requestSingleInstanceLock()) {
+  if (INSTALL_SMOKE) console.error("smoke: isolated profile instance lock refused");
+  process.exit(INSTALL_SMOKE ? 1 : 0);
+}
+installSmokeProgress?.stage("instance lock acquired; waiting for Electron ready");
 let pendingIntegrationReturn: string | null = null;
 function returnToIntegration(value: string) {
   const id = integrationReturnId(value);
@@ -1413,7 +1425,8 @@ function safeOrigin(targetUrl: string) {
   }
 }
 
-app.whenReady().then(async () => {
+const startup = app.whenReady().then(async () => {
+  installSmokeProgress?.stage("Electron ready; IPC installing");
   registerIntegrationProtocol(app);
   const initialLink = process.argv.find((arg) => arg.startsWith("ardurbot:"));
   if (initialLink) pendingIntegrationReturn = integrationReturnId(initialLink);
@@ -1457,6 +1470,7 @@ app.whenReady().then(async () => {
     },
   });
   legacyCompose = await legacyStackEnvExists(userDataDir);
+  installSmokeProgress?.stage("local controllers configuring");
   let binaries: Awaited<ReturnType<typeof loadEmbeddedPostgres>> | undefined;
   // Loaded when local mode first starts: a Compose launch never needs these binaries,
   // and a missing package becomes one sentence in a window whose handlers exist.
@@ -1641,6 +1655,7 @@ app.whenReady().then(async () => {
     });
   }
   const boot = new BootSnapshotStore(userDataDir);
+  installSmokeProgress?.stage("profile loading");
   bootSnapshot = boot;
   await boot.load();
   ipcMain.handle("desktop.boot.save", async (event, snapshot: unknown) => {
@@ -1669,6 +1684,7 @@ app.whenReady().then(async () => {
   const icon = developmentIcon();
   if (process.platform === "darwin" && icon) app.dock?.setIcon(icon);
   installApplicationMenu();
+  installSmokeProgress?.stage("application menu installed");
   const browserAuthAttempts = new Map<string, AbortController>();
   const cancelBrowserAuth = () => {
     for (const attempt of browserAuthAttempts.values()) attempt.abort();
@@ -1978,6 +1994,7 @@ app.whenReady().then(async () => {
     });
     dockBadge?.sync();
   };
+  installSmokeProgress?.stage("runtime installing");
   desktopSystem = await installSystemRuntime({
     window: () => mainWindow,
     target: () => currentTargetUrl,
@@ -2023,7 +2040,37 @@ app.whenReady().then(async () => {
       return mainWindow;
     },
   });
+  installSmokeProgress?.stage("runtime installed");
   if (process.platform !== "darwin") setMenuBar(true);
+  installSmokeProgress?.stage("tray configured");
+
+  if (INSTALL_SMOKE) {
+    try {
+      if (legacyCompose) throw new Error("Install smoke requires a fresh local profile.");
+      await runInstallSmoke({
+        start: () => localMode.start(),
+        healthy: async () => (await probeServer(localMode.origin())).ok,
+        open: async () => {
+          currentSetup = { mode: "new", serverUrl: localMode.origin() };
+          return openApp(localMode.origin());
+        },
+        screenshot: async () => {
+          if (process.env.ARDUR_INSTALL_SMOKE_SCREENSHOT && mainWindow) {
+            const image = await mainWindow.webContents.capturePage();
+            await writeFile(process.env.ARDUR_INSTALL_SMOKE_SCREENSHOT, image.toPNG());
+          }
+        },
+        stop: () => localMode.quit(),
+        report: (message) => console.log(message),
+        stage: (message) => installSmokeProgress?.stage(message),
+      });
+      installSmokeProgress?.stage("quit requested");
+      app.quit();
+    } catch (error) {
+      installSmokeProgress?.fail(error);
+    }
+    return;
+  }
 
   if (target.kind === "setup") {
     showSetupWindow();
@@ -2075,6 +2122,10 @@ app.whenReady().then(async () => {
     if (launchAppSession !== null) cacheSessions.push(launchAppSession.value);
     scheduleLaunchCacheMaintenance(cacheSessions);
   }
+});
+void startup.catch((error: unknown) => {
+  if (installSmokeProgress) installSmokeProgress.fail(error);
+  else throw error;
 });
 
 // A normal quit has already stopped them; this covers SIGTERM and crashes.

@@ -24,4 +24,17 @@ describe("coordination line fixture", () => {
     expect(source).toMatch(/window\.history\.pushState\(null, "", `\/app\/\$\{botId\}`\)/);
     expect(source).not.toContain("window.location.assign");
   });
+  it("exercises correction receipts and stop states through the production renderers", () => {
+    const source = readFileSync(fixturePath, "utf8");
+    expect(source).toContain('["requested", "confirmed", "uncertain", "checking", "replacement"]');
+    expect(source).toContain('get("stop")');
+    expect(source).toMatch(
+      /h\(ChiefReceiptText,\s*\{\s*key: "receipt",\s*receiptKey: "exclude-member",\s*memberName: "Member",?\s*\}\)/,
+    );
+    expect(source).toMatch(
+      /h\(ChiefReceiptText,\s*\{\s*key: "change",\s*receiptKey: "change-task",?\s*\}\)/,
+    );
+    expect(source).toContain("h(ChiefDispatchLine,");
+    expect(source).toContain('stopState !== "replacement"');
+  });
 });

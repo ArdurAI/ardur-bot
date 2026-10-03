@@ -46,6 +46,14 @@ export async function ensureComputerRecord(
   },
 ) {
   const scopeKey = computerScopeKey(input.mode, input.spaceId, input.botId);
+  if (input.mode === "team") {
+    // Older spaces may already share a computer under a noncanonical key.
+    const existing = await prisma.computer.findFirst({
+      where: { spaceId: input.spaceId, scope: "team" },
+      orderBy: [{ bots: { _count: "desc" } }, { createdAt: "asc" }, { id: "asc" }],
+    });
+    if (existing) return existing;
+  }
   return prisma.computer.upsert({
     where: { scopeKey },
     create: {

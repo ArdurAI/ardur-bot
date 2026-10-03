@@ -11,7 +11,12 @@ import type {
   MemorySyncState,
   RevisionAuthor,
 } from "@ardurbot/contracts";
-import type { AdapterContext, AdapterDescriptor } from "./types.js";
+import type {
+  AdapterContext,
+  AdapterDescriptor,
+  MemoryReadRequest,
+  MemorySnapshot,
+} from "./types.js";
 
 export type {
   DocumentDelivery,
@@ -66,6 +71,10 @@ export interface DocumentCommit {
   deleted?: boolean;
 }
 export interface MemoryDocumentStore {
+  /** Changes atomically with every durable head mutation, including deletes and imports. */
+  recallRevision?(access: MemoryAccess): Promise<string | null>;
+  /** Scoped current heads without exporting every document's revision history. */
+  readSnapshot?(input: MemoryReadRequest, access: MemoryAccess): Promise<MemorySnapshot>;
   startSession?(access: MemoryAccess): Promise<void>;
   push?(access: MemoryAccess): Promise<void>;
   syncState?(access: MemoryAccess): Promise<MemorySyncState | null>;

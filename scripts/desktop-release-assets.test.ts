@@ -41,45 +41,60 @@ async function stageSource(source: string, version: string) {
   }
 }
 
-it("assembles required installers, merges both Mac architectures, and refuses missing feeds", async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "release-assets-"));
-  const source = path.join(dir, "source");
-  const output = path.join(dir, "output");
-  const version = "0.1.0-alpha.1";
-  try {
-    await stageSource(source, version);
-    execFileSync(
-      process.execPath,
-      ["scripts/desktop-release-assets.mjs", version, source, output],
-      { stdio: "pipe" },
-    );
-    const feed = await readFile(path.join(output, "latest-mac.yml"), "utf8");
-    expect(feed).toContain("mac-arm64.zip");
-    expect(feed).toContain("mac-x64.zip");
-    expect(await readFile(path.join(output, "ardur.rb"), "utf8")).not.toContain("@ARM64_SHA256@");
-    const checksums = await readFile(path.join(output, "checksums.txt"), "utf8");
-    for (const file of [
-      "install.sh",
-      "ArdurAI.ArdurBot.installer.yaml",
-      "ArdurAI.ArdurBot.locale.en-US.yaml",
-      "ArdurAI.ArdurBot.yaml",
-    ]) {
-      const content = await readFile(path.join(output, file));
-      const hash = createHash("sha256").update(content).digest("hex");
-      expect(checksums).toContain(`${hash}  ${file}`);
-    }
-    await rm(path.join(source, "win-x64/latest.yml"));
-    expect(() =>
+it.each(["false", "true"])(
+  "assembles installers and matching cask caveats (signed=%s), refusing missing feeds",
+  async (signed) => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "release-assets-"));
+    const source = path.join(dir, "source");
+    const output = path.join(dir, "output");
+    const version = "0.1.0-alpha.1";
+    try {
+      await stageSource(source, version);
+      await writeFile(
+        path.join(source, "mac-arm64/install-build-mac-arm64.json"),
+        JSON.stringify({ signed: signed === "true" }),
+      );
       execFileSync(
         process.execPath,
-        ["scripts/desktop-release-assets.mjs", version, source, output],
+        ["scripts/desktop-release-assets.mjs", version, source, output, signed],
         { stdio: "pipe" },
-      ),
-    ).toThrow();
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
-});
+      );
+      const feed = await readFile(path.join(output, "latest-mac.yml"), "utf8");
+      expect((await readdir(output)).some((file) => file.startsWith("install-build-"))).toBe(false);
+      expect(feed).toContain("mac-arm64.zip");
+      expect(feed).toContain("mac-x64.zip");
+      expect(await readFile(path.join(output, "ardur.rb"), "utf8")).not.toContain("@ARM64_SHA256@");
+      const cask = await readFile(path.join(output, "ardur.rb"), "utf8");
+      expect(cask.includes("caveats")).toBe(signed === "false");
+      expect(cask.includes("--no-quarantine")).toBe(signed === "false");
+      expect(cask).not.toContain("@MACOS_CAVEATS@");
+      expect(
+        execFileSync("ruby", ["-c", path.join(output, "ardur.rb")], { encoding: "utf8" }),
+      ).toContain("Syntax OK");
+      const checksums = await readFile(path.join(output, "checksums.txt"), "utf8");
+      for (const file of [
+        "install.sh",
+        "ArdurAI.ArdurBot.installer.yaml",
+        "ArdurAI.ArdurBot.locale.en-US.yaml",
+        "ArdurAI.ArdurBot.yaml",
+      ]) {
+        const content = await readFile(path.join(output, file));
+        const hash = createHash("sha256").update(content).digest("hex");
+        expect(checksums).toContain(`${hash}  ${file}`);
+      }
+      await rm(path.join(source, "win-x64/latest.yml"));
+      expect(() =>
+        execFileSync(
+          process.execPath,
+          ["scripts/desktop-release-assets.mjs", version, source, output],
+          { stdio: "pipe" },
+        ),
+      ).toThrow();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  },
+);
 
 it("accepts the produced Linux names without the retired linux-x64 ones", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "release-assets-linux-"));

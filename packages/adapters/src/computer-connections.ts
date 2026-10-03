@@ -20,6 +20,14 @@ import type { SandboxProviderOptions } from "./sandbox-factory.js";
 
 export type ComputerSecretLoader = { load(ciphertext: string, id: string): string };
 
+/** No saved computer connection exists in the authorized space. */
+export class MissingComputerConnectionError extends Error {
+  constructor() {
+    super("The computer connection is unavailable; choose a connection in Settings.");
+    this.name = "MissingComputerConnectionError";
+  }
+}
+
 /** Saved connection rows keep every operation on the computer's chosen destination. */
 export class ComputerConnections {
   private readonly providers = new Map<
@@ -38,8 +46,7 @@ export class ComputerConnections {
     const row = await this.prisma.connection.findFirst({
       where: { id, spaceId: context.spaceId, connectorId: "computer" },
     });
-    if (!row)
-      throw new Error("The computer connection is unavailable; choose a connection in Settings.");
+    if (!row) throw new MissingComputerConnectionError();
     const key = `${context.spaceId}:${id}`;
     const revision = JSON.stringify([row.updatedAt?.getTime() ?? 0, row.metadata, row.secretId]);
     let cached = this.providers.get(key);
@@ -166,7 +173,7 @@ export class ConnectedSandboxProvider implements SandboxProvider {
   }
   /** Every operation on an existing computer: its connection, else the engine of its kind. */
   async owner(computer: ComputerIdentity, context: AdapterContext): Promise<SandboxProvider> {
-    return computer.connectionId
+    return computer.connectionId != null
       ? this.connections.resolve(computer.connectionId, context)
       : this.connectionless(computer.kind);
   }

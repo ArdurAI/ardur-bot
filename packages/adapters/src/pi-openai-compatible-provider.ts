@@ -1,6 +1,11 @@
 import { lookup } from "node:dns/promises";
 import { isIP, type LookupFunction } from "node:net";
-import { DEFAULT_MODEL_CONTEXT_WINDOW, DEFAULT_MODEL_MAX_TOKENS } from "@ardurbot/contracts";
+import type { ModelContextWindowSource } from "@ardurbot/contracts";
+import {
+  DEFAULT_MODEL_MAX_TOKENS,
+  modelContextWindowForConsumer,
+  resolveModelContextWindow,
+} from "@ardurbot/contracts";
 import {
   createProvider,
   type Model,
@@ -54,7 +59,7 @@ export function openAiCompatibleModel(
   reasoning = false,
   acceptsImages = false,
   maxTokens = DEFAULT_MODEL_MAX_TOKENS,
-  contextWindow = DEFAULT_MODEL_CONTEXT_WINDOW,
+  contextWindow = modelContextWindowForConsumer(resolveModelContextWindow(), "builtin"),
 ): Model<"openai-completions"> {
   return {
     id,
@@ -291,6 +296,7 @@ export function registerOpenAiCompatibleRuntime(
     acceptsImages?: boolean;
     maxTokens?: number;
     contextWindow?: number;
+    contextWindowSource?: ModelContextWindowSource;
   },
 ): MutableModels {
   const baseUrl = normalizeOpenAiCompatibleBaseUrl(opts.baseUrl);
@@ -304,7 +310,13 @@ export function registerOpenAiCompatibleRuntime(
         opts.reasoning,
         acceptsImages,
         opts.maxTokens,
-        opts.contextWindow,
+        modelContextWindowForConsumer(
+          {
+            ...resolveModelContextWindow(opts.contextWindow),
+            ...(opts.contextWindowSource ? { contextWindowSource: opts.contextWindowSource } : {}),
+          },
+          "builtin",
+        ),
       ),
     ]),
   );

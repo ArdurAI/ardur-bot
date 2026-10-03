@@ -135,7 +135,7 @@ it("returns the paired desktop's host label with the computer list", async () =>
     homeRevision: "saved",
   };
   const prisma = {
-    bot: { findMany: async () => [{ id: "bot", name: "Builder", computer }] },
+    bot: { findMany: async () => [{ id: "bot", name: "Builder", runtimeKind: "pi", computer }] },
     hostRegistration: { findUnique: async () => ({ platform: "darwin" }) },
   } as unknown as PrismaClient;
   const handler = new RPCHandler(
@@ -410,6 +410,7 @@ it("refuses a profile-only computer.configure synchronously on a lost-engine com
     bot: {
       findFirst: async () => ({
         id: "bot",
+        runtimeKind: "pi",
         spaceId: "space",
         userId: "owner",
         archivedAt: null,

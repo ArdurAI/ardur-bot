@@ -1,35 +1,200 @@
-import type { Bot, ComputerStatus, RunActivityRow, WorkspaceContext } from "@ardurbot/contracts";
-import { WorkspaceTabs } from "@ardurbot/ui-web";
+import type {
+  Bot,
+  ComputerStatus,
+  RunActivityRow,
+  WorkspaceContext,
+  WorkspaceView,
+} from "@ardurbot/contracts";
+import { Button, WorkspaceTabs } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
+import { ArrowLeft, Maximize2, Minimize2, X } from "lucide-react";
 import type { ReactNode } from "react";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { Shimmer } from "../../components/ai/primitives";
 import { rpc } from "../../lib/rpc";
-import { getEffectiveWorkspaceTab } from "../shell/computer-visibility";
-import { terminalSupported } from "./terminal-controller";
-import { WorkspaceTasks } from "./WorkspaceTasks";
-
-const WorkspaceFiles = lazy(() =>
-  import("./WorkspaceFiles").then((module) => ({ default: module.WorkspaceFiles })),
-);
-const WorkspaceScreen = lazy(() =>
-  import("./WorkspaceScreen").then((module) => ({ default: module.WorkspaceScreen })),
-);
-const WorkspaceTerminal = lazy(() =>
-  import("./WorkspaceTerminal").then((module) => ({ default: module.WorkspaceTerminal })),
-);
+import type { ChangeLocation } from "./change-target";
+import { availableWorkspaceViews, isWorkspaceViewId, workspaceViews } from "./view-registry";
 
 export function WorkspacePane({
   bot,
   computer,
+  context: suppliedContext,
+  contextLoading: suppliedContextLoading = false,
   routines,
   screen,
   terminal,
   onOpenRun,
   tab,
   onTabChange,
-}: {
+  openViews,
+  expanded = false,
+  onExpand,
+  onClose,
+  onRetry,
+  visible = true,
+  headerActions,
+  allowTerminalStart = true,
+  onBackToChat,
+  hiddenControlsHost,
+  compact = false,
+  fileLocation,
+  changeLocation,
+}: WorkspacePaneProps) {
+  const { t } = useLingui();
+  const [context, setContext] = useState<{
+    key: string;
+    value: WorkspaceContext | null;
+  } | null>(null);
+  const [controlsHost, setControlsHost] = useState<HTMLDivElement | null>(null);
+  const [revision, setRevision] = useState(0);
+  const contextKey = JSON.stringify([
+    bot.id,
+    computer?.computerId,
+    computer?.connectionId,
+    computer?.kind,
+    computer?.state,
+    computer?.homeRevision,
+    revision,
+  ]);
+  useEffect(() => {
+    if (suppliedContext !== undefined) return;
+    const abort = new AbortController();
+    setContext(null);
+    void rpc.workspace
+      .describe({ botId: bot.id }, { signal: abort.signal })
+      .then((result) => {
+        if (!abort.signal.aborted) setContext({ key: contextKey, value: result });
+      })
+      .catch(() => {
+        if (!abort.signal.aborted) setContext({ key: contextKey, value: null });
+      });
+    return () => abort.abort();
+  }, [bot.id, contextKey, suppliedContext]);
+  const contextLoading =
+    suppliedContext === undefined ? context?.key !== contextKey : suppliedContextLoading;
+  const describedContext = suppliedContext === undefined ? context?.value : suppliedContext;
+  const currentContext =
+    !contextLoading &&
+    describedContext?.botId === bot.id &&
+    describedContext.computerId === (computer?.computerId ?? null)
+      ? describedContext
+      : null;
+  const capabilities = { computer, context: currentContext, terminal: terminal !== null };
+  const selected = isWorkspaceViewId(tab) ? tab : "tasks";
+  const views =
+    openViews ?? availableWorkspaceViews(capabilities).map((view) => ({ type: view.id }));
+  const opened = views.some((view) => view.type === selected)
+    ? views
+    : [...views, { type: selected }];
+  const name = workspaceViews[selected].label(t);
+  const closeLabel = (name: string) => t`Close ${name}`;
+  const tabs = opened.map(({ type }) => {
+    const view = workspaceViews[type];
+    return {
+      id: type,
+      contentId: type === "files" || type === "ide" ? "editor" : type,
+      label: view.label(t),
+      content:
+        (type === "files" || type === "ide" || type === "changes") && contextLoading ? (
+          <div
+            role="status"
+            className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground"
+          >
+            <Shimmer>{t`Loading…`}</Shimmer>
+          </div>
+        ) : type === "terminal" && view.available(capabilities) && !allowTerminalStart ? (
+          <div className="flex h-full items-center justify-center p-6">
+            <Button
+              variant="outline"
+              onClick={() => onTabChange("terminal")}
+            >{t`Open terminal`}</Button>
+          </div>
+        ) : view.available(capabilities) ? (
+          <Suspense fallback={null}>
+            {view.render({
+              bot,
+              computer,
+              context: currentContext,
+              routines,
+              screen,
+              terminal,
+              onOpenRun,
+              visible: visible && selected === type,
+              controlsHost: !visible && hiddenControlsHost ? hiddenControlsHost : controlsHost,
+              compact,
+              fileLocation,
+              changeLocation,
+            })}
+          </Suspense>
+        ) : (
+          <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-sm text-muted-foreground">
+            <p role="status">{view.unavailable(t)}</p>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRevision((value) => value + 1);
+                onRetry?.();
+              }}
+            >{t`Retry`}</Button>
+          </div>
+        ),
+    };
+  });
+  return (
+    <>
+      <div
+        data-workspace-chrome
+        className="flex shrink-0 items-center gap-1 border-b border-border px-3 py-2"
+      >
+        <h2 className="mr-auto text-sm font-medium">{name}</h2>
+        {onBackToChat ? (
+          <Button variant="ghost" size="sm" onClick={onBackToChat}>
+            <ArrowLeft size={16} className="rtl:rotate-180" />
+            {t`Back to chat`}
+          </Button>
+        ) : null}
+        {headerActions}
+        {onExpand ? (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={expanded ? t`Back to chat` : t`Expand`}
+            onClick={onExpand}
+          >
+            {expanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+          </Button>
+        ) : null}
+        {onClose ? (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={closeLabel(name)}
+            onClick={() => onClose(selected)}
+          >
+            <X size={16} />
+          </Button>
+        ) : null}
+      </div>
+      <div ref={setControlsHost} />
+      <div className="flex min-h-0 flex-1 flex-col">
+        <WorkspaceTabs
+          label={t`Views`}
+          tabs={tabs}
+          value={selected}
+          onChange={onTabChange}
+          onClose={onClose}
+          closeLabel={closeLabel}
+        />
+      </div>
+    </>
+  );
+}
+
+export type WorkspacePaneProps = {
   bot: Bot;
   computer: ComputerStatus | null;
+  context?: WorkspaceContext | null;
+  contextLoading?: boolean;
   routines: ReactNode;
   screen: {
     computer: ComputerStatus | null;
@@ -50,115 +215,17 @@ export function WorkspacePane({
   onOpenRun(run: RunActivityRow): void;
   tab: string;
   onTabChange(tab: string): void;
-}) {
-  const { t } = useLingui();
-  const [context, setContext] = useState<WorkspaceContext | null>(null);
-  const [controlsHost, setControlsHost] = useState<HTMLDivElement | null>(null);
-  useEffect(() => {
-    const abort = new AbortController();
-    setContext(null);
-    void rpc.workspace
-      .describe({ botId: bot.id }, { signal: abort.signal })
-      .then((result) => {
-        if (!abort.signal.aborted) setContext(result);
-      })
-      .catch(() => {
-        if (!abort.signal.aborted) setContext(null);
-      });
-    return () => abort.abort();
-  }, [bot.id, computer?.computerId, computer?.state, computer?.homeRevision]);
-  const currentContext =
-    context?.botId === bot.id && context.computerId === (computer?.computerId ?? null)
-      ? context
-      : null;
-  const filesAvailable = currentContext?.files !== "unavailable" && currentContext?.computerId;
-  const terminalAvailable = terminal !== null && terminalSupported(computer);
-  const selected = getEffectiveWorkspaceTab(
-    tab,
-    computer?.capabilities?.graphical,
-    !!filesAvailable,
-    terminalAvailable,
-  );
-  const tabs = [
-    {
-      id: "tasks",
-      label: t`Tasks`,
-      content: (
-        <WorkspaceTasks
-          key={bot.id}
-          botId={bot.id}
-          visible={selected === "tasks"}
-          onOpenRun={onOpenRun}
-        />
-      ),
-    },
-    ...(filesAvailable
-      ? [
-          {
-            id: "files",
-            label: t`Files`,
-            content: (
-              <Suspense fallback={null}>
-                <WorkspaceFiles bot={bot} context={currentContext} />
-              </Suspense>
-            ),
-          },
-        ]
-      : []),
-    ...(terminal && terminalAvailable
-      ? [
-          {
-            id: "terminal",
-            label: t`Terminal`,
-            content: (
-              <Suspense fallback={null}>
-                <WorkspaceTerminal
-                  key={bot.id}
-                  bot={bot}
-                  computer={computer}
-                  visible={selected === "terminal"}
-                  working={terminal.working}
-                  onTakeControl={terminal.onTakeControl}
-                  onStop={terminal.onStop}
-                  onStart={terminal.onStart}
-                  onReleased={terminal.onReleased}
-                  controlsHost={controlsHost}
-                  registerCloseGuard={terminal.registerCloseGuard}
-                />
-              </Suspense>
-            ),
-          },
-        ]
-      : []),
-    { id: "routines", label: t`Routines`, content: routines },
-    ...(computer?.capabilities?.graphical === true
-      ? [
-          {
-            id: "screen",
-            label: t`Screen`,
-            content: (
-              <Suspense fallback={null}>
-                <WorkspaceScreen {...screen} visible={selected === "screen"} />
-              </Suspense>
-            ),
-          },
-        ]
-      : [
-          {
-            id: "computer",
-            label: t`Computer`,
-            content: (
-              <Suspense fallback={null}>
-                <WorkspaceScreen {...screen} visible={selected === "computer"} />
-              </Suspense>
-            ),
-          },
-        ]),
-  ];
-  return (
-    <>
-      <div ref={setControlsHost} />
-      <WorkspaceTabs tabs={tabs} value={selected} onChange={onTabChange} />
-    </>
-  );
-}
+  openViews?: readonly WorkspaceView[];
+  expanded?: boolean;
+  visible?: boolean;
+  onExpand?(): void;
+  onClose?(tab: string): void;
+  onRetry?(): void;
+  headerActions?: ReactNode;
+  allowTerminalStart?: boolean;
+  onBackToChat?(): void;
+  hiddenControlsHost?: HTMLElement | null;
+  compact?: boolean;
+  fileLocation?: { path: string; line?: number; requestId: number };
+  changeLocation?: ChangeLocation;
+};

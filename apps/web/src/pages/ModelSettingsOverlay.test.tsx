@@ -76,7 +76,24 @@ vi.mock("@ardurbot/ui-web", () => {
     DialogDescription: Container,
     DialogHeader: Container,
     DialogTitle: Container,
-    ModelThinkingOptions: () => null,
+    ModelThinkingOptions: ({
+      contextWindow,
+      contextWindowLabel,
+      onContextWindowChange,
+    }: {
+      contextWindow: string;
+      contextWindowLabel: string;
+      onContextWindowChange: (value: string) => void;
+    }) => (
+      <label>
+        {contextWindowLabel}
+        <input
+          aria-label={contextWindowLabel}
+          value={contextWindow}
+          onChange={(event) => onContextWindowChange(event.target.value)}
+        />
+      </label>
+    ),
   };
 });
 
@@ -384,4 +401,84 @@ it("opens the provider requested by a pin failure instead of the space default",
     root.render(<ModelSettingsOverlay embedded initialProvider="xai" onClose={() => undefined} />),
   );
   expect(picker().textContent).toBe("Grok 4.6");
+});
+
+it.each([
+  ["default", 65_536, "Context limit (estimated)"],
+  ["catalog", 200_000, "Context limit (from the provider)"],
+  ["metadata", 8_192, "Context limit"],
+] as const)(
+  "shows the resolved %s context in Models",
+  async (contextWindowSource, contextWindow, label) => {
+    api.list.mockResolvedValue([
+      {
+        provider: "openai-compatible",
+        providerName: "OpenAI-compatible",
+        id: "custom",
+        label: "Custom model id",
+        billing: "",
+        auth: "api-key",
+        placeholder: true,
+      },
+    ]);
+    api.credentials.mockResolvedValue([
+      {
+        id: "connection",
+        provider: "openai-compatible",
+        label: "Fixture",
+        hasKey: true,
+        isDefault: true,
+        modelId: "fixture-model",
+        baseUrl: "https://example.invalid/v1",
+        contextWindow,
+        contextWindowSource,
+      },
+    ]);
+    api.me.mockResolvedValue({
+      defaultProvider: "openai-compatible",
+      defaultModel: "fixture-model",
+    });
+    await render();
+    expect(container.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)?.value).toBe(
+      String(contextWindow),
+    );
+    expect(container.textContent).toContain(label);
+  },
+);
+
+it("does not turn an untouched estimate into saved metadata when reconnecting", async () => {
+  api.list.mockResolvedValue([
+    {
+      provider: "openai-compatible",
+      providerName: "OpenAI-compatible",
+      id: "custom",
+      label: "Custom model id",
+      billing: "",
+      auth: "api-key",
+      placeholder: true,
+    },
+  ]);
+  api.credentials.mockResolvedValue([
+    {
+      id: "connection",
+      provider: "openai-compatible",
+      label: "Fixture",
+      hasKey: true,
+      isDefault: true,
+      modelId: "fixture-model",
+      baseUrl: "https://example.invalid/v1",
+      contextWindow: 65_536,
+      contextWindowSource: "default",
+    },
+  ]);
+  api.me.mockResolvedValue({ defaultProvider: "openai-compatible", defaultModel: "fixture-model" });
+  api.connect.mockResolvedValue({});
+  await render();
+  const connect = [...container.querySelectorAll("button")].find(
+    (entry) => entry.textContent?.trim() === "Save",
+  );
+  expect(connect).toBeDefined();
+  await act(async () => connect!.click());
+  expect(api.connect).toHaveBeenCalled();
+  expect(api.connect.mock.calls[0]?.[0]).not.toHaveProperty("contextWindow");
 });

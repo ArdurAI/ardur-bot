@@ -1,6 +1,7 @@
 import type { ComputerUpdate } from "@ardurbot/contracts";
 import { expect, test } from "@playwright/test";
 import { activeBotId, captureScreenshot, completeOnboarding, signup } from "./helpers";
+import { openWorkspaceView } from "./workspace-view";
 
 test("computer maintenance shows durable background progress and failure recovery", async ({
   page,
@@ -40,7 +41,7 @@ test("computer maintenance shows durable background progress and failure recover
     return route.fulfill({ json: { json: { ok: true } } });
   });
   await page.getByTitle("Agent computer").click();
-  await page.getByTestId("side-panel").getByRole("tab", { name: "Screen", exact: true }).click();
+  await openWorkspaceView(page, "Screen");
   await expect(page.getByTestId("computer-preview")).toBeVisible();
   await page.getByTestId("computer-preview").hover();
   await page.getByTestId("computer-preview-open").click();
@@ -75,6 +76,13 @@ test("computer maintenance shows durable background progress and failure recover
   expect(releases).toBe(1);
   await expect(dialog.getByRole("heading")).toHaveText("Update failed");
   await captureScreenshot(page, testInfo, "computer-update-failed");
+  updates = [{ ...updating, status: "failed", stage: "saving", failureReason: "source-missing" }];
+  await expect(dialog.getByRole("alert")).toHaveText(
+    "The computer or its workspace could not be found.",
+  );
+  await expect(dialog.getByRole("alert")).toHaveCount(1);
+  await expect(dialog.getByRole("button", { name: "Recover computer" })).toBeEnabled();
+  await captureScreenshot(page, testInfo, "computer-update-workspace-save-failed");
   await dialog.getByRole("button", { name: "Recover computer" }).click();
   await expect(dialog.getByRole("heading")).toHaveText("Recovering Team Computer");
   await captureScreenshot(page, testInfo, "computer-recovery-progress");

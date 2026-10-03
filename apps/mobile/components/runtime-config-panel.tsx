@@ -1,11 +1,14 @@
+import { RuntimePinSchema } from "@ardurbot/contracts";
 import type {
   HermesRuntimeConfigV2,
   HistoricalHermesRuntimeConfig,
 } from "@ardurbot/contracts/runtime-config";
 import type { RuntimePin } from "@ardurbot/contracts/runtime-pins";
+import { rpcErrorMessage } from "@ardurbot/core";
 import { effectiveHermesRuntimeConfigV2 } from "@ardurbot/core/runtime-config";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
+import { rpc } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { useMobileTokens } from "../lib/native";
 import { RuntimeConfigAdvanced } from "./runtime-config-advanced";
@@ -33,6 +36,34 @@ export function RuntimeConfigPanel({
   const [time, setTime] = useState(String(settings.limits.timeoutMs / 1_000));
   const [contextKib, setContextKib] = useState(String(settings.context.maxInputBytes / 1_024));
 
+  const [pinError, setPinError] = useState<string | null>(null);
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
+  const tRef = useRef(t);
+  tRef.current = t;
+  const pinKey = JSON.stringify(pin ?? null);
+  useEffect(() => {
+    let active = true;
+    setPinError(null);
+    const choice = RuntimePinSchema.omit({ revision: true }).safeParse(JSON.parse(pinKey));
+    if (choice.success && choice.data.runtimeKind === "hermes") {
+      void rpc("models/validatePin", choice.data).then(
+        () => {
+          if (active) setPinError(null);
+        },
+        (error: { code?: string; message: string }) => {
+          if (active)
+            setPinError(
+              tRef.current(rpcErrorMessage(error, "Could not check the model. Try again.")),
+            );
+        },
+      );
+    }
+    return () => {
+      active = false;
+    };
+  }, [pinKey]);
+
   const [callsError, setCallsError] = useState<string | null>(null);
   const [timeError, setTimeError] = useState<string | null>(null);
   const [contextError, setContextError] = useState<string | null>(null);
@@ -53,6 +84,10 @@ export function RuntimeConfigPanel({
     setContextKib(String(settings.context.maxInputBytes / 1_024));
   }, [settings.context.maxInputBytes]);
 
+  useEffect(() => {
+    onErrorRef.current?.(pinError || callsError || timeError || contextError || advancedError);
+  }, [pinError, callsError, timeError, contextError, advancedError]);
+
   const updateErrors = (
     nextCallsErr: string | null,
     nextTimeErr: string | null,
@@ -63,8 +98,6 @@ export function RuntimeConfigPanel({
     setTimeError(nextTimeErr);
     setContextError(nextContextErr);
     setAdvancedError(nextAdvancedErr);
-    const active = nextCallsErr || nextTimeErr || nextContextErr || nextAdvancedErr || null;
-    onError?.(active);
   };
 
   const handleCallsChange = (val: string) => {
@@ -133,6 +166,11 @@ export function RuntimeConfigPanel({
 
   return (
     <View style={{ gap: 12, marginTop: 12 }}>
+      {pinError ? (
+        <Text accessibilityRole="alert" style={{ color: tokens.destructive }}>
+          {pinError}
+        </Text>
+      ) : null}
       <View style={{ flexDirection: "row", gap: 12 }}>
         <View style={{ flex: 1 }}>
           <Text style={{ color: tokens.mutedForeground }}>{t("Model calls per turn")}</Text>
@@ -265,8 +303,6 @@ export function RuntimeConfigPanel({
             }}
             onError={(err) => {
               setAdvancedError(err);
-              const active = callsError || timeError || contextError || err || null;
-              onError?.(active);
             }}
             onInvalidChange={setAdvancedInvalid}
             onReset={() => {

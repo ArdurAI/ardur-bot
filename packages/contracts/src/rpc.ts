@@ -109,6 +109,7 @@ import {
   VoiceStatusSchema,
 } from "./domain.js";
 import { ProductEventSchema } from "./events.js";
+import { evidenceContract } from "./evidence.js";
 import { featuresContract } from "./features.js";
 import {
   FleetConnectionDetailsSchema,
@@ -138,6 +139,7 @@ import {
   IntegrationResourceConstraintsSchema,
   IntegrationResourceKindSchema,
   IntegrationResourceToolSchema,
+  IntegrationToolReviewSchema,
   SpaceToolPoliciesSchema,
 } from "./integration-catalog.js";
 import {
@@ -198,6 +200,7 @@ import {
   WorkspaceContextSchema,
   WorkspaceFileSchema,
   WorkspaceFilesSchema,
+  WorkspaceRootBindingSchema,
   WorkspaceTasksSchema,
 } from "./workspace.js";
 
@@ -269,6 +272,7 @@ const ideContract = /* @__PURE__ */ createIdeContract();
 function createIdeContract() {
   return {
     roots: oc.output(z.array(IdeRootSchema)),
+    target: oc.input(WorkspaceRootBindingSchema).output(IdeRootSchema),
     list: oc
       .input(z.object({ rootId: Id, path: IdePathSchema.default("") }))
       .output(
@@ -300,6 +304,8 @@ function createIdeContract() {
           since: z.iso.datetime(),
           until: z.iso.datetime(),
           cursor: Id.optional(),
+          target: WorkspaceRootBindingSchema.optional(),
+          changeId: Id.optional(),
         }),
       )
       .output(z.object({ items: z.array(IdeChangeSchema), nextCursor: Id.nullable() })),
@@ -399,9 +405,12 @@ export const threadsContract = {
 };
 export type ThreadsContract = typeof threadsContract;
 
+type DashboardContract = typeof dashboardContract;
+
 export const appContract = {
   features: featuresContract,
-  dashboard: dashboardContract,
+  evidence: evidenceContract,
+  dashboard: dashboardContract as DashboardContract,
   board: boardContract,
   localImport: {
     credentials: oc
@@ -588,6 +597,9 @@ export const appContract = {
       ),
   },
   models: {
+    validatePin: oc
+      .input(RuntimePinSchema.omit({ revision: true }))
+      .output(z.object({ ok: z.literal(true) })),
     ollama: oc.output(OllamaStatusSchema),
     testOllama: oc.input(z.object({ baseUrl: z.string() })).output(OllamaStatusSchema),
     pullOllama: oc
@@ -676,6 +688,7 @@ export const appContract = {
           computerId: Id,
           generation: z.number().int().nonnegative(),
           path: IdePathSchema,
+          rootId: Id.optional(),
         }),
       )
       .output(WorkspaceFilesSchema),
@@ -686,6 +699,7 @@ export const appContract = {
           computerId: Id,
           generation: z.number().int().nonnegative(),
           path: IdePathSchema.min(1),
+          rootId: Id.optional(),
         }),
       )
       .output(WorkspaceFileSchema),
@@ -697,6 +711,7 @@ export const appContract = {
           generation: z.number().int().nonnegative(),
           path: IdePathSchema.min(1),
           content: z.string().max(IDE_FILE_BYTES),
+          rootId: Id.optional(),
           version: z.string().regex(/^[a-f0-9]{64}$/),
           approved: z.boolean().default(false),
         }),
@@ -731,6 +746,22 @@ export const appContract = {
   },
   fleet: fleetContract,
   computer: {
+    creationOptions: oc.output(
+      z.object({
+        defaultLocation: z.enum(["host", "sandbox"]),
+        hostAvailable: z.boolean(),
+        sandboxAvailable: z.boolean(),
+        sandboxBoundary: z.enum(["container", "account", "hosted", "test"]).optional(),
+        container: z.object({ connectionId: Id.nullable() }).nullable(),
+        team: z
+          .object({
+            location: z.enum(["host", "sandbox"]),
+            connectionId: Id.nullable(),
+            name: z.string().optional(),
+          })
+          .nullable(),
+      }),
+    ),
     engine: oc.input(z.object({ connectionId: Id.nullable() })).output(
       z.object({
         name: z.enum(["docker", "podman", "kubernetes", "ssh"]),
@@ -738,7 +769,14 @@ export const appContract = {
       }),
     ),
     list: oc.output(
-      z.array(z.object({ botId: Id, name: z.string(), status: ComputerStatusSchema })),
+      z.array(
+        z.object({
+          botId: Id,
+          name: z.string(),
+          runtimeKind: RuntimeKindSchema.optional(),
+          status: ComputerStatusSchema,
+        }),
+      ),
     ),
     connections: oc.output(
       z.array(
@@ -1174,6 +1212,20 @@ export const appContract = {
   },
   integrations: {
     list: oc.output(IntegrationCatalogListSchema),
+    toolReview: oc
+      .input(z.object({ connectionId: Id, botId: Id.optional() }))
+      .output(IntegrationToolReviewSchema),
+    reviewTools: oc
+      .input(
+        z.object({
+          connectionId: Id,
+          revision: z.number().int().nonnegative(),
+          botId: Id.optional(),
+          toolIds: z.array(z.string().min(1).max(200)).max(2000),
+          approveSpace: z.boolean().default(false),
+        }),
+      )
+      .output(z.object({ ok: z.literal(true) })),
     status: oc.input(z.object({ connectionId: Id })).output(IntegrationConnectionSchema),
     connect: oc
       .input(
@@ -1246,7 +1298,13 @@ export const appContract = {
       )
       .output(z.array(IntegrationResourceChoiceSchema)),
     grants: oc.input(z.object({ connectionId: Id })).output(z.array(IntegrationGrantSchema)),
-    available: oc.input(botId).output(z.array(z.object({ id: Id, name: z.string() }))),
+    available: oc
+      .input(botId)
+      .output(
+        z.array(
+          z.object({ id: Id, name: z.string(), toolsNeedReview: z.boolean().default(false) }),
+        ),
+      ),
     revoke: oc.input(z.object({ connectionId: Id })).output(z.object({ ok: z.literal(true) })),
     cancel: oc.input(z.object({ connectionId: Id })).output(z.object({ ok: z.literal(true) })),
     discover: oc.input(z.object({ connectionId: Id })).output(z.object({ ok: z.literal(true) })),

@@ -8,6 +8,10 @@ export default defineConfig({
   resolve: {
     alias: [
       {
+        find: /^\.\/desktop-guardrails\.js$/,
+        replacement: path.join(root, "apps/desktop/scripts/host-guardrails-entry.ts"),
+      },
+      {
         find: /^\.\.\/fleet-discovery\.js$/,
         replacement: path.join(root, "apps/desktop/scripts/fleet-discovery-entry.ts"),
       },
@@ -33,7 +37,9 @@ export default defineConfig({
       "infra/sandboxes/kubernetes/*.test.ts",
       "infra/updater/src/**/*.test.ts",
       "apps/desktop/src/**/*.test.ts",
+      "apps/desktop/scripts/**/*.test.ts",
       "apps/host-service/src/**/*.test.ts",
+      "apps/cli/src/**/*.test.ts",
       "apps/web/src/**/*.test.{ts,tsx}",
       "apps/mobile/lib/**/*.test.ts",
       "apps/mobile/plugins/**/*.test.js",

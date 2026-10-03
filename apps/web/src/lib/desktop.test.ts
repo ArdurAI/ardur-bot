@@ -67,7 +67,10 @@ describe("window chrome", () => {
       'className="app-drag flex items-center justify-between border-b border-sidebar-border',
     );
     expect(shell).toContain('className="app-no-drag grid h-8 w-8');
-    expect(shell).toContain('className="app-no-drag flex min-w-0 items-center gap-3"');
+    const identityClass = shell.match(
+      /data-testid="bot-settings-trigger"[\s\S]*?className="([^"]+)"/,
+    )?.[1];
+    expect(identityClass?.split(" ")).toContain("app-no-drag");
     expect(shell.match(/className="app-no-drag grid h-\[30px\] w-\[34px\]/g)).toHaveLength(1);
   });
 

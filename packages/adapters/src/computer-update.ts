@@ -1,5 +1,9 @@
 import type { ComputerUpdate } from "@ardurbot/contracts";
-import { ComputerReplacementConfigurationSchema, ComputerUpdateSchema } from "@ardurbot/contracts";
+import {
+  ComputerReplacementConfigurationSchema,
+  ComputerUpdateSchema,
+  ComputerWorkspaceSaveError,
+} from "@ardurbot/contracts";
 import { ACTIVE_RUN_STATUSES } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
@@ -21,6 +25,7 @@ export function computerUpdateView(
     action: string;
     id: string;
     botId: string;
+    computerId?: string;
     status: string;
     stage: string;
     failureReason?: string | null;
@@ -30,6 +35,7 @@ export function computerUpdateView(
 ): ComputerUpdate {
   return ComputerUpdateSchema.parse({
     canReleaseReservation: isDeploymentOwner && row.status === "interrupted",
+    computerId: row.computerId,
     action: row.action,
     id: row.id,
     botId: row.computer.bots.some((bot) => bot.id === row.botId)
@@ -51,6 +57,7 @@ export async function queueComputerUpdate(
   configuration?: {
     imageProfile?: "base" | "developer";
     connectionId?: string | null;
+    destination?: "host" | "sandbox";
     networkEgress?: boolean;
     confirmed: boolean;
   },
@@ -62,7 +69,7 @@ export async function queueComputerUpdate(
     // The following statement then observes their committed reservation.
     await tx.$queryRaw`SELECT id FROM computers WHERE id = ${computerId} FOR UPDATE`;
     const computer = await tx.computer.findUniqueOrThrow({ where: { id: computerId } });
-    if (action === "update" && !configuration && !computerSupportsUpdate(computer.kind))
+    if (action === "update" && !configuration && !computerSupportsUpdate(computer))
       throw new Error("Computer update is not available on this device");
     const update = await tx.computerUpdate.create({
       data: { computerId, botId, action, ...(configuration ? { configuration } : {}) },
@@ -146,6 +153,7 @@ export async function performComputerUpdate(deps: Deps, updateId: string) {
       signal: controller.signal,
     };
     if (
+      configuration?.destination === undefined &&
       connectionlessConfigurationUnchanged(update.computer, configuration) &&
       (await staysOnDeploymentEngine(deps, update.computer, context))
     ) {
@@ -169,13 +177,28 @@ export async function performComputerUpdate(deps: Deps, updateId: string) {
       configuration,
     );
     await finishUpdate(deps.prisma, updateId, update.computerId, "completed");
-    scheduleComputerSleep(deps.jobs, update.computerId);
+    await scheduleComputerSleep(deps, update.computerId);
   } catch (error) {
-    getLogger().error("computer update failed", error, { updateId, computerId: update.computerId });
+    getLogger().error(
+      "computer update failed",
+      error instanceof ComputerWorkspaceSaveError ? undefined : error,
+      {
+        updateId,
+        computerId: update.computerId,
+        ...(error instanceof ComputerWorkspaceSaveError
+          ? { saveFailureReason: error.reason, engineFailureCategory: error.engineFailureCategory }
+          : {}),
+      },
+    );
     // Provider errors may contain credentials or private URLs. Expose only the failed stage,
     // except the missing-engine sentence, which never carries either and tells the user what to
     // do next (the queued job discovered its engine gone after admission already let it through).
-    const failureReason = error instanceof MissingComputerProviderError ? error.message : undefined;
+    const failureReason =
+      error instanceof ComputerWorkspaceSaveError
+        ? error.detail
+        : error instanceof MissingComputerProviderError
+          ? error.message
+          : undefined;
     await finishUpdate(deps.prisma, updateId, update.computerId, "failed", failureReason);
   } finally {
     clearInterval(heartbeat);

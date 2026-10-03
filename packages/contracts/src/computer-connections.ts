@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { isComputerImageReference, MAX_COMPUTER_IMAGE_LENGTH } from "./computer-image.js";
 import { ComputerProfileSchema } from "./computer-profiles.js";
-import type { ComputerMode, ComputerStatus } from "./domain.js";
+import type { ComputerMode, ComputerStatus, ComputerUpdate } from "./domain.js";
 import { EngineEndpointSchema, SshSettingsSchema } from "./fleet.js";
 import type { SandboxKind } from "./ids.js";
 
@@ -88,6 +88,20 @@ export const HOST_MOVE_UNAVAILABLE_CODE = "host-move-unavailable";
 export const FLEET_ACTIVE_RUN_CONFLICT_CODE = "fleet-active-runs";
 export const FLEET_PINNED_BOTS_CONFLICT_CODE = "fleet-pinned-bots";
 export const ISOLATED_COMPUTER_UNAVAILABLE_CODE = "isolated-computer-unavailable";
+export const NEW_BOT_TEAM_LOCATION_CONFLICT_CODE = "new-bot-team-location-conflict";
+export const NEW_BOT_HOST_UNAVAILABLE_CODE = "new-bot-host-unavailable";
+export class NewBotHostUnavailableError extends Error {
+  constructor() {
+    super("Connect the host service to choose This computer.");
+    this.name = "NewBotHostUnavailableError";
+  }
+}
+export class NewBotTeamLocationConflictError extends Error {
+  constructor() {
+    super("Choose Only this bot to use a different location from the Team computer.");
+    this.name = "NewBotTeamLocationConflictError";
+  }
+}
 export class IsolatedComputerUnavailableError extends Error {
   constructor() {
     super("Set up a container for isolated work.");
@@ -98,19 +112,28 @@ const ComputerConfigurationFieldsSchema = z.object({
   botId: z.string().min(1),
   imageProfile: ComputerProfileSchema.optional(),
   /** Omitted keeps the computer where it is; null chooses the deployment default. */
-  connectionId: z.string().nullable().optional(),
+  connectionId: z.string().min(1).nullable().optional(),
+  /** Explicit owner-consented host destination; never inferred from the deployment default. */
+  destination: z.enum(["host", "sandbox"]).optional(),
   confirmed: z.boolean().default(false),
 });
 /** A configuration that changes neither the profile nor the connection is not a request. */
 export const ComputerConfigurationSchema = ComputerConfigurationFieldsSchema.refine(
   (configuration) =>
-    configuration.imageProfile !== undefined || configuration.connectionId !== undefined,
+    configuration.imageProfile !== undefined ||
+    configuration.connectionId !== undefined ||
+    configuration.destination !== undefined,
   { message: "Choose an image profile or a connection to change." },
+).refine(
+  (configuration) =>
+    configuration.destination !== "host" || configuration.connectionId === undefined,
+  { message: "Choose one computer destination." },
 );
 type ComputerKindFacts = {
   location: "Container" | "This computer" | "Remote computer" | "Hosted sandbox" | "Test computer";
   boundary: "container" | "host" | "account" | "hosted" | "test";
   isolated: boolean;
+  sleepWorkspace: "checkpoint" | "keep-local-files";
   capabilities: { graphical: boolean; interactiveTerminal: boolean };
   policyFields: readonly ("cpu" | "memory" | "disk" | "network")[];
 };
@@ -118,6 +141,7 @@ type ComputerKindFacts = {
 /** Describes execution boundaries, not proof that a requested limit was applied. */
 export const COMPUTER_KINDS = {
   docker: {
+    sleepWorkspace: "checkpoint",
     location: "Container",
     boundary: "container",
     isolated: true,
@@ -125,6 +149,7 @@ export const COMPUTER_KINDS = {
     policyFields: ["cpu", "memory", "network"],
   },
   "remote-docker": {
+    sleepWorkspace: "checkpoint",
     location: "Container",
     boundary: "container",
     isolated: true,
@@ -132,6 +157,7 @@ export const COMPUTER_KINDS = {
     policyFields: ["cpu", "memory", "network"],
   },
   kubernetes: {
+    sleepWorkspace: "checkpoint",
     location: "Container",
     boundary: "container",
     isolated: true,
@@ -139,6 +165,7 @@ export const COMPUTER_KINDS = {
     policyFields: ["cpu", "memory", "network"],
   },
   desktop: {
+    sleepWorkspace: "keep-local-files",
     location: "This computer",
     boundary: "host",
     isolated: false,
@@ -146,6 +173,7 @@ export const COMPUTER_KINDS = {
     policyFields: [],
   },
   ssh: {
+    sleepWorkspace: "checkpoint",
     location: "Remote computer",
     boundary: "account",
     isolated: false,
@@ -153,6 +181,7 @@ export const COMPUTER_KINDS = {
     policyFields: [],
   },
   e2b: {
+    sleepWorkspace: "checkpoint",
     location: "Hosted sandbox",
     boundary: "hosted",
     isolated: true,
@@ -160,6 +189,7 @@ export const COMPUTER_KINDS = {
     policyFields: [],
   },
   daytona: {
+    sleepWorkspace: "checkpoint",
     location: "Hosted sandbox",
     boundary: "hosted",
     isolated: true,
@@ -167,6 +197,7 @@ export const COMPUTER_KINDS = {
     policyFields: [],
   },
   box: {
+    sleepWorkspace: "checkpoint",
     location: "Hosted sandbox",
     boundary: "hosted",
     isolated: true,
@@ -174,6 +205,7 @@ export const COMPUTER_KINDS = {
     policyFields: [],
   },
   fake: {
+    sleepWorkspace: "checkpoint",
     location: "Test computer",
     boundary: "test",
     isolated: false,
@@ -206,6 +238,28 @@ export function computerModeFacts(mode: ComputerMode) {
   } as const;
 }
 
+export const COMPUTER_STATES = {
+  stopped: "Stopped",
+  booting: "Starting",
+  running: "Running",
+  suspending: "Saving your workspace",
+  suspended: "Sleeping",
+  error: "Could not start",
+} as const satisfies Record<ComputerStatus["state"], string>;
+
+export function interruptedComputerUpdate(
+  status: Pick<ComputerStatus, "botId" | "computerId">,
+  updates: readonly ComputerUpdate[],
+) {
+  return updates.find(
+    (update) =>
+      update.status === "interrupted" &&
+      (status.computerId && update.computerId
+        ? status.computerId === update.computerId
+        : status.botId === update.botId),
+  );
+}
+
 export function computerRuntimeSummary(
   status: Pick<ComputerStatus, "kind" | "mode" | "state">,
   mode: ComputerMode = status.mode,
@@ -217,6 +271,7 @@ export function computerRuntimeSummary(
     reach: COMPUTER_BOUNDARY_MESSAGES[facts.boundary],
     ...computerModeFacts(mode),
     state: status.state,
+    stateLabel: COMPUTER_STATES[status.state],
   } as const;
 }
 
@@ -234,4 +289,10 @@ export function recommendedContainer(
 
 export const ComputerReplacementConfigurationSchema = ComputerConfigurationFieldsSchema.omit({
   botId: true,
-}).extend({ networkEgress: z.boolean().optional(), confirmed: z.literal(true) });
+})
+  .extend({ networkEgress: z.boolean().optional(), confirmed: z.literal(true) })
+  .refine(
+    (configuration) =>
+      configuration.destination !== "host" || configuration.connectionId === undefined,
+    { message: "Choose one computer destination." },
+  );

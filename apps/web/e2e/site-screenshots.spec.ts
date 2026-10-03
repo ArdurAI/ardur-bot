@@ -5,6 +5,7 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import { listPiCatalog } from "../../../packages/adapters/src/pi-models";
 import { dashboardFixture } from "./dashboard-fixture";
+import { openWorkspaceView } from "./workspace-view";
 
 const outputDir = process.env.SITE_SCREENSHOTS_DIR;
 test.skip(!outputDir, "Website screenshots run in the site assets publish job.");
@@ -307,16 +308,20 @@ test("captures bot chat, group collaboration, and routines from seeded demo data
     }
     if (procedure === "models/credentials")
       return route.fulfill({ json: { json: data.credentials } });
+    if (procedure === "host/status")
+      return route.fulfill({
+        json: { json: { configured: true, connected: true, roots: [], health: null } },
+      });
     if (procedure === "computer/status")
       return route.fulfill({
         json: {
           json: {
             botId: "bot",
             computerId: "demo-computer",
-            kind: "docker",
+            kind: "desktop",
             mode: "team",
             state: "stopped",
-            connectionId: null,
+            connectionId: "demo-engine",
             imageProfile: "base",
             controlHolder: "none",
             controlBotId: null,
@@ -330,8 +335,13 @@ test("captures bot chat, group collaboration, and routines from seeded demo data
           },
         },
       });
-    if (procedure === "computer/connections" || procedure === "computer/list")
-      return route.fulfill({ json: { json: [] } });
+    if (procedure === "computer/connections")
+      return route.fulfill({
+        json: {
+          json: [{ id: "demo-engine", name: "Docker Desktop", settings: { engine: "docker" } }],
+        },
+      });
+    if (procedure === "computer/list") return route.fulfill({ json: { json: [] } });
     const original = data.fixture.rpc(procedure, input);
     const space = { ...data.base.spaces[0], bots: data.bots, groups: [data.group] };
     const result =
@@ -426,8 +436,18 @@ test("captures bot chat, group collaboration, and routines from seeded demo data
   const botSettings = page.getByTestId("bot-settings");
   const runtimeSummary = botSettings.getByTestId("runtime-summary");
   await expect(runtimeSummary).toContainText("Container");
+  await expect(runtimeSummary).toContainText("Docker Desktop");
+  await expect(runtimeSummary).not.toContainText("Runs as you");
   await expect(runtimeSummary).toContainText("Bots share files and installed tools");
   await runtimeSummary.scrollIntoViewIfNeeded();
+  await botSettings.getByText("Change location", { exact: true }).click();
+  const locations = botSettings.getByTestId("computer-location-picker");
+  await expect(locations.getByRole("button", { name: "This computer", exact: true })).toBeEnabled();
+  await expect(locations.getByRole("button", { name: "Sandbox", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await locations.scrollIntoViewIfNeeded();
   await captureSiteScreenshot(page, "bot-runtime-settings");
 
   await page.goto("/app/g/operations-group");
@@ -446,7 +466,7 @@ test("captures bot chat, group collaboration, and routines from seeded demo data
 
   await page.goto("/app/bot");
   await page.getByTitle("Agent computer").click();
-  await page.getByRole("tab", { name: "Routines", exact: true }).click();
+  await openWorkspaceView(page, "Routines");
   await expect(page.getByText("Morning brief")).toBeVisible();
   await expect(page.getByText("Every day at 4:00 PM")).toBeVisible();
   await expect(page.getByTestId("side-panel")).toHaveAttribute("data-panel", "computer");

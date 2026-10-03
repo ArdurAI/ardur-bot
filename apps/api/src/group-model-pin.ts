@@ -5,13 +5,14 @@ import {
   nativeHostOwner,
 } from "@ardurbot/adapters";
 import type { Actor, RuntimePin } from "@ardurbot/contracts";
-import { RuntimePinSchema } from "@ardurbot/contracts";
+import { computerRunsOnHost, RuntimePinSchema } from "@ardurbot/contracts";
 import {
   appendEventInTransaction,
   createGroupRepos,
   IsolationError,
   lockOwnedGroup,
   Prisma,
+  resetBriefRetries,
   touchGroupUpdatedAt,
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
@@ -93,7 +94,7 @@ export async function updateGroupMemberModelPin(
           bot: {
             select: {
               runtimeExperimental: true,
-              computer: { select: { kind: true } },
+              computer: { select: { kind: true, connectionId: true } },
             },
           },
         },
@@ -103,7 +104,7 @@ export async function updateGroupMemberModelPin(
   if (visible?.members.length !== 1) throw new IsolationError();
   if (requested?.runtimeKind !== "pi" && requested) {
     const targetBot = visible.members[0]!.bot;
-    if (!targetBot.runtimeExperimental || targetBot.computer?.kind !== "desktop")
+    if (!targetBot.runtimeExperimental || !computerRunsOnHost(targetBot.computer))
       throw new ORPCError("BAD_REQUEST", {
         message: "This choice needs a supported computer and bot settings.",
       });
@@ -193,6 +194,8 @@ export async function updateGroupMemberModelPin(
     });
     return { threadId: group.thread.id, seq: event.seq };
   });
+  if (committed.seq !== null)
+    await resetBriefRetries(deps.prisma, { botId: target.botId, threadId: committed.threadId });
   if (committed.seq !== null)
     await deps.events.notify(committed.threadId, committed.seq).catch((error) => {
       getLogger().error("group model notification", error);

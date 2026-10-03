@@ -12,6 +12,7 @@ import {
   nativeRuntimeProviders,
   RuntimePinError,
   RuntimePinSchema,
+  resolveModelContextWindow,
   runtimePinProblem,
   ThinkingLevelSchema,
 } from "@ardurbot/contracts";
@@ -27,7 +28,7 @@ import { compileHermesRuntimeConfig } from "@ardurbot/host-runtime/runtimes/herm
 
 import { hermesCompatibility, hermesConfigHash } from "./hermes-compatibility.js";
 import { modelLocalityRefusedBy } from "./model-locality.js";
-import { listPiCatalog } from "./pi-models.js";
+import { listPiCatalog, piModelContextWindow } from "./pi-models.js";
 import { AnthropicOAuthUnavailableError } from "./pi-oauth.js";
 import { catalogModels } from "./pi-runtime.js";
 import type { BotPinFields } from "./pin-resolution.js";
@@ -263,6 +264,12 @@ export async function resolveRunModelPin(input: {
     const availableMaxTokens = model.maxTokens ?? concrete?.maxTokens ?? 4_096;
     const resolved = {
       ...model,
+      ...(model.contextWindow !== undefined && model.contextWindowSource
+        ? { contextWindow: model.contextWindow, contextWindowSource: model.contextWindowSource }
+        : resolveModelContextWindow(
+            model.contextWindow,
+            concrete?.contextWindow ?? piModelContextWindow(model.provider, model.id),
+          )),
       ...(translatedHermes
         ? {
             reasoning: model.reasoning ?? concrete?.reasoning,
@@ -273,7 +280,6 @@ export async function resolveRunModelPin(input: {
         : {}),
       ...(pin.runtimeKind === "hermes"
         ? {
-            contextWindow: model.contextWindow ?? concrete?.contextWindow ?? 32_768,
             maxTokens: Math.min(availableMaxTokens, input.maxOutputTokens ?? 65_536),
           }
         : {}),

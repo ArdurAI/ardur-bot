@@ -4,32 +4,31 @@ type JsonObject = Record<string, unknown>;
 
 export class AcpClientError extends Error {
   /**
-   * The agent's own error text, kept only so the runtime can classify the failure's
-   * cause. It is never stored or shown; the recorded failure names the category.
+   * Private matching text, including data; never log it. Diagnostic metadata projects
+   * only the JSON-RPC code and message, redacted by the runtime before logging.
    */
   constructor(
     message: string,
     readonly detail?: string,
+    readonly kind: "closed" | "timeout" | "protocol-error" = "protocol-error",
+    readonly protocolError?: { code?: number; message?: string },
   ) {
     super(message);
     this.name = "AcpClientError";
   }
 }
 
-/** The matchable text of a JSON-RPC error: its message and any nested message. */
+/** Private matching text, including the pinned SDK’s data.details; never diagnostic data. */
 function acpErrorDetail(error: unknown): string | undefined {
   if (!error || typeof error !== "object") return undefined;
   const parts: string[] = [];
   if ("message" in error && typeof error.message === "string") parts.push(error.message);
   const data = "data" in error ? error.data : undefined;
   if (typeof data === "string") parts.push(data);
-  else if (
-    data &&
-    typeof data === "object" &&
-    "message" in data &&
-    typeof data.message === "string"
-  )
-    parts.push(data.message);
+  else if (data && typeof data === "object") {
+    if ("message" in data && typeof data.message === "string") parts.push(data.message);
+    if ("details" in data && typeof data.details === "string") parts.push(data.details);
+  }
   return parts.length ? parts.join("\n") : undefined;
 }
 
@@ -59,25 +58,25 @@ export class AcpClient {
     this.maxLineBytes = options.maxLineBytes ?? 8 * 1024 * 1024;
     this.timeoutMs = options.timeoutMs ?? 30_000;
     child.stdout.on("data", (chunk: Buffer) => this.receive(chunk));
-    child.stdout.on("end", () => this.fail("ACP closed before the turn completed."));
-    child.stdin.on("error", () => this.fail("ACP input closed."));
-    child.on("error", () => this.fail("ACP process failed."));
-    child.on("close", () => this.fail("ACP process exited before the turn completed."));
+    child.stdout.on("end", () => this.fail("ACP closed before the turn completed.", "closed"));
+    child.stdin.on("error", () => this.fail("ACP input closed.", "closed"));
+    child.on("error", () => this.fail("ACP process failed.", "closed"));
+    child.on("close", () => this.fail("ACP process exited before the turn completed.", "closed"));
   }
 
   private send(value: JsonObject) {
     if (this.closed) throw this.closed;
     if (this.child.stdin.destroyed || !this.child.stdin.writable) {
-      this.fail("ACP input closed.");
+      this.fail("ACP input closed.", "closed");
       throw this.closed;
     }
     const line = `${JSON.stringify(value)}\n`;
     this.child.stdin.write(line);
   }
 
-  private fail(message: string) {
+  private fail(message: string, kind: AcpClientError["kind"] = "protocol-error") {
     if (this.closed) return;
-    this.closed = new AcpClientError(message);
+    this.closed = new AcpClientError(message, undefined, kind);
     this.buffer = Buffer.alloc(0);
     for (const entry of this.pending.values()) {
       clearTimeout(entry.timer);
@@ -186,9 +185,23 @@ export class AcpClient {
     }
     this.pending.delete(message.id);
     clearTimeout(entry.timer);
-    if (message.error !== undefined)
-      entry.reject(new AcpClientError("ACP request failed.", acpErrorDetail(message.error)));
-    else if (message.result && typeof message.result === "object" && !Array.isArray(message.result))
+    if (message.error !== undefined) {
+      const error = message.error;
+      const fields = error && typeof error === "object" ? (error as JsonObject) : {};
+      entry.reject(
+        new AcpClientError("ACP request failed.", acpErrorDetail(error), "protocol-error", {
+          code:
+            typeof fields.code === "number" && Number.isFinite(fields.code)
+              ? fields.code
+              : undefined,
+          message: typeof fields.message === "string" ? fields.message : undefined,
+        }),
+      );
+    } else if (
+      message.result &&
+      typeof message.result === "object" &&
+      !Array.isArray(message.result)
+    )
       entry.resolve(message.result as JsonObject);
     else entry.reject(new AcpClientError("ACP sent an invalid response."));
   }
@@ -201,7 +214,7 @@ export class AcpClient {
     return new Promise<JsonObject>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new AcpClientError("ACP request timed out."));
+        reject(new AcpClientError("ACP request timed out.", undefined, "timeout"));
       }, timeoutMs);
       this.pending.set(id, { resolve, reject, timer });
       try {
@@ -219,6 +232,6 @@ export class AcpClient {
   }
 
   close() {
-    this.fail("ACP connection closed.");
+    this.fail("ACP connection closed.", "closed");
   }
 }

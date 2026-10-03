@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   checkpointComputerWorkspace,
   ensureComputerWorkspaceLayout,
-  isRemoteHostAbsolutePath,
+  isHostAbsolutePath,
   restoreComputerWorkspace,
 } from "./computer-workspace.js";
 import { FakeSandboxProvider } from "./fake-sandbox.js";
@@ -25,6 +25,23 @@ afterEach(async () => {
 });
 
 describe("provider-neutral computer workspace", () => {
+  it.each([null, "docker", "podman", "missing", ""])(
+    "preserves host absolute paths only without connection %s",
+    (connectionId) => {
+      expect(
+        isHostAbsolutePath(
+          {
+            id: "computer",
+            botId: "bot",
+            kind: "desktop",
+            connectionId,
+            providerRef: "host:computer",
+          },
+          "/fixture/project",
+        ),
+      ).toBe(connectionId === null);
+    },
+  );
   it("preserves registered host paths through Team Computer path mapping on every platform", () => {
     const computer = {
       id: "host:computer",
@@ -32,15 +49,13 @@ describe("provider-neutral computer workspace", () => {
       kind: "desktop" as const,
       providerRef: "host:computer",
     };
-    expect(isRemoteHostAbsolutePath(computer, "/fixture/project/note.txt")).toBe(true);
-    expect(isRemoteHostAbsolutePath(computer, "C:\\Projects\\note.txt")).toBe(true);
-    expect(isRemoteHostAbsolutePath(computer, "notes/file.txt")).toBe(false);
-    expect(isRemoteHostAbsolutePath({ ...computer, kind: "docker" }, "/fixture/project")).toBe(
-      false,
-    );
+    expect(isHostAbsolutePath(computer, "/fixture/project/note.txt")).toBe(true);
+    expect(isHostAbsolutePath(computer, "C:\\Projects\\note.txt")).toBe(true);
+    expect(isHostAbsolutePath(computer, "notes/file.txt")).toBe(false);
+    expect(isHostAbsolutePath({ ...computer, kind: "docker" }, "/fixture/project")).toBe(false);
     expect(
-      isRemoteHostAbsolutePath({ ...computer, providerRef: "/fixture/home" }, "/fixture/project"),
-    ).toBe(false);
+      isHostAbsolutePath({ ...computer, providerRef: "/fixture/home" }, "/fixture/project"),
+    ).toBe(true);
   });
   it("prepares shared and bot folders for a Team Computer", async () => {
     const provider = new FakeSandboxProvider();

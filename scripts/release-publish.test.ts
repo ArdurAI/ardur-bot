@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { releaseNotes } from "./desktop-release.mjs";
 
 const repo = fileURLToPath(new URL("..", import.meta.url));
 const script = path.join(repo, "scripts/release-publish.mjs");
@@ -21,6 +22,7 @@ async function fakeGh(
     | "edit-fails-draft",
 ) {
   const root = await mkdtemp(path.join(os.tmpdir(), "release-publish-"));
+  await writeFile(path.join(root, "package.json"), '{"type":"module"}\n');
   const log = path.join(root, "gh.log");
   const bin = path.join(root, "bin");
   await writeFile(log, "");
@@ -84,7 +86,7 @@ process.exit(0);
   return { root, log, bin, notes, waiver, installer, notesCapture, mode };
 }
 
-function publish(fixture: Awaited<ReturnType<typeof fakeGh>>) {
+function publish(fixture: Awaited<ReturnType<typeof fakeGh>>, signingArgs: string[] = []) {
   return spawnSync(
     process.execPath,
     [
@@ -97,6 +99,7 @@ function publish(fixture: Awaited<ReturnType<typeof fakeGh>>) {
       fixture.notes,
       "--waiver-record",
       fixture.waiver,
+      ...signingArgs,
       "--",
       fixture.installer,
     ],
@@ -123,6 +126,45 @@ async function calls(log: string) {
 }
 
 describe("release publication retry", () => {
+  it.each([false, true])("uploads matching signing evidence (signed=%s)", async (signed) => {
+    const fixture = await fakeGh("missing");
+    const record = path.join(fixture.root, "signing.json");
+    try {
+      await writeFile(record, JSON.stringify({ signed }));
+      await writeFile(fixture.notes, await releaseNotes([], undefined, signed));
+      const result = publish(fixture, ["--signed", String(signed), "--signing-record", record]);
+      expect(result.status).toBe(0);
+      expect((await calls(fixture.log)).find((call) => call[1] === "upload")).toContain(record);
+      expect(await readFile(fixture.notesCapture, "utf8")).toContain(
+        signed
+          ? "Signed and notarized for macOS."
+          : "This preview is not signed by an identified developer.",
+      );
+    } finally {
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses mismatched or missing signing evidence before any publication call", async () => {
+    const fixture = await fakeGh("missing");
+    const record = path.join(fixture.root, "signing.json");
+    try {
+      await writeFile(record, JSON.stringify({ signed: false }));
+      for (const args of [
+        ["--signed", "true", "--signing-record", record],
+        ["--signed", "yes", "--signing-record", record],
+        ["--signed", "false"],
+        ["--signing-record", record],
+        ["--signed", "false", "--signing-record", `${record}.missing`],
+      ]) {
+        expect(publish(fixture, args).status).not.toBe(0);
+        expect(await calls(fixture.log)).toEqual([]);
+      }
+    } finally {
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
   it("carries the workflow marker in the notes every release create call receives", async () => {
     const missing = await fakeGh("missing");
     try {

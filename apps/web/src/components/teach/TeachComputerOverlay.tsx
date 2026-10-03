@@ -94,7 +94,7 @@ export function TeachComputerOverlayControl({
   }, [botId, onRefresh]); // t omitted: identity churn must not re-lock Start
 
   // Hide only for desktop-host bots. Null computer still shows the control so teaching can boot.
-  if (computer?.kind === "desktop") return null;
+  if (computer?.runsOnHost === true) return null;
 
   async function refreshView() {
     const requestBotId = botId;

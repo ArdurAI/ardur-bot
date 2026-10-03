@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { AgentHomeStore } from "@ardurbot/adapter-kit";
 import { FakeSandboxProvider } from "@ardurbot/adapters";
-import type { Actor } from "@ardurbot/contracts";
+import type { Actor, RuntimeComputerLocation } from "@ardurbot/contracts";
 import { IDE_FILE_BYTES } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
@@ -41,12 +41,23 @@ async function fixture() {
     scope: "team",
     scopeKey: "team:space",
     kind: "fake",
+    connectionId: null as string | null,
+    connectionSettings: null as RuntimeComputerLocation["connectionSettings"],
     state: "running",
     providerRef: ref.providerRef,
     maintenanceId: null,
+    screenGeneration: 1,
   };
   const db = {
-    bot: { findMany: vi.fn(async (_query: unknown) => [{ id: "bot", name: "Test", computer }]) },
+    bot: {
+      findMany: vi.fn(async (_query: unknown) => [{ id: "bot", name: "Test", computer }]),
+      findFirst: vi.fn(
+        async ({ where }: { where: { id: string; userId: string; spaceId: string } }) =>
+          where.id === "bot" && where.userId === "owner" && where.spaceId === "space"
+            ? { id: "bot", name: "Test", computer }
+            : null,
+      ),
+    },
     computer: { findFirst: vi.fn(async () => computer), updateMany: vi.fn(async () => ({})) },
     actionApprovalRule: { findMany: vi.fn(async () => []) },
   };
@@ -65,6 +76,103 @@ async function fixture() {
   return { files, sandbox, computer, db, home, ref, context, input };
 }
 describe("IDE file operations", () => {
+  it("binds a Team root to the selected bot instead of the root list's representative", async () => {
+    const f = await fixture();
+    f.db.bot.findMany.mockResolvedValue([{ id: "teammate", name: "Team", computer: f.computer }]);
+    const result = await f.files.checkedRoot(actor, {
+      botId: "bot",
+      rootId: f.input.rootId,
+      computerId: "computer",
+      generation: 1,
+    });
+    expect(result.root.botId).toBe("bot");
+    expect(result.context.botId).toBe("bot");
+  });
+  it.each([
+    { botId: "foreign" },
+    { rootId: "sandbox-other-bot-computer" },
+    { rootId: "host-folder" },
+  ])("refuses cross-bot and host root targets before accessing files: %s", async (other) => {
+    const f = await fixture();
+    const read = vi.spyOn(f.sandbox, "readFile");
+    await expect(
+      f.files.checkedRoot(actor, {
+        botId: "bot",
+        rootId: f.input.rootId,
+        computerId: "computer",
+        generation: 1,
+        ...other,
+      }),
+    ).rejects.toThrow("Resource not found");
+    expect(read).not.toHaveBeenCalled();
+  });
+  it("refuses another owner's target and stale computer generations", async () => {
+    const f = await fixture();
+    const binding = { botId: "bot", rootId: f.input.rootId, computerId: "computer", generation: 1 };
+    await expect(f.files.checkedRoot({ ...actor, userId: "other" }, binding)).rejects.toThrow(
+      "Resource not found",
+    );
+    await expect(f.files.checkedRoot(actor, { ...binding, generation: 0 })).rejects.toThrow(
+      "Computer changed. Refresh files.",
+    );
+    await expect(
+      f.files.checkedRoot(actor, { ...binding, computerId: "replaced" }),
+    ).rejects.toThrow("Computer changed. Refresh files.");
+  });
+  it.each(["docker", "podman"] as const)(
+    "keeps a legacy desktop %s connection in sandbox roots and routes its files there",
+    async (engine) => {
+      const f = await fixture();
+      f.computer.kind = "desktop";
+      f.computer.connectionId = "saved-connection";
+      f.computer.connectionSettings = { engine };
+      expect(await f.files.roots(actor)).toMatchObject([
+        { kind: "sandbox", computerId: "computer" },
+      ]);
+      const current = await f.files.read(actor, f.input);
+      expect(current.content).toBe("before\n");
+      expect(
+        await f.files.save(actor, {
+          ...f.input,
+          version: current.version,
+          content: "after\n",
+          approved: false,
+        }),
+      ).toMatchObject({ saved: true });
+      expect((await f.files.read(actor, f.input)).content).toBe("after\n");
+      expect(f.home.readFile).not.toHaveBeenCalled();
+      f.computer.state = "stopped";
+      f.home.list.mockResolvedValue([{ path: f.input.path, kind: "file", size: 5 }] as never);
+      f.home.readFile.mockResolvedValue("saved");
+      const saved = await f.files.read(actor, f.input);
+      expect(saved.content).toBe("saved");
+      expect(
+        await f.files.save(actor, {
+          ...f.input,
+          version: saved.version,
+          content: "after",
+          approved: false,
+        }),
+      ).toMatchObject({ saved: true });
+      expect(f.home.writeFile).toHaveBeenCalledWith(
+        "home",
+        f.input.path,
+        "after",
+        expect.anything(),
+      );
+    },
+  );
+
+  it("does not expose a connectionless host as a sandbox root", async () => {
+    const f = await fixture();
+    f.computer.kind = "desktop";
+    const read = vi.spyOn(f.sandbox, "readFile");
+    expect(await f.files.roots(actor)).toEqual([]);
+    await expect(f.files.read(actor, f.input)).rejects.toThrow();
+    expect(read).not.toHaveBeenCalled();
+    expect(f.home.readFile).not.toHaveBeenCalled();
+  });
+
   it("keeps a provider-limited preview read-only instead of overwriting the unread tail", async () => {
     const f = await fixture();
     const write = vi.spyOn(f.sandbox, "writeFile");

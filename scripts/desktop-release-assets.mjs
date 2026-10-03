@@ -1,7 +1,7 @@
 import { copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
-import { generateCask, generateWinget, releaseVersion } from "./desktop-release.mjs";
+import { generateCask, generateWinget, parseSigned, releaseVersion } from "./desktop-release.mjs";
 
 // Reuse electron-builder's YAML codec; no new dependency or runtime code.
 const require = createRequire(import.meta.url);
@@ -9,12 +9,14 @@ const builderRequire = createRequire(
   require.resolve("electron-builder", { paths: ["apps/desktop"] }),
 );
 const yaml = builderRequire("js-yaml");
-const [version, source, destination] = process.argv.slice(2);
+const [version, source, destination, signing] = process.argv.slice(2);
+const signed = parseSigned(signing);
 releaseVersion(`v${version}`, version);
 await mkdir(destination, { recursive: true });
 const feeds = new Map();
 for (const directory of await readdir(source)) {
   for (const file of await readdir(path.join(source, directory))) {
+    if (file.startsWith("install-build-")) continue;
     const from = path.join(source, directory, file);
     if (file.endsWith(".yml")) {
       const feed = yaml.load(await readFile(from, "utf8"));
@@ -56,7 +58,7 @@ for (const [file, feed] of feeds) {
   await writeFile(path.join(destination, file), yaml.dump(feed));
 }
 await copyFile("scripts/install.sh", path.join(destination, "install.sh"));
-await generateCask(version, destination, path.join(destination, "ardur.rb"));
+await generateCask(version, destination, path.join(destination, "ardur.rb"), signed);
 await generateWinget(version, destination, destination);
 
 const crypto = await import("node:crypto");

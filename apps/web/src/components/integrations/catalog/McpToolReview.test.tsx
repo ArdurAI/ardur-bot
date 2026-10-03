@@ -132,3 +132,54 @@ it("loads an existing MCP grant, saves Ask and Block without changing other serv
   expect(select("update_item").value).toBe("block");
   await act(async () => root.unmount());
 });
+
+it.each(["connected", "needs-sign-in", "discovery-failed"] as const)(
+  "shows per-bot pending status only for a connected custom server, not %s",
+  async (connectionState) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const server = {
+      id: "server",
+      connectionState,
+      enabled: true,
+      needsReview: true,
+      spaceAllowedTools: [],
+      spaceToolPolicies: {},
+    } as unknown as McpServer;
+    api.all.mockResolvedValue([]);
+    api.list.mockResolvedValue([server]);
+    if (connectionState === "connected") {
+      api.tools.mockResolvedValue({
+        tools: [{ id: "get_item", description: "Read an item", inputSchemaDigest: "a".repeat(64) }],
+      });
+    } else {
+      api.tools.mockRejectedValue(new Error("Connection is not ready"));
+    }
+    const node = document.createElement("div");
+    const root = createRoot(node);
+    try {
+      await act(async () =>
+        root.render(
+          <McpToolReview
+            server={server}
+            bots={[{ id: "bot", name: "Helper" } as Bot]}
+            assignments={{}}
+            onClose={vi.fn()}
+            onSaved={vi.fn(async () => undefined)}
+          />,
+        ),
+      );
+      const botLabel = [...node.querySelectorAll("label")].find((label) =>
+        label.textContent?.includes("Helper"),
+      );
+      expect(botLabel).toBeDefined();
+      if (connectionState === "connected") {
+        expect(botLabel!.textContent).toContain("Connected · tools need review");
+      } else {
+        expect(botLabel!.textContent).not.toContain("Connected");
+      }
+      expect(api.permissions).not.toHaveBeenCalled();
+    } finally {
+      await act(async () => root.unmount());
+    }
+  },
+);

@@ -1,5 +1,5 @@
 import {
-  DEFAULT_MODEL_CONTEXT_WINDOW,
+  DEFAULT_CONNECTION_CONTEXT_WINDOW,
   DEFAULT_MODEL_MAX_TOKENS,
   type IntegrationSetupState,
   MAX_MODEL_CONTEXT_WINDOW,
@@ -34,6 +34,7 @@ import { FeatureDocsLink } from "../components/FeatureDocsLink";
 import { IntegrationSetup } from "../components/integrations/IntegrationSetup";
 import { OllamaSettings } from "../components/OllamaSettings";
 import type { ModelCatalogEntry } from "../lib/model-auth";
+import { modelContextLabel } from "../lib/model-context-label";
 import { rpc } from "../lib/rpc";
 import { thinkingLevelOptions } from "../lib/thinking-level-options";
 import { useFirstBotSetup } from "../lib/use-first-bot-setup";
@@ -66,7 +67,8 @@ export function OnboardingPage() {
   const [manualModelId, setManualModelId] = useState(false);
   const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel | null>(null);
   const [maxTokens, setMaxTokens] = useState(String(DEFAULT_MODEL_MAX_TOKENS));
-  const [contextWindow, setContextWindow] = useState(String(DEFAULT_MODEL_CONTEXT_WINDOW));
+  const [contextWindow, setContextWindow] = useState(String(DEFAULT_CONNECTION_CONTEXT_WINDOW));
+  const [contextWindowEdited, setContextWindowEdited] = useState(false);
   const [supportsImages, setSupportsImages] = useState(false);
   const [maxImagesPerPrompt, setMaxImagesPerPrompt] = useState("");
   const [{ models: probeModels, probing }, setProbe] = useState(initialModelProbeState);
@@ -210,7 +212,8 @@ export function OnboardingPage() {
     setManualModelId(false);
     setSupportsImages(false);
     setMaxTokens(String(DEFAULT_MODEL_MAX_TOKENS));
-    setContextWindow(String(DEFAULT_MODEL_CONTEXT_WINDOW));
+    setContextWindow(String(DEFAULT_CONNECTION_CONTEXT_WINDOW));
+    setContextWindowEdited(false);
     setMaxImagesPerPrompt("");
     resetOpenAiCompatibleProbe();
     setError(null);
@@ -280,7 +283,7 @@ export function OnboardingPage() {
           reasoning,
           thinkingLevel: reasoning ? thinkingLevel : null,
           maxTokens: parsedMaxTokens,
-          contextWindow: parsedContextWindow,
+          ...(contextWindowEdited ? { contextWindow: parsedContextWindow } : {}),
           supportsImages,
           maxImagesPerPrompt: maxImagesPerPromptInput,
           apiKey: apiKey.trim() || undefined,
@@ -498,8 +501,13 @@ export function OnboardingPage() {
                         onMaxTokensChange={setMaxTokens}
                         maxTokensLabel={t`Maximum output tokens`}
                         contextWindow={contextWindow}
-                        onContextWindowChange={setContextWindow}
-                        contextWindowLabel={t`Context limit`}
+                        onContextWindowChange={(value) => {
+                          setContextWindow(value);
+                          setContextWindowEdited(true);
+                        }}
+                        contextWindowLabel={modelContextLabel(
+                          contextWindowEdited ? "metadata" : "default",
+                        )}
                         supportsImages={supportsImages}
                         onSupportsImagesChange={setSupportsImages}
                         imagesLabel={t`Supports images`}

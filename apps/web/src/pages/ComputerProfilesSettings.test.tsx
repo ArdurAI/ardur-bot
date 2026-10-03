@@ -168,9 +168,8 @@ it("shows a desktop computer with the host label from the API and hides image pr
     ),
   );
   expect(element.textContent).toContain("Engine: This computer");
-  expect(element.textContent).toContain(
-    "Your OS will not ask for extra permission if you let bots run on this computer. They run as you.",
-  );
+  expect(element.textContent).toContain("Runs as you; can use your files and signed-in tools");
+  expect(element.textContent).not.toContain("They run as you.");
   expect(element.textContent).not.toContain("Deployment default");
   expect(element.querySelector('[aria-label="Connection"]')).toBeNull();
   expect(api.engine).not.toHaveBeenCalled();
@@ -236,10 +235,10 @@ it("moves a connectionless computer to a saved connection and hides the control 
   await act(async () => root.unmount());
 });
 
-it("names the engine new computers start on, and none while that is the host", () => {
-  expect(
-    deploymentDefaultEngine({ sandboxProvider: "docker", computerHost: "this-mac" }),
-  ).toBeNull();
+it("keeps the sandbox engine available independently from a host default", () => {
+  expect(deploymentDefaultEngine({ sandboxProvider: "docker", computerHost: "this-mac" })).toBe(
+    "docker",
+  );
   expect(deploymentDefaultEngine({ sandboxProvider: "desktop", computerHost: null })).toBeNull();
   expect(deploymentDefaultEngine({ sandboxProvider: "docker", computerHost: null })).toBe("docker");
   expect(deploymentDefaultEngine({ sandboxProvider: "docker", computerHost: "docker" })).toBe(
@@ -333,6 +332,7 @@ it("offers the deployment default by its engine name unless that is the host", a
     botId: "bot",
     imageProfile: "base",
     connectionId: null,
+    destination: "sandbox",
     confirmed: true,
   });
   await act(async () => root.unmount());
@@ -365,7 +365,7 @@ it("moves a connectionless Docker computer to an E2B deployment default and name
     select.value = select.options[1]!.value;
     select.dispatchEvent(new Event("change", { bubbles: true }));
   });
-  expect(element.textContent).toContain("Engine: E2B");
+  expect(element.textContent).toContain("Engine: Docker");
   // Only the Docker engine it runs on was checked; E2B is named, not probed.
   expect(api.engine).toHaveBeenCalledExactlyOnceWith({ connectionId: null });
   await act(async () => button("Apply").click());
@@ -377,6 +377,7 @@ it("moves a connectionless Docker computer to an E2B deployment default and name
     botId: "bot",
     imageProfile: "base",
     connectionId: null,
+    destination: "sandbox",
     confirmed: true,
   });
   api.configure.mockClear();
@@ -744,6 +745,237 @@ it("shows the selected remote-account boundary before Apply, without saving", as
   }
 });
 
+it("never describes a desktop computer as Docker when a container is selected", async () => {
+  const element = document.createElement("div");
+  const root = createRoot(element);
+  try {
+    await act(async () =>
+      root.render(
+        <ComputerProfile
+          botId="bot"
+          name="Builder"
+          status={{ ...status, kind: "desktop" }}
+          connections={[
+            { id: "container", name: "Container engine", settings: { engine: "docker" } as never },
+          ]}
+          deploymentDefault={null}
+          onChanged={async () => {}}
+        />,
+      ),
+    );
+    const select = element.querySelector<HTMLSelectElement>('[aria-label="Connection"]')!;
+    await act(async () => {
+      select.value = "container";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(element.textContent).not.toContain("Engine: Docker");
+    expect(element.textContent).toContain("Engine: This computer");
+    expect(api.configure).not.toHaveBeenCalled();
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+it("keeps a connected desktop row on its real container location without a mutation", async () => {
+  const element = document.createElement("div");
+  const root = createRoot(element);
+  try {
+    await act(async () =>
+      root.render(
+        <ComputerProfile
+          choicesOnly
+          botId="bot"
+          name="Builder"
+          status={{ ...status, kind: "desktop", connectionId: "container" }}
+          connections={[
+            { id: "container", name: "Container engine", settings: { engine: "docker" } as never },
+          ]}
+          deploymentDefault={null}
+          onChanged={async () => {}}
+        />,
+      ),
+    );
+    const select = element.querySelector<HTMLSelectElement>('[aria-label="Connection"]')!;
+    expect(select.value).toBe("container");
+    expect([...select.options].map((option) => option.textContent)).toEqual([
+      "Keep current location",
+    ]);
+    expect(api.engine).toHaveBeenCalledWith({ connectionId: "container" });
+    expect(element.textContent).not.toContain("Move to a container");
+    expect(element.querySelector('[aria-label="Sandbox"]')?.getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    const button = (label: string) =>
+      [...element.querySelectorAll("button")].find((entry) => entry.textContent === label)!;
+    expect(button("Apply").disabled).toBe(true);
+    expect(api.configure).not.toHaveBeenCalled();
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+it("renders only destination choices and consequences inside Change location", async () => {
+  const element = document.createElement("div");
+  const root = createRoot(element);
+  try {
+    await act(async () =>
+      root.render(
+        <ComputerProfile
+          choicesOnly
+          botId="bot"
+          name="Builder"
+          status={{ ...status, kind: "desktop" }}
+          connections={[
+            { id: "container", name: "Container engine", settings: { engine: "docker" } as never },
+          ]}
+          deploymentDefault={null}
+          onChanged={async () => {}}
+        />,
+      ),
+    );
+    expect(element.querySelector('[data-testid="runtime-summary"]')).toBeNull();
+    expect(element.textContent).not.toContain("Engine:");
+    expect(
+      element.querySelector('[aria-label="This computer"]')?.getAttribute("aria-pressed"),
+    ).toBe("true");
+    const select = element.querySelector<HTMLSelectElement>('[aria-label="Connection"]')!;
+    expect(select.options[0]?.textContent).toBe("Keep current location");
+    await act(async () => {
+      select.value = "container";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(element.textContent).toContain("Move to a container");
+    expect(element.textContent).toContain(
+      "Separate home; can reach allowed network services and granted credentials.",
+    );
+    expect(element.textContent).not.toContain("Shared with team");
+    expect(element.textContent).not.toContain("Stopped");
+    expect(api.configure).not.toHaveBeenCalled();
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+it.each([
+  { kind: "desktop" as const, choicesOnly: false, showGuidance: false },
+  { kind: "docker" as const, choicesOnly: false, showGuidance: true },
+  { kind: "desktop" as const, choicesOnly: true, showGuidance: true },
+  { kind: "docker" as const, choicesOnly: true, showGuidance: true },
+])(
+  "shows host-only runtime guidance only on a mismatch or explicit location choice: $kind / $choicesOnly",
+  async ({ kind, choicesOnly, showGuidance }) => {
+    const element = document.createElement("div");
+    const root = createRoot(element);
+    try {
+      await act(async () =>
+        root.render(
+          <ComputerProfile
+            botId="bot"
+            name="Builder"
+            runtimeKind="codex-app-server"
+            choicesOnly={choicesOnly}
+            status={{ ...status, kind, hostLabel: "This computer" }}
+            connections={[]}
+            hostConnected
+            onChanged={async () => {}}
+          />,
+        ),
+      );
+      const guidance = "Other locations are unavailable for Codex. Choose This computer.";
+      expect(element.textContent?.includes(guidance)).toBe(showGuidance);
+      expect(element.textContent?.split(guidance).length).toBe(showGuidance ? 2 : 1);
+      const picker = element.querySelector('[data-testid="computer-location-picker"]');
+      expect(Boolean(picker)).toBe(showGuidance);
+      if (picker) {
+        expect(picker.querySelector<HTMLButtonElement>('[aria-label="Sandbox"]')?.disabled).toBe(
+          true,
+        );
+        expect(
+          picker.querySelector<HTMLButtonElement>('[aria-label="This computer"]')?.disabled,
+        ).toBe(false);
+      }
+      expect(api.engine).not.toHaveBeenCalled();
+      expect(api.configure).not.toHaveBeenCalled();
+    } finally {
+      await act(async () => root.unmount());
+    }
+  },
+);
+
+it.each(["fake", "e2b", "daytona", "box"])(
+  "offers a confirmed move from the host back to the %s deployment sandbox",
+  async (deploymentDefault) => {
+    const element = document.createElement("div");
+    const root = createRoot(element);
+    try {
+      await act(async () =>
+        root.render(
+          <ComputerProfile
+            choicesOnly
+            botId="bot"
+            name="Builder"
+            status={{ ...status, kind: "desktop" }}
+            connections={[]}
+            deploymentDefault={deploymentDefault}
+            hostConnected
+            onChanged={async () => {}}
+          />,
+        ),
+      );
+      const sandbox = element.querySelector<HTMLButtonElement>('[aria-label="Sandbox"]')!;
+      expect(sandbox.disabled).toBe(false);
+      await act(async () => sandbox.click());
+      expect(sandbox.getAttribute("aria-pressed")).toBe("true");
+      const button = (label: string) =>
+        [...element.querySelectorAll("button")].find((entry) => entry.textContent === label)!;
+      await act(async () => button("Apply").click());
+      expect(api.configure).not.toHaveBeenCalled();
+      expect(element.querySelector('[role="alertdialog"]')?.textContent).toContain(
+        "and replaces its files. Continue?",
+      );
+      await act(async () => button("Continue").click());
+      expect(api.configure).toHaveBeenCalledWith({
+        botId: "bot",
+        destination: "sandbox",
+        connectionId: null,
+        confirmed: true,
+      });
+      expect(api.engine).not.toHaveBeenCalled();
+    } finally {
+      await act(async () => root.unmount());
+    }
+  },
+);
+it.each([null, "none", "unknown"])(
+  "disables Sandbox without a known deployment provider or container: %s",
+  async (deploymentDefault) => {
+    const element = document.createElement("div");
+    const root = createRoot(element);
+    try {
+      await act(async () =>
+        root.render(
+          <ComputerProfile
+            choicesOnly
+            botId="bot"
+            name="Builder"
+            status={{ ...status, kind: "desktop" }}
+            connections={[]}
+            deploymentDefault={deploymentDefault}
+            hostConnected
+            onChanged={async () => {}}
+          />,
+        ),
+      );
+      expect(element.querySelector<HTMLButtonElement>('[aria-label="Sandbox"]')?.disabled).toBe(
+        true,
+      );
+      expect(element.textContent).toContain("Set up a container for isolated work.");
+      expect(api.configure).not.toHaveBeenCalled();
+    } finally {
+      await act(async () => root.unmount());
+    }
+  },
+);
 it("refuses configuration on an unknown computer kind", async () => {
   const element = document.createElement("div");
   const root = createRoot(element);

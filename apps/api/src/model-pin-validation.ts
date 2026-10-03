@@ -7,11 +7,15 @@ import {
   nativeRuntimeAvailability,
   ollamaErrorMessage,
   parseModelSecret,
+  piModelContextWindow,
   showOllamaModel,
   suggestedModelEffort,
 } from "@ardurbot/adapters";
 import type { Actor, RuntimeKind, RuntimePin, UpdateBotInput } from "@ardurbot/contracts";
 import {
+  DEFAULT_CONNECTION_CONTEXT_WINDOW,
+  HERMES_CONTEXT_LIMIT_MESSAGE,
+  HERMES_MINIMUM_CONTEXT_TOKENS,
   nativeRuntimeProviders,
   normalizedThinkingLevel,
   ollamaThink,
@@ -46,6 +50,7 @@ export async function normalizeModelPinUpdate(
   )
     return {};
   if (
+    (input.runtimeKind ?? existing.runtimeKind ?? "pi") !== "hermes" &&
     (input.runtimeKind === undefined || input.runtimeKind === (existing.runtimeKind ?? "pi")) &&
     (input.modelProvider === undefined || input.modelProvider === existing.modelProvider) &&
     (input.modelId === undefined || input.modelId === existing.modelId) &&
@@ -139,6 +144,7 @@ export async function normalizeModelPinUpdate(
         : null;
       ollamaThink(effort, model);
       if (runtimeKind === "hermes") {
+        requireHermesContext(model.contextWindow);
         const problem = hermesCompatibility(
           {
             runtimeKind,
@@ -203,6 +209,11 @@ export async function normalizeModelPinUpdate(
       message: `Thinking level must be one of: ${levels.join(", ")}`,
     });
   if (runtimeKind === "hermes") {
+    requireHermesContext(
+      compatible?.contextWindow ??
+        piModelContextWindow(provider, modelId) ??
+        DEFAULT_CONNECTION_CONTEXT_WINDOW,
+    );
     // Hermes refuses sign-in connections; detect them from the stored secret so
     // editing fails with the same reason a run would.
     const secret = await deps.prisma.secret.findFirst({
@@ -234,6 +245,14 @@ export async function normalizeModelPinUpdate(
     );
     if (problem) throw new ORPCError("BAD_REQUEST", { message: problem.reason });
   }
+  if (
+    runtimeKind === existing.runtimeKind &&
+    provider === existing.modelProvider &&
+    modelId === existing.modelId &&
+    credential.id === existing.modelCredentialId &&
+    effort === existing.thinkingLevel
+  )
+    return {};
   return {
     runtimeKind,
     modelProvider: provider,
@@ -242,6 +261,11 @@ export async function normalizeModelPinUpdate(
     thinkingLevel: effort,
     modelPinRevision: { increment: 1 },
   };
+}
+
+function requireHermesContext(contextWindow: number): void {
+  if (contextWindow < HERMES_MINIMUM_CONTEXT_TOKENS)
+    throw new ORPCError("BAD_REQUEST", { message: HERMES_CONTEXT_LIMIT_MESSAGE });
 }
 
 /** A validated choice with every required field bound: the shape setReviewer accepts. */

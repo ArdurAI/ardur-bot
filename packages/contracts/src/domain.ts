@@ -365,6 +365,7 @@ export const CreateBotInput = z.object({
   notifyOnFinish: z.boolean().default(true),
   color: BotAvatarValueSchema.optional(),
   computerMode: ComputerModeSchema.default("team"),
+  computerLocation: z.enum(["host", "sandbox"]).optional(),
   /** Explicit new-work intent: refuse rather than substitute a host or shared computer. */
   isolatedComputer: z.object({ connectionId: Id.nullable() }).optional(),
   /** Idempotency key within a space (unique with spaceId). */
@@ -898,6 +899,7 @@ export const COMPUTER_UPDATE_STAGES = [
 ] as const;
 export const ComputerUpdateSchema = z.object({
   canReleaseReservation: z.boolean().optional(),
+  computerId: Id.optional(),
   action: z.enum(["update", "recover"]),
   id: Id,
   botId: Id,
@@ -911,6 +913,7 @@ export const ComputerUpdateSchema = z.object({
 export type ComputerUpdate = z.infer<typeof ComputerUpdateSchema>;
 
 export const ComputerStatusSchema = z.object({
+  runsOnHost: z.boolean().optional(),
   imageProfile: ComputerProfileSchema.optional(),
   connectionId: Id.nullable().optional(),
   capabilities: z.object({ graphical: z.boolean(), interactiveTerminal: z.boolean() }).optional(),
@@ -918,7 +921,8 @@ export const ComputerStatusSchema = z.object({
   botId: Id,
   mode: ComputerModeSchema,
   kind: SandboxKind,
-  state: z.enum(["stopped", "booting", "running", "suspended", "error"]),
+  state: z.enum(["stopped", "booting", "running", "suspending", "suspended", "error"]),
+  sleepFailureReason: z.string().nullable().optional(),
   imagePulling: z.boolean().optional(),
   imagePullPercent: z.number().int().min(0).max(100).nullable().optional(),
   controlHolder: z.enum(["bot", "user", "none"]),
@@ -1078,11 +1082,53 @@ export function resolveCompletionMaxTokens(
 /** Largest completion-token limit exposed by model settings. */
 export const MAX_MODEL_MAX_TOKENS = 131_072;
 
-/** Default context window for an OpenAI-compatible connection. */
+/** Minimum declared model context accepted by the pinned Hermes runtime. */
+export const HERMES_MINIMUM_CONTEXT_TOKENS = 64_000;
+
+export const HERMES_CONTEXT_LIMIT_MESSAGE =
+  "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models.";
+
+/** Conservative reservation cap retained for built-in delegation budgeting. */
 export const DEFAULT_MODEL_CONTEXT_WINDOW = 32_768;
 
 /** Largest context window exposed by model settings. */
 export const MAX_MODEL_CONTEXT_WINDOW = 1_048_576;
+
+/** Last-resort connection estimate, not a claim about a provider's actual capacity. */
+export const DEFAULT_CONNECTION_CONTEXT_WINDOW = 65_536;
+
+export const ModelContextWindowSourceSchema = z.enum(["metadata", "catalog", "default"]);
+export type ModelContextWindowSource = z.infer<typeof ModelContextWindowSourceSchema>;
+
+/** Compact field labels keep inferred capacity distinct from a saved limit. */
+export function modelContextWindowLabel(source: ModelContextWindowSource): string {
+  if (source === "default") return "Context limit (estimated)";
+  if (source === "catalog") return "Context limit (from the provider)";
+  return "Context limit";
+}
+
+/** Saved metadata wins; catalog/provider facts are next; unknown capacity is explicitly estimated. */
+export function resolveModelContextWindow(
+  metadata?: number,
+  catalog?: number,
+): { contextWindow: number; contextWindowSource: ModelContextWindowSource } {
+  const valid = (value: number | undefined): value is number =>
+    value !== undefined && Number.isSafeInteger(value) && value > 0;
+  if (valid(metadata)) return { contextWindow: metadata, contextWindowSource: "metadata" };
+  if (valid(catalog)) return { contextWindow: catalog, contextWindowSource: "catalog" };
+  return { contextWindow: DEFAULT_CONNECTION_CONTEXT_WINDOW, contextWindowSource: "default" };
+}
+
+/** Only the built-in runtime budgets an unknown estimate conservatively. */
+export function modelContextWindowForConsumer(
+  resolved: { contextWindow: number; contextWindowSource: ModelContextWindowSource },
+  consumer: "display" | "hermes-pin" | "hermes-manifest" | "builtin",
+): number {
+  return resolved.contextWindowSource === "default" && consumer === "builtin"
+    ? DEFAULT_MODEL_CONTEXT_WINDOW
+    : resolved.contextWindow;
+}
+
 /** Parse the optional per-connection image limit entered in model settings. */
 export function parseModelMaxImagesPerPrompt(
   value: string,
@@ -1134,7 +1180,8 @@ export const ModelCredentialSchema = z.object({
   reasoning: z.boolean().optional(),
   thinkingLevel: ThinkingLevelSchema.nullable().optional(),
   maxTokens: z.number().int().min(1).max(MAX_MODEL_MAX_TOKENS).optional(),
-  contextWindow: z.number().int().min(1).max(MAX_MODEL_CONTEXT_WINDOW).optional(),
+  contextWindow: z.number().int().positive().optional(),
+  contextWindowSource: ModelContextWindowSourceSchema.optional(),
   supportsImages: z.boolean().optional(),
   maxImagesPerPrompt: z.number().int().min(1).max(1000).optional(),
   thinkingLevels: z.array(ThinkingLevelSchema).optional(),

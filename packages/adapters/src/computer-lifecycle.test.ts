@@ -1013,6 +1013,7 @@ describe("computer provisioning", () => {
             provisioningId: null,
             providerRef: next.providerRef,
             kind: next.kind,
+            sleepFailureReason: null,
             updatedAt: expect.any(Date),
           },
         });
@@ -1919,6 +1920,27 @@ describe("computer execution leases", () => {
     });
   });
 
+  it.each([null, "update"])(
+    "distinguishes an idle save from maintenance %s",
+    async (maintenanceId) => {
+      const prisma = leasePrisma({ scope: "team" });
+      prisma.findUniqueOrThrow.mockResolvedValue({
+        scope: "team",
+        state: "suspending",
+        maintenanceId,
+        updatedAt: new Date(),
+      });
+      await expect(
+        acquireComputerExecutionLease(prisma.client, {
+          computerId: "computer-1",
+          runId: "run-1",
+          botId: "bot-1",
+        }),
+      ).rejects.toMatchObject({ waitingForIdleSave: maintenanceId === null });
+      expect(prisma.create).not.toHaveBeenCalled();
+    },
+  );
+
   it("refuses a team lease while suspension is still in progress", async () => {
     const prisma = leasePrisma({ scope: "team" });
     prisma.findUniqueOrThrow.mockResolvedValue({
@@ -2004,9 +2026,13 @@ function leasePrisma(options: {
 }
 
 describe("computer replacement", () => {
-  it("exposes update availability by sandbox kind", () => {
-    expect(computerSupportsUpdate("e2b")).toBe(true);
-    expect(computerSupportsUpdate("desktop")).toBe(false);
+  it("exposes update availability by execution location", () => {
+    expect(computerSupportsUpdate({ kind: "e2b", connectionId: null })).toBe(true);
+    expect(computerSupportsUpdate({ kind: "desktop", connectionId: null })).toBe(false);
+    expect(computerSupportsUpdate({ kind: "desktop", connectionId: "docker" })).toBe(true);
+    expect(computerSupportsUpdate({ kind: "desktop", connectionId: "podman" })).toBe(true);
+    expect(computerSupportsUpdate({ kind: "desktop", connectionId: "missing" })).toBe(true);
+    expect(computerSupportsUpdate({ kind: "desktop", connectionId: "" })).toBe(true);
   });
 
   it("replaces a wedged computer and restores the durable home", async () => {
@@ -3175,7 +3201,7 @@ describe("computer replacement", () => {
           "update",
           context,
         ),
-      ).rejects.toThrow("ECONNRESET");
+      ).rejects.toThrow("save-failed");
       expect(destroy).not.toHaveBeenCalled();
       expect(updateMany).toHaveBeenLastCalledWith({
         where: { id: "computer-1", maintenanceId: null, updatedAt: expect.any(Date) },

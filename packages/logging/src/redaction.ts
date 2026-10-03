@@ -95,14 +95,16 @@ function containerEnd(text: string, start: number): number {
   return text.length;
 }
 
-function redactAssignments(text: string): string {
+function redactAssignments(text: string, credentialsOnly = false): string {
   const keys = new RegExp(ASSIGNMENT_KEY);
   const parts: string[] = [];
   let copied = 0;
   for (let match = keys.exec(text); match; match = keys.exec(text)) {
     const key = match[2] ?? match[3]!;
-    if (!isSensitiveKey(key) && !(match[2] !== undefined ? /email/i.test(key) : /^key$/i.test(key)))
-      continue;
+    // Diagnostics also hide addresses and bare "key" assignments; a credential check keeps them.
+    const privacyKey =
+      !credentialsOnly && (match[2] !== undefined ? /email/i.test(key) : /^key$/i.test(key));
+    if (!isSensitiveKey(key) && !privacyKey) continue;
     const start = keys.lastIndex;
     const quote = text[start];
     let end = start;
@@ -165,17 +167,32 @@ const AWS_SECRET = /(?<![A-Za-z0-9/+=])[A-Za-z0-9/+]{40}(?:=)?(?![A-Za-z0-9/+=])
 const JWT = /(?<![A-Za-z0-9_-])([A-Za-z0-9_-]+)\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g;
 
 export function redactSensitiveText(text: string): string {
+  return redactText(text, false);
+}
+
+/**
+ * Redacts credentials only: passwords, tokens, keys, credential URLs, PEM blocks and the
+ * like. Addresses and other private-but-not-secret text stay, so a memory or note that
+ * mentions an email address is not mistaken for a leaked credential.
+ */
+export function redactCredentialText(text: string): string {
+  return redactText(text, true);
+}
+
+function redactText(text: string, credentialsOnly: boolean): string {
   // Hide URL credentials before their password/host suffix can look like an email.
-  let result = text.includes("@")
-    ? text.replace(CREDENTIAL_URL, `$1${REDACTED}@`).replace(EMAIL, REDACTED)
-    : text;
-  result = redactAssignments(result);
+  let result = text.includes("@") ? text.replace(CREDENTIAL_URL, `$1${REDACTED}@`) : text;
+  if (!credentialsOnly && result.includes("@")) result = result.replace(EMAIL, REDACTED);
+  result = redactAssignments(result, credentialsOnly);
   for (const [pattern, replacement] of TEXT_REDACTIONS)
     result = result.replace(pattern, replacement);
   // SHA-1 commit IDs share the AWS key length but are public provenance, not credentials.
-  result = result.replace(AWS_SECRET, (value: string) =>
-    /^[a-f0-9]{40}$/i.test(value) ? value : REDACTED,
-  );
+  // A bare 40-character run is only a hint, so the credential check leaves it alone: notes
+  // are full of identifiers that length, and a key id (AKIA...) is caught on its own above.
+  if (!credentialsOnly)
+    result = result.replace(AWS_SECRET, (value: string) =>
+      /^[a-f0-9]{40}$/i.test(value) ? value : REDACTED,
+    );
   // Ordinary dotted text must not invoke the JWT callback for every three words.
   return result.includes("eyJ") && result.includes(".")
     ? result.replace(JWT, (token: string, header: string) =>

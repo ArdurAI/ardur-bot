@@ -7,6 +7,7 @@ import {
   wakeGoalCoordinatorForDelegation,
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
+import { wakeChiefAfterControl } from "./chief-control.js";
 import type { ExecutorDeps } from "./executor.js";
 
 export async function wakeGoalAfterDelegation(
@@ -14,6 +15,17 @@ export async function wakeGoalAfterDelegation(
   delegationId: string | null | undefined,
 ) {
   if (!delegationId) return;
+  if (deps.prisma.chiefAssignment) {
+    const row = await deps.prisma.delegation.findUnique({
+      where: { id: delegationId },
+      select: { runId: true },
+    });
+    if (row?.runId) await wakeChiefAfterControl(deps, row.runId);
+    const assignment = row?.runId
+      ? await deps.prisma.chiefAssignment.findUnique({ where: { runId: row.runId } })
+      : null;
+    if (assignment?.supersededAt) return;
+  }
   if (deps.prisma.chiefPlan) {
     const update = await settleChiefActivity(deps.prisma, delegationId).catch(() => undefined);
     if (update) await deps.events?.notify(update.threadId, update.seq).catch(() => undefined);

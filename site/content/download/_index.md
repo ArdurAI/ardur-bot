@@ -4,22 +4,27 @@ description: "Every real way to install it today: what exists, and what does not
 eyebrow: "Install"
 ---
 
-There is no signed installer yet. What exists today is an **unsigned desktop preview**
+What exists today is a **desktop preview**
 (direct download or Homebrew), a **source checkout**, and a **self-hosted server**. This page
 says plainly which is which; nothing here is invented.
 
-## Desktop preview (unsigned)
+## Desktop preview
 
 Download your OS and architecture from
-[GitHub pre-releases]({{< repo-link >}}/releases). These builds are **unsigned**; macOS builds
-are also **not notarized**. Only approve a download you trust from the official release page.
+[GitHub pre-releases]({{< repo-link >}}/releases). Release notes say whether macOS builds are
+signed and notarized; the workflow enables this when release credentials exist.
+Only approve a download you trust from the official release page.
 
 {{< platform-grid >}}
 {{% platform "macOS" %}}
 Open the arm64 DMG for Apple Silicon or the x64 DMG for Intel, drag the app into
-**Applications**, and eject the DMG. Gatekeeper will say the developer cannot
-be verified. Right-click the app &rarr; **Open** &rarr; **Open**,
-or use **System Settings &rarr; Privacy & Security &rarr; Open Anyway**.
+**Applications**, and eject the DMG. Signed and notarized releases open normally.
+Otherwise, try to open the app once, then open **System Settings > Privacy & Security**,
+scroll to the message about Ardur, and choose **Open Anyway**. Or use Terminal:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/Ardur.app
+```
 {{% /platform %}}
 {{% platform "Windows" %}}
 Run the x64 NSIS installer. SmartScreen may show **"Windows protected your
@@ -33,9 +38,9 @@ need FUSE support for AppImages. A `.deb` alternative installs with
 {{% /platform %}}
 {{< /platform-grid >}}
 
-Updates on unsigned previews are download-only on every OS: the app shows
+Updates on previews are download-only on every OS: the app shows
 &ldquo;A new version is available&rdquo; and links to the release page. There is no
-in-place automatic update for an unsigned build.
+in-place automatic update for a preview build.
 
 ## Homebrew
 
@@ -49,8 +54,9 @@ brew trust --cask ArdurAI/tap/ardur
 brew install --cask ArdurAI/tap/ardur
 ```
 
-Homebrew releases without the trust command can skip that step. Previews are unsigned and
-not notarized; approve the app once in Privacy & Security. Homebrew still checks each
+Homebrew releases without the trust command can skip that step. For previews without an
+identified developer, choose **Open Anyway** in Privacy & Security, or install with
+`brew install --cask --no-quarantine ArdurAI/tap/ardur`. Homebrew still checks each
 download against the cask's SHA-256. See
 [Homebrew tap handoff]({{< repo-link "docs/desktop-release.md#homebrew-tap-handoff" >}}) for
 how each release updates the cask.
@@ -109,6 +115,6 @@ if you want to build and distribute your own branded app.
 
 ## What this means today
 
-- If you want the least setup: try a desktop preview, knowing it is unsigned.
+- If you want the least setup: try a desktop preview and follow its release notes for first open.
 - If you want a server others can reach, or you want Docker/Podman/Kubernetes computers: self-host.
 - If you want to see or change the code as you run it: build from source.

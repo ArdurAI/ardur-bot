@@ -1,16 +1,16 @@
 msgid ""
 msgstr ""
-"POT-Creation-Date: 2026-08-26 00:00+0000\n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=utf-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"X-Generator: @lingui/cli\n"
-"Language: hi\n"
 "Project-Id-Version: ardurbot-web\n"
 "Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-08-26 00:00+0000\n"
+"MIME-Version: 1.0\n"
+"X-Generator: @lingui/cli\n"
 "PO-Revision-Date: \n"
 "Last-Translator: \n"
+"Language: hi\n"
 "Language-Team: \n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: \n"
 
 #: src/pages/shell/model-pin-select.tsx
@@ -256,6 +256,10 @@ msgstr ""
 msgid "{failed} failed"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "{gapCount} evidence gaps"
+msgstr "साक्ष्य में {gapCount} कमियाँ"
+
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
 msgstr "{hours} घंटे पहले"
@@ -312,6 +316,10 @@ msgid "{name} needs your input"
 msgstr ""
 
 #: src/components/ai/CoordinationLine.tsx
+msgid "{name} stood down"
+msgstr "{name} रुक गया"
+
+#: src/components/ai/CoordinationLine.tsx
 msgid "{name} stopped before answering"
 msgstr "{name} जवाब देने से पहले रुक गया"
 
@@ -336,12 +344,20 @@ msgid "{runtime} could not finish this run. Check the runtime or change the pin.
 msgstr "{runtime} इस रन को पूरा नहीं कर सका। रनटाइम जांचें या पिन बदलें।"
 
 #: src/lib/failure-category-copy.ts
+msgid "{runtime} could not start a session. Check the runtime and try again."
+msgstr "{runtime} सत्र शुरू नहीं कर सका। रनटाइम की जाँच करें और फिर से कोशिश करें।"
+
+#: src/lib/failure-category-copy.ts
 msgid "{runtime} is experimental. Turn on Experimental for {bot} to use it."
 msgstr "{runtime} प्रायोगिक है। इसका उपयोग करने के लिए {bot} के लिए Experimental चालू करें।"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "{runtime} loads all connected tools because deferred loading is unavailable."
 msgstr ""
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} needs a model with at least 64K context; change the model and try again."
+msgstr "{runtime} को कम से कम 64K संदर्भ वाला मॉडल चाहिए; मॉडल बदलें और फिर कोशिश करें।"
 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} reached this run's turn limit. Narrow the task and try again."
@@ -364,8 +380,36 @@ msgid "{runtime}'s model connection is missing. Connect it or change the pin."
 msgstr "{runtime} का मॉडल कनेक्शन मौजूद नहीं है। उसे कनेक्ट करें या पिन बदलें।"
 
 #: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model provider rejected the connection key. Check it in Settings, under Models."
+msgstr "{runtime} के मॉडल प्रदाता ने कनेक्शन कुंजी अस्वीकार कर दी। सेटिंग में मॉडल के तहत इसे जाँचें।"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model request failed. Check the connection in Settings, under Models, and try again."
+msgstr "{runtime} का मॉडल अनुरोध विफल हो गया। सेटिंग में मॉडल के तहत कनेक्शन जाँचें और फिर से कोशिश करें।"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model request was outside this run's allowance. Narrow the task and try again."
+msgstr "{runtime} का मॉडल अनुरोध इस रन की अनुमति से बाहर था। काम का दायरा छोटा करें और फिर से कोशिश करें।"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model request was too large. Narrow the task and try again."
+msgstr "{runtime} का मॉडल अनुरोध बहुत बड़ा था। काम का दायरा छोटा करें और फिर से कोशिश करें।"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model response was too large. Narrow the task and try again."
+msgstr "{runtime} के मॉडल का जवाब बहुत बड़ा था। काम का दायरा छोटा करें और फिर से कोशिश करें।"
+
+#: src/lib/failure-category-copy.ts
 msgid "{runtime}'s pinned model is unavailable. Change the pin and try again."
 msgstr "{runtime} का पिन किया गया मॉडल उपलब्ध नहीं है। पिन बदलें और फिर प्रयास करें।"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s settings were not confirmed. Check this bot's settings and try again."
+msgstr "{runtime} की सेटिंग की पुष्टि नहीं हुई। इस बॉट की सेटिंग जाँचें और फिर से कोशिश करें।"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s tool list changed during startup. Check the connected tools and try again."
+msgstr "शुरू होते समय {runtime} की टूल सूची बदल गई। जुड़े हुए टूल जाँचें और फिर से कोशिश करें।"
 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime}'s usage limit is reached. Try again after it resets."
@@ -427,6 +471,10 @@ msgstr ""
 #: src/pages/system/SystemPage.tsx
 msgid "A saved shortcut is unavailable; choose another."
 msgstr ""
+
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "About evidence"
+msgstr "साक्ष्य के बारे में"
 
 #: src/pages/shell/bot-picker.tsx
 msgid "About groups"
@@ -760,6 +808,10 @@ msgstr ""
 msgid "Allow actions after presence confirmation"
 msgstr ""
 
+#: src/components/integrations/catalog/BotToolReview.tsx
+msgid "Allow all"
+msgstr "सभी की अनुमति दें"
+
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Allow approvals once"
 msgstr ""
@@ -801,6 +853,10 @@ msgstr "तैयारी की अनुमति दें"
 msgid "Allow purchase actions without asking"
 msgstr "खरीद कार्रवाइयों को बिना पूछे अनुमति दें"
 
+#: src/components/integrations/catalog/BotToolReview.tsx
+msgid "Allow selected"
+msgstr "चुने हुए टूल की अनुमति दें"
+
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Allow the assistant to directly interact with apps, data, and tools on your computer"
 msgstr ""
@@ -837,6 +893,10 @@ msgstr "एक बार अनुमति दी गई"
 #: src/pages/Auth.tsx
 msgid "Already have an account?"
 msgstr "पहले से खाता है?"
+
+#: src/components/integrations/catalog/BotToolReview.tsx
+msgid "Also allow these tools for the space"
+msgstr "स्पेस के लिए भी इन टूल को अनुमति दें"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Always act"
@@ -1141,16 +1201,16 @@ msgstr ""
 msgid "Ask the server owner to configure this provider."
 msgstr ""
 
+#: src/components/integrations/catalog/BotToolReview.tsx
+msgid "Ask the space owner to review these tools in Settings."
+msgstr "स्पेस के मालिक से सेटिंग में इन टूल की समीक्षा करने को कहें।"
+
 #: src/components/ai/CoordinationLine.tsx
 msgid "Asked {asked, plural, one {# bot} other {# bots}} · {answered, plural, one {# answered} other {# answered}}"
 msgstr "{asked, plural, one {# बॉट} other {# बॉट}} से पूछा · {answered, plural, one {# ने जवाब दिया} other {# ने जवाब दिए}}"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "asks first"
-msgstr ""
-
-#: src/pages/dashboard/ComputersPanel.tsx
-msgid "Asleep"
 msgstr ""
 
 #: src/pages/board/Board.tsx
@@ -1259,6 +1319,10 @@ msgstr "वापस"
 #: src/pages/capabilities/CapabilitiesSettings.tsx
 msgid "Back to capabilities"
 msgstr ""
+
+#: src/pages/workspace/WorkspacePane.tsx
+msgid "Back to chat"
+msgstr "चैट पर वापस जाएँ"
 
 #: src/pages/NotFound.tsx
 msgid "Back to home"
@@ -1385,10 +1449,6 @@ msgstr "बोर्ड की स्थिति"
 #: src/pages/storage/StorageSettings.tsx
 msgid "Boards"
 msgstr "बोर्ड"
-
-#: src/pages/dashboard/ComputersPanel.tsx
-msgid "Booting"
-msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Booting live desktop…"
@@ -1535,10 +1595,10 @@ msgstr "सर्वर तक नहीं पहुंचा जा सका�
 
 #: src/components/AskCard.tsx
 #: src/components/ComputerMaintenanceActions.tsx
-#: src/components/ComputerUpdateProgress.tsx
 #: src/components/Context.tsx
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/OllamaSettings.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -1560,6 +1620,7 @@ msgstr "सर्वर तक नहीं पहुंचा जा सका�
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/shell/dialogs.tsx
+#: src/pages/shell/move-to-host.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Cancel"
 msgstr "रद्द करें"
@@ -1621,8 +1682,9 @@ msgstr ""
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/shell/move-to-host.tsx
 msgid "Change computer"
-msgstr ""
+msgstr "कंप्यूटर बदलें"
 
 #: src/pages/shell/runtime-summary.tsx
 msgid "Change location"
@@ -1703,9 +1765,10 @@ msgstr ""
 msgid "Check again"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Check failed"
-msgstr ""
+msgstr "जाँच विफल"
 
 #: src/components/DesktopUpdates.tsx
 #: src/components/SoftwareUpdateSection.tsx
@@ -1732,6 +1795,10 @@ msgstr "जाँच की गई {0}"
 #: src/pages/shell/runtime-settings.tsx
 msgid "Checking the download"
 msgstr "डाउनलोड की जाँच हो रही है"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Checking the earlier action"
+msgstr "पिछली कार्रवाई की जाँच कर रहा हूँ"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Checking the missing tool"
@@ -1818,6 +1885,11 @@ msgstr ""
 #: src/pages/McpServersOverlay.tsx
 msgid "Choose one credential: a token or a header."
 msgstr ""
+
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/computer-location-picker.tsx
+msgid "Choose Only this bot to use a different location from the Team computer."
+msgstr "टीम के कंप्यूटर से अलग स्थान इस्तेमाल करने के लिए केवल यह बॉट चुनें।"
 
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "Choose Trim older context or Stop the run."
@@ -1906,6 +1978,10 @@ msgstr "बंद करें"
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Close {0}"
 msgstr ""
+
+#: src/pages/workspace/WorkspacePane.tsx
+msgid "Close {name}"
+msgstr "{name} बंद करें"
 
 #: src/pages/shell/message-cards.tsx
 msgid "Close chart"
@@ -2041,6 +2117,10 @@ msgstr ""
 msgid "Command"
 msgstr "कमांड"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Command line"
+msgstr "कमांड लाइन"
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Commands"
 msgstr ""
@@ -2082,7 +2162,7 @@ msgstr ""
 #: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
-#: src/pages/workspace/WorkspacePane.tsx
+#: src/pages/workspace/view-registry.ts
 msgid "Computer"
 msgstr "कंप्यूटर"
 
@@ -2260,6 +2340,12 @@ msgstr "OAuth कनेक्ट करें"
 msgid "Connect remote account"
 msgstr ""
 
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/computer-location-picker.tsx
+#: src/pages/shell/move-to-host.tsx
+msgid "Connect the host service to choose This computer."
+msgstr "यह कंप्यूटर चुनने के लिए होस्ट सेवा कनेक्ट करें।"
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Connect this provider to use it as your personal model."
 msgstr "इस प्रोवाइडर को अपने व्यक्तिगत मॉडल के रूप में उपयोग करने के लिए कनेक्ट करें।"
@@ -2269,6 +2355,9 @@ msgid "Connect Treg"
 msgstr "Treg कनेक्ट करें"
 
 #: src/components/composer/ComposerMenu.tsx
+#: src/components/Context.tsx
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -2288,6 +2377,15 @@ msgstr "कनेक्टेड"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Connected · {0}"
 msgstr "कनेक्टेड · {0}"
+
+#: src/components/Context.tsx
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/pages/customize/IntegrationTable.tsx
+#: src/pages/dashboard/ConnectionsPanel.tsx
+msgid "Connected · tools need review"
+msgstr "कनेक्ट है · टूल की समीक्षा ज़रूरी है"
 
 #. placeholder {0}: selected.name
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -2368,10 +2466,17 @@ msgstr "कंटेनर"
 msgid "Context"
 msgstr "संदर्भ"
 
-#: src/pages/ModelSettingsOverlay.tsx
-#: src/pages/Onboarding.tsx
+#: src/lib/model-context-label.ts
 msgid "Context limit"
 msgstr "कॉन्टेक्स्ट सीमा"
+
+#: src/lib/model-context-label.ts
+msgid "Context limit (estimated)"
+msgstr "संदर्भ सीमा (अनुमानित)"
+
+#: src/lib/model-context-label.ts
+msgid "Context limit (from the provider)"
+msgstr "संदर्भ सीमा (प्रदाता से)"
 
 #: src/pages/group-model-control.tsx
 #: src/pages/shell/runtime-config-advanced.tsx
@@ -2383,6 +2488,7 @@ msgstr "कॉन्टेक्स्ट सीमा (KiB)"
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/shell/move-to-host.tsx
 msgid "Continue"
 msgstr "जारी रखें"
 
@@ -2446,8 +2552,8 @@ msgid "Copy output"
 msgstr ""
 
 #: src/pages/DevicesSettings.tsx
-msgid "Copy pairing details"
-msgstr ""
+msgid "Copy pairing code"
+msgstr "पेयरिंग कोड कॉपी करें"
 
 #: src/pages/memory/MemoryImport.tsx
 msgid "Copy prompt"
@@ -2513,8 +2619,9 @@ msgid "Could not change password"
 msgstr "पासवर्ड बदला नहीं जा सका"
 
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/shell/move-to-host.tsx
 msgid "Could not change the computer; stop its bots and try again."
-msgstr ""
+msgstr "कंप्यूटर नहीं बदला जा सका; उसके बॉट रोकें और फिर कोशिश करें।"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Could not change the computer. Stop its bots and try again."
@@ -2544,6 +2651,10 @@ msgstr ""
 msgid "Could not check teaching status. Refresh the view to continue."
 msgstr ""
 
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Could not check the model. Try again."
+msgstr "मॉडल की जाँच नहीं हो सकी। फिर कोशिश करें।"
+
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/HostComputerSettings.tsx
 msgid "Could not check this computer."
@@ -2558,8 +2669,9 @@ msgid "Could not clear conversation"
 msgstr "बातचीत साफ़ नहीं की जा सकी"
 
 #: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Could not complete action"
-msgstr ""
+msgstr "कार्रवाई पूरी नहीं हो सकी"
 
 #: src/pages/McpOAuthCallback.tsx
 msgid "Could not complete authorization. Try connecting again."
@@ -2793,6 +2905,7 @@ msgstr ""
 msgid "Could not load Ollama."
 msgstr ""
 
+#: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Could not load or save tools."
 msgstr ""
@@ -2876,6 +2989,8 @@ msgid "Could not load your bots; reopen quick access."
 msgstr ""
 
 #: src/components/ai/ChiefResultBubble.tsx
+#: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspaceChanges.tsx
 msgid "Could not open file"
 msgstr "फ़ाइल नहीं खोली जा सकी"
 
@@ -3076,9 +3191,10 @@ msgid "Could not save this file. Try again."
 msgstr "यह फ़ाइल सहेजी नहीं जा सकी। पुनः प्रयास करें।"
 
 #: src/pages/customize/McpCredentialFix.tsx
+#: src/pages/dashboard/GovernancePanel.tsx
 #: src/pages/Shell.tsx
 msgid "Could not save. Try again."
-msgstr ""
+msgstr "सहेजा नहीं जा सका। फिर कोशिश करें।"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
@@ -3104,7 +3220,7 @@ msgstr ""
 msgid "Could not show the menu bar item; try again."
 msgstr ""
 
-#: src/pages/shell/runtime-summary.tsx
+#: src/lib/computer-state-labels.ts
 msgid "Could not start"
 msgstr "शुरू नहीं हो सका"
 
@@ -3817,6 +3933,10 @@ msgstr "{name} डाउनलोड करें"
 msgid "Download as markdown"
 msgstr "मार्कडाउन के रूप में डाउनलोड करें"
 
+#: src/components/RunEvidence.tsx
+msgid "Download evidence"
+msgstr "साक्ष्य डाउनलोड करें"
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Download Executor"
 msgstr ""
@@ -4038,7 +4158,21 @@ msgstr "हर सप्ताह"
 
 #: src/pages/LearningInbox.tsx
 msgid "Evidence"
-msgstr ""
+msgstr "साक्ष्य"
+
+#: src/components/RunEvidence.tsx
+msgid "Evidence gap"
+msgstr "साक्ष्य में अंतर"
+
+#: src/components/RunEvidence.tsx
+#: src/pages/dashboard/GovernancePanel.tsx
+#: src/pages/dashboard/panels.ts
+msgid "Evidence off"
+msgstr "साक्ष्य बंद"
+
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "Evidence on"
+msgstr "साक्ष्य चालू"
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Excluded files"
@@ -4061,6 +4195,7 @@ msgid "Existing documents keep their scope."
 msgstr ""
 
 #: src/pages/shell/message-cards.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Expand"
 msgstr "विस्तृत करें"
 
@@ -4068,10 +4203,6 @@ msgstr "विस्तृत करें"
 #: src/pages/Shell.tsx
 msgid "Expand {0}"
 msgstr ""
-
-#: src/pages/Shell.tsx
-msgid "Expand workspace"
-msgstr "कार्यक्षेत्र का विस्तार करें"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
@@ -4184,15 +4315,15 @@ msgstr ""
 msgid "Filed by {name}"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/pages/workspace/view-registry.ts
 #: src/pages/workspace/WorkspaceFiles.tsx
-#: src/pages/workspace/WorkspacePane.tsx
 msgid "Files"
 msgstr "फ़ाइलें"
 
+#: src/pages/workspace/view-registry.ts
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Files are unavailable on this computer."
-msgstr ""
+msgstr "इस कंप्यूटर पर फ़ाइलें उपलब्ध नहीं हैं।"
 
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Filter"
@@ -4302,6 +4433,7 @@ msgstr ""
 msgid "For {task}, {better} on this machine did as well as {other} in your runs."
 msgstr ""
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "For testing only; not an isolation boundary."
 msgstr "केवल परीक्षण के लिए; यह अलगाव की सीमा नहीं है।"
@@ -4407,6 +4539,10 @@ msgid "Got it — I’ll check the request and choose the next step."
 msgstr "समझ गया — अनुरोध जाँचूँगा और अगला कदम चुनूँगा।"
 
 #: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll check this change before the next action."
+msgstr "समझ गया — अगली कार्रवाई से पहले इस बदलाव की जाँच करूँगा।"
+
+#: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll check what’s missing and ask before installing it."
 msgstr "समझ गया — क्या कमी है, जाँचूँगा और इंस्टॉल करने से पहले पूछूँगा।"
 
@@ -4414,13 +4550,12 @@ msgstr "समझ गया — क्या कमी है, जाँचू�
 msgid "Got it — I’ll choose a team member to put this in Notion."
 msgstr "समझ गया — इसे Notion में रखने के लिए टीम का एक सदस्य चुनूँगा।"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll keep {name} off this task."
+msgstr "समझ गया — {name} को इस काम से अलग रखूँगा।"
+
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
-msgstr ""
-
-#: src/pages/dashboard/GovernancePanel.tsx
-#: src/pages/dashboard/panels.ts
-msgid "Governance and encryption are not part of this build yet."
 msgstr ""
 
 #: src/pages/LearningTimeline.tsx
@@ -4504,6 +4639,10 @@ msgstr "इस कंप्यूटर पर Hermes इंस्टॉल न�
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes isn't available on Windows yet."
 msgstr "Hermes अभी Windows पर उपलब्ध नहीं है।"
+
+#: src/lib/hermes-refusal.ts
+msgid "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models."
+msgstr "Hermes के लिए कम से कम 64K टोकन की संदर्भ सीमा चाहिए। इस कनेक्शन के लिए इसे सेटिंग्स → मॉडल में तय करें।"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."
@@ -4594,8 +4733,9 @@ msgstr "मेरा काम हो गया"
 
 #: src/pages/ide/IdePage.tsx
 #: src/pages/shell/ide-nav.ts
+#: src/pages/workspace/view-registry.ts
 msgid "IDE"
-msgstr ""
+msgstr "IDE"
 
 #: src/pages/TeamBoard.tsx
 msgid "Idle"
@@ -4913,6 +5053,10 @@ msgstr "अभी-अभी"
 msgid "Keep computer awake"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Keep current location"
+msgstr "मौजूदा स्थान बनाए रखें"
+
 #: src/pages/LearningCurator.tsx
 msgid "Keep for recovery"
 msgstr ""
@@ -5216,6 +5360,7 @@ msgstr ""
 msgid "Loading voice providers…"
 msgstr "आवाज़ प्रोवाइडर्स लोड हो रहे हैं…"
 
+#: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Loading your tools."
 msgstr ""
@@ -5230,6 +5375,8 @@ msgstr ""
 #: src/pages/SharedCommand.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/workspace/WorkspaceChanges.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Loading…"
 msgstr "लोड हो रहा है…"
 
@@ -5281,7 +5428,6 @@ msgstr ""
 msgid "low — quick, with a little checking"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "macOS will not ask for extra permission if you let bots run on this Mac. They run as you."
 msgstr "यदि आप बॉट्स को इस Mac पर चलने देते हैं तो macOS अतिरिक्त अनुमति नहीं मांगेगा। वे आपके रूप में ही चलते हैं।"
@@ -5290,7 +5436,7 @@ msgstr "यदि आप बॉट्स को इस Mac पर चलने �
 msgid "Make default"
 msgstr "डिफ़ॉल्ट बनाएँ"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Make sure nothing is still running on this computer."
 msgstr "सुनिश्चित करें कि इस कंप्यूटर पर कुछ भी चल नहीं रहा है।"
 
@@ -5697,6 +5843,18 @@ msgstr ""
 msgid "Move bots first: {0}"
 msgstr "पहले इन बॉट्स को स्थानांतरित करें: {0}"
 
+#: src/pages/workspace/ViewControls.tsx
+msgid "Move split view down"
+msgstr "विभाजित दृश्य नीचे ले जाएँ"
+
+#: src/pages/workspace/ViewControls.tsx
+msgid "Move split view left"
+msgstr "विभाजित दृश्य बाईं ओर ले जाएँ"
+
+#: src/pages/workspace/ViewControls.tsx
+msgid "Move split view right"
+msgstr "विभाजित दृश्य दाईं ओर ले जाएँ"
+
 #: src/pages/shell/dialogs.tsx
 msgid "Move them to your shared memory."
 msgstr "उन्हें अपनी साझा मेमोरी में ले जाएं।"
@@ -5713,6 +5871,14 @@ msgstr ""
 #: src/pages/fleet/PlacementNotice.tsx
 msgid "Move to {name}?"
 msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Move to a container"
+msgstr "कंटेनर में ले जाएँ"
+
+#: src/pages/shell/move-to-host.tsx
+msgid "Move to This computer"
+msgstr "इस कंप्यूटर पर ले जाएँ"
 
 #. placeholder {0}: value.minimumFreeGb
 #: src/pages/fleet/FleetSettings.tsx
@@ -5872,6 +6038,10 @@ msgstr ""
 msgid "Next run"
 msgstr "अगला रन"
 
+#: src/components/Context.tsx
+msgid "Next try at {time}"
+msgstr "अगला प्रयास {time} पर"
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No agent connections yet."
 msgstr ""
@@ -5899,6 +6069,10 @@ msgstr ""
 #: src/pages/shell/bot-picker.tsx
 msgid "No bots match"
 msgstr ""
+
+#: src/pages/workspace/WorkspaceChanges.tsx
+msgid "No changes to show"
+msgstr "दिखाने के लिए कोई बदलाव नहीं है"
 
 #: src/pages/customize/McpConfigEditor.tsx
 msgid "No changes."
@@ -6162,6 +6336,10 @@ msgstr ""
 msgid "Not running — open the desktop app"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "Not sealed"
+msgstr "सील नहीं"
+
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
 msgstr ""
@@ -6174,7 +6352,7 @@ msgstr ""
 msgid "Nothing installed yet"
 msgstr ""
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Nothing is still running"
 msgstr "कुछ भी नहीं चल रहा"
 
@@ -6385,6 +6563,10 @@ msgstr ""
 msgid "Open screen to view this computer."
 msgstr "इस कंप्यूटर को देखने के लिए स्क्रीन खोलें।"
 
+#: src/pages/workspace/view-registry.ts
+msgid "Open Screen to view this computer."
+msgstr "इस कंप्यूटर को देखने के लिए स्क्रीन खोलें।"
+
 #: src/components/composer/command-description.ts
 #: src/pages/shell/provider-error-message.tsx
 msgid "Open Settings"
@@ -6395,8 +6577,9 @@ msgid "Open System Settings"
 msgstr ""
 
 #: src/pages/shell/command-palette.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Open terminal"
-msgstr ""
+msgstr "टर्मिनल खोलें"
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Open the desktop app to check this computer."
@@ -6486,6 +6669,10 @@ msgstr ""
 #: src/pages/import/LocalImportPage.tsx
 msgid "Other files"
 msgstr ""
+
+#: src/pages/shell/computer-location-picker.tsx
+msgid "Other locations are unavailable for {runtime}. Choose This computer."
+msgstr "{runtime} के लिए अन्य स्थान उपलब्ध नहीं हैं। यह कंप्यूटर चुनें।"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -6869,6 +7056,7 @@ msgstr "प्रतिक्रिया दें"
 msgid "Reactions"
 msgstr "प्रतिक्रियाएँ"
 
+#: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/ToolPicker.tsx
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
@@ -6966,6 +7154,19 @@ msgstr ""
 msgid "Reconnecting"
 msgstr "पुनः कनेक्ट हो रहा है"
 
+#: src/pages/dashboard/GovernancePanel.tsx
+msgid "Record evidence of bot decisions"
+msgstr "बॉट के निर्णयों के साक्ष्य रिकॉर्ड करें"
+
+#: src/pages/workspace/view-registry.ts
+#: src/pages/workspace/WorkspaceChanges.tsx
+msgid "Recorded changes"
+msgstr "दर्ज किए गए बदलाव"
+
+#: src/components/RunEvidence.tsx
+msgid "Recording"
+msgstr "रिकॉर्ड हो रहा है"
+
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Recording may have started, but the view could not refresh"
 msgstr ""
@@ -7059,13 +7260,13 @@ msgstr ""
 msgid "Release"
 msgstr "नियंत्रण छोड़ें"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Release computer"
-msgstr ""
+msgstr "कंप्यूटर मुक्त करें"
 
-#: src/components/ComputerUpdateProgress.tsx
+#: src/components/ReleaseInterruptedComputer.tsx
 msgid "Release interrupted computer?"
-msgstr ""
+msgstr "बाधित कार्रवाई के बाद कंप्यूटर मुक्त करें?"
 
 #: src/pages/account/AccountProfile.tsx
 msgid "Reload"
@@ -7419,6 +7620,7 @@ msgstr "टीम संदेश फिर शुरू करें"
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/shell/runtime-summary.tsx
 #: src/pages/system/SystemPage.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Retry"
 msgstr "फिर से कोशिश करें"
@@ -7440,10 +7642,6 @@ msgstr ""
 #: src/pages/McpOAuthCallback.tsx
 msgid "Return to Ardur"
 msgstr "Ardur पर लौटें"
-
-#: src/pages/Shell.tsx
-msgid "Return to conversation"
-msgstr "बातचीत पर लौटें"
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "Return to setup"
@@ -7484,6 +7682,8 @@ msgstr ""
 msgid "Review saved copy"
 msgstr ""
 
+#: src/components/Context.tsx
+#: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/pages/customize/McpDefaults.tsx
@@ -7555,8 +7755,7 @@ msgstr "रूटीन"
 #: src/pages/dashboard/panels.ts
 #: src/pages/RoutineEditor.tsx
 #: src/pages/settings/GeneralSettings.tsx
-#: src/pages/Shell.tsx
-#: src/pages/workspace/WorkspacePane.tsx
+#: src/pages/workspace/view-registry.ts
 msgid "Routines"
 msgstr "रूटीन्स"
 
@@ -7597,13 +7796,12 @@ msgstr ""
 msgid "running"
 msgstr "चल रहा है"
 
+#: src/lib/computer-state-labels.ts
 #: src/lib/run-status-label.ts
 #: src/pages/ComparePanel.tsx
 #: src/pages/customize/McpDiagnostics.tsx
-#: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/fleet/FleetSettings.tsx
-#: src/pages/shell/runtime-summary.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Running"
 msgstr "चल रहा है"
@@ -7620,10 +7818,13 @@ msgstr "चल रहा है…"
 msgid "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?"
 msgstr "इस कंप्यूटर पर रन सक्रिय हैं। कनेक्शन बदलने से वे रुक सकते हैं। फिर भी सहेजें?"
 
+#: src/pages/shell/computer-location-picker.tsx
+#: src/pages/shell/move-to-host.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "Runs as you; can use your files and signed-in tools"
 msgstr "आपकी अनुमतियों से चलता है; आपकी फ़ाइलें और साइन-इन किए हुए टूल इस्तेमाल कर सकता है"
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "Runs at the configured provider; can use granted credentials and network access."
 msgstr "कॉन्फ़िगर किए गए प्रदाता पर चलता है; दिए गए क्रेडेंशियल और नेटवर्क पहुँच का उपयोग कर सकता है।"
@@ -7672,6 +7873,10 @@ msgstr ""
 #: src/pages/ComparePanel.tsx
 msgid "Same task, {count} bots"
 msgstr ""
+
+#: src/pages/shell/computer-location-picker.tsx
+msgid "Sandbox"
+msgstr "सैंडबॉक्स"
 
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Sans"
@@ -7778,8 +7983,9 @@ msgid "Saved. Rotate to reveal."
 msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
+#: src/lib/computer-state-labels.ts
 msgid "Saving your workspace"
-msgstr ""
+msgstr "आपका कार्यक्षेत्र सहेजा जा रहा है"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Saving..."
@@ -7807,15 +8013,18 @@ msgstr "हां या ना कहें, या एक वाक्य म�
 msgid "Scopes"
 msgstr ""
 
-#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
-#: src/pages/workspace/WorkspacePane.tsx
+#: src/pages/workspace/view-registry.ts
 msgid "Screen"
 msgstr "स्क्रीन"
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Screen and terminal: Not available on this computer"
 msgstr ""
+
+#: src/pages/workspace/view-registry.ts
+msgid "Screen is unavailable on this computer."
+msgstr "इस कंप्यूटर पर स्क्रीन उपलब्ध नहीं है।"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Screen recording"
@@ -7973,6 +8182,7 @@ msgstr "{peer} को भेजा गया"
 msgid "Sentry alert"
 msgstr ""
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "Separate home; can reach allowed network services and granted credentials."
 msgstr "अलग होम फ़ोल्डर; अनुमत नेटवर्क सेवाओं और दिए गए क्रेडेंशियल तक पहुँच सकता है।"
@@ -8039,6 +8249,7 @@ msgid "Set up a board"
 msgstr "बोर्ड सेट अप करें"
 
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/computer-location-picker.tsx
 msgid "Set up a container for isolated work."
 msgstr "अलग वातावरण में काम करने के लिए कंटेनर सेट अप करें।"
 
@@ -8109,6 +8320,10 @@ msgstr ""
 #: src/pages/shell/runtime-summary.tsx
 msgid "Shared with team"
 msgstr "टीम के साथ साझा"
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Sharing"
+msgstr "साझा करना"
 
 #: src/components/ShowAllModels.tsx
 msgid "Show all models"
@@ -8273,7 +8488,7 @@ msgstr ""
 msgid "Slash commands"
 msgstr ""
 
-#: src/pages/shell/runtime-summary.tsx
+#: src/lib/computer-state-labels.ts
 msgid "Sleeping"
 msgstr "स्लीप मोड में"
 
@@ -8434,8 +8649,8 @@ msgstr "रिकॉर्डिंग शुरू करें"
 msgid "Start the engine and press Test."
 msgstr "इंजन शुरू करें और टेस्ट दबाएँ।"
 
+#: src/lib/computer-state-labels.ts
 #: src/lib/run-status-label.ts
-#: src/pages/shell/runtime-summary.tsx
 msgid "Starting"
 msgstr "शुरू हो रहा है"
 
@@ -8506,10 +8721,9 @@ msgstr "रन रोकें"
 msgid "Stop work in this conversation"
 msgstr ""
 
+#: src/lib/computer-state-labels.ts
 #: src/pages/customize/McpDiagnostics.tsx
-#: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/GroupPanel.tsx
-#: src/pages/shell/runtime-summary.tsx
 msgid "Stopped"
 msgstr "बंद"
 
@@ -8522,6 +8736,10 @@ msgstr "जवाब देने से पहले रुक गया"
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Stopping"
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Stopping {name}"
+msgstr "{name} को रोक रहा हूँ"
 
 #: src/pages/settings-sections.ts
 msgid "Storage"
@@ -8616,8 +8834,7 @@ msgid "Task contracts"
 msgstr ""
 
 #: src/pages/settings/GeneralSettings.tsx
-#: src/pages/Shell.tsx
-#: src/pages/workspace/WorkspacePane.tsx
+#: src/pages/workspace/view-registry.ts
 msgid "Tasks"
 msgstr "कार्य"
 
@@ -8665,12 +8882,11 @@ msgid "Tell your bot what to change or remove"
 msgstr ""
 
 #: src/pages/ide/IdePage.tsx
-#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
-#: src/pages/workspace/WorkspacePane.tsx
+#: src/pages/workspace/view-registry.ts
 msgid "Terminal"
-msgstr ""
+msgstr "टर्मिनल"
 
 #: src/pages/shell/computer-terminal.tsx
 msgid "Terminal could not open; try again"
@@ -8679,6 +8895,10 @@ msgstr ""
 #: src/pages/workspace/terminal-controller.ts
 msgid "Terminal is not available on this computer"
 msgstr ""
+
+#: src/pages/workspace/view-registry.ts
+msgid "Terminal is unavailable on this computer."
+msgstr "इस कंप्यूटर पर टर्मिनल उपलब्ध नहीं है।"
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/components/OllamaSettings.tsx
@@ -8728,6 +8948,18 @@ msgstr ""
 msgid "The computer is busy. Wait for it to finish."
 msgstr "कंप्यूटर व्यस्त है। इसके पूरा होने तक प्रतीक्षा करें।"
 
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer or its workspace could not be found."
+msgstr "कंप्यूटर या उसका कार्यस्थान नहीं मिला।"
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer stopped before its workspace could be saved."
+msgstr "कार्यस्थान सहेजे जाने से पहले कंप्यूटर रुक गया।"
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The computer's engine could not be reached to save its workspace."
+msgstr "कार्यस्थान सहेजने के लिए कंप्यूटर के इंजन से संपर्क नहीं हो सका।"
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr ""
@@ -8752,9 +8984,17 @@ msgstr "समूह का मॉडल चयन फिर से लोड �
 msgid "The Hermes install on this computer failed its safety check."
 msgstr "इस कंप्यूटर पर Hermes की स्थापना सुरक्षा जाँच में विफल रही।"
 
+#: src/pages/shell/runtime-summary.tsx
+msgid "The last update was interrupted."
+msgstr "पिछला अपडेट बीच में रुक गया था।"
+
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "The previous action may have finished. I’ll check before retrying."
+msgstr "पिछली कार्रवाई पूरी हो चुकी हो सकती है। दोबारा कोशिश करने से पहले जाँचूँगा।"
 
 #: src/pages/board/BoardsSettings.tsx
 msgid "The reviewer was changed in another window."
@@ -8771,6 +9011,14 @@ msgstr ""
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "The service may use its own embedding providers. Check its settings before saving private documents."
 msgstr ""
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The workspace could not be saved."
+msgstr "कार्यस्थान सहेजा नहीं जा सका।"
+
+#: src/components/ComputerUpdateProgress.tsx
+msgid "The workspace is too large to save."
+msgstr "कार्यस्थान सहेजने के लिए बहुत बड़ा है।"
 
 #: src/pages/settings-sections.ts
 #: src/pages/settings/GeneralSettings.tsx
@@ -8862,7 +9110,6 @@ msgstr "यह चैट केवल देखने के लिए है"
 msgid "This command is not available to this account."
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "यह कंप्यूटर"
@@ -8875,6 +9122,7 @@ msgstr "यह कंप्यूटर"
 #: src/pages/fleet/target-name.ts
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "This computer"
 msgstr "यह कंप्यूटर"
@@ -8927,7 +9175,6 @@ msgstr "बॉट या स्पेस की सेटिंग इस सम
 msgid "This is a binary file. You cannot edit it here."
 msgstr "यह एक बाइनरी फ़ाइल है। आप इसे यहाँ संपादित नहीं कर सकते।"
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "यह Mac"
@@ -8956,8 +9203,9 @@ msgstr ""
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/shell/move-to-host.tsx
 msgid "This replaces the computer's files. Continue?"
-msgstr ""
+msgstr "इससे कंप्यूटर की फ़ाइलें बदल जाएँगी। जारी रखें?"
 
 #: src/pages/Auth.tsx
 msgid "This reset link is invalid or expired"
@@ -9112,6 +9360,10 @@ msgstr ""
 msgid "Tokens over seven days"
 msgstr ""
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Told {name} to stand down"
+msgstr "{name} को रुकने के लिए कहा"
+
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Tool access mode"
 msgstr ""
@@ -9155,6 +9407,7 @@ msgid "Trusted folders"
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/integrations/catalog/ResourcePicker.tsx
@@ -9247,6 +9500,7 @@ msgid "Unpin"
 msgstr "पिन हटाएं"
 
 #: src/pages/ide/IdePage.tsx
+#: src/pages/Shell.tsx
 #: src/pages/workspace/WorkspaceFileGuard.tsx
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Unsaved changes"
@@ -9458,6 +9712,7 @@ msgstr "पूर्ण सेकंड डालें।"
 msgid "User"
 msgstr ""
 
+#: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/runtime-summary.tsx
 msgid "Uses that account's permissions."
 msgstr "उस खाते की अनुमतियों का उपयोग करता है।"
@@ -9466,6 +9721,10 @@ msgstr "उस खाते की अनुमतियों का उपय�
 #: src/pages/shell/group-participants.tsx
 msgid "Using {currentId}"
 msgstr "{currentId} का उपयोग हो रहा है"
+
+#: src/components/RunEvidence.tsx
+msgid "Verified"
+msgstr "सत्यापित"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"
@@ -9486,6 +9745,11 @@ msgstr ""
 #: src/pages/customize/McpDiagnostics.tsx
 msgid "View logs"
 msgstr ""
+
+#: src/pages/workspace/ViewControls.tsx
+#: src/pages/workspace/WorkspacePane.tsx
+msgid "Views"
+msgstr "दृश्य"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Visuals"
@@ -9720,6 +9984,7 @@ msgstr "कार्यक्षेत्र"
 msgid "Workspace or server ID"
 msgstr ""
 
+#: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Write"
 msgstr ""
@@ -9790,7 +10055,6 @@ msgstr "आपका ईमेल पता"
 msgid "Your name"
 msgstr "आपका नाम"
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "Your OS will not ask for extra permission if you let bots run on {hostLabel}. They run as you."
 msgstr "यदि आप बॉट्स को {hostLabel} पर चलने देते हैं तो आपका OS अतिरिक्त अनुमति नहीं मांगेगा। वे आपके रूप में ही चलते हैं।"

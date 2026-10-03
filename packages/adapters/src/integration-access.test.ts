@@ -8,7 +8,10 @@ import {
   grantedMcpTools,
   integrationApprovalForCall,
   integrationResourceDenial,
+  MCP_TOOLS_NEED_REVIEW_SENTENCE,
   mcpGrantForBot,
+  mcpReviewDiscoveryLine,
+  mcpToolsPendingReview,
 } from "./integration-access.js";
 import { captureIntegrationManifest } from "./integration-manifest.js";
 import { McpConnector } from "./mcp-connector.js";
@@ -523,5 +526,55 @@ describe("resource boundaries", () => {
     ).toMatchObject([{ type: "result" }]);
     expect(f.calls).toEqual([name]);
     await f.connector.close();
+  });
+});
+
+describe("pending integration discovery", () => {
+  it("explains existing tools awaiting review, then exposes an explicitly approved selection", async () => {
+    const f = fixture();
+    f.assignment.needsReview = true;
+    f.assignment.allowedTools = [];
+    const line = await mcpReviewDiscoveryLine(f.db as never, context);
+    expect(line).toContain(`Tool discovery: ${MCP_TOOLS_NEED_REVIEW_SENTENCE.slice(0, -1)}`);
+    expect(line).toContain("tell the person this sentence");
+    expect(line).not.toContain("no tools are exposed");
+    expect(await f.connector.discoverTools(context)).toEqual([]);
+    f.assignment.needsReview = false;
+    f.assignment.allowedTools = [tools[0]!.name];
+    expect(await mcpReviewDiscoveryLine(f.db as never, context)).toBeUndefined();
+    expect((await f.connector.discoverTools(context)).map((tool) => tool.route?.toolName)).toEqual([
+      tools[0]!.name,
+    ]);
+    await f.connector.close();
+  });
+  it("distinguishes an empty list from removed and disconnected integrations", () => {
+    const f = fixture();
+    expect(mcpToolsPendingReview(f.assignment)).toBe(false);
+    expect(mcpToolsPendingReview({ ...f.assignment, allowedTools: [] })).toBe(true);
+    expect(mcpToolsPendingReview({ ...f.assignment, allowedTools: [], access: "none" })).toBe(
+      false,
+    );
+    expect(
+      mcpToolsPendingReview({
+        ...f.assignment,
+        server: { ...f.assignment.server, connectionState: "needs-sign-in" },
+      }),
+    ).toBe(false);
+  });
+  it("scopes the diagnostic to the acting bot and space", async () => {
+    const bot = vi.fn(async () => null);
+    const servers = vi.fn();
+    expect(
+      await mcpReviewDiscoveryLine(
+        { bot: { findFirst: bot }, mcpServer: { findMany: servers } } as never,
+        context,
+      ),
+    ).toBeUndefined();
+    expect(bot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "bot", spaceId: "space", userId: "owner", archivedAt: null },
+      }),
+    );
+    expect(servers).not.toHaveBeenCalled();
   });
 });

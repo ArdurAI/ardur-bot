@@ -1,4 +1,36 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "{runtime}'s tool list changed during startup. Check the connected tools and try again.":
+    "Список инструментов {runtime} изменился при запуске. Проверьте подключённые инструменты и повторите попытку.",
+  "{runtime}'s settings were not confirmed. Check this bot's settings and try again.":
+    "Настройки {runtime} не были подтверждены. Проверьте настройки этого бота и повторите попытку.",
+  "{runtime}'s model request was too large. Narrow the task and try again.":
+    "Запрос к модели {runtime} был слишком большим. Сократите задачу и повторите попытку.",
+  "{runtime}'s model response was too large. Narrow the task and try again.":
+    "Ответ модели {runtime} был слишком большим. Сократите задачу и повторите попытку.",
+  "{runtime}'s model request was outside this run's allowance. Narrow the task and try again.":
+    "Запрос к модели {runtime} вышел за пределы разрешённого для этого запуска. Сократите задачу и повторите попытку.",
+  "{runtime}'s model provider rejected the connection key. Check it in Settings, under Models.":
+    "Поставщик модели {runtime} отклонил ключ подключения. Проверьте его в разделе «Модели» в настройках.",
+  "{runtime}'s model request failed. Check the connection in Settings, under Models, and try again.":
+    "Запрос к модели {runtime} завершился ошибкой. Проверьте подключение в разделе «Модели» в настройках и повторите попытку.",
+  "Review tools on web": "Проверить инструменты в веб-версии",
+  "Connected · tools need review": "Подключено · инструменты требуют проверки",
+  "{runtime} needs a model with at least 64K context; change the model and try again.":
+    "Для {runtime} нужна модель с контекстом не менее 64K; смените модель и повторите попытку.",
+  "{runtime} could not start a session. Check the runtime and try again.":
+    "{runtime} не удалось запустить сессию. Проверьте среду выполнения и повторите попытку.",
+  Sandbox: "Песочница",
+  "Move to This computer": "Переместить на Этот компьютер",
+  "Choose Only this bot to use a different location from the Team computer.":
+    "Выберите Только этот бот, чтобы использовать другое расположение, чем у компьютера команды.",
+  "Other locations are unavailable for {runtime}. Choose This computer.":
+    "Другие расположения недоступны для {runtime}. Выберите Этот компьютер.",
+  "Connect the host service to choose This computer.":
+    "Подключите службу хоста, чтобы выбрать Этот компьютер.",
+  "Move to a container": "Переместить в контейнер",
+  "Keep current location": "Оставить текущее расположение",
+  "Paused for an update": "Приостановлен для обновления",
+  "The last update was interrupted.": "Последнее обновление было прервано.",
   "Reading the document": "Читаю документ",
   "Connecting to Notion": "Подключаюсь к Notion",
   "Creating the Notion page": "Создаю страницу в Notion",
@@ -389,6 +421,14 @@ export const RU_MESSAGES: Record<string, string> = {
   "Recovery restores the last saved workspace. Unsaved work may be lost.":
     "Восстановление возвращает последнее сохраненное рабочее пространство. Несохраненные изменения могут быть потеряны.",
   "Recreating the computer": "Повторное создание компьютера",
+  "The computer stopped before its workspace could be saved.":
+    "Компьютер остановился до сохранения рабочего пространства.",
+  "The computer or its workspace could not be found.":
+    "Компьютер или его рабочее пространство не найдено.",
+  "The computer's engine could not be reached to save its workspace.":
+    "Движок компьютера недоступен, поэтому сохранить его рабочее пространство не удалось.",
+  "The workspace is too large to save.": "Рабочее пространство слишком велико для сохранения.",
+  "The workspace could not be saved.": "Не удалось сохранить рабочее пространство.",
   "Release computer": "Освободить компьютер",
   "Release interrupted computer?": "Освободить прерванный компьютер?",
   "Make sure nothing is still running on this computer.":
@@ -1071,6 +1111,7 @@ export const RU_MESSAGES: Record<string, string> = {
   "Time to first token": "Время до первого токена",
   "Cache hits": "Попадания в кэш",
   "Queue wait": "Ожидание в очереди",
+  "Next try at {time}": "Следующая попытка: {time}",
   "Rewritten {time}": "Перезаписано {time}",
   "Left unchanged: {reason}": "Без изменений: {reason}",
   "Task budget reached": "Бюджет задачи исчерпан",
@@ -1448,4 +1489,26 @@ export const RU_MESSAGES: Record<string, string> = {
   "Set up a container on desktop, then try again.":
     "Настройте контейнер в настольном приложении, затем попробуйте снова.",
   Sleeping: "Спит",
+  "Evidence off": "Запись выключена",
+  Recording: "Запись",
+  Verified: "Проверено",
+  "Not sealed": "Без печати",
+  "Evidence gap": "Пробел в записи",
+  "Check failed": "Проверка не пройдена",
+  "Download evidence": "Скачать свидетельства",
+  "{gapCount} evidence gaps": "Пробелов в записи: {gapCount}",
+  "Checking the earlier action": "Проверяю предыдущее действие",
+  "Got it — I’ll keep {name} off this task.": "Понял — не буду поручать эту задачу {name}.",
+  "Got it — I’ll check this change before the next action.":
+    "Понял — проверю это изменение перед следующим действием.",
+  "Told {name} to stand down": "Попросил {name} остановиться",
+  "Stopping {name}": "Останавливаю {name}",
+  "{name} stood down": "{name} прекратил работу",
+  "The previous action may have finished. I’ll check before retrying.":
+    "Предыдущее действие могло завершиться. Проверю перед повторной попыткой.",
+  "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models.":
+    "Hermes нужен лимит контекста не менее 64K токенов. Задайте его для этого подключения в Настройки → Модели.",
+  "Could not check the model. Try again.": "Не удалось проверить модель. Попробуйте ещё раз.",
+  "Context limit (estimated)": "Лимит контекста (оценка)",
+  "Context limit (from the provider)": "Лимит контекста (от провайдера)",
 };

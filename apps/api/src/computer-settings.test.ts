@@ -10,6 +10,7 @@ import {
   listComputerConnections,
   saveComputerConnection,
   validateComputerConfiguration,
+  validateRuntimeComputerConfiguration,
 } from "./computer-settings.js";
 
 const context = {
@@ -20,6 +21,119 @@ const context = {
   signal: new AbortController().signal,
 };
 describe("computer connection settings", () => {
+  it.each(["fake", "e2b", "daytona", "box"])(
+    "allows moving pi from the host back to the deployment's %s sandbox",
+    async (deploymentKind) => {
+      const prisma = {} as PrismaClient;
+      for (const connectionId of [null, undefined]) {
+        const configuration = {
+          botId: "bot",
+          destination: "sandbox" as const,
+          connectionId,
+          confirmed: true,
+        };
+        await expect(
+          validateRuntimeComputerConfiguration(
+            prisma,
+            {
+              runtimeKind: "pi",
+              computer: { kind: "desktop", connectionId: null, spaceId: "space" },
+            },
+            configuration,
+            deploymentKind,
+            true,
+          ),
+        ).resolves.toBeUndefined();
+        await expect(
+          validateRuntimeComputerConfiguration(
+            prisma,
+            {
+              runtimeKind: "hermes",
+              computer: { kind: "desktop", connectionId: null, spaceId: "space" },
+            },
+            configuration,
+            deploymentKind,
+            true,
+          ),
+        ).rejects.toMatchObject({ data: { code: "computer-unsupported" } });
+      }
+    },
+  );
+  it.each(["desktop", "none", "unknown"])(
+    "refuses a deployment sandbox move without a known non-host provider: %s",
+    async (deploymentKind) => {
+      await expect(
+        validateRuntimeComputerConfiguration(
+          {} as PrismaClient,
+          {
+            runtimeKind: "pi",
+            computer: { kind: "desktop", connectionId: null, spaceId: "space" },
+          },
+          { botId: "bot", destination: "sandbox", connectionId: null, confirmed: true },
+          deploymentKind,
+          true,
+        ),
+      ).rejects.toThrow("Set up a container for isolated work.");
+    },
+  );
+  it.each(["docker", "podman", "kubernetes", "ssh"] as const)(
+    "still requires a container for an explicit %s connection on a hosted deployment",
+    async (engine) => {
+      const findFirst = vi.fn(async () => ({ metadata: { engine } }));
+      const prisma = { connection: { findFirst } } as unknown as PrismaClient;
+      const result = validateRuntimeComputerConfiguration(
+        prisma,
+        {
+          runtimeKind: "pi",
+          computer: { kind: "desktop", connectionId: null, spaceId: "space" },
+        },
+        { botId: "bot", destination: "sandbox", connectionId: "saved", confirmed: true },
+        "e2b",
+        true,
+      );
+      if (engine === "ssh")
+        await expect(result).rejects.toThrow("Set up a container for isolated work.");
+      else await expect(result).resolves.toBeUndefined();
+      expect(findFirst).toHaveBeenCalledWith({
+        where: { id: "saved", spaceId: "space", connectorId: "computer" },
+      });
+    },
+  );
+  it("accepts an explicit confirmed sandbox even when the host is the deployment default", async () => {
+    const prisma = {
+      deploymentSettings: { findUnique: vi.fn(async () => ({ computerHost: "this-mac" })) },
+    } as unknown as PrismaClient;
+    const configuration = await validateComputerConfiguration(prisma, "space", {
+      botId: "bot",
+      destination: "sandbox",
+      connectionId: null,
+      confirmed: true,
+    });
+    await expect(
+      validateRuntimeComputerConfiguration(
+        prisma,
+        {
+          runtimeKind: "pi",
+          computer: { kind: "desktop", connectionId: null, spaceId: "space" },
+        },
+        configuration,
+        "docker",
+        true,
+      ),
+    ).resolves.toBeUndefined();
+    await expect(
+      validateRuntimeComputerConfiguration(
+        prisma,
+        {
+          runtimeKind: "hermes",
+          computer: { kind: "desktop", connectionId: null, spaceId: "space" },
+        },
+        configuration,
+        "docker",
+        true,
+      ),
+    ).rejects.toMatchObject({ data: { code: "computer-unsupported" } });
+  });
   it("returns the saved connection state without an owner-only engine probe", async () => {
     const findMany = vi.fn(async () => [
       {

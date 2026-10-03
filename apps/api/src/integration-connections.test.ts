@@ -7,6 +7,7 @@ import {
   McpReauthorizationRequiredError,
 } from "@ardurbot/adapters";
 import type { McpServer } from "@ardurbot/db";
+import { IsolationError } from "@ardurbot/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { McpSession } from "../../../packages/adapters/src/mcp-transport.js";
 import { IntegrationConnections } from "./integration-connections.js";
@@ -124,7 +125,12 @@ function fixture(stdio: { stdioEnabled?: boolean; allowedCommands?: string[] } =
     spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) },
     bot: {
       findMany: vi.fn(async ({ where }: { where: { id: { in: string[] } } }) =>
-        where.id.in.filter((id) => id === "bot").map((id) => ({ id })),
+        where.id.in
+          .filter((id) => id === "bot")
+          .map((id) => ({
+            id,
+            computer: { kind: "desktop", connectionId: null as string | null },
+          })),
       ),
     },
     botMcpServer: {
@@ -1319,6 +1325,47 @@ describe("connection recovery and health", () => {
       1_800_000,
     );
   });
+  it.each([
+    { kind: "desktop", connectionId: null, assignable: true },
+    { kind: "desktop", connectionId: "saved-container", assignable: false },
+    { kind: "desktop", connectionId: "", assignable: false },
+    { kind: "docker", connectionId: null, assignable: false },
+    { kind: "unknown", connectionId: null, assignable: false },
+  ])(
+    "checks host CLI assignment against actual placement: %j",
+    async ({ assignable, ...computer }) => {
+      const f = fixture();
+      f.setRow({ transport: "host-cli" });
+      // Return the row even if the query would exclude it to exercise the shared predicate too.
+      f.db.bot.findMany.mockResolvedValue([{ id: "bot", computer }]);
+      const assignment = f.service.assign(actor, {
+        connectionId: "connection",
+        botIds: ["bot"],
+        toolIds: ["synthetic_read"],
+      });
+      if (assignable) {
+        await expect(assignment).resolves.toEqual([
+          { botId: "bot", access: "custom", toolIds: ["synthetic_read"], needsReview: false },
+        ]);
+        expect(f.db.botMcpServer.upsert).toHaveBeenCalledOnce();
+      } else {
+        await expect(assignment).rejects.toBeInstanceOf(IsolationError);
+        expect(f.db.botMcpServer.upsert).not.toHaveBeenCalled();
+        expect(f.db.mcpServer.update).not.toHaveBeenCalled();
+        expect(f.db.externalEffect.updateMany).not.toHaveBeenCalled();
+      }
+      expect(f.db.bot.findMany).toHaveBeenCalledExactlyOnceWith({
+        where: {
+          id: { in: ["bot"] },
+          spaceId: actor.spaceId,
+          userId: actor.userId,
+          archivedAt: null,
+          computer: { connectionId: null },
+        },
+        select: { id: true, computer: { select: { kind: true, connectionId: true } } },
+      });
+    },
+  );
   it("creates a host grant without copying a credential into the secret store", async () => {
     const f = fixture();
     vi.spyOn(f.service, "hostSignIns").mockResolvedValue([
@@ -1346,7 +1393,7 @@ describe("connection recovery and health", () => {
     });
     expect(f.db.bot.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ computer: { kind: "desktop" } }),
+        where: expect.objectContaining({ computer: { connectionId: null } }),
       }),
     );
     await expect(
@@ -1358,4 +1405,180 @@ describe("connection recovery and health", () => {
       }),
     ).rejects.toThrow("Writes always ask");
   });
+});
+
+describe("explicit tool review", () => {
+  it("saves a bot selection, clears review, and explicitly widens the space ceiling", async () => {
+    const f = fixture();
+    f.setRow({ needsReview: true });
+    await f.service.reviewTools(actor, {
+      connectionId: "connection",
+      revision: 1,
+      botId: "bot",
+      toolIds: ["synthetic_read"],
+      approveSpace: true,
+    });
+    expect(f.db.botMcpServer.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          botId: "bot",
+          access: "custom",
+          allowedTools: ["synthetic_read"],
+          needsReview: false,
+          allowAllTools: false,
+        }),
+        update: expect.objectContaining({ allowedTools: ["synthetic_read"], needsReview: false }),
+      }),
+    );
+    expect(f.row().spaceAllowedTools).toEqual(["synthetic_read"]);
+    expect(f.row().needsReview).toBe(false);
+    expect(f.db.externalEffect.updateMany).toHaveBeenCalled();
+  });
+  it("does not change the space ceiling during bot-only review", async () => {
+    const f = fixture();
+    f.setRow({ spaceAllowedTools: ["synthetic_read"], needsReview: false });
+    f.db.spaceMember.findUnique.mockResolvedValue({ role: "member" });
+    await f.service.reviewTools(actor, {
+      connectionId: "connection",
+      revision: 1,
+      botId: "bot",
+      toolIds: ["synthetic_read"],
+      approveSpace: false,
+    });
+    expect(f.row().spaceAllowedTools).toEqual(["synthetic_read"]);
+    expect(f.db.bot.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ spaceId: "space", userId: "owner", archivedAt: null }),
+      }),
+    );
+  });
+  it.each([
+    { botId: "other-bot", connectionId: "connection" },
+    { botId: "bot", connectionId: "other-server" },
+  ])("refuses a foreign bot or server", async (input) => {
+    const f = fixture();
+    await expect(
+      f.service.reviewTools(actor, { ...input, toolIds: ["synthetic_read"], approveSpace: true }),
+    ).rejects.toThrow();
+    expect(f.db.botMcpServer.upsert).not.toHaveBeenCalled();
+    expect(f.db.mcpServer.update).not.toHaveBeenCalled();
+  });
+  it("refuses cross-space and cross-owner access", async () => {
+    const f = fixture();
+    for (const caller of [
+      { ...actor, spaceId: "other-space" },
+      { ...actor, userId: "other-user" },
+    ])
+      await expect(
+        f.service.reviewTools(caller, {
+          connectionId: "connection",
+          revision: 1,
+          botId: "bot",
+          toolIds: ["synthetic_read"],
+          approveSpace: true,
+        }),
+      ).rejects.toThrow();
+    expect(f.db.botMcpServer.upsert).not.toHaveBeenCalled();
+  });
+  it.each([undefined, "bot"])("refuses non-owner space permission changes", async (botId) => {
+    const f = fixture();
+    f.db.spaceMember.findUnique.mockResolvedValue({ role: "member" });
+    await expect(
+      f.service.reviewTools(actor, {
+        connectionId: "connection",
+        revision: 1,
+        botId,
+        toolIds: ["synthetic_read"],
+        approveSpace: true,
+      }),
+    ).rejects.toThrow("Only the space owner");
+    expect(f.db.botMcpServer.upsert).not.toHaveBeenCalled();
+    expect(f.db.mcpServer.update).not.toHaveBeenCalled();
+  });
+  it("refuses a member bot-only review while the server needs review even inside the space ceiling", async () => {
+    const f = fixture();
+    f.setRow({ needsReview: true, spaceAllowedTools: ["synthetic_read"] });
+    f.db.spaceMember.findUnique.mockResolvedValue({ role: "member" });
+    await expect(
+      f.service.reviewTools(actor, {
+        connectionId: "connection",
+        revision: 1,
+        botId: "bot",
+        toolIds: ["synthetic_read"],
+        approveSpace: false,
+      }),
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message: "Ask the space owner to review these tools in Settings.",
+    });
+    expect(f.db.botMcpServer.upsert).not.toHaveBeenCalled();
+    expect(f.db.mcpServer.update).not.toHaveBeenCalled();
+    expect(f.db.mcpServer.updateMany).not.toHaveBeenCalled();
+    expect(f.db.externalEffect.updateMany).not.toHaveBeenCalled();
+    expect(f.row().spaceAllowedTools).toEqual(["synthetic_read"]);
+    expect(f.row().needsReview).toBe(true);
+  });
+  it("refuses a bot selection outside the space ceiling and uncaptured tools", async () => {
+    const f = fixture();
+    await expect(
+      f.service.reviewTools(actor, {
+        connectionId: "connection",
+        revision: 1,
+        botId: "bot",
+        toolIds: ["synthetic_read"],
+        approveSpace: false,
+      }),
+    ).rejects.toThrow("Ask the space owner");
+    await expect(
+      f.service.reviewTools(actor, {
+        connectionId: "connection",
+        revision: 1,
+        botId: "bot",
+        toolIds: ["uncaptured"],
+        approveSpace: true,
+      }),
+    ).rejects.toThrow("Review the available tools");
+    expect(f.db.botMcpServer.upsert).not.toHaveBeenCalled();
+  });
+  it("does not let the older assign RPC bypass the space owner boundary", async () => {
+    const f = fixture();
+    f.db.spaceMember.findUnique.mockResolvedValue({ role: "member" });
+    await expect(
+      f.service.assign(actor, {
+        connectionId: "connection",
+        revision: 1,
+        overrides: [],
+        toolIds: ["synthetic_read"],
+      }),
+    ).rejects.toThrow("Only the space owner");
+    expect(f.db.mcpServer.update).not.toHaveBeenCalled();
+  });
+  it("returns review facts without granting tools or discovering remotely", async () => {
+    const f = fixture();
+    const value = await f.service.toolReview(actor, {
+      connectionId: "connection",
+      revision: 1,
+      botId: "bot",
+    });
+    expect(value.manifest).toEqual(manifest);
+    expect(value.canApproveSpace).toBe(true);
+    expect(f.db.mcpServer.update).not.toHaveBeenCalled();
+    expect(f.db.botMcpServer.upsert).not.toHaveBeenCalled();
+  });
+});
+
+it("refuses stale review before changing permissions", async () => {
+  const f = fixture();
+  f.setRow({ revision: 2 });
+  await expect(
+    f.service.reviewTools(actor, {
+      connectionId: "connection",
+      revision: 1,
+      botId: "bot",
+      toolIds: ["synthetic_read"],
+      approveSpace: true,
+    }),
+  ).rejects.toThrow("Tools changed");
+  expect(f.db.botMcpServer.upsert).not.toHaveBeenCalled();
+  expect(f.db.mcpServer.update).not.toHaveBeenCalled();
 });
