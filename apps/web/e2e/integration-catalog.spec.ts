@@ -258,6 +258,7 @@ test("Find apps connects a token app, waits for an OAuth app, and manages custom
               catalogId: "github",
               state: "connected",
               needsReview: false,
+              spaceAllowedTools: ["synthetic_read"],
               spaceToolPolicies: {},
               manifest: {
                 capturedAt: "2026-09-25T00:00:00.000Z",
@@ -265,7 +266,13 @@ test("Find apps connects a token app, waits for an OAuth app, and manages custom
                 account: null,
                 workspace: null,
                 scopes: [],
-                tools: [],
+                tools: [
+                  {
+                    id: "synthetic_read",
+                    description: "Synthetic fixture, not a vendor tool",
+                    inputSchemaDigest: "a".repeat(64),
+                  },
+                ],
               },
             },
             authorizationUrl: null,
