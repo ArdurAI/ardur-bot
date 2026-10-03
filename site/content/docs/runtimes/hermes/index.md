@@ -217,7 +217,3 @@ HTTP status. They never include the request body, headers, raw exception text,
 cause, or private ACP error data. Normal ACP summaries keep their existing
 redaction boundary. Unknown provider errors remain unknown rather than being
 guessed from their prose.
-
-See the [session-start follow-up](/docs/runtimes/hermes-session-r2-investigation/) for the
-source evidence, deterministic reproductions, and the unresolved real-install
-acceptance boundary.
