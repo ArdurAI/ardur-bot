@@ -62,12 +62,10 @@ export async function restoreComputerWorkspace(
   await sandbox.importWorkspace(computer, home.exportHome(homeKey, context), context);
 }
 
-/** Preserve OS paths until the host process checks its registered roots. */
-export function isRemoteHostAbsolutePath(computer: ComputerRef, value: string) {
+/** Preserve OS paths until the local or paired host checks its registered roots. */
+export function isHostAbsolutePath(computer: ComputerRef, value: string) {
   return (
-    computerRunsOnHost(computer) &&
-    computer.providerRef.startsWith("host:") &&
-    (path.posix.isAbsolute(value) || path.win32.isAbsolute(value))
+    computerRunsOnHost(computer) && (path.posix.isAbsolute(value) || path.win32.isAbsolute(value))
   );
 }
 

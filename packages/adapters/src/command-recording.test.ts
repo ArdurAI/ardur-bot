@@ -184,10 +184,10 @@ describe("command recording boundary", () => {
     expect(cwd.sandbox.execute).not.toHaveBeenCalled();
   });
   it("runs credential-looking fixtures unchanged while retaining only redacted arguments", async () => {
-    const fake = "sk-" + "f".repeat(40);
+    const fake = `sk-${"f".repeat(40)}`;
     const command = `echo ${fake}`;
     const f = fixture([
-      { type: "stdout", data: fake + " fixture output" },
+      { type: "stdout", data: `${fake} fixture output` },
       { type: "exit", code: 0 },
     ]);
     const tool = vi.fn(async (_name, args) => {
@@ -224,7 +224,7 @@ describe("command recording boundary", () => {
     expect(JSON.stringify(f.events)).not.toContain(known);
   });
   it("runs a 40 KB command", async () => {
-    const command = "echo " + "x".repeat(40 * 1024);
+    const command = `echo ${"x".repeat(40 * 1024)}`;
     const f = fixture();
     const tool = vi.fn(async (_name, args) => {
       expect(args.command).toBe(command);

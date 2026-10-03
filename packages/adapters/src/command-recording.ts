@@ -39,7 +39,7 @@ export function redactCommandText(text: string, secrets: string[]): string {
 export function sensitiveShellCommand(command: string): boolean {
   const position = "(?:^|[;&|()\\n])\\s*(?:command\\s+|builtin\\s+)?";
   const environmentRead = new RegExp(
-    position + "(?:printenv\\b|(?:env|set|export)\\s*(?=$|[;&|)\\n]))",
+    `${position}(?:printenv\\b|(?:env|set|export)\\s*(?=$|[;&|)\\n]))`,
     "i",
   );
   const keychainRead = new RegExp(

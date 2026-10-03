@@ -289,7 +289,7 @@ import {
   teamBotWorkspaceDirectory,
 } from "./computer-support.js";
 import { observationToolResult, parseComputerActions } from "./computer-tools.js";
-import { checkpointRunComputerWorkspace, isRemoteHostAbsolutePath } from "./computer-workspace.js";
+import { checkpointRunComputerWorkspace, isHostAbsolutePath } from "./computer-workspace.js";
 import { sanitizeConnectorError } from "./connector-safety.js";
 import { assembleTurnContext } from "./context/assemble.js";
 import { claimBotRun } from "./context/concurrency.js";
@@ -3237,7 +3237,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           const toolDirectory =
             helperWorkspaces.get(helperToolDelegations.get(executionId) ?? "") ?? taskDirectory;
           const toolWorkspacePath = (value: string) =>
-            isRemoteHostAbsolutePath(computer, value)
+            isHostAbsolutePath(computer, value)
               ? value
               : toolDirectory
                 ? taskWorkspacePath(toolDirectory, value)
@@ -4174,7 +4174,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               path: requestedPath,
               entries: entries.map((entry) => ({
                 ...entry,
-                path: isRemoteHostAbsolutePath(computer, entry.path)
+                path: isHostAbsolutePath(computer, entry.path)
                   ? entry.path
                   : displayBotWorkspacePath(computerMode, bot.id, requestedPath, entry.path),
               })),

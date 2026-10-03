@@ -99,7 +99,7 @@ mismatch repair say **Change location on desktop** rather than silently migratin
   worker even when the host's terminal frame arrives first.
 - Computer homes are derived locally from validated space and home identifiers.
   Their hash includes an unambiguous separator, so identifiers cannot collide across
-  spaces. Team Computer file tools preserve absolute host paths for the service to
+  spaces. File tools preserve absolute host paths for the local or paired host to
   validate; relative paths retain the existing bot workspace mapping.
   Caller-provided provider references cannot choose a host directory. Registered
   folders come only from the native picker. Cwd and files undergo realpath checks;

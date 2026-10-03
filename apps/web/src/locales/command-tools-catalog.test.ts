@@ -10,6 +10,7 @@ it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
     const source = readFileSync(filename, "utf8");
     const catalog = await formatter().parse(source, { locale, sourceLocale: "en", filename });
     for (const message of [
+      "Use a path inside this bot's folder or a registered folder.",
       "This command was not run because it exceeds 64 KB. Put code in a file and run that file.",
     ]) {
       expect(source.split(`msgid ${JSON.stringify(message)}\n`)).toHaveLength(2);

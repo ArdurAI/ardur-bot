@@ -9988,3 +9988,7 @@ msgstr ""
 #. Command size refusal; shown only after a rejected command.
 msgid "This command was not run because it exceeds 64 KB. Put code in a file and run that file."
 msgstr "명령이 64 KB를 초과하여 실행되지 않았습니다. 코드를 파일에 넣고 그 파일을 실행하세요."
+
+#. File location refusal; shown only for a disallowed path.
+msgid "Use a path inside this bot's folder or a registered folder."
+msgstr "이 봇의 폴더 또는 등록된 폴더 안의 경로를 사용하세요."
