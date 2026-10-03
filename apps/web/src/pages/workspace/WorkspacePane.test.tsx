@@ -131,6 +131,8 @@ describe("WorkspacePane tab selection and content rendering", () => {
   it.each([
     { connectionId: "saved-docker", files: "live" as const, selected: "Files" },
     { connectionId: "saved-podman", files: "saved" as const, selected: "Files" },
+    { connectionId: null, files: "live" as const, selected: "Files" },
+    { connectionId: null, files: "saved" as const, selected: "Files" },
     { connectionId: null, files: "unavailable" as const, selected: "Files" },
   ])(
     "uses supplied API file policy for a desktop row on $connectionId",
