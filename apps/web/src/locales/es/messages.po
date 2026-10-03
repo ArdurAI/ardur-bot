@@ -2117,6 +2117,10 @@ msgstr "Próximamente"
 msgid "Command"
 msgstr "Comando"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Command line"
+msgstr "Línea de comandos"
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Commands"
 msgstr ""
@@ -2548,8 +2552,8 @@ msgid "Copy output"
 msgstr ""
 
 #: src/pages/DevicesSettings.tsx
-msgid "Copy pairing details"
-msgstr ""
+msgid "Copy pairing code"
+msgstr "Copiar código de vinculación"
 
 #: src/pages/memory/MemoryImport.tsx
 msgid "Copy prompt"
@@ -6033,6 +6037,10 @@ msgstr ""
 #: src/pages/shell/group-participants.tsx
 msgid "Next run"
 msgstr "Próxima ejecución"
+
+#: src/components/Context.tsx
+msgid "Next try at {time}"
+msgstr "Próximo intento a las {time}"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No agent connections yet."

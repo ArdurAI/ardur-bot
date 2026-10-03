@@ -23,6 +23,7 @@ test("devices shows pairing, listener state and revocable grants", async ({ page
     {
       id: "test-phone",
       deviceName: "Test phone",
+      platform: "cli",
       scopes: ["read", "dispatch", "approve"],
       createdAt: new Date().toISOString(),
       lastUsedAt: null,
@@ -83,6 +84,13 @@ test("devices shows pairing, listener state and revocable grants", async ({ page
     return route.fulfill({ json: { json: { ok: true } } });
   });
   await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      value: {
+        writeText: async (text: string) => {
+          (window as unknown as { copiedPairing: string }).copiedPairing = text;
+        },
+      },
+    });
     let enabled = false;
     window.ardurbotDesktop = {
       platform: "darwin",
@@ -107,6 +115,16 @@ test("devices shows pairing, listener state and revocable grants", async ({ page
   await settings.getByRole("button", { name: "Pair device", exact: true }).click();
   await expect(settings.getByRole("img", { name: "Pair device" })).toBeVisible();
   await expect(settings.getByText("TESTCODE", { exact: true })).toBeVisible();
+  await expect(settings.getByText("Command line", { exact: true })).toBeVisible();
+  await settings.getByRole("button", { name: "Copy pairing code", exact: true }).click();
+  const copied = await page.evaluate(
+    () => (window as unknown as { copiedPairing: string }).copiedPairing,
+  );
+  expect(JSON.parse(copied)).toMatchObject({
+    instanceId: "test-home",
+    certificateFingerprint,
+    challenge: "nonredeemable-screenshot-challenge",
+  });
   await settings.getByRole("button", { name: "Pair a chat account", exact: true }).click();
   await expect(settings.getByRole("combobox", { name: "Bot", exact: true })).toHaveValue(
     pairedBotId,

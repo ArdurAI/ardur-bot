@@ -179,3 +179,17 @@ it("reports unavailable Kubernetes screen and terminal from shared capability fl
     capabilities: { graphical: false, interactiveTerminal: false },
   });
 });
+
+it("carries the last idle configuration failure on the computer card", () => {
+  expect(
+    toComputerStatus("bot", {
+      id: "computer",
+      scope: "team",
+      kind: "docker",
+      state: "running",
+      sleepFailureReason: "This computer's engine is not configured.",
+    } as never),
+  ).toMatchObject({
+    sleepFailureReason: "This computer's engine is not configured.",
+  });
+});

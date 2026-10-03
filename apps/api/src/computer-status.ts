@@ -63,6 +63,7 @@ export function toComputerStatus(
     id?: string;
     kind: string;
     state: string;
+    sleepFailureReason?: string | null;
     scope: string;
     controlHolder: string;
     controlBotId?: string | null;
@@ -90,6 +91,7 @@ export function toComputerStatus(
     mode: computer?.scope === "dedicated" ? "dedicated" : "team",
     kind,
     state,
+    sleepFailureReason: computer?.sleepFailureReason ?? null,
     controlHolder: (computer?.controlHolder ?? "none") as ComputerStatus["controlHolder"],
     controlBotId: computer?.controlBotId ?? null,
     takeoverRequested: Boolean(computer?.controlRunId),

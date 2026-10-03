@@ -1013,6 +1013,7 @@ describe("computer provisioning", () => {
             provisioningId: null,
             providerRef: next.providerRef,
             kind: next.kind,
+            sleepFailureReason: null,
             updatedAt: expect.any(Date),
           },
         });

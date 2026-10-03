@@ -72,6 +72,9 @@ export function RuntimeSummary({
         <Text style={{ color: tokens.mutedForeground }}>{t(facts.sharingWarning)}</Text>
       ) : null}
       <Text style={{ color: tokens.mutedForeground }}>{t(facts.stateLabel)}</Text>
+      {status.sleepFailureReason ? (
+        <Text style={{ color: tokens.destructive }}>{status.sleepFailureReason}</Text>
+      ) : null}
     </View>
   );
 }

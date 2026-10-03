@@ -2117,6 +2117,10 @@ msgstr "即将推出"
 msgid "Command"
 msgstr "命令"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Command line"
+msgstr "命令行"
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Commands"
 msgstr ""
@@ -2548,8 +2552,8 @@ msgid "Copy output"
 msgstr ""
 
 #: src/pages/DevicesSettings.tsx
-msgid "Copy pairing details"
-msgstr ""
+msgid "Copy pairing code"
+msgstr "复制配对码"
 
 #: src/pages/memory/MemoryImport.tsx
 msgid "Copy prompt"
@@ -6033,6 +6037,10 @@ msgstr ""
 #: src/pages/shell/group-participants.tsx
 msgid "Next run"
 msgstr "下次运行"
+
+#: src/components/Context.tsx
+msgid "Next try at {time}"
+msgstr "下次尝试时间：{time}"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No agent connections yet."

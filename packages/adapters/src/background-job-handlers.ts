@@ -225,7 +225,7 @@ export function createBackgroundJobHandlers(deps: {
     },
     "computer.control-expire": async (payload) => {
       if (await expireComputerControl(deps, payload.computerId, payload.leaseId)) {
-        scheduleComputerSleep(deps.jobs, payload.computerId);
+        await scheduleComputerSleep(deps, payload.computerId);
       }
     },
     "skill.teaching-expire": async (payload) => {
