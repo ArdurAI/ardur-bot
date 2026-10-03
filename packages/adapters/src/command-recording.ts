@@ -37,9 +37,11 @@ export function redactCommandText(text: string, secrets: string[]): string {
  * This is an output safeguard, not a shell authorization grammar; other output is redacted.
  */
 export function sensitiveShellCommand(command: string): boolean {
-  const position = "(?:^|[;&|()\\n])\\s*(?:command\\s+|builtin\\s+)?";
+  const position = "(?:^|[;&|()\\n])\\s*(?:command\\s+|builtin\\s+)?(?:[^\\s;&|()]+/)?";
   const environmentRead = new RegExp(
-    `${position}(?:printenv\\b|(?:env|set|export)\\s*(?=$|[;&|)\\n]))`,
+    position +
+      "(?:printenv\\b|(?:set|export(?:\\s+-p)?)\\s*(?=$|[;&|)\\n])|" +
+      "env(?:\\s+(?:-[0i]+|--null|--ignore-environment|(?:-u|--unset)\\s+\\w+|--unset=\\w+|[A-Za-z_]\\w*=[^\\s;&|()]+))*\\s*(?=$|[;&|)\\n]))",
     "i",
   );
   const keychainRead = new RegExp(
