@@ -44,7 +44,7 @@ export function sensitiveShellCommand(command: string): boolean {
   const position = `(?:^|[;&|()\\n])\\s*(?:${wrapperPrefix})*(?:[^\\s;&|()]+/)?`;
   const environmentRead = new RegExp(
     position +
-      "(?:printenv\\b|(?:set|export(?:\\s+-p)?)\\s*(?=$|[;&|)\\n])|" +
+      "(?:printenv\\b|(?:(?:declare|typeset)\\s+-(?:x|p)|set|export(?:\\s+-p)?)\\s*(?=$|[;&|)\\n])|" +
       "env(?:\\s+(?:-[0i]+|--null|--ignore-environment|(?:-u|--unset)\\s+\\w+|--unset=\\w+|[A-Za-z_]\\w*=[^\\s;&|()]+))*\\s*(?=$|[;&|)\\n]))",
     "i",
   );
