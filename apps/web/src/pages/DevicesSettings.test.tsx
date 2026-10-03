@@ -5,6 +5,9 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
+const qr = vi.hoisted(() => vi.fn(() => new Uint8Array([1, 0, 0, 1])));
+vi.mock("toqr", () => ({ toQR: qr }));
+
 const api = vi.hoisted(() => ({
   list: vi.fn(),
   start: vi.fn(),
@@ -209,4 +212,21 @@ it("asks for a desktop update when an older bridge cannot report pairing capabil
   await act(async () => root.render(<DevicesSettings owner />));
   expect(container.querySelector("#lan-listener")).toBeNull();
   expect(container.textContent).toContain("Restart the desktop app to update it.");
+});
+
+it("copies the exact QR payload and labels and revokes a CLI device", async () => {
+  const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) };
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: clipboard });
+  const state = await api.list();
+  state.devices[0].platform = "cli";
+  state.devices[0].deviceName = "Terminal";
+  api.list.mockResolvedValue(state);
+  await act(async () => root.render(<DevicesSettings owner />));
+  expect(container.textContent).toContain("Command line");
+  await click("Pair device");
+  await click("Copy pairing code");
+  expect(clipboard.writeText).toHaveBeenCalledWith(JSON.stringify((await api.start()).payload));
+  expect(qr).toHaveBeenCalledWith(clipboard.writeText.mock.calls[0]![0]);
+  await click("Revoke");
+  expect(api.revoke).toHaveBeenCalledWith({ id: "phone" });
 });

@@ -56,8 +56,16 @@ export function createMemoryLifecycle(deps: MemoryLifecycleDependencies) {
     open: (context, action) => {
       const open = async (tx: Prisma.TransactionClient) => {
         if (context.memorySessionStart) await tx.$executeRaw`SET LOCAL lock_timeout = '500ms'`;
-        // Thread first, then memory: clearing holds this row through its generation update.
+        // Keep Clear/claim's parent -> thread -> memory order, but do not block
+        // foreign-key KEY SHARE checks: usage can insert a bot reference after
+        // locking the thread. FOR UPDATE here would invert that effective order.
         if (context.briefGeneration !== undefined) {
+          if (context.groupId && context.groupId !== "direct") {
+            await tx.$queryRaw`SELECT id FROM chat_groups WHERE id = ${context.groupId} AND "spaceId" = ${context.spaceId} FOR NO KEY UPDATE`;
+          }
+          if (context.botId) {
+            await tx.$queryRaw`SELECT id FROM bots WHERE id = ${context.botId} AND "spaceId" = ${context.spaceId} FOR NO KEY UPDATE`;
+          }
           await tx.$queryRaw`SELECT id FROM threads WHERE id = ${context.threadId} AND "spaceId" = ${context.spaceId} AND "userId" = ${context.userId} FOR UPDATE`;
         }
         await lockMemorySpace(tx, context.spaceId);

@@ -93,6 +93,20 @@ it("loads scoped context through the shared schemas and does not render unknown 
   await act(async () => root.unmount());
 });
 
+it("shows the next brief attempt in the phone's active language", async () => {
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  const at = "2026-10-04T08:00:00Z";
+  await act(async () =>
+    root.render(createElement(MobileBrief, { brief: { ...brief, nextAttemptAt: at } })),
+  );
+  await act(async () => node.querySelector("button")!.click());
+  expect(node.textContent).toContain(
+    ZH_MESSAGES["Next try at {time}"]!.replace("{time}", new Date(at).toLocaleString()),
+  );
+  await act(async () => root.unmount());
+});
+
 it("shows pending integration status and the explicit web review path on phone", async () => {
   vi.mocked(rpc).mockImplementation(async (procedure) =>
     procedure === "briefs/list"

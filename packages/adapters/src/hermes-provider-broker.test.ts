@@ -175,7 +175,9 @@ describe("worker provider broker", () => {
     f.fetch.mockResolvedValueOnce(body(4 * 1024 * 1024));
     expect((await f.broker.open(f.request())).ok).toBe(true);
     f.fetch.mockResolvedValueOnce(body(100));
-    await expect(f.broker.open(f.request())).rejects.toThrow("Provider request failed");
+    await expect(f.broker.open(f.request())).rejects.toMatchObject({
+      failure: { kind: "response-limit" },
+    });
     expect(f.records.filter((row) => row.request?.collection?.outcome === "success")).toHaveLength(
       1,
     );
@@ -188,7 +190,9 @@ describe("worker provider broker", () => {
     f.fetch.mockResolvedValueOnce(body(2 * 1024 * 1024));
     f.fetch.mockResolvedValueOnce(body(2 * 1024 * 1024));
     expect((await f.broker.open(f.request())).ok).toBe(true);
-    await expect(f.broker.open(f.request())).rejects.toThrow("Provider request failed");
+    await expect(f.broker.open(f.request())).rejects.toMatchObject({
+      failure: { kind: "response-limit" },
+    });
     expect(f.records.filter((row) => row.request?.collection?.outcome === "success")).toHaveLength(
       1,
     );

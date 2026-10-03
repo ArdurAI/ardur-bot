@@ -380,8 +380,36 @@ msgid "{runtime}'s model connection is missing. Connect it or change the pin."
 msgstr "Die Modellverbindung von {runtime} fehlt. Verbinden Sie sie oder ändern Sie die Festlegung."
 
 #: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model provider rejected the connection key. Check it in Settings, under Models."
+msgstr "Der Modellanbieter von {runtime} hat den Verbindungsschlüssel abgelehnt. Prüfe ihn in den Einstellungen unter Modelle."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model request failed. Check the connection in Settings, under Models, and try again."
+msgstr "Die Modellanfrage von {runtime} ist fehlgeschlagen. Prüfe die Verbindung in den Einstellungen unter Modelle und versuche es erneut."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model request was outside this run's allowance. Narrow the task and try again."
+msgstr "Die Modellanfrage von {runtime} lag außerhalb des erlaubten Rahmens für diesen Lauf. Grenze die Aufgabe ein und versuche es erneut."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model request was too large. Narrow the task and try again."
+msgstr "Die Modellanfrage von {runtime} war zu groß. Grenze die Aufgabe ein und versuche es erneut."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model response was too large. Narrow the task and try again."
+msgstr "Die Modellantwort von {runtime} war zu groß. Grenze die Aufgabe ein und versuche es erneut."
+
+#: src/lib/failure-category-copy.ts
 msgid "{runtime}'s pinned model is unavailable. Change the pin and try again."
 msgstr "Das für {runtime} festgelegte Modell ist nicht verfügbar. Ändern Sie die Festlegung und versuchen Sie es erneut."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s settings were not confirmed. Check this bot's settings and try again."
+msgstr "Die Einstellungen von {runtime} wurden nicht bestätigt. Prüfe die Einstellungen dieses Bots und versuche es erneut."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s tool list changed during startup. Check the connected tools and try again."
+msgstr "Die Werkzeugliste von {runtime} hat sich beim Start geändert. Prüfe die verbundenen Werkzeuge und versuche es erneut."
 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime}'s usage limit is reached. Try again after it resets."
@@ -2089,6 +2117,10 @@ msgstr ""
 msgid "Command"
 msgstr "Befehl"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Command line"
+msgstr "Befehlszeile"
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Commands"
 msgstr ""
@@ -2520,8 +2552,8 @@ msgid "Copy output"
 msgstr ""
 
 #: src/pages/DevicesSettings.tsx
-msgid "Copy pairing details"
-msgstr ""
+msgid "Copy pairing code"
+msgstr "Kopplungscode kopieren"
 
 #: src/pages/memory/MemoryImport.tsx
 msgid "Copy prompt"
@@ -6005,6 +6037,10 @@ msgstr ""
 #: src/pages/shell/group-participants.tsx
 msgid "Next run"
 msgstr "Nächster Lauf"
+
+#: src/components/Context.tsx
+msgid "Next try at {time}"
+msgstr "Nächster Versuch um {time}"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No agent connections yet."

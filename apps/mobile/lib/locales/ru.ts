@@ -1,4 +1,18 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "{runtime}'s tool list changed during startup. Check the connected tools and try again.":
+    "Список инструментов {runtime} изменился при запуске. Проверьте подключённые инструменты и повторите попытку.",
+  "{runtime}'s settings were not confirmed. Check this bot's settings and try again.":
+    "Настройки {runtime} не были подтверждены. Проверьте настройки этого бота и повторите попытку.",
+  "{runtime}'s model request was too large. Narrow the task and try again.":
+    "Запрос к модели {runtime} был слишком большим. Сократите задачу и повторите попытку.",
+  "{runtime}'s model response was too large. Narrow the task and try again.":
+    "Ответ модели {runtime} был слишком большим. Сократите задачу и повторите попытку.",
+  "{runtime}'s model request was outside this run's allowance. Narrow the task and try again.":
+    "Запрос к модели {runtime} вышел за пределы разрешённого для этого запуска. Сократите задачу и повторите попытку.",
+  "{runtime}'s model provider rejected the connection key. Check it in Settings, under Models.":
+    "Поставщик модели {runtime} отклонил ключ подключения. Проверьте его в разделе «Модели» в настройках.",
+  "{runtime}'s model request failed. Check the connection in Settings, under Models, and try again.":
+    "Запрос к модели {runtime} завершился ошибкой. Проверьте подключение в разделе «Модели» в настройках и повторите попытку.",
   "Review tools on web": "Проверить инструменты в веб-версии",
   "Connected · tools need review": "Подключено · инструменты требуют проверки",
   "{runtime} needs a model with at least 64K context; change the model and try again.":
@@ -1097,6 +1111,7 @@ export const RU_MESSAGES: Record<string, string> = {
   "Time to first token": "Время до первого токена",
   "Cache hits": "Попадания в кэш",
   "Queue wait": "Ожидание в очереди",
+  "Next try at {time}": "Следующая попытка: {time}",
   "Rewritten {time}": "Перезаписано {time}",
   "Left unchanged: {reason}": "Без изменений: {reason}",
   "Task budget reached": "Бюджет задачи исчерпан",

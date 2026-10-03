@@ -643,8 +643,8 @@ export class HostAgent {
       ? await startHermesProviderRelay(
           turn.providerBroker,
           (method, args) => callback(method, args),
-          () => {
-            void hermes?.fail(turn.runId);
+          (failure) => {
+            void hermes?.fail(turn.runId, failure).catch(() => {});
           },
         )
       : undefined;

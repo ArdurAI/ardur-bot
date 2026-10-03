@@ -73,6 +73,7 @@ function recordingDeps(skill: ReturnType<typeof skillRow>) {
     tx,
     deps: {
       prisma: {
+        computer: { findUnique: vi.fn(async () => ({ sleepFailureReason: null })) },
         $transaction: vi.fn(async (fn: (client: typeof tx) => unknown) => fn(tx)),
         taughtSkill: {
           findUnique: vi.fn(async () => current),

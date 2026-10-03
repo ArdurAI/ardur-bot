@@ -81,6 +81,9 @@ export function RuntimeSummary({
         <p className="text-muted-foreground">{t`Bots share files and installed tools`}</p>
       ) : null}
       <p className="text-muted-foreground">{states[summary.stateLabel]}</p>
+      {status.sleepFailureReason ? (
+        <p className="text-destructive">{status.sleepFailureReason}</p>
+      ) : null}
     </div>
   );
 }
