@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { LocalAgentHomeStore } from "@ardurbot/adapters";
+import { DesktopSandboxProvider, LocalAgentHomeStore } from "@ardurbot/adapters";
 import type { Actor, RuntimeComputerLocation } from "@ardurbot/contracts";
 import { IDE_FILE_BYTES } from "@ardurbot/contracts";
 import { IsolationError } from "@ardurbot/db";
@@ -125,33 +125,75 @@ describe("bot workspace files", () => {
     },
   );
 
-  it("keeps connectionless host files out of the implicit workspace", async () => {
-    const f = fixture();
-    f.computer.kind = "desktop";
-    expect(await f.files.describe(actor, "bot")).toMatchObject({
-      files: "unavailable",
-      runsOnHost: true,
-    });
-    await expect(f.files.list(actor, f.input)).rejects.toThrow("Files are unavailable");
-    await expect(f.files.read(actor, { ...f.input, path: "notes.md" })).rejects.toThrow(
-      "Files are unavailable",
-    );
-    await expect(
-      f.files.save(actor, {
-        ...f.input,
-        path: "notes.md",
-        content: "edited",
-        version: digest("hello"),
-        approved: false,
-      }),
-    ).rejects.toThrow("Files are unavailable");
-    expect(f.sandbox.listFiles).not.toHaveBeenCalled();
-    expect(f.sandbox.readFile).not.toHaveBeenCalled();
-    expect(f.sandbox.writeFile).not.toHaveBeenCalled();
-    expect(f.home.list).not.toHaveBeenCalled();
-    expect(f.home.readFile).not.toHaveBeenCalled();
-    expect(f.home.writeFile).not.toHaveBeenCalled();
-  });
+  it.each(["running", "suspended"])(
+    "serves a connectionless host's own Team folder while %s",
+    async (state) => {
+      const f = fixture();
+      f.computer.kind = "desktop";
+      f.computer.state = state;
+      expect(await f.files.describe(actor, "bot")).toMatchObject({
+        files: "live",
+        runsOnHost: true,
+        rootId: "sandbox-computer",
+      });
+      expect((await f.files.list(actor, f.input)).entries).toEqual([
+        { path: "notes.md", kind: "file", size: 5 },
+      ]);
+      const file = await f.files.read(actor, { ...f.input, path: "notes.md" });
+      expect(file.content).toBe("hello");
+      expect(
+        await f.files.save(actor, {
+          ...f.input,
+          path: "notes.md",
+          content: "edited",
+          version: file.version,
+          approved: false,
+        }),
+      ).toMatchObject({ saved: true });
+      expect(f.sandbox.listFiles).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: "desktop", providerRef: "provider-ref" }),
+        "bots/bot",
+        expect.objectContaining({ fileRoot: "bots/bot" }),
+      );
+      expect(f.home.list).not.toHaveBeenCalled();
+      expect(f.home.readFile).not.toHaveBeenCalled();
+      expect(f.home.writeFile).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    { kind: "desktop", connectionId: null, scope: "dedicated", state: "running", expected: "live" },
+    { kind: "desktop", connectionId: null, scope: "team", state: "suspended", expected: "live" },
+    {
+      kind: "desktop",
+      connectionId: "container",
+      connectionSettings: { engine: "docker" },
+      state: "suspended",
+      expected: "saved",
+    },
+    { kind: "remote-docker", state: "running", expected: "live" },
+    { kind: "fake", state: "running", expected: "unavailable" },
+    { kind: "desktop", providerRef: "host:home", expected: "unavailable" },
+    { kind: "desktop", providerRef: null, homeRevision: "empty", expected: "unavailable" },
+    // A stopped paired bridge keeps a server-side checkpoint but no location to tell it apart.
+    {
+      kind: "desktop",
+      connectionId: null,
+      providerRef: null,
+      homeRevision: "rev-1",
+      state: "stopped",
+      expected: "unavailable",
+    },
+    { kind: "desktop", state: "stopped", expected: "saved" },
+  ])(
+    "describes the saved location without activating it: %s",
+    async ({ expected, ...location }) => {
+      const f = fixture();
+      Object.assign(f.computer, location);
+      expect((await f.files.describe(actor, "bot")).files).toBe(expected);
+      expect(f.sandbox.listFiles).not.toHaveBeenCalled();
+    },
+  );
 
   it("distinguishes live, saved, and unavailable computers without activating one", async () => {
     const f = fixture();
@@ -160,9 +202,9 @@ describe("bot workspace files", () => {
     f.computer.state = "stopped";
     expect(await f.files.describe(actor, "bot")).toMatchObject({ files: "saved" });
     f.computer.kind = "desktop";
-    expect(await f.files.describe(actor, "bot")).toMatchObject({ files: "unavailable" });
+    expect(await f.files.describe(actor, "bot")).toMatchObject({ files: "saved" });
     f.computer.state = "running";
-    expect(await f.files.describe(actor, "bot")).toMatchObject({ files: "unavailable" });
+    expect(await f.files.describe(actor, "bot")).toMatchObject({ files: "live" });
     expect(workspaceFileSource(null)).toBe("unavailable");
     for (const kind of ["ssh", "remote-docker", "docker", "kubernetes", "e2b", "daytona", "box"]) {
       expect(
@@ -224,105 +266,115 @@ describe("bot workspace files", () => {
     await expect(f.files.read(actor, { ...f.input, path: "missing.md" })).rejects.toThrow();
   });
 
-  it("saves through the same ownership, maintenance, approval, and version checks as the IDE", async () => {
-    const f = fixture();
-    const save = {
-      ...f.input,
-      path: "notes.md",
-      content: "hello!",
-      version: digest("hello"),
-      approved: false,
-    };
-    await expect(f.files.save({ ...actor, userId: "other" }, save)).rejects.toThrow();
-    await expect(f.files.save(actor, { ...save, path: "../private" })).rejects.toThrow();
-    await expect(f.files.save(actor, { ...save, generation: 1 })).rejects.toThrow();
-    expect(f.sandbox.writeFile).not.toHaveBeenCalled();
-    expect(f.home.writeFile).not.toHaveBeenCalled();
+  it.each(["docker", "desktop"])(
+    "saves %s through the same ownership, maintenance, approval, and version checks",
+    async (kind) => {
+      const f = fixture();
+      f.computer.kind = kind;
+      const save = {
+        ...f.input,
+        path: "notes.md",
+        content: "hello!",
+        version: digest("hello"),
+        approved: false,
+      };
+      await expect(f.files.save({ ...actor, userId: "other" }, save)).rejects.toThrow();
+      await expect(f.files.save(actor, { ...save, path: "../private" })).rejects.toThrow();
+      await expect(f.files.save(actor, { ...save, generation: 1 })).rejects.toThrow();
+      expect(f.sandbox.writeFile).not.toHaveBeenCalled();
+      expect(f.home.writeFile).not.toHaveBeenCalled();
 
-    const tooBig = await f.files.save(actor, {
-      ...save,
-      content: "a".repeat(IDE_FILE_BYTES + 1),
-    });
-    expect(tooBig).toMatchObject({
-      saved: false,
-      approvalRequired: false,
-      reason: "This file is larger than 2 MB. Open a copy to edit it.",
-    });
-    expect(f.sandbox.listFiles).not.toHaveBeenCalled();
+      const tooBig = await f.files.save(actor, {
+        ...save,
+        content: "a".repeat(IDE_FILE_BYTES + 1),
+      });
+      expect(tooBig).toMatchObject({
+        saved: false,
+        approvalRequired: false,
+        reason: "This file is larger than 2 MB. Open a copy to edit it.",
+      });
+      expect(f.sandbox.listFiles).not.toHaveBeenCalled();
 
-    f.computer.maintenanceId = "maintenance";
-    await expect(f.files.read(actor, { ...f.input, path: "notes.md" })).resolves.toMatchObject({
-      content: "saved",
-      version: digest("saved"),
-    });
-    await expect(f.files.save(actor, { ...save, version: digest("saved") })).rejects.toThrow(
-      /The computer is busy. Wait for it to finish./,
-    );
-    expect(f.home.writeFile).not.toHaveBeenCalled();
-    f.computer.maintenanceId = null;
+      f.computer.maintenanceId = "maintenance";
+      await expect(f.files.read(actor, { ...f.input, path: "notes.md" })).resolves.toMatchObject({
+        content: "saved",
+        version: digest("saved"),
+      });
+      await expect(f.files.save(actor, { ...save, version: digest("saved") })).rejects.toThrow(
+        /The computer is busy. Wait for it to finish./,
+      );
+      expect(f.home.writeFile).not.toHaveBeenCalled();
+      f.computer.maintenanceId = null;
 
-    f.db.actionApprovalRule.findMany.mockResolvedValueOnce([
-      { effect: "require_approval", matchKind: "tool", matchValue: "write_file", botId: null },
-    ]);
-    await expect(f.files.save(actor, save)).resolves.toEqual({
-      saved: false,
-      approvalRequired: true,
-    });
-    expect(f.sandbox.writeFile).not.toHaveBeenCalled();
-    f.sandbox.listFiles.mockImplementation(async () => [
-      { path: "bots/bot/notes.md", kind: "file", size: 5, executable: true },
-    ]);
-    f.db.actionApprovalRule.findMany.mockResolvedValueOnce([
-      { effect: "require_approval", matchKind: "tool", matchValue: "write_file", botId: null },
-    ]);
-    await expect(f.files.save(actor, { ...save, approved: true })).resolves.toMatchObject({
-      saved: true,
-      approvalRequired: false,
-      version: digest("hello!"),
-    });
-    expect(f.sandbox.writeFile).toHaveBeenCalledWith(
-      expect.anything(),
-      { path: "bots/bot/notes.md", content: new TextEncoder().encode("hello!"), executable: true },
-      expect.anything(),
-    );
-    expect(f.db.computer.updateMany).toHaveBeenCalledWith({
-      where: { id: "computer" },
-      data: { updatedAt: expect.any(Date) },
-    });
+      f.db.actionApprovalRule.findMany.mockResolvedValueOnce([
+        { effect: "require_approval", matchKind: "tool", matchValue: "write_file", botId: null },
+      ]);
+      await expect(f.files.save(actor, save)).resolves.toEqual({
+        saved: false,
+        approvalRequired: true,
+      });
+      expect(f.sandbox.writeFile).not.toHaveBeenCalled();
+      f.sandbox.listFiles.mockImplementation(async () => [
+        { path: "bots/bot/notes.md", kind: "file", size: 5, executable: true },
+      ]);
+      f.db.actionApprovalRule.findMany.mockResolvedValueOnce([
+        { effect: "require_approval", matchKind: "tool", matchValue: "write_file", botId: null },
+      ]);
+      await expect(f.files.save(actor, { ...save, approved: true })).resolves.toMatchObject({
+        saved: true,
+        approvalRequired: false,
+        version: digest("hello!"),
+      });
+      expect(f.sandbox.writeFile).toHaveBeenCalledWith(
+        expect.anything(),
+        {
+          path: "bots/bot/notes.md",
+          content: new TextEncoder().encode("hello!"),
+          executable: true,
+        },
+        expect.anything(),
+      );
+      expect(f.db.computer.updateMany).toHaveBeenCalledWith({
+        where: { id: "computer" },
+        data: { updatedAt: expect.any(Date) },
+      });
 
-    f.sandbox.writeFile.mockClear();
-    await expect(f.files.save(actor, { ...save, version: "b".repeat(64) })).resolves.toMatchObject({
-      saved: false,
-      approvalRequired: false,
-      reason: "The file changed. Open it again before saving.",
-    });
-    f.sandbox.readFile.mockResolvedValueOnce(Uint8Array.from([0]));
-    await expect(f.files.save(actor, save)).resolves.toMatchObject({
-      saved: false,
-      reason: "This is a binary file. You cannot edit it here.",
-    });
-    const oversized = new Uint8Array(IDE_FILE_BYTES + 1).fill(97);
-    f.sandbox.readFile.mockResolvedValueOnce(oversized);
-    await expect(f.files.save(actor, save)).resolves.toMatchObject({
-      saved: false,
-      reason: "This file is larger than 2 MB. Open a copy to edit it.",
-    });
-    expect(f.sandbox.writeFile).not.toHaveBeenCalled();
+      f.sandbox.writeFile.mockClear();
+      await expect(
+        f.files.save(actor, { ...save, version: "b".repeat(64) }),
+      ).resolves.toMatchObject({
+        saved: false,
+        approvalRequired: false,
+        reason: "The file changed. Open it again before saving.",
+      });
+      f.sandbox.readFile.mockResolvedValueOnce(Uint8Array.from([0]));
+      await expect(f.files.save(actor, save)).resolves.toMatchObject({
+        saved: false,
+        reason: "This is a binary file. You cannot edit it here.",
+      });
+      const oversized = new Uint8Array(IDE_FILE_BYTES + 1).fill(97);
+      f.sandbox.readFile.mockResolvedValueOnce(oversized);
+      await expect(f.files.save(actor, save)).resolves.toMatchObject({
+        saved: false,
+        reason: "This file is larger than 2 MB. Open a copy to edit it.",
+      });
+      expect(f.sandbox.writeFile).not.toHaveBeenCalled();
 
-    f.computer.state = "stopped";
-    f.db.computer.updateMany.mockClear();
-    await expect(
-      f.files.save(actor, { ...save, content: "saved!", version: digest("saved") }),
-    ).resolves.toMatchObject({ saved: true, version: digest("saved!") });
-    expect(f.home.writeFile).toHaveBeenCalledWith(
-      "home",
-      "bots/bot/notes.md",
-      "saved!",
-      expect.anything(),
-    );
-    expect(f.sandbox.writeFile).not.toHaveBeenCalled();
-    expect(f.db.computer.updateMany).not.toHaveBeenCalled();
-  });
+      f.computer.state = "stopped";
+      f.db.computer.updateMany.mockClear();
+      await expect(
+        f.files.save(actor, { ...save, content: "saved!", version: digest("saved") }),
+      ).resolves.toMatchObject({ saved: true, version: digest("saved!") });
+      expect(f.home.writeFile).toHaveBeenCalledWith(
+        "home",
+        "bots/bot/notes.md",
+        "saved!",
+        expect.anything(),
+      );
+      expect(f.sandbox.writeFile).not.toHaveBeenCalled();
+      expect(f.db.computer.updateMany).not.toHaveBeenCalled();
+    },
+  );
 
   it("does not follow a symlink out of the bot folder when saving a stopped computer", async () => {
     const f = fixture();
@@ -384,6 +436,104 @@ describe("bot workspace files", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it.each(["dedicated", "team"])(
+    "contains a real local host's %s folder for list, read and save",
+    async (scope) => {
+      const f = fixture();
+      const directory = await realpath(await mkdtemp(path.join(tmpdir(), "host-workspace-")));
+      try {
+        const sandbox = new DesktopSandboxProvider({ root: directory, restricted: true });
+        const ref = await sandbox.provision(
+          { botId: "home", homePath: "" },
+          {
+            ...actor,
+            operationId: "fixture",
+            traceId: "fixture",
+            signal: new AbortController().signal,
+          },
+        );
+        Object.assign(f.computer, { kind: "desktop", scope, providerRef: ref.providerRef });
+        const own = scope === "team" ? path.join(ref.providerRef, "bots", "bot") : ref.providerRef;
+        const outside = path.join(directory, "outside");
+        await mkdir(own, { recursive: true });
+        await mkdir(outside);
+        await writeFile(path.join(own, "notes.md"), "hello");
+        await writeFile(path.join(outside, "private.md"), "outside");
+        const files = createWorkspaceFiles({
+          sandbox,
+          home: f.home,
+          prisma: f.db,
+        } as unknown as Parameters<typeof createWorkspaceFiles>[0]);
+        expect((await files.list(actor, f.input)).entries.map((entry) => entry.path)).toEqual([
+          "notes.md",
+        ]);
+        expect((await files.read(actor, { ...f.input, path: "notes.md" })).content).toBe("hello");
+        const save = {
+          ...f.input,
+          path: "notes.md",
+          content: "draft",
+          version: digest("stale"),
+          approved: false,
+        };
+        expect(await files.save(actor, save)).toMatchObject({
+          saved: false,
+          reason: "The file changed. Open it again before saving.",
+        });
+        expect(save.content).toBe("draft");
+        expect(await readFile(path.join(own, "notes.md"), "utf8")).toBe("hello");
+        await expect(
+          files.save(actor, { ...save, version: digest("hello") }),
+        ).resolves.toMatchObject({ saved: true });
+        for (const escapedPath of [
+          "..",
+          "../outside/private.md",
+          path.join(outside, "private.md"),
+          "C:/outside/private.md",
+          "\\\\outside\\\\private.md",
+        ]) {
+          await expect(files.list(actor, { ...f.input, path: escapedPath })).rejects.toThrow(
+            "Path escapes registered folders.",
+          );
+          await expect(files.read(actor, { ...f.input, path: escapedPath })).rejects.toThrow(
+            "Path escapes registered folders.",
+          );
+          await expect(files.save(actor, { ...save, path: escapedPath })).rejects.toThrow(
+            "Path escapes registered folders.",
+          );
+        }
+        await symlink(outside, path.join(own, "escape"));
+        await expect(files.list(actor, { ...f.input, path: "escape" })).rejects.toThrow(
+          "Use a path inside this bot's folder or a registered folder.",
+        );
+        await expect(files.read(actor, { ...f.input, path: "escape/private.md" })).rejects.toThrow(
+          "Use a path inside this bot's folder or a registered folder.",
+        );
+        await expect(files.save(actor, { ...save, path: "escape/private.md" })).rejects.toThrow(
+          "Use a path inside this bot's folder or a registered folder.",
+        );
+        if (scope === "team") {
+          const sibling = path.join(ref.providerRef, "bots", "other");
+          await mkdir(sibling);
+          await writeFile(path.join(sibling, "private.md"), "sibling");
+          await symlink(sibling, path.join(own, "sibling"));
+          await expect(files.list(actor, { ...f.input, path: "sibling" })).rejects.toThrow(
+            "Use a path inside this bot's folder or a registered folder.",
+          );
+          await expect(
+            files.read(actor, { ...f.input, path: "sibling/private.md" }),
+          ).rejects.toThrow("Use a path inside this bot's folder or a registered folder.");
+          await expect(files.save(actor, { ...save, path: "sibling/private.md" })).rejects.toThrow(
+            "Use a path inside this bot's folder or a registered folder.",
+          );
+          expect(await readFile(path.join(sibling, "private.md"), "utf8")).toBe("sibling");
+        }
+        expect(await readFile(path.join(outside, "private.md"), "utf8")).toBe("outside");
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("describes a deleted file as a refusal with a reason, not a server error", async () => {
     const f = fixture();

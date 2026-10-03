@@ -15,6 +15,7 @@ import { IsolationError, requireMembership } from "@ardurbot/db";
 import { ORPCError } from "@orpc/server";
 import { sourceHostStatus } from "./host-status.js";
 import type { RouterDeps } from "./router.js";
+import { createWorkspaceFiles, workspaceFileSource } from "./workspace-files.js";
 
 type Deps = Pick<RouterDeps, "prisma" | "sandbox" | "home" | "hostBridge"> & {
   env?: Pick<RouterDeps["env"], "sandboxProvider">;
@@ -25,6 +26,7 @@ export const ideHostPaths = (root: string) =>
 
 export function createIdeFiles(deps: Deps) {
   const sourceFiles = new DesktopSandboxProvider({ restricted: true });
+  const workspaceFiles = createWorkspaceFiles(deps);
   const sourceHost = (actor: Actor) =>
     actor.isDeploymentOwner && deps.env
       ? sourceHostStatus(deps.prisma, actor.userId, deps.env.sandboxProvider)
@@ -118,7 +120,7 @@ export function createIdeFiles(deps: Deps) {
       const computer = bot.computer;
       if (
         !computer ||
-        computerRunsOnHost(computer) ||
+        (computerRunsOnHost(computer) && workspaceFileSource(computer) === "unavailable") ||
         seen.has(computer.id) ||
         computer.spaceId !== actor.spaceId ||
         (computer.scope === "dedicated" && computer.userId !== actor.userId) ||
@@ -170,8 +172,21 @@ export function createIdeFiles(deps: Deps) {
       path: root.kind === "host" ? ideHostPaths(root.path).join(root.path, safe) : safe,
     };
   }
+  function workspaceRequest(target: Awaited<ReturnType<typeof resolve>>, filePath: string) {
+    return {
+      botId: target.root.botId!,
+      computerId: target.computer!.id,
+      generation: target.computer!.screenGeneration,
+      rootId: target.root.id,
+      path: filePath,
+    };
+  }
   async function list(actor: Actor, input: { rootId: string; path: string }, signal?: AbortSignal) {
     const target = await resolve(actor, input.rootId, input.path, signal);
+    if (target.computer && computerRunsOnHost(target.computer)) {
+      const result = await workspaceFiles.list(actor, workspaceRequest(target, input.path), signal);
+      return { entries: result.entries, hiddenCount: 0 };
+    }
     let entries: ComputerFileEntry[];
     if (target.root.kind === "host") {
       const { result } = await hostFile(
@@ -211,6 +226,14 @@ export function createIdeFiles(deps: Deps) {
     signal?: AbortSignal,
   ): Promise<IdeFile> {
     const target = await resolve(actor, input.rootId, input.path, signal);
+    if (target.computer && computerRunsOnHost(target.computer)) {
+      const { context: _context, ...file } = await workspaceFiles.read(
+        actor,
+        workspaceRequest(target, input.path),
+        signal,
+      );
+      return file;
+    }
     const entries = await list(
       actor,
       {
@@ -295,6 +318,12 @@ export function createIdeFiles(deps: Deps) {
         reason: "Read only: file is larger than 2 MB",
       };
     const target = await resolve(actor, input.rootId, input.path, signal);
+    if (target.computer && computerRunsOnHost(target.computer))
+      return workspaceFiles.save(
+        actor,
+        { ...input, ...workspaceRequest(target, input.path) },
+        signal,
+      );
     const rules = await deps.prisma.actionApprovalRule.findMany({
       where: { spaceId: actor.spaceId, createdByUserId: actor.userId },
     });
@@ -370,10 +399,11 @@ export function createIdeFiles(deps: Deps) {
     });
     if (!bot) throw new IsolationError();
     const computer = bot.computer;
-    if (!computer || computerRunsOnHost(computer) || binding.rootId !== `sandbox-${computer.id}`)
-      throw new IsolationError();
+    if (!computer || binding.rootId !== `sandbox-${computer.id}`) throw new IsolationError();
     if (binding.computerId !== computer.id || binding.generation !== computer.screenGeneration)
       throw new ORPCError("CONFLICT", { message: "Computer changed. Refresh files." });
+    if (computerRunsOnHost(computer) && workspaceFileSource(computer) === "unavailable")
+      throw new ORPCError("CONFLICT", { message: "Files are unavailable on this computer." });
     const target = await resolve(actor, binding.rootId);
     return {
       ...target,

@@ -40,6 +40,7 @@ export function WorkspaceFiles({
   location?: { path: string; line?: number; requestId: number };
 }) {
   const { t } = useLingui();
+  const botName = bot.name;
   const computerId = context.computerId;
   const generation = context.generation;
   const valid = Boolean(computerId) && generation !== null && context.files !== "unavailable";
@@ -305,7 +306,13 @@ export function WorkspaceFiles({
   return (
     <div data-workspace-files className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 items-center justify-between border-b border-border px-2 py-1 text-xs text-muted-foreground">
-        <span>{context.files === "live" ? t`Live files` : t`Saved files`}</span>
+        <span className="min-w-0 truncate">
+          {context.runsOnHost
+            ? t`This computer · ${botName}'s folder`
+            : context.files === "live"
+              ? t`Live files`
+              : t`Saved files`}
+        </span>
         <div className="flex gap-1">
           <Button variant="ghost" size="xs" onClick={() => setQuick(true)}>{t`Quick open`}</Button>
           <Button variant="ghost" size="xs" onClick={() => setRevision((value) => value + 1)}>

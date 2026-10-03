@@ -2119,6 +2119,10 @@ msgstr ""
 msgid "Command"
 msgstr "कमांड"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Command line"
+msgstr "कमांड लाइन"
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Commands"
 msgstr ""
@@ -2550,8 +2554,8 @@ msgid "Copy output"
 msgstr ""
 
 #: src/pages/DevicesSettings.tsx
-msgid "Copy pairing details"
-msgstr ""
+msgid "Copy pairing code"
+msgstr "पेयरिंग कोड कॉपी करें"
 
 #: src/pages/memory/MemoryImport.tsx
 msgid "Copy prompt"
@@ -6041,6 +6045,10 @@ msgstr ""
 msgid "Next run"
 msgstr "अगला रन"
 
+#: src/components/Context.tsx
+msgid "Next try at {time}"
+msgstr "अगला प्रयास {time} पर"
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No agent connections yet."
 msgstr ""
@@ -9125,6 +9133,10 @@ msgstr "यह कंप्यूटर"
 #: src/pages/shell/runtime-summary.tsx
 msgid "This computer"
 msgstr "यह कंप्यूटर"
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This computer · {botName}'s folder"
+msgstr "यह कंप्यूटर · {botName} का फ़ोल्डर"
 
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "This configuration is too complex."

@@ -2119,6 +2119,10 @@ msgstr ""
 msgid "Command"
 msgstr "Komut"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Command line"
+msgstr "Komut satırı"
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Commands"
 msgstr ""
@@ -2550,8 +2554,8 @@ msgid "Copy output"
 msgstr ""
 
 #: src/pages/DevicesSettings.tsx
-msgid "Copy pairing details"
-msgstr ""
+msgid "Copy pairing code"
+msgstr "Eşleştirme kodunu kopyala"
 
 #: src/pages/memory/MemoryImport.tsx
 msgid "Copy prompt"
@@ -6041,6 +6045,10 @@ msgstr ""
 msgid "Next run"
 msgstr "Sonraki çalıştırma"
 
+#: src/components/Context.tsx
+msgid "Next try at {time}"
+msgstr "Sonraki deneme: {time}"
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No agent connections yet."
 msgstr ""
@@ -9125,6 +9133,10 @@ msgstr "bu bilgisayar"
 #: src/pages/shell/runtime-summary.tsx
 msgid "This computer"
 msgstr "Bu bilgisayar"
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This computer · {botName}'s folder"
+msgstr "Bu bilgisayar · {botName} klasörü"
 
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "This configuration is too complex."

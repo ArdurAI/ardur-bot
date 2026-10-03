@@ -1,3 +1,4 @@
+import type { Brief } from "@ardurbot/contracts";
 import { expect, test } from "@playwright/test";
 import { activeBotId, captureScreenshot, completeOnboarding, rpc, signup } from "./helpers";
 
@@ -27,6 +28,26 @@ test("Chief of Staff settings show two group briefs and a default-routed run", a
       content: `## Goal\nRelease ${name}\n## Open items\nReview ${name}`,
     });
   }
+  // Display fixture only; API tests separately verify persisted retry state.
+  await page.route("**/rpc/briefs/list", async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as { json: Brief[] };
+    await route.fulfill({
+      response,
+      json: {
+        json: body.json.map((brief) =>
+          brief.groupId === groups[0]!.id
+            ? {
+                ...brief,
+                reason:
+                  "Hermes needs a model with at least 64K context; change the model and try again.",
+                nextAttemptAt: "2026-10-04T08:00:00Z",
+              }
+            : brief,
+        ),
+      },
+    });
+  });
   await page.reload();
   await page.locator("main").getByRole("button", { name: "Chief", exact: true }).click();
   const settings = page.getByTestId("bot-settings");
@@ -43,6 +64,8 @@ test("Chief of Staff settings show two group briefs and a default-routed run", a
     await brief.locator("summary").click();
     await expect(brief).toContainText(`Release ${name}`);
   }
+  await expect(context).toContainText("Hermes needs a model with at least 64K context");
+  await expect(context.getByTestId("brief-next-try")).toContainText("Next try at");
   await captureScreenshot(page, testInfo, "context-two-group-briefs");
   const sent = await rpc<{ runId: string }>(page, "threads/send", {
     groupId: groups[0]!.id,

@@ -120,6 +120,7 @@ export function createContextService(prisma: PrismaClient, memory: MemoryService
           content: document?.content ?? normalizeBrief(""),
           rewrittenAt: state?.rewrittenAt?.toISOString() ?? null,
           reason: state?.reason ?? null,
+          nextAttemptAt: state?.nextAttemptAt?.toISOString() ?? null,
         });
       }
       return result;

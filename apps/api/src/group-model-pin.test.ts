@@ -141,6 +141,7 @@ function fixture(
   );
   const eventCreate = vi.fn(async () => ({ seq: 4 }));
   const tx = {
+    botBrief: { updateMany: vi.fn(async () => ({ count: 1 })) },
     $queryRaw: vi.fn(async () => [{ id: "group" }]),
     chatGroup: { findFirst, update: vi.fn(async () => groupRecord()) },
     chatGroupMember: { findUnique: vi.fn(async () => memberRow()), update },
@@ -300,4 +301,33 @@ describe("group model owner mutation", () => {
     ).rejects.toThrow();
     expect(f.update).not.toHaveBeenCalled();
   });
+});
+
+it("resets only the saved room member's brief after the pin transaction", async () => {
+  const f = fixture();
+  let committed = false;
+  const transact = vi.mocked(f.deps.prisma.$transaction).getMockImplementation()!;
+  vi.mocked(f.deps.prisma.$transaction).mockImplementation(async (action) => {
+    const result = await transact(action as never);
+    committed = true;
+    return result;
+  });
+  f.tx.botBrief.updateMany.mockImplementation(async () => {
+    expect(committed).toBe(true);
+    return { count: 1 };
+  });
+  await updateGroupMemberModelPin(f.deps, actor, target, choice);
+  expect(f.tx.botBrief.updateMany).toHaveBeenCalledWith({
+    where: { botId: "bot", threadId: "room" },
+    data: { failureCount: 0, nextAttemptAt: null, attemptedAt: null },
+  });
+});
+
+it("keeps the saved room pin when retry cleanup fails", async () => {
+  const f = fixture();
+  f.tx.botBrief.updateMany.mockRejectedValueOnce(new Error("cleanup unavailable"));
+  await expect(updateGroupMemberModelPin(f.deps, actor, target, choice)).resolves.toBeDefined();
+  expect(f.update).toHaveBeenCalledOnce();
+  expect(f.eventCreate).toHaveBeenCalledOnce();
+  expect(f.notify).toHaveBeenCalledOnce();
 });

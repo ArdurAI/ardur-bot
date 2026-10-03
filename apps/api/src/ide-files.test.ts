@@ -8,6 +8,7 @@ import { IDE_FILE_BYTES } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
 import { sourceHostStatus } from "./host-status.js";
+import { createIdeChanges } from "./ide-changes.js";
 import { createIdeFiles } from "./ide-files.js";
 
 vi.mock("./host-status.js", () => ({ sourceHostStatus: vi.fn(async () => null) }));
@@ -38,6 +39,7 @@ async function fixture() {
     spaceId: "space",
     userId: "owner",
     homeKey: "home",
+    homeRevision: "saved",
     scope: "team",
     scopeKey: "team:space",
     kind: "fake",
@@ -163,14 +165,105 @@ describe("IDE file operations", () => {
     },
   );
 
-  it("does not expose a connectionless host as a sandbox root", async () => {
+  it.each(["running", "suspended"])(
+    "routes a local host root to its own folder while %s",
+    async (state) => {
+      const f = await fixture();
+      Object.assign(f.computer, { kind: "desktop", scope: "dedicated", state });
+      const listed = await f.files.roots(actor);
+      expect(listed).toMatchObject([{ id: "sandbox-computer", kind: "sandbox", botId: "bot" }]);
+      const current = await f.files.read(actor, f.input);
+      expect(current.content).toBe("before\n");
+      expect(
+        await f.files.save(actor, {
+          ...f.input,
+          version: current.version,
+          content: "after\n",
+          approved: false,
+        }),
+      ).toMatchObject({ saved: true });
+      expect((await f.files.read(actor, f.input)).content).toBe("after\n");
+      expect(f.home.readFile).not.toHaveBeenCalled();
+      const checked = await f.files.checkedRoot(actor, {
+        botId: "bot",
+        rootId: f.input.rootId,
+        computerId: "computer",
+        generation: 1,
+      });
+      expect(checked.root).toMatchObject({ kind: "sandbox", botId: "bot" });
+    },
+  );
+
+  it("checks a host Team root and excludes sibling, absolute and foreign recorded changes", async () => {
     const f = await fixture();
     f.computer.kind = "desktop";
-    const read = vi.spyOn(f.sandbox, "readFile");
+    f.db.bot.findMany.mockResolvedValue([{ id: "teammate", name: "Team", computer: f.computer }]);
+    const entry = (id: string, filePath: string, botId = "bot") => ({
+      id,
+      botId,
+      runId: "run",
+      createdAt: new Date("2026-01-02T12:00:00Z"),
+      type: "computer.file.changed",
+      payload: {
+        path: filePath,
+        computerId: "computer",
+        source: "tool",
+        before: "old",
+        after: "new",
+      },
+    });
+    const findMany = vi.fn(async () => [
+      entry("own", "bots/bot/notes.md"),
+      entry("sibling", "bots/teammate/private.md"),
+      entry("foreign", "bots/bot/private.md", "other"),
+      entry("absolute", "/registered/private.md"),
+      entry("traversal", "bots/bot/../../private.md"),
+    ]);
+    const changes = createIdeChanges(
+      {
+        prisma: { ...f.db, event: { findMany } } as unknown as PrismaClient,
+        sandbox: f.sandbox,
+      },
+      f.files,
+    );
+    const input = {
+      rootId: f.input.rootId,
+      since: "2026-01-02T00:00:00Z",
+      until: "2026-01-03T00:00:00Z",
+      target: { botId: "bot", rootId: f.input.rootId, computerId: "computer", generation: 1 },
+    };
+    expect(await changes(actor, input)).toMatchObject({ items: [{ id: "own", path: "notes.md" }] });
+    expect((await changes(actor, input)).items).toHaveLength(1);
+    f.db.bot.findMany.mockResolvedValue([{ id: "bot", name: "Test", computer: f.computer }]);
+    const { target: _target, ...unbound } = input;
+    expect(await changes(actor, unbound)).toMatchObject({
+      items: [{ id: "own", path: "notes.md" }],
+    });
+    expect((await changes(actor, unbound)).items).toHaveLength(1);
+    expect(findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ botId: "bot" }),
+      }),
+    );
+    for (const changeId of ["sibling", "foreign", "absolute", "traversal"])
+      await expect(changes(actor, { ...input, changeId })).rejects.toThrow("Resource not found");
+  });
+
+  it("keeps the paired host unavailable without changing registered-folder authorization", async () => {
+    const f = await fixture();
+    Object.assign(f.computer, { kind: "desktop", providerRef: "host:home" });
     expect(await f.files.roots(actor)).toEqual([]);
-    await expect(f.files.read(actor, f.input)).rejects.toThrow();
+    const read = vi.spyOn(f.sandbox, "readFile");
+    await expect(f.files.read(actor, f.input)).rejects.toThrow("Resource not found");
+    await expect(
+      f.files.checkedRoot(actor, {
+        botId: "bot",
+        rootId: f.input.rootId,
+        computerId: "computer",
+        generation: 1,
+      }),
+    ).rejects.toThrow("Files are unavailable on this computer.");
     expect(read).not.toHaveBeenCalled();
-    expect(f.home.readFile).not.toHaveBeenCalled();
   });
 
   it("keeps a provider-limited preview read-only instead of overwriting the unread tail", async () => {
@@ -225,7 +318,10 @@ describe("IDE file operations", () => {
         env: { sandboxProvider: "desktop" },
       } as Parameters<typeof createIdeFiles>[0]);
       const roots = await files.roots(actor);
-      expect(roots).toMatchObject([{ kind: "host", path: directory }]);
+      expect(roots).toMatchObject([
+        { kind: "host", path: directory },
+        { kind: "sandbox", id: "sandbox-computer" },
+      ]);
       const input = { rootId: roots[0]!.id, path: "notes.md" };
       expect(await files.list(actor, { ...input, path: "" })).toMatchObject({
         entries: [{ path: "notes.md" }],
@@ -242,7 +338,9 @@ describe("IDE file operations", () => {
         }),
       ).toMatchObject({ saved: true });
       expect(await readFile(path.join(directory, "notes.md"), "utf8")).toBe("after");
-      expect(await files.roots({ ...actor, isDeploymentOwner: false })).toEqual([]);
+      expect(await files.roots({ ...actor, isDeploymentOwner: false })).toMatchObject([
+        { kind: "sandbox", id: "sandbox-computer" },
+      ]);
       await expect(files.read({ ...actor, isDeploymentOwner: false }, input)).rejects.toThrow();
     } finally {
       vi.mocked(sourceHostStatus).mockResolvedValue(null);

@@ -46,6 +46,7 @@ async function installWorkspace(
   files: "live" | "saved",
   saveReason?: string,
   legacyContainer = false,
+  hostBot = false,
 ) {
   const botId = bots[0]!.id;
   const context = {
@@ -54,7 +55,7 @@ async function installWorkspace(
     computerId: "fixture-computer",
     generation: 1,
     files,
-    runsOnHost: false,
+    runsOnHost: hostBot,
     observedAt: "2026-09-28T00:00:00.000Z",
   };
   await installPerformanceFixture(
@@ -65,6 +66,9 @@ async function installWorkspace(
     {
       ...computerFor(botId),
       ...(legacyContainer ? { kind: "desktop", connectionId: "container-connection" } : {}),
+      ...(hostBot
+        ? { kind: "desktop", connectionId: null, runsOnHost: true, state: "suspended" }
+        : {}),
     },
     `[notes.md:2](notes.md#L2) · [Open recorded change](${workspaceIntentHref({
       view: { type: "changes" },
@@ -158,47 +162,62 @@ async function openFiles(page: Page) {
   return pane;
 }
 
-test("conversation file and recorded-change links open checked views beside chat", async ({
-  page,
-}, testInfo) => {
-  const { botId, unexpected } = await installWorkspace(page, "live");
-  await page.goto(`/app/${botId}`);
-  await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
-  const pane = page.getByTestId("side-panel");
-  await page.getByRole("link", { name: "notes.md:2", exact: true }).click();
-  await expect(pane.getByRole("tab", { name: "IDE", exact: true })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
-  const editor = pane.locator("[data-ide-editor]");
-  await expect(editor).toContainText("Workspace notes");
-  await expect(editor.locator(".cm-line").nth(1)).toHaveClass(/cm-activeLine/);
-  await expect(page).toHaveURL(`/app/${botId}`);
-  await captureScreenshot(page, testInfo, "workspace-ide-beside-chat");
-  await editor.fill("Unsaved IDE draft");
-  await editor.evaluate((element) => element.setAttribute("data-draft-proof", "ide"));
-  await pane.getByRole("button", { name: "Expand", exact: true }).click();
-  await expect(pane.locator('[data-draft-proof="ide"]')).toBeVisible();
-  await pane.getByRole("button", { name: "Back to chat", exact: true }).click();
-  await page.getByRole("link", { name: "Open recorded change", exact: true }).click();
-  await expect(pane.getByRole("tab", { name: "Recorded changes", exact: true })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
-  await expect(pane.getByTestId("ide-diff")).toContainText("Workspace notes updated");
-  await expect(page).toHaveURL(`/app/${botId}`);
-  await captureScreenshot(page, testInfo, "workspace-recorded-changes-beside-chat");
-  await pane.getByRole("tab", { name: "IDE", exact: true }).click();
-  await expect(pane.locator('[data-draft-proof="ide"]')).toBeVisible();
-  await expect(editor).toContainText("Unsaved IDE draft");
-  page.once("dialog", (dialog) => dialog.dismiss());
-  await pane
-    .getByRole("tablist", { name: "Views", exact: true })
-    .getByRole("button", { name: "Close IDE", exact: true })
-    .click();
-  await expect(pane.getByRole("tab", { name: "IDE", exact: true })).toBeVisible();
-  expect(unexpected).toEqual([]);
-});
+for (const hostBot of [false, true])
+  test(`conversation file and recorded-change links open checked views beside chat (host: ${hostBot})`, async ({
+    page,
+  }, testInfo) => {
+    const { botId, unexpected } = await installWorkspace(page, "live", undefined, false, hostBot);
+    await page.goto(`/app/${botId}`);
+    await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
+    const pane = page.getByTestId("side-panel");
+    await page.getByRole("link", { name: "notes.md:2", exact: true }).click();
+    await expect(pane.getByRole("tab", { name: "IDE", exact: true })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    const editor = pane.locator("[data-ide-editor]");
+    await expect(editor).toContainText("Workspace notes");
+    await expect(editor.locator(".cm-line").nth(1)).toHaveClass(/cm-activeLine/);
+    await expect(page).toHaveURL(`/app/${botId}`);
+    if (hostBot) {
+      await expect(pane).toContainText(`This computer · ${bots[0]!.name}'s folder`);
+      await expect(pane.getByRole("tab", { name: "Terminal", exact: true })).toHaveCount(0);
+    }
+    await captureScreenshot(
+      page,
+      testInfo,
+      hostBot ? "workspace-host-ide-beside-chat" : "workspace-ide-beside-chat",
+    );
+    await editor.fill("Unsaved IDE draft");
+    await editor.evaluate((element) => element.setAttribute("data-draft-proof", "ide"));
+    await pane.getByRole("button", { name: "Expand", exact: true }).click();
+    await expect(pane.locator('[data-draft-proof="ide"]')).toBeVisible();
+    await pane.getByRole("button", { name: "Back to chat", exact: true }).click();
+    await page.getByRole("link", { name: "Open recorded change", exact: true }).click();
+    await expect(pane.getByRole("tab", { name: "Recorded changes", exact: true })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(pane.getByTestId("ide-diff")).toContainText("Workspace notes updated");
+    await expect(page).toHaveURL(`/app/${botId}`);
+    await captureScreenshot(
+      page,
+      testInfo,
+      hostBot
+        ? "workspace-host-recorded-changes-beside-chat"
+        : "workspace-recorded-changes-beside-chat",
+    );
+    await pane.getByRole("tab", { name: "IDE", exact: true }).click();
+    await expect(pane.locator('[data-draft-proof="ide"]')).toBeVisible();
+    await expect(editor).toContainText("Unsaved IDE draft");
+    page.once("dialog", (dialog) => dialog.dismiss());
+    await pane
+      .getByRole("tablist", { name: "Views", exact: true })
+      .getByRole("button", { name: "Close IDE", exact: true })
+      .click();
+    await expect(pane.getByRole("tab", { name: "IDE", exact: true })).toBeVisible();
+    expect(unexpected).toEqual([]);
+  });
 
 test("workspace pane opens Tasks and bot files without starting the computer", async ({
   page,
@@ -287,6 +306,25 @@ test("workspace views retain drafts across docking, expansion and return to chat
   await expect(pane.getByRole("tab", { name: "Files", exact: true })).toHaveCount(0);
   await expect(pane.getByRole("tab", { name: "Tasks", exact: true })).toBeFocused();
   await captureScreenshot(page, testInfo, "workspace-views-closed");
+  expect(unexpected).toEqual([]);
+});
+
+test("a host bot opens only its own Files view and keeps a conflicted draft", async ({
+  page,
+}, testInfo) => {
+  const { botId, unexpected } = await installWorkspace(page, "live", undefined, false, true);
+  await page.goto(`/app/${botId}`);
+  await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
+  const pane = await openFiles(page);
+  await expect(pane).toContainText(`This computer · ${bots[0]!.name}'s folder`);
+  const editor = pane.locator("[data-ide-editor]");
+  await editor.fill("Host folder draft");
+  await pane.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(pane.getByRole("alert")).toHaveText(
+    "The file changed. Open it again before saving.",
+  );
+  await expect(editor).toContainText("Host folder draft");
+  await captureScreenshot(page, testInfo, "workspace-host-files-conflict");
   expect(unexpected).toEqual([]);
 });
 

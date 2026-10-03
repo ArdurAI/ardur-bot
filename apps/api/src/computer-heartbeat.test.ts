@@ -39,7 +39,12 @@ it("heartbeats preserve a legacy desktop row's connection and workspace policy",
   const keepAlive = vi.fn();
   const handler = new RPCHandler(
     createRouter({
-      prisma: { computer: { updateMany: vi.fn() } } as unknown as PrismaClient,
+      prisma: {
+        computer: {
+          updateMany: vi.fn(),
+          findUnique: vi.fn(async () => ({ sleepFailureReason: null })),
+        },
+      } as unknown as PrismaClient,
       sandbox: { keepAlive } as unknown as SandboxProvider,
       jobs: { enqueue: vi.fn() },
       env: { sandboxProvider: "fake" },

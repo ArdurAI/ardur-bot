@@ -75,5 +75,6 @@ export const BriefSchema = z.object({
   content: z.string().max(6000),
   rewrittenAt: z.string().nullable(),
   reason: z.string().nullable(),
+  nextAttemptAt: z.string().nullable().optional(),
 });
 export type Brief = z.infer<typeof BriefSchema>;

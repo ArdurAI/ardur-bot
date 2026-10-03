@@ -191,3 +191,18 @@ it("loads the existing pin read-only and ignores a late response for another bot
     await act(async () => root.unmount());
   }
 });
+
+it("shows an idle configuration refusal without changing the computer's reported state", async () => {
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  const reason =
+    "This computer runs on Docker, which is not configured here. Configure Docker again.";
+  await act(async () =>
+    root.render(
+      <RuntimeSummary status={{ ...status, state: "running", sleepFailureReason: reason }} />,
+    ),
+  );
+  expect(node.textContent).toContain(reason);
+  expect(node.textContent).toContain(COMPUTER_STATES.running);
+  await act(async () => root.unmount());
+});

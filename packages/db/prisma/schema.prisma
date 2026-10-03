@@ -1173,6 +1173,7 @@ model Computer {
   kind                    String
   providerRef             String?
   state                   String                   @default("stopped")
+  sleepFailureReason      String?
   provisioningId          String?
   controlHolder           String                   @default("none")
   controlLeaseId          String?
@@ -2706,6 +2707,9 @@ model BotBrief {
   attemptedAt DateTime?
   leaseExpiresAt DateTime?
   reason String?
+  failureCount Int @default(0)
+  nextAttemptAt DateTime?
+  @@index([nextAttemptAt, leaseExpiresAt, attemptedAt])
   @@unique([botId, threadId])
   @@index([pendingRunId, attemptedAt])
   @@index([botId, leaseExpiresAt])

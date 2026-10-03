@@ -367,11 +367,11 @@ export class DesktopSandboxProvider implements SandboxProvider {
   async listFiles(
     computer: ComputerRef,
     directory: string,
-    _context: AdapterContext,
+    context: AdapterContext,
   ): Promise<ComputerFileEntry[]> {
     const box = this.requiredBox(computer);
-    const { root, target } = await this.fileTarget(box.home, directory, true);
-    const resolvedRoot = await realpath(root);
+    const { root, target } = await this.fileTarget(box.home, directory, true, context.fileRoot);
+    const resolvedRoot = root;
     const relative = path.isAbsolute(directory) ? directory : normalizeWorkspacePath(directory);
     const guarded = (await this.guardrail()).paths;
     this.assertNotGuarded(guarded, target);
@@ -395,6 +395,7 @@ export class DesktopSandboxProvider implements SandboxProvider {
               path.relative(resolvedRoot, path.join(target, entry.name)),
               true,
               (candidate) => this.assertNotGuarded(guarded, candidate),
+              resolvedRoot,
             );
         this.assertNotGuarded(guarded, child);
         const info = literalName ? await lstat(child) : await stat(child);
@@ -412,11 +413,11 @@ export class DesktopSandboxProvider implements SandboxProvider {
   async readFile(
     computer: ComputerRef,
     filePath: string,
-    _context?: AdapterContext,
+    context?: AdapterContext,
     options?: { maxBytes?: number; preview?: boolean },
   ) {
     const box = this.requiredBox(computer);
-    const { root, target } = await this.fileTarget(box.home, filePath, true);
+    const { root, target } = await this.fileTarget(box.home, filePath, true, context?.fileRoot);
     this.assertNotGuarded((await this.guardrail()).paths, target);
     if (this.opts.restricted)
       return readContainedWorkspaceFile(
@@ -441,11 +442,11 @@ export class DesktopSandboxProvider implements SandboxProvider {
     );
   }
 
-  async writeFile(computer: ComputerRef, file: PortableFile) {
+  async writeFile(computer: ComputerRef, file: PortableFile, context?: AdapterContext) {
     if (this.opts.restricted && process.platform === "win32" && !win32NtRelativeAvailable())
       throw new Error("Host file writes require native directory handles on Windows.");
     const box = this.requiredBox(computer);
-    const { root, target } = await this.fileTarget(box.home, file.path, false);
+    const { root, target } = await this.fileTarget(box.home, file.path, false, context?.fileRoot);
     this.assertNotGuarded((await this.guardrail()).paths, target);
     const handle = await openContainedWorkspaceFile(root, target, file.executable ? 0o700 : 0o600);
     try {
@@ -517,12 +518,21 @@ export class DesktopSandboxProvider implements SandboxProvider {
   }
 
   /** Select a trusted root before using the existing race-resistant contained file helpers. */
-  private async fileTarget(home: string, requested: string, mustExist: boolean) {
+  private async fileTarget(home: string, requested: string, mustExist: boolean, fileRoot?: string) {
     if (requested.includes("\0") || requested.split(/[/\\]/u).includes(".."))
       throw new Error(FILE_LOCATION_REFUSAL);
     let root = home;
     let relative = requested;
-    if (path.isAbsolute(requested)) {
+    if (fileRoot !== undefined) {
+      const normalized = normalizeDesktopWorkspacePath(fileRoot);
+      const canonicalHome = await realpath(home);
+      root = path.resolve(canonicalHome, normalized);
+      // A Team root itself cannot be redirected into a sibling bot's folder.
+      if ((await realpath(root)) !== root) throw new Error(FILE_LOCATION_REFUSAL);
+      relative = path.relative(normalized || ".", requested);
+      if (path.isAbsolute(requested) || !isAllowedDesktopPath(path.resolve(root, relative), [root]))
+        throw new Error(FILE_LOCATION_REFUSAL);
+    } else if (path.isAbsolute(requested)) {
       const roots = await this.allowedRoots(home);
       const available = [...roots, ...(await resolvedRoots(roots))];
       const match = available.find((candidate) => isAllowedDesktopPath(requested, [candidate]));
@@ -530,12 +540,17 @@ export class DesktopSandboxProvider implements SandboxProvider {
       root = match;
       relative = path.relative(root, requested);
     }
+    if (fileRoot === undefined) root = await realpath(root);
     const guarded = (await this.guardrail()).paths;
     // Check before creating missing parents, as well as after realpath resolution.
     this.assertNotGuarded(guarded, path.resolve(await realpath(root), relative));
     try {
-      const target = await localWorkspaceTarget(root, relative, mustExist, (candidate) =>
-        this.assertNotGuarded(guarded, candidate),
+      const target = await localWorkspaceTarget(
+        root,
+        relative,
+        mustExist,
+        (candidate) => this.assertNotGuarded(guarded, candidate),
+        root,
       );
       this.assertNotGuarded(guarded, target);
       return { root, target };
@@ -595,7 +610,7 @@ async function readContainedWorkspaceFile(
   maxBytes: number,
   preview = false,
 ) {
-  const resolvedHome = await realpath(home);
+  const resolvedHome = home;
   const parent = await open(
     path.dirname(target),
     constants.O_RDONLY | (constants.O_DIRECTORY ?? 0),
@@ -631,12 +646,13 @@ async function localWorkspaceTarget(
   relative: string,
   mustExist: boolean,
   assertTarget?: (target: string) => void,
+  canonicalHome?: string,
 ) {
   const normalized = normalizeDesktopWorkspacePath(relative);
   const candidate = path.resolve(home, normalized);
   if (!isAllowedDesktopPath(candidate, [home]))
     throw new Error("Path escapes the computer workspace");
-  const resolvedHome = await realpath(home);
+  const resolvedHome = canonicalHome ?? (await realpath(home));
   if (!mustExist) {
     // Walk/create parents from a held directory fd so a junction swap cannot
     // redirect mkdir outside the workspace between validation and creation.
@@ -740,7 +756,7 @@ async function localWorkspaceTarget(
 }
 
 async function openContainedWorkspaceFile(home: string, target: string, mode: number) {
-  const resolvedHome = await realpath(home);
+  const resolvedHome = home;
   const parentPath = path.dirname(target);
   const name = path.basename(target);
   if (!name || name === "." || name === "..") {

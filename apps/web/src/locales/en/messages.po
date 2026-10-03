@@ -2119,6 +2119,10 @@ msgstr "Coming soon"
 msgid "Command"
 msgstr "Command"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Command line"
+msgstr "Command line"
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Commands"
 msgstr "Commands"
@@ -2550,8 +2554,8 @@ msgid "Copy output"
 msgstr "Copy output"
 
 #: src/pages/DevicesSettings.tsx
-msgid "Copy pairing details"
-msgstr "Copy pairing details"
+msgid "Copy pairing code"
+msgstr "Copy pairing code"
 
 #: src/pages/memory/MemoryImport.tsx
 msgid "Copy prompt"
@@ -6041,6 +6045,10 @@ msgstr "Next"
 msgid "Next run"
 msgstr "Next run"
 
+#: src/components/Context.tsx
+msgid "Next try at {time}"
+msgstr "Next try at {time}"
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No agent connections yet."
 msgstr "No agent connections yet."
@@ -9125,6 +9133,10 @@ msgstr "this computer"
 #: src/pages/shell/runtime-summary.tsx
 msgid "This computer"
 msgstr "This computer"
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This computer · {botName}'s folder"
+msgstr "This computer · {botName}'s folder"
 
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "This configuration is too complex."

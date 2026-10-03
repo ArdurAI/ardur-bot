@@ -48,9 +48,17 @@ export function workspaceFileSource(
       })
     | null,
 ): WorkspaceContext["files"] {
-  // Host folders require an explicit registered-root choice; a bot has no implicit host root.
-  if (!computer || computer.kind === "fake" || computerRunsOnHost(computer)) return "unavailable";
-  if (computer.state === "running" && computer.providerRef && !computer.maintenanceId)
+  if (!computer || computer.kind === "fake") return "unavailable";
+  const host = computerRunsOnHost(computer);
+  // The paired bridge requires run or maintenance authorization, not a pane request. A host
+  // computer without a location cannot be told apart from a stopped bridge, so it shows nothing.
+  if (host && (!computer.providerRef || computer.providerRef.startsWith("host:")))
+    return "unavailable";
+  if (
+    (computer.state === "running" || (host && computer.state === "suspended")) &&
+    computer.providerRef &&
+    !computer.maintenanceId
+  )
     return "live";
   if (computer.homeRevision !== "empty") return "saved";
   return "unavailable";
@@ -75,9 +83,7 @@ export function createWorkspaceFiles(deps: Deps) {
       generation: computer?.screenGeneration ?? null,
       files: workspaceFileSource(computer),
       runsOnHost: computerRunsOnHost(computer ?? {}),
-      ...(!computerRunsOnHost(computer ?? {}) && computer
-        ? { rootId: `sandbox-${computer.id}` }
-        : {}),
+      ...(computer ? { rootId: `sandbox-${computer.id}` } : {}),
       observedAt: new Date().toISOString(),
     };
   }
@@ -104,6 +110,7 @@ export function createWorkspaceFiles(deps: Deps) {
       userId: actor.userId,
       spaceId: actor.spaceId,
       botId: bot.id,
+      ...(state.runsOnHost ? { fileRoot: root } : {}),
       operationId,
       traceId: operationId,
       signal: signal ?? new AbortController().signal,

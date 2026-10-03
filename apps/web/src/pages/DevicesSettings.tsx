@@ -174,6 +174,13 @@ export function DevicesSettings({ owner }: { owner: boolean }) {
       {pairing ? (
         <div className="space-y-2" data-testid="device-pairing">
           <PairingQr payload={pairing.payload} />
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={() =>
+              void act(() => navigator.clipboard.writeText(JSON.stringify(pairing.payload)))
+            }
+          >{t`Copy pairing code`}</Button>
           <p>
             {t`Pairing code`}: <strong className="font-mono">{pairing.shortCode}</strong>
           </p>
@@ -183,10 +190,6 @@ export function DevicesSettings({ owner }: { owner: boolean }) {
             <p>{t`Confirm the phone fingerprint here before allowing it.`}</p>
             <Input aria-label={t`Home link`} readOnly value={pairing.payload.hints[0] ?? ""} />
             <p className="break-all font-mono text-xs">{pairing.payload.certificateFingerprint}</p>
-            <Button
-              variant="outline"
-              onClick={() => void navigator.clipboard.writeText(JSON.stringify(pairing.payload))}
-            >{t`Copy pairing details`}</Button>
           </details>
         </div>
       ) : null}
@@ -212,6 +215,9 @@ export function DevicesSettings({ owner }: { owner: boolean }) {
               {device.deviceName}
               {device.revokedAt ? ` · ${t`Revoked`}` : ""}
             </p>
+            {device.platform === "cli" ? (
+              <p className="text-sm text-muted-foreground">{t`Command line`}</p>
+            ) : null}
             <p className="text-sm text-muted-foreground">{device.scopes.join(", ")}</p>
             <p className="text-sm">
               {t`Last used`}:{" "}
