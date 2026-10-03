@@ -1,6 +1,6 @@
 import { canBotRun, modelCredentialDto, requestedBotPin } from "@ardurbot/adapters";
-import type { Actor, LocalityPolicy } from "@ardurbot/contracts";
-import { LocalityPolicySchema } from "@ardurbot/contracts";
+import type { Actor, LocalityPolicy, RuntimePin } from "@ardurbot/contracts";
+import { LocalityPolicySchema, RuntimePinSchema } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { findBoundModelCredential, findDefaultModelCredential } from "@ardurbot/db";
 import { ORPCError } from "@orpc/server";
@@ -26,59 +26,46 @@ export async function setModelDestinations(
     });
     if (!member || !["owner", "admin"].includes(member.role)) throw new ORPCError("FORBIDDEN");
   }
+  const overrides = {
+    groupMembers: {
+      where: { group: { spaceId: actor.spaceId, archivedAt: null } },
+      select: { runtimePin: true },
+    },
+  } as const;
   const bots = input.botId
     ? [
         await prisma.bot.findFirstOrThrow({
           where: { id: input.botId, spaceId: actor.spaceId, userId: actor.userId },
+          include: overrides,
         }),
       ]
     : await prisma.bot.findMany({
         where: { spaceId: actor.spaceId, archivedAt: null },
         orderBy: [{ name: "asc" }, { id: "asc" }],
+        include: overrides,
       });
   const blocked: { id: string; name: string }[] = [];
   let reason: string | undefined;
   for (const bot of bots) {
-    // A space admin checks each owner's actual saved connection, not the admin's default.
-    const scope = { spaceId: actor.spaceId, userId: bot.userId };
-    let pin = requestedBotPin(bot);
-    const credential =
-      pin.provider && pin.credentialId
-        ? await findBoundModelCredential(prisma, scope, pin.provider, pin.credentialId)
-        : pin.runtimeKind === "pi" && !pin.provider && !pin.modelId
-          ? await findDefaultModelCredential(prisma, scope)
-          : null;
-    if (!pin.provider && !pin.modelId && credential) {
-      pin = {
-        ...pin,
-        provider: credential.provider,
-        modelId: credential.defaultModel,
-        credentialId: credential.id,
-      };
-    }
-    // A policy cannot strand a bot that has no model connection to run with.
-    if (!pin.provider || !pin.modelId) continue;
-    if ((pin.runtimeKind === "pi" || pin.runtimeKind === "hermes") && !credential) continue;
-    let baseUrl: string | undefined;
-    if (credential) {
-      const secret = await prisma.secret.findFirst({
-        where: { id: credential.secretId, userId: bot.userId, spaceId: null },
-      });
-      if (!secret) continue;
-      baseUrl = modelCredentialDto(
-        credential,
-        deps.secrets.load(secret.ciphertext, secret.id),
-      ).baseUrl;
-    }
-    const problem = canBotRun({
-      pin,
-      destinationModel: { provider: pin.provider ?? "", id: pin.modelId ?? "", baseUrl },
-      // Check only the policy being edited; relaxing a policy must not revalidate unrelated defects.
-      ...(input.botId ? { botPolicy: input.policy } : { spacePolicy: input.policy }),
-    });
-    if (problem) {
+    const pins = [
+      requestedBotPin(bot),
+      ...bot.groupMembers.flatMap((member) => {
+        const parsed = RuntimePinSchema.safeParse(member.runtimePin);
+        return parsed.success ? [parsed.data] : [];
+      }),
+    ];
+    for (const pin of pins) {
+      const scope = { spaceId: actor.spaceId, userId: bot.userId };
+      const problem = await botModelDestinationProblem(
+        deps,
+        scope,
+        pin,
+        input.botId ? { botPolicy: input.policy } : { spacePolicy: input.policy },
+      );
+      if (!problem) continue;
       reason ??= problem.reason;
       blocked.push({ id: bot.id, name: bot.name });
+      break;
     }
   }
   if (reason)
@@ -97,4 +84,48 @@ export async function setModelDestinations(
       data: { allowedModelDestinations: input.policy },
     });
   return { ok: true as const };
+}
+
+/** Check configured destinations offline, using the model owner's connection. */
+export async function botModelDestinationProblem(
+  deps: Pick<RouterDeps, "prisma" | "secrets">,
+  actor: Actor,
+  pin: RuntimePin,
+  policies: Pick<Parameters<typeof canBotRun>[0], "botPolicy" | "spacePolicy">,
+) {
+  const scope = actor;
+  const credential =
+    pin.provider && pin.credentialId
+      ? await findBoundModelCredential(deps.prisma, scope, pin.provider, pin.credentialId)
+      : pin.runtimeKind === "pi" && !pin.provider && !pin.modelId
+        ? await findDefaultModelCredential(deps.prisma, scope)
+        : null;
+  if (!pin.provider && !pin.modelId && credential) {
+    pin = {
+      ...pin,
+      provider: credential.provider,
+      modelId: credential.defaultModel,
+      credentialId: credential.id,
+    };
+  }
+  // A policy cannot strand a bot that has no model connection to run with.
+  if (!pin.provider || !pin.modelId) return null;
+  if ((pin.runtimeKind === "pi" || pin.runtimeKind === "hermes") && !credential) return null;
+  let baseUrl: string | undefined;
+  if (credential) {
+    const secret = await deps.prisma.secret.findFirst({
+      where: { id: credential.secretId, userId: actor.userId, spaceId: null },
+    });
+    if (!secret) return null;
+    baseUrl = modelCredentialDto(
+      credential,
+      deps.secrets.load(secret.ciphertext, secret.id),
+    ).baseUrl;
+  }
+
+  return canBotRun({
+    pin,
+    destinationModel: { provider: pin.provider!, id: pin.modelId!, baseUrl },
+    ...policies,
+  });
 }

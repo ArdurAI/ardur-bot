@@ -28,6 +28,7 @@ function fixture({
         : `connection-${index}`,
     thinkingLevel: "off",
     modelPinRevision: 1,
+    groupMembers: [] as { runtimePin: unknown }[],
   }));
   const credentials = bots.map((bot, index) => ({
     id: `connection-${index}`,
@@ -268,4 +269,87 @@ it("only connected bots newly blocked by the space policy are named", async () =
     body: { json: { data: { blockedBots: [{ id: "bot-1", name: "Beta" }] } } },
   });
   expect(f.prisma.space.update).not.toHaveBeenCalled();
+});
+
+it.each([false, true])(
+  "policy saves check group-room member snapshots (bot policy: %s)",
+  async (botPolicy) => {
+    const f = fixture({ baseUrl: "http://localhost:11434/v1" });
+    for (const bot of f.bots)
+      bot.groupMembers = [
+        {
+          runtimePin: {
+            runtimeKind: "codex-app-server",
+            provider: "openai",
+            modelId: "fixture-native",
+            credentialId: "native:codex-app-server",
+            effort: "off",
+            revision: 1,
+          },
+        },
+        {
+          runtimePin: {
+            runtimeKind: "codex-app-server",
+            provider: "openai",
+            modelId: "fixture-native",
+            credentialId: "native:codex-app-server",
+            effort: "off",
+            revision: 2,
+          },
+        },
+      ];
+    const result = await f.call(
+      { mode: "local" },
+      botPolicy ? { ...actor, userId: "owner-0" } : actor,
+      botPolicy ? "bot-0" : undefined,
+    );
+    expect(result).toMatchObject({
+      status: 400,
+      body: {
+        json: {
+          message: failureCategoryMessage(botPolicy ? "destinations-bot" : "destinations-space", {
+            bot: "this bot",
+          }),
+          data: {
+            blockedBots: botPolicy
+              ? [{ id: "bot-0", name: "Alpha" }]
+              : [
+                  { id: "bot-0", name: "Alpha" },
+                  { id: "bot-1", name: "Beta" },
+                ],
+          },
+        },
+      },
+    });
+    expect(f.prisma.bot.update).not.toHaveBeenCalled();
+    expect(f.prisma.space.update).not.toHaveBeenCalled();
+    const query = botPolicy ? f.prisma.bot.findFirstOrThrow : f.prisma.bot.findMany;
+    expect(query).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: {
+          groupMembers: {
+            where: { group: { spaceId: "space", archivedAt: null } },
+            select: { runtimePin: true },
+          },
+        },
+      }),
+    );
+  },
+);
+it("a local room override and a cleared override do not block a local policy", async () => {
+  const f = fixture({ provider: "ollama", baseUrl: "http://localhost:11434/v1" });
+  f.bots[0]!.groupMembers = [
+    {
+      runtimePin: {
+        runtimeKind: "pi",
+        provider: "ollama",
+        modelId: "fixture-model",
+        credentialId: "connection-0",
+        effort: null,
+        revision: 1,
+      },
+    },
+    { runtimePin: null },
+  ];
+  expect((await f.call({ mode: "local" })).status).toBe(200);
 });
