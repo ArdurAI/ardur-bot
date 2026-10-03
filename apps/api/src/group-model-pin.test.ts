@@ -1,3 +1,4 @@
+import { canBotRun } from "@ardurbot/adapters";
 import type { PrismaClient } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
 import { updateGroupMemberModelPin } from "./group-model-pin.js";
@@ -7,7 +8,21 @@ vi.mock("@ardurbot/adapters", async (original) => ({
   ...(await original<object>()),
   nativeHostOwner: vi.fn(async () => true),
 }));
-vi.mock("./model-pin-validation.js", () => ({
+vi.mock("./model-pin-validation.js", async (original) => ({
+  ...(await original<object>()),
+  // These tests isolate revision-fenced persistence; the actual checker is exercised at RPC level.
+  validateBotCanRun: vi.fn(async (deps, actor, pin) => {
+    const visible = await deps.prisma.chatGroup.findFirst({
+      where: { userId: actor.userId, spaceId: actor.spaceId },
+      select: { members: true },
+    });
+    const bot = visible.members[0].bot;
+    const problem = canBotRun({
+      pin: { ...pin, revision: 0 },
+      placement: { computer: bot.computer, experimental: bot.runtimeExperimental },
+    });
+    if (problem) throw Object.assign(new Error(problem.reason), { code: "BAD_REQUEST" });
+  }),
   validateModelPinSelection: vi.fn(async (_deps, _actor, pin) => pin),
 }));
 

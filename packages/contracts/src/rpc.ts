@@ -598,7 +598,13 @@ export const appContract = {
   },
   models: {
     validatePin: oc
-      .input(RuntimePinSchema.omit({ revision: true }))
+      .input(
+        RuntimePinSchema.omit({ revision: true }).extend({
+          botId: Id.optional(),
+          runtimeExperimental: z.boolean().optional(),
+          computerLocation: z.enum(["host", "sandbox"]).optional(),
+        }),
+      )
       .output(z.object({ ok: z.literal(true) })),
     ollama: oc.output(OllamaStatusSchema),
     testOllama: oc.input(z.object({ baseUrl: z.string() })).output(OllamaStatusSchema),

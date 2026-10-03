@@ -118,6 +118,7 @@ import type {
   ComputerStatus,
   Me,
   RuntimeAvailability,
+  RuntimeKind,
   SpaceNavigation,
 } from "@ardurbot/contracts";
 import {
@@ -303,7 +304,7 @@ import {
 } from "./memory-provider-config.js";
 import { memoryContext, memoryRpc } from "./memory-routes.js";
 import { createChannelPairing } from "./messaging-dispatch.js";
-import { validateModelPinSelection } from "./model-pin-validation.js";
+import { validateBotCanRun, validateModelPinSelection } from "./model-pin-validation.js";
 import { notificationActivity } from "./notification-activity.js";
 import { ollamaConnection, ollamaStatus } from "./ollama.js";
 import {
@@ -1325,7 +1326,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     },
     models: {
       validatePin: authed.models.validatePin.handler(async ({ context, input }) => {
-        await validateModelPinSelection(deps, context.actor, input);
+        await validateBotCanRun(deps, context.actor, input, input);
         return { ok: true };
       }),
       list: authed.models.list.handler(async ({ context }) => {
@@ -1601,7 +1602,23 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       }),
       create: authed.bots.create.handler(async ({ context, input }) => {
         try {
-          return await repos.createBot(context.actor, input);
+          return await repos.createBot(context.actor, {
+            ...input,
+            onCreated: async (tx, botId) => {
+              await validateBotCanRun(
+                { ...deps, prisma: tx as PrismaClient },
+                context.actor,
+                {
+                  runtimeKind: "pi",
+                  provider: null,
+                  modelId: null,
+                  credentialId: null,
+                  effort: null,
+                },
+                { botId },
+              );
+            },
+          });
         } catch (error) {
           if (
             error instanceof NewBotTeamLocationConflictError ||
@@ -1722,6 +1739,38 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           if (!section) throw new IsolationError();
         }
         const modelPinUpdate = await botModelPinUpdate(deps, context.actor, existing, input);
+        if (
+          [
+            "runtimeKind",
+            "runtimeExperimental",
+            "modelProvider",
+            "modelId",
+            "thinkingLevel",
+            "modelCredentialId",
+            "runtimeConfig",
+          ].some((key) => key in input)
+        ) {
+          await validateBotCanRun(
+            deps,
+            context.actor,
+            {
+              runtimeKind: (modelPinUpdate.runtimeKind ?? existing.runtimeKind) as RuntimeKind,
+              provider: (modelPinUpdate.modelProvider === undefined
+                ? existing.modelProvider
+                : modelPinUpdate.modelProvider) as string | null,
+              modelId: (modelPinUpdate.modelId === undefined
+                ? existing.modelId
+                : modelPinUpdate.modelId) as string | null,
+              credentialId: (modelPinUpdate.modelCredentialId === undefined
+                ? existing.modelCredentialId
+                : modelPinUpdate.modelCredentialId) as string | null,
+              effort: (modelPinUpdate.thinkingLevel === undefined
+                ? existing.thinkingLevel
+                : modelPinUpdate.thinkingLevel) as string | null,
+            },
+            { botId: existing.id, runtimeExperimental: input.runtimeExperimental },
+          );
+        }
         const configSave = prepareRuntimeConfigSave(
           existing,
           input,

@@ -32,7 +32,20 @@ function fixture({
 } = {}) {
   const upsert = vi.fn(async ({ create }) => ({ id: "computer", ...create }));
   const create = vi.fn(async ({ data }) => ({ id: "bot", ...data }));
+  const credential = {
+    id: "connection",
+    userId: "owner",
+    provider: "openai-compatible",
+    label: "Fixture",
+    secretId: "secret",
+  };
   const prisma = {
+    space: { findUnique: vi.fn(async () => ({ allowedModelDestinations: { mode: "any" } })) },
+    userModelCredential: { findFirst: vi.fn(async () => credential) },
+    spaceModelPreference: {
+      findFirst: vi.fn(async () => ({ credential, modelId: "fixture-model", isDefault: true })),
+    },
+    secret: { findFirst: vi.fn(async () => ({ id: "secret", ciphertext: "fixture" })) },
     deploymentSettings: { findUnique: vi.fn(async () => ({ ownerUserId: "owner", computerHost })) },
     connection: {
       findMany: vi.fn(async () => []),
@@ -45,7 +58,11 @@ function fixture({
     computer: { upsert, findFirst: vi.fn(async () => team) },
     bot: {
       aggregate: vi.fn(async () => ({ _max: { position: 0 } })),
-      findFirst: vi.fn(),
+      findFirst: vi.fn(async () => ({
+        id: "bot",
+        runtimeExperimental: false,
+        computer: { kind: "desktop", spaceId: "space", connectionId: null },
+      })),
       create,
       findFirstOrThrow: vi.fn(async () => ({
         id: "bot",
@@ -80,6 +97,15 @@ function fixture({
     prisma: prisma as unknown as PrismaClient,
     hostBridge,
     env: { sandboxProvider },
+    secrets: {
+      load: () =>
+        JSON.stringify({
+          kind: "openai_compatible",
+          baseUrl: "http://localhost:8080/v1",
+          reasoning: false,
+          thinkingLevel: "off",
+        }),
+    },
   } as RouterDeps;
   const handler = new RPCHandler(createRouter(deps));
   async function call(procedure: string, input: unknown) {
