@@ -518,3 +518,89 @@ it("duplicate admits valid saved settings without replacing their pin", async ()
     }),
   );
 });
+
+it.each(["models/validatePin", "bots/update", "group"])(
+  "%s uses locality before Hermes capabilities, just like runtime admission",
+  async (procedure) => {
+    const f = fixture({ name: "two defects", kind: "hermes", local: true, window: 8192 });
+    const sentence = failureCategoryMessage("destinations-space");
+    if (procedure === "group") {
+      await expect(
+        updateGroupMemberModelPin(
+          f.deps,
+          actor,
+          {
+            groupId: "group",
+            botId: "bot",
+            memberId: "member",
+            expectedRevision: 0,
+          },
+          f.pin,
+        ),
+      ).rejects.toThrow(sentence);
+    } else {
+      const result = await f.call(
+        procedure,
+        procedure === "models/validatePin"
+          ? { ...f.pin, botId: "bot" }
+          : {
+              botId: "bot",
+              runtimeKind: "hermes",
+              modelProvider: f.pin.provider,
+              modelId: f.pin.modelId,
+              modelCredentialId: f.pin.credentialId,
+              thinkingLevel: "off",
+              runtimeExperimental: true,
+            },
+      );
+      expect(result).toMatchObject({ status: 400, body: { json: { message: sentence } } });
+    }
+    expect(f.prisma.bot.update).not.toHaveBeenCalled();
+  },
+);
+
+it("a bare Experimental-off save checks the inherited native pin", async () => {
+  const f = fixture({ name: "native", kind: "codex-app-server" });
+  const result = await f.call("bots/update", { botId: "bot", runtimeExperimental: false });
+  expect(result).toMatchObject({
+    status: 400,
+    body: {
+      json: {
+        message: failureCategoryMessage("experimental-off", { runtime: "Codex", bot: "this bot" }),
+      },
+    },
+  });
+  expect(f.prisma.bot.update).not.toHaveBeenCalled();
+});
+
+it("an unchanged inherited Ollama default is checked without probing", async () => {
+  const f = ollamaFixture("pi");
+  f.bot.modelProvider = null as never;
+  f.bot.modelId = null as never;
+  f.bot.modelCredentialId = null as never;
+  f.prisma.spaceModelPreference.findFirst.mockResolvedValue({
+    modelId: "fixture-model",
+    isDefault: true,
+    credential: {
+      id: "connection",
+      provider: "ollama",
+      userId: "user",
+      label: "Fixture",
+      secretId: "secret",
+    },
+  } as never);
+  expect(
+    (
+      await f.call("models/validatePin", {
+        runtimeKind: "pi",
+        provider: null,
+        modelId: null,
+        credentialId: null,
+        effort: "off",
+        botId: "bot",
+      })
+    ).status,
+  ).toBe(200);
+  expect(listOllamaModels).not.toHaveBeenCalled();
+  expect(showOllamaModel).not.toHaveBeenCalled();
+});

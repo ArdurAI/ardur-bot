@@ -56,6 +56,7 @@ export async function normalizeModelPinUpdate(
     runtimeKind?: string;
   },
   input: ReturnType<typeof UpdateBotInput.parse>,
+  policies?: Pick<Parameters<typeof canBotRun>[0], "botPolicy" | "spacePolicy">,
 ): Promise<Prisma.BotUpdateInput> {
   if (
     input.runtimeKind === undefined &&
@@ -173,6 +174,7 @@ export async function normalizeModelPinUpdate(
       ollamaThink(effort, model);
       if (runtimeKind === "hermes") {
         const problem = canBotRun({
+          ...policies,
           pin: {
             runtimeKind,
             provider,
@@ -259,6 +261,7 @@ export async function normalizeModelPinUpdate(
       (provider === "anthropic" && isSerializedModelCredential(plaintext)) ||
       parseModelSecret(plaintext).kind === "oauth";
     const problem = canBotRun({
+      ...policies,
       pin: { runtimeKind, provider, modelId, effort, credentialId: credential.id, revision: 0 },
       model: {
         provider,
@@ -314,6 +317,7 @@ export async function validateModelPinSelection(
   deps: RouterDeps,
   actor: Actor,
   choice: Omit<RuntimePin, "revision">,
+  policies?: Pick<Parameters<typeof canBotRun>[0], "botPolicy" | "spacePolicy">,
 ): Promise<ValidatedModelPinChoice> {
   const checked = RuntimePinSchema.omit({ revision: true }).parse(choice);
   if (
@@ -356,6 +360,7 @@ export async function validateModelPinSelection(
       thinkingLevel: checked.effort === null ? null : ThinkingLevelSchema.parse(checked.effort),
       modelCredentialId: checked.credentialId,
     },
+    policies,
   );
   return {
     runtimeKind: checked.runtimeKind,
@@ -427,6 +432,14 @@ export async function validateBotCanRun(
   };
   const placementProblem = canBotRun({ pin, placement });
   if (placementProblem) throw new ORPCError("BAD_REQUEST", { message: placementProblem.reason });
+  const unchangedChoice =
+    bot &&
+    (context.inheritBotPin ||
+      (pin.runtimeKind === bot.runtimeKind &&
+        pin.provider === bot.modelProvider &&
+        pin.modelId === bot.modelId &&
+        pin.credentialId === bot.modelCredentialId &&
+        normalizedThinkingLevel(pin.effort) === normalizedThinkingLevel(bot.thinkingLevel)));
   let credential = null;
   if (pin.runtimeKind === "pi" && pin.provider === null && pin.modelId === null) {
     credential = await findDefaultModelCredential(deps.prisma, actor);
@@ -482,14 +495,12 @@ export async function validateBotCanRun(
     const problem = canBotRun({ pin, connection: { credential } });
     if (problem) throw new ORPCError("BAD_REQUEST", { message: problem.reason });
   }
-  const unchangedOllamaPin =
-    bot &&
-    pin.provider === "ollama" &&
-    pin.runtimeKind === bot.runtimeKind &&
-    pin.provider === bot.modelProvider &&
-    pin.modelId === bot.modelId &&
-    pin.credentialId === bot.modelCredentialId &&
-    normalizedThinkingLevel(pin.effort) === normalizedThinkingLevel(bot.thinkingLevel);
+  const unchangedOllamaPin = pin.provider === "ollama" && unchangedChoice;
+  const space = await deps.prisma.space.findUnique({ where: { id: actor.spaceId } });
+  const policies = {
+    botPolicy: bot?.allowedModelDestinations,
+    spacePolicy: space?.allowedModelDestinations,
+  };
   let checked: ValidatedModelPinChoice;
   if (
     (pin.runtimeKind === "pi" || pin.runtimeKind === "hermes") &&
@@ -507,9 +518,8 @@ export async function validateBotCanRun(
       effort: pin.effort,
     };
   } else {
-    checked = await validateModelPinSelection(deps, actor, pin);
+    checked = await validateModelPinSelection(deps, actor, pin, policies);
   }
-  const space = await deps.prisma.space.findUnique({ where: { id: actor.spaceId } });
   let metadata: ReturnType<typeof modelCredentialDto> | undefined;
   if (credential) {
     const secret = await deps.prisma.secret.findFirst({

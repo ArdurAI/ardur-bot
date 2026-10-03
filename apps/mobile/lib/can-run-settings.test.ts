@@ -267,3 +267,62 @@ it("the phone ignores an old success while the changed runtime is still being ch
   await act(async () => newResolve({ ok: true }));
   expect(saveButton().disabled).toBe(false);
 });
+
+it.each([null, "high"] as const)(
+  "the phone preserves the saved %s Ollama effort while the catalog is offline",
+  async (effort) => {
+    const impl = api.getMockImplementation()!;
+    api.mockImplementation(async (procedure, input) => {
+      if (procedure === "bots/get")
+        return {
+          ...fixture.bot,
+          modelProvider: "ollama",
+          modelId: "fixture-model",
+          modelCredentialId: "connection",
+          thinkingLevel: effort,
+        };
+      if (procedure === "models/list")
+        return [
+          {
+            provider: "ollama",
+            providerName: "Ollama",
+            id: "",
+            label: "Ollama",
+            billing: "",
+            placeholder: true,
+          },
+        ];
+      if (procedure === "models/credentials")
+        return [
+          { id: "connection", provider: "ollama", hasKey: true, isDefault: false, label: "Local" },
+        ];
+      if (procedure === "bots/update")
+        return {
+          ...fixture.bot,
+          modelProvider: "ollama",
+          modelId: "fixture-model",
+          modelCredentialId: "connection",
+          thinkingLevel: effort,
+        };
+      return impl(procedure, input);
+    });
+    await render();
+    expect(api).toHaveBeenCalledWith(
+      "models/validatePin",
+      expect.objectContaining({ provider: "ollama", effort }),
+    );
+    expect(saveButton().disabled).toBe(false);
+    const name = node.querySelector<HTMLInputElement>('input:not([type="checkbox"])')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+        name,
+        "Renamed fixture",
+      );
+      name.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => saveButton().click());
+    const saved = api.mock.calls.find(([procedure]) => procedure === "bots/update")?.[1];
+    expect(saved).toMatchObject({ name: "Renamed fixture" });
+    expect(saved).not.toHaveProperty("thinkingLevel");
+  },
+);

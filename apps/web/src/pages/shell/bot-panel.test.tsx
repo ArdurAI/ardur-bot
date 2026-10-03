@@ -2098,3 +2098,82 @@ it.each(["hermes", "codex-app-server", "claude-code", "antigravity"] as const)(
     expect(container.textContent).not.toContain("Experimental turned on for this runtime");
   },
 );
+
+it("preview and Save use the same saved-credential fallback for an unbound model option", async () => {
+  api.validatePin.mockImplementation(async (choice) => {
+    if (!choice.credentialId) throw { code: "BAD_REQUEST", message: "missing connection" };
+    return { ok: true };
+  });
+  await act(async () =>
+    root.render(
+      settings({
+        modelProvider: "openai-codex",
+        modelId: "gpt-6-sol",
+        modelCredentialId: "credential-test",
+        thinkingLevel: "high",
+      }),
+    ),
+  );
+  const select = modelSelect();
+  await act(async () => {
+    const option = document.createElement("option");
+    option.value = "openai-codex::gpt-6-sol";
+    select.append(option);
+    select.value = option.value;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(api.validatePin).toHaveBeenLastCalledWith(
+    expect.objectContaining({ credentialId: "credential-test" }),
+  );
+  await save();
+  expect(onSave).toHaveBeenCalledWith(
+    expect.objectContaining({ modelCredentialId: "credential-test" }),
+  );
+});
+
+it.each([null, "high"] as const)(
+  "an offline Ollama catalog preserves the saved %s effort in preview and Save",
+  async (effort) => {
+    api.list.mockResolvedValue([
+      {
+        provider: "ollama",
+        providerName: "Ollama",
+        id: "",
+        label: "Ollama",
+        billing: "",
+        placeholder: true,
+      },
+    ]);
+    api.credentials.mockResolvedValue([
+      {
+        id: "ollama-connection",
+        provider: "ollama",
+        label: "Local",
+        hasKey: true,
+        isDefault: false,
+        baseUrl: "http://localhost:11434/v1",
+      },
+    ]);
+    await act(async () =>
+      root.render(
+        settings({
+          modelProvider: "ollama",
+          modelId: "fixture-model",
+          modelCredentialId: "ollama-connection",
+          thinkingLevel: effort,
+        }),
+      ),
+    );
+    expect(api.validatePin).toHaveBeenLastCalledWith(
+      expect.objectContaining({ provider: "ollama", effort }),
+    );
+    await save();
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelProvider: "ollama",
+        modelId: "fixture-model",
+        thinkingLevel: effort,
+      }),
+    );
+  },
+);

@@ -579,10 +579,14 @@ export function BotSettings({
     runtimeExperimental,
     provider: selectedModel?.provider ?? null,
     modelId: selectedModel?.modelId ?? null,
-    credentialId: selectedModel?.credentialId ?? null,
+    credentialId: selectedModel
+      ? (selectedModel.credentialId ?? bot.modelCredentialId ?? null)
+      : null,
     effort: selectedModel
-      ? isOllama && effectiveEntry?.reasoning === false
-        ? null
+      ? isOllama
+        ? effectiveEntry?.reasoning === false
+          ? null
+          : thinkingLevel || null
         : thinkingLevel || defaultThinkingLevel
       : thinkingLevel || null,
   });
@@ -640,7 +644,7 @@ export function BotSettings({
           : null,
         ...(runtimeKind !== "pi" || modelMetaReady
           ? {
-              thinkingLevel: (isOllama && !effectiveEntry?.reasoning
+              thinkingLevel: (isOllama && effectiveEntry?.reasoning === false
                 ? null
                 : thinkingLevel || null) as ThinkingLevel | null,
             }

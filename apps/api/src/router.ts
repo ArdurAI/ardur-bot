@@ -1753,7 +1753,22 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           });
           if (!section) throw new IsolationError();
         }
-        const modelPinUpdate = await botModelPinUpdate(deps, context.actor, existing, input);
+        const policies =
+          (input.runtimeKind ?? existing.runtimeKind) === "hermes"
+            ? {
+                botPolicy: existing.allowedModelDestinations,
+                spacePolicy: (
+                  await deps.prisma.space.findUnique({ where: { id: context.actor.spaceId } })
+                )?.allowedModelDestinations,
+              }
+            : undefined;
+        const modelPinUpdate = await botModelPinUpdate(
+          deps,
+          context.actor,
+          existing,
+          input,
+          policies,
+        );
         if (
           [
             "runtimeKind",

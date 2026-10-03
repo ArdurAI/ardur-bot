@@ -227,8 +227,10 @@ export default function BotSettingsScreen() {
           modelId: selectedPin?.modelId ?? null,
           credentialId: selectedPin?.credentialId ?? null,
           effort: selectedPin
-            ? isOllama && effectiveEntry?.reasoning === false
-              ? null
+            ? isOllama
+              ? effectiveEntry?.reasoning === false
+                ? null
+                : thinkingLevel || null
               : thinkingLevel || defaultThinkingLevel
             : thinkingLevel || null,
         }
@@ -361,8 +363,10 @@ export default function BotSettingsScreen() {
         (selected?.modelId ?? null) !== (bot.modelId ?? null) ||
         (selected?.credentialId ?? null) !== (bot.modelCredentialId ?? null);
       const nextEffort = selectedPin
-        ? isOllama && effectiveEntry?.reasoning === false
-          ? null
+        ? isOllama
+          ? effectiveEntry?.reasoning === false
+            ? null
+            : thinkingLevel || null
           : thinkingLevel || defaultThinkingLevel
         : thinkingLevel || null;
       const thinkingChanged = nextEffort !== (bot.thinkingLevel ?? null);

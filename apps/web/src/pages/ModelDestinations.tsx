@@ -29,7 +29,7 @@ export function ModelDestinations({ botId }: { botId?: string }) {
     return () => {
       live = false;
     };
-  }, [botId, t]);
+  }, [botId]);
   const save = async (next: LocalityPolicy) => {
     try {
       await rpc.delegations.setPolicy({ botId, policy: next });

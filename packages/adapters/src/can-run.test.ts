@@ -92,3 +92,9 @@ it("a destination-only policy check does not revalidate unrelated runtime capabi
     { reasonId: "destinations-space" },
   );
 });
+
+it("runtime locality takes precedence over the Hermes context refusal", () => {
+  expect(
+    canBotRun({ pin, model: { ...model, contextWindow: 8192 }, spacePolicy: { mode: "local" } }),
+  ).toMatchObject({ reasonId: "destinations-space" });
+});
