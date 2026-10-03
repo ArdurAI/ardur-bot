@@ -88,7 +88,7 @@ describe("display-aware normal bounds", () => {
     },
     {
       name: "partly reachable top band in B",
-      saved: { ...normal, x: 2000, y: -50 },
+      saved: { ...normal, x: 2000, y: -50, displayId: 2 },
       displays: [a, b],
       bounds: { x: 2000, y: 0, width: 1000, height: 700 },
     },
@@ -139,6 +139,24 @@ describe("display-aware normal bounds", () => {
       saved: { ...normal, x: -300, y: -150 },
       displays: [{ ...a, workArea: { x: -1920, y: -1040, width: 1920, height: 1016 } }],
       bounds: { x: -1000, y: -724, width: 1000, height: 700 },
+    },
+    {
+      name: "connected saved display wins after rearrangement",
+      saved: { ...normal, displayId: 2 },
+      displays: [a, b],
+      bounds: { x: 2160, y: 70, ...defaults },
+    },
+    {
+      name: "connected display wins over primary for unusable coordinates",
+      saved: { ...normal, x: 9000, displayId: 2 },
+      displays: [a, b],
+      bounds: { x: 2160, y: 70, ...defaults },
+    },
+    {
+      name: "missing display uses saved-centre display before primary",
+      saved: { ...normal, x: 2000, y: -200, displayId: 99 },
+      displays: [a, b],
+      bounds: { x: 2160, y: 70, ...defaults },
     },
     { name: "missing state", saved: null, displays: [b, a], bounds: centred },
     {
@@ -474,6 +492,18 @@ describe("placement persistence", () => {
     expect(await readdir(dir)).toEqual([WINDOW_PLACE_FILE]);
     if (process.platform !== "win32")
       expect((await stat(path.join(dir, WINDOW_PLACE_FILE))).mode & 0o777).toBe(0o600);
+  });
+
+  it("snapshots native geometry before queued writes", async () => {
+    const dir = await directory();
+    const store = new WindowPlaceStore(dir);
+    const place = { ...normal };
+    const saved = store.save(place);
+    place.x = 9000;
+    await saved;
+    const restored = new WindowPlaceStore(dir);
+    await restored.load();
+    expect(restored.current).toEqual(normal);
   });
 
   it("does not follow a final symlink on read or write", async () => {

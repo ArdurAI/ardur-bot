@@ -67,15 +67,19 @@ export function restoreWindowPlace(
   displays: readonly WindowDisplay[],
   defaults: Pick<Rectangle, "width" | "height">,
 ): { bounds: Rectangle; maximized: boolean; fullScreen: boolean } {
-  const valid = windowPlaceFrom(saved);
+  const valid = saved;
   const usable = displays.filter(
     (display) => display.workArea.width > 0 && display.workArea.height > 0,
   );
+  const remembered = valid ? usable.find((display) => display.id === valid.displayId) : undefined;
   const visible = valid
-    ? usable.find((display) => titleAreaVisible(valid, display.workArea))
+    ? (remembered ? [remembered] : usable).find((display) =>
+        titleAreaVisible(valid, display.workArea),
+      )
     : undefined;
   const display =
     visible ??
+    remembered ??
     (valid ? usable.find((candidate) => containsCentre(candidate.bounds, valid)) : undefined) ??
     usable.find((candidate) => candidate.primary) ??
     usable[0];
@@ -111,7 +115,9 @@ export function captureWindowPlace(
   };
 }
 
-/** Bounded reads and serialized atomic writes reuse the desktop state-file boundary. */
+/** Validate untrusted disk state once on load; native captures are already typed.
+ * Bounded reads and serialized atomic writes reuse the desktop state-file boundary.
+ */
 export class WindowPlaceStore {
   current: WindowPlace | null = null;
   private writes: Promise<void> = Promise.resolve();
@@ -129,8 +135,7 @@ export class WindowPlaceStore {
   }
 
   save(place: WindowPlace): Promise<void> {
-    const next = windowPlaceFrom(place);
-    if (!next) return Promise.resolve();
+    const next = { ...place };
     this.current = next;
     this.pending++;
     this.writes = this.writes.then(async () => {
