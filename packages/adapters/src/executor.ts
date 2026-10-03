@@ -1344,6 +1344,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
       reasoning: resolved.reasoning,
       maxTokens: resolved.maxTokens,
       contextWindow: resolved.contextWindow,
+      contextWindowSource: resolved.contextWindowSource,
       acceptsImages: resolved.acceptsImages,
       maxImagesPerPrompt: resolved.maxImagesPerPrompt,
       thinkingLevel: resolved.thinkingLevel ?? null,
@@ -8272,6 +8273,7 @@ export async function resolveModelKey(
   reasoning?: boolean;
   maxTokens?: number;
   contextWindow?: number;
+  contextWindowSource?: AgentRunRequest["model"]["contextWindowSource"];
   thinkingLevel?: AgentRunRequest["model"]["thinkingLevel"];
   acceptsImages?: boolean;
   maxImagesPerPrompt?: number;
@@ -8391,10 +8393,9 @@ export async function resolveModelKey(
           resolved.secret.kind === "openai_compatible" ? resolved.secret.reasoning : undefined,
         maxTokens:
           resolved.secret.kind === "openai_compatible" ? resolved.secret.maxTokens : undefined,
-        contextWindow:
-          resolved.secret.kind === "openai_compatible"
-            ? resolveModelContextWindow(resolved.secret.contextWindow).contextWindow
-            : undefined,
+        ...(resolved.secret.kind === "openai_compatible"
+          ? resolveModelContextWindow(resolved.secret.contextWindow)
+          : {}),
         thinkingLevel:
           resolved.secret.kind === "openai_compatible" ? resolved.secret.thinkingLevel : undefined,
         acceptsImages,

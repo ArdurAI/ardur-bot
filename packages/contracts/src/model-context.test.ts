@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_MODEL_CONTEXT_WINDOW,
   HERMES_CONTEXT_LIMIT_MESSAGE,
+  modelContextWindowForConsumer,
   modelContextWindowLabel,
   resolveModelContextWindow,
 } from "./domain.js";
@@ -24,6 +25,28 @@ describe("connection context resolution", () => {
       });
     },
   );
+
+  it.each(
+    (["metadata", "catalog", "default"] as const).flatMap((source) =>
+      (["display", "hermes-pin", "hermes-manifest", "builtin"] as const).map((consumer) => ({
+        source,
+        consumer,
+        contextWindow: source === "metadata" ? 8_192 : source === "catalog" ? 200_000 : 65_536,
+        expected:
+          source === "default" && consumer === "builtin"
+            ? 32_768
+            : source === "metadata"
+              ? 8_192
+              : source === "catalog"
+                ? 200_000
+                : 65_536,
+      })),
+    ),
+  )("budgets $source for $consumer", ({ source, consumer, contextWindow, expected }) => {
+    expect(
+      modelContextWindowForConsumer({ contextWindow, contextWindowSource: source }, consumer),
+    ).toBe(expected);
+  });
 
   it("does not raise the built-in delegation reservation cap", () => {
     expect(DEFAULT_MODEL_CONTEXT_WINDOW).toBe(32_768);

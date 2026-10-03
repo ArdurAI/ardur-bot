@@ -1118,6 +1118,16 @@ export function resolveModelContextWindow(
   return { contextWindow: DEFAULT_CONNECTION_CONTEXT_WINDOW, contextWindowSource: "default" };
 }
 
+/** Only the built-in runtime budgets an unknown estimate conservatively. */
+export function modelContextWindowForConsumer(
+  resolved: { contextWindow: number; contextWindowSource: ModelContextWindowSource },
+  consumer: "display" | "hermes-pin" | "hermes-manifest" | "builtin",
+): number {
+  return resolved.contextWindowSource === "default" && consumer === "builtin"
+    ? DEFAULT_MODEL_CONTEXT_WINDOW
+    : resolved.contextWindow;
+}
+
 /** Parse the optional per-connection image limit entered in model settings. */
 export function parseModelMaxImagesPerPrompt(
   value: string,

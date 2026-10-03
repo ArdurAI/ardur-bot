@@ -166,10 +166,11 @@ checks the connection on the server before saving and names **Settings → Model
 when the limit is too small. Exactly 64,000 is accepted. The built-in runtime can
 still use a smaller saved window.
 
-In **Settings → Models**, the context field shows the value the runtime will use.
+In **Settings → Models**, the context field shows the resolved connection limit.
 Saved metadata wins over provider catalog facts. When neither is known, compatible
 connections use 65,536 with **Context limit (estimated)**. An untouched estimate is
-not saved as metadata. Known catalog limits show **Context limit (from the provider)**.
+not saved as metadata. Hermes uses that estimate; the built-in runtime keeps its
+conservative 32,768 budget until metadata or catalog capacity is known. Known catalog limits show **Context limit (from the provider)**.
 The compatible endpoint catalog currently lists model IDs, not endpoint-qualified
 context lengths, so those connections use saved metadata or the explicit estimate.
 

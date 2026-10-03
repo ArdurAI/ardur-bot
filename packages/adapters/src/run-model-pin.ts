@@ -264,10 +264,12 @@ export async function resolveRunModelPin(input: {
     const availableMaxTokens = model.maxTokens ?? concrete?.maxTokens ?? 4_096;
     const resolved = {
       ...model,
-      ...resolveModelContextWindow(
-        model.contextWindow,
-        concrete?.contextWindow ?? piModelContextWindow(model.provider, model.id),
-      ),
+      ...(model.contextWindow !== undefined && model.contextWindowSource
+        ? { contextWindow: model.contextWindow, contextWindowSource: model.contextWindowSource }
+        : resolveModelContextWindow(
+            model.contextWindow,
+            concrete?.contextWindow ?? piModelContextWindow(model.provider, model.id),
+          )),
       ...(translatedHermes
         ? {
             reasoning: model.reasoning ?? concrete?.reasoning,
