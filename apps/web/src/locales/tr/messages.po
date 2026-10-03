@@ -2117,6 +2117,10 @@ msgstr ""
 msgid "Command"
 msgstr "Komut"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Command line"
+msgstr "Komut satırı"
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Commands"
 msgstr ""
@@ -2548,8 +2552,8 @@ msgid "Copy output"
 msgstr ""
 
 #: src/pages/DevicesSettings.tsx
-msgid "Copy pairing details"
-msgstr ""
+msgid "Copy pairing code"
+msgstr "Eşleştirme kodunu kopyala"
 
 #: src/pages/memory/MemoryImport.tsx
 msgid "Copy prompt"

@@ -2117,6 +2117,10 @@ msgstr "Скоро"
 msgid "Command"
 msgstr "Команда"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Command line"
+msgstr "Командная строка"
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Commands"
 msgstr ""
@@ -2548,8 +2552,8 @@ msgid "Copy output"
 msgstr ""
 
 #: src/pages/DevicesSettings.tsx
-msgid "Copy pairing details"
-msgstr ""
+msgid "Copy pairing code"
+msgstr "Копировать код сопряжения"
 
 #: src/pages/memory/MemoryImport.tsx
 msgid "Copy prompt"

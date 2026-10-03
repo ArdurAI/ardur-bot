@@ -2117,6 +2117,10 @@ msgstr "即将推出"
 msgid "Command"
 msgstr "命令"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Command line"
+msgstr "命令行"
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Commands"
 msgstr ""
@@ -2548,8 +2552,8 @@ msgid "Copy output"
 msgstr ""
 
 #: src/pages/DevicesSettings.tsx
-msgid "Copy pairing details"
-msgstr ""
+msgid "Copy pairing code"
+msgstr "复制配对码"
 
 #: src/pages/memory/MemoryImport.tsx
 msgid "Copy prompt"

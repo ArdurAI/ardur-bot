@@ -2117,6 +2117,10 @@ msgstr "준비 중"
 msgid "Command"
 msgstr "실행 명령"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Command line"
+msgstr "명령줄"
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Commands"
 msgstr ""
@@ -2548,8 +2552,8 @@ msgid "Copy output"
 msgstr ""
 
 #: src/pages/DevicesSettings.tsx
-msgid "Copy pairing details"
-msgstr ""
+msgid "Copy pairing code"
+msgstr "페어링 코드 복사"
 
 #: src/pages/memory/MemoryImport.tsx
 msgid "Copy prompt"
