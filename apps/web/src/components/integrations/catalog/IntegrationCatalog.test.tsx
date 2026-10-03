@@ -8,6 +8,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DirectMcpSearch } from "../DirectMcpSearch";
 import { IntegrationCatalog } from "./IntegrationCatalog";
+import { IntegrationManage } from "./IntegrationManage";
 
 const api = vi.hoisted(() => ({
   list: vi.fn(),
@@ -294,6 +295,32 @@ const click = async (element: HTMLElement) => {
 };
 
 describe("Settings integration catalog", () => {
+  it.each(["connected", "needs-sign-in", "discovery-failed"] as const)(
+    "shows per-bot pending status only for a connected managed account, not %s",
+    async (state) => {
+      await act(async () =>
+        root.render(
+          <IntegrationManage
+            descriptor={catalog[0]!}
+            connection={{ ...connected, state, needsReview: true, spaceAllowedTools: [] }}
+            onBack={vi.fn()}
+            onChanged={vi.fn(async () => undefined)}
+          />,
+        ),
+      );
+      const botLabel = [...container.querySelectorAll("label")].find((label) =>
+        label.textContent?.includes("Helper"),
+      );
+      expect(botLabel).toBeDefined();
+      if (state === "connected") {
+        expect(botLabel!.textContent).toContain("Connected · tools need review");
+      } else {
+        expect(botLabel!.textContent).not.toContain("Connected");
+      }
+      expect(api.assign).not.toHaveBeenCalled();
+    },
+  );
+
   it("shows local and remote accounts once and reconnects through the selected Manage view", async () => {
     const local = { ...connected, id: "local", transport: "host-cli" as const };
     const remote = {

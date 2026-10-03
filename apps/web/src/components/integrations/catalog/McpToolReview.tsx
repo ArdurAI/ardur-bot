@@ -154,7 +154,7 @@ export function McpToolReview({
                     }
                   />
                   {bot.name}
-                  {!removed ? (
+                  {!removed && server.connectionState === "connected" ? (
                     <span>
                       {integrationToolsNeedReview(server, override)
                         ? t`Connected · tools need review`

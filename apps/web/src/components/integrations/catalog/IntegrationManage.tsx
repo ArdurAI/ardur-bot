@@ -282,7 +282,7 @@ export function IntegrationManage({
                       }}
                     />
                     {bot.name}
-                    {!removed ? (
+                    {!removed && connection.state === "connected" ? (
                       <span className="text-muted-foreground">
                         {integrationToolsNeedReview(connection, override)
                           ? t`Connected · tools need review`
