@@ -6,8 +6,8 @@ import { describe, expect, it, vi } from "vitest";
 import { selectBuiltinToolsForRun } from "./executor.js";
 import type { BrokerOptions, BrokerRequest } from "./hermes-provider-broker.js";
 import { HermesProviderBroker, hermesToolName } from "./hermes-provider-broker.js";
+import { brokerLedgerFixture } from "./hermes-run-budget-ledger.fixture.js";
 import { requestReservationTokens } from "./request-usage.js";
-import { brokerRootTokensBlock } from "./run-usage.js";
 
 // Production host catalog: graphical computer, no page browser, no optional
 // semantic memory or cloud agents. The launcher omits run_subagent.
@@ -59,9 +59,7 @@ function fixture(
   } = {},
 ) {
   const records: AgentUsage[] = [];
-  let used = patch.used ?? 0;
-  let consumed = 0;
-  let calls = 0;
+  const ledger = brokerLedgerFixture(patch);
   const scope: BrokerOptions["scope"] = {
     runId: "fixture-run",
     botId: "fixture-bot",
@@ -146,33 +144,7 @@ function fixture(
     fetch,
     ...(patch.translated ? { streamSimple } : {}),
     record: async (usage) => {
-      const request = usage.request!;
-      if (request.counter.sequence === 0) {
-        const admission = request.admission!;
-        // Same durable-count and root-policy checks as the ledger, without a DB.
-        if (
-          calls >= admission.maxRequests ||
-          consumed + admission.reservedTokens > admission.maxReservedTokens
-        )
-          throw new Error("Broker request allowance exhausted");
-        const rootPolicy = {
-          goal: patch.goal ?? false,
-          delegated: false,
-          usedTokens: used,
-          reservedTokens: 0,
-          requestTokens: admission.reservedTokens,
-          tokenLimit: DELEGATION_LIMITS.tokens,
-          coordinatorRunAllowance: admission.maxReservedTokens,
-        };
-        if (brokerRootTokensBlock(rootPolicy))
-          throw new Error("Broker root task allowance exhausted");
-        calls++;
-        consumed += admission.reservedTokens;
-      } else if (request.categories.logicalInput !== null && request.categories.output !== null) {
-        // This fixture provider supplies one measured snapshot per request.
-        if (request.collection?.outcome !== "success")
-          used += request.categories.logicalInput + request.categories.output;
-      }
+      await ledger.record(usage);
       records.push(usage);
     },
   };
@@ -194,7 +166,7 @@ function fixture(
     path: "/v1/chat/completions",
     body,
   });
-  return { broker, fetch, streamSimple, records, request, body };
+  return { broker, fetch, streamSimple, records, request, body, ledger };
 }
 
 describe("Hermes run and root budget separation", () => {
@@ -224,11 +196,24 @@ describe("Hermes run and root budget separation", () => {
     expect(f.records.at(-1)?.request?.collection?.outcome).toBe("success");
     expect(f.records.at(-1)?.inputTokens).toBe(14_000);
     expect(f.records.at(-1)?.outputTokens).toBe(128);
+    expect(f.ledger.root.usedTokens).toBe(14_128);
+    expect(f.ledger.root.reservedTokens).toBe(0);
+    expect(f.ledger.rows.size).toBe(1);
     // Reservations are not reported usage, and follow-up calls use the same run allowance.
     const next = await f.broker.open(f.request());
     expect(next.ok).toBe(true);
     await next.text();
     expect(f.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("completes the next full-size provider request after asking room members", async () => {
+    const f = fixture({ used: 100_000 });
+    await (await f.broker.open(f.request())).text();
+    await f.ledger.ask([36_864]);
+    expect(f.ledger.root.tokenLimit).toBeGreaterThan(DELEGATION_LIMITS.tokens);
+    await (await f.broker.open(f.request())).text();
+    expect(f.fetch).toHaveBeenCalledTimes(2);
+    expect(f.ledger.rows.size).toBe(2);
   });
 
   it.each([false, true])(

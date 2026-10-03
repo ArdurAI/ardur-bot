@@ -6,7 +6,9 @@ import { vi } from "vitest";
 import { recordBrokerRunUsage } from "./run-usage.js";
 
 /** Storage only: admission, accounting and ask resizing all run production code. */
-export function brokerLedgerFixture(patch: { goal?: boolean; used?: number } = {}) {
+export function brokerLedgerFixture(
+  patch: { goal?: boolean; used?: number; delegated?: boolean } = {},
+) {
   const rows = new Map<string, Record<string, unknown>>();
   const receipts = new Map<string, Record<string, unknown>>();
   const run = {
@@ -17,7 +19,7 @@ export function brokerLedgerFixture(patch: { goal?: boolean; used?: number } = {
     threadId: "fixture-thread",
     taskId: "fixture-root",
     delegationRootTaskId: null,
-    delegationId: null,
+    delegationId: patch.delegated ? "fixture-delegation" : null,
     goalId: patch.goal ? "fixture-goal" : null,
     status: "running",
     leaseOwner: "fixture-worker",
@@ -35,6 +37,23 @@ export function brokerLedgerFixture(patch: { goal?: boolean; used?: number } = {
     activeDescendants: 0,
     cancelRequestedAt: null as Date | null,
     deadlineAt: new Date(Date.now() + 60_000),
+  };
+  const delegation = {
+    id: "fixture-delegation",
+    spaceId: run.spaceId,
+    userId: run.userId,
+    rootTaskId: run.taskId,
+    requesterBotId: run.botId,
+    actingBotId: run.botId,
+    depth: 1,
+    hop: 1,
+    parentRunId: "fixture-parent-run",
+    runId: run.id,
+    status: "running",
+    usedTokens: 0,
+    reservedTokens: 36_864,
+    attemptReservedTokens: 36_864,
+    snapshot: { pin: run.runtimePin },
   };
   function updateRoot({ data }: { data: Record<string, unknown> }) {
     for (const [key, value] of Object.entries(data)) {
@@ -60,6 +79,13 @@ export function brokerLedgerFixture(patch: { goal?: boolean; used?: number } = {
       updateMany: vi.fn(async (input: { data: Record<string, unknown> }) => {
         updateRoot(input);
         return { count: 1 };
+      }),
+    },
+    delegation: {
+      findUniqueOrThrow: vi.fn(async () => structuredClone(delegation)),
+      update: vi.fn(async ({ data }: { data: { usedTokens: { increment: number } } }) => {
+        delegation.usedTokens += data.usedTokens.increment;
+        return structuredClone(delegation);
       }),
     },
     usageRecord: {
