@@ -17,7 +17,7 @@ vi.mock("@ardurbot/adapters", async (original) => ({
     models: [{ id: "fixture-native", label: "Fixture", efforts: ["off"] }],
   })),
 }));
-const actor = { userId: "user", spaceId: "space" } as Actor;
+const actor = { userId: "user", spaceId: "space", isDeploymentOwner: true } as Actor;
 const rows: {
   name: string;
   kind: RuntimeKind;
@@ -94,6 +94,15 @@ function fixture(row: (typeof rows)[number]) {
     secretId: "secret",
   };
   const prisma = {
+    deploymentSettings: { findUnique: vi.fn(async () => ({ ownerUserId: "user" })) },
+    connection: { findMany: vi.fn(async () => []) },
+    spaceMember: {
+      findUnique: vi.fn(async () => ({ organizationId: "org", space: { deletingAt: null } })),
+    },
+    $queryRaw: vi.fn(async () => []),
+    browserProfile: { create: vi.fn() },
+    memoryDocument: { create: vi.fn() },
+    botMcpServer: { findMany: vi.fn(async () => []) },
     computer: {
       findFirst: vi.fn(async () => ({
         kind: "docker",
@@ -102,16 +111,23 @@ function fixture(row: (typeof rows)[number]) {
         connectionId: null,
       })),
       findUnique: vi.fn(async () => null),
+      upsert: vi.fn(async ({ create }) => ({ id: "duplicate-computer", ...create })),
     },
     chatGroup: { findFirst: vi.fn(async () => ({ members: [{ id: "member", bot }] })) },
     bot: {
-      findFirst: vi.fn(async () => bot),
+      aggregate: vi.fn(async () => ({ _max: { position: 0 } })),
+      create: vi.fn(async ({ data }) => ({ ...bot, ...data, id: "duplicate" })),
+      findFirstOrThrow: vi.fn(async () => bot),
+      findFirst: vi.fn(async (_input?: { where: { id: string } }) => bot),
       findMany: vi.fn(async () => [bot]),
       updateMany: vi.fn(),
       update: vi.fn(async () => ({ id: "bot", name: "Renamed", title: "", description: "" })),
     },
     botBrief: { updateMany: vi.fn() },
-    thread: { update: vi.fn(async () => ({ nextEventSeq: 1 })) },
+    thread: {
+      create: vi.fn(async () => ({ id: "duplicate-thread" })),
+      update: vi.fn(async () => ({ nextEventSeq: 1 })),
+    },
     event: { create: vi.fn(async () => ({ seq: 1 })) },
     space: {
       findUnique: vi.fn(async () => ({
@@ -127,7 +143,8 @@ function fixture(row: (typeof rows)[number]) {
   };
   prisma.$transaction.mockImplementation(async (callback) => callback(prisma));
   const deps = {
-    env: { webOrigin: "http://localhost" },
+    env: { webOrigin: "http://localhost", sandboxProvider: "fake" },
+    hostBridge: { status: vi.fn(async () => ({ connected: true, configured: true })) },
     prisma,
     events: { notify: vi.fn(async () => {}) },
     secrets: {
@@ -431,4 +448,73 @@ it("a changed Ollama pin still checks installed models and the Hermes floor", as
     body: { json: { message: HERMES_CONTEXT_LIMIT_MESSAGE } },
   });
   expect(showOllamaModel).toHaveBeenCalledTimes(1);
+});
+
+it.each(rows)(
+  "duplicate refuses legacy $name using the final transaction's bot and computer",
+  async (row) => {
+    const f = fixture(row);
+    // Use a hosted sandbox so creation reaches the final admission hook rather than
+    // the older isolated-container restriction, which rejects native runtimes first.
+    if (row.computer === "docker") f.bot.computer.kind = "fake";
+    f.prisma.bot.findFirst.mockImplementation(async ({ where }: { where: { id: string } }) =>
+      where.id === "duplicate" ? { ...f.bot, id: "duplicate" } : f.bot,
+    );
+    const result = await f.call("bots/duplicate", { botId: "bot" });
+    const runtime =
+      row.kind === "codex-app-server" ? "Codex" : row.kind === "pi" ? "Ardur" : "Hermes";
+    const sentence = row.category
+      ? failureCategoryMessage(row.category, { runtime, bot: "this bot" })
+      : HERMES_CONTEXT_LIMIT_MESSAGE;
+    expect(result).toMatchObject({ status: 400, body: { json: { message: sentence } } });
+    expect(f.prisma.bot.create).toHaveBeenCalledOnce();
+    expect(f.prisma.$transaction).toHaveBeenCalledOnce();
+    expect(f.prisma.bot.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "duplicate", spaceId: "space", userId: "user", archivedAt: null },
+      }),
+    );
+    expect(f.prisma.browserProfile.create).not.toHaveBeenCalled();
+    expect(f.prisma.memoryDocument.create).not.toHaveBeenCalled();
+    expect(f.prisma.botMcpServer.findMany).not.toHaveBeenCalled();
+  },
+);
+
+it("duplicate checks the final allocated computer rather than only the source's valid host", async () => {
+  const f = fixture({ name: "valid source", kind: "codex-app-server" });
+  f.prisma.bot.findFirst.mockImplementation(async (input) =>
+    input?.where.id === "duplicate"
+      ? { ...f.bot, id: "duplicate", computer: { ...f.bot.computer, kind: "fake" } }
+      : f.bot,
+  );
+  const result = await f.call("bots/duplicate", { botId: "bot" });
+  expect(result).toMatchObject({
+    status: 400,
+    body: {
+      json: {
+        message: failureCategoryMessage("computer-unsupported", {
+          runtime: "Codex",
+          bot: "this bot",
+        }),
+      },
+    },
+  });
+  expect(f.prisma.browserProfile.create).not.toHaveBeenCalled();
+});
+
+it("duplicate admits valid saved settings without replacing their pin", async () => {
+  const f = fixture({ name: "valid source", kind: "pi" });
+  f.prisma.bot.findFirst.mockImplementation(async (input) =>
+    input?.where.id === "duplicate" ? { ...f.bot, id: "duplicate" } : f.bot,
+  );
+  expect((await f.call("bots/duplicate", { botId: "bot" })).status).toBe(200);
+  expect(f.prisma.bot.create).toHaveBeenCalledWith(
+    expect.objectContaining({
+      data: expect.objectContaining({
+        modelProvider: f.bot.modelProvider,
+        modelId: f.bot.modelId,
+        modelCredentialId: f.bot.modelCredentialId,
+      }),
+    }),
+  );
 });

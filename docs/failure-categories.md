@@ -42,7 +42,9 @@ consumer's generic line, never a wrong category.
 
 `canBotRun` in the adapter package is used both by runtime selection and by
 `models.validatePin`. The editor, bot save and group override save reuse the same
-placement, connection, locality and context predicates. Settings failures reuse
+placement, connection, locality and context predicates. Duplicates recheck the copied
+pin inside the creation transaction against the final bot and computer, so legacy
+impossible settings are not copied into a fresh bot. Settings failures reuse
 this table's sentences rather than introducing separate editor wording. An
 unknown transport error stays generic and leaves Save disabled.
 

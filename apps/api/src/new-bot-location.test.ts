@@ -196,7 +196,7 @@ it.each([
   ["none", null, "none"],
   ["unknown", null, "fake"],
 ] as const)(
-  "duplicates the source Team sandbox despite a usable host: %s / %s",
+  "preserves a supported source Team sandbox or refuses an unusable one: %s / %s",
   async (kind, connectionId, sandboxProvider) => {
     const computer = { id: "team", kind, connectionId, spaceId: "space", scope: "team" };
     const f = fixture({ team: computer, sandboxProvider });
@@ -211,7 +211,12 @@ it.each([
       runtimeKind: "pi",
     } as never);
     const result = await f.call("bots/duplicate", { botId: "source" });
-    expect(result.status, JSON.stringify(result.body)).toBe(200);
+    const unusable = kind === "none" || kind === "unknown";
+    expect(result.status, JSON.stringify(result.body)).toBe(unusable ? 400 : 200);
+    if (unusable) {
+      expect(JSON.stringify(result.body)).toContain("Change this bot's computer to use it.");
+      expect(f.prisma.browserProfile.create).not.toHaveBeenCalled();
+    }
     expect(f.create.mock.calls[0]![0].data.computerId).toBe("team");
     expect(f.upsert).not.toHaveBeenCalled();
   },

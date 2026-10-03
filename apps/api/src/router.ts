@@ -96,6 +96,7 @@ import {
   queueComputerUpdate,
   releaseComputerExecutionLease,
   replaceComputer,
+  requestedBotPin,
   resolveAutoReviewChecker,
   resolveBotWorkspacePath,
   revokeScreenControl,
@@ -1682,6 +1683,14 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                 ? null
                 : decodeHistoricalHermesRuntimeConfig(source.runtimeConfig),
             runtimeExperimental: source.runtimeExperimental,
+            onCreated: async (tx, botId) => {
+              await validateBotCanRun(
+                { ...deps, prisma: tx as PrismaClient },
+                context.actor,
+                requestedBotPin(source),
+                { botId, inheritBotPin: true },
+              );
+            },
           })
           .catch((error: unknown) => {
             if (
