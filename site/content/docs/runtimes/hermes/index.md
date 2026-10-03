@@ -243,9 +243,3 @@ host callbacks preserve the category; unknown exception text still becomes a
 generic provider failure. The HTTP response and conversation do not expose the
 category, request body, headers or private error data. Old peers can retain the
 generic provider failure when they do not recognize the newer fixed signature.
-
-The [pinned request audit](/docs/runtimes/hermes-provider-request/) lists source-confirmed
-custom GLM fields. Its main and tools-free brief-summary fixtures passed admission
-before the diagnostic repair. That evidence does not establish the cause of an
-installed runtime's refusal. The failed run needs its safe category before an
-admission change, and still needs independent review and runtime acceptance.
