@@ -97,7 +97,7 @@ export function sensitiveShellCommand(command: string): boolean {
       environmentRead.test(text) ||
       keychainRead.test(text) ||
       credentialToolRead.test(text) ||
-      /(?<![\w.-])\.env(?:[.\s/;&|()<>]|$)/i.test(text) ||
+      /(?<![\w.-])\.env(?:[.,\s/;&|()<>"]|$)/i.test(text) ||
       sensitiveCredentialDirectory(text),
   );
 }

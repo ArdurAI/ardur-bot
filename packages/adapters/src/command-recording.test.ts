@@ -134,6 +134,8 @@ describe("credential-read output suppression", () => {
     ["dd if=.env", true],
     ["openssl enc -in .env", true],
     ["cp .env t && cat t", true],
+    [`node -e 'console.log(require("fs").readFileSync(".env","utf8"))'`, true],
+    [`python3 -c 'print(open(".env","r").read())'`, true],
     ["echo .env.local", true],
     ["echo .env.production", true],
     ["cat .env.example", true],
