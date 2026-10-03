@@ -3,6 +3,7 @@ import { Button, Input, Popover, PopoverContent, PopoverTrigger, Textarea } from
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useId, useState } from "react";
 import { rpc } from "../lib/rpc";
+import { BotToolReview } from "./integrations/catalog/BotToolReview";
 
 const duration = (value: number | null | undefined) =>
   value == null ? "—" : `${Math.round(value)} ms`;
@@ -175,11 +176,14 @@ export function BotContext({
   const [open, setOpen] = useState(false);
   const [version, setVersion] = useState(0);
   const [briefs, setBriefs] = useState<Brief[]>([]);
-  const [integrations, setIntegrations] = useState<Array<{ id: string; name: string }>>([]);
+  const [integrations, setIntegrations] = useState<
+    Array<{ id: string; name: string; toolsNeedReview?: boolean }>
+  >([]);
   const [metrics, setMetrics] = useState<Awaited<ReturnType<typeof rpc.metrics.context>> | null>(
     null,
   );
   const [concurrentRuns, setConcurrentRuns] = useState(3);
+  const [reviewId, setReviewId] = useState<string>();
   const [error, setError] = useState(false);
   const [period, setPeriod] = useState<"today" | "sevenDays">("today");
   useEffect(() => {
@@ -228,12 +232,32 @@ export function BotContext({
           <p className="font-medium">
             <Trans>Integrations</Trans>
           </p>
-          <p className="text-muted-foreground">
-            {integrations.length
-              ? integrations.map((item) => item.name).join(", ")
-              : t`None available`}
-          </p>
+          {integrations.length ? (
+            integrations.map((item) => (
+              <p key={item.id} className="text-muted-foreground">
+                {item.name} —{" "}
+                {item.toolsNeedReview ? t`Connected · tools need review` : t`Connected`}
+                {item.toolsNeedReview ? (
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    onClick={() => setReviewId(item.id)}
+                  >{t`Review tools`}</Button>
+                ) : null}
+              </p>
+            ))
+          ) : (
+            <p className="text-muted-foreground">{t`None available`}</p>
+          )}
         </div>
+        {reviewId ? (
+          <BotToolReview
+            connectionId={reviewId}
+            botId={botId}
+            onClose={() => setReviewId(undefined)}
+            onSaved={() => setVersion((v) => v + 1)}
+          />
+        ) : null}
         <div className="flex gap-2">
           <Button
             size="xs"

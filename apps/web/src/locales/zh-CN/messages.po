@@ -780,6 +780,10 @@ msgstr "允许 {bot} 使用 {tool} 而不再询问？"
 msgid "Allow actions after presence confirmation"
 msgstr ""
 
+#: src/components/integrations/catalog/BotToolReview.tsx
+msgid "Allow all"
+msgstr "允许全部工具"
+
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Allow approvals once"
 msgstr ""
@@ -821,6 +825,10 @@ msgstr "允许准备"
 msgid "Allow purchase actions without asking"
 msgstr "允许购买操作，无需询问"
 
+#: src/components/integrations/catalog/BotToolReview.tsx
+msgid "Allow selected"
+msgstr "允许所选工具"
+
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Allow the assistant to directly interact with apps, data, and tools on your computer"
 msgstr ""
@@ -857,6 +865,10 @@ msgstr "已允许一次"
 #: src/pages/Auth.tsx
 msgid "Already have an account?"
 msgstr "已有账户？"
+
+#: src/components/integrations/catalog/BotToolReview.tsx
+msgid "Also allow these tools for the space"
+msgstr "同时为此空间允许这些工具"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Always act"
@@ -1160,6 +1172,10 @@ msgstr ""
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Ask the server owner to configure this provider."
 msgstr ""
+
+#: src/components/integrations/catalog/BotToolReview.tsx
+msgid "Ask the space owner to review these tools in Settings."
+msgstr "请让空间所有者在设置中审核这些工具。"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Asked {asked, plural, one {# bot} other {# bots}} · {answered, plural, one {# answered} other {# answered}}"
@@ -2307,6 +2323,9 @@ msgid "Connect Treg"
 msgstr "连接 Treg"
 
 #: src/components/composer/ComposerMenu.tsx
+#: src/components/Context.tsx
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -2326,6 +2345,15 @@ msgstr "已连接"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Connected · {0}"
 msgstr "已连接 · {0}"
+
+#: src/components/Context.tsx
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/pages/customize/IntegrationTable.tsx
+#: src/pages/dashboard/ConnectionsPanel.tsx
+msgid "Connected · tools need review"
+msgstr "已连接 · 工具需要审核"
 
 #. placeholder {0}: selected.name
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -2845,6 +2873,7 @@ msgstr ""
 msgid "Could not load Ollama."
 msgstr ""
 
+#: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Could not load or save tools."
 msgstr ""
@@ -5299,6 +5328,7 @@ msgstr ""
 msgid "Loading voice providers…"
 msgstr "正在加载语音提供方…"
 
+#: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Loading your tools."
 msgstr ""
@@ -6990,6 +7020,7 @@ msgstr "回应"
 msgid "Reactions"
 msgstr "表情回应"
 
+#: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/ToolPicker.tsx
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
@@ -7615,6 +7646,8 @@ msgstr ""
 msgid "Review saved copy"
 msgstr ""
 
+#: src/components/Context.tsx
+#: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/pages/customize/McpDefaults.tsx
@@ -9338,6 +9371,7 @@ msgid "Trusted folders"
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/integrations/catalog/ResourcePicker.tsx
@@ -9914,6 +9948,7 @@ msgstr "工作区"
 msgid "Workspace or server ID"
 msgstr ""
 
+#: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Write"
 msgstr ""

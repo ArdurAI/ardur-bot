@@ -202,7 +202,12 @@ export function integrationDocsFixture() {
       workspace: "Sample workspace",
       scopes: ["read", "write"],
       tools: [
-        { id: "read_notes", description: "Read sample notes", inputSchemaDigest: "a".repeat(64) },
+        {
+          id: "read_notes",
+          description: "Read sample notes",
+          inputSchemaDigest: "a".repeat(64),
+          annotations: { readOnlyHint: true },
+        },
         {
           id: "update_notes",
           description: "Update sample notes",
@@ -221,6 +226,14 @@ export function integrationDocsFixture() {
       if (procedure === "integrations/grants" || procedure === "integrations/resourceTools")
         return [];
       if (procedure === "integrations/status") return connection;
+      if (procedure === "integrations/toolReview")
+        return {
+          revision: 1,
+          manifest: connection.manifest,
+          spaceAllowedTools: connection.spaceAllowedTools,
+          canApproveSpace: true,
+          spaceNeedsReview: false,
+        };
       if (procedure === "integrations/discover") return connection.manifest;
       if (procedure === "integrations/assign") {
         if (input?.connectionId !== connection.id || !Array.isArray(input.toolIds))

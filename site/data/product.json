@@ -51,7 +51,7 @@
       "id": "approve",
       "eyebrow": "APPROVAL",
       "title": "Stay in control",
-      "body": "Ardur asks for approval before consequential actions. Space owners can opt in to signed bot-decision evidence; members can check run status and download sealed evidence from visible runs for independent verification. Evidence is not encrypted and does not prove tool execution or completeness.",
+      "body": "Ardur asks for approval before consequential actions. Space owners can opt in to signed bot-decision evidence; members can check run status and download sealed evidence from visible runs for independent verification. Evidence is not encrypted and does not prove tool execution or completeness. Connected integrations with no allowed tools show that tools need review in Context, per-bot access rows, Find apps, and the space Dashboard. Web and desktop offer an explicit tool review with marked read-only tools selected; the owner chooses Allow selected or Allow all before access changes. Phone shows the same pending state and opens web management for review.",
       "source": "README.md#What you get today"
     }
   ],
@@ -1268,7 +1268,7 @@
         "id": "integrations",
         "aliases": [],
         "title": "Integrations",
-        "summary": "Find an integration, set and save tool permissions, and open a connection form.",
+        "summary": "Find an integration, review pending tools, save explicit permissions, and open a connection form.",
         "area": "connections-and-computers",
         "order": 110,
         "status": "published",
@@ -1358,7 +1358,11 @@
         "boundaries": [
           "Opening a connection form does not connect an account.",
           "Permission changes take effect only after Save; Block removes tool access, and write tools remain subject to their approval policy.",
-          "On mobile, a connected integration opens Manage on web; tool permissions are changed in the web or desktop app."
+          "On mobile, a connected integration opens Manage on web; tool permissions are changed in the web or desktop app.",
+          "Connected describes account access, not permission to use tools. Empty or pending tool permissions show Connected · tools need review.",
+          "Choose Review tools from Context or a bot access row, check the marked read-only selection, then choose Allow selected or Allow all. Opening review does not grant access.",
+          "Bot permissions stay within the space tool list unless an owner explicitly also allows the selection for the space. Reopen a review if the available tools change.",
+          "Phone Context shows pending tool review and offers Review tools on web; tool selection remains in web or desktop."
         ],
         "troubleshooting": [
           {

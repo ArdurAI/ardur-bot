@@ -8,11 +8,16 @@ import type {
   TeamRow,
 } from "@ardurbot/contracts";
 
+import { integrationToolsNeedReview } from "@ardurbot/contracts";
+
 export type OverviewNow = DashboardNow;
 
 export function connectionOverview(input: {
   integrations: IntegrationCatalogList;
-  servers: Pick<McpServer, "id" | "name" | "enabled" | "oauthStatus">[];
+  servers: Pick<
+    McpServer,
+    "id" | "name" | "enabled" | "oauthStatus" | "needsReview" | "spaceAllowedTools"
+  >[];
   devices: Pick<DeviceGrantView, "id" | "deviceName" | "kind" | "revokedAt">[];
   channels: MessagingChannelMembership[];
 }): ConnectionOverview[] {
@@ -24,6 +29,7 @@ export function connectionOverview(input: {
       (row): ConnectionOverview => ({
         id: row.id,
         kind: "integration",
+        toolsNeedReview: integrationToolsNeedReview(row),
         name:
           input.integrations.catalog.find((entry) => entry.id === row.catalogId)?.name ??
           row.catalogId,
@@ -59,6 +65,7 @@ export function connectionOverview(input: {
           id: row.id,
           name: row.name,
           kind: "mcp",
+          toolsNeedReview: integrationToolsNeedReview(row),
           state: !row.enabled
             ? "not-connected"
             : row.oauthStatus === "reconnect"

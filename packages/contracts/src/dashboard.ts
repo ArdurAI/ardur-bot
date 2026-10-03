@@ -39,6 +39,7 @@ export const ConnectionOverviewSchema = z.object({
   name: z.string(),
   kind: z.enum(["integration", "mcp", "device", "channel"]),
   state: z.enum(["connected", "needs-sign-in", "not-connected", "error"]),
+  toolsNeedReview: z.boolean().optional(),
 });
 export type ConnectionOverview = z.infer<typeof ConnectionOverviewSchema>;
 export const DashboardNowSchema = z.object({

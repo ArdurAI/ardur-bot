@@ -4089,6 +4089,12 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       }),
     },
     integrations: {
+      toolReview: authed.integrations.toolReview.handler(({ context, input }) =>
+        integrations.toolReview(context.actor, input),
+      ),
+      reviewTools: authed.integrations.reviewTools.handler(({ context, input }) =>
+        integrations.reviewTools(context.actor, input),
+      ),
       available: authed.integrations.available.handler(async ({ context, input }) => {
         const bot = await deps.prisma.bot.findFirst({
           where: {
@@ -4122,16 +4128,27 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
               needsReview: false,
               allowedTools: server.spaceAllowedTools,
             };
+            return grant.access !== "none" && server.connectionState === "connected";
+          })
+          .map((server) => {
+            const row = server.assignments[0];
+            const grant = row ?? {
+              access: "inherit",
+              allowAllTools: false,
+              needsReview: false,
+              allowedTools: server.spaceAllowedTools,
+            };
             const source =
-              server.catalogId || server.manifest
-                ? server.spaceAllowedTools
-                : (row?.allowedTools ?? server.spaceAllowedTools);
+              server.catalogId || server.manifest ? server.spaceAllowedTools : grant.allowedTools;
             const offered = Array.isArray(source)
               ? source.filter((id): id is string => typeof id === "string")
               : [];
-            return grantedMcpTools({ ...grant, server }, offered).length > 0;
-          })
-          .map((server) => ({ id: server.id, name: server.name }));
+            return {
+              id: server.id,
+              name: server.name,
+              toolsNeedReview: grantedMcpTools({ ...grant, server }, offered).length === 0,
+            };
+          });
       }),
       status: authed.integrations.status.handler(async ({ context, input }) => {
         await integrations.expireConsent(context.actor);
@@ -6124,6 +6141,10 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
               id: server.id,
               name: server.name,
               enabled: server.enabled,
+              needsReview: server.needsReview,
+              spaceAllowedTools: Array.isArray(server.spaceAllowedTools)
+                ? server.spaceAllowedTools.filter((id): id is string => typeof id === "string")
+                : [],
               oauthStatus: await mcpOAuth.statusFor(server, actor),
             })),
           ),

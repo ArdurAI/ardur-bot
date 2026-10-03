@@ -236,6 +236,7 @@ function fixture({
     instanceIdentity: { findUnique: vi.fn(async () => null) },
     deviceApprovalBinding: { findUnique: vi.fn(async (): Promise<unknown> => null) },
     botMcpServer: { findFirst: vi.fn(async () => grant) },
+    mcpServer: { findMany: vi.fn(async () => []) },
     run: {
       findUnique: vi.fn(async () => run),
       findUniqueOrThrow: vi.fn(async () => run),
@@ -246,6 +247,7 @@ function fixture({
     },
     bot: {
       findFirst: vi.fn(async () => ({
+        id: run.botId,
         computer: { id: "computer-1", kind: "desktop", providerRef: "/workspace" },
       })),
       findUniqueOrThrow: vi.fn(async () => ({

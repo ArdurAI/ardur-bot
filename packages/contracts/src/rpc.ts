@@ -139,6 +139,7 @@ import {
   IntegrationResourceConstraintsSchema,
   IntegrationResourceKindSchema,
   IntegrationResourceToolSchema,
+  IntegrationToolReviewSchema,
   SpaceToolPoliciesSchema,
 } from "./integration-catalog.js";
 import {
@@ -1209,6 +1210,20 @@ export const appContract = {
   },
   integrations: {
     list: oc.output(IntegrationCatalogListSchema),
+    toolReview: oc
+      .input(z.object({ connectionId: Id, botId: Id.optional() }))
+      .output(IntegrationToolReviewSchema),
+    reviewTools: oc
+      .input(
+        z.object({
+          connectionId: Id,
+          revision: z.number().int().nonnegative(),
+          botId: Id.optional(),
+          toolIds: z.array(z.string().min(1).max(200)).max(2000),
+          approveSpace: z.boolean().default(false),
+        }),
+      )
+      .output(z.object({ ok: z.literal(true) })),
     status: oc.input(z.object({ connectionId: Id })).output(IntegrationConnectionSchema),
     connect: oc
       .input(
@@ -1281,7 +1296,13 @@ export const appContract = {
       )
       .output(z.array(IntegrationResourceChoiceSchema)),
     grants: oc.input(z.object({ connectionId: Id })).output(z.array(IntegrationGrantSchema)),
-    available: oc.input(botId).output(z.array(z.object({ id: Id, name: z.string() }))),
+    available: oc
+      .input(botId)
+      .output(
+        z.array(
+          z.object({ id: Id, name: z.string(), toolsNeedReview: z.boolean().default(false) }),
+        ),
+      ),
     revoke: oc.input(z.object({ connectionId: Id })).output(z.object({ ok: z.literal(true) })),
     cancel: oc.input(z.object({ connectionId: Id })).output(z.object({ ok: z.literal(true) })),
     discover: oc.input(z.object({ connectionId: Id })).output(z.object({ ok: z.literal(true) })),

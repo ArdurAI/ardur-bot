@@ -251,7 +251,7 @@ describeJourneys("required product journeys", () => {
         `mcp__${server.slug}__synthetic_read`,
       );
       expect(await rpc(app, cookie, "integrations/available", { botId: first.id })).toEqual([
-        { id: server.id, name: "Fixture connection" },
+        { id: server.id, name: "Fixture connection", toolsNeedReview: false },
       ]);
       await rpc(app, cookie, "integrations/assign", {
         connectionId: server.id,
@@ -273,6 +273,9 @@ describeJourneys("required product journeys", () => {
         data: { needsReview: true, spaceAllowedTools: [], revision: { increment: 1 } },
       });
       expect(await listed(second.id)).toEqual([]);
+      expect(await rpc(app, cookie, "integrations/available", { botId: second.id })).toEqual([
+        { id: server.id, name: "Fixture connection", toolsNeedReview: true },
+      ]);
       await rpc(app, cookie, "integrations/assign", {
         connectionId: server.id,
         toolIds: [tool.name],

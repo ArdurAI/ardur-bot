@@ -1,5 +1,5 @@
 import type { IntegrationConnection, IntegrationDescriptor } from "@ardurbot/contracts";
-import { IntegrationCatalogListSchema } from "@ardurbot/contracts";
+import { IntegrationCatalogListSchema, integrationToolsNeedReview } from "@ardurbot/contracts";
 
 export async function loadIntegrationCatalog(request: (procedure: string) => Promise<unknown>) {
   return IntegrationCatalogListSchema.parse(await request("integrations/list"));
@@ -15,7 +15,7 @@ export function integrationCardMessage(
     case "needs-sign-in":
       return "Needs sign-in";
     case "connected":
-      return connection.needsReview
+      return integrationToolsNeedReview(connection)
         ? "Review tools before your bots can use this account."
         : "Your account is connected.";
     case "awaiting-consent":

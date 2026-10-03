@@ -736,3 +736,58 @@ describe("integration RPC boundaries", () => {
     expect(put).not.toHaveBeenCalled();
   });
 });
+
+it("requires a signed-in actor for tool review and routes explicit consent", async () => {
+  const f = fixture();
+  const review = vi
+    .spyOn(IntegrationConnections.prototype, "reviewTools")
+    .mockResolvedValue({ ok: true });
+  const input = {
+    connectionId: "server",
+    revision: 1,
+    botId: "bot",
+    toolIds: ["read_item"],
+    approveSpace: false,
+  };
+  expect((await f.request("integrations/reviewTools", input, null))?.status).toBe(401);
+  expect(review).not.toHaveBeenCalled();
+  expect((await f.request("integrations/reviewTools", input))?.status).toBe(200);
+  expect(review).toHaveBeenCalledWith(actor, input);
+});
+
+it("keeps connected integrations with pending tools in the bot Context list", async () => {
+  const f = fixture();
+  const list = vi.fn(async () => [
+    {
+      id: "server",
+      name: "Notes",
+      enabled: true,
+      connectionState: "connected",
+      transport: "streamable_http",
+      catalogId: null,
+      spaceAllowedTools: [],
+      needsReview: false,
+      manifest: {
+        capturedAt: "2026-10-02T00:00:00Z",
+        serverVersion: null,
+        account: null,
+        tools: [{ id: "read_item", description: "Read", inputSchemaDigest: "a".repeat(64) }],
+      },
+      assignments: [
+        { access: "custom", allowAllTools: false, needsReview: true, allowedTools: [] },
+      ],
+    },
+  ]);
+  Object.assign(f.prisma.mcpServer, { findMany: list });
+  const response = await f.request("integrations/available", { botId: "bot" });
+  expect(response?.status).toBe(200);
+  expect(await response?.json()).toMatchObject({
+    json: [{ id: "server", name: "Notes", toolsNeedReview: true }],
+  });
+  expect(list).toHaveBeenCalledWith(
+    expect.objectContaining({
+      where: { spaceId: "space", userId: "owner", enabled: true },
+      include: { assignments: { where: { botId: "bot", spaceId: "space", userId: "owner" } } },
+    }),
+  );
+});

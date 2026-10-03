@@ -8,13 +8,18 @@ import type {
   McpServer,
   SpaceToolPolicies,
 } from "@ardurbot/contracts";
-import { IntegrationResourceConstraintsSchema, notionResourceId } from "@ardurbot/contracts";
+import {
+  IntegrationResourceConstraintsSchema,
+  integrationToolsNeedReview,
+  notionResourceId,
+} from "@ardurbot/contracts";
 import { Button, Checkbox, Input } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { useEffect, useId, useState } from "react";
 import { rpc } from "../../../lib/rpc";
 import { changedMcpCredentialFlags, McpCredentialFields } from "../McpCredentialFields";
 import { ToolPermissions as ToolPicker } from "../manage/ToolPermissions";
+import { BotToolReview } from "./BotToolReview";
 import { ResourcePicker } from "./ResourcePicker";
 
 export function IntegrationManage({
@@ -55,6 +60,8 @@ export function IntegrationManage({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [reviewBotId, setReviewBotId] = useState<string>();
+  const [reviewSpace, setReviewSpace] = useState(false);
   const load = async () => {
     setError(false);
     setLoading(true);
@@ -79,7 +86,11 @@ export function IntegrationManage({
       const editableBotIds = new Set(editableBots.map((bot) => bot.id));
       setOverrides(grants.filter((grant) => editableBotIds.has(grant.botId)));
       setSpaceToolPolicies(connection.spaceToolPolicies);
-      setToolIds(connection.spaceAllowedTools ?? []);
+      setToolIds(
+        servers.find((server) => server.id === connection.id)?.spaceAllowedTools ??
+          connection.spaceAllowedTools ??
+          [],
+      );
     } catch {
       setError(true);
     } finally {
@@ -188,6 +199,23 @@ export function IntegrationManage({
         <dt className="text-muted-foreground">{t`Runs on`}</dt>
         <dd>{connection.transport === "host-cli" ? t`This computer` : t`Server`}</dd>
       </dl>
+      {reviewSpace || reviewBotId ? (
+        <BotToolReview
+          connectionId={connection.id}
+          botId={reviewSpace ? undefined : reviewBotId}
+          onClose={() => {
+            setReviewSpace(false);
+            setReviewBotId(undefined);
+          }}
+          onSaved={() => {
+            void load();
+            void onChanged();
+          }}
+        />
+      ) : null}
+      {connection.state === "connected" ? (
+        <Button variant="outline" onClick={() => setReviewSpace(true)}>{t`Review tools`}</Button>
+      ) : null}
       <a
         href={descriptor.docsUrl}
         target="_blank"
@@ -254,8 +282,22 @@ export function IntegrationManage({
                       }}
                     />
                     {bot.name}
+                    {!removed && connection.state === "connected" ? (
+                      <span className="text-muted-foreground">
+                        {integrationToolsNeedReview(connection, override)
+                          ? t`Connected · tools need review`
+                          : t`Connected`}
+                      </span>
+                    ) : null}
                     {removed ? <span className="text-muted-foreground">{t`Removed`}</span> : null}
                   </label>
+                  {!removed && integrationToolsNeedReview(connection, override) ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setReviewBotId(bot.id)}
+                    >{t`Review tools`}</Button>
+                  ) : null}
                   {!removed && connection.manifest ? (
                     <details className="ml-7 text-sm">
                       <summary className="cursor-pointer">{t`Limit tools`}</summary>

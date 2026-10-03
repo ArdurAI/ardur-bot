@@ -343,7 +343,7 @@ import {
   selectCompactedHistory,
 } from "./history-compaction.js";
 import { hostCommandApprovalMatches } from "./host-integration-tools.js";
-import { integrationApprovalDetailsForCall } from "./integration-access.js";
+import { integrationApprovalDetailsForCall, mcpReviewDiscoveryLine } from "./integration-access.js";
 import { integrationCatalog } from "./integration-catalog.js";
 import {
   assertConnectorToolArgs,
@@ -2511,13 +2511,18 @@ export function createRunExecutor(deps: ExecutorDeps) {
               : undefined
             : undefined;
         const pendingExposures: Parameters<typeof recordKnowledgeExposure>[2][] = [];
-        const [discovered, currentTurnImages, scratchpadContext] = await Promise.all([
-          discoveredPromise,
-          loadCurrentTurnImages(deps, turnBlocks, context),
-          messagingChannelRun || comparisonRun
-            ? Promise.resolve("")
-            : loadAgentScratchpadContext(deps, { spaceId: run.spaceId, botId: bot.id }),
-        ]);
+        const [discovered, currentTurnImages, scratchpadContext, mcpReviewLine] = await Promise.all(
+          [
+            discoveredPromise,
+            loadCurrentTurnImages(deps, turnBlocks, context),
+            messagingChannelRun || comparisonRun
+              ? Promise.resolve("")
+              : loadAgentScratchpadContext(deps, { spaceId: run.spaceId, botId: bot.id }),
+            deps.connector && !peerReadOnly
+              ? mcpReviewDiscoveryLine(deps.prisma, context)
+              : Promise.resolve(undefined),
+          ],
+        );
         const semanticMemoryEnabled = Boolean(semanticMemory) && !messagingChannelRun;
         const groupBrief =
           !comparisonRun &&
@@ -6130,6 +6135,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               ? undefined
               : "archive_bot safely archives a bot this bot created, and only that bot. Use it when the user asks to remove that bot or when it is finished and unused. The user can restore it or permanently delete it later. confirm_name must exactly match its name.",
             peerReadOnly ? undefined : pluginLine,
+            peerReadOnly ? undefined : mcpReviewLine,
             peerReadOnly ? undefined : agentSkillsLine,
             peerReadOnly ? undefined : pluginInstructions,
             peerReadOnly ? undefined : taughtSkillsLine,

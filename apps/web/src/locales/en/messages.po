@@ -780,6 +780,10 @@ msgstr "Allow {tool} for {bot} without asking?"
 msgid "Allow actions after presence confirmation"
 msgstr "Allow actions after presence confirmation"
 
+#: src/components/integrations/catalog/BotToolReview.tsx
+msgid "Allow all"
+msgstr "Allow all"
+
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Allow approvals once"
 msgstr "Allow approvals once"
@@ -821,6 +825,10 @@ msgstr "Allow preparation"
 msgid "Allow purchase actions without asking"
 msgstr "Allow purchase actions without asking"
 
+#: src/components/integrations/catalog/BotToolReview.tsx
+msgid "Allow selected"
+msgstr "Allow selected"
+
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Allow the assistant to directly interact with apps, data, and tools on your computer"
 msgstr "Allow the assistant to directly interact with apps, data, and tools on your computer"
@@ -857,6 +865,10 @@ msgstr "Allowed once"
 #: src/pages/Auth.tsx
 msgid "Already have an account?"
 msgstr "Already have an account?"
+
+#: src/components/integrations/catalog/BotToolReview.tsx
+msgid "Also allow these tools for the space"
+msgstr "Also allow these tools for the space"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Always act"
@@ -1160,6 +1172,10 @@ msgstr "Ask first"
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Ask the server owner to configure this provider."
 msgstr "Ask the server owner to configure this provider."
+
+#: src/components/integrations/catalog/BotToolReview.tsx
+msgid "Ask the space owner to review these tools in Settings."
+msgstr "Ask the space owner to review these tools in Settings."
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Asked {asked, plural, one {# bot} other {# bots}} · {answered, plural, one {# answered} other {# answered}}"
@@ -2307,6 +2323,9 @@ msgid "Connect Treg"
 msgstr "Connect Treg"
 
 #: src/components/composer/ComposerMenu.tsx
+#: src/components/Context.tsx
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -2326,6 +2345,15 @@ msgstr "Connected"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Connected · {0}"
 msgstr "Connected · {0}"
+
+#: src/components/Context.tsx
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/pages/customize/IntegrationTable.tsx
+#: src/pages/dashboard/ConnectionsPanel.tsx
+msgid "Connected · tools need review"
+msgstr "Connected · tools need review"
 
 #. placeholder {0}: selected.name
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -2845,6 +2873,7 @@ msgstr "Could not load observations."
 msgid "Could not load Ollama."
 msgstr "Could not load Ollama."
 
+#: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Could not load or save tools."
 msgstr "Could not load or save tools."
@@ -5299,6 +5328,7 @@ msgstr "Loading tools…"
 msgid "Loading voice providers…"
 msgstr "Loading voice providers…"
 
+#: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Loading your tools."
 msgstr "Loading your tools."
@@ -6990,6 +7020,7 @@ msgstr "React"
 msgid "Reactions"
 msgstr "Reactions"
 
+#: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/ToolPicker.tsx
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
@@ -7615,6 +7646,8 @@ msgstr "Review model: {0}. Model usage may incur charges."
 msgid "Review saved copy"
 msgstr "Review saved copy"
 
+#: src/components/Context.tsx
+#: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/pages/customize/McpDefaults.tsx
@@ -9338,6 +9371,7 @@ msgid "Trusted folders"
 msgstr "Trusted folders"
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/components/integrations/catalog/ResourcePicker.tsx
@@ -9914,6 +9948,7 @@ msgstr "Workspace"
 msgid "Workspace or server ID"
 msgstr "Workspace or server ID"
 
+#: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Write"
 msgstr "Write"

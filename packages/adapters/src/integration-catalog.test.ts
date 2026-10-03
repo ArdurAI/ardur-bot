@@ -155,3 +155,18 @@ describe("integration manifest capture", () => {
       expect(IntegrationManifestSchema.safeParse(fixture).success).toBe(true);
   });
 });
+
+it("captures read-only hints for review without granting a tool", () => {
+  const manifest = captureIntegrationManifest(
+    [
+      {
+        name: "read_item",
+        inputSchema: {},
+        annotations: { readOnlyHint: true, destructiveHint: false },
+      },
+    ],
+    null,
+  );
+  expect(manifest.tools[0]?.annotations).toEqual({ readOnlyHint: true, destructiveHint: false });
+  expect(Object.keys(manifest)).not.toContain("allowedTools");
+});
