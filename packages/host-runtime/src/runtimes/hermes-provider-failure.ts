@@ -1,5 +1,38 @@
 import type { FailureCategoryId } from "@ardurbot/contracts/failure-categories";
 
+/** Fixed names only: neither arbitrary property names nor values cross the relay. */
+export const HERMES_GRANT_REFUSAL_CATEGORIES = [
+  "grant",
+  "model",
+  "messages",
+  "tools",
+  "tool-choice",
+  "output-tokens",
+  "effort",
+  "stream-options",
+  "sampling",
+  "context",
+  "request-bytes",
+  "run-budget",
+  "unknown-field",
+  "unknown-field:reasoning",
+  "unknown-field:extra_body",
+  "unknown-field:user",
+  "unknown-field:seed",
+  "unknown-field:n",
+  "unknown-field:metadata",
+  "unknown-field:prompt_cache_key",
+  "unknown-field:response_format",
+  "unknown-field:service_tier",
+  "unknown-field:store",
+] as const;
+
+export type HermesGrantRefusalCategory = (typeof HERMES_GRANT_REFUSAL_CATEGORIES)[number];
+
+function grantRefusalMessage(category: HermesGrantRefusalCategory): string {
+  return `Provider request is outside this run's grant (${category}).`;
+}
+
 /** Only fixed reasons and a validated HTTP status cross the provider/host boundary. */
 export type HermesProviderFailure = {
   kind:
@@ -13,6 +46,7 @@ export type HermesProviderFailure = {
     | "provider-http"
     | "provider-failed";
   status?: number;
+  category?: HermesGrantRefusalCategory;
 };
 
 function safeFailure(failure: HermesProviderFailure): HermesProviderFailure {
@@ -22,11 +56,14 @@ function safeFailure(failure: HermesProviderFailure): HermesProviderFailure {
       ? { kind: "provider-http", status }
       : { kind: "provider-failed" };
   }
+  if (failure.kind === "grant-refused") {
+    const category = HERMES_GRANT_REFUSAL_CATEGORIES.find((value) => value === failure.category);
+    return { kind: "grant-refused", ...(category ? { category } : {}) };
+  }
   switch (failure.kind) {
     case "profile-unacknowledged":
     case "request-limit":
     case "response-limit":
-    case "grant-refused":
     case "sequence-changed":
     case "grant-expired":
     case "disconnected":
@@ -45,16 +82,18 @@ export class HermesProviderRelayError extends Error {
     super(
       failure.kind === "provider-http"
         ? `Provider request failed (HTTP ${failure.status}).`
-        : {
-            "profile-unacknowledged": "Hermes configuration is not acknowledged.",
-            "request-limit": "Provider request exceeded the limit.",
-            "response-limit": "Provider response exceeded the limit.",
-            "grant-refused": "Provider request is outside this run's grant.",
-            "sequence-changed": "Provider response sequence changed.",
-            "grant-expired": "Provider grant expired.",
-            disconnected: "Provider client disconnected.",
-            "provider-failed": "Provider request failed.",
-          }[failure.kind],
+        : failure.kind === "grant-refused" && failure.category
+          ? grantRefusalMessage(failure.category)
+          : {
+              "profile-unacknowledged": "Hermes configuration is not acknowledged.",
+              "request-limit": "Provider request exceeded the limit.",
+              "response-limit": "Provider response exceeded the limit.",
+              "grant-refused": "Provider request is outside this run's grant.",
+              "sequence-changed": "Provider response sequence changed.",
+              "grant-expired": "Provider grant expired.",
+              disconnected: "Provider client disconnected.",
+              "provider-failed": "Provider request failed.",
+            }[failure.kind],
     );
     this.name = "HermesProviderRelayError";
     this.failure = failure;
@@ -78,6 +117,10 @@ export function hermesProviderFailure(error: unknown): HermesProviderFailure {
     "Provider grant expired.": "grant-expired",
     "Provider client disconnected.": "disconnected",
   };
+  const category = HERMES_GRANT_REFUSAL_CATEGORIES.find(
+    (value) => message === grantRefusalMessage(value),
+  );
+  if (category) return { kind: "grant-refused", category };
   const status = /^Provider request failed \(HTTP ([1-5][0-9]{2})\)\.$/.exec(message)?.[1];
   if (status) return { kind: "provider-http", status: Number(status) };
   return {

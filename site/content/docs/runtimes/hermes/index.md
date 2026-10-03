@@ -212,8 +212,34 @@ Both main and tools-free summary requests accept the pinned streaming
 option on a non-streaming request remain refused. Profile acknowledgment is still
 required for summary turns.
 
-Provider failure logs contain only a fixed reason and, when available, a validated
-HTTP status. They never include the request body, headers, raw exception text,
+Provider failure logs contain only a fixed reason, a fixed grant-refusal category
+when known, and a validated HTTP status when available. They never include the request body, headers, raw exception text,
 cause, or private ACP error data. Normal ACP summaries keep their existing
 redaction boundary. Unknown provider errors remain unknown rather than being
 guessed from their prose.
+
+### Grant-refusal diagnostics
+
+The visible allowance sentence remains unchanged. A category in the safe log
+identifies the failed check, not the private value or a confirmed incident cause.
+
+| Safe category | Failed check | Investigation |
+| --- | --- | --- |
+| `model` | Exact pinned model | Compare the launcher and grant model identities without recording their values. |
+| `output-tokens` | Output cap or conflicting cap fields | Compare the launcher cap with the grant; do not raise the grant. |
+| `tools`, `tool-choice` | Granted tool list or selection | Check the consented catalog and pinned name translation. |
+| `messages` | Message shape or supported roles/content | Reproduce the unsupported shape with fake content. |
+| `effort` | Shared effort validation | Check the pinned effort and route before changing the request. |
+| `stream-options`, `sampling` | Strict streaming or sampling fields | Reproduce the unsupported shape; keep validation strict. |
+| `context` | Required Ardur context absent from prepared messages | Check whether context loading, scanning or truncation changed the supplied document. |
+| `request-bytes` | Encoded admitted body over its byte limit | Narrow the task; keep the byte limit. |
+| `run-budget` | Reservation invalid or started receipt could not commit | Inspect admission/persistence safely; this category alone does not prove budget exhaustion. |
+| `grant` | Grant identity, scope, lifecycle or active-run check | Check expiry, lease and revocation; never reuse another run's grant. |
+| `unknown-field:<fixed name>` | Unsupported known request field | Reproduce that field with fake data before admitting it. |
+| `unknown-field` | Any other unsupported field | Arbitrary names and all values stay out of the log. |
+
+Known field names come from a fixed list. Typed failures and message-only paired
+host callbacks preserve the category; unknown exception text still becomes a
+generic provider failure. The HTTP response and conversation do not expose the
+category, request body, headers or private error data. Old peers can retain the
+generic provider failure when they do not recognize the newer fixed signature.

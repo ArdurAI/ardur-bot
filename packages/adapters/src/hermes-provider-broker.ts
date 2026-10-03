@@ -1,6 +1,8 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
+import type { HermesGrantRefusalCategory } from "@ardurbot/host-runtime/runtimes/hermes-provider-failure";
 import {
+  HERMES_GRANT_REFUSAL_CATEGORIES,
   HermesProviderRelayError,
   hermesProviderFailure,
 } from "@ardurbot/host-runtime/runtimes/hermes-provider-failure";
@@ -75,8 +77,8 @@ const keys = (value: JsonObject, allowed: readonly string[]) =>
   Object.keys(value).every((key) => allowed.includes(key));
 const bounded = (value: unknown, max: number): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value > 0 && value <= max;
-const denied = (): never => {
-  throw new Error("Provider request is outside this run's grant.");
+const denied = (category: HermesGrantRefusalCategory = "grant"): never => {
+  throw new HermesProviderRelayError({ kind: "grant-refused", category });
 };
 
 export type BrokerScope = {
@@ -304,27 +306,31 @@ function admittedBody(
   allowed: ReadonlyMap<string, JsonObject>,
 ): JsonObject {
   const body = object(input);
-  if (!body) return denied();
+  if (!body) return denied("messages");
+  const admittedFields = [
+    "model",
+    "messages",
+    "tools",
+    "tool_choice",
+    "stream",
+    "stream_options",
+    "max_tokens",
+    "max_completion_tokens",
+    "reasoning_effort",
+    "temperature",
+    "top_p",
+    "stop",
+    "parallel_tool_calls",
+  ];
+  const unknownField = Object.keys(body).find((field) => !admittedFields.includes(field));
+  if (unknownField !== undefined) {
+    const category = HERMES_GRANT_REFUSAL_CATEGORIES.find(
+      (value) => value === `unknown-field:${unknownField}`,
+    );
+    denied(category ?? "unknown-field");
+  }
+  if (body.model !== connection.modelId) denied("model");
   if (
-    !keys(body, [
-      "model",
-      "messages",
-      "tools",
-      "tool_choice",
-      "stream",
-      "stream_options",
-      "max_tokens",
-      "max_completion_tokens",
-      "reasoning_effort",
-      "temperature",
-      "top_p",
-      "stop",
-      "parallel_tool_calls",
-    ])
-  )
-    denied();
-  if (
-    body.model !== connection.modelId ||
     !Array.isArray(body.messages) ||
     body.messages.length === 0 ||
     body.messages.length > 256 ||
@@ -332,8 +338,8 @@ function admittedBody(
       validMessage(message, connection.acceptsImages, connection.supportsDeveloperRole, allowed),
     )
   )
-    denied();
-  if (body.stream !== undefined && typeof body.stream !== "boolean") denied();
+    denied("messages");
+  if (body.stream !== undefined && typeof body.stream !== "boolean") denied("stream-options");
   if (body.stream_options !== undefined) {
     const options = object(body.stream_options);
     if (
@@ -342,9 +348,9 @@ function admittedBody(
       !keys(options, ["include_usage"]) ||
       options.include_usage !== true
     )
-      denied();
+      denied("stream-options");
   }
-  if (body.parallel_tool_calls !== undefined && body.parallel_tool_calls !== false) denied();
+  if (body.parallel_tool_calls !== undefined && body.parallel_tool_calls !== false) denied("tools");
   if (
     body.temperature !== undefined &&
     (typeof body.temperature !== "number" ||
@@ -352,7 +358,7 @@ function admittedBody(
       body.temperature < 0 ||
       body.temperature > 2)
   )
-    denied();
+    denied("sampling");
   if (
     body.top_p !== undefined &&
     (typeof body.top_p !== "number" ||
@@ -360,7 +366,7 @@ function admittedBody(
       body.top_p < 0 ||
       body.top_p > 1)
   )
-    denied();
+    denied("sampling");
   if (
     body.stop !== undefined &&
     !(
@@ -370,7 +376,7 @@ function admittedBody(
         body.stop.every((item) => typeof item === "string"))
     )
   )
-    denied();
+    denied("sampling");
   const hasMaxTokens = Object.hasOwn(body, "max_tokens");
   const hasMaxCompletionTokens = Object.hasOwn(body, "max_completion_tokens");
   if (
@@ -378,9 +384,9 @@ function admittedBody(
     (hasMaxTokens && !bounded(body.max_tokens, connection.maxOutputTokens)) ||
     (hasMaxCompletionTokens && !bounded(body.max_completion_tokens, connection.maxOutputTokens))
   )
-    denied();
+    denied("output-tokens");
   if (body.tools !== undefined) {
-    if (!Array.isArray(body.tools) || body.tools.length > allowed.size) return denied();
+    if (!Array.isArray(body.tools) || body.tools.length > allowed.size) return denied("tools");
     const seen = new Set<string>();
     for (const item of body.tools) {
       const tool = object(item);
@@ -395,7 +401,7 @@ function admittedBody(
         !allowed.has(fn.name) ||
         seen.has(fn.name)
       )
-        denied();
+        denied("tools");
       seen.add(String(fn?.name));
     }
   }
@@ -412,14 +418,16 @@ function admittedBody(
       typeof fn.name !== "string" ||
       !allowed.has(fn.name)
     )
-      denied();
+      denied("tool-choice");
   }
-  if (choice === "required" && (!Array.isArray(body.tools) || body.tools.length === 0)) denied();
-  if (!connection.effort.supported.includes(pinnedEffort)) return denied();
+  if (choice === "required" && (!Array.isArray(body.tools) || body.tools.length === 0))
+    denied("tool-choice");
+  if (!connection.effort.supported.includes(pinnedEffort)) return denied("effort");
   const wireEffort = pinnedEffort === "off" ? "none" : pinnedEffort;
   if (connection.effort.field === "none") {
-    if (pinnedEffort !== "off" || body.reasoning_effort !== undefined) denied();
-  } else if (body.reasoning_effort !== undefined && body.reasoning_effort !== wireEffort) denied();
+    if (pinnedEffort !== "off" || body.reasoning_effort !== undefined) denied("effort");
+  } else if (body.reasoning_effort !== undefined && body.reasoning_effort !== wireEffort)
+    denied("effort");
   const selected = Array.isArray(body.tools)
     ? body.tools.map((item) => allowed.get(String(object(object(item)?.function)?.name)))
     : undefined;
@@ -429,7 +437,7 @@ function admittedBody(
       !Array.isArray(body.tools) ||
       !body.tools.some((item) => object(object(item)?.function)?.name === selectedName)
     )
-      denied();
+      denied("tool-choice");
   }
   return {
     ...body,
@@ -614,14 +622,14 @@ export class HermesProviderBroker {
                 : "",
           )
           .join("\n");
-        if (!text.includes(this.options.requiredContext)) denied();
+        if (!text.includes(this.options.requiredContext)) denied("context");
       }
       const encoded = JSON.stringify(body);
-      if (Buffer.byteLength(encoded) > MAX_REQUEST_BYTES) denied();
+      if (Buffer.byteLength(encoded) > MAX_REQUEST_BYTES) denied("request-bytes");
       await active();
       const outputCap = Number(body.max_tokens ?? body.max_completion_tokens);
       const reservedTokens = requestReservationTokens(encoded, connection.contextWindow, outputCap);
-      if (!bounded(reservedTokens, MAX_TOKEN)) denied();
+      if (!bounded(reservedTokens, MAX_TOKEN)) denied("run-budget");
       const collector = new RequestUsageCollector({
         provider: connection.provider,
         model: connection.modelId,
@@ -648,7 +656,7 @@ export class HermesProviderBroker {
       try {
         await this.options.record(collector.start());
       } catch {
-        throw new Error("Provider request could not be admitted.");
+        denied("run-budget");
       }
       if (this.translated)
         return await this.openTranslated(body, controller, collector, finish, live, active);
