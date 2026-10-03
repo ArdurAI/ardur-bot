@@ -195,6 +195,7 @@ import {
   releaseSpaceDeletionClaim,
   renewSpaceDeletionClaim,
   requestCancel,
+  resetBriefRetriesForConnection,
   SPACE_DELETION_CLAIM_TIMEOUT_MS,
   SpaceDeletionInProgressError,
   SpaceLimitError,
@@ -1736,6 +1737,13 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           botId: input.botId,
           expectedModelPinRevision: configSave.expectedModelPinRevision,
           emitBotUpdated: botProfileLabelsChanged(input),
+          resetBriefRetries:
+            input.runtimeKind !== undefined ||
+            input.modelProvider !== undefined ||
+            input.modelId !== undefined ||
+            input.modelCredentialId !== undefined ||
+            input.thinkingLevel !== undefined ||
+            input.runtimeExperimental !== undefined,
           data: {
             name: input.name,
             title: input.title,
@@ -6965,6 +6973,11 @@ async function persistModelCredential(
           });
           throwIfAborted(input.signal);
         }
+        await resetBriefRetriesForConnection(tx, {
+          userId: actor.userId,
+          credentialId: credential.id,
+          provider: input.provider,
+        });
         return { ...credential, isDefault, defaultModel };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },

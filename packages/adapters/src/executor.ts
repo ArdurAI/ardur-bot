@@ -1444,7 +1444,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
     const selected = await resolvePin(run, bot, run.runtimePin, (values) =>
       secrets.push(...values),
     );
-    if (selected.kind === "problem") return null;
+    if (selected.kind === "problem") return selected;
     const delegatedTokens = run.delegationId
       ? await enforceDelegationDestination(deps.prisma, run.delegationId, selected)
       : undefined;
@@ -1461,7 +1461,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
         : undefined,
     );
-    if ("kind" in selection) return null;
+    if ("kind" in selection) return selection;
     if (selected.pin.runtimeKind !== "pi" && !(await nativeHostOwner(deps.prisma, run.userId)))
       return null;
     return {
@@ -1499,7 +1499,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
         orderBy: { createdAt: "desc" },
         include: { bot: { include: { computer: true } } },
       });
-      return run ? resolveBriefRuntime(run, run.bot, [...deps.secrets]) : null;
+      const resolved = run ? await resolveBriefRuntime(run, run.bot, [...deps.secrets]) : null;
+      return resolved && !("kind" in resolved) ? resolved : null;
     },
     /**
      * The runtime for a one-off call made for a source run outside the run itself, such

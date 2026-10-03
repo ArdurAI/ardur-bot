@@ -2,13 +2,16 @@ import { createHash, randomUUID } from "node:crypto";
 import type { AgentRunRequest, AgentRuntime, AgentUsage } from "@ardurbot/adapter-kit";
 import type { MessageBlock } from "@ardurbot/contracts";
 import { computerRunsOnHost, DEFAULT_MODEL_MAX_TOKENS } from "@ardurbot/contracts";
+import type { RuntimeProblem } from "@ardurbot/contracts/runtime-pins";
+import { RuntimePinError } from "@ardurbot/contracts/runtime-pins";
 import {
   blocksToAgentHistoryText,
   isMessagingChannelRun,
   receiptFilteredSummary,
   redactSecrets,
 } from "@ardurbot/core";
-import { type Prisma, type PrismaClient, quietHistoryDeliveryIds } from "@ardurbot/db";
+import type { Prisma, PrismaClient } from "@ardurbot/db";
+import { quietHistoryDeliveryIds } from "@ardurbot/db";
 import type { MemoryService } from "../service.js";
 import { readBrief, rewriteBrief } from "./brief.js";
 import { hasNewBriefFacts } from "./novelty.js";
@@ -102,7 +105,7 @@ export interface BriefMaintenanceDeps {
     run: Run,
     bot: Bot,
     secrets: string[],
-  ) => Promise<{ runtime: AgentRuntime; model: AgentRunRequest["model"] } | null>;
+  ) => Promise<{ runtime: AgentRuntime; model: AgentRunRequest["model"] } | RuntimeProblem | null>;
   secrets: string[];
   claim: (input: {
     runId: string;
@@ -123,6 +126,11 @@ export async function markBriefPending(prisma: PrismaClient, runId: string) {
   )
     return;
   const thread = run.thread;
+  // Only new source work bypasses a previous failure, not redelivery of the same job.
+  await prisma.botBrief.updateMany({
+    where: { botId: run.botId, threadId: thread.id, pendingRunId: { not: runId } },
+    data: { failureCount: 0, nextAttemptAt: null, pendingRunId: runId, toolResults: "" },
+  });
   await prisma.botBrief.upsert({
     where: { botId_threadId: { botId: run.botId, threadId: thread.id } },
     create: {
@@ -165,6 +173,7 @@ export async function refreshRunBrief(deps: BriefMaintenanceDeps, runId: string)
   )
     return;
   const now = new Date();
+  if (state.nextAttemptAt && state.nextAttemptAt > now) return;
   const maintenanceRunId = `brief-${runId}`;
   const claimed = await deps.claim({
     // Maintenance is a separate turn; a resumed source still consumes capacity.
@@ -174,7 +183,12 @@ export async function refreshRunBrief(deps: BriefMaintenanceDeps, runId: string)
     now,
     claim: (tx) =>
       tx.botBrief.updateMany({
-        where: { id: state.id, pendingRunId: runId, attemptedAt: state.attemptedAt },
+        where: {
+          id: state.id,
+          pendingRunId: runId,
+          attemptedAt: state.attemptedAt,
+          nextAttemptAt: state.nextAttemptAt,
+        },
         data: { attemptedAt: now, leaseExpiresAt: new Date(now.getTime() + 45_000) },
       }),
   });
@@ -194,6 +208,7 @@ export async function refreshRunBrief(deps: BriefMaintenanceDeps, runId: string)
     signal: AbortSignal.timeout(30_000),
   };
   let reason: string | null = "Model unavailable";
+  let deterministic = false;
   let rewritten = false;
   let unchanged = false;
   try {
@@ -287,6 +302,8 @@ export async function refreshRunBrief(deps: BriefMaintenanceDeps, runId: string)
           include: { computer: true },
         });
         const resolved = await deps.resolve(run, bot, secrets);
+        if (resolved && "kind" in resolved) throw new RuntimePinError(resolved);
+        if (!resolved) deterministic = true;
         if (resolved && !resolved.runtime.describe().capabilities.scripted) {
           const transcript = evidence
             .map(({ role, text }) => `${role}: ${text}`)
@@ -404,8 +421,11 @@ export async function refreshRunBrief(deps: BriefMaintenanceDeps, runId: string)
       }
     }
   } catch (error) {
+    deterministic = error instanceof RuntimePinError && deterministicBriefFailure(error.problem);
     reason = redactSecrets(
-      `Brief refresh failed: ${error instanceof Error ? error.message : "Unknown failure"}`,
+      error instanceof RuntimePinError
+        ? error.problem.reason
+        : `Brief refresh failed: ${error instanceof Error ? error.message : "Unknown failure"}`,
       secrets,
     ).slice(0, 500);
   }
@@ -424,9 +444,17 @@ export async function refreshRunBrief(deps: BriefMaintenanceDeps, runId: string)
         )
       : run.thread.nextMessageSeq - 1;
   await deps.prisma.botBrief.updateMany({
-    where: { id: state.id, pendingRunId: runId, historyGeneration: state.historyGeneration },
+    where: {
+      id: state.id,
+      pendingRunId: runId,
+      historyGeneration: state.historyGeneration,
+      attemptedAt: now,
+    },
     data: {
       reason,
+      ...(rewritten || unchanged
+        ? { failureCount: 0, nextAttemptAt: null }
+        : briefRetryAfter(state.failureCount, deterministic, now)),
       ...(rewritten || unchanged
         ? {
             historyGeneration: run.thread.historyCompactionGeneration,
@@ -457,6 +485,7 @@ export async function maintainBriefs(
         SELECT 1 FROM messages source WHERE source.id = r."sourceMessageId"
           AND NOT source.blocks @> '[{"kind":"channel_message"}]'::jsonb
       ))
+      AND (b."nextAttemptAt" IS NULL OR b."nextAttemptAt" <= NOW())
       AND (b."leaseExpiresAt" IS NULL OR b."leaseExpiresAt" <= NOW())
       -- A room's other members may still be answering; only this bot's own active run
       -- in the thread postpones its brief.
@@ -465,4 +494,40 @@ export async function maintainBriefs(
   `;
   for (const brief of pending) await refresh(brief.pendingRunId);
   return pending.length;
+}
+
+/** Unknown failures remain retryable; only typed configuration refusals jump to daily. */
+export function deterministicBriefFailure(problem: RuntimeProblem): boolean {
+  return (
+    [
+      "model-context-too-small",
+      "session-start-failed",
+      "signed-out",
+      "model-unavailable",
+      "configuration-invalid",
+      "connection-missing",
+      "experimental-off",
+      "computer-unsupported",
+      "destinations-bot",
+      "destinations-space",
+    ].includes(problem.reasonId ?? "") ||
+    [
+      "pin-credential-missing",
+      "pin-model-unknown",
+      "pin-effort-unsupported",
+      "pin-incomplete",
+      "locality-denied",
+      "runtime-unsupported-computer",
+      "runtime-unsupported-protocol",
+      "runtime-configuration-invalid",
+    ].includes(problem.code)
+  );
+}
+export function briefRetryAfter(failures: number, deterministic: boolean, now: Date) {
+  const delays = [10 * 60_000, 30 * 60_000, 2 * 3_600_000, 24 * 3_600_000];
+  const failureCount = deterministic ? Math.max(4, failures + 1) : failures + 1;
+  return {
+    failureCount: Math.min(failureCount, 4),
+    nextAttemptAt: new Date(now.getTime() + delays[Math.min(failureCount - 1, 3)]!),
+  };
 }

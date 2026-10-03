@@ -202,3 +202,35 @@ describe("commitBotUpdate", () => {
     );
   });
 });
+
+it("a model-pin save atomically resets brief retry state with the fenced bot write", async () => {
+  const update = vi.fn().mockResolvedValue({ id: "bot" });
+  await commitBotUpdate({
+    prisma: { bot: { update } } as never,
+    notify: vi.fn(),
+    spaceId: "space",
+    threadId: "thread",
+    botId: "bot",
+    emitBotUpdated: false,
+    resetBriefRetries: true,
+    expectedModelPinRevision: 2,
+    data: { modelPinRevision: { increment: 1 } },
+  });
+  expect(update).toHaveBeenCalledWith(
+    expect.objectContaining({
+      where: { id: "bot", modelPinRevision: 2 },
+      data: expect.objectContaining({
+        briefs: {
+          updateMany: {
+            where: {},
+            data: {
+              failureCount: 0,
+              nextAttemptAt: null,
+              attemptedAt: null,
+            },
+          },
+        },
+      }),
+    }),
+  );
+});

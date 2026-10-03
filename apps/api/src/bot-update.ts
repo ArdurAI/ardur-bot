@@ -60,9 +60,23 @@ export async function commitBotUpdate(
     expectedModelPinRevision?: number;
     data: Prisma.BotUncheckedUpdateInput;
     emitBotUpdated: boolean;
+    resetBriefRetries?: boolean;
   },
   appendEvent: AppendEvent = appendEventInTransaction,
 ): Promise<{ id: string; name: string; title: string; description: string }> {
+  const data: Prisma.BotUncheckedUpdateInput = {
+    ...options.data,
+    ...(options.resetBriefRetries || options.data.modelPinRevision !== undefined
+      ? {
+          briefs: {
+            updateMany: {
+              where: {},
+              data: { failureCount: 0, nextAttemptAt: null, attemptedAt: null },
+            },
+          },
+        }
+      : {}),
+  };
   try {
     if (!options.emitBotUpdated) {
       return await options.prisma.bot.update({
@@ -72,7 +86,7 @@ export async function commitBotUpdate(
             ? {}
             : { modelPinRevision: options.expectedModelPinRevision }),
         },
-        data: options.data,
+        data,
         select: { id: true, name: true, title: true, description: true },
       });
     }
@@ -85,7 +99,7 @@ export async function commitBotUpdate(
             ? {}
             : { modelPinRevision: options.expectedModelPinRevision }),
         },
-        data: options.data,
+        data,
         select: { id: true, name: true, title: true, description: true },
       });
       const event = await appendEvent(tx, {

@@ -126,6 +126,7 @@ function fixture(
   );
   const eventCreate = vi.fn(async () => ({ seq: 4 }));
   const tx = {
+    botBrief: { updateMany: vi.fn(async () => ({ count: 1 })) },
     $queryRaw: vi.fn(async () => [{ id: "group" }]),
     chatGroup: { findFirst, update: vi.fn(async () => groupRecord()) },
     chatGroupMember: { findUnique: vi.fn(async () => memberRow()), update },
