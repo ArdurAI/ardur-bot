@@ -17,7 +17,8 @@ import {
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import { ORPCError } from "@orpc/server";
-import { validateBotCanRun, validateModelPinSelection } from "./model-pin-validation.js";
+import type { ValidatedModelPinChoice } from "./model-pin-validation.js";
+import { validateBotCanRun } from "./model-pin-validation.js";
 import type { RouterDeps } from "./router.js";
 
 type Target = {
@@ -102,8 +103,9 @@ export async function updateGroupMemberModelPin(
     },
   });
   if (visible?.members.length !== 1) throw new IsolationError();
+  let choice: ValidatedModelPinChoice | null = null;
   if (requested) {
-    await validateBotCanRun(deps, actor, requested, { botId: target.botId });
+    choice = await validateBotCanRun(deps, actor, requested, { botId: target.botId });
     if (requested.runtimeKind !== "pi" && !(await nativeHostOwner(deps.prisma, actor.userId)))
       throw new ORPCError("FORBIDDEN", { message: NATIVE_HOST_OWNER_MESSAGE });
   } else {
@@ -120,7 +122,6 @@ export async function updateGroupMemberModelPin(
       { botId: target.botId, inheritBotPin: true },
     );
   }
-  const choice = requested ? await validateModelPinSelection(deps, actor, requested) : null;
   const committed = await deps.prisma.$transaction(async (tx) => {
     await lockOwnedGroup(tx, actor, target.groupId);
     const group = await tx.chatGroup.findFirst({

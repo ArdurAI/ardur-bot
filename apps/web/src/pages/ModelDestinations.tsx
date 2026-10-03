@@ -1,6 +1,8 @@
 import type { LocalityPolicy } from "@ardurbot/contracts";
+import { failureCategoryFromText } from "@ardurbot/contracts";
 import { rpcErrorMessage } from "@ardurbot/core";
 import { Button, Input, NativeSelect, NativeSelectOption } from "@ardurbot/ui-web";
+import { i18n } from "@lingui/core";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useId, useState } from "react";
 import { rpc } from "../lib/rpc";
@@ -48,7 +50,12 @@ export function ModelDestinations({ botId }: { botId?: string }) {
               code: "code" in cause && typeof cause.code === "string" ? cause.code : undefined,
             }
           : { message: fallback };
-      setError(runSettingsMessage(rpcErrorMessage(safe, fallback)));
+      const sentence = rpcErrorMessage(safe, fallback);
+      setError(
+        botId && failureCategoryFromText(sentence)?.id === "destinations-bot"
+          ? t`Change this bot's model first.`
+          : runSettingsMessage(sentence),
+      );
       const data = cause && typeof cause === "object" && "data" in cause ? cause.data : null;
       const bots =
         data && typeof data === "object" && "blockedBots" in data && Array.isArray(data.blockedBots)
@@ -118,7 +125,12 @@ export function ModelDestinations({ botId }: { botId?: string }) {
           <div>{error}</div>
           {blockedNames.length ? (
             <div>
-              <Trans>Change these bots' models first: {blockedNames.join(", ")}</Trans>
+              <Trans>
+                Change these bots' models first:{" "}
+                {new Intl.ListFormat(i18n.locale, { style: "short", type: "unit" }).format(
+                  blockedNames,
+                )}
+              </Trans>
             </div>
           ) : null}
         </div>

@@ -18,3 +18,11 @@ it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
     );
   },
 );
+
+it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+  "translates the bot-policy repair action in %s",
+  (locale) => {
+    const source = readFileSync(new URL(`${locale}/messages.po`, import.meta.url), "utf8");
+    expect(source).toMatch(/msgid "Change this bot's model first."\nmsgstr "[^"\n]+"/);
+  },
+);

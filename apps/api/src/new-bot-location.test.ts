@@ -201,6 +201,14 @@ it.each([
     const computer = { id: "team", kind, connectionId, spaceId: "space", scope: "team" };
     const f = fixture({ team: computer, sandboxProvider });
     f.prisma.bot.findFirst.mockResolvedValue({
+      id: "source",
+      userId: f.actor.userId,
+      spaceId: f.actor.spaceId,
+      modelProvider: null,
+      modelId: null,
+      modelCredentialId: null,
+      thinkingLevel: null,
+      runtimeExperimental: false,
       name: "Source",
       title: "",
       description: "",
@@ -217,7 +225,8 @@ it.each([
       expect(JSON.stringify(result.body)).toContain("Change this bot's computer to use it.");
       expect(f.prisma.browserProfile.create).not.toHaveBeenCalled();
     }
-    expect(f.create.mock.calls[0]![0].data.computerId).toBe("team");
+    if (unusable) expect(f.create).not.toHaveBeenCalled();
+    else expect(f.create.mock.calls[0]![0].data.computerId).toBe("team");
     expect(f.upsert).not.toHaveBeenCalled();
   },
 );
@@ -227,6 +236,14 @@ it.each(["host", "conflict"])("maps the duplicate %s refusal", async (refusal) =
     team: { id: "team", kind: "desktop", connectionId: null },
   });
   f.prisma.bot.findFirst.mockResolvedValue({
+    id: "source",
+    userId: f.actor.userId,
+    spaceId: f.actor.spaceId,
+    modelProvider: null,
+    modelId: null,
+    modelCredentialId: null,
+    thinkingLevel: null,
+    runtimeExperimental: false,
     name: "Source",
     title: "",
     description: "",
@@ -512,6 +529,14 @@ it("a non-owner duplicate cannot reach the host Team computer", async () => {
     actor: { ...owner, userId: "member", isDeploymentOwner: false },
   });
   f.prisma.bot.findFirst.mockResolvedValue({
+    id: "source",
+    userId: f.actor.userId,
+    spaceId: f.actor.spaceId,
+    modelProvider: null,
+    modelId: null,
+    modelCredentialId: null,
+    thinkingLevel: null,
+    runtimeExperimental: false,
     name: "Source",
     title: "",
     description: "",

@@ -122,3 +122,37 @@ test("can-run-duplicate-refusal", async ({ page }, testInfo) => {
   await expect(page.getByTestId("composer-error")).toContainText(sentence);
   await captureScreenshot(page, testInfo, "can-run-duplicate-refusal");
 });
+
+test("can-run-bot-policy-refusal", async ({ page }, testInfo) => {
+  await installPerformanceFixture(page);
+  await page.route("**/rpc/delegations/policy**", (route) =>
+    route.fulfill({ json: { json: { mode: "any" } } }),
+  );
+  await page.route("**/rpc/delegations/setPolicy", (route) =>
+    route.fulfill({
+      status: 400,
+      json: {
+        json: {
+          code: "BAD_REQUEST",
+          status: 400,
+          defined: false,
+          message: failureCategoryMessage("destinations-bot", { bot: "this bot" }),
+          data: { blockedBots: [{ id: "fixture-bot-0", name: "Alpha" }] },
+        },
+      },
+    }),
+  );
+  await page.goto("/app/fixture-bot-0");
+  await page.getByTestId("bot-settings-trigger").click();
+  const settings = page.getByTestId("bot-settings");
+  await settings
+    .getByRole("combobox", { name: "Allowed model destinations" })
+    .selectOption("local");
+  await expect(
+    settings.getByRole("alert").filter({ hasText: "Change this bot's model first." }),
+  ).toBeVisible();
+  await expect(settings.getByRole("combobox", { name: "Allowed model destinations" })).toHaveValue(
+    "any",
+  );
+  await captureScreenshot(page, testInfo, "can-run-bot-policy-refusal");
+});

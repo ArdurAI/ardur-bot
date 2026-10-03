@@ -52,7 +52,10 @@ function fixture({
       }),
       update: vi.fn(),
     },
-    space: { update: vi.fn() },
+    space: {
+      update: vi.fn(),
+      findUnique: vi.fn(async () => ({ allowedModelDestinations: { mode: "any" } })),
+    },
     spaceMember: { findUnique: vi.fn(async () => ({ role })) },
     userModelCredential: {
       findFirst: vi.fn(
@@ -352,4 +355,16 @@ it("a local room override and a cleared override do not block a local policy", a
     { runtimePin: null },
   ];
   expect((await f.call({ mode: "local" })).status).toBe(200);
+});
+
+it("a bot already blocked by its own policy does not block a space policy edit", async () => {
+  const f = fixture();
+  for (const bot of f.bots) Object.assign(bot, { allowedModelDestinations: { mode: "local" } });
+  expect((await f.call({ mode: "local" })).status).toBe(200);
+  expect(f.prisma.space.update).toHaveBeenCalledOnce();
+});
+it("relaxing a saved restrictive space policy does not re-report its already blocked bots", async () => {
+  const f = fixture();
+  f.prisma.space.findUnique.mockResolvedValue({ allowedModelDestinations: { mode: "local" } });
+  expect((await f.call({ mode: "hosts", hosts: ["other.example.com"] })).status).toBe(200);
 });

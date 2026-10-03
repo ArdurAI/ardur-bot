@@ -22,8 +22,8 @@ vi.mock("./model-pin-validation.js", async (original) => ({
       placement: { computer: bot.computer, experimental: bot.runtimeExperimental },
     });
     if (problem) throw Object.assign(new Error(problem.reason), { code: "BAD_REQUEST" });
+    return pin;
   }),
-  validateModelPinSelection: vi.fn(async (_deps, _actor, pin) => pin),
 }));
 
 const actor = {

@@ -1809,7 +1809,11 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                 ? existing.thinkingLevel
                 : modelPinUpdate.thinkingLevel) as string | null,
             },
-            { botId: existing.id, runtimeExperimental: input.runtimeExperimental },
+            {
+              botId: existing.id,
+              runtimeExperimental: input.runtimeExperimental,
+              ollamaSelectionValidated: modelPinUpdate.modelProvider === "ollama",
+            },
           );
         }
         const configSave = prepareRuntimeConfigSave(

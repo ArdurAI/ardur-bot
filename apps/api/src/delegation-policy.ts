@@ -44,6 +44,7 @@ export async function setModelDestinations(
         orderBy: [{ name: "asc" }, { id: "asc" }],
         include: overrides,
       });
+  const space = await prisma.space.findUnique({ where: { id: actor.spaceId } });
   const blocked: { id: string; name: string }[] = [];
   let reason: string | undefined;
   for (const bot of bots) {
@@ -61,6 +62,7 @@ export async function setModelDestinations(
         scope,
         pin,
         input.botId ? { botPolicy: input.policy } : { spacePolicy: input.policy },
+        { botPolicy: bot.allowedModelDestinations, spacePolicy: space?.allowedModelDestinations },
       );
       if (!problem) continue;
       reason ??= problem.reason;
@@ -92,6 +94,7 @@ export async function botModelDestinationProblem(
   actor: Pick<Actor, "spaceId" | "userId">,
   pin: RuntimePin,
   policies: Pick<Parameters<typeof canBotRun>[0], "botPolicy" | "spacePolicy">,
+  previousPolicies?: Pick<Parameters<typeof canBotRun>[0], "botPolicy" | "spacePolicy">,
 ) {
   const scope = actor;
   const credential =
@@ -123,11 +126,10 @@ export async function botModelDestinationProblem(
     ).baseUrl;
   }
 
-  return canBotRun({
-    pin,
-    destinationModel: { provider: pin.provider!, id: pin.modelId!, baseUrl },
-    ...policies,
-  });
+  const destinationModel = { provider: pin.provider, id: pin.modelId, baseUrl };
+  // Report only destinations this edit newly blocks, not pre-existing policy defects.
+  if (previousPolicies && canBotRun({ pin, destinationModel, ...previousPolicies })) return null;
+  return canBotRun({ pin, destinationModel, ...policies });
 }
 
 /** The default changes only unpinned built-in bots owned by this member. */

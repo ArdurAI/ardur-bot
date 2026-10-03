@@ -1707,10 +1707,14 @@ msgstr "Parolayı değiştir"
 msgid "Change pin"
 msgstr ""
 
-#. placeholder {0}: blockedNames.join(", ")
+#. placeholder {0}: new Intl.ListFormat(i18n.locale, { style: "short", type: "unit" }).format( blockedNames, )
 #: src/pages/ModelDestinations.tsx
 msgid "Change these bots' models first: {0}"
 msgstr "Önce bu botların modellerini değiştirin: {0}"
+
+#: src/pages/ModelDestinations.tsx
+msgid "Change this bot's model first."
+msgstr "Önce bu botun modelini değiştirin."
 
 #: src/components/composer/command-description.ts
 msgid "Change this bot’s pin"

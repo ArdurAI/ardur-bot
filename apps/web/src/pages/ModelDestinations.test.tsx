@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { failureCategoryMessage } from "@ardurbot/contracts";
+import { i18n } from "@lingui/core";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -23,6 +25,8 @@ vi.mock("@ardurbot/ui-web", () => ({
 let node: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 beforeEach(() => {
+  i18n.load("en", {});
+  i18n.activate("en");
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   api.policy.mockReset().mockResolvedValue({ mode: "any" });
   api.setPolicy.mockReset();
@@ -76,4 +80,33 @@ it("does not display private transport errors or untrusted diagnostic names", as
   await chooseLocal();
   expect(node.textContent).toContain("Could not save destinations; try again.");
   expect(node.textContent).not.toContain("private");
+});
+
+it("a bot policy refusal points to changing its model, not back to the open settings", async () => {
+  api.setPolicy.mockRejectedValue({
+    code: "BAD_REQUEST",
+    message: failureCategoryMessage("destinations-bot", { bot: "this bot" }),
+    data: { blockedBots: [{ id: "bot", name: "Self" }] },
+  });
+  await act(async () => root.render(<ModelDestinations botId="bot" />));
+  await chooseLocal();
+  expect(node.querySelector('[role="alert"]')!.textContent).toBe("Change this bot's model first.");
+  expect(node.textContent).not.toContain("Change them in");
+  expect(node.textContent).not.toContain("Self");
+  expect(node.querySelector("select")!.value).toBe("any");
+});
+it("formats affected names for the active locale", async () => {
+  i18n.load("zh-CN", {});
+  i18n.activate("zh-CN");
+  api.setPolicy.mockRejectedValue({
+    code: "BAD_REQUEST",
+    message: failureCategoryMessage("destinations-space"),
+    data: { blockedBots: [{ name: "Alpha" }, { name: "Beta" }] },
+  });
+  await act(async () => root.render(<ModelDestinations />));
+  await chooseLocal();
+  expect(node.textContent).toContain(
+    new Intl.ListFormat("zh-CN", { style: "short", type: "unit" }).format(["Alpha", "Beta"]),
+  );
+  expect(node.textContent).not.toContain("Alpha, Beta");
 });

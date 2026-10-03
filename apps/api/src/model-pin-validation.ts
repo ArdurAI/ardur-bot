@@ -5,6 +5,7 @@ import {
   listPiCatalog,
   modelCredentialDto,
   nativeRuntimeAvailability,
+  ollamaCheckUnavailable,
   ollamaErrorMessage,
   parseModelSecret,
   piModelContextWindow,
@@ -204,12 +205,7 @@ export async function normalizeModelPinUpdate(
       };
     } catch (error) {
       const message = ollamaErrorMessage(error);
-      const unavailable = [
-        "Ollama is not running. Start it and try again.",
-        "Could not reach Ollama. Check the server URL and try again.",
-        "Ollama took too long. Try again.",
-        "Ollama could not complete the request. Try again.",
-      ].includes(message);
+      const unavailable = ollamaCheckUnavailable(error);
       // A temporarily unavailable server is not an impossible settings combination.
       throw new ORPCError(unavailable ? "PRECONDITION_FAILED" : "BAD_REQUEST", { message });
     }
@@ -377,6 +373,8 @@ export type BotRunSettingsContext = {
   computerLocation?: "host" | "sandbox";
   computerMode?: ComputerMode;
   inheritBotPin?: boolean;
+  /** Server-only: normalizeModelPinUpdate already checked this changed Ollama selection. */
+  ollamaSelectionValidated?: boolean;
 };
 
 /** Read the actual destination of a sharing change without creating or moving a computer. */
@@ -406,7 +404,7 @@ export async function validateBotCanRun(
   actor: Actor,
   choice: Omit<RuntimePin, "revision">,
   context: BotRunSettingsContext,
-): Promise<void> {
+): Promise<ValidatedModelPinChoice> {
   const bot = context.botId
     ? await deps.prisma.bot.findFirst({
         where: {
@@ -430,8 +428,6 @@ export async function validateBotCanRun(
     computer,
     experimental: context.runtimeExperimental ?? bot?.runtimeExperimental ?? false,
   };
-  const placementProblem = canBotRun({ pin, placement });
-  if (placementProblem) throw new ORPCError("BAD_REQUEST", { message: placementProblem.reason });
   const inheritedNewBotDefault =
     !bot && pin.runtimeKind === "pi" && pin.provider === null && pin.modelId === null;
   const unchangedChoice =
@@ -498,7 +494,8 @@ export async function validateBotCanRun(
     const problem = canBotRun({ pin, connection: { credential } });
     if (problem) throw new ORPCError("BAD_REQUEST", { message: problem.reason });
   }
-  const unchangedOllamaPin = pin.provider === "ollama" && unchangedChoice;
+  const unchangedOllamaPin =
+    pin.provider === "ollama" && (unchangedChoice || context.ollamaSelectionValidated);
   const space = await deps.prisma.space.findUnique({ where: { id: actor.spaceId } });
   const policies = {
     botPolicy: bot?.allowedModelDestinations,
@@ -558,4 +555,7 @@ export async function validateBotCanRun(
     spacePolicy: space?.allowedModelDestinations,
   });
   if (problem) throw new ORPCError("BAD_REQUEST", { message: problem.reason });
+  const placementProblem = canBotRun({ pin, placement });
+  if (placementProblem) throw new ORPCError("BAD_REQUEST", { message: placementProblem.reason });
+  return checked;
 }

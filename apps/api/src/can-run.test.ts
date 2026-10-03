@@ -1,8 +1,13 @@
-import { listOllamaModels, nativeRuntimeAvailability, showOllamaModel } from "@ardurbot/adapters";
+import {
+  listOllamaModels,
+  nativeRuntimeAvailability,
+  OllamaUnavailableError,
+  showOllamaModel,
+} from "@ardurbot/adapters";
 import type { Actor, RuntimeKind } from "@ardurbot/contracts";
 import { failureCategoryMessage, HERMES_CONTEXT_LIMIT_MESSAGE } from "@ardurbot/contracts";
 import { RPCHandler } from "@orpc/server/fetch";
-import { expect, it, vi } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 import { updateGroupMemberModelPin } from "./group-model-pin.js";
 import type { RouterDeps } from "./router.js";
 import { createRouter } from "./router.js";
@@ -17,6 +22,7 @@ vi.mock("@ardurbot/adapters", async (original) => ({
     models: [{ id: "fixture-native", label: "Fixture", efforts: ["off"] }],
   })),
 }));
+beforeEach(() => vi.clearAllMocks());
 const actor = { userId: "user", spaceId: "space", isDeploymentOwner: true } as Actor;
 const rows: {
   name: string;
@@ -367,7 +373,9 @@ function ollamaFixture(kind: "pi" | "hermes") {
     });
   vi.mocked(listOllamaModels)
     .mockReset()
-    .mockRejectedValue(new Error("Ollama is not running. Start it and try again."));
+    .mockRejectedValue(
+      new OllamaUnavailableError("Ollama is not running. Start it and try again."),
+    );
   vi.mocked(showOllamaModel)
     .mockReset()
     .mockRejectedValue(new Error("Ollama is not running. Start it and try again."));
@@ -704,3 +712,95 @@ it.each(["local endpoint", "no inherited bots", "unrestricted"])(
     expect(f.prisma.bot.update).not.toHaveBeenCalled();
   },
 );
+
+it.each(["models/validatePin", "bots/update", "group"])(
+  "%s checks model policy before Experimental, like runtime",
+  async (procedure) => {
+    const f = fixture({
+      name: "policy and Experimental",
+      kind: "hermes",
+      local: true,
+      experimental: false,
+    });
+    const sentence = failureCategoryMessage("destinations-space");
+    if (procedure === "group") {
+      await expect(
+        updateGroupMemberModelPin(
+          f.deps,
+          actor,
+          { groupId: "group", botId: "bot", memberId: "member", expectedRevision: 0 },
+          f.pin,
+        ),
+      ).rejects.toThrow(sentence);
+    } else {
+      const result = await f.call(
+        procedure,
+        procedure === "models/validatePin"
+          ? { ...f.pin, botId: "bot" }
+          : {
+              botId: "bot",
+              runtimeKind: "hermes",
+              modelProvider: f.pin.provider,
+              modelId: f.pin.modelId,
+              modelCredentialId: f.pin.credentialId,
+              thinkingLevel: "off",
+              runtimeExperimental: false,
+            },
+      );
+      expect(result).toMatchObject({ status: 400, body: { json: { message: sentence } } });
+    }
+    expect(f.prisma.bot.update).not.toHaveBeenCalled();
+  },
+);
+it.each(["bots/update", "group"])(
+  "a changed Ollama %s probes each model endpoint only once",
+  async (procedure) => {
+    const f = ollamaFixture("pi");
+    vi.mocked(listOllamaModels).mockResolvedValue([{ name: "another-model" }]);
+    vi.mocked(showOllamaModel).mockResolvedValue({
+      id: "another-model",
+      reasoning: false,
+      acceptsImages: false,
+      supportsThinkingOff: true,
+      contextWindow: 65536,
+    });
+    if (procedure === "bots/update") {
+      const result = await f.call(procedure, {
+        botId: "bot",
+        modelProvider: "ollama",
+        modelId: "another-model",
+        modelCredentialId: "connection",
+        thinkingLevel: "off",
+        expectedModelPinRevision: 1,
+      });
+      expect(result.body.json.message).toBeUndefined();
+      expect(result).toMatchObject({ status: 200 });
+    } else {
+      // Stop after admission so this unit fixture need not emulate the group commit.
+      f.prisma.$transaction.mockRejectedValueOnce(new Error("commit boundary"));
+      await expect(
+        updateGroupMemberModelPin(
+          f.deps,
+          actor,
+          { groupId: "group", botId: "bot", memberId: "member", expectedRevision: 0 },
+          { ...f.pin, modelId: "another-model", effort: null },
+        ),
+      ).rejects.toThrow("commit boundary");
+      expect(f.prisma.$transaction).toHaveBeenCalledOnce();
+    }
+    expect(listOllamaModels).toHaveBeenCalledTimes(1);
+    expect(showOllamaModel).toHaveBeenCalledTimes(1);
+  },
+);
+
+it("a preview cannot claim the server-only Ollama validation flag to bypass probing", async () => {
+  const f = ollamaFixture("pi");
+  const result = await f.call("models/validatePin", {
+    ...f.pin,
+    modelId: "another-model",
+    botId: "bot",
+    ollamaSelectionValidated: true,
+  });
+  expect(result.status).toBe(412);
+  expect(listOllamaModels).toHaveBeenCalledOnce();
+});
