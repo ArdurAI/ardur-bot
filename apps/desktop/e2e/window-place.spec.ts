@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ElectronApplication } from "@playwright/test";
@@ -35,9 +35,10 @@ async function launch() {
   return page;
 }
 
-test("remembers a chosen normal rectangle across a desktop restart", async () => {
+test("flushes a chosen normal rectangle on immediate quit and restores it after restart", async () => {
   await launch();
-  const bounds = await app!.evaluate(({ BrowserWindow, screen }) => {
+  const closed = app!.waitForEvent("close");
+  const bounds = await app!.evaluate(({ app, BrowserWindow, screen }) => {
     const area = screen.getPrimaryDisplay().workArea;
     const win = BrowserWindow.getAllWindows()[0]!;
     win.setBounds({
@@ -46,42 +47,21 @@ test("remembers a chosen normal rectangle across a desktop restart", async () =>
       width: Math.min(800, area.width - 100),
       height: Math.min(600, area.height - 100),
     });
-    return win.getNormalBounds();
+    const normal = win.getNormalBounds();
+    // Quit in the same main-process turn as setBounds, before the debounce can fire.
+    app.quit();
+    return normal;
   });
-  await expect
-    .poll(async () => {
-      try {
-        const saved = JSON.parse(await readFile(path.join(userData, "window-place.json"), "utf8"));
-        return { x: saved.x, y: saved.y, width: saved.width, height: saved.height };
-      } catch {
-        return null;
-      }
-    })
-    .toEqual(bounds);
-
-  await app!.close();
+  await closed;
   app = undefined;
+  const saved = JSON.parse(await readFile(path.join(userData, "window-place.json"), "utf8"));
+  expect({ x: saved.x, y: saved.y, width: saved.width, height: saved.height }).toEqual(bounds);
   await launch();
   await expect
     .poll(() =>
       app!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.getNormalBounds()),
     )
     .toEqual(bounds);
-  await mkdir(path.join(import.meta.dirname, "screenshots"), { recursive: true });
-  const screenshot = await app!.evaluate(async ({ desktopCapturer, screen }) => {
-    const display = screen.getPrimaryDisplay();
-    const sources = await desktopCapturer.getSources({
-      types: ["screen"],
-      thumbnailSize: display.size,
-    });
-    const source =
-      sources.find((candidate) => candidate.display_id === String(display.id)) ?? sources[0]!;
-    return source.thumbnail.toPNG().toString("base64");
-  });
-  await writeFile(
-    path.join(import.meta.dirname, "screenshots", "window-place-restored.png"),
-    Buffer.from(screenshot, "base64"),
-  );
 });
 
 test("opens reachable default bounds when the saved display is gone", async () => {
