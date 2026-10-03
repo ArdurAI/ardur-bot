@@ -127,6 +127,7 @@ import {
   windowBackgroundColor,
 } from "./window-options.js";
 import {
+  createWindowPlaceQuitWait,
   restoreWindowPlace,
   WindowPlaceStore,
   watchWindowPlace,
@@ -164,6 +165,7 @@ let dockBadge: ReturnType<typeof installDockBadge> | null = null;
 /** The theme the app page last showed; new main windows open in that colour. */
 let bootSnapshot: BootSnapshotStore | undefined;
 let windowPlace: WindowPlaceStore | undefined;
+let windowPlaceQuitWait: ReturnType<typeof createWindowPlaceQuitWait> | undefined;
 const unsavedFiles = new UnsavedFiles<BrowserWindow>();
 const appWindowTargets = new WeakMap<BrowserWindow, string>();
 let setupWindow: BrowserWindow | null = null;
@@ -1453,6 +1455,7 @@ const startup = app.whenReady().then(async () => {
   const userDataDir = app.getPath("userData");
   windowPlace = new WindowPlaceStore(userDataDir);
   await windowPlace.load();
+  windowPlaceQuitWait = createWindowPlaceQuitWait(windowPlace, () => app.quit());
   hostService = installHostService({
     window: () => mainWindow,
     target: () => currentTargetUrl,
@@ -2183,11 +2186,7 @@ app.on("before-quit", (event) => {
  * is still open and usable.
  */
 app.on("will-quit", (event) => {
-  if (windowPlace?.writing) {
-    event.preventDefault();
-    void windowPlace.flush().then(() => app.quit());
-    return;
-  }
+  if (windowPlaceQuitWait?.(event)) return;
   if (guidedEngine?.running()) {
     event.preventDefault();
     void guidedEngine.cancel().finally(() => app.quit());

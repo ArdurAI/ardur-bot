@@ -12,7 +12,12 @@ import { systemSenderAllowed } from "./system/install.js";
 import { UnsavedFiles } from "./unsaved-files.js";
 import { browserWindowOptions, windowBackgroundColor } from "./window-options.js";
 import type { WindowPlace } from "./window-place.js";
-import { restoreWindowPlace, watchWindowPlace, windowWithRestoredState } from "./window-place.js";
+import {
+  createWindowPlaceQuitWait,
+  restoreWindowPlace,
+  watchWindowPlace,
+  windowWithRestoredState,
+} from "./window-place.js";
 
 class WindowFake extends EventEmitter {
   constructor(readonly options: { backgroundColor?: string; show?: boolean } = {}) {
@@ -809,6 +814,8 @@ describe("quitting while local mode runs", () => {
       unsavedFiles: new UnsavedFiles<WindowFake>(),
       dialog: { showMessageBoxSync: vi.fn(() => 0) },
       windowPlace: undefined,
+      windowPlaceQuitWait: undefined,
+      createWindowPlaceQuitWait,
       legacyCompose: false,
       guidedEngine: null,
       guidedIpcCleanup: null,
@@ -1133,6 +1140,8 @@ describe("main placement lifecycle regressions", () => {
         load = store.load;
       },
       windowPlace: undefined,
+      windowPlaceQuitWait: undefined,
+      createWindowPlaceQuitWait,
       dockBadge: undefined,
       hostService: undefined,
       installHostService,

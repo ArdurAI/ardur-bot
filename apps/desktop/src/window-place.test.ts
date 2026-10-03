@@ -1,18 +1,17 @@
 import { EventEmitter } from "node:events";
-import { readFileSync } from "node:fs";
 import { mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
-import { stripTypeScriptTypes } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import vm from "node:vm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MAIN_WINDOW_SHOW_FALLBACK_MS, showMainWindowWhenPainted } from "./main-window-show.js";
 import type { WindowDisplay, WindowPlace } from "./window-place.js";
 import {
   captureWindowPlace,
+  createWindowPlaceQuitWait,
   restoreWindowPlace,
   WINDOW_PLACE_DEBOUNCE_MS,
   WINDOW_PLACE_FILE,
+  WINDOW_PLACE_QUIT_TIMEOUT_MS,
   WindowPlaceStore,
   watchWindowPlace,
   windowPlaceFrom,
@@ -533,52 +532,66 @@ describe("placement persistence", () => {
   });
 });
 
-it("waits for the final close write before app quit", async () => {
-  const source = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
-  const start = source.indexOf('app.on("will-quit", (event) => {');
-  const end = source.indexOf("\n});", start) + "\n});".length;
-  expect(start).toBeGreaterThan(0);
-  let handler: (event: { preventDefault: () => void }) => void = () => {};
-  let finish = () => {};
-  const windowPlace = {
-    writing: true,
-    flush: vi.fn(
-      () =>
-        new Promise<void>((resolve) => {
-          finish = resolve;
-        }),
-    ),
-  };
-  const quit = vi.fn();
-  const stop = vi.fn();
-  const context = {
-    app: {
-      on: (_event: string, listener: typeof handler) => {
-        handler = listener;
-      },
-      quit,
+describe("bounded placement quit wait", () => {
+  function fixture() {
+    vi.useFakeTimers();
+    let finish!: () => void;
+    let fail!: () => void;
+    const store = {
+      writing: true,
+      flush: vi.fn(
+        () =>
+          new Promise<void>((resolve, reject) => {
+            finish = resolve;
+            fail = () => reject(new Error("write failed"));
+          }),
+      ),
+    };
+    const quit = vi.fn();
+    const wait = createWindowPlaceQuitWait(store, quit);
+    const event = { preventDefault: vi.fn() };
+    return { store, quit, wait, event, finish: () => finish(), fail: () => fail() };
+  }
+
+  it.each(["resolve", "reject"] as const)(
+    "resumes exactly once when the write %s settles",
+    async (result) => {
+      const f = fixture();
+      expect(f.wait(f.event)).toBe(true);
+      expect(f.event.preventDefault).toHaveBeenCalledOnce();
+      expect(f.wait(f.event)).toBe(true);
+      expect(f.store.flush).toHaveBeenCalledOnce();
+      expect(f.quit).not.toHaveBeenCalled();
+      if (result === "resolve") f.finish();
+      else f.fail();
+      await Promise.resolve();
+      expect(f.quit).toHaveBeenCalledOnce();
+      expect(f.wait(f.event)).toBe(false);
+      expect(vi.getTimerCount()).toBe(0);
     },
-    windowPlace,
-    guidedEngine: undefined,
-    legacyCompose: true,
-    hostService: { stop },
-    guidedIpcCleanup: null,
-    desktopTray: null,
-    clearTimeout: vi.fn(),
-    warmWindowTimer: undefined,
-    remoteListener: { stop: vi.fn() },
-    localStack: undefined,
-  };
-  vm.runInNewContext(stripTypeScriptTypes(source.slice(start, end)), context);
-  const event = { preventDefault: vi.fn() };
-  handler(event);
-  expect(event.preventDefault).toHaveBeenCalledOnce();
-  expect(quit).not.toHaveBeenCalled();
-  expect(stop).not.toHaveBeenCalled();
-  windowPlace.writing = false;
-  finish();
-  await Promise.resolve();
-  expect(quit).toHaveBeenCalledOnce();
-  handler({ preventDefault: vi.fn() });
-  expect(stop).toHaveBeenCalledOnce();
+  );
+
+  it("lets quit proceed after the timeout even if the write never settles", async () => {
+    const f = fixture();
+    expect(f.wait(f.event)).toBe(true);
+    vi.advanceTimersByTime(WINDOW_PLACE_QUIT_TIMEOUT_MS - 1);
+    expect(f.quit).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(f.quit).toHaveBeenCalledOnce();
+    expect(f.store.writing).toBe(true);
+    expect(f.wait(f.event)).toBe(false);
+    f.finish();
+    await Promise.resolve();
+    expect(f.quit).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("does not hold quit or start a timer without a pending write", () => {
+    const f = fixture();
+    f.store.writing = false;
+    expect(f.wait(f.event)).toBe(false);
+    expect(f.event.preventDefault).not.toHaveBeenCalled();
+    expect(f.store.flush).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });

@@ -228,3 +228,30 @@ export function windowWithRestoredState(
     once: (event, listener) => win.once(event, listener),
   };
 }
+
+export const WINDOW_PLACE_QUIT_TIMEOUT_MS = 2_000;
+
+/** Hold quit for the final close write, but never let a stalled disk trap the app. */
+export function createWindowPlaceQuitWait(
+  store: Pick<WindowPlaceStore, "writing" | "flush">,
+  quit: () => void,
+): (event: { preventDefault(): void }) => boolean {
+  let waiting = false;
+  let finished = false;
+  return (event) => {
+    if (finished || !store.writing) return false;
+    event.preventDefault();
+    if (waiting) return true;
+    waiting = true;
+    const resume = () => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      quit();
+    };
+    const timer = setTimeout(resume, WINDOW_PLACE_QUIT_TIMEOUT_MS);
+    timer.unref();
+    void store.flush().then(resume, resume);
+    return true;
+  };
+}
