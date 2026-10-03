@@ -264,7 +264,11 @@ import { createContextService } from "./context.js";
 import type { RouterContext } from "./customization-routes.js";
 import { createCustomizationRoutes } from "./customization-routes.js";
 import { dashboardNow, routineOverview, usageSummary } from "./dashboard.js";
-import { getModelDestinations, setModelDestinations } from "./delegation-policy.js";
+import {
+  getModelDestinations,
+  setModelDestinations,
+  validateDefaultModelDestinations,
+} from "./delegation-policy.js";
 import { runEvidenceSummary } from "./evidence.js";
 import { listSpaceFeatures, setSpaceFeature } from "./features.js";
 import {
@@ -1556,12 +1560,13 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                   message: `No model credential is connected for ${input.provider}.`,
                 });
               }
-              await selectSpaceModelPreference(
-                tx,
+              const modelId = usableModelId(input.modelId) ?? defaultCatalogModelId(input.provider);
+              await validateDefaultModelDestinations(
+                { ...deps, prisma: tx as PrismaClient },
                 context.actor,
-                credential.id,
-                usableModelId(input.modelId) ?? defaultCatalogModelId(input.provider),
+                { provider: input.provider, modelId, credentialId: credential.id },
               );
+              await selectSpaceModelPreference(tx, context.actor, credential.id, modelId);
             },
             { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
           ),

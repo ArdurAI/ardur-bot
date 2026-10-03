@@ -136,6 +136,8 @@ function fixture(row: (typeof rows)[number]) {
     },
     userModelCredential: { findFirst: vi.fn(async () => (row.missing ? null : credential)) },
     spaceModelPreference: {
+      updateMany: vi.fn(),
+      upsert: vi.fn(),
       findFirst: vi.fn(async () => ({ modelId: "fixture-model", isDefault: false })),
     },
     secret: { findFirst: vi.fn(async () => ({ id: "secret", ciphertext: "fixture" })) },
@@ -641,3 +643,70 @@ it("new-bot preview and creation accept an inherited offline Ollama default with
   expect(listOllamaModels).not.toHaveBeenCalled();
   expect(showOllamaModel).not.toHaveBeenCalled();
 });
+
+it.each(["space", "bot"])(
+  "setDefault refuses to strand inherited bots under a %s Local-only policy",
+  async (policy) => {
+    const f = fixture({ name: "inherited", kind: "pi", local: policy === "space" });
+    f.bot.modelProvider = null as never;
+    f.bot.modelId = null as never;
+    f.bot.modelCredentialId = null as never;
+    Object.assign(f.bot, {
+      allowedModelDestinations: { mode: policy === "bot" ? "local" : "any" },
+    });
+    const result = await f.call("models/setDefault", {
+      provider: "openai-compatible",
+      modelId: "remote-default",
+    });
+    expect(result).toMatchObject({
+      status: 400,
+      body: {
+        json: {
+          message: failureCategoryMessage(
+            policy === "space" ? "destinations-space" : "destinations-bot",
+            { bot: "this bot" },
+          ),
+          data: { blockedBots: [{ id: "bot", name: "Renamed" }] },
+        },
+      },
+    });
+    expect(f.prisma.spaceModelPreference.updateMany).not.toHaveBeenCalled();
+    expect(f.prisma.spaceModelPreference.upsert).not.toHaveBeenCalled();
+    expect(f.prisma.bot.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          spaceId: "space",
+          userId: "user",
+          archivedAt: null,
+          runtimeKind: "pi",
+          modelProvider: null,
+          modelId: null,
+        },
+      }),
+    );
+  },
+);
+it.each(["local endpoint", "no inherited bots", "unrestricted"])(
+  "setDefault permits %s without changing a saved pin",
+  async (scenario) => {
+    const f = fixture({ name: "default", kind: "pi", local: scenario !== "unrestricted" });
+    if (scenario === "no inherited bots") f.prisma.bot.findMany.mockResolvedValue([]);
+    if (scenario === "local endpoint")
+      f.deps.secrets.load = () =>
+        JSON.stringify({ kind: "openai_compatible", baseUrl: "http://localhost:11434/v1" });
+    expect(
+      (await f.call("models/setDefault", { provider: "openai-compatible", modelId: "new-default" }))
+        .status,
+    ).toBe(200);
+    expect(f.prisma.spaceModelPreference.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          modelId: "new-default",
+          credentialId: "connection",
+          isDefault: true,
+        }),
+      }),
+    );
+    expect(f.prisma.bot.update).not.toHaveBeenCalled();
+  },
+);

@@ -89,7 +89,7 @@ export async function setModelDestinations(
 /** Check configured destinations offline, using the model owner's connection. */
 export async function botModelDestinationProblem(
   deps: Pick<RouterDeps, "prisma" | "secrets">,
-  actor: Actor,
+  actor: Pick<Actor, "spaceId" | "userId">,
   pin: RuntimePin,
   policies: Pick<Parameters<typeof canBotRun>[0], "botPolicy" | "spacePolicy">,
 ) {
@@ -128,4 +128,47 @@ export async function botModelDestinationProblem(
     destinationModel: { provider: pin.provider!, id: pin.modelId!, baseUrl },
     ...policies,
   });
+}
+
+/** The default changes only unpinned built-in bots owned by this member. */
+export async function validateDefaultModelDestinations(
+  deps: Pick<RouterDeps, "prisma" | "secrets">,
+  actor: Actor,
+  choice: { provider: string; modelId: string | null | undefined; credentialId: string },
+) {
+  const bots = await deps.prisma.bot.findMany({
+    where: {
+      spaceId: actor.spaceId,
+      userId: actor.userId,
+      archivedAt: null,
+      runtimeKind: "pi",
+      modelProvider: null,
+      modelId: null,
+    },
+    orderBy: [{ name: "asc" }, { id: "asc" }],
+  });
+  if (!bots.length) return;
+  const space = await deps.prisma.space.findUnique({ where: { id: actor.spaceId } });
+  const blocked: { id: string; name: string }[] = [];
+  let reason: string | undefined;
+  for (const bot of bots) {
+    const problem = await botModelDestinationProblem(
+      deps,
+      actor,
+      {
+        runtimeKind: "pi",
+        provider: choice.provider,
+        modelId: choice.modelId ?? null,
+        credentialId: choice.credentialId,
+        effort: null,
+        revision: 0,
+      },
+      { botPolicy: bot.allowedModelDestinations, spacePolicy: space?.allowedModelDestinations },
+    );
+    if (!problem) continue;
+    reason ??= problem.reason;
+    blocked.push({ id: bot.id, name: bot.name });
+  }
+  if (reason)
+    throw new ORPCError("BAD_REQUEST", { message: reason, data: { blockedBots: blocked } });
 }
