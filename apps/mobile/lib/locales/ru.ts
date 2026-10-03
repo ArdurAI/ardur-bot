@@ -1,4 +1,6 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "{runtime} needs a model with at least 64K context; change the model and try again.":
+    "Для {runtime} нужна модель с контекстом не менее 64K; смените модель и повторите попытку.",
   "{runtime} could not start a session. Check the runtime and try again.":
     "{runtime} не удалось запустить сессию. Проверьте среду выполнения и повторите попытку.",
   Sandbox: "Песочница",
@@ -1487,4 +1489,9 @@ export const RU_MESSAGES: Record<string, string> = {
   "{name} stood down": "{name} прекратил работу",
   "The previous action may have finished. I’ll check before retrying.":
     "Предыдущее действие могло завершиться. Проверю перед повторной попыткой.",
+  "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models.":
+    "Hermes нужен лимит контекста не менее 64K токенов. Задайте его для этого подключения в Настройки → Модели.",
+  "Could not check the model. Try again.": "Не удалось проверить модель. Попробуйте ещё раз.",
+  "Context limit (estimated)": "Лимит контекста (оценка)",
+  "Context limit (from the provider)": "Лимит контекста (от провайдера)",
 };

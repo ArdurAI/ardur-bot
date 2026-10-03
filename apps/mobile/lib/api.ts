@@ -17,7 +17,7 @@ import type {
   SpaceNavigation,
   ToolResumedPayload,
 } from "@ardurbot/contracts";
-import { RuntimeProblemSchema } from "@ardurbot/contracts";
+import { HERMES_CONTEXT_LIMIT_MESSAGE, RuntimeProblemSchema } from "@ardurbot/contracts";
 import type { ThreadHistory } from "@ardurbot/core";
 import {
   aiConsentTarget,
@@ -677,7 +677,11 @@ export async function rpc<T>(
         payload && typeof payload === "object" && "data" in payload ? payload.data : undefined;
       const throwRpcError = () =>
         serverMessage !== undefined
-          ? new RpcServerError(serverMessage, code, data)
+          ? new RpcServerError(
+              serverMessage === HERMES_CONTEXT_LIMIT_MESSAGE ? t(serverMessage) : serverMessage,
+              code,
+              data,
+            )
           : new RpcError(message, code, data);
       const unauthorized = res.status === 401 || /unauthorized/i.test(message);
       // After a delete where SecureStore could not clear the stale id, restart

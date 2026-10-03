@@ -800,6 +800,18 @@ export class HermesRuntime implements AgentRuntime {
             turn.failureKind = classifyTurnFailure(error, turn.phase, category);
             if (error instanceof AcpClientError) turn.acpError = error;
             const handshakeFailed = turn.phase === "initialize" || turn.phase === "session/new";
+            // The pinned constructor rejects a window below 64,000. Only this
+            // confirmed response selects fixed copy; private data is never echoed.
+            const sessionFailure =
+              turn.phase === "session/new" &&
+              error instanceof AcpClientError &&
+              error.kind === "protocol-error" &&
+              error.protocolError?.code === -32603 &&
+              error.detail?.includes(
+                "tokens, which is below the minimum 64,000 required by Hermes Agent.",
+              )
+                ? "model-context-too-small"
+                : "session-start-failed";
             // Stdout ends a tick before the process 'close', so the exit code
             // is often still unknown here; stop the child and settle the exit
             // facts before the failure is recorded.
@@ -809,12 +821,12 @@ export class HermesRuntime implements AgentRuntime {
               request.runId,
               "failure",
               handshakeFailed && pin
-                ? new RuntimePinError(nativeFailureProblem(pin, "session-start-failed"))
+                ? new RuntimePinError(nativeFailureProblem(pin, sessionFailure))
                 : category && pin
                   ? new RuntimePinError(nativeFailureProblem(pin, category))
                   : new Error(
                       handshakeFailed
-                        ? failureCategoryMessage("session-start-failed", { runtime: "Hermes" })
+                        ? failureCategoryMessage(sessionFailure, { runtime: "Hermes" })
                         : "Hermes could not complete this turn.",
                       {
                         cause: error,

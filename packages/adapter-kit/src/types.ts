@@ -2,6 +2,7 @@ import type {
   ConnectionCatalogItem,
   DelegationProblem,
   DocumentScope,
+  ModelContextWindowSource,
   RuntimeInfo,
   RuntimePin,
   RuntimeProblem,
@@ -425,6 +426,8 @@ export interface AgentRunModel {
   maxTokens?: number;
   /** Context-window limit used when sizing prompts and completions. */
   contextWindow?: number;
+  /** Provenance keeps an unknown estimate distinct from a declared runtime budget. */
+  contextWindowSource?: ModelContextWindowSource;
   /** Explicit thinking effort; unsupported values must fail without clamping. */
   thinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | null;
   /** In-process OAuth credential from the encrypted store for this run. */

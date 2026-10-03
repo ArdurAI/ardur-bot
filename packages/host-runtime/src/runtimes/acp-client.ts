@@ -18,20 +18,17 @@ export class AcpClientError extends Error {
   }
 }
 
-/** The matchable text of a JSON-RPC error: its message and any nested message. */
+/** Private matching text, including the pinned SDK’s data.details; never diagnostic data. */
 function acpErrorDetail(error: unknown): string | undefined {
   if (!error || typeof error !== "object") return undefined;
   const parts: string[] = [];
   if ("message" in error && typeof error.message === "string") parts.push(error.message);
   const data = "data" in error ? error.data : undefined;
   if (typeof data === "string") parts.push(data);
-  else if (
-    data &&
-    typeof data === "object" &&
-    "message" in data &&
-    typeof data.message === "string"
-  )
-    parts.push(data.message);
+  else if (data && typeof data === "object") {
+    if ("message" in data && typeof data.message === "string") parts.push(data.message);
+    if ("details" in data && typeof data.details === "string") parts.push(data.details);
+  }
   return parts.length ? parts.join("\n") : undefined;
 }
 

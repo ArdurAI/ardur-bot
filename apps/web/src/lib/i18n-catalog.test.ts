@@ -18,14 +18,18 @@ describe("lingui catalogs", () => {
     async (locale) => {
       const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
       const source = readFileSync(filename, "utf8");
-      const message = "{runtime} could not start a session. Check the runtime and try again.";
-      const catalog = await formatter().parse(source, { locale, sourceLocale: "en", filename });
-      expect(source.split(`msgid ${JSON.stringify(message)}\n`)).toHaveLength(2);
-      const entry = Object.values(catalog).find((value) => value.message === message);
-      expect(entry?.translation?.trim(), locale).toBeTruthy();
-      expect(entry?.translation).toContain("{runtime}");
-      if (locale === "en") expect(entry?.translation).toBe(message);
-      else expect(entry?.translation).not.toBe(message);
+      for (const message of [
+        "{runtime} could not start a session. Check the runtime and try again.",
+        "{runtime} needs a model with at least 64K context; change the model and try again.",
+      ]) {
+        const catalog = await formatter().parse(source, { locale, sourceLocale: "en", filename });
+        expect(source.split(`msgid ${JSON.stringify(message)}\n`)).toHaveLength(2);
+        const entry = Object.values(catalog).find((value) => value.message === message);
+        expect(entry?.translation?.trim(), locale).toBeTruthy();
+        expect(entry?.translation).toContain("{runtime}");
+        if (locale === "en") expect(entry?.translation).toBe(message);
+        else expect(entry?.translation).not.toBe(message);
+      }
     },
   );
   it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(

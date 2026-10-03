@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildModelConnectPlaintext, modelCredentialDto } from "./model-connect.js";
+import { piModelContextWindow } from "./pi-models.js";
 import { parseModelSecret, serializeModelSecret } from "./pi-oauth.js";
 
 describe("modelCredentialDto", () => {
@@ -51,6 +52,8 @@ describe("modelCredentialDto", () => {
         plaintext,
       ),
     ).toEqual({
+      contextWindow: 65_536,
+      contextWindowSource: "default",
       id: "cred-1",
       provider: "openai-compatible",
       label: "Local MLX",
@@ -166,6 +169,8 @@ describe("modelCredentialDto", () => {
       label: "xAI",
       hasKey: true,
       isDefault: false,
+      contextWindow: piModelContextWindow("xai", "grok-4.6") ?? 65_536,
+      contextWindowSource: piModelContextWindow("xai", "grok-4.6") ? "catalog" : "default",
       modelId: "grok-4.6",
     });
   });
@@ -393,5 +398,43 @@ describe("compatible connection updates", () => {
     const baseUrl = "http://example.invalid/v1";
     const legacy = serializeModelSecret({ kind: "openai_compatible", baseUrl, apiKey: "fake-key" });
     expect(() => buildModelConnectPlaintext({ ...input, baseUrl }, legacy)).toThrow(/HTTPS/);
+  });
+});
+
+it.each([undefined, 8_192, 64_000])(
+  "projects the resolved compatible window and source for %s",
+  (contextWindow) => {
+    const dto = modelCredentialDto(
+      {
+        id: "connection",
+        provider: "openai-compatible",
+        label: "Fixture",
+        isDefault: false,
+        defaultModel: "fixture-model",
+      },
+      serializeModelSecret({
+        kind: "openai_compatible",
+        baseUrl: "https://example.invalid/v1",
+        ...(contextWindow === undefined ? {} : { contextWindow }),
+      }),
+    );
+    expect(dto).toMatchObject({
+      contextWindow: contextWindow ?? 65_536,
+      contextWindowSource: contextWindow === undefined ? "default" : "metadata",
+    });
+  },
+);
+
+it("marks an unconfigured compatible connection as an estimate without saving it", () => {
+  expect(
+    modelCredentialDto({
+      id: "connection",
+      provider: "openai-compatible",
+      label: "Fixture",
+      isDefault: false,
+    }),
+  ).toMatchObject({
+    contextWindow: 65_536,
+    contextWindowSource: "default",
   });
 });

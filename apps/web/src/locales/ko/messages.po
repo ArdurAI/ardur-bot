@@ -356,6 +356,10 @@ msgid "{runtime} loads all connected tools because deferred loading is unavailab
 msgstr ""
 
 #: src/lib/failure-category-copy.ts
+msgid "{runtime} needs a model with at least 64K context; change the model and try again."
+msgstr "{runtime}에는 최소 64K 컨텍스트를 지원하는 모델이 필요합니다. 모델을 변경한 후 다시 시도하세요."
+
+#: src/lib/failure-category-copy.ts
 msgid "{runtime} reached this run's turn limit. Narrow the task and try again."
 msgstr "{runtime}이(가) 이 실행의 턴 한도에 도달했습니다. 작업 범위를 좁히고 다시 시도하세요."
 
@@ -2402,10 +2406,17 @@ msgstr "컨테이너"
 msgid "Context"
 msgstr "컨텍스트"
 
-#: src/pages/ModelSettingsOverlay.tsx
-#: src/pages/Onboarding.tsx
+#: src/lib/model-context-label.ts
 msgid "Context limit"
 msgstr "컨텍스트 한도"
+
+#: src/lib/model-context-label.ts
+msgid "Context limit (estimated)"
+msgstr "컨텍스트 한도 (추정)"
+
+#: src/lib/model-context-label.ts
+msgid "Context limit (from the provider)"
+msgstr "컨텍스트 한도 (공급자 제공)"
 
 #: src/pages/group-model-control.tsx
 #: src/pages/shell/runtime-config-advanced.tsx
@@ -2579,6 +2590,10 @@ msgstr ""
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Could not check teaching status. Refresh the view to continue."
 msgstr "가르치기 상태를 확인하지 못했습니다. 화면을 새로고침한 뒤 이어가세요."
+
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Could not check the model. Try again."
+msgstr "모델을 확인하지 못했습니다. 다시 시도하세요."
 
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/HostComputerSettings.tsx
@@ -4563,6 +4578,10 @@ msgstr "이 컴퓨터에 Hermes가 설치되어 있지 않습니다."
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes isn't available on Windows yet."
 msgstr "Hermes는 아직 Windows에서 사용할 수 없습니다."
+
+#: src/lib/hermes-refusal.ts
+msgid "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models."
+msgstr "Hermes에는 최소 64K 토큰의 컨텍스트 한도가 필요합니다. 설정 → 모델에서 이 연결의 한도를 지정하세요."
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."

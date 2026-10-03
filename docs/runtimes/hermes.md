@@ -101,6 +101,10 @@ pinned to one is refused, and any other sign-in connection is refused the same
 way. A run on an Anthropic sign-in saved by an older version is refused with
 "Reconnect with an API key." The chosen connection
 must have a bounded context window and an output limit at most 65,536 tokens.
+The pinned runtime rejects a model context window below 64,000 tokens. That
+session-start refusal shows “Hermes needs a model with at least 64K context;
+change the model and try again.” The context limit in bot settings controls
+Ardur’s supplied instructions, not the model’s context window.
 Effort is a requested value; seeing the outbound field does not prove the provider
 applied it. The bot and run keep their exact credential, model, effort and revision.
 Group member model choices must pass the same compatibility check. An admitted run
@@ -153,3 +157,24 @@ unavailable. Browser screenshot execution and packaged desktop acceptance also
 require their own lanes. No benchmark result should mix Ardur/Hermes with the
 built-in runtime or Hermes standalone. The five comparison identities are
 Ardur/built-in, Ardur/Hermes, Hermes standalone, Ardur/Prime and Prime standalone.
+
+
+## Model context limit
+
+Hermes needs a model context limit of at least 64,000 tokens. The model picker
+checks the connection on the server before saving and names **Settings → Models**
+when the limit is too small. Exactly 64,000 is accepted. The built-in runtime can
+still use a smaller saved window.
+
+In **Settings → Models**, the context field shows the resolved connection limit.
+Saved metadata wins over provider catalog facts. When neither is known, compatible
+connections use 65,536 with **Context limit (estimated)**. An untouched estimate is
+not saved as metadata. Hermes uses that estimate; the built-in runtime keeps its
+conservative 32,768 budget until metadata or catalog capacity is known. Known catalog limits show **Context limit (from the provider)**.
+The compatible endpoint catalog currently lists model IDs, not endpoint-qualified
+context lengths, so those connections use saved metadata or the explicit estimate.
+
+This is separate from a bot's **Context limit (KiB)**, which bounds the text Ardur
+supplies to a turn. Changing that byte limit does not change the model's capacity.
+An estimate is not proof of actual capacity; set the provider's documented limit
+if it differs. No provider, model, effort, source pin or runtime fallback changes.

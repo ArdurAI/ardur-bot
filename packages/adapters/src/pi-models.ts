@@ -21,6 +21,7 @@ export type PiCatalogEntry = {
   authHint?: string;
   subscription: boolean;
   signIn?: ModelOAuthSignInMode;
+  contextWindow?: number;
   reasoning?: boolean;
   thinkingLevels?: ThinkingLevel[];
   placeholder?: boolean;
@@ -65,6 +66,7 @@ function buildPiCatalog(): PiCatalogEntry[] {
           provider.id === OPENAI_COMPATIBLE_PROVIDER_ID ? "Custom server" : signInMeta?.hint,
         subscription,
         signIn: signInMeta?.mode,
+        contextWindow: model.contextWindow,
         reasoning: Boolean(model.reasoning),
         thinkingLevels,
         // Compatibility metadata does not prove a model is served by a user's

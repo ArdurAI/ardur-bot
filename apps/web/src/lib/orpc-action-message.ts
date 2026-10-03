@@ -1,4 +1,6 @@
+import { HERMES_CONTEXT_LIMIT_MESSAGE } from "@ardurbot/contracts";
 import { rpcErrorMessage } from "@ardurbot/core";
+import { i18n } from "@lingui/core";
 import { ORPCError } from "@orpc/client";
 
 /**
@@ -6,5 +8,6 @@ import { ORPCError } from "@orpc/client";
  * fallback. Its code decides: an error the server did not map never shows its text.
  */
 export function actionMessage(error: unknown, fallback: string): string {
-  return error instanceof ORPCError ? rpcErrorMessage(error, fallback) : fallback;
+  const message = error instanceof ORPCError ? rpcErrorMessage(error, fallback) : fallback;
+  return message === HERMES_CONTEXT_LIMIT_MESSAGE ? i18n._(HERMES_CONTEXT_LIMIT_MESSAGE) : message;
 }

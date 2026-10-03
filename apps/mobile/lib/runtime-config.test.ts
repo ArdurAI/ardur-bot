@@ -562,3 +562,35 @@ it("clears a stale server-preview error after a short-panel edit", async () => {
   expect(lastPayload.runtimeConfig.limits.maxProviderRequests).toBe(24);
   await act(async () => root.unmount());
 });
+
+it("shows the server's Hermes pin refusal in the short phone panel", async () => {
+  const sentence =
+    "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models.";
+  vi.mocked(rpc).mockRejectedValueOnce({ code: "BAD_REQUEST", message: sentence });
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  const onError = vi.fn();
+  await act(async () => {
+    root.render(
+      createElement(RuntimeConfigPanel, {
+        value: null,
+        onChange: () => {},
+        onError,
+        pin: {
+          runtimeKind: "hermes",
+          provider: "openai-compatible",
+          modelId: "fixture-model",
+          credentialId: "connection",
+          effort: "off",
+        },
+      }),
+    );
+  });
+  expect(node.textContent).toContain(sentence);
+  expect(onError).toHaveBeenLastCalledWith(sentence);
+  expect(rpc).toHaveBeenCalledWith(
+    "models/validatePin",
+    expect.objectContaining({ modelId: "fixture-model" }),
+  );
+  await act(async () => root.unmount());
+});

@@ -356,6 +356,10 @@ msgid "{runtime} loads all connected tools because deferred loading is unavailab
 msgstr ""
 
 #: src/lib/failure-category-copy.ts
+msgid "{runtime} needs a model with at least 64K context; change the model and try again."
+msgstr "{runtime} necesita un modelo con al menos 64K de contexto; cambia el modelo e inténtalo de nuevo."
+
+#: src/lib/failure-category-copy.ts
 msgid "{runtime} reached this run's turn limit. Narrow the task and try again."
 msgstr "{runtime} alcanzó el límite de turnos de esta ejecución. Acota la tarea e inténtalo de nuevo."
 
@@ -2402,10 +2406,17 @@ msgstr "Contenedor"
 msgid "Context"
 msgstr "Contexto"
 
-#: src/pages/ModelSettingsOverlay.tsx
-#: src/pages/Onboarding.tsx
+#: src/lib/model-context-label.ts
 msgid "Context limit"
 msgstr "Límite de contexto"
+
+#: src/lib/model-context-label.ts
+msgid "Context limit (estimated)"
+msgstr "Límite de contexto (estimado)"
+
+#: src/lib/model-context-label.ts
+msgid "Context limit (from the provider)"
+msgstr "Límite de contexto (del proveedor)"
 
 #: src/pages/group-model-control.tsx
 #: src/pages/shell/runtime-config-advanced.tsx
@@ -2579,6 +2590,10 @@ msgstr ""
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Could not check teaching status. Refresh the view to continue."
 msgstr "No se pudo comprobar el estado de enseñanza. Actualiza la vista para continuar."
+
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Could not check the model. Try again."
+msgstr "No se pudo comprobar el modelo. Inténtalo de nuevo."
 
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/HostComputerSettings.tsx
@@ -4563,6 +4578,10 @@ msgstr "Hermes no está instalado en este equipo."
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes isn't available on Windows yet."
 msgstr "Hermes todavía no está disponible en Windows."
+
+#: src/lib/hermes-refusal.ts
+msgid "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models."
+msgstr "Hermes necesita un límite de contexto de al menos 64K tokens. Configúralo para esta conexión en Ajustes → Modelos."
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."

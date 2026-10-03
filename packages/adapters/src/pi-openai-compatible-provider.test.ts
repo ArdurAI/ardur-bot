@@ -237,6 +237,27 @@ describe("openai-compatible provider", () => {
     expect(provider.getModels()[0]?.id).toBe(OPENAI_COMPATIBLE_CATALOG_MODEL_ID);
   });
 
+  it.each([
+    [undefined, undefined, 32_768],
+    [65_536, "default", 32_768],
+    [8_192, "metadata", 8_192],
+    [200_000, "catalog", 200_000],
+    [65_536, undefined, 65_536],
+  ] as const)(
+    "registers context %s from %s as %s",
+    (contextWindow, contextWindowSource, expected) => {
+      const models = registerOpenAiCompatibleRuntime(builtinModels(), {
+        modelId: "fixture-model",
+        baseUrl: "http://127.0.0.1:8000/v1",
+        contextWindow,
+        contextWindowSource,
+      });
+      expect(models.getModel(OPENAI_COMPATIBLE_PROVIDER_ID, "fixture-model")?.contextWindow).toBe(
+        expected,
+      );
+    },
+  );
+
   it("registers runtime models at the stored base URL", () => {
     const models = registerOpenAiCompatibleRuntime(builtinModels(), {
       modelId: "rapid-mlx",

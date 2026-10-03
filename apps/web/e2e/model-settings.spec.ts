@@ -345,3 +345,40 @@ test("model settings connect, replace, and cancel provider authentication", asyn
   await expect(page.getByRole("button", { name: "Replace API key" })).toBeEnabled();
   await expect(page.getByText("Waiting for sign-in…")).toBeHidden();
 });
+
+test("Models shows an unsaved context estimate and preserves its source", async ({
+  page,
+}, testInfo) => {
+  const stamp = Date.now();
+  await signup(page, `context-estimate-${stamp}@example.test`, "password12", "Context settings");
+  await completeOnboarding(page);
+  await page.route("**/rpc/models/credentials", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        json: [
+          {
+            id: "context-fixture",
+            provider: "openai-compatible",
+            label: "Fixture connection",
+            hasKey: true,
+            isDefault: false,
+            modelId: "fixture-model",
+            baseUrl: "https://example.invalid/v1",
+            contextWindow: 65_536,
+            contextWindowSource: "default",
+          },
+        ],
+      }),
+    }),
+  );
+  await openUserSettings(page, "models");
+  await page.getByPlaceholder("Search providers").fill("openai-compatible");
+  await page.getByRole("button", { name: /OpenAI-compatible/ }).click();
+  await page.getByText("Advanced", { exact: true }).click();
+  await expect(page.getByLabel("Context limit (estimated)", { exact: true })).toHaveValue("65536");
+  await captureScreenshot(page, testInfo, "model-context-estimate");
+  await page.getByLabel("Context limit (estimated)", { exact: true }).fill("64000");
+  await expect(page.getByLabel("Context limit", { exact: true })).toHaveValue("64000");
+  await captureScreenshot(page, testInfo, "model-context-explicit-limit");
+});

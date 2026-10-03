@@ -1,8 +1,12 @@
 import type { ModelConnectInput, ModelCredential, ThinkingLevel } from "@ardurbot/contracts";
-import { OPENAI_COMPATIBLE_PROVIDER_ID as CONTRACT_OPENAI_COMPAT } from "@ardurbot/contracts";
+import {
+  OPENAI_COMPATIBLE_PROVIDER_ID as CONTRACT_OPENAI_COMPAT,
+  resolveModelContextWindow,
+} from "@ardurbot/contracts";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { modelIdSupportsImages, updateModelImageCapabilities } from "./model-vision.js";
 import { normalizeOllamaUrl } from "./ollama.js";
+import { piModelContextWindow } from "./pi-models.js";
 import type { StoredModelSecret } from "./pi-oauth.js";
 import {
   assertAnthropicApiKey,
@@ -118,6 +122,9 @@ export function modelCredentialDto(
     label: row.label,
     hasKey: true,
     isDefault: row.isDefault,
+    ...(row.provider !== CONTRACT_OPENAI_COMPAT && row.defaultModel
+      ? resolveModelContextWindow(undefined, piModelContextWindow(row.provider, row.defaultModel))
+      : {}),
     ...(row.defaultModel ? { modelId: row.defaultModel } : {}),
   };
   if (row.provider === "ollama") {
@@ -140,9 +147,10 @@ export function modelCredentialDto(
     ...credential,
     supportsImages: row.supportsImages ?? false,
   };
-  if (!plaintext) return compatibleCredential;
+  if (!plaintext) return { ...compatibleCredential, ...resolveModelContextWindow() };
   const parsed = parseModelSecret(plaintext);
-  if (parsed.kind !== "openai_compatible") return compatibleCredential;
+  if (parsed.kind !== "openai_compatible")
+    return { ...compatibleCredential, ...resolveModelContextWindow() };
   return {
     ...compatibleCredential,
     supportsImages:
@@ -153,7 +161,7 @@ export function modelCredentialDto(
     reasoning: parsed.reasoning ?? false,
     ...(parsed.thinkingLevel !== undefined ? { thinkingLevel: parsed.thinkingLevel } : {}),
     ...(parsed.maxTokens !== undefined ? { maxTokens: parsed.maxTokens } : {}),
-    ...(parsed.contextWindow !== undefined ? { contextWindow: parsed.contextWindow } : {}),
+    ...resolveModelContextWindow(parsed.contextWindow),
     ...(parsed.maxImagesPerPrompt !== undefined
       ? { maxImagesPerPrompt: parsed.maxImagesPerPrompt }
       : {}),

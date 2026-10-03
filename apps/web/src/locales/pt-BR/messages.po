@@ -356,6 +356,10 @@ msgid "{runtime} loads all connected tools because deferred loading is unavailab
 msgstr ""
 
 #: src/lib/failure-category-copy.ts
+msgid "{runtime} needs a model with at least 64K context; change the model and try again."
+msgstr "{runtime} precisa de um modelo com pelo menos 64K de contexto; altere o modelo e tente novamente."
+
+#: src/lib/failure-category-copy.ts
 msgid "{runtime} reached this run's turn limit. Narrow the task and try again."
 msgstr "{runtime} atingiu o limite de turnos desta execução. Restrinja a tarefa e tente novamente."
 
@@ -2402,10 +2406,17 @@ msgstr "Contêiner"
 msgid "Context"
 msgstr "Contexto"
 
-#: src/pages/ModelSettingsOverlay.tsx
-#: src/pages/Onboarding.tsx
+#: src/lib/model-context-label.ts
 msgid "Context limit"
 msgstr "Limite de contexto"
+
+#: src/lib/model-context-label.ts
+msgid "Context limit (estimated)"
+msgstr "Limite de contexto (estimado)"
+
+#: src/lib/model-context-label.ts
+msgid "Context limit (from the provider)"
+msgstr "Limite de contexto (do provedor)"
 
 #: src/pages/group-model-control.tsx
 #: src/pages/shell/runtime-config-advanced.tsx
@@ -2579,6 +2590,10 @@ msgstr ""
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Could not check teaching status. Refresh the view to continue."
 msgstr ""
+
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Could not check the model. Try again."
+msgstr "Não foi possível verificar o modelo. Tente novamente."
 
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/HostComputerSettings.tsx
@@ -4563,6 +4578,10 @@ msgstr "O Hermes não está instalado neste computador."
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes isn't available on Windows yet."
 msgstr "O Hermes ainda não está disponível no Windows."
+
+#: src/lib/hermes-refusal.ts
+msgid "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models."
+msgstr "Hermes precisa de um limite de contexto de pelo menos 64K tokens. Defina-o para esta conexão em Configurações → Modelos."
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."
