@@ -2406,10 +2406,17 @@ msgstr "容器"
 msgid "Context"
 msgstr "上下文"
 
-#: src/pages/ModelSettingsOverlay.tsx
-#: src/pages/Onboarding.tsx
+#: src/lib/model-context-label.ts
 msgid "Context limit"
 msgstr "上下文限制"
+
+#: src/lib/model-context-label.ts
+msgid "Context limit (estimated)"
+msgstr "上下文限制（估计）"
+
+#: src/lib/model-context-label.ts
+msgid "Context limit (from the provider)"
+msgstr "上下文限制（来自提供商）"
 
 #: src/pages/group-model-control.tsx
 #: src/pages/shell/runtime-config-advanced.tsx
@@ -4567,6 +4574,10 @@ msgstr "此计算机上未安装 Hermes。"
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes isn't available on Windows yet."
 msgstr "Hermes 暂不支持 Windows。"
+
+#: src/lib/hermes-refusal.ts
+msgid "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models."
+msgstr "Hermes 需要至少 64K 个 token 的上下文限制。请在设置 → 模型中为此连接设置。"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."
@@ -9988,15 +9999,3 @@ msgstr "你的一支随时在线的 Agent 团队<0/>可以交给它们真正的�
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
-
-msgid "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models."
-msgstr "Hermes 需要至少 64K 个 token 的上下文限制。请在设置 → 模型中为此连接设置。"
-
-msgid "Could not check the model. Try again."
-msgstr "无法检查模型。请重试。"
-
-msgid "Context limit (estimated)"
-msgstr "上下文限制（估计）"
-
-msgid "Context limit (from the provider)"
-msgstr "上下文限制（来自提供商）"

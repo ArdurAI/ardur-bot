@@ -2406,10 +2406,17 @@ msgstr "Container"
 msgid "Context"
 msgstr "Context"
 
-#: src/pages/ModelSettingsOverlay.tsx
-#: src/pages/Onboarding.tsx
+#: src/lib/model-context-label.ts
 msgid "Context limit"
 msgstr "Context limit"
+
+#: src/lib/model-context-label.ts
+msgid "Context limit (estimated)"
+msgstr "Context limit (estimated)"
+
+#: src/lib/model-context-label.ts
+msgid "Context limit (from the provider)"
+msgstr "Context limit (from the provider)"
 
 #: src/pages/group-model-control.tsx
 #: src/pages/shell/runtime-config-advanced.tsx
@@ -4567,6 +4574,10 @@ msgstr "Hermes is not installed on this computer."
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes isn't available on Windows yet."
 msgstr "Hermes isn't available on Windows yet."
+
+#: src/lib/hermes-refusal.ts
+msgid "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models."
+msgstr "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models."
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."
@@ -9988,15 +9999,3 @@ msgstr "Your team of always-on agents<0/>that you can give real work to."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr "Yours"
-
-msgid "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models."
-msgstr "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models."
-
-msgid "Could not check the model. Try again."
-msgstr "Could not check the model. Try again."
-
-msgid "Context limit (estimated)"
-msgstr "Context limit (estimated)"
-
-msgid "Context limit (from the provider)"
-msgstr "Context limit (from the provider)"

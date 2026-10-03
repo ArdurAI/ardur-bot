@@ -2406,10 +2406,17 @@ msgstr "Konteyner"
 msgid "Context"
 msgstr "Bağlam"
 
-#: src/pages/ModelSettingsOverlay.tsx
-#: src/pages/Onboarding.tsx
+#: src/lib/model-context-label.ts
 msgid "Context limit"
 msgstr "Bağlam sınırı"
+
+#: src/lib/model-context-label.ts
+msgid "Context limit (estimated)"
+msgstr "Bağlam sınırı (tahmini)"
+
+#: src/lib/model-context-label.ts
+msgid "Context limit (from the provider)"
+msgstr "Bağlam sınırı (sağlayıcıdan)"
 
 #: src/pages/group-model-control.tsx
 #: src/pages/shell/runtime-config-advanced.tsx
@@ -4567,6 +4574,10 @@ msgstr "Hermes bu bilgisayarda yüklü değil."
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes isn't available on Windows yet."
 msgstr "Hermes henüz Windows'ta kullanılamıyor."
+
+#: src/lib/hermes-refusal.ts
+msgid "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models."
+msgstr "Hermes en az 64K belirteçlik bağlam sınırı gerektirir. Bu bağlantı için Ayarlar → Modeller bölümünde sınırı ayarlayın."
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."
@@ -9988,15 +9999,3 @@ msgstr "Gerçek işler verebileceğin,<0/>her zaman açık agent takımın."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
-
-msgid "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models."
-msgstr "Hermes en az 64K belirteçlik bağlam sınırı gerektirir. Bu bağlantı için Ayarlar → Modeller bölümünde sınırı ayarlayın."
-
-msgid "Could not check the model. Try again."
-msgstr "Model kontrol edilemedi. Tekrar deneyin."
-
-msgid "Context limit (estimated)"
-msgstr "Bağlam sınırı (tahmini)"
-
-msgid "Context limit (from the provider)"
-msgstr "Bağlam sınırı (sağlayıcıdan)"
