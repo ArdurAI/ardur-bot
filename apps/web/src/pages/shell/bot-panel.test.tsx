@@ -16,6 +16,7 @@ import type { rpc } from "../../lib/rpc";
 
 const api = vi.hoisted(() => ({
   list: vi.fn(),
+  validatePin: vi.fn(),
   credentials: vi.fn(),
   me: vi.fn(),
   availability: vi.fn(),
@@ -169,6 +170,7 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.clearAllMocks();
   api.list.mockResolvedValue(catalog);
+  api.validatePin.mockResolvedValue({ ok: true });
   api.credentials.mockResolvedValue(credentials);
   api.me.mockResolvedValue(me);
   api.connections.mockResolvedValue([]);
@@ -1557,6 +1559,14 @@ it("reads and saves only Hermes limits with the existing model pin", async () =>
   );
   expect(container.textContent).toContain("Hermes is not installed on this computer.");
   expect(container.textContent).toContain("Hermes runs with this computer's access.");
+  expect(api.validatePin).toHaveBeenCalledWith(
+    expect.objectContaining({
+      runtimeKind: "hermes",
+      provider: "ollama",
+      modelId: "llama3.2:1b",
+      credentialId: "connection",
+    }),
+  );
   expect(container.querySelector<HTMLInputElement>('input[type="number"][max="600"]')?.value).toBe(
     "42",
   );
