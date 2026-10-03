@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
-import { clearThread, createDb, createThreadMessage } from "@ardurbot/db";
+import {
+  clearThread,
+  createDb,
+  createThreadMessage,
+  resetBriefRetriesForConnection,
+} from "@ardurbot/db";
 import { maintainBriefs, markBriefPending } from "@ardurbot/memory";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createMemoryLifecycle } from "./lifecycle.js";
@@ -111,56 +116,111 @@ describe.skipIf(!hasDb)("brief authorization and history clearing (PostgreSQL)",
     return { prisma, bot, thread, run, service, context, chat };
   }
 
-  it("serializes a checked brief commit with clearing and rejects the old generation afterward", async () => {
-    const f = await fixture();
-    const checked = deferred();
-    const release = deferred();
-    const open = f.service.dependencies.open;
-    f.service.dependencies.open = (context, action) =>
-      open(context, async (session) => {
-        checked.resolve();
-        await release.promise;
-        return action(session);
+  it.each([false, true])(
+    "serializes a checked brief commit with clearing and rejects the old generation afterward (group: %s)",
+    async (group) => {
+      const f = await fixture(group);
+      const checked = deferred();
+      const release = deferred();
+      const open = f.service.dependencies.open;
+      f.service.dependencies.open = (context, action) =>
+        open(context, async (session) => {
+          checked.resolve();
+          await release.promise;
+          return action(session);
+        });
+      const input = {
+        scope: "group" as const,
+        botId: f.bot.id,
+        groupId: f.chat?.id ?? "direct",
+        path: `briefs/${f.chat?.id ?? "direct"}.md`,
+        content: "Old generation",
+        expectedRevision: 0,
+      };
+      const committing = f.service.commit(input, f.context);
+      await checked.promise;
+      let cleared = false;
+      const clearing = clearThread(f.prisma, {
+        ...(f.chat ? { groupId: f.chat.id } : {}),
+        spaceId: f.context.spaceId,
+        botId: f.bot.id,
+        threadId: f.thread.id,
+      }).then(() => {
+        cleared = true;
       });
-    const input = {
-      scope: "group" as const,
-      botId: f.bot.id,
-      groupId: "direct",
-      path: "briefs/direct.md",
-      content: "Old generation",
-      expectedRevision: 0,
-    };
-    const committing = f.service.commit(input, f.context);
-    await checked.promise;
-    let cleared = false;
-    const clearing = clearThread(f.prisma, {
-      spaceId: f.context.spaceId,
-      botId: f.bot.id,
-      threadId: f.thread.id,
-    }).then(() => {
-      cleared = true;
+      try {
+        // Observe the actual database interleaving; no timing-based sleep decides the outcome.
+        await expect
+          .poll(
+            async () =>
+              cleared ||
+              (
+                await db.pool.query(
+                  "SELECT 1 FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND (query LIKE '%threads%' OR query LIKE '%bots%' OR query LIKE '%chat_groups%')",
+                )
+              ).rowCount! > 0,
+          )
+          .toBe(true);
+        expect(cleared).toBe(false);
+      } finally {
+        release.resolve();
+        await Promise.all([committing, clearing]);
+      }
+      await expect(
+        f.service.commit({ ...input, expectedRevision: 1 }, f.context),
+      ).rejects.toMatchObject({ code: "MEMORY_ACCESS" });
+    },
+  );
+
+  it("connection saves reset provider-default room briefs but not unset or differently pinned briefs", async () => {
+    const f = await fixture(true);
+    await f.prisma.bot.update({ where: { id: f.bot.id }, data: { modelProvider: "other" } });
+    const unsetBot = await f.prisma.bot.create({
+      data: {
+        spaceId: f.context.spaceId,
+        userId: f.context.userId,
+        name: "Unset",
+        color: "fixture-color",
+      },
     });
-    try {
-      // Observe the actual database interleaving; no timing-based sleep decides the outcome.
-      await expect
-        .poll(
-          async () =>
-            cleared ||
-            (
-              await db.pool.query(
-                "SELECT 1 FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%threads%'",
-              )
-            ).rowCount! > 0,
-        )
-        .toBe(true);
-      expect(cleared).toBe(false);
-    } finally {
-      release.resolve();
-      await Promise.all([committing, clearing]);
+    const unsetThread = await f.prisma.thread.create({
+      data: { spaceId: f.context.spaceId, userId: f.context.userId, botId: unsetBot.id },
+    });
+    const retry = { failureCount: 4, nextAttemptAt: new Date(Date.now() + 86_400_000) };
+    await markBriefPending(f.prisma, f.run.id);
+    const where = { botId_threadId: { botId: f.bot.id, threadId: f.thread.id } };
+    const unset = await f.prisma.botBrief.create({
+      data: {
+        ...retry,
+        botId: unsetBot.id,
+        threadId: unsetThread.id,
+        spaceId: f.context.spaceId,
+        userId: f.context.userId,
+        groupKey: "direct",
+      },
+    });
+    for (const [credentialId, provider, shouldReset] of [
+      [null, "fixture", true],
+      ["different", "fixture", false],
+      [null, "other", false],
+    ] as const) {
+      await f.prisma.chatGroupMember.update({
+        where: { groupId_botId: { groupId: f.chat!.id, botId: f.bot.id } },
+        data: { runtimePin: { provider, credentialId } },
+      });
+      await f.prisma.botBrief.update({ where, data: retry });
+      await resetBriefRetriesForConnection(f.prisma, {
+        userId: f.context.userId,
+        credentialId: "saved-connection",
+        provider: "fixture",
+      });
+      const room = await f.prisma.botBrief.findUniqueOrThrow({ where });
+      expect(room.failureCount).toBe(shouldReset ? 0 : 4);
+      expect(room.nextAttemptAt).toEqual(shouldReset ? null : retry.nextAttemptAt);
+      expect(await f.prisma.botBrief.findUniqueOrThrow({ where: { id: unset.id } })).toMatchObject(
+        retry,
+      );
     }
-    await expect(
-      f.service.commit({ ...input, expectedRevision: 1 }, f.context),
-    ).rejects.toMatchObject({ code: "MEMORY_ACCESS" });
   });
 
   it("skips dirty briefs before retry eligibility and admits them after the deadline", async () => {

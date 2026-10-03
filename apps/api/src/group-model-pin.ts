@@ -12,6 +12,7 @@ import {
   IsolationError,
   lockOwnedGroup,
   Prisma,
+  resetBriefRetries,
   touchGroupUpdatedAt,
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
@@ -174,10 +175,6 @@ export async function updateGroupMemberModelPin(
       where: { id: member.id },
       data: { modelPinRevision: revision, runtimePin: nextPin ?? Prisma.DbNull },
     });
-    await tx.botBrief.updateMany({
-      where: { botId: target.botId, threadId: group.thread.id },
-      data: { failureCount: 0, nextAttemptAt: null, attemptedAt: null },
-    });
     await touchGroupUpdatedAt(tx, target.groupId);
     const event = await appendEventInTransaction(tx, {
       spaceId: actor.spaceId,
@@ -197,6 +194,8 @@ export async function updateGroupMemberModelPin(
     });
     return { threadId: group.thread.id, seq: event.seq };
   });
+  if (committed.seq !== null)
+    await resetBriefRetries(deps.prisma, { botId: target.botId, threadId: committed.threadId });
   if (committed.seq !== null)
     await deps.events.notify(committed.threadId, committed.seq).catch((error) => {
       getLogger().error("group model notification", error);

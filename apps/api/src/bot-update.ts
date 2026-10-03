@@ -4,7 +4,8 @@ import {
   effectiveHermesRuntimeConfigV2,
   normalizeHermesRuntimeConfig,
 } from "@ardurbot/core/runtime-config";
-import { appendEventInTransaction, type Prisma, type PrismaClient } from "@ardurbot/db";
+import type { Prisma, PrismaClient } from "@ardurbot/db";
+import { appendEventInTransaction, resetBriefRetries } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import { ORPCError } from "@orpc/server";
 
@@ -64,22 +65,14 @@ export async function commitBotUpdate(
   },
   appendEvent: AppendEvent = appendEventInTransaction,
 ): Promise<{ id: string; name: string; title: string; description: string }> {
-  const data: Prisma.BotUncheckedUpdateInput = {
-    ...options.data,
-    ...(options.resetBriefRetries || options.data.modelPinRevision !== undefined
-      ? {
-          briefs: {
-            updateMany: {
-              where: {},
-              data: { failureCount: 0, nextAttemptAt: null, attemptedAt: null },
-            },
-          },
-        }
-      : {}),
-  };
+  const data = options.data;
+  const resetRetries = () =>
+    options.resetBriefRetries || options.data.modelPinRevision !== undefined
+      ? resetBriefRetries(options.prisma, { botId: options.botId })
+      : Promise.resolve();
   try {
     if (!options.emitBotUpdated) {
-      return await options.prisma.bot.update({
+      const updated = await options.prisma.bot.update({
         where: {
           id: options.botId,
           ...(options.expectedModelPinRevision === undefined
@@ -89,6 +82,8 @@ export async function commitBotUpdate(
         data,
         select: { id: true, name: true, title: true, description: true },
       });
+      await resetRetries();
+      return updated;
     }
 
     const committed = await options.prisma.$transaction(async (tx) => {
@@ -117,6 +112,7 @@ export async function commitBotUpdate(
       return { updated, seq: event.seq };
     });
 
+    await resetRetries();
     await options.notify(options.threadId, committed.seq).catch((error) => {
       getLogger().error("bot.updated realtime notification", error);
     });

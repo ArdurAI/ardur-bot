@@ -6994,16 +6994,16 @@ async function persistModelCredential(
           });
           throwIfAborted(input.signal);
         }
-        await resetBriefRetriesForConnection(tx, {
-          userId: actor.userId,
-          credentialId: credential.id,
-          provider: input.provider,
-        });
         return { ...credential, isDefault, defaultModel };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     ),
   );
+  await resetBriefRetriesForConnection(deps.prisma, {
+    userId: actor.userId,
+    credentialId: cred.id,
+    provider: input.provider,
+  });
   return modelCredentialDto(cred, input.plaintext);
 }
 

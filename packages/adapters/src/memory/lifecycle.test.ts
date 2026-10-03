@@ -19,7 +19,7 @@ function fixture() {
   };
   let inTransaction = false;
   const tx = Object.assign(database.tx, {
-    $queryRaw: vi.fn(async () => []),
+    $queryRaw: vi.fn(async (..._args: unknown[]) => []),
     agentSkill: {
       findFirst: vi.fn(
         async () =>
@@ -176,3 +176,41 @@ describe("document store factory and queue composition", () => {
     );
   });
 });
+
+it.each(["direct", "group"])(
+  "locks the brief's parents before its thread and memory (%s)",
+  async (groupId) => {
+    const f = fixture();
+    // Stop after the lock calls; the relational fake does not model thread generations.
+    f.tx.spaceMember.findUnique.mockRejectedValueOnce(new Error("checked locks"));
+    await expect(
+      f.service.list(
+        {},
+        {
+          spaceId: "space",
+          userId: "user",
+          botId: "bot",
+          threadId: "thread",
+          groupId,
+          briefGeneration: 0,
+          operationId: "fixture",
+          traceId: "fixture",
+          signal: new AbortController().signal,
+        },
+      ),
+    ).rejects.toThrow("checked locks");
+    const locks = f.tx.$queryRaw.mock.calls.map(([sql]) => String(sql));
+    expect(locks).toEqual(
+      groupId === "direct"
+        ? [expect.stringContaining("FROM bots"), expect.stringContaining("FROM threads")]
+        : [
+            expect.stringContaining("FROM chat_groups"),
+            expect.stringContaining("FROM bots"),
+            expect.stringContaining("FROM threads"),
+          ],
+    );
+    expect(f.tx.$queryRaw.mock.invocationCallOrder.at(-1)!).toBeLessThan(
+      f.tx.$executeRaw.mock.invocationCallOrder[0]!,
+    );
+  },
+);

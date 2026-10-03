@@ -89,6 +89,7 @@ function fixture(pinned: string[] = []) {
     },
   };
   const prisma = {
+    computer: tx.computer,
     connection: { findFirstOrThrow: vi.fn(async () => row), findFirst: vi.fn(async () => null) },
     run: { findFirst: vi.fn(async () => null) },
     secret: { findFirst: vi.fn(async () => null) },
@@ -288,7 +289,7 @@ describe("saved fleet connections", () => {
     await updateComputerConnection(deps, "saved", next, row.updatedAt.toISOString(), true, context);
     expect(tx.computer.updateMany).toHaveBeenCalledWith({
       where: { connectionId: "saved", spaceId: "space", userId: "owner" },
-      data: { sleepFailureReason: null },
+      data: { sleepFailureReason: null, updatedAt: expect.any(Date) },
     });
     expect(tx.fleetAudit.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ action: "connection-updated" }),
@@ -816,4 +817,21 @@ describe("saved fleet connections", () => {
       vi.unstubAllEnvs();
     }
   });
+});
+
+it("keeps a committed connection save when sleep retry cleanup fails", async () => {
+  const { deps, prisma, tx } = fixture();
+  vi.mocked(prisma.computer.updateMany).mockRejectedValueOnce(new Error("cleanup unavailable"));
+  await expect(
+    updateComputerConnection(
+      deps,
+      "saved",
+      { name: "New", settings: metadata },
+      row.updatedAt.toISOString(),
+      false,
+      context,
+    ),
+  ).resolves.toMatchObject({ revision: row.updatedAt.toISOString() });
+  expect(tx.connection.update).toHaveBeenCalledOnce();
+  expect(tx.fleetAudit.create).toHaveBeenCalledOnce();
 });

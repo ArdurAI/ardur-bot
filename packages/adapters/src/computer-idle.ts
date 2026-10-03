@@ -10,6 +10,7 @@ import {
 import { computerSleepWorkspacePolicy } from "@ardurbot/contracts";
 import { ACTIVE_RUN_STATUSES } from "@ardurbot/core";
 import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
+import { getLogger } from "@ardurbot/logging";
 import { MissingComputerProviderError } from "./computer-connections.js";
 import { expireComputerControl, hasActiveComputerControl } from "./computer-control.js";
 import { toComputerRef } from "./computer-lifecycle.js";
@@ -212,12 +213,17 @@ export async function scheduleComputerSleep(
   computerId: string,
 ): Promise<void> {
   if (!computerId) return;
-  const computer = await deps.prisma.computer.findUnique({
-    where: { id: computerId },
-    select: { sleepFailureReason: true },
-  });
-  if (!computer || computer.sleepFailureReason) return;
-  await deps.jobs.enqueue(computerSleepJob(computerId, new Date(Date.now() + sandboxIdleMs())));
+  try {
+    const computer = await deps.prisma.computer.findUnique({
+      where: { id: computerId },
+      select: { sleepFailureReason: true },
+    });
+    if (!computer || computer.sleepFailureReason) return;
+    await deps.jobs.enqueue(computerSleepJob(computerId, new Date(Date.now() + sandboxIdleMs())));
+  } catch (error) {
+    // Scheduling is upkeep, not part of the foreground computer operation.
+    getLogger().error("computer sleep scheduling", error);
+  }
 }
 
 export async function touchRunningComputer(

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@ardurbot/db", () => ({
+vi.mock("@ardurbot/db", async (original) => ({
+  ...(await original<object>()),
   appendEventInTransaction: vi.fn(),
 }));
 
@@ -203,34 +204,77 @@ describe("commitBotUpdate", () => {
   });
 });
 
-it("a model-pin save atomically resets brief retry state with the fenced bot write", async () => {
-  const update = vi.fn().mockResolvedValue({ id: "bot" });
-  await commitBotUpdate({
-    prisma: { bot: { update } } as never,
-    notify: vi.fn(),
-    spaceId: "space",
-    threadId: "thread",
-    botId: "bot",
-    emitBotUpdated: false,
-    resetBriefRetries: true,
-    expectedModelPinRevision: 2,
-    data: { modelPinRevision: { increment: 1 } },
-  });
-  expect(update).toHaveBeenCalledWith(
-    expect.objectContaining({
-      where: { id: "bot", modelPinRevision: 2 },
-      data: expect.objectContaining({
-        briefs: {
-          updateMany: {
-            where: {},
-            data: {
-              failureCount: 0,
-              nextAttemptAt: null,
-              attemptedAt: null,
-            },
-          },
-        },
+it.each([false, true])(
+  "resets retries after the fenced bot write commits (event: %s)",
+  async (emitBotUpdated) => {
+    let committed = false;
+    const update = vi.fn(async () => ({ id: "bot", name: "Bot", title: "", description: "" }));
+    const updateMany = vi.fn(async () => {
+      expect(committed).toBe(true);
+      return { count: 1 };
+    });
+    const tx = { bot: { update } };
+    const prisma = {
+      bot: {
+        update: vi.fn(async (args) => {
+          const result = await update(args);
+          committed = true;
+          return result;
+        }),
+      },
+      botBrief: { updateMany },
+      $transaction: vi.fn(async (action) => {
+        const result = await action(tx);
+        committed = true;
+        return result;
       }),
+    };
+    await commitBotUpdate(
+      {
+        prisma: prisma as never,
+        notify: vi.fn(async () => undefined),
+        spaceId: "space",
+        threadId: "thread",
+        botId: "bot",
+        emitBotUpdated,
+        resetBriefRetries: true,
+        expectedModelPinRevision: 2,
+        data: { modelPinRevision: { increment: 1 } },
+      },
+      vi.fn(async () => ({ seq: 1 })) as never,
+    );
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "bot", modelPinRevision: 2 },
+        data: { modelPinRevision: { increment: 1 } },
+      }),
+    );
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { botId: "bot" },
+      data: { failureCount: 0, nextAttemptAt: null, attemptedAt: null },
+    });
+  },
+);
+
+it("returns the saved bot when retry cleanup fails", async () => {
+  const updated = { id: "bot", name: "Bot", title: "", description: "" };
+  await expect(
+    commitBotUpdate({
+      prisma: {
+        bot: { update: vi.fn(async () => updated) },
+        botBrief: {
+          updateMany: vi.fn(async () => {
+            throw new Error("reset unavailable");
+          }),
+        },
+      } as never,
+      notify: vi.fn(),
+      spaceId: "space",
+      threadId: "thread",
+      botId: "bot",
+      emitBotUpdated: false,
+      resetBriefRetries: true,
+      data: {},
     }),
-  );
+  ).resolves.toEqual(updated);
 });

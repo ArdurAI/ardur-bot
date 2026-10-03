@@ -1,5 +1,6 @@
 import { expect, it, vi } from "vitest";
 import { resetBriefRetriesForConnection } from "./brief-retries.js";
+import { Prisma } from "./client.js";
 
 it("connection saves reset only that user's connected or inherited bot and group briefs", async () => {
   const updateMany = vi.fn().mockResolvedValue({ count: 1 });
@@ -16,7 +17,7 @@ it("connection saves reset only that user's connected or inherited bot and group
         {
           bot: {
             modelCredentialId: null,
-            OR: [{ modelProvider: "fixture" }, { modelProvider: null }],
+            modelProvider: "fixture",
           },
         },
         {
@@ -25,7 +26,15 @@ it("connection saves reset only that user's connected or inherited bot and group
               members: {
                 some: {
                   bot: { userId: "owner" },
-                  runtimePin: { path: ["credentialId"], equals: "connection" },
+                  OR: [
+                    { runtimePin: { path: ["credentialId"], equals: "connection" } },
+                    {
+                      AND: [
+                        { runtimePin: { path: ["provider"], equals: "fixture" } },
+                        { runtimePin: { path: ["credentialId"], equals: Prisma.JsonNull } },
+                      ],
+                    },
+                  ],
                 },
               },
             },
@@ -35,4 +44,15 @@ it("connection saves reset only that user's connected or inherited bot and group
     },
     data: { failureCount: 0, nextAttemptAt: null, attemptedAt: null },
   });
+});
+
+it("does not reject the saved connection when retry cleanup fails", async () => {
+  await expect(
+    resetBriefRetriesForConnection(
+      {
+        botBrief: { updateMany: vi.fn().mockRejectedValue(new Error("reset unavailable")) },
+      } as never,
+      { userId: "owner", credentialId: "connection", provider: "fixture" },
+    ),
+  ).resolves.toBeUndefined();
 });

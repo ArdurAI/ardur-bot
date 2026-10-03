@@ -30,6 +30,7 @@ import {
 } from "@ardurbot/contracts";
 import { ACTIVE_RUN_STATUSES, sandboxKindForBot } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
+import { getLogger } from "@ardurbot/logging";
 import { ORPCError } from "@orpc/server";
 import type { z } from "zod";
 import { cleanupFleetSecret, importFleetSecret } from "./fleet.js";
@@ -397,10 +398,6 @@ export async function updateComputerConnection(
               : {}),
         },
       });
-      await tx.computer.updateMany({
-        where: { connectionId, spaceId: context.spaceId, userId: context.userId },
-        data: { sleepFailureReason: null },
-      });
       if (previous.secretId && (newSecret || input.settings.engine !== "kubernetes"))
         await tx.secret.deleteMany({
           where: { id: previous.secretId, spaceId: context.spaceId, userId: context.userId },
@@ -425,6 +422,18 @@ export async function updateComputerConnection(
         });
       return updated;
     });
+    try {
+      await deps.prisma.computer.updateMany({
+        where: { connectionId, spaceId: context.spaceId, userId: context.userId },
+        // Invalidate an idle attempt loaded before this save, including its failure mark.
+        data: {
+          sleepFailureReason: null,
+          updatedAt: new Date(Math.max(Date.now(), saved.updatedAt.getTime() + 1)),
+        },
+      });
+    } catch (error) {
+      getLogger().error("computer sleep retry reset", error);
+    }
     if (oldSettings.hostSecretId && oldSettings.hostSecretId !== input.settings.hostSecretId) {
       await cleanupFleetSecret(deps.prisma, deps.hostBridge, context, oldSettings.hostSecretId);
     }

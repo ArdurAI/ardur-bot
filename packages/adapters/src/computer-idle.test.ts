@@ -866,3 +866,42 @@ it("clearing the configuration mark allows scheduling again", async () => {
   await scheduleComputerSleep(h.deps, h.computer.id);
   expect(h.jobs.enqueue).toHaveBeenCalledOnce();
 });
+
+it.each(["status", "queue"])(
+  "sleep scheduling failure at %s does not fail foreground work",
+  async (stage) => {
+    const h = idleHarness();
+    if (stage === "status")
+      h.prisma.computer.findUnique.mockRejectedValueOnce(new Error("status unavailable"));
+    else h.jobs.enqueue.mockRejectedValueOnce(new Error("queue unavailable"));
+    await expect(scheduleComputerSleep(h.deps, h.computer.id)).resolves.toBeUndefined();
+  },
+);
+
+it.each(["probe", "checkpoint", "stop"])(
+  "a connection save fences out a late missing-engine mark at %s",
+  async (stage) => {
+    const h = idleHarness();
+    const saved = () => {
+      h.computer.updatedAt = new Date(h.computer.updatedAt.getTime() + 1);
+      Object.assign(h.computer, { sleepFailureReason: null });
+      throw new MissingComputerProviderError("docker");
+    };
+    if (stage === "probe")
+      h.sandbox.execute.mockImplementation(async function* () {
+        yield { type: "stdout" as const, data: "ardurbot-background-idle\n" };
+        saved();
+      });
+    if (stage === "checkpoint")
+      h.sandbox.exportWorkspace.mockImplementation(async function* () {
+        yield { path: "fixture", content: new Uint8Array() };
+        saved();
+      });
+    if (stage === "stop")
+      h.sandbox.stop.mockImplementation(async () => {
+        saved();
+      });
+    await expect(sleepComputerIfIdle(h.deps, h.computer.id)).resolves.toBeUndefined();
+    expect(h.computer).toMatchObject({ sleepFailureReason: null });
+  },
+);
