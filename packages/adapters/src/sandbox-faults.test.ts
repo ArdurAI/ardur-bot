@@ -59,9 +59,7 @@ describe.each([
       content: new TextEncoder().encode("nope"),
     };
 
-    await expect(provider.listFiles(computer, "../outside", context)).rejects.toThrow(
-      /escapes the computer workspace/i,
-    );
+    await expect(provider.listFiles(computer, "../outside", context)).rejects.toThrow(fileRefusal);
     await expect(provider.readFile(computer, "..\\outside.txt", context)).rejects.toThrow(
       fileRefusal,
     );
