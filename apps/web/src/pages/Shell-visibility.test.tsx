@@ -90,6 +90,7 @@ const state = vi.hoisted(
       bootstrapBotId?: string;
       bootstrapGate?: Promise<void>;
       bootstrapThread?: ThreadSnapshot;
+      duplicateError?: unknown;
       takeoverRejections: number;
       takeoverFailures: number;
       terminalAvailable: boolean;
@@ -199,6 +200,12 @@ vi.mock("../lib/rpc", () => {
             },
           ],
         };
+      },
+      bots: {
+        duplicate: async () => {
+          state.calls.push("bots.duplicate");
+          throw state.duplicateError;
+        },
       },
       spaces: {
         list: async () => ({
@@ -482,6 +489,7 @@ let savedLayouts: Map<string, string>;
 let narrowWindow = false;
 
 beforeEach(() => {
+  state.duplicateError = undefined;
   savedLayouts = new Map();
   narrowWindow = false;
   Object.defineProperty(window, "localStorage", {
@@ -1471,3 +1479,37 @@ it("does not request a screen when the full-window view is on the Terminal tab",
   await deliverCapabilityFlip("bot-1", true);
   expect(count("computer.screenUrl")).toBe(beforeRefresh + 1);
 }, 30_000);
+
+it.each([
+  {
+    code: "BAD_REQUEST",
+    message:
+      "Codex cannot run on this computer. Move this bot to This computer or change its runtime.",
+    expected:
+      "Codex cannot run on this computer. Move this bot to This computer or change its runtime.",
+  },
+  {
+    code: "INTERNAL_SERVER_ERROR",
+    message: "private diagnostic",
+    expected: "Could not save. Try again.",
+  },
+])("shows a refused Duplicate instead of dropping its rejection: $code", async (error) => {
+  state.duplicateError = error;
+  await renderShell("/app/bot-1");
+  const target = host.querySelector('[data-roster-bot-id="bot-1"]')!;
+  target.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  await until(() => document.querySelector('[role="menuitem"]') !== null);
+  const duplicate = [...document.querySelectorAll('[role="menuitem"]')].find(
+    (item) => item.textContent?.trim() === "Duplicate",
+  );
+  expect(duplicate).toBeDefined();
+  click(duplicate);
+  await until(
+    () =>
+      host
+        .querySelector('[data-testid="composer-error"]')
+        ?.textContent?.includes(error.expected) === true,
+  );
+  expect(state.calls.filter((name) => name === "bots.duplicate")).toHaveLength(1);
+  expect(host.textContent).not.toContain("private diagnostic");
+});

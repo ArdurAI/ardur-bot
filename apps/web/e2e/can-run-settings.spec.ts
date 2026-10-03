@@ -103,3 +103,22 @@ test("can-run-policy-refusal", async ({ page }, testInfo) => {
   await expect(select).toHaveValue("any");
   await captureScreenshot(page, testInfo, "can-run-policy-refusal");
 });
+
+test("can-run-duplicate-refusal", async ({ page }, testInfo) => {
+  await installPerformanceFixture(page);
+  const sentence = failureCategoryMessage("computer-unsupported", {
+    runtime: "Codex",
+    bot: "this bot",
+  });
+  await page.route("**/rpc/bots/duplicate", (route) =>
+    route.fulfill({
+      status: 400,
+      json: { json: { code: "BAD_REQUEST", status: 400, defined: false, message: sentence } },
+    }),
+  );
+  await page.goto("/app/fixture-bot-0");
+  await page.locator('[data-roster-bot-id="fixture-bot-0"]').click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Duplicate", exact: true }).click();
+  await expect(page.getByTestId("composer-error")).toContainText(sentence);
+  await captureScreenshot(page, testInfo, "can-run-duplicate-refusal");
+});
