@@ -244,44 +244,32 @@ generic provider failure. The HTTP response and conversation do not expose the
 category, request body, headers or private error data. Old peers can retain the
 generic provider failure when they do not recognize the newer fixed signature.
 
-### Standalone run budgets — 2026-10-03
+### Turn limits and allowance errors
 
-A standalone turn is not a delegated worker or a token-budgeted goal. Its pinned
-allowance is the model-call limit multiplied by the sum of the model context
-window and the output cap, bounded to the ledger's integer range. The first durable
-admission fixes that allowance for the source run; brief maintenance inherits it.
+A Hermes turn stops at its model-call or time limit. Its brief summary shares
+the source turn's model-call allowance; it does not get a fresh allowance.
 
-Previously the root ledger also imposed the implicit 120,000-token delegation
-default on the coordinator's own requests. An offline fixture using the actual
-56-tool host catalog and a fake prior conversation bounded to the default 16 KiB
-supplied-context limit reproduces that refusal. The admitted body is 56,355
-UTF-8 bytes after the broker applies pinned effort. Its conservative reservation
-is 121,891 units including the unchanged 65,536 output cap. It is below the
-256 KiB request boundary and the existing 17,048,576-unit pinned run allowance,
-but above the unrelated delegation default. This fixture is not a capture of
-an installed failed request.
+To let new turns do more work, change **Model calls per turn** or
+**Time limit (seconds)** in the bot's runtime settings. Increase only the limit
+the turn reached. More calls or more time can increase cost. These settings do
+not remove a goal's token limit or an asked member's separate allowance, and
+they do not change a turn already running.
 
-For a non-goal coordinator with the default root policy, admission now uses the
-larger of that default and the already-pinned run allowance. It does not rewrite
-the root policy or enlarge worker reservations. A configured goal, a non-default
-root policy, worker-attempt allowances, cumulative run reservations, request
-count, leases, cancellation and deadline checks retain their limits.
-The built-in runtime and other native runtimes do not use this broker admission.
+Before each model call, Ardur reserves room for the request and its possible
+output. This conservative reservation is not measured usage or a bill.
+Reported usage and cost come from the provider; a request whose usage is
+unknown keeps its reservation. A non-goal room coordinator uses the larger
+of its stored task limit and its run allowance. Asking members does not
+reduce that allowance. Goals still stop at their explicit whole-task limit;
+members stay within their own attempt allowances. Stop, cancellation and
+expiry still prevent new requests.
 
-The UTF-8-byte input upper bound is unchanged: dividing JSON bytes by a guessed
-tokens-per-byte ratio could under-reserve arbitrary text. Provider measurements,
-not reservations, still populate usage and cost. The model, effort, output cap,
-tool consent, context preparation, transport byte limit and runtime pin are
-unchanged.
+A diagnostic category of `run-budget` means Ardur did not admit the model
+request. It can mean an allowance was reached, or that Ardur could not save
+the request's admission record. The category alone does not tell you which.
 
-**Trade-off:** standalone Hermes turns can now continue beyond the incidental
-delegation default, within their existing model-call and time limits. This can
-increase actual spend compared with an early refusal. A token-budgeted goal still
-stops at the person's explicit whole-task limit.
-
-The same fixture completes on both broker routes after the repair. Reverting
-the production change fails six offline assertions while preserving the negative
-budget cases. Separate PostgreSQL tests verify persistence, unchanged root
-policy, configured goal refusal, cancellation and deadline handling in CI.
-No native-install acceptance or explanation of an installed turn's elapsed time
-is inferred from these fixtures.
+Check the run's call count, runtime limits and goal status before raising
+a limit. If the refusal happens before those limits are reached, report the
+Ardur build version, the request number and the time spent in each phase.
+Do not include prompts, request bodies, headers or credentials. Changing the
+model or reinstalling Hermes is not a remedy for this category alone.
