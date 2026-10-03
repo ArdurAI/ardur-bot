@@ -1,6 +1,7 @@
 import type { AgentUsage } from "@ardurbot/adapter-kit";
 import { DELEGATION_LIMITS } from "@ardurbot/contracts";
 import { hermesContextDocument } from "@ardurbot/host-runtime/runtimes/hermes-runtime";
+import type { AssistantMessageEvent } from "@earendil-works/pi-ai";
 import { describe, expect, it, vi } from "vitest";
 import { selectBuiltinToolsForRun } from "./executor.js";
 import type { BrokerOptions, BrokerRequest } from "./hermes-provider-broker.js";
@@ -54,6 +55,7 @@ function fixture(
     allowance?: number;
     requests?: number;
     summary?: boolean;
+    translated?: boolean;
   } = {},
 ) {
   const records: AgentUsage[] = [];
@@ -93,6 +95,30 @@ function fixture(
         { headers: { "content-type": "application/json" } },
       ),
   );
+  const streamSimple = vi.fn(async function* (): AsyncGenerator<AssistantMessageEvent> {
+    const message: Extract<AssistantMessageEvent, { type: "done" }>["message"] = {
+      role: "assistant",
+      content: [{ type: "text", text: "Fixture completed." }],
+      api: "openai-completions",
+      provider: "zai",
+      model: "glm-5.3",
+      usage: {
+        input: 14_000,
+        output: 128,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 14_128,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: "stop",
+      timestamp: 0,
+    };
+    yield { type: "start", partial: message };
+    yield { type: "text_start", contentIndex: 0, partial: message };
+    yield { type: "text_delta", contentIndex: 0, delta: "Fixture completed.", partial: message };
+    yield { type: "text_end", contentIndex: 0, content: "Fixture completed.", partial: message };
+    yield { type: "done", reason: "stop", message };
+  });
   const options: BrokerOptions = {
     scope,
     connection: {
@@ -100,7 +126,7 @@ function fixture(
       provider: "openai-compatible",
       modelId: "glm-5.3",
       baseUrl: "http://127.0.0.1:1/v1",
-      route: "openai-completions",
+      route: patch.translated ? "provider-translated" : "openai-completions",
       contextWindow,
       maxOutputTokens: patch.summary ? 4_096 : outputCap,
       acceptsImages: false,
@@ -118,6 +144,7 @@ function fixture(
     active: async () => true,
     requiredContext,
     fetch,
+    ...(patch.translated ? { streamSimple } : {}),
     record: async (usage) => {
       const request = usage.request!;
       if (request.counter.sequence === 0) {
@@ -167,16 +194,16 @@ function fixture(
     path: "/v1/chat/completions",
     body,
   });
-  return { broker, fetch, records, request, body };
+  return { broker, fetch, streamSimple, records, request, body };
 }
 
 describe("Hermes run and root budget separation", () => {
   it("completes a real 56-tool host request without treating the default delegation ceiling as its run limit", async () => {
     expect(tools).toHaveLength(56);
     expect(Buffer.byteLength(requiredContext)).toBeLessThanOrEqual(16_384);
-    const bytes = Buffer.byteLength(JSON.stringify(mainBody));
+    const bytes = Buffer.byteLength(JSON.stringify({ ...mainBody, reasoning_effort: "high" }));
     const reservation = requestReservationTokens(
-      JSON.stringify(mainBody),
+      JSON.stringify({ ...mainBody, reasoning_effort: "high" }),
       contextWindow,
       outputCap,
     );
@@ -204,6 +231,22 @@ describe("Hermes run and root budget separation", () => {
     expect(f.fetch).toHaveBeenCalledTimes(2);
   });
 
+  it.each([false, true])(
+    "completes the same large main and no-tool summary through provider translation (summary=%s)",
+    async (summary) => {
+      const f = fixture({
+        translated: true,
+        summary,
+        used: summary ? DELEGATION_LIMITS.tokens : 0,
+      });
+      const response = await f.broker.open(f.request());
+      expect((await response.json()).choices[0].message.content).toBe("Fixture completed.");
+      expect(f.streamSimple).toHaveBeenCalledOnce();
+      expect(f.fetch).not.toHaveBeenCalled();
+      expect(f.records.at(-1)?.request?.collection?.outcome).toBe("success");
+    },
+  );
+
   it("admits brief maintenance under the inherited run allowance after the default root ceiling was spent", async () => {
     const f = fixture({ summary: true, used: DELEGATION_LIMITS.tokens });
     const response = await f.broker.open(f.request());
@@ -229,7 +272,7 @@ describe("Hermes run and root budget separation", () => {
 
   it("still bounds cumulative reservations and request count", async () => {
     const reservation = requestReservationTokens(
-      JSON.stringify(mainBody),
+      JSON.stringify({ ...mainBody, reasoning_effort: "high" }),
       contextWindow,
       outputCap,
     );
