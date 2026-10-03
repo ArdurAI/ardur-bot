@@ -9,6 +9,7 @@ import { approvalPausedToolResult } from "./approval-effect.js";
 import {
   adoptOpenCommands,
   createCommandRecording,
+  normalizeShellText,
   sensitiveFilePath,
   sensitiveShellCommand,
 } from "./command-recording.js";
@@ -74,8 +75,42 @@ function fixture(
   return { events, order, append, recording, execute, invoke, blocks, sandbox, abort };
 }
 
+it.each([
+  ["'cat' .env", "cat .env"],
+  ['"cat" .env', "cat .env"],
+  ["c\\at .env", "cat .env"],
+  ["cat .e''nv", "cat .env"],
+  ["  cat\t  .env  ", "cat .env"],
+  ['echo "a" "b"', "echo a b"],
+  ['echo a""b', "echo ab"],
+  ["echo a\\b", "echo ab"],
+  ["echo a' 'b", "echo a b"],
+  ["echo $'a'$'b'", "echo ab"],
+])("normalizes %s to %s", (input, normalized) => {
+  expect(normalizeShellText(input)).toBe(normalized);
+});
+
 describe("credential-read output suppression", () => {
   it.each([
+    ["sh -c 'cat .env'", true],
+    ["'cat' .env", true],
+    ['"cat" .env', true],
+    ["c\\at .env", true],
+    ["cat .e''nv", true],
+    ["dd if=.env", true],
+    ["openssl enc -in .env", true],
+    ["cp .env t && cat t", true],
+    ["echo .env.local", true],
+    ["echo .env.production", true],
+    ["cat .env.example", true],
+    ["dd if=.netrc", true],
+    ["cp .docker/config.json t && cat t", true],
+    ["echo /proc/123/environ", true],
+    ["ls environments/", false],
+    ["grep -rn ENV_NAME src/", false],
+    ["cat docs/env-vars.md", false],
+    ["node scripts/export-site.mjs", false],
+    ["echo project.env", false],
     ["sh -c 'printenv'", true],
     ['sh -c "env"', true],
     ["sh -lc 'printenv'", true],
@@ -257,6 +292,9 @@ describe("credential-read output suppression", () => {
   });
 
   it.each([
+    "dd if=.env",
+    "cp .env t && cat t",
+    "cat .e''nv",
     "gh auth token",
     "git credential fill",
     "gpg --export-secret-keys",

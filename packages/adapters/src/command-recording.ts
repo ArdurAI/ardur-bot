@@ -33,6 +33,19 @@ export function redactCommandText(text: string, secrets: string[]): string {
 }
 
 /**
+ * Conservative text matching, not shell evaluation. Remove quote/escape spelling tricks
+ * once so output suppression and known-value refusal share the same view of a command.
+ */
+export function normalizeShellText(value: string): string {
+  return value
+    .replace(/\$(['"])/g, "$1")
+    .replace(/\\([\s\S])/g, "$1")
+    .replace(/['"]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
  * Suppress credential reads, not development commands that merely mention credential names.
  * This is an output safeguard, not a shell authorization grammar; other output is redacted.
  */
@@ -67,11 +80,6 @@ export function sensitiveShellCommand(command: string): boolean {
       "kubectl\\s+get\\s+secrets?\\b)",
     "i",
   );
-  const environmentFileRead = new RegExp(
-    position +
-      "(?:cat|head|tail|less|more|sed|awk|grep|rg|source|\\.)\\s+[^;&|\\n]*?(?<![\\w.-])\\.env(?:[.\\s/\"']|$)",
-    "i",
-  );
   // Inspect one quoted shell/eval layer, without treating quoted prose as commands.
   const quotedReader = new RegExp(
     `${position}(?:(?:sh|bash|zsh|dash|ksh)\\s+-(?:c|lc|ic)|eval)\\s+(["'])([\\s\\S]*?)\\1`,
@@ -79,6 +87,7 @@ export function sensitiveShellCommand(command: string): boolean {
   );
   const candidates = [
     command,
+    normalizeShellText(command),
     ...Array.from(command.matchAll(quotedReader), (match) => match[2] ?? ""),
   ];
   return candidates.some(
@@ -86,8 +95,7 @@ export function sensitiveShellCommand(command: string): boolean {
       environmentRead.test(text) ||
       keychainRead.test(text) ||
       credentialToolRead.test(text) ||
-      environmentFileRead.test(text) ||
-      /<\s*["']?[^;&|\n]*\.env(?:[.\s/"']|$)/i.test(text) ||
+      /(?<![\w.-])\.env(?:[.\s/;&|()<>]|$)/i.test(text) ||
       sensitiveCredentialDirectory(text),
   );
 }
@@ -101,7 +109,7 @@ export function sensitiveFilePath(value: string): boolean {
 function sensitiveCredentialDirectory(value: string): boolean {
   return (
     /(?:\.(?:ssh|aws|kube|gnupg)[/\\]|[/\\]proc[/\\][^\s;|&]+[/\\]environ\b)/i.test(value) ||
-    /(?:^|[/\\\s"'<>])(?:\.(?:git-credentials|netrc|npmrc|pgpass)|\.docker[/\\]config\.json|\.config[/\\]gh[/\\]hosts\.yml|\.terraform\.d[/\\]credentials[\w.-]*)(?=$|[/\\\s"';&|)])/i.test(
+    /(?:^|[/\\\s"'<>=])(?:\.(?:git-credentials|netrc|npmrc|pgpass)|\.docker[/\\]config\.json|\.config[/\\]gh[/\\]hosts\.yml|\.terraform\.d[/\\]credentials[\w.-]*)(?=$|[/\\\s"';&|)])/i.test(
       value,
     )
   );
