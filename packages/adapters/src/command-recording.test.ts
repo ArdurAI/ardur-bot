@@ -247,6 +247,7 @@ describe("credential-read output suppression", () => {
     ["gpg --export-secret-keys", true],
     ["gpg --armor --export-secret-subkeys fixture", true],
     ["security export -k fixture.keychain", true],
+    ["security export -w -t all -f pkcs12 -k login.keychain", true],
     ["aws configure export-credentials", true],
     ["aws sts get-session-token", true],
     ["aws sts assume-role --role-arn fixture", true],
