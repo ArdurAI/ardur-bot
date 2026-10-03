@@ -75,6 +75,42 @@ function fixture(
 
 describe("credential-read output suppression", () => {
   it.each([
+    ["gh auth token", true],
+    ["git credential fill", true],
+    ["git credential get", true],
+    ["git credential-osxkeychain get", true],
+    ["git credential-store get", true],
+    ["git credential-cache get", true],
+    ["gpg --export-secret-keys", true],
+    ["gpg --armor --export-secret-subkeys fixture", true],
+    ["security export -k fixture.keychain", true],
+    ["aws configure export-credentials", true],
+    ["aws sts get-session-token", true],
+    ["aws sts assume-role --role-arn fixture", true],
+    ["gcloud auth print-access-token", true],
+    ["gcloud auth print-identity-token", true],
+    ["az account get-access-token", true],
+    ["vault read fixture/path", true],
+    ["vault kv get fixture/path", true],
+    ["vault token lookup", true],
+    ["op read fixture/item", true],
+    ["op item get fixture", true],
+    ["kubectl get secret fixture", true],
+    ["kubectl get secrets", true],
+    ["/usr/bin/gh auth token", true],
+    ['git commit -m "token refresh"', false],
+    ["git log --grep credential", false],
+    ['rg -n "export " packages/', false],
+    ["pnpm exec vitest run packages/adapters/src/secret.test.ts", false],
+    ["node scripts/export-site.mjs", false],
+    ['echo "set -e"', false],
+    ["cat docs/env-vars.md", false],
+    ["gh pr view 131", false],
+    ["gh auth status", false],
+    ["git credential-osxkeychain --help", false],
+    ["kubectl get pods", false],
+    ["docker login --help", false],
+    ["docker login", false],
     ["set -e; pnpm test", false],
     ["grep -n token src/a.ts", false],
     ["grep -n sensitiveShellCommand src/a.ts", false],
@@ -112,6 +148,22 @@ describe("credential-read output suppression", () => {
   ])("%s suppresses output: %s", (command, hidden) => {
     expect(sensitiveShellCommand(command)).toBe(hidden);
   });
+
+  it.each(["gh auth token", "git credential fill", "gpg --export-secret-keys"])(
+    "never retains opaque reader output for %s",
+    async (command) => {
+      const opaque = "fixture-unstructured-output";
+      const f = fixture([
+        { type: "stdout", data: opaque },
+        { type: "stderr", data: opaque },
+        { type: "exit", code: 0 },
+      ]);
+      const result = await f.invoke(command);
+      expect(result).toMatchObject({ stdout: COMMAND_SUPPRESSED, stderr: COMMAND_SUPPRESSED });
+      expect(JSON.stringify(f.events)).not.toContain(opaque);
+      expect(f.blocks()[0]?.stdout).toBe(COMMAND_SUPPRESSED);
+    },
+  );
 
   it.each([
     "set -e; pnpm test",

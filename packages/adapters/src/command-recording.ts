@@ -49,6 +49,20 @@ export function sensitiveShellCommand(command: string): boolean {
       "(?:security\\s+(?:find-[\\w-]+|dump-keychain|show-keychain-info|list-keychains)\\b|keychain\\b)",
     "i",
   );
+  const credentialToolRead = new RegExp(
+    position +
+      "(?:gh\\s+auth\\s+token\\b|" +
+      "git\\s+credential(?:-[\\w-]+)?\\b(?![\\w-]|\\s+--help\\s*(?:$|[;&|\\n]))|" +
+      "gpg\\s+[^;&|\\n]*--export-secret-(?:sub)?keys\\b|" +
+      "security\\s+export\\b|" +
+      "aws\\s+(?:configure\\s+export-credentials|sts\\s+(?:get-session-token|assume-role))\\b|" +
+      "gcloud\\s+auth\\s+print-(?:access|identity)-token\\b|" +
+      "az\\s+account\\s+get-access-token\\b|" +
+      "vault\\s+(?:read|kv\\s+get|token)\\b|" +
+      "op\\s+(?:read|item\\s+get)\\b|" +
+      "kubectl\\s+get\\s+secrets?\\b)",
+    "i",
+  );
   const environmentFileRead = new RegExp(
     position +
       "(?:cat|head|tail|less|more|sed|awk|grep|rg|source|\\.)\\s+[^;&|\\n]*?(?<![\\w.-])\\.env(?:[.\\s/\"']|$)",
@@ -57,6 +71,7 @@ export function sensitiveShellCommand(command: string): boolean {
   return (
     environmentRead.test(command) ||
     keychainRead.test(command) ||
+    credentialToolRead.test(command) ||
     environmentFileRead.test(command) ||
     /<\s*["']?[^;&|\n]*\.env(?:[.\s/"']|$)/i.test(command) ||
     sensitiveCredentialDirectory(command)
