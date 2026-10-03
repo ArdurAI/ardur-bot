@@ -1,4 +1,10 @@
-# Session-start follow-up — 2026-10-03
+---
+title: "Session-start follow-up — 2026-10-03"
+description: "Part of #118. This work does not close the issue."
+source_path: "docs/runtimes/hermes-session-r2-investigation.md"
+---
+
+> [Source: docs/runtimes/hermes-session-r2-investigation.md](https://github.com/ArdurAI/ardur-bot/blob/__ARDUR_BOT_SOURCE_REF__/docs/runtimes/hermes-session-r2-investigation.md). Edit the source file, then run `python3 site/scripts/sync_docs.py` to refresh this page.
 
 Part of #118. This work does not close the issue.
 

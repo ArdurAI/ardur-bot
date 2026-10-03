@@ -1,4 +1,18 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "{runtime}'s tool list changed during startup. Check the connected tools and try again.":
+    "{runtime} 的工具列表在启动期间发生了变化。请检查已连接的工具后重试。",
+  "{runtime}'s settings were not confirmed. Check this bot's settings and try again.":
+    "{runtime} 的设置未得到确认。请检查此机器人的设置后重试。",
+  "{runtime}'s model request was too large. Narrow the task and try again.":
+    "{runtime} 的模型请求过大。请缩小任务范围后重试。",
+  "{runtime}'s model response was too large. Narrow the task and try again.":
+    "{runtime} 的模型响应过大。请缩小任务范围后重试。",
+  "{runtime}'s model request was outside this run's allowance. Narrow the task and try again.":
+    "{runtime} 的模型请求超出了本次运行的许可范围。请缩小任务范围后重试。",
+  "{runtime}'s model provider rejected the connection key. Check it in Settings, under Models.":
+    "{runtime} 的模型提供商拒绝了连接密钥。请在设置的模型部分检查密钥。",
+  "{runtime}'s model request failed. Check the connection in Settings, under Models, and try again.":
+    "{runtime} 的模型请求失败。请在设置的模型部分检查连接后重试。",
   "Review tools on web": "在网页版审核工具",
   "Connected · tools need review": "已连接 · 工具需要审核",
   "{runtime} needs a model with at least 64K context; change the model and try again.":
