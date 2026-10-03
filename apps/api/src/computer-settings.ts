@@ -397,6 +397,10 @@ export async function updateComputerConnection(
               : {}),
         },
       });
+      await tx.computer.updateMany({
+        where: { connectionId, spaceId: context.spaceId, userId: context.userId },
+        data: { sleepFailureReason: null },
+      });
       if (previous.secretId && (newSecret || input.settings.engine !== "kubernetes"))
         await tx.secret.deleteMany({
           where: { id: previous.secretId, spaceId: context.spaceId, userId: context.userId },

@@ -2567,7 +2567,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const computer = await provisionComputer(deps, storedComputer.id, context, "bot");
         screenRelease = { computer, context };
         if (run.cancelRequestedAt) throw new DispatchStopRequested();
-        scheduleComputerSleep(deps.jobs, storedComputer.id);
+        await scheduleComputerSleep(deps, storedComputer.id);
         const workspaceCheckpoint = createRunWorkspaceCheckpoint(() =>
           checkpointRunComputerWorkspace(deps, storedComputer, computer, context),
         );

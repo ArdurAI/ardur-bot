@@ -2534,7 +2534,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         const bot = await repos.getBot(context.actor, input.botId);
         if (!bot.computer) throw new IsolationError();
         if (bot.computer.state === "running" && bot.computer.providerRef) {
-          scheduleComputerSleep(deps.jobs, bot.computer.id);
+          await scheduleComputerSleep(deps, bot.computer.id);
           return computerStatus(deps, context.actor, input.botId);
         }
         const ctx = computerContext(context.actor, bot.id, "boot");
@@ -2557,7 +2557,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             ...ctx,
             screenLeaseId: screenLeaseIdForRun(lease, manualRunId),
           });
-          scheduleComputerSleep(deps.jobs, bot.computer.id);
+          await scheduleComputerSleep(deps, bot.computer.id);
         } catch (error) {
           if (error instanceof ComputerBusyError) {
             throw new ORPCError("CONFLICT", { message: "Computer is busy" });
@@ -2891,7 +2891,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
               payload: { leaseId, takeoverRequested: waitingForTakeover },
             });
           }
-          scheduleComputerSleep(deps.jobs, bot.computer.id);
+          await scheduleComputerSleep(deps, bot.computer.id);
           return { leaseId, expiresAt: expiresAt.toISOString() };
         }),
       ),
@@ -2948,7 +2948,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           });
 
         await enqueueTakeoverContinuation(deps.jobs, released.runId);
-        scheduleComputerSleep(deps.jobs, bot.computer.id);
+        await scheduleComputerSleep(deps, bot.computer.id);
         return { ok: true as const };
       }),
       input: authed.computer.input.handler(async ({ context, input }) => {
@@ -2994,7 +2994,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           where: { id: computer.id, state: "running" },
           data: { updatedAt: new Date() },
         });
-        scheduleComputerSleep(deps.jobs, computer.id);
+        await scheduleComputerSleep(deps, computer.id);
         return { ok: true as const };
       }),
       files: authed.computer.files.handler(async ({ context, input }) => {
@@ -3010,7 +3010,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             where: { id: computer.id, state: "running" },
             data: { updatedAt: new Date() },
           });
-          scheduleComputerSleep(deps.jobs, computer.id);
+          await scheduleComputerSleep(deps, computer.id);
           entries = await deps.sandbox.listFiles(toComputerRef(computer), storedPath, ctx);
         } else {
           entries = await deps.home.list(computer.homeKey, storedPath, ctx);
@@ -3032,7 +3032,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             where: { id: bot.computer.id, state: "running" },
             data: { updatedAt: new Date() },
           });
-          scheduleComputerSleep(deps.jobs, bot.computer.id);
+          await scheduleComputerSleep(deps, bot.computer.id);
           const bytes = await deps.sandbox.readFile(toComputerRef(bot.computer), storedPath, ctx, {
             maxBytes: MAX_COMPUTER_TEXT_FILE_BYTES,
           });
@@ -3097,7 +3097,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             return null;
           });
         if (!session?.url) return { url: null };
-        scheduleComputerSleep(deps.jobs, bot.computer.id);
+        await scheduleComputerSleep(deps, bot.computer.id);
         const viewUrl = withViewOnly(
           session.url,
           !(hasActiveComputerControl(bot.computer) && bot.computer.controlBotId === bot.id),
@@ -3120,7 +3120,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             data: { updatedAt: new Date() },
           });
           await touchRunningComputer(
-            { sandbox: deps.sandbox, jobs: deps.jobs },
+            { sandbox: deps.sandbox, jobs: deps.jobs, prisma: deps.prisma },
             bot.computer,
           ).catch(() => undefined);
         }
@@ -6709,7 +6709,7 @@ async function runComputerReplace(
       ...computerContext(context.actor, bot.id, operationId),
       screenLeaseId: screenLeaseIdForRun(lease, manualRunId),
     });
-    scheduleComputerSleep(deps.jobs, bot.computer.id);
+    await scheduleComputerSleep(deps, bot.computer.id);
   } catch (error) {
     if (error instanceof ComputerBusyError) {
       throw new ORPCError("CONFLICT", { message: "Computer is busy" });

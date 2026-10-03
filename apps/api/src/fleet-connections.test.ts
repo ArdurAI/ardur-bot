@@ -67,6 +67,7 @@ function fixture(pinned: string[] = []) {
     },
     bot: { findMany: vi.fn(async () => pinned.map((name) => ({ name }))) },
     computer: {
+      updateMany: vi.fn(async () => ({ count: 1 })),
       findMany: vi.fn(async () => [{ id: "computer" }]),
       deleteMany: vi.fn(async () => ({ count: 1 })),
     },
@@ -285,6 +286,10 @@ describe("saved fleet connections", () => {
     });
     expect(tx.connection.update).not.toHaveBeenCalled();
     await updateComputerConnection(deps, "saved", next, row.updatedAt.toISOString(), true, context);
+    expect(tx.computer.updateMany).toHaveBeenCalledWith({
+      where: { connectionId: "saved", spaceId: "space", userId: "owner" },
+      data: { sleepFailureReason: null },
+    });
     expect(tx.fleetAudit.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ action: "connection-updated" }),
     });

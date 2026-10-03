@@ -242,6 +242,7 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService, sandbox?: San
 
     $queryRaw: vi.fn(async () => [{ acquired: true }]),
     computer: {
+      findUnique: vi.fn(async () => computer),
       findFirstOrThrow: vi.fn(async () => computer),
       findUniqueOrThrow: vi.fn(async () => computer),
     },

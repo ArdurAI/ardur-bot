@@ -1173,6 +1173,7 @@ model Computer {
   kind                    String
   providerRef             String?
   state                   String                   @default("stopped")
+  sleepFailureReason      String?
   provisioningId          String?
   controlHolder           String                   @default("none")
   controlLeaseId          String?
