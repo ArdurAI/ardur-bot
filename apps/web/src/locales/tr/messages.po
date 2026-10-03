@@ -380,8 +380,36 @@ msgid "{runtime}'s model connection is missing. Connect it or change the pin."
 msgstr "{runtime} model bağlantısı eksik. Bağlayın veya sabitlemeyi değiştirin."
 
 #: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model provider rejected the connection key. Check it in Settings, under Models."
+msgstr "{runtime} model sağlayıcısı bağlantı anahtarını reddetti. Ayarlar'da Modeller bölümünden anahtarı kontrol edin."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model request failed. Check the connection in Settings, under Models, and try again."
+msgstr "{runtime} model isteği başarısız oldu. Ayarlar'da Modeller bölümünden bağlantıyı kontrol edip yeniden deneyin."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model request was outside this run's allowance. Narrow the task and try again."
+msgstr "{runtime} model isteği bu çalıştırma için izin verilen kapsamın dışındaydı. Görevin kapsamını daraltıp yeniden deneyin."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model request was too large. Narrow the task and try again."
+msgstr "{runtime} model isteği çok büyüktü. Görevin kapsamını daraltıp yeniden deneyin."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model response was too large. Narrow the task and try again."
+msgstr "{runtime} model yanıtı çok büyüktü. Görevin kapsamını daraltıp yeniden deneyin."
+
+#: src/lib/failure-category-copy.ts
 msgid "{runtime}'s pinned model is unavailable. Change the pin and try again."
 msgstr "{runtime} için sabitlenmiş model kullanılamıyor. Sabitlemeyi değiştirin ve yeniden deneyin."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s settings were not confirmed. Check this bot's settings and try again."
+msgstr "{runtime} ayarları doğrulanmadı. Bu botun ayarlarını kontrol edip yeniden deneyin."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s tool list changed during startup. Check the connected tools and try again."
+msgstr "{runtime} araç listesi başlatma sırasında değişti. Bağlı araçları kontrol edip yeniden deneyin."
 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime}'s usage limit is reached. Try again after it resets."
@@ -10038,31 +10066,3 @@ msgstr "Gerçek işler verebileceğin,<0/>her zaman açık agent takımın."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
-
-#: src/lib/failure-category-copy.ts
-msgid "{runtime}'s tool list changed during startup. Check the connected tools and try again."
-msgstr "{runtime} araç listesi başlatma sırasında değişti. Bağlı araçları kontrol edip yeniden deneyin."
-
-#: src/lib/failure-category-copy.ts
-msgid "{runtime}'s settings were not confirmed. Check this bot's settings and try again."
-msgstr "{runtime} ayarları doğrulanmadı. Bu botun ayarlarını kontrol edip yeniden deneyin."
-
-#: src/lib/failure-category-copy.ts
-msgid "{runtime}'s model request was too large. Narrow the task and try again."
-msgstr "{runtime} model isteği çok büyüktü. Görevin kapsamını daraltıp yeniden deneyin."
-
-#: src/lib/failure-category-copy.ts
-msgid "{runtime}'s model response was too large. Narrow the task and try again."
-msgstr "{runtime} model yanıtı çok büyüktü. Görevin kapsamını daraltıp yeniden deneyin."
-
-#: src/lib/failure-category-copy.ts
-msgid "{runtime}'s model request was outside this run's allowance. Narrow the task and try again."
-msgstr "{runtime} model isteği bu çalıştırma için izin verilen kapsamın dışındaydı. Görevin kapsamını daraltıp yeniden deneyin."
-
-#: src/lib/failure-category-copy.ts
-msgid "{runtime}'s model provider rejected the connection key. Check it in Settings, under Models."
-msgstr "{runtime} model sağlayıcısı bağlantı anahtarını reddetti. Ayarlar'da Modeller bölümünden anahtarı kontrol edin."
-
-#: src/lib/failure-category-copy.ts
-msgid "{runtime}'s model request failed. Check the connection in Settings, under Models, and try again."
-msgstr "{runtime} model isteği başarısız oldu. Ayarlar'da Modeller bölümünden bağlantıyı kontrol edip yeniden deneyin."

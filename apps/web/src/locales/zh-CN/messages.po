@@ -380,8 +380,36 @@ msgid "{runtime}'s model connection is missing. Connect it or change the pin."
 msgstr "{runtime} 的模型连接缺失。请连接或更改固定模型。"
 
 #: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model provider rejected the connection key. Check it in Settings, under Models."
+msgstr "{runtime} 的模型提供商拒绝了连接密钥。请在设置的模型部分检查密钥。"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model request failed. Check the connection in Settings, under Models, and try again."
+msgstr "{runtime} 的模型请求失败。请在设置的模型部分检查连接后重试。"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model request was outside this run's allowance. Narrow the task and try again."
+msgstr "{runtime} 的模型请求超出了本次运行的许可范围。请缩小任务范围后重试。"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model request was too large. Narrow the task and try again."
+msgstr "{runtime} 的模型请求过大。请缩小任务范围后重试。"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model response was too large. Narrow the task and try again."
+msgstr "{runtime} 的模型响应过大。请缩小任务范围后重试。"
+
+#: src/lib/failure-category-copy.ts
 msgid "{runtime}'s pinned model is unavailable. Change the pin and try again."
 msgstr "{runtime} 固定的模型不可用。请更改固定模型后重试。"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s settings were not confirmed. Check this bot's settings and try again."
+msgstr "{runtime} 的设置未得到确认。请检查此机器人的设置后重试。"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s tool list changed during startup. Check the connected tools and try again."
+msgstr "{runtime} 的工具列表在启动期间发生了变化。请检查已连接的工具后重试。"
 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime}'s usage limit is reached. Try again after it resets."
@@ -10038,31 +10066,3 @@ msgstr "你的一支随时在线的 Agent 团队<0/>可以交给它们真正的�
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
-
-#: src/lib/failure-category-copy.ts
-msgid "{runtime}'s tool list changed during startup. Check the connected tools and try again."
-msgstr "{runtime} 的工具列表在启动期间发生了变化。请检查已连接的工具后重试。"
-
-#: src/lib/failure-category-copy.ts
-msgid "{runtime}'s settings were not confirmed. Check this bot's settings and try again."
-msgstr "{runtime} 的设置未得到确认。请检查此机器人的设置后重试。"
-
-#: src/lib/failure-category-copy.ts
-msgid "{runtime}'s model request was too large. Narrow the task and try again."
-msgstr "{runtime} 的模型请求过大。请缩小任务范围后重试。"
-
-#: src/lib/failure-category-copy.ts
-msgid "{runtime}'s model response was too large. Narrow the task and try again."
-msgstr "{runtime} 的模型响应过大。请缩小任务范围后重试。"
-
-#: src/lib/failure-category-copy.ts
-msgid "{runtime}'s model request was outside this run's allowance. Narrow the task and try again."
-msgstr "{runtime} 的模型请求超出了本次运行的许可范围。请缩小任务范围后重试。"
-
-#: src/lib/failure-category-copy.ts
-msgid "{runtime}'s model provider rejected the connection key. Check it in Settings, under Models."
-msgstr "{runtime} 的模型提供商拒绝了连接密钥。请在设置的模型部分检查密钥。"
-
-#: src/lib/failure-category-copy.ts
-msgid "{runtime}'s model request failed. Check the connection in Settings, under Models, and try again."
-msgstr "{runtime} 的模型请求失败。请在设置的模型部分检查连接后重试。"

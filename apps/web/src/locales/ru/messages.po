@@ -380,8 +380,36 @@ msgid "{runtime}'s model connection is missing. Connect it or change the pin."
 msgstr "Подключение модели {runtime} отсутствует. Подключите его или измените закрепление."
 
 #: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model provider rejected the connection key. Check it in Settings, under Models."
+msgstr "Поставщик модели {runtime} отклонил ключ подключения. Проверьте его в разделе «Модели» в настройках."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model request failed. Check the connection in Settings, under Models, and try again."
+msgstr "Запрос к модели {runtime} завершился ошибкой. Проверьте подключение в разделе «Модели» в настройках и повторите попытку."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model request was outside this run's allowance. Narrow the task and try again."
+msgstr "Запрос к модели {runtime} вышел за пределы разрешённого для этого запуска. Сократите задачу и повторите попытку."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model request was too large. Narrow the task and try again."
+msgstr "Запрос к модели {runtime} был слишком большим. Сократите задачу и повторите попытку."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s model response was too large. Narrow the task and try again."
+msgstr "Ответ модели {runtime} был слишком большим. Сократите задачу и повторите попытку."
+
+#: src/lib/failure-category-copy.ts
 msgid "{runtime}'s pinned model is unavailable. Change the pin and try again."
 msgstr "Закреплённая модель {runtime} недоступна. Измените закреплённую модель и повторите попытку."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s settings were not confirmed. Check this bot's settings and try again."
+msgstr "Настройки {runtime} не были подтверждены. Проверьте настройки этого бота и повторите попытку."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s tool list changed during startup. Check the connected tools and try again."
+msgstr "Список инструментов {runtime} изменился при запуске. Проверьте подключённые инструменты и повторите попытку."
 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime}'s usage limit is reached. Try again after it resets."
@@ -10038,31 +10066,3 @@ msgstr "Ваша команда постоянно работающих аген
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
-
-#: src/lib/failure-category-copy.ts
-msgid "{runtime}'s tool list changed during startup. Check the connected tools and try again."
-msgstr "Список инструментов {runtime} изменился при запуске. Проверьте подключённые инструменты и повторите попытку."
-
-#: src/lib/failure-category-copy.ts
-msgid "{runtime}'s settings were not confirmed. Check this bot's settings and try again."
-msgstr "Настройки {runtime} не были подтверждены. Проверьте настройки этого бота и повторите попытку."
-
-#: src/lib/failure-category-copy.ts
-msgid "{runtime}'s model request was too large. Narrow the task and try again."
-msgstr "Запрос к модели {runtime} был слишком большим. Сократите задачу и повторите попытку."
-
-#: src/lib/failure-category-copy.ts
-msgid "{runtime}'s model response was too large. Narrow the task and try again."
-msgstr "Ответ модели {runtime} был слишком большим. Сократите задачу и повторите попытку."
-
-#: src/lib/failure-category-copy.ts
-msgid "{runtime}'s model request was outside this run's allowance. Narrow the task and try again."
-msgstr "Запрос к модели {runtime} вышел за пределы разрешённого для этого запуска. Сократите задачу и повторите попытку."
-
-#: src/lib/failure-category-copy.ts
-msgid "{runtime}'s model provider rejected the connection key. Check it in Settings, under Models."
-msgstr "Поставщик модели {runtime} отклонил ключ подключения. Проверьте его в разделе «Модели» в настройках."
-
-#: src/lib/failure-category-copy.ts
-msgid "{runtime}'s model request failed. Check the connection in Settings, under Models, and try again."
-msgstr "Запрос к модели {runtime} завершился ошибкой. Проверьте подключение в разделе «Модели» в настройках и повторите попытку."
