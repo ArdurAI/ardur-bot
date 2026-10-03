@@ -40,6 +40,71 @@ async function fixture(restricted: boolean) {
 const bytes = (text: string) => new TextEncoder().encode(text);
 
 describe.each([false, true])("registered local files (restricted: %s)", (restricted) => {
+  it("narrows workspace operations to a Team bot without changing explicit registered roots", async () => {
+    const { provider, computer, registered } = await fixture(restricted);
+    const root = "bots/selected";
+    const scoped = { ...context, fileRoot: root };
+    const own = path.join(computer.providerRef, root);
+    const other = path.join(computer.providerRef, "bots/other");
+    await mkdir(own, { recursive: true });
+    await mkdir(other);
+    await writeFile(path.join(own, "notes.md"), "own");
+    await writeFile(path.join(other, "notes.md"), "other");
+    await writeFile(path.join(registered, "notes.md"), "registered");
+    expect(await provider.listFiles(computer, root, scoped)).toMatchObject([
+      { path: `${root}/notes.md` },
+    ]);
+    expect(await provider.readFile(computer, `${root}/notes.md`, scoped)).toEqual(bytes("own"));
+    await provider.stop(computer, context);
+    await provider.writeFile(
+      computer,
+      { path: `${root}/notes.md`, content: bytes("edited") },
+      scoped,
+    );
+    expect(await provider.readFile(computer, `${root}/notes.md`, scoped)).toEqual(bytes("edited"));
+    for (const escapedPath of ["bots/other", path.join(registered, "notes.md")]) {
+      await expect(provider.listFiles(computer, escapedPath, scoped)).rejects.toThrow(
+        FILE_LOCATION_REFUSAL,
+      );
+      await expect(provider.readFile(computer, escapedPath, scoped)).rejects.toThrow(
+        FILE_LOCATION_REFUSAL,
+      );
+      await expect(
+        provider.writeFile(computer, { path: escapedPath, content: bytes("draft") }, scoped),
+      ).rejects.toThrow(FILE_LOCATION_REFUSAL);
+    }
+    await symlink(other, path.join(own, "sibling"), "junction");
+    await expect(provider.listFiles(computer, `${root}/sibling`, scoped)).rejects.toThrow(
+      FILE_LOCATION_REFUSAL,
+    );
+    await expect(provider.readFile(computer, `${root}/sibling/notes.md`, scoped)).rejects.toThrow(
+      FILE_LOCATION_REFUSAL,
+    );
+    await expect(
+      provider.writeFile(
+        computer,
+        { path: `${root}/sibling/notes.md`, content: bytes("draft") },
+        scoped,
+      ),
+    ).rejects.toThrow(FILE_LOCATION_REFUSAL);
+    await rm(path.join(own, "sibling"));
+    await rm(own, { recursive: true });
+    await symlink(other, own, "junction");
+    await expect(provider.listFiles(computer, root, scoped)).rejects.toThrow(FILE_LOCATION_REFUSAL);
+    await expect(provider.readFile(computer, `${root}/notes.md`, scoped)).rejects.toThrow(
+      FILE_LOCATION_REFUSAL,
+    );
+    await expect(
+      provider.writeFile(computer, { path: `${root}/notes.md`, content: bytes("draft") }, scoped),
+    ).rejects.toThrow(FILE_LOCATION_REFUSAL);
+    expect(await readFile(path.join(other, "notes.md"), "utf8")).toBe("other");
+    // Explicit operations outside the workspace pane retain the existing registered-root behavior.
+    const explicit = path.join(registered, "notes.md");
+    expect(await provider.readFile(computer, explicit, context)).toEqual(bytes("registered"));
+    await provider.writeFile(computer, { path: explicit, content: bytes("updated") }, context);
+    expect(await readFile(explicit, "utf8")).toBe("updated");
+  });
+
   it("keeps own-folder relative paths working and accepts their absolute form", async () => {
     const { provider, computer } = await fixture(restricted);
     await provider.writeFile(computer, { path: "notes/result.txt", content: bytes("own") });

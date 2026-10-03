@@ -216,6 +216,24 @@ mismatch repair say **Change location on desktop** rather than silently migratin
   a container home store, and a host checkpoint does not overwrite that store with
   an empty export. Registered folders are not deleted by computer destruction.
 
+## Bot files beside chat
+
+In local host mode, Files, IDE and Recorded changes open the selected bot's own
+folder beside its conversation. A Team computer uses that bot's subfolder, not
+the shared computer home or another bot's files. A sleeping host can still serve
+its folder; viewing files does not wake it.
+
+The server's workspace context decides availability and supplies a checked
+computer root. Listing, reading and saving reuse the configured provider and its
+contained file helpers. The pane accepts only relative paths inside the bot's
+folder; traversal, outside symlinks and Team sibling links are refused. Save
+approvals and stale-file checks are unchanged, and a conflict keeps the draft.
+
+A paired host's bot pane remains unavailable: its current bridge grants require
+an active run or maintenance operation. The existing registered-folder IDE
+grants do not authorize bot homes. Registered folders and absolute-path file
+tools keep their existing boundaries. Terminal for host bots is out of scope.
+
 ## What Ardur logs about the processes it starts
 
 Every child process the host runtime spawns (Hermes, Claude Code, Codex, the

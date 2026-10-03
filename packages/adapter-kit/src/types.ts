@@ -15,6 +15,8 @@ import type { LocalImportJob } from "@ardurbot/contracts/local-import";
 export interface AdapterContext {
   /** Supplied by the executor only after claiming the exact approved host command. */
   hostCommandApproval?: HostCommandApproval;
+  /** Server-selected relative boundary for contained host workspace file operations only. */
+  fileRoot?: string;
   toolAccessMode?: "when-needed" | "all";
   operationId: string;
   traceId: string;

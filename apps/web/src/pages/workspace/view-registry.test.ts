@@ -55,6 +55,33 @@ describe("workspace registry", () => {
       availableWorkspaceViews({ computer, context: null, terminal: false }).map((view) => view.id),
     ).toEqual(["tasks", "routines", "screen"]);
   });
+  it.each(["live", "saved", "unavailable"] as const)(
+    "uses server file policy for a host bot (%s), with Terminal still unavailable",
+    (files) => {
+      const host: ComputerStatus = {
+        ...computer,
+        kind: "desktop",
+        runsOnHost: true,
+        capabilities: {
+          graphical: false,
+          interactiveTerminal: false,
+        },
+      };
+      const described = { ...context, files, runsOnHost: true };
+      const views = availableWorkspaceViews({ computer: host, context: described }).map(
+        (view) => view.id,
+      );
+      for (const view of ["files", "ide", "changes"])
+        expect(views.includes(view as (typeof views)[number])).toBe(files !== "unavailable");
+      expect(views).not.toContain("terminal");
+      expect(
+        workspaceViews.ide.available({
+          computer: host,
+          context: { ...described, rootId: undefined },
+        }),
+      ).toBe(false);
+    },
+  );
   it("uses only described file policy, not a computer kind or saved connection", () => {
     expect(workspaceViews.files.available({ computer })).toBe(false);
     expect(
