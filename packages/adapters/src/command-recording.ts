@@ -51,14 +51,19 @@ export function normalizeShellText(value: string): string {
  */
 export function sensitiveShellCommand(command: string): boolean {
   const wrapperPrefix =
-    "(?:(?:[^\\s;&|()]+/)?(?:eval|xargs|sudo|doas|nohup|time|nice|exec|command|builtin)\\s+|" +
+    "(?:(?:[A-Za-z_]\\w*=[^\\s;&|()]+\\s+)|" +
+    "(?:[^\\s;&|()]+/)?(?:eval|xargs|sudo|doas|nohup|time|nice|exec|command|builtin)\\s+|" +
+    "(?:[^\\s;&|()]+/)?(?:sh|bash|zsh|dash|ksh)\\s+-(?:c|lc|ic)\\s+|" +
+    "(?:[^\\s;&|()]+/)?docker\\s+exec\\s+[^\\s;&|()]+\\s+|" +
+    "(?:[^\\s;&|()]+/)?kubectl\\s+exec\\s+[^;&|()\\n]*?\\s+--\\s+|" +
+    "(?:[^\\s;&|()]+/)?ssh\\s+[^\\s;&|()]+\\s+|" +
     "(?:[^\\s;&|()]+/)?timeout\\s+[^\\s;&|()]+\\s+|" +
-    "(?:[^\\s;&|()]+/)?env\\s+(?:[A-Za-z_]\\w*=[^\\s;&|()]+\\s+)*)";
+    "(?:[^\\s;&|()]+/)?env\\s+)";
   const position = `(?:^|[;&|()\\n])\\s*(?:${wrapperPrefix})*(?:[^\\s;&|()]+/)?`;
   const environmentRead = new RegExp(
     position +
-      "(?:printenv\\b|(?:(?:declare|typeset)\\s+-(?:x|p)|set|export(?:\\s+-p)?)\\s*(?=$|[;&|)\\n])|" +
-      "env(?:\\s+(?:-[0i]+|--null|--ignore-environment|(?:-u|--unset)\\s+\\w+|--unset=\\w+|[A-Za-z_]\\w*=[^\\s;&|()]+))*\\s*(?=$|[;&|)\\n]))",
+      "(?:printenv\\b|(?:(?:declare|typeset)\\s+-(?:x|p)|set|export(?:\\s+-p)?)\\s*(?=$|[;&|)<>\\n])|" +
+      "env(?:\\s+(?:-[0i]+|--null|--ignore-environment|(?:-u|--unset)\\s+\\w+|--unset=\\w+|[A-Za-z_]\\w*=[^\\s;&|()]+))*\\s*(?=$|[;&|)<>\\n]))",
     "i",
   );
   const keychainRead = new RegExp(
@@ -80,16 +85,8 @@ export function sensitiveShellCommand(command: string): boolean {
       "kubectl\\s+get\\s+secrets?\\b)",
     "i",
   );
-  // Inspect one quoted shell/eval layer, without treating quoted prose as commands.
-  const quotedReader = new RegExp(
-    `${position}(?:(?:sh|bash|zsh|dash|ksh)\\s+-(?:c|lc|ic)|eval)\\s+(["'])([\\s\\S]*?)\\1`,
-    "gi",
-  );
-  const candidates = [
-    command,
-    normalizeShellText(command),
-    ...Array.from(command.matchAll(quotedReader), (match) => match[2] ?? ""),
-  ];
+  // Retain the raw view for newlines and native path separators as well.
+  const candidates = [command, normalizeShellText(command)];
   return candidates.some(
     (text) =>
       environmentRead.test(text) ||

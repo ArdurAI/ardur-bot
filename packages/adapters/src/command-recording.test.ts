@@ -92,6 +92,27 @@ it.each([
 
 describe("credential-read output suppression", () => {
   it.each([
+    [`${"FOO=1 ".repeat(128)}pnpm test`, false],
+    [`${"FOO=1 ".repeat(128)}env`, true],
+    ["FOO=1 env", true],
+    ["env FOO=1 printenv", true],
+    ["env FOO=1 env", true],
+    ["env > /tmp/x", true],
+    ["docker exec c printenv", true],
+    ["kubectl exec p -- env", true],
+    ["ssh host env", true],
+    ["FOO=1 gh auth token", true],
+    ["CI=1 printenv", true],
+    ["BUILD=1 pnpm test", false],
+    ["docker exec c node scripts/export-site.mjs", false],
+    ["kubectl exec p -- node x.js", false],
+    ["ssh host pnpm test", false],
+    ["env>/tmp/x", true],
+    ["set > /tmp/x", true],
+    ["export -p > /tmp/x", true],
+    ['echo "docker exec c printenv"', false],
+    ['echo "ssh host env"', false],
+    ["FOO=1 BAR=2 env", true],
     ["sh -c 'cat .env'", true],
     ["'cat' .env", true],
     ['"cat" .env', true],
@@ -292,6 +313,13 @@ describe("credential-read output suppression", () => {
   });
 
   it.each([
+    "FOO=1 env",
+    "env > /tmp/x",
+    "docker exec c printenv",
+    "kubectl exec p -- env",
+    "ssh host env",
+    "FOO=1 gh auth token",
+    "CI=1 printenv",
     "dd if=.env",
     "cp .env t && cat t",
     "cat .e''nv",
