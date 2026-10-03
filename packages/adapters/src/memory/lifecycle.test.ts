@@ -202,10 +202,13 @@ it.each(["direct", "group"])(
     const locks = f.tx.$queryRaw.mock.calls.map(([sql]) => String(sql));
     expect(locks).toEqual(
       groupId === "direct"
-        ? [expect.stringContaining("FROM bots"), expect.stringContaining("FROM threads")]
+        ? [
+            expect.stringMatching(/FROM bots.*FOR NO KEY UPDATE/),
+            expect.stringContaining("FROM threads"),
+          ]
         : [
-            expect.stringContaining("FROM chat_groups"),
-            expect.stringContaining("FROM bots"),
+            expect.stringMatching(/FROM chat_groups.*FOR NO KEY UPDATE/),
+            expect.stringMatching(/FROM bots.*FOR NO KEY UPDATE/),
             expect.stringContaining("FROM threads"),
           ],
     );

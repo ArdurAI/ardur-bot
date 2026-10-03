@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { RuntimePinSchema } from "@ardurbot/contracts/runtime-pins";
 import {
+  appendEventInTransaction,
   clearThread,
   createDb,
   createThreadMessage,
@@ -170,6 +171,90 @@ describe.skipIf(!hasDb)("brief authorization and history clearing (PostgreSQL)",
       await expect(
         f.service.commit({ ...input, expectedRevision: 1 }, f.context),
       ).rejects.toMatchObject({ code: "MEMORY_ACCESS" });
+    },
+  );
+
+  it.each([false, true])(
+    "allows a thread-locked usage/event path to finish while a checked brief waits (group: %s)",
+    async (group) => {
+      const f = await fixture(group);
+      const held = deferred();
+      const release = deferred();
+      let eventPid = 0;
+      // Request usage locks the thread before inserting its bot foreign key
+      // and appending usage.recorded. Pause at that exact boundary.
+      const events = f.prisma.$transaction(
+        async (tx) => {
+          const [backend] = await tx.$queryRaw<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`;
+          eventPid = backend!.pid;
+          await appendEventInTransaction(tx, {
+            spaceId: f.context.spaceId,
+            threadId: f.thread.id,
+            botId: f.bot.id,
+            runId: f.run.id,
+            type: "thread.progress",
+            payload: { text: "Working" },
+          });
+          held.resolve();
+          await release.promise;
+          const usage = await tx.usageRecord.create({
+            data: {
+              spaceId: f.context.spaceId,
+              userId: f.context.userId,
+              botId: f.bot.id,
+              runId: f.run.id,
+              provider: "fixture",
+              model: "fixture",
+              inputTokens: 1,
+              outputTokens: 1,
+            },
+          });
+          await appendEventInTransaction(tx, {
+            spaceId: f.context.spaceId,
+            threadId: f.thread.id,
+            botId: f.bot.id,
+            runId: f.run.id,
+            type: "usage.recorded",
+            payload: { usageId: usage.id },
+          });
+        },
+        { timeout: 15_000 },
+      );
+      await held.promise;
+      const transactions = vi.spyOn(f.prisma, "$transaction");
+      const committing = f.service.commit(
+        {
+          scope: "group",
+          botId: f.bot.id,
+          groupId: f.chat?.id ?? "direct",
+          path: `briefs/${f.chat?.id ?? "direct"}.md`,
+          content: "New generation",
+          expectedRevision: 0,
+        },
+        f.context,
+      );
+      try {
+        // Observe this specific blocker, not another test's lock or a sleep.
+        await expect
+          .poll(
+            async () =>
+              (
+                await db.pool.query(
+                  "SELECT 1 FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%FROM threads%' AND $1 = ANY(pg_blocking_pids(pid))",
+                  [eventPid],
+                )
+              ).rowCount! > 0,
+          )
+          .toBe(true);
+      } finally {
+        release.resolve();
+        const results = await Promise.allSettled([events, committing]);
+        expect(results.map((result) => result.status)).toEqual(["fulfilled", "fulfilled"]);
+      }
+      expect(transactions).toHaveBeenCalledTimes(1);
+      transactions.mockRestore();
+      expect(await f.prisma.event.count({ where: { threadId: f.thread.id } })).toBe(2);
+      expect(await f.prisma.usageRecord.count({ where: { runId: f.run.id } })).toBe(1);
     },
   );
 
