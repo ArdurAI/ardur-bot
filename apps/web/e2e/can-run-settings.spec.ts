@@ -5,7 +5,10 @@ import { installPerformanceFixture } from "./performance-fixture";
 
 test("can-run-settings", async ({ page }, testInfo) => {
   await installPerformanceFixture(page);
-  const sentence = failureCategoryMessage("computer-unsupported", { runtime: "Codex" });
+  const sentence = failureCategoryMessage("computer-unsupported", {
+    runtime: "Codex",
+    bot: "this bot",
+  });
   let moves = 0;
   await page.route("**/rpc/computer/status", (route) =>
     route.fulfill({
@@ -51,6 +54,8 @@ test("can-run-settings", async ({ page }, testInfo) => {
   await expect(move).toBeEnabled();
   expect(moves).toBe(0);
   await captureScreenshot(page, testInfo, "can-run-settings");
+  await settings.getByRole("button", { name: "Save", exact: true }).scrollIntoViewIfNeeded();
+  await captureScreenshot(page, testInfo, "can-run-settings-refusal");
   await move.click();
   await expect(page.getByRole("alertdialog")).toContainText(
     "This replaces the computer's files. Continue?",

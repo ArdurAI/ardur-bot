@@ -1448,4 +1448,5 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Could not check the model. Try again.": "无法检查模型。请重试。",
   "Context limit (estimated)": "上下文限制（估计）",
   "Context limit (from the provider)": "上下文限制（来自提供商）",
+  "Experimental turned on for this runtime": "已为此运行时开启实验性功能",
 };

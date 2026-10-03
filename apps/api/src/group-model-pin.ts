@@ -105,6 +105,19 @@ export async function updateGroupMemberModelPin(
     await validateBotCanRun(deps, actor, requested, { botId: target.botId });
     if (requested.runtimeKind !== "pi" && !(await nativeHostOwner(deps.prisma, actor.userId)))
       throw new ORPCError("FORBIDDEN", { message: NATIVE_HOST_OWNER_MESSAGE });
+  } else {
+    await validateBotCanRun(
+      deps,
+      actor,
+      {
+        runtimeKind: "pi",
+        provider: null,
+        modelId: null,
+        credentialId: null,
+        effort: null,
+      },
+      { botId: target.botId, inheritBotPin: true },
+    );
   }
   const choice = requested ? await validateModelPinSelection(deps, actor, requested) : null;
   const committed = await deps.prisma.$transaction(async (tx) => {

@@ -10,6 +10,8 @@ import { rpc } from "./rpc";
 
 export type CanRunChoice = Omit<RuntimePin, "revision"> & {
   botId?: string;
+  inheritBotPin?: boolean;
+  computerMode?: "team" | "dedicated";
   runtimeExperimental?: boolean;
   computerLocation?: "host" | "sandbox";
 };

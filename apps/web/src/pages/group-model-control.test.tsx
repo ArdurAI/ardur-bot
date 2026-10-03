@@ -999,3 +999,22 @@ it.each([
     expect(rpc.models.validatePin).toHaveBeenCalledWith(expect.objectContaining({ botId: bot.id }));
   },
 );
+
+it("shows the server reason when Same as bot would inherit settings that cannot run", async () => {
+  const sentence = failureCategoryMessage("computer-unsupported", {
+    runtime: "Codex",
+    bot: "this bot",
+  });
+  vi.mocked(rpc.models.validatePin).mockRejectedValue(
+    new ORPCError("BAD_REQUEST", { message: sentence }),
+  );
+  await render({ ...member, runtimePin: null });
+  expect(rpc.models.validatePin).toHaveBeenCalledWith(
+    expect.objectContaining({ botId: bot.id, inheritBotPin: true }),
+  );
+  expect(container.textContent).toContain(sentence);
+  const save = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Save model",
+  )!;
+  expect(save.disabled).toBe(true);
+});

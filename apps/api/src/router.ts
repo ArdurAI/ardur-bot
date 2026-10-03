@@ -42,6 +42,7 @@ import {
   bumpMcpServerRevision,
   CodexConnections,
   ComputerBusyError,
+  canBotRun,
   cancelComputerRunWork,
   checkpointAndRecordComputerWorkspace,
   clearInactiveUserComputerControl,
@@ -304,7 +305,11 @@ import {
 } from "./memory-provider-config.js";
 import { memoryContext, memoryRpc } from "./memory-routes.js";
 import { createChannelPairing } from "./messaging-dispatch.js";
-import { validateBotCanRun, validateModelPinSelection } from "./model-pin-validation.js";
+import {
+  botRunComputerLocation,
+  validateBotCanRun,
+  validateModelPinSelection,
+} from "./model-pin-validation.js";
 import { notificationActivity } from "./notification-activity.js";
 import { ollamaConnection, ollamaStatus } from "./ollama.js";
 import {
@@ -1824,6 +1829,28 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         if (currentMode === input.mode) {
           return repos.setBotComputer(context.actor, bot.id, input.mode);
         }
+        const placementProblem = canBotRun({
+          pin: {
+            runtimeKind: bot.runtimeKind as RuntimeKind,
+            provider: bot.modelProvider,
+            modelId: bot.modelId,
+            credentialId: bot.modelCredentialId,
+            effort: bot.thinkingLevel,
+            revision: bot.modelPinRevision,
+          },
+          placement: {
+            computer: await botRunComputerLocation(
+              deps,
+              context.actor,
+              bot.computer,
+              bot.id,
+              input.mode,
+            ),
+            experimental: bot.runtimeExperimental,
+          },
+        });
+        if (placementProblem)
+          throw new ORPCError("BAD_REQUEST", { message: placementProblem.reason });
         const claimed = await deps.prisma.$transaction(async (tx) => {
           await tx.$queryRaw`SELECT id FROM computers WHERE id = ${bot.computerId} FOR UPDATE`;
           return tx.bot.updateMany({

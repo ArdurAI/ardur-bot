@@ -8,12 +8,15 @@ import {
   ollamaErrorMessage,
   parseModelSecret,
   piModelContextWindow,
+  requestedBotPin,
   runtimeComputerLocation,
+  selectConfiguredModel,
   showOllamaModel,
   suggestedModelEffort,
 } from "@ardurbot/adapters";
 import type {
   Actor,
+  ComputerMode,
   RuntimeComputerLocation,
   RuntimeKind,
   RuntimePin,
@@ -203,7 +206,12 @@ export async function normalizeModelPinUpdate(
     }
   }
   const entry = listPiCatalog().find((item) => item.provider === provider && item.id === modelId);
-  if (provider === "openai-compatible" ? credential.defaultModel !== modelId : !entry) {
+  if (
+    provider === "openai-compatible"
+      ? credential.defaultModel !== modelId &&
+        !(unchanged && existing.modelCredentialId === credential.id)
+      : !entry
+  ) {
     throw new ORPCError("BAD_REQUEST", { message: "Unknown model for that provider" });
   }
   let levels = entry?.thinkingLevels ?? ["off" as const];
@@ -355,7 +363,30 @@ export type BotRunSettingsContext = {
   botId?: string;
   runtimeExperimental?: boolean;
   computerLocation?: "host" | "sandbox";
+  computerMode?: ComputerMode;
+  inheritBotPin?: boolean;
 };
+
+/** Read the actual destination of a sharing change without creating or moving a computer. */
+export async function botRunComputerLocation(
+  deps: RouterDeps,
+  actor: Actor,
+  computer: { kind: string; connectionId?: string | null; spaceId: string; scope?: string } | null,
+  botId: string,
+  mode?: ComputerMode,
+): Promise<RuntimeComputerLocation> {
+  const currentMode = computer?.scope === "dedicated" ? "dedicated" : "team";
+  const destination =
+    mode && mode !== currentMode
+      ? mode === "team"
+        ? await deps.prisma.computer.findFirst({
+            where: { spaceId: actor.spaceId, scope: "team" },
+            orderBy: [{ bots: { _count: "desc" } }, { createdAt: "asc" }, { id: "asc" }],
+          })
+        : await deps.prisma.computer.findUnique({ where: { scopeKey: `bot:${botId}` } })
+      : null;
+  return runtimeComputerLocation(deps.prisma, destination ?? computer);
+}
 
 /** Resolve trusted facts once; forms and save endpoints use the same run admission predicates. */
 export async function validateBotCanRun(
@@ -378,9 +409,11 @@ export async function validateBotCanRun(
   if (context.botId && !bot) throw new IsolationError();
   // An existing bot's computer is never supplied by the client.
   const computer: RuntimeComputerLocation = bot
-    ? await runtimeComputerLocation(deps.prisma, bot.computer)
+    ? await botRunComputerLocation(deps, actor, bot.computer, bot.id, context.computerMode)
     : { kind: context.computerLocation === "host" ? "desktop" : "docker" };
-  let pin: RuntimePin = { ...choice, revision: 0 };
+  if (context.inheritBotPin && !bot) throw new IsolationError();
+  let pin: RuntimePin =
+    context.inheritBotPin && bot ? requestedBotPin(bot) : { ...choice, revision: 0 };
   const placement = {
     computer,
     experimental: context.runtimeExperimental ?? bot?.runtimeExperimental ?? false,
@@ -442,7 +475,25 @@ export async function validateBotCanRun(
     const problem = canBotRun({ pin, connection: { credential } });
     if (problem) throw new ORPCError("BAD_REQUEST", { message: problem.reason });
   }
-  const checked = await validateModelPinSelection(deps, actor, pin);
+  let checked: ValidatedModelPinChoice;
+  if (
+    (pin.runtimeKind === "pi" || pin.runtimeKind === "hermes") &&
+    pin.provider !== "ollama" &&
+    (pin.provider !== "scripted" || deps.env.agentRuntime === "scripted")
+  ) {
+    const selected = selectConfiguredModel({ pin, credential });
+    if (selected.kind !== "resolved")
+      throw new ORPCError("BAD_REQUEST", { message: selected.reason });
+    checked = {
+      runtimeKind: pin.runtimeKind,
+      provider: selected.provider,
+      modelId: selected.id,
+      credentialId: pin.credentialId!,
+      effort: pin.effort,
+    };
+  } else {
+    checked = await validateModelPinSelection(deps, actor, pin);
+  }
   const space = await deps.prisma.space.findUnique({ where: { id: actor.spaceId } });
   let metadata: ReturnType<typeof modelCredentialDto> | undefined;
   if (credential) {
@@ -469,7 +520,14 @@ export async function validateBotCanRun(
       id: checked.modelId,
       baseUrl: metadata?.baseUrl,
       reasoning: ollamaModel?.reasoning ?? metadata?.reasoning,
-      contextWindow: ollamaModel?.contextWindow ?? metadata?.contextWindow,
+      ...(metadata?.oauth || metadata?.connectionIssue === "api-key-required"
+        ? { oauth: { credential: { type: "oauth" as const, access: "", refresh: "", expires: 0 } } }
+        : {}),
+      contextWindow:
+        ollamaModel?.contextWindow ??
+        (checked.provider === "openai-compatible"
+          ? metadata?.contextWindow
+          : (piModelContextWindow(checked.provider, checked.modelId) ?? metadata?.contextWindow)),
       maxTokens: metadata?.maxTokens,
       thinkingLevel: ThinkingLevelSchema.parse(normalizedThinkingLevel(checked.effort)),
     },

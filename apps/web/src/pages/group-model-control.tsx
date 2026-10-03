@@ -122,7 +122,15 @@ export function GroupModelControl({
               : effort || (kind === "pi" || kind === "hermes" ? defaultEffort : null),
           runtimeExperimental: bot.runtimeExperimental ?? false,
         }
-      : null,
+      : {
+          botId: bot.id,
+          inheritBotPin: true,
+          runtimeKind: bot.runtimeKind ?? "pi",
+          provider: bot.modelProvider ?? null,
+          modelId: bot.modelId ?? null,
+          credentialId: bot.modelCredentialId ?? null,
+          effort: bot.thinkingLevel ?? null,
+        },
   );
 
   async function save() {

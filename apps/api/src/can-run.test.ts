@@ -63,7 +63,12 @@ function fixture(row: (typeof rows)[number]) {
     runtimeConfig: null,
     modelPinRevision: 1,
     thread: { id: "thread" },
-    computer: { kind: row.computer ?? "desktop", connectionId: null, spaceId: "space" },
+    computer: {
+      kind: row.computer ?? "desktop",
+      connectionId: null,
+      spaceId: "space",
+      scope: "dedicated",
+    },
   };
   const credential = {
     id: "connection",
@@ -73,6 +78,15 @@ function fixture(row: (typeof rows)[number]) {
     secretId: "secret",
   };
   const prisma = {
+    computer: {
+      findFirst: vi.fn(async () => ({
+        kind: "docker",
+        spaceId: "space",
+        scope: "team",
+        connectionId: null,
+      })),
+      findUnique: vi.fn(async () => null),
+    },
     chatGroup: { findFirst: vi.fn(async () => ({ members: [{ id: "member", bot }] })) },
     bot: { findFirst: vi.fn(async () => bot), updateMany: vi.fn() },
     space: {
@@ -184,5 +198,108 @@ it.each(rows)("group save refuses $name through the actual checker", async (row)
       f.pin,
     ),
   ).rejects.toThrow(sentence);
+  expect(f.prisma.$transaction).not.toHaveBeenCalled();
+});
+
+it("the preview checks the existing Team computer rather than the bot's current host", async () => {
+  const f = fixture({ name: "valid host Codex", kind: "codex-app-server" });
+  const result = await f.call("models/validatePin", {
+    ...f.pin,
+    botId: "bot",
+    computerMode: "team",
+  });
+  expect(result).toMatchObject({
+    status: 400,
+    body: {
+      json: {
+        message: failureCategoryMessage("computer-unsupported", {
+          runtime: "Codex",
+          bot: "this bot",
+        }),
+      },
+    },
+  });
+  expect(f.prisma.computer.findFirst).toHaveBeenCalledWith(
+    expect.objectContaining({
+      where: { spaceId: "space", scope: "team" },
+    }),
+  );
+  expect(f.prisma.$transaction).not.toHaveBeenCalled();
+});
+it("a sharing save cannot bypass the Team placement check or start moving files", async () => {
+  const f = fixture({ name: "valid host Codex", kind: "codex-app-server" });
+  const result = await f.call("bots/setComputer", { botId: "bot", mode: "team" });
+  expect(result).toMatchObject({
+    status: 400,
+    body: {
+      json: {
+        message: failureCategoryMessage("computer-unsupported", {
+          runtime: "Codex",
+          bot: "this bot",
+        }),
+      },
+    },
+  });
+  expect(f.prisma.$transaction).not.toHaveBeenCalled();
+});
+
+it.each(["pi", "hermes"] as const)(
+  "a %s preview preserves the exact bound custom pin after the connection default changes",
+  async (kind) => {
+    const f = fixture({ name: "saved custom pin", kind });
+    f.prisma.spaceModelPreference.findFirst.mockResolvedValue({
+      modelId: "another-default",
+      isDefault: false,
+    });
+    const result = await f.call("models/validatePin", { ...f.pin, botId: "bot" });
+    expect(result.status).toBe(200);
+    expect(f.prisma.bot.updateMany).not.toHaveBeenCalled();
+  },
+);
+
+it("a non-scripted deployment refuses a client-supplied fixture pin", async () => {
+  const f = fixture({ name: "production", kind: "pi" });
+  const result = await f.call("models/validatePin", {
+    runtimeKind: "pi",
+    provider: "scripted",
+    modelId: "scripted",
+    credentialId: "scripted",
+    effort: "off",
+    botId: "bot",
+  });
+  expect(result.status).toBe(400);
+});
+
+it.each(rows)(
+  "an inherited group preview refuses $name even if the client describes a different pin",
+  async (row) => {
+    const f = fixture(row);
+    const result = await f.call("models/validatePin", {
+      runtimeKind: "pi",
+      provider: null,
+      modelId: null,
+      credentialId: null,
+      effort: null,
+      botId: "bot",
+      inheritBotPin: true,
+    });
+    expect(result.status).toBe(400);
+  },
+);
+it.each(rows)("clearing a group override cannot inherit $name", async (row) => {
+  const f = fixture(row);
+  await expect(
+    updateGroupMemberModelPin(
+      f.deps,
+      actor,
+      {
+        groupId: "group",
+        botId: "bot",
+        memberId: "member",
+        expectedRevision: 0,
+      },
+      null,
+    ),
+  ).rejects.toThrow();
   expect(f.prisma.$transaction).not.toHaveBeenCalled();
 });

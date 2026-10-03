@@ -1761,6 +1761,8 @@ msgstr "Los inicios de sesión de ChatGPT solo funcionan dentro de Codex; añade
 msgid "Check"
 msgstr ""
 
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Check again"
 msgstr ""
@@ -2647,6 +2649,7 @@ msgstr ""
 msgid "Could not check teaching status. Refresh the view to continue."
 msgstr "No se pudo comprobar el estado de enseñanza. Actualiza la vista para continuar."
 
+#: src/lib/use-can-run.ts
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Could not check the model. Try again."
 msgstr "No se pudo comprobar el modelo. Inténtalo de nuevo."
@@ -4203,6 +4206,10 @@ msgstr "Expandir {0}"
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Experimental turned on for this runtime"
+msgstr "Se activó Experimental para este entorno de ejecución"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts

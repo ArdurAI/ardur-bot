@@ -44,6 +44,14 @@ when those apply, and the sentences older builds stored verbatim. Readers map st
 English text back to its id with `failureCategoryFromText`; anything unknown shows the
 consumer's generic line, never a wrong category.
 
+## Settings checks
+
+`canBotRun` in the adapter package is used both by runtime selection and by
+`models.validatePin`. The editor, bot save and group override save reuse the same
+placement, connection, locality and context predicates. Settings failures reuse
+this table's sentences rather than introducing separate editor wording. An
+unknown transport error stays generic and leaves Save disabled.
+
 ## Adding a category
 
 1. Add one entry to `FAILURE_CATEGORIES` (id, default English sentence, action, optional

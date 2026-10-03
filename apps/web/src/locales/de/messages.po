@@ -1761,6 +1761,8 @@ msgstr "ChatGPT-Anmeldungen funktionieren nur innerhalb von Codex; füge einen O
 msgid "Check"
 msgstr ""
 
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Check again"
 msgstr ""
@@ -2647,6 +2649,7 @@ msgstr ""
 msgid "Could not check teaching status. Refresh the view to continue."
 msgstr ""
 
+#: src/lib/use-can-run.ts
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Could not check the model. Try again."
 msgstr "Das Modell konnte nicht geprüft werden. Versuche es erneut."
@@ -4203,6 +4206,10 @@ msgstr ""
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Experimental turned on for this runtime"
+msgstr "Experimentell wurde für diese Laufzeit aktiviert"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts

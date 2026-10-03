@@ -190,6 +190,7 @@ export function CreateBotForm({
           credentialId: null,
           effort: null,
           computerLocation,
+          computerMode,
           runtimeExperimental: false,
         }
       : null,
@@ -573,6 +574,7 @@ export function BotSettings({
 
   const canRun = useCanRun({
     botId: bot.id,
+    computerMode,
     runtimeKind,
     runtimeExperimental,
     provider: selectedModel?.provider ?? null,
@@ -888,7 +890,13 @@ export function BotSettings({
             mode={computerMode}
             runtimeKind={runtimeKind}
           >
-            <ComputerModePicker value={computerMode} onChange={setComputerMode} />
+            <ComputerModePicker
+              value={computerMode}
+              onChange={(mode) => {
+                setComputerMode(mode);
+                canRun.recheck();
+              }}
+            />
           </BotRuntimeSettings>
         </div>
       </SettingsGroup>

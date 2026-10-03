@@ -32,6 +32,7 @@ import { loadLearning } from "../lib/learning";
 import { presentMessageActionSheet } from "../lib/message-action-sheet";
 import { useMobileTokens, useResolvedAppearance } from "../lib/native";
 import { RpcError } from "../lib/rpc-error";
+import { useCanRun } from "../lib/use-can-run";
 
 type BotSettingsRecord = MobileBot & {
   description?: string;
@@ -214,6 +215,28 @@ export default function BotSettingsScreen() {
     ? t("On")
     : `${t("Default")} (${thinkingLevelLabel(defaultThinkingLevel, t)})`;
 
+  const selectedPin = modelKey ? parseModelOptionKey(modelKey) : null;
+  const canRun = useCanRun(
+    bot
+      ? {
+          botId: bot.id,
+          computerMode,
+          runtimeKind,
+          runtimeExperimental,
+          provider: selectedPin?.provider ?? null,
+          modelId: selectedPin?.modelId ?? null,
+          credentialId: selectedPin?.credentialId ?? null,
+          effort: selectedPin
+            ? isOllama && effectiveEntry?.reasoning === false
+              ? null
+              : thinkingLevel || defaultThinkingLevel
+            : thinkingLevel || null,
+        }
+      : null,
+  );
+  const activeValidationError =
+    canRun.error || (runtimeKind === "hermes" ? runtimeConfigError : null);
+
   const spaceDefaultLabel = me?.defaultModel
     ? `${t("Space default")} (${catalogLabel(catalog, me.defaultProvider, me.defaultModel) ?? me.defaultModel})`
     : t("Space default");
@@ -297,7 +320,7 @@ export default function BotSettingsScreen() {
   }
 
   async function save() {
-    if (!botId || !bot || pending) return;
+    if (!botId || !bot || pending || canRun.blocked) return;
     if (runtimeKind === "hermes" && runtimeConfigError) return;
     setPending(true);
     setError(null);
@@ -337,14 +360,19 @@ export default function BotSettingsScreen() {
         (selected?.provider ?? null) !== (bot.modelProvider ?? null) ||
         (selected?.modelId ?? null) !== (bot.modelId ?? null) ||
         (selected?.credentialId ?? null) !== (bot.modelCredentialId ?? null);
-      const thinkingChanged = (thinkingLevel || null) !== (bot.thinkingLevel ?? null);
+      const nextEffort = selectedPin
+        ? isOllama && effectiveEntry?.reasoning === false
+          ? null
+          : thinkingLevel || defaultThinkingLevel
+        : thinkingLevel || null;
+      const thinkingChanged = nextEffort !== (bot.thinkingLevel ?? null);
       if (modelChanged) {
         input.modelProvider = selected?.provider ?? null;
         input.modelId = selected?.modelId ?? null;
         input.modelCredentialId = selected?.credentialId ?? null;
       }
       if ((runtimeKind !== "pi" || modelMetaReady) && (modelChanged || thinkingChanged)) {
-        input.thinkingLevel = (thinkingLevel || null) as ThinkingLevel | null;
+        input.thinkingLevel = nextEffort as ThinkingLevel | null;
       }
       if (computerMode !== bot.computerMode) {
         await rpc(
@@ -504,14 +532,13 @@ export default function BotSettingsScreen() {
             />
           ))}
         </ScrollView>
-        <BotRuntimeSettings
-          botId={botId}
-          mode={computerMode}
-          runtimeKind={bot?.runtimeKind ?? "pi"}
-        >
+        <BotRuntimeSettings botId={botId} mode={computerMode} runtimeKind={runtimeKind}>
           <ComputerModePicker
             value={computerMode}
-            onChange={setComputerMode}
+            onChange={(mode) => {
+              setComputerMode(mode);
+              canRun.recheck();
+            }}
             showConsequence={false}
           />
         </BotRuntimeSettings>
@@ -544,6 +571,7 @@ export default function BotSettingsScreen() {
         {runtimeKind === "hermes" ? (
           <RuntimeConfigPanel
             value={runtimeConfig}
+            checkPin={false}
             onChange={setRuntimeConfig}
             onError={setRuntimeConfigError}
             onOpenLearning={() => router.push({ pathname: "/learning", params: { botId } })}
@@ -644,6 +672,16 @@ export default function BotSettingsScreen() {
             ) : null}
           </View>
         ) : null}
+        {activeValidationError ? (
+          <Text accessibilityRole="alert" style={{ color: tokens.destructive, marginTop: 16 }}>
+            {activeValidationError}
+          </Text>
+        ) : null}
+        {canRun.error ? (
+          <Pressable accessibilityRole="button" onPress={canRun.recheck}>
+            <Text style={{ color: tokens.foreground }}>{t("Check again")}</Text>
+          </Pressable>
+        ) : null}
         {error ? (
           <Text accessibilityRole="alert" style={{ color: tokens.destructive, marginTop: 16 }}>
             {error}
@@ -688,6 +726,7 @@ export default function BotSettingsScreen() {
             !name.trim() ||
             pending ||
             !bot ||
+            canRun.blocked ||
             (runtimeKind === "hermes" && Boolean(runtimeConfigError || hermesRefusal))
           }
           style={{
@@ -700,6 +739,7 @@ export default function BotSettingsScreen() {
               !name.trim() ||
               pending ||
               !bot ||
+              canRun.blocked ||
               (runtimeKind === "hermes" && Boolean(runtimeConfigError))
                 ? 0.4
                 : 1,
