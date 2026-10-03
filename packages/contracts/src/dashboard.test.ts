@@ -1,7 +1,24 @@
-import { describe, expect, it } from "vitest";
-import { DashboardNowSchema, UsagePeriodSchema, UsageSummarySchema } from "./dashboard.js";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import {
+  DashboardNowSchema,
+  dashboardContract,
+  UsagePeriodSchema,
+  UsageSummarySchema,
+} from "./dashboard.js";
+import { appContract } from "./rpc.js";
 
 describe("Dashboard read contracts", () => {
+  it("keeps the app dashboard boundary exactly typed", () => {
+    expectTypeOf(appContract.dashboard).toEqualTypeOf<typeof dashboardContract>();
+  });
+
+  it("reuses the dashboard procedures and validators without rebuilding them", () => {
+    expect(appContract.dashboard).toBe(dashboardContract);
+    expect(appContract.dashboard.now).toBe(dashboardContract.now);
+    expect(appContract.dashboard.connections).toBe(dashboardContract.connections);
+    expect(appContract.dashboard.now["~orpc"].outputSchema).toBe(DashboardNowSchema);
+  });
+
   it("keeps usage records distinct from request counts", () => {
     expect(
       UsagePeriodSchema.safeParse({ requests: 1, inputTokens: 20, outputTokens: 5, cost: null })
