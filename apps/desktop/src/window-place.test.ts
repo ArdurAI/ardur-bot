@@ -346,6 +346,20 @@ describe("Electron edge without Electron", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it("saves a move-only drag to another display after the debounce", () => {
+    vi.useFakeTimers();
+    const win = new WindowFake();
+    const store = new WindowPlaceStore("/unused");
+    const save = vi.spyOn(store, "save").mockResolvedValue();
+    watchWindowPlace(win, store, displayScreen, () => true);
+    win.bounds = { ...win.bounds, x: 2050 };
+    win.emit("move");
+    vi.advanceTimersByTime(WINDOW_PLACE_DEBOUNCE_MS - 1);
+    expect(save).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(save).toHaveBeenCalledExactlyOnceWith({ ...normal, x: 2050, displayId: 2 });
+  });
+
   it.each(["maximize", "unmaximize", "enter-full-screen", "leave-full-screen"])(
     "also saves %s state changes without relying on a resize",
     (event) => {
