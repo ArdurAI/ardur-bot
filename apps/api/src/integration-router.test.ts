@@ -736,3 +736,21 @@ describe("integration RPC boundaries", () => {
     expect(put).not.toHaveBeenCalled();
   });
 });
+
+it("requires a signed-in actor for tool review and routes explicit consent", async () => {
+  const f = fixture();
+  const review = vi
+    .spyOn(IntegrationConnections.prototype, "reviewTools")
+    .mockResolvedValue({ ok: true });
+  const input = {
+    connectionId: "server",
+    revision: 1,
+    botId: "bot",
+    toolIds: ["read_item"],
+    approveSpace: false,
+  };
+  expect((await f.request("integrations/reviewTools", input, null))?.status).toBe(401);
+  expect(review).not.toHaveBeenCalled();
+  expect((await f.request("integrations/reviewTools", input))?.status).toBe(200);
+  expect(review).toHaveBeenCalledWith(actor, input);
+});

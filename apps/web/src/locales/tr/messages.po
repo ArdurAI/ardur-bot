@@ -9991,3 +9991,15 @@ msgstr ""
 
 msgid "Connected · tools need review"
 msgstr "Bağlı · araçların incelenmesi gerekiyor"
+
+msgid "Also allow these tools for the space"
+msgstr "Bu araçlara alan için de izin ver"
+
+msgid "Allow selected"
+msgstr "Seçilenlere izin ver"
+
+msgid "Allow all"
+msgstr "Tümüne izin ver"
+
+msgid "Ask the space owner to review these tools in Settings."
+msgstr "Alan sahibinden bu araçları Ayarlar’da incelemesini isteyin."

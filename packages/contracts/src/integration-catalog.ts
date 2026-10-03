@@ -108,6 +108,13 @@ export const IntegrationManifestSchema = z
             id: z.string().min(1).max(200),
             description: z.string().max(8000),
             inputSchemaDigest: z.string().regex(/^[a-f0-9]{64}$/),
+            annotations: z
+              .object({
+                readOnlyHint: z.boolean().optional(),
+                destructiveHint: z.boolean().optional(),
+              })
+              .strict()
+              .optional(),
           })
           .strict(),
       )
@@ -252,3 +259,17 @@ export const BotIntegrationAvailabilitySchema = z.object({
   toolsNeedReview: z.boolean().default(false),
 });
 export type BotIntegrationAvailability = z.infer<typeof BotIntegrationAvailabilitySchema>;
+
+/** Hints describe defaults only; they never confer permission or bypass approval. */
+export function mcpReviewToolKind(tool: IntegrationManifest["tools"][number]): "read" | "write" {
+  return tool.annotations?.readOnlyHint === true && tool.annotations.destructiveHint !== true
+    ? "read"
+    : "write";
+}
+export const IntegrationToolReviewSchema = z.object({
+  revision: z.number().int().nonnegative(),
+  manifest: IntegrationManifestSchema,
+  spaceAllowedTools: z.array(z.string()),
+  canApproveSpace: z.boolean(),
+  spaceNeedsReview: z.boolean(),
+});

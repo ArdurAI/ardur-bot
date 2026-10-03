@@ -9991,3 +9991,15 @@ msgstr ""
 
 msgid "Connected · tools need review"
 msgstr "कनेक्ट है · टूल की समीक्षा ज़रूरी है"
+
+msgid "Also allow these tools for the space"
+msgstr "स्पेस के लिए भी इन टूल को अनुमति दें"
+
+msgid "Allow selected"
+msgstr "चुने हुए टूल की अनुमति दें"
+
+msgid "Allow all"
+msgstr "सभी की अनुमति दें"
+
+msgid "Ask the space owner to review these tools in Settings."
+msgstr "स्पेस के मालिक से सेटिंग में इन टूल की समीक्षा करने को कहें।"

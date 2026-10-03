@@ -3,6 +3,7 @@ import { Button, Input, Popover, PopoverContent, PopoverTrigger, Textarea } from
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useId, useState } from "react";
 import { rpc } from "../lib/rpc";
+import { BotToolReview } from "./integrations/catalog/BotToolReview";
 
 const duration = (value: number | null | undefined) =>
   value == null ? "—" : `${Math.round(value)} ms`;
@@ -176,6 +177,7 @@ export function BotContext({
     null,
   );
   const [concurrentRuns, setConcurrentRuns] = useState(3);
+  const [reviewId, setReviewId] = useState<string>();
   const [error, setError] = useState(false);
   const [period, setPeriod] = useState<"today" | "sevenDays">("today");
   useEffect(() => {
@@ -229,12 +231,27 @@ export function BotContext({
               <p key={item.id} className="text-muted-foreground">
                 {item.name} —{" "}
                 {item.toolsNeedReview ? t`Connected · tools need review` : t`Connected`}
+                {item.toolsNeedReview ? (
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    onClick={() => setReviewId(item.id)}
+                  >{t`Review tools`}</Button>
+                ) : null}
               </p>
             ))
           ) : (
             <p className="text-muted-foreground">{t`None available`}</p>
           )}
         </div>
+        {reviewId ? (
+          <BotToolReview
+            connectionId={reviewId}
+            botId={botId}
+            onClose={() => setReviewId(undefined)}
+            onSaved={() => setVersion((v) => v + 1)}
+          />
+        ) : null}
         <div className="flex gap-2">
           <Button
             size="xs"

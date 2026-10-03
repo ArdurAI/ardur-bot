@@ -9991,3 +9991,15 @@ msgstr ""
 
 msgid "Connected · tools need review"
 msgstr "Conectado · as ferramentas precisam de revisão"
+
+msgid "Also allow these tools for the space"
+msgstr "Permitir também estas ferramentas no espaço"
+
+msgid "Allow selected"
+msgstr "Permitir selecionadas"
+
+msgid "Allow all"
+msgstr "Permitir todas"
+
+msgid "Ask the space owner to review these tools in Settings."
+msgstr "Peça ao proprietário do espaço para revisar estas ferramentas nas Configurações."

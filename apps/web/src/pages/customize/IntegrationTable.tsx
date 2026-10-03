@@ -69,7 +69,9 @@ export function IntegrationTable({
                   {row.status === "connected" ? (
                     <>
                       <Check className="size-4 text-success" aria-hidden />
-                      <span>{t`Connected`}</span>
+                      <span>
+                        {row.toolsNeedReview ? t`Connected · tools need review` : t`Connected`}
+                      </span>
                     </>
                   ) : row.status === "reconnect" ? (
                     <>

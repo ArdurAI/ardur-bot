@@ -4077,6 +4077,12 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       }),
     },
     integrations: {
+      toolReview: authed.integrations.toolReview.handler(({ context, input }) =>
+        integrations.toolReview(context.actor, input),
+      ),
+      reviewTools: authed.integrations.reviewTools.handler(({ context, input }) =>
+        integrations.reviewTools(context.actor, input),
+      ),
       available: authed.integrations.available.handler(async ({ context, input }) => {
         const bot = await deps.prisma.bot.findFirst({
           where: {

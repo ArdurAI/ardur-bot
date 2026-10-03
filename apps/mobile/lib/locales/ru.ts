@@ -1,4 +1,5 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "Review tools on web": "Проверить инструменты в веб-версии",
   "Connected · tools need review": "Подключено · инструменты требуют проверки",
   "{runtime} needs a model with at least 64K context; change the model and try again.":
     "Для {runtime} нужна модель с контекстом не менее 64K; смените модель и повторите попытку.",

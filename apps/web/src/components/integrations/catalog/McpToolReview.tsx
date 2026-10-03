@@ -5,11 +5,13 @@ import type {
   McpServer,
   SpaceToolPolicies,
 } from "@ardurbot/contracts";
+import { integrationToolsNeedReview } from "@ardurbot/contracts";
 import { Button, Checkbox, Dialog, DialogContent, DialogTitle } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { useEffect, useId, useState } from "react";
 import { rpc } from "../../../lib/rpc";
 import { ToolPermissions } from "../manage/ToolPermissions";
+import { BotToolReview } from "./BotToolReview";
 
 /** Existing custom servers use the same explicit picker, without a trusted catalog policy. */
 export function McpToolReview({
@@ -28,7 +30,12 @@ export function McpToolReview({
   const controlId = useId();
   const [manifest, setManifest] = useState<IntegrationManifest | null>(null);
   const [overrides, setOverrides] = useState<
-    Array<{ botId: string; access: "inherit" | "custom" | "none"; toolIds: string[] }>
+    Array<{
+      botId: string;
+      access: "inherit" | "custom" | "none";
+      toolIds: string[];
+      needsReview?: boolean;
+    }>
   >([]);
   const [toolIds, setToolIds] = useState<string[]>([]);
   const [spaceToolPolicies, setSpaceToolPolicies] = useState<SpaceToolPolicies>(
@@ -37,6 +44,7 @@ export function McpToolReview({
   const [savedPolicies, setSavedPolicies] = useState<SpaceToolPolicies>(
     server.spaceToolPolicies ?? {},
   );
+  const [reviewBotId, setReviewBotId] = useState<string>();
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
   const load = async () => {
@@ -52,6 +60,7 @@ export function McpToolReview({
           botId: entry.botId,
           access: entry.access,
           toolIds: entry.allowedTools,
+          needsReview: entry.needsReview,
         })),
       );
       const latest = (await rpc.mcp.servers.list()).find((entry) => entry.id === server.id);
@@ -73,7 +82,8 @@ export function McpToolReview({
       await rpc.mcp.servers.permissions({
         serverId: server.id,
         overrides: overrides.map((entry) => ({
-          ...entry,
+          botId: entry.botId,
+          access: entry.access,
           toolIds:
             entry.access === "custom" ? entry.toolIds.filter((id) => toolIds.includes(id)) : [],
         })),
@@ -90,6 +100,18 @@ export function McpToolReview({
       setBusy(false);
     }
   }
+  if (reviewBotId)
+    return (
+      <BotToolReview
+        connectionId={server.id}
+        botId={reviewBotId}
+        onClose={() => setReviewBotId(undefined)}
+        onSaved={() => {
+          void load();
+          void onSaved();
+        }}
+      />
+    );
   return (
     <Dialog
       open
@@ -132,8 +154,18 @@ export function McpToolReview({
                     }
                   />
                   {bot.name}
+                  {!removed ? (
+                    <span>
+                      {integrationToolsNeedReview(server, override)
+                        ? t`Connected · tools need review`
+                        : t`Connected`}
+                    </span>
+                  ) : null}
                   {removed ? <span className="text-muted-foreground">{t`Removed`}</span> : null}
                 </label>
+                {!removed && integrationToolsNeedReview(server, override) ? (
+                  <Button onClick={() => setReviewBotId(bot.id)}>{t`Review tools`}</Button>
+                ) : null}
                 {!removed && manifest ? (
                   <details className="ml-7 text-sm">
                     <summary className="cursor-pointer">{t`Limit tools`}</summary>
