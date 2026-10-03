@@ -68,13 +68,16 @@ it("uses the pinned run allowance only for a standalone coordinator, not goals o
     coordinatorRunAllowance: 17_048_576,
   };
   expect(brokerRootTokensBlock(base)).toBe(false);
-  expect(brokerRootTokensBlock({ ...base, tokenLimit: 100_000 })).toBe(true);
+  expect(brokerRootTokensBlock({ ...base, tokenLimit: 100_000 })).toBe(false);
   expect(brokerRootTokensBlock({ ...base, goal: true })).toBe(true);
   expect(brokerRootTokensBlock({ ...base, delegated: true })).toBe(false);
   expect(
     brokerRootTokensBlock({ ...base, goal: true, delegated: true, reservedTokens: 120_001 }),
   ).toBe(true);
   expect(brokerRootTokensBlock({ ...base, usedTokens: base.coordinatorRunAllowance })).toBe(true);
+  expect(brokerRootTokensBlock({ ...base, usedTokens: 18_000_000, tokenLimit: 19_000_000 })).toBe(
+    false,
+  );
   expect(brokerRootTokensBlock({ ...base, coordinatorRunAllowance: undefined })).toBe(true);
 });
 

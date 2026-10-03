@@ -9,6 +9,7 @@ import {
   createDb,
   finishDelegation,
   rejectDelegation,
+  sizeDelegationRootForAsk,
   updateWorkerTask,
 } from "@ardurbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -350,15 +351,16 @@ postgres("request ledger on disposable PostgreSQL", () => {
     const rows = await f.rows();
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ inputTokens: 14_000, outputTokens: 128 });
-    // An explicitly different root policy is not enlarged to the model allowance.
-    await db.prisma.delegationRoot.update({
-      where: { rootTaskId: f.id },
-      data: { tokenLimit: 100_000 },
-    });
-    await expect(record(make().start())).rejects.toThrow("Broker root task allowance exhausted");
-    await db.prisma.delegationRoot.update({
-      where: { rootTaskId: f.id },
-      data: { tokenLimit: DELEGATION_LIMITS.tokens },
+    // A room ask automatically raises this same root; it must not drop the run allowance.
+    const resized = await db.prisma.$transaction((tx) =>
+      sizeDelegationRootForAsk(tx, { runId: f.run.id, memberTokens: [36_864, 36_864, 36_864] }),
+    );
+    expect(resized.tokenLimit).toBeGreaterThan(DELEGATION_LIMITS.tokens);
+    await record(make().start());
+    expect(await f.root()).toMatchObject({
+      tokenLimit: resized.tokenLimit,
+      usedTokens: 14_128,
+      reservedTokens: 121_891,
     });
     // Root cancellation and expiry still block transport admission.
     await db.prisma.delegationRoot.update({
@@ -371,7 +373,7 @@ postgres("request ledger on disposable PostgreSQL", () => {
       data: { cancelRequestedAt: null, deadlineAt: new Date(0) },
     });
     await expect(record(make().start())).rejects.toThrow("Broker root task allowance exhausted");
-    expect(await f.rows()).toHaveLength(1);
+    expect(await f.rows()).toHaveLength(2);
   });
 
   it("keeps a configured goal ceiling even when it equals the delegation default", async () => {

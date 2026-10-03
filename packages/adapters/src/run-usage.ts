@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import type { AgentUsage, RequestUsageObservation, UsagePurpose } from "@ardurbot/adapter-kit";
 import type { RuntimePin } from "@ardurbot/contracts";
-import { DELEGATION_LIMITS } from "@ardurbot/contracts";
 import type { PrismaClient, ThreadEvents, UsageRecord } from "@ardurbot/db";
 import {
   appendEventInTransaction,
@@ -191,9 +190,9 @@ export async function recordStandaloneUsage(
 /**
  * Outside a goal, an admitted worker is bounded by its own allowance, and reservations
  * already handed out do not block the coordinator's own provider request. A goal still
- * stops the whole tree at the owner's limit. A standalone coordinator uses its pinned
- * run allowance rather than inheriting the default delegation ceiling. Cancel and
- * deadline are checked by the caller.
+ * stops the whole tree at the owner's limit. A non-goal coordinator uses the larger
+ * of its stored root limit and pinned run allowance, including after room asks resize it.
+ * Cancel and deadline are checked by the caller.
  */
 export function brokerRootTokensBlock(input: {
   goal: boolean;
@@ -206,10 +205,7 @@ export function brokerRootTokensBlock(input: {
 }): boolean {
   if (!input.goal) {
     if (input.delegated) return false;
-    const limit =
-      input.tokenLimit === DELEGATION_LIMITS.tokens
-        ? Math.max(input.tokenLimit, input.coordinatorRunAllowance ?? input.tokenLimit)
-        : input.tokenLimit;
+    const limit = Math.max(input.tokenLimit, input.coordinatorRunAllowance ?? input.tokenLimit);
     return input.usedTokens + input.requestTokens > limit;
   }
   const held = input.delegated ? 0 : input.requestTokens;
