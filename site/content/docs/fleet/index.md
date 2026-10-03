@@ -119,6 +119,8 @@ single node, a volume topology, or quota can satisfy a pod. SSH uses the remote 
 permissions: its file API confines paths and refuses symlinks, but SSH is not an operating-system
 sandbox. Use a dedicated Linux account for workloads that need that separation.
 
+A per-computer virtual machine on the owner's host is designed in [Virtual machine computers](/docs/vm-computers/).
+
 ## Security and bounds
 
 OpenSSH runs with an argv array, BatchMode, strict host-key checking, agent forwarding disabled,

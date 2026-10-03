@@ -8,6 +8,8 @@ source_path: "docs/computer-runtime.md"
 
 For Fleet targets, capacity, placement, transport limits and verification, see [Fleet P1](/docs/fleet/).
 
+The design for virtual machine computers, where bots can run Docker and kind, is in [Virtual machine computers](/docs/vm-computers/).
+
 Ardur keeps the agent runtime and the computer runtime separate:
 
 ```text
