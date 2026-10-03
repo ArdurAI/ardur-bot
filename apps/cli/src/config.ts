@@ -8,6 +8,7 @@ import path from "node:path";
 import type { PairingPayload } from "@ardurbot/contracts";
 import { PairingPayloadSchema } from "@ardurbot/contracts";
 import { CliError } from "./transport.js";
+import { windowsAcl } from "./windows-acl.js";
 
 export type PairedHome = PairingPayload & {
   url: string;
@@ -36,6 +37,7 @@ function privateFile(stat: Stats, directory = false) {
 export async function saveHome(home: PairedHome, directory = configDirectory()) {
   await mkdir(directory, { recursive: true, mode: 0o700 });
   privateFile(await lstat(directory), true);
+  await windowsAcl(directory, true);
   const temporary = path.join(directory, `.home-${randomUUID()}`);
   const file = await open(temporary, "wx", 0o600);
   try {
@@ -52,6 +54,8 @@ export async function loadHome(directory = configDirectory()): Promise<PairedHom
   let file: FileHandle | undefined;
   try {
     privateFile(await lstat(directory), true);
+    await windowsAcl(directory);
+    await windowsAcl(path.join(directory, "home.json"));
     file = await open(
       path.join(directory, "home.json"),
       constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),

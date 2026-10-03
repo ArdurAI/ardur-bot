@@ -112,6 +112,7 @@ it("waits for the scripted summary, then reads only its final message", async ()
           role: "bot",
           blocks: [
             { kind: "progress", text: "Reasoning", reasoning: true },
+            { kind: "text", text: "Hidden reasoning", reasoning: true },
             { kind: "text", text: "The final answer" },
           ],
         },

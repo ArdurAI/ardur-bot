@@ -1,3 +1,4 @@
+import { chmod } from "node:fs/promises";
 import { build } from "esbuild";
 
 await build({
@@ -9,3 +10,5 @@ await build({
   target: "node22",
   banner: { js: "#!/usr/bin/env node" },
 });
+
+await chmod("dist/ardur.mjs", 0o755);

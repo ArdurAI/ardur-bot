@@ -2089,6 +2089,10 @@ msgstr ""
 msgid "Command"
 msgstr "Befehl"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Command line"
+msgstr "Befehlszeile"
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Commands"
 msgstr ""
@@ -2520,8 +2524,8 @@ msgid "Copy output"
 msgstr ""
 
 #: src/pages/DevicesSettings.tsx
-msgid "Copy pairing details"
-msgstr ""
+msgid "Copy pairing code"
+msgstr "Kopplungscode kopieren"
 
 #: src/pages/memory/MemoryImport.tsx
 msgid "Copy prompt"

@@ -24,6 +24,8 @@ Apache-2.0 attribution.
 
 ## What you get today
 
+- [Command-line tool](/docs/cli/): Send a bot a task from your terminal or a script.
+
 - Persistent bots with their own conversation, memory, routines and history
 - Group chats whose members answer at the same time — the owner sets how many bots answer at
   once (1-8) in group settings — and delegation between bots, plus short-lived subagents
@@ -232,7 +234,8 @@ pnpm test    # offline unit tests, no keys needed
 ```
 
 More checks and the branch policy are in [CONTRIBUTING.md](/docs/contributing/). Design notes
-are under [docs/](https://github.com/ArdurAI/ardur-bot/tree/__ARDUR_BOT_SOURCE_REF__/docs) where present and decisions under [docs/decisions/](https://github.com/ArdurAI/ardur-bot/tree/__ARDUR_BOT_SOURCE_REF__/docs/decisions).
+are under [docs/](https://github.com/ArdurAI/ardur-bot/tree/__ARDUR_BOT_SOURCE_REF__/docs) where present, including the [command-line guide](/docs/cli/).
+Decisions are under [docs/decisions/](https://github.com/ArdurAI/ardur-bot/tree/__ARDUR_BOT_SOURCE_REF__/docs/decisions).
 
 ## Community
 

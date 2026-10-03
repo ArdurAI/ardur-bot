@@ -2089,6 +2089,10 @@ msgstr "Coming soon"
 msgid "Command"
 msgstr "Command"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Command line"
+msgstr "Command line"
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Commands"
 msgstr "Commands"
@@ -2520,8 +2524,8 @@ msgid "Copy output"
 msgstr "Copy output"
 
 #: src/pages/DevicesSettings.tsx
-msgid "Copy pairing details"
-msgstr "Copy pairing details"
+msgid "Copy pairing code"
+msgstr "Copy pairing code"
 
 #: src/pages/memory/MemoryImport.tsx
 msgid "Copy prompt"

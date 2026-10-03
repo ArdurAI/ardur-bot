@@ -75,6 +75,7 @@ export function createRemoteDevices(deps: RemoteDevicesDeps) {
         devices: devices.map((device) => ({
           id: device.id,
           deviceName: device.deviceName,
+          platform: device.platform,
           scopes: DeviceScopeSchema.array().parse(device.scopes),
           createdAt: device.createdAt.toISOString(),
           lastUsedAt: device.lastUsedAt?.toISOString() ?? null,

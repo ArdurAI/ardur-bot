@@ -98,7 +98,10 @@ async function waitForReply(
         if (page.threadId !== receipt.threadId || !message || !Array.isArray(message.blocks))
           throw new CliError("The task finished, but its answer is unavailable. Open it at home.");
         text = message.blocks
-          .filter((block) => typeof block.text === "string" && block.kind === "text")
+          .filter(
+            (block) =>
+              typeof block.text === "string" && block.kind === "text" && block.reasoning !== true,
+          )
           .map((block) => block.text)
           .join("\n");
       }
