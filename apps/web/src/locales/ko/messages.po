@@ -6038,6 +6038,10 @@ msgstr ""
 msgid "Next run"
 msgstr "다음 실행"
 
+#: src/components/Context.tsx
+msgid "Next try at {time}"
+msgstr "다음 시도: {time}"
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No agent connections yet."
 msgstr "아직 Agent 연결이 없습니다."
@@ -10070,7 +10074,3 @@ msgstr "언제든 실제 작업을 맡길 수 있는<0/>나만의 Agent 팀"
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
-
-#: src/components/Context.tsx
-msgid "Next try at {time}"
-msgstr "다음 시도: {time}"

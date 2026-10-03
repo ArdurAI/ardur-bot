@@ -6038,6 +6038,10 @@ msgstr ""
 msgid "Next run"
 msgstr "Sonraki çalıştırma"
 
+#: src/components/Context.tsx
+msgid "Next try at {time}"
+msgstr "Sonraki deneme: {time}"
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No agent connections yet."
 msgstr ""
@@ -10070,7 +10074,3 @@ msgstr "Gerçek işler verebileceğin,<0/>her zaman açık agent takımın."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
-
-#: src/components/Context.tsx
-msgid "Next try at {time}"
-msgstr "Sonraki deneme: {time}"
