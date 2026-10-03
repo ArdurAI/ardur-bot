@@ -9,6 +9,7 @@ import { approvalPausedToolResult } from "./approval-effect.js";
 import {
   adoptOpenCommands,
   createCommandRecording,
+  sensitiveFilePath,
   sensitiveShellCommand,
 } from "./command-recording.js";
 
@@ -161,6 +162,26 @@ describe("credential-read output suppression", () => {
     ["typeset -x FOO=1", false],
     ["export FOO=1", false],
     ['echo "declare -p"', false],
+    ["cat .git-credentials", true],
+    ['cat "fixture/.git-credentials"', true],
+    ["cat .netrc", true],
+    ['cat "fixture/.netrc"', true],
+    ["cat .npmrc", true],
+    ['cat "fixture/.npmrc"', true],
+    ["cat .pgpass", true],
+    ['cat "fixture/.pgpass"', true],
+    ["cat .docker/config.json", true],
+    ['cat "fixture/.docker/config.json"', true],
+    ["cat .config/gh/hosts.yml", true],
+    ['cat "fixture/.config/gh/hosts.yml"', true],
+    ["cat .terraform.d/credentials", true],
+    ['cat "fixture/.terraform.d/credentials"', true],
+    ["cat .terraform.d/credentials.tfrc.json", true],
+    ['cat "fixture/.terraform.d/credentials.tfrc.json"', true],
+    ["cat docs/.npmrc-guide.md", false],
+    ["cat docs/netrc.md", false],
+    ["cat .docker/config.json.example", false],
+    ["cat .config/gh/hosts.yml.example", false],
     ["gh auth token", true],
     ["git credential fill", true],
     ["git credential get", true],
@@ -269,6 +290,21 @@ describe("credential-read output suppression", () => {
     expect(result).toMatchObject({ stdout: "development output", code: 0 });
     expect(f.blocks()[0]?.stdout).toBe("development output");
   });
+});
+
+it.each([
+  ".git-credentials",
+  ".netrc",
+  ".npmrc",
+  ".pgpass",
+  ".docker/config.json",
+  ".config/gh/hosts.yml",
+  ".terraform.d/credentials",
+  ".terraform.d/credentials.tfrc.json",
+])("protects portable snapshot paths for %s", (file) => {
+  expect(sensitiveFilePath(file)).toBe(true);
+  expect(sensitiveFilePath(`fixture/${file}`)).toBe(true);
+  expect(sensitiveFilePath(`C:\\fixture\\${file.replaceAll("/", "\\")}`)).toBe(true);
 });
 
 describe("command recording boundary", () => {

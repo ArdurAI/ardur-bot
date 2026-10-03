@@ -99,7 +99,12 @@ export function sensitiveFilePath(value: string): boolean {
 }
 
 function sensitiveCredentialDirectory(value: string): boolean {
-  return /(?:\.(?:ssh|aws|kube|gnupg)[/\\]|[/\\]proc[/\\][^\s;|&]+[/\\]environ\b)/i.test(value);
+  return (
+    /(?:\.(?:ssh|aws|kube|gnupg)[/\\]|[/\\]proc[/\\][^\s;|&]+[/\\]environ\b)/i.test(value) ||
+    /(?:^|[/\\\s"'<>])(?:\.(?:git-credentials|netrc|npmrc|pgpass)|\.docker[/\\]config\.json|\.config[/\\]gh[/\\]hosts\.yml|\.terraform\.d[/\\]credentials[\w.-]*)(?=$|[/\\\s"';&|)])/i.test(
+      value,
+    )
+  );
 }
 
 type Tool = (name: string, args: Record<string, unknown>, executionId: string) => Promise<unknown>;

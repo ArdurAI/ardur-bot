@@ -31,6 +31,16 @@ it("bounds and redacts recorded file content without claiming a binary before-im
 });
 
 it.each([
+  ".git-credentials",
+  ".netrc",
+  ".npmrc",
+  ".pgpass",
+  ".docker/config.json",
+  ".config/gh/hosts.yml",
+  ".terraform.d/credentials",
+  ".terraform.d/credentials.tfrc.json",
+  "fixture\\.config\\gh\\hosts.yml",
+  "fixture/.netrc",
   ".env",
   ".env.local",
   "project/.env",
