@@ -10003,11 +10003,3 @@ msgstr "Your team of always-on agents<0/>that you can give real work to."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr "Yours"
-
-#. Command size refusal; shown only after a rejected command.
-msgid "This command was not run because it exceeds 64 KB. Put code in a file and run that file."
-msgstr "This command was not run because it exceeds 64 KB. Put code in a file and run that file."
-
-#. File location refusal; shown only for a disallowed path.
-msgid "Use a path inside this bot's folder or a registered folder."
-msgstr "Use a path inside this bot's folder or a registered folder."
