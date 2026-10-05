@@ -4,6 +4,10 @@ import path from "node:path";
 import type { ModelCredential, ThreadMessage, ThreadSnapshot } from "@ardurbot/contracts";
 import { OPENAI_COMPATIBLE_PROVIDER_ID } from "@ardurbot/contracts";
 import { expect, test } from "@playwright/test";
+import type {
+  ProductDemoObservation,
+  ProductDemoStepId,
+} from "../../../packages/testkit/src/product-demo-report";
 import {
   ProductDemoRecorder,
   writeProductDemoReport,
@@ -39,13 +43,23 @@ test("records the fixed seven-step product demo without promoting missing prereq
   const unavailable = async (): Promise<never> => {
     throw new Error("Unavailable demo prerequisite was executed");
   };
-  await recorder.step("models", async () => {
+  let failure: unknown;
+  const runStep = (id: ProductDemoStepId, action: () => Promise<ProductDemoObservation>) =>
+    recorder.step(id, async () => {
+      try {
+        return await action();
+      } catch (error) {
+        failure ??= error;
+        throw error;
+      }
+    });
+  await runStep("models", async () => {
     await signup(page, `product-demo-${Date.now()}@example.test`, "password12", "Product demo");
     await completeOnboarding(page);
     await rpc(page, "models/connect", {
       provider: OPENAI_COMPATIBLE_PROVIDER_ID,
       modelId: "demo-fixture",
-      baseUrl: "https://models.example.test/v1",
+      baseUrl: "http://127.0.0.1:29999/v1",
       label: "Demo fixture",
       contextWindow: 65536,
     });
@@ -62,7 +76,7 @@ test("records the fixed seven-step product demo without promoting missing prereq
     await openUserSettings(page, "models");
     await page.getByPlaceholder("Search providers").fill("compatible");
     await page.getByRole("button", { name: /OpenAI-compatible/ }).click();
-    await page.getByRole("button", { name: "Advanced", exact: true }).click();
+    await page.locator("summary", { hasText: /^Advanced$/ }).click();
     await expect(page.getByLabel("Context limit", { exact: true })).toHaveValue("65536");
     return { screenshot: await screenshot("models"), evidence: "app-api" };
   });
@@ -72,7 +86,7 @@ test("records the fixed seven-step product demo without promoting missing prereq
   await recorder.step("draft-pr", unavailable, "github");
   await recorder.step("chief-summary", unavailable, "integration");
   await recorder.step("workspace", unavailable, "not-executed");
-  await recorder.step("room", async () => {
+  await runStep("room", async () => {
     const first = await createNamedBot(page, "Demo first");
     const second = await createNamedBot(page, "Demo second");
     const group = await rpc<{ id: string }>(page, "groups/create", {
@@ -114,5 +128,6 @@ test("records the fixed seven-step product demo without promoting missing prereq
   const file = path.join(output, "product-demo.json");
   await writeProductDemoReport(file, recorder);
   await testInfo.attach("product-demo", { path: file, contentType: "application/json" });
+  if (failure) throw failure;
   expect(recorder.report().steps.filter((row) => row.result === "failed")).toEqual([]);
 });
