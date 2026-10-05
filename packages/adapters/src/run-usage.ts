@@ -190,7 +190,9 @@ export async function recordStandaloneUsage(
 /**
  * Outside a goal, an admitted worker is bounded by its own allowance, and reservations
  * already handed out do not block the coordinator's own provider request. A goal still
- * stops the whole tree at the owner's limit. Cancel and deadline are checked by the caller.
+ * stops the whole tree at the owner's limit. A non-goal coordinator uses the larger
+ * of its stored root limit and pinned run allowance, including after room asks resize it.
+ * Cancel and deadline are checked by the caller.
  */
 export function brokerRootTokensBlock(input: {
   goal: boolean;
@@ -199,10 +201,12 @@ export function brokerRootTokensBlock(input: {
   reservedTokens: number;
   requestTokens: number;
   tokenLimit: number;
+  coordinatorRunAllowance?: number;
 }): boolean {
   if (!input.goal) {
     if (input.delegated) return false;
-    return input.usedTokens + input.requestTokens > input.tokenLimit;
+    const limit = Math.max(input.tokenLimit, input.coordinatorRunAllowance ?? input.tokenLimit);
+    return input.usedTokens + input.requestTokens > limit;
   }
   const held = input.delegated ? 0 : input.requestTokens;
   return input.usedTokens + input.reservedTokens + held > input.tokenLimit;
@@ -613,6 +617,7 @@ async function recordRequestUsage(
               reservedTokens: rootBudget.reservedTokens,
               requestTokens: request.admission.reservedTokens,
               tokenLimit: rootBudget.tokenLimit,
+              coordinatorRunAllowance: request.admission.maxReservedTokens,
             })
           )
             throw new Error("Broker root task allowance exhausted");
