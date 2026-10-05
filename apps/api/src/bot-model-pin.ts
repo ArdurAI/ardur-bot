@@ -1,3 +1,4 @@
+import type { canBotRun } from "@ardurbot/adapters";
 import type { Actor, UpdateBotInput } from "@ardurbot/contracts";
 import type { Prisma } from "@ardurbot/db";
 import { normalizeModelPinUpdate } from "./model-pin-validation.js";
@@ -15,6 +16,7 @@ export async function botModelPinUpdate(
     runtimeKind?: string;
   },
   input: ReturnType<typeof UpdateBotInput.parse>,
+  policies?: Pick<Parameters<typeof canBotRun>[0], "botPolicy" | "spacePolicy">,
 ): Promise<Prisma.BotUpdateInput> {
-  return normalizeModelPinUpdate(deps, actor, existing, input);
+  return normalizeModelPinUpdate(deps, actor, existing, input, policies);
 }
