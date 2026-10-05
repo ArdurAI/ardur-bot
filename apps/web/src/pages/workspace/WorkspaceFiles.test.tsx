@@ -508,6 +508,30 @@ describe("workspace generation recovery", () => {
     expect(api.list).toHaveBeenCalledTimes(2);
   });
 
+  it("recovers a Strict Mode opening when every old-generation directory request conflicts", async () => {
+    await act(async () => renderer.render(null));
+    api.list.mockClear().mockImplementation(async ({ generation }) => {
+      if (generation === 2) throw changed();
+      return {
+        context: { ...context, generation: 3 },
+        entries: [{ path: "notes.md", kind: "file", size: 5 }],
+      };
+    });
+    await act(async () =>
+      renderer.render(
+        <StrictMode>
+          <WorkspaceFiles bot={{ id: "bot", name: "bot" } as Bot} context={context} />
+        </StrictMode>,
+      ),
+    );
+    await tick();
+    await tick();
+    expect(button("notes.md")).toBeDefined();
+    expect(host.querySelector("[role=alert]")).toBeNull();
+    expect(api.describe).toHaveBeenCalledTimes(1);
+    expect(api.list.mock.calls.map(([input]) => input.generation)).toEqual([2, 2, 3]);
+  });
+
   it("recovers a file read and retains its draft through another recovery and a save conflict", async () => {
     api.read.mockRejectedValueOnce(changed());
     await click("notes.md");

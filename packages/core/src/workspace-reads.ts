@@ -23,6 +23,7 @@ function sameTarget(a: WorkspaceContext, b: WorkspaceContext): boolean {
 export class WorkspaceReads {
   private active = true;
   private epoch = 0;
+  private bindingRevision = 0;
   private refresh: Promise<WorkspaceContext> | null = null;
 
   constructor(
@@ -35,11 +36,13 @@ export class WorkspaceReads {
   ) {}
 
   bind(context: WorkspaceContext): number {
-    if (workspaceBindingKey(context) === workspaceBindingKey(this.context)) return this.epoch;
+    if (workspaceBindingKey(context) === workspaceBindingKey(this.context))
+      return this.bindingRevision;
     this.context = context;
     this.epoch++;
+    this.bindingRevision++;
     this.refresh = null;
-    return this.epoch;
+    return this.bindingRevision;
   }
 
   activate(): void {

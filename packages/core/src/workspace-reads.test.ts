@@ -29,6 +29,17 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 describe("workspace read binding", () => {
+  it("changes its binding revision only for an external binding, not effect replay or recovery", async () => {
+    const { reads } = setup();
+    const revision = reads.bind(context);
+    reads.dispose();
+    reads.activate();
+    expect(reads.bind(context)).toBe(revision);
+    await reads.read(vi.fn().mockRejectedValueOnce(conflict).mockResolvedValue("current"));
+    expect(reads.bind({ ...context, generation: 2 })).toBe(revision);
+    expect(reads.bind({ ...context, generation: 5 })).toBe(revision + 1);
+  });
+
   it("reuses a completed refresh for a slower concurrent conflict", async () => {
     const { reads, describe, publish } = setup();
     const slow = deferred<string>();
