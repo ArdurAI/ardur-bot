@@ -38,7 +38,7 @@ import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import { createRunExecutor } from "./executor.js";
 import { ProviderError } from "./provider-error.js";
 import type { DrainResult } from "./restart-drain.js";
-import { RestartDrain } from "./restart-drain.js";
+import { drainForShutdown, RestartDrain } from "./restart-drain.js";
 import { recordRunUsage } from "./run-usage.js";
 import { EncryptedSecretStore } from "./secrets.js";
 
@@ -2143,6 +2143,41 @@ describe("run failure cause", () => {
 });
 
 describe("executor restart journeys without a database", () => {
+  it("requeues a boot wait promptly without interrupting the runtime drain signal", async () => {
+    vi.useFakeTimers();
+    try {
+      const drain = new RestartDrain({} as never);
+      vi.spyOn(drain, "admits").mockResolvedValue(true);
+      const f = fixture("boot-wait", undefined, undefined, drain);
+      let ready!: () => void;
+      const booting = new Promise<void>((resolve) => {
+        ready = resolve;
+      });
+      vi.mocked(provisionComputer).mockImplementationOnce(async (_deps, _id, context) => {
+        ready();
+        return new Promise((_resolve, reject) => {
+          context.signal.addEventListener("abort", () => reject(context.signal.reason), {
+            once: true,
+          });
+        });
+      });
+      const running = f.executor.continueRun("boot-wait", "worker");
+      await booting;
+      const shutdown = new AbortController();
+      const stopped = drainForShutdown(drain, shutdown);
+      expect(shutdown.signal.aborted).toBe(false);
+      await running;
+      await vi.advanceTimersByTimeAsync(50);
+      expect(await stopped).toMatchObject({ ok: true, remaining: 0, durationMs: 50 });
+      expect(f.runRecord.status).toBe("queued");
+      expect(f.runtimeRun).not.toHaveBeenCalled();
+      expect(f.finalizeRun).not.toHaveBeenCalled();
+      expect(f.runRecord.turnCheckpoint).toBeNull();
+      expect(shutdown.signal.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("does not treat a paused approval intent as an uncertain restart effect", async () => {
     const f = fixture("answered-approval");
     const args = { command: "echo fixture" };

@@ -104,6 +104,7 @@ describe.each(["API", "worker"])("%s service shutdown", () => {
     const shutdown = new AbortController();
     const stopped = drainForShutdown(f.drain, shutdown);
     expect(shutdown.signal.aborted).toBe(false);
+    expect(f.drain.preparationSignal.aborted).toBe(true);
     expect(f.drain.enter()).toBeUndefined();
     leave();
     await vi.advanceTimersByTimeAsync(50);

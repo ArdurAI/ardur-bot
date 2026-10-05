@@ -1903,11 +1903,25 @@ export function createRunExecutor(deps: ExecutorDeps) {
       });
       if (started.count !== 1) return;
       current.queueWaitMs ??= Math.max(0, Date.now() - run.createdAt.getTime());
+      const preparationSignal = deps.restartDrain?.preparationSignal;
       if (!current.startedAt && !run.runtimeComputer && deps.placement) {
         try {
-          if (!(await deps.placement(runId, deps.shutdownSignal ?? new AbortController().signal)))
-            return;
+          const signals = [deps.shutdownSignal, preparationSignal].filter(
+            (signal): signal is AbortSignal => Boolean(signal),
+          );
+          if (!(await deps.placement(runId, AbortSignal.any(signals)))) return;
         } catch {
+          if (preparationSignal?.aborted) {
+            await requeueComputerRun(
+              deps,
+              runId,
+              workerId,
+              fence,
+              resumeCheckpoint,
+              heldForTakeover,
+            );
+            return;
+          }
           const placementAttempt = await deps.prisma.$transaction(async (tx) => {
             const active = await tx.run.updateMany({
               where: {
@@ -2589,7 +2603,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
               },
             },
           });
-        const computer = await provisionComputer(deps, storedComputer.id, context, "bot");
+        const computer = await provisionComputer(
+          deps,
+          storedComputer.id,
+          preparationSignal
+            ? { ...context, signal: AbortSignal.any([context.signal, preparationSignal]) }
+            : context,
+          "bot",
+        );
         screenRelease = { computer, context };
         if (run.cancelRequestedAt) throw new DispatchStopRequested();
         await scheduleComputerSleep(deps, storedComputer.id);
@@ -7518,6 +7539,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
         }
       } catch (setupError) {
+        if (preparationSignal?.aborted) {
+          await requeueComputerRun(deps, runId, workerId, fence, resumeCheckpoint, heldForTakeover);
+          await deps.prisma.attempt.update({
+            where: { id: attempt.id },
+            data: { status: "setup_failed", error: null, finishedAt: new Date() },
+          });
+          return;
+        }
         if (deps.shutdownSignal?.aborted) return;
         if (
           setupError instanceof RuntimePinError ||

@@ -16,6 +16,10 @@ export interface DrainResult {
 export class RestartDrain {
   private stopping = false;
   private readonly active = new Set<symbol>();
+  private readonly preparation = new AbortController();
+  get preparationSignal(): AbortSignal {
+    return this.preparation.signal;
+  }
   constructor(private readonly prisma: PrismaClient) {}
   async initialize(): Promise<void> {
     await this.prisma.deploymentSettings.upsert({
@@ -50,6 +54,7 @@ export class RestartDrain {
   }
   async shutdown(timeoutMs = RESTART_DRAIN_MS): Promise<DrainResult> {
     this.stopping = true;
+    this.preparation.abort();
     return this.wait(() => Promise.resolve(this.active.size), timeoutMs);
   }
   async begin(
