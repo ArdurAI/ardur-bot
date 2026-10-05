@@ -2528,7 +2528,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         }
       }),
       status: authed.computer.status.handler(({ context, input }) =>
-        computerStatus(deps, context.actor, input.botId),
+        computerStatus(deps, context.actor, input.botId, input.includeLimits),
       ),
       boot: authed.computer.boot.handler(async ({ context, input }) => {
         const bot = await repos.getBot(context.actor, input.botId);
@@ -6678,6 +6678,7 @@ async function computerStatus(
   deps: RouterDeps,
   actor: Actor,
   botId: string,
+  includeLimits = false,
 ): Promise<ComputerStatus> {
   const repos = createRepos(deps.prisma, { sandboxProvider: deps.env.sandboxProvider });
   let bot = await repos.getBot(actor, botId);
@@ -6692,7 +6693,27 @@ async function computerStatus(
     }),
     bot.computer ? deploymentHostLabel(deps.prisma) : Promise.resolve(undefined),
   ]);
-  return toComputerStatus(botId, bot.computer, busyBotName, hostLabel);
+  const observedComputer = bot.computer;
+  const appliedLimits =
+    includeLimits && observedComputer?.providerRef && observedComputer.state === "running"
+      ? await deps.sandbox
+          .appliedLimits?.(toComputerRef(observedComputer), {
+            ...computerContext(actor, botId, "computer.limits"),
+            signal: AbortSignal.timeout(2000),
+          })
+          .catch(() => null)
+      : null;
+  // Do not attach an observation to a replacement computer or a changed generation.
+  if (appliedLimits && observedComputer) {
+    bot = await repos.getBot(actor, botId);
+    if (
+      bot.computer?.id !== observedComputer.id ||
+      bot.computer.screenGeneration !== observedComputer.screenGeneration ||
+      bot.computer.providerRef !== observedComputer.providerRef
+    )
+      return toComputerStatus(botId, bot.computer, busyBotName, hostLabel);
+  }
+  return toComputerStatus(botId, bot.computer, busyBotName, hostLabel, appliedLimits);
 }
 
 async function runComputerReplace(

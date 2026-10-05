@@ -1,4 +1,4 @@
-import type { CapacitySnapshot } from "@ardurbot/contracts";
+import type { CapacitySnapshot, ComputerLimitsObservation } from "@ardurbot/contracts";
 import type { TerminalProvider } from "./terminal.js";
 import type {
   AdapterContext,
@@ -84,6 +84,11 @@ import type {
 } from "./types.js";
 
 export interface SandboxProvider {
+  /** Inspect the existing running computer; never activate it to report limits. */
+  appliedLimits?(
+    computer: ComputerRef,
+    context: AdapterContext,
+  ): Promise<ComputerLimitsObservation | null>;
   /** Target capacity; older hosted providers may explicitly leave it unreported. */
   capacity(context: AdapterContext): Promise<CapacitySnapshot>;
   terminal?: TerminalProvider;

@@ -229,6 +229,9 @@ export class ConnectedSandboxProvider implements SandboxProvider {
   async environmentNote(...args: Parameters<NonNullable<SandboxProvider["environmentNote"]>>) {
     return (await this.owner(args[0], args[1])).environmentNote?.(...args);
   }
+  async appliedLimits(...args: Parameters<NonNullable<SandboxProvider["appliedLimits"]>>) {
+    return (await this.owner(args[0], args[1])).appliedLimits?.(...args) ?? null;
+  }
   async connectScreen(...args: Parameters<SandboxProvider["connectScreen"]>) {
     return (await this.owner(args[0], args[2])).connectScreen(...args);
   }

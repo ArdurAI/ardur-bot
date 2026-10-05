@@ -1,4 +1,9 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "Applied limits": "Действующие ограничения",
+  CPU: "Процессор",
+  Processes: "Процессы",
+  "Host account": "Учётная запись хоста",
+  "Checked {time}": "Проверено в {time}",
   "Native runtimes": "Локальные среды выполнения",
   "Set up on the home device": "Настройте на основном устройстве",
   "{runtime}'s tool list changed during startup. Check the connected tools and try again.":

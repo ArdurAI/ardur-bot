@@ -804,7 +804,9 @@ export const appContract = {
       .output(z.array(z.object({ name: z.string(), local: z.boolean() }))),
     configure: oc.input(ComputerConfigurationSchema).output(ComputerUpdateSchema),
 
-    status: oc.input(botId).output(ComputerStatusSchema),
+    status: oc
+      .input(botId.extend({ includeLimits: z.boolean().optional() }))
+      .output(ComputerStatusSchema),
     boot: oc.input(botId).output(ComputerStatusSchema),
     stop: oc.input(botId).output(ComputerStatusSchema),
     recover: oc.input(botId).output(ComputerUpdateSchema),

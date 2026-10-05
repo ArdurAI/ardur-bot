@@ -1042,6 +1042,10 @@ msgstr "Aparência"
 msgid "Applied"
 msgstr ""
 
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "Applied limits"
+msgstr "Limites aplicados"
+
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/customize/McpConfigEditor.tsx
 msgid "Apply"
@@ -1792,6 +1796,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Checked {0}"
 msgstr "Verificado em {0}"
+
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "Checked {time}"
+msgstr "Verificado às {time}"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Checking the download"
@@ -3360,6 +3368,10 @@ msgstr ""
 msgid "Couldn't update messaging settings"
 msgstr ""
 
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "CPU"
+msgstr "CPU"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "CPU limit"
 msgstr ""
@@ -4695,6 +4707,10 @@ msgstr "Vinculado"
 msgid "Host"
 msgstr ""
 
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "Host account"
+msgstr "Conta do host"
+
 #: src/pages/HostComputerSettings.tsx
 msgid "Host service:"
 msgstr ""
@@ -5553,6 +5569,7 @@ msgstr "Membros (escolha {GROUP_MEMBER_MIN}–{GROUP_MEMBER_MAX})"
 msgid "Memories"
 msgstr ""
 
+#: src/pages/fleet/ComputerLimitsDetails.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/memory/MemoryProposals.tsx
@@ -6329,9 +6346,10 @@ msgid "Not recorded"
 msgstr ""
 
 #: src/pages/ComparePanel.tsx
+#: src/pages/fleet/ComputerLimitsDetails.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Not reported"
-msgstr ""
+msgstr "Não informado"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Not requested"
@@ -6940,6 +6958,10 @@ msgstr ""
 #: src/pages/shell/dialogs.tsx
 msgid "Private workspace with its own bots and groups."
 msgstr ""
+
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "Processes"
+msgstr "Processos"
 
 #: src/pages/account/AccountProfile.tsx
 #: src/pages/memory/MemoryDocuments.tsx

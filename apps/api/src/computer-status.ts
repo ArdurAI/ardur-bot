@@ -1,10 +1,11 @@
 import { computerSupportsUpdate } from "@ardurbot/adapters";
-import type { ComputerStatus, HostLabel } from "@ardurbot/contracts";
+import type { ComputerLimitsObservation, ComputerStatus, HostLabel } from "@ardurbot/contracts";
 import {
   COMPUTER_STATES,
   ComputerProfileSchema,
   computerCapabilities,
   computerRunsOnHost,
+  currentComputerLimits,
 } from "@ardurbot/contracts";
 import { ACTIVE_RUN_STATUSES, computerScreenSize } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
@@ -73,6 +74,7 @@ export function toComputerStatus(
   } | null,
   busyBotName: string | null = null,
   hostLabel?: HostLabel,
+  appliedLimits?: ComputerLimitsObservation | null,
 ): ComputerStatus {
   const state = computer?.maintenanceId
     ? "suspending"
@@ -82,6 +84,13 @@ export function toComputerStatus(
   const screen = computerScreenSize(computer?.kind);
   const kind = (computer?.kind ?? "fake") as ComputerStatus["kind"];
   return {
+    appliedLimits: state === "running" ? currentComputerLimits(appliedLimits) : null,
+    executionBoundary:
+      computerRunsOnHost(computer) || kind === "ssh"
+        ? "host-account"
+        : ["docker", "remote-docker"].includes(kind)
+          ? "container"
+          : "unknown",
     ...(computer?.id ? { computerId: computer.id } : {}),
     runsOnHost: computerRunsOnHost(computer),
     botId,

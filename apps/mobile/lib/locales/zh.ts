@@ -1,4 +1,9 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "Applied limits": "已实施的限制",
+  CPU: "处理器",
+  Processes: "进程",
+  "Host account": "主机账户",
+  "Checked {time}": "检查时间：{time}",
   "Native runtimes": "本机运行时",
   "Set up on the home device": "在主设备上设置",
   "{runtime}'s tool list changed during startup. Check the connected tools and try again.":
