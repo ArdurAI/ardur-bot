@@ -5,7 +5,7 @@ import {
   nativeHostOwner,
 } from "@ardurbot/adapters";
 import type { Actor, RuntimePin } from "@ardurbot/contracts";
-import { computerRunsOnHost, RuntimePinSchema } from "@ardurbot/contracts";
+import { RuntimePinSchema } from "@ardurbot/contracts";
 import {
   appendEventInTransaction,
   createGroupRepos,
@@ -17,7 +17,8 @@ import {
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import { ORPCError } from "@orpc/server";
-import { validateModelPinSelection } from "./model-pin-validation.js";
+import type { ValidatedModelPinChoice } from "./model-pin-validation.js";
+import { validateBotCanRun, validateModelPinSelection } from "./model-pin-validation.js";
 import type { RouterDeps } from "./router.js";
 
 type Target = {
@@ -52,7 +53,7 @@ export function attachHermesSettingsSnapshot<T extends { runtimeKind: string }>(
 ):
   | (T & { runtimeConfig?: ReturnType<typeof effectiveHermesConfig>; runtimeConfigHash?: string })
   | null {
-  if (!choice || choice.runtimeKind !== "hermes") return choice;
+  if (choice?.runtimeKind !== "hermes") return choice;
   const config = effectiveHermesConfig(storedConfig === Prisma.DbNull ? null : storedConfig);
   return { ...choice, runtimeConfig: config, runtimeConfigHash: hermesConfigHash(config) };
 }
@@ -102,16 +103,28 @@ export async function updateGroupMemberModelPin(
     },
   });
   if (visible?.members.length !== 1) throw new IsolationError();
-  if (requested?.runtimeKind !== "pi" && requested) {
-    const targetBot = visible.members[0]!.bot;
-    if (!targetBot.runtimeExperimental || !computerRunsOnHost(targetBot.computer))
-      throw new ORPCError("BAD_REQUEST", {
-        message: "This choice needs a supported computer and bot settings.",
-      });
-    if (!(await nativeHostOwner(deps.prisma, actor.userId)))
+  let choice: ValidatedModelPinChoice | null = null;
+  if (requested) {
+    choice = await validateBotCanRun(deps, actor, requested, { botId: target.botId });
+    if (requested.runtimeKind !== "pi" && !(await nativeHostOwner(deps.prisma, actor.userId)))
       throw new ORPCError("FORBIDDEN", { message: NATIVE_HOST_OWNER_MESSAGE });
+    // Reuse the probed Ollama choice; other providers retain their edit-time selection checks.
+    if (choice.provider !== "ollama")
+      choice = await validateModelPinSelection(deps, actor, requested);
+  } else {
+    await validateBotCanRun(
+      deps,
+      actor,
+      {
+        runtimeKind: "pi",
+        provider: null,
+        modelId: null,
+        credentialId: null,
+        effort: null,
+      },
+      { botId: target.botId, inheritBotPin: true },
+    );
   }
-  const choice = requested ? await validateModelPinSelection(deps, actor, requested) : null;
   const committed = await deps.prisma.$transaction(async (tx) => {
     await lockOwnedGroup(tx, actor, target.groupId);
     const group = await tx.chatGroup.findFirst({

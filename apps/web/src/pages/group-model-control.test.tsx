@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import type { Bot, GroupMember } from "@ardurbot/contracts";
 import { modelPinOptionKey } from "@ardurbot/core";
+import { i18n } from "@lingui/core";
 import { ORPCError } from "@orpc/client";
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
@@ -8,6 +9,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@lingui/core/macro", () => ({
+  msg: (parts: TemplateStringsArray) => ({ id: parts.join(""), message: parts.join("") }),
   t: (parts: TemplateStringsArray, ...values: unknown[]) =>
     parts.reduce((text, part, index) => text + part + (values[index] ?? ""), ""),
 }));
@@ -42,6 +44,8 @@ vi.mock("../lib/rpc", () => ({
   },
 }));
 
+import { failureCategoryMessage } from "@ardurbot/contracts";
+import { rpc } from "../lib/rpc";
 import { GroupModelControl } from "./group-model-control";
 import { BotModelChip } from "./shell/bot-model-chip";
 
@@ -101,6 +105,10 @@ const settings = {
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 beforeEach(() => {
+  i18n.load("en", {});
+  i18n.activate("en");
+  vi.mocked(rpc.models.validatePin).mockReset();
+  vi.mocked(rpc.models.validatePin).mockResolvedValue({ ok: true });
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   container = document.createElement("div");
   document.body.append(container);
@@ -963,4 +971,50 @@ describe("group model control", () => {
       "Bot settings changed. Reload before saving.",
     );
   });
+});
+
+it.each([
+  "experimental-off",
+  "computer-unsupported",
+  "destinations-space",
+  "connection-missing",
+] as const)(
+  "group picker blocks Save and explains %s using the server sentence",
+  async (category) => {
+    const sentence = failureCategoryMessage(category, { runtime: "Codex", bot: "this bot" });
+    vi.mocked(rpc.models.validatePin).mockRejectedValue(
+      new ORPCError("BAD_REQUEST", { message: sentence }),
+    );
+    const onSave = await render({ ...member, runtimePin: pin }, undefined, {
+      ...bot,
+      runtimeExperimental: true,
+    });
+    const button = [...container.querySelectorAll("button")].find(
+      (item) => item.textContent === "Save model",
+    )!;
+    expect(button.disabled).toBe(true);
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(sentence);
+    await act(async () => button.click());
+    expect(onSave).not.toHaveBeenCalled();
+    expect(rpc.models.validatePin).toHaveBeenCalledWith(expect.objectContaining({ botId: bot.id }));
+  },
+);
+
+it("shows the server reason when Same as bot would inherit settings that cannot run", async () => {
+  const sentence = failureCategoryMessage("computer-unsupported", {
+    runtime: "Codex",
+    bot: "this bot",
+  });
+  vi.mocked(rpc.models.validatePin).mockRejectedValue(
+    new ORPCError("BAD_REQUEST", { message: sentence }),
+  );
+  await render({ ...member, runtimePin: null });
+  expect(rpc.models.validatePin).toHaveBeenCalledWith(
+    expect.objectContaining({ botId: bot.id, inheritBotPin: true }),
+  );
+  expect(container.textContent).toContain(sentence);
+  const save = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Save model",
+  )!;
+  expect(save.disabled).toBe(true);
 });

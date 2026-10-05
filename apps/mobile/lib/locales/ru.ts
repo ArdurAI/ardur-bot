@@ -1511,4 +1511,6 @@ export const RU_MESSAGES: Record<string, string> = {
   "Could not check the model. Try again.": "Не удалось проверить модель. Попробуйте ещё раз.",
   "Context limit (estimated)": "Лимит контекста (оценка)",
   "Context limit (from the provider)": "Лимит контекста (от провайдера)",
+  "Experimental turned on for this runtime":
+    "Экспериментальный режим включён для этой среды выполнения",
 };

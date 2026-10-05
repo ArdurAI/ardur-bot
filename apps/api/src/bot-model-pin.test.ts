@@ -237,7 +237,7 @@ describe("bot pin editing", () => {
         modelCredentialId: "removed",
         thinkingLevel: "off",
       }),
-    ).rejects.toThrow("Connect that model provider first");
+    ).rejects.toThrow("model connection is missing. Connect it or change the pin.");
     expect(deps.prisma.spaceModelPreference.findFirst).not.toHaveBeenCalled();
   });
 
@@ -489,7 +489,7 @@ describe("bot pin editing", () => {
         modelId: "grok-4.6",
         modelCredentialId: "deleted",
       }),
-    ).rejects.toThrow("Connect that model provider first");
+    ).rejects.toThrow("model connection is missing. Connect it or change the pin.");
     expect(deps.prisma.spaceModelPreference.findFirst).not.toHaveBeenCalled();
   });
   it("preserves a disconnected pin during a profile save", async () => {
