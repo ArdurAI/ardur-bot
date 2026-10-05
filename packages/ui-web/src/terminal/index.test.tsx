@@ -10,9 +10,16 @@ const renderer = vi.hoisted(() => ({
   focus: vi.fn(),
   dispose: vi.fn(),
   input: (_data: string) => {},
+  activate: (_event: MouseEvent, _text: string) => {},
 }));
 vi.mock("@xterm/xterm", () => ({
   Terminal: class {
+    constructor(options: { linkHandler: { activate: (event: MouseEvent, text: string) => void } }) {
+      renderer.activate = options.linkHandler.activate;
+    }
+    registerLinkProvider() {
+      return { dispose() {} };
+    }
     options = {};
     parser = { registerOscHandler: () => ({ dispose() {} }) };
     loadAddon() {}
@@ -79,13 +86,20 @@ it("fits after reveal without remounting or stealing focus while hidden", async 
     path: "/api/terminal/socket",
   }));
   const close = vi.fn(async () => {});
+  const openLink = vi.fn();
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
   try {
     await act(async () =>
       root.render(
-        <ComputerTerminal ticket={ticket} close={close} labels={labels} visible={false} />,
+        <ComputerTerminal
+          ticket={ticket}
+          close={close}
+          labels={labels}
+          visible={false}
+          openLink={openLink}
+        />,
       ),
     );
     const terminalHost = host.querySelector(".ardur-terminal")!;
@@ -102,7 +116,15 @@ it("fits after reveal without remounting or stealing focus while hidden", async 
     expect(send).not.toHaveBeenCalled();
     renderer.fit.mockClear();
     await act(async () =>
-      root.render(<ComputerTerminal ticket={ticket} close={close} labels={labels} visible />),
+      root.render(
+        <ComputerTerminal
+          ticket={ticket}
+          close={close}
+          labels={labels}
+          visible
+          openLink={openLink}
+        />,
+      ),
     );
     expect(renderer.fit).toHaveBeenCalledOnce();
     expect(
@@ -111,6 +133,14 @@ it("fits after reveal without remounting or stealing focus while hidden", async 
       ),
     ).toBe(true);
     expect(ticket).toHaveBeenCalledOnce();
+    expect(openLink).not.toHaveBeenCalled();
+    const click = { isTrusted: true, button: 0, preventDefault() {} } as MouseEvent;
+    renderer.activate(click, "javascript:alert(1)");
+    renderer.activate(click, "https://user:secret@example.test");
+    renderer.activate({ ...click, isTrusted: false } as MouseEvent, "https://example.test");
+    expect(openLink).not.toHaveBeenCalled();
+    renderer.activate(click, "https://example.test");
+    expect(openLink).toHaveBeenCalledExactlyOnceWith("https://example.test");
     expect(close).not.toHaveBeenCalled();
     expect(renderer.dispose).not.toHaveBeenCalled();
     send.mockClear();

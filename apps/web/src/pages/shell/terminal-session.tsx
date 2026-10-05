@@ -16,11 +16,15 @@ export default function ComputerTerminalSession({
   return (
     <Terminal
       visible={visible}
+      openLink={(url) => {
+        window.open(url, "_blank", "noopener,noreferrer");
+      }}
       key={`${computerId}:${botId}`}
       close={(sessionId) => rpc.terminal.close({ botId, computerId, sessionId })}
       ticket={(sessionId) => rpc.terminal.ticket({ botId, computerId, sessionId, workspace })}
       labels={{
         terminal: t`Terminal`,
+        openLink: t`Open link`,
         reconnect: t`Reconnect`,
         opening: t`Opening terminal`,
         connecting: t`Connection lost — reconnecting`,

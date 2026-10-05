@@ -1,4 +1,9 @@
-import { decodeTerminalFrame, encodeTerminalFrame, TERMINAL_FRAME_BYTES } from "@ardurbot/core";
+import {
+  decodeTerminalFrame,
+  encodeTerminalFrame,
+  TERMINAL_FRAME_BYTES,
+  terminalWebLink,
+} from "@ardurbot/core";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import type { ITheme } from "@xterm/xterm";
@@ -7,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "../components/ui/button.js";
 import { Input } from "../components/ui/input.js";
 import { terminalInput } from "./input.js";
+import { terminalLinkProvider } from "./links.js";
 import "@xterm/xterm/css/xterm.css";
 import "./terminal.css";
 
@@ -20,6 +26,7 @@ export type TerminalLabels = {
   next: string;
   previous: string;
   terminal: string;
+  openLink?: string;
 };
 export type TerminalTicket = { sessionId: string; ticket: string; path: string };
 export interface TerminalProps {
@@ -27,10 +34,17 @@ export interface TerminalProps {
   labels: TerminalLabels;
   close(sessionId: string): Promise<unknown>;
   visible?: boolean;
+  openLink?(url: string): void;
 }
 
 /** Imported only when the computer's Terminal tab is selected. */
-export default function ComputerTerminal({ ticket, labels, close, visible = true }: TerminalProps) {
+export default function ComputerTerminal({
+  ticket,
+  labels,
+  close,
+  visible = true,
+  openLink,
+}: TerminalProps) {
   const container = useRef<HTMLDivElement>(null);
   const currentSession = useRef<string | undefined>(undefined);
   const reconnect = useRef<() => void>(() => {});
@@ -44,6 +58,10 @@ export default function ComputerTerminal({ ticket, labels, close, visible = true
   const [state, setState] = useState<"opening" | "connecting" | "ready" | "ended">("opening");
   const [attempt, setAttempt] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [link, setLink] = useState<string | null>(null);
+  const activateLink = useRef<(event: MouseEvent, url: string) => void>(() => {});
+  const openLinkRef = useRef(openLink);
+  openLinkRef.current = openLink;
   const admission = useRef<Promise<unknown>>(Promise.resolve());
   const ticketRef = useRef(ticket);
   ticketRef.current = ticket;
@@ -75,7 +93,7 @@ export default function ComputerTerminal({ ticket, labels, close, visible = true
       screenReaderMode: true,
       convertEol: false,
       windowOptions: {},
-      linkHandler: { activate: () => {} },
+      linkHandler: { activate: (event, text) => activateLink.current(event, text) },
       theme: terminalTheme(host),
     });
     // Consume dangerous terminal-driven actions without forwarding them to browser APIs.
@@ -88,6 +106,29 @@ export default function ComputerTerminal({ ticket, labels, close, visible = true
     terminal.loadAddon(fit);
     terminal.loadAddon(finder);
     terminal.open(host);
+    setLink(null);
+    activateLink.current = (event, text) => {
+      const url = terminalWebLink(text);
+      if (
+        disposed ||
+        !ready ||
+        !visibleRef.current ||
+        !event.isTrusted ||
+        event.button !== 0 ||
+        !url
+      )
+        return;
+      event.preventDefault();
+      terminal.focus();
+      openLinkRef.current?.(url);
+    };
+    const links = terminal.registerLinkProvider(
+      terminalLinkProvider(
+        () => terminal.buffer.active,
+        (event, text) => activateLink.current(event, text),
+        (_event, text) => setLink(terminalWebLink(text)),
+      ),
+    );
     terminal.textarea?.setAttribute("aria-label", labels.terminal);
     const send = (data: string, binary = false) => {
       if (!ready || !visibleRef.current || !socket || socket.readyState !== WebSocket.OPEN) return;
@@ -249,6 +290,7 @@ export default function ComputerTerminal({ ticket, labels, close, visible = true
       themeObserver.disconnect();
       input.dispose();
       binary.dispose();
+      links.dispose();
       for (const blocker of blockers) blocker.dispose();
       terminal.dispose();
       search.current = null;
@@ -286,6 +328,17 @@ export default function ComputerTerminal({ ticket, labels, close, visible = true
         <Button size="sm" variant="ghost" onClick={() => search.current?.findNext(query.current)}>
           {labels.next}
         </Button>
+        {link && openLink && labels.openLink ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            title={link}
+            disabled={state !== "ready"}
+            onClick={(event) => activateLink.current(event.nativeEvent, link)}
+          >
+            {labels.openLink}
+          </Button>
+        ) : null}
       </div>
       {state !== "ready" ? (
         <div role="status" className="flex items-center gap-3 p-3 text-sm text-muted-foreground">

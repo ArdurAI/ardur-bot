@@ -1,4 +1,5 @@
 import type { ComputerStatus } from "@ardurbot/contracts";
+import { encodeTerminalFrame } from "@ardurbot/contracts";
 import { expect, test } from "@playwright/test";
 import { activeBotId, captureScreenshot, completeOnboarding, signup } from "./helpers";
 
@@ -38,6 +39,7 @@ test("Terminal is optional, keeps Screen default and exposes a clear unavailable
 
 test("Terminal loads on demand and shell shortcuts stay in the terminal", async ({
   page,
+  context,
 }, testInfo) => {
   await signup(page, `terminal-input-${Date.now()}@example.test`, "password12", "Terminal Input");
   await completeOnboarding(page);
@@ -83,8 +85,14 @@ test("Terminal loads on demand and shell shortcuts stay in the terminal", async 
   );
   await page.routeWebSocket("**/api/terminal/socket", (socket) => {
     socket.onMessage((message) => {
-      if (typeof message === "string" && JSON.parse(message).type === "connect")
+      if (typeof message === "string" && JSON.parse(message).type === "connect") {
         socket.send(JSON.stringify({ type: "ready", inputSeq: 0 }));
+        socket.send(
+          Buffer.from(
+            encodeTerminalFrame(1, new TextEncoder().encode("https://example.test/\r\n")),
+          ),
+        );
+      }
     });
   });
   await page.reload();
@@ -94,6 +102,20 @@ test("Terminal loads on demand and shell shortcuts stay in the terminal", async 
   await expect(page.getByTestId("command-palette")).toBeVisible();
   await page.getByRole("option", { name: "Open terminal", exact: true }).click();
   await expect(page.getByRole("region", { name: "Terminal", exact: true })).toBeVisible();
+  const printed = page.getByText("https://example.test/", { exact: true }).first();
+  await expect(printed).toBeVisible();
+  expect(context.pages()).toHaveLength(1);
+  await context.route("https://example.test/**", (route) =>
+    route.fulfill({ body: "Fixture page" }),
+  );
+  await printed.hover();
+  await expect(page.getByRole("button", { name: "Open link", exact: true })).toBeVisible();
+  const popup = context.waitForEvent("page");
+  await page.getByRole("button", { name: "Open link", exact: true }).click();
+  const opened = await popup;
+  await expect(opened).toHaveURL("https://example.test/");
+  await opened.close();
+  await page.bringToFront();
   await page.getByRole("textbox", { name: "Terminal", exact: true }).focus();
   await page.keyboard.press("ControlOrMeta+K");
   await expect(page.getByTestId("command-palette")).toBeHidden();

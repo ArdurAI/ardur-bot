@@ -6554,6 +6554,10 @@ msgstr "전체 창으로 열기"
 msgid "Open learning inbox"
 msgstr ""
 
+#: src/pages/shell/terminal-session.tsx
+msgid "Open link"
+msgstr "링크 열기"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Open links in built-in browser"
 msgstr ""

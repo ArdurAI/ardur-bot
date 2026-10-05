@@ -6554,6 +6554,10 @@ msgstr "在完整窗口中打开"
 msgid "Open learning inbox"
 msgstr ""
 
+#: src/pages/shell/terminal-session.tsx
+msgid "Open link"
+msgstr "打开链接"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Open links in built-in browser"
 msgstr ""
