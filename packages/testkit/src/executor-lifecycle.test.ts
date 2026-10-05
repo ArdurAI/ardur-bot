@@ -22,10 +22,29 @@ const api = hasDb ? await import("../../../apps/api/src/app.ts") : undefined;
 describeIntegration("run executor lifecycle", () => {
   let handles: Awaited<ReturnType<typeof createApp>>;
   const activeRuns = new Set<string>();
+  const activeOrigins = new Map<symbol, Array<string | undefined>>();
+  const startedAt = new Date();
   const dataDir = mkdtempSync(path.join(tmpdir(), "ardurbot-executor-lifecycle-"));
   const stamp = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
   beforeAll(async () => {
+    const enter = RestartDrain.prototype.enter;
+    vi.spyOn(RestartDrain.prototype, "enter").mockImplementation(function (this: RestartDrain) {
+      const leave = enter.call(this);
+      if (!leave) return;
+      const token = Symbol();
+      activeOrigins.set(
+        token,
+        new Error().stack
+          ?.split("\n")
+          .map((line) => line.match(/at ([\w.]+) \(/)?.[1])
+          .filter(Boolean) ?? [],
+      );
+      return () => {
+        activeOrigins.delete(token);
+        leave();
+      };
+    });
     handles = await api!.createApp({
       databaseUrl: process.env.DATABASE_URL!,
       dataDir,
@@ -47,6 +66,12 @@ describeIntegration("run executor lifecycle", () => {
   });
 
   afterAll(async () => {
+    console.info("teardown.origins", [...activeOrigins.values()]);
+    const unfinished = await handles.prisma.run.findMany({
+      where: { createdAt: { gte: startedAt }, status: { in: ["running", "leased"] } },
+      select: { id: true },
+    });
+    for (const run of unfinished) activeRuns.add(run.id);
     console.info(
       "teardown.active",
       await Promise.all(
