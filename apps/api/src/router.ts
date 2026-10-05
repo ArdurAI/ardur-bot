@@ -315,6 +315,7 @@ import {
   startOnboarding,
 } from "./onboarding.js";
 import { getProtectedLocations, patchProtectedLocations } from "./protected-locations.js";
+import type { RemoteDevicesDeps } from "./remote-devices.js";
 import { createRemoteDevices } from "./remote-devices.js";
 import { routineHistory } from "./routine-history.js";
 import { listSpaceRuns } from "./runs.js";
@@ -536,6 +537,8 @@ function mcpAssignmentDto(row: {
 }
 
 export interface RouterDeps {
+  listenerState?: RemoteDevicesDeps["listenerState"];
+  trustedDesktopHints?: RemoteDevicesDeps["trustedDesktopHints"];
   runtime?: AgentRuntime;
   resolveComparisonPin?: DelegationResolver;
   hostBridge?: HostBridge;
@@ -640,7 +643,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     origin?: string;
   }>();
   const channelPairing = createChannelPairing(deps);
-  const remoteDevices = createRemoteDevices({ ...deps, publicUrl: deps.env.webOrigin });
+  const remoteDevices = createRemoteDevices(deps);
   const account = createAccountService({ ...deps, remoteDevices });
   const repos = createRepos(deps.prisma, {
     sandboxProvider: deps.env.sandboxProvider,

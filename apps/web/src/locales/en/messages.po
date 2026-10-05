@@ -4032,6 +4032,10 @@ msgstr "Email"
 msgid "Enable"
 msgstr "Enable"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Enable ARDURBOT_DEVICE_LISTENER_ENABLED on the server to pair a device."
+msgstr "Enable ARDURBOT_DEVICE_LISTENER_ENABLED on the server to pair a device."
+
 #: src/lib/mcp-sign-in.ts
 msgid "Enable this server first, then sign in."
 msgstr "Enable this server first, then sign in."
@@ -6789,10 +6793,6 @@ msgstr "Personal"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Personal credential"
 msgstr "Personal credential"
-
-#: src/pages/DevicesSettings.tsx
-msgid "Phone pairing needs a home run by this app. Set up This computer to use it."
-msgstr "Phone pairing needs a home run by this app. Set up This computer to use it."
 
 #: src/pages/LearningObservation.tsx
 msgid "pin"

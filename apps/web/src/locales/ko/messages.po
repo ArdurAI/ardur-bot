@@ -4032,6 +4032,10 @@ msgstr "이메일"
 msgid "Enable"
 msgstr ""
 
+#: src/pages/DevicesSettings.tsx
+msgid "Enable ARDURBOT_DEVICE_LISTENER_ENABLED on the server to pair a device."
+msgstr "기기를 페어링하려면 서버에서 ARDURBOT_DEVICE_LISTENER_ENABLED를 활성화하세요."
+
 #: src/lib/mcp-sign-in.ts
 msgid "Enable this server first, then sign in."
 msgstr ""
@@ -6789,10 +6793,6 @@ msgstr ""
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Personal credential"
 msgstr "내 인증 정보"
-
-#: src/pages/DevicesSettings.tsx
-msgid "Phone pairing needs a home run by this app. Set up This computer to use it."
-msgstr ""
 
 #: src/pages/LearningObservation.tsx
 msgid "pin"

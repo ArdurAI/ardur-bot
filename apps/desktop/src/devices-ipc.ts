@@ -45,8 +45,30 @@ export function installDevices(options: {
       ...(!available ? { reason: MANAGED_HOME_REQUIRED } : {}),
     };
   }
-  ipcMain.handle("desktop.devices.state", (event) => {
+  async function stackToken(home: { development: boolean }) {
+    return home.development
+      ? process.env.ARDURBOT_DESKTOP_STACK_TOKEN?.trim()
+      : await readStackToken(stackDir(app.getPath("userData")));
+  }
+  async function publish(origin: string, token: string) {
+    const response = await net.fetch(`${origin}/local/device-listener-state`, {
+      method: "POST",
+      headers: { [LOCAL_SETTINGS_TOKEN_HEADER]: token, "content-type": "application/json" },
+      body: JSON.stringify(options.listener.state()),
+      signal: AbortSignal.timeout(5_000),
+      redirect: "error",
+      bypassCustomProtocolHandlers: true,
+    });
+    if (!response.ok) throw new Error("Update your home before pairing a phone.");
+  }
+  ipcMain.handle("desktop.devices.state", async (event) => {
     if (!trusted(event)) throw new Error("Open Devices on your Mac.");
+    const home = target();
+    if (home && options.listener.state().enabled) {
+      const token = await stackToken(home);
+      if (!token) throw new Error("Start your home before pairing a phone.");
+      await publish(home.origin, token);
+    }
     return state();
   });
   ipcMain.handle("desktop.devices.setEnabled", async (event, enabled: unknown) => {
@@ -54,13 +76,12 @@ export function installDevices(options: {
       throw new Error("Open Devices on your Mac.");
     const home = target();
     if (!home) throw new Error(MANAGED_HOME_REQUIRED);
+    const token = await stackToken(home);
     if (!enabled) {
       await options.listener.stop();
+      if (token) await publish(home.origin, token);
       return state();
     }
-    const token = home.development
-      ? process.env.ARDURBOT_DESKTOP_STACK_TOKEN?.trim()
-      : await readStackToken(stackDir(app.getPath("userData")));
     if (!token || (!home.development && !(await options.stack.matchesDesiredStack())))
       throw new Error("Start your home before pairing a phone.");
     const response = await net.fetch(`${home.origin}/local/device-listener`, {
@@ -75,7 +96,15 @@ export function installDevices(options: {
       privateKey: string;
       certificateFingerprint: string;
     };
-    await options.listener.start({ ...material, target: home.origin });
+    try {
+      await options.listener.start({ ...material, target: home.origin });
+      await publish(home.origin, token);
+    } catch (error) {
+      await options.listener.stop();
+      // Clear any earlier approval. A failed cleanup also expires after its short lease.
+      await publish(home.origin, token).catch(() => undefined);
+      throw error;
+    }
     return state();
   });
 }
