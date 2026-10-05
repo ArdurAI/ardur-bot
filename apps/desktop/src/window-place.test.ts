@@ -11,6 +11,7 @@ import {
   restoreWindowPlace,
   WINDOW_PLACE_DEBOUNCE_MS,
   WINDOW_PLACE_FILE,
+  WINDOW_PLACE_FULL_SCREEN_TIMEOUT_MS,
   WINDOW_PLACE_QUIT_TIMEOUT_MS,
   WindowPlaceStore,
   watchWindowPlace,
@@ -309,6 +310,7 @@ describe("Electron edge without Electron", () => {
       expect(win.setFullScreen).toHaveBeenCalledExactlyOnceWith(true);
       expect(win.maximized).toBe(true);
       expect(win.fullScreen).toBe(true);
+      win.emit("enter-full-screen");
       win.emit("ready-to-show");
       vi.advanceTimersByTime(MAIN_WINDOW_SHOW_FALLBACK_MS);
       expect(win.maximize).toHaveBeenCalledOnce();
@@ -356,6 +358,9 @@ describe("Electron edge without Electron", () => {
       win.emit("enter-full-screen");
       vi.advanceTimersByTime(WINDOW_PLACE_DEBOUNCE_MS);
       expect(save).toHaveBeenCalledExactlyOnceWith({ ...normal, fullScreen: true, displayId: 2 });
+      expect(vi.getTimerCount()).toBe(0);
+      vi.advanceTimersByTime(WINDOW_PLACE_FULL_SCREEN_TIMEOUT_MS);
+      expect(save).toHaveBeenCalledOnce();
       win.fullScreen = false;
       win.emit("leave-full-screen");
       vi.advanceTimersByTime(WINDOW_PLACE_DEBOUNCE_MS);
@@ -365,6 +370,114 @@ describe("Electron edge without Electron", () => {
       expect(vi.getTimerCount()).toBe(0);
     },
   );
+
+  it("saves actual state after a dropped full-screen entry and resumes later saves", () => {
+    vi.useFakeTimers();
+    const win = new WindowFake();
+    win.setFullScreen.mockImplementation(() => win.emit("resize"));
+    const store = new WindowPlaceStore("/unused");
+    const save = vi.spyOn(store, "save").mockResolvedValue();
+    watchWindowPlace(win, store, displayScreen, () => true);
+    const placed = windowWithRestoredState(win, { maximized: false, fullScreen: true });
+    // The timeout starts at the request, not while waiting for the first reveal.
+    vi.advanceTimersByTime(WINDOW_PLACE_FULL_SCREEN_TIMEOUT_MS);
+    expect(save).not.toHaveBeenCalled();
+    placed.show();
+    vi.advanceTimersByTime(WINDOW_PLACE_FULL_SCREEN_TIMEOUT_MS - 1);
+    expect(save).not.toHaveBeenCalled();
+    win.bounds = { ...win.bounds, x: 300 };
+    vi.advanceTimersByTime(1);
+    expect(save).toHaveBeenCalledExactlyOnceWith({ ...normal, x: 300, displayId: 2 });
+    win.bounds = { ...win.bounds, x: 400 };
+    win.emit("move");
+    vi.advanceTimersByTime(WINDOW_PLACE_DEBOUNCE_MS);
+    expect(save).toHaveBeenLastCalledWith({ ...normal, x: 400, displayId: 2 });
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("resumes saves when full-screen is left before entry settles", () => {
+    vi.useFakeTimers();
+    const win = new WindowFake();
+    win.setFullScreen.mockImplementation(() => win.emit("resize"));
+    const store = new WindowPlaceStore("/unused");
+    const save = vi.spyOn(store, "save").mockResolvedValue();
+    watchWindowPlace(win, store, displayScreen, () => true);
+    windowWithRestoredState(win, { maximized: false, fullScreen: true }).show();
+    vi.advanceTimersByTime(WINDOW_PLACE_DEBOUNCE_MS);
+    expect(save).not.toHaveBeenCalled();
+    win.emit("leave-full-screen");
+    vi.advanceTimersByTime(WINDOW_PLACE_DEBOUNCE_MS);
+    expect(save).toHaveBeenCalledExactlyOnceWith({ ...normal, displayId: 2 });
+    expect(vi.getTimerCount()).toBe(0);
+    win.bounds = { ...win.bounds, x: 300 };
+    win.emit("close");
+    expect(save).toHaveBeenLastCalledWith({ ...normal, x: 300, displayId: 2 });
+    vi.advanceTimersByTime(WINDOW_PLACE_FULL_SCREEN_TIMEOUT_MS);
+    expect(save).toHaveBeenCalledTimes(2);
+  });
+
+  it("cancels the full-screen timeout when the window closes before entry", () => {
+    vi.useFakeTimers();
+    const win = new WindowFake();
+    const store = new WindowPlaceStore("/unused");
+    const save = vi.spyOn(store, "save").mockResolvedValue();
+    watchWindowPlace(win, store, displayScreen, () => true);
+    windowWithRestoredState(win, { maximized: false, fullScreen: true }).show();
+    expect(vi.getTimerCount()).toBe(1);
+    win.destroyed = true;
+    win.emit("closed");
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(WINDOW_PLACE_FULL_SCREEN_TIMEOUT_MS);
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("does not let a superseded window save when its full-screen attempt times out", () => {
+    vi.useFakeTimers();
+    const win = new WindowFake();
+    const store = new WindowPlaceStore("/unused");
+    const save = vi.spyOn(store, "save").mockResolvedValue();
+    let current = true;
+    watchWindowPlace(win, store, displayScreen, () => current);
+    windowWithRestoredState(win, { maximized: false, fullScreen: true }).show();
+    current = false;
+    vi.advanceTimersByTime(WINDOW_PLACE_FULL_SCREEN_TIMEOUT_MS);
+    expect(save).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("does not start a full-screen timeout if entry completes synchronously", () => {
+    vi.useFakeTimers();
+    const win = new WindowFake();
+    win.setFullScreen.mockImplementation(() => {
+      win.fullScreen = true;
+      win.emit("enter-full-screen");
+    });
+    const store = new WindowPlaceStore("/unused");
+    const save = vi.spyOn(store, "save").mockResolvedValue();
+    watchWindowPlace(win, store, displayScreen, () => true);
+    windowWithRestoredState(win, { maximized: false, fullScreen: true }).show();
+    vi.advanceTimersByTime(WINDOW_PLACE_DEBOUNCE_MS);
+    expect(save).toHaveBeenCalledExactlyOnceWith({ ...normal, fullScreen: true, displayId: 2 });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("resumes saves if the full-screen request throws", () => {
+    vi.useFakeTimers();
+    const win = new WindowFake();
+    win.setFullScreen.mockImplementation(() => {
+      throw new Error("full-screen unavailable");
+    });
+    const store = new WindowPlaceStore("/unused");
+    const save = vi.spyOn(store, "save").mockResolvedValue();
+    watchWindowPlace(win, store, displayScreen, () => true);
+    const placed = windowWithRestoredState(win, { maximized: false, fullScreen: true });
+    expect(() => placed.show()).toThrow("full-screen unavailable");
+    win.emit("move");
+    vi.advanceTimersByTime(WINDOW_PLACE_DEBOUNCE_MS);
+    expect(save).toHaveBeenCalledExactlyOnceWith({ ...normal, displayId: 2 });
+    expect(vi.getTimerCount()).toBe(0);
+  });
 
   it("does not restore state after a window is destroyed", () => {
     vi.useFakeTimers();

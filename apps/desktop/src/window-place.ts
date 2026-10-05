@@ -6,9 +6,11 @@ import { readPrivateFile, writePrivateFile } from "./setup-store.js";
 
 export const WINDOW_PLACE_FILE = "window-place.json";
 export const WINDOW_PLACE_DEBOUNCE_MS = 500;
+export const WINDOW_PLACE_FULL_SCREEN_TIMEOUT_MS = 3_000;
 
-// Native full-screen entry is asynchronous. Keep the saved state until Electron confirms it.
+// Native full-screen entry is asynchronous, but missing events must not disable later saves.
 const restoringFullScreen = new WeakSet<object>();
+const windowPlaceSavers = new WeakMap<object, () => void>();
 
 export type WindowPlace = Rectangle & {
   maximized: boolean;
@@ -183,6 +185,7 @@ export function watchWindowPlace(
     timer = setTimeout(save, WINDOW_PLACE_DEBOUNCE_MS);
     timer.unref();
   };
+  windowPlaceSavers.set(win, save);
   win.on("move", schedule);
   win.on("resize", schedule);
   win.on("maximize", schedule);
@@ -190,7 +193,10 @@ export function watchWindowPlace(
   win.on("enter-full-screen", schedule);
   win.on("leave-full-screen", schedule);
   win.on("close", save);
-  win.on("closed", stop);
+  win.on("closed", () => {
+    stop();
+    windowPlaceSavers.delete(win);
+  });
 }
 
 /**
@@ -203,16 +209,38 @@ export function windowWithRestoredState(
   place: Pick<WindowPlace, "maximized" | "fullScreen">,
 ): ShowableWindow {
   let restored = false;
+  let fullScreenTimer: ReturnType<typeof setTimeout> | undefined;
+  const finishFullScreen = () => {
+    clearTimeout(fullScreenTimer);
+    fullScreenTimer = undefined;
+    restoringFullScreen.delete(win);
+  };
   if (place.fullScreen) {
     restoringFullScreen.add(win);
-    win.once("enter-full-screen", () => restoringFullScreen.delete(win));
-    win.once("closed", () => restoringFullScreen.delete(win));
+    win.once("enter-full-screen", finishFullScreen);
+    win.once("leave-full-screen", finishFullScreen);
+    win.once("closed", finishFullScreen);
   }
   const restore = () => {
     if (restored || win.isDestroyed() || !win.isVisible()) return;
     restored = true;
     if (place.maximized) win.maximize();
-    if (place.fullScreen) win.setFullScreen(true);
+    if (place.fullScreen) {
+      try {
+        win.setFullScreen(true);
+      } catch (error) {
+        finishFullScreen();
+        throw error;
+      }
+      // A synchronous native event may already have ended the attempt.
+      if (restoringFullScreen.has(win)) {
+        fullScreenTimer = setTimeout(() => {
+          finishFullScreen();
+          windowPlaceSavers.get(win)?.();
+        }, WINDOW_PLACE_FULL_SCREEN_TIMEOUT_MS);
+        fullScreenTimer.unref();
+      }
+    }
   };
   // Dock/tray activation can intentionally show the window before its first paint.
   win.once("show", restore);
