@@ -10,7 +10,16 @@ import { Button } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { ORPCError } from "@orpc/client";
 import { X } from "lucide-react";
-import { createElement, lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import {
+  createElement,
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { actionMessage } from "../../lib/orpc-action-message";
 import { rpc } from "../../lib/rpc";
 import { AskBot, QuickOpen } from "./dialogs";
@@ -73,7 +82,7 @@ export function WorkspaceFiles({
       }),
   );
   const bindingRevision = reads.bind(context);
-  useEffect(() => {
+  useLayoutEffect(() => {
     reads.activate();
     return () => reads.dispose();
   }, [reads]);
@@ -340,6 +349,9 @@ export function WorkspaceFiles({
       openedLocation.current = request;
       openRef.current(location.path, true);
     }
+    return () => {
+      openedLocation.current = null;
+    };
   }, [location, bot.id]);
   useEffect(() => {
     const hotkey = (event: KeyboardEvent) => {

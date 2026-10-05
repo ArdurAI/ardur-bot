@@ -3,7 +3,7 @@ import type { Bot, WorkspaceContext } from "@ardurbot/contracts";
 import type { MessageDescriptor } from "@lingui/core";
 import { ORPCError } from "@orpc/client";
 import type { ComponentProps, ReactNode, Ref } from "react";
-import { act, useImperativeHandle, useRef, useState } from "react";
+import { act, StrictMode, useImperativeHandle, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -452,6 +452,38 @@ function deferred<T>() {
 }
 
 describe("workspace generation recovery", () => {
+  it.each([false, true])(
+    "loads a fresh Strict Mode view with a location intent: %s",
+    async (intent) => {
+      await act(async () => renderer.render(null));
+      api.list.mockClear();
+      api.read.mockClear();
+      await act(async () =>
+        renderer.render(
+          <StrictMode>
+            <WorkspaceFiles
+              bot={{ id: "bot", name: "bot" } as Bot}
+              context={context}
+              location={intent ? { path: "notes.md", requestId: 1 } : undefined}
+            />
+          </StrictMode>,
+        ),
+      );
+      await tick();
+      await tick();
+      expect(button("notes.md")).toBeDefined();
+      if (intent) expect(host.querySelector("textarea")?.value).toBe("hello");
+      else {
+        api.read.mockRejectedValueOnce(changed());
+        await click("notes.md");
+        expect(api.read).toHaveBeenCalledTimes(2);
+        expect(api.read).toHaveBeenLastCalledWith(expect.objectContaining({ generation: 3 }));
+        expect(host.querySelector("textarea")?.value).toBe("hello");
+      }
+      expect(host.querySelector("[role=alert]")).toBeNull();
+    },
+  );
+
   it("recovers the opening list once and publishes the binding without repeated directory reads", async () => {
     api.list.mockClear().mockRejectedValueOnce(changed());
     const publish = vi.fn();
