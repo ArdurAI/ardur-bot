@@ -101,8 +101,8 @@ export function GroupModelControl({
   const selectedEntry = settings?.catalog.find(
     (item) => item.provider === selectedModel?.provider && item.id === selectedModel.modelId,
   );
-  const supportedEffort: ThinkingLevel[] =
-    selectedCredential?.thinkingLevels ?? selectedEntry?.thinkingLevels ?? [];
+  const supportedEffort: ThinkingLevel[] | undefined =
+    selectedCredential?.thinkingLevels ?? selectedEntry?.thinkingLevels;
   const defaultEffort =
     selectedCredential?.thinkingLevel ??
     spaceDefaultEffort(selectedCredential?.reasoning ?? selectedEntry?.reasoning, supportedEffort);
@@ -287,7 +287,7 @@ export function GroupModelControl({
             id={`${id}-effort`}
             value={effort}
             onChange={setEffort}
-            supported={supportedEffort}
+            supported={supportedEffort ?? []}
             isOllama={selectedModel?.provider === "ollama"}
             defaultLevel={defaultEffort}
             notApplicable={

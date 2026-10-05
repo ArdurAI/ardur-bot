@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { Bot, GroupMember } from "@ardurbot/contracts";
+import type { Bot, GroupMember, ThinkingLevel } from "@ardurbot/contracts";
 import { modelPinOptionKey } from "@ardurbot/core";
 import { i18n } from "@lingui/core";
 import { ORPCError } from "@orpc/client";
@@ -165,6 +165,87 @@ function expectSaveReady() {
 }
 
 describe("group model control", () => {
+  describe.each(["pi", "hermes"] as const)("%s default effort", (runtimeKind) => {
+    it.each([
+      {
+        name: "omitted capabilities",
+        catalog: { reasoning: undefined },
+        credential: {},
+        effort: "medium",
+      },
+      {
+        name: "reasoning without levels",
+        catalog: { reasoning: true },
+        credential: {},
+        effort: "medium",
+      },
+      {
+        name: "explicitly empty levels",
+        catalog: { thinkingLevels: [] },
+        credential: {},
+        effort: "off",
+      },
+      { name: "non-reasoning model", catalog: { reasoning: false }, credential: {}, effort: "off" },
+      {
+        name: "catalog levels",
+        catalog: { thinkingLevels: ["high"] },
+        credential: {},
+        effort: "high",
+      },
+      {
+        name: "connection levels",
+        catalog: { thinkingLevels: ["high"] },
+        credential: { thinkingLevels: ["low"] },
+        effort: "low",
+      },
+      {
+        name: "connection default",
+        catalog: {},
+        credential: { thinkingLevel: "xhigh" },
+        effort: "xhigh",
+      },
+    ] satisfies {
+      name: string;
+      catalog: { reasoning?: boolean; thinkingLevels?: ThinkingLevel[] };
+      credential: { thinkingLevels?: ThinkingLevel[]; thinkingLevel?: ThinkingLevel };
+      effort: ThinkingLevel;
+    }[])("validates and saves $name consistently", async ({ catalog, credential, effort }) => {
+      const choiceSettings = {
+        ...settings!,
+        catalog: [{ ...settings!.catalog[0]!, thinkingLevels: undefined, ...catalog }],
+        credentials: [{ ...settings!.credentials[0]!, ...credential }],
+      };
+      const save = vi.fn(async () => undefined);
+      await act(async () =>
+        root.render(
+          <GroupModelControl
+            member={member}
+            bot={{ ...bot, runtimeExperimental: true }}
+            settings={choiceSettings}
+            onSave={save}
+          />,
+        ),
+      );
+      await change(container.querySelector('select[id$="-runtime"]')!, runtimeKind);
+      await change(
+        container.querySelector('select[id$="-model"]')!,
+        modelPinOptionKey("test", "model-a", "credential"),
+      );
+      expectSaveReady();
+      await act(async () => saveButton().click());
+      expect(save).toHaveBeenCalledWith(member, {
+        runtimeKind,
+        provider: "test",
+        modelId: "model-a",
+        credentialId: "credential",
+        effort,
+      });
+      expect(rpc.models.validatePin).toHaveBeenLastCalledWith(
+        expect.objectContaining({ runtimeKind, effort }),
+      );
+    });
+  });
+
   it("explains a missing Hermes model, then saves the unchanged valid choice", async () => {
     const save = await render(
       member,
