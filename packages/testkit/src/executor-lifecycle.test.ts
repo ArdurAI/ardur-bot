@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { AgentRunRequest } from "@ardurbot/adapter-kit";
-import { RestartDrain, ScriptedAgentRuntime } from "@ardurbot/adapters";
+import { ScriptedAgentRuntime } from "@ardurbot/adapters";
 import type { MessageBlock } from "@ardurbot/contracts";
 import { approvalEffectKey } from "@ardurbot/core/node/approval-effect-key";
 import { createThreadEvents, createThreadMessage, loadRunHistoryMessages } from "@ardurbot/db";
@@ -21,30 +21,11 @@ const api = hasDb ? await import("../../../apps/api/src/app.ts") : undefined;
 
 describeIntegration("run executor lifecycle", () => {
   let handles: Awaited<ReturnType<typeof createApp>>;
-  const activeRuns = new Set<string>();
-  const activeOrigins = new Map<symbol, Array<string | undefined>>();
-  const startedAt = new Date();
+  const fixtureSpaceIds = new Set<string>();
   const dataDir = mkdtempSync(path.join(tmpdir(), "ardurbot-executor-lifecycle-"));
   const stamp = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
   beforeAll(async () => {
-    const enter = RestartDrain.prototype.enter;
-    vi.spyOn(RestartDrain.prototype, "enter").mockImplementation(function (this: RestartDrain) {
-      const leave = enter.call(this);
-      if (!leave) return;
-      const token = Symbol();
-      activeOrigins.set(
-        token,
-        new Error().stack
-          ?.split("\n")
-          .map((line) => line.match(/at ([\w.]+) \(/)?.[1])
-          .filter(Boolean) ?? [],
-      );
-      return () => {
-        activeOrigins.delete(token);
-        leave();
-      };
-    });
     handles = await api!.createApp({
       databaseUrl: process.env.DATABASE_URL!,
       dataDir,
@@ -54,69 +35,22 @@ describeIntegration("run executor lifecycle", () => {
       defaultProvider: "scripted",
       defaultModel: "scripted",
     });
-    const continueRun = handles.executor.continueRun.bind(handles.executor);
-    vi.spyOn(handles.executor, "continueRun").mockImplementation(async (runId, workerId) => {
-      activeRuns.add(runId);
-      try {
-        return await continueRun(runId, workerId);
-      } finally {
-        activeRuns.delete(runId);
-      }
-    });
   });
 
   afterAll(async () => {
-    console.info("teardown.origins", [...activeOrigins.values()]);
-    const unfinished = await handles.prisma.run.findMany({
-      where: { createdAt: { gte: startedAt }, status: { in: ["running", "leased"] } },
-      select: { id: true },
-    });
-    for (const run of unfinished) activeRuns.add(run.id);
-    console.info(
-      "teardown.active",
-      await Promise.all(
-        [...activeRuns].map(async (id) => {
-          const run = await handles.prisma.run.findUniqueOrThrow({
-            where: { id },
-            include: { bot: { include: { computer: true } } },
-          });
-          const events = await handles.prisma.event.findMany({
-            where: { runId: id },
-            orderBy: { seq: "desc" },
-            select: { type: true },
-            take: 8,
-          });
-          return {
-            status: run.status,
-            checkpoint: Boolean(run.turnCheckpoint),
-            computer: run.bot.computer?.state,
-            events: events.map((event) => event.type),
-          };
-        }),
-      ),
-    );
-    const drainShutdown = RestartDrain.prototype.shutdown;
-    vi.spyOn(RestartDrain.prototype, "shutdown").mockImplementation(async function (
-      this: RestartDrain,
-      timeoutMs,
-    ) {
-      console.info("teardown.drain.start");
-      const result = await drainShutdown.call(this, timeoutMs);
-      console.info("teardown.drain.finish", result);
-      return result;
-    });
-    const closeJobs = handles.jobs.close.bind(handles.jobs);
-    vi.spyOn(handles.jobs, "close").mockImplementation(async () => {
-      console.info("teardown.jobs.start");
-      await closeJobs();
-      console.info("teardown.jobs.finish");
-    });
-    const disconnect = handles.prisma.$disconnect.bind(handles.prisma);
-    vi.spyOn(handles.prisma, "$disconnect").mockImplementation(async () => {
-      console.info("teardown.database.start");
-      await disconnect();
-      console.info("teardown.database.finish");
-    });
+    // Stop deliberately nonterminating fixtures after assertions, not by shortening the
+    // production drain deadline or extending this hook's timeout.
+    if (handles) {
+      const unfinished = await handles.prisma.run.findMany({
+        where: {
+          spaceId: { in: [...fixtureSpaceIds] },
+          status: { in: ["running", "leased"] },
+        },
+        select: { id: true },
+      });
+      const runtime = new ScriptedAgentRuntime();
+      for (const run of unfinished) await runtime.abort(run.id);
+    }
     await handles?.stop();
     rmSync(dataDir, { recursive: true, force: true });
   });
@@ -2016,6 +1950,7 @@ describeIntegration("run executor lifecycle", () => {
   ) {
     const cookie = await signup(`executor-${label}-${stamp}@example.test`, `Executor ${label}`);
     const me = await rpc<{ userId: string; spaceId: string }>(cookie, "me");
+    fixtureSpaceIds.add(me.spaceId);
     const bot = await rpc<{ id: string }>(cookie, "bots/create", {
       name: `Executor ${label}`,
       title: "",
