@@ -205,9 +205,9 @@ async function main() {
   const restartDrain = new RestartDrain(prisma);
   await restartDrain.initialize();
   const executor = createRunExecutor({
+    evidenceRecorder: createRunEvidenceRecorder({ prisma, secretStore: secrets }),
     restartDrain,
     shutdownSignal: shutdown.signal,
-    evidenceRecorder: createRunEvidenceRecorder({ prisma, secretStore: secrets }),
     prisma,
     lockPool,
     runtime,
