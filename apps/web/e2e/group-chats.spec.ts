@@ -26,6 +26,14 @@ test("goal budget details separate measured usage and outstanding reservations",
     name: "Budget room",
     botIds: [first, second],
   });
+  await page.route("**/rpc/bootstrap", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: { json: { ...body.json, me: { ...body.json.me, isDeploymentOwner: true } } },
+    });
+  });
   await page.route("**/rpc/goals/get", (route) =>
     route.fulfill({
       contentType: "application/json",
@@ -44,10 +52,13 @@ test("goal budget details separate measured usage and outstanding reservations",
       }),
     }),
   );
+  const goalResponse = page.waitForResponse("**/rpc/goals/get");
   await page.goto(`/app/g/${group.id}`);
+  expect((await goalResponse).ok()).toBe(true);
   const details = page
     .locator("details")
     .filter({ has: page.locator("summary", { hasText: "Goal:" }) });
+  await expect(details.locator("summary")).toBeVisible();
   await expect(details.locator("dt", { hasText: "Reserved" })).not.toBeVisible();
   await details.locator("summary").click();
   await expect(details).toContainText("Used");
