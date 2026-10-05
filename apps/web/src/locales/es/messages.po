@@ -7767,6 +7767,10 @@ msgstr ""
 msgid "Run at"
 msgstr "Ejecutar a las"
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Run commands inside this bot's folder or a registered folder."
+msgstr "Ejecuta los comandos dentro de la carpeta de este bot o de una carpeta registrada."
+
 #: src/pages/RoutineEditor.tsx
 msgid "Run history"
 msgstr "Historial de ejecuciones"
@@ -9109,6 +9113,10 @@ msgstr "Este chat es de solo lectura"
 #: src/pages/SharedCommand.tsx
 msgid "This command is not available to this account."
 msgstr ""
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "This command was not run because its request is invalid. Check the command and folder."
+msgstr "Este comando no se ejecutó porque su solicitud no es válida. Revisa el comando y la carpeta."
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"

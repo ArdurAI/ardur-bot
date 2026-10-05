@@ -7767,6 +7767,10 @@ msgstr ""
 msgid "Run at"
 msgstr ""
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Run commands inside this bot's folder or a registered folder."
+msgstr "कमांड इस बॉट के फ़ोल्डर या किसी पंजीकृत फ़ोल्डर में चलाएँ।"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Run history"
 msgstr ""
@@ -9109,6 +9113,10 @@ msgstr "यह चैट केवल देखने के लिए है"
 #: src/pages/SharedCommand.tsx
 msgid "This command is not available to this account."
 msgstr ""
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "This command was not run because its request is invalid. Check the command and folder."
+msgstr "अनुरोध अमान्य होने के कारण यह कमांड नहीं चला। कमांड और फ़ोल्डर जाँचें।"
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"

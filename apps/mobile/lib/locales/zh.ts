@@ -1,4 +1,9 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "Run commands inside this bot's folder or a registered folder.":
+    "请在此机器人的文件夹或已注册的文件夹中运行命令。",
+  "This command was not run because its request is invalid. Check the command and folder.":
+    "此命令因请求无效而未运行。请检查命令和文件夹。",
+
   "{runtime}'s tool list changed during startup. Check the connected tools and try again.":
     "{runtime} 的工具列表在启动期间发生了变化。请检查已连接的工具后重试。",
   "{runtime}'s settings were not confirmed. Check this bot's settings and try again.":

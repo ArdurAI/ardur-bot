@@ -7767,6 +7767,10 @@ msgstr ""
 msgid "Run at"
 msgstr ""
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Run commands inside this bot's folder or a registered folder."
+msgstr "Komutları bu botun klasöründe veya kayıtlı bir klasörde çalıştırın."
+
 #: src/pages/RoutineEditor.tsx
 msgid "Run history"
 msgstr ""
@@ -9109,6 +9113,10 @@ msgstr "Bu sohbet yalnızca görüntülenebilir"
 #: src/pages/SharedCommand.tsx
 msgid "This command is not available to this account."
 msgstr ""
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "This command was not run because its request is invalid. Check the command and folder."
+msgstr "İsteği geçersiz olduğu için bu komut çalıştırılmadı. Komutu ve klasörü kontrol edin."
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"

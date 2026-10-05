@@ -70,3 +70,27 @@ test("command blocks fold, show inert output, search a run and export a log", as
   await expect.poll(async () => (await block.boundingBox())!.height).toBe(foldedHeight);
   await expect(block.getByRole("button", { name: "Export run", exact: true })).not.toBeVisible();
 });
+
+test("refused commands keep their text and explain the folder boundary", async ({
+  page,
+}, testInfo) => {
+  await page.route("**/rpc/commands/open", async (route) => {
+    await route.fulfill({
+      json: {
+        json: {
+          rerunDisabledReason: "Run commands inside this bot's folder or a registered folder.",
+        },
+      },
+    });
+  });
+  await page.goto("/e2e/fixtures/command-blocks.html?refusal");
+  const block = page.getByTestId("command-block").first();
+  await expect(block).toContainText("git rev-parse HEAD");
+  await block.getByRole("button", { expanded: false }).click();
+  await expect(block.locator("pre")).toContainText(
+    "Run commands inside this bot's folder or a registered folder.",
+  );
+  await expect(block.locator("pre")).not.toContainText("managed credential variables");
+  await expect(block.getByRole("button", { name: "Rerun", exact: true })).toBeDisabled();
+  await captureScreenshot(page, testInfo, "command-folder-refusal");
+});
