@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { AgentRunRequest } from "@ardurbot/adapter-kit";
-import { ScriptedAgentRuntime } from "@ardurbot/adapters";
+import { RestartDrain, ScriptedAgentRuntime } from "@ardurbot/adapters";
 import type { MessageBlock } from "@ardurbot/contracts";
 import { approvalEffectKey } from "@ardurbot/core/node/approval-effect-key";
 import { createThreadEvents, createThreadMessage, loadRunHistoryMessages } from "@ardurbot/db";
@@ -37,6 +37,28 @@ describeIntegration("run executor lifecycle", () => {
   });
 
   afterAll(async () => {
+    const drainShutdown = RestartDrain.prototype.shutdown;
+    vi.spyOn(RestartDrain.prototype, "shutdown").mockImplementation(async function (
+      this: RestartDrain,
+      timeoutMs,
+    ) {
+      console.info("teardown.drain.start");
+      const result = await drainShutdown.call(this, timeoutMs);
+      console.info("teardown.drain.finish", result);
+      return result;
+    });
+    const closeJobs = handles.jobs.close.bind(handles.jobs);
+    vi.spyOn(handles.jobs, "close").mockImplementation(async () => {
+      console.info("teardown.jobs.start");
+      await closeJobs();
+      console.info("teardown.jobs.finish");
+    });
+    const disconnect = handles.prisma.$disconnect.bind(handles.prisma);
+    vi.spyOn(handles.prisma, "$disconnect").mockImplementation(async () => {
+      console.info("teardown.database.start");
+      await disconnect();
+      console.info("teardown.database.finish");
+    });
     await handles?.stop();
     rmSync(dataDir, { recursive: true, force: true });
   });
