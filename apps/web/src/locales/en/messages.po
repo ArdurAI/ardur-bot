@@ -1707,6 +1707,15 @@ msgstr "Change password"
 msgid "Change pin"
 msgstr "Change pin"
 
+#. placeholder {0}: new Intl.ListFormat(i18n.locale, { style: "short", type: "unit" }).format( blockedNames, )
+#: src/pages/ModelDestinations.tsx
+msgid "Change these bots' models first: {0}"
+msgstr "Change these bots' models first: {0}"
+
+#: src/pages/ModelDestinations.tsx
+msgid "Change this bot's model first."
+msgstr "Change this bot's model first."
+
 #: src/components/composer/command-description.ts
 msgid "Change this bot’s pin"
 msgstr "Change this bot’s pin"
@@ -1761,6 +1770,8 @@ msgstr "ChatGPT sign-ins only work inside Codex; add an OpenAI API key to use GP
 msgid "Check"
 msgstr "Check"
 
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Check again"
 msgstr "Check again"
@@ -2651,6 +2662,7 @@ msgstr "Could not check browsers; try Recheck."
 msgid "Could not check teaching status. Refresh the view to continue."
 msgstr "Could not check teaching status. Refresh the view to continue."
 
+#: src/lib/use-can-run.ts
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Could not check the model. Try again."
 msgstr "Could not check the model. Try again."
@@ -4207,6 +4219,10 @@ msgstr "Expand {0}"
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
 msgstr "Experimental"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Experimental turned on for this runtime"
+msgstr "Experimental turned on for this runtime"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts

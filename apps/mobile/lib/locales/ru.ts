@@ -1515,4 +1515,6 @@ export const RU_MESSAGES: Record<string, string> = {
     "Команда не выполнена, потому что её размер превышает 64 КБ. Сохраните код в файл и запустите этот файл.",
   "Use a path inside this bot's folder or a registered folder.":
     "Используйте путь внутри папки этого бота или зарегистрированной папки.",
+  "Experimental turned on for this runtime":
+    "Экспериментальный режим включён для этой среды выполнения",
 };

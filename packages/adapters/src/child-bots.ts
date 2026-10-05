@@ -100,6 +100,8 @@ export async function spawnBot(
           card: input.card,
         });
         if (!admission.ok) throw new Error(admission.error);
+        // prepareDelegation copies the parent's admitted run snapshot: its pin and
+        // computer already passed canBotRun. Never substitute an unadmitted draft here.
         const snapshot = admission.record.snapshot as unknown as DelegationSnapshot;
         if (input.computerMode && input.computerMode !== snapshot.computer.mode)
           throw new DelegationAdmissionError(delegationProblem("authority-exceeded"));
