@@ -65,9 +65,13 @@ export function installDevices(options: {
     if (!trusted(event)) throw new Error("Open Devices on your Mac.");
     const home = target();
     if (home && options.listener.state().enabled) {
-      const token = await stackToken(home);
-      if (!token) throw new Error("Start your home before pairing a phone.");
-      await publish(home.origin, token);
+      try {
+        const token = await stackToken(home);
+        if (token) await publish(home.origin, token);
+      } catch {
+        // Renewal is best-effort; return local state and retry on the next poll.
+        // The home still expires stale approval and validates every pairing request.
+      }
     }
     return state();
   });

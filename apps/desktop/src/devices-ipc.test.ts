@@ -189,3 +189,58 @@ it("stops the desktop listener when the home refuses approval", async () => {
   expect(f.listener.stop).toHaveBeenCalledOnce();
   expect(await f.state()).toMatchObject({ enabled: false });
 });
+
+it.each([
+  ["network failure", new Error("Fixture network unavailable")],
+  ["timeout", new DOMException("Fixture request timed out", "TimeoutError")],
+  ["HTTP refusal", null],
+])(
+  "keeps local listener state after a publication %s and retries on the next poll",
+  async (_, error) => {
+    vi.stubEnv("ARDURBOT_DESKTOP_STACK_TOKEN", FAKE_DEVELOPMENT_TOKEN);
+    const f = fixture();
+    await f.set(true);
+    fake.fetch.mockClear();
+    if (error) fake.fetch.mockRejectedValueOnce(error);
+    else fake.fetch.mockResolvedValueOnce({ ok: false });
+
+    await expect(f.state()).resolves.toMatchObject({ enabled: true, available: true });
+    expect(f.listener.stop).not.toHaveBeenCalled();
+    await expect(f.state()).resolves.toMatchObject({ enabled: true, available: true });
+    expect(fake.fetch).toHaveBeenCalledTimes(2);
+    expect(fake.fetch.mock.calls[1]?.[1]).toMatchObject({
+      body: JSON.stringify({ enabled: true, hints: [] }),
+      redirect: "error",
+    });
+  },
+);
+
+it.each([null, new Error("Fixture token temporarily unreadable")])(
+  "keeps managed listener state when its publication token is unavailable",
+  async (error) => {
+    fake.app.isPackaged = true;
+    const f = fixture("new", "http://127.0.0.1:45173");
+    await f.set(true);
+    fake.fetch.mockClear();
+    if (error) fake.readToken.mockRejectedValueOnce(error);
+    else fake.readToken.mockResolvedValueOnce(undefined);
+
+    await expect(f.state()).resolves.toMatchObject({ enabled: true, available: true });
+    expect(fake.fetch).not.toHaveBeenCalled();
+    expect(f.listener.stop).not.toHaveBeenCalled();
+    await expect(f.state()).resolves.toMatchObject({ enabled: true, available: true });
+    expect(fake.fetch).toHaveBeenCalledOnce();
+  },
+);
+
+it("rejects untrusted state polls before reading credentials or publishing", async () => {
+  const f = fixture("new", "http://127.0.0.1:45173");
+  await f.set(true);
+  fake.fetch.mockClear();
+  fake.readToken.mockClear();
+  await expect(
+    fake.handlers.get("desktop.devices.state")!({ ...f.event, sender: {} } as IpcMainInvokeEvent),
+  ).rejects.toThrow("Open Devices on your Mac.");
+  expect(fake.readToken).not.toHaveBeenCalled();
+  expect(fake.fetch).not.toHaveBeenCalled();
+});
