@@ -1,7 +1,14 @@
 import type { Bot, IdeEntry, WorkspaceContext } from "@ardurbot/contracts";
 import { ideHandoffText } from "@ardurbot/contracts";
+import {
+  COMPUTER_CHANGED_MESSAGE,
+  WorkspaceReadCancelled,
+  WorkspaceReads,
+  workspaceBindingKey,
+} from "@ardurbot/core";
 import { Button } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
+import { ORPCError } from "@orpc/client";
 import { X } from "lucide-react";
 import { createElement, lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { actionMessage } from "../../lib/orpc-action-message";
@@ -30,21 +37,79 @@ function exactNotice(role: "alert" | "status", className: string, text: string) 
 
 export function WorkspaceFiles({
   bot,
-  context,
+  context: suppliedContext,
+  onContextChange,
   compact = false,
   location,
 }: {
   bot: Bot;
   context: WorkspaceContext;
+  onContextChange?(context: WorkspaceContext): void;
   compact?: boolean;
   location?: { path: string; line?: number; requestId: number };
 }) {
   const { t } = useLingui();
+  const [binding, setBinding] = useState({
+    source: workspaceBindingKey(suppliedContext),
+    context: suppliedContext,
+  });
+  const source = workspaceBindingKey(suppliedContext);
+  const context = source === binding.source ? binding.context : suppliedContext;
+  if (source !== binding.source) setBinding({ source, context: suppliedContext });
+  const publish = useRef<(next: WorkspaceContext) => void>(() => {});
+  publish.current = (next) => {
+    setBinding({ source, context: next });
+    onContextChange?.(next);
+  };
+  const [reads] = useState(
+    () =>
+      new WorkspaceReads(context, {
+        describe: (botId) => rpc.workspace.describe({ botId }),
+        computerChanged: (error) =>
+          error instanceof ORPCError &&
+          error.code === "CONFLICT" &&
+          error.message === COMPUTER_CHANGED_MESSAGE,
+        publish: (next) => publish.current(next),
+      }),
+  );
+  const bindingRevision = reads.bind(context);
+  useEffect(() => {
+    reads.activate();
+    return () => reads.dispose();
+  }, [reads]);
+  const loadError = useRef<(error: unknown) => void>(() => {});
+  loadError.current = (error) => {
+    if (error instanceof WorkspaceReadCancelled) return;
+    const message = actionMessage(error, t`Could not load files. Try again.`);
+    switch (message) {
+      case "Computer changed. Refresh files.":
+        setError(t`Computer changed. Refresh files.`);
+        break;
+      case "Files are unavailable on this computer.":
+        setError(t`Files are unavailable on this computer.`);
+        break;
+      case "The computer is busy. Wait for it to finish.":
+        setError(t`The computer is busy. Wait for it to finish.`);
+        break;
+      default:
+        setError(message);
+    }
+  };
+  const onLoadError = useCallback((error: unknown) => loadError.current(error), []);
   const botName = bot.name;
   const computerId = context.computerId;
   const generation = context.generation;
-  const valid = Boolean(computerId) && generation !== null && context.files !== "unavailable";
-  const sessionId = valid ? workspaceFileSessionId(bot.id, computerId!) : null;
+  const valid =
+    context.botId === bot.id &&
+    Boolean(computerId) &&
+    generation !== null &&
+    context.files !== "unavailable";
+  const sessionId = valid
+    ? workspaceFileSessionId(
+        bot.id,
+        context.rootId ? `${computerId!}/${context.rootId}` : computerId!,
+      )
+    : null;
   const describeSaveError = (reason: string) => {
     switch (reason) {
       case fileChangedReason:
@@ -110,17 +175,18 @@ export function WorkspaceFiles({
   };
   const list = useCallback(
     async (path: string): Promise<IdeEntry[]> => {
-      if (!computerId || generation === null) return [];
-      const result = await rpc.workspace.list({
-        botId: bot.id,
-        computerId,
-        generation,
-        path,
-        rootId: context.rootId,
-      });
+      const result = await reads.read((binding) =>
+        rpc.workspace.list({
+          botId: binding.botId,
+          computerId: binding.computerId!,
+          generation: binding.generation!,
+          path,
+          rootId: binding.rootId,
+        }),
+      );
       return result.entries;
     },
-    [bot.id, computerId, generation, revision, context.rootId],
+    [reads, bot.id, computerId, revision, context.rootId, bindingRevision],
   );
   const open = (path: string, preserveDraft = false) => {
     const target = sessionId;
@@ -133,9 +199,18 @@ export function WorkspaceFiles({
     }
     setError(null);
     setStatus(null);
-    void rpc.workspace
-      .read({ botId: bot.id, computerId, generation, path, rootId: context.rootId })
+    void reads
+      .read((binding) =>
+        rpc.workspace.read({
+          botId: binding.botId,
+          computerId: binding.computerId!,
+          generation: binding.generation!,
+          path,
+          rootId: binding.rootId,
+        }),
+      )
       .then((file) => {
+        if (!alive.current || boundRef.current !== target) return;
         if (file.binary) {
           if (alive.current && boundRef.current === target) {
             setError(t`This is a binary file. You cannot edit it here.`);
@@ -172,9 +247,8 @@ export function WorkspaceFiles({
           setError(null);
         }
       })
-      .catch(() => {
-        if (alive.current && boundRef.current === target)
-          setError(t`Could not load files. Try again.`);
+      .catch((error) => {
+        if (alive.current && boundRef.current === target) onLoadError(error);
       });
   };
   const save = async () => {
@@ -259,9 +333,14 @@ export function WorkspaceFiles({
     openRef.current = open;
     saveRef.current = save;
   });
+  const openedLocation = useRef<string | null>(null);
   useEffect(() => {
-    if (location) openRef.current(location.path, true);
-  }, [location, sessionId]);
+    const request = location ? `${bot.id}:${location.requestId}` : null;
+    if (location && request !== openedLocation.current) {
+      openedLocation.current = request;
+      openRef.current(location.path, true);
+    }
+  }, [location, bot.id]);
   useEffect(() => {
     const hotkey = (event: KeyboardEvent) => {
       if (
@@ -315,7 +394,14 @@ export function WorkspaceFiles({
         </span>
         <div className="flex gap-1">
           <Button variant="ghost" size="xs" onClick={() => setQuick(true)}>{t`Quick open`}</Button>
-          <Button variant="ghost" size="xs" onClick={() => setRevision((value) => value + 1)}>
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={() => {
+              setError(null);
+              setRevision((value) => value + 1);
+            }}
+          >
             {t`Refresh`}
           </Button>
         </div>
@@ -343,7 +429,7 @@ export function WorkspaceFiles({
             label={t`Files`}
             list={list}
             onOpen={open}
-            onError={() => setError(t`Could not load files. Try again.`)}
+            onError={onLoadError}
             selected={current?.path}
           />
         </div>
@@ -449,7 +535,7 @@ export function WorkspaceFiles({
           list={list}
           onOpen={open}
           onClose={() => setQuick(false)}
-          onError={() => setError(t`Could not load files. Try again.`)}
+          onError={onLoadError}
         />
       ) : null}
       {ask ? (

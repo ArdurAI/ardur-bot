@@ -12,6 +12,7 @@ import { WorkspaceFileGuard } from "./WorkspaceFileGuard";
 import { WorkspaceFiles } from "./WorkspaceFiles";
 
 const api = vi.hoisted(() => ({
+  describe: vi.fn(),
   list: vi.fn(),
   read: vi.fn(),
   save: vi.fn(),
@@ -19,7 +20,7 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock("../../lib/rpc", () => ({
   rpc: {
-    workspace: { list: api.list, read: api.read, save: api.save },
+    workspace: { describe: api.describe, list: api.list, read: api.read, save: api.save },
     threads: { send: api.send },
   },
 }));
@@ -167,7 +168,8 @@ async function show(
 beforeEach(async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   resetWorkspaceFileSessions();
-  vi.clearAllMocks();
+  vi.resetAllMocks();
+  api.describe.mockResolvedValue({ ...context, generation: 3 });
   api.list.mockResolvedValue({
     context,
     entries: [{ path: "notes.md", kind: "file", size: 5 }],
@@ -438,4 +440,234 @@ describe("workspace files", () => {
     expect(host.textContent).toContain("This file is larger than 2 MB. Open a copy to edit it.");
     expect(button("Save")?.disabled).toBe(true);
   });
+});
+
+const changed = () => new ORPCError("CONFLICT", { message: "Computer changed. Refresh files." });
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+describe("workspace generation recovery", () => {
+  it("recovers the opening list once and publishes the binding without repeated directory reads", async () => {
+    api.list.mockClear().mockRejectedValueOnce(changed());
+    const publish = vi.fn();
+    await act(async () =>
+      renderer.render(
+        <WorkspaceFiles
+          bot={{ id: "bot", name: "bot" } as Bot}
+          context={context}
+          onContextChange={publish}
+        />,
+      ),
+    );
+    await tick();
+    await tick();
+    expect(api.describe).toHaveBeenCalledTimes(1);
+    expect(api.list).toHaveBeenCalledTimes(2);
+    expect(api.list).toHaveBeenLastCalledWith(expect.objectContaining({ generation: 3 }));
+    expect(publish).toHaveBeenCalledWith(expect.objectContaining({ generation: 3 }));
+    expect(button("notes.md")).toBeDefined();
+    expect(host.querySelector("[role=alert]")).toBeNull();
+    await tick();
+    expect(api.list).toHaveBeenCalledTimes(2);
+  });
+
+  it("recovers a file read and retains its draft through another recovery and a save conflict", async () => {
+    api.read.mockRejectedValueOnce(changed());
+    await click("notes.md");
+    expect(api.read).toHaveBeenCalledTimes(2);
+    expect(api.read).toHaveBeenLastCalledWith(expect.objectContaining({ generation: 3 }));
+    expect(host.querySelector("textarea")?.value).toBe("hello");
+    expect(host.querySelector("[role=alert]")).toBeNull();
+    await type("draft");
+    api.describe.mockResolvedValueOnce({ ...context, generation: 4 });
+    api.list.mockRejectedValueOnce(changed());
+    await click("Refresh");
+    expect(host.querySelector("textarea")?.value).toBe("draft");
+    api.save.mockRejectedValueOnce(changed());
+    await click("Save");
+    expect(api.save).toHaveBeenCalledTimes(1);
+    expect(api.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({ generation: 4, version, approved: false }),
+    );
+    expect(api.describe).toHaveBeenCalledTimes(2);
+    expect(host.querySelector("[role=alert]")?.textContent).toBe(
+      "Computer changed. Refresh files.",
+    );
+    expect(host.querySelector("textarea")?.value).toBe("draft");
+  });
+
+  it("recovers nested folders and quick open through the same list path", async () => {
+    api.list.mockImplementation(async ({ path }) => ({
+      context,
+      entries: path
+        ? [{ path: "src/nested.md", kind: "file", size: 5 }]
+        : [{ path: "src", kind: "dir", size: 0 }],
+    }));
+    await click("Refresh");
+    api.list.mockRejectedValueOnce(changed());
+    await click("src");
+    expect(button("nested.md")).toBeDefined();
+    expect(api.describe).toHaveBeenCalledTimes(1);
+    api.describe.mockResolvedValueOnce({ ...context, generation: 4 });
+    api.list.mockRejectedValueOnce(changed());
+    await click("Quick open");
+    expect(host.querySelector("[role=option]")?.textContent).toBe("src/nested.md");
+    expect(api.describe).toHaveBeenCalledTimes(2);
+    expect(host.querySelector("[role=alert]")).toBeNull();
+  });
+
+  it("coalesces parallel stale tree and file reads into one describe", async () => {
+    const refresh = deferred<WorkspaceContext>();
+    api.describe.mockReturnValueOnce(refresh.promise);
+    api.read.mockRejectedValueOnce(changed());
+    await click("notes.md");
+    api.list.mockRejectedValueOnce(changed());
+    await click("Refresh");
+    expect(api.describe).toHaveBeenCalledTimes(1);
+    await act(async () => refresh.resolve({ ...context, generation: 3 }));
+    await tick();
+    await tick();
+    expect(host.querySelector("textarea")?.value).toBe("hello");
+    expect(host.querySelector("[role=alert]")).toBeNull();
+    expect(api.read).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["list", "read"] as const)(
+    "shows the safe sentence after two %s conflicts without a third attempt",
+    async (operation) => {
+      api[operation].mockClear().mockRejectedValueOnce(changed()).mockRejectedValueOnce(changed());
+      await click(operation === "list" ? "Refresh" : "notes.md");
+      expect(api[operation]).toHaveBeenCalledTimes(2);
+      expect(api.describe).toHaveBeenCalledTimes(1);
+      expect(host.querySelector("[role=alert]")?.textContent).toBe(
+        "Computer changed. Refresh files.",
+      );
+      await tick();
+      expect(api[operation]).toHaveBeenCalledTimes(2);
+      if (operation === "list") {
+        await click("Refresh");
+        expect(button("notes.md")).toBeDefined();
+      }
+    },
+  );
+
+  it("shows a safe refresh failure and keeps Refresh usable", async () => {
+    api.list.mockRejectedValueOnce(changed());
+    api.describe.mockRejectedValueOnce(
+      new ORPCError("CONFLICT", { message: "Files are unavailable on this computer." }),
+    );
+    await click("Refresh");
+    expect(host.querySelector("[role=alert]")?.textContent).toBe(
+      "Files are unavailable on this computer.",
+    );
+    expect(api.list).toHaveBeenCalledTimes(2); // initial list plus the failed refresh
+    await click("Refresh");
+    expect(button("notes.md")).toBeDefined();
+  });
+
+  it.each([
+    new ORPCError("CONFLICT", { message: "The computer is busy. Wait for it to finish." }),
+    new ORPCError("BAD_REQUEST", { message: "Computer changed. Refresh files." }),
+    new Error("Computer changed. Refresh files."),
+    new ORPCError("INTERNAL_SERVER_ERROR", { message: "private diagnostic" }),
+  ])("does not retry an unrelated or untrusted failure: %s", async (error) => {
+    api.read.mockRejectedValueOnce(error);
+    await click("notes.md");
+    expect(api.describe).not.toHaveBeenCalled();
+    expect(api.read).toHaveBeenCalledTimes(1);
+    expect(host.querySelector("[role=alert]")?.textContent).toBe(
+      error instanceof ORPCError && error.code !== "INTERNAL_SERVER_ERROR"
+        ? error.message
+        : "Could not load files. Try again.",
+    );
+  });
+
+  it.each([
+    { files: "unavailable" as const },
+    { computerId: "replacement", rootId: "replacement-root" },
+    { rootId: "replacement-root" },
+  ])("does not replay a file read after the binding changes: %s", async (replacement) => {
+    api.read.mockRejectedValueOnce(changed());
+    api.describe.mockResolvedValueOnce({ ...context, generation: 3, ...replacement });
+    await click("notes.md");
+    expect(api.read).toHaveBeenCalledTimes(1);
+    expect(host.querySelector("textarea")).toBeNull();
+    expect(host.querySelector("[role=alert]")).toBeNull();
+    if (replacement.files)
+      expect(host.textContent).toContain("Files are unavailable on this computer.");
+  });
+
+  it.each(["unmount", "bot", "root", "generation"])(
+    "discards a late file response after %s changes",
+    async (change) => {
+      const pending = deferred<Awaited<ReturnType<typeof api.read>>>();
+      api.read.mockReturnValueOnce(pending.promise);
+      await click("notes.md");
+      if (change === "unmount") await act(async () => renderer.render(null));
+      else
+        await show(
+          change === "bot" ? "other" : "bot",
+          change === "root"
+            ? { rootId: "other-root" }
+            : change === "generation"
+              ? { generation: 5 }
+              : {},
+        );
+      await act(async () =>
+        pending.resolve({
+          context,
+          path: "notes.md",
+          content: "late data",
+          size: 9,
+          binary: false,
+          readOnly: false,
+          version,
+        }),
+      );
+      await tick();
+      expect(host.querySelector("textarea")).toBeNull();
+      await show();
+      expect(host.querySelector("textarea")).toBeNull();
+    },
+  );
+
+  it("discards a describe completed after switching bots", async () => {
+    const refresh = deferred<WorkspaceContext>();
+    api.describe.mockReturnValueOnce(refresh.promise);
+    api.read.mockRejectedValueOnce(changed());
+    await click("notes.md");
+    await show("other");
+    await act(async () => refresh.resolve({ ...context, generation: 3 }));
+    await tick();
+    expect(api.read).toHaveBeenCalledTimes(1);
+    expect(host.querySelector("[role=alert]")).toBeNull();
+  });
+});
+
+it("does not replay a location intent when recovery replaces its root", async () => {
+  api.read.mockRejectedValueOnce(changed());
+  api.describe.mockResolvedValueOnce({ ...context, rootId: "replacement-root", generation: 3 });
+  await show("bot", {}, { path: "notes.md", requestId: 1 });
+  expect(api.read).toHaveBeenCalledTimes(1);
+  expect(host.querySelector("textarea")).toBeNull();
+});
+
+it("loads a newer external binding and ignores its old pending directory response", async () => {
+  const pending = deferred<{ entries: { path: string; kind: string; size: number }[] }>();
+  api.list.mockReturnValueOnce(pending.promise);
+  await click("Refresh");
+  api.list.mockResolvedValueOnce({ entries: [{ path: "current.md", kind: "file", size: 5 }] });
+  await show("bot", { generation: 5 });
+  expect(button("current.md")).toBeDefined();
+  await act(async () =>
+    pending.resolve({ entries: [{ path: "obsolete.md", kind: "file", size: 5 }] }),
+  );
+  await tick();
+  expect(button("obsolete.md")).toBeUndefined();
+  expect(button("current.md")).toBeDefined();
 });

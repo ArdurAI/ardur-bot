@@ -33,6 +33,7 @@ type ViewBodyProps = Pick<
   | "onOpenRun"
   | "fileLocation"
   | "changeLocation"
+  | "onContextChange"
 > & {
   context: WorkspaceContext | null;
   visible: boolean;
@@ -73,8 +74,10 @@ export const workspaceViews = {
     icon: Folder,
     available: ({ context }) => Boolean(context?.computerId && context.files !== "unavailable"),
     unavailable: (t) => t(msg`Files are unavailable on this computer.`),
-    render: ({ bot, context, compact, fileLocation }) =>
-      context ? createElement(Files, { bot, context, compact, location: fileLocation }) : null,
+    render: ({ bot, context, compact, fileLocation, onContextChange }) =>
+      context
+        ? createElement(Files, { bot, context, compact, location: fileLocation, onContextChange })
+        : null,
   },
   ide: {
     id: "ide",
@@ -83,8 +86,10 @@ export const workspaceViews = {
     primary: true,
     available: ({ context }) => Boolean(context?.rootId && context.files !== "unavailable"),
     unavailable: (t) => t(msg`Files are unavailable on this computer.`),
-    render: ({ bot, context, compact, fileLocation }) =>
-      context ? createElement(Files, { bot, context, compact, location: fileLocation }) : null,
+    render: ({ bot, context, compact, fileLocation, onContextChange }) =>
+      context
+        ? createElement(Files, { bot, context, compact, location: fileLocation, onContextChange })
+        : null,
   },
   changes: {
     id: "changes",

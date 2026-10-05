@@ -101,4 +101,5 @@ export * from "./thread-message-updates.js";
 export * from "./thread-subscription.js";
 export * from "./tool-activity.js";
 export * from "./work-record.js";
+export * from "./workspace-reads.js";
 export * from "./workspace-tasks.js";
