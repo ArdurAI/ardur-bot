@@ -67,6 +67,7 @@ export default function FilesScreen() {
             { signal: abort.signal },
           );
           if (!abort.signal.aborted && context.botId === botId) {
+            let published = context;
             reads.current = new WorkspaceReads(context, {
               describe: (botId) => rpc<WorkspaceContext>("workspace/describe", { botId }),
               computerChanged: (error) =>
@@ -75,10 +76,12 @@ export default function FilesScreen() {
                 error.message === COMPUTER_CHANGED_MESSAGE,
               publish: (next) => {
                 if (alive.current && currentBot.current === botId) {
+                  const previous = published;
+                  published = next;
                   setWorkspace(next);
                   if (
-                    next.computerId !== context.computerId ||
-                    next.rootId !== context.rootId ||
+                    next.computerId !== previous.computerId ||
+                    next.rootId !== previous.rootId ||
                     next.files === "unavailable"
                   ) {
                     setFile(null);

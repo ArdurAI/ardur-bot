@@ -169,6 +169,61 @@ it.each([
   expect(host.querySelector('[role="alert"]')).toBeNull();
   if (next.files) expect(host.textContent).toContain("Files are unavailable on this computer.");
 });
+it.each([
+  { computerId: "replacement-computer" },
+  { rootId: "replacement-root" },
+  { computerId: "replacement-computer", rootId: "replacement-root" },
+])("keeps the mobile folder and file on a later wake after a target change: %s", async (target) => {
+  const next = { ...context, ...target, generation: 3 };
+  vi.mocked(rpc).mockImplementation(async (name, input) => {
+    if (name === "workspace/describe") {
+      describeCount++;
+      return describeCount === 1 ? context : { ...next, generation: describeCount === 2 ? 3 : 4 };
+    }
+    if (name === "workspace/list") {
+      listCount++;
+      if (listCount === 1) throw changed();
+      const { path } = input as { path: string };
+      return {
+        entries: [
+          path
+            ? { path: "folder/notes.md", kind: "file", size: 5 }
+            : { path: "folder", kind: "dir" },
+        ],
+      };
+    }
+    if (name === "workspace/read") {
+      readCount++;
+      if ((input as { generation: number }).generation !== 4) throw changed();
+      return { path: "folder/notes.md", content: "File contents", binary: false };
+    }
+    throw new Error(`Unexpected procedure ${name}`);
+  });
+  await show();
+  expect(describeCount).toBe(2);
+  await click("folder");
+  expect(listCount).toBe(3);
+  await click("notes.md");
+  expect(describeCount).toBe(3);
+  expect(readCount).toBe(2);
+  expect(host.textContent).toContain("File contents");
+  expect(host.querySelector('[role="alert"]')).toBeNull();
+  expect(vi.mocked(rpc)).toHaveBeenLastCalledWith(
+    "workspace/read",
+    expect.objectContaining({
+      computerId: next.computerId,
+      rootId: next.rootId,
+      generation: 4,
+      path: "folder/notes.md",
+    }),
+  );
+  await click("Back");
+  expect(host.textContent).toContain("notes.md");
+  expect([...host.querySelectorAll("button")].some((button) => button.textContent === "Back")).toBe(
+    true,
+  );
+  expect(listCount).toBe(3);
+});
 it("keeps paired-device files unavailable without describing a workspace", async () => {
   fakes.paired = true;
   await show();
