@@ -982,6 +982,11 @@ describe("instruction file grants", () => {
     root = await realpath(await mkdtemp(path.join(tmpdir(), "codex-grants-")));
     return root;
   };
+  const botProject = async () => {
+    const folder = path.join(await scratch(), "bot");
+    await mkdir(path.join(folder, ".git"), { recursive: true });
+    return folder;
+  };
   const refused = (f: ReturnType<typeof fixture>, runtime: CodexAppServerRuntime) =>
     (async () => {
       for await (const _event of runtime.run(f.request)) {
@@ -1026,8 +1031,7 @@ describe("instruction file grants", () => {
     },
   );
   it("sends the bot's own instructions alone when the folder has no instruction files", async () => {
-    const folder = path.join(await scratch(), "bot");
-    await mkdir(folder, { recursive: true });
+    const folder = await botProject();
     const f = fixture();
     f.request.nativeCwd = folder;
     await f.collect();
@@ -1041,9 +1045,8 @@ describe("instruction file grants", () => {
   it.each(["thread/start", "thread/resume"] as const)(
     "refuses an instruction file that links outside the project for %s",
     async (method) => {
-      const folder = path.join(await scratch(), "bot");
+      const folder = await botProject();
       const vault = path.join(root, "vault");
-      await mkdir(folder, { recursive: true });
       await mkdir(vault, { recursive: true });
       await writeFile(path.join(vault, "secret.txt"), "protected");
       await symlink(path.join(vault, "secret.txt"), path.join(folder, "AGENTS.md"));
@@ -1063,9 +1066,8 @@ describe("instruction file grants", () => {
     },
   );
   it("reads no instruction file for a controlled comparison, even an unsafe one", async () => {
-    const folder = path.join(await scratch(), "bot");
+    const folder = await botProject();
     const vault = path.join(root, "vault");
-    await mkdir(folder, { recursive: true });
     await mkdir(vault, { recursive: true });
     await writeFile(path.join(vault, "secret.txt"), "protected");
     await symlink(path.join(vault, "secret.txt"), path.join(folder, "AGENTS.md"));
