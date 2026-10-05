@@ -2,7 +2,65 @@ import type { AgentUsage } from "@ardurbot/adapter-kit";
 import { RequestUsageCollector } from "@ardurbot/adapter-kit";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
 import { expect, it, vi } from "vitest";
-import { brokerRootTokensBlock, recordRunUsage, recordStandaloneUsage } from "./run-usage.js";
+import {
+  brokerRootTokensBlock,
+  recordFirstReply,
+  recordRunUsage,
+  recordStandaloneUsage,
+} from "./run-usage.js";
+
+it("sets only the first non-empty reply timestamp under exact live authority", async () => {
+  const at = new Date("2030-01-01T00:00:01Z");
+  let stored: Date | null = null;
+  const updateMany = vi.fn(async ({ data }: { data: { firstReplyAt: Date } }) => {
+    if (stored) return { count: 0 };
+    stored = data.firstReplyAt;
+    return { count: 1 };
+  });
+  const prisma = { run: { updateMany } } as unknown as PrismaClient;
+  const run = { id: "run", userId: "owner", spaceId: "space" };
+  const lease = { leaseOwner: "worker", leaseFence: 2 };
+  await recordFirstReply(prisma, run, lease, "");
+  await recordFirstReply(prisma, run, lease, " \n ");
+  expect(updateMany).not.toHaveBeenCalled();
+  await recordFirstReply(prisma, run, lease, "First", at);
+  await recordFirstReply(prisma, run, lease, "Second", new Date("2030-01-01T00:00:02Z"));
+  expect(stored).toEqual(at);
+  expect(updateMany).toHaveBeenNthCalledWith(1, {
+    where: {
+      ...run,
+      ...lease,
+      status: "running",
+      leaseExpiresAt: { gt: at },
+      startedAt: { not: null, lte: at },
+      firstReplyAt: null,
+    },
+    data: { firstReplyAt: at },
+  });
+  expect(JSON.stringify(updateMany.mock.calls)).not.toContain("First");
+});
+
+it("does not overwrite a reply after cancellation or an expired/replaced lease", async () => {
+  const updateMany = vi.fn(async () => ({ count: 0 }));
+  const prisma = { run: { updateMany } } as unknown as PrismaClient;
+  await recordFirstReply(
+    prisma,
+    { id: "run", userId: "owner", spaceId: "space" },
+    { leaseOwner: "old-worker", leaseFence: 1 },
+    "Reply",
+  );
+  expect(updateMany).toHaveBeenCalledWith(
+    expect.objectContaining({
+      where: expect.objectContaining({
+        status: "running",
+        firstReplyAt: null,
+        leaseFence: 1,
+        leaseOwner: "old-worker",
+        leaseExpiresAt: expect.any(Object),
+      }),
+    }),
+  );
+});
 
 it("admits a non-goal coordinator and an admitted worker when ask reservations fill the task", () => {
   expect(

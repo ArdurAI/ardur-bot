@@ -240,6 +240,10 @@ msgstr ""
 msgid "{count} folders"
 msgstr ""
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "{count} measured runs"
+msgstr "{count} ölçülen çalıştırma"
+
 #: src/pages/LearningInsights.tsx
 msgid "{count} runs needed {connection}, which is not connected."
 msgstr ""
@@ -1670,6 +1674,7 @@ msgstr "iptal edildi"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "Cancelled"
 msgstr "İptal edildi"
 
@@ -2168,6 +2173,7 @@ msgstr "Tamamlandı"
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/GroupPanel.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "Completed"
 msgstr "Tamamlandı"
 
@@ -4310,6 +4316,7 @@ msgstr "başarısız"
 #: src/lib/team-delivery-text.ts
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "Failed"
 msgstr "Başarısız"
 
@@ -4423,6 +4430,10 @@ msgstr "MCP bağlantısı tamamlanıyor…"
 #: src/pages/GuidedOnboarding.tsx
 msgid "First bot not created"
 msgstr "İlk bot oluşturulmadı"
+
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "First reply"
+msgstr "İlk yanıt"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Fix"
@@ -5171,6 +5182,10 @@ msgstr ""
 msgid "Language"
 msgstr "Dil"
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Last 7 days"
+msgstr "Son 7 gün"
+
 #: src/pages/LearningCurator.tsx
 msgid "Last check"
 msgstr ""
@@ -5178,6 +5193,10 @@ msgstr ""
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Last checked"
 msgstr ""
+
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Last failure"
+msgstr "Son hata"
 
 #: src/pages/DevicesSettings.tsx
 msgid "Last present"
@@ -6256,8 +6275,9 @@ msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineHistory.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "No runs yet"
-msgstr ""
+msgstr "Henüz çalıştırma yok"
 
 #: src/pages/dashboard/panels.ts
 #: src/pages/dashboard/RoutinesPanel.tsx
@@ -6364,6 +6384,10 @@ msgstr ""
 #: src/pages/board/BoardsSettings.tsx
 msgid "Not initialized"
 msgstr "Başlatılmadı"
+
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Not measured"
+msgstr "Ölçülmedi"
 
 #: src/pages/LearningInbox.tsx
 #: src/pages/shell/message-cards.tsx
@@ -8864,6 +8888,10 @@ msgstr "alt ajan"
 msgid "Submit"
 msgstr "Gönder"
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Success"
+msgstr "Başarı"
+
 #: src/pages/LearningInbox.tsx
 msgid "Suggested content"
 msgstr ""
@@ -9175,6 +9203,10 @@ msgstr ""
 
 #: src/pages/LearningInbox.tsx
 msgid "This board item was completed."
+msgstr ""
+
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "This bot"
 msgstr ""
 
 #: src/pages/shell/provider-error-message.tsx

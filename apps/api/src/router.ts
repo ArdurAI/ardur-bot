@@ -261,7 +261,12 @@ import {
 import { createContextService } from "./context.js";
 import type { RouterContext } from "./customization-routes.js";
 import { createCustomizationRoutes } from "./customization-routes.js";
-import { dashboardNow, routineOverview, usageSummary } from "./dashboard.js";
+import {
+  dashboardNow,
+  routineOverview,
+  runtimeReliabilitySummary,
+  usageSummary,
+} from "./dashboard.js";
 import { getModelDestinations, setModelDestinations } from "./delegation-policy.js";
 import { runEvidenceSummary } from "./evidence.js";
 import { listSpaceFeatures, setSpaceFeature } from "./features.js";
@@ -1149,6 +1154,9 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       }),
     },
     runtimes: {
+      reliability: authed.runtimes.reliability.handler(({ context }) =>
+        runtimeReliabilitySummary(deps.prisma, context.actor),
+      ),
       capabilities: authed.runtimes.capabilities.handler(({ input }) =>
         registeredRuntimeCapabilityReport(input.runtimeKind),
       ),

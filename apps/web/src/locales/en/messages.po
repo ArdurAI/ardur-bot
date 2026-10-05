@@ -240,6 +240,10 @@ msgstr "{connection} rejected its sign-in; {count} runs could not use it."
 msgid "{count} folders"
 msgstr "{count} folders"
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "{count} measured runs"
+msgstr "{count} measured runs"
+
 #: src/pages/LearningInsights.tsx
 msgid "{count} runs needed {connection}, which is not connected."
 msgstr "{count} runs needed {connection}, which is not connected."
@@ -1670,6 +1674,7 @@ msgstr "cancelled"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "Cancelled"
 msgstr "Cancelled"
 
@@ -2168,6 +2173,7 @@ msgstr "Complete"
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/GroupPanel.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "Completed"
 msgstr "Completed"
 
@@ -4310,6 +4316,7 @@ msgstr "failed"
 #: src/lib/team-delivery-text.ts
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "Failed"
 msgstr "Failed"
 
@@ -4423,6 +4430,10 @@ msgstr "Finishing MCP connection…"
 #: src/pages/GuidedOnboarding.tsx
 msgid "First bot not created"
 msgstr "First bot not created"
+
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "First reply"
+msgstr "First reply"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Fix"
@@ -5171,6 +5182,10 @@ msgstr "Labels"
 msgid "Language"
 msgstr "Language"
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Last 7 days"
+msgstr "Last 7 days"
+
 #: src/pages/LearningCurator.tsx
 msgid "Last check"
 msgstr "Last check"
@@ -5178,6 +5193,10 @@ msgstr "Last check"
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Last checked"
 msgstr "Last checked"
+
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Last failure"
+msgstr "Last failure"
 
 #: src/pages/DevicesSettings.tsx
 msgid "Last present"
@@ -6256,6 +6275,7 @@ msgstr "No reviewer model yet."
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineHistory.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "No runs yet"
 msgstr "No runs yet"
 
@@ -6364,6 +6384,10 @@ msgstr "Not in the plugin catalog"
 #: src/pages/board/BoardsSettings.tsx
 msgid "Not initialized"
 msgstr "Not initialized"
+
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Not measured"
+msgstr "Not measured"
 
 #: src/pages/LearningInbox.tsx
 #: src/pages/shell/message-cards.tsx
@@ -8864,6 +8888,10 @@ msgstr "subagent"
 msgid "Submit"
 msgstr "Submit"
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Success"
+msgstr "Success"
+
 #: src/pages/LearningInbox.tsx
 msgid "Suggested content"
 msgstr "Suggested content"
@@ -9176,6 +9204,10 @@ msgstr "This board item was closed."
 #: src/pages/LearningInbox.tsx
 msgid "This board item was completed."
 msgstr "This board item was completed."
+
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "This bot"
+msgstr "This bot"
 
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."

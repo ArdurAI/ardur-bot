@@ -6,6 +6,60 @@ import { captureScreenshot, completeOnboarding, openUserSettings, rpc, signup } 
 const LOCAL_MODEL_ID = "ardurbot-e2e-local";
 const LOCAL_MODEL_REPLY = "OpenAI-compatible endpoint verified end to end.";
 
+test("runtime reliability keeps cancellations separate and textless results unmeasured", async ({
+  page,
+}, testInfo) => {
+  await signup(page, `reliability-${Date.now()}@example.test`, "password12", "Reliability fixture");
+  await completeOnboarding(page);
+  await page.route("**/rpc/runtimes/reliability", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        json: {
+          from: "2030-01-01T00:00:00Z",
+          asOf: "2030-01-08T00:00:00Z",
+          runtimes: [
+            {
+              runtimeKind: "pi",
+              completed: 2,
+              failed: 1,
+              cancelled: 1,
+              successRate: 2 / 3,
+              measuredRuns: 2,
+              firstReplyMedianMs: 2500,
+              lastFailure: { category: "usage-limit", at: "2030-01-08T00:00:00Z" },
+            },
+            {
+              runtimeKind: "codex-app-server",
+              completed: 0,
+              failed: 0,
+              cancelled: 1,
+              successRate: null,
+              measuredRuns: 0,
+              firstReplyMedianMs: null,
+              lastFailure: null,
+            },
+          ],
+        },
+      }),
+    }),
+  );
+  await openUserSettings(page, "models");
+  await page.locator("summary", { hasText: "Last 7 days" }).click();
+  const builtIn = page.getByRole("region", { name: "Ardur", exact: true });
+  await expect(builtIn.getByText("67%", { exact: true })).toBeVisible();
+  await expect(builtIn.getByText("2 measured runs", { exact: true })).toBeVisible();
+  await expect(
+    builtIn.getByText("Ardur's usage limit is reached.", { exact: false }),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: "Codex", exact: true })
+      .getByText("Not measured", { exact: true }),
+  ).toHaveCount(2);
+  await captureScreenshot(page, testInfo, "runtime-reliability");
+});
+
 test("native discovery and cancelled connection preserve the default pin", async ({
   page,
 }, testInfo) => {

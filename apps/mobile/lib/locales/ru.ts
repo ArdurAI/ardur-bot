@@ -1,5 +1,12 @@
 export const RU_MESSAGES: Record<string, string> = {
   "Capability checks": "Проверки возможностей",
+  "Last 7 days": "Последние 7 дней",
+  Success: "Успех",
+  "First reply": "Первый ответ",
+  "{count} measured runs": "Измерено запусков: {count}",
+  "Last failure": "Последний сбой",
+  "No runs yet": "Пока нет запусков",
+  "Not measured": "Не измерено",
   Declared: "Заявлено",
   "Confirmed offline": "Подтверждено офлайн",
   Unsupported: "Не поддерживается",

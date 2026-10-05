@@ -240,6 +240,10 @@ msgstr ""
 msgid "{count} folders"
 msgstr ""
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "{count} measured runs"
+msgstr "{count} execuções medidas"
+
 #: src/pages/LearningInsights.tsx
 msgid "{count} runs needed {connection}, which is not connected."
 msgstr ""
@@ -1670,6 +1674,7 @@ msgstr "cancelado"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "Cancelled"
 msgstr "Cancelado"
 
@@ -2168,6 +2173,7 @@ msgstr "Concluir"
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/GroupPanel.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "Completed"
 msgstr "Concluído"
 
@@ -4310,6 +4316,7 @@ msgstr "falhou"
 #: src/lib/team-delivery-text.ts
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "Failed"
 msgstr "Falha"
 
@@ -4423,6 +4430,10 @@ msgstr "Finalizando conexão MCP…"
 #: src/pages/GuidedOnboarding.tsx
 msgid "First bot not created"
 msgstr "O primeiro bot ainda não foi criado"
+
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "First reply"
+msgstr "Primeira resposta"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Fix"
@@ -5171,6 +5182,10 @@ msgstr ""
 msgid "Language"
 msgstr "Idioma"
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Last 7 days"
+msgstr "Últimos 7 dias"
+
 #: src/pages/LearningCurator.tsx
 msgid "Last check"
 msgstr ""
@@ -5178,6 +5193,10 @@ msgstr ""
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Last checked"
 msgstr ""
+
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Last failure"
+msgstr "Última falha"
 
 #: src/pages/DevicesSettings.tsx
 msgid "Last present"
@@ -6256,8 +6275,9 @@ msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineHistory.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "No runs yet"
-msgstr ""
+msgstr "Nenhuma execução ainda"
 
 #: src/pages/dashboard/panels.ts
 #: src/pages/dashboard/RoutinesPanel.tsx
@@ -6364,6 +6384,10 @@ msgstr ""
 #: src/pages/board/BoardsSettings.tsx
 msgid "Not initialized"
 msgstr "Não inicializado"
+
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Not measured"
+msgstr "Não medido"
 
 #: src/pages/LearningInbox.tsx
 #: src/pages/shell/message-cards.tsx
@@ -8864,6 +8888,10 @@ msgstr "subagente"
 msgid "Submit"
 msgstr "Enviar"
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Success"
+msgstr "Sucesso"
+
 #: src/pages/LearningInbox.tsx
 msgid "Suggested content"
 msgstr ""
@@ -9175,6 +9203,10 @@ msgstr ""
 
 #: src/pages/LearningInbox.tsx
 msgid "This board item was completed."
+msgstr ""
+
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "This bot"
 msgstr ""
 
 #: src/pages/shell/provider-error-message.tsx

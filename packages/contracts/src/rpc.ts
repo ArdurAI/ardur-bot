@@ -195,6 +195,7 @@ import { RoutineRunSchema, RunsListOutputSchema } from "./runs.js";
 import { HermesRuntimeConfigPreviewSchema, RuntimeConfigIssueSchema } from "./runtime-config.js";
 import { RuntimeCapabilityReportSchema } from "./runtime-evidence.js";
 import { RuntimeAvailabilitySchema, RuntimeKindSchema, RuntimePinSchema } from "./runtime-pins.js";
+import { RuntimeReliabilitySchema } from "./runtime-reliability.js";
 import { SearchQueryOutputSchema } from "./search.js";
 import { teamContract } from "./team.js";
 import {
@@ -556,6 +557,7 @@ export const appContract = {
     disconnect: oc.input(z.object({}).optional()).output(z.object({ ok: z.literal(true) })),
   },
   runtimes: {
+    reliability: oc.output(RuntimeReliabilitySchema),
     capabilities: oc
       .input(z.object({ runtimeKind: RuntimeKindSchema }))
       .output(RuntimeCapabilityReportSchema),

@@ -1,5 +1,12 @@
 export const ZH_MESSAGES: Record<string, string> = {
   "Capability checks": "能力检查",
+  "Last 7 days": "过去 7 天",
+  Success: "成功率",
+  "First reply": "首次回复",
+  "{count} measured runs": "{count} 次已测量运行",
+  "Last failure": "最近失败",
+  "No runs yet": "尚无运行",
+  "Not measured": "未测量",
   Declared: "已声明",
   "Confirmed offline": "已离线确认",
   Unsupported: "不支持",
