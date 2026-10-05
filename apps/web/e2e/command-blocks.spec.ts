@@ -1,3 +1,5 @@
+import type { CommandBlock } from "@ardurbot/contracts";
+import { COMMAND_REFUSALS } from "@ardurbot/contracts";
 import { expect, test } from "@playwright/test";
 import { captureScreenshot } from "./helpers";
 
@@ -72,9 +74,38 @@ test("command blocks fold, show inert output, search a run and export a log", as
 });
 
 test("conversation command refusals use the selected language", async ({ page }, testInfo) => {
+  const match: CommandBlock = {
+    commandId: "refused-path-command",
+    runId: "run-1",
+    attemptId: null,
+    executionId: "execution-2",
+    command: "cat ../outside.txt",
+    cwd: "~/work",
+    computerId: null,
+    computer: null,
+    startedAt: null,
+    durationMs: null,
+    exitCode: null,
+    outcome: "cancelled",
+    stdout: null,
+    stderr: null,
+    error: COMMAND_REFUSALS["file-location"],
+    refusalId: "file-location",
+    redacted: false,
+    truncated: false,
+    replayOf: null,
+    rerunDisabledReason: null,
+  };
   await page.route("**/rpc/commands/open", (route) =>
     route.fulfill({ status: 403, json: { code: "FORBIDDEN" } }),
   );
+  await page.route("**/rpc/commands/list", async (route) => {
+    expect(route.request().headers()["x-ardurbot-space-id"]).toBe("space-1");
+    expect(route.request().postDataJSON()).toEqual({
+      json: { runId: "run-1", query: "registered folder" },
+    });
+    await route.fulfill({ json: { json: { blocks: [match] } } });
+  });
   await page.goto("/e2e/fixtures/command-blocks.html?translated");
   const block = page.getByTestId("command-block").first();
   await block.getByRole("button", { name: /Ran/ }).click();
@@ -83,4 +114,15 @@ test("conversation command refusals use the selected language", async ({ page },
   );
   await expect(block.locator("pre")).not.toContainText("This command was not run");
   await captureScreenshot(page, testInfo, "command-refusal-translated");
+  await block.getByLabel("Search run output").fill("registered folder");
+  await block.getByRole("button", { name: "Поиск", exact: true }).click();
+  const result = block.locator("details");
+  await expect(result).toHaveCount(1);
+  await result.locator("summary").click();
+  await expect(result.locator("pre")).toBeVisible();
+  await expect(result.locator("pre")).toContainText(
+    "Используйте путь внутри папки этого бота или зарегистрированной папки.",
+  );
+  await expect(result.locator("pre")).not.toContainText(COMMAND_REFUSALS["file-location"]);
+  await captureScreenshot(page, testInfo, "command-refusal-search-translated");
 });
