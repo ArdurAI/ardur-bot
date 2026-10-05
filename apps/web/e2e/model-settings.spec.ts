@@ -114,7 +114,10 @@ test("native discovery and cancelled connection preserve the default pin", async
     .locator("details")
     .filter({ has: page.locator("summary", { hasText: /^Codex$/ }) });
   await codex.locator("summary", { hasText: "Capability checks" }).click();
-  await expect(codex.getByText("Not tested", { exact: true })).toHaveCount(5);
+  const checks = codex.locator("dl dd");
+  await expect(checks).toHaveCount(5);
+  for (const check of await checks.all()) await expect(check).toContainText("Not tested");
+  await expect(checks.first()).toContainText("Declared");
   await expect(codex.getByText("Confirmed offline", { exact: true })).toHaveCount(0);
   await captureScreenshot(page, testInfo, "runtime-capability-checks");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
