@@ -21,6 +21,7 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { ShowAllModels } from "../components/ShowAllModels";
 import { hermesRefusalMessage } from "../lib/hermes-refusal";
 import { actionMessage } from "../lib/orpc-action-message";
+import { useCanRun } from "../lib/use-can-run";
 import type { ModelSettings } from "../lib/use-model-settings";
 import { ModelEffortSelect, ModelPinSelect } from "./shell/model-pin-select";
 import { RuntimeSettings } from "./shell/runtime-settings";
@@ -119,8 +120,34 @@ export function GroupModelControl({
     setEffort(confirmed?.effort ?? "");
   }, [activeMember?.memberId, activeMember?.modelPinRevision]);
 
+  const canRun = useCanRun(
+    !inherit
+      ? {
+          botId: bot.id,
+          runtimeKind: kind,
+          provider: selectedModel?.provider ?? null,
+          modelId: selectedModel?.modelId ?? null,
+          credentialId: selectedModel?.credentialId ?? null,
+          effort:
+            selectedModel?.provider === "ollama" &&
+            (selectedCredential?.reasoning ?? selectedEntry?.reasoning) === false
+              ? null
+              : effort || (kind === "pi" || kind === "hermes" ? defaultEffort : null),
+          runtimeExperimental: bot.runtimeExperimental ?? false,
+        }
+      : {
+          botId: bot.id,
+          inheritBotPin: true,
+          runtimeKind: bot.runtimeKind ?? "pi",
+          provider: bot.modelProvider ?? null,
+          modelId: bot.modelId ?? null,
+          credentialId: bot.modelCredentialId ?? null,
+          effort: bot.thinkingLevel ?? null,
+        },
+  );
+
   async function save() {
-    if (saveReason || saving) return;
+    if (saveReason || saving || canRun.blocked) return;
     const selected = selectedModel;
     const nextEffort =
       kind === "pi" || kind === "hermes"
@@ -329,6 +356,16 @@ export function GroupModelControl({
           </div>
         </details>
       ) : null}
+      {canRun.error ? (
+        <Button variant="ghost" size="sm" onClick={canRun.recheck}>
+          <Trans>Check again</Trans>
+        </Button>
+      ) : null}
+      {canRun.error ? (
+        <p role="alert" className="mt-2 text-xs text-destructive">
+          {canRun.error}
+        </p>
+      ) : null}
       {error ? (
         <p role="alert" className="mt-2 text-xs text-destructive">
           {error}
@@ -342,7 +379,7 @@ export function GroupModelControl({
       <Button
         size="sm"
         className="mt-2"
-        disabled={saving || Boolean(saveReason)}
+        disabled={saving || Boolean(saveReason) || canRun.blocked}
         aria-describedby={!saving && saveReason ? `${id}-save-reason` : undefined}
         onClick={() => void save()}
       >

@@ -14,6 +14,35 @@ SandboxProvider workspace <-> AgentHomeStore <-> Ardur-owned DATA_DIR
 
 Pi runs in the Ardur API/worker process. It is not installed in, or executed by, E2B. The built-in tools are ordinary Pi tools, not Claude- or MCP-specific tools, so any model exposed through Pi can call them. Screen operation still requires a model that can accept image tool results and reason about screenshots.
 
+## Check settings before Save
+
+Bot settings on web, desktop and mobile, new-bot creation, and group model overrides
+ask the server whether the chosen settings can run. Save stays disabled while the
+check is pending or refused. A refusal shows the same translated sentence as a run.
+The save endpoint checks independently; skipping the preview does not bypass it.
+
+The shared `canBotRun` rule covers Experimental, the computer's actual execution
+kind, bot and space model policies, the exact connected pin and the Hermes model
+context floor. Saved computer connection metadata decides host versus sandbox;
+a client cannot describe an existing sandbox as a host. A sharing change checks
+the existing destination computer before moving, since the Team computer can have
+a different location. Creation checks the final allocated computer inside its
+transaction.
+
+Choosing an experimental runtime visibly turns Experimental on. The person can
+turn it off again. A Codex/sandbox mismatch offers **Move to This computer** using
+the existing confirmation; choosing the runtime never moves files or changes
+access silently. Mobile keeps location changes on desktop and rechecks on return.
+Group overrides cannot secretly enable Experimental on the underlying bot.
+**Same as bot** checks the current saved bot settings too; clearing an override
+cannot knowingly inherit a combination that is refused.
+
+A disconnected default blocks new-bot creation. A valid default stays inherited;
+the check does not select a replacement model, loosen a policy or refresh sign-in
+credentials. Ollama checks use the existing read-only model metadata probe.
+This is a settings check, not a promise that a provider is online or a sign-in will
+remain valid. Runtime selection still checks before each run.
+
 ## Computer contract
 
 ### Location and new-bot defaults

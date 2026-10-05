@@ -61,6 +61,7 @@ import {
   reorderBotTo,
   resolveComposerSendPlan,
   resolveMentionPickerKey,
+  rpcErrorMessage,
   runThreadSubscription,
   searchHitThreadTarget,
   serializeComposerPrompt,
@@ -163,7 +164,6 @@ import {
 } from "../components/composer/folders";
 import { useComposerCommands } from "../components/composer/use-composer-commands";
 import type { FeedbackEdit } from "../components/MessageFeedback";
-
 import { MessageHoverMetadata } from "../components/MessageHoverMetadata";
 import { PeerMessageReceipt } from "../components/PeerMessageReceipt";
 import { SkillDraftCard } from "../components/teach/SkillDraftCard";
@@ -233,6 +233,7 @@ import {
   useTranscriptFollowSnap,
 } from "../lib/transcript-scroll";
 import { whenSpeakerReady, withSpeaker } from "../lib/tts-lazy";
+import { runSettingsMessage } from "../lib/use-can-run";
 import { useModelSettings } from "../lib/use-model-settings";
 import { useNotifications } from "../lib/use-notifications";
 import { workingIndicatorLabel } from "../lib/working-indicator";
@@ -4739,10 +4740,28 @@ export function ShellPage({
               const request = contextBot
                 ? rpc.bots.duplicate({ botId: contextBot.id })
                 : rpc.groups.duplicate({ groupId: contextGroup!.id });
-              void request.then(async (chat) => {
-                await refreshBots();
-                navigate(contextBot ? `/app/${chat.id}` : `/app/g/${chat.id}`);
-              });
+              void request
+                .then(async (chat) => {
+                  await refreshBots();
+                  navigate(contextBot ? `/app/${chat.id}` : `/app/g/${chat.id}`);
+                })
+                .catch((error: unknown) => {
+                  const fallback = t`Could not save. Try again.`;
+                  const safe =
+                    error &&
+                    typeof error === "object" &&
+                    "message" in error &&
+                    typeof error.message === "string"
+                      ? {
+                          message: error.message,
+                          code:
+                            "code" in error && typeof error.code === "string"
+                              ? error.code
+                              : undefined,
+                        }
+                      : { message: fallback };
+                  setSendError(runSettingsMessage(rpcErrorMessage(safe, fallback)));
+                });
             }}
             onClear={() => {
               setClearTarget(
