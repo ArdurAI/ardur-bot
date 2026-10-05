@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true
+  },
+  "include": [
+    "src/product-demo-report.ts",
+    "src/product-demo-report.test.ts",
+    "src/cli/harness.ts",
+    "../../apps/web/e2e/product-demo.spec.ts"
+  ],
+  "exclude": []
+}
