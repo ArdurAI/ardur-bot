@@ -2436,10 +2436,6 @@ msgstr "Bağlanıyor…"
 msgid "Connection"
 msgstr ""
 
-#: src/pages/shell/terminal-session.tsx
-msgid "Connection lost — reconnecting"
-msgstr ""
-
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Connection saved, but the test failed:"
 msgstr "Bağlantı kaydedildi ancak test başarısız oldu:"
@@ -4001,6 +3997,10 @@ msgstr "örn. Hivenet Agent, Presales, puantaj botu"
 #: src/pages/Shell.tsx
 msgid "Earlier message"
 msgstr ""
+
+#: src/pages/shell/terminal-session.tsx
+msgid "Earlier output is unavailable"
+msgstr "Önceki çıktı kullanılamıyor"
 
 #: src/components/Context.tsx
 #: src/pages/board/Board.tsx
@@ -7198,6 +7198,10 @@ msgstr ""
 msgid "Reconnecting"
 msgstr "Yeniden bağlanıyor"
 
+#: src/pages/shell/terminal-session.tsx
+msgid "Reconnecting terminal"
+msgstr "Terminal yeniden bağlanıyor"
+
 #: src/pages/dashboard/GovernancePanel.tsx
 msgid "Record evidence of bot decisions"
 msgstr "Bot kararlarının kanıtlarını kaydet"
@@ -8945,6 +8949,10 @@ msgstr "Terminal {number}"
 #: src/pages/shell/computer-terminal.tsx
 msgid "Terminal could not open; try again"
 msgstr ""
+
+#: src/pages/shell/terminal-session.tsx
+msgid "Terminal expired"
+msgstr "Terminal oturumunun süresi doldu"
 
 #: src/pages/workspace/terminal-controller.ts
 msgid "Terminal is not available on this computer"

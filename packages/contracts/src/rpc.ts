@@ -740,6 +740,7 @@ export const appContract = {
           computerId: Id,
           sessionId: Id.optional(),
           workspace: z.literal("computer").optional(),
+          releaseOnDisconnect: z.boolean().optional(),
         }),
       )
       .output(z.object({ sessionId: Id, ticket: z.string(), path: z.string() })),

@@ -2436,10 +2436,6 @@ msgstr "연결 중…"
 msgid "Connection"
 msgstr ""
 
-#: src/pages/shell/terminal-session.tsx
-msgid "Connection lost — reconnecting"
-msgstr ""
-
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Connection saved, but the test failed:"
 msgstr "연결을 저장했지만 테스트에 실패했습니다:"
@@ -4001,6 +3997,10 @@ msgstr "예: Hivenet Agent, Presales, 근무표 봇"
 #: src/pages/Shell.tsx
 msgid "Earlier message"
 msgstr "이전 메시지"
+
+#: src/pages/shell/terminal-session.tsx
+msgid "Earlier output is unavailable"
+msgstr "이전 출력을 사용할 수 없습니다"
 
 #: src/components/Context.tsx
 #: src/pages/board/Board.tsx
@@ -7198,6 +7198,10 @@ msgstr ""
 msgid "Reconnecting"
 msgstr "다시 연결 중"
 
+#: src/pages/shell/terminal-session.tsx
+msgid "Reconnecting terminal"
+msgstr "터미널에 다시 연결 중"
+
 #: src/pages/dashboard/GovernancePanel.tsx
 msgid "Record evidence of bot decisions"
 msgstr "봇 결정의 증거 기록"
@@ -8945,6 +8949,10 @@ msgstr "터미널 {number}"
 #: src/pages/shell/computer-terminal.tsx
 msgid "Terminal could not open; try again"
 msgstr ""
+
+#: src/pages/shell/terminal-session.tsx
+msgid "Terminal expired"
+msgstr "터미널 세션이 만료되었습니다"
 
 #: src/pages/workspace/terminal-controller.ts
 msgid "Terminal is not available on this computer"

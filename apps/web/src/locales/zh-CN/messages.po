@@ -2436,10 +2436,6 @@ msgstr "正在连接…"
 msgid "Connection"
 msgstr ""
 
-#: src/pages/shell/terminal-session.tsx
-msgid "Connection lost — reconnecting"
-msgstr ""
-
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Connection saved, but the test failed:"
 msgstr "连接已保存，但测试失败："
@@ -4001,6 +3997,10 @@ msgstr "例如 Hivenet Agent、Presales、工时表机器人"
 #: src/pages/Shell.tsx
 msgid "Earlier message"
 msgstr "更早的消息"
+
+#: src/pages/shell/terminal-session.tsx
+msgid "Earlier output is unavailable"
+msgstr "较早的输出不可用"
 
 #: src/components/Context.tsx
 #: src/pages/board/Board.tsx
@@ -7198,6 +7198,10 @@ msgstr ""
 msgid "Reconnecting"
 msgstr "正在重新连接"
 
+#: src/pages/shell/terminal-session.tsx
+msgid "Reconnecting terminal"
+msgstr "正在重新连接终端"
+
 #: src/pages/dashboard/GovernancePanel.tsx
 msgid "Record evidence of bot decisions"
 msgstr "记录机器人决策的证据"
@@ -8945,6 +8949,10 @@ msgstr "终端 {number}"
 #: src/pages/shell/computer-terminal.tsx
 msgid "Terminal could not open; try again"
 msgstr ""
+
+#: src/pages/shell/terminal-session.tsx
+msgid "Terminal expired"
+msgstr "终端会话已过期"
 
 #: src/pages/workspace/terminal-controller.ts
 msgid "Terminal is not available on this computer"

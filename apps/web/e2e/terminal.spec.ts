@@ -174,12 +174,33 @@ test("workspace keeps four distinct terminals and releases only at the final clo
       if (typeof message !== "string") return;
       const payload = JSON.parse(message);
       if (payload.type === "connect") {
-        socket.send(JSON.stringify({ type: "ready", inputSeq: 0 }));
+        socket.send(
+          JSON.stringify({
+            type: "ready",
+            version: 2,
+            inputSeq: 0,
+            reset: payload.reset === true,
+            from: 1,
+            truncated: false,
+            cols: 80,
+            rows: 24,
+          }),
+        );
+        socket.send(
+          JSON.stringify({ type: "replay-size", version: 2, seq: 1, cols: 80, rows: 24 }),
+        );
         socket.send(
           Buffer.from(
             encodeTerminalFrame(1, new TextEncoder().encode(`Process ${payload.ticket}\r\n`)),
           ),
         );
+        socket.send(
+          JSON.stringify({ type: "replay-size", version: 2, seq: 2, cols: 40, rows: 12 }),
+        );
+        socket.send(
+          Buffer.from(encodeTerminalFrame(2, new TextEncoder().encode("After resize\r\n"))),
+        );
+        socket.send(JSON.stringify({ type: "replay-end", version: 2, seq: 2 }));
       }
     });
   });
@@ -199,6 +220,18 @@ test("workspace keeps four distinct terminals and releases only at the final clo
   await pane.getByRole("tab", { name: "Terminal 1", exact: true }).click();
   await expect(pane.locator(".xterm-accessibility-tree:visible")).toContainText("Process tabs-1");
   await captureScreenshot(page, testInfo, "workspace-four-terminals");
+  await page.reload();
+  await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
+  await expect(pane.getByRole("tab", { name: "Terminal 1", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(pane.locator(".xterm-accessibility-tree:visible")).toContainText("Process tabs-1");
+  await expect(pane.locator(".xterm-accessibility-tree:visible")).toContainText("After resize");
+  expect(opened).toBe(4);
+  expect(closed).toEqual([]);
+  expect(releases).toBe(0);
+  await captureScreenshot(page, testInfo, "workspace-restored-terminals");
   await pane.getByRole("button", { name: "Close terminal", exact: true }).nth(1).click();
   await expect(pane.getByRole("tab", { name: "Terminal 2", exact: true })).toHaveCount(0);
   expect(releases).toBe(0);

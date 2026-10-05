@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import type { Bot, ComputerStatus } from "@ardurbot/contracts";
+import { terminalCollectionKey } from "@ardurbot/core";
 import type { ReactNode } from "react";
 import { act, useEffect } from "react";
 import { createRoot } from "react-dom/client";
@@ -16,6 +17,9 @@ const calls = vi.hoisted(() => ({
       computerId: string;
       visible?: boolean;
       onSession?(id: string): void;
+      initialSession?: string;
+      initialSize?: { cols: number; rows: number };
+      shouldDetach?(): boolean;
     }) => null as ReactNode,
   ),
 }));
@@ -98,9 +102,61 @@ afterEach(async () => {
   vi.clearAllMocks();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  window.sessionStorage.clear();
 });
 
 describe("WorkspaceTerminal", () => {
+  it("retains selected server identities on pagehide and restores only the current scope", async () => {
+    calls.session.mockReturnValue(null);
+    await import("./TerminalCollection");
+    const props = baseProps({
+      userId: "owner",
+      bot: { ...bot, spaceId: "space" },
+      computer: computer({ computerGeneration: 2, controlHolder: "user", controlBotId: "bot" }),
+    });
+    await render(props);
+    await act(async () => calls.session.mock.lastCall![0].onSession!("shell-one"));
+    const add = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "New terminal",
+    )!;
+    await act(async () => add.click());
+    await act(async () =>
+      calls.session.mock.calls.findLast(([value]) => value.visible)![0].onSession!("shell-two"),
+    );
+    await act(async () => window.dispatchEvent(new Event("pagehide")));
+    expect(calls.session.mock.lastCall![0].shouldDetach!()).toBe(true);
+    await act(async () => root.unmount());
+    expect(calls.release).not.toHaveBeenCalled();
+    const key = terminalCollectionKey({
+      userId: "owner",
+      spaceId: "space",
+      botId: "bot",
+      computerId: "computer",
+      generation: 2,
+    });
+    const stored = JSON.parse(window.sessionStorage.getItem(key)!);
+    expect(stored.sessions.map((value: { id: string }) => value.id)).toEqual([
+      "shell-one",
+      "shell-two",
+    ]);
+    expect(stored.activeId).toBe("shell-two");
+    root = createRoot(container);
+    calls.session.mockClear();
+    await render(props);
+    expect(calls.session.mock.calls.map(([value]) => value.initialSession)).toEqual([
+      "shell-one",
+      "shell-two",
+    ]);
+    expect(calls.session.mock.calls.find(([value]) => value.visible)![0].initialSession).toBe(
+      "shell-two",
+    );
+    await render({
+      ...props,
+      computer: computer({ computerGeneration: 3, controlHolder: "user", controlBotId: "bot" }),
+    });
+    expect(calls.session.mock.lastCall![0].initialSession).toBeUndefined();
+    expect(window.sessionStorage.getItem(key)).toBeNull();
+  });
   it("keeps four sessions under one grant and confirms only the final close", async () => {
     calls.session.mockReturnValue(null);
     await import("./TerminalCollection");

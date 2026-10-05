@@ -4263,6 +4263,7 @@ export function ShellPage({
                       computer
                         ? {
                             working: composerRunning,
+                            userId,
                             registerCloseGuard: registerTerminalCloseGuard,
                             onTakeControl: async () => {
                               await rpc.computer.takeover({ botId: active.id });

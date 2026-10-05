@@ -1,4 +1,5 @@
 import type { Bot, ComputerStatus } from "@ardurbot/contracts";
+import { terminalCollectionKey } from "@ardurbot/core";
 import { Button } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { lazy, Suspense, useLayoutEffect, useState } from "react";
@@ -26,6 +27,7 @@ export function WorkspaceTerminal({
   onReleased,
   controlsHost,
   registerCloseGuard,
+  userId,
 }: {
   bot: Bot;
   computer: ComputerStatus | null;
@@ -37,8 +39,19 @@ export function WorkspaceTerminal({
   onReleased(): void;
   controlsHost?: HTMLElement | null;
   registerCloseGuard?(guard: (() => boolean) | null): void;
+  userId?: string;
 }) {
   const { t } = useLingui();
+  const storageKey =
+    userId && computer?.computerId && computer.computerGeneration !== undefined
+      ? terminalCollectionKey({
+          userId,
+          spaceId: bot.spaceId,
+          botId: bot.id,
+          computerId: computer.computerId,
+          generation: computer.computerGeneration,
+        })
+      : undefined;
   const controller = useTerminalController({
     botId: bot.id,
     computerId: computer?.computerId,
@@ -53,8 +66,9 @@ export function WorkspaceTerminal({
     onReleased,
     releaseOnLeave: true,
     keepControlWhileHidden: true,
+    preserveOnReload: Boolean(storageKey),
   });
-  const identity = `${bot.id}:${computer?.computerId}:${computer?.computerGeneration ?? "unknown"}`;
+  const identity = `${storageKey ?? "unscoped"}:${bot.id}:${computer?.computerId}:${computer?.computerGeneration ?? "unknown"}`;
   const [opened, setOpened] = useState<string | null>(null);
   if (visible && controller.ready && opened !== identity) setOpened(identity);
   const sessionOpen = opened === identity && controller.ready;
@@ -103,6 +117,8 @@ export function WorkspaceTerminal({
               computerId={computer.computerId}
               visible={visible}
               onCloseLast={controller.release}
+              storageKey={storageKey}
+              releaseOnDisconnect={controller.ownsControl}
             />
           </Suspense>
         </div>

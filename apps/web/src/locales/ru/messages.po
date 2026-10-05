@@ -2436,10 +2436,6 @@ msgstr "Подключение…"
 msgid "Connection"
 msgstr ""
 
-#: src/pages/shell/terminal-session.tsx
-msgid "Connection lost — reconnecting"
-msgstr ""
-
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Connection saved, but the test failed:"
 msgstr "Подключение сохранено, но проверка не прошла:"
@@ -4001,6 +3997,10 @@ msgstr "напр. Hivenet Agent, Presales, бот табелей"
 #: src/pages/Shell.tsx
 msgid "Earlier message"
 msgstr "Предыдущее сообщение"
+
+#: src/pages/shell/terminal-session.tsx
+msgid "Earlier output is unavailable"
+msgstr "Предыдущий вывод недоступен"
 
 #: src/components/Context.tsx
 #: src/pages/board/Board.tsx
@@ -7198,6 +7198,10 @@ msgstr ""
 msgid "Reconnecting"
 msgstr "Повторное подключение"
 
+#: src/pages/shell/terminal-session.tsx
+msgid "Reconnecting terminal"
+msgstr "Повторное подключение к терминалу"
+
 #: src/pages/dashboard/GovernancePanel.tsx
 msgid "Record evidence of bot decisions"
 msgstr "Записывать свидетельства решений ботов"
@@ -8945,6 +8949,10 @@ msgstr "Терминал {number}"
 #: src/pages/shell/computer-terminal.tsx
 msgid "Terminal could not open; try again"
 msgstr ""
+
+#: src/pages/shell/terminal-session.tsx
+msgid "Terminal expired"
+msgstr "Сеанс терминала истёк"
 
 #: src/pages/workspace/terminal-controller.ts
 msgid "Terminal is not available on this computer"

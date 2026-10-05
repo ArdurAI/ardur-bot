@@ -3,26 +3,65 @@ import { TERMINAL_SESSION_LIMIT } from "@ardurbot/contracts";
 import { addTerminalSession, removeTerminalSession } from "@ardurbot/core";
 import { Button, WorkspaceTabs } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { rpc } from "../../lib/rpc";
 import ComputerTerminalSession from "../shell/terminal-session";
+import {
+  clearTerminalCollection,
+  readTerminalCollection,
+  writeTerminalCollection,
+} from "./terminal-state";
 
 export default function TerminalCollection({
   botId,
   computerId,
   visible,
   onCloseLast,
+  storageKey,
+  releaseOnDisconnect = false,
 }: {
   botId: string;
   computerId: string;
   visible: boolean;
   onCloseLast(): void | Promise<void>;
+  storageKey?: string;
+  releaseOnDisconnect?: boolean;
 }) {
   const { t } = useLingui();
-  const [collection, setCollection] = useState<TerminalSessionCollection>(() =>
-    addTerminalSession({ sessions: [], activeId: "" }, crypto.randomUUID()),
+  const [restored] = useState(() => readTerminalCollection(storageKey));
+  const [collection, setCollection] = useState<TerminalSessionCollection>(
+    () => restored ?? addTerminalSession({ sessions: [], activeId: "" }, crypto.randomUUID()),
   );
-  const [serverIds, setServerIds] = useState<Record<string, string>>({});
+  const [serverIds, setServerIds] = useState<Record<string, string>>(() =>
+    Object.fromEntries(restored?.sessions.map((session) => [session.id, session.id]) ?? []),
+  );
+  const initialIds = useRef(new Set(restored?.sessions.map((session) => session.id) ?? []));
+  const reloading = useRef(false);
+  const snapshot = useRef({ collection, serverIds });
+  snapshot.current = { collection, serverIds };
+  useEffect(() => {
+    writeTerminalCollection(storageKey, collection, serverIds);
+  }, [storageKey, collection, serverIds]);
+  useEffect(() => {
+    const save = () =>
+      writeTerminalCollection(storageKey, snapshot.current.collection, snapshot.current.serverIds);
+    const hide = () => {
+      reloading.current = Boolean(storageKey);
+      save();
+    };
+    const show = () => {
+      reloading.current = false;
+    };
+    const timer = setInterval(save, 5_000);
+    window.addEventListener("pagehide", hide);
+    window.addEventListener("pageshow", show);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("pagehide", hide);
+      window.removeEventListener("pageshow", show);
+      if (!reloading.current) clearTerminalCollection(storageKey);
+    };
+  }, [storageKey]);
   const [pending, setPending] = useState(false);
   const closing = useRef(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +73,10 @@ export default function TerminalCollection({
     setError(null);
     try {
       if (collection.sessions.length === 1) {
-        if (window.confirm(t`End this terminal?`)) await onCloseLast();
+        if (window.confirm(t`End this terminal?`)) {
+          clearTerminalCollection(storageKey);
+          await onCloseLast();
+        }
         return;
       }
       if (serverIds[id]) await rpc.terminal.close({ botId, computerId, sessionId: serverIds[id] });
@@ -76,6 +118,7 @@ export default function TerminalCollection({
         ) : null}
       </div>
       <WorkspaceTabs
+        mountAll
         label={t`Terminal`}
         value={collection.activeId}
         onChange={(id) => {
@@ -96,6 +139,30 @@ export default function TerminalCollection({
                 botId={botId}
                 computerId={computerId}
                 visible={visible && collection.activeId === session.id}
+                initialSession={initialIds.current.has(session.id) ? session.id : undefined}
+                initialSize={
+                  session.cols && session.rows
+                    ? { cols: session.cols, rows: session.rows }
+                    : undefined
+                }
+                shouldDetach={() => reloading.current}
+                releaseOnDisconnect={releaseOnDisconnect}
+                onSize={(size) =>
+                  setCollection((current) =>
+                    current.sessions.some(
+                      (entry) =>
+                        entry.id === session.id &&
+                        (entry.cols !== size.cols || entry.rows !== size.rows),
+                    )
+                      ? {
+                          ...current,
+                          sessions: current.sessions.map((entry) =>
+                            entry.id === session.id ? { ...entry, ...size } : entry,
+                          ),
+                        }
+                      : current,
+                  )
+                }
                 onSession={(id) =>
                   setServerIds((current) =>
                     current[session.id] === id ? current : { ...current, [session.id]: id },

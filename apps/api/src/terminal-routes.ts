@@ -22,6 +22,7 @@ export function createTerminalRoutes(deps: {
   prisma: PrismaClient;
   sandbox: SandboxProvider;
   trustedOrigin(origin: string): boolean;
+  disconnected?(grant: TerminalGrant): Promise<void>;
 }) {
   async function owned(actor: Actor, botId: string, computerId: string) {
     await requireMembership(deps.prisma, actor.userId, actor.spaceId);
@@ -57,6 +58,7 @@ export function createTerminalRoutes(deps: {
   const gateway = provider
     ? new TerminalGateway({
         provider,
+        disconnected: deps.disconnected,
         async authorize(grant) {
           const [computer, session] = await Promise.all([
             owned(grant.actor, grant.botId, grant.computerId),
@@ -114,7 +116,13 @@ export function createTerminalRoutes(deps: {
     },
     async ticket(
       actor: Actor,
-      input: { botId: string; computerId: string; sessionId?: string; workspace?: "computer" },
+      input: {
+        botId: string;
+        computerId: string;
+        sessionId?: string;
+        workspace?: "computer";
+        releaseOnDisconnect?: boolean;
+      },
       authSessionId: string | undefined,
       origin: string | undefined,
     ) {
@@ -153,6 +161,7 @@ export function createTerminalRoutes(deps: {
               computerId: computer.id,
               computerGeneration: computer.screenGeneration,
               authSessionId,
+              releaseOnDisconnect: input.releaseOnDisconnect === true && !input.sessionId,
               computer: toComputerRef(computer),
               context: {
                 operationId: "terminal-open",

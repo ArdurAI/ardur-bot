@@ -2436,10 +2436,6 @@ msgstr "कनेक्ट हो रहा है…"
 msgid "Connection"
 msgstr ""
 
-#: src/pages/shell/terminal-session.tsx
-msgid "Connection lost — reconnecting"
-msgstr ""
-
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Connection saved, but the test failed:"
 msgstr "कनेक्शन सहेजा गया, लेकिन जाँच विफल रही:"
@@ -4001,6 +3997,10 @@ msgstr "उदा. Hivenet Agent, Presales, टाइमशीट बॉट"
 #: src/pages/Shell.tsx
 msgid "Earlier message"
 msgstr "पुराना संदेश"
+
+#: src/pages/shell/terminal-session.tsx
+msgid "Earlier output is unavailable"
+msgstr "पहले का आउटपुट उपलब्ध नहीं है"
 
 #: src/components/Context.tsx
 #: src/pages/board/Board.tsx
@@ -7198,6 +7198,10 @@ msgstr ""
 msgid "Reconnecting"
 msgstr "पुनः कनेक्ट हो रहा है"
 
+#: src/pages/shell/terminal-session.tsx
+msgid "Reconnecting terminal"
+msgstr "टर्मिनल से फिर कनेक्ट किया जा रहा है"
+
 #: src/pages/dashboard/GovernancePanel.tsx
 msgid "Record evidence of bot decisions"
 msgstr "बॉट के निर्णयों के साक्ष्य रिकॉर्ड करें"
@@ -8945,6 +8949,10 @@ msgstr "टर्मिनल {number}"
 #: src/pages/shell/computer-terminal.tsx
 msgid "Terminal could not open; try again"
 msgstr ""
+
+#: src/pages/shell/terminal-session.tsx
+msgid "Terminal expired"
+msgstr "टर्मिनल की अवधि समाप्त हो गई"
 
 #: src/pages/workspace/terminal-controller.ts
 msgid "Terminal is not available on this computer"

@@ -36,6 +36,7 @@ it.each([undefined, "computer"] as const)(
         computerId: "computer",
         workspace,
         sessionId: "session",
+        releaseOnDisconnect: undefined,
       });
       expect(fake.close).toHaveBeenCalledWith({
         botId: "bot",
