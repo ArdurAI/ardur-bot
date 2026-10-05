@@ -633,6 +633,25 @@ describe("command recording boundary", () => {
     expect(JSON.stringify(f.events)).not.toContain(credential);
     expect(f.blocks()[0]?.stdout).toBe("password=[Redacted]\nplain");
   });
+  it("hides unregistered alphanumeric credentials in results and recorded output", async () => {
+    const f = fixture([
+      { type: "stdout", data: "password: hun" },
+      { type: "stdout", data: "ter2,\nsecret: mysecretpassword\n" },
+      { type: "stderr", data: "authKey=shortKey" },
+      { type: "exit", code: 0 },
+    ]);
+    expect(await f.invoke()).toMatchObject({
+      stdout: "password: [Redacted],\nsecret: [Redacted]\n",
+      stderr: "authKey=[Redacted]",
+      code: 0,
+    });
+    expect(f.blocks()[0]).toMatchObject({
+      stdout: "password: [Redacted],\nsecret: [Redacted]\n",
+      stderr: "authKey=[Redacted]",
+      redacted: true,
+    });
+    expect(JSON.stringify(f.events)).not.toMatch(/hunter2|mysecretpassword|shortKey/);
+  });
   it("does not persist provider exceptions and rejects changed approval arguments", async () => {
     const credential = randomUUID();
     const f = fixture([], [credential]);

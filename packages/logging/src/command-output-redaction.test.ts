@@ -48,6 +48,20 @@ describe("command output redaction", () => {
   it.each(credentials)("hides credential values: %s", (line, expected) => {
     expect(redactCommandOutput(line!)).toBe(expected);
   });
+  it.each([
+    ["password: hunter2,", "password: [Redacted],"],
+    ["password: mysecretpassword\n", "password: [Redacted]\n"],
+    ["secret=mysecret", "secret=[Redacted]"],
+    ["token: shortToken;", "token: [Redacted];"],
+    ["authKey: shortKey}", "authKey: [Redacted]}"],
+    ["credential: shortCredential]", "credential: [Redacted]]"],
+    ["PASSWORD=hunter2\r\n", "PASSWORD=[Redacted]\r\n"],
+    ["cookie: sessionValue", "cookie: [Redacted]"],
+    ["authorization: opaqueValue", "authorization: [Redacted]"],
+    ["knownSecrets: shortSecret,", "knownSecrets: [Redacted],"],
+  ])("hides ambiguous unquoted credentials: %s", (line, expected) => {
+    expect(redactCommandOutput(line!)).toBe(expected);
+  });
   it.each(sourceLines.filter((line) => line.includes(":")))(
     "keeps shared log, memory and evidence text conservative: %s",
     (line) => {

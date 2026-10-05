@@ -97,7 +97,7 @@ function containerEnd(text: string, start: number): number {
 
 // Command output may contain source. Only bare, plainly executable/type-like values
 // qualify; token-shaped values and quoted strings still follow the conservative path.
-function isCodeValue(text: string, start: number): boolean {
+function isCodeValue(text: string, start: number, key: string): boolean {
   if (/^["'`]/.test(text.slice(start, start + 1))) return false;
   if (/^(?:\$\{[^{}]+\}|\{\{[^{}]+\}\})/.test(text.slice(start))) return true;
   if (/^[{[]/.test(text.slice(start, start + 1))) return false;
@@ -114,7 +114,17 @@ function isCodeValue(text: string, start: number): boolean {
   const identifier = /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*/.exec(rest)?.[0];
   if (!identifier) return false;
   const suffix = rest.slice(identifier.length);
-  return /^(?:\(|\??[ \t]*(?:[,;}\]\r\n]|$))/.test(suffix);
+  if (suffix.startsWith("(")) return true;
+  if (!/^\??[ \t]*(?:[,;}\]\r\n]|$)/.test(suffix)) return false;
+  if (identifier.includes(".")) return true;
+  // A bare word can equally be a YAML/environment credential. Preserve only
+  // explicit type syntax or a named collection reference such as knownSecrets: secrets.
+  return (
+    (/^(?:string|number|boolean|unknown|never|any|void|bigint|symbol|object)$/.test(identifier) &&
+      /^[ \t]*;/.test(suffix)) ||
+    (key === `known${identifier[0]!.toUpperCase()}${identifier.slice(1)}` &&
+      /^(?:secrets|credentials)$/.test(identifier))
+  );
 }
 
 function redactAssignments(text: string, credentialsOnly = false, commandOutput = false): string {
@@ -129,7 +139,7 @@ function redactAssignments(text: string, credentialsOnly = false, commandOutput 
     if (!isSensitiveKey(key) && !privacyKey) continue;
     const start = keys.lastIndex;
     const quote = text[start];
-    if (commandOutput && match[2] === undefined && isCodeValue(text, start)) continue;
+    if (commandOutput && match[2] === undefined && isCodeValue(text, start, key)) continue;
     let end = start;
     let replacement = REDACTED;
     if (quote === '"' || quote === "'" || (commandOutput && quote === "`")) {
