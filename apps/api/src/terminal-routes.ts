@@ -6,7 +6,12 @@ import {
   withComputerAdmission,
 } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
-import { computerCapabilities, TERMINAL_ENDED, TERMINAL_UNAVAILABLE } from "@ardurbot/contracts";
+import {
+  computerCapabilities,
+  TERMINAL_ENDED,
+  TERMINAL_SESSION_LIMIT,
+  TERMINAL_UNAVAILABLE,
+} from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { IsolationError, requireMembership } from "@ardurbot/db";
 import { ORPCError } from "@orpc/server";
@@ -131,16 +136,12 @@ export function createTerminalRoutes(deps: {
               computer.controlBotId !== input.botId
             )
               throw new IsolationError();
-            if (
-              !input.sessionId &&
-              [...gateway.sessions.values()].some(
-                (session) => session.grant.computerId === input.computerId,
-              )
-            )
-              throw new ComputerAdmissionError(
-                "A terminal is already open. Close it before opening another.",
-              );
-            if (!input.sessionId) {
+            const siblings = [...gateway.sessions.values()].filter(
+              (session) => session.grant.computerId === input.computerId,
+            );
+            if (!input.sessionId && siblings.length >= TERMINAL_SESSION_LIMIT)
+              throw new ComputerAdmissionError("Four terminals are already open.");
+            if (!input.sessionId && !siblings.length) {
               computer = await deps.prisma.computer.update({
                 where: { id: computer.id, controlLeaseId: computer.controlLeaseId },
                 data: { controlFence: { increment: 1 } },
