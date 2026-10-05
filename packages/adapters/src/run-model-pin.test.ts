@@ -121,7 +121,7 @@ describe("run pin snapshots", () => {
       id: "same-model",
       baseUrl: "http://127.0.0.1:8080/v1",
       thinkingLevel: "off",
-      contextWindow: 32768,
+      contextWindow: 65536,
       maxTokens: 4096,
     });
     const config = { version: 1 as const, maxProviderRequests: 7, timeoutMs: 42000 };
@@ -668,7 +668,7 @@ it("an unchanged connection resolves without a mismatch (executor delegation / b
     baseUrl: "https://api.example.com",
     apiKey: "test",
     maxTokens: 16384, // True connection capability
-    contextWindow: 32768,
+    contextWindow: 65536,
     thinkingLevel: "off" as const,
     reasoning: false,
     acceptsImages: false,

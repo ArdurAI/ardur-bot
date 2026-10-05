@@ -1165,6 +1165,7 @@ describe("model credential persistence", () => {
     const finish = vi.fn();
     const begin = vi.fn();
     const tx = {
+      bot: { findMany: vi.fn(async () => []) },
       userModelCredential: {
         findFirst: vi.fn().mockResolvedValue(null),
         create: vi.fn().mockImplementation(async ({ data }: { data: { provider: string } }) => ({
