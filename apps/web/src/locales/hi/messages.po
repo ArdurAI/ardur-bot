@@ -1651,6 +1651,10 @@ msgstr "उत्तर रद्द करें"
 msgid "Cancel sign-in"
 msgstr ""
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Cancellation"
+msgstr "रद्द करना"
+
 #: src/pages/LearningObservation.tsx
 msgid "Cancellations"
 msgstr ""
@@ -1672,6 +1676,10 @@ msgstr "रद्द किया गया"
 #: src/pages/settings-sections.ts
 msgid "Capabilities"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Capability checks"
+msgstr "क्षमता जाँच"
 
 #: src/pages/group-model-control.tsx
 msgid "Captured for this group."
@@ -2294,6 +2302,10 @@ msgstr "पासवर्ड की पुष्टि करें"
 #: src/pages/DevicesSettings.tsx
 msgid "Confirm the phone fingerprint here before allowing it."
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Confirmed offline"
+msgstr "ऑफ़लाइन पुष्टि की गई"
 
 #. placeholder {0}: conflict.path
 #: src/pages/GitMemorySettings.tsx
@@ -3550,6 +3562,10 @@ msgstr ""
 #: src/pages/RoutineSchedule.tsx
 msgid "days"
 msgstr "दिन"
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Declared"
+msgstr "घोषित"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Decline"
@@ -4959,6 +4975,10 @@ msgstr "इंस्टेंस API कुंजी"
 #: src/pages/RoutineEditor.tsx
 msgid "Instruction"
 msgstr "निर्देश"
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Instruction delivery"
+msgstr "निर्देशों का वितरण"
 
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/import/LocalImportPage.tsx
@@ -6381,6 +6401,10 @@ msgstr "सील नहीं"
 msgid "Not set up"
 msgstr ""
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Not tested"
+msgstr "जाँचा नहीं गया"
+
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Not used"
 msgstr ""
@@ -7480,6 +7504,10 @@ msgstr ""
 #: src/pages/settings-support-links.tsx
 msgid "Report an issue"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Report is for another version"
+msgstr "रिपोर्ट दूसरे संस्करण के लिए है"
 
 #: src/pages/TeamBoard.tsx
 msgid "Reported met"
@@ -8823,6 +8851,10 @@ msgstr "एन्क्रिप्टेड रूप में संग्र
 msgid "Stored securely. Never shown here."
 msgstr "सुरक्षित रूप से संग्रहीत। यहां कभी नहीं दिखाया जाता।"
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Streaming"
+msgstr "स्ट्रीमिंग"
+
 #: src/pages/Shell.tsx
 msgid "subagent"
 msgstr "सबएजेंट"
@@ -9436,6 +9468,10 @@ msgstr "{name} को रुकने के लिए कहा"
 msgid "Tool access mode"
 msgstr ""
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Tool authorization"
+msgstr "टूल प्राधिकरण"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Tool sources"
 msgstr "टूल स्रोत"
@@ -9548,6 +9584,7 @@ msgstr ""
 #: src/components/ai/CompactWorkRecord.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/LearningCurator.tsx
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Unknown"
 msgstr "अज्ञात"
@@ -9574,6 +9611,10 @@ msgstr "पिन हटाएं"
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Unsaved changes"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Unsupported"
+msgstr "समर्थित नहीं"
 
 #. placeholder {0}: pending.file.name
 #: src/pages/Shell.tsx
@@ -9683,6 +9724,7 @@ msgstr ""
 #: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/settings-sections.ts
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
 msgid "Usage"
 msgstr "उपयोग"
 

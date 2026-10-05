@@ -56,6 +56,13 @@ test("native discovery and cancelled connection preserve the default pin", async
     .filter({ hasText: /^Codex$/ })
     .click();
   await expect(page.getByText("Fixture native", { exact: true })).toBeVisible();
+  const codex = page
+    .locator("details")
+    .filter({ has: page.locator("summary", { hasText: /^Codex$/ }) });
+  await codex.locator("summary", { hasText: "Capability checks" }).click();
+  await expect(codex.getByText("Not tested", { exact: true })).toHaveCount(5);
+  await expect(codex.getByText("Confirmed offline", { exact: true })).toHaveCount(0);
+  await captureScreenshot(page, testInfo, "runtime-capability-checks");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(page.getByRole("link", { name: "Continue with ChatGPT" })).toBeVisible();
   await captureScreenshot(page, testInfo, "native-models-connection");

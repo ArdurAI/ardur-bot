@@ -1651,6 +1651,10 @@ msgstr "Yanıtı iptal et"
 msgid "Cancel sign-in"
 msgstr ""
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Cancellation"
+msgstr "İptal"
+
 #: src/pages/LearningObservation.tsx
 msgid "Cancellations"
 msgstr ""
@@ -1672,6 +1676,10 @@ msgstr "İptal edildi"
 #: src/pages/settings-sections.ts
 msgid "Capabilities"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Capability checks"
+msgstr "Yetenek kontrolleri"
 
 #: src/pages/group-model-control.tsx
 msgid "Captured for this group."
@@ -2294,6 +2302,10 @@ msgstr "Parolayı doğrulayın"
 #: src/pages/DevicesSettings.tsx
 msgid "Confirm the phone fingerprint here before allowing it."
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Confirmed offline"
+msgstr "Çevrimdışı doğrulandı"
 
 #. placeholder {0}: conflict.path
 #: src/pages/GitMemorySettings.tsx
@@ -3550,6 +3562,10 @@ msgstr ""
 #: src/pages/RoutineSchedule.tsx
 msgid "days"
 msgstr "gün"
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Declared"
+msgstr "Beyan edilen"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Decline"
@@ -4959,6 +4975,10 @@ msgstr "Instance API anahtarı"
 #: src/pages/RoutineEditor.tsx
 msgid "Instruction"
 msgstr "Talimat"
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Instruction delivery"
+msgstr "Talimat iletimi"
 
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/import/LocalImportPage.tsx
@@ -6381,6 +6401,10 @@ msgstr "Mühürlenmedi"
 msgid "Not set up"
 msgstr ""
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Not tested"
+msgstr "Test edilmedi"
+
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Not used"
 msgstr ""
@@ -7480,6 +7504,10 @@ msgstr ""
 #: src/pages/settings-support-links.tsx
 msgid "Report an issue"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Report is for another version"
+msgstr "Rapor başka bir sürüm için"
 
 #: src/pages/TeamBoard.tsx
 msgid "Reported met"
@@ -8823,6 +8851,10 @@ msgstr "Şifreli saklanıyor"
 msgid "Stored securely. Never shown here."
 msgstr "Güvenle saklanır. Burada gösterilmez."
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Streaming"
+msgstr "Akış"
+
 #: src/pages/Shell.tsx
 msgid "subagent"
 msgstr "alt ajan"
@@ -9436,6 +9468,10 @@ msgstr "{name} için durma talimatı verildi"
 msgid "Tool access mode"
 msgstr ""
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Tool authorization"
+msgstr "Araç yetkilendirmesi"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Tool sources"
 msgstr "Araç kaynakları"
@@ -9548,6 +9584,7 @@ msgstr ""
 #: src/components/ai/CompactWorkRecord.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/LearningCurator.tsx
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Unknown"
 msgstr "Bilinmiyor"
@@ -9574,6 +9611,10 @@ msgstr "Sabitlemeyi kaldır"
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Unsaved changes"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Unsupported"
+msgstr "Desteklenmiyor"
 
 #. placeholder {0}: pending.file.name
 #: src/pages/Shell.tsx
@@ -9683,6 +9724,7 @@ msgstr ""
 #: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/settings-sections.ts
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
 msgid "Usage"
 msgstr "Kullanım"
 

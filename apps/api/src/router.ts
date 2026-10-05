@@ -93,6 +93,7 @@ import {
   provisionComputer,
   pullOllamaModel,
   queueComputerUpdate,
+  registeredRuntimeCapabilityReport,
   releaseComputerExecutionLease,
   replaceComputer,
   resolveAutoReviewChecker,
@@ -1148,6 +1149,9 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       }),
     },
     runtimes: {
+      capabilities: authed.runtimes.capabilities.handler(({ input }) =>
+        registeredRuntimeCapabilityReport(input.runtimeKind),
+      ),
       availability: authed.runtimes.availability.handler(async ({ context, input }) => {
         if (input.runtimeKind === "hermes") {
           const bot = input.botId ? await repos.getBot(context.actor, input.botId) : null;

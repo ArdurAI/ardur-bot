@@ -60,6 +60,7 @@ export * from "./room-policy.js";
 export type * from "./rpc.js";
 export * from "./rpc-error.js";
 export * from "./runs.js";
+export * from "./runtime-evidence.js";
 export * from "./runtime-pins.js";
 export * from "./runtime-placement.js";
 export * from "./scoreboard-trace.js";

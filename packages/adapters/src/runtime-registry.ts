@@ -10,6 +10,7 @@ import {
   computerRunsOnHost,
   failureCategoryMessage,
   nativeRuntimeHealthKeys,
+  runtimeCapabilityReport,
   runtimeNames,
   runtimePinProblem,
   runtimeSupportsLocation,
@@ -17,16 +18,40 @@ import {
 } from "@ardurbot/contracts";
 import type { BrokerScope, HermesProviderBroker } from "./hermes-provider-broker.js";
 import { setHermesProviderStream } from "./hermes-provider-broker.js";
-import { catalogModels } from "./pi-runtime.js";
+import { catalogModels, PiAgentRuntime } from "./pi-runtime.js";
 import { RemoteHostRuntime } from "./remote-host-runtime.js";
 import { createHostClient, usesHostBridge } from "./remote-host-sandbox.js";
 import { AntigravityRuntime, probeAntigravity } from "./runtimes/antigravity-runtime.js";
 import { ClaudeCodeRuntime, probeClaude } from "./runtimes/claude-code-runtime.js";
 import { CodexAppServerRuntime, probeCodex } from "./runtimes/codex-app-server-runtime.js";
 
-type RuntimeEntry = { factory: () => AgentRuntime; probe: () => Promise<RuntimeAvailability> };
+type RuntimeEntry = {
+  factory: () => AgentRuntime;
+  probe: () => Promise<RuntimeAvailability>;
+  evidence?: unknown;
+};
 export class RuntimeRegistry {
   constructor(private readonly entries: Partial<Record<RuntimeKind, RuntimeEntry>>) {}
+  capabilityReport(kind: RuntimeKind, runtimeVersion: string | null = null) {
+    const entry = this.entries[kind];
+    if (!entry) throw new Error("Runtime is not registered");
+    const descriptor = entry.factory().describe();
+    const capabilities = descriptor.capabilities;
+    return runtimeCapabilityReport({
+      runtimeKind: kind,
+      adapterId: descriptor.id,
+      adapterVersion: descriptor.adapterVersion,
+      runtimeVersion,
+      evidence: entry.evidence,
+      declared: {
+        streaming: capabilities.streaming,
+        instructions: capabilities.instructions,
+        cancellation: capabilities.cancellation,
+        "tool-authorization": capabilities.toolAuthorization,
+        usage: capabilities.usage,
+      },
+    });
+  }
   async resolve(
     pin: RuntimePin,
     computerLocation?: string | RuntimeComputerLocation,
@@ -163,6 +188,13 @@ export function createRuntimeRegistry(
   setHermesProviderStream((model, context, options) =>
     catalogModels().streamSimple(model, context, options),
   );
+  return new RuntimeRegistry(runtimeEntries(pi, brokerForTurn));
+}
+
+function runtimeEntries(
+  pi: AgentRuntime,
+  brokerForTurn?: Parameters<typeof createRuntimeRegistry>[1],
+) {
   const client = usesHostBridge() ? createHostClient() : undefined;
   const claude = client ? new RemoteHostRuntime(client, "claude-code") : new ClaudeCodeRuntime();
   const codex = client
@@ -174,7 +206,7 @@ export function createRuntimeRegistry(
   const hermes = client
     ? new RemoteHostRuntime(client, "hermes", brokerForTurn)
     : new LocalHermesRuntime(brokerForTurn);
-  return new RuntimeRegistry({
+  return {
     pi: {
       factory: () => pi,
       probe: async () => ({
@@ -197,7 +229,12 @@ export function createRuntimeRegistry(
       factory: () => hermes,
       probe: () => nativeRuntimeAvailability("hermes"),
     },
-  });
+  } satisfies Partial<Record<RuntimeKind, RuntimeEntry>>;
+}
+
+/** Metadata only: no availability probe, health request, model call or runtime launch. */
+export function registeredRuntimeCapabilityReport(kind: RuntimeKind) {
+  return new RuntimeRegistry(runtimeEntries(new PiAgentRuntime())).capabilityReport(kind);
 }
 
 export async function nativeRuntimeAvailability(

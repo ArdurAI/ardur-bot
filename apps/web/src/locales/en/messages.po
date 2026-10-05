@@ -1651,6 +1651,10 @@ msgstr "Cancel reply"
 msgid "Cancel sign-in"
 msgstr "Cancel sign-in"
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Cancellation"
+msgstr "Cancellation"
+
 #: src/pages/LearningObservation.tsx
 msgid "Cancellations"
 msgstr "Cancellations"
@@ -1672,6 +1676,10 @@ msgstr "Cancelled"
 #: src/pages/settings-sections.ts
 msgid "Capabilities"
 msgstr "Capabilities"
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Capability checks"
+msgstr "Capability checks"
 
 #: src/pages/group-model-control.tsx
 msgid "Captured for this group."
@@ -2294,6 +2302,10 @@ msgstr "Confirm password"
 #: src/pages/DevicesSettings.tsx
 msgid "Confirm the phone fingerprint here before allowing it."
 msgstr "Confirm the phone fingerprint here before allowing it."
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Confirmed offline"
+msgstr "Confirmed offline"
 
 #. placeholder {0}: conflict.path
 #: src/pages/GitMemorySettings.tsx
@@ -3550,6 +3562,10 @@ msgstr "Day-to-day work"
 #: src/pages/RoutineSchedule.tsx
 msgid "days"
 msgstr "days"
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Declared"
+msgstr "Declared"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Decline"
@@ -4959,6 +4975,10 @@ msgstr "Instance API key"
 #: src/pages/RoutineEditor.tsx
 msgid "Instruction"
 msgstr "Instruction"
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Instruction delivery"
+msgstr "Instruction delivery"
 
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/import/LocalImportPage.tsx
@@ -6381,6 +6401,10 @@ msgstr "Not sealed"
 msgid "Not set up"
 msgstr "Not set up"
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Not tested"
+msgstr "Not tested"
+
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Not used"
 msgstr "Not used"
@@ -7480,6 +7504,10 @@ msgstr "Replying to {replyName}: “{replyQuote}”"
 #: src/pages/settings-support-links.tsx
 msgid "Report an issue"
 msgstr "Report an issue"
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Report is for another version"
+msgstr "Report is for another version"
 
 #: src/pages/TeamBoard.tsx
 msgid "Reported met"
@@ -8823,6 +8851,10 @@ msgstr "Stored encrypted"
 msgid "Stored securely. Never shown here."
 msgstr "Stored securely. Never shown here."
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Streaming"
+msgstr "Streaming"
+
 #: src/pages/Shell.tsx
 msgid "subagent"
 msgstr "subagent"
@@ -9436,6 +9468,10 @@ msgstr "Told {name} to stand down"
 msgid "Tool access mode"
 msgstr "Tool access mode"
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Tool authorization"
+msgstr "Tool authorization"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Tool sources"
 msgstr "Tool sources"
@@ -9548,6 +9584,7 @@ msgstr "Uninstall"
 #: src/components/ai/CompactWorkRecord.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/LearningCurator.tsx
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Unknown"
 msgstr "Unknown"
@@ -9574,6 +9611,10 @@ msgstr "Unpin"
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Unsaved changes"
 msgstr "Unsaved changes"
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Unsupported"
+msgstr "Unsupported"
 
 #. placeholder {0}: pending.file.name
 #: src/pages/Shell.tsx
@@ -9683,6 +9724,7 @@ msgstr "Uploaded files"
 #: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/settings-sections.ts
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
 msgid "Usage"
 msgstr "Usage"
 

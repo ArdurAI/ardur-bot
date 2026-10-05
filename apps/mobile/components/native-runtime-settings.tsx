@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useI18n } from "../lib/i18n";
 import { useMobileTokens } from "../lib/native";
+import { RuntimeCapabilityChecks } from "./runtime-capability-checks";
 import { RuntimeSettings } from "./runtime-settings";
 
 const unchanged = () => undefined;
@@ -23,6 +24,8 @@ export function NativeRuntimeSettings() {
       {expanded ? (
         <>
           <Text style={{ color: tokens.mutedForeground }}>{t("Set up on the home device")}</Text>
+          <Text style={{ color: tokens.foreground }}>{runtimeNames.pi}</Text>
+          <RuntimeCapabilityChecks kind="pi" />
           {(Object.keys(nativeRuntimeProviders) as (keyof typeof nativeRuntimeProviders)[]).map(
             (kind) => (
               <View key={kind}>
@@ -39,6 +42,7 @@ export function NativeRuntimeSettings() {
                   effort=""
                   onEffort={unchanged}
                 />
+                <RuntimeCapabilityChecks kind={kind} />
               </View>
             ),
           )}

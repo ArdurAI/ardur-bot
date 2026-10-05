@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
   testOllama: vi.fn(),
   connect: vi.fn(),
   availability: vi.fn(),
+  capabilities: vi.fn(),
   connectCodex: vi.fn(),
   connectStatus: vi.fn(),
   cancelConnect: vi.fn(),
@@ -177,6 +178,40 @@ async function expandNativeRuntime() {
     panel.dispatchEvent(new Event("toggle"));
   });
 }
+
+it("reveals declared capabilities without starting a runtime check or sign-in", async () => {
+  api.availability.mockResolvedValue({
+    runtimeKind: "codex-app-server",
+    available: true,
+    models: [],
+  });
+  api.capabilities.mockResolvedValue({
+    version: 1,
+    runtimeKind: "codex-app-server",
+    adapterId: "fixture",
+    adapterVersion: "1",
+    runtimeVersion: null,
+    evidenceMode: "not-tested",
+    versionMismatch: false,
+    checks: [{ behavior: "streaming", declared: true, verdict: "not-tested" }],
+  });
+  await render();
+  await expandNativeRuntime();
+  expect(api.capabilities).not.toHaveBeenCalled();
+  const details = [...container.querySelectorAll("details")].find(
+    (entry) => entry.querySelector("summary")?.textContent === "Capability checks",
+  )!;
+  await act(async () => {
+    details.open = true;
+    details.dispatchEvent(new Event("toggle"));
+  });
+  expect(api.capabilities).toHaveBeenCalledWith({ runtimeKind: "codex-app-server" });
+  expect(details.textContent).toContain("Declared");
+  expect(details.textContent).toContain("Not tested");
+  expect(details.textContent).not.toContain("Confirmed offline");
+  expect(api.availability).toHaveBeenCalledTimes(1);
+  expect(api.connectCodex).not.toHaveBeenCalled();
+});
 
 it("discovers native models without a bot or changing pins, and cancels owner setup", async () => {
   api.me.mockResolvedValue({

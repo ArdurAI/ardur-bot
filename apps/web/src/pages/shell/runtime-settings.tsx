@@ -5,6 +5,7 @@ import { Button, NativeSelect, NativeSelectOption, Switch } from "@ardurbot/ui-w
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useId, useRef, useState } from "react";
 import { rpc } from "../../lib/rpc";
+import { RuntimeCapabilityChecks } from "../settings/RuntimeCapabilityChecks";
 
 /** Give up on a started install when no installing or ready status shows up in time. */
 const HERMES_INSTALL_TIMEOUT_MS = 90_000;
@@ -449,6 +450,7 @@ export function RuntimeSettings({
               </p>
             </>
           ) : null}
+          <RuntimeCapabilityChecks key={kind} kind={kind} />
         </>
       ) : null}
     </div>

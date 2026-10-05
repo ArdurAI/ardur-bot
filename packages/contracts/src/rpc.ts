@@ -193,6 +193,7 @@ import { ExportDownloadSchema } from "./privacy.js";
 import { FeedbackReasonSchema, MessageReactionSchema } from "./reactions.js";
 import { RoutineRunSchema, RunsListOutputSchema } from "./runs.js";
 import { HermesRuntimeConfigPreviewSchema, RuntimeConfigIssueSchema } from "./runtime-config.js";
+import { RuntimeCapabilityReportSchema } from "./runtime-evidence.js";
 import { RuntimeAvailabilitySchema, RuntimeKindSchema, RuntimePinSchema } from "./runtime-pins.js";
 import { SearchQueryOutputSchema } from "./search.js";
 import { teamContract } from "./team.js";
@@ -555,6 +556,9 @@ export const appContract = {
     disconnect: oc.input(z.object({}).optional()).output(z.object({ ok: z.literal(true) })),
   },
   runtimes: {
+    capabilities: oc
+      .input(z.object({ runtimeKind: RuntimeKindSchema }))
+      .output(RuntimeCapabilityReportSchema),
     availability: oc
       .input(
         z.object({

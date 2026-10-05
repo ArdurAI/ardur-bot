@@ -1651,6 +1651,10 @@ msgstr "Antwort abbrechen"
 msgid "Cancel sign-in"
 msgstr ""
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Cancellation"
+msgstr "Abbruch"
+
 #: src/pages/LearningObservation.tsx
 msgid "Cancellations"
 msgstr ""
@@ -1672,6 +1676,10 @@ msgstr "Abgebrochen"
 #: src/pages/settings-sections.ts
 msgid "Capabilities"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Capability checks"
+msgstr "Fähigkeitsprüfungen"
 
 #: src/pages/group-model-control.tsx
 msgid "Captured for this group."
@@ -2294,6 +2302,10 @@ msgstr "Passwort bestätigen"
 #: src/pages/DevicesSettings.tsx
 msgid "Confirm the phone fingerprint here before allowing it."
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Confirmed offline"
+msgstr "Offline bestätigt"
 
 #. placeholder {0}: conflict.path
 #: src/pages/GitMemorySettings.tsx
@@ -3550,6 +3562,10 @@ msgstr ""
 #: src/pages/RoutineSchedule.tsx
 msgid "days"
 msgstr "Tage"
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Declared"
+msgstr "Deklariert"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Decline"
@@ -4959,6 +4975,10 @@ msgstr "Instanz-API-Schlüssel"
 #: src/pages/RoutineEditor.tsx
 msgid "Instruction"
 msgstr "Anweisung"
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Instruction delivery"
+msgstr "Übermittlung von Anweisungen"
 
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/import/LocalImportPage.tsx
@@ -6381,6 +6401,10 @@ msgstr "Nicht versiegelt"
 msgid "Not set up"
 msgstr ""
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Not tested"
+msgstr "Nicht getestet"
+
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Not used"
 msgstr ""
@@ -7480,6 +7504,10 @@ msgstr ""
 #: src/pages/settings-support-links.tsx
 msgid "Report an issue"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Report is for another version"
+msgstr "Bericht gilt für eine andere Version"
 
 #: src/pages/TeamBoard.tsx
 msgid "Reported met"
@@ -8823,6 +8851,10 @@ msgstr "Verschlüsselt gespeichert"
 msgid "Stored securely. Never shown here."
 msgstr "Sicher gespeichert. Hier nie angezeigt."
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Streaming"
+msgstr "Streaming"
+
 #: src/pages/Shell.tsx
 msgid "subagent"
 msgstr "Subagent"
@@ -9436,6 +9468,10 @@ msgstr "{name} zum Aufhören aufgefordert"
 msgid "Tool access mode"
 msgstr ""
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Tool authorization"
+msgstr "Werkzeugautorisierung"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Tool sources"
 msgstr "Toolquellen"
@@ -9548,6 +9584,7 @@ msgstr ""
 #: src/components/ai/CompactWorkRecord.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/LearningCurator.tsx
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Unknown"
 msgstr "Unbekannt"
@@ -9574,6 +9611,10 @@ msgstr "Lösen"
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Unsaved changes"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Unsupported"
+msgstr "Nicht unterstützt"
 
 #. placeholder {0}: pending.file.name
 #: src/pages/Shell.tsx
@@ -9683,6 +9724,7 @@ msgstr ""
 #: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/settings-sections.ts
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
 msgid "Usage"
 msgstr "Nutzung"
 
