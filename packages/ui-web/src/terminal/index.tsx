@@ -107,6 +107,7 @@ export default function ComputerTerminal({
       received = 0,
       inputSeq = 0,
       ready = false;
+    let admitted = false;
     let fresh = true,
       replaying = false;
     let rendering = Promise.resolve();
@@ -230,6 +231,7 @@ export default function ComputerTerminal({
             return;
           }
           sessionId = granted.sessionId;
+          admitted = true;
           return granted;
         });
         if (!grant || disposed) return;
@@ -377,7 +379,9 @@ export default function ComputerTerminal({
       disposed = true;
       ready = false;
       const detach = detachRef.current?.() === true;
-      if (sessionId && !detach) void serialize(() => closeSession(sessionId!)).catch(() => {});
+      // A restored id is not owned until admission; StrictMode cleanup must not end it.
+      if (sessionId && admitted && !detach)
+        void serialize(() => closeSession(sessionId!)).catch(() => {});
       clearInterval(heartbeat);
       clearTimeout(retry);
       clearTimeout(resize);

@@ -162,53 +162,62 @@ it("fits after reveal without remounting or stealing focus while hidden", async 
   renderer.input("echo stopped\n");
   expect(send).not.toHaveBeenCalled();
 });
-it("opens once through StrictMode setup/cleanup and closes a late grant before another admission", async () => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  vi.stubGlobal(
-    "ResizeObserver",
-    class {
-      observe() {}
-      disconnect() {}
-    },
-  );
-  vi.stubGlobal(
-    "WebSocket",
-    class {
-      static OPEN = 1;
-      readyState = 0;
-      close() {}
-    },
-  );
-  let resolve!: (ticket: TerminalTicket) => void;
-  const ticket = vi.fn(
-    () =>
-      new Promise<TerminalTicket>((done) => {
-        resolve = done;
-      }),
-  );
-  const close = vi.fn(async () => {});
-  const host = document.createElement("div");
-  document.body.append(host);
-  const root = createRoot(host);
-  try {
-    await act(async () =>
-      root.render(
-        <StrictMode>
-          <ComputerTerminal ticket={ticket} close={close} labels={labels} />
-        </StrictMode>,
-      ),
+it.each([undefined, "restored"])(
+  "opens %s once through StrictMode setup/cleanup and closes a late grant before another admission",
+  async (initialSession) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        disconnect() {}
+      },
     );
-    expect(ticket).toHaveBeenCalledOnce();
-    await act(async () => root.unmount());
-    await act(async () =>
-      resolve({ sessionId: "first", ticket: "ticket", path: "/api/terminal/socket" }),
+    vi.stubGlobal(
+      "WebSocket",
+      class {
+        static OPEN = 1;
+        readyState = 0;
+        close() {}
+      },
     );
-    expect(close).toHaveBeenCalledExactlyOnceWith("first");
-  } finally {
-    await act(async () => root.unmount());
-    host.remove();
-  }
-});
+    let resolve!: (ticket: TerminalTicket) => void;
+    const ticket = vi.fn(
+      () =>
+        new Promise<TerminalTicket>((done) => {
+          resolve = done;
+        }),
+    );
+    const close = vi.fn(async () => {});
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    try {
+      await act(async () =>
+        root.render(
+          <StrictMode>
+            <ComputerTerminal
+              ticket={ticket}
+              close={close}
+              labels={labels}
+              initialSession={initialSession}
+            />
+          </StrictMode>,
+        ),
+      );
+      expect(ticket).toHaveBeenCalledOnce();
+      expect(close).not.toHaveBeenCalled();
+      await act(async () => root.unmount());
+      await act(async () =>
+        resolve({ sessionId: "first", ticket: "ticket", path: "/api/terminal/socket" }),
+      );
+      expect(close).toHaveBeenCalledExactlyOnceWith("first");
+    } finally {
+      await act(async () => root.unmount());
+      host.remove();
+    }
+  },
+);
 
 it("keeps one admission when the terminal's translated label changes", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
