@@ -44,6 +44,24 @@ when those apply, and the sentences older builds stored verbatim. Readers map st
 English text back to its id with `failureCategoryFromText`; anything unknown shows the
 consumer's generic line, never a wrong category.
 
+## Settings checks
+
+`canBotRun` in the adapter package is used both by runtime selection and by
+`models.validatePin`. The editor, bot save and group override save reuse the same
+placement, connection, locality and context predicates. Duplicates recheck the copied
+pin inside the creation transaction against the final bot and computer, so legacy
+impossible settings are not copied into a fresh bot. Settings failures reuse
+this table's sentences rather than introducing separate editor wording. An
+unknown transport error stays generic and leaves Save disabled.
+
+Bot and space destination-policy saves check the affected bots' saved or inherited
+model endpoints through the same locality predicate, without live model probes.
+Space refusals identify the bots whose models need changing. Policy edits check only
+the destination rule being changed, so relaxing a policy does not revalidate unrelated
+legacy runtime settings. Unchanged Ollama pins are checked without contacting their
+server. Changed Ollama pins retain discovery checks; an unavailable server gives a
+retryable precondition sentence, not an invalid-settings refusal.
+
 ## Adding a category
 
 1. Add one entry to `FAILURE_CATEGORIES` (id, default English sentence, action, optional

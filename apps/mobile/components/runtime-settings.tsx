@@ -41,6 +41,7 @@ export function RuntimeSettings({
   const [login, setLogin] = useState<ModelOAuthBegin | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
+  const [experimentalAdjusted, setExperimentalAdjusted] = useState(false);
   useEffect(() => {
     setAvailability(null);
     setError(null);
@@ -112,7 +113,9 @@ export function RuntimeSettings({
                   text: t(runtimeLabels[value]),
                   onPress: () => {
                     onKind(value);
-                    onExperimental(value === "hermes");
+                    const enable = value !== "pi" && !experimental;
+                    if (enable) onExperimental(true);
+                    setExperimentalAdjusted(enable);
                     if (!["pi", "hermes"].includes(kind) || !["pi", "hermes"].includes(value)) {
                       onModel("");
                       onEffort("");
@@ -139,6 +142,11 @@ export function RuntimeSettings({
                 onValueChange={onExperimental}
               />
             </View>
+          ) : null}
+          {experimentalAdjusted && experimental ? (
+            <Text accessibilityLiveRegion="polite" style={{ color: tokens.mutedForeground }}>
+              {t("Experimental turned on for this runtime")}
+            </Text>
           ) : null}
           {availability && kind !== "hermes" ? (
             <Text style={{ color: tokens.mutedForeground }}>

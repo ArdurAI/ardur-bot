@@ -10,18 +10,37 @@ import { MAIN_WINDOW_SHOW_FALLBACK_MS, showMainWindowWhenPainted } from "./main-
 import { managedLocalOpenUrl, parseSetupInput } from "./setup-config.js";
 import { systemSenderAllowed } from "./system/install.js";
 import { UnsavedFiles } from "./unsaved-files.js";
-import { windowBackgroundColor } from "./window-options.js";
+import { browserWindowOptions, windowBackgroundColor } from "./window-options.js";
+import type { WindowPlace } from "./window-place.js";
+import {
+  createWindowPlaceQuitWait,
+  restoreWindowPlace,
+  watchWindowPlace,
+  windowWithRestoredState,
+} from "./window-place.js";
 
 class WindowFake extends EventEmitter {
-  constructor(readonly options: { backgroundColor?: string } = {}) {
+  constructor(readonly options: { backgroundColor?: string; show?: boolean } = {}) {
     super();
+    this.visible = options.show !== false;
   }
   destroyed = false;
   webContents = Object.assign(new EventEmitter(), { setWindowOpenHandler: vi.fn() });
-  hide = vi.fn();
-  show = vi.fn();
+  visible = true;
+  hide = vi.fn(() => {
+    this.visible = false;
+  });
+  show = vi.fn(() => {
+    this.visible = true;
+    this.emit("show");
+  });
   focus = vi.fn();
-  isVisible = () => true;
+  getNormalBounds = () => ({ x: 150, y: 120, width: 1000, height: 700 });
+  isMaximized = () => false;
+  isFullScreen = () => false;
+  isVisible = () => this.visible;
+  maximize = vi.fn();
+  setFullScreen = vi.fn();
   isDestroyed = () => this.destroyed;
   destroy() {
     this.destroyed = true;
@@ -67,6 +86,7 @@ function fixture() {
     Menu: { getApplicationMenu: () => null },
     watchAppShortcutMenu: vi.fn(),
     syncAppShortcutMenu: vi.fn(),
+    staysRunning: () => false,
     quitting: false,
     warmWindowTimer: undefined,
     clearTimeout: vi.fn(),
@@ -81,7 +101,22 @@ function fixture() {
     __dirname: "/fixture",
     process: { platform: "linux", env: {} },
     developmentIcon: () => undefined,
-    browserWindowOptions: () => ({}),
+    browserWindowOptions,
+    screen: {
+      getDisplayMatching: () => ({ id: 1 }),
+      getPrimaryDisplay: () => ({ id: 1 }),
+      getAllDisplays: () => [
+        {
+          id: 1,
+          bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+          workArea: { x: 0, y: 0, width: 1920, height: 1040 },
+        },
+      ],
+    },
+    windowPlace: undefined as { current: WindowPlace; save: ReturnType<typeof vi.fn> } | undefined,
+    restoreWindowPlace,
+    watchWindowPlace,
+    windowWithRestoredState,
     windowBackgroundColor,
     bootSnapshot: undefined as { current: { theme: string; language: string } } | undefined,
     nativeTheme: { shouldUseDarkColors: true },
@@ -778,6 +813,9 @@ describe("quitting while local mode runs", () => {
       mainWindow: new WindowFake() as WindowFake | null,
       unsavedFiles: new UnsavedFiles<WindowFake>(),
       dialog: { showMessageBoxSync: vi.fn(() => 0) },
+      windowPlace: undefined,
+      windowPlaceQuitWait: undefined,
+      createWindowPlaceQuitWait,
       legacyCompose: false,
       guidedEngine: null,
       guidedIpcCleanup: null,
@@ -941,5 +979,189 @@ describe("main window ready-to-show wiring", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("main window placement wiring", () => {
+  it("passes restored normal bounds into the real createWindow before any reveal", async () => {
+    const f = fixture();
+    f.windowPlace = {
+      save: vi.fn().mockResolvedValue(undefined),
+      current: {
+        x: 150,
+        y: 120,
+        width: 1000,
+        height: 700,
+        maximized: true,
+        fullScreen: true,
+        displayId: 1,
+      },
+    };
+    expect(await f.openAppOnce(url)).toBe(true);
+    expect(f.mainWindow!.options).toMatchObject({
+      x: 150,
+      y: 120,
+      width: 1000,
+      height: 700,
+      show: false,
+    });
+    expect(f.mainWindow!.maximize).not.toHaveBeenCalled();
+    expect(f.mainWindow!.setFullScreen).not.toHaveBeenCalled();
+    expect(f.showMainWindowWhenPainted).toHaveBeenCalledOnce();
+  });
+
+  it("opens safely after the saved display is unplugged", async () => {
+    const f = fixture();
+    f.windowPlace = {
+      save: vi.fn().mockResolvedValue(undefined),
+      current: {
+        x: 9000,
+        y: 120,
+        width: 1000,
+        height: 700,
+        maximized: false,
+        fullScreen: false,
+        displayId: 2,
+      },
+    };
+    expect(await f.openAppOnce(url)).toBe(true);
+    expect(f.mainWindow!.options).toMatchObject({
+      x: 240,
+      y: 70,
+      width: 1440,
+      height: 900,
+      show: false,
+    });
+  });
+});
+
+describe("main placement lifecycle regressions", () => {
+  it("captures the current main window on close through the production watcher", async () => {
+    const f = fixture();
+    f.windowPlace = {
+      current: {
+        x: 150,
+        y: 120,
+        width: 1000,
+        height: 700,
+        maximized: false,
+        fullScreen: false,
+        displayId: 1,
+      },
+      save: vi.fn().mockResolvedValue(undefined),
+    };
+    await f.openAppOnce(url);
+    f.mainWindow!.emit("close", { preventDefault: vi.fn() });
+    expect(f.windowPlace.save).toHaveBeenCalledExactlyOnceWith(f.windowPlace.current);
+  });
+
+  it.each(["ready-to-show", "fallback", "activation"])(
+    "applies saved maximized state at first %s reveal",
+    async (trigger) => {
+      vi.useFakeTimers();
+      try {
+        const f = fixture();
+        f.showMainWindowWhenPainted = showMainWindowWhenPainted;
+        f.windowPlace = {
+          current: {
+            x: 150,
+            y: 120,
+            width: 1000,
+            height: 700,
+            maximized: true,
+            fullScreen: false,
+            displayId: 1,
+          },
+          save: vi.fn().mockResolvedValue(undefined),
+        };
+        await f.openAppOnce(url);
+        const win = f.mainWindow!;
+        expect(win.maximize).not.toHaveBeenCalled();
+        expect(win.show).not.toHaveBeenCalled();
+        if (trigger === "ready-to-show") win.emit("ready-to-show");
+        if (trigger === "fallback") vi.advanceTimersByTime(MAIN_WINDOW_SHOW_FALLBACK_MS);
+        if (trigger === "activation") win.show();
+        expect(win.isVisible()).toBe(true);
+        expect(win.maximize).toHaveBeenCalledOnce();
+        win.emit("ready-to-show");
+        vi.advanceTimersByTime(MAIN_WINDOW_SHOW_FALLBACK_MS);
+        expect(win.maximize).toHaveBeenCalledOnce();
+        win.emit("closed");
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it("awaits placement load in the actual startup callback before dispatching windows", async () => {
+    // Run the real callback only as far as host installation. No Electron or service starts.
+    const source = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+    const prefix = "const startup = app.whenReady().then(";
+    const startIndex = source.indexOf(prefix);
+    expect(startIndex).toBeGreaterThan(-1);
+    const endIndex = source.indexOf("\n});", startIndex);
+    expect(endIndex).toBeGreaterThan(startIndex);
+    const callback = source.slice(startIndex + prefix.length, endIndex + 2);
+    let finish!: () => void;
+    const saved = {
+      x: 150,
+      y: 120,
+      width: 1000,
+      height: 700,
+      maximized: true,
+      fullScreen: false,
+      displayId: 1,
+    };
+    const store = {
+      current: null as WindowPlace | null,
+      load: vi.fn(async () => {
+        await new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+        store.current = saved;
+      }),
+    };
+    const reached = new Error("startup boundary reached");
+    const installHostService = vi.fn(() => {
+      throw reached;
+    });
+    const context = {
+      app: { getPath: () => "/fixture" },
+      process: { argv: [] },
+      installSmokeProgress: undefined,
+      registerIntegrationProtocol: vi.fn(),
+      installCustomizationIpc: vi.fn(),
+      installDesktopNotifications: vi.fn(),
+      installDockBadge: vi.fn(),
+      WindowPlaceStore: class {
+        get current() {
+          return store.current;
+        }
+        load = store.load;
+      },
+      windowPlace: undefined,
+      windowPlaceQuitWait: undefined,
+      createWindowPlaceQuitWait,
+      dockBadge: undefined,
+      hostService: undefined,
+      installHostService,
+      localModeOwns: vi.fn(),
+      LocalFolders: class {},
+      localFoldersFile: vi.fn(),
+    };
+    const start = vm.runInNewContext(
+      stripTypeScriptTypes(`(${callback})`.replaceAll("import.meta.dirname", '"/fixture"')),
+      context,
+    ) as () => Promise<void>;
+    const pending = start();
+    const stopped = expect(pending).rejects.toBe(reached);
+    expect(store.load).toHaveBeenCalledOnce();
+    expect(installHostService).not.toHaveBeenCalled();
+    expect(store.current).toBeNull();
+    finish();
+    await stopped;
+    expect(installHostService).toHaveBeenCalledOnce();
+    expect(context.windowPlace).toMatchObject({ current: saved, load: store.load });
+    expect(store.current).toEqual(saved);
   });
 });

@@ -54,6 +54,7 @@ export function RuntimeSettings({
   }, [kind, botId, allowConnect]);
   const [error, setError] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
+  const [experimentalAdjusted, setExperimentalAdjusted] = useState(false);
   const [pendingInstall, setPendingInstall] = useState(false);
   const [installFailed, setInstallFailed] = useState(false);
   const installLock = useRef(false);
@@ -207,7 +208,9 @@ export function RuntimeSettings({
             onChange={(event) => {
               const next = event.target.value as RuntimeKind;
               onKind(next);
-              if (!experimentalReadOnly) onExperimental(next === "hermes");
+              const enable = !experimentalReadOnly && next !== "pi" && !experimental;
+              if (enable) onExperimental(true);
+              setExperimentalAdjusted(enable);
               if (!["pi", "hermes"].includes(kind) || !["pi", "hermes"].includes(next)) {
                 onModel("");
                 onEffort("");
@@ -236,6 +239,11 @@ export function RuntimeSettings({
               />
               <Trans>Experimental</Trans>
             </label>
+          ) : null}
+          {experimentalAdjusted && experimental ? (
+            <p role="status" className="text-sm text-muted-foreground">
+              <Trans>Experimental turned on for this runtime</Trans>
+            </p>
           ) : null}
           {availability && kind !== "hermes" ? (
             <p role="status" className="text-sm text-muted-foreground">
@@ -321,7 +329,14 @@ export function RuntimeSettings({
               {error}
             </p>
           ) : null}
-          <Button variant="ghost" size="sm" onClick={() => setRefresh((value) => value + 1)}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setRefresh((value) => value + 1);
+              window.dispatchEvent(new Event("fleet:changed"));
+            }}
+          >
             <Trans>Check again</Trans>
           </Button>
           {allowConnect &&

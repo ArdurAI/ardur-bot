@@ -42,6 +42,7 @@ import {
   bumpMcpServerRevision,
   CodexConnections,
   ComputerBusyError,
+  canBotRun,
   cancelComputerRunWork,
   checkpointAndRecordComputerWorkspace,
   clearInactiveUserComputerControl,
@@ -96,6 +97,7 @@ import {
   registeredRuntimeCapabilityReport,
   releaseComputerExecutionLease,
   replaceComputer,
+  requestedBotPin,
   resolveAutoReviewChecker,
   resolveBotWorkspacePath,
   revokeScreenControl,
@@ -119,6 +121,7 @@ import type {
   ComputerStatus,
   Me,
   RuntimeAvailability,
+  RuntimeKind,
   SpaceNavigation,
 } from "@ardurbot/contracts";
 import {
@@ -267,7 +270,11 @@ import {
   runtimeReliabilitySummary,
   usageSummary,
 } from "./dashboard.js";
-import { getModelDestinations, setModelDestinations } from "./delegation-policy.js";
+import {
+  getModelDestinations,
+  setModelDestinations,
+  validateDefaultModelDestinations,
+} from "./delegation-policy.js";
 import { runEvidenceSummary } from "./evidence.js";
 import { listSpaceFeatures, setSpaceFeature } from "./features.js";
 import {
@@ -310,7 +317,11 @@ import {
 } from "./memory-provider-config.js";
 import { memoryContext, memoryRpc } from "./memory-routes.js";
 import { createChannelPairing } from "./messaging-dispatch.js";
-import { validateModelPinSelection } from "./model-pin-validation.js";
+import {
+  botRunComputerLocation,
+  validateBotCanRun,
+  validateModelPinSelection,
+} from "./model-pin-validation.js";
 import { notificationActivity } from "./notification-activity.js";
 import { ollamaConnection, ollamaStatus } from "./ollama.js";
 import {
@@ -1338,7 +1349,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     },
     models: {
       validatePin: authed.models.validatePin.handler(async ({ context, input }) => {
-        await validateModelPinSelection(deps, context.actor, input);
+        await validateBotCanRun(deps, context.actor, input, input);
         return { ok: true };
       }),
       list: authed.models.list.handler(async ({ context }) => {
@@ -1561,12 +1572,13 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                   message: `No model credential is connected for ${input.provider}.`,
                 });
               }
-              await selectSpaceModelPreference(
-                tx,
+              const modelId = usableModelId(input.modelId) ?? defaultCatalogModelId(input.provider);
+              await validateDefaultModelDestinations(
+                { ...deps, prisma: tx as PrismaClient },
                 context.actor,
-                credential.id,
-                usableModelId(input.modelId) ?? defaultCatalogModelId(input.provider),
+                { provider: input.provider, modelId, credentialId: credential.id },
               );
+              await selectSpaceModelPreference(tx, context.actor, credential.id, modelId);
             },
             { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
           ),
@@ -1614,7 +1626,23 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       }),
       create: authed.bots.create.handler(async ({ context, input }) => {
         try {
-          return await repos.createBot(context.actor, input);
+          return await repos.createBot(context.actor, {
+            ...input,
+            onCreated: async (tx, botId) => {
+              await validateBotCanRun(
+                { ...deps, prisma: tx as PrismaClient },
+                context.actor,
+                {
+                  runtimeKind: "pi",
+                  provider: null,
+                  modelId: null,
+                  credentialId: null,
+                  effort: null,
+                },
+                { botId },
+              );
+            },
+          });
         } catch (error) {
           if (
             error instanceof NewBotTeamLocationConflictError ||
@@ -1639,6 +1667,12 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       }),
       duplicate: authed.bots.duplicate.handler(async ({ context, input }) => {
         const source = await repos.getBot(context.actor, input.botId);
+        // Refuse the source with the same run sentence before legacy container guards.
+        // The creation hook still checks the final allocated computer inside the transaction.
+        await validateBotCanRun(deps, context.actor, requestedBotPin(source), {
+          botId: source.id,
+          inheritBotPin: true,
+        });
         const sourceKind = computerExecutionKind(
           await runtimeComputerLocation(deps.prisma, source.computer),
         );
@@ -1672,6 +1706,14 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                 ? null
                 : decodeHistoricalHermesRuntimeConfig(source.runtimeConfig),
             runtimeExperimental: source.runtimeExperimental,
+            onCreated: async (tx, botId) => {
+              await validateBotCanRun(
+                { ...deps, prisma: tx as PrismaClient },
+                context.actor,
+                requestedBotPin(source),
+                { botId, inheritBotPin: true },
+              );
+            },
           })
           .catch((error: unknown) => {
             if (
@@ -1734,7 +1776,58 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           });
           if (!section) throw new IsolationError();
         }
-        const modelPinUpdate = await botModelPinUpdate(deps, context.actor, existing, input);
+        const policies =
+          (input.runtimeKind ?? existing.runtimeKind) === "hermes"
+            ? {
+                botPolicy: existing.allowedModelDestinations,
+                spacePolicy: (
+                  await deps.prisma.space.findUnique({ where: { id: context.actor.spaceId } })
+                )?.allowedModelDestinations,
+              }
+            : undefined;
+        const modelPinUpdate = await botModelPinUpdate(
+          deps,
+          context.actor,
+          existing,
+          input,
+          policies,
+        );
+        if (
+          [
+            "runtimeKind",
+            "runtimeExperimental",
+            "modelProvider",
+            "modelId",
+            "thinkingLevel",
+            "modelCredentialId",
+            "runtimeConfig",
+          ].some((key) => key in input)
+        ) {
+          await validateBotCanRun(
+            deps,
+            context.actor,
+            {
+              runtimeKind: (modelPinUpdate.runtimeKind ?? existing.runtimeKind) as RuntimeKind,
+              provider: (modelPinUpdate.modelProvider === undefined
+                ? existing.modelProvider
+                : modelPinUpdate.modelProvider) as string | null,
+              modelId: (modelPinUpdate.modelId === undefined
+                ? existing.modelId
+                : modelPinUpdate.modelId) as string | null,
+              credentialId: (modelPinUpdate.modelCredentialId === undefined
+                ? existing.modelCredentialId
+                : modelPinUpdate.modelCredentialId) as string | null,
+              effort: (modelPinUpdate.thinkingLevel === undefined
+                ? existing.thinkingLevel
+                : modelPinUpdate.thinkingLevel) as string | null,
+            },
+            {
+              botId: existing.id,
+              runtimeExperimental: input.runtimeExperimental,
+              ollamaSelectionValidated: modelPinUpdate.modelProvider === "ollama",
+            },
+          );
+        }
         const configSave = prepareRuntimeConfigSave(
           existing,
           input,
@@ -1795,6 +1888,28 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         if (currentMode === input.mode) {
           return repos.setBotComputer(context.actor, bot.id, input.mode);
         }
+        const placementProblem = canBotRun({
+          pin: {
+            runtimeKind: bot.runtimeKind as RuntimeKind,
+            provider: bot.modelProvider,
+            modelId: bot.modelId,
+            credentialId: bot.modelCredentialId,
+            effort: bot.thinkingLevel,
+            revision: bot.modelPinRevision,
+          },
+          placement: {
+            computer: await botRunComputerLocation(
+              deps,
+              context.actor,
+              bot.computer,
+              bot.id,
+              input.mode,
+            ),
+            experimental: bot.runtimeExperimental,
+          },
+        });
+        if (placementProblem)
+          throw new ORPCError("BAD_REQUEST", { message: placementProblem.reason });
         const claimed = await deps.prisma.$transaction(async (tx) => {
           await tx.$queryRaw`SELECT id FROM computers WHERE id = ${bot.computerId} FOR UPDATE`;
           return tx.bot.updateMany({
@@ -6349,7 +6464,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         getModelDestinations(deps.prisma, context.actor, input.botId),
       ),
       setPolicy: authed.delegations.setPolicy.handler(({ context, input }) =>
-        setModelDestinations(deps.prisma, context.actor, input),
+        setModelDestinations(deps, context.actor, input),
       ),
       protectedLocations: authed.delegations.protectedLocations.handler(({ context, input }) =>
         getProtectedLocations(deps.prisma, context.actor, input.botId),

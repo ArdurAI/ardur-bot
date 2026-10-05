@@ -32,7 +32,20 @@ function fixture({
 } = {}) {
   const upsert = vi.fn(async ({ create }) => ({ id: "computer", ...create }));
   const create = vi.fn(async ({ data }) => ({ id: "bot", ...data }));
+  const credential = {
+    id: "connection",
+    userId: "owner",
+    provider: "openai-compatible",
+    label: "Fixture",
+    secretId: "secret",
+  };
   const prisma = {
+    space: { findUnique: vi.fn(async () => ({ allowedModelDestinations: { mode: "any" } })) },
+    userModelCredential: { findFirst: vi.fn(async () => credential) },
+    spaceModelPreference: {
+      findFirst: vi.fn(async () => ({ credential, modelId: "fixture-model", isDefault: true })),
+    },
+    secret: { findFirst: vi.fn(async () => ({ id: "secret", ciphertext: "fixture" })) },
     deploymentSettings: { findUnique: vi.fn(async () => ({ ownerUserId: "owner", computerHost })) },
     connection: {
       findMany: vi.fn(async () => []),
@@ -45,7 +58,11 @@ function fixture({
     computer: { upsert, findFirst: vi.fn(async () => team) },
     bot: {
       aggregate: vi.fn(async () => ({ _max: { position: 0 } })),
-      findFirst: vi.fn(),
+      findFirst: vi.fn(async () => ({
+        id: "bot",
+        runtimeExperimental: false,
+        computer: { kind: "desktop", spaceId: "space", connectionId: null },
+      })),
       create,
       findFirstOrThrow: vi.fn(async () => ({
         id: "bot",
@@ -80,6 +97,15 @@ function fixture({
     prisma: prisma as unknown as PrismaClient,
     hostBridge,
     env: { sandboxProvider },
+    secrets: {
+      load: () =>
+        JSON.stringify({
+          kind: "openai_compatible",
+          baseUrl: "http://localhost:8080/v1",
+          reasoning: false,
+          thinkingLevel: "off",
+        }),
+    },
   } as RouterDeps;
   const handler = new RPCHandler(createRouter(deps));
   async function call(procedure: string, input: unknown) {
@@ -170,11 +196,19 @@ it.each([
   ["none", null, "none"],
   ["unknown", null, "fake"],
 ] as const)(
-  "duplicates the source Team sandbox despite a usable host: %s / %s",
+  "preserves a supported source Team sandbox or refuses an unusable one: %s / %s",
   async (kind, connectionId, sandboxProvider) => {
     const computer = { id: "team", kind, connectionId, spaceId: "space", scope: "team" };
     const f = fixture({ team: computer, sandboxProvider });
     f.prisma.bot.findFirst.mockResolvedValue({
+      id: "source",
+      userId: f.actor.userId,
+      spaceId: f.actor.spaceId,
+      modelProvider: null,
+      modelId: null,
+      modelCredentialId: null,
+      thinkingLevel: null,
+      runtimeExperimental: false,
       name: "Source",
       title: "",
       description: "",
@@ -185,8 +219,14 @@ it.each([
       runtimeKind: "pi",
     } as never);
     const result = await f.call("bots/duplicate", { botId: "source" });
-    expect(result.status, JSON.stringify(result.body)).toBe(200);
-    expect(f.create.mock.calls[0]![0].data.computerId).toBe("team");
+    const unusable = kind === "none" || kind === "unknown";
+    expect(result.status, JSON.stringify(result.body)).toBe(unusable ? 400 : 200);
+    if (unusable) {
+      expect(JSON.stringify(result.body)).toContain("Change this bot's computer to use it.");
+      expect(f.prisma.browserProfile.create).not.toHaveBeenCalled();
+    }
+    if (unusable) expect(f.create).not.toHaveBeenCalled();
+    else expect(f.create.mock.calls[0]![0].data.computerId).toBe("team");
     expect(f.upsert).not.toHaveBeenCalled();
   },
 );
@@ -196,6 +236,14 @@ it.each(["host", "conflict"])("maps the duplicate %s refusal", async (refusal) =
     team: { id: "team", kind: "desktop", connectionId: null },
   });
   f.prisma.bot.findFirst.mockResolvedValue({
+    id: "source",
+    userId: f.actor.userId,
+    spaceId: f.actor.spaceId,
+    modelProvider: null,
+    modelId: null,
+    modelCredentialId: null,
+    thinkingLevel: null,
+    runtimeExperimental: false,
     name: "Source",
     title: "",
     description: "",
@@ -481,6 +529,14 @@ it("a non-owner duplicate cannot reach the host Team computer", async () => {
     actor: { ...owner, userId: "member", isDeploymentOwner: false },
   });
   f.prisma.bot.findFirst.mockResolvedValue({
+    id: "source",
+    userId: f.actor.userId,
+    spaceId: f.actor.spaceId,
+    modelProvider: null,
+    modelId: null,
+    modelCredentialId: null,
+    thinkingLevel: null,
+    runtimeExperimental: false,
     name: "Source",
     title: "",
     description: "",
