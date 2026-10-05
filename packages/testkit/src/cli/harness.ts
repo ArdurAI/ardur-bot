@@ -408,7 +408,7 @@ async function main() {
       await writeSummary(reportDir, {
         ok: true,
         mode,
-        ...(productDemoWritten
+        ...(productDemoWritten && productDemoDirectory
           ? {
               productDemo: {
                 file: path.join(productDemoDirectory, "product-demo.json"),
