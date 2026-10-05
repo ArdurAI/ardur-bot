@@ -21,6 +21,7 @@ const api = hasDb ? await import("../../../apps/api/src/app.ts") : undefined;
 
 describeIntegration("run executor lifecycle", () => {
   let handles: Awaited<ReturnType<typeof createApp>>;
+  const activeRuns = new Set<string>();
   const dataDir = mkdtempSync(path.join(tmpdir(), "ardurbot-executor-lifecycle-"));
   const stamp = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
@@ -34,9 +35,41 @@ describeIntegration("run executor lifecycle", () => {
       defaultProvider: "scripted",
       defaultModel: "scripted",
     });
+    const continueRun = handles.executor.continueRun.bind(handles.executor);
+    vi.spyOn(handles.executor, "continueRun").mockImplementation(async (runId, workerId) => {
+      activeRuns.add(runId);
+      try {
+        return await continueRun(runId, workerId);
+      } finally {
+        activeRuns.delete(runId);
+      }
+    });
   });
 
   afterAll(async () => {
+    console.info(
+      "teardown.active",
+      await Promise.all(
+        [...activeRuns].map(async (id) => {
+          const run = await handles.prisma.run.findUniqueOrThrow({
+            where: { id },
+            include: { bot: { include: { computer: true } } },
+          });
+          const events = await handles.prisma.event.findMany({
+            where: { runId: id },
+            orderBy: { seq: "desc" },
+            select: { type: true },
+            take: 8,
+          });
+          return {
+            status: run.status,
+            checkpoint: Boolean(run.turnCheckpoint),
+            computer: run.bot.computer?.state,
+            events: events.map((event) => event.type),
+          };
+        }),
+      ),
+    );
     const drainShutdown = RestartDrain.prototype.shutdown;
     vi.spyOn(RestartDrain.prototype, "shutdown").mockImplementation(async function (
       this: RestartDrain,
