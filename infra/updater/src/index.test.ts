@@ -5,11 +5,21 @@ import type { ServerUpdateRun } from "@ardurbot/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   commandEnvironment,
-  createUpdaterApp,
+  createUpdaterApp as createUpdater,
   restoreCheckoutArgv,
   type UpdaterCommandRunner,
 } from "./index.js";
 import { resolveUpdaterConfig } from "./updater-logic.js";
+
+function createUpdaterApp(
+  config: Parameters<typeof createUpdater>[0],
+  options: Parameters<typeof createUpdater>[1] = {},
+) {
+  return createUpdater(config, {
+    drain: { begin: async () => true, clear: async () => {} },
+    ...options,
+  });
+}
 
 const token = "fake-review-updater-token-000000000000";
 const app = createUpdaterApp(
@@ -479,5 +489,72 @@ describe("child process environment", () => {
       "deploy",
       currentCommit,
     ]);
+  });
+});
+
+describe("restart drain before recreate", () => {
+  it("pauses a timed-out update without recreating, restores the pin and reopens admission", async () => {
+    const fixture = await deployment();
+    const commands: string[] = [];
+    let reopened = false;
+    const run: UpdaterCommandRunner = async (command, args) => {
+      commands.push(args.join(" "));
+      return command === "git" ? ok(`${targetCommit}\trefs/tags/v1.1.0\n`) : ok();
+    };
+    const subject = createUpdaterApp(fixture.config, {
+      run,
+      drain: {
+        begin: async () => false,
+        clear: async () => {
+          reopened = true;
+        },
+      },
+    });
+    const record = (await (
+      await request(subject, "/apply", {
+        repoUrl: "https://github.com/ardurai/ardur-bot",
+        branch: "dev",
+      })
+    ).json()) as ServerUpdateRun;
+    expect(record).toMatchObject({
+      ok: false,
+      restart: "not-required",
+      error: "Update paused because a bot is still working. Try again.",
+    });
+    expect(commands.some((command) => command.includes(" up "))).toBe(false);
+    expect(reopened).toBe(true);
+    expect(await readFile(path.join(fixture.deployDir, ".env"), "utf8")).toContain(
+      "ARDURBOT_IMAGE_TAG=v1.0.0",
+    );
+  });
+  it("waits for saved progress before recreating and clears admission after failure recovery", async () => {
+    const fixture = await deployment();
+    const order: string[] = [];
+    let upCalls = 0;
+    const run: UpdaterCommandRunner = async (command, args) => {
+      if (command === "git") return ok(`${targetCommit}\trefs/tags/v1.1.0\n`);
+      if (args.includes("up")) {
+        order.push(++upCalls === 1 ? "recreate" : "recover");
+        return upCalls === 1 ? failed("failed") : ok();
+      }
+      return ok();
+    };
+    const subject = createUpdaterApp(fixture.config, {
+      run,
+      drain: {
+        begin: async () => {
+          order.push("saved");
+          return true;
+        },
+        clear: async () => {
+          order.push("reopened");
+        },
+      },
+    });
+    await request(subject, "/apply", {
+      repoUrl: "https://github.com/ardurai/ardur-bot",
+      branch: "dev",
+    });
+    expect(order).toEqual(["saved", "recreate", "recover", "reopened"]);
   });
 });

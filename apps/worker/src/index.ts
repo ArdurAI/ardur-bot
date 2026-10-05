@@ -2,9 +2,11 @@ import type { JobPublisher, JobWorkerHost } from "@ardurbot/adapter-kit";
 import {
   ComposioConnector,
   createHostClient,
+  drainForShutdown,
   FleetCatalog,
   IntegrationProviderSettings,
   placeRunComputer,
+  RestartDrain,
 } from "@ardurbot/adapters";
 import { loadRootEnv } from "@ardurbot/core/node/load-root-env";
 import { secretEnvironment } from "@ardurbot/core/node/service-secrets";
@@ -199,7 +201,12 @@ async function main() {
   const cloudAgent = createCloudAgentConnection();
   const memoryLifecycleDeps = { prisma, secrets, jobs, dataDir };
   const { memory, service: memoryDocuments } = createMemoryLifecycle(memoryLifecycleDeps);
+  const shutdown = new AbortController();
+  const restartDrain = new RestartDrain(prisma);
+  await restartDrain.initialize();
   const executor = createRunExecutor({
+    restartDrain,
+    shutdownSignal: shutdown.signal,
     evidenceRecorder: createRunEvidenceRecorder({ prisma, secretStore: secrets }),
     prisma,
     lockPool,
@@ -324,11 +331,17 @@ async function main() {
   const stop = async () => {
     if (stopping) return;
     stopping = true;
+    const drained = drainForShutdown(restartDrain, shutdown);
     try {
       await chatReceivers.stop();
       await boardNotifications.stop();
       await reconciler.stop();
-      await jobHost.stop();
+      await drained;
+      await jobHost.drain?.(5_000);
+      await Promise.race([
+        jobHost.stop(),
+        new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
+      ]);
       await jobs.close();
       await realtime.close();
       await connector.stop();

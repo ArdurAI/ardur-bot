@@ -1449,4 +1449,12 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Could not check the model. Try again.": "无法检查模型。请重试。",
   "Context limit (estimated)": "上下文限制（估计）",
   "Context limit (from the provider)": "上下文限制（来自提供商）",
+  "Updating — your bots will continue after the update": "正在更新 — 更新后你的机器人将继续工作",
+  "This run continued in a new session after a restart.": "重启后，此任务在新会话中继续运行。",
+  "Update paused because a bot is still working. Try again.":
+    "机器人仍在工作，更新已暂停。请重试。",
+  "This action may already have happened. Check its outcome before trying again.":
+    "此操作可能已经执行。再次尝试前，请检查结果。",
+  "Bot work is still paused after the update. Try again.":
+    "更新后，机器人工作仍处于暂停状态。请重试。",
 };

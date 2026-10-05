@@ -31,6 +31,7 @@ import {
   isSecretAskBlock,
   mentionChipKey,
   projectMessageReactions,
+  RESTART_ACTION_MESSAGE,
   resolveComposerSendPlan,
   selectedAskActionLabel,
   serializeComposerPrompt,
@@ -1734,79 +1735,88 @@ function Thread() {
     );
   }
 
-  const workingFooter =
-    !inGroup && currentBot && isWorkingStatus(currentBotStatus) && !hasLiveProgress ? (
-      <View
-        accessibilityLabel={
-          currentBotRetrying
-            ? t("Waiting for the model")
-            : t("{name} is working", { name: currentBot.name })
-        }
-        accessibilityRole="text"
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          minHeight: 40,
-          marginTop: 12,
-        }}
-      >
-        <BotAvatar
-          color={currentBot.color}
-          identity={currentBot.id}
-          label={currentBot.name}
-          size={28}
-          status={currentBotStatus}
-        />
+  const restarting = (snap?.activeRuns ?? (snap?.run ? [snap.run] : [])).some(
+    (run) => run.restarting,
+  );
+  const workingFooter = restarting ? (
+    <Text
+      accessibilityRole="text"
+      style={{ color: tokens.mutedForeground, fontSize: 13, paddingVertical: 12 }}
+    >
+      {t("Updating — your bots will continue after the update")}
+    </Text>
+  ) : !inGroup && currentBot && isWorkingStatus(currentBotStatus) && !hasLiveProgress ? (
+    <View
+      accessibilityLabel={
+        currentBotRetrying
+          ? t("Waiting for the model")
+          : t("{name} is working", { name: currentBot.name })
+      }
+      accessibilityRole="text"
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        minHeight: 40,
+        marginTop: 12,
+      }}
+    >
+      <BotAvatar
+        color={currentBot.color}
+        identity={currentBot.id}
+        label={currentBot.name}
+        size={28}
+        status={currentBotStatus}
+      />
+    </View>
+  ) : inGroup && workingGroupBots.length > 0 ? (
+    <View
+      accessibilityLabel={
+        workingGroupBots.every((bot) => bot.retrying)
+          ? t("Waiting for the model")
+          : workingGroupBots.every((bot) => bot.status === "queued" && !bot.retrying)
+            ? t("Waiting for a free place")
+            : workingGroupBots.length === 1
+              ? t("{name} is working", { name: workingGroupBots[0]?.name ?? t("Agent") })
+              : t("{count} agents working", { count: workingGroupBots.length })
+      }
+      accessibilityRole="text"
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        minHeight: 40,
+        marginTop: 12,
+      }}
+    >
+      <View style={{ flexDirection: "row", paddingRight: 8 }}>
+        {workingGroupBots.map((bot, index) => (
+          <View
+            key={bot.botId}
+            style={{
+              marginLeft: index === 0 ? 0 : -8,
+              zIndex: workingGroupBots.length - index,
+            }}
+          >
+            <BotAvatar
+              color={bot.color}
+              identity={bot.botId}
+              label={bot.name}
+              size={28}
+              status={bot.status}
+            />
+          </View>
+        ))}
       </View>
-    ) : inGroup && workingGroupBots.length > 0 ? (
-      <View
-        accessibilityLabel={
-          workingGroupBots.every((bot) => bot.retrying)
-            ? t("Waiting for the model")
-            : workingGroupBots.every((bot) => bot.status === "queued" && !bot.retrying)
-              ? t("Waiting for a free place")
-              : workingGroupBots.length === 1
-                ? t("{name} is working", { name: workingGroupBots[0]?.name ?? t("Agent") })
-                : t("{count} agents working", { count: workingGroupBots.length })
-        }
-        accessibilityRole="text"
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          minHeight: 40,
-          marginTop: 12,
-        }}
-      >
-        <View style={{ flexDirection: "row", paddingRight: 8 }}>
-          {workingGroupBots.map((bot, index) => (
-            <View
-              key={bot.botId}
-              style={{
-                marginLeft: index === 0 ? 0 : -8,
-                zIndex: workingGroupBots.length - index,
-              }}
-            >
-              <BotAvatar
-                color={bot.color}
-                identity={bot.botId}
-                label={bot.name}
-                size={28}
-                status={bot.status}
-              />
-            </View>
-          ))}
-        </View>
-        {workingGroupBots.every((bot) => bot.retrying) ? (
-          <Text style={{ color: tokens.mutedForeground, fontSize: 13 }}>
-            {t("Waiting for the model")}
-          </Text>
-        ) : workingGroupBots.every((bot) => bot.status === "queued" && !bot.retrying) ? (
-          <Text style={{ color: tokens.mutedForeground, fontSize: 13 }}>
-            {t("Waiting for a free place")}
-          </Text>
-        ) : null}
-      </View>
-    ) : null;
+      {workingGroupBots.every((bot) => bot.retrying) ? (
+        <Text style={{ color: tokens.mutedForeground, fontSize: 13 }}>
+          {t("Waiting for the model")}
+        </Text>
+      ) : workingGroupBots.every((bot) => bot.status === "queued" && !bot.retrying) ? (
+        <Text style={{ color: tokens.mutedForeground, fontSize: 13 }}>
+          {t("Waiting for a free place")}
+        </Text>
+      ) : null}
+    </View>
+  ) : null;
 
   const loadEarlierControl =
     snap?.olderCursor != null ? (
@@ -3319,7 +3329,9 @@ function AskBlock({
         {...actionProps}
         style={{ color: tokens.foreground, fontSize: 15.5, fontWeight: "600" }}
       >
-        {ask.text}
+        {ask.text === RESTART_ACTION_MESSAGE
+          ? t("This action may already have happened. Check its outcome before trying again.")
+          : ask.text}
       </Text>
       {secretInput && ask.credential ? (
         <Text style={{ color: tokens.mutedForeground, fontSize: 13.5 }}>

@@ -285,6 +285,9 @@ export interface JobPublisher {
 }
 
 export interface JobWorkerHost {
+  /** Close admission and wait for handlers within the deadline. Resume on a cancelled restart. */
+  drain?(timeoutMs: number): Promise<boolean>;
+  resume?(): void;
   start(handlers: BackgroundJobHandlers): Promise<void>;
   stop(): Promise<void>;
 }

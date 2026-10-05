@@ -1493,6 +1493,10 @@ msgstr ""
 msgid "Bot token"
 msgstr ""
 
+#: src/components/SoftwareUpdateSection.tsx
+msgid "Bot work is still paused after the update. Try again."
+msgstr "O trabalho dos bots continua pausado após a atualização. Tente novamente."
+
 #. placeholder {0}: botName ?? proposal.scope.botId
 #. placeholder {0}: botNames[rule.botId] ?? rule.botId
 #: src/components/ApprovalRulesSettings.tsx
@@ -9039,6 +9043,10 @@ msgstr "Pensando"
 msgid "This action could not finish; try again."
 msgstr ""
 
+#: src/components/AskCard.tsx
+msgid "This action may already have happened. Check its outcome before trying again."
+msgstr "Esta ação pode já ter sido realizada. Confira o resultado antes de tentar novamente."
+
 #: src/pages/LearningInbox.tsx
 msgid "This board item changed after it was filed, so it was left open for review on the Board."
 msgstr ""
@@ -9214,6 +9222,10 @@ msgstr "Isso substitui os arquivos do computador. Continuar?"
 #: src/pages/Auth.tsx
 msgid "This reset link is invalid or expired"
 msgstr "Este link de redefinição é inválido ou expirou"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "This run continued in a new session after a restart."
+msgstr "Esta execução continuou em uma nova sessão após uma reinicialização."
 
 #: src/lib/failure-category-copy.ts
 msgid "This runtime"
@@ -9565,6 +9577,10 @@ msgstr ""
 msgid "Update finished with errors"
 msgstr ""
 
+#: src/components/SoftwareUpdateSection.tsx
+msgid "Update paused because a bot is still working. Try again."
+msgstr "A atualização foi pausada porque um bot ainda está trabalhando. Tente novamente."
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Update progress"
 msgstr ""
@@ -9582,6 +9598,11 @@ msgstr "Atualizado há 1 min"
 #: src/pages/settings-sections.ts
 msgid "Updates"
 msgstr "Atualizações"
+
+#: src/components/SoftwareUpdateSection.tsx
+#: src/pages/Shell.tsx
+msgid "Updating — your bots will continue after the update"
+msgstr "Atualizando — seus bots continuarão após a atualização"
 
 #. placeholder {0}: update.name
 #: src/components/ComputerUpdateProgress.tsx

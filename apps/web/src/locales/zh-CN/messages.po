@@ -1493,6 +1493,10 @@ msgstr "要关联的 Bot"
 msgid "Bot token"
 msgstr ""
 
+#: src/components/SoftwareUpdateSection.tsx
+msgid "Bot work is still paused after the update. Try again."
+msgstr "更新后，机器人工作仍处于暂停状态。请重试。"
+
 #. placeholder {0}: botName ?? proposal.scope.botId
 #. placeholder {0}: botNames[rule.botId] ?? rule.botId
 #: src/components/ApprovalRulesSettings.tsx
@@ -9039,6 +9043,10 @@ msgstr "思考"
 msgid "This action could not finish; try again."
 msgstr ""
 
+#: src/components/AskCard.tsx
+msgid "This action may already have happened. Check its outcome before trying again."
+msgstr "此操作可能已经执行。再次尝试前，请检查结果。"
+
 #: src/pages/LearningInbox.tsx
 msgid "This board item changed after it was filed, so it was left open for review on the Board."
 msgstr "此看板事项在创建后已有变更，因此仍保持开放，供在看板上复查。"
@@ -9214,6 +9222,10 @@ msgstr "这将替换计算机的文件。是否继续？"
 #: src/pages/Auth.tsx
 msgid "This reset link is invalid or expired"
 msgstr "此重置链接无效或已过期"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "This run continued in a new session after a restart."
+msgstr "重启后，此任务在新会话中继续运行。"
 
 #: src/lib/failure-category-copy.ts
 msgid "This runtime"
@@ -9565,6 +9577,10 @@ msgstr "更新失败"
 msgid "Update finished with errors"
 msgstr "更新完成但有错误"
 
+#: src/components/SoftwareUpdateSection.tsx
+msgid "Update paused because a bot is still working. Try again."
+msgstr "机器人仍在工作，更新已暂停。请重试。"
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Update progress"
 msgstr ""
@@ -9582,6 +9598,11 @@ msgstr "1 分钟前更新"
 #: src/pages/settings-sections.ts
 msgid "Updates"
 msgstr "更新"
+
+#: src/components/SoftwareUpdateSection.tsx
+#: src/pages/Shell.tsx
+msgid "Updating — your bots will continue after the update"
+msgstr "正在更新 — 更新后你的机器人将继续工作"
 
 #. placeholder {0}: update.name
 #: src/components/ComputerUpdateProgress.tsx

@@ -1493,6 +1493,10 @@ msgstr ""
 msgid "Bot token"
 msgstr ""
 
+#: src/components/SoftwareUpdateSection.tsx
+msgid "Bot work is still paused after the update. Try again."
+msgstr "Die Bot-Arbeit ist nach dem Update noch pausiert. Versuche es erneut."
+
 #. placeholder {0}: botName ?? proposal.scope.botId
 #. placeholder {0}: botNames[rule.botId] ?? rule.botId
 #: src/components/ApprovalRulesSettings.tsx
@@ -9039,6 +9043,10 @@ msgstr "Denkmodus"
 msgid "This action could not finish; try again."
 msgstr ""
 
+#: src/components/AskCard.tsx
+msgid "This action may already have happened. Check its outcome before trying again."
+msgstr "Diese Aktion wurde möglicherweise bereits ausgeführt. Prüfe das Ergebnis, bevor du es erneut versuchst."
+
 #: src/pages/LearningInbox.tsx
 msgid "This board item changed after it was filed, so it was left open for review on the Board."
 msgstr ""
@@ -9214,6 +9222,10 @@ msgstr "Dies ersetzt die Dateien des Computers. Fortfahren?"
 #: src/pages/Auth.tsx
 msgid "This reset link is invalid or expired"
 msgstr "Dieser Link zum Zurücksetzen ist ungültig oder abgelaufen"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "This run continued in a new session after a restart."
+msgstr "Dieser Lauf wurde nach einem Neustart in einer neuen Sitzung fortgesetzt."
 
 #: src/lib/failure-category-copy.ts
 msgid "This runtime"
@@ -9565,6 +9577,10 @@ msgstr ""
 msgid "Update finished with errors"
 msgstr ""
 
+#: src/components/SoftwareUpdateSection.tsx
+msgid "Update paused because a bot is still working. Try again."
+msgstr "Das Update wurde pausiert, weil ein Bot noch arbeitet. Versuche es erneut."
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Update progress"
 msgstr ""
@@ -9582,6 +9598,11 @@ msgstr "Vor 1 Min. aktualisiert"
 #: src/pages/settings-sections.ts
 msgid "Updates"
 msgstr "Updates"
+
+#: src/components/SoftwareUpdateSection.tsx
+#: src/pages/Shell.tsx
+msgid "Updating — your bots will continue after the update"
+msgstr "Aktualisierung läuft — deine Bots machen nach dem Update weiter"
 
 #. placeholder {0}: update.name
 #: src/components/ComputerUpdateProgress.tsx

@@ -31,6 +31,22 @@ function collectSourceFiles(dir: string): string[] {
 }
 
 describe("mobile i18n", () => {
+  it("translates restart progress and fresh-session notices", async () => {
+    const { resetI18nForTests, t } = await import("./i18n");
+    for (const locale of ["ru", "zh-CN"] as const) {
+      resetI18nForTests(locale);
+      for (const message of [
+        "Updating — your bots will continue after the update",
+        "This run continued in a new session after a restart.",
+        "Update paused because a bot is still working. Try again.",
+        "This action may already have happened. Check its outcome before trying again.",
+        "Bot work is still paused after the update. Try again.",
+      ]) {
+        expect(t(message).trim()).toBeTruthy();
+        expect(t(message)).not.toBe(message);
+      }
+    }
+  });
   it("translates every workspace save failure in Russian and Chinese", async () => {
     const { resetI18nForTests, t } = await import("./i18n");
     for (const locale of ["ru", "zh-CN"] as const) {

@@ -1493,6 +1493,10 @@ msgstr "Бот для ссылки"
 msgid "Bot token"
 msgstr ""
 
+#: src/components/SoftwareUpdateSection.tsx
+msgid "Bot work is still paused after the update. Try again."
+msgstr "После обновления работа ботов всё ещё приостановлена. Попробуйте снова."
+
 #. placeholder {0}: botName ?? proposal.scope.botId
 #. placeholder {0}: botNames[rule.botId] ?? rule.botId
 #: src/components/ApprovalRulesSettings.tsx
@@ -9039,6 +9043,10 @@ msgstr "рассуждение"
 msgid "This action could not finish; try again."
 msgstr ""
 
+#: src/components/AskCard.tsx
+msgid "This action may already have happened. Check its outcome before trying again."
+msgstr "Это действие уже могло быть выполнено. Проверьте результат, прежде чем повторять попытку."
+
 #: src/pages/LearningInbox.tsx
 msgid "This board item changed after it was filed, so it was left open for review on the Board."
 msgstr "Эта задача на доске изменилась после создания, поэтому она оставлена открытой для проверки на доске."
@@ -9214,6 +9222,10 @@ msgstr "Это заменит файлы компьютера. Продолжи�
 #: src/pages/Auth.tsx
 msgid "This reset link is invalid or expired"
 msgstr "Эта ссылка для сброса недействительна или срок ее действия истек."
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "This run continued in a new session after a restart."
+msgstr "После перезапуска эта задача продолжилась в новом сеансе."
 
 #: src/lib/failure-category-copy.ts
 msgid "This runtime"
@@ -9565,6 +9577,10 @@ msgstr "Обновление не выполнено"
 msgid "Update finished with errors"
 msgstr "Обновление завершено с ошибками"
 
+#: src/components/SoftwareUpdateSection.tsx
+msgid "Update paused because a bot is still working. Try again."
+msgstr "Обновление приостановлено: бот ещё работает. Попробуйте снова."
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Update progress"
 msgstr "Ход обновления"
@@ -9582,6 +9598,11 @@ msgstr "Обновлено минуту назад"
 #: src/pages/settings-sections.ts
 msgid "Updates"
 msgstr "Обновления"
+
+#: src/components/SoftwareUpdateSection.tsx
+#: src/pages/Shell.tsx
+msgid "Updating — your bots will continue after the update"
+msgstr "Обновление — ваши боты продолжат работу после обновления"
 
 #. placeholder {0}: update.name
 #: src/components/ComputerUpdateProgress.tsx

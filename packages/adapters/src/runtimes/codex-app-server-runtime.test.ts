@@ -314,6 +314,45 @@ function fixture(
   return { collect, messages, request, info, spawn, runtime, child, loaded };
 }
 describe("Codex app-server protocol", () => {
+  it("saves model context and usage before interrupting for restart", async () => {
+    const f = fixture("success", {
+      duringTurn: [
+        {
+          method: "thread/tokenUsage/updated",
+          params: {
+            threadId: "thread-native",
+            tokenUsage: { total: { inputTokens: 10, outputTokens: 5, cachedInputTokens: 0 } },
+          },
+        },
+        {
+          method: "item/completed",
+          params: {
+            threadId: "thread-native",
+            turnId: "turn-native",
+            item: { type: "agentMessage", text: "Saved response" },
+          },
+        },
+      ],
+    });
+    let release!: () => void;
+    const stored = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    f.request.saveCheckpoint = vi.fn(async () => {
+      await stored;
+      return true;
+    });
+    const work = f.collect();
+    await vi.waitFor(() => expect(f.request.saveCheckpoint).toHaveBeenCalledOnce());
+    expect(f.messages.some((message) => message.method === "turn/interrupt")).toBe(false);
+    expect(f.request.saveCheckpoint).toHaveBeenCalledWith(
+      [expect.objectContaining({ text: "Saved response" })],
+      [expect.objectContaining({ inputTokens: 10, outputTokens: 5 })],
+    );
+    release();
+    await work;
+    expect(f.messages.some((message) => message.method === "turn/interrupt")).toBe(true);
+  });
   it("redacts bridge credentials registered after the app-server starts", async () => {
     vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", "1");
     vi.stubEnv("LOG_LEVEL", "debug");

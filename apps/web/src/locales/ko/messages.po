@@ -1493,6 +1493,10 @@ msgstr "연결할 Bot"
 msgid "Bot token"
 msgstr ""
 
+#: src/components/SoftwareUpdateSection.tsx
+msgid "Bot work is still paused after the update. Try again."
+msgstr "업데이트 후에도 봇 작업이 일시 중지되어 있습니다. 다시 시도하세요."
+
 #. placeholder {0}: botName ?? proposal.scope.botId
 #. placeholder {0}: botNames[rule.botId] ?? rule.botId
 #: src/components/ApprovalRulesSettings.tsx
@@ -9039,6 +9043,10 @@ msgstr "생각 깊이"
 msgid "This action could not finish; try again."
 msgstr ""
 
+#: src/components/AskCard.tsx
+msgid "This action may already have happened. Check its outcome before trying again."
+msgstr "이 작업이 이미 실행되었을 수 있습니다. 다시 시도하기 전에 결과를 확인하세요."
+
 #: src/pages/LearningInbox.tsx
 msgid "This board item changed after it was filed, so it was left open for review on the Board."
 msgstr ""
@@ -9214,6 +9222,10 @@ msgstr "컴퓨터의 파일이 교체됩니다. 계속할까요?"
 #: src/pages/Auth.tsx
 msgid "This reset link is invalid or expired"
 msgstr "이 재설정 링크는 유효하지 않거나 만료되었습니다"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "This run continued in a new session after a restart."
+msgstr "재시작 후 새 세션에서 이 실행을 계속했습니다."
 
 #: src/lib/failure-category-copy.ts
 msgid "This runtime"
@@ -9565,6 +9577,10 @@ msgstr "업데이트 실패"
 msgid "Update finished with errors"
 msgstr "오류와 함께 업데이트가 완료되었습니다"
 
+#: src/components/SoftwareUpdateSection.tsx
+msgid "Update paused because a bot is still working. Try again."
+msgstr "봇이 아직 작업 중이어서 업데이트가 일시 중지되었습니다. 다시 시도하세요."
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Update progress"
 msgstr ""
@@ -9582,6 +9598,11 @@ msgstr "1분 전에 업데이트됨"
 #: src/pages/settings-sections.ts
 msgid "Updates"
 msgstr "업데이트"
+
+#: src/components/SoftwareUpdateSection.tsx
+#: src/pages/Shell.tsx
+msgid "Updating — your bots will continue after the update"
+msgstr "업데이트 중 — 업데이트 후 봇이 작업을 계속합니다"
 
 #. placeholder {0}: update.name
 #: src/components/ComputerUpdateProgress.tsx

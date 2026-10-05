@@ -1511,4 +1511,14 @@ export const RU_MESSAGES: Record<string, string> = {
   "Could not check the model. Try again.": "Не удалось проверить модель. Попробуйте ещё раз.",
   "Context limit (estimated)": "Лимит контекста (оценка)",
   "Context limit (from the provider)": "Лимит контекста (от провайдера)",
+  "Updating — your bots will continue after the update":
+    "Обновление — ваши боты продолжат работу после обновления",
+  "This run continued in a new session after a restart.":
+    "После перезапуска эта задача продолжилась в новом сеансе.",
+  "Update paused because a bot is still working. Try again.":
+    "Обновление приостановлено: бот ещё работает. Попробуйте снова.",
+  "This action may already have happened. Check its outcome before trying again.":
+    "Это действие уже могло быть выполнено. Проверьте результат, прежде чем повторять попытку.",
+  "Bot work is still paused after the update. Try again.":
+    "После обновления работа ботов всё ещё приостановлена. Попробуйте снова.",
 };

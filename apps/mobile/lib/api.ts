@@ -27,6 +27,7 @@ import {
   isCommandCardEvent,
   isInterimNarrationAt,
   isReasoningSummaryBlock,
+  isRestartEvent,
   isRunTerminalEvent,
   mergeCommandLinks,
   mergeThreadHistory,
@@ -35,6 +36,7 @@ import {
   readBoundedJsonResponse,
   reduceCommandMessages,
   reduceLiveMessageBlocks,
+  reduceRestartState,
   reduceRunContext,
   runFailureError,
   showsReplyText,
@@ -852,6 +854,7 @@ export type MobileSnapshot = {
   links?: readonly ToolResumedPayload[];
   olderCursor: number | null;
   run: {
+    restarting?: boolean;
     id: string;
     botId?: string;
     status: string;
@@ -866,6 +869,7 @@ export type MobileSnapshot = {
   } | null;
   contextRun?: MobileSnapshot["run"];
   activeRuns?: Array<{
+    restarting?: boolean;
     id: string;
     botId?: string;
     status: string;
@@ -1072,6 +1076,7 @@ export function isMobileThreadSnapshotEvent(event: ThreadEvent): boolean {
     event.type === "thread.subagent" ||
     event.type === "thread.cloud_agent" ||
     event.type === "thread.cleared" ||
+    isRestartEvent(event) ||
     event.type === "run.started" ||
     event.type === "run.waiting_input" ||
     event.type === "run.retry_scheduled" ||
@@ -1085,6 +1090,7 @@ export function applyMobileThreadEvent(
   event: ThreadEvent,
 ): MobileSnapshot | null {
   if (!prev) return prev;
+  if (isRestartEvent(event)) return reduceRestartState(prev, event);
   if (event.type === "run.context") return reduceRunContext(prev, event);
   if (isCommandCardEvent(event.type) && (event.seq ?? -1) <= (prev.cursor ?? -1)) return prev;
   if (isCommandCardEvent(event.type)) {
