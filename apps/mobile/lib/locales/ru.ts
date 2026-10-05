@@ -1,4 +1,6 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "Native runtimes": "Локальные среды выполнения",
+  "Set up on the home device": "Настройте на основном устройстве",
   "{runtime}'s tool list changed during startup. Check the connected tools and try again.":
     "Список инструментов {runtime} изменился при запуске. Проверьте подключённые инструменты и повторите попытку.",
   "{runtime}'s settings were not confirmed. Check this bot's settings and try again.":

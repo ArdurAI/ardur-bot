@@ -6,6 +6,65 @@ import { captureScreenshot, completeOnboarding, openUserSettings, rpc, signup } 
 const LOCAL_MODEL_ID = "ardurbot-e2e-local";
 const LOCAL_MODEL_REPLY = "OpenAI-compatible endpoint verified end to end.";
 
+test("native discovery and cancelled connection preserve the default pin", async ({
+  page,
+}, testInfo) => {
+  await signup(page, `native-models-${Date.now()}@example.test`, "password12", "Native models");
+  await completeOnboarding(page);
+  const original = await rpc<Record<string, unknown>>(page, "me", {});
+  await page.route("**/rpc/me", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ json: { ...original, isDeploymentOwner: true } }),
+    }),
+  );
+  await page.route("**/rpc/runtimes/availability", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        json: {
+          runtimeKind: "codex-app-server",
+          available: true,
+          signedIn: false,
+          models: [{ id: "fixture-native", label: "Fixture native", efforts: [] }],
+        },
+      }),
+    }),
+  );
+  await page.route("**/rpc/runtimes/connectCodex", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        json: {
+          loginId: "fixture-login",
+          mode: "auth-url",
+          verificationUri: "https://example.test/login",
+        },
+      }),
+    }),
+  );
+  await page.route("**/rpc/runtimes/cancelConnect", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ json: { ok: true } }),
+    }),
+  );
+  await openUserSettings(page, "models");
+  await page.getByText("Native runtimes", { exact: true }).click();
+  await page
+    .locator("summary")
+    .filter({ hasText: /^Codex$/ })
+    .click();
+  await expect(page.getByText("Fixture native", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Continue with ChatGPT" })).toBeVisible();
+  await captureScreenshot(page, testInfo, "native-models-connection");
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Continue with ChatGPT" })).toHaveCount(0);
+  const current = await rpc<Record<string, unknown>>(page, "me", {});
+  expect(current.defaultModel).toBe(original.defaultModel);
+});
+
 test("Anthropic offers API keys and asks old subscription connections to reconnect", async ({
   page,
 }, testInfo) => {
@@ -32,11 +91,7 @@ test("Anthropic offers API keys and asks old subscription connections to reconne
   await openUserSettings(page, "models");
   await page.getByPlaceholder("Search providers").fill("anthropic");
   await page.getByRole("button", { name: /Anthropic/ }).click();
-  await expect(
-    page.getByText(
-      "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings.",
-    ),
-  ).toBeVisible();
+  await expect(page.getByText("Set up on the home device")).toBeVisible();
   await expect(page.getByText("Reconnect with an API key", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /Sign in/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Use this model", exact: true })).toHaveCount(0);

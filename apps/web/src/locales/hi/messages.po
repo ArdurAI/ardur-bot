@@ -1621,6 +1621,7 @@ msgstr "सर्वर तक नहीं पहुंचा जा सका�
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/shell/move-to-host.tsx
+#: src/pages/shell/runtime-settings.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Cancel"
 msgstr "रद्द करें"
@@ -5929,6 +5930,10 @@ msgstr "नेटिव कंप्रेशन"
 msgid "Native compression is not available with Hermes."
 msgstr "Hermes के साथ नेटिव कंप्रेशन उपलब्ध नहीं है।"
 
+#: src/pages/settings/NativeRuntimeSettings.tsx
+msgid "Native runtimes"
+msgstr "नेटिव रनटाइम"
+
 #: src/pages/shell/TopNav.tsx
 msgid "Navigation"
 msgstr ""
@@ -8265,6 +8270,11 @@ msgstr ""
 msgid "Set up memory search"
 msgstr ""
 
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/settings/NativeRuntimeSettings.tsx
+msgid "Set up on the home device"
+msgstr "मुख्य डिवाइस पर सेट अप करें"
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Set up servers"
 msgstr ""
@@ -9317,10 +9327,6 @@ msgstr "शीर्षक"
 #: src/components/PeerMessageReceipt.tsx
 msgid "to {peer}"
 msgstr "{peer} को"
-
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings."
-msgstr ""
 
 #: src/pages/shell/bot-picker.tsx
 msgid "To:"

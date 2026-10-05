@@ -1621,6 +1621,7 @@ msgstr "서버에 연결할 수 없습니다."
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/shell/move-to-host.tsx
+#: src/pages/shell/runtime-settings.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Cancel"
 msgstr "취소"
@@ -5929,6 +5930,10 @@ msgstr "네이티브 압축"
 msgid "Native compression is not available with Hermes."
 msgstr "Hermes에서는 네이티브 압축을 사용할 수 없습니다."
 
+#: src/pages/settings/NativeRuntimeSettings.tsx
+msgid "Native runtimes"
+msgstr "네이티브 런타임"
+
 #: src/pages/shell/TopNav.tsx
 msgid "Navigation"
 msgstr ""
@@ -8265,6 +8270,11 @@ msgstr ""
 msgid "Set up memory search"
 msgstr ""
 
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/settings/NativeRuntimeSettings.tsx
+msgid "Set up on the home device"
+msgstr "주 기기에서 설정"
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Set up servers"
 msgstr ""
@@ -9317,10 +9327,6 @@ msgstr "역할"
 #: src/components/PeerMessageReceipt.tsx
 msgid "to {peer}"
 msgstr "{peer}에게"
-
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings."
-msgstr ""
 
 #: src/pages/shell/bot-picker.tsx
 msgid "To:"

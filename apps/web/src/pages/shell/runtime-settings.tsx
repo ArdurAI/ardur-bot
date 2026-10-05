@@ -20,10 +20,14 @@ export function RuntimeSettings({
   experimental,
   onExperimental,
   experimentalReadOnly = false,
+  setupOnly = false,
+  allowConnect = true,
 }: {
   experimental: boolean;
   onExperimental: (enabled: boolean) => void;
   experimentalReadOnly?: boolean;
+  setupOnly?: boolean;
+  allowConnect?: boolean;
   kind: RuntimeKind;
   botId?: string;
   onKind: (kind: RuntimeKind) => void;
@@ -36,6 +40,17 @@ export function RuntimeSettings({
   const id = useId();
   const [availability, setAvailability] = useState<RuntimeAvailability | null>(null);
   const [login, setLogin] = useState<ModelOAuthBegin | null>(null);
+  const [connecting, setConnecting] = useState(false);
+  const connectionRevision = useRef(0);
+  const connectionLock = useRef(false);
+  useEffect(() => {
+    setLogin(null);
+    setConnecting(false);
+    connectionLock.current = false;
+    return () => {
+      connectionRevision.current += 1;
+    };
+  }, [kind, botId, allowConnect]);
   const [error, setError] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
   const [pendingInstall, setPendingInstall] = useState(false);
@@ -149,10 +164,12 @@ export function RuntimeSettings({
   }
   useEffect(() => {
     if (!login) return;
+    let active = true;
     const timer = setInterval(() => {
       void rpc.runtimes
         .connectStatus({ loginId: login.loginId })
         .then((result) => {
+          if (!active) return;
           if (result.status === "ready") {
             setLogin(null);
             setRefresh((value) => value + 1);
@@ -163,6 +180,7 @@ export function RuntimeSettings({
           }
         })
         .catch(() => {
+          if (!active) return;
           setError(t`Sign-in expired. Connect Codex again.`);
           setLogin(null);
         });
@@ -170,39 +188,44 @@ export function RuntimeSettings({
     return () => {
       clearInterval(timer);
       void rpc.runtimes.cancelConnect({ loginId: login.loginId }).catch(() => undefined);
+      active = false;
     };
   }, [login]);
   const selected = parseModelPinOptionKey(modelKey);
   const model = availability?.models.find((entry) => entry.id === selected?.modelId);
   return (
     <div className="mt-5 space-y-2">
-      <label htmlFor={`${id}-runtime`} className="block text-[13.5px] text-muted-foreground">
-        <Trans>Runs on</Trans>
-      </label>
-      <NativeSelect
-        id={`${id}-runtime`}
-        value={kind}
-        onChange={(event) => {
-          const next = event.target.value as RuntimeKind;
-          onKind(next);
-          if (!experimentalReadOnly) onExperimental(next === "hermes");
-          if (!["pi", "hermes"].includes(kind) || !["pi", "hermes"].includes(next)) {
-            onModel("");
-            onEffort("");
-          }
-          setError(null);
-          setLogin(null);
-        }}
-      >
-        <NativeSelectOption value="pi">{t`Ardur (built-in)`}</NativeSelectOption>
-        <NativeSelectOption value="claude-code">{t`Claude Code (your claude sign-in)`}</NativeSelectOption>
-        <NativeSelectOption value="codex-app-server">{t`Codex (your ChatGPT sign-in)`}</NativeSelectOption>
-        <NativeSelectOption value="antigravity">{t`Antigravity`}</NativeSelectOption>
-        <NativeSelectOption value="hermes">{t`Hermes`}</NativeSelectOption>
-      </NativeSelect>
+      {!setupOnly ? (
+        <>
+          <label htmlFor={`${id}-runtime`} className="block text-[13.5px] text-muted-foreground">
+            <Trans>Runs on</Trans>
+          </label>
+          <NativeSelect
+            id={`${id}-runtime`}
+            value={kind}
+            onChange={(event) => {
+              const next = event.target.value as RuntimeKind;
+              onKind(next);
+              if (!experimentalReadOnly) onExperimental(next === "hermes");
+              if (!["pi", "hermes"].includes(kind) || !["pi", "hermes"].includes(next)) {
+                onModel("");
+                onEffort("");
+              }
+              setError(null);
+              setLogin(null);
+            }}
+          >
+            <NativeSelectOption value="pi">{t`Ardur (built-in)`}</NativeSelectOption>
+            <NativeSelectOption value="claude-code">{t`Claude Code (your claude sign-in)`}</NativeSelectOption>
+            <NativeSelectOption value="codex-app-server">{t`Codex (your ChatGPT sign-in)`}</NativeSelectOption>
+            <NativeSelectOption value="antigravity">{t`Antigravity`}</NativeSelectOption>
+            <NativeSelectOption value="hermes">{t`Hermes`}</NativeSelectOption>
+          </NativeSelect>
+        </>
+      ) : null}
       {kind !== "pi" ? (
         <>
-          {!experimentalReadOnly ? (
+          {!setupOnly && !experimentalReadOnly ? (
             <label htmlFor={`${id}-experimental`} className="flex items-center gap-2">
               <Switch
                 id={`${id}-experimental`}
@@ -300,15 +323,37 @@ export function RuntimeSettings({
           <Button variant="ghost" size="sm" onClick={() => setRefresh((value) => value + 1)}>
             <Trans>Check again</Trans>
           </Button>
-          {kind === "codex-app-server" && availability?.signedIn === false ? (
+          {allowConnect &&
+          !login &&
+          kind === "codex-app-server" &&
+          availability?.signedIn === false ? (
             <Button
               variant="outline"
               size="sm"
+              disabled={connecting}
               onClick={() => {
+                if (connectionLock.current) return;
+                connectionLock.current = true;
+                setConnecting(true);
+                const revision = connectionRevision.current;
                 void rpc.runtimes
                   .connectCodex()
-                  .then(setLogin)
-                  .catch(() => setError(t`Codex app-server unavailable`));
+                  .then((value) => {
+                    if (revision !== connectionRevision.current) {
+                      void rpc.runtimes
+                        .cancelConnect({ loginId: value.loginId })
+                        .catch(() => undefined);
+                    } else setLogin(value);
+                  })
+                  .catch(() => {
+                    if (revision === connectionRevision.current)
+                      setError(t`Codex app-server unavailable`);
+                  })
+                  .finally(() => {
+                    if (revision !== connectionRevision.current) return;
+                    connectionLock.current = false;
+                    setConnecting(false);
+                  });
               }}
             >
               <Trans>Connect</Trans>
@@ -324,9 +369,18 @@ export function RuntimeSettings({
               >
                 <Trans>Continue with ChatGPT</Trans>
               </a>
+              <Button variant="ghost" size="sm" onClick={() => setLogin(null)}>
+                <Trans>Cancel</Trans>
+              </Button>
             </div>
           ) : null}
-          {kind !== "hermes" ? (
+          {setupOnly ? (
+            <ul className="text-sm text-muted-foreground">
+              {availability?.models.map((entry) => (
+                <li key={entry.id}>{entry.label}</li>
+              ))}
+            </ul>
+          ) : kind !== "hermes" ? (
             <>
               <label htmlFor={`${id}-model`} className="block text-sm">
                 <Trans>Model</Trans>

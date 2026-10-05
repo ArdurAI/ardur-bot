@@ -1,4 +1,6 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "Native runtimes": "本机运行时",
+  "Set up on the home device": "在主设备上设置",
   "{runtime}'s tool list changed during startup. Check the connected tools and try again.":
     "{runtime} 的工具列表在启动期间发生了变化。请检查已连接的工具后重试。",
   "{runtime}'s settings were not confirmed. Check this bot's settings and try again.":

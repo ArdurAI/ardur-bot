@@ -14,9 +14,13 @@ const api = vi.hoisted(() => ({
   ollama: vi.fn(),
   testOllama: vi.fn(),
   connect: vi.fn(),
+  availability: vi.fn(),
+  connectCodex: vi.fn(),
+  connectStatus: vi.fn(),
+  cancelConnect: vi.fn(),
   persistenceChange: null as ((pending: boolean) => void) | null,
 }));
-vi.mock("../lib/rpc", () => ({ rpc: { models: api, me: api.me } }));
+vi.mock("../lib/rpc", () => ({ rpc: { models: api, me: api.me, runtimes: api } }));
 vi.mock("../lib/use-model-oauth-signin", () => ({
   useModelOAuthSignIn: (options: { onPersistenceChange?: (pending: boolean) => void }) => {
     api.persistenceChange = options.onPersistenceChange ?? null;
@@ -159,6 +163,106 @@ afterEach(async () => {
 const render = () =>
   act(async () => root.render(<ModelSettingsOverlay embedded onClose={() => undefined} />));
 
+async function expandNativeRuntime() {
+  await act(async () => {
+    const panel = container.querySelector("details")!;
+    panel.open = true;
+    panel.dispatchEvent(new Event("toggle"));
+  });
+  await act(async () => {
+    const panel = [...container.querySelectorAll("details")].find(
+      (entry) => entry.querySelector("summary")?.textContent === "Codex",
+    )!;
+    panel.open = true;
+    panel.dispatchEvent(new Event("toggle"));
+  });
+}
+
+it("discovers native models without a bot or changing pins, and cancels owner setup", async () => {
+  api.me.mockResolvedValue({
+    isDeploymentOwner: true,
+    defaultProvider: "openai-codex",
+    defaultModel: "gpt-6-sol",
+  });
+  api.availability.mockResolvedValue({
+    runtimeKind: "codex-app-server",
+    available: true,
+    signedIn: false,
+    models: [{ id: "native-fixture", label: "Native fixture", efforts: [] }],
+  });
+  api.connectCodex.mockResolvedValue({
+    loginId: "login-fixture",
+    verificationUri: "https://example.test/login",
+  });
+  api.cancelConnect.mockResolvedValue({ ok: true });
+  await render();
+  expect(api.availability).not.toHaveBeenCalled();
+  await expandNativeRuntime();
+  expect(api.availability).toHaveBeenCalledWith({
+    runtimeKind: "codex-app-server",
+    botId: undefined,
+    refresh: false,
+  });
+  expect(container.textContent).toContain("Native fixture");
+  expect(container.querySelector('[id$="-model"]')).toBeNull();
+  await act(async () =>
+    [...container.querySelectorAll("button")]
+      .find((entry) => entry.textContent === "Connect")!
+      .click(),
+  );
+  expect(container.querySelector('a[href="https://example.test/login"]')).not.toBeNull();
+  await act(async () =>
+    [...container.querySelectorAll("button")]
+      .find((entry) => entry.textContent === "Cancel")!
+      .click(),
+  );
+  expect(api.cancelConnect).toHaveBeenCalledWith({ loginId: "login-fixture" });
+  expect(api.connect).not.toHaveBeenCalled();
+});
+
+it("does not expose native setup to a non-owner", async () => {
+  api.availability.mockResolvedValue({ available: true, signedIn: false, models: [] });
+  await render();
+  await expandNativeRuntime();
+  expect(container.textContent).toContain("Set up on the home device");
+  expect(
+    [...container.querySelectorAll("button")].find((entry) => entry.textContent === "Connect"),
+  ).toBeUndefined();
+  expect(api.connectCodex).not.toHaveBeenCalled();
+});
+
+it("cancels a late native sign-in response after its panel is detached", async () => {
+  api.me.mockResolvedValue({ isDeploymentOwner: true, defaultProvider: "openai-codex" });
+  api.availability.mockResolvedValue({ available: true, signedIn: false, models: [] });
+  let finish!: (value: unknown) => void;
+  api.connectCodex.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  api.cancelConnect.mockResolvedValue({ ok: true });
+  await render();
+  await expandNativeRuntime();
+  await act(async () =>
+    [...container.querySelectorAll("button")]
+      .find((entry) => entry.textContent === "Connect")!
+      .click(),
+  );
+  await act(async () => {
+    const panel = [...container.querySelectorAll("details")].find(
+      (entry) => entry.querySelector("summary")?.textContent === "Codex",
+    )!;
+    panel.open = false;
+    panel.dispatchEvent(new Event("toggle"));
+  });
+  await act(async () =>
+    finish({ loginId: "late-login", verificationUri: "https://example.test/login" }),
+  );
+  expect(api.cancelConnect).toHaveBeenCalledWith({ loginId: "late-login" });
+  expect(container.querySelector('a[href="https://example.test/login"]')).toBeNull();
+});
+
 it("reports subscription persistence through the overlay handoff", async () => {
   const onSavePendingChange = vi.fn();
   await act(async () =>
@@ -263,9 +367,7 @@ it.each([false, true])(
     );
     await act(async () => button("Open bot settings").click());
     expect(onOpenBotRuntime).toHaveBeenCalledOnce();
-    expect(container.textContent).toContain(
-      "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings.",
-    );
+    expect(container.textContent).toContain("Set up on the home device");
     expect(container.querySelector('label[for="model-api-key"]')?.textContent).toContain("API key");
     expect(container.textContent).not.toContain("Sign in");
     expect(container.textContent).not.toContain("Connected ·");

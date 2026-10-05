@@ -32,6 +32,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { NativeRuntimeSettings } from "../components/native-runtime-settings";
 import { OllamaConnection } from "../components/ollama-connection";
 import type { MobileMe, MobileModel, MobileModelCredential } from "../lib/api";
 import { rpc } from "../lib/api";
@@ -508,6 +509,8 @@ export default function Models() {
             {currentEntry?.providerName ?? me?.defaultProvider ?? t("Configured by deployment")}
           </Text>
         </View>
+
+        <NativeRuntimeSettings />
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {notice ? <Text style={styles.notice}>{notice}</Text> : null}

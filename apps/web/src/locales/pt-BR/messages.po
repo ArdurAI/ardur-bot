@@ -1621,6 +1621,7 @@ msgstr "Não é possível acessar o servidor."
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/shell/move-to-host.tsx
+#: src/pages/shell/runtime-settings.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Cancel"
 msgstr "Cancelar"
@@ -5929,6 +5930,10 @@ msgstr "Compressão nativa"
 msgid "Native compression is not available with Hermes."
 msgstr "A compressão nativa não está disponível com o Hermes."
 
+#: src/pages/settings/NativeRuntimeSettings.tsx
+msgid "Native runtimes"
+msgstr "Ambientes de execução nativos"
+
 #: src/pages/shell/TopNav.tsx
 msgid "Navigation"
 msgstr ""
@@ -8265,6 +8270,11 @@ msgstr ""
 msgid "Set up memory search"
 msgstr ""
 
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/settings/NativeRuntimeSettings.tsx
+msgid "Set up on the home device"
+msgstr "Configure no dispositivo principal"
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Set up servers"
 msgstr ""
@@ -9317,10 +9327,6 @@ msgstr "Título"
 #: src/components/PeerMessageReceipt.tsx
 msgid "to {peer}"
 msgstr "para {peer}"
-
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings."
-msgstr ""
 
 #: src/pages/shell/bot-picker.tsx
 msgid "To:"
