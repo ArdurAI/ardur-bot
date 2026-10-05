@@ -2143,6 +2143,44 @@ describe("run failure cause", () => {
 });
 
 describe("executor restart journeys without a database", () => {
+  it.each(["queued", "waiting_input"])(
+    "uses current answer context rather than restart context for an ordinary %s continuation",
+    async (status) => {
+      const f = fixture(`answered-${status}`);
+      f.runRecord.status = status;
+      f.prisma.task.findUniqueOrThrow.mockResolvedValue({
+        id: "task-1",
+        prompt: "Continue after the protected answer.",
+      });
+      f.runRecord.turnCheckpoint = (
+        await digests.put(
+          JSON.stringify({
+            version: 1,
+            runtimeKind: "pi",
+            pin: {},
+            history: [{ role: "user", content: "pre-answer context" }],
+            prompt: "show a secret card for a masked api key",
+            runtimeState: [{ role: "assistant", content: "waiting for the answer" }],
+            effects: [],
+          }),
+          {} as never,
+          `turn:answered-${status}`,
+        )
+      ).ciphertext;
+      f.runtimeRun.mockImplementation(async function* (request) {
+        expect(request.prompt).toContain("Continue after the protected answer.");
+        expect(JSON.stringify(request.history)).not.toContain("pre-answer context");
+        expect(request.restartState).toBeUndefined();
+        expect(request.priorToolCalls).toBeUndefined();
+        yield { type: "done", text: "Finished after the answer" };
+      });
+      await f.executor.continueRun(f.runRecord.id, "worker");
+      expect(f.finalizeRun).toHaveBeenCalledWith(expect.objectContaining({ outcome: "completed" }));
+      expect(f.events.append).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: "run.resumed" }),
+      );
+    },
+  );
   function admission() {
     let draining = false;
     return {
