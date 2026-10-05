@@ -607,8 +607,8 @@ for (const view of ["Files", "IDE"] as const) {
   }, testInfo) => {
     const { botId } = await installWorkspace(page, "live", undefined, false, true);
     let generation = 1;
-    let lists = 0;
-    let reads = 0;
+    const lists: number[] = [];
+    const reads: number[] = [];
     let describes = 0;
     const context = () => ({
       botId,
@@ -626,9 +626,11 @@ for (const view of ["Files", "IDE"] as const) {
         return route.fulfill({ json: { json: context() } });
       }
       if (name === "list" || name === "read") {
-        const first = name === "list" ? ++lists === 1 : ++reads === 1;
-        if (first) {
-          generation++;
+        const input = route.request().postDataJSON().json;
+        const requests = name === "list" ? lists : reads;
+        requests.push(input.generation);
+        if (requests.length === 1) generation++;
+        if (input.generation !== generation) {
           return route.fulfill({
             status: 409,
             json: {
@@ -641,7 +643,6 @@ for (const view of ["Files", "IDE"] as const) {
             },
           });
         }
-        const input = route.request().postDataJSON().json;
         expect(input.generation).toBe(generation);
         expect(input.rootId).toBe("sandbox-fixture-computer");
         return route.fulfill({
@@ -664,8 +665,9 @@ for (const view of ["Files", "IDE"] as const) {
     await pane.getByRole("button", { name: "notes.md", exact: true }).click();
     await expect(pane.locator("[data-ide-editor]")).toContainText("Workspace notes after wake");
     await expect(pane.getByRole("alert")).toHaveCount(0);
-    expect(lists).toBe(2);
-    expect(reads).toBe(2);
+    // Strict Mode replays the opening effect; both stale requests must be refused.
+    expect(lists).toEqual([1, 1, 2]);
+    expect(reads).toEqual([2, 3]);
     expect(describes - initialDescribes).toBe(2);
     await captureScreenshot(page, testInfo, `workspace-${view.toLowerCase()}-wake-recovery`);
   });
