@@ -2039,6 +2039,10 @@ msgstr "关闭面板"
 msgid "Close preview"
 msgstr "关闭预览"
 
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Close terminal"
+msgstr "关闭终端"
+
 #: src/pages/SettingsOverlay.tsx
 msgid "Close user settings"
 msgstr "关闭用户设置"
@@ -4049,6 +4053,7 @@ msgstr "启用"
 msgid "Enable this server first, then sign in."
 msgstr "请先启用此服务器，然后登录。"
 
+#: src/pages/workspace/TerminalCollection.tsx
 #: src/pages/workspace/WorkspaceTerminal.tsx
 msgid "End this terminal?"
 msgstr "结束此终端？"
@@ -4466,6 +4471,10 @@ msgstr ""
 #: src/pages/import/LocalImportPage.tsx
 msgid "Found on this Mac"
 msgstr ""
+
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Four terminals are already open."
+msgstr "已打开四个终端。"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Free"
@@ -6044,6 +6053,10 @@ msgstr "新建技能"
 #: src/pages/shell/dialogs.tsx
 msgid "New space"
 msgstr "新建工作区"
+
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "New terminal"
+msgstr "新建终端"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "New work item"
@@ -8920,9 +8933,14 @@ msgstr ""
 #: src/pages/ide/IdePage.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
+#: src/pages/workspace/TerminalCollection.tsx
 #: src/pages/workspace/view-registry.ts
 msgid "Terminal"
 msgstr "终端"
+
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Terminal {number}"
+msgstr "终端 {number}"
 
 #: src/pages/shell/computer-terminal.tsx
 msgid "Terminal could not open; try again"
@@ -9072,6 +9090,7 @@ msgstr "思考"
 #: src/pages/ide/terminal.tsx
 #: src/pages/workspace/dialogs.tsx
 #: src/pages/workspace/terminal-controller.ts
+#: src/pages/workspace/TerminalCollection.tsx
 msgid "This action could not finish; try again."
 msgstr ""
 

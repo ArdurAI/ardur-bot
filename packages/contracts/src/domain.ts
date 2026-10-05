@@ -914,6 +914,7 @@ export const ComputerUpdateSchema = z.object({
 export type ComputerUpdate = z.infer<typeof ComputerUpdateSchema>;
 
 export const ComputerStatusSchema = z.object({
+  computerGeneration: z.number().int().nonnegative().optional(),
   appliedLimits: ComputerLimitsObservationSchema.nullable().optional(),
   executionBoundary: z.enum(["host-account", "container", "unknown"]).optional(),
   runsOnHost: z.boolean().optional(),

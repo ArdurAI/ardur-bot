@@ -2039,6 +2039,10 @@ msgstr "패널 닫기"
 msgid "Close preview"
 msgstr "미리보기 닫기"
 
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Close terminal"
+msgstr "터미널 닫기"
+
 #: src/pages/SettingsOverlay.tsx
 msgid "Close user settings"
 msgstr "계정 설정 닫기"
@@ -4049,6 +4053,7 @@ msgstr ""
 msgid "Enable this server first, then sign in."
 msgstr ""
 
+#: src/pages/workspace/TerminalCollection.tsx
 #: src/pages/workspace/WorkspaceTerminal.tsx
 msgid "End this terminal?"
 msgstr "이 터미널을 종료할까요?"
@@ -4466,6 +4471,10 @@ msgstr ""
 #: src/pages/import/LocalImportPage.tsx
 msgid "Found on this Mac"
 msgstr ""
+
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Four terminals are already open."
+msgstr "이미 터미널 네 개가 열려 있습니다."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Free"
@@ -6044,6 +6053,10 @@ msgstr "새 스킬"
 #: src/pages/shell/dialogs.tsx
 msgid "New space"
 msgstr "새 스페이스"
+
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "New terminal"
+msgstr "새 터미널"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "New work item"
@@ -8920,9 +8933,14 @@ msgstr ""
 #: src/pages/ide/IdePage.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
+#: src/pages/workspace/TerminalCollection.tsx
 #: src/pages/workspace/view-registry.ts
 msgid "Terminal"
 msgstr "터미널"
+
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Terminal {number}"
+msgstr "터미널 {number}"
 
 #: src/pages/shell/computer-terminal.tsx
 msgid "Terminal could not open; try again"
@@ -9072,6 +9090,7 @@ msgstr "생각 깊이"
 #: src/pages/ide/terminal.tsx
 #: src/pages/workspace/dialogs.tsx
 #: src/pages/workspace/terminal-controller.ts
+#: src/pages/workspace/TerminalCollection.tsx
 msgid "This action could not finish; try again."
 msgstr ""
 

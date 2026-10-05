@@ -62,6 +62,7 @@ export function toComputerStatus(
     imageProfile?: string;
     connectionId?: string | null;
     id?: string;
+    screenGeneration?: number;
     kind: string;
     state: string;
     sleepFailureReason?: string | null;
@@ -84,6 +85,7 @@ export function toComputerStatus(
   const screen = computerScreenSize(computer?.kind);
   const kind = (computer?.kind ?? "fake") as ComputerStatus["kind"];
   return {
+    computerGeneration: computer?.screenGeneration,
     appliedLimits: state === "running" ? currentComputerLimits(appliedLimits) : null,
     executionBoundary:
       computerRunsOnHost(computer) || kind === "ssh"

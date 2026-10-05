@@ -2039,6 +2039,10 @@ msgstr "Paneli kapat"
 msgid "Close preview"
 msgstr "Önizlemeyi kapat"
 
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Close terminal"
+msgstr "Terminali kapat"
+
 #: src/pages/SettingsOverlay.tsx
 msgid "Close user settings"
 msgstr "Kullanıcı ayarlarını kapat"
@@ -4049,6 +4053,7 @@ msgstr ""
 msgid "Enable this server first, then sign in."
 msgstr ""
 
+#: src/pages/workspace/TerminalCollection.tsx
 #: src/pages/workspace/WorkspaceTerminal.tsx
 msgid "End this terminal?"
 msgstr "Bu terminal sonlandırılsın mı?"
@@ -4466,6 +4471,10 @@ msgstr ""
 #: src/pages/import/LocalImportPage.tsx
 msgid "Found on this Mac"
 msgstr ""
+
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Four terminals are already open."
+msgstr "Zaten dört terminal açık."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Free"
@@ -6044,6 +6053,10 @@ msgstr "Yeni beceri"
 #: src/pages/shell/dialogs.tsx
 msgid "New space"
 msgstr ""
+
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "New terminal"
+msgstr "Yeni terminal"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "New work item"
@@ -8920,9 +8933,14 @@ msgstr ""
 #: src/pages/ide/IdePage.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
+#: src/pages/workspace/TerminalCollection.tsx
 #: src/pages/workspace/view-registry.ts
 msgid "Terminal"
 msgstr "Terminal"
+
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Terminal {number}"
+msgstr "Terminal {number}"
 
 #: src/pages/shell/computer-terminal.tsx
 msgid "Terminal could not open; try again"
@@ -9072,6 +9090,7 @@ msgstr "Düşünüyor"
 #: src/pages/ide/terminal.tsx
 #: src/pages/workspace/dialogs.tsx
 #: src/pages/workspace/terminal-controller.ts
+#: src/pages/workspace/TerminalCollection.tsx
 msgid "This action could not finish; try again."
 msgstr ""
 

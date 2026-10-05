@@ -7,15 +7,18 @@ export default function ComputerTerminalSession({
   computerId,
   workspace,
   visible = true,
+  onSession,
 }: {
   botId: string;
   computerId: string;
   workspace?: "computer";
   visible?: boolean;
+  onSession?(id: string): void;
 }) {
   return (
     <Terminal
       visible={visible}
+      onSession={onSession}
       openLink={(url) => {
         window.open(url, "_blank", "noopener,noreferrer");
       }}

@@ -35,6 +35,7 @@ export interface TerminalProps {
   close(sessionId: string): Promise<unknown>;
   visible?: boolean;
   openLink?(url: string): void;
+  onSession?(id: string): void;
 }
 
 /** Imported only when the computer's Terminal tab is selected. */
@@ -44,6 +45,7 @@ export default function ComputerTerminal({
   close,
   visible = true,
   openLink,
+  onSession,
 }: TerminalProps) {
   const container = useRef<HTMLDivElement>(null);
   const currentSession = useRef<string | undefined>(undefined);
@@ -62,6 +64,8 @@ export default function ComputerTerminal({
   const activateLink = useRef<(event: MouseEvent, url: string) => void>(() => {});
   const openLinkRef = useRef(openLink);
   openLinkRef.current = openLink;
+  const onSessionRef = useRef(onSession);
+  onSessionRef.current = onSession;
   const admission = useRef<Promise<unknown>>(Promise.resolve());
   const ticketRef = useRef(ticket);
   ticketRef.current = ticket;
@@ -199,6 +203,7 @@ export default function ComputerTerminal({
         if (!grant || disposed) return;
         sessionId = grant.sessionId;
         currentSession.current = sessionId;
+        onSessionRef.current?.(sessionId);
         const url = new URL(grant.path, window.location.origin);
         if (url.origin !== window.location.origin) throw new Error("Invalid terminal origin.");
         url.protocol = url.protocol === "https:" ? "wss:" : "ws:";

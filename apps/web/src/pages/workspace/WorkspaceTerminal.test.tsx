@@ -9,11 +9,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const calls = vi.hoisted(() => ({
   available: vi.fn(async () => ({ available: true })),
   release: vi.fn(async () => ({})),
-  session: vi.fn((_props: { botId: string; computerId: string }) => null as ReactNode),
+  close: vi.fn(async () => ({})),
+  session: vi.fn(
+    (_props: {
+      botId: string;
+      computerId: string;
+      visible?: boolean;
+      onSession?(id: string): void;
+    }) => null as ReactNode,
+  ),
 }));
 vi.mock("../../lib/rpc", () => ({
   rpc: {
-    terminal: { available: calls.available },
+    terminal: { available: calls.available, close: calls.close },
     computer: { release: calls.release },
   },
 }));
@@ -93,6 +101,44 @@ afterEach(async () => {
 });
 
 describe("WorkspaceTerminal", () => {
+  it("keeps four sessions under one grant and confirms only the final close", async () => {
+    calls.session.mockReturnValue(null);
+    await import("./TerminalCollection");
+    await render(baseProps({ computer: computer({ controlHolder: "user", controlBotId: "bot" }) }));
+    const add = () =>
+      [...container.querySelectorAll("button")].find(
+        (button) => button.textContent === "New terminal",
+      )!;
+    for (const id of ["shell-one", "shell-two", "shell-three", "shell-four"]) {
+      const session = calls.session.mock.calls.findLast(([props]) => props.visible)![0];
+      await act(async () => session.onSession!(id));
+      if (id !== "shell-four") await act(async () => add().click());
+    }
+    expect(container.querySelectorAll('[role="tab"]')).toHaveLength(4);
+    expect(add().disabled).toBe(true);
+    expect(add().title).toBe("Four terminals are already open.");
+    await act(async () =>
+      container.querySelectorAll<HTMLButtonElement>('[aria-label="Close terminal"]')[1]!.click(),
+    );
+    expect(calls.close).toHaveBeenCalledExactlyOnceWith({
+      botId: "bot",
+      computerId: "computer",
+      sessionId: "shell-two",
+    });
+    expect(calls.release).not.toHaveBeenCalled();
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(container.querySelectorAll('[role="tab"]')).toHaveLength(3);
+    for (const _ of [0, 1])
+      await act(async () =>
+        container.querySelector<HTMLButtonElement>('[aria-label="Close terminal"]')!.click(),
+      );
+    expect(container.querySelectorAll('[role="tab"]')).toHaveLength(1);
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Close terminal"]')!.click(),
+    );
+    expect(window.confirm).toHaveBeenCalledWith("End this terminal?");
+    expect(calls.release).toHaveBeenCalledExactlyOnceWith({ botId: "bot" });
+  });
   it("keeps authority and Release reachable outside the hidden tab", async () => {
     const controlsHost = document.createElement("div");
     document.body.append(controlsHost);

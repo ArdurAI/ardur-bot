@@ -2,6 +2,8 @@ import type { ComputerStatus } from "@ardurbot/contracts";
 import { encodeTerminalFrame } from "@ardurbot/contracts";
 import { expect, test } from "@playwright/test";
 import { activeBotId, captureScreenshot, completeOnboarding, signup } from "./helpers";
+import { bots, installPerformanceFixture } from "./performance-fixture";
+import { openWorkspaceView } from "./workspace-view";
 
 test("Terminal is optional, keeps Screen default and exposes a clear unavailable state", async ({
   page,
@@ -122,4 +124,94 @@ test("Terminal loads on demand and shell shortcuts stay in the terminal", async 
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("computer-viewport")).toBeVisible();
   await captureScreenshot(page, testInfo, "terminal-tab");
+});
+
+test("workspace keeps four distinct terminals and releases only at the final close", async ({
+  page,
+}, testInfo) => {
+  const botId = bots[0]!.id;
+  const computer: ComputerStatus = {
+    botId,
+    computerId: "tabs-computer",
+    computerGeneration: 1,
+    mode: "team",
+    kind: "docker",
+    state: "running",
+    controlHolder: "user",
+    controlBotId: botId,
+    capabilities: { graphical: false, interactiveTerminal: true },
+    takeoverRequested: false,
+    screenAvailable: false,
+    screenWidth: 1280,
+    screenHeight: 800,
+    homeRevision: null,
+    busyBotName: null,
+    canUpdate: false,
+  };
+  await installPerformanceFixture(page, false, false, {}, computer);
+  let opened = 0,
+    releases = 0;
+  const closed: string[] = [];
+  await page.route("**/rpc/terminal/available", (route) =>
+    route.fulfill({ json: { json: { available: true } } }),
+  );
+  await page.route("**/rpc/terminal/ticket", (route) => {
+    const sessionId = route.request().postDataJSON().json.sessionId ?? `tabs-${++opened}`;
+    return route.fulfill({
+      json: { json: { sessionId, ticket: sessionId, path: "/api/terminal/socket" } },
+    });
+  });
+  await page.route("**/rpc/terminal/close", (route) => {
+    closed.push(route.request().postDataJSON().json.sessionId);
+    return route.fulfill({ json: { json: { ok: true } } });
+  });
+  await page.route("**/rpc/computer/release", (route) => {
+    releases++;
+    return route.fulfill({ json: { json: { ok: true } } });
+  });
+  await page.routeWebSocket("**/api/terminal/socket", (socket) => {
+    socket.onMessage((message) => {
+      if (typeof message !== "string") return;
+      const payload = JSON.parse(message);
+      if (payload.type === "connect") {
+        socket.send(JSON.stringify({ type: "ready", inputSeq: 0 }));
+        socket.send(
+          Buffer.from(
+            encodeTerminalFrame(1, new TextEncoder().encode(`Process ${payload.ticket}\r\n`)),
+          ),
+        );
+      }
+    });
+  });
+  await page.goto(`/app/${botId}`);
+  await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
+  await page.getByRole("button", { name: "Agent computer" }).click();
+  await openWorkspaceView(page, "Terminal");
+  const pane = page.getByTestId("side-panel");
+  for (const number of [1, 2, 3, 4]) {
+    if (number > 1) await pane.getByRole("button", { name: "New terminal", exact: true }).click();
+    await expect(pane.locator(".xterm-accessibility-tree:visible")).toContainText(
+      `Process tabs-${number}`,
+    );
+  }
+  await expect(pane.getByRole("button", { name: "New terminal", exact: true })).toBeDisabled();
+  expect(opened).toBe(4);
+  await pane.getByRole("tab", { name: "Terminal 1", exact: true }).click();
+  await expect(pane.locator(".xterm-accessibility-tree:visible")).toContainText("Process tabs-1");
+  await captureScreenshot(page, testInfo, "workspace-four-terminals");
+  await pane.getByRole("button", { name: "Close terminal", exact: true }).nth(1).click();
+  await expect(pane.getByRole("tab", { name: "Terminal 2", exact: true })).toHaveCount(0);
+  expect(releases).toBe(0);
+  expect(new Set(closed)).toEqual(new Set(["tabs-2"]));
+  await expect(pane.locator(".xterm-accessibility-tree:visible")).toContainText("Process tabs-1");
+  await pane.getByRole("button", { name: "Close terminal", exact: true }).nth(1).click();
+  await expect(pane.getByRole("tab", { name: "Terminal 3", exact: true })).toHaveCount(0);
+  await pane.getByRole("button", { name: "Close terminal", exact: true }).nth(1).click();
+  await expect(pane.getByRole("tab", { name: "Terminal 4", exact: true })).toHaveCount(0);
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toBe("End this terminal?");
+    await dialog.accept();
+  });
+  await pane.getByRole("button", { name: "Close terminal", exact: true }).click();
+  await expect.poll(() => releases).toBe(1);
 });

@@ -7,7 +7,7 @@ import { userHoldsComputerControl } from "../../lib/thread-events";
 import { terminalSupported, useTerminalController } from "./terminal-controller";
 import { useUnsavedChanges } from "./unsaved";
 
-const ComputerTerminalSession = lazy(() => import("../shell/terminal-session"));
+const TerminalCollection = lazy(() => import("./TerminalCollection"));
 
 /**
  * Terminal tab of the workspace pane. Same authority rules as the full computer window: the
@@ -54,7 +54,7 @@ export function WorkspaceTerminal({
     releaseOnLeave: true,
     keepControlWhileHidden: true,
   });
-  const identity = `${bot.id}:${computer?.computerId}`;
+  const identity = `${bot.id}:${computer?.computerId}:${computer?.computerGeneration ?? "unknown"}`;
   const [opened, setOpened] = useState<string | null>(null);
   if (visible && controller.ready && opened !== identity) setOpened(identity);
   const sessionOpen = opened === identity && controller.ready;
@@ -97,10 +97,12 @@ export function WorkspaceTerminal({
               >{t`Opening terminal`}</p>
             }
           >
-            <ComputerTerminalSession
+            <TerminalCollection
+              key={identity}
               botId={bot.id}
               computerId={computer.computerId}
               visible={visible}
+              onCloseLast={controller.release}
             />
           </Suspense>
         </div>

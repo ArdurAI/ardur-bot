@@ -8,6 +8,7 @@ import {
   TERMINAL_ENDED,
   TERMINAL_GRACE_MS,
   TERMINAL_REPLAY_BYTES,
+  TERMINAL_SESSION_LIMIT,
   TERMINAL_WINDOW_BYTES,
 } from "@ardurbot/contracts";
 
@@ -70,11 +71,22 @@ export interface TerminalGatewayDeps {
 export class TerminalGateway {
   readonly sessions = new Map<string, Entry>();
   private tickets = new Map<string, Ticket>();
+  private admissions = new Map<string, Promise<unknown>>();
   private readonly now: () => number;
   constructor(private readonly deps: TerminalGatewayDeps) {
     this.now = deps.now ?? Date.now;
   }
   async request(grant: TerminalGrant, origin: string, sessionId?: string) {
+    const previous = this.admissions.get(grant.computerId) ?? Promise.resolve();
+    const next = previous.catch(() => undefined).then(() => this.admit(grant, origin, sessionId));
+    this.admissions.set(grant.computerId, next);
+    try {
+      return await next;
+    } finally {
+      if (this.admissions.get(grant.computerId) === next) this.admissions.delete(grant.computerId);
+    }
+  }
+  private async admit(grant: TerminalGrant, origin: string, sessionId?: string) {
     await this.deps.audit("requested", grant, sessionId ?? "", "human-request");
     try {
       await this.deps.authorize(grant);
@@ -84,8 +96,14 @@ export class TerminalGateway {
           throw new Error(TERMINAL_ENDED);
         return this.issue(s);
       }
-      if ([...this.sessions.values()].some((s) => s.grant.computerId === grant.computerId))
-        throw new Error("A terminal is already open.");
+      const siblings = [...this.sessions.values()].filter(
+        (s) => s.grant.computerId === grant.computerId,
+      );
+      if (
+        siblings.length >= TERMINAL_SESSION_LIMIT ||
+        siblings.some((s) => s.closed || s.origin !== origin || !sameGrant(s.grant, grant))
+      )
+        throw new Error(TERMINAL_ENDED);
       const opened = await this.deps.provider.open(
         grant.computer,
         { cols: 80, rows: 24, shellProfileId: "default" },
@@ -94,6 +112,12 @@ export class TerminalGateway {
       if (opened.generation !== grant.context.generation) {
         await this.deps.provider.close(opened.id, "stale-generation");
         throw new Error(TERMINAL_ENDED);
+      }
+      try {
+        await this.deps.authorize(grant);
+      } catch (error) {
+        await this.deps.provider.close(opened.id, "revoked-during-open");
+        throw error;
       }
       const s: Entry = {
         id: opened.id,
@@ -357,7 +381,9 @@ function sameGrant(a: TerminalGrant, b: TerminalGrant) {
     a.authSessionId === b.authSessionId &&
     a.context.leaseId === b.context.leaseId &&
     a.context.fence === b.context.fence &&
-    a.context.generation === b.context.generation
+    a.context.generation === b.context.generation &&
+    a.context.workingRoot === b.context.workingRoot &&
+    a.context.userId === b.context.userId
   );
 }
 export const terminalRequestReference = () => randomUUID();

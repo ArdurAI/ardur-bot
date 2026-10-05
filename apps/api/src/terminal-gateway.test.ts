@@ -112,6 +112,58 @@ const tick = async () => {
 afterEach(() => vi.useRealTimers());
 
 describe("human terminal gateway", () => {
+  it("closes a process whose grant was revoked while admission was pending", async () => {
+    const f = setup();
+    f.authorize.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error("Revoked"));
+    await expect(f.gateway.request(f.grant, "https://app.example")).rejects.toThrow(
+      "Session ended",
+    );
+    expect(f.provider.close).toHaveBeenCalledExactlyOnceWith(
+      "terminal-test",
+      "revoked-during-open",
+    );
+    expect(f.gateway.sessions.size).toBe(0);
+  });
+  it("serializes the four-session cap and preserves siblings when one closes", async () => {
+    const f = setup();
+    const streams = new Map<string, PassThrough>();
+    vi.mocked(f.provider.open).mockImplementation(async () => {
+      const id = `terminal-${streams.size}`;
+      streams.set(id, new PassThrough());
+      return { id, generation: f.grant.context.generation };
+    });
+    vi.mocked(f.provider.close).mockImplementation(async (id) => {
+      streams.get(id)?.destroy();
+    });
+    f.provider.output = async function* (id) {
+      for await (const bytes of streams.get(id)!) yield { seq: 1, bytes };
+    };
+    try {
+      const results = await Promise.allSettled(
+        Array.from({ length: 5 }, () => f.gateway.request(f.grant, "https://app.example")),
+      );
+      expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(4);
+      expect(f.gateway.sessions.size).toBe(4);
+      await f.gateway.closeOwned(f.grant.actor, f.grant.botId, f.grant.computerId, "terminal-1");
+      expect(f.gateway.sessions.size).toBe(3);
+      expect(f.gateway.sessions.has("terminal-0")).toBe(true);
+      expect(f.provider.close).toHaveBeenCalledExactlyOnceWith("terminal-1", "human-closed");
+      await expect(
+        f.gateway.request({ ...f.grant, authSessionId: "another" }, "https://app.example"),
+      ).rejects.toThrow();
+      await expect(
+        f.gateway.request({ ...f.grant, computerGeneration: 3 }, "https://app.example"),
+      ).rejects.toThrow();
+      await expect(
+        f.gateway.request(
+          { ...f.grant, context: { ...f.grant.context, leaseId: "another" } },
+          "https://app.example",
+        ),
+      ).rejects.toThrow();
+    } finally {
+      await f.gateway.stop();
+    }
+  });
   it("delivers real Fleet output from the first prompt and reconnects without replaying input", async () => {
     const child = Object.assign(new EventEmitter(), {
       stdin: new PassThrough(),

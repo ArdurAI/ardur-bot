@@ -2039,6 +2039,10 @@ msgstr "Закрыть панель"
 msgid "Close preview"
 msgstr "Закрыть предварительный просмотр"
 
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Close terminal"
+msgstr "Закрыть терминал"
+
 #: src/pages/SettingsOverlay.tsx
 msgid "Close user settings"
 msgstr "Закрыть настройки пользователя"
@@ -4049,6 +4053,7 @@ msgstr ""
 msgid "Enable this server first, then sign in."
 msgstr "Сначала включите этот сервер, затем войдите."
 
+#: src/pages/workspace/TerminalCollection.tsx
 #: src/pages/workspace/WorkspaceTerminal.tsx
 msgid "End this terminal?"
 msgstr "Закрыть этот терминал?"
@@ -4466,6 +4471,10 @@ msgstr ""
 #: src/pages/import/LocalImportPage.tsx
 msgid "Found on this Mac"
 msgstr ""
+
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Four terminals are already open."
+msgstr "Уже открыты четыре терминала."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Free"
@@ -6044,6 +6053,10 @@ msgstr "Новый навык"
 #: src/pages/shell/dialogs.tsx
 msgid "New space"
 msgstr "Новое пространство"
+
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "New terminal"
+msgstr "Новый терминал"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "New work item"
@@ -8920,9 +8933,14 @@ msgstr ""
 #: src/pages/ide/IdePage.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
+#: src/pages/workspace/TerminalCollection.tsx
 #: src/pages/workspace/view-registry.ts
 msgid "Terminal"
 msgstr "Терминал"
+
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Terminal {number}"
+msgstr "Терминал {number}"
 
 #: src/pages/shell/computer-terminal.tsx
 msgid "Terminal could not open; try again"
@@ -9072,6 +9090,7 @@ msgstr "рассуждение"
 #: src/pages/ide/terminal.tsx
 #: src/pages/workspace/dialogs.tsx
 #: src/pages/workspace/terminal-controller.ts
+#: src/pages/workspace/TerminalCollection.tsx
 msgid "This action could not finish; try again."
 msgstr ""
 

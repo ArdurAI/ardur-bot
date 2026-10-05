@@ -3,6 +3,11 @@ export const TERMINAL_HEADER_BYTES = 9;
 export const TERMINAL_REPLAY_BYTES = 2 * 1024 * 1024;
 export const TERMINAL_WINDOW_BYTES = 256 * 1024;
 export const TERMINAL_GRACE_MS = 30_000;
+export const TERMINAL_SESSION_LIMIT = 4;
+export type TerminalSessionCollection = {
+  sessions: readonly { id: string; number: number }[];
+  activeId: string;
+};
 export const TERMINAL_UNAVAILABLE = "Terminal is not available on this computer.";
 export const TERMINAL_ENDED = "Session ended — open a new terminal.";
 
