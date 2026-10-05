@@ -1856,7 +1856,7 @@ msgstr ""
 #: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose a model"
-msgstr ""
+msgstr "एक मॉडल चुनें"
 
 #: src/pages/memory/MemoryGeneration.tsx
 msgid "Choose a model in Models to enable memory suggestions."
@@ -7930,6 +7930,10 @@ msgstr "निर्देश सहेजें"
 msgid "Save model"
 msgstr "मॉडल सहेजें"
 
+#: src/pages/group-model-control.tsx
+msgid "Save the group first."
+msgstr "पहले समूह सहेजें।"
+
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/account/AccountProfile.tsx
@@ -9105,6 +9109,10 @@ msgstr ""
 #: src/pages/PeerMessagesOverlay.tsx
 msgid "This chat is view-only"
 msgstr "यह चैट केवल देखने के लिए है"
+
+#: src/pages/group-model-control.tsx
+msgid "This choice needs a supported computer and bot settings."
+msgstr "इस विकल्प के लिए समर्थित कंप्यूटर और बॉट सेटिंग्स चाहिए।"
 
 #: src/pages/SharedCommand.tsx
 msgid "This command is not available to this account."

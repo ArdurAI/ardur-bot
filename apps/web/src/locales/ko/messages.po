@@ -1856,7 +1856,7 @@ msgstr ""
 #: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose a model"
-msgstr ""
+msgstr "모델 선택"
 
 #: src/pages/memory/MemoryGeneration.tsx
 msgid "Choose a model in Models to enable memory suggestions."
@@ -7930,6 +7930,10 @@ msgstr "지침 저장"
 msgid "Save model"
 msgstr "모델 저장"
 
+#: src/pages/group-model-control.tsx
+msgid "Save the group first."
+msgstr "먼저 그룹을 저장하세요."
+
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/account/AccountProfile.tsx
@@ -9105,6 +9109,10 @@ msgstr ""
 #: src/pages/PeerMessagesOverlay.tsx
 msgid "This chat is view-only"
 msgstr "이 채팅은 읽기 전용입니다"
+
+#: src/pages/group-model-control.tsx
+msgid "This choice needs a supported computer and bot settings."
+msgstr "이 선택에는 지원되는 컴퓨터와 봇 설정이 필요합니다."
 
 #: src/pages/SharedCommand.tsx
 msgid "This command is not available to this account."

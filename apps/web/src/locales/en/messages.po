@@ -7930,6 +7930,10 @@ msgstr "Save instructions"
 msgid "Save model"
 msgstr "Save model"
 
+#: src/pages/group-model-control.tsx
+msgid "Save the group first."
+msgstr "Save the group first."
+
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/account/AccountProfile.tsx
@@ -9105,6 +9109,10 @@ msgstr "This change could not finish; try again."
 #: src/pages/PeerMessagesOverlay.tsx
 msgid "This chat is view-only"
 msgstr "This chat is view-only"
+
+#: src/pages/group-model-control.tsx
+msgid "This choice needs a supported computer and bot settings."
+msgstr "This choice needs a supported computer and bot settings."
 
 #: src/pages/SharedCommand.tsx
 msgid "This command is not available to this account."

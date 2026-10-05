@@ -1856,7 +1856,7 @@ msgstr ""
 #: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose a model"
-msgstr ""
+msgstr "Elige un modelo"
 
 #: src/pages/memory/MemoryGeneration.tsx
 msgid "Choose a model in Models to enable memory suggestions."
@@ -7930,6 +7930,10 @@ msgstr "Guardar instrucciones"
 msgid "Save model"
 msgstr "Guardar modelo"
 
+#: src/pages/group-model-control.tsx
+msgid "Save the group first."
+msgstr "Guarda primero el grupo."
+
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/account/AccountProfile.tsx
@@ -9105,6 +9109,10 @@ msgstr ""
 #: src/pages/PeerMessagesOverlay.tsx
 msgid "This chat is view-only"
 msgstr "Este chat es de solo lectura"
+
+#: src/pages/group-model-control.tsx
+msgid "This choice needs a supported computer and bot settings."
+msgstr "Esta opción requiere un equipo compatible y la configuración del bot."
 
 #: src/pages/SharedCommand.tsx
 msgid "This command is not available to this account."

@@ -1856,7 +1856,7 @@ msgstr "选择主文件夹内的一个文件夹。"
 #: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose a model"
-msgstr ""
+msgstr "选择模型"
 
 #: src/pages/memory/MemoryGeneration.tsx
 msgid "Choose a model in Models to enable memory suggestions."
@@ -7930,6 +7930,10 @@ msgstr "保存指令"
 msgid "Save model"
 msgstr "保存模型"
 
+#: src/pages/group-model-control.tsx
+msgid "Save the group first."
+msgstr "请先保存群组。"
+
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/account/AccountProfile.tsx
@@ -9105,6 +9109,10 @@ msgstr ""
 #: src/pages/PeerMessagesOverlay.tsx
 msgid "This chat is view-only"
 msgstr "此对话为只读"
+
+#: src/pages/group-model-control.tsx
+msgid "This choice needs a supported computer and bot settings."
+msgstr "此选择需要受支持的电脑和机器人设置。"
 
 #: src/pages/SharedCommand.tsx
 msgid "This command is not available to this account."

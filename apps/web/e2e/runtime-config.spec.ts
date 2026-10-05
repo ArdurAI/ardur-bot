@@ -232,5 +232,14 @@ test("a group shows captured runtime settings and refreshes them from the bot", 
   await expect(control.getByText("Time limit (seconds): 60")).toBeVisible();
   await expect(control.getByText("Context limit (KiB): 32")).toBeVisible();
   await expect(control.getByRole("button", { name: "Use bot runtime settings" })).toHaveCount(0);
+
+  await control.getByText("Runtime", { exact: true }).click();
+  await control.locator('select[id$="-model"]').selectOption("");
+  await control.getByRole("combobox", { name: "Runs on" }).selectOption("hermes");
+  const save = control.getByRole("button", { name: "Save model", exact: true });
+  await expect(save).toBeDisabled();
+  await expect(save).toHaveAccessibleDescription("Choose a model");
+  await expect(control.getByRole("status").filter({ hasText: /^Choose a model$/ })).toBeVisible();
+  await captureScreenshot(page, testInfo, "group-runtime-missing-model");
   await page.unrouteAll({ behavior: "ignoreErrors" });
 });
