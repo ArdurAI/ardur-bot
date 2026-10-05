@@ -1,6 +1,6 @@
 import { execSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { access, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { loadRootEnv } from "@ardurbot/core/node/load-root-env";
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
@@ -27,7 +27,7 @@ const e2eGrep = grepArg?.slice("--grep=".length);
 const e2eWorkers = workersArg?.slice("--workers=".length);
 const e2eShard = shardArg?.slice("--shard=".length);
 const agentRuntime = runtimeArg?.slice("--runtime=".length) ?? "scripted";
-const productDemo = path.basename(e2eSpec ?? "") === "product-demo.spec.ts";
+const productDemo = e2e && (!e2eSpec || path.basename(e2eSpec) === "product-demo.spec.ts");
 
 if (Number(integration) + Number(e2e) !== 1) {
   throw new Error("Pass exactly one of --integration or --e2e");
@@ -399,10 +399,16 @@ async function main() {
         if (failedRuns.length) console.error("Failed agent runs:", failedRuns);
         throw error;
       }
+      const productDemoWritten = productDemoDirectory
+        ? await access(path.join(reportDir, productDemoDirectory, "product-demo.json")).then(
+            () => true,
+            () => false,
+          )
+        : false;
       await writeSummary(reportDir, {
         ok: true,
         mode,
-        ...(productDemoDirectory
+        ...(productDemoWritten
           ? {
               productDemo: {
                 file: path.join(productDemoDirectory, "product-demo.json"),
