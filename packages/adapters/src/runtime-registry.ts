@@ -8,16 +8,14 @@ import type {
 } from "@ardurbot/contracts";
 import {
   computerRunsOnHost,
-  failureCategoryMessage,
   nativeRuntimeHealthKeys,
-  runtimeNames,
   runtimePinProblem,
-  runtimeSupportsLocation,
   validateAntigravityPin,
 } from "@ardurbot/contracts";
 import type { BrokerScope, HermesProviderBroker } from "./hermes-provider-broker.js";
 import { setHermesProviderStream } from "./hermes-provider-broker.js";
 import { catalogModels } from "./pi-runtime.js";
+import { canBotRun } from "./pin-resolution.js";
 import { RemoteHostRuntime } from "./remote-host-runtime.js";
 import { createHostClient, usesHostBridge } from "./remote-host-sandbox.js";
 import { AntigravityRuntime, probeAntigravity } from "./runtimes/antigravity-runtime.js";
@@ -40,33 +38,17 @@ export class RuntimeRegistry {
         "runtime-unavailable",
         "The pinned runtime is unavailable — change the pin.",
       );
-    if (
-      !runtimeSupportsLocation(
-        pin.runtimeKind,
-        typeof computerLocation === "string"
-          ? { kind: computerLocation }
-          : (computerLocation ?? {}),
-      )
-    )
-      return runtimePinProblem(
-        pin,
-        "runtime-unsupported-computer",
-        failureCategoryMessage("computer-unsupported", {
-          runtime: runtimeNames[pin.runtimeKind],
-          bot: "this bot",
-        }),
-        "computer-unsupported",
-      );
-    if (pin.runtimeKind !== "pi" && !experimental)
-      return runtimePinProblem(
-        pin,
-        "runtime-unavailable",
-        failureCategoryMessage("experimental-off", {
-          runtime: runtimeNames[pin.runtimeKind],
-          bot: "this bot",
-        }),
-        "experimental-off",
-      );
+    const problem = canBotRun({
+      pin,
+      placement: {
+        computer:
+          typeof computerLocation === "string"
+            ? { kind: computerLocation }
+            : (computerLocation ?? {}),
+        experimental,
+      },
+    });
+    if (problem) return problem;
     const availability = await entry.probe().catch(
       (): RuntimeAvailability => ({
         runtimeKind: pin.runtimeKind,

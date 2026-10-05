@@ -1521,4 +1521,6 @@ export const RU_MESSAGES: Record<string, string> = {
     "Это действие уже могло быть выполнено. Проверьте результат, прежде чем повторять попытку.",
   "Bot work is still paused after the update. Try again.":
     "После обновления работа ботов всё ещё приостановлена. Попробуйте снова.",
+  "Experimental turned on for this runtime":
+    "Экспериментальный режим включён для этой среды выполнения",
 };

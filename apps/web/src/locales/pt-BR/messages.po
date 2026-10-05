@@ -1711,6 +1711,15 @@ msgstr "Alterar senha"
 msgid "Change pin"
 msgstr ""
 
+#. placeholder {0}: new Intl.ListFormat(i18n.locale, { style: "short", type: "unit" }).format( blockedNames, )
+#: src/pages/ModelDestinations.tsx
+msgid "Change these bots' models first: {0}"
+msgstr "Primeiro, altere os modelos destes bots: {0}"
+
+#: src/pages/ModelDestinations.tsx
+msgid "Change this bot's model first."
+msgstr "Altere primeiro o modelo deste bot."
+
 #: src/components/composer/command-description.ts
 msgid "Change this bot’s pin"
 msgstr ""
@@ -1765,6 +1774,8 @@ msgstr "Os acessos do ChatGPT só funcionam dentro do Codex; adicione uma chave 
 msgid "Check"
 msgstr ""
 
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Check again"
 msgstr ""
@@ -2655,6 +2666,7 @@ msgstr ""
 msgid "Could not check teaching status. Refresh the view to continue."
 msgstr ""
 
+#: src/lib/use-can-run.ts
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Could not check the model. Try again."
 msgstr "Não foi possível verificar o modelo. Tente novamente."
@@ -4211,6 +4223,10 @@ msgstr ""
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Experimental turned on for this runtime"
+msgstr "Experimental foi ativado para este ambiente de execução"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts

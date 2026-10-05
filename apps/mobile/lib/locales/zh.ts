@@ -1457,4 +1457,5 @@ export const ZH_MESSAGES: Record<string, string> = {
     "此操作可能已经执行。再次尝试前，请检查结果。",
   "Bot work is still paused after the update. Try again.":
     "更新后，机器人工作仍处于暂停状态。请重试。",
+  "Experimental turned on for this runtime": "已为此运行时开启实验性功能",
 };

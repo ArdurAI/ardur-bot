@@ -1711,6 +1711,15 @@ msgstr "비밀번호 변경"
 msgid "Change pin"
 msgstr ""
 
+#. placeholder {0}: new Intl.ListFormat(i18n.locale, { style: "short", type: "unit" }).format( blockedNames, )
+#: src/pages/ModelDestinations.tsx
+msgid "Change these bots' models first: {0}"
+msgstr "먼저 다음 봇의 모델을 변경하세요: {0}"
+
+#: src/pages/ModelDestinations.tsx
+msgid "Change this bot's model first."
+msgstr "먼저 이 봇의 모델을 변경하세요."
+
 #: src/components/composer/command-description.ts
 msgid "Change this bot’s pin"
 msgstr ""
@@ -1765,6 +1774,8 @@ msgstr "ChatGPT 로그인은 Codex 안에서만 작동합니다. Hermes에서 GP
 msgid "Check"
 msgstr ""
 
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Check again"
 msgstr ""
@@ -2655,6 +2666,7 @@ msgstr ""
 msgid "Could not check teaching status. Refresh the view to continue."
 msgstr "가르치기 상태를 확인하지 못했습니다. 화면을 새로고침한 뒤 이어가세요."
 
+#: src/lib/use-can-run.ts
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Could not check the model. Try again."
 msgstr "모델을 확인하지 못했습니다. 다시 시도하세요."
@@ -4211,6 +4223,10 @@ msgstr "{0} 펼치기"
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Experimental turned on for this runtime"
+msgstr "이 런타임에 대해 실험적 기능이 켜졌습니다"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
