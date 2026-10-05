@@ -9223,7 +9223,7 @@ msgstr "此看板事项已完成。"
 
 #: src/pages/settings/RuntimeReliability.tsx
 msgid "This bot"
-msgstr ""
+msgstr "此机器人"
 
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."

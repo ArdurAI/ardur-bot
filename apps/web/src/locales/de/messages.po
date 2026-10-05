@@ -9223,7 +9223,7 @@ msgstr ""
 
 #: src/pages/settings/RuntimeReliability.tsx
 msgid "This bot"
-msgstr ""
+msgstr "Dieser Bot"
 
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
