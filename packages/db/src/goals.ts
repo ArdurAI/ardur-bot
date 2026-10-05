@@ -7,6 +7,7 @@ import {
   GOAL_MAX_DEPTH,
   GOAL_MAX_HOPS,
   GoalStartInputSchema,
+  goalBudget,
 } from "@ardurbot/contracts";
 import {
   checkPeerWakeLimits,
@@ -20,7 +21,7 @@ import { appendEventInTransaction } from "./events.js";
 import { IsolationError } from "./scope.js";
 import { withTransactionRetry } from "./transaction-retry.js";
 
-type GoalRow = TeamGoal & { usedTokens: number };
+type GoalRow = TeamGoal & ReturnType<typeof goalBudget>;
 
 function asGoal(row: GoalRow): Goal {
   return {
@@ -35,6 +36,9 @@ function asGoal(row: GoalRow): Goal {
     status: row.status as Goal["status"],
     tokenLimit: row.tokenLimit,
     usedTokens: row.usedTokens,
+    reservedTokens: row.reservedTokens,
+    availableTokens: row.availableTokens,
+    usageComplete: row.usageComplete,
     perWorkerTokens: row.perWorkerTokens,
     maxConcurrent: row.maxConcurrent,
     maxDescendants: row.maxDescendants,
@@ -47,16 +51,39 @@ function asGoal(row: GoalRow): Goal {
 }
 
 async function loadGoal(prisma: PrismaClient, where: Prisma.TeamGoalWhereInput) {
-  const row = await prisma.teamGoal.findFirst({
-    where,
-    orderBy: { createdAt: "desc" },
-  });
-  if (!row) return null;
-  const root = await prisma.delegationRoot.findUnique({
-    where: { rootTaskId: row.rootTaskId },
-    select: { usedTokens: true },
-  });
-  return asGoal({ ...row, usedTokens: root?.usedTokens ?? 0 });
+  return withTransactionRetry(() =>
+    prisma.$transaction(
+      async (tx) => {
+        const row = await tx.teamGoal.findFirst({ where, orderBy: { createdAt: "desc" } });
+        if (!row) return null;
+        const scope = { spaceId: row.spaceId, userId: row.userId };
+        const root = await tx.delegationRoot.findFirst({
+          where: { rootTaskId: row.rootTaskId, ...scope },
+          select: { usedTokens: true, reservedTokens: true, tokenLimit: true },
+        });
+        const incomplete = await tx.usageRecord.findFirst({
+          where: {
+            ...scope,
+            rootTaskId: row.rootTaskId,
+            purpose: { not: "detached-learning" },
+            coverage: { not: "complete" },
+          },
+          select: { id: true },
+        });
+        const unmeasured = await tx.run.findFirst({
+          where: {
+            ...scope,
+            OR: [{ taskId: row.rootTaskId }, { delegationRootTaskId: row.rootTaskId }],
+            status: { in: ["running", "completed", "failed", "cancelled"] },
+            usageRecords: { none: { purpose: { not: "detached-learning" } } },
+          },
+          select: { id: true },
+        });
+        return asGoal({ ...row, ...goalBudget(row.tokenLimit, root, !incomplete && !unmeasured) });
+      },
+      { isolationLevel: "RepeatableRead" },
+    ),
+  );
 }
 
 export function goalExhaustionReason(

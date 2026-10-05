@@ -1290,9 +1290,10 @@ msgid "Automatically start when you log in to your computer."
 msgstr ""
 
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Available"
-msgstr ""
+msgstr "Disponible"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Available after the routine is saved"
@@ -7557,6 +7558,10 @@ msgstr ""
 msgid "Reserve a merge run"
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Reserved"
+msgstr "Reservado"
+
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Reset"
@@ -9541,6 +9546,7 @@ msgid "Uninstall"
 msgstr ""
 
 #: src/components/ai/CompactWorkRecord.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/LearningCurator.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Unknown"
@@ -9680,6 +9686,10 @@ msgstr ""
 msgid "Usage"
 msgstr "Uso"
 
+#: src/pages/GroupPanel.tsx
+msgid "Usage incomplete"
+msgstr "Datos de uso incompletos"
+
 #: src/pages/HostComputerPrompt.tsx
 msgid "Use {hostLabel}"
 msgstr "Usar {hostLabel}"
@@ -9770,6 +9780,10 @@ msgstr "Usa KiB enteros."
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Use whole seconds."
 msgstr "Usa segundos enteros."
+
+#: src/pages/GroupPanel.tsx
+msgid "Used"
+msgstr "Usado"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "User"

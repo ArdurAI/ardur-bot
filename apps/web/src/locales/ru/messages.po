@@ -1290,9 +1290,10 @@ msgid "Automatically start when you log in to your computer."
 msgstr ""
 
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Available"
-msgstr ""
+msgstr "Доступно"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Available after the routine is saved"
@@ -7557,6 +7558,10 @@ msgstr ""
 msgid "Reserve a merge run"
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Reserved"
+msgstr "Зарезервировано"
+
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Reset"
@@ -9541,6 +9546,7 @@ msgid "Uninstall"
 msgstr "Удалить"
 
 #: src/components/ai/CompactWorkRecord.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/LearningCurator.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Unknown"
@@ -9680,6 +9686,10 @@ msgstr ""
 msgid "Usage"
 msgstr "Использование"
 
+#: src/pages/GroupPanel.tsx
+msgid "Usage incomplete"
+msgstr "Данные о расходе неполные"
+
 #: src/pages/HostComputerPrompt.tsx
 msgid "Use {hostLabel}"
 msgstr "Используйте {hostLabel}"
@@ -9770,6 +9780,10 @@ msgstr "Используйте целые КиБ."
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Use whole seconds."
 msgstr "Используйте целые секунды."
+
+#: src/pages/GroupPanel.tsx
+msgid "Used"
+msgstr "Использовано"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "User"

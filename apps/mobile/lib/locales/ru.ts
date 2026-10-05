@@ -1,4 +1,8 @@
 export const RU_MESSAGES: Record<string, string> = {
+  Goal: "Цель",
+  Used: "Использовано",
+  Reserved: "Зарезервировано",
+  "Usage incomplete": "Данные о расходе неполные",
   "Applied limits": "Действующие ограничения",
   CPU: "Процессор",
   Processes: "Процессы",

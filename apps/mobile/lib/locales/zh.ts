@@ -1,4 +1,8 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  Goal: "目标",
+  Used: "已使用",
+  Reserved: "已预留",
+  "Usage incomplete": "用量数据不完整",
   "Applied limits": "已实施的限制",
   CPU: "处理器",
   Processes: "进程",

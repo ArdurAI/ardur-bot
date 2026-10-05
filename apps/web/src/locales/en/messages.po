@@ -1290,6 +1290,7 @@ msgid "Automatically start when you log in to your computer."
 msgstr "Automatically start when you log in to your computer."
 
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Available"
 msgstr "Available"
@@ -7557,6 +7558,10 @@ msgstr "Research & writing"
 msgid "Reserve a merge run"
 msgstr "Reserve a merge run"
 
+#: src/pages/GroupPanel.tsx
+msgid "Reserved"
+msgstr "Reserved"
+
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Reset"
@@ -9541,6 +9546,7 @@ msgid "Uninstall"
 msgstr "Uninstall"
 
 #: src/components/ai/CompactWorkRecord.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/LearningCurator.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Unknown"
@@ -9680,6 +9686,10 @@ msgstr "Uploaded files"
 msgid "Usage"
 msgstr "Usage"
 
+#: src/pages/GroupPanel.tsx
+msgid "Usage incomplete"
+msgstr "Usage incomplete"
+
 #: src/pages/HostComputerPrompt.tsx
 msgid "Use {hostLabel}"
 msgstr "Use {hostLabel}"
@@ -9770,6 +9780,10 @@ msgstr "Use whole KiB."
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Use whole seconds."
 msgstr "Use whole seconds."
+
+#: src/pages/GroupPanel.tsx
+msgid "Used"
+msgstr "Used"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "User"
