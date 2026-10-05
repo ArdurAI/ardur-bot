@@ -9110,6 +9110,10 @@ msgstr "This chat is view-only"
 msgid "This command is not available to this account."
 msgstr "This command is not available to this account."
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "This command was not run because it exceeds 64 KB. Put code in a file and run that file."
+msgstr "This command was not run because it exceeds 64 KB. Put code in a file and run that file."
+
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "this computer"
@@ -9629,6 +9633,10 @@ msgstr "Use {hostLabel}"
 #: src/pages/Onboarding.tsx
 msgid "Use a found model"
 msgstr "Use a found model"
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Use a path inside this bot's folder or a registered folder."
+msgstr "Use a path inside this bot's folder or a registered folder."
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Use a token"

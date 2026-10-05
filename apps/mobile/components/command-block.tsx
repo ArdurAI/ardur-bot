@@ -1,12 +1,15 @@
 import type { CommandBlock } from "@ardurbot/contracts";
-import { commandOutput, commandSummaryDisplay } from "@ardurbot/core";
+import { COMMAND_REFUSALS } from "@ardurbot/contracts";
+import { commandDisplayError, commandDisplayOutput, commandSummaryDisplay } from "@ardurbot/core";
 import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { mobileTokens } from "../lib/appearance";
 import { exportCommandRun } from "../lib/command-export";
-import { t } from "../lib/i18n";
+import { useI18n } from "../lib/i18n";
 
 export function NativeCommandBlock({ block }: { block: CommandBlock }) {
+  const { t } = useI18n();
+  const displayError = commandDisplayError(block, (id) => t(COMMAND_REFUSALS[id]));
   const [expanded, setExpanded] = useState(false);
   const [error, setError] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -50,7 +53,7 @@ export function NativeCommandBlock({ block }: { block: CommandBlock }) {
           </Text>
           <ScrollView style={styles.output} nestedScrollEnabled>
             <Text selectable style={[styles.mono, { color: tokens.foreground }]}>
-              {commandOutput(block)}
+              {commandDisplayOutput(block, displayError)}
             </Text>
           </ScrollView>
           <Pressable

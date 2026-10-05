@@ -70,3 +70,17 @@ test("command blocks fold, show inert output, search a run and export a log", as
   await expect.poll(async () => (await block.boundingBox())!.height).toBe(foldedHeight);
   await expect(block.getByRole("button", { name: "Export run", exact: true })).not.toBeVisible();
 });
+
+test("conversation command refusals use the selected language", async ({ page }, testInfo) => {
+  await page.route("**/rpc/commands/open", (route) =>
+    route.fulfill({ status: 403, json: { code: "FORBIDDEN" } }),
+  );
+  await page.goto("/e2e/fixtures/command-blocks.html?translated");
+  const block = page.getByTestId("command-block").first();
+  await block.getByRole("button", { name: /Ran/ }).click();
+  await expect(block.locator("pre")).toContainText(
+    "Команда не выполнена, потому что её размер превышает 64 КБ. Сохраните код в файл и запустите этот файл.",
+  );
+  await expect(block.locator("pre")).not.toContainText("This command was not run");
+  await captureScreenshot(page, testInfo, "command-refusal-translated");
+});

@@ -9110,6 +9110,10 @@ msgstr "此对话为只读"
 msgid "This command is not available to this account."
 msgstr ""
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "This command was not run because it exceeds 64 KB. Put code in a file and run that file."
+msgstr "此命令未运行，因为它超过了 64 KB。请将代码放入文件并运行该文件。"
+
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "这台电脑"
@@ -9629,6 +9633,10 @@ msgstr "使用 {hostLabel}"
 #: src/pages/Onboarding.tsx
 msgid "Use a found model"
 msgstr "使用找到的模型"
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Use a path inside this bot's folder or a registered folder."
+msgstr "请使用此机器人的文件夹或已注册文件夹内的路径。"
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Use a token"

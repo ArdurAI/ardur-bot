@@ -13,7 +13,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "check": "expo install --check && tsc --noEmit -p tsconfig.json",
-    "test": "vitest run --root ../.. apps/mobile/lib",
+    "test": "vitest run --root ../.. apps/mobile/lib apps/mobile/components",
     "test:e2e": "maestro test .maestro/smoke.yaml"
   },
   "dependencies": {

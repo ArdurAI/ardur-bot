@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
 import type { AdapterContext, ComputerRef, SandboxProvider } from "@ardurbot/adapter-kit";
-import type { CommandBlock, CommandEventPayload } from "@ardurbot/contracts";
+import type { CommandBlock, CommandEventPayload, CommandRefusalId } from "@ardurbot/contracts";
 import {
+  COMMAND_REFUSALS,
   COMMAND_SUPPRESSED,
   COMMAND_TEXT_LIMIT,
   COMMAND_TRUNCATED,
   CommandEventPayloadSchema,
+  CommandRefusalError,
   CommandRequestSchema,
   ToolResumedPayloadSchema,
 } from "@ardurbot/contracts";
@@ -269,12 +271,27 @@ export function createCommandRecording(input: {
     executionId: string,
     tool: Tool,
   ) {
-    if (name !== "shell") return tool(name, args, executionId);
+    if (name !== "shell") return invokeTool(tool, name, args, executionId);
     const existing = deliveries.get(executionId);
     if (existing) return existing;
     const delivery = record(args, executionId, tool);
     deliveries.set(executionId, delivery);
     return delivery;
+  }
+
+  async function invokeTool(
+    tool: Tool,
+    name: string,
+    args: Record<string, unknown>,
+    executionId: string,
+  ) {
+    try {
+      return await tool(name, args, executionId);
+    } catch (error) {
+      if (error instanceof CommandRefusalError)
+        return { error: error.message, refusalId: error.refusalId };
+      throw error;
+    }
   }
 
   async function record(args: Record<string, unknown>, executionId: string, tool: Tool) {
@@ -285,6 +302,7 @@ export function createCommandRecording(input: {
     const request = parsed.success ? parsed.data : null;
     let resolvedCwd: string | null = null;
     let cwdError = false;
+    let cwdRefusal: CommandRefusalId | undefined;
     try {
       if (request) {
         const cwd = input.resolveCwd
@@ -297,8 +315,9 @@ export function createCommandRecording(input: {
         resolvedCwd =
           (await input.sandbox.resolveCommandCwd?.(input.computer, cwd, input.context)) ?? null;
       }
-    } catch {
+    } catch (error) {
       cwdError = true;
+      if (error instanceof CommandRefusalError) cwdRefusal = error.refusalId;
     }
     const command = safe(request?.command ?? "[Invalid command]");
     const cwd = resolvedCwd === null ? null : safe(resolvedCwd);
@@ -391,11 +410,18 @@ export function createCommandRecording(input: {
       const result =
         !request || containsKnownSecret || cwdError
           ? {
+              ...(oversized
+                ? { refusalId: "command-size" }
+                : cwdRefusal
+                  ? { refusalId: cwdRefusal }
+                  : {}),
               error: oversized
-                ? "This command was not run because it exceeds 64 KB. Put code in a file and run that file."
-                : "This command was not run because its arguments could not be retained safely; use managed credential variables.",
+                ? COMMAND_REFUSALS["command-size"]
+                : cwdRefusal
+                  ? COMMAND_REFUSALS[cwdRefusal]
+                  : "This command was not run because its arguments could not be retained safely; use managed credential variables.",
             }
-          : await tool("shell", { ...request }, executionId);
+          : await invokeTool(tool, "shell", { ...request }, executionId);
       // The earlier attempt's card already shows a finished call.
       if (isToolPauseResult(result) || finished) return result;
       const value = result && typeof result === "object" ? (result as Record<string, unknown>) : {};
@@ -417,6 +443,9 @@ export function createCommandRecording(input: {
         exitCode: code,
         stdout: typeof value.stdout === "string" ? safe(value.stdout) : null,
         stderr: typeof value.stderr === "string" ? safe(value.stderr) : null,
+        ...(value.error && typeof value.refusalId === "string"
+          ? { refusalId: safe(value.refusalId) }
+          : {}),
         error: value.error
           ? safe(typeof value.error === "string" ? value.error : "The command could not finish.")
           : null,
