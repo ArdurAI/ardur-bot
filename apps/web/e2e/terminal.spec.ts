@@ -110,8 +110,13 @@ test("Terminal loads on demand and shell shortcuts stay in the terminal", async 
   await context.route("https://example.test/**", (route) =>
     route.fulfill({ body: "Fixture page" }),
   );
-  const printedBounds = await printed.boundingBox();
-  expect(printedBounds).not.toBeNull();
+  let printedBounds: Awaited<ReturnType<typeof printed.boundingBox>> = null;
+  await expect
+    .poll(async () => {
+      printedBounds = await printed.boundingBox();
+      return printedBounds;
+    })
+    .not.toBeNull();
   // Accessibility text sits beneath xterm's screen; move the real pointer over the glyphs.
   await page.mouse.move(
     printedBounds!.x + printedBounds!.width / 2,
