@@ -237,3 +237,33 @@ host callbacks preserve the category; unknown exception text still becomes a
 generic provider failure. The HTTP response and conversation do not expose the
 category, request body, headers or private error data. Old peers can retain the
 generic provider failure when they do not recognize the newer fixed signature.
+
+### Turn limits and allowance errors
+
+A Hermes turn stops at its model-call or time limit. Its brief summary shares
+the source turn's model-call allowance; it does not get a fresh allowance.
+
+To let new turns do more work, change **Model calls per turn** or
+**Time limit (seconds)** in the bot's runtime settings. Increase only the limit
+the turn reached. More calls or more time can increase cost. These settings do
+not remove a goal's token limit or an asked member's separate allowance, and
+they do not change a turn already running.
+
+Before each model call, Ardur reserves room for the request and its possible
+output. This conservative reservation is not measured usage or a bill.
+Reported usage and cost come from the provider; a request whose usage is
+unknown keeps its reservation. A non-goal room coordinator uses the larger
+of its stored task limit and its run allowance. Asking members does not
+reduce that allowance. Goals still stop at their explicit whole-task limit;
+members stay within their own attempt allowances. Stop, cancellation and
+expiry still prevent new requests.
+
+A diagnostic category of `run-budget` means Ardur did not admit the model
+request. It can mean an allowance was reached, or that Ardur could not save
+the request's admission record. The category alone does not tell you which.
+
+Check the run's call count, runtime limits and goal status before raising
+a limit. If the refusal happens before those limits are reached, report the
+Ardur build version, the request number and the time spent in each phase.
+Do not include prompts, request bodies, headers or credentials. Changing the
+model or reinstalling Hermes is not a remedy for this category alone.
