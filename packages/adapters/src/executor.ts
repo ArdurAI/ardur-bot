@@ -5921,14 +5921,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
           const resumeTurn =
             savedTurn && (savedTurn.suspended || recoveringActiveTurn) ? savedTurn : undefined;
           const turnProgress = new TurnProgress(
-            savedTurn ?? {
+            resumeTurn ?? {
               runtimeKind: selected.pin.runtimeKind,
               pin: selected.pin,
               history: [],
               prompt: task.prompt,
             },
           );
-          if (!resumeTurn) turnProgress.runtimeState = undefined;
           let checkpointWrite = Promise.resolve();
           const saveProgress = () => {
             const snapshot = redactTaskValue(turnProgress.snapshot(), runSecrets);
@@ -6001,6 +6000,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 ])
               : [[], new Set<string>()];
           const priorCalls = priorToolCalls(priorToolEvents);
+          const priorRecordedCalls = new Map(priorCalls.recorded);
           for (const executionId of priorCalls.finished) finishedCommands.add(executionId);
           adoptOpenCommands(
             openCommands,
@@ -6149,8 +6149,18 @@ export function createRunExecutor(deps: ExecutorDeps) {
             try {
               const digest = deps.secretStore.digest("restart-effect", stableJsonValue(args));
               const replay = turnProgress.replay(name, digest);
-              if (replay.kind === "completed") return replay.result;
-              if (replay.kind === "uncertain") {
+              const recordedCommand =
+                name === "shell" &&
+                (resumes !== undefined ||
+                  sameToolCall(priorRecordedCalls.get(executionId), {
+                    name,
+                    argumentDigest: deps.secretStore.digest(
+                      "tool-call-arguments",
+                      stableJsonValue(args),
+                    ),
+                  }));
+              if (replay.kind === "completed" && !recordedCommand) return replay.result;
+              if (replay.kind === "uncertain" && !recordedCommand) {
                 const paused = await deps.events.pauseRunForInput({
                   spaceId: run.spaceId,
                   threadId: run.threadId,

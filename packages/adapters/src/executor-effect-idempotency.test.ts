@@ -2143,6 +2143,36 @@ describe("run failure cause", () => {
 });
 
 describe("executor restart journeys without a database", () => {
+  it("does not treat a paused approval intent as an uncertain restart effect", async () => {
+    const f = fixture("answered-approval");
+    const args = { command: "echo fixture" };
+    f.runRecord.turnCheckpoint = (
+      await digests.put(
+        JSON.stringify({
+          version: 1,
+          runtimeKind: "pi",
+          pin: {},
+          history: [],
+          prompt: "work",
+          effects: [
+            {
+              id: "paused",
+              name: "shell",
+              digest: testDigest("restart-effect", JSON.stringify(args)),
+              state: "started",
+            },
+          ],
+        }),
+        {} as never,
+        "turn:answered-approval",
+      )
+    ).ciphertext;
+    f.setCalls([{ name: "shell", args, executionId: "answered" }]);
+    await f.executor.continueRun("answered-approval", "worker");
+    expect(f.sandboxExecute).toHaveBeenCalledOnce();
+    expect(f.events.pauseRunForInput).not.toHaveBeenCalled();
+    expect(f.finalizeRun).toHaveBeenCalledWith(expect.objectContaining({ outcome: "completed" }));
+  });
   it.each(["queued", "waiting_input"])(
     "uses current answer context rather than restart context for an ordinary %s continuation",
     async (status) => {
@@ -2320,6 +2350,7 @@ describe("executor restart journeys without a database", () => {
   });
   it("pauses an uncertain command for a person instead of repeating it", async () => {
     const f = fixture("uncertain-tool");
+    f.runRecord.status = "running";
     const args = { command: "echo fixture" };
     const saved = {
       version: 1,
