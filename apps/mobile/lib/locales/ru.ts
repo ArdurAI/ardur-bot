@@ -1,4 +1,9 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "Run commands inside this bot's folder or a registered folder.":
+    "Запускайте команды в папке этого бота или в зарегистрированной папке.",
+  "This command was not run because its request is invalid. Check the command and folder.":
+    "Команда не была выполнена из-за неверного запроса. Проверьте команду и папку.",
+
   "{runtime}'s tool list changed during startup. Check the connected tools and try again.":
     "Список инструментов {runtime} изменился при запуске. Проверьте подключённые инструменты и повторите попытку.",
   "{runtime}'s settings were not confirmed. Check this bot's settings and try again.":

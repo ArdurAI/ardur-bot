@@ -10,6 +10,14 @@ import { useI18n } from "../lib/i18n";
 export function NativeCommandBlock({ block }: { block: CommandBlock }) {
   const { t } = useI18n();
   const displayError = commandDisplayError(block, (id) => t(COMMAND_REFUSALS[id]));
+  const translatedError =
+    displayError === block.error &&
+    block.refusalId == null &&
+    (block.error === "Run commands inside this bot's folder or a registered folder." ||
+      block.error ===
+        "This command was not run because its request is invalid. Check the command and folder.")
+      ? t(block.error)
+      : displayError;
   const [expanded, setExpanded] = useState(false);
   const [error, setError] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -53,7 +61,7 @@ export function NativeCommandBlock({ block }: { block: CommandBlock }) {
           </Text>
           <ScrollView style={styles.output} nestedScrollEnabled>
             <Text selectable style={[styles.mono, { color: tokens.foreground }]}>
-              {commandDisplayOutput(block, displayError)}
+              {commandDisplayOutput(block, translatedError)}
             </Text>
           </ScrollView>
           <Pressable

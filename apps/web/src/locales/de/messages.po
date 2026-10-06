@@ -1867,7 +1867,7 @@ msgstr ""
 #: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose a model"
-msgstr ""
+msgstr "Wähle ein Modell"
 
 #: src/pages/memory/MemoryGeneration.tsx
 msgid "Choose a model in Models to enable memory suggestions."
@@ -7783,6 +7783,10 @@ msgstr ""
 msgid "Run at"
 msgstr ""
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Run commands inside this bot's folder or a registered folder."
+msgstr "Führe Befehle im Ordner dieses Bots oder in einem registrierten Ordner aus."
+
 #: src/pages/RoutineEditor.tsx
 msgid "Run history"
 msgstr ""
@@ -7945,6 +7949,10 @@ msgstr "Anweisungen speichern"
 #: src/pages/group-model-control.tsx
 msgid "Save model"
 msgstr "Modell speichern"
+
+#: src/pages/group-model-control.tsx
+msgid "Save the group first."
+msgstr "Speichere zuerst die Gruppe."
 
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
@@ -9122,6 +9130,10 @@ msgstr ""
 msgid "This chat is view-only"
 msgstr "Dieser Chat ist schreibgeschützt"
 
+#: src/pages/group-model-control.tsx
+msgid "This choice needs a supported computer and bot settings."
+msgstr "Diese Auswahl erfordert einen unterstützten Computer und passende Bot-Einstellungen."
+
 #: src/pages/SharedCommand.tsx
 msgid "This command is not available to this account."
 msgstr ""
@@ -9129,6 +9141,10 @@ msgstr ""
 #: src/components/ThreadCommandBlock.tsx
 msgid "This command was not run because it exceeds 64 KB. Put code in a file and run that file."
 msgstr "Dieser Befehl wurde nicht ausgeführt, weil er 64 KB überschreitet. Speichere den Code in einer Datei und führe diese aus."
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "This command was not run because its request is invalid. Check the command and folder."
+msgstr "Dieser Befehl wurde nicht ausgeführt, weil seine Anfrage ungültig ist. Prüfe den Befehl und den Ordner."
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"

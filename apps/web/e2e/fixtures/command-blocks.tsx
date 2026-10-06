@@ -31,6 +31,21 @@ const block: CommandBlock = {
   rerunDisabledReason: null,
 };
 
+const refusal = new URLSearchParams(window.location.search).has("refusal");
+const displayedBlock: CommandBlock = refusal
+  ? {
+      ...block,
+      command: "git rev-parse HEAD",
+      outcome: "cancelled",
+      exitCode: null,
+      durationMs: null,
+      stdout: null,
+      stderr: null,
+      error: "Run commands inside this bot's folder or a registered folder.",
+      rerunDisabledReason: "Run commands inside this bot's folder or a registered folder.",
+    }
+  : block;
+
 createRoot(document.getElementById("root")!).render(
   <I18nProvider i18n={i18n}>
     <main className="min-h-screen bg-background p-8 text-foreground">
@@ -48,7 +63,7 @@ createRoot(document.getElementById("root")!).render(
                   stdout: "",
                   stderr: "",
                 }
-              : block
+              : displayedBlock
           }
           spaceId="space-1"
         />
