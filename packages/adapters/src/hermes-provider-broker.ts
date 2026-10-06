@@ -559,7 +559,10 @@ export class HermesProviderBroker {
       assertHttpsForKeyedOpenAiCompatibleUrl(url, connection.apiKey);
     }
     this.allowed = catalog(this.options.tools);
-    this.transport = createOpenAiCompatibleFetch(options.fetch);
+    this.transport = diagnosticProviderFetch(
+      createOpenAiCompatibleFetch(options.fetch),
+      () => undefined,
+    );
     this.grant = Object.freeze({
       id: randomUUID(),
       token: randomBytes(32).toString("base64url"),
