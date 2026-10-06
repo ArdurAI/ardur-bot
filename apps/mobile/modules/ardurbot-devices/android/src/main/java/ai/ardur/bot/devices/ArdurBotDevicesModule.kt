@@ -17,12 +17,12 @@ import java.security.KeyStore
 import java.security.MessageDigest
 import java.security.Signature
 import java.security.cert.CertificateFactory
+import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
 import java.security.spec.ECGenParameterSpec
 import java.util.UUID
 import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.SSLContext
-import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
 
 private fun digest(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it.toInt() and 255) }
@@ -94,22 +94,25 @@ class ArdurBotDevicesModule : Module() {
     AsyncFunction("request") { url: String, fingerprint: String, body: String ->
       val target = URL(url)
       require(target.protocol == "https" && target.userInfo == null && target.query == null && target.ref == null && target.path.startsWith("/device/") && body.toByteArray().size <= 131072) { "Choose an HTTPS home." }
-      val managerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm()).apply { init(null as KeyStore?) }
-      val systemTrust = managerFactory.trustManagers.filterIsInstance<X509TrustManager>().first()
       var pinned = false
       val trust = object : X509TrustManager {
-        override fun getAcceptedIssuers() = systemTrust.acceptedIssuers
-        override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) = systemTrust.checkClientTrusted(chain, authType)
+        override fun getAcceptedIssuers() = emptyArray<X509Certificate>()
+        override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {
+          throw CertificateException("This home's identity changed; pair your phone again.")
+        }
         override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {
-          pinned = chain.isNotEmpty() && digest(chain[0].encoded) == fingerprint
-          if (pinned) { chain[0].checkValidity(); chain[0].verify(chain[0].publicKey) }
-          else systemTrust.checkServerTrusted(chain, authType)
+          pinned = false
+          if (chain.isEmpty() || digest(chain[0].encoded) != fingerprint) {
+            throw CertificateException("This home's identity changed; pair your phone again.")
+          }
+          chain[0].checkValidity(); chain[0].verify(chain[0].publicKey)
+          pinned = true
         }
       }
       val ssl = SSLContext.getInstance("TLS").apply { init(null, arrayOf(trust), null) }
       val connection = target.openConnection() as HttpsURLConnection
       connection.sslSocketFactory = ssl.socketFactory
-      connection.hostnameVerifier = javax.net.ssl.HostnameVerifier { host, session -> pinned || HttpsURLConnection.getDefaultHostnameVerifier().verify(host, session) }
+      connection.hostnameVerifier = javax.net.ssl.HostnameVerifier { _, _ -> pinned }
       connection.instanceFollowRedirects = false; connection.connectTimeout = 15000; connection.readTimeout = 15000
       connection.requestMethod = "POST"; connection.doOutput = true
       connection.setRequestProperty("Content-Type", "application/json")
