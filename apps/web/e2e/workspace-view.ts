@@ -15,6 +15,6 @@ export async function openWorkspaceView(page: Page, name: string) {
 
 /** Toggle the remembered workspace and refresh its computer on reopening. */
 export async function toggleAgentComputer(page: Page) {
-  await page.getByRole("button", { name: "Views", exact: true }).click();
-  await page.getByRole("menuitemcheckbox", { name: "Agent computer", exact: true }).click();
+  await page.locator("[data-workspace-trigger]").click();
+  await page.locator("[data-workspace-toggle]").click();
 }

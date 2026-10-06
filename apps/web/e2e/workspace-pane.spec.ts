@@ -261,7 +261,9 @@ test("one header menu keeps views, computer and settings reachable by keyboard",
   await captureScreenshot(page, testInfo, "header-menu-narrow");
   await page.keyboard.press("Escape");
   await expect(trigger).toBeFocused();
-  expect(unexpected).toEqual([]);
+  // This journey explicitly opens Computer. Its screen requests are expected,
+  // but opening the menu or a view must never boot, take control or start a terminal.
+  expect(new Set(unexpected)).toEqual(new Set(["computer/screenUrl"]));
 });
 
 for (const hostBot of [false, true])
