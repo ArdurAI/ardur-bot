@@ -1,6 +1,9 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import type { HermesGrantRefusalCategory } from "@ardurbot/host-runtime/runtimes/hermes-provider-failure";
+import type {
+  HermesGrantRefusalCategory,
+  HermesProviderFailure,
+} from "@ardurbot/host-runtime/runtimes/hermes-provider-failure";
 import {
   HERMES_GRANT_REFUSAL_CATEGORIES,
   HermesProviderRelayError,
@@ -22,8 +25,10 @@ import type {
   Context as PiContext,
   SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
+import { diagnosticProviderFetch, upstreamHttpFailure } from "./hermes-provider-diagnostics.js";
+import type { AdmittedChatMessage } from "./hermes-provider-translation.js";
 import {
-  type AdmittedChatMessage,
+  BrokerTranslationError,
   piContext,
   providerThinkingLevel,
   translateStream,
@@ -677,6 +682,7 @@ export class HermesProviderBroker {
         });
         responseBody = response.body;
         await active();
+        if (!response.ok) throw new HermesProviderRelayError(upstreamHttpFailure(response.status));
         const mime = response.headers.get("content-type") ?? "";
         if (!mime.includes("application/json") && !mime.includes("text/event-stream")) {
           controller.abort();
@@ -832,6 +838,15 @@ export class HermesProviderBroker {
     const { connection } = this.options;
     const catalog = this.options.catalog;
     const model = catalog?.model;
+    let providerFailure: HermesProviderFailure | undefined;
+    let phase: "request-translation" | "provider-stream" | "response-translation" =
+      "request-translation";
+    const providerFetch = diagnosticProviderFetch(
+      this.options.fetch ?? globalThis.fetch,
+      (failure) => {
+        providerFailure = failure;
+      },
+    );
     try {
       live();
       await active();
@@ -859,8 +874,9 @@ export class HermesProviderBroker {
           : typeof body.stop === "string"
             ? { samplingParams: { stop: [body.stop] } }
             : {}),
-        ...(this.options.fetch ? { fetch: this.options.fetch } : {}),
+        fetch: providerFetch,
       };
+      phase = "provider-stream";
       const invoked = this.options.streamSimple
         ? this.options.streamSimple(model, context, options)
         : piStreamSimple(model!, context, options);
@@ -876,6 +892,7 @@ export class HermesProviderBroker {
           void this.options.record(collector.snapshot(usage));
         },
       });
+      phase = "response-translation";
       await active();
       live();
       const payload = result.frames.join("") || JSON.stringify(result.body);
@@ -917,35 +934,27 @@ export class HermesProviderBroker {
       }
       if (outcome === "cancelled" || outcome === "timed-out")
         throw new Error("Provider request was cancelled.");
-      const isInlineImageError =
-        error instanceof Error && error.message === "Only inline images are supported.";
-      const status = isInlineImageError
-        ? 400
-        : error instanceof Error
-          ? providerErrorStatus(error)
-          : 500;
-      return new Response(
-        JSON.stringify({
-          error: {
-            message: isInlineImageError ? error.message : "Provider request failed.",
-            type: status === 400 ? "invalid_request_error" : "api_error",
-            code: status,
-          },
-        }),
-        { status, headers: { "content-type": "application/json" } },
-      );
+      if (error instanceof HermesProviderRelayError) throw error;
+      if (providerFailure) throw new HermesProviderRelayError(providerFailure);
+      const safe = hermesProviderFailure(error);
+      if (safe.kind !== "provider-failed" || safe.layer) throw new HermesProviderRelayError(safe);
+      // Exact SDK signature for an upstream SSE finish reason, not arbitrary vendor text.
+      if (
+        error instanceof BrokerTranslationError &&
+        error.message === "Provider finish_reason: network_error"
+      )
+        throw new HermesProviderRelayError({
+          kind: "provider-failed",
+          layer: "upstream",
+          reason: "stream-network",
+        });
+      throw new HermesProviderRelayError({
+        kind: "provider-failed",
+        layer: phase === "provider-stream" ? "provider-adapter" : "translation",
+        reason: phase,
+      });
     }
   }
-}
-
-/** Same status classes the pass-through path surfaces from provider HTTP codes. */
-function providerErrorStatus(error: Error): 400 | 401 | 429 | 500 {
-  const text = error.message.toLowerCase();
-  if (/unauthorized|invalid[ _-]api[ _-]key|authentication|token expired|api[ _-]key/.test(text))
-    return 401;
-  if (/rate limit|too many requests|quota/.test(text)) return 429;
-  if (/not found|unknown model|unsupported|invalid|malformed|must /.test(text)) return 400;
-  return 500;
 }
 
 export class HermesRelayDispatcher {

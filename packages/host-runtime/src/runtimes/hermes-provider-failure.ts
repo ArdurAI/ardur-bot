@@ -37,7 +37,7 @@ export const HERMES_PROVIDER_FAILURE_LAYERS = [
   "upstream",
   "provider-transport",
   "translation",
-  "relay",
+  "provider-adapter",
 ] as const;
 export const HERMES_PROVIDER_FAILURE_REASONS = [
   "http-auth",
@@ -46,6 +46,7 @@ export const HERMES_PROVIDER_FAILURE_REASONS = [
   "http-server",
   "http-other",
   "transport",
+  "stream-network",
   "request-translation",
   "provider-stream",
   "response-translation",

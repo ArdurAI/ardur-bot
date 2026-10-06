@@ -838,37 +838,31 @@ describe("worker provider broker translated route", () => {
     });
   });
 
-  it("rejects remote image URLs with a Chat Completions 400 error without fetching", async () => {
+  it("names request translation for remote image URLs without fetching", async () => {
     const fetchSpy = vi.fn();
     const f = translatedFixture([startEvent, doneEvent([text("should not reach")])], {
       fetch: fetchSpy,
     });
-    const response = await f.broker.open(
-      f.request({
-        body: {
-          model: "claude-fixture",
-          messages: [
-            {
-              role: "user",
-              content: [
-                { type: "text", text: "what is this" },
-                { type: "image_url", image_url: { url: "https://example.com/remote.png" } },
-              ],
-            },
-          ],
-          stream: false,
-        },
-      }),
-    );
-    expect(response.status).toBe(400);
-    expect(response.headers.get("content-type")).toBe("application/json");
-    const body = JSON.parse(await response.text());
-    expect(body).toEqual({
-      error: {
-        message: "Only inline images are supported.",
-        type: "invalid_request_error",
-        code: 400,
-      },
+    await expect(
+      f.broker.open(
+        f.request({
+          body: {
+            model: "claude-fixture",
+            messages: [
+              {
+                role: "user",
+                content: [
+                  { type: "text", text: "what is this" },
+                  { type: "image_url", image_url: { url: "https://example.com/remote.png" } },
+                ],
+              },
+            ],
+            stream: false,
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({
+      failure: { kind: "provider-failed", layer: "translation", reason: "request-translation" },
     });
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(f.captured).toHaveLength(0);
@@ -969,7 +963,7 @@ describe("worker provider broker translated route", () => {
     expect(f.records).toHaveLength(0);
   });
 
-  it("maps provider errors to Chat Completions error JSON without secrets", async () => {
+  it("does not infer HTTP status from private stream exception text", async () => {
     const failingStream = async () => {
       const stream = createAssistantMessageEventStream();
       const message = {
@@ -988,14 +982,18 @@ describe("worker provider broker translated route", () => {
       return stream;
     };
     const f = translatedFixture([], { streamSimple: failingStream as never });
-    const response = await f.broker.open(f.request());
-    expect(response.status).toBe(401);
-    expect(response.headers.get("content-type")).toBe("application/json");
-    const body = JSON.parse(await response.text());
-    expect(body.error.type).toBe("api_error");
-    expect(body.error.message).toBe("Provider request failed.");
-    expect(body.error.code).toBe(401);
-    expect(JSON.stringify(body)).not.toContain(SENTINEL_SECRET);
+    let caught: unknown;
+    try {
+      await f.broker.open(f.request());
+    } catch (error) {
+      caught = error;
+    }
+    expect(hermesProviderFailure(caught)).toEqual({
+      kind: "provider-failed",
+      layer: "provider-adapter",
+      reason: "provider-stream",
+    });
+    expect(String(caught)).not.toContain(SENTINEL_SECRET);
     expect(f.records.at(-1)?.request?.collection?.outcome).toBe("failed");
   });
 
