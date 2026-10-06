@@ -95,6 +95,7 @@ function fixture(
   memoryDocuments?: MemoryService,
   sandbox?: SandboxProvider,
   restartDrain?: Parameters<typeof createRunExecutor>[0]["restartDrain"],
+  shutdownSignal?: AbortSignal,
 ) {
   vi.mocked(recordRunUsage).mockClear();
   const effects: Effect[] = [];
@@ -427,6 +428,7 @@ function fixture(
   const executor = createRunExecutor({
     prisma,
     restartDrain,
+    shutdownSignal,
     secretStore: {
       load: (value: string, id: string) =>
         id.startsWith("turn:") ? digests.load(value, id) : "test-key",
@@ -2143,6 +2145,43 @@ describe("run failure cause", () => {
 });
 
 describe("executor restart journeys without a database", () => {
+  it.each([false, true])(
+    "flushes redacted stream progress on ordinary shutdown with restart admission %s",
+    async (withDrain) => {
+      const shutdown = new AbortController();
+      const f = fixture(
+        "shutdown-progress",
+        undefined,
+        undefined,
+        withDrain ? admission().value : undefined,
+        shutdown.signal,
+      );
+      f.secrets.push("fixture-secret-token");
+      f.runtimeRun.mockImplementation(async function* () {
+        yield { type: "text", text: "First response. " };
+        yield { type: "text", text: "fixture-secret-token Final response." };
+        shutdown.abort();
+      });
+      await f.executor.continueRun(f.runRecord.id, "worker");
+      const recorded = f.events.append.mock.calls as unknown as Array<
+        [{ type: string; payload: { text?: string; delta?: string } }]
+      >;
+      const progress = recorded
+        .map(([event]) => event)
+        .filter(
+          (event) =>
+            event.type === "thread.progress" && (event.payload.text || event.payload.delta),
+        )
+        .map((event) => event.payload.text ?? event.payload.delta)
+        .join("");
+      expect(progress).toContain("Final response.");
+      expect(progress).not.toContain("fixture-secret-token");
+      expect(f.finalizeRun).not.toHaveBeenCalled();
+      expect(f.events.append).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: "run.suspended" }),
+      );
+    },
+  );
   it("requeues a boot wait promptly without interrupting the runtime drain signal", async () => {
     vi.useFakeTimers();
     try {

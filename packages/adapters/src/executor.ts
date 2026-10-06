@@ -7226,13 +7226,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
 
           tracePoint(runId, "runtime.finished", { attempt: fence });
           if (approvalPausePending || !leaseValid || suspendedForRestart) return;
-          if (deps.shutdownSignal?.aborted) {
-            await suspendAtBoundary();
-            return;
-          }
+          if (deps.shutdownSignal?.aborted && (await suspendAtBoundary())) return;
           approvedEffectReplays.assertDrained();
           pendingProgress += progressRedactor.finish();
           await flushProgress();
+          if (deps.shutdownSignal?.aborted) return;
 
           for (const turn of comparisonRun ? [] : (script ?? [])) {
             for (const file of turn.files ?? []) {
