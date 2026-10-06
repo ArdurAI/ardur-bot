@@ -1871,7 +1871,7 @@ msgstr ""
 #: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose a model"
-msgstr ""
+msgstr "Escolha um modelo"
 
 #: src/pages/memory/MemoryGeneration.tsx
 msgid "Choose a model in Models to enable memory suggestions."
@@ -7787,6 +7787,10 @@ msgstr ""
 msgid "Run at"
 msgstr ""
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Run commands inside this bot's folder or a registered folder."
+msgstr "Execute os comandos dentro da pasta deste bot ou de uma pasta registrada."
+
 #: src/pages/RoutineEditor.tsx
 msgid "Run history"
 msgstr ""
@@ -7949,6 +7953,10 @@ msgstr "Salvar instruções"
 #: src/pages/group-model-control.tsx
 msgid "Save model"
 msgstr "Salvar modelo"
+
+#: src/pages/group-model-control.tsx
+msgid "Save the group first."
+msgstr "Salve o grupo primeiro."
 
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
@@ -9130,9 +9138,17 @@ msgstr ""
 msgid "This chat is view-only"
 msgstr "Este chat é somente leitura"
 
+#: src/pages/group-model-control.tsx
+msgid "This choice needs a supported computer and bot settings."
+msgstr "Esta escolha precisa de um computador compatível e das configurações do bot."
+
 #: src/pages/SharedCommand.tsx
 msgid "This command is not available to this account."
 msgstr ""
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "This command was not run because its request is invalid. Check the command and folder."
+msgstr "Este comando não foi executado porque sua solicitação é inválida. Verifique o comando e a pasta."
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
