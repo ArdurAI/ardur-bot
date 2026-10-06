@@ -36,6 +36,8 @@ describe("mobile i18n", () => {
     for (const locale of ["ru", "zh-CN"] as const) {
       resetI18nForTests(locale);
       for (const message of [
+        "Run commands inside this bot's folder or a registered folder.",
+        "This command was not run because its request is invalid. Check the command and folder.",
         "The computer stopped before its workspace could be saved.",
         "The computer or its workspace could not be found.",
         "The computer's engine could not be reached to save its workspace.",

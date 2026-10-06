@@ -13,6 +13,18 @@ export function ThreadCommandBlock({
   spaceId?: string;
 }) {
   const { t, i18n } = useLingui();
+  const displayMessage = (message: string | null): string | null =>
+    message === "Run commands inside this bot's folder or a registered folder."
+      ? t`Run commands inside this bot's folder or a registered folder.`
+      : message ===
+          "This command was not run because its request is invalid. Check the command and folder."
+        ? t`This command was not run because its request is invalid. Check the command and folder.`
+        : message;
+  const displayBlock = (recorded: RecordedCommand): RecordedCommand => ({
+    ...recorded,
+    error: displayMessage(recorded.error),
+    rerunDisabledReason: displayMessage(recorded.rerunDisabledReason),
+  });
   const id = useId();
   const [current, setCurrent] = useState<RecordedCommand | null>(null);
   const [query, setQuery] = useState("");
@@ -44,10 +56,10 @@ export function ThreadCommandBlock({
     <div className="w-full min-w-0 space-y-2" aria-busy={busy}>
       <CommandBlock
         locale={i18n.locale}
-        block={{
+        block={displayBlock({
           ...block,
           rerunDisabledReason: current ? current.rerunDisabledReason : block.rerunDisabledReason,
-        }}
+        })}
         labels={{
           copyCommand: t`Copy command`,
           copyOutput: t`Copy output`,
@@ -117,7 +129,7 @@ export function ThreadCommandBlock({
                   {commandSummaryDisplay(match)}
                 </summary>
                 <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all">
-                  {commandOutput(match)}
+                  {commandOutput(displayBlock(match))}
                 </pre>
               </details>
             ))}
