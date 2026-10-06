@@ -1890,7 +1890,7 @@ msgstr "选择主文件夹内的一个文件夹。"
 #: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose a model"
-msgstr ""
+msgstr "选择模型"
 
 #: src/pages/memory/MemoryGeneration.tsx
 msgid "Choose a model in Models to enable memory suggestions."
@@ -7888,6 +7888,10 @@ msgstr ""
 msgid "Run at"
 msgstr "运行时间"
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Run commands inside this bot's folder or a registered folder."
+msgstr "请在此机器人的文件夹或已注册的文件夹中运行命令。"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Run history"
 msgstr "运行记录"
@@ -8050,6 +8054,10 @@ msgstr "保存指令"
 #: src/pages/group-model-control.tsx
 msgid "Save model"
 msgstr "保存模型"
+
+#: src/pages/group-model-control.tsx
+msgid "Save the group first."
+msgstr "请先保存群组。"
 
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
@@ -9254,9 +9262,17 @@ msgstr ""
 msgid "This chat is view-only"
 msgstr "此对话为只读"
 
+#: src/pages/group-model-control.tsx
+msgid "This choice needs a supported computer and bot settings."
+msgstr "此选择需要受支持的电脑和机器人设置。"
+
 #: src/pages/SharedCommand.tsx
 msgid "This command is not available to this account."
 msgstr ""
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "This command was not run because its request is invalid. Check the command and folder."
+msgstr "此命令因请求无效而未运行。请检查命令和文件夹。"
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"

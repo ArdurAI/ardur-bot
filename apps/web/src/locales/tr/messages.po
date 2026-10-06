@@ -1890,7 +1890,7 @@ msgstr ""
 #: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose a model"
-msgstr ""
+msgstr "Bir model seçin"
 
 #: src/pages/memory/MemoryGeneration.tsx
 msgid "Choose a model in Models to enable memory suggestions."
@@ -7888,6 +7888,10 @@ msgstr ""
 msgid "Run at"
 msgstr ""
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Run commands inside this bot's folder or a registered folder."
+msgstr "Komutları bu botun klasöründe veya kayıtlı bir klasörde çalıştırın."
+
 #: src/pages/RoutineEditor.tsx
 msgid "Run history"
 msgstr ""
@@ -8050,6 +8054,10 @@ msgstr "Talimatları kaydet"
 #: src/pages/group-model-control.tsx
 msgid "Save model"
 msgstr "Modeli kaydet"
+
+#: src/pages/group-model-control.tsx
+msgid "Save the group first."
+msgstr "Önce grubu kaydedin."
 
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
@@ -9254,9 +9262,17 @@ msgstr ""
 msgid "This chat is view-only"
 msgstr "Bu sohbet yalnızca görüntülenebilir"
 
+#: src/pages/group-model-control.tsx
+msgid "This choice needs a supported computer and bot settings."
+msgstr "Bu seçim için desteklenen bir bilgisayar ve bot ayarları gerekir."
+
 #: src/pages/SharedCommand.tsx
 msgid "This command is not available to this account."
 msgstr ""
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "This command was not run because its request is invalid. Check the command and folder."
+msgstr "İsteği geçersiz olduğu için bu komut çalıştırılmadı. Komutu ve klasörü kontrol edin."
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"

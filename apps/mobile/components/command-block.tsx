@@ -50,7 +50,7 @@ export function NativeCommandBlock({ block }: { block: CommandBlock }) {
           </Text>
           <ScrollView style={styles.output} nestedScrollEnabled>
             <Text selectable style={[styles.mono, { color: tokens.foreground }]}>
-              {commandOutput(block)}
+              {commandOutput({ ...block, error: block.error ? t(block.error) : null })}
             </Text>
           </ScrollView>
           <Pressable

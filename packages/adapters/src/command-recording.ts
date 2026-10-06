@@ -18,7 +18,7 @@ import {
   stripCommandControls,
 } from "@ardurbot/core";
 import type { ThreadEvents } from "@ardurbot/db";
-import { redactBindings } from "@ardurbot/logging";
+import { redactBindings, redactCommandOutput } from "@ardurbot/logging";
 import { redactAgentCommandResult } from "./agent-environment.js";
 import { isToolPauseResult } from "./approval-effect.js";
 import { commandComputerFingerprint } from "./command-replay.js";
@@ -30,6 +30,14 @@ export function redactCommandText(text: string, secrets: string[]): string {
     secrets,
   ).stdout;
   return stripCommandControls(String(redactBindings({ value: masked }).value));
+}
+
+function safeCommandOutput(text: string, secrets: string[]): string {
+  const masked = redactAgentCommandResult(
+    { stdout: stripCommandControls(text), stderr: "", code: 0 },
+    secrets,
+  ).stdout;
+  return stripCommandControls(redactCommandOutput(masked));
 }
 
 /**
@@ -244,6 +252,7 @@ export function createCommandRecording(input: {
   >();
   const deliveries = new Map<string, Promise<unknown>>();
   const safe = (text: string) => redactCommandText(text, input.secrets);
+  const safeOutput = (text: string) => safeCommandOutput(text, input.secrets);
   /** The card a call on `executionId` records: the open card it resumes on that id, or its own. */
   const commandIdFor = (executionId: string) =>
     input.openCommands?.get(executionId)?.commandId ??
@@ -300,14 +309,10 @@ export function createCommandRecording(input: {
     } catch {
       cwdError = true;
     }
-    const command = safe(request?.command ?? "[Invalid command]");
+    const rawCommand = args.command ?? args.cmd;
+    let command = safe(typeof rawCommand === "string" ? rawCommand : "[Invalid command]");
     const cwd = resolvedCwd === null ? null : safe(resolvedCwd);
-    const unchanged =
-      request !== null &&
-      command === request.command &&
-      cwd === resolvedCwd &&
-      (request.cwd === undefined || safe(request.cwd) === request.cwd);
-    const containsKnownSecret = [request?.command, request?.cwd, resolvedCwd].some((value) => {
+    const containsKnownSecret = [rawCommand, args.cwd, resolvedCwd].some((value) => {
       if (typeof value !== "string") return false;
       const normalized = normalizeShellText(value);
       const compact = normalized.replace(/\s/g, "");
@@ -317,11 +322,41 @@ export function createCommandRecording(input: {
           (value.includes(secret) || normalized.includes(secret) || compact.includes(secret)),
       );
     });
-    const rawCommand = args.command ?? args.cmd;
+    // Known values may have been split with shell quoting or whitespace. Retain a masked
+    // normalized spelling too, rather than keeping pieces that reconstruct the secret.
+    if (containsKnownSecret && typeof rawCommand === "string") {
+      const normalized = normalizeShellText(rawCommand);
+      if (
+        input.secrets.some(
+          (secret) => secret && !rawCommand.includes(secret) && normalized.includes(secret),
+        )
+      )
+        command = safe(normalized);
+      if (
+        input.secrets.some(
+          (secret) =>
+            secret &&
+            !normalized.includes(secret) &&
+            normalized.replace(/\s/g, "").includes(secret),
+        )
+      )
+        command = safe(normalized.replace(/\s/g, ""));
+    }
     const oversized =
       typeof rawCommand === "string" &&
       (rawCommand.length > COMMAND_TEXT_LIMIT ||
         new TextEncoder().encode(rawCommand).byteLength > COMMAND_TEXT_LIMIT);
+    const retainedCommand = createBoundedCommandOutput(
+      oversized ? COMMAND_TEXT_LIMIT - COMMAND_TRUNCATED.length - 1 : COMMAND_TEXT_LIMIT,
+    );
+    retainedCommand.push(command);
+    command = retainedCommand.value();
+    const unchanged =
+      request !== null &&
+      !containsKnownSecret &&
+      command === request.command &&
+      cwd === resolvedCwd &&
+      (request.cwd === undefined || safe(request.cwd) === request.cwd);
     const suppress = sensitiveShellCommand(request?.command ?? "");
     // The same call resuming on its own id finishes the card the killed attempt published.
     const resumeCard = input.openCommands?.get(executionId);
@@ -350,10 +385,11 @@ export function createCommandRecording(input: {
       stderr: null,
       error: null,
       redacted: !unchanged || suppress,
-      truncated: false,
+      truncated: retainedCommand.truncated,
       replayOf: resumeCard ? resumeCard.replayOf : (input.replayOf ?? null),
-      rerunDisabledReason:
-        !unchanged || suppress
+      rerunDisabledReason: cwdError
+        ? "Run commands inside this bot's folder or a registered folder."
+        : !unchanged || suppress
           ? "This command cannot be retained safely for rerun."
           : resolvedCwd === null
             ? "This computer did not record its working directory."
@@ -391,9 +427,13 @@ export function createCommandRecording(input: {
       const result =
         !request || containsKnownSecret || cwdError
           ? {
-              error: oversized
-                ? "This command was not run because it exceeds 64 KB. Put code in a file and run that file."
-                : "This command was not run because its arguments could not be retained safely; use managed credential variables.",
+              error: !request
+                ? oversized
+                  ? "This command was not run because it exceeds 64 KB. Put code in a file and run that file."
+                  : "This command was not run because its request is invalid. Check the command and folder."
+                : containsKnownSecret
+                  ? "This command was not run because its arguments could not be retained safely; use managed credential variables."
+                  : "Run commands inside this bot's folder or a registered folder.",
             }
           : await tool("shell", { ...request }, executionId);
       // The earlier attempt's card already shows a finished call.
@@ -415,15 +455,15 @@ export function createCommandRecording(input: {
               : "cancelled",
         durationMs: executed ? Math.max(0, Date.now() - entry.started) : null,
         exitCode: code,
-        stdout: typeof value.stdout === "string" ? safe(value.stdout) : null,
-        stderr: typeof value.stderr === "string" ? safe(value.stderr) : null,
+        stdout: typeof value.stdout === "string" ? safeOutput(value.stdout) : null,
+        stderr: typeof value.stderr === "string" ? safeOutput(value.stderr) : null,
         error: value.error
           ? safe(typeof value.error === "string" ? value.error : "The command could not finish.")
           : null,
       };
       const retained = `${entry.block.stdout ?? ""}\n${entry.block.stderr ?? ""}`;
       entry.block.redacted ||= /\[redacted|\[Output redacted/i.test(retained);
-      entry.block.truncated = retained.includes(COMMAND_TRUNCATED);
+      entry.block.truncated ||= retained.includes(COMMAND_TRUNCATED);
       await append("command.finished", { block: entry.block });
       return result;
     } catch (error) {
@@ -492,7 +532,7 @@ export function createCommandRecording(input: {
       // A lower-level collector can cut a credential mid-value. Suppress that buffer.
       if (input.secrets.length && value.includes(COMMAND_TRUNCATED))
         return `${COMMAND_SUPPRESSED}\n${COMMAND_TRUNCATED}`;
-      return safe(value);
+      return safeOutput(value);
     };
     return {
       stdout: entry.suppress ? COMMAND_SUPPRESSED : retained(stdout.value()),
