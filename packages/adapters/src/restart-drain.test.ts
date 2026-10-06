@@ -17,14 +17,43 @@ function fixture() {
     }),
   };
   const count = vi.fn(async () => 1);
+  const queryRaw = vi.fn(async (_query: TemplateStringsArray) => []);
   const prisma = {
     deploymentSettings,
     run: { count },
-    $queryRaw: vi.fn(async () => []),
+    $queryRaw: queryRaw,
   } as unknown as PrismaClient;
-  return { prisma, count, deploymentSettings, state: () => state, drain: new RestartDrain(prisma) };
+  return {
+    prisma,
+    count,
+    queryRaw,
+    deploymentSettings,
+    state: () => state,
+    drain: new RestartDrain(prisma),
+  };
 }
 describe("shared restart admission", () => {
+  it("awaits the shared row lock before reading admission state", async () => {
+    const f = fixture();
+    let release!: () => void;
+    const locked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const query = f.queryRaw.mockImplementationOnce(async () => {
+      await locked;
+      return [];
+    });
+    const admitting = f.drain.admits(f.prisma as never);
+    try {
+      expect(query.mock.calls[0]?.[0]).toEqual([
+        "SELECT id FROM deployment_settings WHERE id = 'default' FOR SHARE",
+      ]);
+      expect(f.deploymentSettings.findUnique).not.toHaveBeenCalled();
+    } finally {
+      release();
+    }
+    expect(await admitting).toBe(true);
+  });
   it("stops claims on both services and reopens admission after a deadline miss", async () => {
     vi.useFakeTimers();
     const f = fixture();
