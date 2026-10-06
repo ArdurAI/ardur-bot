@@ -84,12 +84,25 @@ export function GroupModelControl({
     kind === "hermes"
       ? hermesConnectionRefusal(selectedModel?.provider, selectedCredential)
       : undefined;
-  const incompatibleHermes = Boolean(hermesRefusal);
+  const saveReason = (() => {
+    if (!activeMember?.memberId) return t`Save the group first.`;
+    if (inherit) return null;
+    if (
+      !selectedModel?.provider.trim() ||
+      !selectedModel.modelId.trim() ||
+      !selectedModel.credentialId?.trim()
+    )
+      return t`Choose a model`;
+    if (hermesRefusal) return hermesRefusalMessage(hermesRefusal);
+    if (kind !== "pi" && !bot.runtimeExperimental)
+      return t`This choice needs a supported computer and bot settings.`;
+    return null;
+  })();
   const selectedEntry = settings?.catalog.find(
     (item) => item.provider === selectedModel?.provider && item.id === selectedModel.modelId,
   );
-  const supportedEffort: ThinkingLevel[] =
-    selectedCredential?.thinkingLevels ?? selectedEntry?.thinkingLevels ?? [];
+  const supportedEffort: ThinkingLevel[] | undefined =
+    selectedCredential?.thinkingLevels ?? selectedEntry?.thinkingLevels;
   const defaultEffort =
     selectedCredential?.thinkingLevel ??
     spaceDefaultEffort(selectedCredential?.reasoning ?? selectedEntry?.reasoning, supportedEffort);
@@ -134,34 +147,20 @@ export function GroupModelControl({
   );
 
   async function save() {
-    if (!activeMember?.memberId || saving || canRun.blocked) return;
-    const selected = parseModelPinOptionKey(key);
-    if (
-      !inherit &&
-      (!selected?.provider || !selected.modelId || !selected.credentialId || incompatibleHermes)
-    )
-      return;
-    const credential = settings?.credentials.find((item) => item.id === selected?.credentialId);
-    const catalogEntry = settings?.catalog.find(
-      (item) => item.provider === selected?.provider && item.id === selected.modelId,
-    );
+    if (saveReason || saving || canRun.blocked) return;
+    const selected = selectedModel;
     const nextEffort =
       kind === "pi" || kind === "hermes"
         ? selected?.provider === "ollama" &&
-          (credential?.reasoning ?? catalogEntry?.reasoning) === false
+          (selectedCredential?.reasoning ?? selectedEntry?.reasoning) === false
           ? null
-          : effort ||
-            (credential?.thinkingLevel ??
-              spaceDefaultEffort(
-                credential?.reasoning ?? catalogEntry?.reasoning,
-                credential?.thinkingLevels ?? catalogEntry?.thinkingLevels,
-              ))
+          : effort || defaultEffort
         : effort || null;
     setSaving(true);
     setError(null);
     try {
       await onSave(
-        activeMember,
+        activeMember!,
         inherit
           ? null
           : {
@@ -175,7 +174,9 @@ export function GroupModelControl({
     } catch (cause) {
       const conflict =
         typeof cause === "object" && cause !== null && "code" in cause && cause.code === "CONFLICT";
-      const reloaded = conflict ? await onReload?.(activeMember).catch(() => undefined) : undefined;
+      const reloaded = conflict
+        ? await onReload?.(activeMember!).catch(() => undefined)
+        : undefined;
       if (reloaded) {
         setActiveMember(reloaded);
         const restored = reloaded.runtimePin ?? null;
@@ -286,7 +287,7 @@ export function GroupModelControl({
             id={`${id}-effort`}
             value={effort}
             onChange={setEffort}
-            supported={supportedEffort}
+            supported={supportedEffort ?? []}
             isOllama={selectedModel?.provider === "ollama"}
             defaultLevel={defaultEffort}
             notApplicable={
@@ -296,11 +297,6 @@ export function GroupModelControl({
             disabled={saving}
           />
         </>
-      ) : null}
-      {hermesRefusal ? (
-        <p role="status" className="mt-2 text-sm text-muted-foreground">
-          {hermesRefusalMessage(hermesRefusal)}
-        </p>
       ) : null}
       {activeMember?.memberId ? (
         <details className="mt-2 text-xs text-muted-foreground">
@@ -375,16 +371,16 @@ export function GroupModelControl({
           {error}
         </p>
       ) : null}
+      {!saving && saveReason ? (
+        <p id={`${id}-save-reason`} role="status" className="mt-2 text-sm text-muted-foreground">
+          {saveReason}
+        </p>
+      ) : null}
       <Button
         size="sm"
         className="mt-2"
-        disabled={
-          !activeMember?.memberId ||
-          saving ||
-          canRun.blocked ||
-          (!inherit && !key) ||
-          incompatibleHermes
-        }
+        disabled={saving || Boolean(saveReason) || canRun.blocked}
+        aria-describedby={!saving && saveReason ? `${id}-save-reason` : undefined}
         onClick={() => void save()}
       >
         {saving ? <Trans>Saving…</Trans> : <Trans>Save model</Trans>}

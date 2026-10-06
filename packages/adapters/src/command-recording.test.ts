@@ -511,9 +511,92 @@ describe("command recording boundary", () => {
     });
     expect(tool).not.toHaveBeenCalled();
     expect(f.sandbox.execute).not.toHaveBeenCalled();
+    expect(f.events[0]?.payload.replay).toBeNull();
+    expect(f.blocks()[0]?.command).toContain("[redacted]");
   });
-  it("runs a 40 KB command", async () => {
-    const command = `echo ${"x".repeat(40 * 1024)}`;
+  it.each(["git rev-parse HEAD", 'rg -n "build_request|request_fields|tokenCount" src/'])(
+    "records a folder refusal for %s without blaming arguments",
+    async (command) => {
+      const f = fixture();
+      vi.mocked(f.sandbox.resolveCommandCwd!).mockRejectedValueOnce(
+        new Error("Path escapes registered folders."),
+      );
+      const tool = vi.fn();
+      const result = await f.recording.invoke(
+        "shell",
+        { command, cwd: "/outside/pinned-checkout" },
+        "execution-1",
+        tool,
+      );
+      expect(result).toEqual({
+        error: "Run commands inside this bot's folder or a registered folder.",
+      });
+      expect(tool).not.toHaveBeenCalled();
+      expect(f.blocks()[0]).toMatchObject({
+        command,
+        outcome: "cancelled",
+        error: "Run commands inside this bot's folder or a registered folder.",
+      });
+      expect(f.blocks()[0]?.rerunDisabledReason).toBe(
+        "Run commands inside this bot's folder or a registered folder.",
+      );
+      expect(f.events[0]?.payload.replay).toBeNull();
+    },
+  );
+  it("runs a plain request-field source search in an allowed folder", async () => {
+    const command = 'rg -n "build_request|request_fields|tokenCount" src/';
+    const output =
+      "knownSecrets: secrets,\nconst tokenCount = usage.total\nmaxTokens: 4096\nsecretStore.read(id)\ntokens: number;";
+    const f = fixture([
+      { type: "stdout", data: output },
+      { type: "exit", code: 0 },
+    ]);
+    expect(await f.invoke(command)).toMatchObject({ stdout: output, code: 0 });
+    expect(f.blocks()[0]).toMatchObject({ command, stdout: output, redacted: false });
+    expect(f.sandbox.execute).toHaveBeenCalledOnce();
+  });
+  it("keeps raw invalid-request text redacted in the refused record", async () => {
+    const f = fixture([], ["fixture-managed-value"]);
+    const tool = vi.fn();
+    const result = await f.recording.invoke(
+      "shell",
+      { command: 'echo "fixture-managed-value"', cwd: 17 },
+      "execution-1",
+      tool,
+    );
+    expect(result).toEqual({
+      error:
+        "This command was not run because its request is invalid. Check the command and folder.",
+    });
+    expect(tool).not.toHaveBeenCalled();
+    expect(f.blocks()[0]?.command).toContain("[redacted]");
+    expect(JSON.stringify(f.events)).not.toContain("fixture-managed-value");
+    expect(f.events[0]?.payload.replay).toBeNull();
+  });
+  it("keeps credentials hidden beside source output, including split known values and PEM", async () => {
+    const secret = "fixture-managed-value";
+    const f = fixture(
+      [
+        { type: "stdout", data: `knownSecrets: secrets,\n${secret.slice(0, 8)}` },
+        {
+          type: "stdout",
+          data:
+            secret.slice(8) +
+            "\npassword: 'hunter2'\n-----BEGIN PRIVATE KEY-----\nFAKE-KEY-FIXTURE\n-----END PRIVATE KEY-----",
+        },
+        { type: "exit", code: 0 },
+      ],
+      [secret],
+    );
+    const result = await f.invoke();
+    expect(result).toMatchObject({
+      stdout: "knownSecrets: secrets,\n[redacted]\npassword: '[Redacted]'\n[Redacted]",
+      code: 0,
+    });
+    expect(JSON.stringify(f.events)).not.toMatch(/fixture-managed-value|hunter2|FAKE-KEY-FIXTURE/);
+  });
+  it.each([40 * 1024, 64 * 1024])("runs and retains a %i-byte command", async (bytes) => {
+    const command = `echo ${"x".repeat(bytes - 5)}`;
     const f = fixture();
     const tool = vi.fn(async (_name, args) => {
       expect(args.command).toBe(command);
@@ -535,7 +618,9 @@ describe("command recording boundary", () => {
       });
       expect(tool).not.toHaveBeenCalled();
       expect(f.sandbox.execute).not.toHaveBeenCalled();
-      expect(f.blocks()[0]?.command).toBe("[Invalid command]");
+      expect(f.blocks()[0]?.command?.startsWith(command.slice(0, 100))).toBe(true);
+      expect(f.blocks()[0]?.command?.endsWith(COMMAND_TRUNCATED)).toBe(true);
+      expect(f.blocks()[0]?.command?.length).toBeLessThanOrEqual(64 * 1024);
     },
   );
   it("strips active controls and masks structured credentials even when not registered", async () => {
@@ -547,6 +632,25 @@ describe("command recording boundary", () => {
     await f.invoke();
     expect(JSON.stringify(f.events)).not.toContain(credential);
     expect(f.blocks()[0]?.stdout).toBe("password=[Redacted]\nplain");
+  });
+  it("hides unregistered alphanumeric credentials in results and recorded output", async () => {
+    const f = fixture([
+      { type: "stdout", data: "password: hun" },
+      { type: "stdout", data: "ter2,\nsecret: mysecretpassword\n" },
+      { type: "stderr", data: "authKey=shortKey" },
+      { type: "exit", code: 0 },
+    ]);
+    expect(await f.invoke()).toMatchObject({
+      stdout: "password: [Redacted],\nsecret: [Redacted]\n",
+      stderr: "authKey=[Redacted]",
+      code: 0,
+    });
+    expect(f.blocks()[0]).toMatchObject({
+      stdout: "password: [Redacted],\nsecret: [Redacted]\n",
+      stderr: "authKey=[Redacted]",
+      redacted: true,
+    });
+    expect(JSON.stringify(f.events)).not.toMatch(/hunter2|mysecretpassword|shortKey/);
   });
   it("does not persist provider exceptions and rejects changed approval arguments", async () => {
     const credential = randomUUID();

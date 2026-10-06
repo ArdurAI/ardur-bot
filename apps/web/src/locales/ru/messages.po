@@ -1867,7 +1867,7 @@ msgstr "Выберите папку внутри вашей домашней п�
 #: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose a model"
-msgstr ""
+msgstr "Выберите модель"
 
 #: src/pages/memory/MemoryGeneration.tsx
 msgid "Choose a model in Models to enable memory suggestions."
@@ -7783,6 +7783,10 @@ msgstr ""
 msgid "Run at"
 msgstr "Запустить в"
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Run commands inside this bot's folder or a registered folder."
+msgstr "Запускайте команды в папке этого бота или в зарегистрированной папке."
+
 #: src/pages/RoutineEditor.tsx
 msgid "Run history"
 msgstr "История запуска"
@@ -7945,6 +7949,10 @@ msgstr "Сохранить инструкции"
 #: src/pages/group-model-control.tsx
 msgid "Save model"
 msgstr "Сохранить модель"
+
+#: src/pages/group-model-control.tsx
+msgid "Save the group first."
+msgstr "Сначала сохраните группу."
 
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
@@ -9122,9 +9130,17 @@ msgstr ""
 msgid "This chat is view-only"
 msgstr "Этот чат доступен только для просмотра"
 
+#: src/pages/group-model-control.tsx
+msgid "This choice needs a supported computer and bot settings."
+msgstr "Для этого выбора нужны поддерживаемый компьютер и настройки бота."
+
 #: src/pages/SharedCommand.tsx
 msgid "This command is not available to this account."
 msgstr ""
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "This command was not run because its request is invalid. Check the command and folder."
+msgstr "Команда не была выполнена из-за неверного запроса. Проверьте команду и папку."
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"

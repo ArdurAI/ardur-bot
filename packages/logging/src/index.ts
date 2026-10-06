@@ -27,7 +27,12 @@ export {
   wrapJobPayload,
 } from "./jobs.js";
 export { createLogger, getLogger, installLogger } from "./logger.js";
-export { redactBindings, redactCredentialText, redactSensitiveText } from "./redaction.js";
+export {
+  redactBindings,
+  redactCommandOutput,
+  redactCredentialText,
+  redactSensitiveText,
+} from "./redaction.js";
 export { serializeError } from "./serialize-error.js";
 export { createTestSink, type TestSink } from "./test-sink.js";
 export type {

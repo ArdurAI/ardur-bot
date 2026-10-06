@@ -14,11 +14,13 @@ import zhCN from "../../scripts/translations-zh-CN.json";
 
 describe("lingui catalogs", () => {
   it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
-    "translates session-start failures once in %s",
+    "translates session-start failures and command refusals once in %s",
     async (locale) => {
       const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
       const source = readFileSync(filename, "utf8");
       for (const message of [
+        "Run commands inside this bot's folder or a registered folder.",
+        "This command was not run because its request is invalid. Check the command and folder.",
         "{runtime} could not start a session. Check the runtime and try again.",
         "{runtime} needs a model with at least 64K context; change the model and try again.",
       ]) {
@@ -26,7 +28,7 @@ describe("lingui catalogs", () => {
         expect(source.split(`msgid ${JSON.stringify(message)}\n`)).toHaveLength(2);
         const entry = Object.values(catalog).find((value) => value.message === message);
         expect(entry?.translation?.trim(), locale).toBeTruthy();
-        expect(entry?.translation).toContain("{runtime}");
+        if (message.includes("{runtime}")) expect(entry?.translation).toContain("{runtime}");
         if (locale === "en") expect(entry?.translation).toBe(message);
         else expect(entry?.translation).not.toBe(message);
       }

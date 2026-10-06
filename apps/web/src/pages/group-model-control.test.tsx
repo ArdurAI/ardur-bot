@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { Bot, GroupMember } from "@ardurbot/contracts";
+import type { Bot, GroupMember, ThinkingLevel } from "@ardurbot/contracts";
 import { modelPinOptionKey } from "@ardurbot/core";
 import { i18n } from "@lingui/core";
 import { ORPCError } from "@orpc/client";
@@ -7,6 +7,8 @@ import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const buttonActions = vi.hoisted(() => ({ save: undefined as (() => void) | undefined }));
 
 vi.mock("@lingui/core/macro", () => ({
   msg: (parts: TemplateStringsArray) => ({ id: parts.join(""), message: parts.join("") }),
@@ -25,7 +27,10 @@ vi.mock("@ardurbot/ui-web", () => ({
     variant: _variant,
     size: _size,
     ...props
-  }: ComponentProps<"button"> & { variant?: string; size?: string }) => <button {...props} />,
+  }: ComponentProps<"button"> & { variant?: string; size?: string }) => {
+    if (props.className === "mt-2") buttonActions.save = () => props.onClick?.(null as never);
+    return <button {...props} />;
+  },
   NativeSelect: (props: ComponentProps<"select">) => <select {...props} />,
   NativeSelectOption: (props: ComponentProps<"option">) => <option {...props} />,
   Switch: () => null,
@@ -121,7 +126,7 @@ afterEach(async () => {
 
 async function render(
   memberValue: GroupMember | undefined,
-  onSave = vi.fn(async () => undefined),
+  onSave = vi.fn(async (): Promise<void> => undefined),
   botValue = bot,
 ) {
   await act(async () =>
@@ -138,7 +143,237 @@ async function change(select: HTMLSelectElement, value: string) {
   });
 }
 
+function saveButton() {
+  return [...container.querySelectorAll("button")].find((button) =>
+    ["Save model", "Saving…"].includes(button.textContent ?? ""),
+  )!;
+}
+
+function expectSaveBlocked(reason: string) {
+  const button = saveButton();
+  expect(button.disabled).toBe(true);
+  const description = document.getElementById(button.getAttribute("aria-describedby") ?? "");
+  expect(description?.textContent).toBe(reason);
+  expect(description?.getAttribute("role")).toBe("status");
+  expect(description?.hidden).toBe(false);
+}
+
+function expectSaveReady() {
+  expect(saveButton().disabled).toBe(false);
+  expect(saveButton().hasAttribute("aria-describedby")).toBe(false);
+  expect(container.querySelector('[id$="-save-reason"]')).toBeNull();
+}
+
 describe("group model control", () => {
+  describe.each(["pi", "hermes"] as const)("%s default effort", (runtimeKind) => {
+    it.each([
+      {
+        name: "omitted capabilities",
+        catalog: { reasoning: undefined },
+        credential: {},
+        effort: "medium",
+      },
+      {
+        name: "reasoning without levels",
+        catalog: { reasoning: true },
+        credential: {},
+        effort: "medium",
+      },
+      {
+        name: "explicitly empty levels",
+        catalog: { thinkingLevels: [] },
+        credential: {},
+        effort: "off",
+      },
+      { name: "non-reasoning model", catalog: { reasoning: false }, credential: {}, effort: "off" },
+      {
+        name: "catalog levels",
+        catalog: { thinkingLevels: ["high"] },
+        credential: {},
+        effort: "high",
+      },
+      {
+        name: "connection levels",
+        catalog: { thinkingLevels: ["high"] },
+        credential: { thinkingLevels: ["low"] },
+        effort: "low",
+      },
+      {
+        name: "connection default",
+        catalog: {},
+        credential: { thinkingLevel: "xhigh" },
+        effort: "xhigh",
+      },
+    ] satisfies {
+      name: string;
+      catalog: { reasoning?: boolean; thinkingLevels?: ThinkingLevel[] };
+      credential: { thinkingLevels?: ThinkingLevel[]; thinkingLevel?: ThinkingLevel };
+      effort: ThinkingLevel;
+    }[])("validates and saves $name consistently", async ({ catalog, credential, effort }) => {
+      const choiceSettings = {
+        ...settings!,
+        catalog: [{ ...settings!.catalog[0]!, thinkingLevels: undefined, ...catalog }],
+        credentials: [{ ...settings!.credentials[0]!, ...credential }],
+      };
+      const save = vi.fn(async () => undefined);
+      await act(async () =>
+        root.render(
+          <GroupModelControl
+            member={member}
+            bot={{ ...bot, runtimeExperimental: true }}
+            settings={choiceSettings}
+            onSave={save}
+          />,
+        ),
+      );
+      await change(container.querySelector('select[id$="-runtime"]')!, runtimeKind);
+      await change(
+        container.querySelector('select[id$="-model"]')!,
+        modelPinOptionKey("test", "model-a", "credential"),
+      );
+      expectSaveReady();
+      await act(async () => saveButton().click());
+      expect(save).toHaveBeenCalledWith(member, {
+        runtimeKind,
+        provider: "test",
+        modelId: "model-a",
+        credentialId: "credential",
+        effort,
+      });
+      expect(rpc.models.validatePin).toHaveBeenLastCalledWith(
+        expect.objectContaining({ runtimeKind, effort }),
+      );
+    });
+  });
+
+  it("explains a missing Hermes model, then saves the unchanged valid choice", async () => {
+    const save = await render(
+      member,
+      vi.fn(async () => undefined),
+      {
+        ...bot,
+        runtimeExperimental: true,
+      },
+    );
+    await change(container.querySelector('select[id$="-runtime"]')!, "hermes");
+    expectSaveBlocked("Choose a model");
+    await act(async () => saveButton().click());
+    await act(async () => buttonActions.save?.());
+    expect(save).not.toHaveBeenCalled();
+
+    await change(
+      container.querySelector('select[id$="-model"]')!,
+      modelPinOptionKey("test", "model-a", "credential"),
+    );
+    expectSaveReady();
+    await act(async () => saveButton().click());
+    expect(save).toHaveBeenCalledWith(member, {
+      runtimeKind: "hermes",
+      provider: "test",
+      modelId: "model-a",
+      credentialId: "credential",
+      effort: "medium",
+    });
+  });
+
+  it("explains Experimental off and clears the reason when bot settings allow saving", async () => {
+    const save = await render({ ...member, runtimePin: pin });
+    await change(container.querySelector('select[id$="-runtime"]')!, "hermes");
+    expectSaveBlocked("This choice needs a supported computer and bot settings.");
+    await act(async () => saveButton().click());
+    await act(async () => buttonActions.save?.());
+    expect(save).not.toHaveBeenCalled();
+    await render({ ...member, runtimePin: pin }, save, { ...bot, runtimeExperimental: true });
+    expectSaveReady();
+    expect((container.querySelector('select[id$="-runtime"]') as HTMLSelectElement).value).toBe(
+      "hermes",
+    );
+  });
+
+  it.each([
+    "test::model-a",
+    "test::",
+    "[broken",
+    '["test","model-a",1]',
+    '["","model-a","credential"]',
+    '["test","","credential"]',
+    '["test","model-a",""]',
+    '[" ","model-a","credential"]',
+    '["test"," ","credential"]',
+    '["test","model-a"," "]',
+  ])("explains an incomplete or malformed choice %s without saving it", async (key) => {
+    const save = await render({ ...member, runtimePin: pin });
+    const model = container.querySelector('select[id$="-model"]') as HTMLSelectElement;
+    const option = document.createElement("option");
+    option.value = key;
+    model.append(option);
+    await change(model, key);
+    expectSaveBlocked("Choose a model");
+    await act(async () => saveButton().click());
+    await act(async () => buttonActions.save?.());
+    expect(save).not.toHaveBeenCalled();
+    await change(model, modelPinOptionKey("test", "model-a", "credential"));
+    expectSaveReady();
+  });
+
+  it("uses Saving… for the pending state and prevents a second save", async () => {
+    let finish!: () => void;
+    const save = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await render({ ...member, runtimePin: pin }, save);
+    await act(async () => saveButton().click());
+    expect(saveButton().textContent).toBe("Saving…");
+    expect(saveButton().disabled).toBe(true);
+    expect(saveButton().hasAttribute("aria-describedby")).toBe(false);
+    expect(container.querySelector('[id$="-save-reason"]')).toBeNull();
+    await act(async () => saveButton().click());
+    await act(async () => buttonActions.save?.());
+    expect(save).toHaveBeenCalledOnce();
+    await act(async () => finish());
+    expectSaveReady();
+  });
+
+  it.each([
+    [
+      "BAD_REQUEST",
+      "Hermes needs a context limit of at least 64K tokens. Set it for this connection in Settings → Models.",
+    ],
+    ["BAD_REQUEST", "This choice needs a supported computer and bot settings."],
+    ["FORBIDDEN", "Native runtimes need a single-user host for now — change the pin."],
+  ] as const)(
+    "shows a server %s refusal and keeps the complete Hermes choice: %s",
+    async (code, message) => {
+      const save = vi.fn(async () => {
+        throw new ORPCError(code, { message });
+      });
+      await render({ ...member, runtimePin: pin }, save, { ...bot, runtimeExperimental: true });
+      await change(container.querySelector('select[id$="-runtime"]')!, "hermes");
+      expectSaveReady();
+      await act(async () => saveButton().click());
+      expect(save).toHaveBeenCalledWith(
+        { ...member, runtimePin: pin },
+        {
+          runtimeKind: "hermes",
+          provider: "test",
+          modelId: "model-a",
+          credentialId: "credential",
+          effort: "medium",
+        },
+      );
+      expect(container.querySelector('[role="alert"]')?.textContent).toBe(message);
+      expect((container.querySelector('select[id$="-runtime"]') as HTMLSelectElement).value).toBe(
+        "hermes",
+      );
+      expect((container.querySelector('select[id$="-model"]') as HTMLSelectElement).value).toBe(
+        modelPinOptionKey("test", "model-a", "credential"),
+      );
+      expectSaveReady();
+    },
+  );
   it.each([
     { reasoning: true, effort: "high" },
     { reasoning: false, effort: "off" },
@@ -311,6 +546,7 @@ describe("group model control", () => {
       (item) => item.textContent === "Save model",
     )!;
     expect(saveButton.disabled).toBe(true);
+    expectSaveBlocked("Add an API key connection to use this provider with Hermes.");
   });
 
   it("lists a key-based catalog connection for Hermes without a warning", async () => {
@@ -355,6 +591,7 @@ describe("group model control", () => {
     );
     const modelSelect = container.querySelector('select[id$="-model"]') as HTMLSelectElement;
     expect(modelSelect.value).toBe(modelPinOptionKey("openai-compatible", "model-a", "credential"));
+    expectSaveBlocked("This choice needs a supported computer and bot settings.");
 
     await change(modelSelect, "");
     expect(modelSelect.value).toBe("");
@@ -363,6 +600,7 @@ describe("group model control", () => {
       (item) => item.textContent === "Save model",
     )!;
     expect(saveButton.disabled).toBe(false);
+    expectSaveReady();
     await act(async () => saveButton.click());
     expect(save).toHaveBeenCalledWith(expect.objectContaining({ botId: member.botId }), null);
   });
@@ -511,7 +749,11 @@ describe("group model control", () => {
     const save = await render(undefined);
     expect(container.querySelector("select")?.disabled).toBe(true);
     expect(container.querySelector("button:last-child")?.hasAttribute("disabled")).toBe(true);
+    expectSaveBlocked("Save the group first.");
+    await act(async () => buttonActions.save?.());
     expect(save).not.toHaveBeenCalled();
+    await render(member, save);
+    expectSaveReady();
   });
 
   it("names the default connection when a newer matching connection comes first", async () => {
