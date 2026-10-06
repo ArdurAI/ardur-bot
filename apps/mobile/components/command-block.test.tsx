@@ -132,3 +132,29 @@ it.each(["command-size", "file-location"] as const)(
     );
   },
 );
+
+it.each([
+  "Run commands inside this bot's folder or a registered folder.",
+  "This command was not run because its request is invalid. Check the command and folder.",
+])("translates merged guidance and follows phone locale changes: %s", async (error) => {
+  const block = fixture({ error, stdout: error, stderr: error });
+  const container = await mount(block);
+  expect(RU_MESSAGES[error]).not.toBe(error);
+  expect(container.querySelector("pre")!.textContent).toBe(
+    `stdout:\n${error}\nstderr:\n${error}\nerror:\n${RU_MESSAGES[error]}`,
+  );
+  await act(async () => activateUiLocale("zh-CN"));
+  expect(container.querySelector("pre")!.textContent).toBe(
+    `stdout:\n${error}\nstderr:\n${error}\nerror:\n${ZH_MESSAGES[error]}`,
+  );
+  expect(block.error).toBe(error);
+});
+
+it.each([
+  "Run commands inside this bot's folder or a registered folder.",
+  "This command was not run because its request is invalid. Check the command and folder.",
+])("does not reinterpret future refusal identifiers as merged guidance: %s", async (error) => {
+  const block = fixture({ error, refusalId: "future-refusal" });
+  const container = await mount(block);
+  expect(container.querySelector("pre")!.textContent).toBe(commandOutput(block));
+});

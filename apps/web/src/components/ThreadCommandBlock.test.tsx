@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { CommandBlock, CommandRefusalId } from "@ardurbot/contracts";
 import { COMMAND_REFUSALS } from "@ardurbot/contracts";
-import { commandOutput, exportCommandLog } from "@ardurbot/core";
+import { commandDisplayOutput, commandOutput, exportCommandLog } from "@ardurbot/core";
 import { createCompiledCatalog } from "@lingui/cli/api";
 import { setupI18n } from "@lingui/core";
 import { formatter } from "@lingui/format-po";
@@ -215,4 +215,46 @@ it("resolves search result errors independently of the expanded block", async ()
     expected.ru["file-location"],
   );
   expect(container.querySelector("pre")!.textContent).toContain("ordinary failure");
+});
+
+it.each([
+  "Run commands inside this bot's folder or a registered folder.",
+  "This command was not run because its request is invalid. Check the command and folder.",
+])("translates merged guidance without changing copied evidence: %s", async (error) => {
+  const block = fixture({ error, rerunDisabledReason: error });
+  const { container, i18n } = await mount(block);
+  const translated = i18n._(catalogIds.get(error)!);
+  expect(translated).not.toBe(error);
+  expect(container.querySelector("pre")!.textContent).toBe(commandDisplayOutput(block, translated));
+  expect(container.textContent).toContain(translated);
+  expect(container.textContent).not.toContain(error);
+  await act(async () =>
+    container
+      .querySelector("form")!
+      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  expect(container.querySelector("details pre")!.textContent).toBe(
+    commandDisplayOutput(block, translated),
+  );
+  const copy = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText: copy },
+  });
+  await act(async () =>
+    [...container.querySelectorAll("button")]
+      .find((button) => button.textContent === i18n._(catalogIds.get("Copy output")!))!
+      .click(),
+  );
+  expect(copy).toHaveBeenCalledWith(commandOutput(block));
+  expect(block.error).toBe(error);
+});
+
+it.each([
+  "Run commands inside this bot's folder or a registered folder.",
+  "This command was not run because its request is invalid. Check the command and folder.",
+])("does not reinterpret future refusal identifiers as merged guidance: %s", async (error) => {
+  const block = fixture({ error, refusalId: "future-refusal" });
+  const { container } = await mount(block);
+  expect(container.querySelector("pre")!.textContent).toBe(commandOutput(block));
 });
