@@ -7783,6 +7783,10 @@ msgstr ""
 msgid "Run at"
 msgstr "Запустить в"
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Run commands inside this bot's folder or a registered folder."
+msgstr "Запускайте команды в папке этого бота или в зарегистрированной папке."
+
 #: src/pages/RoutineEditor.tsx
 msgid "Run history"
 msgstr "История запуска"
@@ -9133,6 +9137,10 @@ msgstr "Для этого выбора нужны поддерживаемый �
 #: src/pages/SharedCommand.tsx
 msgid "This command is not available to this account."
 msgstr ""
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "This command was not run because its request is invalid. Check the command and folder."
+msgstr "Команда не была выполнена из-за неверного запроса. Проверьте команду и папку."
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"

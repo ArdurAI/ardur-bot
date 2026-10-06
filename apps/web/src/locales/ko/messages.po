@@ -7783,6 +7783,10 @@ msgstr ""
 msgid "Run at"
 msgstr "실행 시간"
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Run commands inside this bot's folder or a registered folder."
+msgstr "이 봇의 폴더 또는 등록된 폴더 안에서 명령을 실행하세요."
+
 #: src/pages/RoutineEditor.tsx
 msgid "Run history"
 msgstr "실행 기록"
@@ -9133,6 +9137,10 @@ msgstr "이 선택에는 지원되는 컴퓨터와 봇 설정이 필요합니다
 #: src/pages/SharedCommand.tsx
 msgid "This command is not available to this account."
 msgstr ""
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "This command was not run because its request is invalid. Check the command and folder."
+msgstr "요청이 유효하지 않아 이 명령을 실행하지 않았습니다. 명령과 폴더를 확인하세요."
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
