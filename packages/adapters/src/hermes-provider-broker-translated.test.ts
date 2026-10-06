@@ -1,5 +1,7 @@
 import type { AgentUsage } from "@ardurbot/adapter-kit";
 import { hermesProviderFailure } from "@ardurbot/host-runtime/runtimes/hermes-provider-failure";
+import { startHermesProviderRelay } from "@ardurbot/host-runtime/runtimes/hermes-provider-relay";
+import { createLogger, createTestSink } from "@ardurbot/logging";
 import type {
   Api,
   AssistantMessageEvent,
@@ -14,6 +16,7 @@ import {
   type BrokerOptions,
   type BrokerRequest,
   HermesProviderBroker,
+  HermesRelayDispatcher,
   hermesToolName,
 } from "./hermes-provider-broker.js";
 import { piContext } from "./hermes-provider-translation.js";
@@ -837,6 +840,90 @@ describe("worker provider broker translated route", () => {
       timestamp: 1,
     });
   });
+
+  it.each([
+    ["main", false],
+    ["main", true],
+    ["summary", false],
+    ["summary", true],
+  ] as const)(
+    "returns safe 400 JSON through the real relay for %s remote images (stream %s)",
+    async (purpose, stream) => {
+      const fetchSpy = vi.fn();
+      const f = translatedFixture([startEvent, doneEvent([text("unused")])], {
+        purpose,
+        fetch: fetchSpy,
+      });
+      const dispatcher = new HermesRelayDispatcher(
+        { broker: f.broker, scope: f.options.scope },
+        new AbortController().signal,
+      );
+      const sink = createTestSink();
+      const logger = createLogger({ service: "fixture", sinks: [sink], level: "info" });
+      const failed = vi.fn();
+      const relay = await startHermesProviderRelay(
+        { ...f.broker.grant, protocol: 1, hostGeneration: "fixture" },
+        async (method, args) => {
+          try {
+            return await dispatcher.dispatch(method, args);
+          } catch (error) {
+            throw new Error((error as Error).message);
+          }
+        },
+        failed,
+        logger,
+      );
+      try {
+        const response = await fetch(`${relay.url}/chat/completions`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${f.broker.grant.token}` },
+          body: JSON.stringify({
+            model: "claude-fixture",
+            messages: [
+              {
+                role: "user",
+                content: [
+                  { type: "text", text: "private fixture prompt" },
+                  {
+                    type: "image_url",
+                    image_url: { url: "https://example.com/private-fixture.png" },
+                  },
+                ],
+              },
+            ],
+            stream,
+          }),
+        });
+        expect(response.status).toBe(400);
+        expect(response.headers.get("content-type")).toBe("application/json");
+        expect(await response.json()).toEqual({
+          error: {
+            message: "Provider request failed.",
+            type: "invalid_request_error",
+            code: 400,
+          },
+        });
+        expect(failed).toHaveBeenCalledExactlyOnceWith({
+          kind: "provider-failed",
+          layer: "translation",
+          reason: "request-translation",
+        });
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(f.captured).toHaveLength(0);
+        expect(f.records.map((entry) => entry.request?.collection?.outcome)).toEqual([
+          "started",
+          "failed",
+        ]);
+        const logged = JSON.stringify(sink.events);
+        expect(logged).toContain("request-translation");
+        expect(logged).not.toContain("private");
+        expect(logged).not.toContain("example.com");
+        expect(logged).not.toContain(f.broker.grant.token);
+      } finally {
+        relay.close();
+      }
+    },
+  );
 
   it("names request translation for remote image URLs without fetching", async () => {
     const fetchSpy = vi.fn();

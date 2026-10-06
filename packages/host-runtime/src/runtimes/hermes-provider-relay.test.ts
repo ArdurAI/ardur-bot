@@ -329,7 +329,7 @@ it("logs a fixed refusal category through a message-only callback without values
 it.each([
   { kind: "provider-http", status: 500, layer: "upstream", reason: "http-server" },
   { kind: "provider-failed", layer: "provider-adapter", reason: "provider-stream" },
-  { kind: "provider-failed", layer: "translation", reason: "request-translation" },
+  { kind: "provider-failed", layer: "translation", reason: "response-translation" },
   { kind: "provider-failed", layer: "upstream", reason: "stream-network" },
   { kind: "provider-failed", layer: "provider-transport", reason: "transport" },
 ] as const)("logs the fixed failing layer through a remote-style callback: %j", async (failure) => {
