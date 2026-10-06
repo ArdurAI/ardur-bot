@@ -67,10 +67,13 @@ test("bot creation, editing, and deletion persist", async ({ page }, testInfo) =
   await page.locator("main").getByRole("button", { name: "New Bot", exact: true }).click();
   await expect(page.getByTestId("side-panel")).toHaveAttribute("data-panel", "settings");
   await expect(page.getByTestId("side-panel")).toHaveCSS("width", "560px");
-  const botSettingsButton = page
-    .locator("main")
-    .getByRole("button", { name: "Bot settings", exact: true });
-  await expect(botSettingsButton).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Views", exact: true }).click();
+  const botSettingsButton = page.getByRole("menuitemcheckbox", {
+    name: "Bot settings",
+    exact: true,
+  });
+  await expect(botSettingsButton).toHaveAttribute("aria-checked", "true");
+  await page.keyboard.press("Escape");
   const nameInput = page.locator("label:has-text('Name') input");
   const titleInput = page.locator("label:has-text('Title') input");
   const descriptionInput = page.locator("label:has-text('Description') textarea");

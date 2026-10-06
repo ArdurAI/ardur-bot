@@ -12,7 +12,7 @@ import {
   memoryDocsFixture,
   routineDocsFixture,
 } from "./feature-docs-fixtures";
-import { openWorkspaceView } from "./workspace-view";
+import { openWorkspaceView, toggleAgentComputer } from "./workspace-view";
 
 const captureRoot = process.env.FEATURE_DOCS_DIR
   ? Promise.resolve(process.env.FEATURE_DOCS_DIR)
@@ -328,7 +328,7 @@ test("routines: edit a scheduled routine and inspect its result", async ({ page 
   await useDashboard(page, state);
   await page.goto("/app/bot");
   await expectModelReady(page);
-  await page.getByTitle("Agent computer").click();
+  await toggleAgentComputer(page);
   await openWorkspaceView(page, "Routines");
   await expect(page.getByRole("button", { name: /Morning brief/ })).toBeVisible();
   await capture(page, "docs-routines-open");

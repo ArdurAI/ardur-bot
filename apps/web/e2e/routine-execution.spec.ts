@@ -1,7 +1,7 @@
 import type { Routine } from "@ardurbot/contracts";
 import { expect, test } from "@playwright/test";
 import { activeBotId, captureScreenshot, completeOnboarding, rpc, signup } from "./helpers";
-import { openWorkspaceView } from "./workspace-view";
+import { openWorkspaceView, toggleAgentComputer } from "./workspace-view";
 
 test("Slack message trigger uses the mounted messaging provider and persists", async ({
   page,
@@ -19,7 +19,7 @@ test("Slack message trigger uses the mounted messaging provider and persists", a
   await completeOnboarding(page);
   const botId = activeBotId(page);
 
-  await page.getByTitle("Agent computer").click();
+  await toggleAgentComputer(page);
   await openWorkspaceView(page, "Routines");
   await page.getByRole("button", { name: "Create Routine" }).click();
   await page.getByPlaceholder("Name this routine").fill("Triage Slack updates");
@@ -59,7 +59,7 @@ test("GitHub event trigger exposes signed delivery settings and persists", async
   await completeOnboarding(page);
   const botId = activeBotId(page);
 
-  await page.getByTitle("Agent computer").click();
+  await toggleAgentComputer(page);
   await openWorkspaceView(page, "Routines");
   await page.getByRole("button", { name: "Create Routine" }).click();
   await page.getByPlaceholder("Name this routine").fill("Review repository events");
@@ -126,7 +126,7 @@ test("routine test-run completes and survives reload", async ({ page }, testInfo
   await signup(page, `routine-${stamp}@example.test`, "password12", "Routine");
   await completeOnboarding(page);
 
-  await page.getByTitle("Agent computer").click();
+  await toggleAgentComputer(page);
   await openWorkspaceView(page, "Routines");
   await expect(page.getByRole("button", { name: "Test run" })).toHaveCount(0);
   await page.getByRole("button", { name: "Create Routine" }).click();
@@ -159,7 +159,7 @@ test("routine test-run completes and survives reload", async ({ page }, testInfo
 
   await page.reload();
   await expect(page.getByText(/routine-run-now-ok/i).first()).toBeVisible();
-  await page.getByTitle("Agent computer").click();
+  await toggleAgentComputer(page);
   await openWorkspaceView(page, "Routines");
   await expect(page.getByRole("button", { name: /Daily verification/ })).toContainText(
     "Weekdays at 9:00 AM",

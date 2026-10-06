@@ -39,12 +39,16 @@ test("a group member choice appears in the room and on its captured run", async 
   await panel.getByRole("button", { name: "Create group", exact: true }).click();
   await page.waitForURL(/\/app\/g\/[^/]+$/);
   const groupId = page.url().split("/").at(-1)!;
-  const groupSettingsButton = page
-    .locator("main")
-    .getByRole("button", { name: "Group settings", exact: true });
+  await page.getByRole("button", { name: "Views", exact: true }).click();
+  const groupSettingsButton = page.getByRole("menuitemcheckbox", {
+    name: "Group settings",
+    exact: true,
+  });
   await groupSettingsButton.click();
   await expect(panel).toHaveAttribute("data-panel", "group-settings");
-  await expect(groupSettingsButton).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Views", exact: true }).click();
+  await expect(groupSettingsButton).toHaveAttribute("aria-checked", "true");
+  await page.keyboard.press("Escape");
   const control = panel.getByTestId(`group-model-${first}`);
   const select = control.locator("select").first();
   await expect
