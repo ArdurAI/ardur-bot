@@ -95,7 +95,39 @@ function containerEnd(text: string, start: number): number {
   return text.length;
 }
 
-function redactAssignments(text: string, credentialsOnly = false): string {
+// Command output may contain source. Only bare, plainly executable/type-like values
+// qualify; token-shaped values and quoted strings still follow the conservative path.
+function isCodeValue(text: string, start: number, key: string): boolean {
+  if (/^["'`]/.test(text.slice(start, start + 1))) return false;
+  if (/^(?:\$\{[^{}]+\}|\{\{[^{}]+\}\})/.test(text.slice(start))) return true;
+  if (/^[{[]/.test(text.slice(start, start + 1))) return false;
+  const value = text.slice(start).match(/^[^\s"',;}&\]]*/)?.[0] ?? "";
+  if (PLACEHOLDER.test(value)) return true;
+  if (
+    (value.length >= 32 && /^[A-Za-z0-9_+/=-]+$/.test(value)) ||
+    /^(?:gh[pousr]_|github_pat_|AKIA|ASIA|sk-|xai-|ak_|ck_)/.test(value)
+  )
+    return false;
+  if (/^[+-]?(?:\d+(?:\.\d+)?|0x[\da-f]+)$/i.test(value)) return true;
+  const rest = text.slice(start);
+  // Do not mistake an authorization scheme followed by an opaque value for source.
+  const identifier = /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*/.exec(rest)?.[0];
+  if (!identifier) return false;
+  const suffix = rest.slice(identifier.length);
+  if (suffix.startsWith("(")) return true;
+  if (!/^\??[ \t]*(?:[,;}\]\r\n]|$)/.test(suffix)) return false;
+  if (identifier.includes(".")) return true;
+  // A bare word can equally be a YAML/environment credential. Preserve only
+  // explicit type syntax or a named collection reference such as knownSecrets: secrets.
+  return (
+    (/^(?:string|number|boolean|unknown|never|any|void|bigint|symbol|object)$/.test(identifier) &&
+      /^[ \t]*;/.test(suffix)) ||
+    (key === `known${identifier[0]!.toUpperCase()}${identifier.slice(1)}` &&
+      /^(?:secrets|credentials)$/.test(identifier))
+  );
+}
+
+function redactAssignments(text: string, credentialsOnly = false, commandOutput = false): string {
   const keys = new RegExp(ASSIGNMENT_KEY);
   const parts: string[] = [];
   let copied = 0;
@@ -107,9 +139,10 @@ function redactAssignments(text: string, credentialsOnly = false): string {
     if (!isSensitiveKey(key) && !privacyKey) continue;
     const start = keys.lastIndex;
     const quote = text[start];
+    if (commandOutput && match[2] === undefined && isCodeValue(text, start, key)) continue;
     let end = start;
     let replacement = REDACTED;
-    if (quote === '"' || quote === "'") {
+    if (quote === '"' || quote === "'" || (commandOutput && quote === "`")) {
       end = quotedEnd(text, start);
       const closed = text[end] === quote;
       const value = text.slice(start + 1, end);
@@ -179,11 +212,21 @@ export function redactCredentialText(text: string): string {
   return redactText(text, true);
 }
 
-function redactText(text: string, credentialsOnly: boolean): string {
+/** Source-aware redaction for retained shell output only; logs and memories stay conservative. */
+export function redactCommandOutput(text: string): string {
+  // Remove blocks before assignment scanning can consume their opening marker.
+  const withoutPrivateKeys = text.replace(
+    /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g,
+    REDACTED,
+  );
+  return redactText(withoutPrivateKeys, false, true);
+}
+
+function redactText(text: string, credentialsOnly: boolean, commandOutput = false): string {
   // Hide URL credentials before their password/host suffix can look like an email.
   let result = text.includes("@") ? text.replace(CREDENTIAL_URL, `$1${REDACTED}@`) : text;
   if (!credentialsOnly && result.includes("@")) result = result.replace(EMAIL, REDACTED);
-  result = redactAssignments(result, credentialsOnly);
+  result = redactAssignments(result, credentialsOnly, commandOutput);
   for (const [pattern, replacement] of TEXT_REDACTIONS)
     result = result.replace(pattern, replacement);
   // SHA-1 commit IDs share the AWS key length but are public provenance, not credentials.
