@@ -70,6 +70,22 @@ jobs:
       - run: pnpm site:facts:check
       - run: pnpm feature-docs:report
 
+  expo-check:
+    name: Expo package compatibility (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @ardurbot/mobile check:expo
+
   build:
     name: Production builds
     runs-on: ubuntu-latest
