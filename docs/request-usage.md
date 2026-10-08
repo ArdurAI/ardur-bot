@@ -145,6 +145,16 @@ complete the categories. Other transports retain a runtime-call receipt and only
 SDK-normalized lower bounds: the SDK's initialized zeros cannot establish measured zero.
 Request-level coverage on those routes is unknown.
 
+Within one HTTP attempt, a decreasing mapped category is not a verified reset. Pi keeps the
+last consistent snapshot as a lower bound and marks `counter-discontinuity`, while retaining
+the new report's whitelisted numeric fields in the receipt. Invalid reports do not replace
+that comparison point. A later nondecreasing snapshot may raise the lower bound but does not
+remove the uncertainty marker. This prevents a bad usage report from failing an otherwise
+successful answer without inventing another bill or silently claiming complete spend.
+The ledger still rejects decreasing cumulative categories from callers that bypass this mapping.
+Pi creates fresh request IDs for model calls and the ledger also keys by persisted run ID;
+this repair does not establish the cause of any installed provider failure.
+
 Anthropic's uncached input, cache reads and cache creation are additive. OpenAI input includes cache
 subsets; reported reasoning is a subset of output. Missing fields remain null, including omitted
 cache-write or reasoning counts. `normalizeUsageCounts` rejects negative, fractional, nonfinite,
