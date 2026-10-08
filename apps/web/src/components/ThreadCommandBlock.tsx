@@ -1,5 +1,5 @@
 import type { CommandBlock as RecordedCommand } from "@ardurbot/contracts";
-import { commandOutput, commandSummaryDisplay } from "@ardurbot/core";
+import { commandDisplayError, commandDisplayOutput, commandSummaryDisplay } from "@ardurbot/core";
 import { Button, CommandBlock, Input } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { useId, useState } from "react";
@@ -13,6 +13,12 @@ export function ThreadCommandBlock({
   spaceId?: string;
 }) {
   const { t, i18n } = useLingui();
+  const displayError = (record: RecordedCommand) =>
+    commandDisplayError(record, (reason) =>
+      reason === "command-size"
+        ? t`This command was not run because it exceeds 64 KB. Put code in a file and run that file.`
+        : t`Use a path inside this bot's folder or a registered folder.`,
+    );
   const displayMessage = (message: string | null): string | null =>
     message === "Run commands inside this bot's folder or a registered folder."
       ? t`Run commands inside this bot's folder or a registered folder.`
@@ -20,11 +26,12 @@ export function ThreadCommandBlock({
           "This command was not run because its request is invalid. Check the command and folder."
         ? t`This command was not run because its request is invalid. Check the command and folder.`
         : message;
-  const displayBlock = (recorded: RecordedCommand): RecordedCommand => ({
-    ...recorded,
-    error: displayMessage(recorded.error),
-    rerunDisabledReason: displayMessage(recorded.rerunDisabledReason),
-  });
+  const translatedError = (record: RecordedCommand) => {
+    const translated = displayError(record);
+    return translated === record.error && record.refusalId == null
+      ? displayMessage(translated)
+      : translated;
+  };
   const id = useId();
   const [current, setCurrent] = useState<RecordedCommand | null>(null);
   const [query, setQuery] = useState("");
@@ -56,10 +63,13 @@ export function ThreadCommandBlock({
     <div className="w-full min-w-0 space-y-2" aria-busy={busy}>
       <CommandBlock
         locale={i18n.locale}
-        block={displayBlock({
+        displayError={translatedError(block)}
+        block={{
           ...block,
-          rerunDisabledReason: current ? current.rerunDisabledReason : block.rerunDisabledReason,
-        })}
+          rerunDisabledReason: displayMessage(
+            current ? current.rerunDisabledReason : block.rerunDisabledReason,
+          ),
+        }}
         labels={{
           copyCommand: t`Copy command`,
           copyOutput: t`Copy output`,
@@ -129,7 +139,7 @@ export function ThreadCommandBlock({
                   {commandSummaryDisplay(match)}
                 </summary>
                 <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all">
-                  {commandOutput(displayBlock(match))}
+                  {commandDisplayOutput(match, translatedError(match))}
                 </pre>
               </details>
             ))}

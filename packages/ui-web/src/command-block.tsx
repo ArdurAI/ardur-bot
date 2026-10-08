@@ -1,5 +1,5 @@
 import type { CommandBlock as RecordedCommand } from "@ardurbot/core";
-import { commandOutput, commandSummaryDisplay } from "@ardurbot/core";
+import { commandDisplayOutput, commandOutput, commandSummaryDisplay } from "@ardurbot/core";
 import type { ReactNode } from "react";
 import { useId, useState } from "react";
 import { formatAbsoluteCommandTime, formatCommandTime } from "./command-time.js";
@@ -25,6 +25,7 @@ export type CommandBlockLabels = {
 export function CommandBlock({
   block,
   labels,
+  displayError = block.error,
   locale,
   onExpand,
   onExportRun,
@@ -36,6 +37,7 @@ export function CommandBlock({
 }: {
   block: RecordedCommand;
   labels: CommandBlockLabels;
+  displayError?: string | null;
   locale?: string;
   onExpand?: () => void;
   onExportRun?: () => void;
@@ -103,7 +105,7 @@ export function CommandBlock({
                 tabIndex={0}
                 className="max-h-80 overflow-auto whitespace-pre-wrap break-all font-mono text-[13px] normal-case"
               >
-                {commandOutput(block)}
+                {commandDisplayOutput(block, displayError)}
               </pre>
               <div className="flex flex-wrap gap-2">
                 <Button

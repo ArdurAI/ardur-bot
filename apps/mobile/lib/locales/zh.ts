@@ -1455,5 +1455,9 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Could not check the model. Try again.": "无法检查模型。请重试。",
   "Context limit (estimated)": "上下文限制（估计）",
   "Context limit (from the provider)": "上下文限制（来自提供商）",
+  "This command was not run because it exceeds 64 KB. Put code in a file and run that file.":
+    "此命令未运行，因为它超过了 64 KB。请将代码放入文件并运行该文件。",
+  "Use a path inside this bot's folder or a registered folder.":
+    "请使用此机器人的文件夹或已注册文件夹内的路径。",
   "Experimental turned on for this runtime": "已为此运行时开启实验性功能",
 };

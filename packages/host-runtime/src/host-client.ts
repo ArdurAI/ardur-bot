@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { AdapterContext } from "@ardurbot/adapter-kit";
+import { CommandRefusalError, CommandRefusalIdSchema } from "@ardurbot/contracts";
 import type {
   HostFrame,
   HostHealth,
@@ -113,7 +114,11 @@ export class HostClient {
         buffered--;
         if (frame.type === "end") {
           finished = true;
-          if (frame.problem) throw new RuntimePinError(frame.problem);
+          if (frame.problem) {
+            const refusal = CommandRefusalIdSchema.safeParse(frame.problem.refusalId);
+            if (refusal.success) throw new CommandRefusalError(refusal.data);
+            throw new RuntimePinError(frame.problem);
+          }
           return;
         }
         if (frame.type === "stream") {
