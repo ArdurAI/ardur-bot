@@ -13,7 +13,7 @@ import {
 } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { XIcon } from "lucide-react";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { rpc } from "../lib/rpc";
 import { GitMemorySettings, GitMemoryStatus } from "./GitMemorySettings";
 import { SpaceMemorySection } from "./KnowledgeSection";
@@ -82,8 +82,14 @@ export function MemorySettingsOverlay({
       active = false;
     };
   }, []);
+  // Follow the saved location only while the user has not picked a different one:
+  // a config (re)load must not throw away an in-progress choice or remount the
+  // location form underneath it.
+  const previousConfigured = useRef(configuredLocation(config));
   useEffect(() => {
-    setLocation(configuredLocation(config));
+    const configured = configuredLocation(config);
+    setLocation((current) => (current === previousConfigured.current ? configured : current));
+    previousConfigured.current = configured;
     setFolder(config?.documentSettings.folder ?? "");
     setScope(config?.defaultMemoryScope ?? "isolated");
     setPreview(null);

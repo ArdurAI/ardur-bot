@@ -139,3 +139,47 @@ it("shows the Git repository form exactly once when Git is already configured", 
     },
   );
 });
+
+it("keeps the chosen location and a single Publication mode control when the config loads late", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const props = {
+    embedded: true,
+    onConfigChange: () => undefined,
+    onClose: () => undefined,
+  };
+  try {
+    await act(async () => root.render(<MemorySettingsOverlay {...props} config={undefined} />));
+    const location = container.querySelector("select")!;
+    await act(async () => {
+      location.value = "git";
+      location.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(location.value).toBe("git");
+    // The saved config arrives after the user already picked Git (the screenshot-job race).
+    await act(async () =>
+      root.render(
+        <MemorySettingsOverlay
+          {...props}
+          config={
+            {
+              provider: "builtin",
+              documentStore: "postgres",
+              documentSettings: {},
+              generation: 0,
+              defaultMemoryScope: "isolated",
+            } as never
+          }
+        />,
+      ),
+    );
+    expect(container.querySelectorAll('[data-testid="git-memory-settings"]')).toHaveLength(1);
+    expect(container.querySelectorAll('select[aria-label="Publication mode"]')).toHaveLength(1);
+    expect(container.querySelector("select")!.value).toBe("git");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
+});
