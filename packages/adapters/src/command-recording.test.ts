@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { ProcessEvent, SandboxProvider } from "@ardurbot/adapter-kit";
 import type { CommandBlock } from "@ardurbot/contracts";
-import { COMMAND_OUTPUT_LIMIT, COMMAND_SUPPRESSED, COMMAND_TRUNCATED } from "@ardurbot/contracts";
+import {
+  COMMAND_OUTPUT_LIMIT,
+  COMMAND_REFUSALS,
+  COMMAND_SUPPRESSED,
+  COMMAND_TRUNCATED,
+  CommandRefusalError,
+} from "@ardurbot/contracts";
 import { projectCommandBlocks } from "@ardurbot/core";
 import type { AppendEventInput, ThreadEvents } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
@@ -613,11 +619,13 @@ describe("command recording boundary", () => {
       const tool = vi.fn();
       const result = await f.recording.invoke("shell", { command }, "execution-1", tool);
       expect(result).toEqual({
+        refusalId: "command-size",
         error:
           "This command was not run because it exceeds 64 KB. Put code in a file and run that file.",
       });
       expect(tool).not.toHaveBeenCalled();
       expect(f.sandbox.execute).not.toHaveBeenCalled();
+      expect(f.blocks()[0]?.refusalId).toBe("command-size");
       expect(f.blocks()[0]?.command?.startsWith(command.slice(0, 100))).toBe(true);
       expect(f.blocks()[0]?.command?.endsWith(COMMAND_TRUNCATED)).toBe(true);
       expect(f.blocks()[0]?.command?.length).toBeLessThanOrEqual(64 * 1024);
@@ -863,4 +871,58 @@ it("records the task-owned working directory selected for a helper execution", a
     "tasks/root/helper/project",
     expect.anything(),
   );
+});
+
+it("preserves a producer's typed file refusal through the tool result and recorded block", async () => {
+  const f = fixture();
+  const result = await f.recording.invoke("shell", { command: "pwd" }, "execution-1", async () => {
+    throw new CommandRefusalError("file-location");
+  });
+  expect(result).toEqual({ error: COMMAND_REFUSALS["file-location"], refusalId: "file-location" });
+  expect(f.blocks()[0]).toMatchObject({
+    error: COMMAND_REFUSALS["file-location"],
+    refusalId: "file-location",
+  });
+});
+it("preserves a typed cwd refusal without executing and does not classify ordinary error words", async () => {
+  const f = fixture();
+  vi.mocked(f.sandbox.resolveCommandCwd!).mockRejectedValueOnce(
+    new CommandRefusalError("file-location"),
+  );
+  expect(await f.invoke()).toEqual({
+    error: COMMAND_REFUSALS["file-location"],
+    refusalId: "file-location",
+  });
+  expect(f.sandbox.execute).not.toHaveBeenCalled();
+  const ordinary = fixture();
+  await ordinary.recording.invoke("shell", { command: "pwd" }, "execution-1", async () => ({
+    error: COMMAND_REFUSALS["file-location"],
+    stdout: COMMAND_REFUSALS["command-size"],
+  }));
+  expect(ordinary.blocks()[0]?.refusalId).toBeUndefined();
+});
+
+it("carries a file tool producer's identifier in its result without inventing a command card", async () => {
+  const f = fixture();
+  const result = await f.recording.invoke(
+    "read_file",
+    { path: "/outside.txt" },
+    "file-1",
+    async () => {
+      throw new CommandRefusalError("file-location");
+    },
+  );
+  expect(result).toEqual({ error: COMMAND_REFUSALS["file-location"], refusalId: "file-location" });
+  expect(f.events).toEqual([]);
+});
+it("keeps a future result identifier so it cannot be mistaken for an exact legacy sentence", async () => {
+  const f = fixture();
+  await f.recording.invoke("shell", { command: "pwd" }, "execution-1", async () => ({
+    refusalId: "future-refusal",
+    error: COMMAND_REFUSALS["file-location"],
+  }));
+  expect(f.blocks()[0]).toMatchObject({
+    refusalId: "future-refusal",
+    error: COMMAND_REFUSALS["file-location"],
+  });
 });

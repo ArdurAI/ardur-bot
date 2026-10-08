@@ -61,7 +61,10 @@ export const HostRuntimeInfoSchema = z.union([
   RuntimeInfoSchema,
   RuntimeInfoSchema.extend({ runtimeKind: z.literal("hermes") }),
 ]);
-export const HostRuntimeProblemSchema = RuntimeProblemSchema.extend({ pin: HostRuntimePinSchema });
+export const HostRuntimeProblemSchema = RuntimeProblemSchema.extend({
+  pin: HostRuntimePinSchema,
+  refusalId: z.string().optional(),
+});
 export type HostRuntimeProblem = z.infer<typeof HostRuntimeProblemSchema>;
 export const HOST_TOOLS = [
   "git",

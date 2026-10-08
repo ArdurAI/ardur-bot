@@ -8,7 +8,7 @@ import type {
   AgentRuntime,
   ComputerRef,
 } from "@ardurbot/adapter-kit";
-import { IDE_FILE_BYTES } from "@ardurbot/contracts";
+import { CommandRefusalError, IDE_FILE_BYTES } from "@ardurbot/contracts";
 import type {
   HostFrame,
   HostHealth,
@@ -47,7 +47,7 @@ import {
 } from "./host-guardrails.js";
 import { inspectHostIntegrations } from "./host-integrations.js";
 import { HostMcpServers } from "./host-mcp.js";
-import { confinedHostCwd, FILE_LOCATION_REFUSAL } from "./host-policy.js";
+import { confinedHostCwd } from "./host-policy.js";
 import type { LocalImportScanner } from "./import/scanner.js";
 import { createLocalImportScanner, LocalImportRescanError } from "./import/scanner.js";
 import { AntigravityRuntime, probeAntigravity } from "./runtimes/antigravity-runtime.js";
@@ -502,10 +502,12 @@ export class HostAgent {
           problem:
             error instanceof RuntimePinError
               ? error.problem
-              : hostLostProblem(
-                  request,
-                  "Host operation could not finish — check registered folders and the runtime.",
-                ),
+              : error instanceof CommandRefusalError
+                ? { ...hostLostProblem(request, error.message), refusalId: error.refusalId }
+                : hostLostProblem(
+                    request,
+                    "Host operation could not finish — check registered folders and the runtime.",
+                  ),
         });
       } catch {
         // A malformed or oversized operation error must not disconnect other host operations.
@@ -528,13 +530,13 @@ export class HostAgent {
   }
   private fileTarget(computer: ComputerRef, requested: string) {
     if (requested.includes("\0") || requested.split(/[/\\]/u).includes(".."))
-      throw new Error(FILE_LOCATION_REFUSAL);
+      throw new CommandRefusalError("file-location");
     if (!path.isAbsolute(requested)) return { computer, path: requested === "." ? "" : requested };
     const root = [computer.providerRef, ...this.roots].find((root) => {
       const relative = path.relative(root, requested);
       return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
     });
-    if (!root) throw new Error(FILE_LOCATION_REFUSAL);
+    if (!root) throw new CommandRefusalError("file-location");
     const key = `folder-${createHash("sha256").update(root).digest("hex")}`;
     // Only locally registered roots can create these provider references. The provider
     // resolves symlinks again at file-open time and uses its existing contained writer.

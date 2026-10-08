@@ -9147,6 +9147,10 @@ msgid "This command is not available to this account."
 msgstr ""
 
 #: src/components/ThreadCommandBlock.tsx
+msgid "This command was not run because it exceeds 64 KB. Put code in a file and run that file."
+msgstr "Dieser Befehl wurde nicht ausgeführt, weil er 64 KB überschreitet. Speichere den Code in einer Datei und führe diese aus."
+
+#: src/components/ThreadCommandBlock.tsx
 msgid "This command was not run because its request is invalid. Check the command and folder."
 msgstr "Dieser Befehl wurde nicht ausgeführt, weil seine Anfrage ungültig ist. Prüfe den Befehl und den Ordner."
 
@@ -9682,6 +9686,10 @@ msgstr "{hostLabel} verwenden"
 #: src/pages/Onboarding.tsx
 msgid "Use a found model"
 msgstr "Gefundenes Modell verwenden"
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Use a path inside this bot's folder or a registered folder."
+msgstr "Verwende einen Pfad im Ordner dieses Bots oder in einem registrierten Ordner."
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Use a token"

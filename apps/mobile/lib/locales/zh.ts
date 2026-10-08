@@ -1462,5 +1462,9 @@ export const ZH_MESSAGES: Record<string, string> = {
     "此操作可能已经执行。再次尝试前，请检查结果。",
   "Bot work is still paused after the update. Try again.":
     "更新后，机器人工作仍处于暂停状态。请重试。",
+  "This command was not run because it exceeds 64 KB. Put code in a file and run that file.":
+    "此命令未运行，因为它超过了 64 KB。请将代码放入文件并运行该文件。",
+  "Use a path inside this bot's folder or a registered folder.":
+    "请使用此机器人的文件夹或已注册文件夹内的路径。",
   "Experimental turned on for this runtime": "已为此运行时开启实验性功能",
 };
