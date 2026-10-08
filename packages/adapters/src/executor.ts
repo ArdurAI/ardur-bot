@@ -2000,6 +2000,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
           throw error;
         });
 
+      let checkpointWrite: Promise<void> = Promise.resolve();
+      const flushProgressSaves = () => checkpointWrite;
       let suspendedForRestart = false;
       let leaseValid = true;
       let lastLeaseCheckAt = 0;
@@ -3231,6 +3233,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             tool: name,
             pause: async (reason, action) => {
               await workspaceCheckpoint.flush();
+              await flushProgressSaves();
               const paused = await deps.events.pauseRunForInput({
                 spaceId: run.spaceId,
                 threadId: run.threadId,
@@ -3995,6 +3998,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             }
             await workspaceCheckpoint.flush();
             await bindDeviceApproval(deps.prisma, run, applied!.effect);
+            await flushProgressSaves();
             const paused = await deps.events.pauseRunForInput({
               helperDelegationId: helperToolDelegations.get(executionId),
               spaceId: run.spaceId,
@@ -5158,6 +5162,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               return pauseForSecret();
             }
             await workspaceCheckpoint.flush();
+            await flushProgressSaves();
             const paused = await deps.events.pauseRunForInput({
               spaceId: run.spaceId,
               threadId: run.threadId,
@@ -5950,7 +5955,6 @@ export function createRunExecutor(deps: ExecutorDeps) {
               prompt: task.prompt,
             },
           );
-          let checkpointWrite: Promise<void> = Promise.resolve();
           // A failed write must not poison later saves: snapshots are cumulative, so the next
           // save supersedes a lost one. Callers that await still see that save's own failure.
           const saveProgress = () => {
@@ -5978,7 +5982,6 @@ export function createRunExecutor(deps: ExecutorDeps) {
           const queueProgressSave = () => {
             void saveProgress().catch(() => {});
           };
-          const flushProgressSaves = () => checkpointWrite;
           const suspendAtBoundary = async () => {
             if (!deps.restartDrain || !(await deps.restartDrain.requested())) return false;
             turnProgress.snapshot().suspended = true;
@@ -6892,6 +6895,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               }
               const releasedHold = takeoverCheckpointOf(still.checkpoint);
               if (heldForTakeover && releasedHold) {
+                await flushProgressSaves();
                 await requeueComputerRun(deps, runId, workerId, fence, releasedHold, false);
                 leaseValid = false;
                 runAbortController?.abort();
@@ -6998,6 +7002,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 label: redactSecrets(action.label, runSecrets),
               }));
               await workspaceCheckpoint.flush();
+              await flushProgressSaves();
               const paused = await deps.events.pauseRunForInput({
                 spaceId: run.spaceId,
                 threadId: run.threadId,
@@ -7059,6 +7064,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 { kind: "computer", state: "Needs you", text: safeReason },
               ]);
               await workspaceCheckpoint.flush();
+              await flushProgressSaves();
               if (!(await holdComputerExecutionLeaseForTakeover(deps.prisma, computerLease))) {
                 throw new Error("Computer lease expired before takeover");
               }
@@ -7108,6 +7114,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 }
                 await workspaceCheckpoint.flush();
                 terminalCheckpointComplete = true;
+                await flushProgressSaves();
                 const stuckText = `I got stuck calling ${humanizeToolName(event.name)} with the same input ${toolCallStreak.count} times in a row without making progress, so I stopped early. Try rephrasing this, or ask me to try a different approach.`;
                 const stopped = await deps.events.finalizeRun({
                   onCommitted: () =>
@@ -7397,6 +7404,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             });
           }
         } catch (error) {
+          await flushProgressSaves();
           if (suspendedForRestart || deps.shutdownSignal?.aborted) return;
           const stopping = await deps.prisma.run.findUnique({
             where: { id: runId },
@@ -7564,6 +7572,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
         }
       } catch (setupError) {
+        await flushProgressSaves();
         if (preparationSignal?.aborted) {
           await requeueComputerRun(deps, runId, workerId, fence, resumeCheckpoint, heldForTakeover);
           await deps.prisma.attempt.update({
@@ -7706,6 +7715,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
           throw new Error("Run setup failed; retrying");
         }
       } finally {
+        // Keep the turn registered and its leases held until queued writes settle. The
+        // existing drain deadline can still report and interrupt an unfinished turn.
+        await flushProgressSaves();
         controlWatch.abort();
         await controlWatcher;
         detachShutdown?.();
