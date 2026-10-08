@@ -5949,10 +5949,12 @@ export function createRunExecutor(deps: ExecutorDeps) {
               prompt: task.prompt,
             },
           );
-          let checkpointWrite = Promise.resolve();
+          let checkpointWrite: Promise<void> = Promise.resolve();
+          // A failed write must not poison later saves: snapshots are cumulative, so the next
+          // save supersedes a lost one. Callers that await still see that save's own failure.
           const saveProgress = () => {
             const snapshot = redactTaskValue(turnProgress.snapshot(), runSecrets);
-            checkpointWrite = checkpointWrite.then(async () => {
+            const write = checkpointWrite.then(async () => {
               const stored = await deps.secretStore.put(
                 JSON.stringify(snapshot),
                 context,
@@ -5961,8 +5963,21 @@ export function createRunExecutor(deps: ExecutorDeps) {
               await saveTurnProgress(deps.prisma, runId, workerId, fence, stored.ciphertext);
               tracePoint(runId, "restart.saved", { attempt: fence });
             });
-            return checkpointWrite;
+            checkpointWrite = write.catch((error: unknown) => {
+              getLogger().warn("restart.turn.checkpoint.failed", {
+                runId,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            });
+            return write;
           };
+          // Boundaries that need no happens-before edge (pre-model, post-effect, done) queue
+          // the save off the turn's critical path; the chain preserves write order and the
+          // flush before finalize settles every queued write while the lease is still held.
+          const queueProgressSave = () => {
+            void saveProgress().catch(() => {});
+          };
+          const flushProgressSaves = () => checkpointWrite;
           const suspendAtBoundary = async () => {
             if (!deps.restartDrain || !(await deps.restartDrain.requested())) return false;
             turnProgress.snapshot().suspended = true;
@@ -6182,6 +6197,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   }));
               if (replay.kind === "completed" && !recordedCommand) return replay.result;
               if (replay.kind === "uncertain" && !recordedCommand) {
+                await flushProgressSaves();
                 const paused = await deps.events.pauseRunForInput({
                   spaceId: run.spaceId,
                   threadId: run.threadId,
@@ -6211,7 +6227,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 !(result && typeof result === "object" && "uncertain" in result && result.uncertain)
               )
                 turnProgress.finishEffect(executionId, redactTaskValue(result, runSecrets));
-              await saveProgress();
+              queueProgressSave();
               await suspendAtBoundary();
               chiefUncertain = Boolean(
                 result && typeof result === "object" && "uncertain" in result && result.uncertain,
@@ -6594,7 +6610,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           context.signal.throwIfAborted();
           turnProgress.snapshot().history = resumeTurn?.history ?? turnContext.history;
           turnProgress.snapshot().prompt = resumeTurn?.prompt ?? turnContext.prompt;
-          await saveProgress();
+          queueProgressSave();
           if (await suspendAtBoundary()) return;
           const runtimeEvents = withComparisonInput(
             deps,
@@ -7208,7 +7224,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               const state = turnProgress.snapshot().runtimeState;
               if (state === undefined || typeof state === "string") {
                 turnProgress.runtimeState = event.text ?? assembled;
-                await saveProgress();
+                queueProgressSave();
               }
               if (await suspendAtBoundary()) return;
               if (!assembled && event.text) {
@@ -7225,6 +7241,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
 
           tracePoint(runId, "runtime.finished", { attempt: fence });
+          await flushProgressSaves();
           if (approvalPausePending || !leaseValid || suspendedForRestart) return;
           if (deps.shutdownSignal?.aborted && (await suspendAtBoundary())) return;
           approvedEffectReplays.assertDrained();

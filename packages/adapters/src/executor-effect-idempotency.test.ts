@@ -2394,6 +2394,31 @@ describe("executor restart journeys without a database", () => {
     const saved = JSON.parse(digests.load(f.runRecord.turnCheckpoint!, "turn:native-progress"));
     expect(saved.runtimeState).toEqual([{ role: "assistant", content: "full model context" }]);
   });
+  it("re-arms checkpoint writes after a transient failure instead of poisoning the turn", async () => {
+    const f = fixture("checkpoint-rearm");
+    const underlying = f.prisma.run.updateMany.getMockImplementation()!;
+    let checkpointWrites = 0;
+    f.prisma.run.updateMany.mockImplementation(async (input) => {
+      if ((input as { data?: { turnCheckpoint?: unknown } }).data?.turnCheckpoint) {
+        checkpointWrites++;
+        if (checkpointWrites === 2) throw new Error("transient connection reset");
+      }
+      return underlying(input);
+    });
+    f.runtimeRun.mockImplementation(async function* (request) {
+      await expect(
+        request.saveCheckpoint!([{ role: "assistant", content: "lost write" }]),
+      ).rejects.toThrow("transient connection reset");
+      await request.saveCheckpoint!([{ role: "assistant", content: "re-armed write" }]);
+      yield { type: "done", text: "finished" };
+    });
+    await f.executor.continueRun("checkpoint-rearm", "worker");
+    expect(f.finalizeRun).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: "checkpoint-rearm", outcome: "completed" }),
+    );
+    const saved = JSON.parse(digests.load(f.runRecord.turnCheckpoint!, "turn:checkpoint-rearm"));
+    expect(saved.runtimeState).toEqual([{ role: "assistant", content: "re-armed write" }]);
+  });
   it("keeps a cancelled saved turn cancelled without starting a fresh session", async () => {
     const f = fixture("cancelled-saved");
     f.runRecord.status = "cancelled";
