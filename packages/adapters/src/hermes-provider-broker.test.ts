@@ -1,9 +1,13 @@
 import type { AgentUsage } from "@ardurbot/adapter-kit";
+import { hermesProviderFailure } from "@ardurbot/host-runtime/runtimes/hermes-provider-failure";
+import { startHermesProviderRelay } from "@ardurbot/host-runtime/runtimes/hermes-provider-relay";
+import { createLogger, createTestSink } from "@ardurbot/logging";
 import { describe, expect, it, vi } from "vitest";
 import {
   type BrokerOptions,
   type BrokerRequest,
   HermesProviderBroker,
+  HermesRelayDispatcher,
   hermesToolName,
 } from "./hermes-provider-broker.js";
 
@@ -89,6 +93,72 @@ function fixture(patch: Partial<BrokerOptions> = {}) {
 }
 
 describe("worker provider broker", () => {
+  it.each([
+    ["main", false],
+    ["main", true],
+    ["summary", false],
+    ["summary", true],
+  ] as const)(
+    "logs safe pass-through network failures for %s (stream %s)",
+    async (purpose, stream) => {
+      const provider = vi.fn<typeof globalThis.fetch>(async () => {
+        throw Object.assign(new TypeError("private fixture endpoint and key"), {
+          cause: { code: "ENOTFOUND", address: "private fixture address" },
+        });
+      });
+      const f = fixture({ purpose, fetch: provider });
+      const failure = { kind: "provider-failed", layer: "provider-transport", reason: "transport" };
+      const sink = createTestSink();
+      const logger = createLogger({ service: "fixture", sinks: [sink], level: "info" });
+      const failed = vi.fn();
+      let brokerFailure: unknown;
+      const dispatcher = new HermesRelayDispatcher(
+        { broker: f.broker, scope: f.options.scope },
+        new AbortController().signal,
+      );
+      const relay = await startHermesProviderRelay(
+        { ...f.broker.grant, protocol: 1, hostGeneration: "fixture" },
+        async (method, args) => {
+          try {
+            return await dispatcher.dispatch(method, args);
+          } catch (error) {
+            brokerFailure = hermesProviderFailure(error);
+            // Remote callbacks lose the error class, properties and cause.
+            throw new Error((error as Error).message);
+          }
+        },
+        failed,
+        logger,
+      );
+      try {
+        const response = await fetch(`${relay.url}/chat/completions`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${f.broker.grant.token}` },
+          body: JSON.stringify({ ...f.body, stream }),
+        });
+        expect(response.status).toBe(502);
+        expect(await response.text()).toBe("Provider request failed.");
+        expect(brokerFailure).toEqual(failure);
+        expect(failed).toHaveBeenCalledExactlyOnceWith(failure);
+        expect(provider).toHaveBeenCalledOnce();
+        expect(f.records.map((entry) => entry.request?.collection?.outcome)).toEqual([
+          "started",
+          "failed",
+        ]);
+        const logged = JSON.stringify(sink.events);
+        expect(logged).toContain("provider-transport");
+        expect(logged).toContain("transport");
+        expect(logged).not.toContain("status");
+        expect(logged).not.toContain("private fixture");
+        expect(logged).not.toContain("ENOTFOUND");
+        expect(logged).not.toContain(f.broker.grant.token);
+        expect(logged).not.toContain("stack");
+      } finally {
+        relay.close();
+      }
+    },
+  );
+
   it("admits a small delegated request under a 10,000-token allowance and settles it", async () => {
     const records: AgentUsage[] = [];
     const base = fixture();

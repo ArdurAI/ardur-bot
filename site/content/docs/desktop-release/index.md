@@ -34,6 +34,18 @@ proxy with another certificate cannot satisfy the home pin.
 The listener exposes only the device API over TLS on the private
 network; it does not forward cookies, general RPC, or the stack token to phones.
 
+## Automation and screen readers
+
+Set `ARDUR_DESKTOP_ACCESSIBILITY=1` in the environment that launches the desktop app
+to expose its accessibility tree without waiting for a screen reader or automation
+client to request it. The app enables the tree after Electron is ready and before
+creating its first window, then logs “Accessibility tree forced on for automation.”
+The desktop development command sets this variable automatically. Packaged launches
+can use the same environment variable. When it is
+absent or has any other value, normal screen reader detection stays unchanged.
+Forcing the tree adds rendering work, so it remains an explicit choice outside
+development.
+
 ## Native Codex compatibility
 
 Codex owns its ChatGPT sign-in. Native pins use `native:codex-app-server` and never

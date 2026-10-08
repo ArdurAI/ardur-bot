@@ -33,6 +33,39 @@ function grantRefusalMessage(category: HermesGrantRefusalCategory): string {
   return `Provider request is outside this run's grant (${category}).`;
 }
 
+export const HERMES_PROVIDER_FAILURE_LAYERS = [
+  "upstream",
+  "provider-transport",
+  "translation",
+  "provider-adapter",
+] as const;
+export const HERMES_PROVIDER_FAILURE_REASONS = [
+  "http-auth",
+  "http-rate-limit",
+  "http-client",
+  "http-server",
+  "http-other",
+  "transport",
+  "stream-network",
+  "request-translation",
+  "provider-stream",
+  "response-translation",
+] as const;
+export type HermesProviderFailureLayer = (typeof HERMES_PROVIDER_FAILURE_LAYERS)[number];
+export type HermesProviderFailureReason = (typeof HERMES_PROVIDER_FAILURE_REASONS)[number];
+
+function safeDiagnostic(failure: HermesProviderFailure) {
+  const layer = HERMES_PROVIDER_FAILURE_LAYERS.find((value) => value === failure.layer);
+  const reason = HERMES_PROVIDER_FAILURE_REASONS.find((value) => value === failure.reason);
+  return layer && reason ? { layer, reason } : {};
+}
+
+function diagnosticSuffix(failure: HermesProviderFailure): string {
+  return failure.layer && failure.reason
+    ? ` (layer:${failure.layer}; reason:${failure.reason})`
+    : "";
+}
+
 /** Only fixed reasons and a validated HTTP status cross the provider/host boundary. */
 export type HermesProviderFailure = {
   kind:
@@ -46,6 +79,8 @@ export type HermesProviderFailure = {
     | "provider-http"
     | "provider-failed";
   status?: number;
+  layer?: HermesProviderFailureLayer;
+  reason?: HermesProviderFailureReason;
   category?: HermesGrantRefusalCategory;
 };
 
@@ -53,7 +88,7 @@ function safeFailure(failure: HermesProviderFailure): HermesProviderFailure {
   if (failure.kind === "provider-http") {
     const status = failure.status;
     return typeof status === "number" && Number.isInteger(status) && status >= 100 && status <= 599
-      ? { kind: "provider-http", status }
+      ? { kind: "provider-http", status, ...safeDiagnostic(failure) }
       : { kind: "provider-failed" };
   }
   if (failure.kind === "grant-refused") {
@@ -67,8 +102,9 @@ function safeFailure(failure: HermesProviderFailure): HermesProviderFailure {
     case "sequence-changed":
     case "grant-expired":
     case "disconnected":
-    case "provider-failed":
       return { kind: failure.kind };
+    case "provider-failed":
+      return { kind: failure.kind, ...safeDiagnostic(failure) };
     default:
       return { kind: "provider-failed" };
   }
@@ -80,7 +116,7 @@ export class HermesProviderRelayError extends Error {
   constructor(input: HermesProviderFailure) {
     const failure = safeFailure(input);
     super(
-      failure.kind === "provider-http"
+      (failure.kind === "provider-http"
         ? `Provider request failed (HTTP ${failure.status}).`
         : failure.kind === "grant-refused" && failure.category
           ? grantRefusalMessage(failure.category)
@@ -93,7 +129,7 @@ export class HermesProviderRelayError extends Error {
               "grant-expired": "Provider grant expired.",
               disconnected: "Provider client disconnected.",
               "provider-failed": "Provider request failed.",
-            }[failure.kind],
+            }[failure.kind]) + diagnosticSuffix(failure),
     );
     this.name = "HermesProviderRelayError";
     this.failure = failure;
@@ -103,7 +139,19 @@ export class HermesProviderRelayError extends Error {
 /** Internal signatures are exact; vendor text, error data and causes are never copied. */
 export function hermesProviderFailure(error: unknown): HermesProviderFailure {
   if (error instanceof HermesProviderRelayError) return safeFailure(error.failure);
-  const message = error instanceof Error ? error.message : "";
+  const originalMessage = error instanceof Error ? error.message : "";
+  const diagnostic =
+    /^(Provider request failed(?: \(HTTP [1-5][0-9]{2}\))?\.) \(layer:([a-z-]+); reason:([a-z-]+)\)$/.exec(
+      originalMessage,
+    );
+  const message = diagnostic?.[1] ?? originalMessage;
+  const facts = diagnostic
+    ? safeDiagnostic({
+        kind: "provider-failed",
+        layer: diagnostic[2] as HermesProviderFailureLayer,
+        reason: diagnostic[3] as HermesProviderFailureReason,
+      })
+    : {};
   const reasons: Record<string, HermesProviderFailure["kind"]> = {
     "Hermes configuration is not acknowledged.": "profile-unacknowledged",
     "Provider request exceeded the limit.": "request-limit",
@@ -122,8 +170,9 @@ export function hermesProviderFailure(error: unknown): HermesProviderFailure {
   );
   if (category) return { kind: "grant-refused", category };
   const status = /^Provider request failed \(HTTP ([1-5][0-9]{2})\)\.$/.exec(message)?.[1];
-  if (status) return { kind: "provider-http", status: Number(status) };
+  if (status) return { kind: "provider-http", status: Number(status), ...facts };
   return {
+    ...facts,
     kind: Object.hasOwn(reasons, message)
       ? (reasons[message] ?? "provider-failed")
       : "provider-failed",
