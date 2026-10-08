@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { activeBotId, captureScreenshot, completeOnboarding, rpc, signup } from "./helpers";
-import { openWorkspaceView, toggleAgentComputer } from "./workspace-view";
+import { openAgentComputer, openWorkspaceView } from "./workspace-view";
 
 test("screen connection failures stay visible and can be retried", async ({ page }, testInfo) => {
   await signup(page, `screen-error-${Date.now()}@example.test`, "password12", "Screen Error");
@@ -39,7 +39,7 @@ test("screen connection failures stay visible and can be retried", async ({ page
     }),
   );
 
-  await toggleAgentComputer(page);
+  await openAgentComputer(page);
   await openWorkspaceView(page, "Screen");
   const preview = page.getByTestId("computer-preview");
   await expect(preview.getByRole("alert")).toContainText("temporarily busy");

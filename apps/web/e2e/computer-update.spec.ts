@@ -1,7 +1,7 @@
 import type { ComputerUpdate } from "@ardurbot/contracts";
 import { expect, test } from "@playwright/test";
 import { activeBotId, captureScreenshot, completeOnboarding, signup } from "./helpers";
-import { openWorkspaceView, toggleAgentComputer } from "./workspace-view";
+import { openAgentComputer, openWorkspaceView } from "./workspace-view";
 
 test("computer maintenance shows durable background progress and failure recovery", async ({
   page,
@@ -40,7 +40,7 @@ test("computer maintenance shows durable background progress and failure recover
     updates = [{ ...updating, status: "failed" }];
     return route.fulfill({ json: { json: { ok: true } } });
   });
-  await toggleAgentComputer(page);
+  await openAgentComputer(page);
   await openWorkspaceView(page, "Screen");
   await expect(page.getByTestId("computer-preview")).toBeVisible();
   await page.getByTestId("computer-preview").hover();

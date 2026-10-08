@@ -5,7 +5,7 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import { listPiCatalog } from "../../../packages/adapters/src/pi-models";
 import { dashboardFixture } from "./dashboard-fixture";
-import { openWorkspaceView, toggleAgentComputer } from "./workspace-view";
+import { openAgentComputer, openWorkspaceView } from "./workspace-view";
 
 const outputDir = process.env.SITE_SCREENSHOTS_DIR;
 test.skip(!outputDir, "Website screenshots run in the site assets publish job.");
@@ -469,7 +469,7 @@ test("captures bot chat, group collaboration, and routines from seeded demo data
   await captureSiteScreenshot(page, "group-chat");
 
   await page.goto("/app/bot");
-  await toggleAgentComputer(page);
+  await openAgentComputer(page);
   await openWorkspaceView(page, "Routines");
   await expect(page.getByText("Morning brief")).toBeVisible();
   await expect(page.getByText("Every day at 4:00 PM")).toBeVisible();
