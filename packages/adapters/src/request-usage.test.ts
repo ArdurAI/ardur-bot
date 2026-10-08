@@ -1,6 +1,8 @@
 import type { RequestUsageObservation } from "@ardurbot/adapter-kit";
+import { RequestUsageCollector } from "@ardurbot/adapter-kit";
 import { describe, expect, it } from "vitest";
 import { accumulateRequestUsage, parseRequestUsage, usageTokenTotals } from "./request-usage.js";
+import { ObservedUsageTotals } from "./runtime-usage.js";
 
 function observation(patch: Partial<RequestUsageObservation> = {}): RequestUsageObservation {
   return {
@@ -26,6 +28,72 @@ function observation(patch: Partial<RequestUsageObservation> = {}): RequestUsage
 }
 
 describe("request usage normalization", () => {
+  it("counts a new session's first cumulative value in full when request identities are reused", () => {
+    const session = () =>
+      new RequestUsageCollector({
+        provider: "fixture",
+        model: "fixture",
+        requestId: "bot-session",
+        attemptId: "0",
+        mappingVersion: "fixture-v1",
+        inputSemantics: "total-with-cache-subsets",
+      });
+    const totals = new ObservedUsageTotals();
+    const runA = session();
+    const first = runA.snapshot({ input: 1200, output: 0 });
+    expect(totals.observe(first)).toEqual({ inputTokens: 1200, outputTokens: 0 });
+    expect(totals.observe(runA.finish("success"))).toBeNull();
+    const runB = session();
+    const next = runB.snapshot({ input: 300, output: 0 });
+    // Keep delivery sequence increasing to isolate a counter reset from a replay conflict.
+    next.request!.counter.sequence = 2;
+    expect(totals.observe(next)).toEqual({ inputTokens: 300, outputTokens: 0 });
+    expect(totals.observe(next)).toBeNull();
+    expect(totals.tokens).toBe(1500);
+    expect(next.request!.counter.epochId).not.toBe(first.request!.counter.epochId);
+  });
+
+  it("rejects a lower cumulative value within the same collector epoch", () => {
+    const request = new RequestUsageCollector({
+      provider: "fixture",
+      model: "fixture",
+      mappingVersion: "fixture-v1",
+      inputSemantics: "total-with-cache-subsets",
+    });
+    const totals = new ObservedUsageTotals();
+    totals.observe(request.snapshot({ input: 1200, output: 0 }));
+    expect(() => totals.observe(request.snapshot({ input: 300, output: 0 }))).toThrow(
+      "Usage cumulative counter decreased; a verified reset requires a new epoch",
+    );
+    expect(totals.tokens).toBe(1200);
+  });
+
+  it("still adds delta reports even when the next value is lower", () => {
+    const totals = new ObservedUsageTotals();
+    const delta = (sequence: number, input: number) => ({
+      provider: "fixture",
+      model: "fixture",
+      inputTokens: input,
+      outputTokens: 0,
+      request: observation({
+        counter: { mode: "delta", epochId: "epoch", sequence },
+        categories: {
+          logicalInput: input,
+          uncachedInput: input,
+          cacheReadInput: 0,
+          cacheWriteInput: 0,
+          output: 0,
+          reasoning: 0,
+        },
+      }),
+    });
+    expect(totals.observe(delta(0, 1200))).toEqual({ inputTokens: 1200, outputTokens: 0 });
+    const next = delta(1, 300);
+    expect(totals.observe(next)).toEqual({ inputTokens: 300, outputTokens: 0 });
+    expect(totals.observe(next)).toBeNull();
+    expect(totals.tokens).toBe(1500);
+  });
+
   it("accepts typed broker admission but rejects persisted bearer fields", () => {
     const admission = {
       kind: "worker-provider-broker" as const,

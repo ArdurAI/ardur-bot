@@ -22,6 +22,7 @@ import {
 } from "./context/metrics.js";
 import { HermesProviderBroker } from "./hermes-provider-broker.js";
 import { loadLearningRecords } from "./learning-records.js";
+import { applyPiWireSnapshot } from "./pi-request-usage.js";
 import type { RecordedContextUsage } from "./run-usage.js";
 import {
   brokerRunAllowance,
@@ -158,6 +159,120 @@ postgres("request ledger on disposable PostgreSQL", () => {
     const root = () => prisma.delegationRoot.findUniqueOrThrow({ where: { rootTaskId: id } });
     return { id, run, pin, request, usage, record, rows, root, events };
   }
+
+  it("persists independent default collectors across consecutive runs of one bot", async () => {
+    const f = await fixture();
+    const observations: AgentUsage[][] = [];
+    const runs = [f.run];
+    for (const input of [1200, 300]) {
+      if (input === 300) {
+        await db.prisma.run.update({ where: { id: f.run.id }, data: { status: "completed" } });
+        runs.push(
+          await db.prisma.run.create({
+            data: {
+              spaceId: f.run.spaceId,
+              userId: f.run.userId,
+              botId: f.run.botId,
+              threadId: f.run.threadId,
+              taskId: f.run.taskId,
+              runtimePin: f.pin,
+              status: "running",
+              trigger: "manual",
+            },
+          }),
+        );
+      }
+      const run = runs.at(-1)!;
+      // Exercise production defaults, not synthetic reused request/attempt identities.
+      const collector = new RequestUsageCollector({
+        provider: "fixture",
+        model: "fixture",
+        mappingVersion: "pi-anthropic-messages-wire-v1",
+        inputSemantics: "additive-cache-categories",
+      });
+      const merged = {};
+      const payloads = [
+        {
+          type: "message_start",
+          message: {
+            usage: {
+              input_tokens: input,
+              output_tokens: 1,
+              cache_read_input_tokens: 0,
+              cache_creation_input_tokens: 0,
+            },
+          },
+        },
+        ...(input === 300
+          ? [
+              {
+                type: "message_delta",
+                usage: { input_tokens: 200, output_tokens: 0 },
+              },
+            ]
+          : []),
+        { type: "message_delta", usage: { output_tokens: input === 1200 ? 20 : 10 } },
+      ];
+      const usage = [
+        collector.start(),
+        ...payloads.map(
+          (payload) => applyPiWireSnapshot(collector, "anthropic-messages", payload, merged)!,
+        ),
+        collector.finish("success"),
+      ];
+      await f.record(usage[0]!, db.prisma, { id: run.id });
+      const startedRow = (await f.rows()).find((row) => row.runId === run.id)!;
+      expect(startedRow).toMatchObject({
+        threadId: run.threadId,
+        counterEpoch: usage[0]!.request!.counter.epochId,
+        lastSequence: 0,
+      });
+      expect(startedRow.observations).toHaveLength(1);
+      for (const event of usage.slice(1)) await f.record(event, db.prisma, { id: run.id });
+      for (const event of usage)
+        expect(await f.record(event, peer.prisma, { id: run.id })).toBeNull();
+      observations.push(usage);
+    }
+    const first = observations[0]![0]!.request!;
+    const second = observations[1]![0]!.request!;
+    expect(first.requestId).not.toBe(second.requestId);
+    expect(first.attemptId).not.toBe(second.attemptId);
+    expect(first.counter.epochId).not.toBe(second.counter.epochId);
+    for (const usage of observations) {
+      expect(new Set(usage.map((event) => event.request!.counter.epochId)).size).toBe(1);
+      expect(usage.at(-1)!.request!.collection!.outcome).toBe("success");
+    }
+    const rows = await f.rows();
+    expect(rows).toHaveLength(2);
+    for (const [index, run] of runs.entries()) {
+      const row = rows.find((value) => value.runId === run.id)!;
+      expect(row).toMatchObject({
+        botId: f.run.botId,
+        threadId: f.run.threadId,
+        runtimePin: f.pin,
+        counterMode: "cumulative",
+        counterEpoch: observations[index]![0]!.request!.counter.epochId,
+        inputTokens: index === 0 ? 1200 : 300,
+        outputTokens: index === 0 ? 20 : 10,
+      });
+      expect(row.observations).toHaveLength(observations[index]!.length);
+    }
+    const secondRow = rows.find((row) => row.runId === runs[1]!.id)!;
+    expect(secondRow).toMatchObject({
+      coverage: "partial",
+      categoryCoverage: { logicalInput: "partial", output: "partial" },
+    });
+    expect(secondRow.observations.map((receipt) => receipt.observation)).toContainEqual(
+      expect.objectContaining({
+        categories: expect.objectContaining({ logicalInput: 300, output: 1 }),
+        collection: expect.objectContaining({
+          raw: { input: 200, output: 0, cacheRead: 0, cacheWrite: 0 },
+          limitations: ["counter-discontinuity"],
+        }),
+      }),
+    );
+    expect(await f.root()).toMatchObject({ usedTokens: 1530 });
+  });
 
   it("persists accepted fake-provider broker usage once and leaves unmeasured usage unknown", async () => {
     async function turn(measured: boolean) {
