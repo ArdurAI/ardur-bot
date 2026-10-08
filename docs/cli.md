@@ -74,20 +74,56 @@ ardur status --json
 
 A task must be non-empty and no longer than 32,000 characters. Brief files are bounded at
 128,000 UTF-8 bytes and must be regular files. Ordinary send prints the task and run ids.
-`--wait` polls saved tasks and summaries, then reads the summary's final message through the
-existing read-only message procedure. It prints answer text, not tool output or reasoning.
-`--json` prints one JSON result; errors go to standard error as JSON.
+`send --wait` reads the exact run, then its saved final message. It prints answer text,
+not tool output or reasoning. A completed run without its exact answer is an error, not a pass.
+
+### Recover a send or resume waiting
+
+Choose a request id before sending if you may need to recover a lost admission response:
+
+```sh
+ardur send "Builder" "Reply with READY" --request-id example-request-0001 --wait
+ardur wait --run <run-id> --timeout 180s --json
+ardur runs list --limit 50 --json
+ardur runs list --cursor <last-run-id> --limit 50 --json
+ardur runs show <run-id> --json
+ardur tasks show <task-id> --json
+```
+
+Request ids must be 16–128 characters. After a lost response, repeat the same request id and
+identical message, bot id and optional fields. The client obtains a fresh signing nonce.
+The home returns the original admission with its current dispatch state; it does not create
+another task. Changed input under that id is refused. Different devices have separate request-id
+namespaces. There is no automatic retry. Keep the bot's exact id when recovering a named send;
+a changed name resolution is changed input.
+
+Exact run and task reads remain available after leaving the latest 100 tasks. They are limited
+to this device's admissions and the current user and space. Unknown and foreign ids receive
+the same refusal. Message reads use the existing thread access checks and device projection.
+Run pages contain at most 100 records (default 50), newest first, ordered by creation time and
+then id. Use the returned `nextCursor` for the next page; null means the end.
 
 Waiting is not streaming. It checks about every two seconds and each signed request needs a nonce
-round trip. Polls read local saved state; they do not start additional model turns. Running the task
-still uses the bot's configured model and computer, with their normal costs and approvals.
-An individual network request times out after 15 seconds. `send --wait` has no overall deadline; `test bot` has a finite deadline.
-Interrupting the CLI stops waiting, **not the task**; use `ardur stop` to request cancellation.
+round trip. Polls read saved state; they do not start model turns. Work keeps the bot's saved
+model and computer, normal costs and approvals. Each network request times out after 15 seconds.
+Both `send --wait` and `wait --run` have a 180-second default overall deadline; `--timeout`
+accepts seconds or an `ms`, `s` or `m` suffix. A deadline or interruption stops waiting,
+**not the task**. Approval waits ask you to continue at home. Use `stop` to request cancellation;
+only the run's later confirmation establishes that work stopped.
 
-There is no automatic send retry. If a network failure happens after admission, the task may still
-be running. Check it at home before repeating a send, or you may create a second task.
-`--wait` cannot resume from an id in this release. If a task falls out of the bounded saved list
-or its answer is unavailable, the CLI asks you to check it at home.
+### Command results
+
+Send, stop, wait, runs list/show and tasks show use the same versioned result family and exit
+codes as `test bot`, with `command` and `data` added. JSON mode writes exactly one result to
+standard output, including errors. Diagnostics never contain raw provider errors.
+
+```json
+{"version":1,"command":"runs show","bot":null,"runId":"run-id","taskId":"task-id","verdict":"pass","replyText":"","elapsedMs":12,"failureReason":null,"data":{"run":{}}}
+```
+
+The example abbreviates the run detail; its full fields are below. A successful show exits 0
+even if the inspected run failed. Waiting on that failed run exits 2. Send without wait proves
+admission only. Pair, bots and status retain their existing output and exit codes.
 
 ## Test a bot from a script
 
@@ -158,11 +194,11 @@ Polling reads saved state and does not add model turns.
 
 ### Test exit codes
 
-These codes apply only to `test bot`; existing commands keep the codes below.
+These codes apply to `test bot` and the Stage 3 commands above. Exit 1 is used only for a test mismatch.
 
 | Code | Meaning |
 | --- | --- |
-| 0 | Exact final reply contains the expectation |
+| 0 | Command succeeded; a test reply contains the expectation |
 | 1 | Reply received, but the expectation did not match |
 | 2 | Run failed/stopped, or a home request/protocol failure |
 | 3 | Deadline reached; known admission ids are retained |
@@ -174,7 +210,7 @@ in the result.
 
 ## Scopes and revocation
 
-- `bots`, `status`, `--wait` and `test bot` need **read**.
+- `bots`, `status`, waits, run/task reads, message reads and `test bot` need **read**.
 - `send` and `test bot` need **dispatch**; ordinary work is limited by the grant's **ordinary** authority.
 - `stop` needs **stop**.
 - Home, space, user and bot policies still apply. Turning dispatch off at home refuses sends.
@@ -188,12 +224,12 @@ The separate presence key is not saved, so the config cannot supply that additio
 To revoke, open **Settings → Devices**, find the device labelled **Command line**, and choose
 **Revoke**. Its next request is refused. Removing the local file alone does not revoke the grant.
 
-## Existing command exit codes
+## Pair, bots and status exit codes
 
 | Code | Meaning |
 | --- | --- |
-| 0 | Command succeeded; with `--wait`, task completed |
-| 1 | Task failed/stopped, home unreachable, or another request failure |
+| 0 | Command succeeded |
+| 1 | Home unreachable or another request failure |
 | 2 | Access refused, revoked grant, changed identity, or unsafe config permissions |
 | 3 | Invalid arguments, pairing payload or task input |
 
@@ -202,6 +238,44 @@ A stop reports that cancellation was requested, not that it has finished.
 Normal process interruption can return the shell's interruption code.
 
 Out of scope: streaming output, webhooks, OAuth sign-in and automatic approval.
+
+## Signed device operations
+
+Existing operations and their wire shapes are unchanged. These operations use the existing
+`POST /device/request` envelope `{operation, body, proof}`; all four new reads require read scope.
+
+| Operation | Exact body | Response |
+| --- | --- | --- |
+| `runs/get` | `{runId}` | `{run: DeviceRunDetail}` |
+| `tasks/get` | `{taskId}` | `{task: DeviceRunDetail}` |
+| `runs/list` | `{cursor?: runId, limit?: 1..100}` | `{runs: DeviceRunDetail[], nextCursor: runId \| null}` |
+| `messages/get` | `{threadId, botId?, groupId?, before?: nonnegative integer, around?: {messageId}}` | Existing `ThreadMessagePage`: `{threadId, messages, olderCursor}` |
+| `dispatch` (existing) | `{clientNonce, botId?, text, replyToTaskId?}` | Existing `DispatchReceipt` |
+| `stop` (existing) | `{taskId}` | `{cancelRequested:true}` |
+
+Message reads require exactly one of botId or groupId. Pages are bounded at 100 and retain the
+existing filtering, command hydration and device redaction. Around lookup retrieves a bounded
+window around the exact message, not an unbounded transcript.
+
+`DeviceRunDetail` contains the unchanged receipt fields `taskId, runId, threadId, botId,
+state, cancelRequested`, plus `status, cancelConfirmed, messageId, failure, createdAt,
+startedAt, completedAt`. Message id and start/completion times may be null. Failure is null
+or `{category, message}`, using the shared safe failure categories and a fixed plain sentence.
+Raw run status stays separate from dispatch state. Reading a completed record does not prove
+that a final answer exists or that the owner accepted it.
+
+### Portable strings and conformance
+
+Pairing payloads and canonical signed JSON accept only well-formed Unicode strings: ordinary
+Unicode scalar values, including valid UTF-16 surrogate pairs for characters outside the basic
+plane. Lone high or low surrogates in values or keys are refused with
+“Use well-formed Unicode strings.” No Unicode normalization is applied. Keys retain the
+existing JavaScript UTF-16 sort order. Every client must reproduce the exact canonical bytes.
+
+Synthetic request bodies, canonical JSON and signed text live in
+`apps/cli/fixtures/device-operations.json`, including four rejected surrogate vectors.
+Regenerate with `pnpm exec tsx apps/cli/generate-device-fixtures.ts`. Contract tests verify
+these vectors against the home canonicalizer; the Rust client consumes them for byte parity.
 
 ## Protocol references
 

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   canonicalDispatchJson,
@@ -54,4 +55,49 @@ it("preserves the exact body for retry fingerprints", () => {
   const input = { clientNonce: "client-nonce-1234", text: " Task " };
   expect(DispatchInputSchema.parse(input)).toEqual(input);
   expect(DispatchInputSchema.safeParse({ ...input, text: "   " }).success).toBe(false);
+});
+
+const vectors: {
+  instanceId: string;
+  proof: { grantId: string; nonce: string; timestamp: number };
+  requests: Array<{ operation: string; body: unknown; canonicalBody: string; signedText: string }>;
+  rejected: Array<{ name: string; body: unknown; error: string }>;
+} = JSON.parse(
+  readFileSync(
+    new URL("../../../apps/cli/fixtures/device-operations.json", import.meta.url),
+    "utf8",
+  ),
+);
+it.each(vectors.requests)("matches the signed operation vector $operation", (vector) => {
+  expect(canonicalDispatchJson(vector.body)).toBe(vector.canonicalBody);
+  expect(deviceSignedText(vectors.instanceId, vectors.proof, vector.operation, vector.body)).toBe(
+    vector.signedText,
+  );
+});
+it.each(vectors.rejected)("rejects $name instead of signing unrepresentable bytes", (vector) => {
+  expect(() => canonicalDispatchJson(vector.body)).toThrow(vector.error);
+});
+it.each(["\ud800", "\udfff"])("rejects lone surrogate pairing values and keys", (unit) => {
+  for (const field of ["challenge", "instanceId", "homeName"]) {
+    const result = PairingPayloadSchema.safeParse({
+      ...payload,
+      [field]: payload[field as keyof typeof payload] + unit,
+    });
+    expect(result.success).toBe(false);
+    if (!result.success)
+      expect(
+        result.error.issues.some((issue) => issue.message.includes("well-formed Unicode")),
+      ).toBe(true);
+  }
+  expect(
+    PairingPayloadSchema.safeParse({ ...payload, hints: [`https://example.test/${unit}`] }).success,
+  ).toBe(false);
+  const key = PairingPayloadSchema.safeParse({ ...payload, [unit]: "value" });
+  expect(key.success).toBe(false);
+  if (!key.success) expect(key.error.issues[0]!.message).toContain("well-formed Unicode");
+});
+it("accepts paired surrogates and validates omitted object keys too", () => {
+  expect(PairingPayloadSchema.parse({ ...payload, homeName: "Home 🚀" }).homeName).toBe("Home 🚀");
+  expect(canonicalDispatchJson({ "🚀": "🚀" })).toBe('{"🚀":"🚀"}');
+  expect(() => canonicalDispatchJson({ "\ud800": undefined })).toThrow("well-formed Unicode");
 });

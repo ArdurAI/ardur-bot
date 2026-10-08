@@ -18,7 +18,7 @@ function fixture() {
     devicePublicKey: keys.publicKey.export({ type: "spki", format: "der" }).toString("base64"),
     revokedAt: null as Date | null,
   };
-  let nonceUsed = false;
+  const usedNonces = new Set<string>();
   const tx = {
     remoteAuthorityPolicy: {
       findMany: vi.fn(async () => [] as { layer: string; scopes: string[] }[]),
@@ -35,9 +35,9 @@ function fixture() {
     },
     spaceMember: { findUnique: vi.fn(async () => ({ id: "member" })) },
     deviceNonce: {
-      updateMany: vi.fn(async () => {
-        if (nonceUsed) return { count: 0 };
-        nonceUsed = true;
+      updateMany: vi.fn(async ({ where }) => {
+        if (usedNonces.has(where.hash)) return { count: 0 };
+        usedNonces.add(where.hash);
         return { count: 1 };
       }),
     },
@@ -50,7 +50,7 @@ function fixture() {
   const signed = (operation: string, body: unknown) => {
     const proof: DeviceProof = {
       grantId: grant.id,
-      nonce: "n".repeat(43),
+      nonce: crypto.randomUUID().replaceAll("-", "").padEnd(43, "n"),
       timestamp: Date.now(),
       signature: "",
     };
@@ -284,4 +284,202 @@ it("does not expose feature mutation or device management through Overview grant
     const f = fixture();
     expect((await f.call(f.signed("rpc", { procedure, input: {} }))).status).toBe(403);
   }
+});
+
+function scopedFixture() {
+  const f = fixture();
+  const receipts = Array.from({ length: 101 }, (_, index) => ({
+    id: `receipt-${index}`,
+    instanceId: "home",
+    spaceId: "space",
+    deviceGrantId: "phone",
+    taskId: `task-${index}`,
+    runId: `run-${index}`,
+    botId: "bot",
+    threadId: "thread",
+    createdAt: new Date(index * 1000),
+  }));
+  const runs = receipts.map((receipt) => ({
+    id: receipt.runId,
+    taskId: receipt.taskId,
+    botId: receipt.botId,
+    threadId: receipt.threadId,
+    spaceId: "space",
+    userId: "owner",
+    status: "queued",
+    createdAt: receipt.createdAt,
+    startedAt: null,
+    completedAt: null,
+    cancelRequestedAt: null,
+    cancelConfirmedAt: null,
+    providerErrorKind: null,
+    error: null,
+    runtimeProblem: null,
+  }));
+  const matches = (row: Record<string, unknown>, where: Record<string, unknown>) =>
+    Object.entries(where).every(([key, value]) =>
+      typeof value === "object" ? true : row[key] === value,
+    );
+  Object.assign(f.tx, {
+    dispatchReceipt: {
+      findFirst: vi.fn(async ({ where }) => receipts.find((row) => matches(row, where)) ?? null),
+      findMany: vi.fn(async () => receipts.slice(-100).reverse()),
+    },
+    run: {
+      findFirst: vi.fn(async ({ where }) => runs.find((row) => matches(row, where)) ?? null),
+      findMany: vi.fn(async ({ where }) => runs.filter((row) => where.id.in.includes(row.id))),
+    },
+    event: {
+      findFirst: vi.fn(async () => ({
+        payload: { error: "private", providerErrorKind: runs[0]!.providerErrorKind },
+      })),
+    },
+    dispatchSummary: { findFirst: vi.fn(async () => ({ messageId: "answer" })) },
+    thread: {
+      findFirst: vi.fn(async ({ where }) =>
+        matches(
+          {
+            id: "thread",
+            botId: "bot",
+            groupId: null,
+            userId: "owner",
+            spaceId: "space",
+          },
+          where,
+        )
+          ? { id: "thread" }
+          : null,
+      ),
+    },
+    $queryRaw: vi.fn(async () => [...runs].reverse().slice(0, 3)),
+  });
+  Object.assign(f.deps.prisma, f.tx);
+  return { ...f, runs, receipts };
+}
+const newReads = [
+  ["runs/get", { runId: "run-0" }],
+  ["tasks/get", { taskId: "task-0" }],
+  ["runs/list", { cursor: "run-0", limit: 2 }],
+  ["messages/get", { threadId: "thread", botId: "bot" }],
+] as const;
+it("finds the old task by exact id after the existing list overflows", async () => {
+  const f = scopedFixture();
+  const listed = await f.call(f.signed("tasks", {}));
+  const list = (await listed.json()) as Array<{ taskId: string }>;
+  expect(list).toHaveLength(100);
+  expect(list.some((row) => row.taskId === "task-0")).toBe(false);
+  const exact = await f.call(f.signed("tasks/get", { taskId: "task-0" }));
+  expect(exact.status).toBe(200);
+  expect(await exact.json()).toMatchObject({
+    task: { taskId: "task-0", status: "queued", state: "accepted" },
+  });
+});
+it.each(newReads)("refuses revoked grants before %s reads", async (operation, body) => {
+  const f = scopedFixture();
+  f.grant.revokedAt = new Date();
+  expect((await f.call(f.signed(operation, body))).status).toBe(401);
+  expect(f.read).not.toHaveBeenCalled();
+});
+it.each(newReads)("requires read scope for %s", async (operation, body) => {
+  const f = scopedFixture();
+  f.grant.scopes = [];
+  expect((await f.call(f.signed(operation, body))).status).toBe(403);
+});
+it.each(newReads)("refuses removed membership for %s", async (operation, body) => {
+  const f = scopedFixture();
+  f.tx.spaceMember.findUnique.mockResolvedValue(null as never);
+  expect((await f.call(f.signed(operation, body))).status).toBe(401);
+});
+for (const boundary of ["user", "space", "device"]) {
+  it.each(
+    boundary === "device"
+      ? newReads.filter(([operation]) => operation !== "messages/get")
+      : newReads,
+  )(`refuses cross-${boundary} access for %s`, async (operation, body) => {
+    const f = scopedFixture();
+    if (boundary === "user") f.grant.userId = "other-user";
+    if (boundary === "space") f.grant.spaceId = "other-space";
+    if (boundary === "device") {
+      f.grant.id = "other-device";
+    }
+    const response = await f.call(f.signed(operation, body));
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      message: "This record is unavailable from this device.",
+    });
+    expect(f.read).not.toHaveBeenCalled();
+  });
+}
+it.each(["runs/get", "tasks/get"])(
+  "does not reveal foreign versus missing ids for %s",
+  async (operation) => {
+    const f = scopedFixture();
+    const body = operation === "runs/get" ? { runId: "unknown" } : { taskId: "unknown" };
+    const response = await f.call(f.signed(operation, body));
+    expect(await response.json()).toEqual({
+      message: "This record is unavailable from this device.",
+    });
+  },
+);
+it("keeps raw waiting status and cancellation request separate from confirmed stop", async () => {
+  const f = scopedFixture();
+  f.runs[0]!.status = "waiting_input";
+  f.runs[0]!.cancelRequestedAt = new Date() as never;
+  const first = await f.call(f.signed("runs/get", { runId: "run-0" }));
+  expect(await first.json()).toMatchObject({
+    run: {
+      status: "waiting_input",
+      state: "running",
+      cancelRequested: true,
+      cancelConfirmed: false,
+    },
+  });
+  f.runs[0]!.status = "cancelled";
+  f.runs[0]!.cancelConfirmedAt = new Date() as never;
+  const second = await f.call(f.signed("runs/get", { runId: "run-0" }));
+  expect(await second.json()).toMatchObject({
+    run: { status: "cancelled", state: "stopped", cancelConfirmed: true },
+  });
+});
+it.each(["auth", "rate-limit", "model-unavailable", null])(
+  "projects safe provider category for %s",
+  async (kind) => {
+    const f = scopedFixture();
+    f.runs[0]!.status = "failed";
+    f.runs[0]!.providerErrorKind = kind as never;
+    f.runs[0]!.error = "private provider diagnostic /private/file" as never;
+    const response = await f.call(f.signed("runs/get", { runId: "run-0" }));
+    const output = await response.text();
+    expect(output).not.toContain("private");
+    expect(JSON.parse(output).run.failure.category).toBe(
+      kind === "auth"
+        ? "signed-out"
+        : kind === "rate-limit"
+          ? "usage-limit"
+          : kind === "model-unavailable"
+            ? "model-unavailable"
+            : "other",
+    );
+  },
+);
+it("routes message reads through the same bounded redacted projection", async () => {
+  const f = scopedFixture();
+  const response = await f.call(
+    f.signed("messages/get", { botId: "bot", threadId: "thread", before: 9 }),
+  );
+  expect(response.status).toBe(200);
+  expect(f.read).toHaveBeenCalledWith(f.grant, "threads/messages", {
+    botId: "bot",
+    threadId: "thread",
+    before: 9,
+  });
+});
+it("bounds pages and returns the last delivered run as the next cursor", async () => {
+  const f = scopedFixture();
+  const response = await f.call(f.signed("runs/list", { limit: 2 }));
+  expect(await response.json()).toMatchObject({
+    runs: [{ runId: "run-100" }, { runId: "run-99" }],
+    nextCursor: "run-99",
+  });
+  expect((await f.call(f.signed("runs/list", { limit: 101 }))).status).toBe(400);
 });
