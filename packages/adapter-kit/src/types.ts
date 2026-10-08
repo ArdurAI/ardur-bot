@@ -464,6 +464,7 @@ export interface RequestUsageObservation {
   attemptId: string;
   parentRequestId: string | null;
   purpose: UsagePurpose;
+  /** The adapter starts a new epoch at a verified counter reset, never on a mere decrease. */
   counter: { mode: "delta" | "cumulative"; epochId: string; sequence: number };
   inputSemantics: "total-with-cache-subsets" | "additive-cache-categories" | "unknown";
   reasoningSemantics: "subset-of-output" | "separate" | "unknown";
@@ -652,6 +653,10 @@ export type AgentRuntimeEvent =
 
 export interface AgentRuntimeCapabilities {
   streaming: boolean;
+  instructions?: boolean;
+  cancellation?: boolean;
+  toolAuthorization?: boolean;
+  usage?: boolean;
   compaction: boolean;
   tools: boolean;
   scripted: boolean;

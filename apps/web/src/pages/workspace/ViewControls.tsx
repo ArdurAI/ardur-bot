@@ -2,6 +2,7 @@ import type { WorkspaceLayout, WorkspaceViewId } from "@ardurbot/contracts";
 import {
   Button,
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -9,6 +10,7 @@ import {
 } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { MoreVertical } from "lucide-react";
+import type { ReactNode } from "react";
 import type { ViewCapabilities } from "./view-registry";
 import { availableWorkspaceViews } from "./view-registry";
 
@@ -18,66 +20,63 @@ export function ViewControls({
   visible,
   onOpen,
   onPosition,
+  children,
 }: {
-  capabilities: ViewCapabilities;
+  capabilities: ViewCapabilities | null;
   layout: WorkspaceLayout;
   visible: boolean;
   onOpen(view: WorkspaceViewId): void;
   onPosition(position: WorkspaceLayout["position"]): void;
+  children: ReactNode;
 }) {
   const { t } = useLingui();
-  const views = availableWorkspaceViews(capabilities);
+  const views = capabilities ? availableWorkspaceViews(capabilities) : [];
   return (
-    <>
-      {views
-        .filter((view) => view.primary)
-        .map((view) => {
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={t`Views`}
+            data-workspace-trigger
+            className="app-no-drag shrink-0"
+          />
+        }
+      >
+        <MoreVertical size={18} aria-hidden="true" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-max">
+        {views.map((view) => {
           const Icon = view.icon;
           return (
-            <Button
+            <DropdownMenuCheckboxItem
               key={view.id}
-              variant="ghost"
-              size="icon-sm"
-              aria-label={view.label(t)}
-              aria-pressed={visible && layout.active === view.id}
-              title={view.label(t)}
-              className="app-no-drag aria-pressed:bg-accent"
+              checked={visible && layout.active === view.id}
+              closeOnClick
               onClick={() => onOpen(view.id)}
             >
-              <Icon size={18} aria-hidden="true" />
-            </Button>
+              <Icon size={16} aria-hidden="true" />
+              {view.label(t)}
+            </DropdownMenuCheckboxItem>
           );
         })}
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <Button variant="ghost" size="icon-sm" aria-label={t`Views`} className="app-no-drag" />
-          }
-        >
-          <MoreVertical size={18} aria-hidden="true" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          {views.map((view) => {
-            const Icon = view.icon;
-            return (
-              <DropdownMenuItem key={view.id} onClick={() => onOpen(view.id)}>
-                <Icon size={16} aria-hidden="true" />
-                {view.label(t)}
-              </DropdownMenuItem>
-            );
-          })}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() => onPosition("left")}
-          >{t`Move split view left`}</DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => onPosition("right")}
-          >{t`Move split view right`}</DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => onPosition("bottom")}
-          >{t`Move split view down`}</DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </>
+        {children}
+        {capabilities ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => onPosition("left")}
+            >{t`Move split view left`}</DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => onPosition("right")}
+            >{t`Move split view right`}</DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => onPosition("bottom")}
+            >{t`Move split view down`}</DropdownMenuItem>
+          </>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

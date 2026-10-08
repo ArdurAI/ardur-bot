@@ -48,8 +48,19 @@ ardur bots
 ```
 
 Quote the whole payload as one argument. The CLI also accepts its base64url-encoded form.
-The first home link must be an HTTPS origin reachable from your terminal. The local listener
-must be enabled when using a desktop home's network link. Do not expose a listener without
+The first home link must be an HTTPS origin reachable from your terminal. For a server or
+source checkout, set `ARDURBOT_DEVICE_LISTENER_ENABLED=true` and
+`ARDURBOT_DEVICE_LISTENER_ORIGIN=https://127.0.0.1:43119` before starting the API.
+The default bind is `127.0.0.1` and port is `43119`; configure
+`ARDURBOT_DEVICE_LISTENER_BIND` and `ARDURBOT_DEVICE_LISTENER_PORT` for another private
+address or port. A remote terminal or phone needs a reachable private origin, for example
+`https://10.0.0.10:43119`, with the listener bound to that private address and firewall
+access explicitly allowed. See [Server device pairing](/docs/self-host-guide/#pair-a-phone-or-command-line-device-with-a-server)
+for the Compose override. Keep the application database and `ENCRYPTION_KEY` across
+restarts to retain the certificate and encrypted home key. A TLS-terminating proxy
+with another certificate will fail the pin; use direct access or TLS passthrough.
+The local listener must be enabled when using a desktop home's network link.
+Do not expose a listener without
 checking its network boundary. There is no HTTP, redirect or unpinned fallback.
 The exact certificate pin and the signed home proof are checked before pairing or signed requests.
 A changed or expired certificate requires a fresh pairing.

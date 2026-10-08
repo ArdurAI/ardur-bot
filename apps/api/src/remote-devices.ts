@@ -1,7 +1,7 @@
 import type { JobPublisher } from "@ardurbot/adapter-kit";
 import { runContinueJob } from "@ardurbot/adapter-kit";
 import { admitRoutedDispatch as admitDispatch, validateDeviceApproval } from "@ardurbot/adapters";
-import type { Actor, DeviceScope, PairingPayload } from "@ardurbot/contracts";
+import type { Actor, DeviceListenerState, DeviceScope, PairingPayload } from "@ardurbot/contracts";
 import {
   canonicalDispatchJson,
   DeviceMessagesGetInputSchema,
@@ -46,7 +46,8 @@ export interface RemoteDevicesDeps {
   prisma: PrismaClient;
   events: ThreadEvents;
   jobs: JobPublisher;
-  publicUrl?: string;
+  listenerState?: () => DeviceListenerState;
+  trustedDesktopHints?: () => string[];
   homeProof?: (challenge: string) => { certificate: string; signature: string };
 }
 function owner(actor: Actor) {
@@ -75,6 +76,7 @@ export function createRemoteDevices(deps: RemoteDevicesDeps) {
         },
       });
       return {
+        listener: deps.listenerState?.() ?? { enabled: false, hints: [] },
         instanceId: home.instanceId,
         homeName: home.homeName,
         fingerprint: home.fingerprint,
@@ -102,18 +104,23 @@ export function createRemoteDevices(deps: RemoteDevicesDeps) {
       const home = await identity();
       if (input.scopes.some((scope) => !home.scopes.includes(scope)))
         throw new DeviceRequestError("These permissions are unavailable at home.");
+      const listener = deps.listenerState?.();
+      const hints = [
+        ...new Set([
+          ...(listener?.enabled ? listener.hints : []),
+          ...(deps.trustedDesktopHints?.() ?? []),
+        ]),
+      ].slice(0, 8);
+      if (!hints.length)
+        throw new DeviceRequestError(
+          "Enable ARDURBOT_DEVICE_LISTENER_ENABLED on the server to pair a device.",
+        );
       const issued = await startDevicePairing(prisma, {
         userId: actor.userId,
         spaceId: actor.spaceId,
         instanceId: home.instanceId,
         scopes: input.scopes,
       });
-      const hints = [
-        ...new Set([
-          ...input.hints,
-          ...(deps.publicUrl?.startsWith("https:") ? [new URL(deps.publicUrl).origin] : []),
-        ]),
-      ].slice(0, 8);
       const payload: PairingPayload = PairingPayloadSchema.parse({
         version: 1,
         challenge: issued.challenge,

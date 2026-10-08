@@ -30,6 +30,22 @@ export const GoalStatusSchema = z.enum([
 ]);
 export type GoalStatus = z.infer<typeof GoalStatusSchema>;
 
+/** Read-only projection of the admission ledger, never a provider cost estimate. */
+export function goalBudget(
+  limit: number,
+  root: { usedTokens: number; reservedTokens: number; tokenLimit: number } | null,
+  usageComplete: boolean,
+) {
+  return {
+    usedTokens: root?.usedTokens ?? null,
+    reservedTokens: root?.reservedTokens ?? null,
+    availableTokens: root
+      ? Math.max(0, Math.min(limit, root.tokenLimit) - root.usedTokens - root.reservedTokens)
+      : null,
+    usageComplete: root !== null && usageComplete,
+  };
+}
+
 export const GoalSchema = z.object({
   id: Id,
   spaceId: Id,
@@ -41,7 +57,10 @@ export const GoalSchema = z.object({
   doneWhen: z.array(z.string()),
   status: GoalStatusSchema,
   tokenLimit: z.number().int(),
-  usedTokens: z.number().int().nonnegative(),
+  usedTokens: z.number().int().nonnegative().nullable(),
+  reservedTokens: z.number().int().nonnegative().nullable(),
+  availableTokens: z.number().int().nonnegative().nullable(),
+  usageComplete: z.boolean(),
   perWorkerTokens: z.number().int(),
   maxConcurrent: z.number().int(),
   maxDescendants: z.number().int(),

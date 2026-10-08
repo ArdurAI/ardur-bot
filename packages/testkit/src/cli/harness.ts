@@ -1,6 +1,6 @@
 import { execSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { access, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { loadRootEnv } from "@ardurbot/core/node/load-root-env";
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
@@ -27,6 +27,7 @@ const e2eGrep = grepArg?.slice("--grep=".length);
 const e2eWorkers = workersArg?.slice("--workers=".length);
 const e2eShard = shardArg?.slice("--shard=".length);
 const agentRuntime = runtimeArg?.slice("--runtime=".length) ?? "scripted";
+const productDemo = e2e && (!e2eSpec || path.basename(e2eSpec) === "product-demo.spec.ts");
 
 if (Number(integration) + Number(e2e) !== 1) {
   throw new Error("Pass exactly one of --integration or --e2e");
@@ -43,6 +44,9 @@ if (integration && sandboxProvider !== "fake") {
 if (agentRuntime !== "pi" && agentRuntime !== "scripted") {
   throw new Error('Runtime must be "pi" or "scripted"');
 }
+if (productDemo && (!e2e || sandboxProvider !== "fake" || agentRuntime !== "scripted")) {
+  throw new Error("Product demo requires --e2e --sandbox=fake --runtime=scripted");
+}
 if (sandboxProvider === "e2b" && !process.env.E2B_API_KEY) {
   throw new Error("E2B_API_KEY is required when --sandbox=e2b");
 }
@@ -57,6 +61,18 @@ async function main() {
   const mode = integration ? "integration" : "e2e";
   const reportDir = path.resolve(process.env.TEST_REPORT_DIR ?? "test-report", mode);
   await mkdir(reportDir, { recursive: true });
+  const productDemoDirectory = productDemo ? path.join("product-demo", randomUUID()) : null;
+  if (productDemoDirectory) {
+    process.env.PRODUCT_DEMO_REPORT_DIR = path.join(reportDir, productDemoDirectory);
+    process.env.PRODUCT_DEMO_BUILD_REVISION = execSync("git rev-parse HEAD", {
+      encoding: "utf8",
+    }).trim();
+    process.env.PRODUCT_DEMO_BUILD_DIRTY = execSync("git status --porcelain", {
+      encoding: "utf8",
+    }).trim()
+      ? "1"
+      : "0";
+  }
   const container = await new PostgreSqlContainer("postgres:16-alpine").start();
   try {
     const databaseUrl = container.getConnectionUri();
@@ -385,9 +401,23 @@ async function main() {
         if (failedRuns.length) console.error("Failed agent runs:", failedRuns);
         throw error;
       }
+      const productDemoWritten = productDemoDirectory
+        ? await access(path.join(reportDir, productDemoDirectory, "product-demo.json")).then(
+            () => true,
+            () => false,
+          )
+        : false;
       await writeSummary(reportDir, {
         ok: true,
         mode,
+        ...(productDemoWritten && productDemoDirectory
+          ? {
+              productDemo: {
+                file: path.join(productDemoDirectory, "product-demo.json"),
+                evidenceMode: "scripted",
+              },
+            }
+          : {}),
         sandbox: process.env.SANDBOX_PROVIDER,
         runtime: process.env.AGENT_RUNTIME,
         apiPort,

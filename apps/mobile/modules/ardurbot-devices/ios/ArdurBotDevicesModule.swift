@@ -91,16 +91,16 @@ private final class PinnedRequest: NSObject, URLSessionDataDelegate {
   }
   func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
     guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust, let trust = challenge.protectionSpace.serverTrust,
-      let cert = SecTrustGetCertificateAtIndex(trust, 0) else { completionHandler(.performDefaultHandling, nil); return }
-    if hexDigest(SecCertificateCopyData(cert) as Data) == fingerprint {
-      SecTrustSetPolicies(trust, SecPolicyCreateBasicX509())
-      SecTrustSetAnchorCertificates(trust, [cert] as CFArray); SecTrustSetAnchorCertificatesOnly(trust, true)
-      if SecTrustEvaluateWithError(trust, nil) { completionHandler(.useCredential, URLCredential(trust: trust)); return }
+      let cert = SecTrustGetCertificateAtIndex(trust, 0),
+      hexDigest(SecCertificateCopyData(cert) as Data) == fingerprint else {
+      changedIdentity = true
       completionHandler(.cancelAuthenticationChallenge, nil); return
     }
-    // Public homes may terminate TLS at their own proxy; the signed home challenge still pins identity.
-    changedIdentity = !SecTrustEvaluateWithError(trust, nil)
-    completionHandler(.performDefaultHandling, nil)
+    // The exact paired leaf is the only trust anchor; public trust cannot replace it.
+    SecTrustSetPolicies(trust, SecPolicyCreateBasicX509())
+    SecTrustSetAnchorCertificates(trust, [cert] as CFArray); SecTrustSetAnchorCertificatesOnly(trust, true)
+    if SecTrustEvaluateWithError(trust, nil) { completionHandler(.useCredential, URLCredential(trust: trust)); return }
+    completionHandler(.cancelAuthenticationChallenge, nil)
   }
   func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) { completionHandler(nil) }
   func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
@@ -111,7 +111,7 @@ private final class PinnedRequest: NSObject, URLSessionDataDelegate {
     if data.count + chunk.count > 16 * 1024 * 1024 { dataTask.cancel() } else { data.append(chunk) }
   }
   func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-    if error != nil { promise.reject(changedIdentity ? "HOME_CHANGED" : "HOME_UNREACHABLE", changedIdentity ? "This home's identity changed; pair your phone again." : "Home unreachable — check that Ardur is running") }
+    if changedIdentity || error != nil { promise.reject(changedIdentity ? "HOME_CHANGED" : "HOME_UNREACHABLE", changedIdentity ? "This home's identity changed; pair your phone again." : "Home unreachable — check that Ardur is running") }
     else { promise.resolve(["status": status, "body": String(data: data, encoding: .utf8) ?? ""]) }
     session.invalidateAndCancel(); self.session = nil
   }

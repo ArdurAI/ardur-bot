@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { Readable } from "node:stream";
+import { RemoteListener as SharedRemoteListener } from "@ardurbot/host-runtime/device-listener";
 import { describe, expect, it, vi } from "vitest";
 import {
   allowedDeviceRequest,
@@ -36,7 +37,13 @@ describe("restricted LAN listener", () => {
     const input = Object.assign(Readable.from([Buffer.from('{"operation":"tasks"}')]), {
       method: "POST",
       url: "/device/request",
-      headers: { cookie: "synthetic", authorization: "synthetic" },
+      headers: {
+        cookie: "synthetic",
+        authorization: "synthetic",
+        origin: "https://untrusted.example.test",
+        "x-forwarded-host": "untrusted.example.test",
+        "x-ardurbot-local-settings-token": "nonfunctional-fixture-token",
+      },
     });
     const output = Object.assign(new EventEmitter(), {
       setHeader: vi.fn(),
@@ -64,4 +71,8 @@ it("allows development loopback targets while rejecting LAN and public proxy des
     expect(() => deviceProxy(target)).not.toThrow();
   for (const target of ["http://192.168.1.2:5173", "https://example.test", "file:///fixture"])
     expect(() => deviceProxy(target)).toThrow("A local home is required.");
+});
+
+it("shares the server listener implementation with Electron", () => {
+  expect(RemoteListener).toBe(SharedRemoteListener);
 });

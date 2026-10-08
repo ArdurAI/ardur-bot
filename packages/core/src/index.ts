@@ -2,11 +2,13 @@ export {
   decodeTerminalFrame,
   encodeTerminalFrame,
   parseTerminalControl,
+  parseTerminalReplaySize,
   TERMINAL_ENDED,
   TERMINAL_FRAME_BYTES,
   TERMINAL_GRACE_MS,
   TERMINAL_HEADER_BYTES,
   TERMINAL_REPLAY_BYTES,
+  TERMINAL_REPLAY_VERSION,
   TERMINAL_UNAVAILABLE,
   TERMINAL_WINDOW_BYTES,
   validateTerminalSize,
@@ -96,10 +98,14 @@ export * from "./task-card.js";
 export * from "./teach-playbook.js";
 export * from "./teach-recording.js";
 export * from "./team-board.js";
+export * from "./terminal-link.js";
+export * from "./terminal-restore.js";
+export * from "./terminal-sessions.js";
 export * from "./text-direction.js";
 export * from "./thread-context.js";
 export * from "./thread-message-updates.js";
 export * from "./thread-subscription.js";
 export * from "./tool-activity.js";
 export * from "./work-record.js";
+export * from "./workspace-reads.js";
 export * from "./workspace-tasks.js";

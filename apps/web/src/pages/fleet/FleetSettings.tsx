@@ -23,6 +23,7 @@ import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 import { FeatureDocsLink } from "../../components/FeatureDocsLink";
 import { rpc } from "../../lib/rpc";
+import { ComputerLimitsDetails } from "./ComputerLimitsDetails";
 import { useTargetName } from "./target-name";
 
 type Fleet = Awaited<ReturnType<typeof rpc.fleet.list>>;
@@ -242,11 +243,9 @@ export function FleetSettings() {
                 {target.version} · {target.os}
               </p>
             ) : null}
-            {target.bots.length ? (
-              <p className="text-xs text-muted-foreground">
-                {target.bots.map((bot) => bot.name).join(", ")}
-              </p>
-            ) : null}
+            {target.bots.map((bot) => (
+              <ComputerLimitsDetails key={bot.id} bot={bot} />
+            ))}
           </li>
         ))}
       </ul>

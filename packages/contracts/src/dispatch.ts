@@ -162,9 +162,16 @@ export function deviceSignedText(
   ]);
 }
 
+export const DeviceListenerStateSchema = z.object({
+  enabled: z.boolean(),
+  hints: PairingPayloadSchema.shape.hints,
+});
+export type DeviceListenerState = z.infer<typeof DeviceListenerStateSchema>;
+
 export const devicesContract = {
   list: oc.output(
     z.object({
+      listener: DeviceListenerStateSchema,
       instanceId: z.string(),
       homeName: z.string(),
       fingerprint: z.string(),

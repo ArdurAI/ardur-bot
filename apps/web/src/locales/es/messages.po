@@ -240,6 +240,10 @@ msgstr ""
 msgid "{count} folders"
 msgstr ""
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "{count} measured runs"
+msgstr "{count} ejecuciones medidas"
+
 #: src/pages/LearningInsights.tsx
 msgid "{count} runs needed {connection}, which is not connected."
 msgstr ""
@@ -1042,6 +1046,10 @@ msgstr "Apariencia"
 msgid "Applied"
 msgstr ""
 
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "Applied limits"
+msgstr "Límites aplicados"
+
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/customize/McpConfigEditor.tsx
 msgid "Apply"
@@ -1286,9 +1294,10 @@ msgid "Automatically start when you log in to your computer."
 msgstr ""
 
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Available"
-msgstr ""
+msgstr "Disponible"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Available after the routine is saved"
@@ -1625,6 +1634,7 @@ msgstr "No se puede alcanzar el servidor."
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/shell/move-to-host.tsx
+#: src/pages/shell/runtime-settings.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Cancel"
 msgstr "Cancelar"
@@ -1649,6 +1659,10 @@ msgstr "Cancelar respuesta"
 msgid "Cancel sign-in"
 msgstr ""
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Cancellation"
+msgstr "Cancelación"
+
 #: src/pages/LearningObservation.tsx
 msgid "Cancellations"
 msgstr ""
@@ -1664,12 +1678,17 @@ msgstr "cancelado"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "Cancelled"
 msgstr "Cancelado"
 
 #: src/pages/settings-sections.ts
 msgid "Capabilities"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Capability checks"
+msgstr "Comprobaciones de capacidades"
 
 #: src/pages/group-model-control.tsx
 msgid "Captured for this group."
@@ -1806,6 +1825,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Checked {0}"
 msgstr "Comprobado {0}"
+
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "Checked {time}"
+msgstr "Comprobado a las {time}"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Checking the download"
@@ -2045,6 +2068,10 @@ msgstr "Cerrar panel"
 msgid "Close preview"
 msgstr "Cerrar vista previa"
 
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Close terminal"
+msgstr "Cerrar terminal"
+
 #: src/pages/SettingsOverlay.tsx
 msgid "Close user settings"
 msgstr "Cerrar configuración de usuario"
@@ -2161,6 +2188,7 @@ msgstr "Completado"
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/GroupPanel.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "Completed"
 msgstr "Completado"
 
@@ -2295,6 +2323,10 @@ msgstr "Confirmar contraseña"
 #: src/pages/DevicesSettings.tsx
 msgid "Confirm the phone fingerprint here before allowing it."
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Confirmed offline"
+msgstr "Confirmado sin conexión"
 
 #. placeholder {0}: conflict.path
 #: src/pages/GitMemorySettings.tsx
@@ -2436,10 +2468,6 @@ msgstr "Conectando…"
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Connection"
-msgstr ""
-
-#: src/pages/shell/terminal-session.tsx
-msgid "Connection lost — reconnecting"
 msgstr ""
 
 #: src/pages/fleet/FleetSettings.tsx
@@ -3375,6 +3403,10 @@ msgstr "No se pudo cargar la configuración de mensajería"
 msgid "Couldn't update messaging settings"
 msgstr "No se pudo actualizar la configuración de mensajería"
 
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "CPU"
+msgstr "CPU"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "CPU limit"
 msgstr ""
@@ -3552,6 +3584,10 @@ msgstr ""
 #: src/pages/RoutineSchedule.tsx
 msgid "days"
 msgstr "días"
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Declared"
+msgstr "Declarado"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Decline"
@@ -4001,6 +4037,10 @@ msgstr "p. ej. Hivenet Agent, Presales, bot de hojas de horas"
 msgid "Earlier message"
 msgstr "Mensaje anterior"
 
+#: src/pages/shell/terminal-session.tsx
+msgid "Earlier output is unavailable"
+msgstr "La salida anterior no está disponible"
+
 #: src/components/Context.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/fleet/FleetSettings.tsx
@@ -4048,10 +4088,15 @@ msgstr "Correo"
 msgid "Enable"
 msgstr ""
 
+#: src/pages/DevicesSettings.tsx
+msgid "Enable ARDURBOT_DEVICE_LISTENER_ENABLED on the server to pair a device."
+msgstr "Activa ARDURBOT_DEVICE_LISTENER_ENABLED en el servidor para vincular un dispositivo."
+
 #: src/lib/mcp-sign-in.ts
 msgid "Enable this server first, then sign in."
 msgstr ""
 
+#: src/pages/workspace/TerminalCollection.tsx
 #: src/pages/workspace/WorkspaceTerminal.tsx
 msgid "End this terminal?"
 msgstr "¿Cerrar este terminal?"
@@ -4295,6 +4340,7 @@ msgstr "fallido"
 #: src/lib/team-delivery-text.ts
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "Failed"
 msgstr "Falló"
 
@@ -4409,6 +4455,10 @@ msgstr "Finalizando conexión MCP…"
 msgid "First bot not created"
 msgstr "El primer bot aún no se ha creado"
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "First reply"
+msgstr "Primera respuesta"
+
 #: src/components/ai/CoordinationLine.tsx
 msgid "Fix"
 msgstr "Corregir"
@@ -4473,6 +4523,10 @@ msgstr ""
 #: src/pages/import/LocalImportPage.tsx
 msgid "Found on this Mac"
 msgstr ""
+
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Four terminals are already open."
+msgstr "Ya hay cuatro terminales abiertos."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Free"
@@ -4714,6 +4768,10 @@ msgstr "Vinculado"
 msgid "Host"
 msgstr ""
 
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "Host account"
+msgstr "Cuenta del anfitrión"
+
 #: src/pages/HostComputerSettings.tsx
 msgid "Host service:"
 msgstr ""
@@ -4953,6 +5011,10 @@ msgstr "Clave de API de instancia"
 msgid "Instruction"
 msgstr "Instrucción"
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Instruction delivery"
+msgstr "Entrega de instrucciones"
+
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/import/LocalImportPage.tsx
 msgid "Instructions"
@@ -5144,6 +5206,10 @@ msgstr ""
 msgid "Language"
 msgstr "Idioma"
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Last 7 days"
+msgstr "Últimos 7 días"
+
 #: src/pages/LearningCurator.tsx
 msgid "Last check"
 msgstr ""
@@ -5151,6 +5217,10 @@ msgstr ""
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Last checked"
 msgstr ""
+
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Last failure"
+msgstr "Último fallo"
 
 #: src/pages/DevicesSettings.tsx
 msgid "Last present"
@@ -5572,6 +5642,7 @@ msgstr "Miembros (elige {GROUP_MEMBER_MIN}–{GROUP_MEMBER_MAX})"
 msgid "Memories"
 msgstr ""
 
+#: src/pages/fleet/ComputerLimitsDetails.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/memory/MemoryProposals.tsx
@@ -5949,6 +6020,10 @@ msgstr "Compresión nativa"
 msgid "Native compression is not available with Hermes."
 msgstr "La compresión nativa no está disponible con Hermes."
 
+#: src/pages/settings/NativeRuntimeSettings.tsx
+msgid "Native runtimes"
+msgstr "Entornos de ejecución nativos"
+
 #: src/pages/shell/TopNav.tsx
 msgid "Navigation"
 msgstr ""
@@ -6042,6 +6117,10 @@ msgstr "Nueva habilidad"
 #: src/pages/shell/dialogs.tsx
 msgid "New space"
 msgstr "Nuevo space"
+
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "New terminal"
+msgstr "Nuevo terminal"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "New work item"
@@ -6220,6 +6299,7 @@ msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineHistory.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "No runs yet"
 msgstr "Aún no hay ejecuciones"
 
@@ -6329,6 +6409,10 @@ msgstr "No está en el catálogo de plugins"
 msgid "Not initialized"
 msgstr "Sin inicializar"
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Not measured"
+msgstr "No medido"
+
 #: src/pages/LearningInbox.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Not now"
@@ -6344,9 +6428,10 @@ msgid "Not recorded"
 msgstr ""
 
 #: src/pages/ComparePanel.tsx
+#: src/pages/fleet/ComputerLimitsDetails.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Not reported"
-msgstr ""
+msgstr "No informado"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Not requested"
@@ -6363,6 +6448,10 @@ msgstr "Sin sellar"
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Not tested"
+msgstr "No probado"
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Not used"
@@ -6550,6 +6639,10 @@ msgstr "Abrir en ventana completa"
 #: src/pages/customize/SkillsPage.tsx
 msgid "Open learning inbox"
 msgstr ""
+
+#: src/pages/shell/terminal-session.tsx
+msgid "Open link"
+msgstr "Abrir enlace"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open links in built-in browser"
@@ -6810,10 +6903,6 @@ msgstr ""
 msgid "Personal credential"
 msgstr "Credencial personal"
 
-#: src/pages/DevicesSettings.tsx
-msgid "Phone pairing needs a home run by this app. Set up This computer to use it."
-msgstr ""
-
 #: src/pages/LearningObservation.tsx
 msgid "pin"
 msgstr ""
@@ -6955,6 +7044,10 @@ msgstr ""
 #: src/pages/shell/dialogs.tsx
 msgid "Private workspace with its own bots and groups."
 msgstr ""
+
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "Processes"
+msgstr "Procesos"
 
 #: src/pages/account/AccountProfile.tsx
 #: src/pages/memory/MemoryDocuments.tsx
@@ -7173,6 +7266,10 @@ msgstr ""
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Reconnecting"
 msgstr "Reconectando"
+
+#: src/pages/shell/terminal-session.tsx
+msgid "Reconnecting terminal"
+msgstr "Volviendo a conectar el terminal"
 
 #: src/pages/dashboard/GovernancePanel.tsx
 msgid "Record evidence of bot decisions"
@@ -7452,6 +7549,10 @@ msgstr ""
 msgid "Report an issue"
 msgstr ""
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Report is for another version"
+msgstr "El informe corresponde a otra versión"
+
 #: src/pages/TeamBoard.tsx
 msgid "Reported met"
 msgstr ""
@@ -7528,6 +7629,10 @@ msgstr ""
 #: src/pages/CompareStart.tsx
 msgid "Reserve a merge run"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Reserved"
+msgstr "Reservado"
 
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -8293,6 +8398,11 @@ msgstr ""
 msgid "Set up memory search"
 msgstr ""
 
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/settings/NativeRuntimeSettings.tsx
+msgid "Set up on the home device"
+msgstr "Configurar en el dispositivo principal"
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Set up servers"
 msgstr ""
@@ -8793,6 +8903,10 @@ msgstr "Almacenado cifrado"
 msgid "Stored securely. Never shown here."
 msgstr "Almacenado de forma segura. Nunca se muestra aquí."
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Streaming"
+msgstr "Transmisión"
+
 #: src/pages/Shell.tsx
 msgid "subagent"
 msgstr "subagente"
@@ -8801,6 +8915,10 @@ msgstr "subagente"
 #: src/pages/Onboarding.tsx
 msgid "Submit"
 msgstr "Enviar"
+
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Success"
+msgstr "Éxito"
 
 #: src/pages/LearningInbox.tsx
 msgid "Suggested content"
@@ -8912,13 +9030,22 @@ msgstr ""
 #: src/pages/ide/IdePage.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
+#: src/pages/workspace/TerminalCollection.tsx
 #: src/pages/workspace/view-registry.ts
 msgid "Terminal"
 msgstr "Terminal"
 
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Terminal {number}"
+msgstr "Terminal {number}"
+
 #: src/pages/shell/computer-terminal.tsx
 msgid "Terminal could not open; try again"
 msgstr ""
+
+#: src/pages/shell/terminal-session.tsx
+msgid "Terminal expired"
+msgstr "El terminal ha caducado"
 
 #: src/pages/workspace/terminal-controller.ts
 msgid "Terminal is not available on this computer"
@@ -9064,6 +9191,7 @@ msgstr "Pensando"
 #: src/pages/ide/terminal.tsx
 #: src/pages/workspace/dialogs.tsx
 #: src/pages/workspace/terminal-controller.ts
+#: src/pages/workspace/TerminalCollection.tsx
 msgid "This action could not finish; try again."
 msgstr ""
 
@@ -9108,6 +9236,10 @@ msgstr ""
 #: src/pages/LearningInbox.tsx
 msgid "This board item was completed."
 msgstr ""
+
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "This bot"
+msgstr "Este bot"
 
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
@@ -9366,10 +9498,6 @@ msgstr "Título"
 msgid "to {peer}"
 msgstr "a {peer}"
 
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings."
-msgstr ""
-
 #: src/pages/shell/bot-picker.tsx
 msgid "To:"
 msgstr "Para:"
@@ -9419,6 +9547,10 @@ msgstr "Le pedí a {name} que se detuviera"
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Tool access mode"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Tool authorization"
+msgstr "Autorización de herramientas"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Tool sources"
@@ -9530,7 +9662,9 @@ msgid "Uninstall"
 msgstr ""
 
 #: src/components/ai/CompactWorkRecord.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/LearningCurator.tsx
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Unknown"
 msgstr "Desconocido"
@@ -9557,6 +9691,10 @@ msgstr "Desfijar"
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Unsaved changes"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Unsupported"
+msgstr "No compatible"
 
 #. placeholder {0}: pending.file.name
 #: src/pages/Shell.tsx
@@ -9675,8 +9813,13 @@ msgstr ""
 #: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/settings-sections.ts
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
 msgid "Usage"
 msgstr "Uso"
+
+#: src/pages/GroupPanel.tsx
+msgid "Usage incomplete"
+msgstr "Datos de uso incompletos"
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "Use {hostLabel}"
@@ -9772,6 +9915,10 @@ msgstr "Usa KiB enteros."
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Use whole seconds."
 msgstr "Usa segundos enteros."
+
+#: src/pages/GroupPanel.tsx
+msgid "Used"
+msgstr "Usado"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "User"

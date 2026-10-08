@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 import { workspaceIntentHref } from "../src/pages/workspace/open-intent";
 import { captureScreenshot } from "./helpers";
 import { bots, installPerformanceFixture } from "./performance-fixture";
-import { openWorkspaceView as openView } from "./workspace-view";
+import { openAgentComputer, openWorkspaceView as openView } from "./workspace-view";
 
 const version = "a".repeat(64);
 
@@ -153,7 +153,7 @@ async function installWorkspace(
 }
 
 async function openFiles(page: Page) {
-  await page.getByRole("button", { name: "Agent computer" }).click();
+  await openAgentComputer(page);
   const pane = page.getByTestId("side-panel");
   await expect(pane).toHaveAttribute("data-panel", "computer");
   await openView(page, "Files");
@@ -161,6 +161,115 @@ async function openFiles(page: Page) {
   await expect(pane).toContainText("Workspace notes");
   return pane;
 }
+
+test("one header menu keeps views, computer and settings reachable by keyboard", async ({
+  page,
+}, testInfo) => {
+  const { botId, unexpected } = await installWorkspace(page, "live");
+  await page.goto(`/app/${botId}`);
+  await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
+  const trigger = page.getByRole("button", { name: "Views", exact: true });
+  const controls = trigger.locator("..");
+  await expect(controls.getByRole("button")).toHaveCount(1);
+  await expect(page.locator("[data-workspace-toggle]")).toHaveCount(0);
+  await captureScreenshot(page, testInfo, "header-menu-closed");
+
+  await trigger.focus();
+  await page.keyboard.press("ArrowDown");
+  const menu = page.getByRole("menu");
+  const labels = [
+    "Tasks",
+    "Files",
+    "IDE",
+    "Recorded changes",
+    "Routines",
+    "Computer",
+    "Agent computer",
+    "Bot settings",
+  ];
+  await expect(menu.getByRole("menuitemcheckbox")).toHaveText(labels);
+  await expect(menu.getByRole("menuitem")).toHaveText([
+    "Move split view left",
+    "Move split view right",
+    "Move split view down",
+  ]);
+  await captureScreenshot(page, testInfo, "header-menu-open");
+  await expect(menu.getByRole("menuitemcheckbox", { name: "Tasks", exact: true })).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(menu.getByRole("menuitemcheckbox", { name: "Files", exact: true })).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await expect(menu.getByRole("menuitemcheckbox", { name: "Tasks", exact: true })).toBeFocused();
+  await page.keyboard.press("Enter");
+  const pane = page.getByTestId("side-panel");
+  await expect(pane.getByRole("tab", { name: "Tasks", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(menu).toBeHidden();
+  // Opening helpers must leave an already selected view and its pane open.
+  await openAgentComputer(page);
+  await openAgentComputer(page);
+  await openView(page, "Tasks");
+  await openView(page, "Tasks");
+  await trigger.click();
+  await expect(page.getByRole("menuitemcheckbox", { name: "Tasks", exact: true })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await page.getByRole("menuitemcheckbox", { name: "Tasks", exact: true }).click();
+  await expect(pane).toHaveAttribute("aria-hidden", "true");
+
+  for (const label of labels.slice(1, 6)) {
+    await trigger.click();
+    await page.getByRole("menuitemcheckbox", { name: label, exact: true }).click();
+    await expect(pane.getByRole("tab", { name: label, exact: true })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await trigger.click();
+    await expect(page.getByRole("menuitemcheckbox", { name: label, exact: true })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await page.getByRole("menuitemcheckbox", { name: label, exact: true }).click();
+    await expect(pane).toHaveAttribute("aria-hidden", "true");
+  }
+  let refreshes = 0;
+  page.on("request", (request) => {
+    if (request.url().includes("/rpc/threads/get")) refreshes += 1;
+  });
+  await openAgentComputer(page);
+  await expect(pane).toHaveAttribute("data-panel", "computer");
+  await expect.poll(() => refreshes).toBeGreaterThan(0);
+  await trigger.click();
+  await expect(page.locator("[data-workspace-toggle]")).toHaveAttribute("aria-checked", "true");
+  await page.locator("[data-workspace-toggle]").click();
+  await expect(pane).toHaveAttribute("aria-hidden", "true");
+  await trigger.click();
+  await page.getByRole("menuitemcheckbox", { name: "Bot settings", exact: true }).click();
+  await expect(pane).toHaveAttribute("data-panel", "settings");
+  await trigger.click();
+  await expect(
+    page.getByRole("menuitemcheckbox", { name: "Bot settings", exact: true }),
+  ).toHaveAttribute("aria-checked", "true");
+  await page.getByRole("menuitemcheckbox", { name: "Bot settings", exact: true }).click();
+  await expect(pane).toHaveAttribute("aria-hidden", "true");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(trigger).toBeInViewport();
+  const header = trigger.locator("xpath=../..");
+  expect(await header.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await trigger.click();
+  await expect(
+    page.getByRole("menuitemcheckbox", { name: "Agent computer", exact: true }),
+  ).toBeInViewport();
+  await captureScreenshot(page, testInfo, "header-menu-narrow");
+  await page.keyboard.press("Escape");
+  await expect(trigger).toBeFocused();
+  // This journey explicitly opens Computer. Its screen requests are expected,
+  // but opening the menu or a view must never boot, take control or start a terminal.
+  expect(new Set(unexpected)).toEqual(new Set(["computer/screenUrl"]));
+});
 
 for (const hostBot of [false, true])
   test(`conversation file and recorded-change links open checked views beside chat (host: ${hostBot})`, async ({
@@ -225,7 +334,7 @@ test("workspace pane opens Tasks and bot files without starting the computer", a
   const { botId, unexpected } = await installWorkspace(page, "live");
   await page.goto(`/app/${botId}`);
   await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
-  await page.getByRole("button", { name: "Agent computer" }).click();
+  await openAgentComputer(page);
   const pane = page.getByTestId("side-panel");
   await expect(pane).toHaveAttribute("data-panel", "computer");
   await expect(pane.getByRole("tab", { name: "Tasks" })).toBeVisible();
@@ -294,8 +403,8 @@ test("workspace views retain drafts across docking, expansion and return to chat
   await captureScreenshot(page, testInfo, "workspace-views-narrow");
   await pane.getByRole("button", { name: "Back to chat", exact: true }).click();
   await expect(pane).toHaveAttribute("aria-hidden", "true");
-  await expect(page.getByRole("button", { name: "Agent computer", exact: true })).toBeFocused();
-  await page.getByRole("button", { name: "Agent computer", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Views", exact: true })).toBeFocused();
+  await openAgentComputer(page);
   await expect(pane.locator('[data-draft-proof="original"]')).toBeVisible();
   await expect(editor).toContainText("Unsaved workspace draft");
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -425,7 +534,7 @@ test("workspace pane Terminal keeps its shell across views and releases explicit
   });
   await page.goto(`/app/${botId}`);
   await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
-  await page.getByRole("button", { name: "Agent computer" }).click();
+  await openAgentComputer(page);
   const pane = page.getByTestId("side-panel");
   await expect(pane).toHaveAttribute("data-panel", "computer");
   const tab = await openView(page, "Terminal");
@@ -521,7 +630,7 @@ test("workspace pane Terminal reports an ended session instead of a dead termina
   });
   await page.goto(`/app/${botId}`);
   await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
-  await page.getByRole("button", { name: "Agent computer" }).click();
+  await openAgentComputer(page);
   const pane = page.getByTestId("side-panel");
   await openView(page, "Terminal");
   await expect(
@@ -584,7 +693,7 @@ test("workspace pane Terminal boots a stopped computer without taking control", 
   });
   await page.goto(`/app/${botId}`);
   await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
-  await page.getByRole("button", { name: "Agent computer" }).click();
+  await openAgentComputer(page);
   const pane = page.getByTestId("side-panel");
   await expect(pane).toHaveAttribute("data-panel", "computer");
   const tab = await openView(page, "Terminal");
@@ -600,3 +709,75 @@ test("workspace pane Terminal boots a stopped computer without taking control", 
   await expect(pane.getByText("Take control to open a terminal", { exact: true })).toBeVisible();
   await expect(pane.getByRole("button", { name: "Take control" })).toBeVisible();
 });
+
+for (const view of ["Files", "IDE"] as const) {
+  test(`${view} recovers when the computer wakes during the opening read`, async ({
+    page,
+  }, testInfo) => {
+    const { botId } = await installWorkspace(page, "live", undefined, false, true);
+    let generation = 1;
+    const lists: number[] = [];
+    const reads: number[] = [];
+    let describes = 0;
+    const context = () => ({
+      botId,
+      rootId: "sandbox-fixture-computer",
+      computerId: "fixture-computer",
+      generation,
+      files: "live",
+      runsOnHost: true,
+      observedAt: "2026-09-28T00:00:00.000Z",
+    });
+    await page.route("**/rpc/workspace/**", async (route) => {
+      const name = new URL(route.request().url()).pathname.split("/").at(-1);
+      if (name === "describe") {
+        describes++;
+        return route.fulfill({ json: { json: context() } });
+      }
+      if (name === "list" || name === "read") {
+        const input = route.request().postDataJSON().json;
+        const requests = name === "list" ? lists : reads;
+        requests.push(input.generation);
+        if (requests.length === 1) generation++;
+        if (input.generation !== generation) {
+          return route.fulfill({
+            status: 409,
+            json: {
+              json: {
+                defined: false,
+                code: "CONFLICT",
+                status: 409,
+                message: "Computer changed. Refresh files.",
+              },
+            },
+          });
+        }
+        expect(input.generation).toBe(generation);
+        expect(input.rootId).toBe("sandbox-fixture-computer");
+        return route.fulfill({
+          json: {
+            json:
+              name === "list"
+                ? { context: context(), entries: [{ path: "notes.md", kind: "file", size: 17 }] }
+                : fileBody(context(), "Workspace notes after wake\n"),
+          },
+        });
+      }
+      await route.fallback();
+    });
+    await page.goto(`/app/${botId}`);
+    await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
+    await openAgentComputer(page);
+    const pane = page.getByTestId("side-panel");
+    const initialDescribes = describes;
+    await openView(page, view);
+    await pane.getByRole("button", { name: "notes.md", exact: true }).click();
+    await expect(pane.locator("[data-ide-editor]")).toContainText("Workspace notes after wake");
+    await expect(pane.getByRole("alert")).toHaveCount(0);
+    // Strict Mode replays the opening effect; both stale requests must be refused.
+    expect(lists).toEqual([1, 1, 2]);
+    expect(reads).toEqual([2, 3]);
+    expect(describes - initialDescribes).toBe(2);
+    await captureScreenshot(page, testInfo, `workspace-${view.toLowerCase()}-wake-recovery`);
+  });
+}

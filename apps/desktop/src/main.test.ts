@@ -1128,6 +1128,7 @@ describe("main placement lifecycle regressions", () => {
     const context = {
       app: { getPath: () => "/fixture" },
       process: { argv: [] },
+      enableDesktopAccessibility: vi.fn(),
       installSmokeProgress: undefined,
       registerIntegrationProtocol: vi.fn(),
       installCustomizationIpc: vi.fn(),
@@ -1155,6 +1156,10 @@ describe("main placement lifecycle regressions", () => {
     ) as () => Promise<void>;
     const pending = start();
     const stopped = expect(pending).rejects.toBe(reached);
+    expect(context.enableDesktopAccessibility).toHaveBeenCalledOnce();
+    expect(context.enableDesktopAccessibility.mock.invocationCallOrder[0]).toBeLessThan(
+      store.load.mock.invocationCallOrder[0] ?? 0,
+    );
     expect(store.load).toHaveBeenCalledOnce();
     expect(installHostService).not.toHaveBeenCalled();
     expect(store.current).toBeNull();

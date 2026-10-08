@@ -53,7 +53,7 @@ import type { EndpointResult } from "./endpoint";
 import { defaultApiBase, normalizeApiBase } from "./endpoint";
 import { t } from "./i18n";
 import { resumeLiveNotifications } from "./live-notifications";
-import { RpcError } from "./rpc-error";
+import { RpcError, RpcServerError } from "./rpc-error";
 import {
   clearSessionToken,
   loadSessionToken,
@@ -579,7 +579,7 @@ export async function deleteAccount(password: string) {
 }
 
 /** The message came from the server's own response body, not a client-side transport failure. */
-export class RpcServerError extends RpcError {}
+export { RpcServerError } from "./rpc-error";
 
 export async function rpc<T>(
   proc: string,

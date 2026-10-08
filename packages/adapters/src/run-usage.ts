@@ -44,6 +44,28 @@ export type BrokerRunFence = {
 /** Only newly persisted primary-call measurements belong in the run's context metrics. */
 export type RecordedContextUsage = { inputTokens: number; cachedTokens: number | null };
 
+/** Observe reply text once, under the current run lease; never persist the text itself. */
+export async function recordFirstReply(
+  prisma: Pick<PrismaClient, "run">,
+  run: Pick<UsageRun, "id" | "spaceId" | "userId">,
+  lease: Pick<BrokerRunFence, "leaseOwner" | "leaseFence">,
+  text: string,
+  at = new Date(),
+): Promise<void> {
+  if (!text.trim()) return;
+  await prisma.run.updateMany({
+    where: {
+      ...run,
+      ...lease,
+      status: "running",
+      leaseExpiresAt: { gt: at },
+      startedAt: { not: null, lte: at },
+      firstReplyAt: null,
+    },
+    data: { firstReplyAt: at },
+  });
+}
+
 /** The first durable broker admission fixes this source run's allowance across later turns. */
 export async function brokerRunAllowance(
   prisma: Pick<PrismaClient, "usageRecord">,
@@ -87,6 +109,7 @@ export async function recordRunUsage(
     botId: run.botId,
     userId: run.userId,
     runId: run.id,
+    threadId: run.threadId,
     ...legacy,
     ...identity,
   };
@@ -657,6 +680,7 @@ async function recordRequestUsage(
             userId: run.userId,
             botId: run.botId,
             runId: run.id,
+            threadId: run.threadId,
             runtimePin:
               usagePin !== undefined
                 ? (usagePin as Prisma.InputJsonValue)
