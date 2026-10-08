@@ -90,7 +90,9 @@ it("attributes the usage record and its event to the same run", async () => {
     run,
     { provider: "fixture", model: "fixture", inputTokens: 10, outputTokens: 20 },
   );
-  expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ runId: run.id }) });
+  expect(create).toHaveBeenCalledWith({
+    data: expect.objectContaining({ runId: run.id, threadId: run.threadId }),
+  });
   expect(create).toHaveBeenCalledWith({
     data: expect.objectContaining({ purpose: "legacy", coverage: "partial" }),
   });
@@ -353,6 +355,44 @@ function runPrisma() {
   } as unknown as PrismaClient;
   return { ...ledger, prisma, tx, run };
 }
+
+it("persists run scope and epoch from each default collector's start through replay", async () => {
+  const { prisma, rows, run } = runPrisma();
+  const deps = { prisma, events: { append: vi.fn() } };
+  for (const [id, input] of [
+    ["run-a", 1200],
+    ["run-b", 300],
+  ] as const) {
+    const request = new RequestUsageCollector({
+      provider: "fixture",
+      model: "fixture",
+      mappingVersion: "fixture-v1",
+      inputSemantics: "total-with-cache-subsets",
+    });
+    const start = request.start();
+    await recordRunUsage(deps, run(id), start);
+    const row = [...rows.values()].find((value) => value.runId === id)!;
+    expect(row).toMatchObject({
+      runId: id,
+      threadId: "thread",
+      botId: "bot",
+      counterEpoch: start.request!.counter.epochId,
+      counterMode: "cumulative",
+      lastSequence: 0,
+    });
+    for (const event of [request.snapshot({ input, output: 10 }), request.finish("success")]) {
+      await recordRunUsage(deps, run(id), event);
+      expect(await recordRunUsage(deps, run(id), event)).toBeNull();
+    }
+    expect([...rows.values()].find((value) => value.runId === id)).toMatchObject({
+      threadId: "thread",
+      counterEpoch: start.request!.counter.epochId,
+      inputTokens: input,
+      outputTokens: 10,
+    });
+  }
+  expect([...rows.values()].map((row) => row.inputTokens)).toEqual([1200, 300]);
+});
 
 it("keeps cumulative totals for two runs of the same bot separate even with identical counter identities", async () => {
   const { prisma, rows, tx, run } = runPrisma();

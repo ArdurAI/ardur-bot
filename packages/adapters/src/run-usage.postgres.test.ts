@@ -220,7 +220,15 @@ postgres("request ledger on disposable PostgreSQL", () => {
         ),
         collector.finish("success"),
       ];
-      for (const event of usage) await f.record(event, db.prisma, { id: run.id });
+      await f.record(usage[0]!, db.prisma, { id: run.id });
+      const startedRow = (await f.rows()).find((row) => row.runId === run.id)!;
+      expect(startedRow).toMatchObject({
+        threadId: run.threadId,
+        counterEpoch: usage[0]!.request!.counter.epochId,
+        lastSequence: 0,
+      });
+      expect(startedRow.observations).toHaveLength(1);
+      for (const event of usage.slice(1)) await f.record(event, db.prisma, { id: run.id });
       for (const event of usage)
         expect(await f.record(event, peer.prisma, { id: run.id })).toBeNull();
       observations.push(usage);
@@ -243,7 +251,7 @@ postgres("request ledger on disposable PostgreSQL", () => {
         threadId: f.run.threadId,
         runtimePin: f.pin,
         counterMode: "cumulative",
-        epochId: observations[index]![0]!.request!.counter.epochId,
+        counterEpoch: observations[index]![0]!.request!.counter.epochId,
         inputTokens: index === 0 ? 1200 : 300,
         outputTokens: index === 0 ? 20 : 10,
       });
