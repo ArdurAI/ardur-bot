@@ -48,3 +48,22 @@ it("does not send headers or body after a wrong pin", async () => {
   await rejected;
   expect(f.req.end).not.toHaveBeenCalled();
 });
+
+it("aborts a deadline request without sending application data", async () => {
+  const controller = new AbortController();
+  const req = Object.assign(new EventEmitter(), {
+    end: vi.fn(),
+    destroy: vi.fn((error: Error) => {
+      req.emit("error", error);
+      req.emit("close");
+    }),
+  });
+  vi.mocked(request).mockReturnValue(req as never);
+  const result = pinnedPost("https://home.example.test/device/request", pin, {}, controller.signal);
+  const rejected = expect(result).rejects.toThrow();
+  controller.abort();
+  expect(req.destroy).toHaveBeenCalledOnce();
+  await rejected;
+  expect(req.destroy).toHaveBeenCalledOnce();
+  expect(req.end).not.toHaveBeenCalled();
+});

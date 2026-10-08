@@ -185,3 +185,24 @@ describe("paired CLI", () => {
     expect(configDirectory("win32", { APPDATA: "/profile" }, "/home")).toBe("/profile/ardur");
   });
 });
+
+it("carries the test deadline to the nonce request and refuses a send after abort", async () => {
+  const { payload, identity } = fixture();
+  const controller = new AbortController();
+  const post = vi.fn<Transport>(async (_url, _pin, body, signal) => {
+    expect(signal).toBe(controller.signal);
+    controller.abort();
+    return identity((body as { clientChallenge: string }).clientChallenge);
+  });
+  const home = {
+    ...payload,
+    url: payload.hints[0]!,
+    grantId: "grant",
+    spaceId: "space",
+    privateKey: createDeviceKeys().privateKey,
+  };
+  await expect(createClient(home, post, controller.signal).request("dispatch", {})).rejects.toThrow(
+    "Waiting stopped.",
+  );
+  expect(post).toHaveBeenCalledOnce();
+});

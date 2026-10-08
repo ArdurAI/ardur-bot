@@ -151,9 +151,18 @@ export class LocalHermesRuntime implements AgentRuntime {
 
       relay = await startHermesProviderRelay(
         { protocol: 1, ...brokerSession.broker.grant, hostGeneration: "local" },
-        (method, args) => {
+        async (method, args) => {
           if (method === "provider.open" || method === "provider.read") assertProfileAcknowledged();
-          return relayDispatcher.dispatch(method, args);
+          const result = await relayDispatcher.dispatch(method, args);
+          if (
+            method === "provider.read" &&
+            result &&
+            typeof result === "object" &&
+            "done" in result &&
+            result.done
+          )
+            await request.saveCheckpoint?.(undefined);
+          return result;
         },
         (failure) => {
           void this.fail(request.runId, failure).catch(() => {});
@@ -218,6 +227,7 @@ export class LocalHermesRuntime implements AgentRuntime {
         onRuntimeInfo: request.onRuntimeInfo,
         acknowledgeInput: request.acknowledgeInput,
         claimSteering: request.claimSteering,
+        saveCheckpoint: request.saveCheckpoint,
       };
       yield* runtime.run(localRequest, context);
     } finally {

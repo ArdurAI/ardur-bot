@@ -7,6 +7,7 @@ import type {
   AgentRunRequest,
   AgentRuntime,
   AgentRuntimeEvent,
+  AgentUsage,
 } from "@ardurbot/adapter-kit";
 import type { RuntimeAvailability } from "@ardurbot/contracts/runtime-pins";
 import { RuntimePinError, runtimePinProblem } from "@ardurbot/contracts/runtime-pins";
@@ -545,6 +546,8 @@ export class CodexAppServerRuntime implements AgentRuntime {
     let interrupted = false;
     let usageBarrier: RpcMessage | undefined;
     let completionHandled = false;
+    const restartTranscript: unknown[] = [];
+    const checkpointUsage: AgentUsage[] = [];
     let reader: Promise<void> | undefined;
     let steering: ReturnType<typeof setInterval> | undefined;
     const interrupt = async () => {
@@ -867,7 +870,20 @@ export class CodexAppServerRuntime implements AgentRuntime {
               const measured = usage.update(
                 (params.tokenUsage as { total?: unknown } | undefined)?.total,
               );
-              if (measured) queue.push(measured);
+              if (measured) {
+                if (measured.type === "usage") checkpointUsage.push(measured);
+                queue.push(measured);
+              }
+            }
+            if (event.method === "item/completed") {
+              const item = params.item as { type?: string } | undefined;
+              if (item?.type === "agentMessage") {
+                restartTranscript.push(item);
+                if (await request.saveCheckpoint?.(restartTranscript, checkpointUsage.splice(0))) {
+                  await interrupt();
+                  break;
+                }
+              }
             }
             if (event.method === "item/agentMessage/delta" && typeof params.delta === "string")
               queue.push({ type: "text", text: params.delta });

@@ -4003,6 +4003,7 @@ export function ShellPage({
               answerableAskIds={answerableAskIds}
               running={transcriptRunning}
               workingBots={workingBots}
+              restarting={workingRuns.some((run) => run.restarting)}
               room={inGroup}
               onLoadOlder={loadOlder}
               onOpenBot={openBot}
@@ -5403,6 +5404,7 @@ const Transcript = memo(function Transcript({
   answerableAskIds,
   running,
   workingBots,
+  restarting,
   room,
   onLoadOlder,
   onOpenBot,
@@ -5432,6 +5434,7 @@ const Transcript = memo(function Transcript({
   answerableAskIds: ReadonlySet<string>;
   running: boolean;
   workingBots: GroupAvatarMember[];
+  restarting: boolean;
   room: boolean;
   onLoadOlder: () => void | Promise<void>;
   onOpenBot: (botId: string) => void;
@@ -5794,7 +5797,11 @@ const Transcript = memo(function Transcript({
             </div>
           );
         })}
-        {running && indicatorBots.length > 0 ? (
+        {restarting ? (
+          <p role="status" className="py-3 text-sm text-muted-foreground">
+            <Trans>Updating — your bots will continue after the update</Trans>
+          </p>
+        ) : running && indicatorBots.length > 0 ? (
           <ActiveBotGlyph bots={indicatorBots} label={workingLabel} />
         ) : null}
       </div>
