@@ -80,6 +80,7 @@ export * from "./peer-hold.js";
 export * from "./peer-transcript.js";
 export * from "./remote-policy.js";
 export * from "./response-bytes.js";
+export * from "./restart-state.js";
 export * from "./room-coordinator.js";
 export * from "./rpc-error-message.js";
 export * from "./run-state.js";

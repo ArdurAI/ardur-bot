@@ -571,6 +571,12 @@ export interface AgentRunRequest {
   ) => Promise<void>;
   resolveModel?: (provider: string, modelId: string) => Promise<AgentRunModel>;
   resumeFromCheckpoint?: string;
+  /** Provider-neutral restart context. Never includes credentials. */
+  restartState?: unknown;
+  /** Calls already spent by this run, including an interrupted intent. */
+  priorToolCalls?: number;
+  /** Await durable progress at a model/tool boundary; true asks the runtime to stop. */
+  saveCheckpoint?: (state: unknown, usage?: AgentUsage[]) => Promise<boolean>;
   script?: ScriptedTurn[];
   /**
    * FYI bot-message wakes and scheduled routines may finish with no text.

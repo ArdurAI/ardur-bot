@@ -87,7 +87,7 @@ existing read-only message procedure. It prints answer text, not tool output or 
 Waiting is not streaming. It checks about every two seconds and each signed request needs a nonce
 round trip. Polls read local saved state; they do not start additional model turns. Running the task
 still uses the bot's configured model and computer, with their normal costs and approvals.
-An individual network request times out after 15 seconds. Waiting has no overall deadline.
+An individual network request times out after 15 seconds. `send --wait` has no overall deadline; `test bot` has a finite deadline.
 Interrupting the CLI stops waiting, **not the task**; use `ardur stop` to request cancellation.
 
 There is no automatic send retry. If a network failure happens after admission, the task may still
@@ -95,10 +95,93 @@ be running. Check it at home before repeating a send, or you may create a second
 `--wait` cannot resume from an id in this release. If a task falls out of the bounded saved list
 or its answer is unavailable, the CLI asks you to check it at home.
 
+## Test a bot from a script
+
+Pair once, then check a bot's final reply without opening a screen:
+
+```sh
+ardur test bot "Builder" --prompt "Reply with READY" --expect-contains "READY" \
+  --timeout 180s --transcript "$HOME/bot-check.json" --json
+```
+
+Use an exact bot id or a unique, exact name. Unknown or duplicate names print candidate ids.
+Only bots and one prompt per command are supported. There are no room, suite, regex or model-judged
+checks in this stage. Matching is case-sensitive and checks the exact final message's non-reasoning
+text before redaction. Other runs, threads, message ids, roles and progress blocks cannot pass it.
+
+The default deadline is 180 seconds. A plain number means seconds; `ms`, `s` and `m` suffixes
+are accepted. The deadline bounds home requests and polling. It stops waiting, **not the bot task**.
+The result keeps any task and run ids received at admission. If the deadline or a connection failure
+occurs before the admission response arrives, the ids may be unknown even though work was admitted.
+Check at home before repeating the command. There is no automatic retry.
+
+`--json` writes exactly one versioned result to standard output, including errors:
+
+```json
+{"version":1,"bot":{"id":"bot-id","name":"Builder"},"runId":"run-id","taskId":"task-id","verdict":"pass","replyText":"READY","elapsedMs":1200,"failureReason":null}
+```
+
+`bot`, `runId` and `taskId` are null until known. Verdicts are `pass`, `mismatch`, `failed`,
+`stopped`, `deadline` or `error`. Reply text and failure reasons are sanitized and redacted.
+Human output prints the ids, a plain verdict sentence and the reply, without terminal controls.
+
+No transcript is written unless `--transcript` is supplied. Relative paths are resolved inside
+your home folder, not the working directory. An absolute path explicitly selects another existing
+folder you control. Parent folders must not be symlinks; on macOS/Linux the immediate parent must
+be owned by you and not writable by other users. Parent traversal (`..`), symlinks and existing
+targets are refused. Choose a new filename for each check. The file is created privately before
+dispatch: mode 0600 on macOS/Linux, a current-user-only ACL on Windows. Filesystems without the
+required protection or hard-link support are refused. Windows ACL execution needs platform acceptance.
+
+The private JSON file records the prompt, reply, bot, task/run ids, verdict and timing; it is
+updated when admission is received and when the command finishes. Credential-shaped values and
+private keys are redacted using the shared redaction rules. It is an unencrypted client observation,
+not a signed execution receipt. Keep it private; redaction is not a guarantee that arbitrary
+sensitive prose is removed.
+
+### Script examples
+
+```sh
+if ardur test bot "Builder" --prompt "Reply with READY" --expect-contains "READY"; then
+  echo "Bot check passed"
+else
+  code=$?
+  echo "Bot check failed (exit $code)" >&2
+fi
+```
+
+Keep the command's exit code when parsing JSON; do not let the parser hide a failed check:
+
+```sh
+code=0
+result=$(ardur test bot "Builder" --prompt "Reply with READY" --expect-contains "READY" --json) || code=$?
+printf '%s\n' "$result" | python3 -c 'import json,sys; r=json.load(sys.stdin); print(r["verdict"], r["runId"], r["taskId"])'
+exit "$code"
+```
+
+Each check creates one ordinary home turn with the bot's saved model, computer, costs and approvals.
+Polling reads saved state and does not add model turns.
+
+### Test exit codes
+
+These codes apply only to `test bot`; existing commands keep the codes below.
+
+| Code | Meaning |
+| --- | --- |
+| 0 | Exact final reply contains the expectation |
+| 1 | Reply received, but the expectation did not match |
+| 2 | Run failed/stopped, or a home request/protocol failure |
+| 3 | Deadline reached; known admission ids are retained |
+| 4 | Usage, pairing/access, bot selection or transcript error |
+
+A failed or stopped run prints its safe final-message reason when available, otherwise a plain
+fallback. A transcript failure returns 4 even if the bot reply matched; known admission ids remain
+in the result.
+
 ## Scopes and revocation
 
-- `bots`, `status` and `--wait` need **read**.
-- `send` needs **dispatch**; ordinary work is limited by the grant's **ordinary** authority.
+- `bots`, `status`, `--wait` and `test bot` need **read**.
+- `send` and `test bot` need **dispatch**; ordinary work is limited by the grant's **ordinary** authority.
 - `stop` needs **stop**.
 - Home, space, user and bot policies still apply. Turning dispatch off at home refuses sends.
 
@@ -111,7 +194,7 @@ The separate presence key is not saved, so the config cannot supply that additio
 To revoke, open **Settings → Devices**, find the device labelled **Command line**, and choose
 **Revoke**. Its next request is refused. Removing the local file alone does not revoke the grant.
 
-## Exit codes
+## Existing command exit codes
 
 | Code | Meaning |
 | --- | --- |

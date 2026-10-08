@@ -1041,3 +1041,33 @@ describe("worker-owned remote runtime callbacks", () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 });
+
+it("acknowledges host restart progress only after the executor persists it", async () => {
+  const input = request();
+  let release!: () => void;
+  const stored = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  input.saveCheckpoint = vi.fn(async () => {
+    await stored;
+    return true;
+  });
+  let acknowledged = false;
+  const remote = runtime(async (callback) => {
+    expect(
+      await callback(
+        frame("saveCheckpoint", [
+          [{ role: "assistant", content: "saved" }],
+          [{ type: "usage", provider: "test", model: "pinned", inputTokens: 3, outputTokens: 5 }],
+        ]),
+      ),
+    ).toBe(true);
+    acknowledged = true;
+  });
+  const work = collect(remote.run(input));
+  await vi.waitFor(() => expect(input.saveCheckpoint).toHaveBeenCalledOnce());
+  expect(acknowledged).toBe(false);
+  release();
+  await work;
+  expect(acknowledged).toBe(true);
+});
