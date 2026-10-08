@@ -83,7 +83,7 @@ it("emits stable cumulative identities and closes failed requests without invent
   expect(end.request).toMatchObject({
     requestId: start.request?.requestId,
     attemptId: start.request?.attemptId,
-    counter: { sequence: 1 },
+    counter: { epochId: start.request!.counter.epochId, sequence: 1 },
     cost: null,
     pricingProvenance: null,
     collection: { outcome: "cancelled", availability: "unavailable" },
@@ -96,4 +96,40 @@ it("emits stable cumulative identities and closes failed requests without invent
       collection: { ...end.request!.collection, raw: { prompt: "private" } },
     }).success,
   ).toBe(false);
+});
+
+it("starts a fresh epoch for each collector even when request and attempt identities are reused", () => {
+  const options = {
+    provider: "fixture",
+    model: "fixture",
+    requestId: "session-request",
+    attemptId: "0",
+    mappingVersion: "fixture-v1",
+    inputSemantics: "total-with-cache-subsets" as const,
+  };
+  const first = new RequestUsageCollector(options);
+  const second = new RequestUsageCollector(options);
+  expect(second.epochId).not.toBe(first.epochId);
+  expect(first.snapshot({ input: 1200 }).request!.counter.epochId).toBe(first.epochId);
+  expect(first.finish("success").request!.counter.epochId).toBe(first.epochId);
+  expect(second.snapshot({ input: 300 }).request!.counter).toEqual({
+    mode: "cumulative",
+    epochId: second.epochId,
+    sequence: 0,
+  });
+});
+
+it("preserves an adapter-supplied session epoch across replayed collectors", () => {
+  const options = {
+    provider: "fixture",
+    model: "fixture",
+    requestId: "session-request",
+    attemptId: "0",
+    epochId: "verified-session",
+    mappingVersion: "fixture-v1",
+    inputSemantics: "total-with-cache-subsets" as const,
+  };
+  const first = new RequestUsageCollector(options).snapshot({ input: 300, output: 0 });
+  const replay = new RequestUsageCollector(options).snapshot({ input: 300, output: 0 });
+  expect(replay).toEqual(first);
 });

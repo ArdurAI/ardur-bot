@@ -109,6 +109,7 @@ export async function recordRunUsage(
     botId: run.botId,
     userId: run.userId,
     runId: run.id,
+    threadId: run.threadId,
     ...legacy,
     ...identity,
   };
@@ -679,6 +680,7 @@ async function recordRequestUsage(
             userId: run.userId,
             botId: run.botId,
             runId: run.id,
+            threadId: run.threadId,
             runtimePin:
               usagePin !== undefined
                 ? (usagePin as Prisma.InputJsonValue)
