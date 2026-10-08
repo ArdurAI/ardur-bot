@@ -3,6 +3,7 @@ import type { Prisma, PrismaClient } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 
 export const RESTART_DRAIN_MS = 60_000;
+const REQUESTED_CACHE_MS = 2_000;
 // Covers both existing 30-minute recreate/recovery limits, checkout restoration and cleanup.
 const RESTART_UPDATE_HOLD_MS = 65 * 60_000;
 export interface DrainResult {
@@ -15,6 +16,7 @@ export interface DrainResult {
 /** Shared admission is durable; process shutdown also closes its own admission immediately. */
 export class RestartDrain {
   private stopping = false;
+  private requestedCache: { at: number; value: boolean } | undefined;
   private readonly active = new Set<symbol>();
   private readonly preparation = new AbortController();
   get preparationSignal(): AbortSignal {
@@ -36,24 +38,34 @@ export class RestartDrain {
   }
   async requested(): Promise<boolean> {
     if (this.stopping) return true;
+    const now = Date.now();
+    // Boundaries check several times per turn; the hold lasts 65 minutes and the drain
+    // window is 60 seconds, so a short cache cannot outlive a real drain.
+    if (this.requestedCache && now - this.requestedCache.at < REQUESTED_CACHE_MS)
+      return this.requestedCache.value;
     const state = await this.prisma.deploymentSettings.findUnique({
       where: { id: "default" },
       select: { restartDrainUntil: true },
     });
-    return Boolean(state?.restartDrainUntil && state.restartDrainUntil.getTime() > Date.now());
+    const value = Boolean(
+      state?.restartDrainUntil && state.restartDrainUntil.getTime() > Date.now(),
+    );
+    this.requestedCache = { at: now, value };
+    return value;
   }
   /** Called inside the claim transaction. The updater takes the same row's write lock. */
   async admits(tx: Prisma.TransactionClient): Promise<boolean> {
     if (this.stopping) return false;
-    await tx.$queryRaw`SELECT id FROM deployment_settings WHERE id = 'default' FOR SHARE`;
-    const state = await tx.deploymentSettings.findUnique({
-      where: { id: "default" },
-      select: { restartDrainUntil: true },
-    });
-    return !state?.restartDrainUntil || state.restartDrainUntil.getTime() <= Date.now();
+    // One locked read per claim: the decision comes from the same row the updater write-locks.
+    const rows = await tx.$queryRaw<Array<{ restartDrainUntil: Date | null }>>`
+      SELECT "restartDrainUntil" FROM deployment_settings WHERE id = 'default' FOR SHARE
+    `;
+    const until = rows[0]?.restartDrainUntil;
+    return !until || until.getTime() <= Date.now();
   }
   async shutdown(timeoutMs = RESTART_DRAIN_MS): Promise<DrainResult> {
     this.stopping = true;
+    this.requestedCache = undefined;
     this.preparation.abort();
     return this.wait(() => Promise.resolve(this.active.size), timeoutMs);
   }
@@ -62,6 +74,7 @@ export class RestartDrain {
     timeoutMs = RESTART_DRAIN_MS,
   ): Promise<DrainResult & { id: string }> {
     // Hold admission through recreate/recovery. A dead updater cannot close admission forever.
+    this.requestedCache = undefined;
     await this.prisma.deploymentSettings.upsert({
       where: { id: "default" },
       create: {
@@ -85,6 +98,7 @@ export class RestartDrain {
     return { ...result, id };
   }
   async clear(id: string): Promise<void> {
+    this.requestedCache = undefined;
     await this.prisma.deploymentSettings.updateMany({
       where: { id: "default", restartDrainId: id },
       data: { restartDrainId: null, restartDrainUntil: null },

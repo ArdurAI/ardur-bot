@@ -17,7 +17,9 @@ function fixture() {
     }),
   };
   const count = vi.fn(async () => 1);
-  const queryRaw = vi.fn(async (_query: TemplateStringsArray) => []);
+  const queryRaw = vi.fn(async (_query: TemplateStringsArray) => [
+    { restartDrainUntil: state.restartDrainUntil ?? null },
+  ]);
   const prisma = {
     deploymentSettings,
     run: { count },
@@ -45,14 +47,42 @@ describe("shared restart admission", () => {
     });
     const admitting = f.drain.admits(f.prisma as never);
     try {
-      expect(query.mock.calls[0]?.[0]).toEqual([
-        "SELECT id FROM deployment_settings WHERE id = 'default' FOR SHARE",
-      ]);
+      const text = String(query.mock.calls[0]?.[0]).replace(/\s+/g, " ").trim();
+      expect(text).toBe(
+        "SELECT \"restartDrainUntil\" FROM deployment_settings WHERE id = 'default' FOR SHARE",
+      );
       expect(f.deploymentSettings.findUnique).not.toHaveBeenCalled();
     } finally {
       release();
     }
     expect(await admitting).toBe(true);
+  });
+  it("decides admission from the single locked read", async () => {
+    const f = fixture();
+    expect(await f.drain.admits(f.prisma as never)).toBe(true);
+    expect(f.queryRaw).toHaveBeenCalledTimes(1);
+    expect(f.deploymentSettings.findUnique).not.toHaveBeenCalled();
+    f.queryRaw.mockResolvedValueOnce([{ restartDrainUntil: new Date(Date.now() + 60_000) }]);
+    expect(await f.drain.admits(f.prisma as never)).toBe(false);
+    expect(f.queryRaw).toHaveBeenCalledTimes(2);
+  });
+  it("caches the shared drain read between boundary checks, then re-reads", async () => {
+    vi.useFakeTimers();
+    const f = fixture();
+    expect(await f.drain.requested()).toBe(false);
+    expect(await f.drain.requested()).toBe(false);
+    expect(f.deploymentSettings.findUnique).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(await f.drain.requested()).toBe(false);
+    expect(f.deploymentSettings.findUnique).toHaveBeenCalledTimes(2);
+  });
+  it("sees a drain that starts after a cached clear read", async () => {
+    const f = fixture();
+    f.count.mockResolvedValue(0);
+    expect(await f.drain.requested()).toBe(false);
+    await f.drain.begin("update", 0);
+    expect(await f.drain.requested()).toBe(true);
+    expect(f.deploymentSettings.findUnique).toHaveBeenCalledTimes(2);
   });
   it("stops claims on both services and reopens admission after a deadline miss", async () => {
     vi.useFakeTimers();
