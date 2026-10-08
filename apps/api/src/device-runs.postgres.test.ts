@@ -76,9 +76,19 @@ postgres("signed Stage 3 device operations (PostgreSQL)", () => {
     });
     for (const id of [userId, "device-stage3-other-user"]) {
       await prisma.user.create({ data: { id, name: "Fixture", email: `${id}@example.test` } });
+      await prisma.member.create({
+        data: {
+          id: `${id}-organization-membership`,
+          organizationId: "device-stage3-org",
+          userId: id,
+          role: "member",
+          createdAt: new Date(),
+        },
+      });
       for (const space of [spaceId, "device-stage3-other-space"]) {
         await prisma.spaceMember.create({
           data: {
+            id: `${id}-${space}-membership`,
             organizationId: "device-stage3-org",
             spaceId: space,
             userId: id,

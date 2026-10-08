@@ -292,7 +292,7 @@ existing JavaScript UTF-16 sort order. Every client must reproduce the exact can
 Synthetic request bodies, canonical JSON and signed text live in
 `apps/cli/fixtures/device-operations.json`, including four rejected surrogate vectors.
 Regenerate with `pnpm exec tsx apps/cli/generate-device-fixtures.ts`. Contract tests verify
-these vectors against the home canonicalizer; the Rust client consumes them for byte parity.
+these vectors against the home canonicalizer; they are available to the Rust client for byte-parity checks.
 
 ## Protocol references
 
