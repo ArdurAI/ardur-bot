@@ -3,6 +3,29 @@ import { describe, expect, it, vi } from "vitest";
 import { ProviderError } from "./provider-error.js";
 import { inferScript, ScriptedAgentRuntime } from "./scripted-runtime.js";
 
+it("lets fixture cleanup stop a nonterminating run through another runtime instance", async () => {
+  const events = new ScriptedAgentRuntime()
+    .run({
+      botId: "bot",
+      threadId: "thread",
+      runId: "fixture-cleanup",
+      prompt: "keep working",
+      instructions: "",
+      history: [],
+      tools: [],
+      model: { provider: "scripted", id: "scripted" },
+    })
+    [Symbol.asyncIterator]();
+  try {
+    expect((await events.next()).value).toMatchObject({ type: "progress", activity: true });
+    await new ScriptedAgentRuntime().abort("fixture-cleanup");
+    expect((await events.next()).value).toEqual({ type: "done", text: "stopped" });
+    expect((await events.next()).done).toBe(true);
+  } finally {
+    await events.return?.();
+  }
+});
+
 it("refuses the first call with a rate limit and answers the retry", async () => {
   const runtime = new ScriptedAgentRuntime();
   const request = {

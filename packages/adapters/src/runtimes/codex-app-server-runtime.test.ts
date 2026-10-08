@@ -314,6 +314,45 @@ function fixture(
   return { collect, messages, request, info, spawn, runtime, child, loaded };
 }
 describe("Codex app-server protocol", () => {
+  it("saves model context and usage before interrupting for restart", async () => {
+    const f = fixture("success", {
+      duringTurn: [
+        {
+          method: "thread/tokenUsage/updated",
+          params: {
+            threadId: "thread-native",
+            tokenUsage: { total: { inputTokens: 10, outputTokens: 5, cachedInputTokens: 0 } },
+          },
+        },
+        {
+          method: "item/completed",
+          params: {
+            threadId: "thread-native",
+            turnId: "turn-native",
+            item: { type: "agentMessage", text: "Saved response" },
+          },
+        },
+      ],
+    });
+    let release!: () => void;
+    const stored = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    f.request.saveCheckpoint = vi.fn(async () => {
+      await stored;
+      return true;
+    });
+    const work = f.collect();
+    await vi.waitFor(() => expect(f.request.saveCheckpoint).toHaveBeenCalledOnce());
+    expect(f.messages.some((message) => message.method === "turn/interrupt")).toBe(false);
+    expect(f.request.saveCheckpoint).toHaveBeenCalledWith(
+      [expect.objectContaining({ text: "Saved response" })],
+      [expect.objectContaining({ inputTokens: 10, outputTokens: 5 })],
+    );
+    release();
+    await work;
+    expect(f.messages.some((message) => message.method === "turn/interrupt")).toBe(true);
+  });
   it("redacts bridge credentials registered after the app-server starts", async () => {
     vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", "1");
     vi.stubEnv("LOG_LEVEL", "debug");
@@ -943,6 +982,11 @@ describe("instruction file grants", () => {
     root = await realpath(await mkdtemp(path.join(tmpdir(), "codex-grants-")));
     return root;
   };
+  const botProject = async () => {
+    const folder = path.join(await scratch(), "bot");
+    await mkdir(path.join(folder, ".git"), { recursive: true });
+    return folder;
+  };
   const refused = (f: ReturnType<typeof fixture>, runtime: CodexAppServerRuntime) =>
     (async () => {
       for await (const _event of runtime.run(f.request)) {
@@ -987,8 +1031,7 @@ describe("instruction file grants", () => {
     },
   );
   it("sends the bot's own instructions alone when the folder has no instruction files", async () => {
-    const folder = path.join(await scratch(), "bot");
-    await mkdir(folder, { recursive: true });
+    const folder = await botProject();
     const f = fixture();
     f.request.nativeCwd = folder;
     await f.collect();
@@ -1002,9 +1045,8 @@ describe("instruction file grants", () => {
   it.each(["thread/start", "thread/resume"] as const)(
     "refuses an instruction file that links outside the project for %s",
     async (method) => {
-      const folder = path.join(await scratch(), "bot");
+      const folder = await botProject();
       const vault = path.join(root, "vault");
-      await mkdir(folder, { recursive: true });
       await mkdir(vault, { recursive: true });
       await writeFile(path.join(vault, "secret.txt"), "protected");
       await symlink(path.join(vault, "secret.txt"), path.join(folder, "AGENTS.md"));
@@ -1024,9 +1066,8 @@ describe("instruction file grants", () => {
     },
   );
   it("reads no instruction file for a controlled comparison, even an unsafe one", async () => {
-    const folder = path.join(await scratch(), "bot");
+    const folder = await botProject();
     const vault = path.join(root, "vault");
-    await mkdir(folder, { recursive: true });
     await mkdir(vault, { recursive: true });
     await writeFile(path.join(vault, "secret.txt"), "protected");
     await symlink(path.join(vault, "secret.txt"), path.join(folder, "AGENTS.md"));
