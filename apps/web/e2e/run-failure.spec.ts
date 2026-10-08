@@ -166,7 +166,7 @@ test("Retry prepares a stalled-run continuation without silently repeating actio
   await expect(error).toContainText(sentence, { timeout: 30_000 });
   await captureScreenshot(page, testInfo, "stalled-run-retry");
   await error.getByRole("button", { name: "Retry", exact: true }).click();
-  await expect(page.getByPlaceholder(/^Message /)).toHaveValue(continuation);
+  await expect(page.getByRole("combobox", { name: /^Message / })).toHaveValue(continuation);
   await expect(error).toBeHidden();
   await expect(page.getByTestId("transcript").getByText(continuation, { exact: true })).toHaveCount(
     0,
