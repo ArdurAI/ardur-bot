@@ -285,3 +285,73 @@ it("does not expose feature mutation or device management through Overview grant
     expect((await f.call(f.signed("rpc", { procedure, input: {} }))).status).toBe(403);
   }
 });
+
+function headlessFixture(enabled = false) {
+  const home = {
+    instanceId: "fixture-home",
+    homeName: "Fixture home",
+    fingerprint: "a".repeat(64),
+    certificateFingerprint: "b".repeat(64),
+    scopes: ["read"],
+  };
+  const tx = {
+    pairingChallenge: { create: vi.fn(async () => ({})) },
+    deviceAuditEvent: { create: vi.fn(async () => ({})) },
+  };
+  const prisma = {
+    instanceIdentity: { findUniqueOrThrow: vi.fn(async () => home) },
+    deviceGrant: { findMany: vi.fn(async () => []) },
+    pendingDevicePairing: { findMany: vi.fn(async () => []) },
+    $transaction: vi.fn(async (fn) => fn(tx)),
+  } as unknown as PrismaClient;
+  const server = { enabled, hints: enabled ? ["https://home.example.test:43119"] : [] };
+  const trustedDesktopHints = vi.fn(() => [] as string[]);
+  const service = createRemoteDevices({
+    prisma,
+    events: {} as ThreadEvents,
+    jobs: {} as JobPublisher,
+    listenerState: () => server,
+    trustedDesktopHints,
+  });
+  const actor = {
+    userId: "owner",
+    spaceId: "space",
+    email: "owner@example.test",
+    isDeploymentOwner: true,
+  };
+  return { service, actor, server, trustedDesktopHints, prisma, tx, home };
+}
+it("gives the headless owner no listener or usable pairing payload when disabled", async () => {
+  const f = headlessFixture();
+  expect((await f.service.list(f.actor)).listener).toEqual({ enabled: false, hints: [] });
+  await expect(
+    f.service.start(f.actor, { scopes: ["read"], hints: ["https://unapproved.example.test"] }),
+  ).rejects.toThrow("ARDURBOT_DEVICE_LISTENER_ENABLED");
+  expect(f.tx.pairingChallenge.create).not.toHaveBeenCalled();
+});
+it("puts the approved pinned server origin first and ignores browser hints and the web origin", async () => {
+  const f = headlessFixture(true);
+  f.trustedDesktopHints.mockReturnValue(["https://10.0.0.2:43119", f.server.hints[0]!]);
+  const issued = await f.service.start(f.actor, {
+    scopes: ["read"],
+    hints: ["https://web.example.test", "https://unapproved.example.test"],
+  });
+  expect(issued.payload.hints).toEqual([f.server.hints[0], "https://10.0.0.2:43119"]);
+  expect(issued.payload.certificateFingerprint).toBe(f.home.certificateFingerprint);
+  expect(issued.payload.instanceId).toBe(f.home.instanceId);
+  expect(JSON.stringify(await f.service.list(f.actor))).not.toMatch(/privateKey|ciphertext/);
+});
+it("retains trusted desktop-only pairing without accepting browser-selected origins", async () => {
+  const f = headlessFixture();
+  f.trustedDesktopHints.mockReturnValue(["https://10.0.0.2:43119"]);
+  expect((await f.service.start(f.actor, { scopes: ["read"], hints: [] })).payload.hints).toEqual([
+    "https://10.0.0.2:43119",
+  ]);
+});
+it("refuses non-owner listener state before reading the home identity", async () => {
+  const f = headlessFixture(true);
+  await expect(f.service.list({ ...f.actor, isDeploymentOwner: false })).rejects.toThrow(
+    "home owner",
+  );
+  expect(f.prisma.instanceIdentity.findUniqueOrThrow).not.toHaveBeenCalled();
+});

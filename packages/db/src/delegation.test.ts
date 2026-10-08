@@ -3,6 +3,7 @@ import {
   ALL_DEVICE_SCOPES,
   DELEGATION_LIMITS,
   delegationStopLine,
+  goalBudget,
   TaskCardSchema,
 } from "@ardurbot/contracts";
 import { userVisibleMessages } from "@ardurbot/core";
@@ -85,6 +86,9 @@ describe("transactional delegation admission", () => {
       problem: { code: "budget-exhausted" },
     });
     expect(f.state()).toEqual(before);
+    expect(
+      goalBudget(DELEGATION_LIMITS.tokens, f.state().root, true).availableTokens,
+    ).toBeGreaterThanOrEqual(0);
   });
   it.each([
     ["depth-exceeded", { maxDepth: 0 }],
@@ -192,10 +196,17 @@ describe("transactional delegation admission", () => {
     await requestCancel(db, { spaceId: "space", userId: "owner" }, "root");
     expect(f.state().rows[0].status).toBe("cancel-requested");
     expect(f.state().root.activeDescendants).toBe(1);
+    expect(goalBudget(DELEGATION_LIMITS.tokens, f.state().root, true).reservedTokens).toBe(
+      DELEGATION_LIMITS.reservationTokens,
+    );
     await db.$transaction((tx) => finishDelegation(tx, row.id, "cancelled", "Stopped"));
     await db.$transaction((tx) => finishDelegation(tx, row.id, "cancelled", "Stopped"));
     expect(f.state().rows[0].cancelConfirmedAt).toBeInstanceOf(Date);
     expect(f.state().root.activeDescendants).toBe(0);
+    expect(goalBudget(DELEGATION_LIMITS.tokens, f.state().root, true)).toMatchObject({
+      reservedTokens: 0,
+      availableTokens: DELEGATION_LIMITS.tokens,
+    });
     expect(f.tx.message.create).toHaveBeenCalledOnce();
   });
   it("defaults to bounded roots", () => {

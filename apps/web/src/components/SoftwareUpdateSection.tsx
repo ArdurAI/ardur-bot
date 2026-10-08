@@ -63,6 +63,7 @@ export function SoftwareUpdatePanel({
   onCheck: () => void;
   onApply: () => void;
 }) {
+  const { t } = useLingui();
   const updateAvailable = check?.status === "available";
 
   return (
@@ -82,10 +83,19 @@ export function SoftwareUpdatePanel({
           </Button>
         ) : null}
       </div>
+      {busy === "apply" ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          <Trans>Updating — your bots will continue after the update</Trans>
+        </p>
+      ) : null}
       {check ? <CheckSummary check={check} /> : null}
       {error ? (
         <p role="alert" className="text-[12.5px] text-destructive">
-          {error}
+          {error === "Update paused because a bot is still working. Try again."
+            ? t`Update paused because a bot is still working. Try again.`
+            : error === "Bot work is still paused after the update. Try again."
+              ? t`Bot work is still paused after the update. Try again.`
+              : error}
         </p>
       ) : null}
       {done ? <SuccessPop label={done} /> : null}
@@ -236,7 +246,7 @@ export function SoftwareUpdateSection({ isDeploymentOwner }: { isDeploymentOwner
       </h3>
       <SoftwareUpdatePanel
         check={check}
-        busy={busy}
+        busy={busy ?? (status.running ? "apply" : null)}
         error={error}
         done={done}
         onCheck={() => void runCheck()}

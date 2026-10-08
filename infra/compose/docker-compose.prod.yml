@@ -23,6 +23,7 @@ services:
       retries: 20
 
   api:
+    stop_grace_period: 90s
     # The tag is what the updater moves. `docker compose pull` fetches it, `up -d` recreates onto
     # it, and the previous tag stays in .env so a rollback is one redeploy rather than a rebuild.
     #
@@ -90,6 +91,7 @@ services:
       retries: 20
 
   worker:
+    stop_grace_period: 90s
     image: ${ARDURBOT_IMAGE:-ghcr.io/ardurai/ardur-bot/app}:${ARDURBOT_IMAGE_TAG:-local}
     build:
       context: ../..

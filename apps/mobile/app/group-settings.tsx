@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import { Alert, Button, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { BotMemberPicker } from "../components/bot-member-picker";
 import { ContextSection } from "../components/context-section";
+import { GoalBudgetDetails } from "../components/goal-budget-details";
 import { GroupMemberModelControl } from "../components/group-member-model-control";
 import {
   type MobileBot,
@@ -52,9 +53,19 @@ export default function GroupSettingsScreen() {
   const [groupTraffic, setGroupTraffic] = useState<BotCommunicationPolicy | null>(null);
   const [trafficBusy, setTrafficBusy] = useState(false);
   const [pairedDevice, setPairedDevice] = useState(false);
+  const [canReadGoal, setCanReadGoal] = useState(false);
 
   useEffect(() => {
-    void hasPairedDevice().then(setPairedDevice);
+    let active = true;
+    void hasPairedDevice().then((paired) => {
+      if (active) {
+        setPairedDevice(paired);
+        setCanReadGoal(!paired);
+      }
+    });
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -335,6 +346,7 @@ export default function GroupSettingsScreen() {
             {t("Bots answering at once")}: {maxConcurrentRuns}
           </Text>
         </Pressable>
+        {canReadGoal && groupId ? <GoalBudgetDetails groupId={groupId} /> : null}
         {error ? <Text style={{ color: tokens.destructive, marginTop: 12 }}>{error}</Text> : null}
         <Pressable
           onPress={() => void save()}

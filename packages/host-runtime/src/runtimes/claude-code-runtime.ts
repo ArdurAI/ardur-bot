@@ -5,6 +5,7 @@ import type {
   AgentRunRequest,
   AgentRuntime,
   AgentRuntimeEvent,
+  AgentUsage,
   UsageOutcome,
 } from "@ardurbot/adapter-kit";
 import { RequestUsageCollector, usageEvent } from "@ardurbot/adapter-kit";
@@ -513,6 +514,9 @@ export class ClaudeCodeRuntime implements AgentRuntime {
       queue.end();
       if (child) terminateNative(child, "SIGTERM");
     };
+    let suspended = false;
+    const restartTranscript: unknown[] = [];
+    const checkpointUsage: AgentUsage[] = [];
     let reader: Promise<void> | undefined;
     try {
       await reportInfo();
@@ -567,10 +571,26 @@ export class ClaudeCodeRuntime implements AgentRuntime {
                 sessionId: parser.sessionId ?? sessionId,
                 reportedModel: reported,
               });
-            for (const event of events) if (event.type !== "done") queue.push(event);
+            for (const event of events) {
+              if (event.type === "usage") checkpointUsage.push(event);
+              if (event.type !== "done") queue.push(event);
+            }
+            if (value.type === "assistant") {
+              restartTranscript.push(value.message);
+              if (await request.saveCheckpoint?.(restartTranscript, checkpointUsage.splice(0))) {
+                suspended = true;
+                abort();
+                break;
+              }
+            }
           }
           const exitCode = await exited;
-          if ((!parser.finished || exitCode !== 0) && !paused && !context?.signal?.aborted)
+          if (
+            (!parser.finished || exitCode !== 0) &&
+            !paused &&
+            !suspended &&
+            !context?.signal?.aborted
+          )
             throw new RuntimePinError(
               runtimePinProblem(
                 pin,
@@ -578,7 +598,8 @@ export class ClaudeCodeRuntime implements AgentRuntime {
                 "Claude Code stopped before completing this run — connect it or change the pin.",
               ),
             );
-          if (parser.finished && !paused && !context?.signal?.aborted) queue.push({ type: "done" });
+          if (parser.finished && !paused && !suspended && !context?.signal?.aborted)
+            queue.push({ type: "done" });
           queue.end();
         } catch (error) {
           parser.initialized = false;

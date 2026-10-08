@@ -26,7 +26,7 @@ Desk dispatch is limited to two messages per coordinator turn, four per bot pair
 | --- | ---: | --- |
 | Total tokens | 600,000 | Shared root limit across the goal's delegations |
 | Deadline | Eight hours from start | Shared root deadline |
-| Tokens per worker | 30,000 | Maximum for one room assignment |
+| Tokens per worker | 65,536 | Maximum for one room assignment |
 | Concurrent assignments | Seated member count | Shared root admission limit |
 | Descendants | 60 | Shared root admission limit |
 | Depth | 1 | Workers cannot delegate further |

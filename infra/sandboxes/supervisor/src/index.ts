@@ -47,6 +47,7 @@ import {
   controlPortPublicationMatches,
   homeVolumeMatches,
   hostComputerUser,
+  inspectedComputerLimits,
   legacyNetworkOwnedSolelyBy,
   publishedLoopbackControlHostPort,
   resolveComputerControlEndpoint,
@@ -469,6 +470,7 @@ app.get("/computers/:id", async (c) => {
       id,
       running: Boolean(info.State.Running),
       image: info.Config.Image,
+      appliedLimits: inspectedComputerLimits(info),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

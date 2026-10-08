@@ -240,6 +240,10 @@ msgstr "{connection} отклонил вход; запусков, которые
 msgid "{count} folders"
 msgstr ""
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "{count} measured runs"
+msgstr "Измерено запусков: {count}"
+
 #: src/pages/LearningInsights.tsx
 msgid "{count} runs needed {connection}, which is not connected."
 msgstr "Запускам ({count}) нужен {connection}, но он не подключён."
@@ -1042,6 +1046,10 @@ msgstr "Внешний вид"
 msgid "Applied"
 msgstr ""
 
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "Applied limits"
+msgstr "Действующие ограничения"
+
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/customize/McpConfigEditor.tsx
 msgid "Apply"
@@ -1286,9 +1294,10 @@ msgid "Automatically start when you log in to your computer."
 msgstr ""
 
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Available"
-msgstr ""
+msgstr "Доступно"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Available after the routine is saved"
@@ -1493,6 +1502,10 @@ msgstr "Бот для ссылки"
 msgid "Bot token"
 msgstr ""
 
+#: src/components/SoftwareUpdateSection.tsx
+msgid "Bot work is still paused after the update. Try again."
+msgstr "После обновления работа ботов всё ещё приостановлена. Попробуйте снова."
+
 #. placeholder {0}: botName ?? proposal.scope.botId
 #. placeholder {0}: botNames[rule.botId] ?? rule.botId
 #: src/components/ApprovalRulesSettings.tsx
@@ -1621,6 +1634,7 @@ msgstr "Не удаётся связаться с сервером."
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/shell/move-to-host.tsx
+#: src/pages/shell/runtime-settings.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Cancel"
 msgstr "Отмена"
@@ -1645,6 +1659,10 @@ msgstr "Отменить ответ"
 msgid "Cancel sign-in"
 msgstr "Отменить вход"
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Cancellation"
+msgstr "Отмена"
+
 #: src/pages/LearningObservation.tsx
 msgid "Cancellations"
 msgstr ""
@@ -1660,12 +1678,17 @@ msgstr "отменен"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "Cancelled"
 msgstr "Отменено"
 
 #: src/pages/settings-sections.ts
 msgid "Capabilities"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Capability checks"
+msgstr "Проверки возможностей"
 
 #: src/pages/group-model-control.tsx
 msgid "Captured for this group."
@@ -1802,6 +1825,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Checked {0}"
 msgstr "Проверено {0}"
+
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "Checked {time}"
+msgstr "Проверено в {time}"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Checking the download"
@@ -2041,6 +2068,10 @@ msgstr "Закрыть панель"
 msgid "Close preview"
 msgstr "Закрыть предварительный просмотр"
 
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Close terminal"
+msgstr "Закрыть терминал"
+
 #: src/pages/SettingsOverlay.tsx
 msgid "Close user settings"
 msgstr "Закрыть настройки пользователя"
@@ -2157,6 +2188,7 @@ msgstr "Завершить"
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/GroupPanel.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "Completed"
 msgstr "Завершено"
 
@@ -2291,6 +2323,10 @@ msgstr "Подтвердите пароль"
 #: src/pages/DevicesSettings.tsx
 msgid "Confirm the phone fingerprint here before allowing it."
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Confirmed offline"
+msgstr "Подтверждено офлайн"
 
 #. placeholder {0}: conflict.path
 #: src/pages/GitMemorySettings.tsx
@@ -2432,10 +2468,6 @@ msgstr "Подключение…"
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Connection"
-msgstr ""
-
-#: src/pages/shell/terminal-session.tsx
-msgid "Connection lost — reconnecting"
 msgstr ""
 
 #: src/pages/fleet/FleetSettings.tsx
@@ -3371,6 +3403,10 @@ msgstr "Не удалось загрузить настройки обмена �
 msgid "Couldn't update messaging settings"
 msgstr "Не удалось обновить настройки обмена сообщениями."
 
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "CPU"
+msgstr "Процессор"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "CPU limit"
 msgstr ""
@@ -3548,6 +3584,10 @@ msgstr ""
 #: src/pages/RoutineSchedule.tsx
 msgid "days"
 msgstr "дни"
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Declared"
+msgstr "Заявлено"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Decline"
@@ -3997,6 +4037,10 @@ msgstr "напр. Hivenet Agent, Presales, бот табелей"
 msgid "Earlier message"
 msgstr "Предыдущее сообщение"
 
+#: src/pages/shell/terminal-session.tsx
+msgid "Earlier output is unavailable"
+msgstr "Предыдущий вывод недоступен"
+
 #: src/components/Context.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/fleet/FleetSettings.tsx
@@ -4044,10 +4088,15 @@ msgstr "Электронная почта"
 msgid "Enable"
 msgstr ""
 
+#: src/pages/DevicesSettings.tsx
+msgid "Enable ARDURBOT_DEVICE_LISTENER_ENABLED on the server to pair a device."
+msgstr "Включите ARDURBOT_DEVICE_LISTENER_ENABLED на сервере, чтобы подключить устройство."
+
 #: src/lib/mcp-sign-in.ts
 msgid "Enable this server first, then sign in."
 msgstr "Сначала включите этот сервер, затем войдите."
 
+#: src/pages/workspace/TerminalCollection.tsx
 #: src/pages/workspace/WorkspaceTerminal.tsx
 msgid "End this terminal?"
 msgstr "Закрыть этот терминал?"
@@ -4291,6 +4340,7 @@ msgstr "неуспешный"
 #: src/lib/team-delivery-text.ts
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "Failed"
 msgstr "Ошибка"
 
@@ -4405,6 +4455,10 @@ msgstr "Завершение подключения MCP…"
 msgid "First bot not created"
 msgstr "Первый бот ещё не создан"
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "First reply"
+msgstr "Первый ответ"
+
 #: src/components/ai/CoordinationLine.tsx
 msgid "Fix"
 msgstr "Исправить"
@@ -4469,6 +4523,10 @@ msgstr ""
 #: src/pages/import/LocalImportPage.tsx
 msgid "Found on this Mac"
 msgstr ""
+
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Four terminals are already open."
+msgstr "Уже открыты четыре терминала."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Free"
@@ -4710,6 +4768,10 @@ msgstr "Подключено"
 msgid "Host"
 msgstr ""
 
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "Host account"
+msgstr "Учётная запись хоста"
+
 #: src/pages/HostComputerSettings.tsx
 msgid "Host service:"
 msgstr ""
@@ -4949,6 +5011,10 @@ msgstr "Ключ API экземпляра"
 msgid "Instruction"
 msgstr "Инструкция"
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Instruction delivery"
+msgstr "Передача инструкций"
+
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/import/LocalImportPage.tsx
 msgid "Instructions"
@@ -5140,6 +5206,10 @@ msgstr ""
 msgid "Language"
 msgstr "Язык"
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Last 7 days"
+msgstr "Последние 7 дней"
+
 #: src/pages/LearningCurator.tsx
 msgid "Last check"
 msgstr ""
@@ -5147,6 +5217,10 @@ msgstr ""
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Last checked"
 msgstr ""
+
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Last failure"
+msgstr "Последний сбой"
 
 #: src/pages/DevicesSettings.tsx
 msgid "Last present"
@@ -5568,6 +5642,7 @@ msgstr "Участники (выберите {GROUP_MEMBER_MIN}–{GROUP_MEMBER_
 msgid "Memories"
 msgstr ""
 
+#: src/pages/fleet/ComputerLimitsDetails.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/memory/MemoryProposals.tsx
@@ -5945,6 +6020,10 @@ msgstr "Нативное сжатие"
 msgid "Native compression is not available with Hermes."
 msgstr "Нативное сжатие недоступно с Hermes."
 
+#: src/pages/settings/NativeRuntimeSettings.tsx
+msgid "Native runtimes"
+msgstr "Локальные среды выполнения"
+
 #: src/pages/shell/TopNav.tsx
 msgid "Navigation"
 msgstr ""
@@ -6038,6 +6117,10 @@ msgstr "Новый навык"
 #: src/pages/shell/dialogs.tsx
 msgid "New space"
 msgstr "Новое пространство"
+
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "New terminal"
+msgstr "Новый терминал"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "New work item"
@@ -6216,6 +6299,7 @@ msgstr "Проверяющая модель ещё не выбрана."
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineHistory.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "No runs yet"
 msgstr "Запусков пока нет"
 
@@ -6325,6 +6409,10 @@ msgstr "Нет в каталоге плагинов"
 msgid "Not initialized"
 msgstr "Не инициализировано"
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Not measured"
+msgstr "Не измерено"
+
 #: src/pages/LearningInbox.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Not now"
@@ -6340,9 +6428,10 @@ msgid "Not recorded"
 msgstr ""
 
 #: src/pages/ComparePanel.tsx
+#: src/pages/fleet/ComputerLimitsDetails.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Not reported"
-msgstr ""
+msgstr "Не сообщается"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Not requested"
@@ -6359,6 +6448,10 @@ msgstr "Не запечатано"
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Not tested"
+msgstr "Не проверено"
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Not used"
@@ -6546,6 +6639,10 @@ msgstr "Открыть в полном окне"
 #: src/pages/customize/SkillsPage.tsx
 msgid "Open learning inbox"
 msgstr ""
+
+#: src/pages/shell/terminal-session.tsx
+msgid "Open link"
+msgstr "Открыть ссылку"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open links in built-in browser"
@@ -6806,10 +6903,6 @@ msgstr ""
 msgid "Personal credential"
 msgstr "Личные учётные данные"
 
-#: src/pages/DevicesSettings.tsx
-msgid "Phone pairing needs a home run by this app. Set up This computer to use it."
-msgstr ""
-
 #: src/pages/LearningObservation.tsx
 msgid "pin"
 msgstr ""
@@ -6951,6 +7044,10 @@ msgstr ""
 #: src/pages/shell/dialogs.tsx
 msgid "Private workspace with its own bots and groups."
 msgstr "Приватное пространство со своими ботами и группами."
+
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "Processes"
+msgstr "Процессы"
 
 #: src/pages/account/AccountProfile.tsx
 #: src/pages/memory/MemoryDocuments.tsx
@@ -7169,6 +7266,10 @@ msgstr ""
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Reconnecting"
 msgstr "Повторное подключение"
+
+#: src/pages/shell/terminal-session.tsx
+msgid "Reconnecting terminal"
+msgstr "Повторное подключение к терминалу"
 
 #: src/pages/dashboard/GovernancePanel.tsx
 msgid "Record evidence of bot decisions"
@@ -7448,6 +7549,10 @@ msgstr ""
 msgid "Report an issue"
 msgstr ""
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Report is for another version"
+msgstr "Отчёт для другой версии"
+
 #: src/pages/TeamBoard.tsx
 msgid "Reported met"
 msgstr ""
@@ -7524,6 +7629,10 @@ msgstr ""
 #: src/pages/CompareStart.tsx
 msgid "Reserve a merge run"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Reserved"
+msgstr "Зарезервировано"
 
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -8289,6 +8398,11 @@ msgstr ""
 msgid "Set up memory search"
 msgstr "Настроить поиск по памяти"
 
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/settings/NativeRuntimeSettings.tsx
+msgid "Set up on the home device"
+msgstr "Настройте на основном устройстве"
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Set up servers"
 msgstr ""
@@ -8789,6 +8903,10 @@ msgstr "Хранится в зашифрованном виде"
 msgid "Stored securely. Never shown here."
 msgstr "Хранится безопасно. Здесь не отображается."
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Streaming"
+msgstr "Потоковый вывод"
+
 #: src/pages/Shell.tsx
 msgid "subagent"
 msgstr "субагент"
@@ -8797,6 +8915,10 @@ msgstr "субагент"
 #: src/pages/Onboarding.tsx
 msgid "Submit"
 msgstr "Отправить"
+
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Success"
+msgstr "Успех"
 
 #: src/pages/LearningInbox.tsx
 msgid "Suggested content"
@@ -8908,13 +9030,22 @@ msgstr ""
 #: src/pages/ide/IdePage.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
+#: src/pages/workspace/TerminalCollection.tsx
 #: src/pages/workspace/view-registry.ts
 msgid "Terminal"
 msgstr "Терминал"
 
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Terminal {number}"
+msgstr "Терминал {number}"
+
 #: src/pages/shell/computer-terminal.tsx
 msgid "Terminal could not open; try again"
 msgstr ""
+
+#: src/pages/shell/terminal-session.tsx
+msgid "Terminal expired"
+msgstr "Сеанс терминала истёк"
 
 #: src/pages/workspace/terminal-controller.ts
 msgid "Terminal is not available on this computer"
@@ -9060,8 +9191,13 @@ msgstr "рассуждение"
 #: src/pages/ide/terminal.tsx
 #: src/pages/workspace/dialogs.tsx
 #: src/pages/workspace/terminal-controller.ts
+#: src/pages/workspace/TerminalCollection.tsx
 msgid "This action could not finish; try again."
 msgstr ""
+
+#: src/components/AskCard.tsx
+msgid "This action may already have happened. Check its outcome before trying again."
+msgstr "Это действие уже могло быть выполнено. Проверьте результат, прежде чем повторять попытку."
 
 #: src/pages/LearningInbox.tsx
 msgid "This board item changed after it was filed, so it was left open for review on the Board."
@@ -9100,6 +9236,10 @@ msgstr "Эта задача на доске закрыта."
 #: src/pages/LearningInbox.tsx
 msgid "This board item was completed."
 msgstr "Эта задача на доске выполнена."
+
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "This bot"
+msgstr "Этот бот"
 
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
@@ -9251,6 +9391,10 @@ msgstr "Это заменит файлы компьютера. Продолжи�
 msgid "This reset link is invalid or expired"
 msgstr "Эта ссылка для сброса недействительна или срок ее действия истек."
 
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "This run continued in a new session after a restart."
+msgstr "После перезапуска эта задача продолжилась в новом сеансе."
+
 #: src/lib/failure-category-copy.ts
 msgid "This runtime"
 msgstr "Эта среда выполнения"
@@ -9354,10 +9498,6 @@ msgstr "Заголовок"
 msgid "to {peer}"
 msgstr "для {peer}"
 
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings."
-msgstr ""
-
 #: src/pages/shell/bot-picker.tsx
 msgid "To:"
 msgstr "К:"
@@ -9407,6 +9547,10 @@ msgstr "Попросил {name} остановиться"
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Tool access mode"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Tool authorization"
+msgstr "Авторизация инструментов"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Tool sources"
@@ -9518,7 +9662,9 @@ msgid "Uninstall"
 msgstr "Удалить"
 
 #: src/components/ai/CompactWorkRecord.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/LearningCurator.tsx
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Unknown"
 msgstr "Неизвестно"
@@ -9545,6 +9691,10 @@ msgstr "Открепить"
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Unsaved changes"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Unsupported"
+msgstr "Не поддерживается"
 
 #. placeholder {0}: pending.file.name
 #: src/pages/Shell.tsx
@@ -9601,6 +9751,10 @@ msgstr "Обновление не выполнено"
 msgid "Update finished with errors"
 msgstr "Обновление завершено с ошибками"
 
+#: src/components/SoftwareUpdateSection.tsx
+msgid "Update paused because a bot is still working. Try again."
+msgstr "Обновление приостановлено: бот ещё работает. Попробуйте снова."
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Update progress"
 msgstr "Ход обновления"
@@ -9618,6 +9772,11 @@ msgstr "Обновлено минуту назад"
 #: src/pages/settings-sections.ts
 msgid "Updates"
 msgstr "Обновления"
+
+#: src/components/SoftwareUpdateSection.tsx
+#: src/pages/Shell.tsx
+msgid "Updating — your bots will continue after the update"
+msgstr "Обновление — ваши боты продолжат работу после обновления"
 
 #. placeholder {0}: update.name
 #: src/components/ComputerUpdateProgress.tsx
@@ -9654,8 +9813,13 @@ msgstr ""
 #: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/settings-sections.ts
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
 msgid "Usage"
 msgstr "Использование"
+
+#: src/pages/GroupPanel.tsx
+msgid "Usage incomplete"
+msgstr "Данные о расходе неполные"
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "Use {hostLabel}"
@@ -9751,6 +9915,10 @@ msgstr "Используйте целые КиБ."
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Use whole seconds."
 msgstr "Используйте целые секунды."
+
+#: src/pages/GroupPanel.tsx
+msgid "Used"
+msgstr "Использовано"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "User"

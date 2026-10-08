@@ -18,9 +18,13 @@ export function RuntimeSettings({
   onEffort,
   experimental,
   onExperimental,
+  setupOnly = false,
+  allowConnect = true,
 }: {
   experimental: boolean;
   onExperimental: (enabled: boolean) => void;
+  setupOnly?: boolean;
+  allowConnect?: boolean;
   kind: RuntimeKind;
   botId?: string;
   onKind: (kind: RuntimeKind) => void;
@@ -60,11 +64,13 @@ export function RuntimeSettings({
   }, [kind, botId, refresh]);
   useEffect(() => {
     if (!login) return;
+    let active = true;
     const timer = setInterval(() => {
       void rpc<{ status: string; error?: string }>("runtimes/connectStatus", {
         loginId: login.loginId,
       })
         .then((result) => {
+          if (!active) return;
           if (result.status === "ready") {
             setLogin(null);
             setRefresh((value) => value + 1);
@@ -75,12 +81,14 @@ export function RuntimeSettings({
           }
         })
         .catch(() => {
+          if (!active) return;
           setError(t("Sign-in expired. Connect Codex again."));
           setLogin(null);
         });
     }, 1_000);
     return () => {
       clearInterval(timer);
+      active = false;
       void rpc("runtimes/cancelConnect", { loginId: login.loginId }).catch(() => undefined);
     };
   }, [login]);
@@ -90,45 +98,51 @@ export function RuntimeSettings({
   const button = { borderWidth: 1, borderColor: tokens.border, borderRadius: 11, padding: 12 };
   return (
     <View style={{ gap: 8, marginTop: 16 }}>
-      <Text style={{ color: tokens.mutedForeground }}>{t("Runs on")}</Text>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t("Runs on")}
-        style={button}
-        onPress={() =>
-          presentMessageActionSheet({
-            ...sheet,
-            title: t("Runs on"),
-            actions: (Object.keys(runtimeLabels) as RuntimeKind[]).map((value) => ({
-              text: t(runtimeLabels[value]),
-              onPress: () => {
-                onKind(value);
-                const enable = value !== "pi" && !experimental;
-                if (enable) onExperimental(true);
-                setExperimentalAdjusted(enable);
-                if (!["pi", "hermes"].includes(kind) || !["pi", "hermes"].includes(value)) {
-                  onModel("");
-                  onEffort("");
-                }
-                setLogin(null);
-                setError(null);
-              },
-            })),
-          })
-        }
-      >
-        <Text style={{ color: tokens.foreground }}>{t(runtimeLabels[kind])}</Text>
-      </Pressable>
+      {!setupOnly ? (
+        <>
+          <Text style={{ color: tokens.mutedForeground }}>{t("Runs on")}</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t("Runs on")}
+            style={button}
+            onPress={() =>
+              presentMessageActionSheet({
+                ...sheet,
+                title: t("Runs on"),
+                actions: (Object.keys(runtimeLabels) as RuntimeKind[]).map((value) => ({
+                  text: t(runtimeLabels[value]),
+                  onPress: () => {
+                    onKind(value);
+                    const enable = value !== "pi" && !experimental;
+                    if (enable) onExperimental(true);
+                    setExperimentalAdjusted(enable);
+                    if (!["pi", "hermes"].includes(kind) || !["pi", "hermes"].includes(value)) {
+                      onModel("");
+                      onEffort("");
+                    }
+                    setLogin(null);
+                    setError(null);
+                  },
+                })),
+              })
+            }
+          >
+            <Text style={{ color: tokens.foreground }}>{t(runtimeLabels[kind])}</Text>
+          </Pressable>
+        </>
+      ) : null}
       {kind !== "pi" ? (
         <>
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <Text style={{ color: tokens.foreground }}>{t("Experimental")}</Text>
-            <Switch
-              accessibilityLabel={t("Experimental")}
-              value={experimental}
-              onValueChange={onExperimental}
-            />
-          </View>
+          {!setupOnly ? (
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <Text style={{ color: tokens.foreground }}>{t("Experimental")}</Text>
+              <Switch
+                accessibilityLabel={t("Experimental")}
+                value={experimental}
+                onValueChange={onExperimental}
+              />
+            </View>
+          ) : null}
           {experimentalAdjusted && experimental ? (
             <Text accessibilityLiveRegion="polite" style={{ color: tokens.mutedForeground }}>
               {t("Experimental turned on for this runtime")}
@@ -186,7 +200,10 @@ export function RuntimeSettings({
           <Pressable accessibilityRole="button" onPress={() => setRefresh((value) => value + 1)}>
             <Text style={{ color: tokens.foreground }}>{t("Check again")}</Text>
           </Pressable>
-          {kind === "codex-app-server" && availability?.signedIn === false ? (
+          {allowConnect &&
+          !login &&
+          kind === "codex-app-server" &&
+          availability?.signedIn === false ? (
             <Pressable
               accessibilityRole="button"
               onPress={() => {
@@ -207,7 +224,13 @@ export function RuntimeSettings({
               <Text style={{ color: tokens.foreground }}>{t("Continue with ChatGPT")}</Text>
             </Pressable>
           ) : null}
-          {kind !== "hermes" ? (
+          {setupOnly ? (
+            availability?.models.map((entry) => (
+              <Text key={entry.id} style={{ color: tokens.mutedForeground }}>
+                {entry.label}
+              </Text>
+            ))
+          ) : kind !== "hermes" ? (
             <>
               <Pressable
                 accessibilityRole="button"

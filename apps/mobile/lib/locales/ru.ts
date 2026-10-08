@@ -1,9 +1,36 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "Capability checks": "Проверки возможностей",
+  "Last 7 days": "Последние 7 дней",
+  Success: "Успех",
+  "First reply": "Первый ответ",
+  "{count} measured runs": "Измерено запусков: {count}",
+  "Last failure": "Последний сбой",
+  "No runs yet": "Пока нет запусков",
+  "Not measured": "Не измерено",
+  Declared: "Заявлено",
+  "Confirmed offline": "Подтверждено офлайн",
+  Unsupported: "Не поддерживается",
+  "Not tested": "Не проверено",
+  "Report is for another version": "Отчёт для другой версии",
+  Streaming: "Потоковый вывод",
+  "Instruction delivery": "Передача инструкций",
+  Cancellation: "Отмена",
+  "Tool authorization": "Авторизация инструментов",
+  Goal: "Цель",
+  Used: "Использовано",
+  Reserved: "Зарезервировано",
+  "Usage incomplete": "Данные о расходе неполные",
+  "Applied limits": "Действующие ограничения",
+  CPU: "Процессор",
+  Processes: "Процессы",
+  "Host account": "Учётная запись хоста",
+  "Checked {time}": "Проверено в {time}",
+  "Native runtimes": "Локальные среды выполнения",
+  "Set up on the home device": "Настройте на основном устройстве",
   "Run commands inside this bot's folder or a registered folder.":
     "Запускайте команды в папке этого бота или в зарегистрированной папке.",
   "This command was not run because its request is invalid. Check the command and folder.":
     "Команда не была выполнена из-за неверного запроса. Проверьте команду и папку.",
-
   "{runtime}'s tool list changed during startup. Check the connected tools and try again.":
     "Список инструментов {runtime} изменился при запуске. Проверьте подключённые инструменты и повторите попытку.",
   "{runtime}'s settings were not confirmed. Check this bot's settings and try again.":
@@ -1516,6 +1543,16 @@ export const RU_MESSAGES: Record<string, string> = {
   "Could not check the model. Try again.": "Не удалось проверить модель. Попробуйте ещё раз.",
   "Context limit (estimated)": "Лимит контекста (оценка)",
   "Context limit (from the provider)": "Лимит контекста (от провайдера)",
+  "Updating — your bots will continue after the update":
+    "Обновление — ваши боты продолжат работу после обновления",
+  "This run continued in a new session after a restart.":
+    "После перезапуска эта задача продолжилась в новом сеансе.",
+  "Update paused because a bot is still working. Try again.":
+    "Обновление приостановлено: бот ещё работает. Попробуйте снова.",
+  "This action may already have happened. Check its outcome before trying again.":
+    "Это действие уже могло быть выполнено. Проверьте результат, прежде чем повторять попытку.",
+  "Bot work is still paused after the update. Try again.":
+    "После обновления работа ботов всё ещё приостановлена. Попробуйте снова.",
   "This command was not run because it exceeds 64 KB. Put code in a file and run that file.":
     "Команда не выполнена, потому что её размер превышает 64 КБ. Сохраните код в файл и запустите этот файл.",
   "Use a path inside this bot's folder or a registered folder.":

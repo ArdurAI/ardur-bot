@@ -94,6 +94,7 @@ import {
   provisionComputer,
   pullOllamaModel,
   queueComputerUpdate,
+  registeredRuntimeCapabilityReport,
   releaseComputerExecutionLease,
   replaceComputer,
   requestedBotPin,
@@ -263,7 +264,12 @@ import {
 import { createContextService } from "./context.js";
 import type { RouterContext } from "./customization-routes.js";
 import { createCustomizationRoutes } from "./customization-routes.js";
-import { dashboardNow, routineOverview, usageSummary } from "./dashboard.js";
+import {
+  dashboardNow,
+  routineOverview,
+  runtimeReliabilitySummary,
+  usageSummary,
+} from "./dashboard.js";
 import {
   getModelDestinations,
   setModelDestinations,
@@ -326,6 +332,7 @@ import {
   startOnboarding,
 } from "./onboarding.js";
 import { getProtectedLocations, patchProtectedLocations } from "./protected-locations.js";
+import type { RemoteDevicesDeps } from "./remote-devices.js";
 import { createRemoteDevices } from "./remote-devices.js";
 import { routineHistory } from "./routine-history.js";
 import { listSpaceRuns } from "./runs.js";
@@ -547,6 +554,8 @@ function mcpAssignmentDto(row: {
 }
 
 export interface RouterDeps {
+  listenerState?: RemoteDevicesDeps["listenerState"];
+  trustedDesktopHints?: RemoteDevicesDeps["trustedDesktopHints"];
   runtime?: AgentRuntime;
   resolveComparisonPin?: DelegationResolver;
   hostBridge?: HostBridge;
@@ -651,7 +660,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     origin?: string;
   }>();
   const channelPairing = createChannelPairing(deps);
-  const remoteDevices = createRemoteDevices({ ...deps, publicUrl: deps.env.webOrigin });
+  const remoteDevices = createRemoteDevices(deps);
   const account = createAccountService({ ...deps, remoteDevices });
   const repos = createRepos(deps.prisma, {
     sandboxProvider: deps.env.sandboxProvider,
@@ -1159,6 +1168,12 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       }),
     },
     runtimes: {
+      reliability: authed.runtimes.reliability.handler(({ context }) =>
+        runtimeReliabilitySummary(deps.prisma, context.actor),
+      ),
+      capabilities: authed.runtimes.capabilities.handler(({ input }) =>
+        registeredRuntimeCapabilityReport(input.runtimeKind),
+      ),
       availability: authed.runtimes.availability.handler(async ({ context, input }) => {
         if (input.runtimeKind === "hermes") {
           const bot = input.botId ? await repos.getBot(context.actor, input.botId) : null;
@@ -2643,7 +2658,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         }
       }),
       status: authed.computer.status.handler(({ context, input }) =>
-        computerStatus(deps, context.actor, input.botId),
+        computerStatus(deps, context.actor, input.botId, input.includeLimits),
       ),
       boot: authed.computer.boot.handler(async ({ context, input }) => {
         const bot = await repos.getBot(context.actor, input.botId);
@@ -6793,6 +6808,7 @@ async function computerStatus(
   deps: RouterDeps,
   actor: Actor,
   botId: string,
+  includeLimits = false,
 ): Promise<ComputerStatus> {
   const repos = createRepos(deps.prisma, { sandboxProvider: deps.env.sandboxProvider });
   let bot = await repos.getBot(actor, botId);
@@ -6807,7 +6823,27 @@ async function computerStatus(
     }),
     bot.computer ? deploymentHostLabel(deps.prisma) : Promise.resolve(undefined),
   ]);
-  return toComputerStatus(botId, bot.computer, busyBotName, hostLabel);
+  const observedComputer = bot.computer;
+  const appliedLimits =
+    includeLimits && observedComputer?.providerRef && observedComputer.state === "running"
+      ? await deps.sandbox
+          .appliedLimits?.(toComputerRef(observedComputer), {
+            ...computerContext(actor, botId, "computer.limits"),
+            signal: AbortSignal.timeout(2000),
+          })
+          .catch(() => null)
+      : null;
+  // Do not attach an observation to a replacement computer or a changed generation.
+  if (appliedLimits && observedComputer) {
+    bot = await repos.getBot(actor, botId);
+    if (
+      bot.computer?.id !== observedComputer.id ||
+      bot.computer.screenGeneration !== observedComputer.screenGeneration ||
+      bot.computer.providerRef !== observedComputer.providerRef
+    )
+      return toComputerStatus(botId, bot.computer, busyBotName, hostLabel);
+  }
+  return toComputerStatus(botId, bot.computer, busyBotName, hostLabel, appliedLimits);
 }
 
 async function runComputerReplace(

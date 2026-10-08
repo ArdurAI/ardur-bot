@@ -1,6 +1,6 @@
 import { ChatMarkdown } from "@ardurbot/chat-ui/web";
 import type { MessageBlock } from "@ardurbot/contracts";
-import { workRecordEntries, workRecordStatus } from "@ardurbot/core";
+import { RESTART_SESSION_MESSAGE, workRecordEntries, workRecordStatus } from "@ardurbot/core";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { Check, ChevronDown, ChevronRight, X } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -121,7 +121,9 @@ export function CompactWorkRecord({
                   dir="auto"
                 >
                   <ChatMarkdown streaming={m.evidence.outcome === "pending"}>
-                    {m.block.text}
+                    {m.block.text === RESTART_SESSION_MESSAGE
+                      ? t`This run continued in a new session after a restart.`
+                      : m.block.text}
                   </ChatMarkdown>
                 </div>
               );

@@ -43,6 +43,7 @@ import { availableProviderModels, unavailableSubscriptionModel } from "../lib/mo
 import { rpc } from "../lib/rpc";
 import { thinkingLevelOptions } from "../lib/thinking-level-options";
 import { useModelOAuthSignIn } from "../lib/use-model-oauth-signin";
+import { NativeRuntimeSettings } from "./settings/NativeRuntimeSettings";
 
 export function ModelSettingsOverlay({
   onClose,
@@ -451,6 +452,8 @@ export function ModelSettingsOverlay({
         </div>
       </div>
 
+      {me ? <NativeRuntimeSettings canConnect={me.isDeploymentOwner === true} /> : null}
+
       <div className="flex min-w-0 flex-col gap-6 px-6 py-6 sm:px-8 @min-[44rem]:flex-row">
         <div className="flex min-w-0 shrink-0 flex-col @min-[44rem]:w-60">
           <div className="mb-3 text-[13.5px] text-muted-foreground">
@@ -691,10 +694,7 @@ export function ModelSettingsOverlay({
               {!isOpenAiCompatible && selected.billing ? (
                 <p className="mt-2 text-[13px] leading-[1.5] text-muted-foreground">
                   {provider === "anthropic" ? (
-                    <Trans>
-                      To use your Claude subscription, choose Runs on → Claude Code in a bot's
-                      settings.
-                    </Trans>
+                    <Trans>Set up on the home device</Trans>
                   ) : (
                     selected.billing
                   )}

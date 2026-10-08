@@ -726,7 +726,12 @@ describe("pauseRunForInput", () => {
       expect(tx.run.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({ status: "running", leaseFence: 3 }),
-          data: { status: "waiting_input", leaseOwner: null, leaseExpiresAt: null },
+          data: {
+            status: "waiting_input",
+            leaseOwner: null,
+            leaseExpiresAt: null,
+            turnCheckpoint: null,
+          },
         }),
       );
       expect(tx.event.create.mock.calls.map(([input]) => input.data.type)).toEqual([
@@ -879,6 +884,7 @@ describe("pauseRunForInput", () => {
           status: "waiting_input",
           leaseOwner: null,
           leaseExpiresAt: null,
+          turnCheckpoint: null,
           checkpoint: JSON.stringify({
             kind: "choice_ask_v1",
             actions: [
@@ -1165,7 +1171,7 @@ describe("answerRunInput", () => {
     expect(tx.run.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({ status: "waiting_input" }),
-        data: { status: "queued", checkpoint: null },
+        data: { status: "queued", checkpoint: null, turnCheckpoint: null },
       }),
     );
     expect(tx.message.update).toHaveBeenCalledWith({
@@ -1290,7 +1296,7 @@ describe("answerRunInput", () => {
     });
     expect(tx.run.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: { status: "queued", checkpoint: null },
+        data: { status: "queued", checkpoint: null, turnCheckpoint: null },
       }),
     );
   });
@@ -1356,7 +1362,7 @@ describe("answerRunInput", () => {
 
     expect(tx.run.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: { status: "queued", checkpoint: null },
+        data: { status: "queued", checkpoint: null, turnCheckpoint: null },
       }),
     );
     expect(tx.task.updateMany).toHaveBeenCalledWith({
@@ -1512,7 +1518,7 @@ describe("answerWaitingRunWithTextInTransaction", () => {
     });
     expect(tx.run.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: { status: "queued" },
+        data: { status: "queued", turnCheckpoint: null },
       }),
     );
   });
@@ -2370,6 +2376,22 @@ describe("claimSteering", () => {
 });
 
 describe("clearThread", () => {
+  it.each(["P2034", "P2002"])("bounds %s failures without publishing a clear", async (code) => {
+    const failure = Object.assign(new Error("transaction failed"), { code });
+    const transaction = vi.fn().mockRejectedValue(failure);
+    const fanout = new TestFanout();
+    const publish = vi.spyOn(fanout, "publish");
+    await expect(
+      clearThread(
+        { $transaction: transaction } as unknown as PrismaClient,
+        { spaceId: "workspace-1", threadId: "thread-1", botId: "bot-1" },
+        fanout,
+      ),
+    ).rejects.toBe(failure);
+    expect(transaction).toHaveBeenCalledTimes(code === "P2034" ? 3 : 1);
+    expect(publish).not.toHaveBeenCalled();
+  });
+
   it.each([false, true])(
     "releases the computer execution lease without dropping the computer (preserve history: %s)",
     async (preserveHistory) => {
@@ -2401,9 +2423,10 @@ describe("clearThread", () => {
         },
         bot: { update: vi.fn() },
       };
-      const prisma = {
-        $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
-      } as unknown as PrismaClient;
+      const transaction = vi
+        .fn(async (callback: (client: typeof tx) => unknown) => callback(tx))
+        .mockRejectedValueOnce(Object.assign(new Error("conflict"), { code: "P2034" }));
+      const prisma = { $transaction: transaction } as unknown as PrismaClient;
 
       await expect(
         clearThread(
@@ -2443,6 +2466,8 @@ describe("clearThread", () => {
       });
       expect(tx.message.deleteMany).toHaveBeenCalledTimes(preserveHistory ? 0 : 1);
       expect(tx.event.deleteMany).toHaveBeenCalledTimes(preserveHistory ? 0 : 1);
+      expect(transaction).toHaveBeenCalledTimes(2);
+      expect(publish).toHaveBeenCalledOnce();
       expect(publish).toHaveBeenCalledWith("thread:thread-1", JSON.stringify({ cursor: 0 }));
     },
   );
