@@ -163,6 +163,30 @@ function fixture(
   };
 }
 describe("Claude subprocess lifecycle", () => {
+  it("awaits saved model context before suspending without a runtime failure", async () => {
+    const f = fixture();
+    let release!: () => void;
+    const stored = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    f.request.saveCheckpoint = vi.fn(async () => {
+      await stored;
+      return true;
+    });
+    let finished = false;
+    const work = f.run().then((events) => {
+      finished = true;
+      return events;
+    });
+    await vi.waitFor(() => expect(f.request.saveCheckpoint).toHaveBeenCalledOnce());
+    expect(finished).toBe(false);
+    expect(f.request.saveCheckpoint).toHaveBeenCalledWith(
+      [expect.objectContaining({ model: "claude-opus-5" })],
+      expect.any(Array),
+    );
+    release();
+    expect(await work).not.toContainEqual({ type: "done" });
+  });
   it("redacts the positional bridge capability and bridge environment credential from stderr", async () => {
     vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", "1");
     vi.stubEnv("LOG_LEVEL", "debug");

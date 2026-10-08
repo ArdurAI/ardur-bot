@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import { request } from "node:https";
 import { beforeAll, expect, it, vi } from "vitest";
 import { generateInstanceCertificate } from "../../api/src/instance-certificate.js";
-import { pinnedPost } from "./transport.js";
+import { HOME_CHANGED, pinnedPost } from "./transport.js";
 
 vi.mock("node:https", () => ({ request: vi.fn() }));
 let raw: Buffer;
@@ -12,7 +12,11 @@ beforeAll(async () => {
   raw = new X509Certificate((await generateInstanceCertificate()).certificate).raw;
   pin = createHash("sha256").update(raw).digest("hex");
 });
-function connection(fingerprint: string) {
+function connection(
+  fingerprint: string,
+  path = "request",
+  peer: { raw?: Buffer; authorized: boolean } = { raw, authorized: false },
+) {
   const req = Object.assign(new EventEmitter(), {
     end: vi.fn(),
     destroy: vi.fn((error: Error) => {
@@ -20,9 +24,12 @@ function connection(fingerprint: string) {
       req.emit("close");
     }),
   });
-  const socket = Object.assign(new EventEmitter(), { getPeerCertificate: () => ({ raw }) });
+  const socket = Object.assign(new EventEmitter(), {
+    authorized: peer.authorized,
+    getPeerCertificate: () => ({ raw: peer.raw }),
+  });
   vi.mocked(request).mockReturnValue(req as never);
-  const result = pinnedPost("https://home.example.test/device/request", fingerprint, {
+  const result = pinnedPost(`https://home.example.test/device/${path}`, fingerprint, {
     task: "private",
   });
   req.emit("socket", socket);
@@ -47,4 +54,47 @@ it("does not send headers or body after a wrong pin", async () => {
   f.socket.emit("secureConnect");
   await rejected;
   expect(f.req.end).not.toHaveBeenCalled();
+});
+
+it.each(["nonce", "pair", "code", "claim", "request"])(
+  "rejects a system-authorized certificate with a different pin on /device/%s",
+  async (path) => {
+    const f = connection("0".repeat(64), path, { raw, authorized: true });
+    const rejected = expect(f.result).rejects.toMatchObject({
+      message: HOME_CHANGED,
+      exitCode: 2,
+    });
+    f.socket.emit("secureConnect");
+    await rejected;
+    expect(f.req.destroy).toHaveBeenCalled();
+    expect(f.req.end).not.toHaveBeenCalled();
+  },
+);
+it.each([undefined, Buffer.from("not a certificate")])(
+  "fails closed when an authorized peer provides no usable leaf certificate",
+  async (peerRaw) => {
+    const f = connection(pin, "nonce", { raw: peerRaw, authorized: true });
+    const rejected = expect(f.result).rejects.toMatchObject({ message: HOME_CHANGED, exitCode: 2 });
+    f.socket.emit("secureConnect");
+    await rejected;
+    expect(f.req.end).not.toHaveBeenCalled();
+  },
+);
+it("aborts a deadline request without sending application data", async () => {
+  const controller = new AbortController();
+  const req = Object.assign(new EventEmitter(), {
+    end: vi.fn(),
+    destroy: vi.fn((error: Error) => {
+      req.emit("error", error);
+      req.emit("close");
+    }),
+  });
+  vi.mocked(request).mockReturnValue(req as never);
+  const result = pinnedPost("https://home.example.test/device/request", pin, {}, controller.signal);
+  const rejected = expect(result).rejects.toThrow();
+  controller.abort();
+  expect(req.destroy).toHaveBeenCalledOnce();
+  await rejected;
+  expect(req.destroy).toHaveBeenCalledOnce();
+  expect(req.end).not.toHaveBeenCalled();
 });

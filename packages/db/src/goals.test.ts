@@ -68,12 +68,20 @@ describe("goal scheduling", () => {
       chatGroup: { findFirst: vi.fn(async () => group) },
       $queryRaw: vi.fn(async () => []),
       teamGoal: {
-        findFirst: vi.fn(async () => null),
+        findFirst: vi.fn().mockResolvedValueOnce(null).mockResolvedValue(goal),
         create: vi.fn(async () => goal),
       },
       task: { create: vi.fn(async () => ({ id: goal.rootTaskId })) },
-      delegationRoot: { create: vi.fn(async () => ({})) },
-      run: { create: runCreate },
+      delegationRoot: {
+        create: vi.fn(async () => ({})),
+        findFirst: vi.fn(async () => ({
+          usedTokens: 0,
+          reservedTokens: 0,
+          tokenLimit: goal.tokenLimit,
+        })),
+      },
+      usageRecord: { findFirst: vi.fn(async () => null) },
+      run: { create: runCreate, findFirst: vi.fn(async () => null) },
       thread: { update: vi.fn(async () => ({ nextEventSeq: 1 })) },
       event: { create: vi.fn(async () => ({ seq: 1 })) },
     };

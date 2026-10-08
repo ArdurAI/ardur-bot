@@ -596,6 +596,7 @@ export class HostAgent {
         | "onRuntimeInfo"
         | "acknowledgeInput"
         | "claimSteering"
+        | "saveCheckpoint"
         | "provider.open"
         | "provider.read"
         | "provider.cancel",
@@ -679,6 +680,8 @@ export class HostAgent {
       acknowledgeInput: async (input) => {
         await callback("acknowledgeInput", [input]);
       },
+      saveCheckpoint: async (state, usage) =>
+        (await callback("saveCheckpoint", [state, usage])) === true,
       claimSteering: async (seen) =>
         (await callback("claimSteering", [seen])) as Awaited<
           ReturnType<NonNullable<AgentRunRequest["claimSteering"]>>

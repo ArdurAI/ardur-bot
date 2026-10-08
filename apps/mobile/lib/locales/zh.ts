@@ -1,9 +1,36 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "Capability checks": "能力检查",
+  "Last 7 days": "过去 7 天",
+  Success: "成功率",
+  "First reply": "首次回复",
+  "{count} measured runs": "{count} 次已测量运行",
+  "Last failure": "最近失败",
+  "No runs yet": "尚无运行",
+  "Not measured": "未测量",
+  Declared: "已声明",
+  "Confirmed offline": "已离线确认",
+  Unsupported: "不支持",
+  "Not tested": "未测试",
+  "Report is for another version": "报告适用于其他版本",
+  Streaming: "流式输出",
+  "Instruction delivery": "指令传递",
+  Cancellation: "取消",
+  "Tool authorization": "工具授权",
+  Goal: "目标",
+  Used: "已使用",
+  Reserved: "已预留",
+  "Usage incomplete": "用量数据不完整",
+  "Applied limits": "已实施的限制",
+  CPU: "处理器",
+  Processes: "进程",
+  "Host account": "主机账户",
+  "Checked {time}": "检查时间：{time}",
+  "Native runtimes": "本机运行时",
+  "Set up on the home device": "在主设备上设置",
   "Run commands inside this bot's folder or a registered folder.":
     "请在此机器人的文件夹或已注册的文件夹中运行命令。",
   "This command was not run because its request is invalid. Check the command and folder.":
     "此命令因请求无效而未运行。请检查命令和文件夹。",
-
   "{runtime}'s tool list changed during startup. Check the connected tools and try again.":
     "{runtime} 的工具列表在启动期间发生了变化。请检查已连接的工具后重试。",
   "{runtime}'s settings were not confirmed. Check this bot's settings and try again.":
@@ -1454,6 +1481,14 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Could not check the model. Try again.": "无法检查模型。请重试。",
   "Context limit (estimated)": "上下文限制（估计）",
   "Context limit (from the provider)": "上下文限制（来自提供商）",
+  "Updating — your bots will continue after the update": "正在更新 — 更新后你的机器人将继续工作",
+  "This run continued in a new session after a restart.": "重启后，此任务在新会话中继续运行。",
+  "Update paused because a bot is still working. Try again.":
+    "机器人仍在工作，更新已暂停。请重试。",
+  "This action may already have happened. Check its outcome before trying again.":
+    "此操作可能已经执行。再次尝试前，请检查结果。",
+  "Bot work is still paused after the update. Try again.":
+    "更新后，机器人工作仍处于暂停状态。请重试。",
   "This command was not run because it exceeds 64 KB. Put code in a file and run that file.":
     "此命令未运行，因为它超过了 64 KB。请将代码放入文件并运行该文件。",
   "Use a path inside this bot's folder or a registered folder.":

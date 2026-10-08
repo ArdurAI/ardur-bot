@@ -8,6 +8,10 @@ export default defineConfig({
   resolve: {
     alias: [
       {
+        find: /^\.\/device-listener\.js$/,
+        replacement: path.join(root, "apps/desktop/scripts/device-listener-entry.ts"),
+      },
+      {
         find: /^\.\/desktop-guardrails\.js$/,
         replacement: path.join(root, "apps/desktop/scripts/host-guardrails-entry.ts"),
       },

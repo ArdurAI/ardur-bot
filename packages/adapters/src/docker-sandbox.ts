@@ -21,6 +21,7 @@ import {
   ComputerEngineUnavailableError,
   ComputerEngineUnavailableSchema,
   ComputerImageDownloadError,
+  currentComputerLimits,
   isComputerImageDownloadReason,
   profileCommandError,
 } from "@ardurbot/contracts";
@@ -211,6 +212,23 @@ export class DockerSandboxProvider implements SandboxProvider {
 
   private url(path: string) {
     return `${this.supervisorUrl.replace(/\/$/, "")}${path}`;
+  }
+
+  async appliedLimits(computer: ComputerRef, context: AdapterContext) {
+    const res = await fetch(this.url(`/computers/${encodeURIComponent(computer.id)}`), {
+      headers: this.headers(context, computer.botId),
+      signal: context.signal,
+    });
+    if (!res.ok) {
+      cancelResponseBody(res);
+      return null;
+    }
+    const observed = await readSandboxJson<{ running?: boolean; appliedLimits?: unknown }>(
+      res,
+      context.signal,
+      4096,
+    );
+    return observed.running ? currentComputerLimits(observed.appliedLimits) : null;
   }
 
   private headers(context: AdapterContext, botId?: string) {

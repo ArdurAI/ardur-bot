@@ -4,7 +4,10 @@ vi.mock("./context/concurrency.js", () => ({
     input.claim(prisma),
 }));
 // Ledger transactions have disposable-PostgreSQL coverage; this fixture isolates approval policy.
-vi.mock("./run-usage.js", () => ({ recordRunUsage: vi.fn(async () => null) }));
+vi.mock("./run-usage.js", () => ({
+  recordFirstReply: vi.fn(async () => undefined),
+  recordRunUsage: vi.fn(async () => null),
+}));
 
 import type {
   AdapterContext,
@@ -336,7 +339,12 @@ function fixture({
   const executor = createRunExecutor({
     evidenceRecorder,
     prisma,
-    secretStore: { load: () => "test-key", digest: testDigest },
+    secretStore: {
+      load: (value: string, id: string) =>
+        id.startsWith("turn:") ? digests.load(value, id) : "test-key",
+      digest: testDigest,
+      put: digests.put.bind(digests),
+    },
     runtime: { describe: () => ({ capabilities: { scripted: false } }), run: runtimeRun },
     connector: {
       discoverTools: async () =>

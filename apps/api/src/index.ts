@@ -13,13 +13,8 @@ const logger = createRootLogger(SERVICE_NAMES.api);
 
 try {
   const env = loadAppEnv();
-  const { app, stop, installTerminal } = await createApp({ ...env, logger });
-  const server = serve({ fetch: app.fetch, port: env.port, hostname: env.apiHost }, () => {
-    logger.info("api listening", { "http.host": env.apiHost, "http.port": env.port });
-  });
-
-  installTerminal(server);
-
+  const { app, stop, installTerminal, startDeviceListener } = await createApp({ ...env, logger });
+  const server = serve({ fetch: app.fetch, port: env.port, hostname: env.apiHost });
   // Long-lived connections (threads.subscribe SSE streams) never end on their
   // own, so server.close() alone waits forever for them. Track sockets and
   // force-close any still open after a short grace period for in-flight
@@ -30,17 +25,37 @@ try {
     socket.once("close", () => sockets.delete(socket));
   });
 
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.once("listening", () => {
+        server.removeListener("error", reject);
+        resolve();
+      });
+    });
+    await startDeviceListener();
+    logger.info("api listening", { "http.host": env.apiHost, "http.port": env.port });
+  } catch (error) {
+    for (const socket of sockets) socket.destroy();
+    if ("closeAllConnections" in server) server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await stop();
+    throw error;
+  }
+
+  installTerminal(server);
+
   let stopping = false;
   const shutdown = async () => {
     if (stopping) return;
     stopping = true;
+    await stop();
     const closed = new Promise<void>((resolve) => server.close(() => resolve()));
     const grace = setTimeout(() => {
       for (const socket of sockets) socket.destroy();
     }, 2_000);
     await closed;
     clearTimeout(grace);
-    await stop();
     await logger.flush({ timeoutMs: 2_000 });
   };
   process.once("SIGTERM", () => void shutdown());

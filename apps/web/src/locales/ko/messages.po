@@ -240,6 +240,10 @@ msgstr ""
 msgid "{count} folders"
 msgstr ""
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "{count} measured runs"
+msgstr "측정된 실행 {count}개"
+
 #: src/pages/LearningInsights.tsx
 msgid "{count} runs needed {connection}, which is not connected."
 msgstr ""
@@ -1042,6 +1046,10 @@ msgstr "모양"
 msgid "Applied"
 msgstr ""
 
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "Applied limits"
+msgstr "적용된 제한"
+
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/customize/McpConfigEditor.tsx
 msgid "Apply"
@@ -1286,9 +1294,10 @@ msgid "Automatically start when you log in to your computer."
 msgstr ""
 
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Available"
-msgstr ""
+msgstr "사용 가능"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Available after the routine is saved"
@@ -1493,6 +1502,10 @@ msgstr "연결할 Bot"
 msgid "Bot token"
 msgstr ""
 
+#: src/components/SoftwareUpdateSection.tsx
+msgid "Bot work is still paused after the update. Try again."
+msgstr "업데이트 후에도 봇 작업이 일시 중지되어 있습니다. 다시 시도하세요."
+
 #. placeholder {0}: botName ?? proposal.scope.botId
 #. placeholder {0}: botNames[rule.botId] ?? rule.botId
 #: src/components/ApprovalRulesSettings.tsx
@@ -1621,6 +1634,7 @@ msgstr "서버에 연결할 수 없습니다."
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/shell/move-to-host.tsx
+#: src/pages/shell/runtime-settings.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Cancel"
 msgstr "취소"
@@ -1645,6 +1659,10 @@ msgstr "답장 취소"
 msgid "Cancel sign-in"
 msgstr ""
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Cancellation"
+msgstr "취소"
+
 #: src/pages/LearningObservation.tsx
 msgid "Cancellations"
 msgstr ""
@@ -1660,12 +1678,17 @@ msgstr "취소됨"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "Cancelled"
 msgstr "취소됨"
 
 #: src/pages/settings-sections.ts
 msgid "Capabilities"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Capability checks"
+msgstr "기능 확인"
 
 #: src/pages/group-model-control.tsx
 msgid "Captured for this group."
@@ -1802,6 +1825,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Checked {0}"
 msgstr "확인 시간 {0}"
+
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "Checked {time}"
+msgstr "확인 시간: {time}"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Checking the download"
@@ -2041,6 +2068,10 @@ msgstr "패널 닫기"
 msgid "Close preview"
 msgstr "미리보기 닫기"
 
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Close terminal"
+msgstr "터미널 닫기"
+
 #: src/pages/SettingsOverlay.tsx
 msgid "Close user settings"
 msgstr "계정 설정 닫기"
@@ -2157,6 +2188,7 @@ msgstr "완료"
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/GroupPanel.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "Completed"
 msgstr "완료됨"
 
@@ -2291,6 +2323,10 @@ msgstr "비밀번호 확인"
 #: src/pages/DevicesSettings.tsx
 msgid "Confirm the phone fingerprint here before allowing it."
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Confirmed offline"
+msgstr "오프라인에서 확인됨"
 
 #. placeholder {0}: conflict.path
 #: src/pages/GitMemorySettings.tsx
@@ -2432,10 +2468,6 @@ msgstr "연결 중…"
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Connection"
-msgstr ""
-
-#: src/pages/shell/terminal-session.tsx
-msgid "Connection lost — reconnecting"
 msgstr ""
 
 #: src/pages/fleet/FleetSettings.tsx
@@ -3371,6 +3403,10 @@ msgstr "메시징 설정을 불러올 수 없습니다"
 msgid "Couldn't update messaging settings"
 msgstr "메시징 설정을 업데이트할 수 없습니다"
 
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "CPU"
+msgstr "CPU"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "CPU limit"
 msgstr ""
@@ -3548,6 +3584,10 @@ msgstr ""
 #: src/pages/RoutineSchedule.tsx
 msgid "days"
 msgstr "일"
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Declared"
+msgstr "선언됨"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Decline"
@@ -3997,6 +4037,10 @@ msgstr "예: Hivenet Agent, Presales, 근무표 봇"
 msgid "Earlier message"
 msgstr "이전 메시지"
 
+#: src/pages/shell/terminal-session.tsx
+msgid "Earlier output is unavailable"
+msgstr "이전 출력을 사용할 수 없습니다"
+
 #: src/components/Context.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/fleet/FleetSettings.tsx
@@ -4044,10 +4088,15 @@ msgstr "이메일"
 msgid "Enable"
 msgstr ""
 
+#: src/pages/DevicesSettings.tsx
+msgid "Enable ARDURBOT_DEVICE_LISTENER_ENABLED on the server to pair a device."
+msgstr "기기를 페어링하려면 서버에서 ARDURBOT_DEVICE_LISTENER_ENABLED를 활성화하세요."
+
 #: src/lib/mcp-sign-in.ts
 msgid "Enable this server first, then sign in."
 msgstr ""
 
+#: src/pages/workspace/TerminalCollection.tsx
 #: src/pages/workspace/WorkspaceTerminal.tsx
 msgid "End this terminal?"
 msgstr "이 터미널을 종료할까요?"
@@ -4291,6 +4340,7 @@ msgstr "실패"
 #: src/lib/team-delivery-text.ts
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "Failed"
 msgstr "실패"
 
@@ -4405,6 +4455,10 @@ msgstr "MCP 연결을 마무리하는 중…"
 msgid "First bot not created"
 msgstr "첫 번째 봇이 아직 생성되지 않았습니다"
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "First reply"
+msgstr "첫 응답"
+
 #: src/components/ai/CoordinationLine.tsx
 msgid "Fix"
 msgstr "수정"
@@ -4469,6 +4523,10 @@ msgstr ""
 #: src/pages/import/LocalImportPage.tsx
 msgid "Found on this Mac"
 msgstr ""
+
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Four terminals are already open."
+msgstr "이미 터미널 네 개가 열려 있습니다."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Free"
@@ -4710,6 +4768,10 @@ msgstr "연결됨"
 msgid "Host"
 msgstr ""
 
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "Host account"
+msgstr "호스트 계정"
+
 #: src/pages/HostComputerSettings.tsx
 msgid "Host service:"
 msgstr ""
@@ -4949,6 +5011,10 @@ msgstr "인스턴스 API 키"
 msgid "Instruction"
 msgstr "실행할 내용"
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Instruction delivery"
+msgstr "지침 전달"
+
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/import/LocalImportPage.tsx
 msgid "Instructions"
@@ -5140,6 +5206,10 @@ msgstr ""
 msgid "Language"
 msgstr "언어"
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Last 7 days"
+msgstr "최근 7일"
+
 #: src/pages/LearningCurator.tsx
 msgid "Last check"
 msgstr ""
@@ -5147,6 +5217,10 @@ msgstr ""
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Last checked"
 msgstr ""
+
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Last failure"
+msgstr "최근 실패"
 
 #: src/pages/DevicesSettings.tsx
 msgid "Last present"
@@ -5568,6 +5642,7 @@ msgstr "참여 Bot ({GROUP_MEMBER_MIN}~{GROUP_MEMBER_MAX}개 선택)"
 msgid "Memories"
 msgstr ""
 
+#: src/pages/fleet/ComputerLimitsDetails.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/memory/MemoryProposals.tsx
@@ -5945,6 +6020,10 @@ msgstr "네이티브 압축"
 msgid "Native compression is not available with Hermes."
 msgstr "Hermes에서는 네이티브 압축을 사용할 수 없습니다."
 
+#: src/pages/settings/NativeRuntimeSettings.tsx
+msgid "Native runtimes"
+msgstr "네이티브 런타임"
+
 #: src/pages/shell/TopNav.tsx
 msgid "Navigation"
 msgstr ""
@@ -6038,6 +6117,10 @@ msgstr "새 스킬"
 #: src/pages/shell/dialogs.tsx
 msgid "New space"
 msgstr "새 스페이스"
+
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "New terminal"
+msgstr "새 터미널"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "New work item"
@@ -6216,6 +6299,7 @@ msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineHistory.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "No runs yet"
 msgstr "아직 실행 기록이 없습니다"
 
@@ -6325,6 +6409,10 @@ msgstr "플러그인 카탈로그에 없음"
 msgid "Not initialized"
 msgstr "초기화되지 않음"
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Not measured"
+msgstr "측정되지 않음"
+
 #: src/pages/LearningInbox.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Not now"
@@ -6340,9 +6428,10 @@ msgid "Not recorded"
 msgstr ""
 
 #: src/pages/ComparePanel.tsx
+#: src/pages/fleet/ComputerLimitsDetails.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Not reported"
-msgstr ""
+msgstr "보고되지 않음"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Not requested"
@@ -6359,6 +6448,10 @@ msgstr "봉인되지 않음"
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Not tested"
+msgstr "테스트되지 않음"
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Not used"
@@ -6546,6 +6639,10 @@ msgstr "전체 창으로 열기"
 #: src/pages/customize/SkillsPage.tsx
 msgid "Open learning inbox"
 msgstr ""
+
+#: src/pages/shell/terminal-session.tsx
+msgid "Open link"
+msgstr "링크 열기"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open links in built-in browser"
@@ -6806,10 +6903,6 @@ msgstr ""
 msgid "Personal credential"
 msgstr "내 인증 정보"
 
-#: src/pages/DevicesSettings.tsx
-msgid "Phone pairing needs a home run by this app. Set up This computer to use it."
-msgstr ""
-
 #: src/pages/LearningObservation.tsx
 msgid "pin"
 msgstr ""
@@ -6951,6 +7044,10 @@ msgstr ""
 #: src/pages/shell/dialogs.tsx
 msgid "Private workspace with its own bots and groups."
 msgstr ""
+
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "Processes"
+msgstr "프로세스"
 
 #: src/pages/account/AccountProfile.tsx
 #: src/pages/memory/MemoryDocuments.tsx
@@ -7169,6 +7266,10 @@ msgstr ""
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Reconnecting"
 msgstr "다시 연결 중"
+
+#: src/pages/shell/terminal-session.tsx
+msgid "Reconnecting terminal"
+msgstr "터미널에 다시 연결 중"
 
 #: src/pages/dashboard/GovernancePanel.tsx
 msgid "Record evidence of bot decisions"
@@ -7448,6 +7549,10 @@ msgstr ""
 msgid "Report an issue"
 msgstr ""
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Report is for another version"
+msgstr "다른 버전의 보고서입니다"
+
 #: src/pages/TeamBoard.tsx
 msgid "Reported met"
 msgstr ""
@@ -7524,6 +7629,10 @@ msgstr ""
 #: src/pages/CompareStart.tsx
 msgid "Reserve a merge run"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Reserved"
+msgstr "예약됨"
 
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -8289,6 +8398,11 @@ msgstr ""
 msgid "Set up memory search"
 msgstr ""
 
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/settings/NativeRuntimeSettings.tsx
+msgid "Set up on the home device"
+msgstr "주 기기에서 설정"
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Set up servers"
 msgstr ""
@@ -8789,6 +8903,10 @@ msgstr "암호화해 저장"
 msgid "Stored securely. Never shown here."
 msgstr "안전하게 저장됩니다. 이 화면에 표시되지 않습니다."
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Streaming"
+msgstr "스트리밍"
+
 #: src/pages/Shell.tsx
 msgid "subagent"
 msgstr "보조 에이전트"
@@ -8797,6 +8915,10 @@ msgstr "보조 에이전트"
 #: src/pages/Onboarding.tsx
 msgid "Submit"
 msgstr "확인"
+
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Success"
+msgstr "성공률"
 
 #: src/pages/LearningInbox.tsx
 msgid "Suggested content"
@@ -8908,13 +9030,22 @@ msgstr ""
 #: src/pages/ide/IdePage.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
+#: src/pages/workspace/TerminalCollection.tsx
 #: src/pages/workspace/view-registry.ts
 msgid "Terminal"
 msgstr "터미널"
 
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Terminal {number}"
+msgstr "터미널 {number}"
+
 #: src/pages/shell/computer-terminal.tsx
 msgid "Terminal could not open; try again"
 msgstr ""
+
+#: src/pages/shell/terminal-session.tsx
+msgid "Terminal expired"
+msgstr "터미널 세션이 만료되었습니다"
 
 #: src/pages/workspace/terminal-controller.ts
 msgid "Terminal is not available on this computer"
@@ -9060,8 +9191,13 @@ msgstr "생각 깊이"
 #: src/pages/ide/terminal.tsx
 #: src/pages/workspace/dialogs.tsx
 #: src/pages/workspace/terminal-controller.ts
+#: src/pages/workspace/TerminalCollection.tsx
 msgid "This action could not finish; try again."
 msgstr ""
+
+#: src/components/AskCard.tsx
+msgid "This action may already have happened. Check its outcome before trying again."
+msgstr "이 작업이 이미 실행되었을 수 있습니다. 다시 시도하기 전에 결과를 확인하세요."
 
 #: src/pages/LearningInbox.tsx
 msgid "This board item changed after it was filed, so it was left open for review on the Board."
@@ -9100,6 +9236,10 @@ msgstr ""
 #: src/pages/LearningInbox.tsx
 msgid "This board item was completed."
 msgstr ""
+
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "This bot"
+msgstr "이 봇"
 
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
@@ -9251,6 +9391,10 @@ msgstr "컴퓨터의 파일이 교체됩니다. 계속할까요?"
 msgid "This reset link is invalid or expired"
 msgstr "이 재설정 링크는 유효하지 않거나 만료되었습니다"
 
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "This run continued in a new session after a restart."
+msgstr "재시작 후 새 세션에서 이 실행을 계속했습니다."
+
 #: src/lib/failure-category-copy.ts
 msgid "This runtime"
 msgstr "이 런타임"
@@ -9354,10 +9498,6 @@ msgstr "역할"
 msgid "to {peer}"
 msgstr "{peer}에게"
 
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings."
-msgstr ""
-
 #: src/pages/shell/bot-picker.tsx
 msgid "To:"
 msgstr "받는 사람:"
@@ -9407,6 +9547,10 @@ msgstr "{name}님에게 중단을 요청했습니다"
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Tool access mode"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Tool authorization"
+msgstr "도구 권한 확인"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Tool sources"
@@ -9518,7 +9662,9 @@ msgid "Uninstall"
 msgstr ""
 
 #: src/components/ai/CompactWorkRecord.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/LearningCurator.tsx
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Unknown"
 msgstr "알 수 없음"
@@ -9545,6 +9691,10 @@ msgstr "고정 해제"
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Unsaved changes"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Unsupported"
+msgstr "지원되지 않음"
 
 #. placeholder {0}: pending.file.name
 #: src/pages/Shell.tsx
@@ -9601,6 +9751,10 @@ msgstr "업데이트 실패"
 msgid "Update finished with errors"
 msgstr "오류와 함께 업데이트가 완료되었습니다"
 
+#: src/components/SoftwareUpdateSection.tsx
+msgid "Update paused because a bot is still working. Try again."
+msgstr "봇이 아직 작업 중이어서 업데이트가 일시 중지되었습니다. 다시 시도하세요."
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Update progress"
 msgstr ""
@@ -9618,6 +9772,11 @@ msgstr "1분 전에 업데이트됨"
 #: src/pages/settings-sections.ts
 msgid "Updates"
 msgstr "업데이트"
+
+#: src/components/SoftwareUpdateSection.tsx
+#: src/pages/Shell.tsx
+msgid "Updating — your bots will continue after the update"
+msgstr "업데이트 중 — 업데이트 후 봇이 작업을 계속합니다"
 
 #. placeholder {0}: update.name
 #: src/components/ComputerUpdateProgress.tsx
@@ -9654,8 +9813,13 @@ msgstr ""
 #: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/settings-sections.ts
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
 msgid "Usage"
 msgstr "사용량"
+
+#: src/pages/GroupPanel.tsx
+msgid "Usage incomplete"
+msgstr "사용량 정보 불완전"
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "Use {hostLabel}"
@@ -9751,6 +9915,10 @@ msgstr "정수 KiB를 사용하세요."
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Use whole seconds."
 msgstr "정수 초를 사용하세요."
+
+#: src/pages/GroupPanel.tsx
+msgid "Used"
+msgstr "사용됨"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "User"

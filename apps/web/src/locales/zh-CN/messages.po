@@ -240,6 +240,10 @@ msgstr "{connection} 拒绝了登录；有 {count} 次运行无法使用它。"
 msgid "{count} folders"
 msgstr ""
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "{count} measured runs"
+msgstr "{count} 次已测量运行"
+
 #: src/pages/LearningInsights.tsx
 msgid "{count} runs needed {connection}, which is not connected."
 msgstr "有 {count} 次运行需要 {connection}，但它尚未连接。"
@@ -1042,6 +1046,10 @@ msgstr "外观"
 msgid "Applied"
 msgstr ""
 
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "Applied limits"
+msgstr "已实施的限制"
+
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/customize/McpConfigEditor.tsx
 msgid "Apply"
@@ -1286,9 +1294,10 @@ msgid "Automatically start when you log in to your computer."
 msgstr ""
 
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Available"
-msgstr ""
+msgstr "可用"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Available after the routine is saved"
@@ -1493,6 +1502,10 @@ msgstr "要关联的 Bot"
 msgid "Bot token"
 msgstr ""
 
+#: src/components/SoftwareUpdateSection.tsx
+msgid "Bot work is still paused after the update. Try again."
+msgstr "更新后，机器人工作仍处于暂停状态。请重试。"
+
 #. placeholder {0}: botName ?? proposal.scope.botId
 #. placeholder {0}: botNames[rule.botId] ?? rule.botId
 #: src/components/ApprovalRulesSettings.tsx
@@ -1621,6 +1634,7 @@ msgstr "无法连接服务器。"
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/shell/move-to-host.tsx
+#: src/pages/shell/runtime-settings.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Cancel"
 msgstr "取消"
@@ -1645,6 +1659,10 @@ msgstr "取消回复"
 msgid "Cancel sign-in"
 msgstr "取消登录"
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Cancellation"
+msgstr "取消"
+
 #: src/pages/LearningObservation.tsx
 msgid "Cancellations"
 msgstr ""
@@ -1660,12 +1678,17 @@ msgstr "已取消"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "Cancelled"
 msgstr "已取消"
 
 #: src/pages/settings-sections.ts
 msgid "Capabilities"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Capability checks"
+msgstr "能力检查"
 
 #: src/pages/group-model-control.tsx
 msgid "Captured for this group."
@@ -1802,6 +1825,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Checked {0}"
 msgstr "检查于 {0}"
+
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "Checked {time}"
+msgstr "检查时间：{time}"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Checking the download"
@@ -2041,6 +2068,10 @@ msgstr "关闭面板"
 msgid "Close preview"
 msgstr "关闭预览"
 
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Close terminal"
+msgstr "关闭终端"
+
 #: src/pages/SettingsOverlay.tsx
 msgid "Close user settings"
 msgstr "关闭用户设置"
@@ -2157,6 +2188,7 @@ msgstr "完成"
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/GroupPanel.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "Completed"
 msgstr "已完成"
 
@@ -2291,6 +2323,10 @@ msgstr "确认密码"
 #: src/pages/DevicesSettings.tsx
 msgid "Confirm the phone fingerprint here before allowing it."
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Confirmed offline"
+msgstr "已离线确认"
 
 #. placeholder {0}: conflict.path
 #: src/pages/GitMemorySettings.tsx
@@ -2432,10 +2468,6 @@ msgstr "正在连接…"
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Connection"
-msgstr ""
-
-#: src/pages/shell/terminal-session.tsx
-msgid "Connection lost — reconnecting"
 msgstr ""
 
 #: src/pages/fleet/FleetSettings.tsx
@@ -3371,6 +3403,10 @@ msgstr "无法加载消息设置"
 msgid "Couldn't update messaging settings"
 msgstr "无法更新消息设置"
 
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "CPU"
+msgstr "处理器"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "CPU limit"
 msgstr ""
@@ -3548,6 +3584,10 @@ msgstr "日常工作"
 #: src/pages/RoutineSchedule.tsx
 msgid "days"
 msgstr "天"
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Declared"
+msgstr "已声明"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Decline"
@@ -3997,6 +4037,10 @@ msgstr "例如 Hivenet Agent、Presales、工时表机器人"
 msgid "Earlier message"
 msgstr "更早的消息"
 
+#: src/pages/shell/terminal-session.tsx
+msgid "Earlier output is unavailable"
+msgstr "较早的输出不可用"
+
 #: src/components/Context.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/fleet/FleetSettings.tsx
@@ -4044,10 +4088,15 @@ msgstr "邮箱"
 msgid "Enable"
 msgstr "启用"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Enable ARDURBOT_DEVICE_LISTENER_ENABLED on the server to pair a device."
+msgstr "在服务器上启用 ARDURBOT_DEVICE_LISTENER_ENABLED 以配对设备。"
+
 #: src/lib/mcp-sign-in.ts
 msgid "Enable this server first, then sign in."
 msgstr "请先启用此服务器，然后登录。"
 
+#: src/pages/workspace/TerminalCollection.tsx
 #: src/pages/workspace/WorkspaceTerminal.tsx
 msgid "End this terminal?"
 msgstr "结束此终端？"
@@ -4291,6 +4340,7 @@ msgstr "失败"
 #: src/lib/team-delivery-text.ts
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "Failed"
 msgstr "失败"
 
@@ -4405,6 +4455,10 @@ msgstr "正在完成 MCP 连接…"
 msgid "First bot not created"
 msgstr "尚未创建第一个机器人"
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "First reply"
+msgstr "首次回复"
+
 #: src/components/ai/CoordinationLine.tsx
 msgid "Fix"
 msgstr "修复"
@@ -4469,6 +4523,10 @@ msgstr ""
 #: src/pages/import/LocalImportPage.tsx
 msgid "Found on this Mac"
 msgstr ""
+
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Four terminals are already open."
+msgstr "已打开四个终端。"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Free"
@@ -4710,6 +4768,10 @@ msgstr "已挂接"
 msgid "Host"
 msgstr ""
 
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "Host account"
+msgstr "主机账户"
+
 #: src/pages/HostComputerSettings.tsx
 msgid "Host service:"
 msgstr ""
@@ -4949,6 +5011,10 @@ msgstr "实例 API 密钥"
 msgid "Instruction"
 msgstr "指令"
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Instruction delivery"
+msgstr "指令传递"
+
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/import/LocalImportPage.tsx
 msgid "Instructions"
@@ -5140,6 +5206,10 @@ msgstr ""
 msgid "Language"
 msgstr "语言"
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Last 7 days"
+msgstr "过去 7 天"
+
 #: src/pages/LearningCurator.tsx
 msgid "Last check"
 msgstr ""
@@ -5147,6 +5217,10 @@ msgstr ""
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Last checked"
 msgstr ""
+
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Last failure"
+msgstr "最近失败"
 
 #: src/pages/DevicesSettings.tsx
 msgid "Last present"
@@ -5568,6 +5642,7 @@ msgstr "成员（选择 {GROUP_MEMBER_MIN}–{GROUP_MEMBER_MAX} 个）"
 msgid "Memories"
 msgstr ""
 
+#: src/pages/fleet/ComputerLimitsDetails.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/memory/MemoryProposals.tsx
@@ -5945,6 +6020,10 @@ msgstr "原生压缩"
 msgid "Native compression is not available with Hermes."
 msgstr "Hermes 不支持原生压缩。"
 
+#: src/pages/settings/NativeRuntimeSettings.tsx
+msgid "Native runtimes"
+msgstr "本机运行时"
+
 #: src/pages/shell/TopNav.tsx
 msgid "Navigation"
 msgstr ""
@@ -6038,6 +6117,10 @@ msgstr "新建技能"
 #: src/pages/shell/dialogs.tsx
 msgid "New space"
 msgstr "新建工作区"
+
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "New terminal"
+msgstr "新建终端"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "New work item"
@@ -6216,6 +6299,7 @@ msgstr "尚未选择复查模型。"
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineHistory.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "No runs yet"
 msgstr "还没有运行记录"
 
@@ -6325,6 +6409,10 @@ msgstr "不在插件目录中"
 msgid "Not initialized"
 msgstr "未初始化"
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Not measured"
+msgstr "未测量"
+
 #: src/pages/LearningInbox.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Not now"
@@ -6340,9 +6428,10 @@ msgid "Not recorded"
 msgstr ""
 
 #: src/pages/ComparePanel.tsx
+#: src/pages/fleet/ComputerLimitsDetails.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Not reported"
-msgstr ""
+msgstr "未报告"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Not requested"
@@ -6359,6 +6448,10 @@ msgstr "未封存"
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Not tested"
+msgstr "未测试"
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Not used"
@@ -6546,6 +6639,10 @@ msgstr "在完整窗口中打开"
 #: src/pages/customize/SkillsPage.tsx
 msgid "Open learning inbox"
 msgstr ""
+
+#: src/pages/shell/terminal-session.tsx
+msgid "Open link"
+msgstr "打开链接"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open links in built-in browser"
@@ -6806,10 +6903,6 @@ msgstr ""
 msgid "Personal credential"
 msgstr "个人凭据"
 
-#: src/pages/DevicesSettings.tsx
-msgid "Phone pairing needs a home run by this app. Set up This computer to use it."
-msgstr ""
-
 #: src/pages/LearningObservation.tsx
 msgid "pin"
 msgstr ""
@@ -6951,6 +7044,10 @@ msgstr ""
 #: src/pages/shell/dialogs.tsx
 msgid "Private workspace with its own bots and groups."
 msgstr ""
+
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "Processes"
+msgstr "进程"
 
 #: src/pages/account/AccountProfile.tsx
 #: src/pages/memory/MemoryDocuments.tsx
@@ -7169,6 +7266,10 @@ msgstr ""
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Reconnecting"
 msgstr "正在重新连接"
+
+#: src/pages/shell/terminal-session.tsx
+msgid "Reconnecting terminal"
+msgstr "正在重新连接终端"
 
 #: src/pages/dashboard/GovernancePanel.tsx
 msgid "Record evidence of bot decisions"
@@ -7448,6 +7549,10 @@ msgstr ""
 msgid "Report an issue"
 msgstr ""
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Report is for another version"
+msgstr "报告适用于其他版本"
+
 #: src/pages/TeamBoard.tsx
 msgid "Reported met"
 msgstr ""
@@ -7524,6 +7629,10 @@ msgstr "调研和写作"
 #: src/pages/CompareStart.tsx
 msgid "Reserve a merge run"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Reserved"
+msgstr "已预留"
 
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -8289,6 +8398,11 @@ msgstr ""
 msgid "Set up memory search"
 msgstr "设置记忆搜索"
 
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/settings/NativeRuntimeSettings.tsx
+msgid "Set up on the home device"
+msgstr "在主设备上设置"
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Set up servers"
 msgstr ""
@@ -8789,6 +8903,10 @@ msgstr "已加密存储"
 msgid "Stored securely. Never shown here."
 msgstr "已安全存储。不会显示在这里。"
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Streaming"
+msgstr "流式输出"
+
 #: src/pages/Shell.tsx
 msgid "subagent"
 msgstr "子 Agent"
@@ -8797,6 +8915,10 @@ msgstr "子 Agent"
 #: src/pages/Onboarding.tsx
 msgid "Submit"
 msgstr "提交"
+
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Success"
+msgstr "成功率"
 
 #: src/pages/LearningInbox.tsx
 msgid "Suggested content"
@@ -8908,13 +9030,22 @@ msgstr ""
 #: src/pages/ide/IdePage.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
+#: src/pages/workspace/TerminalCollection.tsx
 #: src/pages/workspace/view-registry.ts
 msgid "Terminal"
 msgstr "终端"
 
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Terminal {number}"
+msgstr "终端 {number}"
+
 #: src/pages/shell/computer-terminal.tsx
 msgid "Terminal could not open; try again"
 msgstr ""
+
+#: src/pages/shell/terminal-session.tsx
+msgid "Terminal expired"
+msgstr "终端会话已过期"
 
 #: src/pages/workspace/terminal-controller.ts
 msgid "Terminal is not available on this computer"
@@ -9060,8 +9191,13 @@ msgstr "思考"
 #: src/pages/ide/terminal.tsx
 #: src/pages/workspace/dialogs.tsx
 #: src/pages/workspace/terminal-controller.ts
+#: src/pages/workspace/TerminalCollection.tsx
 msgid "This action could not finish; try again."
 msgstr ""
+
+#: src/components/AskCard.tsx
+msgid "This action may already have happened. Check its outcome before trying again."
+msgstr "此操作可能已经执行。再次尝试前，请检查结果。"
 
 #: src/pages/LearningInbox.tsx
 msgid "This board item changed after it was filed, so it was left open for review on the Board."
@@ -9100,6 +9236,10 @@ msgstr "此看板事项已关闭。"
 #: src/pages/LearningInbox.tsx
 msgid "This board item was completed."
 msgstr "此看板事项已完成。"
+
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "This bot"
+msgstr "此机器人"
 
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
@@ -9251,6 +9391,10 @@ msgstr "这将替换计算机的文件。是否继续？"
 msgid "This reset link is invalid or expired"
 msgstr "此重置链接无效或已过期"
 
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "This run continued in a new session after a restart."
+msgstr "重启后，此任务在新会话中继续运行。"
+
 #: src/lib/failure-category-copy.ts
 msgid "This runtime"
 msgstr "此运行时"
@@ -9354,10 +9498,6 @@ msgstr "标题"
 msgid "to {peer}"
 msgstr "发送给 {peer}"
 
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings."
-msgstr ""
-
 #: src/pages/shell/bot-picker.tsx
 msgid "To:"
 msgstr "至:"
@@ -9407,6 +9547,10 @@ msgstr "已通知 {name} 停下"
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Tool access mode"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Tool authorization"
+msgstr "工具授权"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Tool sources"
@@ -9518,7 +9662,9 @@ msgid "Uninstall"
 msgstr ""
 
 #: src/components/ai/CompactWorkRecord.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/LearningCurator.tsx
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Unknown"
 msgstr "未知"
@@ -9545,6 +9691,10 @@ msgstr "取消置顶"
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Unsaved changes"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Unsupported"
+msgstr "不支持"
 
 #. placeholder {0}: pending.file.name
 #: src/pages/Shell.tsx
@@ -9601,6 +9751,10 @@ msgstr "更新失败"
 msgid "Update finished with errors"
 msgstr "更新完成但有错误"
 
+#: src/components/SoftwareUpdateSection.tsx
+msgid "Update paused because a bot is still working. Try again."
+msgstr "机器人仍在工作，更新已暂停。请重试。"
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Update progress"
 msgstr ""
@@ -9618,6 +9772,11 @@ msgstr "1 分钟前更新"
 #: src/pages/settings-sections.ts
 msgid "Updates"
 msgstr "更新"
+
+#: src/components/SoftwareUpdateSection.tsx
+#: src/pages/Shell.tsx
+msgid "Updating — your bots will continue after the update"
+msgstr "正在更新 — 更新后你的机器人将继续工作"
 
 #. placeholder {0}: update.name
 #: src/components/ComputerUpdateProgress.tsx
@@ -9654,8 +9813,13 @@ msgstr ""
 #: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/settings-sections.ts
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
 msgid "Usage"
 msgstr "用量"
+
+#: src/pages/GroupPanel.tsx
+msgid "Usage incomplete"
+msgstr "用量数据不完整"
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "Use {hostLabel}"
@@ -9751,6 +9915,10 @@ msgstr "请输入整数 KiB。"
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Use whole seconds."
 msgstr "请输入整数秒。"
+
+#: src/pages/GroupPanel.tsx
+msgid "Used"
+msgstr "已使用"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "User"

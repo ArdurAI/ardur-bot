@@ -63,6 +63,33 @@ test("Computers shows fleet capacity, placement and move consent", async ({ page
       bots: [],
     },
   ];
+  targets.push({
+    ...targets[0]!,
+    id: "container",
+    name: "Sandbox",
+    kind: "docker",
+    bots: [{ id: "sandbox-builder", name: "Sandbox builder" }],
+  });
+  await page.route("**/rpc/computer/status", (route) =>
+    route.fulfill({
+      json: {
+        json: {
+          botId: "sandbox-builder",
+          state: "running",
+          controlHolder: "none",
+          takeoverRequested: false,
+          isolation: "container",
+          executionBoundary: "container",
+          appliedLimits: {
+            observedAt: new Date().toISOString(),
+            cpuCores: 1.5,
+            memoryBytes: 512 * 1024 ** 2,
+            processes: 100,
+          },
+        },
+      },
+    }),
+  );
   await page.route("**/rpc/fleet/list", (route) =>
     route.fulfill({
       json: {
@@ -171,6 +198,9 @@ test("Computers shows fleet capacity, placement and move consent", async ({ page
   await expect(refusedRow).not.toContainText("Memory not reported");
   await refusedRow.getByRole("button", { name: "Test" }).click();
   await expect(refusedRow).toContainText("Engine not running");
+  await fleet.getByText("Sandbox builder", { exact: true }).click();
+  await expect(fleet.getByText("Applied limits", { exact: true })).toBeVisible();
+  await expect(fleet.getByText("512 MiB", { exact: true })).toBeVisible();
   await captureScreenshot(page, testInfo, "fleet-placement");
 
   const discoveredRow = fleet.locator('[data-fleet-target="discovered-docker"]');

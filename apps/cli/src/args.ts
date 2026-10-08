@@ -1,6 +1,15 @@
 import { CliError } from "./transport.js";
 export type Command =
   | { kind: "help" }
+  | {
+      kind: "test";
+      bot: string;
+      prompt: string;
+      expectContains: string;
+      timeoutMs: number;
+      transcript?: string;
+      json: boolean;
+    }
   | { kind: "pair"; code: string; json: boolean }
   | { kind: "bots" | "status"; json: boolean }
   | { kind: "stop"; taskId: string; json: boolean }
@@ -10,6 +19,7 @@ export const USAGE = [
   "ardur bots [--json]",
   'ardur send [<bot>] "<text>" [--wait] [--json]',
   "ardur send [<bot>] --file <path> [--wait] [--json]",
+  'ardur test bot <name-or-id> --prompt "<text>" --expect-contains "<text>" [--timeout 180s] [--transcript <file>] [--json]',
   "ardur stop <taskId> [--json]",
   "ardur status [--json]",
 ].join("\n");
@@ -19,6 +29,7 @@ const usage = () => {
 export function parseArgs(args: string[]): Command {
   if (args.length === 0 || (args.length === 1 && ["--help", "-h", "help"].includes(args[0]!)))
     return { kind: "help" };
+  if (args[0] === "test") return parseTestArgs(args.slice(1));
   const [kind, ...rest] = args;
   const positions: string[] = [];
   let json = false;
@@ -52,4 +63,48 @@ export function parseArgs(args: string[]): Command {
       };
   }
   return usage();
+}
+
+function parseTestArgs(args: string[]): Extract<Command, { kind: "test" }> {
+  const fail = (): never => {
+    throw new CliError(USAGE, 3);
+  };
+  if (args[0] !== "bot" || !args[1] || args[1].startsWith("-")) return fail();
+  const values = new Map<string, string>();
+  let json = false;
+  for (let i = 2; i < args.length; i++) {
+    const flag = args[i]!;
+    if (flag === "--json" && !json) {
+      json = true;
+      continue;
+    }
+    if (
+      !["--prompt", "--expect-contains", "--timeout", "--transcript"].includes(flag) ||
+      values.has(flag)
+    )
+      return fail();
+    const value = args[++i];
+    if (value === undefined || value.startsWith("--")) return fail();
+    values.set(flag, value);
+  }
+  const prompt = values.get("--prompt");
+  const expectContains = values.get("--expect-contains");
+  if (!prompt?.trim() || prompt.length > 32_000 || !expectContains?.length) return fail();
+  const timeout = values.get("--timeout") ?? "180s";
+  const duration = /^(\d+(?:\.\d+)?)(ms|s|m)?$/.exec(timeout);
+  if (!duration) return fail();
+  const timeoutMs =
+    Number(duration[1]) * (duration[2] === "ms" ? 1 : duration[2] === "m" ? 60_000 : 1_000);
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > 2_147_483_647)
+    return fail();
+  if (values.has("--transcript") && !values.get("--transcript")) return fail();
+  return {
+    kind: "test",
+    bot: args[1],
+    prompt,
+    expectContains,
+    timeoutMs,
+    transcript: values.get("--transcript"),
+    json,
+  };
 }
