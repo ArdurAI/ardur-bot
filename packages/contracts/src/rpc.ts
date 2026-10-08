@@ -193,7 +193,9 @@ import { ExportDownloadSchema } from "./privacy.js";
 import { FeedbackReasonSchema, MessageReactionSchema } from "./reactions.js";
 import { RoutineRunSchema, RunsListOutputSchema } from "./runs.js";
 import { HermesRuntimeConfigPreviewSchema, RuntimeConfigIssueSchema } from "./runtime-config.js";
+import { RuntimeCapabilityReportSchema } from "./runtime-evidence.js";
 import { RuntimeAvailabilitySchema, RuntimeKindSchema, RuntimePinSchema } from "./runtime-pins.js";
+import { RuntimeReliabilitySchema } from "./runtime-reliability.js";
 import { SearchQueryOutputSchema } from "./search.js";
 import { teamContract } from "./team.js";
 import {
@@ -555,6 +557,10 @@ export const appContract = {
     disconnect: oc.input(z.object({}).optional()).output(z.object({ ok: z.literal(true) })),
   },
   runtimes: {
+    reliability: oc.output(RuntimeReliabilitySchema),
+    capabilities: oc
+      .input(z.object({ runtimeKind: RuntimeKindSchema }))
+      .output(RuntimeCapabilityReportSchema),
     availability: oc
       .input(
         z.object({
@@ -748,6 +754,7 @@ export const appContract = {
           computerId: Id,
           sessionId: Id.optional(),
           workspace: z.literal("computer").optional(),
+          releaseOnDisconnect: z.boolean().optional(),
         }),
       )
       .output(z.object({ sessionId: Id, ticket: z.string(), path: z.string() })),
@@ -812,7 +819,9 @@ export const appContract = {
       .output(z.array(z.object({ name: z.string(), local: z.boolean() }))),
     configure: oc.input(ComputerConfigurationSchema).output(ComputerUpdateSchema),
 
-    status: oc.input(botId).output(ComputerStatusSchema),
+    status: oc
+      .input(botId.extend({ includeLimits: z.boolean().optional() }))
+      .output(ComputerStatusSchema),
     boot: oc.input(botId).output(ComputerStatusSchema),
     stop: oc.input(botId).output(ComputerStatusSchema),
     recover: oc.input(botId).output(ComputerUpdateSchema),

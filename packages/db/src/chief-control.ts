@@ -596,11 +596,11 @@ export async function reconcileChiefCorrection(prisma: PrismaClient, planId: str
       for (const runId of control.stoppingRunIds) {
         const run = await tx.run.findUnique({ where: { id: runId } });
         const leases = await tx.computerExecutionLease.count({
-          where: { runId, expiresAt: { gt: new Date() } },
+          where: { runId, expiresAt: { gt: now } },
         });
         if (
           leases ||
-          (!run
+          (!run || (run.status === "cancelled" && !run.cancelConfirmedAt)
             ? now.getTime() - new Date(control.uncertaintySince ?? plan.updatedAt).getTime() <
               CHIEF_RECONCILIATION_POLICY.orphanOutcomeAfterMs
             : !run.cancelConfirmedAt && !["completed", "failed"].includes(run.status))

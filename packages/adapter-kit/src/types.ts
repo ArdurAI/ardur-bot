@@ -653,6 +653,10 @@ export type AgentRuntimeEvent =
 
 export interface AgentRuntimeCapabilities {
   streaming: boolean;
+  instructions?: boolean;
+  cancellation?: boolean;
+  toolAuthorization?: boolean;
+  usage?: boolean;
   compaction: boolean;
   tools: boolean;
   scripted: boolean;

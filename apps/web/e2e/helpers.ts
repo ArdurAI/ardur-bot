@@ -153,8 +153,10 @@ export async function openNewBot(page: Page) {
 }
 
 export async function openBotSettings(page: Page) {
-  const button = page.locator("main").getByRole("button", { name: "Bot settings", exact: true });
-  if ((await button.getAttribute("aria-pressed")) !== "true") await button.click();
+  if ((await page.getByTestId("side-panel").getAttribute("data-panel")) !== "settings") {
+    await page.getByRole("button", { name: "Views", exact: true }).click();
+    await page.getByRole("menuitemcheckbox", { name: "Bot settings", exact: true }).click();
+  }
   await expect(page.getByTestId("side-panel")).toHaveAttribute("data-panel", "settings");
 }
 

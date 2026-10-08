@@ -531,11 +531,32 @@ export function GroupGoalStrip({ goal, onStop }: { goal: Goal; onStop: () => Pro
                   : t`Needs you`;
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-1 text-xs text-muted-foreground md:px-[22px]">
-      <span className="truncate">
-        <Trans>Goal</Trans>: {status} · {goal.usedTokens.toLocaleString()} /{" "}
-        {goal.tokenLimit.toLocaleString()} <Trans>tokens</Trans> ·{" "}
-        {new Date(goal.untilAt).toLocaleString()}
-      </span>
+      <details className="min-w-0 flex-1">
+        <summary className="cursor-pointer truncate">
+          <Trans>Goal</Trans>: {status} · {goal.usedTokens?.toLocaleString() ?? t`Unknown`} /{" "}
+          {goal.tokenLimit.toLocaleString()} <Trans>tokens</Trans> ·{" "}
+          {new Date(goal.untilAt).toLocaleString()}
+        </summary>
+        <dl className="grid grid-cols-2 gap-x-3 gap-y-1 py-2">
+          <dt>
+            <Trans>Used</Trans>
+          </dt>
+          <dd>{goal.usedTokens?.toLocaleString() ?? t`Unknown`}</dd>
+          <dt>
+            <Trans>Reserved</Trans>
+          </dt>
+          <dd>{goal.reservedTokens?.toLocaleString() ?? t`Unknown`}</dd>
+          <dt>
+            <Trans>Available</Trans>
+          </dt>
+          <dd>{goal.availableTokens?.toLocaleString() ?? t`Unknown`}</dd>
+        </dl>
+        {!goal.usageComplete ? (
+          <p className="pb-2">
+            <Trans>Usage incomplete</Trans>
+          </p>
+        ) : null}
+      </details>
       {goal.status === "running" ? (
         <Button
           variant="ghost"

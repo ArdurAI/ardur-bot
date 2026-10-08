@@ -7,8 +7,14 @@ export async function openWorkspaceView(page: Page, name: string) {
   const tab = pane.getByRole("tab", { name, exact: true });
   if ((await pane.getAttribute("aria-hidden")) === "true" || !(await tab.isVisible())) {
     await page.getByRole("button", { name: "Views", exact: true }).click();
-    await page.getByRole("menuitem", { name, exact: true }).click();
+    await page.getByRole("menuitemcheckbox", { name, exact: true }).click();
   } else await tab.click();
   await expect(tab).toHaveAttribute("aria-selected", "true");
   return tab;
+}
+
+/** Toggle the remembered workspace and refresh its computer on reopening. */
+export async function toggleAgentComputer(page: Page) {
+  await page.locator("[data-workspace-trigger]").click();
+  await page.locator("[data-workspace-toggle]").click();
 }

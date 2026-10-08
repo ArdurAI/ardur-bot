@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { TERMINAL_SESSION_LIMIT } from "@ardurbot/contracts";
 import { encodeTerminalFrame, TERMINAL_FRAME_BYTES, validateTerminalSize } from "@ardurbot/core";
 import type Docker from "dockerode";
 import type { Hono } from "hono";
@@ -7,6 +8,7 @@ import type { TerminalProcess } from "./terminal-process.js";
 import { assertNoDockerTerminals, openDockerTerminal } from "./terminal-process.js";
 
 type Grant = {
+  authority?: string;
   startedAt?: string;
   leaseId: string;
   fence: number;
@@ -36,9 +38,13 @@ export class TerminalRegistry {
   readonly sessions = new Map<string, Session>();
   private fences = new Map<string, number>();
   private commands = new Map<string, number>();
+  private admissions = new Map<string, Promise<unknown>>();
   constructor(private readonly now = Date.now) {}
   async command<T>(computer: string, work: () => Promise<T>): Promise<T> {
-    if ([...this.sessions.values()].some((s) => s.computer === computer))
+    if (
+      this.admissions.has(computer) ||
+      [...this.sessions.values()].some((s) => s.computer === computer)
+    )
       throw new Error("A person has control of this computer; wait until they release it.");
     this.commands.set(computer, (this.commands.get(computer) ?? 0) + 1);
     try {
@@ -48,18 +54,55 @@ export class TerminalRegistry {
     }
   }
   async open(computer: string, grant: Grant, spawn: (id: string) => Promise<TerminalProcess>) {
+    const previous = this.admissions.get(computer) ?? Promise.resolve();
+    const next = previous.catch(() => undefined).then(() => this.admit(computer, grant, spawn));
+    this.admissions.set(computer, next);
+    try {
+      return await next;
+    } finally {
+      if (this.admissions.get(computer) === next) this.admissions.delete(computer);
+    }
+  }
+  private async admit(
+    computer: string,
+    grant: Grant,
+    spawn: (id: string) => Promise<TerminalProcess>,
+  ) {
     validateTerminalSize(grant.cols, grant.rows);
     if (
       grant.shellProfileId !== "default" ||
       grant.expiresAt <= this.now() ||
       grant.expiresAt > this.now() + 24 * 60 * 60_000 ||
       !Number.isSafeInteger(grant.fence) ||
-      grant.fence <= (this.fences.get(computer) ?? -1)
+      grant.fence < (this.fences.get(computer) ?? -1)
     )
       throw new Error("Stale terminal grant.");
+    if (this.commands.get(computer)) throw new Error("Computer is busy.");
+    const previousFence = this.fences.get(computer) ?? -1;
+    if (grant.fence > previousFence) {
+      this.fences.set(computer, grant.fence);
+      await Promise.all(
+        [...this.sessions.values()]
+          .filter((s) => s.computer === computer)
+          .map((s) => this.close(s.id)),
+      );
+    }
+    const siblings = [...this.sessions.values()].filter((s) => s.computer === computer);
+    if (grant.fence === previousFence && !siblings.length) throw new Error("Stale terminal grant.");
     if (
       this.commands.get(computer) ||
-      [...this.sessions.values()].some((s) => s.computer === computer)
+      siblings.length >= TERMINAL_SESSION_LIMIT ||
+      siblings.some(
+        (s) =>
+          !grant.authority ||
+          s.closing ||
+          s.grant.fence !== grant.fence ||
+          s.grant.leaseId !== grant.leaseId ||
+          s.grant.generation !== grant.generation ||
+          s.grant.startedAt !== grant.startedAt ||
+          s.grant.workingRoot !== grant.workingRoot ||
+          s.grant.authority !== grant.authority,
+      )
     )
       throw new Error("Computer is busy.");
     const id = randomUUID();
@@ -72,6 +115,11 @@ export class TerminalRegistry {
     this.fences.set(computer, grant.fence);
     try {
       session.process = await spawn(id);
+      resolveReady();
+      if (session.closing || grant.expiresAt <= this.now()) {
+        await this.close(id);
+        throw new Error("Stale terminal grant.");
+      }
       session.iterator = session.process.stream[Symbol.asyncIterator]();
       session.process.stream.on("error", () => {
         void this.close(id).catch(() => {});
@@ -85,7 +133,10 @@ export class TerminalRegistry {
       session.timer.unref?.();
       return { id, generation: grant.generation };
     } catch (error) {
-      this.sessions.delete(id);
+      if (session.process) {
+        resolveReady();
+        await this.close(id);
+      } else this.sessions.delete(id);
       throw error;
     } finally {
       resolveReady();
@@ -97,6 +148,7 @@ export class TerminalRegistry {
       !s ||
       s.computer !== computer ||
       s.closing ||
+      s.grant.fence !== this.fences.get(computer) ||
       s.grant.expiresAt <= this.now() ||
       (generation && s.grant.generation !== generation)
     )
@@ -150,6 +202,7 @@ export class TerminalRegistry {
 
 const grantSchema = z
   .object({
+    authority: z.string().min(1).max(512).optional(),
     leaseId: z.string().uuid(),
     fence: z.number().int().nonnegative(),
     generation: z.string().max(256),
@@ -180,7 +233,11 @@ export function mountTerminalRoutes(
       );
       const action = c.req.path.split("/terminal/")[1]!;
       if (action === "open") {
-        await assertNoDockerTerminals(container);
+        await assertNoDockerTerminals(
+          container,
+          false,
+          [...registry.sessions.values()].filter((s) => s.computer === computer).map((s) => s.id),
+        );
         const grant = grantSchema.parse(await c.req.json());
         if (
           !info.State.Running ||

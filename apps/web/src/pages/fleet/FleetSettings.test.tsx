@@ -17,8 +17,11 @@ const api = vi.hoisted(() => ({
   details: vi.fn(),
   update: vi.fn(),
   remove: vi.fn(),
+  status: vi.fn(),
 }));
-vi.mock("../../lib/rpc", () => ({ rpc: { fleet: api, computer: { connect: api.connect } } }));
+vi.mock("../../lib/rpc", () => ({
+  rpc: { fleet: api, computer: { connect: api.connect, status: api.status } },
+}));
 const catalog = vi.hoisted(() => new Map<string, string>());
 vi.mock("@lingui/react/macro", () => {
   const t = (parts: TemplateStringsArray, ...values: unknown[]) => {
@@ -49,8 +52,59 @@ vi.mock("@ardurbot/ui-web", async (importOriginal) => {
 });
 
 import { Dialog, DialogContent } from "@ardurbot/ui-web";
+import { ComputerLimitsDetails } from "./ComputerLimitsDetails";
 import { discoveredFormKind, FleetSettings } from "./FleetSettings";
 import { PlacementNotice } from "./PlacementNotice";
+
+it("reveals only fresh applied limits and distinguishes host-account execution", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const element = document.createElement("div"),
+    root = createRoot(element);
+  api.status.mockResolvedValue({
+    executionBoundary: "container",
+    appliedLimits: {
+      observedAt: new Date().toISOString(),
+      cpuCores: 1.5,
+      memoryBytes: 512 * 1024 ** 2,
+      processes: 100,
+    },
+  });
+  try {
+    await act(async () =>
+      root.render(<ComputerLimitsDetails bot={{ id: "bot", name: "Builder" }} />),
+    );
+    expect(api.status).not.toHaveBeenCalled();
+    const details = element.querySelector("details")!;
+    await act(async () => {
+      details.open = true;
+      details.dispatchEvent(new Event("toggle"));
+    });
+    expect(api.status).toHaveBeenCalledWith({ botId: "bot", includeLimits: true });
+    expect(element.textContent).toContain("Applied limits");
+    expect(element.textContent).toContain("512 MiB");
+    expect(element.textContent).toContain("Checked");
+    api.status.mockResolvedValue({
+      executionBoundary: "container",
+      appliedLimits: {
+        observedAt: "2020-01-01T00:00:00Z",
+        cpuCores: 20,
+        memoryBytes: null,
+        processes: null,
+      },
+    });
+    await act(async () => root.render(<ComputerLimitsDetails bot={{ id: "old", name: "Old" }} />));
+    expect(element.textContent).toContain("Not reported");
+    expect(element.textContent).not.toContain("20");
+    api.status.mockResolvedValue({ executionBoundary: "host-account", appliedLimits: null });
+    await act(async () =>
+      root.render(<ComputerLimitsDetails bot={{ id: "host", name: "Host" }} />),
+    );
+    expect(element.textContent).toContain("Host account");
+    expect(element.textContent).not.toContain("Applied limits");
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
 
 afterEach(() => {
   catalog.clear();

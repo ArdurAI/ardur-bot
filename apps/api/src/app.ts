@@ -38,6 +38,7 @@ import {
   EmailEmulator,
   EncryptedSecretStore,
   ExpoPushProvider,
+  expireComputerControl,
   FleetCatalog,
   GraphileJobPublisher,
   InMemoryJobQueue,
@@ -569,6 +570,19 @@ export async function createApp(
     prisma,
     sandbox,
     trustedOrigin: (origin) => isTrustedOrigin(origin, env),
+    disconnected: async (grant) => {
+      await expireComputerControl(
+        { prisma, sandbox, jobs, events },
+        grant.computerId,
+        grant.context.leaseId,
+        new Date(),
+        {
+          fence: grant.context.fence,
+          providerRef: grant.context.generation,
+          screenGeneration: grant.computerGeneration,
+        },
+      );
+    },
   });
   const router = createRouter({
     runtime,

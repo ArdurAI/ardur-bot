@@ -432,7 +432,7 @@ import {
   secretPausedToolResult,
   tryCompleteConnectionWithCode,
 } from "./run-secret.js";
-import { brokerRunAllowance, recordRunUsage } from "./run-usage.js";
+import { brokerRunAllowance, recordFirstReply, recordRunUsage } from "./run-usage.js";
 import { runtimeComputerLocation } from "./runtime-computer-location.js";
 import type { DetachedRuntime, RuntimeRegistry } from "./runtime-registry.js";
 import { createRuntimeRegistry, detachedRuntimeRequest } from "./runtime-registry.js";
@@ -3113,6 +3113,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         };
         let pendingProgress = "";
         let tracedText = false;
+        let firstReplyObserved = false;
         let tracedSafe = false;
         let tracedRuntime = false;
         let lastProgressAt = 0;
@@ -6904,6 +6905,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
             }
             if (event.type === "text") {
               if (publishedChiefResult) continue;
+              if (!firstReplyObserved && event.text.trim()) {
+                await recordFirstReply(
+                  deps.prisma,
+                  { id: runId, spaceId: run.spaceId, userId: run.userId },
+                  { leaseOwner: workerId, leaseFence: fence },
+                  event.text,
+                );
+                firstReplyObserved = true;
+              }
               if (event.text && !tracedText) {
                 tracedText = true;
                 tracePoint(runId, "runtime.text", { attempt: fence });

@@ -1,7 +1,7 @@
 import type { Bot, Routine } from "@ardurbot/contracts";
 import { expect, type Page, test } from "@playwright/test";
 import { activeBotId, captureScreenshot, completeOnboarding, rpc, signup } from "./helpers";
-import { openWorkspaceView } from "./workspace-view";
+import { openWorkspaceView, toggleAgentComputer } from "./workspace-view";
 
 async function addScheduleTrigger(page: Page, freq: string) {
   await page.getByRole("button", { name: "Add trigger" }).click();
@@ -23,7 +23,7 @@ test("routine active switch keeps its thumb inside the track", async ({ page }, 
   const stamp = Date.now();
   await signup(page, `routine-toggle-${stamp}@example.test`, "password12", "Routine Toggle");
   await completeOnboarding(page);
-  await page.getByTitle("Agent computer").click();
+  await toggleAgentComputer(page);
   await openWorkspaceView(page, "Routines");
   await page.getByRole("button", { name: "Create Routine" }).click();
 
@@ -82,7 +82,7 @@ test("routine editing updates in place, preserves timezone, and deletion persist
   expect(created.nextRunAt).not.toBeNull();
   expect(localSchedule(created.nextRunAt!, created.timezone)).toMatchObject({ hour: 9, minute: 0 });
   await page.reload();
-  await page.getByTitle("Agent computer").click();
+  await toggleAgentComputer(page);
   await openWorkspaceView(page, "Routines");
 
   await page.getByRole("button", { name: /Tokyo check-in/ }).click();
@@ -127,7 +127,7 @@ test("routine editing updates in place, preserves timezone, and deletion persist
   expect(await rpc<Routine[]>(page, "routines/list", { botId })).toEqual([]);
 
   await page.reload();
-  await page.getByTitle("Agent computer").click();
+  await toggleAgentComputer(page);
   await openWorkspaceView(page, "Routines");
   await expect(updatedButton).toHaveCount(0);
 });
@@ -138,7 +138,7 @@ test("invalid advanced cron is rejected without creating a routine", async ({ pa
   await completeOnboarding(page);
   const botId = activeBotId(page);
 
-  await page.getByTitle("Agent computer").click();
+  await toggleAgentComputer(page);
   await openWorkspaceView(page, "Routines");
   await page.getByRole("button", { name: "Create Routine" }).click();
   await page.locator("label:has-text('Name') input").fill("Broken schedule");
@@ -160,7 +160,7 @@ test("a successful routine create is not reported as failed when refresh fails",
   await completeOnboarding(page);
   const botId = activeBotId(page);
 
-  await page.getByTitle("Agent computer").click();
+  await toggleAgentComputer(page);
   await openWorkspaceView(page, "Routines");
   await page.getByRole("button", { name: "Create Routine" }).click();
   await page.locator("label:has-text('Name') input").fill("Persisted routine");
@@ -227,7 +227,7 @@ test("switching bots while a routine save is pending does not reopen stale state
   ]);
   await page.reload();
 
-  await page.getByTitle("Agent computer").click();
+  await toggleAgentComputer(page);
   await openWorkspaceView(page, "Routines");
   await page.getByRole("button", { name: /First routine/ }).click();
   await page.locator("label:has-text('Name') input").fill("First routine updated");
@@ -268,7 +268,7 @@ test("switching bots while a routine save is pending does not reopen stale state
   await expect(page.getByTestId("side-panel")).toHaveAttribute("data-panel", "closed");
   await expect(page.getByRole("alert")).toHaveCount(0);
 
-  await page.getByTitle("Agent computer").click();
+  await toggleAgentComputer(page);
   await openWorkspaceView(page, "Routines");
   await expect(page.getByRole("button", { name: /Second routine/ })).toHaveCount(1);
   await expect(page.getByRole("button", { name: /First routine/ })).toHaveCount(0);
