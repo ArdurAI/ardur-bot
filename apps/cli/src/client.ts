@@ -65,10 +65,16 @@ export async function pairDevice(code: string, post: Transport = pinnedPost): Pr
     throw new CliError("Pairing could not finish; try again at home.");
   return { ...home, grantId: result.grantId, spaceId: result.spaceId, privateKey: keys.privateKey };
 }
-export function createClient(home: PairedHome, post: Transport = pinnedPost) {
+export function createClient(home: PairedHome, post: Transport = pinnedPost, signal?: AbortSignal) {
+  const requestPost: Transport = signal
+    ? (url, pin, body) => {
+        if (signal.aborted) throw new CliError("Waiting stopped.");
+        return post(url, pin, body, signal);
+      }
+    : post;
   return {
     async request<T>(operation: string, body: unknown = {}): Promise<T> {
-      const identity = await hello(home, post, home.grantId);
+      const identity = await hello(home, requestPost, home.grantId);
       if (
         typeof identity.nonce !== "string" ||
         identity.nonce.length < 32 ||
@@ -79,7 +85,7 @@ export function createClient(home: PairedHome, post: Transport = pinnedPost) {
       )
         throw new CliError("Home returned an expired request; try again.");
       const proof = signRequest(home, identity.nonce, identity.timestamp!, operation, body);
-      return (await post(`${home.url}/device/request`, home.certificateFingerprint, {
+      return (await requestPost(`${home.url}/device/request`, home.certificateFingerprint, {
         operation,
         body,
         proof,
