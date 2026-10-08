@@ -394,6 +394,7 @@ export const HostFrameSchema = /* @__PURE__ */ (() =>
         "onRuntimeInfo",
         "acknowledgeInput",
         "claimSteering",
+        "saveCheckpoint",
         "provider.open",
         "provider.read",
         "provider.cancel",

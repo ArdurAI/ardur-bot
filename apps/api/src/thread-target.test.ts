@@ -1471,7 +1471,7 @@ describe("sendThreadMessage", () => {
     expect(tx.run.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({ status: "waiting_input" }),
-        data: { status: "queued" },
+        data: { status: "queued", turnCheckpoint: null },
       }),
     );
     expect(tx.steeringMessage.create).not.toHaveBeenCalled();

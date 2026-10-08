@@ -49,13 +49,13 @@ try {
   const shutdown = async () => {
     if (stopping) return;
     stopping = true;
+    await stop();
     const closed = new Promise<void>((resolve) => server.close(() => resolve()));
     const grace = setTimeout(() => {
       for (const socket of sockets) socket.destroy();
     }, 2_000);
     await closed;
     clearTimeout(grace);
-    await stop();
     await logger.flush({ timeoutMs: 2_000 });
   };
   process.once("SIGTERM", () => void shutdown());
