@@ -17,6 +17,7 @@ postgres("signed Stage 3 device operations (PostgreSQL)", () => {
   let app: Hono;
   let grant: DeviceGrant;
   let otherDevice: DeviceGrant;
+  let unadmittedDevice: DeviceGrant;
   let otherUser: DeviceGrant;
   let otherSpace: DeviceGrant;
   const keys = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
@@ -133,6 +134,7 @@ postgres("signed Stage 3 device operations (PostgreSQL)", () => {
       });
     grant = await createGrant("device-stage3-primary");
     otherDevice = await createGrant("device-stage3-secondary");
+    unadmittedDevice = await createGrant("device-stage3-unadmitted");
     otherUser = await createGrant("device-stage3-foreign-user", "device-stage3-other-user");
     otherSpace = await createGrant(
       "device-stage3-foreign-space",
@@ -258,7 +260,7 @@ postgres("signed Stage 3 device operations (PostgreSQL)", () => {
       ["runs/list", { cursor: oldRun, limit: 2 }],
       ["messages/get", { botId, threadId }],
     ] as const;
-  it("refuses cross-user and cross-space targets on every new read without revealing existence", async () => {
+  it("refuses cross-user, cross-space and unadmitted-device targets on every new read without revealing existence", async () => {
     for (const foreign of [otherUser, otherSpace])
       for (const [operation, body] of reads()) {
         const response = await request(operation, body, foreign);
@@ -267,8 +269,8 @@ postgres("signed Stage 3 device operations (PostgreSQL)", () => {
           message: "This record is unavailable from this device.",
         });
       }
-    for (const [operation, body] of reads().slice(0, 3)) {
-      expect((await request(operation, body, otherDevice)).status).toBe(403);
+    for (const [operation, body] of reads()) {
+      expect((await request(operation, body, unadmittedDevice)).status).toBe(403);
     }
     for (const foreign of [otherUser, otherSpace, otherDevice]) {
       const page = await request("runs/list", {}, foreign);
@@ -372,7 +374,14 @@ postgres("signed Stage 3 device operations (PostgreSQL)", () => {
     await prisma.run.update({ where: { id: oldRun }, data: { status: "completed" } });
     const completed = await request("runs/get", { runId: oldRun });
     expect(await completed.json()).toMatchObject({
-      run: { status: "completed", messageId: null, failure: null },
+      run: {
+        status: "completed",
+        messageId: null,
+        failure: {
+          category: "other",
+          message: "The task finished, but its answer is unavailable. Open it at home.",
+        },
+      },
     });
     await prisma.message.createMany({
       data: Array.from({ length: 105 }, (_, seq) => ({

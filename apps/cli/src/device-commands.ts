@@ -162,6 +162,12 @@ export async function runDeviceCommand(command: Command, deps: CommandDependenci
           break;
         }
         if (run.status === "completed") {
+          if (run.failure) {
+            result.verdict = "error";
+            result.failureReason = run.failure.message;
+            exitCode = 2;
+            break;
+          }
           result.replyText = await answer(client, run);
           break;
         }
@@ -192,7 +198,7 @@ export async function runDeviceCommand(command: Command, deps: CommandDependenci
       (command.kind === "send"
         ? `Task ${result.taskId}\nRun ${result.runId}`
         : command.kind === "stop"
-          ? `Stop requested for ${result.taskId}.`
+          ? `Cancellation requested for ${result.taskId}.`
           : JSON.stringify(result.data)));
   deps.out(
     `${"json" in command && command.json ? JSON.stringify(redact(result)) : safeDiagnostic(text)}\n`,
@@ -203,7 +209,6 @@ export async function runDeviceCommand(command: Command, deps: CommandDependenci
 async function answer(client: DeviceClient, run: DeviceRunDetail): Promise<string> {
   const unavailable = () =>
     new CliError("The task finished, but its answer is unavailable. Open it at home.");
-  if (!run.messageId) throw unavailable();
   const page = DeviceMessagesGetOutputSchema.parse(
     await client.request(
       "messages/get",

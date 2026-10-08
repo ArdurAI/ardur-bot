@@ -38,7 +38,12 @@ import {
 } from "@ardurbot/db";
 import { Hono } from "hono";
 import * as z from "zod";
-import { DEVICE_RECORD_UNAVAILABLE, getDeviceRun, listDeviceRuns } from "./device-runs.js";
+import {
+  DEVICE_RECORD_UNAVAILABLE,
+  getDeviceRun,
+  listDeviceRuns,
+  requireDeviceThreadReceipt,
+} from "./device-runs.js";
 import { requestBodyLimit } from "./request-body-limit.js";
 import { acceptTeamTask } from "./team.js";
 
@@ -477,6 +482,7 @@ export function mountRemoteDevices(
           select: { id: true },
         });
         if (!thread) throw new DeviceRequestError(DEVICE_RECORD_UNAVAILABLE);
+        await requireDeviceThreadReceipt(deps.prisma, grant, body.threadId);
         // The existing read path owns bounded paging, target authorization and redaction.
         return c.json(await deps.read(grant, "threads/messages", body));
       }

@@ -391,11 +391,7 @@ it.each(newReads)("refuses removed membership for %s", async (operation, body) =
   expect((await f.call(f.signed(operation, body))).status).toBe(401);
 });
 for (const boundary of ["user", "space", "device"]) {
-  it.each(
-    boundary === "device"
-      ? newReads.filter(([operation]) => operation !== "messages/get")
-      : newReads,
-  )(`refuses cross-${boundary} access for %s`, async (operation, body) => {
+  it.each(newReads)(`refuses cross-${boundary} access for %s`, async (operation, body) => {
     const f = scopedFixture();
     if (boundary === "user") f.grant.userId = "other-user";
     if (boundary === "space") f.grant.spaceId = "other-space";
@@ -421,6 +417,34 @@ it.each(["runs/get", "tasks/get"])(
     });
   },
 );
+it("reports a completed run without a saved answer as a safe failure", async () => {
+  const f = scopedFixture();
+  f.runs[0]!.status = "completed";
+  f.tx.dispatchSummary.findFirst.mockResolvedValue({ messageId: null } as never);
+  const response = await f.call(f.signed("runs/get", { runId: "run-0" }));
+  expect(await response.json()).toMatchObject({
+    run: {
+      status: "completed",
+      messageId: null,
+      failure: {
+        category: "other",
+        message: "The task finished, but its answer is unavailable. Open it at home.",
+      },
+    },
+  });
+});
+it("refuses message reads without this device's thread receipt like unknown threads", async () => {
+  const f = scopedFixture();
+  f.receipts.length = 0;
+  for (const threadId of ["thread", "unknown"]) {
+    const response = await f.call(f.signed("messages/get", { botId: "bot", threadId }));
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      message: "This record is unavailable from this device.",
+    });
+  }
+  expect(f.read).not.toHaveBeenCalled();
+});
 it("keeps raw waiting status and cancellation request separate from confirmed stop", async () => {
   const f = scopedFixture();
   f.runs[0]!.status = "waiting_input";

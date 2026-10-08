@@ -264,7 +264,9 @@ Existing operations and their wire shapes are unchanged. These operations use th
 | `dispatch` (existing) | `{clientNonce, botId?, text, replyToTaskId?}` | Existing `DispatchReceipt` |
 | `stop` (existing) | `{taskId}` | `{cancelRequested:true}` |
 
-Message reads require exactly one of botId or groupId. Pages are bounded at 100 and retain the
+A paired device can read messages only in threads of tasks admitted to that device. A thread
+without its admission receipt gets the same refusal as an unknown thread. Thread ownership
+is checked independently. Message reads require exactly one of botId or groupId. Pages are bounded at 100 and retain the
 existing filtering, command hydration and device redaction. Around lookup retrieves a bounded
 window around the exact message, not an unbounded transcript.
 
@@ -272,6 +274,8 @@ window around the exact message, not an unbounded transcript.
 state, cancelRequested`, plus `status, cancelConfirmed, messageId, failure, createdAt,
 startedAt, completedAt`. Message id and start/completion times may be null. Failure is null
 or `{category, message}`, using the shared safe failure categories and a fixed plain sentence.
+A completed run without a saved answer carries category `other` and the fixed sentence
+“The task finished, but its answer is unavailable. Open it at home.”
 Raw run status stays separate from dispatch state. Reading a completed record does not prove
 that a final answer exists or that the owner accepted it.
 

@@ -252,7 +252,16 @@ it("resumes without dispatch or the bounded task and summary lists", async () =>
 });
 it("reports a completed run with no saved answer instead of passing", async () => {
   const f = fixture();
-  f.request.mockResolvedValue({ run: { ...f.run, messageId: null } });
+  f.request.mockResolvedValue({
+    run: {
+      ...f.run,
+      messageId: null,
+      failure: {
+        category: "other",
+        message: "The task finished, but its answer is unavailable. Open it at home.",
+      },
+    },
+  });
   expect(await runCli(["wait", "--run", "run", "--json"], f.deps)).toBe(2);
   expect(JSON.parse(vi.mocked(f.deps.out).mock.calls[0]![0])).toMatchObject({
     verdict: "error",
@@ -269,6 +278,25 @@ it.each(["waiting_input", "waiting_takeover"])(
     expect(vi.mocked(f.deps.out).mock.calls[0]![0]).toContain("needs input at home");
   },
 );
+it("stop reports cancellation requested before confirmation, never stopped", async () => {
+  const f = fixture();
+  f.run.cancelRequested = true;
+  f.run.cancelConfirmed = false;
+  f.run.status = "running";
+  f.run.state = "running";
+  const original = f.request.getMockImplementation()!;
+  f.request.mockImplementation((operation, body) =>
+    operation === "runs/get" ? Promise.resolve({ run: f.run }) : original(operation, body),
+  );
+  expect(await runCli(["stop", "task"], f.deps)).toBe(0);
+  expect(f.deps.out).toHaveBeenLastCalledWith("Cancellation requested for task.\n");
+  expect(f.deps.out).not.toHaveBeenCalledWith(expect.stringMatching(/stopped|cancelled/i));
+  expect(await runCli(["runs", "show", "run", "--json"], f.deps)).toBe(0);
+  expect(JSON.parse(vi.mocked(f.deps.out).mock.calls[1]![0])).toMatchObject({
+    verdict: "pass",
+    data: { run: { status: "running", cancelRequested: true, cancelConfirmed: false } },
+  });
+});
 it("a requested cancellation keeps waiting; only confirmation stops it", async () => {
   const f = fixture();
   f.request

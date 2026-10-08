@@ -10,6 +10,16 @@ export const DEVICE_RECORD_UNAVAILABLE = "This record is unavailable from this d
 function receiptScope(grant: DeviceGrant) {
   return { instanceId: grant.instanceId, spaceId: grant.spaceId, deviceGrantId: grant.id };
 }
+export async function requireDeviceThreadReceipt(
+  prisma: PrismaClient,
+  grant: DeviceGrant,
+  threadId: string,
+) {
+  const receipt = await prisma.dispatchReceipt.findFirst({
+    where: { ...receiptScope(grant), threadId },
+  });
+  if (!receipt) throw new DeviceRequestError(DEVICE_RECORD_UNAVAILABLE);
+}
 function runScope(grant: DeviceGrant) {
   return { spaceId: grant.spaceId, userId: grant.userId };
 }
@@ -37,7 +47,12 @@ async function detail(
       ? { category, message }
       : run.status === "cancelled"
         ? { category: "stopped" as const, message: "The bot run was cancelled." }
-        : null;
+        : run.status === "completed" && !summary?.messageId
+          ? {
+              category: "other" as const,
+              message: "The task finished, but its answer is unavailable. Open it at home.",
+            }
+          : null;
   return DeviceRunDetailSchema.parse({
     taskId: run.taskId,
     runId: run.id,
