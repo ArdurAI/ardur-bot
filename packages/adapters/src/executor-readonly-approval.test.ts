@@ -4,7 +4,10 @@ vi.mock("./context/concurrency.js", () => ({
     input.claim(prisma),
 }));
 // Ledger transactions have disposable-PostgreSQL coverage; this fixture isolates approval policy.
-vi.mock("./run-usage.js", () => ({ recordRunUsage: vi.fn(async () => null) }));
+vi.mock("./run-usage.js", () => ({
+  recordFirstReply: vi.fn(async () => undefined),
+  recordRunUsage: vi.fn(async () => null),
+}));
 
 import type {
   AdapterContext,

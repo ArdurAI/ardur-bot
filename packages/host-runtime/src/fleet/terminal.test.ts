@@ -47,6 +47,48 @@ function fixture() {
 }
 
 describe("Fleet terminal protocol", () => {
+  it("caps siblings and closes one without ending another child", async () => {
+    const f = fixture();
+    const children: ReturnType<typeof fixture>["child"][] = [];
+    f.start.mockImplementation(async () => {
+      const other = fixture();
+      children.push(other.child);
+      return {
+        child: other.child as unknown as ChildProcessWithoutNullStreams,
+        cleanup: other.cleanup,
+      };
+    });
+    try {
+      const sessions = await Promise.all(
+        Array.from({ length: 4 }, () =>
+          f.terminal.open(f.computer, { cols: 80, rows: 24, shellProfileId: "default" }, f.context),
+        ),
+      );
+      await expect(
+        f.terminal.open(f.computer, { cols: 80, rows: 24, shellProfileId: "default" }, f.context),
+      ).rejects.toThrow();
+      await f.terminal.close(sessions[1]!.id, "closed");
+      expect(children[1]!.kill).toHaveBeenCalledOnce();
+      expect(children[0]!.kill).not.toHaveBeenCalled();
+      await f.terminal.write(sessions[0]!.id, Uint8Array.of(1));
+      await expect(
+        f.terminal.open(
+          f.computer,
+          { cols: 80, rows: 24, shellProfileId: "default" },
+          { ...f.context, userId: "other" },
+        ),
+      ).rejects.toThrow();
+      await expect(
+        f.terminal.open(
+          f.computer,
+          { cols: 80, rows: 24, shellProfileId: "default" },
+          { ...f.context, generation: "other" },
+        ),
+      ).rejects.toThrow();
+    } finally {
+      await f.terminal.closeAll();
+    }
+  });
   it("numbers the prompt and subsequent binary output from one across split child chunks", async () => {
     const f = fixture();
     const session = await f.terminal.open(

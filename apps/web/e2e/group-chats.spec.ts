@@ -14,6 +14,61 @@ async function createBot(page: Page, name: string) {
   return createNamedBot(page, name);
 }
 
+test("goal budget details separate measured usage and outstanding reservations", async ({
+  page,
+}, testInfo) => {
+  await signup(page, `goal-budget-${Date.now()}@example.test`, "password12", "Goal fixture");
+  await completeOnboarding(page);
+  await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
+  const first = await createBot(page, "Budget coordinator");
+  const second = await createBot(page, "Budget worker");
+  const group = await rpc<{ id: string }>(page, "groups/create", {
+    name: "Budget room",
+    botIds: [first, second],
+  });
+  await page.route("**/rpc/bootstrap", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: { json: { ...body.json, me: { ...body.json.me, isDeploymentOwner: true } } },
+    });
+  });
+  await page.route("**/rpc/goals/get", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        json: {
+          id: "goal-budget",
+          groupId: group.id,
+          status: "stopped",
+          tokenLimit: 100,
+          usedTokens: 10,
+          reservedTokens: 20,
+          availableTokens: 70,
+          usageComplete: false,
+          untilAt: "2030-01-01T00:00:00Z",
+        },
+      }),
+    }),
+  );
+  const goalResponse = page.waitForResponse("**/rpc/goals/get");
+  await page.goto(`/app/g/${group.id}`);
+  expect((await goalResponse).ok()).toBe(true);
+  const details = page
+    .locator("details")
+    .filter({ has: page.locator("summary", { hasText: "Goal:" }) });
+  await expect(details.locator("summary")).toBeVisible();
+  await expect(details.locator("dt", { hasText: "Reserved" })).not.toBeVisible();
+  await details.locator("summary").click();
+  await expect(details).toContainText("Used");
+  await expect(details).toContainText("Reserved");
+  await expect(details).toContainText("Available");
+  await expect(details.locator("dd")).toHaveText(["10", "20", "70"]);
+  await expect(details).toContainText("Usage incomplete");
+  await captureScreenshot(page, testInfo, "group-goal-budget");
+});
+
 test("a group member choice appears in the room and on its captured run", async ({
   page,
 }, testInfo) => {

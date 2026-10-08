@@ -356,144 +356,146 @@ export async function clearThread(
   input: ClearThreadInput,
   realtime?: RealtimeFanout,
 ): Promise<ClearThreadResult> {
-  const committed = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    // Group mutations precede their thread row in goal admission and group handoff.
-    if (input.groupId) {
-      await tx.$queryRaw`SELECT id FROM chat_groups WHERE id = ${input.groupId} AND "spaceId" = ${input.spaceId} FOR UPDATE`;
-    } else {
-      await tx.$queryRaw`SELECT id FROM bots WHERE id = ${input.botId} AND "spaceId" = ${input.spaceId} FOR UPDATE`;
-    }
-    // A desk cancellation also writes the coordinator's thread. Find those roots while the
-    // recipient bot/group is locked, then lock coordinator threads before the recipient thread.
-    const pendingDeskRuns = await tx.run.findMany({
-      where: {
-        spaceId: input.spaceId,
-        threadId: input.threadId,
-        ...(input.groupId ? {} : { botId: input.botId }),
-        goalId: { not: null },
-        delegationId: { not: null },
-        status: { in: ["queued", "leased", "running", "waiting_input", "waiting_takeover"] },
-      },
-      select: { delegationRootTaskId: true },
-    });
-    const rootTaskIds = [
-      ...new Set(
-        pendingDeskRuns.flatMap((run) =>
-          run.delegationRootTaskId ? [run.delegationRootTaskId] : [],
+  const committed = await withTransactionRetry(() =>
+    prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // Group mutations precede their thread row in goal admission and group handoff.
+      if (input.groupId) {
+        await tx.$queryRaw`SELECT id FROM chat_groups WHERE id = ${input.groupId} AND "spaceId" = ${input.spaceId} FOR UPDATE`;
+      } else {
+        await tx.$queryRaw`SELECT id FROM bots WHERE id = ${input.botId} AND "spaceId" = ${input.spaceId} FOR UPDATE`;
+      }
+      // A desk cancellation also writes the coordinator's thread. Find those roots while the
+      // recipient bot/group is locked, then lock coordinator threads before the recipient thread.
+      const pendingDeskRuns = await tx.run.findMany({
+        where: {
+          spaceId: input.spaceId,
+          threadId: input.threadId,
+          ...(input.groupId ? {} : { botId: input.botId }),
+          goalId: { not: null },
+          delegationId: { not: null },
+          status: { in: ["queued", "leased", "running", "waiting_input", "waiting_takeover"] },
+        },
+        select: { delegationRootTaskId: true },
+      });
+      const rootTaskIds = [
+        ...new Set(
+          pendingDeskRuns.flatMap((run) =>
+            run.delegationRootTaskId ? [run.delegationRootTaskId] : [],
+          ),
         ),
-      ),
-    ];
-    const roots = rootTaskIds.length
-      ? await tx.delegationRoot.findMany({
-          where: { rootTaskId: { in: rootTaskIds } },
-          select: { coordinatorThreadId: true },
-        })
-      : [];
-    for (const threadId of [...new Set(roots.map((root) => root.coordinatorThreadId))]
-      .filter((threadId) => threadId !== input.threadId)
-      .sort())
-      await tx.$queryRaw`SELECT id FROM threads WHERE id = ${threadId} FOR UPDATE`;
-    // Bot or group row precedes both threads, which precede cancelled runs and roots.
-    const thread = await tx.thread.update({
-      where: {
-        id: input.threadId,
-        spaceId: input.spaceId,
-        ...(input.groupId ? { groupId: input.groupId } : { botId: input.botId }),
-      },
-      data: { unread: false },
-      select: { nextMessageSeq: true, historyCompactionGeneration: true },
-    });
-    const activeRuns = await tx.run.findMany({
-      where: {
-        spaceId: input.spaceId,
-        threadId: input.threadId,
-        ...(input.groupId ? {} : { botId: input.botId }),
-        status: { in: ["queued", "leased", "running", "waiting_input", "waiting_takeover"] },
-      },
-      select: { id: true, taskId: true, delegationId: true, goalId: true },
-    });
-    const now = new Date();
-    const runIds = activeRuns.map((run) => run.id);
-    const goalDelegationIds = activeRuns.flatMap((run) =>
-      run.goalId && run.delegationId ? [run.delegationId] : [],
-    );
-    const deskCards = goalDelegationIds.length
-      ? await tx.delegation.findMany({
-          where: { id: { in: goalDelegationIds }, kind: "message" },
-          select: { id: true },
-        })
-      : [];
-    const deskCardIds = new Set(deskCards.map((card) => card.id));
-    for (const run of activeRuns) {
-      if (run.delegationId && deskCardIds.has(run.delegationId))
-        await finishDelegation(
-          tx,
-          run.delegationId,
-          "cancelled",
-          "The recipient thread was cleared before finishing.",
-          run.id,
-        );
-    }
-    await cancelRunsInTransaction(tx, activeRuns, now);
-    // Expire as tombstones so a still-open provider screen claim cannot reset fencing to 1.
-    await expireComputerExecutionLeases(tx, { runId: { in: runIds } });
-    await tx.computer.updateMany({
-      where: { executionRunId: { in: runIds } },
-      data: {
-        executionRunId: null,
-        executionBotId: null,
-        executionLeaseExpiresAt: null,
-      },
-    });
-    if (!input.preserveHistory) {
-      await tx.message.deleteMany({ where: { threadId: input.threadId } });
-      await tx.event.deleteMany({ where: { threadId: input.threadId } });
-    }
-    // The existing compaction boundary excludes earlier messages. A neutral summary
-    // keeps that boundary active while preserving the transcript for the owner.
-    const resetSummary = input.preserveHistory
-      ? `${RECEIPT_FILTERED_SUMMARY_MARKER}${LEGACY_RESTART_SUMMARY}`
-      : null;
-    if (thread.nextMessageSeq > 0) {
-      // nextMessageSeq is not reset, so mark every deleted message as already compacted.
-      // Leaving the cursor behind would let compaction re-summarize deleted history (or, reset
-      // to null, immediately re-fire on the fresh conversation).
-      await tx.thread.update({
-        where: { id: input.threadId },
+      ];
+      const roots = rootTaskIds.length
+        ? await tx.delegationRoot.findMany({
+            where: { rootTaskId: { in: rootTaskIds } },
+            select: { coordinatorThreadId: true },
+          })
+        : [];
+      for (const threadId of [...new Set(roots.map((root) => root.coordinatorThreadId))]
+        .filter((threadId) => threadId !== input.threadId)
+        .sort())
+        await tx.$queryRaw`SELECT id FROM threads WHERE id = ${threadId} FOR UPDATE`;
+      // Bot or group row precedes both threads, which precede cancelled runs and roots.
+      const thread = await tx.thread.update({
+        where: {
+          id: input.threadId,
+          spaceId: input.spaceId,
+          ...(input.groupId ? { groupId: input.groupId } : { botId: input.botId }),
+        },
+        data: { unread: false },
+        select: { nextMessageSeq: true, historyCompactionGeneration: true },
+      });
+      const activeRuns = await tx.run.findMany({
+        where: {
+          spaceId: input.spaceId,
+          threadId: input.threadId,
+          ...(input.groupId ? {} : { botId: input.botId }),
+          status: { in: ["queued", "leased", "running", "waiting_input", "waiting_takeover"] },
+        },
+        select: { id: true, taskId: true, delegationId: true, goalId: true },
+      });
+      const now = new Date();
+      const runIds = activeRuns.map((run) => run.id);
+      const goalDelegationIds = activeRuns.flatMap((run) =>
+        run.goalId && run.delegationId ? [run.delegationId] : [],
+      );
+      const deskCards = goalDelegationIds.length
+        ? await tx.delegation.findMany({
+            where: { id: { in: goalDelegationIds }, kind: "message" },
+            select: { id: true },
+          })
+        : [];
+      const deskCardIds = new Set(deskCards.map((card) => card.id));
+      for (const run of activeRuns) {
+        if (run.delegationId && deskCardIds.has(run.delegationId))
+          await finishDelegation(
+            tx,
+            run.delegationId,
+            "cancelled",
+            "The recipient thread was cleared before finishing.",
+            run.id,
+          );
+      }
+      await cancelRunsInTransaction(tx, activeRuns, now);
+      // Expire as tombstones so a still-open provider screen claim cannot reset fencing to 1.
+      await expireComputerExecutionLeases(tx, { runId: { in: runIds } });
+      await tx.computer.updateMany({
+        where: { executionRunId: { in: runIds } },
         data: {
-          historyCompactedUpToSeq: thread.nextMessageSeq - 1,
-          historyCompactionSummary: resetSummary,
-          historyCompactionGeneration: { increment: 1 },
+          executionRunId: null,
+          executionBotId: null,
+          executionLeaseExpiresAt: null,
         },
       });
-    } else {
-      await tx.thread.update({
-        where: { id: input.threadId },
-        data: {
-          historyCompactionSummary: resetSummary,
-          historyCompactionGeneration: { increment: 1 },
-        },
+      if (!input.preserveHistory) {
+        await tx.message.deleteMany({ where: { threadId: input.threadId } });
+        await tx.event.deleteMany({ where: { threadId: input.threadId } });
+      }
+      // The existing compaction boundary excludes earlier messages. A neutral summary
+      // keeps that boundary active while preserving the transcript for the owner.
+      const resetSummary = input.preserveHistory
+        ? `${RECEIPT_FILTERED_SUMMARY_MARKER}${LEGACY_RESTART_SUMMARY}`
+        : null;
+      if (thread.nextMessageSeq > 0) {
+        // nextMessageSeq is not reset, so mark every deleted message as already compacted.
+        // Leaving the cursor behind would let compaction re-summarize deleted history (or, reset
+        // to null, immediately re-fire on the fresh conversation).
+        await tx.thread.update({
+          where: { id: input.threadId },
+          data: {
+            historyCompactedUpToSeq: thread.nextMessageSeq - 1,
+            historyCompactionSummary: resetSummary,
+            historyCompactionGeneration: { increment: 1 },
+          },
+        });
+      } else {
+        await tx.thread.update({
+          where: { id: input.threadId },
+          data: {
+            historyCompactionSummary: resetSummary,
+            historyCompactionGeneration: { increment: 1 },
+          },
+        });
+      }
+      if (input.groupId) {
+        await tx.chatGroup.update({ where: { id: input.groupId }, data: { updatedAt: now } });
+      } else {
+        await tx.bot.update({
+          where: { id: input.botId, spaceId: input.spaceId },
+          data: { updatedAt: now },
+        });
+      }
+      const event = await appendEventInTransaction(tx, {
+        ...input,
+        type: "thread.cleared",
+        payload: {},
       });
-    }
-    if (input.groupId) {
-      await tx.chatGroup.update({ where: { id: input.groupId }, data: { updatedAt: now } });
-    } else {
-      await tx.bot.update({
-        where: { id: input.botId, spaceId: input.spaceId },
-        data: { updatedAt: now },
-      });
-    }
-    const event = await appendEventInTransaction(tx, {
-      ...input,
-      type: "thread.cleared",
-      payload: {},
-    });
-    return {
-      event,
-      cancelledRunIds: runIds,
-      historyCompactionGeneration: thread.historyCompactionGeneration,
-    };
-  });
+      return {
+        event,
+        cancelledRunIds: runIds,
+        historyCompactionGeneration: thread.historyCompactionGeneration,
+      };
+    }),
+  );
   await notifyRealtime(realtime, committed.event.threadId, committed.event.seq);
   return {
     event: mapProductEvent(committed.event),

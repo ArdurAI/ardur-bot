@@ -2,13 +2,14 @@ import type {
   Actor,
   DashboardNow,
   RoutineOverview,
+  RuntimeReliability,
   UsagePeriod,
   UsageSummary,
 } from "@ardurbot/contracts";
-import { MessageBlock } from "@ardurbot/contracts";
+import { MessageBlock, RuntimeKindSchema, RuntimePinSchema } from "@ardurbot/contracts";
 import { isApprovalAskBlock } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
-import { listSpaceRuns } from "./runs.js";
+import { activityRunFailure, listSpaceRuns } from "./runs.js";
 import { teamBoard } from "./team.js";
 
 /** One finite request; approval cards are independent of the conversation's message page. */
@@ -54,6 +55,101 @@ type UsageRow = {
   reasoningSemantics: string;
 };
 const DAY = 86_400_000;
+
+type ReliabilityRun = {
+  id: string;
+  status: string;
+  runtimePin: unknown;
+  startedAt: Date | null;
+  firstReplyAt: Date | null;
+  completedAt: Date | null;
+  error: string | null;
+};
+
+/** Terminal run rows, not usage-record counts or the capped activity list. */
+export function runtimeReliabilityRows(rows: ReliabilityRun[], now: Date): RuntimeReliability {
+  const from = new Date(now.getTime() - 7 * DAY);
+  const recent = rows.flatMap((run) => {
+    const pin = RuntimePinSchema.safeParse(run.runtimePin);
+    return pin.success &&
+      run.completedAt &&
+      run.completedAt >= from &&
+      run.completedAt <= now &&
+      ["completed", "failed", "cancelled"].includes(run.status)
+      ? [{ ...run, completedAt: run.completedAt, kind: pin.data.runtimeKind }]
+      : [];
+  });
+  return {
+    from: from.toISOString(),
+    asOf: now.toISOString(),
+    runtimes: RuntimeKindSchema.options.map((runtimeKind) => {
+      const own = recent.filter((run) => run.kind === runtimeKind);
+      const completed = own.filter((run) => run.status === "completed").length;
+      const failed = own.filter((run) => run.status === "failed").length;
+      const samples = own
+        .flatMap((run) =>
+          run.startedAt &&
+          run.firstReplyAt &&
+          run.firstReplyAt >= run.startedAt &&
+          run.firstReplyAt <= run.completedAt
+            ? [run.firstReplyAt.getTime() - run.startedAt.getTime()]
+            : [],
+        )
+        .sort((a, b) => a - b);
+      const middle = Math.floor(samples.length / 2);
+      const failure = own
+        .filter((run) => run.status === "failed")
+        .sort(
+          (a, b) => b.completedAt.getTime() - a.completedAt.getTime() || b.id.localeCompare(a.id),
+        )[0];
+      return {
+        runtimeKind,
+        completed,
+        failed,
+        cancelled: own.filter((run) => run.status === "cancelled").length,
+        successRate: completed + failed ? completed / (completed + failed) : null,
+        measuredRuns: samples.length,
+        firstReplyMedianMs: samples.length
+          ? samples.length % 2
+            ? samples[middle]!
+            : (samples[middle - 1]! + samples[middle]!) / 2
+          : null,
+        lastFailure: failure
+          ? {
+              category: activityRunFailure(failure).failureCategory ?? "other",
+              at: failure.completedAt.toISOString(),
+            }
+          : null,
+      };
+    }),
+  };
+}
+
+export async function runtimeReliabilitySummary(
+  prisma: PrismaClient,
+  actor: Actor,
+  now = new Date(),
+): Promise<RuntimeReliability> {
+  const rows = await prisma.run.findMany({
+    where: {
+      spaceId: actor.spaceId,
+      userId: actor.userId,
+      bot: { archivedAt: null },
+      status: { in: ["completed", "failed", "cancelled"] },
+      completedAt: { gte: new Date(now.getTime() - 7 * DAY), lte: now },
+    },
+    select: {
+      id: true,
+      status: true,
+      runtimePin: true,
+      startedAt: true,
+      firstReplyAt: true,
+      completedAt: true,
+      error: true,
+    },
+  });
+  return runtimeReliabilityRows(rows, now);
+}
 
 /**
  * Whether a record's input or output total is only a lower bound. Totals-only records

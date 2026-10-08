@@ -4,6 +4,7 @@ vi.mock("../../../../adapters/src/context/concurrency.js", () => ({
     input.claim(prisma),
 }));
 vi.mock("../../../../adapters/src/run-usage.js", () => ({
+  recordFirstReply: vi.fn(async () => undefined),
   recordRunUsage: vi.fn(async () => null),
 }));
 vi.mock("../../../../adapters/src/delegation-execution.js", () => ({

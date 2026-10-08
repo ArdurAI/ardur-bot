@@ -46,6 +46,7 @@ export function useTerminalController({
   releaseOnLeave,
   bootWithTakeover = false,
   keepControlWhileHidden = false,
+  preserveOnReload = false,
 }: {
   botId: string | undefined;
   computerId: string | undefined;
@@ -65,6 +66,7 @@ export function useTerminalController({
   keepControlWhileHidden?: boolean;
   /** Set when the surface's take-control action boots a stopped computer first. */
   bootWithTakeover?: boolean;
+  preserveOnReload?: boolean;
 }) {
   const [availability, setAvailability] = useState<{
     botId: string;
@@ -90,6 +92,7 @@ export function useTerminalController({
       visible: true,
       hidden: 0,
       held: false,
+      reloading: false,
       acquired: null as null | (() => void),
     }),
     [botId, computerId],
@@ -129,9 +132,23 @@ export function useTerminalController({
       lifetime.alive = false;
       const releaseAcquired = lifetime.acquired;
       lifetime.acquired = null;
-      if (releaseOnLeave) releaseAcquired?.();
+      if (releaseOnLeave && !lifetime.reloading) releaseAcquired?.();
     };
   }, [lifetime, releaseOnLeave]);
+  useEffect(() => {
+    const hide = () => {
+      lifetime.reloading = preserveOnReload;
+    };
+    const show = () => {
+      lifetime.reloading = false;
+    };
+    window.addEventListener("pagehide", hide);
+    window.addEventListener("pageshow", show);
+    return () => {
+      window.removeEventListener("pagehide", hide);
+      window.removeEventListener("pageshow", show);
+    };
+  }, [lifetime, preserveOnReload]);
 
   useEffect(() => {
     if (visible || keepControlWhileHidden || !releaseOnLeave) return;
@@ -238,6 +255,7 @@ export function useTerminalController({
   };
 
   return {
+    ownsControl: Boolean(lifetime.acquired),
     supported,
     available,
     busy,

@@ -1,6 +1,7 @@
 import * as z from "zod";
 import { BotAvatarValueSchema } from "./bot-avatar.js";
 import { ToolResumedPayloadSchema } from "./command-blocks.js";
+import { ComputerLimitsObservationSchema } from "./computer-limits.js";
 import { ComputerProfileSchema } from "./computer-profiles.js";
 import { ConcurrentRunsSchema, ContextSnapshotSchema, RoutingRuleSchema } from "./context.js";
 import { LocalityPolicySchema } from "./delegation.js";
@@ -913,6 +914,9 @@ export const ComputerUpdateSchema = z.object({
 export type ComputerUpdate = z.infer<typeof ComputerUpdateSchema>;
 
 export const ComputerStatusSchema = z.object({
+  computerGeneration: z.number().int().nonnegative().optional(),
+  appliedLimits: ComputerLimitsObservationSchema.nullable().optional(),
+  executionBoundary: z.enum(["host-account", "container", "unknown"]).optional(),
   runsOnHost: z.boolean().optional(),
   imageProfile: ComputerProfileSchema.optional(),
   connectionId: Id.nullable().optional(),
