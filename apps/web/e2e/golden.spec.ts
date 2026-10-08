@@ -8,7 +8,7 @@ import {
   rpc,
   signup,
 } from "./helpers";
-import { openWorkspaceView, toggleAgentComputer } from "./workspace-view";
+import { closeAgentComputer, openAgentComputer, openWorkspaceView } from "./workspace-view";
 
 function sidebarBotButton(page: Page, name: RegExp | string) {
   return page.locator("[data-sidebar-group] [data-roster-bot-id]").filter({
@@ -93,12 +93,10 @@ test("takeover, routine, integrations, and export are reachable", async ({ page 
       message: "the second protected-input run must be ready for takeover",
     })
     .toBe("waiting_takeover");
-  // Agent computer toggles the panel. Re-open when closed so Open can refresh computer status.
+  // Close and reopen explicitly to refresh computer status before takeover.
   const sidePanel = page.getByTestId("side-panel");
-  if ((await sidePanel.getAttribute("data-panel")) === "computer") {
-    await toggleAgentComputer(page);
-  }
-  await toggleAgentComputer(page);
+  await closeAgentComputer(page);
+  await openAgentComputer(page);
   await expect(sidePanel).toHaveAttribute("data-panel", "computer");
   await expect(sidePanel).toHaveCSS("width", "480px");
   await openWorkspaceView(page, "Screen");
@@ -162,7 +160,7 @@ test("takeover, routine, integrations, and export are reachable", async ({ page 
   await page.getByText("Chief").first().click();
   const gear = page.getByRole("button", { name: "Show settings" });
   if (!(await gear.isVisible().catch(() => false))) {
-    await toggleAgentComputer(page);
+    await openAgentComputer(page);
   }
   await gear.click();
   const downloadPromise = page.waitForEvent("download");
