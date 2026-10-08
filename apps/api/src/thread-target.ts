@@ -693,6 +693,8 @@ function mapRun(run: {
   routingRule?: unknown;
   error: string | null;
   providerRetryAt: Date | null;
+  turnCheckpoint?: string | null;
+  leaseOwner?: string | null;
   startedAt: Date | null;
   completedAt: Date | null;
   createdAt: Date;
@@ -727,6 +729,7 @@ function mapRun(run: {
         ? runFailureError({ type: "run.failed", payload: { error: run.error } })
         : run.error,
     providerRetryAt: run.providerRetryAt?.toISOString() ?? null,
+    restarting: run.status === "running" && Boolean(run.turnCheckpoint) && run.leaseOwner === null,
     startedAt: run.startedAt?.toISOString() ?? null,
     completedAt: run.completedAt?.toISOString() ?? null,
     createdAt: run.createdAt.toISOString(),
