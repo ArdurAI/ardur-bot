@@ -9139,6 +9139,10 @@ msgid "This command is not available to this account."
 msgstr ""
 
 #: src/components/ThreadCommandBlock.tsx
+msgid "This command was not run because it exceeds 64 KB. Put code in a file and run that file."
+msgstr "यह कमांड नहीं चला क्योंकि यह 64 KB से बड़ा है। कोड को किसी फ़ाइल में रखें और उस फ़ाइल को चलाएँ।"
+
+#: src/components/ThreadCommandBlock.tsx
 msgid "This command was not run because its request is invalid. Check the command and folder."
 msgstr "अनुरोध अमान्य होने के कारण यह कमांड नहीं चला। कमांड और फ़ोल्डर जाँचें।"
 
@@ -9661,6 +9665,10 @@ msgstr "{hostLabel} का उपयोग करें"
 #: src/pages/Onboarding.tsx
 msgid "Use a found model"
 msgstr "मिला हुआ मॉडल उपयोग करें"
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Use a path inside this bot's folder or a registered folder."
+msgstr "इस बॉट के फ़ोल्डर या किसी पंजीकृत फ़ोल्डर के अंदर का पथ इस्तेमाल करें।"
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Use a token"
