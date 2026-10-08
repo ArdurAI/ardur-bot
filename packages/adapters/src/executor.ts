@@ -294,7 +294,7 @@ import {
 import { observationToolResult, parseComputerActions } from "./computer-tools.js";
 import { checkpointRunComputerWorkspace, isHostAbsolutePath } from "./computer-workspace.js";
 import { sanitizeConnectorError } from "./connector-safety.js";
-import { assembleTurnContext } from "./context/assemble.js";
+import { assembleTurnContext, runIdentityText } from "./context/assemble.js";
 import { claimBotRun } from "./context/concurrency.js";
 import {
   persistBrokerContextUsage,
@@ -2309,7 +2309,12 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 spaceId: run.spaceId,
                 botId: bot.id,
                 computerId: bot.computerId,
-                instructions: botInstructionText(bot, accountContext),
+                instructions: [
+                  runIdentityText({ name: bot.name, pin: selected.pin }),
+                  botInstructionText(bot, accountContext),
+                ]
+                  .filter(Boolean)
+                  .join("\n\n"),
                 historyGeneration: thread.historyCompactionGeneration,
                 pin: selected.pin,
                 pinSource: run.runtimePinSource as RuntimePinSource | null,
@@ -6490,6 +6495,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
           const turnContext = await assembleTurnContext({
             peerReadOnly,
             instructions: comparisonRun ? "" : stableInstructions,
+            // Controlled comparisons deliberately have no bot persona or stable instructions.
+            identity: comparisonRun ? undefined : { name: bot.name, pin: selected.pin },
             tools: comparisonRun ? "none" : tools,
             brief: groupBrief?.content,
             summary: comparisonRun ? null : compactedHistory.summary,
