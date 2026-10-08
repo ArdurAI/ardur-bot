@@ -10286,3 +10286,11 @@ msgstr "你的一支随时在线的 Agent 团队<0/>可以交给它们真正的�
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+
+msgid "The bot stopped responding. Retry the run."
+msgstr "机器人停止响应。请重试此次运行。"
+
+
+msgid "Continue the interrupted run from its saved results. Check any uncertain action before repeating it."
+msgstr "从已保存的结果继续中断的运行。重复任何结果不确定的操作前，请先核实。"

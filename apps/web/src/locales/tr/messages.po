@@ -10286,3 +10286,11 @@ msgstr "Gerçek işler verebileceğin,<0/>her zaman açık agent takımın."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+
+msgid "The bot stopped responding. Retry the run."
+msgstr "Bot yanıt vermeyi durdurdu. Çalıştırmayı yeniden deneyin."
+
+
+msgid "Continue the interrupted run from its saved results. Check any uncertain action before repeating it."
+msgstr "Kesintiye uğrayan çalıştırmaya kaydedilmiş sonuçlarından devam et. Sonucu belirsiz bir işlemi tekrarlamadan önce kontrol et."

@@ -1,6 +1,11 @@
 import type { KeyObject } from "node:crypto";
 import { randomBytes, randomUUID } from "node:crypto";
-import { connectorKindFromToolName, redactSecrets } from "@ardurbot/core";
+import {
+  beforeDeadline,
+  connectorKindFromToolName,
+  redactSecrets,
+  StepDeadlineExceeded,
+} from "@ardurbot/core";
 import type { EvidenceStore } from "@ardurbot/db";
 import { EvidenceSequenceConflict } from "@ardurbot/db";
 import type { EvidenceChain, ReceiptClaims, ReceiptRunIdentity } from "@ardurbot/evidence";
@@ -12,7 +17,8 @@ import {
   sealRun,
   verifyChain,
 } from "@ardurbot/evidence";
-import { redactSensitiveText } from "@ardurbot/logging";
+import { getLogger, redactSensitiveText } from "@ardurbot/logging";
+import { RESTART_DRAIN_MS } from "../restart-drain.js";
 import type { EncryptedSecretStore } from "../secrets.js";
 import type { DecisionKind } from "./decision-kinds.js";
 import { decisionFields } from "./decision-kinds.js";
@@ -84,13 +90,18 @@ export function createEvidenceRecorder(deps: RecorderDeps) {
     // Undurable gap counts are retry work, not a cache; flushGaps releases them after persistence.
   }
 
-  async function serial<T>(runId: string, work: () => Promise<T>): Promise<T> {
+  async function serial<T>(runId: string, step: string, work: () => Promise<T>): Promise<T> {
     const next = (queues.get(runId) ?? Promise.resolve()).catch(() => undefined).then(work);
     queues.set(runId, next);
     try {
-      return await next;
+      return await beforeDeadline(step, Date.now() + RESTART_DRAIN_MS, () => next);
     } finally {
-      if (queues.get(runId) === next) queues.delete(runId);
+      // Keep the queue fenced until the underlying storage work really settles.
+      void next
+        .catch(() => undefined)
+        .finally(() => {
+          if (queues.get(runId) === next) queues.delete(runId);
+        });
     }
   }
   async function governance(run: EvidenceRun) {
@@ -187,8 +198,17 @@ export function createEvidenceRecorder(deps: RecorderDeps) {
     }
     pendingGaps.delete(runId);
   }
+  function timedOutGap(runId: string, step: string) {
+    chains.delete(runId);
+    pendingGaps.set(runId, (pendingGaps.get(runId) ?? 0) + 1);
+    getLogger().warn("run.step.timed_out", { step });
+    // Do not queue this behind the stalled record/seal or hold the reply on it.
+    void beforeDeadline("evidence-gap", Date.now() + RESTART_DRAIN_MS, () =>
+      flushGaps(runId),
+    ).catch(() => undefined);
+  }
   async function recordDecision(input: RecordDecisionInput): Promise<EvidenceResult> {
-    return serial(input.run.id, async () => {
+    return serial(input.run.id, "record", async (): Promise<EvidenceResult> => {
       try {
         if (!(await governance(input.run))) return { ok: true };
         const durableId = input.decisionId
@@ -237,10 +257,14 @@ export function createEvidenceRecorder(deps: RecorderDeps) {
         }
         return { ok: false, reason: "recording_failed" };
       }
+    }).catch((error: unknown) => {
+      if (!(error instanceof StepDeadlineExceeded)) throw error;
+      timedOutGap(input.run.id, error.step);
+      return { ok: false, reason: "recording_failed" };
     });
   }
   async function sealRunEvidence(runId: string): Promise<EvidenceResult> {
-    return serial(runId, async () => {
+    return serial(runId, "seal", async (): Promise<EvidenceResult> => {
       try {
         await flushGaps(runId);
         if (await deps.store.sealForRun(runId)) return { ok: true };
@@ -282,6 +306,10 @@ export function createEvidenceRecorder(deps: RecorderDeps) {
       } finally {
         releaseRunState(runId);
       }
+    }).catch((error: unknown) => {
+      if (!(error instanceof StepDeadlineExceeded)) throw error;
+      timedOutGap(runId, error.step);
+      return { ok: false, reason: "sealing_failed" };
     });
   }
   return { recordDecision, sealRunEvidence, releaseRunState };

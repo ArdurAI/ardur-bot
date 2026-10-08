@@ -38,6 +38,8 @@ import { acquireComputerExecutionLease, provisionComputer } from "./computer-lif
 import type * as ComputerWorkspaceModule from "./computer-workspace.js";
 import { checkpointRunComputerWorkspace } from "./computer-workspace.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
+import { createEvidenceRecorder } from "./evidence/recorder.js";
+import { fakeEvidenceStore } from "./evidence/test-store.js";
 import { createRunExecutor } from "./executor.js";
 import { ProviderError } from "./provider-error.js";
 import type { DrainResult } from "./restart-drain.js";
@@ -99,6 +101,7 @@ function fixture(
   sandbox?: SandboxProvider,
   restartDrain?: Parameters<typeof createRunExecutor>[0]["restartDrain"],
   shutdownSignal?: AbortSignal,
+  evidenceRecorder?: Parameters<typeof createRunExecutor>[0]["evidenceRecorder"],
 ) {
   vi.mocked(recordRunUsage).mockClear();
   const effects: Effect[] = [];
@@ -463,6 +466,7 @@ function fixture(
     events,
     jobs,
     secrets,
+    evidenceRecorder,
   } as unknown as Parameters<typeof createRunExecutor>[0]);
 
   return {
@@ -2147,6 +2151,91 @@ describe("run failure cause", () => {
   });
 });
 
+describe("bounded run finalization without a database", () => {
+  it("fails a stale runtime with a plain Retry sentence instead of renewing it forever", async () => {
+    vi.useFakeTimers();
+    const f = fixture("inactive-runtime");
+    f.runtimeRun.mockImplementation(async function* () {
+      yield { type: "text", text: "Partial reply" };
+      await new Promise(() => {});
+    });
+    let finished = false;
+    const running = f.executor.continueRun(f.runRecord.id, "worker").then(() => {
+      finished = true;
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(119_999);
+      expect(f.finalizeRun).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(f.finalizeRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          outcome: "failed",
+          error: "The bot stopped responding. Retry the run.",
+        }),
+      );
+      expect(finished).toBe(true);
+      await running;
+      const calls = f.prisma.run.findUnique.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(f.prisma.run.findUnique.mock.calls).toHaveLength(calls);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("bounds a blocked post-stream workspace save and releases a pending follow-up", async () => {
+    vi.useFakeTimers();
+    const f = fixture("blocked-finalization");
+    const queued = ["Follow-up request"];
+    const handled: string[] = [];
+    const replies: string[] = [];
+    vi.mocked(checkpointRunComputerWorkspace).mockImplementationOnce(() => new Promise(() => {}));
+    f.runtimeRun.mockImplementation(async function* (request) {
+      if (handled.length) expect(request.prompt).toContain("Follow-up request");
+      else await request.executeTool!("shell", { command: "echo fixture" }, "owned-command");
+      yield { type: "text", text: handled.length ? "Follow-up reply" : "First reply" };
+      yield { type: "done" };
+    });
+    f.finalizeRun.mockImplementation(async (input) => {
+      f.runRecord.status = input.outcome;
+      if (input.outcome === "completed") replies.push("Follow-up reply");
+      return { continuationRunId: queued.length ? "follow-up" : null };
+    });
+    let finished = false;
+    const running = f.executor.continueRun(f.runRecord.id, "worker").then(() => {
+      finished = true;
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(59_999);
+      expect(f.finalizeRun).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(finished).toBe(true);
+      await running;
+      expect(f.finalizeRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          outcome: "failed",
+          error: "The bot stopped responding. Retry the run.",
+        }),
+      );
+      expect(f.jobs.enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "run.continue",
+          payload: { runId: "follow-up" },
+        }),
+      );
+      handled.push(queued.shift()!);
+      f.runRecord.status = "queued";
+      f.prisma.task.findUniqueOrThrow.mockResolvedValueOnce({ id: "task-1", prompt: handled[0]! });
+      await f.executor.continueRun(f.runRecord.id, "worker");
+      expect(replies).toEqual(["Follow-up reply"]);
+      expect(f.runRecord.status).toBe("completed");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("executor restart journeys without a database", () => {
   it.each([false, true])(
     "flushes redacted stream progress on ordinary shutdown with restart admission %s",
@@ -2554,4 +2643,39 @@ it("measures interruption counts with the same two-bot scripted restart workload
     deadlineMisses: 0,
   });
   expect(drainResult.durationMs).toBeLessThan(60_000);
+});
+
+it("finishes a streamed reply despite hung read-only evidence and marks the receipt partial", async () => {
+  vi.useFakeTimers();
+  try {
+    const { store, records, seals } = fakeEvidenceStore();
+    const recorder = createEvidenceRecorder({ store, secretStore: digests });
+    vi.mocked(store.insertRecord).mockImplementationOnce(() => new Promise<never>(() => {}));
+    const f = fixture("evidence-hang", undefined, undefined, undefined, undefined, recorder);
+    f.runtimeRun.mockImplementation(async function* (request) {
+      yield { type: "text", text: "Reply ready" };
+      await request.executeTool!("recall", { query: "fixture" }, "read-only");
+      yield { type: "done", text: "Reply ready" };
+    });
+    let settled = false;
+    const running = f.executor.continueRun("evidence-hang", "worker").then(() => {
+      settled = true;
+    });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(settled).toBe(true);
+    await running;
+    expect(f.finalizeRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outcome: "completed",
+        blocks: expect.arrayContaining([
+          expect.objectContaining({ kind: "text", text: "Reply ready" }),
+        ]),
+      }),
+    );
+    expect(await store.gapCount("evidence-hang")).toBe(1);
+    expect(records).toHaveLength(0);
+    expect(seals).toHaveLength(0);
+  } finally {
+    vi.useRealTimers();
+  }
 });

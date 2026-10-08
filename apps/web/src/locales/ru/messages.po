@@ -10286,3 +10286,11 @@ msgstr "Ваша команда постоянно работающих аген
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+
+msgid "The bot stopped responding. Retry the run."
+msgstr "Бот перестал отвечать. Повторите запуск."
+
+
+msgid "Continue the interrupted run from its saved results. Check any uncertain action before repeating it."
+msgstr "Продолжите прерванный запуск с сохранённых результатов. Проверьте действия с неизвестным результатом, прежде чем повторять их."

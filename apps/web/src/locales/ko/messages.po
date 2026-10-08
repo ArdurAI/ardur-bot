@@ -10286,3 +10286,11 @@ msgstr "언제든 실제 작업을 맡길 수 있는<0/>나만의 Agent 팀"
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+
+msgid "The bot stopped responding. Retry the run."
+msgstr "봇이 응답을 멈췄습니다. 실행을 다시 시도하세요."
+
+
+msgid "Continue the interrupted run from its saved results. Check any uncertain action before repeating it."
+msgstr "저장된 결과에서 중단된 실행을 계속하세요. 결과가 불확실한 작업은 반복하기 전에 확인하세요."

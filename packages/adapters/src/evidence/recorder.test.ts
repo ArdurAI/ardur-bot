@@ -1,5 +1,5 @@
 import { verifyChain, verifySeal } from "@ardurbot/evidence";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { agentConnectionTools, builtinAgentTools } from "../builtin-tools.js";
 import { EncryptedSecretStore } from "../secrets.js";
 import { DECISION_KINDS, decisionFields } from "./decision-kinds.js";
@@ -247,4 +247,46 @@ describe("evidence recorder", () => {
     expect(seals).toEqual([]);
     expect(deps.logFailure).toHaveBeenCalledWith(["malformed_jws"]);
   });
+});
+
+afterEach(() => vi.useRealTimers());
+
+it("bounds a forever-blocked recording, keeps the reply free and records a partial receipt", async () => {
+  vi.useFakeTimers();
+  const { recorder, store, records } = setup();
+  await recorder.recordDecision(input);
+  vi.mocked(store.insertRecord).mockImplementationOnce(() => new Promise(() => {}));
+  let recordingSettled = false;
+  const recording = recorder.recordDecision(input).then((result) => {
+    recordingSettled = true;
+    return result;
+  });
+  await vi.advanceTimersByTimeAsync(59_999);
+  expect(recordingSettled).toBe(false);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(recordingSettled).toBe(true);
+  expect(await recording).toEqual({ ok: false, reason: "recording_failed" });
+  expect(await store.gapCount(input.run.id)).toBe(1);
+  expect(records).toHaveLength(1);
+  const seal = recorder.sealRunEvidence(input.run.id);
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(await seal).toEqual({ ok: false, reason: "sealing_failed" });
+  expect(await store.sealForRun(input.run.id)).toBeNull();
+});
+
+it("bounds a hung seal without claiming verified evidence", async () => {
+  vi.useFakeTimers();
+  const { recorder, store, seals } = setup();
+  await recorder.recordDecision(input);
+  store.insertSeal = vi.fn(() => new Promise<never>(() => {}));
+  let sealingSettled = false;
+  const sealing = recorder.sealRunEvidence(input.run.id).then((result) => {
+    sealingSettled = true;
+    return result;
+  });
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(sealingSettled).toBe(true);
+  expect(await sealing).toEqual({ ok: false, reason: "sealing_failed" });
+  expect(seals).toHaveLength(0);
+  expect(await store.gapCount(input.run.id)).toBe(1);
 });

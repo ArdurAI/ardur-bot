@@ -14,6 +14,7 @@ import {
   RuntimePinSourceSchema,
 } from "@ardurbot/contracts";
 import {
+  beforeDeadline,
   blocksToAgentHistoryText,
   buildBotMessageWakePrompt,
   isApprovalAskBlock,
@@ -28,6 +29,7 @@ import {
   RECEIPT_FILTERED_SUMMARY_MARKER,
   redactTaskValue,
   resolveAskChoice,
+  StepDeadlineExceeded,
   sanitizeJsonValue,
 } from "@ardurbot/core";
 import { classifyPeerEffectBinding } from "@ardurbot/core/node/peer-effect-digest";
@@ -200,6 +202,8 @@ export interface FinalizeRunResult {
 interface FinalizeRunBase {
   /** Best-effort observation after commit and before realtime delivery. */
   onCommitted?: () => void;
+  /** Absolute executor deadline, shared with transaction acquisition and execution. */
+  deadlineAt?: number;
   spaceId: string;
   threadId: string;
   botId: string;
@@ -1585,10 +1589,11 @@ export async function finalizeRun(
 ): Promise<FinalizeRunResult | false> {
   const committed = await withTransactionRetry(() => finalizeRunOnce(prisma, input));
   if (!committed) return false;
-  if (jobs)
-    await jobs.enqueue(evidenceSealJob(input.runId)).catch(() => {
-      getLogger().warn("evidence seal enqueue failed");
-    });
+  try {
+    input.onCommitted?.();
+  } catch {
+    /* Telemetry cannot invalidate a durable outcome. */
+  }
   let continuationRunId = committed.continuationRunId;
   if (input.outcome === "completed" && !continuationRunId) {
     const run = await prisma.run.findUnique({
@@ -1619,16 +1624,23 @@ export async function finalizeRun(
       }
     }
   }
-  try {
-    input.onCommitted?.();
-  } catch {
-    /* Telemetry cannot invalidate a durable outcome. */
-  }
   await notifyRealtime(realtime, committed.threadId, committed.seq);
   if (committed.summary)
     await notifyRealtime(realtime, committed.summary.threadId, committed.summary.seq);
   for (const update of committed.updatedThreads)
     await notifyRealtime(realtime, update.threadId, update.seq);
+  // The reply and continuation are already durable and visible. Evidence work is
+  // optional background work and must never hold their delivery.
+  if (jobs) {
+    const enqueue = () => jobs.enqueue(evidenceSealJob(input.runId));
+    void (
+      input.deadlineAt ? beforeDeadline("evidence-enqueue", input.deadlineAt, enqueue) : enqueue()
+    ).catch((error) => {
+      if (error instanceof StepDeadlineExceeded)
+        getLogger().warn("run.step.timed_out", { step: error.step });
+      else getLogger().warn("evidence seal enqueue failed");
+    });
+  }
   return { continuationRunId };
 }
 
@@ -1687,7 +1699,9 @@ async function finalizeRunOnce(
   summary?: { threadId: string; seq: number };
   updatedThreads: { threadId: string; seq: number }[];
 } | null> {
-  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+  if (input.deadlineAt !== undefined && input.deadlineAt <= Date.now())
+    throw new StepDeadlineExceeded("persist");
+  const commit = async (tx: Prisma.TransactionClient) => {
     // Claiming and delivery take the bot before its thread. Completion may also
     // write the coordinator summary, so acquire the bot before either thread.
     await tx.$queryRaw`SELECT id FROM bots WHERE id = ${input.botId} AND "spaceId" = ${input.spaceId} FOR UPDATE`;
@@ -2149,7 +2163,13 @@ async function finalizeRunOnce(
       summary,
       updatedThreads: coordinationUpdates,
     };
-  });
+  };
+  if (input.deadlineAt === undefined) return prisma.$transaction(commit);
+  const remaining = input.deadlineAt - Date.now();
+  if (remaining < 2) throw new StepDeadlineExceeded("persist");
+  const maxWait = Math.min(5_000, Math.floor(remaining / 2));
+  // Acquisition and transaction execution together fit the caller's deadline.
+  return prisma.$transaction(commit, { maxWait, timeout: remaining - maxWait });
 }
 
 /**

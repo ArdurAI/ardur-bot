@@ -6276,6 +6276,16 @@ export const Composer = memo(function Composer({
             runtimeProblem={runtimeProblem}
             catalog={modelCatalog}
             botName={refusalBotName}
+            onRetry={() => {
+              // Prepare a continuation, never silently replay a possibly completed action.
+              setDraft(
+                (current) =>
+                  current ||
+                  t`Continue the interrupted run from its saved results. Check any uncertain action before repeating it.`,
+              );
+              onDismissError();
+              focusComposer();
+            }}
             onConnect={onConnectPin}
             onChangeModel={onChangeModel}
             onEnableExperimental={onEnableExperimental}

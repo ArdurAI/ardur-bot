@@ -10286,3 +10286,11 @@ msgstr "Your team of always-on agents<0/>that you can give real work to."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr "Yours"
+
+
+msgid "The bot stopped responding. Retry the run."
+msgstr "The bot stopped responding. Retry the run."
+
+
+msgid "Continue the interrupted run from its saved results. Check any uncertain action before repeating it."
+msgstr "Continue the interrupted run from its saved results. Check any uncertain action before repeating it."

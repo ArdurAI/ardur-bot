@@ -1091,6 +1091,88 @@ describeIntegration("run executor lifecycle", () => {
       );
     }
 
+    it("persists a streamed reply and answers its finalization follow-up while evidence enqueue is blocked", async () => {
+      const seeded = await seedRun("post-stream-follow-up", "First request");
+      const events = createThreadEvents(handles.prisma);
+      const requests: AgentRunRequest[] = [];
+      let messageId: string | undefined;
+      let release!: () => void;
+      const blocked = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const enqueue = handles.jobs.enqueue.bind(handles.jobs);
+      const queue = vi.spyOn(handles.jobs, "enqueue").mockImplementation(async (job) => {
+        if (job.name === "evidence.seal" && job.payload.runId === seeded.run.id) {
+          await blocked;
+          return;
+        }
+        return enqueue(job);
+      });
+      const model = vi
+        .spyOn(ScriptedAgentRuntime.prototype, "run")
+        .mockImplementation(async function* (request) {
+          requests.push(request);
+          yield {
+            type: "text",
+            text: request.runId === seeded.run.id ? "First reply" : "Follow-up reply",
+          };
+          yield { type: "done" };
+          if (request.runId === seeded.run.id) {
+            const sent = await events.sendUserMessage({
+              spaceId: seeded.me.spaceId,
+              userId: seeded.me.userId,
+              threadId: seeded.thread.id,
+              botId: seeded.bot.id,
+              blocks: [{ kind: "text", text: MID_RUN_TEXT }],
+              prompt: MID_RUN_TEXT,
+              trigger: "user",
+            });
+            expect(sent.runId).toBe(seeded.run.id);
+            messageId = sent.messageId;
+          }
+        });
+      let settled = false;
+      const running = handles.executor.continueRun(seeded.run.id, "post-stream-worker").then(() => {
+        settled = true;
+      });
+      try {
+        await vi.waitFor(() => expect(settled).toBe(true), { timeout: 5_000 });
+        await running;
+        const original = await handles.prisma.run.findUniqueOrThrow({
+          where: { id: seeded.run.id },
+        });
+        expect(original.status).toBe("completed");
+        expect(
+          await handles.prisma.message.findFirst({ where: { runId: seeded.run.id, role: "bot" } }),
+        ).toMatchObject({
+          blocks: expect.arrayContaining([{ kind: "text", text: "First reply" }]),
+        });
+        const next = await handles.prisma.run.findFirstOrThrow({
+          where: {
+            clientNonce: `steering-continuation:${seeded.run.id}`,
+            spaceId: seeded.me.spaceId,
+          },
+        });
+        await handles.executor.continueRun(next.id, "post-stream-next");
+        await awaitRunStatus(next.id, "completed");
+        expect(requests.filter((request) => request.runId === next.id)).toHaveLength(1);
+        expect(requests.find((request) => request.runId === next.id)?.prompt).toContain(
+          MID_RUN_TEXT,
+        );
+        expect(
+          await handles.prisma.message.findFirst({ where: { runId: next.id, role: "bot" } }),
+        ).toMatchObject({
+          blocks: expect.arrayContaining([{ kind: "text", text: "Follow-up reply" }]),
+        });
+        expect(await handles.prisma.steeringMessage.findMany({ where: { messageId } })).toEqual([]);
+      } finally {
+        release();
+        await running;
+        queue.mockRestore();
+        model.mockRestore();
+      }
+    });
+
     it("delivers a message sent during a run after the follow-up's cue", async () => {
       const { seeded, continuationRunId } = await seedBusyRunWithMidRunMessage("midrun-input");
       await expect(

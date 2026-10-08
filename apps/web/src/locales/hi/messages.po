@@ -10286,3 +10286,11 @@ msgstr "हमेशा चालू रहने वाले एजेंट�
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+
+msgid "The bot stopped responding. Retry the run."
+msgstr "बॉट ने जवाब देना बंद कर दिया। रन फिर से आज़माएँ।"
+
+
+msgid "Continue the interrupted run from its saved results. Check any uncertain action before repeating it."
+msgstr "बाधित रन को उसके सहेजे गए परिणामों से जारी रखें। किसी अनिश्चित कार्रवाई को दोहराने से पहले उसकी जाँच करें।"
