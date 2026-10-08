@@ -789,3 +789,66 @@ The optional marketing site in `apps/www` can be hosted separately.
 The iOS and Android app can also point at a self-hosted origin at runtime. On the sign-in screen, tap **Use a custom server** and enter the same HTTPS origin as `WEB_ORIGIN` (for example `https://app.example.com`). Store builds still default to `EXPO_PUBLIC_API_URL`; the in-app setting is an override for people running their own API. Changing the server signs the device out of any previous session.
 
 The GitHub integration connects with a [fine-grained token](https://github.com/settings/personal-access-tokens/new) by default; grant only the repositories and permissions this bot needs. To also offer **Sign in with GitHub**, register your own OAuth App, set its callback to your public web origin followed by `/mcp/oauth/callback`, and set both `GITHUB_MCP_CLIENT_ID` and `GITHUB_MCP_CLIENT_SECRET` in the API deployment environment. Restart the API after changing them. These values stay on the server; the browser receives only whether sign-in is available. The existing MCP OAuth broker supplies the registered client credentials to the discovered authorization server; no scopes are hardcoded. See [GitHub's MCP setup documentation](https://docs.github.com/en/copilot/how-tos/provide-context/use-mcp-in-your-ide/set-up-the-github-mcp-server).
+
+## Pair a phone or command-line device with a server
+
+The server device listener is off by default. To enable it for a source API process,
+set these operator variables before starting it:
+
+```sh
+export ARDURBOT_DEVICE_LISTENER_ENABLED=true
+export ARDURBOT_DEVICE_LISTENER_ORIGIN=https://127.0.0.1:43119
+# Defaults, shown explicitly:
+export ARDURBOT_DEVICE_LISTENER_BIND=127.0.0.1
+export ARDURBOT_DEVICE_LISTENER_PORT=43119
+```
+
+Open **Settings → Devices** as the deployment owner and choose **Pair device**.
+The first link in the pairing code is the configured device origin, not `WEB_ORIGIN`.
+A desktop connected to this server uses the same server listener; it does not need
+an app-managed home. The phone and CLI keep the same certificate pin, signed
+requests, scopes and revocation. See [Command line](cli.md) for the CLI pairing steps.
+
+Loopback is suitable for a CLI on the server itself. For a phone or another computer,
+explicitly bind the device listener to the server's private network address, for example
+`ARDURBOT_DEVICE_LISTENER_BIND=10.0.0.10` and
+`ARDURBOT_DEVICE_LISTENER_ORIGIN=https://10.0.0.10:43119`.
+Only allow trusted private-network clients through the firewall. No device port is
+published automatically. The API must remain reachable on loopback: `API_HOST` can
+be `127.0.0.1`, `localhost`, `::1`, `0.0.0.0` or `::`; the listener always forwards to
+that local API port, never to `API_URL` or an operator-supplied proxy target.
+
+For a Compose deployment, add an explicit override to the API service and include
+that file in the Compose command you use to start the server:
+
+```yaml
+services:
+  api:
+    environment:
+      ARDURBOT_DEVICE_LISTENER_ENABLED: "true"
+      ARDURBOT_DEVICE_LISTENER_BIND: "0.0.0.0"
+      ARDURBOT_DEVICE_LISTENER_PORT: "43119"
+      ARDURBOT_DEVICE_LISTENER_ORIGIN: "https://10.0.0.10:43119"
+    ports:
+      - "10.0.0.10:43119:43119"
+```
+
+Replace the example private address with the server's actual private address and
+restrict the published port with the host/network firewall. The existing web port
+and authentication setup remain separate. A private DNS name can be advertised
+instead, and explicit port forwarding may use a different advertised port.
+
+The listener exposes only the five POST device routes, over TLS 1.2 or newer. It
+forwards no cookies, authorization headers, general RPC or private key material.
+The durable home certificate and encrypted private key live in the application
+database. Keep that database and `ENCRYPTION_KEY` across restarts and restores.
+Restarting does not rotate the identity. Missing key material, an expired certificate,
+a wrong certificate pin, invalid enabled settings or a failed bind stops API startup
+with an error; there is no insecure fallback. Changing the certificate requires
+fresh pairing. Disabling the listener does not revoke existing grants; revoke them
+in Devices when removing access permanently.
+
+A TLS-terminating reverse proxy that presents a different certificate cannot satisfy
+the existing pin. Reach the device port directly or use TCP/TLS passthrough that
+preserves the home certificate. Do not use the ordinary web HTTPS origin as a
+substitute. This adds no hosted dependency or per-request service fee.

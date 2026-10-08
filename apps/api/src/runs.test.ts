@@ -1,7 +1,28 @@
 import type { Actor } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
-import { activityNotificationsEnabled, activityPromptSnippet, listSpaceRuns } from "./runs.js";
+import {
+  activityNotificationsEnabled,
+  activityPromptSnippet,
+  activityRunFailure,
+  listSpaceRuns,
+} from "./runs.js";
+
+it("keeps reliability's unclassified failure projection free of raw error content", () => {
+  expect(
+    activityRunFailure({
+      status: "failed",
+      runtimePin: null,
+      error: "private fixture diagnostics",
+    }),
+  ).toEqual({});
+  expect(
+    activityRunFailure({
+      status: "cancelled",
+      error: "Ardur's usage limit is reached. Try again after it resets.",
+    }),
+  ).toEqual({});
+});
 
 it.each([null, "group"])(
   "routes delegated approvals to the scoped coordinator thread (%s)",

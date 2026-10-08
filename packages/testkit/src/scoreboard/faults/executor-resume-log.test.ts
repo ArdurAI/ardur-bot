@@ -4,6 +4,7 @@ vi.mock("../../../../adapters/src/context/concurrency.js", () => ({
     input.claim(prisma),
 }));
 vi.mock("../../../../adapters/src/run-usage.js", () => ({
+  recordFirstReply: vi.fn(async () => undefined),
   recordRunUsage: vi.fn(async () => null),
 }));
 vi.mock("../../../../adapters/src/delegation-execution.js", () => ({
@@ -535,8 +536,10 @@ function harness(mode: Mode, encryptionKey = "resume-log-encryption-key") {
   const executor = createRunExecutor({
     prisma,
     secretStore: {
-      load: () => "test-key",
+      load: (value: string, id: string) =>
+        id.startsWith("turn:") ? secretStore.load(value, id) : "test-key",
       digest: (purpose: string, value: string) => secretStore.digest(purpose, value),
+      put: secretStore.put.bind(secretStore),
     },
     runtime: { describe: () => ({ capabilities: { scripted } }), run: runtimeRun },
     connector: {

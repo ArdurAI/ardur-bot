@@ -1,5 +1,5 @@
 import type { AgentUsage, RawUsageCounts, UsageOutcome, UsagePurpose } from "@ardurbot/adapter-kit";
-import { RequestUsageCollector } from "@ardurbot/adapter-kit";
+import { normalizeUsageCounts, RequestUsageCollector } from "@ardurbot/adapter-kit";
 import { OPENAI_COMPATIBLE_PROVIDER_ID } from "@ardurbot/contracts";
 import type {
   Api,
@@ -77,11 +77,28 @@ export function applyPiWireSnapshot(
 ): AgentUsage | null {
   const counts = piWireUsage(api, payload);
   if (!counts) return null;
+  const candidate = { ...merged };
   for (const key of Object.keys(counts) as Array<keyof RawUsageCounts>) {
-    if (counts[key] !== undefined && counts[key] !== null) merged[key] = counts[key];
+    if (counts[key] !== undefined && counts[key] !== null) candidate[key] = counts[key];
   }
+  const semantics =
+    api === "anthropic-messages" ? "additive-cache-categories" : "total-with-cache-subsets";
+  const previous = normalizeUsageCounts(merged, semantics);
+  const next = normalizeUsageCounts(candidate, semantics);
+  const decreased = Object.entries(next.categories).some(([key, value]) => {
+    const prior = previous.categories[key as keyof typeof previous.categories];
+    return value !== null && prior !== null && value < prior;
+  });
   if (piWireUsageIsFinal(api, payload)) collector.acceptFinalUsage();
-  return collector.snapshot(merged);
+  // A falling wire counter is not evidence of a new request/session. Keep the last
+  // consistent lower bound and the actual numeric report, without resetting or rebilling.
+  if (!next.invalid && decreased) {
+    collector.limit("counter-discontinuity");
+    return collector.snapshot(merged, next.raw);
+  }
+  // Invalid reports must not erase the comparison point for the next valid payload.
+  if (!next.invalid) Object.assign(merged, candidate);
+  return collector.snapshot(candidate);
 }
 
 /** A bounded pass-through observes bytes only as the SDK consumes them; it never tees the body. */

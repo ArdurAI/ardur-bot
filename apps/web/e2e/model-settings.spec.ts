@@ -6,6 +6,129 @@ import { captureScreenshot, completeOnboarding, openUserSettings, rpc, signup } 
 const LOCAL_MODEL_ID = "ardurbot-e2e-local";
 const LOCAL_MODEL_REPLY = "OpenAI-compatible endpoint verified end to end.";
 
+test("runtime reliability keeps cancellations separate and textless results unmeasured", async ({
+  page,
+}, testInfo) => {
+  await signup(page, `reliability-${Date.now()}@example.test`, "password12", "Reliability fixture");
+  await completeOnboarding(page);
+  await page.route("**/rpc/runtimes/reliability", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        json: {
+          from: "2030-01-01T00:00:00Z",
+          asOf: "2030-01-08T00:00:00Z",
+          runtimes: [
+            {
+              runtimeKind: "pi",
+              completed: 2,
+              failed: 1,
+              cancelled: 1,
+              successRate: 2 / 3,
+              measuredRuns: 2,
+              firstReplyMedianMs: 2500,
+              lastFailure: { category: "usage-limit", at: "2030-01-08T00:00:00Z" },
+            },
+            {
+              runtimeKind: "codex-app-server",
+              completed: 0,
+              failed: 0,
+              cancelled: 1,
+              successRate: null,
+              measuredRuns: 0,
+              firstReplyMedianMs: null,
+              lastFailure: null,
+            },
+          ],
+        },
+      }),
+    }),
+  );
+  await openUserSettings(page, "models");
+  await page.locator("summary", { hasText: "Last 7 days" }).click();
+  const builtIn = page.getByRole("region", { name: "Ardur", exact: true });
+  await expect(builtIn.getByText("67%", { exact: true })).toBeVisible();
+  await expect(builtIn.getByText("2 measured runs", { exact: true })).toBeVisible();
+  await expect(
+    builtIn.getByText("Ardur's usage limit is reached.", { exact: false }),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: "Codex", exact: true })
+      .getByText("Not measured", { exact: true }),
+  ).toHaveCount(2);
+  await captureScreenshot(page, testInfo, "runtime-reliability");
+});
+
+test("native discovery and cancelled connection preserve the default pin", async ({
+  page,
+}, testInfo) => {
+  await signup(page, `native-models-${Date.now()}@example.test`, "password12", "Native models");
+  await completeOnboarding(page);
+  const original = await rpc<Record<string, unknown>>(page, "me", {});
+  await page.route("**/rpc/me", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ json: { ...original, isDeploymentOwner: true } }),
+    }),
+  );
+  await page.route("**/rpc/runtimes/availability", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        json: {
+          runtimeKind: "codex-app-server",
+          available: true,
+          signedIn: false,
+          models: [{ id: "fixture-native", label: "Fixture native", efforts: [] }],
+        },
+      }),
+    }),
+  );
+  await page.route("**/rpc/runtimes/connectCodex", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        json: {
+          loginId: "fixture-login",
+          mode: "auth-url",
+          verificationUri: "https://example.test/login",
+        },
+      }),
+    }),
+  );
+  await page.route("**/rpc/runtimes/cancelConnect", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ json: { ok: true } }),
+    }),
+  );
+  await openUserSettings(page, "models");
+  await page.getByText("Native runtimes", { exact: true }).click();
+  await page
+    .locator("summary")
+    .filter({ hasText: /^Codex$/ })
+    .click();
+  await expect(page.getByText("Fixture native", { exact: true })).toBeVisible();
+  const codex = page
+    .locator("details")
+    .filter({ has: page.locator("summary", { hasText: /^Codex$/ }) });
+  await codex.locator("summary", { hasText: "Capability checks" }).click();
+  const checks = codex.locator("dl dd");
+  await expect(checks).toHaveCount(5);
+  for (const check of await checks.all()) await expect(check).toContainText("Not tested");
+  await expect(checks.first()).toContainText("Declared");
+  await expect(codex.getByText("Confirmed offline", { exact: true })).toHaveCount(0);
+  await captureScreenshot(page, testInfo, "runtime-capability-checks");
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Continue with ChatGPT" })).toBeVisible();
+  await captureScreenshot(page, testInfo, "native-models-connection");
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Continue with ChatGPT" })).toHaveCount(0);
+  const current = await rpc<Record<string, unknown>>(page, "me", {});
+  expect(current.defaultModel).toBe(original.defaultModel);
+});
+
 test("Anthropic offers API keys and asks old subscription connections to reconnect", async ({
   page,
 }, testInfo) => {
@@ -32,11 +155,7 @@ test("Anthropic offers API keys and asks old subscription connections to reconne
   await openUserSettings(page, "models");
   await page.getByPlaceholder("Search providers").fill("anthropic");
   await page.getByRole("button", { name: /Anthropic/ }).click();
-  await expect(
-    page.getByText(
-      "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings.",
-    ),
-  ).toBeVisible();
+  await expect(page.getByText("Set up on the home device")).toBeVisible();
   await expect(page.getByText("Reconnect with an API key", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /Sign in/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Use this model", exact: true })).toHaveCount(0);

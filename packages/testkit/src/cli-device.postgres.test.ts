@@ -1,22 +1,39 @@
-import { randomUUID } from "node:crypto";
+import {
+  createHash,
+  generateKeyPairSync,
+  randomBytes,
+  randomUUID,
+  sign,
+  verify,
+  X509Certificate,
+} from "node:crypto";
+import { once } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { setTimeout } from "node:timers/promises";
 import { ComposioEmulator, ScriptedAgentRuntime } from "@ardurbot/adapters";
 import type { DeviceGrantView, PairingPayload } from "@ardurbot/contracts";
+import { serve } from "@hono/node-server";
 import { describe, expect, it, vi } from "vitest";
 import { createClient, pairDevice } from "../../../apps/cli/src/client.js";
 import { runCli } from "../../../apps/cli/src/commands.js";
-import type { Transport } from "../../../apps/cli/src/transport.js";
-import { CliError } from "../../../apps/cli/src/transport.js";
+import { pinnedPost } from "../../../apps/cli/src/transport.js";
+import { createDispatchClient } from "../../../apps/mobile/lib/dispatch-client.js";
 import { sessionCookieHeader } from "./index.js";
 
-const hasDatabase = process.env.VERIFY_DATABASE === "1" && Boolean(process.env.DATABASE_URL);
+const hasDatabase =
+  process.env.CI === "1" &&
+  process.env.VERIFY_DATABASE === "1" &&
+  Boolean(process.env.DATABASE_URL);
 describe.skipIf(!hasDatabase)("paired command-line device", () => {
   it("pairs, signs, dispatches to completion, reads the final answer and is refused after revocation", async () => {
     const origin = "http://127.0.0.1:5173";
-    const homeUrl = "https://home.example.test";
+    const apiPort = await unusedPort();
+    let devicePort = await unusedPort();
+    while (devicePort === apiPort) devicePort = await unusedPort();
+    const homeUrl = `https://127.0.0.1:${devicePort}`;
     const dataDir = await mkdtemp(path.join(tmpdir(), "ardur-cli-journey-"));
     const { createApp } = await import("../../../apps/api/src/app.ts");
     const runtime = new ScriptedAgentRuntime();
@@ -26,6 +43,9 @@ describe.skipIf(!hasDatabase)("paired command-line device", () => {
     });
     const handles = await createApp({
       databaseUrl: process.env.DATABASE_URL!,
+      apiHost: "127.0.0.1",
+      port: apiPort,
+      deviceListener: { bind: "127.0.0.1", port: devicePort, hints: [homeUrl] },
       authUrl: origin,
       webOrigin: origin,
       dataDir,
@@ -37,7 +57,10 @@ describe.skipIf(!hasDatabase)("paired command-line device", () => {
       runtime,
     });
     vi.spyOn(handles.executor, "refreshBrief").mockResolvedValue(undefined);
+    const server = serve({ fetch: handles.app.fetch, hostname: "127.0.0.1", port: apiPort });
     try {
+      await once(server, "listening");
+      await handles.startDeviceListener();
       const signup = await handles.app.request("/api/auth/sign-up/email", {
         method: "POST",
         headers: { "content-type": "application/json", origin },
@@ -72,28 +95,87 @@ describe.skipIf(!hasDatabase)("paired command-line device", () => {
       });
       const issued = await rpc<{ payload: PairingPayload }>("pairing/start", {
         scopes: ["read", "dispatch", "stop", "ordinary"],
-        hints: [homeUrl],
+        hints: ["https://unapproved.example.test"],
       });
-      // In-process transport exercises the real routes and signatures without a listener.
-      // The separate transport tests cover TLS gating before any HTTP request leaves.
-      const transport: Transport = async (url, pin, body) => {
-        expect(new URL(url).origin).toBe(homeUrl);
-        expect(pin).toBe(issued.payload.certificateFingerprint);
-        const response = await handles.app.request(new URL(url).pathname, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        const result = (await response.json()) as { message?: string };
-        if (!response.ok)
-          throw new CliError(
-            result.message ?? "Request refused.",
-            response.status === 401 || response.status === 403 ? 2 : 1,
-          );
-        return result;
-      };
+      expect(issued.payload.hints).toEqual([homeUrl]);
+      // CI uses the server's actual TLS listener, certificate pin and unchanged signature protocol.
+      const transport = pinnedPost;
+      await expect(
+        pairDevice(
+          JSON.stringify({ ...issued.payload, certificateFingerprint: "0".repeat(64) }),
+          transport,
+        ),
+      ).rejects.toThrow("identity changed");
       const home = await pairDevice(JSON.stringify(issued.payload), transport);
       expect(home.spaceId).toBe(me.spaceId);
+      const phonePayload = await rpc<{ payload: PairingPayload }>("pairing/start", {
+        scopes: ["read"],
+        hints: [],
+      });
+      const phoneKeys = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+      const presenceKeys = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+      const publicKey = phoneKeys.publicKey
+        .export({ type: "spki", format: "der" })
+        .toString("base64");
+      const values = new Map<string, string>();
+      const phone = createDispatchClient(
+        {
+          nonce: () => randomBytes(32).toString("base64url"),
+          createKeys: async () => ({
+            handle: "fixture-phone",
+            publicKey,
+            presencePublicKey: presenceKeys.publicKey
+              .export({ type: "spki", format: "der" })
+              .toString("base64"),
+            publicKeyFingerprint: createHash("sha256").update(publicKey).digest("hex"),
+          }),
+          sign: async (_handle, text, presence) =>
+            sign(
+              "sha256",
+              Buffer.from(text),
+              presence ? presenceKeys.privateKey : phoneKeys.privateKey,
+            ).toString("base64"),
+          verifyHome: async (certificate, fingerprint, text, signature) => {
+            const cert = new X509Certificate(Buffer.from(certificate, "base64"));
+            return (
+              createHash("sha256").update(cert.raw).digest("hex") === fingerprint &&
+              verify("sha256", Buffer.from(text), cert.publicKey, Buffer.from(signature, "base64"))
+            );
+          },
+          scanQr: async () => JSON.stringify(phonePayload.payload),
+          async request(url, pin, body) {
+            try {
+              return {
+                status: 200,
+                body: JSON.stringify(await pinnedPost(url, pin, JSON.parse(body))),
+              };
+            } catch {
+              return {
+                status: 401,
+                body: JSON.stringify({
+                  message: "This device is unavailable; pair it again at home.",
+                }),
+              };
+            }
+          },
+        },
+        {
+          get: async (key) => values.get(key) ?? null,
+          set: async (key, value) => {
+            values.set(key, value);
+          },
+          remove: async (key) => {
+            values.delete(key);
+          },
+        },
+        undefined,
+        "ios",
+      );
+      const pairedPhone = await phone.pair(phonePayload.payload, homeUrl);
+      expect(pairedPhone.home).toBeDefined();
+      expect(await phone.request("rpc", { procedure: "me", input: {} })).toMatchObject({
+        userId: me.userId,
+      });
       const listed = await rpc<{ devices: DeviceGrantView[] }>("devices/list");
       expect(listed.devices).toContainEqual(
         expect.objectContaining({ id: home.grantId, platform: "cli", deviceName: "Command line" }),
@@ -128,11 +210,27 @@ describe.skipIf(!hasDatabase)("paired command-line device", () => {
       expect(await runCli(["send", bot.id, "Must not run."], deps)).toBe(2);
       expect(out).toEqual([]);
       expect(errors.join("")).toContain("This device is unavailable; pair it again at home.");
+      await rpc("devices/revoke", { id: pairedPhone.home!.grantId });
+      await expect(phone.request("rpc", { procedure: "me", input: {} })).rejects.toThrow();
       expect(await handles.prisma.run.count({ where: { botId: bot.id } })).toBe(1);
     } finally {
       await handles.stop();
+      if ("closeAllConnections" in server) server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
       await rm(dataDir, { recursive: true, force: true });
       vi.restoreAllMocks();
     }
   }, 30_000);
 });
+
+async function unusedPort(): Promise<number> {
+  const socket = createServer();
+  socket.listen(0, "127.0.0.1");
+  await once(socket, "listening");
+  const address = socket.address();
+  if (!address || typeof address === "string") throw new Error("Fixture port unavailable");
+  await new Promise<void>((resolve, reject) =>
+    socket.close((error) => (error ? reject(error) : resolve())),
+  );
+  return address.port;
+}

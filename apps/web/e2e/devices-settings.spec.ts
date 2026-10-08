@@ -19,6 +19,7 @@ test("devices shows pairing, listener state and revocable grants", async ({ page
   const fingerprint = "a".repeat(64);
   const certificateFingerprint = "b".repeat(64);
   let pairedBotId = "";
+  let serverEnabled = false;
   const devices = [
     {
       id: "test-phone",
@@ -35,7 +36,17 @@ test("devices shows pairing, listener state and revocable grants", async ({ page
   await page.route("**/rpc/devices/list", (route) =>
     route.fulfill({
       json: {
-        json: { instanceId: "test-home", homeName: "Test home", fingerprint, devices, pending: [] },
+        json: {
+          listener: {
+            enabled: serverEnabled,
+            hints: serverEnabled ? ["https://home.example.test:43119"] : [],
+          },
+          instanceId: "test-home",
+          homeName: "Test home",
+          fingerprint,
+          devices,
+          pending: [],
+        },
       },
     }),
   );
@@ -50,7 +61,7 @@ test("devices shows pairing, listener state and revocable grants", async ({ page
             homeName: "Test home",
             fingerprint,
             certificateFingerprint,
-            hints: ["https://home.example.test"],
+            hints: ["https://home.example.test:43119"],
           },
           shortCode: "TESTCODE",
           expiresAt: new Date(Date.now() + 300_000).toISOString(),
@@ -112,6 +123,9 @@ test("devices shows pairing, listener state and revocable grants", async ({ page
   await expect(
     settings.getByRole("switch", { name: "Your phone can reach this Mac on your network." }),
   ).not.toBeChecked();
+  await settings
+    .getByRole("switch", { name: "Your phone can reach this Mac on your network." })
+    .check();
   await settings.getByRole("button", { name: "Pair device", exact: true }).click();
   await expect(settings.getByRole("img", { name: "Pair device" })).toBeVisible();
   await expect(settings.getByText("TESTCODE", { exact: true })).toBeVisible();
@@ -134,6 +148,7 @@ test("devices shows pairing, listener state and revocable grants", async ({ page
   await captureScreenshot(page, testInfo, "settings-devices-pairing");
   await settings.getByRole("button", { name: "Revoke", exact: true }).click();
   await expect(settings.getByText("Test phone · Revoked", { exact: true })).toBeVisible();
+  serverEnabled = true;
   await page.evaluate(() => {
     window.ardurbotDesktop!.devices!.state = async () => ({
       enabled: false,
@@ -148,11 +163,25 @@ test("devices shows pairing, listener state and revocable grants", async ({ page
     settings.getByText(
       "Phone pairing needs a home run by this app. Set up This computer to use it.",
     ),
-  ).toBeVisible();
+  ).toHaveCount(0);
+  await expect(settings.getByRole("button", { name: "Pair device", exact: true })).toBeEnabled();
   await expect(settings.getByLabel("Your phone can reach this Mac on your network.")).toHaveCount(
     0,
   );
-  await captureScreenshot(page, testInfo, "settings-devices-existing-instance");
+  await settings.getByRole("button", { name: "Pair device", exact: true }).click();
+  await expect(settings.getByRole("img", { name: "Pair device" })).toBeVisible();
+  await captureScreenshot(page, testInfo, "settings-devices-server-listener");
+  serverEnabled = false;
+  await page.evaluate(() => {
+    delete window.ardurbotDesktop;
+  });
+  await settings.getByTestId("settings-nav-general").click();
+  await settings.getByTestId("settings-nav-devices").click();
+  await expect(
+    settings.getByText("Enable ARDURBOT_DEVICE_LISTENER_ENABLED on the server to pair a device."),
+  ).toBeVisible();
+  await expect(settings.getByRole("button", { name: "Pair device", exact: true })).toBeDisabled();
+  await captureScreenshot(page, testInfo, "settings-devices-server-disabled");
 });
 
 test("activity opens a shared-room task without the personal bot transcript", async ({

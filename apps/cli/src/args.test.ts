@@ -38,3 +38,50 @@ it.each([
     expect(error).toMatchObject({ exitCode: 3 });
   }
 });
+
+it.each([
+  ["180s", 180000],
+  ["2m", 120000],
+  ["500ms", 500],
+  ["0.5", 500],
+])("parses bot test timeout %s", (value, timeoutMs) => {
+  expect(
+    parseArgs([
+      "test",
+      "bot",
+      "bot-id",
+      "--prompt",
+      "hello",
+      "--expect-contains",
+      "world",
+      "--timeout",
+      value,
+    ]),
+  ).toMatchObject({
+    kind: "test",
+    bot: "bot-id",
+    prompt: "hello",
+    expectContains: "world",
+    timeoutMs,
+    json: false,
+  });
+});
+it.each([
+  ["test", "room", "room-id"],
+  ["test", "bot"],
+  ["test", "bot", "bot-id", "--json", "--json"],
+  ["test", "bot", "bot-id", "--prompt", "hello", "--prompt", "again", "--expect-contains", "world"],
+  [
+    "test",
+    "bot",
+    "bot-id",
+    "--prompt",
+    "hello",
+    "--expect-contains",
+    "world",
+    "--timeout",
+    "2147483648ms",
+  ],
+])("refuses invalid bot test arguments %j", (input) => {
+  expect(() => parseArgs(input)).toThrow();
+});

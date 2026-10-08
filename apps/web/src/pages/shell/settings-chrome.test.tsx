@@ -12,6 +12,13 @@ vi.mock("@lingui/react/macro", () => ({
   Trans: ({ children }: { children: ReactNode }) => children,
 }));
 vi.mock("@ardurbot/ui-web", () => ({
+  DropdownMenuCheckboxItem: ({
+    checked,
+    closeOnClick: _closeOnClick,
+    ...props
+  }: ComponentProps<"button"> & { checked: boolean; closeOnClick?: boolean }) => (
+    <button role="menuitemcheckbox" aria-checked={checked} {...props} />
+  ),
   BotAvatar: ({ size, label }: { size?: number; label?: string }) => (
     <span data-testid="seal" data-size={size} data-label={label} />
   ),
@@ -30,7 +37,7 @@ import {
   isSettingsPanel,
   PanelHeaderTitle,
   SettingsPanelToggle,
-  ThreadSettingsButton,
+  ThreadSettingsMenuItem,
 } from "./settings-chrome";
 
 let container: HTMLDivElement;
@@ -56,25 +63,25 @@ it.each([
     const onPanel = vi.fn();
     const button = () => container.querySelector("button");
     await act(async () =>
-      root.render(<ThreadSettingsButton group={group} panel={null} onPanel={onPanel} />),
+      root.render(<ThreadSettingsMenuItem group={group} panel={null} onPanel={onPanel} />),
     );
-    expect(button()?.getAttribute("aria-label")).toBe(label);
-    expect(button()?.title).toBe(label);
-    expect(button()?.getAttribute("aria-pressed")).toBe("false");
+    expect(button()?.textContent).toBe(label);
+    expect(button()?.getAttribute("role")).toBe("menuitemcheckbox");
+    expect(button()?.getAttribute("aria-checked")).toBe("false");
     await act(async () => button()?.click());
     expect(onPanel).toHaveBeenLastCalledWith(target);
 
     await act(async () =>
-      root.render(<ThreadSettingsButton group={group} panel="computer" onPanel={onPanel} />),
+      root.render(<ThreadSettingsMenuItem group={group} panel="computer" onPanel={onPanel} />),
     );
     await act(async () => button()?.click());
     expect(onPanel).toHaveBeenLastCalledWith(target);
 
     await act(async () =>
-      root.render(<ThreadSettingsButton group={group} panel={target} onPanel={onPanel} />),
+      root.render(<ThreadSettingsMenuItem group={group} panel={target} onPanel={onPanel} />),
     );
-    expect(button()?.getAttribute("aria-pressed")).toBe("true");
-    expect(button()?.hasAttribute("data-active")).toBe(true);
+    expect(button()?.getAttribute("aria-checked")).toBe("true");
+    expect(button()?.textContent).toBe(label);
     await act(async () => button()?.click());
     expect(onPanel).toHaveBeenLastCalledWith(null);
   },

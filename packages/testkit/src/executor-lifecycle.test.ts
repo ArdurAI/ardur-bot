@@ -21,6 +21,7 @@ const api = hasDb ? await import("../../../apps/api/src/app.ts") : undefined;
 
 describeIntegration("run executor lifecycle", () => {
   let handles: Awaited<ReturnType<typeof createApp>>;
+  const fixtureSpaceIds = new Set<string>();
   const dataDir = mkdtempSync(path.join(tmpdir(), "ardurbot-executor-lifecycle-"));
   const stamp = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
@@ -37,6 +38,19 @@ describeIntegration("run executor lifecycle", () => {
   });
 
   afterAll(async () => {
+    // Stop deliberately nonterminating fixtures after assertions, not by shortening the
+    // production drain deadline or extending this hook's timeout.
+    if (handles) {
+      const unfinished = await handles.prisma.run.findMany({
+        where: {
+          spaceId: { in: [...fixtureSpaceIds] },
+          status: { in: ["running", "leased"] },
+        },
+        select: { id: true },
+      });
+      const runtime = new ScriptedAgentRuntime();
+      for (const run of unfinished) await runtime.abort(run.id);
+    }
     await handles?.stop();
     rmSync(dataDir, { recursive: true, force: true });
   });
@@ -1936,6 +1950,7 @@ describeIntegration("run executor lifecycle", () => {
   ) {
     const cookie = await signup(`executor-${label}-${stamp}@example.test`, `Executor ${label}`);
     const me = await rpc<{ userId: string; spaceId: string }>(cookie, "me");
+    fixtureSpaceIds.add(me.spaceId);
     const bot = await rpc<{ id: string }>(cookie, "bots/create", {
       name: `Executor ${label}`,
       title: "",

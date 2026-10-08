@@ -34,9 +34,11 @@ import {
   createWebProvider,
   destroyBot,
   deviceThreadProjection,
+  drainForShutdown,
   EmailEmulator,
   EncryptedSecretStore,
   ExpoPushProvider,
+  expireComputerControl,
   FleetCatalog,
   GraphileJobPublisher,
   InMemoryJobQueue,
@@ -59,6 +61,7 @@ import {
   piSessionsRoot,
   placeRunComputer,
   pushTokenPath,
+  RestartDrain,
   reconcileBoardOutcomes,
   reconcileCloudAgents,
   reconcileComputerUpdates,
@@ -122,8 +125,10 @@ import {
 import { mountMessagingWebhookRoutes } from "./messaging-webhook.js";
 import { mountRemoteDevices } from "./remote-devices.js";
 import { mountApiRequestBodyLimits } from "./request-body-limit.js";
+import { createRestartDrainRoutes } from "./restart-drain.js";
 import { createRouter } from "./router.js";
 import { mountScreenTarget } from "./screen-proxy.js";
+import { createServerDeviceListener, mountDesktopListenerState } from "./server-device-listener.js";
 import { mountSystemRoutines } from "./system/routines.js";
 import { isDeferredReservationLost, TeamChatBridge } from "./team-chat-bridge.js";
 import { ModelTeamChatEngagementJudge, TEAM_CHAT_JUDGE_USAGE_PURPOSE } from "./team-chat-judge.js";
@@ -139,6 +144,7 @@ import { mountVoiceHttpRoutes } from "./voice.js";
 import { mountWebhookHttpRoutes } from "./webhook.js";
 
 export interface AppHandles {
+  startDeviceListener: () => Promise<void>;
   installTerminal: (server: Parameters<typeof installTerminalWebSocket>[0]) => void;
   app: Hono;
   prisma: PrismaClient;
@@ -205,6 +211,7 @@ export async function createApp(
       : new InMemoryRealtimeFanout());
   const secrets = new EncryptedSecretStore(env.encryptionKey);
   const instance = await ensureInstanceIdentity(prisma, secrets);
+  const deviceListener = createServerDeviceListener(env, instance, secrets);
   await backfillRuntimePins({ prisma, secrets, logger });
 
   const environmentSignupPolicy = signupPolicyFromEnv(env);
@@ -432,6 +439,8 @@ export async function createApp(
     CURSOR_API_KEY: env.cursorApiKey,
     CLOUD_AGENT_SPACE_ID: env.cloudAgentSpaceId,
   });
+  const restartDrain = new RestartDrain(prisma);
+  await restartDrain.initialize();
   const shutdown = new AbortController();
   const executor = createRunExecutor({
     evidenceRecorder: createRunEvidenceRecorder({ prisma, secretStore: secrets }),
@@ -481,6 +490,7 @@ export async function createApp(
     web: createWebProvider(),
     cloudAgent,
     shutdownSignal: shutdown.signal,
+    restartDrain,
   });
 
   const jobHandlers = createBackgroundJobHandlers({
@@ -563,8 +573,23 @@ export async function createApp(
     prisma,
     sandbox,
     trustedOrigin: (origin) => isTrustedOrigin(origin, env),
+    disconnected: async (grant) => {
+      await expireComputerControl(
+        { prisma, sandbox, jobs, events },
+        grant.computerId,
+        grant.context.leaseId,
+        new Date(),
+        {
+          fence: grant.context.fence,
+          providerRef: grant.context.generation,
+          screenGeneration: grant.computerGeneration,
+        },
+      );
+    },
   });
   const router = createRouter({
+    listenerState: deviceListener.state,
+    trustedDesktopHints: deviceListener.trustedDesktopHints,
     runtime,
     resolveComparisonPin: (bot) =>
       executor.resolveModel({ spaceId: bot.spaceId, userId: bot.userId, botId: bot.id }, true),
@@ -677,6 +702,7 @@ export async function createApp(
   });
   mountSystemRoutines(app, prisma, env.desktopStackToken);
   mountLocalSettings(app, { token: env.desktopStackToken, prisma, rpc });
+  mountDesktopListenerState(app, env.desktopStackToken, deviceListener);
   app.post("/local/device-listener", async (c) => {
     c.header("cache-control", "no-store");
     if (!validLocalSettingsToken(env.desktopStackToken, c.req.header(LOCAL_SETTINGS_TOKEN_HEADER)))
@@ -695,7 +721,7 @@ export async function createApp(
     prisma,
     events,
     jobs,
-    publicUrl: env.webOrigin,
+
     homeProof: (challenge) => ({
       certificate: new X509Certificate(instance.certificate).raw.toString("base64"),
       signature: sign(
@@ -1098,6 +1124,8 @@ export async function createApp(
     }
   });
 
+  app.route("/api/restart-drain", createRestartDrainRoutes(restartDrain, env.updaterToken));
+
   app.get("/health", (c) =>
     c.json({
       ok: true,
@@ -1114,6 +1142,7 @@ export async function createApp(
   );
 
   return {
+    startDeviceListener: deviceListener.start,
     installTerminal: (server) => {
       installTerminalWebSocket(server, terminals.gateway, (origin) => isTrustedOrigin(origin, env));
       hostBridge.install(server);
@@ -1130,13 +1159,13 @@ export async function createApp(
     executor,
     runtime,
     stop: async () => {
-      // Abort in-flight continueRun boot waits before draining jobs so stop() cannot sit
-      // on waitForComputerReady for the full boot-wait window during shared Postgres journeys.
+      // Keep host callbacks and tool transports available until saved progress is durable.
+      await drainForShutdown(restartDrain, shutdown);
+      await deviceListener.stop();
       stopIntegrationHealth();
       clearInterval(fleetCleanupTimer);
       hostBridge.hub.detach();
       await terminals.gateway?.stop();
-      shutdown.abort();
       oauthLogins.abortAll();
       messagingStopped = true;
       clearMessagingRetryDelay?.();
@@ -1156,7 +1185,7 @@ export async function createApp(
       await reconciler?.stop();
       await boardCloses?.stop();
       await settleWithTimeout(fleetCleanupTask, TEAM_CHAT_STARTUP_SHUTDOWN_MS);
-      await jobs.close();
+      await settleWithTimeout(jobs.close(), 5_000);
       await realtime.close();
       await connector.stop();
       await mcp.close();

@@ -28,6 +28,8 @@ export const ProductEventType = z.enum([
   "thread.subagent",
   "thread.cloud_agent",
   "run.started",
+  "run.suspended",
+  "run.resumed",
   "run.context",
   "run.configurationApplied",
   "run.checkpointed",
