@@ -3,7 +3,7 @@ import { encodeTerminalFrame } from "@ardurbot/contracts";
 import { expect, test } from "@playwright/test";
 import { activeBotId, captureScreenshot, completeOnboarding, signup } from "./helpers";
 import { bots, installPerformanceFixture } from "./performance-fixture";
-import { openWorkspaceView } from "./workspace-view";
+import { openWorkspaceView, toggleAgentComputer } from "./workspace-view";
 
 test("Terminal is optional, keeps Screen default and exposes a clear unavailable state", async ({
   page,
@@ -217,7 +217,7 @@ test("workspace keeps four distinct terminals and releases only at the final clo
   });
   await page.goto(`/app/${botId}`);
   await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
-  await page.getByRole("button", { name: "Agent computer" }).click();
+  await toggleAgentComputer(page);
   await openWorkspaceView(page, "Terminal");
   const pane = page.getByTestId("side-panel");
   for (const number of [1, 2, 3, 4]) {
