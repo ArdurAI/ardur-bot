@@ -28,6 +28,7 @@
       "cache": false,
       "passThroughEnv": [
         "ARDURBOT_DESKTOP_STACK_TOKEN",
+        "ARDUR_DESKTOP_ACCESSIBILITY",
         "ARDUR_HERMES_INSTALL",
         "ARDUR_DETAILED_PROCESS_LOGS"
       ],

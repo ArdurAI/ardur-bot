@@ -19,6 +19,7 @@ import {
   session,
   shell,
 } from "electron";
+import { enableDesktopAccessibility } from "./accessibility.js";
 import {
   applicationMenuTemplate,
   applyAppShortcutMenu,
@@ -1445,6 +1446,7 @@ function safeOrigin(targetUrl: string) {
 }
 
 const startup = app.whenReady().then(async () => {
+  enableDesktopAccessibility();
   installSmokeProgress?.stage("Electron ready; IPC installing");
   registerIntegrationProtocol(app);
   const initialLink = process.argv.find((arg) => arg.startsWith("ardurbot:"));

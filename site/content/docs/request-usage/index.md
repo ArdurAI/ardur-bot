@@ -54,6 +54,14 @@ redaction boundary is relaxed to collect usage.
   bounds and partial coverage. A later complete cumulative snapshot can close those gaps.
   Receipts preserve the original supplied values, including nulls.
 
+The runtime adapter owns the epoch boundary. `RequestUsageCollector` starts a fresh opaque epoch
+for each new collector and keeps it stable through snapshots and the terminal receipt. A new run
+or a verified new provider session uses a new collector, so its first cumulative value counts in
+full even if request and attempt IDs are reused. An adapter reconstructing the same session for
+delivery replay must supply the original `epochId` along with the original request and attempt
+IDs. A decreasing value alone never starts a new epoch. Persisted run IDs already separate runs;
+the collector epoch also separates sessions within a run and in local usage totals.
+
 The six category names match schema 3's `USAGE_CATEGORIES` and `RequestUsageEvidence` in
 `packages/testkit/src/performance-report.ts`:
 
@@ -142,6 +150,16 @@ Anthropic `message_start` is that snapshot: its `output_tokens` is a starting co
 complete the categories. Other transports retain a runtime-call receipt and only positive
 SDK-normalized lower bounds: the SDK's initialized zeros cannot establish measured zero.
 Request-level coverage on those routes is unknown.
+
+Within one HTTP attempt, a decreasing mapped category is not a verified reset. Pi keeps the
+last consistent snapshot as a lower bound and marks `counter-discontinuity`, while retaining
+the new report's whitelisted numeric fields in the receipt. Invalid reports do not replace
+that comparison point. A later nondecreasing snapshot may raise the lower bound but does not
+remove the uncertainty marker. This prevents a bad usage report from failing an otherwise
+successful answer without inventing another bill or silently claiming complete spend.
+The ledger still rejects decreasing cumulative categories from callers that bypass this mapping.
+Pi creates fresh request IDs for model calls and the ledger also keys by persisted run ID;
+this repair does not establish the cause of any installed provider failure.
 
 Anthropic's uncached input, cache reads and cache creation are additive. OpenAI input includes cache
 subsets; reported reasoning is a subset of output. Missing fields remain null, including omitted
