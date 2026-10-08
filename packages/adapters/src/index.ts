@@ -150,6 +150,7 @@ export type { McpHostClient } from "./remote-host-mcp.js";
 export * from "./remote-host-runtime.js";
 export * from "./remote-host-sandbox.js";
 export * from "./remote-mcp.js";
+export { drainForShutdown, RESTART_DRAIN_MS, RestartDrain } from "./restart-drain.js";
 export * from "./routing/dispatch.js";
 export * from "./routing/route.js";
 export * from "./run-secret.js";

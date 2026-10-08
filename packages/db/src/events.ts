@@ -1071,6 +1071,7 @@ async function commitAnswerRunInput(
     },
     data: {
       status: peerHold && input.answer === "deny" ? "cancelled" : "queued",
+      turnCheckpoint: null,
       ...(peerHold && input.answer === "deny" ? { completedAt: new Date() } : {}),
       ...(choiceAsk ? { checkpoint: null } : {}),
     },
@@ -1283,6 +1284,7 @@ async function pauseRunForInputOnce(prisma: PrismaClient, input: PauseRunForInpu
         status: "waiting_input",
         leaseOwner: null,
         leaseExpiresAt: null,
+        turnCheckpoint: null,
         ...(input.offeredActions?.length
           ? { checkpoint: choiceAskCheckpoint(input.offeredActions) }
           : {}),

@@ -989,6 +989,7 @@ export const MessagingAgentConnectionSchema = z.object({
 export type MessagingAgentConnection = z.infer<typeof MessagingAgentConnectionSchema>;
 
 export const RunSchema = z.object({
+  restarting: z.boolean().optional(),
   contextSnapshot: ContextSnapshotSchema.nullable().optional(),
   routingRule: RoutingRuleSchema.nullable().optional(),
   id: Id,

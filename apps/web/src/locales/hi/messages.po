@@ -1502,6 +1502,10 @@ msgstr ""
 msgid "Bot token"
 msgstr ""
 
+#: src/components/SoftwareUpdateSection.tsx
+msgid "Bot work is still paused after the update. Try again."
+msgstr "अपडेट के बाद भी बॉट का काम रुका हुआ है। फिर से कोशिश करें।"
+
 #. placeholder {0}: botName ?? proposal.scope.botId
 #. placeholder {0}: botNames[rule.botId] ?? rule.botId
 #: src/components/ApprovalRulesSettings.tsx
@@ -9191,6 +9195,10 @@ msgstr "सोच रहा है"
 msgid "This action could not finish; try again."
 msgstr ""
 
+#: src/components/AskCard.tsx
+msgid "This action may already have happened. Check its outcome before trying again."
+msgstr "यह कार्रवाई शायद पहले ही हो चुकी है। फिर से कोशिश करने से पहले उसका परिणाम जाँचें।"
+
 #: src/pages/LearningInbox.tsx
 msgid "This board item changed after it was filed, so it was left open for review on the Board."
 msgstr ""
@@ -9382,6 +9390,10 @@ msgstr "इससे कंप्यूटर की फ़ाइलें ब�
 #: src/pages/Auth.tsx
 msgid "This reset link is invalid or expired"
 msgstr "यह रीसेट लिंक अमान्य है या इसकी समय-सीमा समाप्त हो गई है"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "This run continued in a new session after a restart."
+msgstr "रीस्टार्ट के बाद यह काम एक नए सत्र में जारी रहा।"
 
 #: src/lib/failure-category-copy.ts
 msgid "This runtime"
@@ -9739,6 +9751,10 @@ msgstr ""
 msgid "Update finished with errors"
 msgstr ""
 
+#: src/components/SoftwareUpdateSection.tsx
+msgid "Update paused because a bot is still working. Try again."
+msgstr "एक बॉट अभी काम कर रहा है, इसलिए अपडेट रुका हुआ है। फिर से कोशिश करें।"
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Update progress"
 msgstr ""
@@ -9756,6 +9772,11 @@ msgstr "1 मिनट पहले अपडेट किया गया"
 #: src/pages/settings-sections.ts
 msgid "Updates"
 msgstr "अपडेट"
+
+#: src/components/SoftwareUpdateSection.tsx
+#: src/pages/Shell.tsx
+msgid "Updating — your bots will continue after the update"
+msgstr "अपडेट हो रहा है — अपडेट के बाद आपके बॉट काम जारी रखेंगे"
 
 #. placeholder {0}: update.name
 #: src/components/ComputerUpdateProgress.tsx

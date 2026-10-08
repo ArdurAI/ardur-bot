@@ -34,6 +34,7 @@ import {
   createWebProvider,
   destroyBot,
   deviceThreadProjection,
+  drainForShutdown,
   EmailEmulator,
   EncryptedSecretStore,
   ExpoPushProvider,
@@ -60,6 +61,7 @@ import {
   piSessionsRoot,
   placeRunComputer,
   pushTokenPath,
+  RestartDrain,
   reconcileBoardOutcomes,
   reconcileCloudAgents,
   reconcileComputerUpdates,
@@ -123,6 +125,7 @@ import {
 import { mountMessagingWebhookRoutes } from "./messaging-webhook.js";
 import { mountRemoteDevices } from "./remote-devices.js";
 import { mountApiRequestBodyLimits } from "./request-body-limit.js";
+import { createRestartDrainRoutes } from "./restart-drain.js";
 import { createRouter } from "./router.js";
 import { mountScreenTarget } from "./screen-proxy.js";
 import { mountSystemRoutines } from "./system/routines.js";
@@ -433,6 +436,8 @@ export async function createApp(
     CURSOR_API_KEY: env.cursorApiKey,
     CLOUD_AGENT_SPACE_ID: env.cloudAgentSpaceId,
   });
+  const restartDrain = new RestartDrain(prisma);
+  await restartDrain.initialize();
   const shutdown = new AbortController();
   const executor = createRunExecutor({
     evidenceRecorder: createRunEvidenceRecorder({ prisma, secretStore: secrets }),
@@ -482,6 +487,7 @@ export async function createApp(
     web: createWebProvider(),
     cloudAgent,
     shutdownSignal: shutdown.signal,
+    restartDrain,
   });
 
   const jobHandlers = createBackgroundJobHandlers({
@@ -1112,6 +1118,8 @@ export async function createApp(
     }
   });
 
+  app.route("/api/restart-drain", createRestartDrainRoutes(restartDrain, env.updaterToken));
+
   app.get("/health", (c) =>
     c.json({
       ok: true,
@@ -1144,13 +1152,12 @@ export async function createApp(
     executor,
     runtime,
     stop: async () => {
-      // Abort in-flight continueRun boot waits before draining jobs so stop() cannot sit
-      // on waitForComputerReady for the full boot-wait window during shared Postgres journeys.
+      // Keep host callbacks and tool transports available until saved progress is durable.
+      await drainForShutdown(restartDrain, shutdown);
       stopIntegrationHealth();
       clearInterval(fleetCleanupTimer);
       hostBridge.hub.detach();
       await terminals.gateway?.stop();
-      shutdown.abort();
       oauthLogins.abortAll();
       messagingStopped = true;
       clearMessagingRetryDelay?.();
@@ -1170,7 +1177,7 @@ export async function createApp(
       await reconciler?.stop();
       await boardCloses?.stop();
       await settleWithTimeout(fleetCleanupTask, TEAM_CHAT_STARTUP_SHUTDOWN_MS);
-      await jobs.close();
+      await settleWithTimeout(jobs.close(), 5_000);
       await realtime.close();
       await connector.stop();
       await mcp.close();

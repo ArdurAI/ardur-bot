@@ -149,6 +149,7 @@ async function main() {
         "packages/adapters/src/learning-insights.postgres.test.ts",
         "packages/adapters/src/bot-comms.postgres.test.ts",
         "packages/adapters/src/delegation-lock-timeout.postgres.test.ts",
+        "packages/adapters/src/restart-drain.postgres.test.ts",
         "packages/db/src/command-blocks.postgres.test.ts",
         "packages/adapters/src/board/filing.postgres.test.ts",
         "packages/adapters/src/board/delivery.postgres.test.ts",

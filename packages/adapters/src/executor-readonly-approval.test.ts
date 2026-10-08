@@ -339,7 +339,12 @@ function fixture({
   const executor = createRunExecutor({
     evidenceRecorder,
     prisma,
-    secretStore: { load: () => "test-key", digest: testDigest },
+    secretStore: {
+      load: (value: string, id: string) =>
+        id.startsWith("turn:") ? digests.load(value, id) : "test-key",
+      digest: testDigest,
+      put: digests.put.bind(digests),
+    },
     runtime: { describe: () => ({ capabilities: { scripted: false } }), run: runtimeRun },
     connector: {
       discoverTools: async () =>

@@ -318,6 +318,8 @@ model DeploymentSettings {
   defaultModelId                  String?
   deploymentModelCredentialCipher String?
   computerHost                    String?
+  restartDrainId                  String?
+  restartDrainUntil               DateTime?
   createdAt                       DateTime @default(now())
   updatedAt                       DateTime @updatedAt
 
@@ -755,6 +757,8 @@ model Run {
   /// run holds a lease. Display only: the continue job's own availableAt schedules it.
   providerRetryAt      DateTime?
   checkpoint           String?
+  /// Encrypted versioned turn context and effect receipts; separate from takeover markers.
+  turnCheckpoint       String?
   clientNonce          String?
   /// Thread position held for this run's reply from its first visible text, so a
   /// message the owner sends while the run is active lands below the saved reply.

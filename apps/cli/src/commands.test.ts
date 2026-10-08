@@ -35,6 +35,8 @@ function fixture() {
     return { ok: true };
   });
   const deps: CommandDependencies = {
+    now: () => 0,
+    transcript: vi.fn(),
     load: vi.fn(async () => home),
     save: vi.fn(async () => undefined),
     pair: vi.fn(async () => home),
