@@ -104,3 +104,36 @@ it("does not copy grant category onto another failure kind", () => {
     ),
   ).toEqual({ kind: "response-limit" });
 });
+
+it.each([
+  { kind: "provider-http", status: 500, layer: "upstream", reason: "http-server" },
+  { kind: "provider-http", status: 403, layer: "upstream", reason: "http-auth" },
+  { kind: "provider-failed", layer: "translation", reason: "request-translation" },
+  { kind: "provider-failed", layer: "provider-transport", reason: "transport" },
+] as const)("keeps fixed layer and reason across message-only callbacks: %j", (failure) => {
+  const error = new HermesProviderRelayError(failure);
+  expect(hermesProviderFailure(error)).toEqual(failure);
+  expect(hermesProviderFailure(new Error(error.message))).toEqual(failure);
+});
+
+it.each(["private fixture body", "__proto__", "constructor"])(
+  "does not serialize an arbitrary layer or reason: %s",
+  (value) => {
+    for (const facts of [
+      { layer: value, reason: "http-server" },
+      { layer: "upstream", reason: value },
+    ]) {
+      const error = new HermesProviderRelayError({
+        kind: "provider-http",
+        status: 500,
+        ...facts,
+      } as never);
+      expect(hermesProviderFailure(error)).toEqual({ kind: "provider-http", status: 500 });
+      expect(error.message).toBe("Provider request failed (HTTP 500).");
+      expect(hermesProviderFailure(new Error(error.message))).toEqual({
+        kind: "provider-http",
+        status: 500,
+      });
+    }
+  },
+);

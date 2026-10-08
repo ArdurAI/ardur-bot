@@ -102,7 +102,7 @@ export function normalizeUsageCounts(
   return { raw, categories: invalid ? unknownUsageCategories() : categories, invalid };
 }
 
-/** One observable request/attempt. Snapshots replace counters; terminal receipts never rebill. */
+/** One observable request/attempt/epoch. Snapshots replace counters; terminal receipts never rebill. */
 export class RequestUsageCollector {
   private sequence = 0;
   private categories = unknownUsageCategories();
@@ -113,6 +113,7 @@ export class RequestUsageCollector {
   private finalUsage = false;
   readonly requestId: string;
   readonly attemptId: string;
+  readonly epochId: string;
   constructor(
     private readonly options: {
       provider: string;
@@ -124,6 +125,8 @@ export class RequestUsageCollector {
       purpose?: UsagePurpose;
       requestId?: string;
       attemptId?: string;
+      /** Stable session boundary for replay; a new collector otherwise starts a fresh epoch. */
+      epochId?: string;
       parentRequestId?: string | null;
       limitations?: UsageLimitation[];
       admission?: RequestUsageObservation["admission"];
@@ -131,6 +134,7 @@ export class RequestUsageCollector {
   ) {
     this.requestId = options.requestId ?? crypto.randomUUID();
     this.attemptId = options.attemptId ?? crypto.randomUUID();
+    this.epochId = options.epochId ?? crypto.randomUUID();
     this.limitations = [...(options.limitations ?? [])];
   }
   start(raw?: RawUsageCounts): AgentUsage {
@@ -198,7 +202,7 @@ export class RequestUsageCollector {
         attemptId: this.attemptId,
         parentRequestId: this.options.parentRequestId ?? null,
         purpose: this.options.purpose ?? "main",
-        counter: { mode: "cumulative", epochId: "0", sequence: this.sequence++ },
+        counter: { mode: "cumulative", epochId: this.epochId, sequence: this.sequence++ },
         inputSemantics: this.options.inputSemantics,
         reasoningSemantics,
         categories,
