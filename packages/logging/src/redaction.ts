@@ -95,13 +95,26 @@ function containerEnd(text: string, start: number): number {
   return text.length;
 }
 
+// Shell escapes such as \n end an unquoted value the way a real newline does;
+// other backslashes stay part of the value so paths and partial masks do not leak.
+function valueEnd(text: string, start: number, shellEscapes: boolean): number {
+  let end = start;
+  while (end < text.length) {
+    const character = text[end]!;
+    if (/[\s"',;}&\]]/.test(character)) break;
+    if (shellEscapes && character === "\\" && /[ntr]/.test(text[end + 1] ?? "")) break;
+    end++;
+  }
+  return end;
+}
+
 // Command output may contain source. Only bare, plainly executable/type-like values
 // qualify; token-shaped values and quoted strings still follow the conservative path.
 function isCodeValue(text: string, start: number, key: string): boolean {
   if (/^["'`]/.test(text.slice(start, start + 1))) return false;
   if (/^(?:\$\{[^{}]+\}|\{\{[^{}]+\}\})/.test(text.slice(start))) return true;
   if (/^[{[]/.test(text.slice(start, start + 1))) return false;
-  const value = text.slice(start).match(/^[^\s"',;}&\]]*/)?.[0] ?? "";
+  const value = text.slice(start, valueEnd(text, start, true));
   if (PLACEHOLDER.test(value)) return true;
   if (
     (value.length >= 32 && /^[A-Za-z0-9_+/=-]+$/.test(value)) ||
@@ -115,14 +128,16 @@ function isCodeValue(text: string, start: number, key: string): boolean {
   if (!identifier) return false;
   const suffix = rest.slice(identifier.length);
   if (suffix.startsWith("(")) return true;
-  if (!/^\??[ \t]*(?:[,;}\]\r\n]|$)/.test(suffix)) return false;
+  if (!/^\??[ \t]*(?:[,;}\]\r\n]|$|\\[ntr])/.test(suffix)) return false;
   if (identifier.includes(".")) return true;
   // A bare word can equally be a YAML/environment credential. Preserve only
   // explicit type syntax or a named collection reference such as knownSecrets: secrets.
+  // Shell text can glue an escape letter to the key (\nknownSecrets:); ignore one.
+  const bareKey = key.replace(/^[ntr](?=known)/i, "");
   return (
     (/^(?:string|number|boolean|unknown|never|any|void|bigint|symbol|object)$/.test(identifier) &&
       /^[ \t]*;/.test(suffix)) ||
-    (key === `known${identifier[0]!.toUpperCase()}${identifier.slice(1)}` &&
+    (bareKey === `known${identifier[0]!.toUpperCase()}${identifier.slice(1)}` &&
       /^(?:secrets|credentials)$/.test(identifier))
   );
 }
@@ -154,7 +169,7 @@ function redactAssignments(text: string, credentialsOnly = false, commandOutput 
       if (quote === "{" || quote === "[") {
         end = containerEnd(text, start);
       } else {
-        while (end < text.length && !/[\s"',;}&\]]/.test(text[end]!)) end++;
+        end = valueEnd(text, start, commandOutput);
         // A scheme and credential can occur under any sensitive key. Preserve
         // a following spaced assignment, not '=' or ':' within the credential.
         let credential = end;
@@ -171,7 +186,7 @@ function redactAssignments(text: string, credentialsOnly = false, commandOutput 
             end = quotedEnd(text, end);
             if (text[end] === credentialQuote) end++;
           } else {
-            while (end < text.length && !/[\s"',;}&\]]/.test(text[end]!)) end++;
+            end = valueEnd(text, end, commandOutput);
           }
         }
       }

@@ -70,6 +70,26 @@ describe("command output redaction", () => {
       expect(redactBindings({ value: line }).value).toContain("[Redacted]");
     },
   );
+
+  it("masks only real secret values in shell text with escapes", () => {
+    // The command card shows the command with literal \n sequences; the reply
+    // shows the same text after printf turns them into real newlines.
+    const command = "printf 'maxTokens: 4096\\nknownSecrets: secrets\\npassword: hunter2\\n'";
+    expect(redactCommandOutput(command)).toBe(
+      "printf 'maxTokens: 4096\\nknownSecrets: secrets\\npassword: [Redacted]\\n'",
+    );
+    expect(redactCommandOutput("maxTokens: 4096\nknownSecrets: secrets\npassword: hunter2\n")).toBe(
+      "maxTokens: 4096\nknownSecrets: secrets\npassword: [Redacted]\n",
+    );
+  });
+  it.each([
+    ["password: hunter2", "password: [Redacted]"],
+    ["api_key=x9f2", "api_key=[Redacted]"],
+    ["Authorization: Bearer abc123", "Authorization: [Redacted]"],
+    ["token: ghp_fixtureOnlyNotARealCredential1234567890", "token: [Redacted]"],
+  ])("still masks real secret values: %s", (line, expected) => {
+    expect(redactCommandOutput(line!)).toBe(expected);
+  });
   it.each(["secret", "password", "apiKey"])("hides quoted %s source values", (key) => {
     expect(redactCommandOutput(`${key}: "ordinary source"`)).toBe(`${key}: "[Redacted]"`);
   });

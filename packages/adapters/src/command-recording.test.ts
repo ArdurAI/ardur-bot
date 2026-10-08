@@ -16,6 +16,7 @@ import {
   adoptOpenCommands,
   createCommandRecording,
   normalizeShellText,
+  redactCommandText,
   sensitiveFilePath,
   sensitiveShellCommand,
 } from "./command-recording.js";
@@ -94,6 +95,31 @@ it.each([
   ["echo $'a'$'b'", "echo ab"],
 ])("normalizes %s to %s", (input, normalized) => {
   expect(normalizeShellText(input)).toBe(normalized);
+});
+
+describe("command card text redaction", () => {
+  it("masks only the password in a printf with a numeric limit and a collection reference", () => {
+    const command = "printf 'maxTokens: 4096\\nknownSecrets: secrets\\npassword: hunter2\\n'";
+    expect(redactCommandText(command, [])).toBe(
+      "printf 'maxTokens: 4096\\nknownSecrets: secrets\\npassword: [Redacted]\\n'",
+    );
+  });
+  it.each([
+    ["password: hunter2", "password: [Redacted]"],
+    ["api_key=x9f2", "api_key=[Redacted]"],
+    ["Authorization: Bearer abc123", "Authorization: [Redacted]"],
+    ["token: ghp_fixtureOnlyNotARealCredential1234567890", "token: [Redacted]"],
+  ])("still masks real secret values in the card text: %s", (line, expected) => {
+    expect(redactCommandText(line, [])).toBe(expected);
+  });
+  it("records the printf command with only the password masked", async () => {
+    const command = "printf 'maxTokens: 4096\\nknownSecrets: secrets\\npassword: hunter2\\n'";
+    const f = fixture();
+    await f.invoke(command);
+    expect(f.blocks()[0]?.command).toBe(
+      "printf 'maxTokens: 4096\\nknownSecrets: secrets\\npassword: [Redacted]\\n'",
+    );
+  });
 });
 
 describe("credential-read output suppression", () => {
