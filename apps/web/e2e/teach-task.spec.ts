@@ -1,13 +1,13 @@
 import { expect, test } from "@playwright/test";
 import { captureScreenshot, completeOnboarding, signup } from "./helpers";
-import { openWorkspaceView, toggleAgentComputer } from "./workspace-view";
+import { openAgentComputer, openWorkspaceView } from "./workspace-view";
 
 test("teach a task records interaction and saves a draft", async ({ page }, testInfo) => {
   const stamp = Date.now();
   await signup(page, `teach-${stamp}@example.test`, "password12", "Teach");
   await completeOnboarding(page);
 
-  await toggleAgentComputer(page);
+  await openAgentComputer(page);
   const sidePanel = page.getByTestId("side-panel");
   await expect(sidePanel).toHaveAttribute("data-panel", "computer");
   await openWorkspaceView(page, "Screen");

@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 import { workspaceIntentHref } from "../src/pages/workspace/open-intent";
 import { captureScreenshot } from "./helpers";
 import { bots, installPerformanceFixture } from "./performance-fixture";
-import { openWorkspaceView as openView, toggleAgentComputer } from "./workspace-view";
+import { openAgentComputer, openWorkspaceView as openView } from "./workspace-view";
 
 const version = "a".repeat(64);
 
@@ -153,7 +153,7 @@ async function installWorkspace(
 }
 
 async function openFiles(page: Page) {
-  await toggleAgentComputer(page);
+  await openAgentComputer(page);
   const pane = page.getByTestId("side-panel");
   await expect(pane).toHaveAttribute("data-panel", "computer");
   await openView(page, "Files");
@@ -206,6 +206,11 @@ test("one header menu keeps views, computer and settings reachable by keyboard",
     "true",
   );
   await expect(menu).toBeHidden();
+  // Opening helpers must leave an already selected view and its pane open.
+  await openAgentComputer(page);
+  await openAgentComputer(page);
+  await openView(page, "Tasks");
+  await openView(page, "Tasks");
   await trigger.click();
   await expect(page.getByRole("menuitemcheckbox", { name: "Tasks", exact: true })).toHaveAttribute(
     "aria-checked",
@@ -233,7 +238,7 @@ test("one header menu keeps views, computer and settings reachable by keyboard",
   page.on("request", (request) => {
     if (request.url().includes("/rpc/threads/get")) refreshes += 1;
   });
-  await toggleAgentComputer(page);
+  await openAgentComputer(page);
   await expect(pane).toHaveAttribute("data-panel", "computer");
   await expect.poll(() => refreshes).toBeGreaterThan(0);
   await trigger.click();
@@ -329,7 +334,7 @@ test("workspace pane opens Tasks and bot files without starting the computer", a
   const { botId, unexpected } = await installWorkspace(page, "live");
   await page.goto(`/app/${botId}`);
   await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
-  await toggleAgentComputer(page);
+  await openAgentComputer(page);
   const pane = page.getByTestId("side-panel");
   await expect(pane).toHaveAttribute("data-panel", "computer");
   await expect(pane.getByRole("tab", { name: "Tasks" })).toBeVisible();
@@ -399,7 +404,7 @@ test("workspace views retain drafts across docking, expansion and return to chat
   await pane.getByRole("button", { name: "Back to chat", exact: true }).click();
   await expect(pane).toHaveAttribute("aria-hidden", "true");
   await expect(page.getByRole("button", { name: "Views", exact: true })).toBeFocused();
-  await toggleAgentComputer(page);
+  await openAgentComputer(page);
   await expect(pane.locator('[data-draft-proof="original"]')).toBeVisible();
   await expect(editor).toContainText("Unsaved workspace draft");
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -529,7 +534,7 @@ test("workspace pane Terminal keeps its shell across views and releases explicit
   });
   await page.goto(`/app/${botId}`);
   await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
-  await toggleAgentComputer(page);
+  await openAgentComputer(page);
   const pane = page.getByTestId("side-panel");
   await expect(pane).toHaveAttribute("data-panel", "computer");
   const tab = await openView(page, "Terminal");
@@ -625,7 +630,7 @@ test("workspace pane Terminal reports an ended session instead of a dead termina
   });
   await page.goto(`/app/${botId}`);
   await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
-  await toggleAgentComputer(page);
+  await openAgentComputer(page);
   const pane = page.getByTestId("side-panel");
   await openView(page, "Terminal");
   await expect(
@@ -688,7 +693,7 @@ test("workspace pane Terminal boots a stopped computer without taking control", 
   });
   await page.goto(`/app/${botId}`);
   await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
-  await toggleAgentComputer(page);
+  await openAgentComputer(page);
   const pane = page.getByTestId("side-panel");
   await expect(pane).toHaveAttribute("data-panel", "computer");
   const tab = await openView(page, "Terminal");

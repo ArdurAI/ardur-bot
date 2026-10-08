@@ -9,7 +9,7 @@ import {
   rpc,
   signup,
 } from "./helpers";
-import { openWorkspaceView, toggleAgentComputer } from "./workspace-view";
+import { openAgentComputer, openWorkspaceView } from "./workspace-view";
 
 test("Team Computer gives bots a home folder plus shared space while Private stays isolated", async ({
   page,
@@ -93,7 +93,7 @@ test("user control leaves another Team bot's screen available", async ({ page },
   const workerId = await createBot(page, "Worker", "team");
 
   await openBot(page, "Chief");
-  await toggleAgentComputer(page);
+  await openAgentComputer(page);
   await openWorkspaceView(page, "Screen");
   await page.getByTestId("computer-preview").hover();
   await page.getByTestId("computer-preview-open").click();
@@ -139,7 +139,7 @@ test("user control leaves another Team bot's screen available", async ({ page },
 test("a failed control release keeps the computer open for retry", async ({ page }, testInfo) => {
   await signup(page, `team-release-${Date.now()}@example.test`, "password12", "Team Release");
   await completeOnboarding(page);
-  await toggleAgentComputer(page);
+  await openAgentComputer(page);
   await openWorkspaceView(page, "Screen");
   await page.getByTestId("computer-preview").hover();
   await page.getByTestId("computer-preview-open").click();
@@ -199,7 +199,7 @@ test("an active Team bot must be stopped before user takeover", async ({ page },
     .poll(async () => (await threadSnapshot(page, chiefId)).run?.status ?? "idle")
     .toBe("running");
 
-  await toggleAgentComputer(page);
+  await openAgentComputer(page);
   const sidePanel = page.getByTestId("side-panel");
   await openWorkspaceView(page, "Screen");
   await expect(sidePanel.getByRole("button", { name: /Take control/i })).toHaveCount(0);
@@ -286,7 +286,7 @@ async function openBot(page: Page, name: string) {
 }
 
 async function openComputerPanel(page: Page) {
-  await toggleAgentComputer(page);
+  await openAgentComputer(page);
   await openWorkspaceView(page, "Screen");
   await expect(page.getByTestId("computer-preview")).toBeVisible();
   await expect(page.getByTestId("computer-preview-open")).toHaveCount(1);
