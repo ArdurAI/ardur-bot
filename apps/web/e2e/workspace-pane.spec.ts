@@ -762,7 +762,7 @@ for (const view of ["Files", "IDE"] as const) {
     });
     await page.goto(`/app/${botId}`);
     await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
-    await page.getByRole("button", { name: "Agent computer" }).click();
+    await toggleAgentComputer(page);
     const pane = page.getByTestId("side-panel");
     const initialDescribes = describes;
     await openView(page, view);
