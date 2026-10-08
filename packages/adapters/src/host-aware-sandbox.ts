@@ -196,6 +196,9 @@ export class HostAwareSandbox implements SandboxProvider {
   async environmentNote(computer: ComputerRef, context: AdapterContext) {
     return (await this.route(computer)).environmentNote?.(computer, context);
   }
+  async appliedLimits(computer: ComputerRef, context: AdapterContext) {
+    return (await this.route(computer)).appliedLimits?.(computer, context) ?? null;
+  }
 
   async resolveCommandCwd(...args: Parameters<NonNullable<SandboxProvider["resolveCommandCwd"]>>) {
     return (await this.route(args[0])).resolveCommandCwd?.(...args) ?? null;

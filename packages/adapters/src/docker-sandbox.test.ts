@@ -1,4 +1,4 @@
-import type { ProcessEvent } from "@ardurbot/adapter-kit";
+import type { ComputerRef, ProcessEvent } from "@ardurbot/adapter-kit";
 import {
   COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE,
   ComputerEngineUnavailableError,
@@ -24,6 +24,32 @@ const context = {
 };
 
 describe("Docker sandbox", () => {
+  it("inspects limits without booting and rejects stopped observations", async () => {
+    const limits = {
+      observedAt: new Date().toISOString(),
+      cpuCores: 1.5,
+      memoryBytes: null,
+      processes: 100,
+    };
+    const fetchMock = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
+      Response.json({ running: true, appliedLimits: limits }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const provider = new DockerSandboxProvider("http://supervisor.test", "test-token");
+    const computer: ComputerRef = {
+      id: "computer",
+      botId: "bot",
+      kind: "docker",
+      providerRef: "computer",
+    };
+    expect(await provider.appliedLimits(computer, context)).toEqual(limits);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("http://supervisor.test/computers/computer");
+    fetchMock.mockImplementation(async () =>
+      Response.json({ running: false, appliedLimits: limits }),
+    );
+    expect(await provider.appliedLimits(computer, context)).toBeNull();
+  });
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();

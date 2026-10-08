@@ -7,7 +7,7 @@ import type {
   TerminalOutput,
   TerminalProvider,
 } from "@ardurbot/adapter-kit";
-import { TERMINAL_FRAME_BYTES } from "@ardurbot/contracts";
+import { TERMINAL_FRAME_BYTES, TERMINAL_SESSION_LIMIT } from "@ardurbot/contracts";
 import { captureChildOutput, childProcessLogger } from "../child-output.js";
 import { RuntimeQueue, stopNative } from "../runtimes/native-process.js";
 import { fleetPath } from "./archive.js";
@@ -50,6 +50,9 @@ finally: stop(); os.close(master)
 `;
 
 type Session = {
+  context: TerminalContext;
+  closing?: boolean;
+  teardown?: Promise<void>;
   computerId: string;
   spaceId: string;
   leaseId: string;
@@ -61,6 +64,8 @@ type Session = {
 };
 export class FleetTerminal implements TerminalProvider {
   private sessions = new Map<string, Session>();
+  private admissions = new Map<string, Promise<unknown>>();
+  private opening = 0;
   constructor(
     private readonly start: (
       computer: ComputerRef,
@@ -78,9 +83,55 @@ export class FleetTerminal implements TerminalProvider {
     options: { cols: number; rows: number; shellProfileId: string },
     context: TerminalContext,
   ) {
-    if (this.sessions.size >= 16 || context.expiresAt <= Date.now() || !context.leaseId)
+    const previous = this.admissions.get(computer.id) ?? Promise.resolve();
+    const next = previous.catch(() => undefined).then(() => this.admit(computer, options, context));
+    this.admissions.set(computer.id, next);
+    try {
+      return await next;
+    } finally {
+      if (this.admissions.get(computer.id) === next) this.admissions.delete(computer.id);
+    }
+  }
+  private async admit(
+    computer: ComputerRef,
+    options: { cols: number; rows: number; shellProfileId: string },
+    context: TerminalContext,
+  ) {
+    const siblings = [...this.sessions.values()].filter((s) => s.computerId === computer.id);
+    if (
+      siblings.length >= TERMINAL_SESSION_LIMIT ||
+      siblings.some(
+        (s) =>
+          s.closing ||
+          s.context.spaceId !== context.spaceId ||
+          s.context.userId !== context.userId ||
+          s.context.leaseId !== context.leaseId ||
+          s.context.fence !== context.fence ||
+          s.context.generation !== context.generation ||
+          s.context.workingRoot !== context.workingRoot,
+      )
+    )
+      throw new Error("Terminal lease is unavailable.");
+    if (
+      this.sessions.size + this.opening >= 16 ||
+      context.expiresAt <= Date.now() ||
+      !context.leaseId ||
+      options.shellProfileId !== "default"
+    )
       throw new Error("Terminal lease is unavailable.");
     this.size(options.cols, options.rows);
+    this.opening++;
+    try {
+      return await this.startSession(computer, options, context);
+    } finally {
+      this.opening--;
+    }
+  }
+  private async startSession(
+    computer: ComputerRef,
+    options: { cols: number; rows: number },
+    context: TerminalContext,
+  ) {
     const root = await this.root(computer, context);
     const cwd =
       context.workingRoot === root
@@ -110,6 +161,7 @@ export class FleetTerminal implements TerminalProvider {
     timer.unref();
     this.sessions.set(id, {
       ...opened,
+      context,
       computerId: computer.id,
       spaceId: context.spaceId,
       leaseId: context.leaseId,
@@ -117,6 +169,10 @@ export class FleetTerminal implements TerminalProvider {
       queue,
       timer,
     });
+    if (context.signal.aborted || context.expiresAt <= Date.now()) {
+      await this.close(id, "expired-during-open");
+      throw new Error("Terminal lease is unavailable.");
+    }
     let pending = "",
       sequence = 0;
     opened.child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
@@ -154,7 +210,7 @@ export class FleetTerminal implements TerminalProvider {
   }
   private session(id: string) {
     const session = this.sessions.get(id);
-    if (!session || session.expiresAt <= Date.now())
+    if (!session || session.closing || session.expiresAt <= Date.now())
       throw new Error("Terminal lease is unavailable.");
     return session;
   }
@@ -175,12 +231,21 @@ export class FleetTerminal implements TerminalProvider {
   async close(id: string, _reason: string) {
     const session = this.sessions.get(id);
     if (!session) return;
-    this.sessions.delete(id);
+    session.closing = true;
     clearTimeout(session.timer);
-    session.child.stdin.end();
-    await stopNative(session.child);
-    await session.cleanup();
-    session.queue.end();
+    session.teardown ??= Promise.resolve().then(async () => {
+      session.child.stdin.end();
+      await stopNative(session.child);
+      await session.cleanup();
+      session.queue.end();
+      this.sessions.delete(id);
+    });
+    try {
+      await session.teardown;
+    } catch (error) {
+      session.teardown = undefined;
+      throw error;
+    }
   }
   async *output(id: string) {
     yield* this.session(id).queue;

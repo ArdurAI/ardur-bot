@@ -55,6 +55,7 @@ export class DockerTerminal implements TerminalProvider {
       generation: context.generation,
       expiresAt: context.expiresAt,
       workingRoot: context.workingRoot,
+      authority: JSON.stringify([context.spaceId, context.userId, computer.botId]),
     });
     const session = (await response.json()) as { id: string; generation: string };
     this.sessions.set(session.id, { computer, context });

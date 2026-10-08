@@ -23,6 +23,7 @@ import {
   controlPortPublicationMatches,
   homeVolumeMatches,
   hostComputerUser,
+  inspectedComputerLimits,
   legacyNetworkOwnedSolelyBy,
   parseMemoryBytes,
   publishedLoopbackControlHostPort,
@@ -37,6 +38,37 @@ import {
   screenUrlWithToken,
   xdotoolCommand,
 } from "./computer-spec.js";
+
+describe("inspected computer limits", () => {
+  const now = new Date("2026-10-01T00:00:00Z");
+  it("uses running-container values, not configuration defaults", () => {
+    const info = {
+      State: { Running: true },
+      HostConfig: { NanoCpus: 1_500_000_000, Memory: 512_000_000, PidsLimit: 100 },
+    } as Docker.ContainerInspectInfo;
+    expect(inspectedComputerLimits(info, now)).toEqual({
+      observedAt: now.toISOString(),
+      cpuCores: 1.5,
+      memoryBytes: 512_000_000,
+      processes: 100,
+    });
+    expect(
+      inspectedComputerLimits({ ...info, State: { ...info.State, Running: false } }, now),
+    ).toBeNull();
+  });
+  it("reports missing or unlimited restrictions conservatively and supports quota-period CPU", () => {
+    const info = {
+      State: { Running: true },
+      HostConfig: { NanoCpus: 0, CpuQuota: 50_000, CpuPeriod: 100_000, Memory: 0, PidsLimit: -1 },
+    } as Docker.ContainerInspectInfo;
+    expect(inspectedComputerLimits(info, now)).toEqual({
+      observedAt: now.toISOString(),
+      cpuCores: 0.5,
+      memoryBytes: null,
+      processes: null,
+    });
+  });
+});
 
 describe("computer image resolution", () => {
   it.each([

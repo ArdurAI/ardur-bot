@@ -76,6 +76,7 @@ import {
   Button,
   cn,
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
@@ -276,7 +277,7 @@ import {
   isSettingsPanel,
   PanelHeaderTitle,
   SettingsPanelToggle,
-  ThreadSettingsButton,
+  ThreadSettingsMenuItem,
 } from "./shell/settings-chrome";
 import {
   botsSidebarCollapsedForPage,
@@ -978,8 +979,9 @@ export function ShellPage({
   }
   const openWorkspace = (tab: string) => {
     if (!isWorkspaceViewId(tab) || !setPanel("computer")) return;
-    paneReturnFocus.current =
-      document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+    paneReturnFocus.current = document.activeElement?.closest('[data-slot="dropdown-menu-content"]')
+      ? document.querySelector<HTMLElement>("[data-workspace-trigger]")
+      : document.activeElement instanceof HTMLElement && document.activeElement !== document.body
         ? document.activeElement
         : null;
     setWorkspaceTab(tab);
@@ -1002,7 +1004,7 @@ export function ShellPage({
     if (!requested && !(workspaceShown && workspaceOverlay)) return;
     if (!workspaceShown || (requested && !workspaceFocusRequest?.view)) {
       if (paneReturnFocus.current?.isConnected) paneReturnFocus.current.focus();
-      else document.querySelector<HTMLElement>("[data-workspace-toggle]")?.focus();
+      else document.querySelector<HTMLElement>("[data-workspace-trigger]")?.focus();
       setWorkspaceFocusRequest(null);
       return;
     }
@@ -2486,9 +2488,9 @@ export function ShellPage({
             return;
           }
           if (groupTarget && activeGroupId.current === groupTarget) {
-            await refreshGroupThreadRef.current(groupTarget);
+            void refreshGroupThreadRef.current(groupTarget).catch(() => undefined);
           } else if (botTarget && activeBotId.current === botTarget) {
-            await refreshThreadRef.current(botTarget);
+            void refreshThreadRef.current(botTarget).catch(() => undefined);
           }
           return;
         }
@@ -2558,8 +2560,10 @@ export function ShellPage({
         }
         if (groupTarget && activeGroupId.current === groupTarget) setAttachmentNotice(null);
         if (botTarget && activeBotId.current === botTarget) setAttachmentNotice(null);
-        if (groupTarget) await refreshGroupThreadRef.current(groupTarget);
-        else if (botTarget) await refreshThreadRef.current(botTarget);
+        // The write is acknowledged; a display refresh must not block the next send
+        // or report a stored message as a failed submission.
+        if (groupTarget) void refreshGroupThreadRef.current(groupTarget).catch(() => undefined);
+        else if (botTarget) void refreshThreadRef.current(botTarget).catch(() => undefined);
       } catch (error) {
         if (reroutedToGroup && groupTarget) {
           setSendError(error instanceof Error ? error.message : t`Failed to send message`);
@@ -3839,7 +3843,7 @@ export function ShellPage({
           inert={mobileSidebarOpen || (workspaceShown && workspaceOverlay)}
           className={`${team || board || dashboard ? "hidden" : "flex"} min-h-0 min-w-0 flex-1 flex-col bg-background`}
         >
-          <div className="app-drag flex items-center justify-between border-b border-sidebar-border px-3 py-[17px] md:px-[22px]">
+          <div className="app-drag flex flex-nowrap items-center justify-between border-b border-sidebar-border px-3 py-[17px] md:px-[22px]">
             <div className="flex min-w-0 flex-1 items-center gap-2">
               {/* Collapsed bots sidebar: this header is the leading edge for window chrome. */}
               {botsSidebarCollapsed && desktopBridge() ? <WindowChrome /> : null}
@@ -3918,48 +3922,49 @@ export function ShellPage({
               <RunContext run={activeSnapshot?.contextRun ?? activeSnapshot?.run} />
             </div>
             <div className="flex shrink-0 items-center gap-1">
-              {!inGroup && active ? (
+              {(inGroup ? activeGroup : active) ? (
                 <Suspense fallback={null}>
                   <ViewControls
-                    capabilities={{ computer, context: workspaceContext }}
+                    capabilities={inGroup ? null : { computer, context: workspaceContext }}
                     layout={workspaceLayout}
                     visible={workspaceShown}
-                    onOpen={openWorkspace}
+                    onOpen={(view) => {
+                      if (workspaceShown && workspaceLayout.active === view) backToChat();
+                      else openWorkspace(view);
+                    }}
                     onPosition={(position) =>
                       updateWorkspaceLayout((layout) => ({ ...layout, position }))
                     }
-                  />
+                  >
+                    {!inGroup && active ? (
+                      <DropdownMenuCheckboxItem
+                        checked={workspaceShown}
+                        closeOnClick
+                        data-workspace-toggle
+                        onClick={() => {
+                          const next = workspaceShown ? null : "computer";
+                          if (workspaceShown) backToChat();
+                          else openWorkspace(workspaceTab);
+                          if (next === "computer" && active) {
+                            // Refresh run/computer so Take control isn't stuck on a stale busyBotName.
+                            void refreshThread(active.id).catch(() => undefined);
+                          }
+                        }}
+                      >
+                        <Monitor size={16} strokeWidth={1.6} aria-hidden="true" />
+                        {t`Agent computer`}
+                      </DropdownMenuCheckboxItem>
+                    ) : null}
+                    <ThreadSettingsMenuItem
+                      group={inGroup}
+                      panel={panel}
+                      onPanel={(next) => {
+                        setModelFocusRequest(0);
+                        setPanel(next);
+                      }}
+                    />
+                  </ViewControls>
                 </Suspense>
-              ) : null}
-              {(inGroup ? activeGroup : active) ? (
-                <ThreadSettingsButton
-                  group={inGroup}
-                  panel={panel}
-                  onPanel={(next) => {
-                    setModelFocusRequest(0);
-                    setPanel(next);
-                  }}
-                />
-              ) : null}
-              {!inGroup && active ? (
-                <button
-                  type="button"
-                  title={t`Agent computer`}
-                  data-workspace-toggle
-                  onClick={() => {
-                    const next = workspaceShown ? null : "computer";
-                    if (workspaceShown) backToChat();
-                    else openWorkspace(workspaceTab);
-                    if (next === "computer" && active) {
-                      // Refresh run/computer so Take control isn't stuck on a stale busyBotName.
-                      void refreshThread(active.id).catch(() => undefined);
-                    }
-                  }}
-                  data-active={workspaceShown ? "" : undefined}
-                  className="app-no-drag grid h-[30px] w-[34px] place-items-center rounded-[9px] hover:bg-accent data-active:bg-accent"
-                >
-                  <Monitor size={18} strokeWidth={1.6} className="text-foreground/75" />
-                </button>
               ) : null}
             </div>
           </div>
@@ -4265,6 +4270,7 @@ export function ShellPage({
                       computer
                         ? {
                             working: composerRunning,
+                            userId,
                             registerCloseGuard: registerTerminalCloseGuard,
                             onTakeControl: async () => {
                               await rpc.computer.takeover({ botId: active.id });

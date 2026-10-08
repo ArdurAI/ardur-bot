@@ -5,6 +5,7 @@ import { rpc } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { useMobileTokens } from "../lib/native";
 import { mobileTargetName } from "../lib/team";
+import { ComputerLimitsDetails } from "./computer-limits-details";
 
 export function FleetStatus() {
   const { t } = useI18n();
@@ -76,11 +77,9 @@ export function FleetStatus() {
                 />
               </View>
             ) : null}
-            {target.bots.length ? (
-              <Text style={{ color: tokens.mutedForeground }}>
-                {target.bots.map((bot) => bot.name).join(", ")}
-              </Text>
-            ) : null}
+            {target.bots.map((bot) => (
+              <ComputerLimitsDetails key={bot.id} bot={bot} />
+            ))}
           </View>
         );
       })}

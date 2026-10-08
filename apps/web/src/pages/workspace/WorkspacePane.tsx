@@ -5,6 +5,7 @@ import type {
   WorkspaceContext,
   WorkspaceView,
 } from "@ardurbot/contracts";
+import { terminalCollectionKey } from "@ardurbot/core";
 import { Button, WorkspaceTabs } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { ArrowLeft, Maximize2, Minimize2, X } from "lucide-react";
@@ -13,6 +14,7 @@ import { Suspense, useEffect, useState } from "react";
 import { Shimmer } from "../../components/ai/primitives";
 import { rpc } from "../../lib/rpc";
 import type { ChangeLocation } from "./change-target";
+import { readTerminalCollection } from "./terminal-state";
 import { availableWorkspaceViews, isWorkspaceViewId, workspaceViews } from "./view-registry";
 
 export function WorkspacePane({
@@ -87,6 +89,20 @@ export function WorkspacePane({
     ? views
     : [...views, { type: selected }];
   const name = workspaceViews[selected].label(t);
+  const canRestoreTerminal = Boolean(
+    terminal?.userId &&
+      computer?.computerId &&
+      computer.computerGeneration !== undefined &&
+      readTerminalCollection(
+        terminalCollectionKey({
+          userId: terminal.userId,
+          spaceId: bot.spaceId,
+          botId: bot.id,
+          computerId: computer.computerId,
+          generation: computer.computerGeneration,
+        }),
+      ),
+  );
   const closeLabel = (name: string) => t`Close ${name}`;
   const tabs = opened.map(({ type }) => {
     const view = workspaceViews[type];
@@ -102,7 +118,10 @@ export function WorkspacePane({
           >
             <Shimmer>{t`Loading…`}</Shimmer>
           </div>
-        ) : type === "terminal" && view.available(capabilities) && !allowTerminalStart ? (
+        ) : type === "terminal" &&
+          view.available(capabilities) &&
+          !allowTerminalStart &&
+          !canRestoreTerminal ? (
           <div className="flex h-full items-center justify-center p-6">
             <Button
               variant="outline"
@@ -205,6 +224,7 @@ export type WorkspacePaneProps = {
     onOpen(): void;
   };
   terminal: {
+    userId?: string;
     working: boolean;
     onTakeControl(): Promise<unknown>;
     onStop(): Promise<unknown>;

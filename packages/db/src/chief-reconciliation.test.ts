@@ -293,4 +293,52 @@ describe("chief correction reconciliation", () => {
     expect(await findChiefCorrectionPlan(f.prisma, scope)).toBe(f.plan);
     expect(f.tx.chiefPlan.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: scope }));
   });
+  it.each([false, true])(
+    "bounds an unconfirmed cancelled run with a pending effect (live lease: %s)",
+    async (live) => {
+      vi.useFakeTimers();
+      try {
+        const f = fixture();
+        f.old.cancelConfirmedAt = null as never;
+        f.actions[0]!.state = "admitted";
+        f.effects[0]!.status = "executing";
+        const since = new Date();
+        f.plan.control = {
+          ...ChiefControlSchema.parse(f.plan.control),
+          stoppingRunIds: ["old"],
+          uncertaintySince: since.toISOString(),
+        };
+        f.tx.computerExecutionLease.count.mockResolvedValue(live ? 1 : 0);
+        vi.setSystemTime(since.getTime() + CHIEF_RECONCILIATION_POLICY.orphanOutcomeAfterMs - 1);
+        expect(await reconcileChiefCorrection(f.prisma, "plan")).toBeUndefined();
+        expect(ChiefControlSchema.parse(f.plan.control).stoppingRunIds).toEqual(["old"]);
+        vi.setSystemTime(since.getTime() + CHIEF_RECONCILIATION_POLICY.orphanOutcomeAfterMs);
+        await reconcileChiefCorrection(f.prisma, "plan");
+        if (live) {
+          expect(ChiefControlSchema.parse(f.plan.control).stoppingRunIds).toEqual(["old"]);
+          expect(f.tx.run.create).not.toHaveBeenCalled();
+        } else {
+          expect(ChiefControlSchema.parse(f.plan.control)).toMatchObject({
+            stoppingRunIds: [],
+            uncertainRunIds: [],
+            pendingReplan: false,
+            reconciledActions: [
+              { runId: "old", effectId: "effect", revision: 2, outcome: "unknown" },
+            ],
+          });
+          expect(f.effects[0]!.status).toBe("executing");
+          expect(await reconcileChiefCorrection(f.prisma, "plan")).toBeUndefined();
+          expect(f.tx.run.create).toHaveBeenCalledOnce();
+          // A late receipt cannot turn an earlier unknown outcome into permission to repeat it.
+          f.effects[0]!.status = "completed";
+          await reconcileChiefCorrection(f.prisma, "plan");
+          expect(ChiefControlSchema.parse(f.plan.control).reconciledActions?.[0]?.outcome).toBe(
+            "unknown",
+          );
+        }
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
 });

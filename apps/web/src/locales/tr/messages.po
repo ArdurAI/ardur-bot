@@ -240,6 +240,10 @@ msgstr ""
 msgid "{count} folders"
 msgstr ""
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "{count} measured runs"
+msgstr "{count} ölçülen çalıştırma"
+
 #: src/pages/LearningInsights.tsx
 msgid "{count} runs needed {connection}, which is not connected."
 msgstr ""
@@ -1042,6 +1046,10 @@ msgstr "Görünüm"
 msgid "Applied"
 msgstr ""
 
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "Applied limits"
+msgstr "Uygulanan sınırlar"
+
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/customize/McpConfigEditor.tsx
 msgid "Apply"
@@ -1286,9 +1294,10 @@ msgid "Automatically start when you log in to your computer."
 msgstr ""
 
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Available"
-msgstr ""
+msgstr "Kullanılabilir"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Available after the routine is saved"
@@ -1625,6 +1634,7 @@ msgstr "Sunucuya ulaşılamıyor."
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/shell/move-to-host.tsx
+#: src/pages/shell/runtime-settings.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Cancel"
 msgstr "İptal"
@@ -1649,6 +1659,10 @@ msgstr "Yanıtı iptal et"
 msgid "Cancel sign-in"
 msgstr ""
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Cancellation"
+msgstr "İptal"
+
 #: src/pages/LearningObservation.tsx
 msgid "Cancellations"
 msgstr ""
@@ -1664,12 +1678,17 @@ msgstr "iptal edildi"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "Cancelled"
 msgstr "İptal edildi"
 
 #: src/pages/settings-sections.ts
 msgid "Capabilities"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Capability checks"
+msgstr "Yetenek kontrolleri"
 
 #: src/pages/group-model-control.tsx
 msgid "Captured for this group."
@@ -1806,6 +1825,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Checked {0}"
 msgstr "Kontrol edildi {0}"
+
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "Checked {time}"
+msgstr "Kontrol zamanı: {time}"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Checking the download"
@@ -2045,6 +2068,10 @@ msgstr "Paneli kapat"
 msgid "Close preview"
 msgstr "Önizlemeyi kapat"
 
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Close terminal"
+msgstr "Terminali kapat"
+
 #: src/pages/SettingsOverlay.tsx
 msgid "Close user settings"
 msgstr "Kullanıcı ayarlarını kapat"
@@ -2161,6 +2188,7 @@ msgstr "Tamamlandı"
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/GroupPanel.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "Completed"
 msgstr "Tamamlandı"
 
@@ -2295,6 +2323,10 @@ msgstr "Parolayı doğrulayın"
 #: src/pages/DevicesSettings.tsx
 msgid "Confirm the phone fingerprint here before allowing it."
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Confirmed offline"
+msgstr "Çevrimdışı doğrulandı"
 
 #. placeholder {0}: conflict.path
 #: src/pages/GitMemorySettings.tsx
@@ -2436,10 +2468,6 @@ msgstr "Bağlanıyor…"
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Connection"
-msgstr ""
-
-#: src/pages/shell/terminal-session.tsx
-msgid "Connection lost — reconnecting"
 msgstr ""
 
 #: src/pages/fleet/FleetSettings.tsx
@@ -3375,6 +3403,10 @@ msgstr ""
 msgid "Couldn't update messaging settings"
 msgstr ""
 
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "CPU"
+msgstr "CPU"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "CPU limit"
 msgstr ""
@@ -3552,6 +3584,10 @@ msgstr ""
 #: src/pages/RoutineSchedule.tsx
 msgid "days"
 msgstr "gün"
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Declared"
+msgstr "Beyan edilen"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Decline"
@@ -4001,6 +4037,10 @@ msgstr "örn. Hivenet Agent, Presales, puantaj botu"
 msgid "Earlier message"
 msgstr ""
 
+#: src/pages/shell/terminal-session.tsx
+msgid "Earlier output is unavailable"
+msgstr "Önceki çıktı kullanılamıyor"
+
 #: src/components/Context.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/fleet/FleetSettings.tsx
@@ -4056,6 +4096,7 @@ msgstr "Bir cihazı eşleştirmek için sunucuda ARDURBOT_DEVICE_LISTENER_ENABLE
 msgid "Enable this server first, then sign in."
 msgstr ""
 
+#: src/pages/workspace/TerminalCollection.tsx
 #: src/pages/workspace/WorkspaceTerminal.tsx
 msgid "End this terminal?"
 msgstr "Bu terminal sonlandırılsın mı?"
@@ -4299,6 +4340,7 @@ msgstr "başarısız"
 #: src/lib/team-delivery-text.ts
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "Failed"
 msgstr "Başarısız"
 
@@ -4413,6 +4455,10 @@ msgstr "MCP bağlantısı tamamlanıyor…"
 msgid "First bot not created"
 msgstr "İlk bot oluşturulmadı"
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "First reply"
+msgstr "İlk yanıt"
+
 #: src/components/ai/CoordinationLine.tsx
 msgid "Fix"
 msgstr "Düzelt"
@@ -4477,6 +4523,10 @@ msgstr ""
 #: src/pages/import/LocalImportPage.tsx
 msgid "Found on this Mac"
 msgstr ""
+
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Four terminals are already open."
+msgstr "Zaten dört terminal açık."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Free"
@@ -4718,6 +4768,10 @@ msgstr "Bağlı"
 msgid "Host"
 msgstr ""
 
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "Host account"
+msgstr "Ana makine hesabı"
+
 #: src/pages/HostComputerSettings.tsx
 msgid "Host service:"
 msgstr ""
@@ -4957,6 +5011,10 @@ msgstr "Instance API anahtarı"
 msgid "Instruction"
 msgstr "Talimat"
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Instruction delivery"
+msgstr "Talimat iletimi"
+
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/import/LocalImportPage.tsx
 msgid "Instructions"
@@ -5148,6 +5206,10 @@ msgstr ""
 msgid "Language"
 msgstr "Dil"
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Last 7 days"
+msgstr "Son 7 gün"
+
 #: src/pages/LearningCurator.tsx
 msgid "Last check"
 msgstr ""
@@ -5155,6 +5217,10 @@ msgstr ""
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Last checked"
 msgstr ""
+
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Last failure"
+msgstr "Son hata"
 
 #: src/pages/DevicesSettings.tsx
 msgid "Last present"
@@ -5576,6 +5642,7 @@ msgstr "Üyeler ({GROUP_MEMBER_MIN}–{GROUP_MEMBER_MAX} seç)"
 msgid "Memories"
 msgstr ""
 
+#: src/pages/fleet/ComputerLimitsDetails.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/memory/MemoryProposals.tsx
@@ -5953,6 +6020,10 @@ msgstr "Yerel sıkıştırma"
 msgid "Native compression is not available with Hermes."
 msgstr "Hermes ile yerel sıkıştırma kullanılamaz."
 
+#: src/pages/settings/NativeRuntimeSettings.tsx
+msgid "Native runtimes"
+msgstr "Yerel çalışma ortamları"
+
 #: src/pages/shell/TopNav.tsx
 msgid "Navigation"
 msgstr ""
@@ -6046,6 +6117,10 @@ msgstr "Yeni beceri"
 #: src/pages/shell/dialogs.tsx
 msgid "New space"
 msgstr ""
+
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "New terminal"
+msgstr "Yeni terminal"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "New work item"
@@ -6224,8 +6299,9 @@ msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineHistory.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "No runs yet"
-msgstr ""
+msgstr "Henüz çalıştırma yok"
 
 #: src/pages/dashboard/panels.ts
 #: src/pages/dashboard/RoutinesPanel.tsx
@@ -6333,6 +6409,10 @@ msgstr ""
 msgid "Not initialized"
 msgstr "Başlatılmadı"
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Not measured"
+msgstr "Ölçülmedi"
+
 #: src/pages/LearningInbox.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Not now"
@@ -6348,9 +6428,10 @@ msgid "Not recorded"
 msgstr ""
 
 #: src/pages/ComparePanel.tsx
+#: src/pages/fleet/ComputerLimitsDetails.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Not reported"
-msgstr ""
+msgstr "Bildirilmedi"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Not requested"
@@ -6367,6 +6448,10 @@ msgstr "Mühürlenmedi"
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Not tested"
+msgstr "Test edilmedi"
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Not used"
@@ -6554,6 +6639,10 @@ msgstr "Tam pencerede aç"
 #: src/pages/customize/SkillsPage.tsx
 msgid "Open learning inbox"
 msgstr ""
+
+#: src/pages/shell/terminal-session.tsx
+msgid "Open link"
+msgstr "Bağlantıyı aç"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open links in built-in browser"
@@ -6956,6 +7045,10 @@ msgstr ""
 msgid "Private workspace with its own bots and groups."
 msgstr ""
 
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "Processes"
+msgstr "İşlemler"
+
 #: src/pages/account/AccountProfile.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/memory/MemoryProposals.tsx
@@ -7173,6 +7266,10 @@ msgstr ""
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Reconnecting"
 msgstr "Yeniden bağlanıyor"
+
+#: src/pages/shell/terminal-session.tsx
+msgid "Reconnecting terminal"
+msgstr "Terminal yeniden bağlanıyor"
 
 #: src/pages/dashboard/GovernancePanel.tsx
 msgid "Record evidence of bot decisions"
@@ -7452,6 +7549,10 @@ msgstr ""
 msgid "Report an issue"
 msgstr ""
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Report is for another version"
+msgstr "Rapor başka bir sürüm için"
+
 #: src/pages/TeamBoard.tsx
 msgid "Reported met"
 msgstr ""
@@ -7528,6 +7629,10 @@ msgstr ""
 #: src/pages/CompareStart.tsx
 msgid "Reserve a merge run"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Reserved"
+msgstr "Ayrılan"
 
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -8293,6 +8398,11 @@ msgstr ""
 msgid "Set up memory search"
 msgstr ""
 
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/settings/NativeRuntimeSettings.tsx
+msgid "Set up on the home device"
+msgstr "Ana cihazda kurun"
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Set up servers"
 msgstr ""
@@ -8793,6 +8903,10 @@ msgstr "Şifreli saklanıyor"
 msgid "Stored securely. Never shown here."
 msgstr "Güvenle saklanır. Burada gösterilmez."
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Streaming"
+msgstr "Akış"
+
 #: src/pages/Shell.tsx
 msgid "subagent"
 msgstr "alt ajan"
@@ -8801,6 +8915,10 @@ msgstr "alt ajan"
 #: src/pages/Onboarding.tsx
 msgid "Submit"
 msgstr "Gönder"
+
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Success"
+msgstr "Başarı"
 
 #: src/pages/LearningInbox.tsx
 msgid "Suggested content"
@@ -8912,13 +9030,22 @@ msgstr ""
 #: src/pages/ide/IdePage.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
+#: src/pages/workspace/TerminalCollection.tsx
 #: src/pages/workspace/view-registry.ts
 msgid "Terminal"
 msgstr "Terminal"
 
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Terminal {number}"
+msgstr "Terminal {number}"
+
 #: src/pages/shell/computer-terminal.tsx
 msgid "Terminal could not open; try again"
 msgstr ""
+
+#: src/pages/shell/terminal-session.tsx
+msgid "Terminal expired"
+msgstr "Terminal oturumunun süresi doldu"
 
 #: src/pages/workspace/terminal-controller.ts
 msgid "Terminal is not available on this computer"
@@ -9064,6 +9191,7 @@ msgstr "Düşünüyor"
 #: src/pages/ide/terminal.tsx
 #: src/pages/workspace/dialogs.tsx
 #: src/pages/workspace/terminal-controller.ts
+#: src/pages/workspace/TerminalCollection.tsx
 msgid "This action could not finish; try again."
 msgstr ""
 
@@ -9108,6 +9236,10 @@ msgstr ""
 #: src/pages/LearningInbox.tsx
 msgid "This board item was completed."
 msgstr ""
+
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "This bot"
+msgstr "Bu bot"
 
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
@@ -9366,10 +9498,6 @@ msgstr "Başlık"
 msgid "to {peer}"
 msgstr "{peer} için"
 
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings."
-msgstr ""
-
 #: src/pages/shell/bot-picker.tsx
 msgid "To:"
 msgstr "Kime:"
@@ -9419,6 +9547,10 @@ msgstr "{name} için durma talimatı verildi"
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Tool access mode"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Tool authorization"
+msgstr "Araç yetkilendirmesi"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Tool sources"
@@ -9530,7 +9662,9 @@ msgid "Uninstall"
 msgstr ""
 
 #: src/components/ai/CompactWorkRecord.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/LearningCurator.tsx
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Unknown"
 msgstr "Bilinmiyor"
@@ -9557,6 +9691,10 @@ msgstr "Sabitlemeyi kaldır"
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Unsaved changes"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Unsupported"
+msgstr "Desteklenmiyor"
 
 #. placeholder {0}: pending.file.name
 #: src/pages/Shell.tsx
@@ -9675,8 +9813,13 @@ msgstr ""
 #: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/settings-sections.ts
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
 msgid "Usage"
 msgstr "Kullanım"
+
+#: src/pages/GroupPanel.tsx
+msgid "Usage incomplete"
+msgstr "Kullanım bilgisi eksik"
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "Use {hostLabel}"
@@ -9772,6 +9915,10 @@ msgstr "Tam KiB değerleri kullanın."
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Use whole seconds."
 msgstr "Tam saniyeler kullanın."
+
+#: src/pages/GroupPanel.tsx
+msgid "Used"
+msgstr "Kullanılan"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "User"

@@ -8,7 +8,7 @@ import {
   rpc,
   signup,
 } from "./helpers";
-import { openWorkspaceView } from "./workspace-view";
+import { openWorkspaceView, toggleAgentComputer } from "./workspace-view";
 
 function sidebarBotButton(page: Page, name: RegExp | string) {
   return page.locator("[data-sidebar-group] [data-roster-bot-id]").filter({
@@ -96,9 +96,9 @@ test("takeover, routine, integrations, and export are reachable", async ({ page 
   // Agent computer toggles the panel. Re-open when closed so Open can refresh computer status.
   const sidePanel = page.getByTestId("side-panel");
   if ((await sidePanel.getAttribute("data-panel")) === "computer") {
-    await page.getByTitle("Agent computer").click();
+    await toggleAgentComputer(page);
   }
-  await page.getByTitle("Agent computer").click();
+  await toggleAgentComputer(page);
   await expect(sidePanel).toHaveAttribute("data-panel", "computer");
   await expect(sidePanel).toHaveCSS("width", "480px");
   await openWorkspaceView(page, "Screen");
@@ -162,7 +162,7 @@ test("takeover, routine, integrations, and export are reachable", async ({ page 
   await page.getByText("Chief").first().click();
   const gear = page.getByRole("button", { name: "Show settings" });
   if (!(await gear.isVisible().catch(() => false))) {
-    await page.getByTitle("Agent computer").click();
+    await toggleAgentComputer(page);
   }
   await gear.click();
   const downloadPromise = page.waitForEvent("download");
