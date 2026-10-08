@@ -767,7 +767,7 @@ for (const view of ["Files", "IDE"] as const) {
     });
     await page.goto(`/app/${botId}`);
     await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
-    await toggleAgentComputer(page);
+    await openAgentComputer(page);
     const pane = page.getByTestId("side-panel");
     const initialDescribes = describes;
     await openView(page, view);
