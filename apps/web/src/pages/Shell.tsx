@@ -4229,6 +4229,14 @@ export function ShellPage({
                     bot={active}
                     computer={computer}
                     context={workspaceContext}
+                    onContextChange={(context) =>
+                      setWorkspaceState((current) =>
+                        current?.key === workspaceLocationKey &&
+                        current.context === workspaceContext
+                          ? { key: workspaceLocationKey, context }
+                          : current,
+                      )
+                    }
                     contextLoading={workspaceContextLoading}
                     tab={workspaceTab}
                     fileLocation={fileLocation}

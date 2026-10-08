@@ -22,6 +22,7 @@ export function WorkspacePane({
   computer,
   context: suppliedContext,
   contextLoading: suppliedContextLoading = false,
+  onContextChange,
   routines,
   screen,
   terminal,
@@ -134,6 +135,10 @@ export function WorkspacePane({
               bot,
               computer,
               context: currentContext,
+              onContextChange: (next) => {
+                if (suppliedContext !== undefined) onContextChange?.(next);
+                else setContext({ key: contextKey, value: next });
+              },
               routines,
               screen,
               terminal,
@@ -214,6 +219,7 @@ export type WorkspacePaneProps = {
   computer: ComputerStatus | null;
   context?: WorkspaceContext | null;
   contextLoading?: boolean;
+  onContextChange?(context: WorkspaceContext): void;
   routines: ReactNode;
   screen: {
     computer: ComputerStatus | null;

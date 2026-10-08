@@ -300,6 +300,7 @@ export const RU_MESSAGES: Record<string, string> = {
   Failures: "Сбои",
   "Feedback corrections": "Исправления по отзывам",
   Files: "Файлы",
+  "Computer changed. Refresh files.": "Компьютер изменился. Обновите файлы.",
   "Files are unavailable on this computer.": "Файлы недоступны на этом компьютере.",
   "Live files": "Текущие файлы",
   "Saved files": "Сохранённые файлы",

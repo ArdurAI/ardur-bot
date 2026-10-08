@@ -1,3 +1,5 @@
+import { rpcErrorMessage } from "@ardurbot/core";
+
 /** An RPC failure that carries the server's error code, so callers can name a specific fix.
  * `code` is the ORPC status (e.g. "BAD_REQUEST", or a custom top-level code some routes use);
  * `data` is the error's own `data` payload, some routes' way of attaching a machine-readable
@@ -11,4 +13,11 @@ export class RpcError extends Error {
     super(message);
     this.name = "RpcError";
   }
+}
+
+/** Only mapped server failures may supply a sentence to the interface. */
+export class RpcServerError extends RpcError {}
+
+export function actionMessage(error: unknown, fallback: string): string {
+  return error instanceof RpcServerError ? rpcErrorMessage(error, fallback) : fallback;
 }
