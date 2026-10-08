@@ -709,3 +709,75 @@ test("workspace pane Terminal boots a stopped computer without taking control", 
   await expect(pane.getByText("Take control to open a terminal", { exact: true })).toBeVisible();
   await expect(pane.getByRole("button", { name: "Take control" })).toBeVisible();
 });
+
+for (const view of ["Files", "IDE"] as const) {
+  test(`${view} recovers when the computer wakes during the opening read`, async ({
+    page,
+  }, testInfo) => {
+    const { botId } = await installWorkspace(page, "live", undefined, false, true);
+    let generation = 1;
+    const lists: number[] = [];
+    const reads: number[] = [];
+    let describes = 0;
+    const context = () => ({
+      botId,
+      rootId: "sandbox-fixture-computer",
+      computerId: "fixture-computer",
+      generation,
+      files: "live",
+      runsOnHost: true,
+      observedAt: "2026-09-28T00:00:00.000Z",
+    });
+    await page.route("**/rpc/workspace/**", async (route) => {
+      const name = new URL(route.request().url()).pathname.split("/").at(-1);
+      if (name === "describe") {
+        describes++;
+        return route.fulfill({ json: { json: context() } });
+      }
+      if (name === "list" || name === "read") {
+        const input = route.request().postDataJSON().json;
+        const requests = name === "list" ? lists : reads;
+        requests.push(input.generation);
+        if (requests.length === 1) generation++;
+        if (input.generation !== generation) {
+          return route.fulfill({
+            status: 409,
+            json: {
+              json: {
+                defined: false,
+                code: "CONFLICT",
+                status: 409,
+                message: "Computer changed. Refresh files.",
+              },
+            },
+          });
+        }
+        expect(input.generation).toBe(generation);
+        expect(input.rootId).toBe("sandbox-fixture-computer");
+        return route.fulfill({
+          json: {
+            json:
+              name === "list"
+                ? { context: context(), entries: [{ path: "notes.md", kind: "file", size: 17 }] }
+                : fileBody(context(), "Workspace notes after wake\n"),
+          },
+        });
+      }
+      await route.fallback();
+    });
+    await page.goto(`/app/${botId}`);
+    await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
+    await openAgentComputer(page);
+    const pane = page.getByTestId("side-panel");
+    const initialDescribes = describes;
+    await openView(page, view);
+    await pane.getByRole("button", { name: "notes.md", exact: true }).click();
+    await expect(pane.locator("[data-ide-editor]")).toContainText("Workspace notes after wake");
+    await expect(pane.getByRole("alert")).toHaveCount(0);
+    // Strict Mode replays the opening effect; both stale requests must be refused.
+    expect(lists).toEqual([1, 1, 2]);
+    expect(reads).toEqual([2, 3]);
+    expect(describes - initialDescribes).toBe(2);
+    await captureScreenshot(page, testInfo, `workspace-${view.toLowerCase()}-wake-recovery`);
+  });
+}

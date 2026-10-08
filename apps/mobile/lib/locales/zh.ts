@@ -291,6 +291,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   Failures: "失败次数",
   "Feedback corrections": "反馈修正",
   Files: "文件",
+  "Computer changed. Refresh files.": "计算机已更改。请刷新文件。",
   "Files are unavailable on this computer.": "此计算机上的文件不可用。",
   "Live files": "实时文件",
   "Saved files": "已保存的文件",
