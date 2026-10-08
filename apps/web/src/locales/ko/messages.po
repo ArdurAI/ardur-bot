@@ -9139,6 +9139,10 @@ msgid "This command is not available to this account."
 msgstr ""
 
 #: src/components/ThreadCommandBlock.tsx
+msgid "This command was not run because it exceeds 64 KB. Put code in a file and run that file."
+msgstr "이 명령은 64 KB를 초과하여 실행되지 않았습니다. 코드를 파일에 저장하고 해당 파일을 실행하세요."
+
+#: src/components/ThreadCommandBlock.tsx
 msgid "This command was not run because its request is invalid. Check the command and folder."
 msgstr "요청이 유효하지 않아 이 명령을 실행하지 않았습니다. 명령과 폴더를 확인하세요."
 
@@ -9661,6 +9665,10 @@ msgstr "{hostLabel} 사용"
 #: src/pages/Onboarding.tsx
 msgid "Use a found model"
 msgstr "찾은 모델 중에서 선택"
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Use a path inside this bot's folder or a registered folder."
+msgstr "이 봇의 폴더 또는 등록된 폴더 안의 경로를 사용하세요."
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Use a token"

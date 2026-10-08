@@ -1,6 +1,7 @@
 import { link, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { COMMAND_REFUSALS, CommandRefusalError } from "@ardurbot/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import { FILE_LOCATION_REFUSAL } from "./host-policy.js";
@@ -40,6 +41,18 @@ async function fixture(restricted: boolean) {
 const bytes = (text: string) => new TextEncoder().encode(text);
 
 describe.each([false, true])("registered local files (restricted: %s)", (restricted) => {
+  it("identifies the actual file guard refusal without changing its original sentence", async () => {
+    const { provider, computer } = await fixture(restricted);
+    const error = await provider
+      .readFile(computer, "../outside.txt", context)
+      .catch((error: unknown) => error);
+    expect(error).toBeInstanceOf(CommandRefusalError);
+    expect(error).toMatchObject({
+      refusalId: "file-location",
+      message: COMMAND_REFUSALS["file-location"],
+    });
+  });
+
   it("narrows workspace operations to a Team bot without changing explicit registered roots", async () => {
     const { provider, computer, registered } = await fixture(restricted);
     const root = "bots/selected";

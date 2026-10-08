@@ -46,6 +46,7 @@ export default defineConfig({
       "apps/cli/src/**/*.test.ts",
       "apps/web/src/**/*.test.{ts,tsx}",
       "apps/mobile/lib/**/*.test.ts",
+      "apps/mobile/components/**/*.test.{ts,tsx}",
       "apps/mobile/plugins/**/*.test.js",
       "apps/api/src/**/*.test.ts",
       "apps/worker/src/**/*.test.ts",

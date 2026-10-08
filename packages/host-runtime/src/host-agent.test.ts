@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { AgentRuntime, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
+import { COMMAND_REFUSALS } from "@ardurbot/contracts";
 import type { HostFrame, HostOperation, HostRequest } from "@ardurbot/contracts/host-bridge";
 import {
   decodeHostFrame,
@@ -554,7 +555,11 @@ describe("host process operations", () => {
     expect(frames.at(-1)).toMatchObject({
       id: "second",
       type: "end",
-      problem: { code: "runtime-unavailable" },
+      problem: {
+        code: "runtime-unavailable",
+        refusalId: "file-location",
+        reason: COMMAND_REFUSALS["file-location"],
+      },
     });
     expect(JSON.stringify(frames)).not.toContain("never transmitted");
   });
