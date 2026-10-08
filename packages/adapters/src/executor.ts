@@ -2001,7 +2001,31 @@ export function createRunExecutor(deps: ExecutorDeps) {
         });
 
       let checkpointWrite: Promise<void> = Promise.resolve();
-      const flushProgressSaves = () => checkpointWrite;
+      let pendingCheckpointSaves = 0;
+      let checkpointSavesAbandoned = false;
+      // Only the drain deadline abandons saves; an ordinary runtime abort still flushes.
+      // Cleanup must not start another 60-second wait.
+      const settleProgressSaves = async (): Promise<boolean> => {
+        const signal = deps.restartDrain?.deadlineSignal;
+        if (!signal) {
+          await checkpointWrite;
+          return true;
+        }
+        if (signal.aborted) return pendingCheckpointSaves === 0;
+        let interrupt!: () => void;
+        const interrupted = new Promise<false>((resolve) => {
+          interrupt = () => resolve(false);
+          signal.addEventListener("abort", interrupt, { once: true });
+        });
+        try {
+          return await Promise.race([checkpointWrite.then(() => true), interrupted]);
+        } finally {
+          signal.removeEventListener("abort", interrupt);
+        }
+      };
+      const flushProgressSaves = async () => {
+        if (!(await settleProgressSaves())) throw deps.restartDrain?.deadlineSignal.reason;
+      };
       let suspendedForRestart = false;
       let leaseValid = true;
       let lastLeaseCheckAt = 0;
@@ -5959,15 +5983,21 @@ export function createRunExecutor(deps: ExecutorDeps) {
           // save supersedes a lost one. Callers that await still see that save's own failure.
           const saveProgress = () => {
             const snapshot = redactTaskValue(turnProgress.snapshot(), runSecrets);
-            const write = checkpointWrite.then(async () => {
-              const stored = await deps.secretStore.put(
-                JSON.stringify(snapshot),
-                context,
-                `turn:${runId}`,
-              );
-              await saveTurnProgress(deps.prisma, runId, workerId, fence, stored.ciphertext);
-              tracePoint(runId, "restart.saved", { attempt: fence });
-            });
+            pendingCheckpointSaves++;
+            const write = checkpointWrite
+              .then(async () => {
+                if (checkpointSavesAbandoned) return;
+                const stored = await deps.secretStore.put(
+                  JSON.stringify(snapshot),
+                  context,
+                  `turn:${runId}`,
+                );
+                await saveTurnProgress(deps.prisma, runId, workerId, fence, stored.ciphertext);
+                tracePoint(runId, "restart.saved", { attempt: fence });
+              })
+              .finally(() => {
+                pendingCheckpointSaves--;
+              });
             checkpointWrite = write.catch((error: unknown) => {
               getLogger().warn("restart.turn.checkpoint.failed", {
                 runId,
@@ -7404,6 +7434,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             });
           }
         } catch (error) {
+          if (deps.shutdownSignal?.aborted) return;
           await flushProgressSaves();
           if (suspendedForRestart || deps.shutdownSignal?.aborted) return;
           const stopping = await deps.prisma.run.findUnique({
@@ -7572,6 +7603,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
         }
       } catch (setupError) {
+        if (deps.shutdownSignal?.aborted) return;
         await flushProgressSaves();
         if (preparationSignal?.aborted) {
           await requeueComputerRun(deps, runId, workerId, fence, resumeCheckpoint, heldForTakeover);
@@ -7715,13 +7747,18 @@ export function createRunExecutor(deps: ExecutorDeps) {
           throw new Error("Run setup failed; retrying");
         }
       } finally {
-        // Keep the turn registered and its leases held until queued writes settle. The
-        // existing drain deadline can still report and interrupt an unfinished turn.
-        await flushProgressSaves();
+        // Keep ownership until saves settle or the drain reports its deadline miss.
+        if (!(await settleProgressSaves())) {
+          checkpointSavesAbandoned = true;
+          getLogger().warn("restart.turn.checkpoint.abandoned", {
+            runId,
+            abandonedSaves: pendingCheckpointSaves,
+          });
+        }
+        stopHeartbeat();
         controlWatch.abort();
         await controlWatcher;
         detachShutdown?.();
-        stopHeartbeat();
         const stopping = await deps.prisma.run.findUnique({
           where: { id: runId },
           select: { cancelRequestedAt: true, status: true },

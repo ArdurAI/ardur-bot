@@ -2351,6 +2351,60 @@ describe("executor restart journeys without a database", () => {
     }
   });
 
+  it.each(["failure", "lease-return"] as const)(
+    "leaves cleanup and stops its heartbeat at the shared drain deadline with a forever-blocked %s save",
+    async (exit) => {
+      vi.useFakeTimers();
+      const sink = createTestSink();
+      installLogger(createLogger({ service: "ardurbot-worker", sinks: [sink] }));
+      const shutdown = new AbortController();
+      const drain = new RestartDrain({} as never);
+      vi.spyOn(drain, "admits").mockResolvedValue(true);
+      vi.spyOn(drain, "requested").mockResolvedValue(false);
+      const f = fixture("forever-checkpoint", undefined, undefined, drain, shutdown.signal);
+      const gate = blockQueuedCheckpoint(f);
+      f.runtimeRun.mockImplementation(async function* () {
+        await gate.queued;
+        if (exit === "lease-return") f.runRecord.leaseFence++;
+        yield { type: "text", text: "Before interruption" };
+        throw new Error("interrupted fixture");
+      });
+      let resolved = false;
+      const running = f.executor.continueRun(f.runRecord.id, "worker").then(() => {
+        resolved = true;
+      });
+      try {
+        await gate.queued;
+        await vi.advanceTimersByTimeAsync(0);
+        const stopped = drainForShutdown(drain, shutdown);
+        await vi.advanceTimersByTimeAsync(59_999);
+        expect(resolved).toBe(false);
+        expect(f.prisma.attempt.updateMany).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1);
+        expect(await stopped).toMatchObject({ ok: false, remaining: 1, durationMs: 60_000 });
+        expect(resolved).toBe(true);
+        await running;
+        expect(f.prisma.attempt.updateMany).toHaveBeenCalledOnce();
+        expect(sink.events).toContainEqual(
+          expect.objectContaining({
+            message: "restart.turn.checkpoint.abandoned",
+            abandonedSaves: 1,
+          }),
+        );
+        const calls = f.prisma.run.findUnique.mock.calls.length;
+        await vi.advanceTimersByTimeAsync(65_000);
+        expect(f.prisma.run.findUnique.mock.calls).toHaveLength(calls);
+        expect(await drain.shutdown(0)).toMatchObject({ ok: true, remaining: 0 });
+        expect(f.runRecord.turnCheckpoint).toBeNull();
+        expect(f.finalizeRun).not.toHaveBeenCalled();
+        // Intentionally never release the save: cleanup must not depend on it.
+      } finally {
+        vi.useRealTimers();
+        installLogger(createLogger({ service: "ardurbot-worker", sinks: [] }));
+      }
+    },
+  );
+
   it.each([false, true])(
     "flushes redacted stream progress on ordinary shutdown with restart admission %s",
     async (withDrain) => {
