@@ -475,6 +475,7 @@ vi.mock("../components/PreferencesProvider", () => ({
   }),
 }));
 
+import { rpc } from "../lib/rpc";
 import { ShellPage } from "./Shell";
 
 let host: HTMLDivElement;
@@ -708,6 +709,130 @@ async function renderShell(route: string) {
   await until(() => (host.textContent ?? "").includes("Graphical"));
   await tick(150);
 }
+
+it.each(["resolve", "reject"])(
+  "accepts another composer message while an acknowledged send refresh is pending (%s)",
+  async (refreshOutcome) => {
+    state.threads["bot-1"]!.messages = [
+      {
+        id: "focus-choice",
+        threadId: "thread-bot-1",
+        seq: 0,
+        role: "bot",
+        botId: "bot-1",
+        createdAt: "2026-09-28T00:00:00Z",
+        blocks: [
+          {
+            kind: "choice",
+            question: "What do you want me on first?",
+            options: [
+              { id: "daily", letter: "A", label: "Day-to-day work" },
+              { id: "inbox", letter: "B", label: "Inbox & email" },
+              { id: "research", letter: "C", label: "Research & writing" },
+              { id: "everything", letter: "D", label: "A bit of everything" },
+            ],
+          },
+        ],
+      },
+    ];
+    await renderShell("/app/bot-1");
+    const composer = host.querySelector<HTMLTextAreaElement>('[role="combobox"]')!;
+    expect(host.textContent).toContain("What do you want me on first?");
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    let acknowledge!: () => void;
+    const acknowledgement = new Promise<void>((resolve) => {
+      acknowledge = resolve;
+    });
+    let finishRefresh!: () => void;
+    const refresh = new Promise<void>((resolve) => {
+      finishRefresh = resolve;
+    });
+    const send = vi.spyOn(rpc.threads, "send").mockImplementation(async (input) => {
+      if (send.mock.calls.length === 1) await acknowledgement;
+      const snapshot = state.threads["bot-1"]!;
+      snapshot.cursor += 1;
+      snapshot.messages = [
+        ...snapshot.messages,
+        {
+          id: `sent-${snapshot.cursor}`,
+          threadId: snapshot.threadId,
+          seq: snapshot.cursor,
+          role: "user",
+          createdAt: "2026-09-28T00:00:00Z",
+          blocks: [{ kind: "text", text: input.text ?? "" }],
+        },
+      ];
+      return { taskId: "task-1", runId: "run-1", seq: snapshot.cursor };
+    });
+    const get = vi.spyOn(rpc.threads, "get").mockImplementation(async () => {
+      const snapshot = { ...state.threads["bot-1"]! };
+      if (get.mock.calls.length === 1) {
+        await refresh;
+        if (refreshOutcome === "reject") throw new Error("Refresh unavailable");
+      }
+      return snapshot;
+    });
+    const interact = async (action: () => void) => {
+      (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+      try {
+        await act(async () => action());
+      } finally {
+        (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+      }
+    };
+    const fill = async (text: string) => {
+      await interact(() => {
+        composer.focus();
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(
+          composer,
+          text,
+        );
+        composer.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    };
+    const enter = async () => {
+      await interact(() => {
+        composer.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+        );
+      });
+    };
+    try {
+      await fill("line one\nline two");
+      await enter();
+      expect(composer.value).toBe("");
+      await fill("Fake composer regression check.");
+      await enter();
+      // An unacknowledged write still blocks a duplicate submission.
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(composer.value).toBe("Fake composer regression check.");
+      await interact(acknowledge);
+      await until(() => get.mock.calls.length === 1);
+      expect(host.querySelector('[role="combobox"]')).toBe(composer);
+      expect(document.activeElement).toBe(composer);
+      await enter();
+      expect(composer.value).toBe("");
+      expect(send).toHaveBeenCalledTimes(2);
+      expect(send.mock.calls[1]?.[0]).toMatchObject({
+        botId: "bot-1",
+        text: "Fake composer regression check.",
+      });
+      await until(() => host.querySelector('[data-message-id="sent-2"]') !== null);
+      await interact(finishRefresh);
+      await tick();
+      expect(host.querySelector('[data-message-id="sent-2"]')?.textContent).toContain(
+        "Fake composer regression check.",
+      );
+      expect(host.querySelector('[data-testid="composer-error"]')).toBeNull();
+    } finally {
+      acknowledge();
+      finishRefresh();
+      await tick();
+      send.mockRestore();
+      get.mockRestore();
+    }
+  },
+);
 
 async function headerItem(label: string) {
   await until(() => host.querySelector("[data-workspace-trigger]") !== null);
