@@ -2,10 +2,14 @@ import { open } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import type { DispatchReceipt, PairingPayload } from "@ardurbot/contracts";
 import { DispatchInputSchema, DispatchReceiptSchema } from "@ardurbot/contracts";
+import type { Command } from "./args.js";
 import { parseArgs, USAGE } from "./args.js";
 import { createClient, nonce, pairDevice } from "./client.js";
 import type { PairedHome } from "./config.js";
 import { loadHome, saveHome } from "./config.js";
+import { safeDiagnostic, safeText } from "./text.js";
+import type { Transcript } from "./transcript.js";
+import { prepareTranscript } from "./transcript.js";
 import { CliError } from "./transport.js";
 export type DeviceClient = Pick<ReturnType<typeof createClient>, "request">;
 type Bot = { id: string; name: string };
@@ -14,9 +18,11 @@ export interface CommandDependencies {
   load: () => Promise<PairedHome>;
   save: (home: PairedHome) => Promise<void>;
   pair: (code: string) => Promise<PairedHome>;
-  client: (home: PairedHome) => DeviceClient;
+  client: (home: PairedHome, signal?: AbortSignal) => DeviceClient;
+  now: () => number;
+  transcript: (path: string) => Promise<Transcript>;
   file: (path: string) => Promise<string>;
-  sleep: () => Promise<void>;
+  sleep: (signal?: AbortSignal) => Promise<void>;
   out: (text: string) => void;
   error: (text: string) => void;
 }
@@ -33,13 +39,6 @@ async function readBrief(filePath: string) {
     await file.close();
   }
 }
-const safeText = (text: string) =>
-  Array.from(text)
-    .filter((char) => {
-      const code = char.codePointAt(0)!;
-      return code === 9 || code === 10 || (code >= 32 && (code < 127 || code > 159));
-    })
-    .join("");
 async function listBots(client: DeviceClient): Promise<Bot[]> {
   const result = await client.request<Bot[]>("rpc", { procedure: "bots/list", input: {} });
   if (
@@ -62,6 +61,7 @@ async function waitForReply(
   client: DeviceClient,
   receipt: DispatchReceipt,
   sleep: () => Promise<void>,
+  strict = false,
 ) {
   for (;;) {
     const summaries = await client.request<Summary[]>("summaries");
@@ -70,7 +70,7 @@ async function waitForReply(
       (item) =>
         item.taskId === receipt.taskId && ["done", "failed", "stopped"].includes(item.state),
     );
-    if (summary) {
+    if (summary && (!strict || summary.messageId || summary.state !== "done")) {
       let text = "";
       if (summary.messageId) {
         const page = await client.request<{
@@ -95,8 +95,14 @@ async function waitForReply(
             message.runId === receipt.runId &&
             message.role === "bot",
         );
-        if (page.threadId !== receipt.threadId || !message || !Array.isArray(message.blocks))
+        if (page.threadId !== receipt.threadId || !message || !Array.isArray(message.blocks)) {
+          if (strict) {
+            if (summary.state !== "done") return { ...receipt, state: summary.state, text: "" };
+            await sleep();
+            continue;
+          }
           throw new CliError("The task finished, but its answer is unavailable. Open it at home.");
+        }
         text = message.blocks
           .filter(
             (block) =>
@@ -108,6 +114,11 @@ async function waitForReply(
       return { ...receipt, state: summary.state, text };
     }
     const tasks = DispatchReceiptSchema.array().parse(await client.request("tasks"));
+    const current = tasks.find(
+      (task) => task.taskId === receipt.taskId && task.runId === receipt.runId,
+    );
+    if (strict && current && ["failed", "stopped"].includes(current.state))
+      return { ...receipt, state: current.state, text: "" };
     if (!tasks.some((task) => task.taskId === receipt.taskId))
       throw new CliError("This task is no longer listed. Check it at home.");
     await sleep();
@@ -121,9 +132,11 @@ export async function runCli(
     load: loadHome,
     save: saveHome,
     pair: pairDevice,
-    client: createClient,
+    client: (home, signal) => createClient(home, undefined, signal),
+    now: () => performance.now(),
+    transcript: prepareTranscript,
     file: readBrief,
-    sleep: () => delay(2_000),
+    sleep: (signal) => delay(2_000, undefined, { signal }),
     out: (text) => process.stdout.write(text),
     error: (text) => process.stderr.write(text),
     ...overrides,
@@ -142,6 +155,7 @@ export async function runCli(
       output({ homeName: home.homeName, paired: true }, `Paired with ${home.homeName}.`);
       return 0;
     }
+    if (command.kind === "test") return runBotTest(command, deps);
     const home = await deps.load();
     const client = deps.client(home);
     if (command.kind === "bots") {
@@ -183,6 +197,12 @@ export async function runCli(
     output(result, result.text || `Task ${result.taskId}: ${result.state}.`);
     return result.state === "done" ? 0 : 1;
   } catch (error) {
+    if (args[0] === "test") {
+      const result = emptyTestResult();
+      result.failureReason = USAGE;
+      printTestResult(result, args.includes("--json"), deps);
+      return 4;
+    }
     const known = error instanceof CliError;
     const exitCode = known ? error.exitCode : 1;
     const message = known ? error.message : "This request could not finish; try again.";
@@ -192,4 +212,159 @@ export async function runCli(
     );
     return exitCode;
   }
+}
+
+type TestVerdict = "pass" | "mismatch" | "failed" | "stopped" | "deadline" | "error";
+type TestResult = {
+  version: 1;
+  bot: Bot | null;
+  runId: string | null;
+  taskId: string | null;
+  verdict: TestVerdict;
+  replyText: string;
+  elapsedMs: number;
+  failureReason: string | null;
+};
+function emptyTestResult(): TestResult {
+  return {
+    version: 1,
+    bot: null,
+    runId: null,
+    taskId: null,
+    verdict: "error",
+    replyText: "",
+    elapsedMs: 0,
+    failureReason: null,
+  };
+}
+function printTestResult(result: TestResult, json: boolean, deps: CommandDependencies) {
+  const text = [
+    result.taskId ? `Task ${result.taskId}\nRun ${result.runId}` : "",
+    result.verdict === "pass" ? "Passed." : result.failureReason,
+    result.replyText,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  // Redact each string, not serialized JSON: escaped control sequences cannot bypass PEM redaction.
+  const safe = {
+    ...result,
+    bot: result.bot
+      ? { id: safeDiagnostic(result.bot.id), name: safeDiagnostic(result.bot.name) }
+      : null,
+    runId: result.runId === null ? null : safeDiagnostic(result.runId),
+    taskId: result.taskId === null ? null : safeDiagnostic(result.taskId),
+    replyText: safeDiagnostic(result.replyText),
+    failureReason: result.failureReason === null ? null : safeDiagnostic(result.failureReason),
+  };
+  deps.out(`${json ? JSON.stringify(safe) : safeDiagnostic(text)}\n`);
+}
+async function runBotTest(command: Extract<Command, { kind: "test" }>, deps: CommandDependencies) {
+  const result = emptyTestResult();
+  const started = deps.now();
+  const controller = new AbortController();
+  const deadline = new Error("deadline");
+  let expired = false;
+  let transcript: Transcript | undefined;
+  let exitCode = 4;
+  const stopped = new Promise<never>((_resolve, reject) => {
+    controller.signal.addEventListener("abort", () => reject(deadline), { once: true });
+  });
+  // Every client request and sleep races the same deadline; late responses cannot start new work.
+  const bounded = <T>(work: () => Promise<T>): Promise<T> =>
+    expired ? Promise.reject(deadline) : Promise.race([work(), stopped]);
+  // Transcript preparation is local and happens before admission, outside the network deadline.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    if (command.transcript) transcript = await deps.transcript(command.transcript);
+    timer = setTimeout(() => {
+      expired = true;
+      controller.abort();
+    }, command.timeoutMs);
+    const home = await bounded(deps.load);
+    const rawClient = deps.client(home, controller.signal);
+    const client: DeviceClient = {
+      request: <T>(operation: string, body?: unknown) =>
+        bounded(() => rawClient.request<T>(operation, body)),
+    };
+    const bots = await listBots(client);
+    const exact = bots.find((bot) => bot.id === command.bot);
+    const matches = exact ? [exact] : bots.filter((bot) => bot.name === command.bot);
+    if (matches.length !== 1) {
+      const candidates = (matches.length ? matches : bots)
+        .map((bot) => `${bot.id}\t${bot.name}`)
+        .join("\n");
+      throw new CliError(
+        `Choose a bot id from ardur bots.${candidates ? `\n${candidates}` : ""}`,
+        3,
+      );
+    }
+    result.bot = matches[0]!;
+    if (transcript) await transcript.write({ ...result, prompt: command.prompt });
+    const receipt = DispatchReceiptSchema.parse(
+      await client.request(
+        "dispatch",
+        DispatchInputSchema.parse({
+          clientNonce: nonce(),
+          botId: result.bot.id,
+          text: command.prompt,
+        }),
+      ),
+    );
+    result.runId = receipt.runId;
+    result.taskId = receipt.taskId;
+    if (transcript) await transcript.write({ ...result, prompt: command.prompt });
+    if (receipt.botId !== result.bot.id)
+      throw new CliError("Home returned a different bot; check the task at home.");
+    const reply = ["failed", "stopped"].includes(receipt.state)
+      ? { ...receipt, text: "" }
+      : await waitForReply(
+          client,
+          receipt,
+          () => bounded(() => deps.sleep(controller.signal)),
+          true,
+        );
+    result.replyText = reply.text;
+    if (reply.state === "failed" || reply.state === "stopped") {
+      result.verdict = reply.state;
+      result.failureReason =
+        safeDiagnostic(reply.text) ||
+        (reply.state === "failed"
+          ? "The bot run failed; check it at home."
+          : "The bot run stopped.");
+      exitCode = 2;
+    } else {
+      const passed = reply.text.includes(command.expectContains);
+      result.verdict = passed ? "pass" : "mismatch";
+      result.failureReason = passed ? null : "Reply did not contain the expected text.";
+      exitCode = passed ? 0 : 1;
+    }
+  } catch (error) {
+    if (expired || error === deadline) {
+      result.verdict = "deadline";
+      result.failureReason =
+        "The deadline was reached. Waiting stopped; the task was not cancelled.";
+      exitCode = 3;
+    } else {
+      result.verdict = "error";
+      exitCode = error instanceof CliError && error.exitCode !== 1 ? 4 : 2;
+      result.failureReason =
+        error instanceof CliError
+          ? safeDiagnostic(error.message)
+          : "This request could not finish; check it at home before trying again.";
+    }
+  } finally {
+    if (timer) clearTimeout(timer);
+    result.elapsedMs = Math.max(0, Math.round(deps.now() - started));
+    try {
+      if (transcript) await transcript.write({ ...result, prompt: command.prompt });
+    } catch {
+      result.failureReason = "The private transcript could not be saved.";
+      result.verdict = "error";
+      exitCode = 4;
+    } finally {
+      await transcript?.close().catch(() => undefined);
+    }
+  }
+  printTestResult(result, command.json, deps);
+  return exitCode;
 }

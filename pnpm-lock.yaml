@@ -104,6 +104,9 @@ importers:
 
   apps/cli:
     dependencies:
+      '@ardurbot/logging':
+        specifier: workspace:*
+        version: link:../../packages/logging
       '@ardurbot/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
