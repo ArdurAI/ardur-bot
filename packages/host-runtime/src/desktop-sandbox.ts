@@ -30,7 +30,7 @@ import type {
   ScreenRequest,
   ScreenSession,
 } from "@ardurbot/adapter-kit";
-import { IDE_FILE_BYTES } from "@ardurbot/contracts";
+import { CommandRefusalError, IDE_FILE_BYTES } from "@ardurbot/contracts";
 import { HOST_FILE_BYTES, hostEnvironmentNote } from "@ardurbot/contracts/host-bridge";
 import { parseRegisteredFolders } from "@ardurbot/contracts/host-folders";
 import {
@@ -64,12 +64,7 @@ import {
   seatbeltProfile,
 } from "./host-guardrails.js";
 import { verifyHostIntegration } from "./host-integrations.js";
-import {
-  confinedHostCwd,
-  FILE_LOCATION_REFUSAL,
-  hostCommand,
-  resolvedRoots,
-} from "./host-policy.js";
+import { confinedHostCwd, hostCommand, resolvedRoots } from "./host-policy.js";
 
 const O_NOFOLLOW = constants.O_NOFOLLOW ?? 0;
 
@@ -520,7 +515,7 @@ export class DesktopSandboxProvider implements SandboxProvider {
   /** Select a trusted root before using the existing race-resistant contained file helpers. */
   private async fileTarget(home: string, requested: string, mustExist: boolean, fileRoot?: string) {
     if (requested.includes("\0") || requested.split(/[/\\]/u).includes(".."))
-      throw new Error(FILE_LOCATION_REFUSAL);
+      throw new CommandRefusalError("file-location");
     let root = home;
     let relative = requested;
     if (fileRoot !== undefined) {
@@ -528,15 +523,15 @@ export class DesktopSandboxProvider implements SandboxProvider {
       const canonicalHome = await realpath(home);
       root = path.resolve(canonicalHome, normalized);
       // A Team root itself cannot be redirected into a sibling bot's folder.
-      if ((await realpath(root)) !== root) throw new Error(FILE_LOCATION_REFUSAL);
+      if ((await realpath(root)) !== root) throw new CommandRefusalError("file-location");
       relative = path.relative(normalized || ".", requested);
       if (path.isAbsolute(requested) || !isAllowedDesktopPath(path.resolve(root, relative), [root]))
-        throw new Error(FILE_LOCATION_REFUSAL);
+        throw new CommandRefusalError("file-location");
     } else if (path.isAbsolute(requested)) {
       const roots = await this.allowedRoots(home);
       const available = [...roots, ...(await resolvedRoots(roots))];
       const match = available.find((candidate) => isAllowedDesktopPath(requested, [candidate]));
-      if (!match) throw new Error(FILE_LOCATION_REFUSAL);
+      if (!match) throw new CommandRefusalError("file-location");
       root = match;
       relative = path.relative(root, requested);
     }
@@ -556,7 +551,7 @@ export class DesktopSandboxProvider implements SandboxProvider {
       return { root, target };
     } catch (error) {
       if (error instanceof Error && error.message === "Path escapes the computer workspace")
-        throw new Error(FILE_LOCATION_REFUSAL);
+        throw new CommandRefusalError("file-location");
       throw error;
     }
   }
