@@ -311,8 +311,117 @@ function standalonePrisma() {
     $transaction: (fn: (tx: Prisma.TransactionClient) => Promise<unknown>) =>
       fn(tx as unknown as Prisma.TransactionClient),
   } as unknown as PrismaClient;
-  return { prisma, rows, receipts };
+  return { prisma, rows, receipts, tx };
 }
+
+function runPrisma() {
+  const ledger = standalonePrisma();
+  const run = (id: string) => ({
+    id,
+    spaceId: "space",
+    userId: "user",
+    botId: "bot",
+    threadId: "thread",
+    taskId: "root",
+    delegationRootTaskId: null,
+    delegationId: null,
+    status: "completed",
+    runtimePin: null,
+  });
+  const tx = {
+    ...ledger.tx,
+    $queryRaw: vi.fn(async () => []),
+    run: {
+      findUniqueOrThrow: vi.fn(async ({ where }: { where: { id: string } }) => run(where.id)),
+      findUnique: vi.fn(async ({ where }: { where: { id: string } }) => run(where.id)),
+    },
+    task: { findFirst: vi.fn(async () => ({ id: "root" })) },
+    delegationRoot: {
+      findUnique: vi.fn(async () => null),
+      updateMany: vi.fn(async (_args: { data: { usedTokens: { increment: number } } }) => ({
+        count: 1,
+      })),
+    },
+    botMessageDelivery: { findMany: vi.fn(async () => []) },
+    thread: { update: vi.fn(async () => ({ nextEventSeq: 2 })) },
+    event: { create: vi.fn(async () => ({ id: "event", seq: 1 })) },
+  };
+  const prisma = {
+    ...tx,
+    $transaction: (fn: (tx: Prisma.TransactionClient) => Promise<unknown>) =>
+      fn(tx as unknown as Prisma.TransactionClient),
+  } as unknown as PrismaClient;
+  return { ...ledger, prisma, tx, run };
+}
+
+it("keeps cumulative totals for two runs of the same bot separate even with identical counter identities", async () => {
+  const { prisma, rows, tx, run } = runPrisma();
+  const request = new RequestUsageCollector({
+    provider: "fixture",
+    model: "fixture",
+    requestId: "session-request",
+    attemptId: "0",
+    epochId: "shared-epoch",
+    mappingVersion: "fixture-v1",
+    inputSemantics: "total-with-cache-subsets",
+  });
+  const deps = { prisma, events: { append: vi.fn() } };
+  expect(
+    await recordRunUsage(deps, run("run-a"), request.snapshot({ input: 1200, output: 0 })),
+  ).toEqual({ inputTokens: 1200, cachedTokens: null });
+  expect(await recordRunUsage(deps, run("run-a"), request.finish("success"))).toEqual({
+    inputTokens: 0,
+    cachedTokens: null,
+  });
+  expect(
+    await recordRunUsage(deps, run("run-b"), request.snapshot({ input: 300, output: 0 })),
+  ).toEqual({ inputTokens: 300, cachedTokens: null });
+  expect([...rows.values()]).toMatchObject([
+    { botId: "bot", runId: "run-a", inputTokens: 1200 },
+    { botId: "bot", runId: "run-b", inputTokens: 300 },
+  ]);
+  expect(
+    tx.delegationRoot.updateMany.mock.calls.reduce(
+      (sum, [args]) => sum + args.data.usedTokens.increment,
+      0,
+    ),
+  ).toBe(1500);
+});
+
+it("bills a new collector session within a run once and still rejects decreases in that session", async () => {
+  const { prisma, rows, tx, run } = runPrisma();
+  const session = () =>
+    new RequestUsageCollector({
+      provider: "fixture",
+      model: "fixture",
+      requestId: "session-request",
+      attemptId: "0",
+      mappingVersion: "fixture-v1",
+      inputSemantics: "total-with-cache-subsets",
+    });
+  const deps = { prisma, events: { append: vi.fn() } };
+  const scope = run("run");
+  const first = session();
+  await recordRunUsage(deps, scope, first.snapshot({ input: 1200, output: 0 }));
+  await recordRunUsage(deps, scope, first.finish("success"));
+  const second = session();
+  const reset = second.snapshot({ input: 300, output: 0 });
+  expect(await recordRunUsage(deps, scope, reset)).toEqual({
+    inputTokens: 300,
+    cachedTokens: null,
+  });
+  expect(await recordRunUsage(deps, scope, reset)).toBeNull();
+  await expect(
+    recordRunUsage(deps, scope, second.snapshot({ input: 200, output: 0 })),
+  ).rejects.toThrow("Usage cumulative counter decreased; a verified reset requires a new epoch");
+  expect([...rows.values()].map((row) => row.inputTokens)).toEqual([1200, 300]);
+  expect(
+    tx.delegationRoot.updateMany.mock.calls.reduce(
+      (sum, [args]) => sum + args.data.usedTokens.increment,
+      0,
+    ),
+  ).toBe(1500);
+});
 const collector = () =>
   new RequestUsageCollector({
     provider: "fixture",

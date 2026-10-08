@@ -48,6 +48,14 @@ redaction boundary is relaxed to collect usage.
   bounds and partial coverage. A later complete cumulative snapshot can close those gaps.
   Receipts preserve the original supplied values, including nulls.
 
+The runtime adapter owns the epoch boundary. `RequestUsageCollector` starts a fresh opaque epoch
+for each new collector and keeps it stable through snapshots and the terminal receipt. A new run
+or a verified new provider session uses a new collector, so its first cumulative value counts in
+full even if request and attempt IDs are reused. An adapter reconstructing the same session for
+delivery replay must supply the original `epochId` along with the original request and attempt
+IDs. A decreasing value alone never starts a new epoch. Persisted run IDs already separate runs;
+the collector epoch also separates sessions within a run and in local usage totals.
+
 The six category names match schema 3's `USAGE_CATEGORIES` and `RequestUsageEvidence` in
 `packages/testkit/src/performance-report.ts`:
 
