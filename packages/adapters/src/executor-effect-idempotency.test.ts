@@ -37,6 +37,8 @@ import { checkpointRunComputerWorkspace } from "./computer-workspace.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import { createRunExecutor } from "./executor.js";
 import { ProviderError } from "./provider-error.js";
+import type { DrainResult } from "./restart-drain.js";
+import { drainForShutdown, RestartDrain } from "./restart-drain.js";
 import { recordRunUsage } from "./run-usage.js";
 import { EncryptedSecretStore } from "./secrets.js";
 
@@ -88,7 +90,13 @@ type ToolCall = {
   executionId: string;
 };
 
-function fixture(runId = "run-1", memoryDocuments?: MemoryService, sandbox?: SandboxProvider) {
+function fixture(
+  runId = "run-1",
+  memoryDocuments?: MemoryService,
+  sandbox?: SandboxProvider,
+  restartDrain?: Parameters<typeof createRunExecutor>[0]["restartDrain"],
+  shutdownSignal?: AbortSignal,
+) {
   vi.mocked(recordRunUsage).mockClear();
   const effects: Effect[] = [];
   const results: unknown[] = [];
@@ -114,6 +122,7 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService, sandbox?: San
     status: "queued",
     trigger: "user",
     sourceMessageId: null as string | null,
+    turnCheckpoint: null as string | null,
     clientNonce: null as string | null,
     leaseFence: 0,
     screenLeaseId: null as string | null,
@@ -418,7 +427,14 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService, sandbox?: San
   const memorySearch = vi.fn(async () => []);
   const executor = createRunExecutor({
     prisma,
-    secretStore: { load: () => "test-key", digest: testDigest },
+    restartDrain,
+    shutdownSignal,
+    secretStore: {
+      load: (value: string, id: string) =>
+        id.startsWith("turn:") ? digests.load(value, id) : "test-key",
+      digest: testDigest,
+      put: digests.put.bind(digests),
+    },
     runtime: { describe: () => ({ capabilities: { scripted: false } }), run: runtimeRun },
     connector: {
       discoverTools: async () => [],
@@ -2126,4 +2142,413 @@ describe("run failure cause", () => {
       runtimeProblem: "runtime-unavailable",
     });
   });
+});
+
+describe("executor restart journeys without a database", () => {
+  it.each([false, true])(
+    "flushes redacted stream progress on ordinary shutdown with restart admission %s",
+    async (withDrain) => {
+      const shutdown = new AbortController();
+      const f = fixture(
+        "shutdown-progress",
+        undefined,
+        undefined,
+        withDrain ? admission().value : undefined,
+        shutdown.signal,
+      );
+      f.secrets.push("fixture-secret-token");
+      f.runtimeRun.mockImplementation(async function* () {
+        yield { type: "text", text: "First response. " };
+        yield { type: "text", text: "fixture-secret-token Final response." };
+        shutdown.abort();
+      });
+      await f.executor.continueRun(f.runRecord.id, "worker");
+      const recorded = f.events.append.mock.calls as unknown as Array<
+        [{ type: string; payload: { text?: string; delta?: string } }]
+      >;
+      const progress = recorded
+        .map(([event]) => event)
+        .filter(
+          (event) =>
+            event.type === "thread.progress" && (event.payload.text || event.payload.delta),
+        )
+        .map((event) => event.payload.text ?? event.payload.delta)
+        .join("");
+      expect(progress).toContain("Final response.");
+      expect(progress).not.toContain("fixture-secret-token");
+      expect(f.finalizeRun).not.toHaveBeenCalled();
+      expect(f.events.append).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: "run.suspended" }),
+      );
+    },
+  );
+  it("requeues a boot wait promptly without interrupting the runtime drain signal", async () => {
+    vi.useFakeTimers();
+    try {
+      const drain = new RestartDrain({} as never);
+      vi.spyOn(drain, "admits").mockResolvedValue(true);
+      const f = fixture("boot-wait", undefined, undefined, drain);
+      let ready!: () => void;
+      const booting = new Promise<void>((resolve) => {
+        ready = resolve;
+      });
+      vi.mocked(provisionComputer).mockImplementationOnce(async (_deps, _id, context) => {
+        ready();
+        return new Promise((_resolve, reject) => {
+          context.signal.addEventListener("abort", () => reject(context.signal.reason), {
+            once: true,
+          });
+        });
+      });
+      const running = f.executor.continueRun("boot-wait", "worker");
+      await booting;
+      const shutdown = new AbortController();
+      const stopped = drainForShutdown(drain, shutdown);
+      expect(shutdown.signal.aborted).toBe(false);
+      await running;
+      await vi.advanceTimersByTimeAsync(50);
+      expect(await stopped).toMatchObject({ ok: true, remaining: 0, durationMs: 50 });
+      expect(f.runRecord.status).toBe("queued");
+      expect(f.runtimeRun).not.toHaveBeenCalled();
+      expect(f.finalizeRun).not.toHaveBeenCalled();
+      expect(f.runRecord.turnCheckpoint).toBeNull();
+      expect(shutdown.signal.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("does not treat a paused approval intent as an uncertain restart effect", async () => {
+    const f = fixture("answered-approval");
+    const args = { command: "echo fixture" };
+    f.runRecord.turnCheckpoint = (
+      await digests.put(
+        JSON.stringify({
+          version: 1,
+          runtimeKind: "pi",
+          pin: {},
+          history: [],
+          prompt: "work",
+          effects: [
+            {
+              id: "paused",
+              name: "shell",
+              digest: testDigest("restart-effect", JSON.stringify(args)),
+              state: "started",
+            },
+          ],
+        }),
+        {} as never,
+        "turn:answered-approval",
+      )
+    ).ciphertext;
+    f.setCalls([{ name: "shell", args, executionId: "answered" }]);
+    await f.executor.continueRun("answered-approval", "worker");
+    expect(f.sandboxExecute).toHaveBeenCalledOnce();
+    expect(f.events.pauseRunForInput).not.toHaveBeenCalled();
+    expect(f.finalizeRun).toHaveBeenCalledWith(expect.objectContaining({ outcome: "completed" }));
+  });
+  it.each(["queued", "waiting_input"])(
+    "uses current answer context rather than restart context for an ordinary %s continuation",
+    async (status) => {
+      const f = fixture(`answered-${status}`);
+      f.runRecord.status = status;
+      f.prisma.task.findUniqueOrThrow.mockResolvedValue({
+        id: "task-1",
+        prompt: "Continue after the protected answer.",
+      });
+      f.runRecord.turnCheckpoint = (
+        await digests.put(
+          JSON.stringify({
+            version: 1,
+            runtimeKind: "pi",
+            pin: {},
+            history: [{ role: "user", content: "pre-answer context" }],
+            prompt: "show a secret card for a masked api key",
+            runtimeState: [{ role: "assistant", content: "waiting for the answer" }],
+            effects: [],
+          }),
+          {} as never,
+          `turn:answered-${status}`,
+        )
+      ).ciphertext;
+      f.runtimeRun.mockImplementation(async function* (request) {
+        expect(request.prompt).toContain("Continue after the protected answer.");
+        expect(JSON.stringify(request.history)).not.toContain("pre-answer context");
+        expect(request.restartState).toBeUndefined();
+        expect(request.priorToolCalls).toBeUndefined();
+        yield { type: "done", text: "Finished after the answer" };
+      });
+      await f.executor.continueRun(f.runRecord.id, "worker");
+      expect(f.finalizeRun).toHaveBeenCalledWith(expect.objectContaining({ outcome: "completed" }));
+      expect(f.events.append).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: "run.resumed" }),
+      );
+    },
+  );
+  function admission() {
+    let draining = false;
+    return {
+      set(value: boolean) {
+        draining = value;
+      },
+      value: {
+        enter: () => () => {},
+        admits: async () => !draining,
+        requested: async () => draining,
+      } as unknown as NonNullable<Parameters<typeof createRunExecutor>[0]["restartDrain"]>,
+    };
+  }
+  it("suspends after a model boundary, keeps the same run and pin, and restores saved context", async () => {
+    const drain = admission();
+    const f = fixture("restart-model", undefined, undefined, drain.value);
+    let calls = 0;
+    let firstModel: unknown;
+    f.runtimeRun.mockImplementation(async function* (request) {
+      calls++;
+      if (calls === 1) {
+        firstModel = request.model;
+        yield { type: "text", text: "First model response" };
+        drain.set(true);
+        expect(
+          await request.saveCheckpoint!(
+            [{ role: "assistant", content: "First model response" }],
+            [{ provider: "test", model: "pinned", inputTokens: 3, outputTokens: 5 }],
+          ),
+        ).toBe(true);
+      } else {
+        expect(JSON.stringify(request.history)).toContain("First model response");
+        expect(request.nativeSession).toBeUndefined();
+        expect(request.model).toEqual(firstModel);
+        yield { type: "done", text: "Finished after restart" };
+      }
+    });
+    await f.executor.continueRun("restart-model", "old");
+    expect(f.finalizeRun).not.toHaveBeenCalled();
+    expect(recordRunUsage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ id: "restart-model" }),
+      expect.objectContaining({ inputTokens: 3, outputTokens: 5 }),
+    );
+    expect(f.runRecord.turnCheckpoint).toMatch(/^v2:/);
+    const saved = JSON.parse(digests.load(f.runRecord.turnCheckpoint!, "turn:restart-model"));
+    expect(saved).toMatchObject({
+      version: 1,
+      runtimeState: [{ content: "First model response" }],
+    });
+    drain.set(false);
+    await f.executor.continueRun("restart-model", "new");
+    expect(f.finalizeRun).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: "restart-model", outcome: "completed" }),
+    );
+    expect(f.events.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "run.resumed",
+        payload: expect.objectContaining({ freshSession: true }),
+      }),
+    );
+  });
+  it("lets an active tool finish before saving and releasing it, then skips the completed effect", async () => {
+    const drain = admission();
+    const f = fixture("tool-boundary", undefined, undefined, drain.value);
+    let release!: () => void;
+    const finished = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    f.sandboxExecute.mockImplementation(async function* () {
+      drain.set(true);
+      await finished;
+      yield { type: "stdout", data: "completed tool result" };
+      yield { type: "exit", code: 0 };
+    });
+    const args = { command: "echo fixture" };
+    f.setCalls([{ name: "shell", args, executionId: "first" }]);
+    const work = f.executor.continueRun("tool-boundary", "old");
+    await vi.waitFor(() => expect(f.sandboxExecute).toHaveBeenCalledOnce());
+    try {
+      expect(f.runRecord.turnCheckpoint).toMatch(/^v2:/);
+      const active = JSON.parse(digests.load(f.runRecord.turnCheckpoint!, "turn:tool-boundary"));
+      expect(active.effects).toContainEqual(expect.objectContaining({ state: "started" }));
+      expect(f.events.append).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: "run.suspended" }),
+      );
+    } finally {
+      release();
+      await work;
+    }
+    expect(f.finalizeRun).not.toHaveBeenCalled();
+    const saved = JSON.parse(digests.load(f.runRecord.turnCheckpoint!, "turn:tool-boundary"));
+    expect(saved.effects).toContainEqual(expect.objectContaining({ state: "completed" }));
+    drain.set(false);
+    f.setCalls([{ name: "shell", args, executionId: "recovered" }]);
+    await f.executor.continueRun("tool-boundary", "new");
+    expect(f.sandboxExecute).toHaveBeenCalledOnce();
+  });
+  it("keeps a full model checkpoint when later stream text is delivered", async () => {
+    const f = fixture("native-progress");
+    f.runtimeRun.mockImplementation(async function* (request) {
+      await request.saveCheckpoint!([{ role: "assistant", content: "full model context" }]);
+      yield { type: "text", text: "later stream fragment" };
+      yield { type: "done", text: "finished" };
+    });
+    await f.executor.continueRun("native-progress", "worker");
+    const saved = JSON.parse(digests.load(f.runRecord.turnCheckpoint!, "turn:native-progress"));
+    expect(saved.runtimeState).toEqual([{ role: "assistant", content: "full model context" }]);
+  });
+  it("re-arms checkpoint writes after a transient failure instead of poisoning the turn", async () => {
+    const f = fixture("checkpoint-rearm");
+    const underlying = f.prisma.run.updateMany.getMockImplementation()!;
+    let checkpointWrites = 0;
+    f.prisma.run.updateMany.mockImplementation(async (input) => {
+      if ((input as { data?: { turnCheckpoint?: unknown } }).data?.turnCheckpoint) {
+        checkpointWrites++;
+        if (checkpointWrites === 2) throw new Error("transient connection reset");
+      }
+      return underlying(input);
+    });
+    f.runtimeRun.mockImplementation(async function* (request) {
+      await expect(
+        request.saveCheckpoint!([{ role: "assistant", content: "lost write" }]),
+      ).rejects.toThrow("transient connection reset");
+      await request.saveCheckpoint!([{ role: "assistant", content: "re-armed write" }]);
+      yield { type: "done", text: "finished" };
+    });
+    await f.executor.continueRun("checkpoint-rearm", "worker");
+    expect(f.finalizeRun).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: "checkpoint-rearm", outcome: "completed" }),
+    );
+    const saved = JSON.parse(digests.load(f.runRecord.turnCheckpoint!, "turn:checkpoint-rearm"));
+    expect(saved.runtimeState).toEqual([{ role: "assistant", content: "re-armed write" }]);
+  });
+  it("keeps a cancelled saved turn cancelled without starting a fresh session", async () => {
+    const f = fixture("cancelled-saved");
+    f.runRecord.status = "cancelled";
+    f.runRecord.turnCheckpoint = "fake-not-decrypted";
+    await f.executor.continueRun("cancelled-saved", "new");
+    expect(f.runtimeRun).not.toHaveBeenCalled();
+    expect(f.runRecord.status).toBe("cancelled");
+  });
+  it("admits no provider call while draining", async () => {
+    const drain = admission();
+    const f = fixture("held", undefined, undefined, drain.value);
+    drain.set(true);
+    await f.executor.continueRun("held", "worker");
+    expect(f.runtimeRun).not.toHaveBeenCalled();
+    expect(f.runRecord.status).toBe("queued");
+  });
+  it("recovers a completed command without repeating it after a crash before lease release", async () => {
+    const f = fixture("restart-tool");
+    const args = { command: "echo fixture" };
+    f.setCalls([{ name: "shell", args, executionId: "first" }]);
+    await f.executor.continueRun("restart-tool", "old");
+    const pin = JSON.stringify(f.runRecord);
+    f.setCalls([{ name: "shell", args, executionId: "recovered" }]);
+    await f.executor.continueRun("restart-tool", "new");
+    expect(f.sandboxExecute).toHaveBeenCalledTimes(1);
+    expect(f.runRecord.turnCheckpoint).toMatch(/^v2:/);
+    expect(pin).not.toContain("Tests passed.");
+  });
+  it("pauses an uncertain command for a person instead of repeating it", async () => {
+    const f = fixture("uncertain-tool");
+    f.runRecord.status = "running";
+    const args = { command: "echo fixture" };
+    const saved = {
+      version: 1,
+      runtimeKind: "pi",
+      pin: {},
+      history: [],
+      prompt: "work",
+      effects: [
+        {
+          id: "started",
+          name: "shell",
+          digest: testDigest("restart-effect", JSON.stringify(args)),
+          state: "started",
+        },
+      ],
+    };
+    f.runRecord.turnCheckpoint = (
+      await digests.put(JSON.stringify(saved), {} as never, "turn:uncertain-tool")
+    ).ciphertext;
+    f.setCalls([{ name: "shell", args, executionId: "recovered" }]);
+    await f.executor.continueRun("uncertain-tool", "new");
+    expect(f.sandboxExecute).not.toHaveBeenCalled();
+    expect(f.events.pauseRunForInput).toHaveBeenCalled();
+    expect(f.finalizeRun).not.toHaveBeenCalled();
+  });
+});
+
+it("measures interruption counts with the same two-bot scripted restart workload", async () => {
+  let draining = false;
+  let service = new RestartDrain({} as never);
+  let drained: Promise<DrainResult> | undefined;
+  const coordinator = {
+    enter: () => service.enter(),
+    admits: async () => !draining,
+    requested: async () => draining,
+  } as unknown as NonNullable<Parameters<typeof createRunExecutor>[0]["restartDrain"]>;
+  const bots = [
+    fixture("workload-a", undefined, undefined, coordinator),
+    fixture("workload-b", undefined, undefined, coordinator),
+  ];
+  let boundaries = 0;
+  let release!: () => void;
+  const together = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let resumed = 0;
+  for (const bot of bots) {
+    let first = true;
+    bot.runtimeRun.mockImplementation(async function* (request) {
+      if (first) {
+        first = false;
+        yield { type: "text", text: "Saved step" };
+        if (++boundaries === 2) {
+          draining = true;
+          drained = service.shutdown();
+          release();
+        }
+        await together;
+        if (await request.saveCheckpoint?.([{ role: "assistant", content: "Saved step" }])) return;
+        throw new Error("Turn interrupted by restart");
+      }
+      resumed++;
+      yield { type: "done", text: "Finished" };
+    });
+  }
+  await Promise.all(bots.map((bot) => bot.executor.continueRun(bot.runRecord.id, "old")));
+  const saved = bots.filter((bot) => bot.runRecord.turnCheckpoint).length;
+  const failed = bots.reduce(
+    (sum, bot) =>
+      sum + bot.finalizeRun.mock.calls.filter(([call]) => call.outcome === "failed").length,
+    0,
+  );
+  const cancelled = bots.reduce(
+    (sum, bot) =>
+      sum + bot.finalizeRun.mock.calls.filter(([call]) => call.outcome === "cancelled").length,
+    0,
+  );
+  const drainResult = await drained!;
+  draining = false;
+  service = new RestartDrain({} as never);
+  if (saved === 2)
+    await Promise.all(bots.map((bot) => bot.executor.continueRun(bot.runRecord.id, "new")));
+  const counts = {
+    activeAtRestart: boundaries,
+    saved,
+    resumed,
+    failed,
+    cancelled,
+    deadlineMisses: Number(!drainResult.ok),
+    drainTimeMs: drainResult.durationMs,
+  };
+  process.stdout.write(`restart-workload ${JSON.stringify(counts)}\n`);
+  expect(counts).toMatchObject({
+    activeAtRestart: 2,
+    saved: 2,
+    resumed: 2,
+    failed: 0,
+    cancelled: 0,
+    deadlineMisses: 0,
+  });
+  expect(drainResult.durationMs).toBeLessThan(60_000);
 });

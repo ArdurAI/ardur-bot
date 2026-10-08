@@ -140,7 +140,8 @@ async function deployment(options: { failures: Failure[]; branch?: string; compo
     ),
   ]);
   vi.stubEnv("PATH", bin);
-  const subject = createUpdaterApp(config);
+  const drain = { begin: vi.fn(async () => true), clear: vi.fn(async () => {}) };
+  const subject = createUpdaterApp(config, { drain });
   const response = await subject.request("/apply", {
     method: "POST",
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
@@ -154,6 +155,7 @@ async function deployment(options: { failures: Failure[]; branch?: string; compo
     response,
     record: (await response.json()) as ServerUpdateRun,
     calls,
+    drain,
     config,
     composeFile,
     state: JSON.parse(await readFile(path.join(bin, "state.json"), "utf8")),
@@ -167,6 +169,8 @@ describe.skipIf(process.platform === "win32")("fork recovery through fake execut
   ])("restores $branch and its Compose configuration before recovery", async (options) => {
     const fixture = await deployment({ ...options, failures: ["recreate"] });
     expect(fixture.response.status).toBe(200);
+    expect(fixture.drain.begin).toHaveBeenCalledOnce();
+    expect(fixture.drain.clear).toHaveBeenCalledOnce();
     expect(fixture.record).toMatchObject({ ok: false, restart: "not-required" });
     const docker = fixture.calls.filter((call) => call.command === "docker");
     expect(docker).toHaveLength(2);
@@ -285,6 +289,8 @@ describe.skipIf(process.platform === "win32")("fork recovery through fake execut
   it("keeps the new checkout and image pin after a successful update", async () => {
     const fixture = await deployment({ failures: [] });
     expect(fixture.record).toMatchObject({ ok: true, restart: "recreated" });
+    expect(fixture.drain.begin).toHaveBeenCalledOnce();
+    expect(fixture.drain.clear).toHaveBeenCalledOnce();
     expect(
       fixture.record.steps.some((step) => step.id.startsWith("restore") || step.id === "recover"),
     ).toBe(false);
