@@ -323,8 +323,38 @@ describe("MCP transport seam", () => {
     expect(provider.tokens()).toMatchObject({
       access_token: "fresh-access",
       refresh_token: "rotated-refresh",
+      issuer: "https://auth.example.test",
     });
-    expect(persisted).toHaveLength(1);
+    // SDK 1.31 (#2888) binds stored credentials to the authorization server
+    // that issued them: material saved without an `issuer` stamp is re-persisted
+    // once on first use, one write stamping the client registration and one for
+    // the rotated tokens, then never again. Pin both writes and their stamps.
+    expect(persisted).toHaveLength(2);
+    const [binding, rotation] = persisted as [
+      {
+        oauth: {
+          clientInformation?: { client_id?: string; issuer?: string };
+          tokens?: { access_token?: string; refresh_token?: string; issuer?: string };
+        };
+      },
+      {
+        oauth: {
+          tokens?: { access_token?: string; refresh_token?: string; issuer?: string };
+        };
+      },
+    ];
+    expect(binding.oauth.clientInformation).toEqual({
+      client_id: "client-1",
+      issuer: "https://auth.example.test",
+    });
+    expect(rotation.oauth.tokens).toMatchObject({
+      access_token: "fresh-access",
+      refresh_token: "rotated-refresh",
+      issuer: "https://auth.example.test",
+    });
+    expect(provider.clientInformation()).toMatchObject({
+      issuer: "https://auth.example.test",
+    });
     await session.close();
   });
 
