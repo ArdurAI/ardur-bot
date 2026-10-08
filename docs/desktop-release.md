@@ -15,8 +15,17 @@ both processes after setting it. Start the server with `pnpm dev`, then the desk
 with `ARDURBOT_WEB_URL=http://127.0.0.1:5173 pnpm --filter @ardurbot/desktop dev`.
 Use Settings → Devices to enable network reachability and pair the phone. The
 development exception requires a loopback target and is disabled in packaged builds.
-Packaged existing-instance connections must use an app-managed "This computer" home
-for this listener. The listener exposes only the device API over TLS on the private
+For a source or headless server, prefer the operator-enabled listener described in
+[Self-hosted device pairing](self-host.md#pair-a-phone-or-command-line-device-with-a-server):
+set `ARDURBOT_DEVICE_LISTENER_ENABLED=true`, configure an advertised HTTPS origin,
+and optionally configure the bind address and port (defaults: `127.0.0.1`, `43119`).
+Packaged existing-instance connections use that server listener when enabled.
+The desktop-local listener still requires an app-managed "This computer" home;
+only the unpackaged loopback exception above can retrieve development key material.
+Keep the server database and `ENCRYPTION_KEY` to preserve its certificate across restarts.
+Expose the device port only through a private network/firewall; a TLS-terminating
+proxy with another certificate cannot satisfy the home pin.
+The listener exposes only the device API over TLS on the private
 network; it does not forward cookies, general RPC, or the stack token to phones.
 
 ## Automation and screen readers

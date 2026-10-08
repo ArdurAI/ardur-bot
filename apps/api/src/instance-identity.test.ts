@@ -22,7 +22,8 @@ it("persists a verifiable home certificate with only an encrypted private key", 
       }),
     },
   } as unknown as PrismaClient;
-  const secrets = new EncryptedSecretStore(randomBytes(32).toString("base64"));
+  const encryptionKey = randomBytes(32).toString("base64");
+  const secrets = new EncryptedSecretStore(encryptionKey);
   const home = await ensureInstanceIdentity(prisma, secrets);
   const certificate = new X509Certificate(home.certificate);
   expect(certificate.verify(certificate.publicKey)).toBe(true);
@@ -40,6 +41,17 @@ it("persists a verifiable home certificate with only an encrypted private key", 
       sign("sha256", Buffer.from("proof"), key),
     ),
   ).toBe(true);
-  expect(await ensureInstanceIdentity(prisma, secrets)).toEqual(home);
+  const restarted = await ensureInstanceIdentity(prisma, new EncryptedSecretStore(encryptionKey));
+  expect(restarted).toEqual(home);
+  expect(
+    new X509Certificate(restarted.certificate).checkPrivateKey(
+      createPrivateKey(
+        new EncryptedSecretStore(encryptionKey).load(
+          restarted.privateKeyCiphertext,
+          restarted.instanceId,
+        ),
+      ),
+    ),
+  ).toBe(true);
   expect(prisma.instanceIdentity.upsert).toHaveBeenCalledOnce();
 });

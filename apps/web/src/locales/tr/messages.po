@@ -4088,6 +4088,10 @@ msgstr "E-posta"
 msgid "Enable"
 msgstr ""
 
+#: src/pages/DevicesSettings.tsx
+msgid "Enable ARDURBOT_DEVICE_LISTENER_ENABLED on the server to pair a device."
+msgstr "Bir cihazı eşleştirmek için sunucuda ARDURBOT_DEVICE_LISTENER_ENABLED ayarını etkinleştirin."
+
 #: src/lib/mcp-sign-in.ts
 msgid "Enable this server first, then sign in."
 msgstr ""
@@ -6898,10 +6902,6 @@ msgstr ""
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Personal credential"
 msgstr "Kişisel kimlik bilgisi"
-
-#: src/pages/DevicesSettings.tsx
-msgid "Phone pairing needs a home run by this app. Set up This computer to use it."
-msgstr ""
 
 #: src/pages/LearningObservation.tsx
 msgid "pin"

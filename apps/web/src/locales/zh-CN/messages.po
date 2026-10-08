@@ -4088,6 +4088,10 @@ msgstr "邮箱"
 msgid "Enable"
 msgstr "启用"
 
+#: src/pages/DevicesSettings.tsx
+msgid "Enable ARDURBOT_DEVICE_LISTENER_ENABLED on the server to pair a device."
+msgstr "在服务器上启用 ARDURBOT_DEVICE_LISTENER_ENABLED 以配对设备。"
+
 #: src/lib/mcp-sign-in.ts
 msgid "Enable this server first, then sign in."
 msgstr "请先启用此服务器，然后登录。"
@@ -6898,10 +6902,6 @@ msgstr ""
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Personal credential"
 msgstr "个人凭据"
-
-#: src/pages/DevicesSettings.tsx
-msgid "Phone pairing needs a home run by this app. Set up This computer to use it."
-msgstr ""
 
 #: src/pages/LearningObservation.tsx
 msgid "pin"

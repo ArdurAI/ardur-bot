@@ -353,6 +353,25 @@ export async function bundleHostGuardrails(
   return outfile;
 }
 
+/** Bundle the same bounded listener used by the server for Electron's JavaScript runtime. */
+export async function bundleDeviceListener(
+  outfile = path.join(desktopDir, "dist", "device-listener.js"),
+) {
+  const { build } = esbuildRequire("esbuild");
+  const result = await build({
+    absWorkingDir: repoRoot,
+    entryPoints: ["apps/desktop/scripts/device-listener-entry.ts"],
+    outfile,
+    bundle: true,
+    format: "esm",
+    platform: "node",
+    target: "node22",
+    metafile: true,
+    logLevel: "warning",
+  });
+  return { outfile, inputs: Object.keys(result.metafile.inputs) };
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const staged = await bundleServices();
   process.stdout.write(
@@ -362,6 +381,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   process.stdout.write(`Migrator bundled with ${migrator.externals.join(", ")}\n`);
   await bundleFleetDiscovery();
   process.stdout.write("Fleet discovery bundled for desktop main.\n");
+  await bundleDeviceListener();
   await bundleHostGuardrails();
   process.stdout.write("Host guardrails bundled for desktop main.\n");
 }
