@@ -29,8 +29,6 @@ import { RunPlacementSchema } from "@ardurbot/contracts/fleet";
 import {
   ACTIVE_RUN_STATUSES,
   chiefIntent,
-  groupMentionBotIds,
-  groupMessageRecipientIds,
   isActive,
   parseChiefCorrection,
   progressMessageId,
@@ -38,6 +36,10 @@ import {
   runFailureError,
 } from "@ardurbot/core";
 import { localTaskClassifier } from "@ardurbot/core/effort-router";
+import {
+  groupMentionBotIds,
+  groupMessageRecipientIds,
+} from "@ardurbot/core/group-message-recipients";
 import { deriveMessageQuote } from "@ardurbot/core/message-quote";
 import {
   answerWaitingRunWithTextInTransaction,

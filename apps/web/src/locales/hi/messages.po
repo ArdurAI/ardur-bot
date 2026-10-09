@@ -10287,10 +10287,10 @@ msgstr "हमेशा चालू रहने वाले एजेंट�
 msgid "Yours"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/components/composer/GroupRecipients.tsx
 msgid "To {names}"
 msgstr "प्राप्तकर्ता: {names}"
 
-#: src/pages/Shell.tsx
+#: src/components/composer/GroupRecipients.tsx
 msgid "Queued: {queued}"
 msgstr "कतार में: {queued}"

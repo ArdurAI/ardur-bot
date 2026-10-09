@@ -37,12 +37,7 @@ import {
   MESSAGE_REACTIONS,
   normalizeCreateBotProfile,
 } from "@ardurbot/contracts";
-import type {
-  ComposerActionId,
-  ComposerMention,
-  ComposerSkill,
-  GroupRecipientContext,
-} from "@ardurbot/core";
+import type { ComposerActionId, ComposerMention, ComposerSkill } from "@ardurbot/core";
 import {
   answerableAskMessageIds,
   applyChiefReceipt,
@@ -50,7 +45,6 @@ import {
   buildComposerMentionOptions,
   canAddComposerFolder,
   clampMentionHighlightIndex,
-  composerGroupRecipientNames,
   composerSkills,
   coordinationBlock,
   cronFromPreset,
@@ -64,7 +58,6 @@ import {
   isToolActivityBlock,
   mentionChipKey,
   projectMessageReactions,
-  queuedGroupRecipientNames,
   reorderBotTo,
   resolveComposerSendPlan,
   resolveMentionPickerKey,
@@ -76,6 +69,7 @@ import {
   userVisibleMessages,
   workRecordEntries,
 } from "@ardurbot/core";
+import type { GroupRecipientContext } from "@ardurbot/core/group-message-recipients";
 import type { GroupAvatarMember } from "@ardurbot/ui-web";
 import {
   AvatarStyleProvider,
@@ -412,6 +406,7 @@ const RoutinesPanel = lazy(() => import("../components/composer/RoutinesPanel"))
 const WorkspacePane = lazy(() =>
   import("./workspace/WorkspacePane").then((module) => ({ default: module.WorkspacePane })),
 );
+const GroupRecipients = lazy(() => import("../components/composer/GroupRecipients"));
 const SlashPicker = lazy(() => import("../components/composer/SlashPicker"));
 const ViewControls = lazy(() =>
   import("./workspace/ViewControls").then((module) => ({ default: module.ViewControls })),
@@ -6041,16 +6036,6 @@ export const Composer = memo(function Composer({
     selectedSkill !== null ||
     selectedMentions.length > 0 ||
     pendingAttachments.length > 0;
-  const names = canSend
-    ? composerGroupRecipientNames({
-        group: groupRecipients,
-        draft,
-        skill: selectedSkill,
-        mentions: selectedMentions,
-        replyBotId: replyTarget?.botId,
-      }).join(", ")
-    : "";
-  const queued = queuedGroupRecipientNames(groupRecipients).join(", ");
   const comparePrompt = comparisonBotId
     ? serializeComposerPrompt(draft, selectedSkill, selectedMentions)
     : "";
@@ -6508,25 +6493,17 @@ export const Composer = memo(function Composer({
           </div>
         </div>
       ) : null}
-      {names ? (
-        <p
-          data-testid="composer-recipients"
-          role="status"
-          title={t`To ${names}`}
-          className="truncate pb-1 ps-12 text-xs text-muted-foreground"
-        >
-          {t`To ${names}`}
-        </p>
-      ) : null}
-      {queued ? (
-        <p
-          data-testid="composer-queued"
-          role="status"
-          title={t`Queued: ${queued}`}
-          className="truncate pb-1 ps-12 text-xs text-muted-foreground"
-        >
-          {t`Queued: ${queued}`}
-        </p>
+      {groupRecipients ? (
+        <Suspense fallback={null}>
+          <GroupRecipients
+            group={groupRecipients}
+            canSend={canSend}
+            draft={draft}
+            skill={selectedSkill}
+            mentions={selectedMentions}
+            replyBotId={replyTarget?.botId}
+          />
+        </Suspense>
       ) : null}
       <div
         data-testid="composer-bar"

@@ -24,7 +24,6 @@ import {
   type ComposerMention,
   cloudAgentHttpsUrl,
   composerCommands,
-  composerGroupRecipientNames,
   composerSkills,
   coordinationBlock,
   isApprovalAskBlock,
@@ -32,7 +31,6 @@ import {
   isSecretAskBlock,
   mentionChipKey,
   projectMessageReactions,
-  queuedGroupRecipientNames,
   RESTART_ACTION_MESSAGE,
   resolveComposerSendPlan,
   selectedAskActionLabel,
@@ -40,6 +38,10 @@ import {
   userVisibleMessages,
   workingBotsWithoutVisibleActivity,
 } from "@ardurbot/core";
+import {
+  composerGroupRecipientNames,
+  queuedGroupRecipientNames,
+} from "@ardurbot/core/group-message-recipients";
 import * as Clipboard from "expo-clipboard";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useHeaderHeight } from "expo-router/react-navigation";

@@ -1,4 +1,4 @@
-import { queuedGroupRecipientNames } from "@ardurbot/core";
+import { queuedGroupRecipientNames } from "@ardurbot/core/group-message-recipients";
 import type { PrismaClient } from "@ardurbot/db";
 import { expect, it } from "vitest";
 import { claimBotRun } from "./concurrency.js";

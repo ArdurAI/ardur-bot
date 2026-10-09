@@ -10287,10 +10287,10 @@ msgstr "Sua equipe de agentes sempre ativos<0/>, a quem você pode dar trabalho 
 msgid "Yours"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/components/composer/GroupRecipients.tsx
 msgid "To {names}"
 msgstr "Para {names}"
 
-#: src/pages/Shell.tsx
+#: src/components/composer/GroupRecipients.tsx
 msgid "Queued: {queued}"
 msgstr "Na fila: {queued}"

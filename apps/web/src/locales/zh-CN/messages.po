@@ -10287,10 +10287,10 @@ msgstr "你的一支随时在线的 Agent 团队<0/>可以交给它们真正的�
 msgid "Yours"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/components/composer/GroupRecipients.tsx
 msgid "To {names}"
 msgstr "发送给：{names}"
 
-#: src/pages/Shell.tsx
+#: src/components/composer/GroupRecipients.tsx
 msgid "Queued: {queued}"
 msgstr "排队中：{queued}"
