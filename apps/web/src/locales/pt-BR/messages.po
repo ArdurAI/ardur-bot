@@ -2539,6 +2539,10 @@ msgstr "Continuar"
 msgid "Continue in Background"
 msgstr ""
 
+#: src/pages/Shell.tsx
+msgid "Continue the interrupted run from its saved results. Check any uncertain action before repeating it."
+msgstr "Continue a execução interrompida a partir dos resultados salvos. Verifique qualquer ação incerta antes de repeti-la."
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Continue with ChatGPT"
 msgstr ""
@@ -7743,6 +7747,7 @@ msgstr "Retomar mensagens da equipe"
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
+#: src/pages/shell/provider-error-message.tsx
 #: src/pages/shell/runtime-summary.tsx
 #: src/pages/system/SystemPage.tsx
 #: src/pages/workspace/WorkspacePane.tsx
@@ -9099,6 +9104,10 @@ msgstr ""
 msgid "The bot is working — wait or stop it"
 msgstr ""
 
+#: src/pages/shell/provider-error-message.tsx
+msgid "The bot stopped responding. Retry the run."
+msgstr "O bot parou de responder. Tente executar novamente."
+
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "The computer is busy. Wait for it to finish."
 msgstr "O computador está ocupado. Aguarde até ele terminar."
@@ -10286,11 +10295,3 @@ msgstr "Sua equipe de agentes sempre ativos<0/>, a quem você pode dar trabalho 
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
-
-
-msgid "The bot stopped responding. Retry the run."
-msgstr "O bot parou de responder. Tente executar novamente."
-
-
-msgid "Continue the interrupted run from its saved results. Check any uncertain action before repeating it."
-msgstr "Continue a execução interrompida a partir dos resultados salvos. Verifique qualquer ação incerta antes de repeti-la."

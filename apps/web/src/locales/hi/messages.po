@@ -2539,6 +2539,10 @@ msgstr "जारी रखें"
 msgid "Continue in Background"
 msgstr ""
 
+#: src/pages/Shell.tsx
+msgid "Continue the interrupted run from its saved results. Check any uncertain action before repeating it."
+msgstr "बाधित रन को उसके सहेजे गए परिणामों से जारी रखें। किसी अनिश्चित कार्रवाई को दोहराने से पहले उसकी जाँच करें।"
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Continue with ChatGPT"
 msgstr ""
@@ -7743,6 +7747,7 @@ msgstr "टीम संदेश फिर शुरू करें"
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
+#: src/pages/shell/provider-error-message.tsx
 #: src/pages/shell/runtime-summary.tsx
 #: src/pages/system/SystemPage.tsx
 #: src/pages/workspace/WorkspacePane.tsx
@@ -9099,6 +9104,10 @@ msgstr ""
 msgid "The bot is working — wait or stop it"
 msgstr ""
 
+#: src/pages/shell/provider-error-message.tsx
+msgid "The bot stopped responding. Retry the run."
+msgstr "बॉट ने जवाब देना बंद कर दिया। रन फिर से आज़माएँ।"
+
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "The computer is busy. Wait for it to finish."
 msgstr "कंप्यूटर व्यस्त है। इसके पूरा होने तक प्रतीक्षा करें।"
@@ -10286,11 +10295,3 @@ msgstr "हमेशा चालू रहने वाले एजेंट�
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
-
-
-msgid "The bot stopped responding. Retry the run."
-msgstr "बॉट ने जवाब देना बंद कर दिया। रन फिर से आज़माएँ।"
-
-
-msgid "Continue the interrupted run from its saved results. Check any uncertain action before repeating it."
-msgstr "बाधित रन को उसके सहेजे गए परिणामों से जारी रखें। किसी अनिश्चित कार्रवाई को दोहराने से पहले उसकी जाँच करें।"

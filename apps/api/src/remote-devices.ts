@@ -4,11 +4,16 @@ import { admitRoutedDispatch as admitDispatch, validateDeviceApproval } from "@a
 import type { Actor, DeviceListenerState, DeviceScope, PairingPayload } from "@ardurbot/contracts";
 import {
   canonicalDispatchJson,
+  DeviceMessagesGetInputSchema,
   DeviceProofSchema,
+  DeviceRunGetInputSchema,
+  DeviceRunsListInputSchema,
   DeviceScopeSchema,
+  DeviceTaskGetInputSchema,
   DispatchInputSchema,
   PairingPayloadSchema,
   pairingSignedText,
+  UNICODE_MESSAGE,
 } from "@ardurbot/contracts";
 import { effectiveRemoteAuthority } from "@ardurbot/core";
 import type { DeviceGrant, PrismaClient, ThreadEvents } from "@ardurbot/db";
@@ -33,6 +38,12 @@ import {
 } from "@ardurbot/db";
 import { Hono } from "hono";
 import * as z from "zod";
+import {
+  DEVICE_RECORD_UNAVAILABLE,
+  getDeviceRun,
+  listDeviceRuns,
+  requireDeviceThreadReceipt,
+} from "./device-runs.js";
 import { requestBodyLimit } from "./request-body-limit.js";
 import { acceptTeamTask } from "./team.js";
 
@@ -232,6 +243,8 @@ export function mountRemoteDevices(
   device.onError((error, c) => {
     if (error instanceof DeviceRequestError)
       return c.json({ message: error.message }, error.status);
+    if (error instanceof TypeError && error.message === UNICODE_MESSAGE)
+      return c.json({ message: UNICODE_MESSAGE }, 400);
     if (error instanceof z.ZodError || error instanceof SyntaxError)
       return c.json({ message: "This request is incomplete; try again." }, 400);
     return c.json({ message: "Home could not finish this request; try again." }, 500);
@@ -438,6 +451,40 @@ export function mountRemoteDevices(
         for (const run of runs)
           await deps.jobs.enqueue(runContinueJob(run.id)).catch(() => undefined);
         return c.json(result);
+      }
+
+      case "runs/get": {
+        requireScope("read");
+        const body = DeviceRunGetInputSchema.parse(input.body);
+        return c.json({ run: await getDeviceRun(deps.prisma, grant, body) });
+      }
+      case "tasks/get": {
+        requireScope("read");
+        const body = DeviceTaskGetInputSchema.parse(input.body);
+        return c.json({ task: await getDeviceRun(deps.prisma, grant, body) });
+      }
+      case "runs/list": {
+        requireScope("read");
+        return c.json(
+          await listDeviceRuns(deps.prisma, grant, DeviceRunsListInputSchema.parse(input.body)),
+        );
+      }
+      case "messages/get": {
+        requireScope("read");
+        const body = DeviceMessagesGetInputSchema.parse(input.body);
+        const thread = await deps.prisma.thread.findFirst({
+          where: {
+            id: body.threadId,
+            spaceId: grant.spaceId,
+            userId: grant.userId,
+            ...(body.botId ? { botId: body.botId, groupId: null } : { groupId: body.groupId }),
+          },
+          select: { id: true },
+        });
+        if (!thread) throw new DeviceRequestError(DEVICE_RECORD_UNAVAILABLE);
+        await requireDeviceThreadReceipt(deps.prisma, grant, body.threadId);
+        // The existing read path owns bounded paging, target authorization and redaction.
+        return c.json(await deps.read(grant, "threads/messages", body));
       }
       case "tasks": {
         requireScope("read");

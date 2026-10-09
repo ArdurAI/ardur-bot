@@ -164,6 +164,7 @@ async function main() {
         "packages/adapters/src/cloud-agent.postgres.test.ts",
         "apps/api/src/local-import.postgres.test.ts",
         "apps/api/src/evidence.postgres.test.ts",
+        "apps/api/src/device-runs.postgres.test.ts",
         "apps/api/src/scratchpad.postgres.test.ts",
       ];
       // Each app reconciles all durable work in its database, including intentionally

@@ -2539,6 +2539,10 @@ msgstr "Devam"
 msgid "Continue in Background"
 msgstr ""
 
+#: src/pages/Shell.tsx
+msgid "Continue the interrupted run from its saved results. Check any uncertain action before repeating it."
+msgstr "Kesintiye uğrayan çalıştırmaya kaydedilmiş sonuçlarından devam et. Sonucu belirsiz bir işlemi tekrarlamadan önce kontrol et."
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Continue with ChatGPT"
 msgstr ""
@@ -7743,6 +7747,7 @@ msgstr "Ekip mesajlarını sürdür"
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
+#: src/pages/shell/provider-error-message.tsx
 #: src/pages/shell/runtime-summary.tsx
 #: src/pages/system/SystemPage.tsx
 #: src/pages/workspace/WorkspacePane.tsx
@@ -9099,6 +9104,10 @@ msgstr ""
 msgid "The bot is working — wait or stop it"
 msgstr ""
 
+#: src/pages/shell/provider-error-message.tsx
+msgid "The bot stopped responding. Retry the run."
+msgstr "Bot yanıt vermeyi durdurdu. Çalıştırmayı yeniden deneyin."
+
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "The computer is busy. Wait for it to finish."
 msgstr "Bilgisayar meşgul. Bitmesini bekleyin."
@@ -10286,11 +10295,3 @@ msgstr "Gerçek işler verebileceğin,<0/>her zaman açık agent takımın."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
-
-
-msgid "The bot stopped responding. Retry the run."
-msgstr "Bot yanıt vermeyi durdurdu. Çalıştırmayı yeniden deneyin."
-
-
-msgid "Continue the interrupted run from its saved results. Check any uncertain action before repeating it."
-msgstr "Kesintiye uğrayan çalıştırmaya kaydedilmiş sonuçlarından devam et. Sonucu belirsiz bir işlemi tekrarlamadan önce kontrol et."
