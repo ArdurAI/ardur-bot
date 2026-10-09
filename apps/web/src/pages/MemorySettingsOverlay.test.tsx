@@ -183,3 +183,88 @@ it("keeps the chosen location and a single Publication mode control when the con
     container.remove();
   }
 });
+
+it("renders one Publication mode control without a React key warning when generation and refresh are both 0", async () => {
+  const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  await mounted(
+    <MemorySettingsOverlay
+      embedded
+      config={
+        {
+          provider: "builtin",
+          documentStore: "git",
+          documentSettings: {
+            url: "https://github.com/fixture/memory.git",
+            branch: "main",
+            mode: "publish",
+            host: "github.com",
+          },
+          generation: 0,
+          defaultMemoryScope: "isolated",
+        } as never
+      }
+      onConfigChange={() => undefined}
+      onClose={() => undefined}
+    />,
+    async (container) => {
+      expect(container.querySelectorAll('[data-testid="git-memory-settings"]')).toHaveLength(1);
+      expect(container.querySelectorAll('select[aria-label="Publication mode"]')).toHaveLength(1);
+      const keyWarnings = consoleError.mock.calls.filter((args) =>
+        args.some((arg) => typeof arg === "string" && arg.includes("same key")),
+      );
+      expect(keyWarnings).toHaveLength(0);
+    },
+  );
+});
+
+it("keeps the folder being typed when the config loads late", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const props = {
+    embedded: true,
+    onConfigChange: () => undefined,
+    onClose: () => undefined,
+  };
+  try {
+    await act(async () => root.render(<MemorySettingsOverlay {...props} config={null} />));
+    const location = container.querySelector("select")!;
+    await act(async () => {
+      location.value = "obsidian";
+      location.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    const folder = container.querySelector(
+      'input[aria-label="Memory folder on your server"]',
+    )! as HTMLInputElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+        folder,
+        "/typed/in-progress",
+      );
+      folder.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(folder.value).toBe("/typed/in-progress");
+    // The saved config arrives while the person is still typing the folder.
+    await act(async () =>
+      root.render(
+        <MemorySettingsOverlay
+          {...props}
+          config={
+            {
+              provider: "builtin",
+              documentStore: "postgres",
+              documentSettings: {},
+              generation: 0,
+              defaultMemoryScope: "isolated",
+            } as never
+          }
+        />,
+      ),
+    );
+    expect(folder.value).toBe("/typed/in-progress");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
+});

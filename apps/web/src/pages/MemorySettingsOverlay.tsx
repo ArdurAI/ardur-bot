@@ -86,11 +86,18 @@ export function MemorySettingsOverlay({
   // a config (re)load must not throw away an in-progress choice or remount the
   // location form underneath it.
   const previousConfigured = useRef(configuredLocation(config));
+  const previousConfiguredFolder = useRef(config?.documentSettings.folder ?? "");
   useEffect(() => {
     const configured = configuredLocation(config);
     setLocation((current) => (current === previousConfigured.current ? configured : current));
     previousConfigured.current = configured;
-    setFolder(config?.documentSettings.folder ?? "");
+    // Same protection for the folder: keep what the person is typing when a
+    // late config (re)load arrives.
+    const configuredFolder = config?.documentSettings.folder ?? "";
+    setFolder((current) =>
+      current === previousConfiguredFolder.current ? configuredFolder : current,
+    );
+    previousConfiguredFolder.current = configuredFolder;
     setScope(config?.defaultMemoryScope ?? "isolated");
     setPreview(null);
   }, [config]);
@@ -260,8 +267,12 @@ export function MemorySettingsOverlay({
           </NativeSelectOption>
         </NativeSelect>
         <p className="mt-2 text-sm text-muted-foreground">{locationLine}</p>
-        {activeLocation === "service" ? <MemoryDeliveryProgress key={config?.generation} /> : null}
-        {activeLocation === "git" ? <GitMemoryStatus key={config?.generation} /> : null}
+        {activeLocation === "service" ? (
+          <MemoryDeliveryProgress key={`delivery-${config?.generation}`} />
+        ) : null}
+        {activeLocation === "git" ? (
+          <GitMemoryStatus key={`git-status-${config?.generation}`} />
+        ) : null}
         <details className="mt-2 text-xs text-muted-foreground">
           <summary>
             <Trans>Details</Trans>
@@ -311,7 +322,7 @@ export function MemorySettingsOverlay({
         </details>
         {location === "git" ? (
           <GitMemorySettings
-            key={config?.generation}
+            key={`git-settings-${config?.generation}`}
             config={config}
             onConfigChange={(next) => {
               onConfigChange(next);
@@ -417,7 +428,7 @@ export function MemorySettingsOverlay({
             ) : null}
           </div>
         ) : null}
-        <SpaceMemorySection key={refresh} />
+        <SpaceMemorySection key={`space-${refresh}`} />
       </div>
     </>
   );
