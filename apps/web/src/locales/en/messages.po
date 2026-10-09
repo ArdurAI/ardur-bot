@@ -7144,6 +7144,10 @@ msgstr "Queued"
 msgid "Queued for {name}"
 msgstr "Queued for {name}"
 
+#: src/components/composer/GroupRecipients.tsx
+msgid "Queued: {queued}"
+msgstr "Queued: {queued}"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Quick access shortcut"
 msgstr "Quick access shortcut"
@@ -9494,6 +9498,10 @@ msgstr "Timeline"
 msgid "Title"
 msgstr "Title"
 
+#: src/components/composer/GroupRecipients.tsx
+msgid "To {names}"
+msgstr "To {names}"
+
 #: src/components/PeerMessageReceipt.tsx
 msgid "to {peer}"
 msgstr "to {peer}"
@@ -10286,11 +10294,3 @@ msgstr "Your team of always-on agents<0/>that you can give real work to."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr "Yours"
-
-#: src/components/composer/GroupRecipients.tsx
-msgid "To {names}"
-msgstr "To {names}"
-
-#: src/components/composer/GroupRecipients.tsx
-msgid "Queued: {queued}"
-msgstr "Queued: {queued}"

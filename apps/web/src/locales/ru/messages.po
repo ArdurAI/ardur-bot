@@ -7144,6 +7144,10 @@ msgstr "В очереди"
 msgid "Queued for {name}"
 msgstr "В очереди для {name}"
 
+#: src/components/composer/GroupRecipients.tsx
+msgid "Queued: {queued}"
+msgstr "В очереди: {queued}"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Quick access shortcut"
 msgstr ""
@@ -9494,6 +9498,10 @@ msgstr ""
 msgid "Title"
 msgstr "Заголовок"
 
+#: src/components/composer/GroupRecipients.tsx
+msgid "To {names}"
+msgstr "Кому: {names}"
+
 #: src/components/PeerMessageReceipt.tsx
 msgid "to {peer}"
 msgstr "для {peer}"
@@ -10286,11 +10294,3 @@ msgstr "Ваша команда постоянно работающих аген
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
-
-#: src/components/composer/GroupRecipients.tsx
-msgid "To {names}"
-msgstr "Кому: {names}"
-
-#: src/components/composer/GroupRecipients.tsx
-msgid "Queued: {queued}"
-msgstr "В очереди: {queued}"
