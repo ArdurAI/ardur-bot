@@ -10286,3 +10286,11 @@ msgstr "Gerçek işler verebileceğin,<0/>her zaman açık agent takımın."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "To {names}"
+msgstr "Alıcı: {names}"
+
+#: src/pages/Shell.tsx
+msgid "Queued: {queued}"
+msgstr "Sırada: {queued}"

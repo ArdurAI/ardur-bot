@@ -10286,3 +10286,11 @@ msgstr "Your team of always-on agents<0/>that you can give real work to."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr "Yours"
+
+#: src/pages/Shell.tsx
+msgid "To {names}"
+msgstr "To {names}"
+
+#: src/pages/Shell.tsx
+msgid "Queued: {queued}"
+msgstr "Queued: {queued}"

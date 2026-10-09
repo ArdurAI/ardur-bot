@@ -10286,3 +10286,11 @@ msgstr "Dein Team aus jederzeit verfügbaren Agents<0/>für echte Aufgaben."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "To {names}"
+msgstr "An {names}"
+
+#: src/pages/Shell.tsx
+msgid "Queued: {queued}"
+msgstr "In der Warteschlange: {queued}"

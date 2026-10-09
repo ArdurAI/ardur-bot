@@ -10286,3 +10286,11 @@ msgstr "언제든 실제 작업을 맡길 수 있는<0/>나만의 Agent 팀"
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "To {names}"
+msgstr "받는 봇: {names}"
+
+#: src/pages/Shell.tsx
+msgid "Queued: {queued}"
+msgstr "대기 중: {queued}"

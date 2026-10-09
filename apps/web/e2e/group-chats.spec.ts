@@ -399,3 +399,57 @@ test("create group from + and see two bots in one transcript", async ({ page }, 
   await page.waitForURL(/\/app\/(?!g\/)[^/]+$/);
   await expect(page.getByRole("combobox", { name: /Message/ })).toBeVisible();
 });
+
+test("room drafts show actual recipients without transmitting unsent text", async ({
+  page,
+}, testInfo) => {
+  await signup(
+    page,
+    `recipient-preview-${Date.now()}@example.test`,
+    "password12",
+    "Preview fixture",
+  );
+  await completeOnboarding(page);
+  const first = await createBot(page, "Preview Alpha");
+  const second = await createBot(page, "Preview Beta");
+  const group = await rpc<{ id: string }>(page, "groups/create", {
+    name: "Preview room",
+    botIds: [first, second],
+  });
+  const snapshot = page.waitForResponse(
+    (response) =>
+      response.url().includes("/rpc/threads/get") &&
+      response.request().postData()?.includes(group.id) === true,
+  );
+  await page.goto(`/app/g/${group.id}`);
+  expect((await snapshot).ok()).toBe(true);
+  const input = page.locator("textarea");
+  const recipients = page.getByTestId("composer-recipients");
+  await expect(recipients).toHaveCount(0);
+  let sends = 0;
+  page.on("request", (request) => {
+    if (request.url().includes("/rpc/threads/send")) sends++;
+  });
+  await input.fill("Each member, reply with your model.");
+  await expect(recipients).toHaveText("To Preview Alpha");
+  expect(sends).toBe(0);
+  await captureScreenshot(page, testInfo, "group-recipient-preview");
+  for (const [text, expected] of [
+    ["@Preview Beta reply", "To Preview Beta"],
+    ["@Preview Alpha @Preview Beta reply", "To Preview Alpha, Preview Beta"],
+    ["@everyone reply", "To Preview Alpha, Preview Beta"],
+  ]) {
+    await input.fill(text!);
+    await expect(recipients).toHaveText(expected!);
+  }
+  expect(sends).toBe(0);
+  await input.fill("Each member, reply with your model.");
+  const sent = page.waitForResponse("**/rpc/threads/send");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  const response = await sent;
+  expect(response.ok()).toBe(true);
+  const receipt = (await response.json()).json as { runIds: string[] };
+  expect(receipt.runIds).toHaveLength(1);
+  const run = await rpc<{ run: { botId: string } }>(page, "runs/get", { runId: receipt.runIds[0] });
+  expect(run.run.botId).toBe(first);
+});

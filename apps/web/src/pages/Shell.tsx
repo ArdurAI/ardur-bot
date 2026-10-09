@@ -37,7 +37,12 @@ import {
   MESSAGE_REACTIONS,
   normalizeCreateBotProfile,
 } from "@ardurbot/contracts";
-import type { ComposerActionId, ComposerMention, ComposerSkill } from "@ardurbot/core";
+import type {
+  ComposerActionId,
+  ComposerMention,
+  ComposerSkill,
+  GroupRecipientContext,
+} from "@ardurbot/core";
 import {
   answerableAskMessageIds,
   applyChiefReceipt,
@@ -45,6 +50,7 @@ import {
   buildComposerMentionOptions,
   canAddComposerFolder,
   clampMentionHighlightIndex,
+  composerGroupRecipientNames,
   composerSkills,
   coordinationBlock,
   cronFromPreset,
@@ -58,6 +64,7 @@ import {
   isToolActivityBlock,
   mentionChipKey,
   projectMessageReactions,
+  queuedGroupRecipientNames,
   reorderBotTo,
   resolveComposerSendPlan,
   resolveMentionPickerKey,
@@ -1815,6 +1822,7 @@ export function ShellPage({
         }
         if (
           isRunTerminalEvent(event) ||
+          (event.type === "thread.message.created" && event.payload.role === "user") ||
           event.type === "run.waiting_input" ||
           event.type === "computer.placement.requested"
         ) {
@@ -4048,6 +4056,15 @@ export function ShellPage({
             <Composer
               key={inGroup ? `group:${groupId}` : `bot:${active?.id}`}
               comparisonBotId={!inGroup && bots.length >= 2 ? active?.id : undefined}
+              groupRecipients={
+                inGroup
+                  ? {
+                      members: transcriptMembers ?? [],
+                      groupRouting: activeSnapshot?.groupRouting,
+                      activeRuns: currentRuns,
+                    }
+                  : undefined
+              }
               activeName={inGroup ? (activeGroup?.name ?? activeSnapshot?.groupName) : active?.name}
               refusalBotName={refusalRunBotName(activeSnapshot, bots, transcriptMembers)}
               running={composerRunning}
@@ -5915,6 +5932,7 @@ const QuoteSelectionButton = memo(function QuoteSelectionButton({
 export const Composer = memo(function Composer({
   comparisonBotId,
   activeName,
+  groupRecipients,
   running,
   disabled,
   pendingAttachments,
@@ -5958,6 +5976,7 @@ export const Composer = memo(function Composer({
 }: {
   comparisonBotId?: string;
   activeName?: string;
+  groupRecipients?: GroupRecipientContext;
   running: boolean;
   disabled?: boolean;
   pendingAttachments: PendingAttachment[];
@@ -6022,6 +6041,16 @@ export const Composer = memo(function Composer({
     selectedSkill !== null ||
     selectedMentions.length > 0 ||
     pendingAttachments.length > 0;
+  const names = canSend
+    ? composerGroupRecipientNames({
+        group: groupRecipients,
+        draft,
+        skill: selectedSkill,
+        mentions: selectedMentions,
+        replyBotId: replyTarget?.botId,
+      }).join(", ")
+    : "";
+  const queued = queuedGroupRecipientNames(groupRecipients).join(", ");
   const comparePrompt = comparisonBotId
     ? serializeComposerPrompt(draft, selectedSkill, selectedMentions)
     : "";
@@ -6478,6 +6507,26 @@ export const Composer = memo(function Composer({
             ))}
           </div>
         </div>
+      ) : null}
+      {names ? (
+        <p
+          data-testid="composer-recipients"
+          role="status"
+          title={t`To ${names}`}
+          className="truncate pb-1 ps-12 text-xs text-muted-foreground"
+        >
+          {t`To ${names}`}
+        </p>
+      ) : null}
+      {queued ? (
+        <p
+          data-testid="composer-queued"
+          role="status"
+          title={t`Queued: ${queued}`}
+          className="truncate pb-1 ps-12 text-xs text-muted-foreground"
+        >
+          {t`Queued: ${queued}`}
+        </p>
       ) : null}
       <div
         data-testid="composer-bar"

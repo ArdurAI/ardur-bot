@@ -10286,3 +10286,11 @@ msgstr "हमेशा चालू रहने वाले एजेंट�
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "To {names}"
+msgstr "प्राप्तकर्ता: {names}"
+
+#: src/pages/Shell.tsx
+msgid "Queued: {queued}"
+msgstr "कतार में: {queued}"

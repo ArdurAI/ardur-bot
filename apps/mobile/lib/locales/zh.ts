@@ -1,4 +1,7 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "To {names}": "发送给：{names}",
+  "Queued: {queued}": "排队中：{queued}",
+
   "Capability checks": "能力检查",
   "Last 7 days": "过去 7 天",
   Success: "成功率",
