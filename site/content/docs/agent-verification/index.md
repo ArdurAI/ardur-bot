@@ -27,6 +27,8 @@ command. Nightly verification never starts computer sandboxes or requests model
 or sandbox credentials.
 Missing live credentials mean **not run**, not a passing model evaluation.
 
+For #199, `ARDUR_TEST_POSTGRES_IMAGE` overrides the test Postgres image; it defaults to `postgres:16-alpine` locally, and CI uses `mirror.gcr.io/library/postgres:16-alpine`.
+
 ## Deterministic Pi tests
 
 `packages/testkit/src/model-emulator.ts` serves a loopback OpenAI-compatible

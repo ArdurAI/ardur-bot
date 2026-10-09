@@ -14,6 +14,9 @@ export function credentialFreeEnvironment(source: NodeJS.ProcessEnv): NodeJS.Pro
     "DOCKER_CONTEXT",
     "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE",
     "TESTCONTAINERS_HOST_OVERRIDE",
+    // #199: Preserve non-secret CI image selection and reaper policy during provisioning.
+    "ARDUR_TEST_POSTGRES_IMAGE",
+    "TESTCONTAINERS_RYUK_DISABLED",
     "DISPLAY",
     "XAUTHORITY",
     "WAYLAND_DISPLAY",

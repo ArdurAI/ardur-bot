@@ -423,7 +423,16 @@ function fixture(
   const environmentNote = vi.fn(async () => "Tools on this computer: gh 2.80.0 (signed in).");
   const resolveCommandCwd = vi.fn(async () => "/workspace");
   const sandboxDescription = { capabilities: { graphical: false } };
-  const events = { append: vi.fn(async () => undefined), pauseRunForInput, finalizeRun };
+  const pauseRunForTakeover = vi.fn(async () => {
+    run.status = "waiting_takeover";
+    return true;
+  });
+  const events = {
+    append: vi.fn(async () => undefined),
+    pauseRunForInput,
+    pauseRunForTakeover,
+    finalizeRun,
+  };
   const jobs = { enqueue: vi.fn(async () => undefined) };
   const secrets: string[] = [];
   const memoryRead = vi.fn(async () => ({ documents: [] }));
@@ -2148,6 +2157,254 @@ describe("run failure cause", () => {
 });
 
 describe("executor restart journeys without a database", () => {
+  function blockQueuedCheckpoint(f: ReturnType<typeof fixture>) {
+    let release!: () => void;
+    let started!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const queued = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const underlying = f.prisma.run.updateMany.getMockImplementation()!;
+    f.prisma.run.updateMany.mockImplementation(async (input) => {
+      if ((input as { data?: { turnCheckpoint?: unknown } }).data?.turnCheckpoint) {
+        started();
+        await blocked;
+        const where = (input as unknown as { where: { leaseFence: number } }).where;
+        if (f.runRecord.status !== "running" || where.leaseFence !== f.runRecord.leaseFence)
+          return { count: 0 };
+      }
+      return underlying(input);
+    });
+    return { queued, release };
+  }
+
+  it.each([
+    "shutdown",
+    "failure",
+    "ask",
+    "takeover",
+    "retry",
+    "stop",
+    "lease-return",
+    "completed",
+    "loop-stop",
+  ] as const)(
+    "settles a queued checkpoint before an interrupted %s exit or transition",
+    async (exit) => {
+      vi.useFakeTimers();
+      const shutdown = new AbortController();
+      const drain = new RestartDrain({} as never);
+      vi.spyOn(drain, "admits").mockResolvedValue(true);
+      vi.spyOn(drain, "requested").mockResolvedValue(false);
+      const leave = vi.fn();
+      const enter = drain.enter.bind(drain);
+      vi.spyOn(drain, "enter").mockImplementation(() => {
+        const unregister = enter()!;
+        return () => {
+          leave();
+          unregister();
+        };
+      });
+      const f = fixture(`queued-${exit}`, undefined, undefined, drain, shutdown.signal);
+      const gate = blockQueuedCheckpoint(f);
+      if (exit === "takeover" || exit === "loop-stop") {
+        Object.assign(f.prisma.message, {
+          create: vi.fn(async () => ({ id: "takeover-notice" })),
+        });
+        Object.assign(f.events, { notify: vi.fn(async () => undefined) });
+      }
+      f.runtimeRun.mockImplementation(async function* () {
+        await gate.queued;
+        if (exit === "ask") {
+          yield { type: "ask", text: "Continue?" };
+          return;
+        }
+        if (exit === "takeover") {
+          yield { type: "takeover", reason: "Continue on the computer" };
+          return;
+        }
+        if (exit === "lease-return") {
+          f.runRecord.leaseFence++;
+          yield { type: "text", text: "No longer owned" };
+          return;
+        }
+        if (exit === "completed") {
+          yield { type: "done", text: "Finished" };
+          return;
+        }
+        if (exit === "loop-stop") {
+          for (let call = 0; call < 6; call++) {
+            yield {
+              type: "tool",
+              name: "read_file",
+              args: { path: "fixture.md" },
+              executionId: String(call),
+            };
+          }
+          return;
+        }
+        if (exit === "retry") throw new ProviderError("Too many requests", "rate-limit");
+        if (exit === "shutdown") shutdown.abort();
+        if (exit === "stop") f.runRecord.cancelRequestedAt = new Date();
+        throw new Error("interrupted fixture");
+      });
+      const running = f.executor.continueRun(f.runRecord.id, "worker");
+      try {
+        await gate.queued;
+        await vi.advanceTimersByTimeAsync(0);
+        expect(f.runRecord.turnCheckpoint).toBeNull();
+        expect(leave).not.toHaveBeenCalled();
+        expect(f.finalizeRun).not.toHaveBeenCalled();
+        expect(f.events.pauseRunForInput).not.toHaveBeenCalled();
+        expect(f.events.pauseRunForTakeover).not.toHaveBeenCalled();
+        expect(f.runRecord.status).toBe("running");
+        expect(f.prisma.attempt.updateMany).not.toHaveBeenCalled();
+        gate.release();
+        await running;
+        expect(leave).toHaveBeenCalledOnce();
+        if (exit === "lease-return") {
+          expect(f.runRecord.turnCheckpoint).toBeNull();
+        } else {
+          expect(f.runRecord.turnCheckpoint).toMatch(/^v2:/);
+          const saved = JSON.parse(
+            digests.load(f.runRecord.turnCheckpoint!, `turn:${f.runRecord.id}`),
+          );
+          expect(saved).toMatchObject({ version: 1, prompt: expect.any(String) });
+        }
+        if (exit === "failure") {
+          expect(f.finalizeRun).toHaveBeenCalledWith(
+            expect.objectContaining({ outcome: "failed" }),
+          );
+        } else if (exit === "completed" || exit === "loop-stop") {
+          expect(f.finalizeRun).toHaveBeenCalledWith(
+            expect.objectContaining({ outcome: "completed" }),
+          );
+        } else if (exit === "ask") {
+          expect(f.events.pauseRunForInput).toHaveBeenCalledOnce();
+        } else if (exit === "takeover") {
+          expect(f.events.pauseRunForTakeover).toHaveBeenCalledOnce();
+        } else if (exit === "retry") {
+          expect(f.runRecord.status).toBe("queued");
+          expect(f.runRecord.providerRetryAt).toBeInstanceOf(Date);
+          expect(f.finalizeRun).not.toHaveBeenCalled();
+        } else {
+          expect(f.finalizeRun).not.toHaveBeenCalled();
+        }
+      } finally {
+        gate.release();
+        await running;
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it("reports an unsettled checkpoint at the existing shutdown deadline without waiting for it", async () => {
+    vi.useFakeTimers();
+    const sink = createTestSink();
+    installLogger(createLogger({ service: "ardurbot-worker", sinks: [sink] }));
+    const shutdown = new AbortController();
+    const drain = new RestartDrain({} as never);
+    vi.spyOn(drain, "admits").mockResolvedValue(true);
+    vi.spyOn(drain, "requested").mockResolvedValue(false);
+    const f = fixture("checkpoint-deadline", undefined, undefined, drain, shutdown.signal);
+    const gate = blockQueuedCheckpoint(f);
+    f.runtimeRun.mockImplementation(async function* () {
+      await gate.queued;
+      yield { type: "text", text: "Before interruption" };
+      throw new Error("interrupted fixture");
+    });
+    const running = f.executor.continueRun(f.runRecord.id, "worker");
+    try {
+      await gate.queued;
+      await vi.advanceTimersByTimeAsync(0);
+      const stopped = drainForShutdown(drain, shutdown);
+      await vi.advanceTimersByTimeAsync(59_999);
+      expect(shutdown.signal.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await stopped).toEqual({
+        ok: false,
+        activeAtStart: 1,
+        remaining: 1,
+        durationMs: 60_000,
+      });
+      expect(shutdown.signal.aborted).toBe(true);
+      expect(sink.events).toContainEqual(
+        expect.objectContaining({
+          message: "restart.drain",
+          deadlineMiss: true,
+          remaining: 1,
+        }),
+      );
+      expect(f.finalizeRun).not.toHaveBeenCalled();
+      expect(f.runRecord.turnCheckpoint).toBeNull();
+      gate.release();
+      await running;
+      expect(f.runRecord.turnCheckpoint).toMatch(/^v2:/);
+      expect(f.finalizeRun).not.toHaveBeenCalled();
+    } finally {
+      gate.release();
+      await running;
+      vi.useRealTimers();
+      installLogger(createLogger({ service: "ardurbot-worker", sinks: [] }));
+    }
+  });
+
+  it.each(["failure", "lease-return"] as const)(
+    "leaves cleanup and stops its heartbeat at the shared drain deadline with a forever-blocked %s save",
+    async (exit) => {
+      vi.useFakeTimers();
+      const sink = createTestSink();
+      installLogger(createLogger({ service: "ardurbot-worker", sinks: [sink] }));
+      const shutdown = new AbortController();
+      const drain = new RestartDrain({} as never);
+      vi.spyOn(drain, "admits").mockResolvedValue(true);
+      vi.spyOn(drain, "requested").mockResolvedValue(false);
+      const f = fixture("forever-checkpoint", undefined, undefined, drain, shutdown.signal);
+      const gate = blockQueuedCheckpoint(f);
+      f.runtimeRun.mockImplementation(async function* () {
+        await gate.queued;
+        if (exit === "lease-return") f.runRecord.leaseFence++;
+        yield { type: "text", text: "Before interruption" };
+        throw new Error("interrupted fixture");
+      });
+      let resolved = false;
+      const running = f.executor.continueRun(f.runRecord.id, "worker").then(() => {
+        resolved = true;
+      });
+      try {
+        await gate.queued;
+        await vi.advanceTimersByTimeAsync(0);
+        const stopped = drainForShutdown(drain, shutdown);
+        await vi.advanceTimersByTimeAsync(59_999);
+        expect(resolved).toBe(false);
+        expect(f.prisma.attempt.updateMany).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1);
+        expect(await stopped).toMatchObject({ ok: false, remaining: 1, durationMs: 60_000 });
+        expect(resolved).toBe(true);
+        await running;
+        expect(f.prisma.attempt.updateMany).toHaveBeenCalledOnce();
+        expect(sink.events).toContainEqual(
+          expect.objectContaining({
+            message: "restart.turn.checkpoint.abandoned",
+            abandonedSaves: 1,
+          }),
+        );
+        const calls = f.prisma.run.findUnique.mock.calls.length;
+        await vi.advanceTimersByTimeAsync(65_000);
+        expect(f.prisma.run.findUnique.mock.calls).toHaveLength(calls);
+        expect(await drain.shutdown(0)).toMatchObject({ ok: true, remaining: 0 });
+        expect(f.runRecord.turnCheckpoint).toBeNull();
+        expect(f.finalizeRun).not.toHaveBeenCalled();
+        // Intentionally never release the save: cleanup must not depend on it.
+      } finally {
+        vi.useRealTimers();
+        installLogger(createLogger({ service: "ardurbot-worker", sinks: [] }));
+      }
+    },
+  );
+
   it.each([false, true])(
     "flushes redacted stream progress on ordinary shutdown with restart admission %s",
     async (withDrain) => {

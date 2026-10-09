@@ -1,5 +1,8 @@
+// #199: Use the shared Postgres image override without changing the local default.
+
 import { execFileSync, spawn } from "node:child_process";
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
+import { TEST_POSTGRES_IMAGE } from "../../postgres-image.js";
 
 function isLocalDockerEndpoint(endpoint: string) {
   return endpoint.startsWith("unix://") || /^npipe:\/\/\/\/\.\/pipe\/[\w-]+$/.test(endpoint);
@@ -28,7 +31,7 @@ export async function provisionReplayPostgres(
       throw new Error("Select a local disposable Docker endpoint");
     process.env.DOCKER_HOST = endpoint;
   }
-  const definition = new PostgreSqlContainer("postgres:16-alpine").withDatabase(
+  const definition = new PostgreSqlContainer(TEST_POSTGRES_IMAGE).withDatabase(
     "scoreboard_template",
   );
   if (options.ownerToken) definition.withLabels({ "ardur.versus.owner": options.ownerToken });

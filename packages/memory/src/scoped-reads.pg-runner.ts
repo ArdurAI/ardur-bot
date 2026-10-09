@@ -1,9 +1,12 @@
+// #199: Use the shared Postgres image override without changing the local default.
+
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { TEST_POSTGRES_IMAGE } from "@ardurbot/testkit/postgres-image";
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
-const container = await new PostgreSqlContainer("postgres:16-alpine")
+const container = await new PostgreSqlContainer(TEST_POSTGRES_IMAGE)
   .withEnvironment({ POSTGRES_INITDB_ARGS: "--locale-provider=icu --icu-locale=en-US" })
   .start();
 try {

@@ -1,4 +1,6 @@
-FROM node:22-bookworm@sha256:0557ac14e0d45d02ed563067b82856ca5e7aa3437fa28d98d4350ea9c3d9494a
+# #199: CI supplies a public mirror prefix; local builds keep Docker Hub defaults.
+ARG DOCKERHUB_LIBRARY_PREFIX=
+FROM ${DOCKERHUB_LIBRARY_PREFIX}node:22-bookworm@sha256:0557ac14e0d45d02ed563067b82856ca5e7aa3437fa28d98d4350ea9c3d9494a
 RUN apt-get update && apt-get install -y --no-install-recommends git openssh-client ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN corepack enable
 WORKDIR /app
