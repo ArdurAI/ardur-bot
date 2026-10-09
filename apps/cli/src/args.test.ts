@@ -85,3 +85,29 @@ it.each([
 ])("refuses invalid bot test arguments %j", (input) => {
   expect(() => parseArgs(input)).toThrow();
 });
+
+it.each([
+  [
+    ["runs", "list", "--limit", "2", "--cursor", "run"],
+    { kind: "runs-list", limit: 2, cursor: "run" },
+  ],
+  [["runs", "show", "run"], { kind: "runs-show", runId: "run" }],
+  [["tasks", "show", "task"], { kind: "tasks-show", taskId: "task" }],
+  [["wait", "--run", "run", "--timeout", "2s"], { kind: "wait", runId: "run", timeoutMs: 2000 }],
+  [
+    ["send", "Hello", "--request-id", "stable-request-0001"],
+    { kind: "send", requestId: "stable-request-0001" },
+  ],
+])("parses the exact-read and recovery command %j", (args, expected) =>
+  expect(parseArgs(args as string[])).toMatchObject(expected),
+);
+it.each([
+  ["runs", "list", "--limit", "101"],
+  ["runs", "list", "--cursor"],
+  ["wait"],
+  ["wait", "--run", "one", "--run", "two"],
+  ["wait", "--run", "run", "--timeout", "0"],
+  ["send", "Hello", "--request-id", "short"],
+  ["tasks", "show"],
+  ["runs", "show", "run", "extra"],
+])("refuses invalid Stage 3 arguments %j", (args) => expect(() => parseArgs(args)).toThrow());
