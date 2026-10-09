@@ -1,3 +1,5 @@
+// #199: Use the shared Postgres image override without changing the local default.
+
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -6,6 +8,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { ModelEmulatorStep } from "../model-emulator.js";
 import { startModelEmulator } from "../model-emulator.js";
+import { TEST_POSTGRES_IMAGE } from "../postgres-image.js";
 import { gradeOutcome } from "../scoreboard/graders/outcome.js";
 import { contentDigest } from "../scoreboard/manifest.js";
 import { startReplayHttp } from "../scoreboard/replay/http.js";
@@ -74,7 +77,7 @@ export async function rpcSelfTest(output: string, containerMode = false) {
 export function cachedPostgresImage() {
   const image = execFileSync(
     "docker",
-    ["image", "inspect", "postgres:16-alpine", "--format", "{{.Id}}"],
+    ["image", "inspect", TEST_POSTGRES_IMAGE, "--format", "{{.Id}}"],
     { encoding: "utf8" },
   ).trim();
   requireValue(
@@ -110,6 +113,8 @@ export async function spawnHarnessChild(options: {
   env.PATH = [pnpmDirectory, dockerDirectory, env.PATH].join(path.delimiter);
   Object.assign(env, {
     DOCKER_HOST: endpoint,
+    // #199: The allowlisted child must provision the same image its parent inspected.
+    ARDUR_TEST_POSTGRES_IMAGE: TEST_POSTGRES_IMAGE,
     TESTCONTAINERS_RYUK_DISABLED: "true",
     NODE_ENV: "test",
     BETTER_AUTH_SECRET: "synthetic-scoreboard-auth-secret-32",

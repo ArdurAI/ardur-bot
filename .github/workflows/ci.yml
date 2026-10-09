@@ -7,6 +7,13 @@ on:
 permissions:
   contents: read
 
+env:
+  # #199: Use public mirrors without credentials or changes to local defaults.
+  ARDUR_TEST_POSTGRES_IMAGE: mirror.gcr.io/library/postgres:16-alpine
+  DOCKERHUB_LIBRARY_PREFIX: mirror.gcr.io/library/
+  # #199: Hosted runners are disposable; do not pull the Ryuk reaper.
+  TESTCONTAINERS_RYUK_DISABLED: "true"
+
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -44,11 +51,26 @@ jobs:
       - run: pnpm lint
       # An invalid workflow file fails only when GitHub loads it, which for the release
       # workflow is at tag time. Check every workflow's syntax and expressions on each push.
-      # rhysd/actionlint 1.7.12, pinned by digest.
+      # #199: Use the checksum-verified release binary instead of a Docker Hub image.
       - name: Lint workflow files
+        env:
+          ACTIONLINT_VERSION: "1.7.12"
         run: |
-          docker run --rm -v "$PWD:/repo" -w /repo \
-            rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -shellcheck= -pyflakes=
+          set -euo pipefail
+          download_dir="$(mktemp -d)"
+          trap 'rm -rf "$download_dir"' EXIT
+          asset="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          checksums="actionlint_${ACTIONLINT_VERSION}_checksums.txt"
+          release="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}"
+          (
+            cd "$download_dir"
+            curl --fail --silent --show-error --location --retry 3 --output "$asset" "$release/$asset"
+            curl --fail --silent --show-error --location --retry 3 --output "$checksums" "$release/$checksums"
+            awk -v asset="$asset" '$2 == asset { print; found++ } END { if (found != 1) exit 1 }' "$checksums" > selected-checksum.txt
+            sha256sum --check --strict selected-checksum.txt
+            tar -xzf "$asset" actionlint
+          )
+          "$download_dir/actionlint" -shellcheck= -pyflakes=
 
   check:
     name: Typecheck
