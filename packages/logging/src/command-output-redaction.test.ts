@@ -48,6 +48,18 @@ describe("command output redaction", () => {
   it.each(credentials)("hides credential values: %s", (line, expected) => {
     expect(redactCommandOutput(line!)).toBe(expected);
   });
+  it("fully masks secrets that contain literal shell escapes", () => {
+    expect(redactCommandOutput("password: my\\nsecret")).toBe("password: [Redacted]");
+    expect(redactCommandOutput("curl -H 'Authorization: Bearer my\\nsecret'")).toBe(
+      "curl -H 'Authorization: [Redacted]'",
+    );
+    expect(redactCommandOutput("api_key=a\\tb")).toBe("api_key=[Redacted]");
+  });
+  it("ends an unquoted secret value at a real newline", () => {
+    expect(redactCommandOutput("password: hunter2\nmaxTokens: 4096")).toBe(
+      "password: [Redacted]\nmaxTokens: 4096",
+    );
+  });
   it.each([
     ["password: hunter2,", "password: [Redacted],"],
     ["password: mysecretpassword\n", "password: [Redacted]\n"],

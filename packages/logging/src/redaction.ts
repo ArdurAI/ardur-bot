@@ -95,14 +95,21 @@ function containerEnd(text: string, start: number): number {
   return text.length;
 }
 
-// Shell escapes such as \n end an unquoted value the way a real newline does;
-// other backslashes stay part of the value so paths and partial masks do not leak.
+// Shell escapes such as \n end an unquoted value the way a real newline does, but
+// only when the escape cannot be part of the value: the string ends, a value
+// terminator follows, or another key/value pair starts. Otherwise the escape is
+// part of the value and masking continues, so secrets containing \n stay masked.
+// Other backslashes stay part of the value so paths and partial masks do not leak.
 function valueEnd(text: string, start: number, shellEscapes: boolean): number {
   let end = start;
   while (end < text.length) {
     const character = text[end]!;
     if (/[\s"',;}&\]]/.test(character)) break;
-    if (shellEscapes && character === "\\" && /[ntr]/.test(text[end + 1] ?? "")) break;
+    if (shellEscapes && character === "\\" && /[ntr]/.test(text[end + 1] ?? "")) {
+      const rest = text.slice(end + 2);
+      if (rest === "" || /^[A-Za-z_$][\w$]*\s*[:=]/.test(rest) || /[\s"',;}&\]]/.test(rest[0]!))
+        break;
+    }
     end++;
   }
   return end;
