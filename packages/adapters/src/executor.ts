@@ -2000,6 +2000,32 @@ export function createRunExecutor(deps: ExecutorDeps) {
           throw error;
         });
 
+      let checkpointWrite: Promise<void> = Promise.resolve();
+      let pendingCheckpointSaves = 0;
+      let checkpointSavesAbandoned = false;
+      // Only the drain deadline abandons saves; an ordinary runtime abort still flushes.
+      // Cleanup must not start another 60-second wait.
+      const settleProgressSaves = async (): Promise<boolean> => {
+        const signal = deps.restartDrain?.deadlineSignal;
+        if (!signal) {
+          await checkpointWrite;
+          return true;
+        }
+        if (signal.aborted) return pendingCheckpointSaves === 0;
+        let interrupt!: () => void;
+        const interrupted = new Promise<false>((resolve) => {
+          interrupt = () => resolve(false);
+          signal.addEventListener("abort", interrupt, { once: true });
+        });
+        try {
+          return await Promise.race([checkpointWrite.then(() => true), interrupted]);
+        } finally {
+          signal.removeEventListener("abort", interrupt);
+        }
+      };
+      const flushProgressSaves = async () => {
+        if (!(await settleProgressSaves())) throw deps.restartDrain?.deadlineSignal.reason;
+      };
       let suspendedForRestart = false;
       let leaseValid = true;
       let lastLeaseCheckAt = 0;
@@ -3236,6 +3262,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             tool: name,
             pause: async (reason, action) => {
               await workspaceCheckpoint.flush();
+              await flushProgressSaves();
               const paused = await deps.events.pauseRunForInput({
                 spaceId: run.spaceId,
                 threadId: run.threadId,
@@ -4000,6 +4027,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             }
             await workspaceCheckpoint.flush();
             await bindDeviceApproval(deps.prisma, run, applied!.effect);
+            await flushProgressSaves();
             const paused = await deps.events.pauseRunForInput({
               helperDelegationId: helperToolDelegations.get(executionId),
               spaceId: run.spaceId,
@@ -5163,6 +5191,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               return pauseForSecret();
             }
             await workspaceCheckpoint.flush();
+            await flushProgressSaves();
             const paused = await deps.events.pauseRunForInput({
               spaceId: run.spaceId,
               threadId: run.threadId,
@@ -5955,20 +5984,25 @@ export function createRunExecutor(deps: ExecutorDeps) {
               prompt: task.prompt,
             },
           );
-          let checkpointWrite: Promise<void> = Promise.resolve();
           // A failed write must not poison later saves: snapshots are cumulative, so the next
           // save supersedes a lost one. Callers that await still see that save's own failure.
           const saveProgress = () => {
             const snapshot = redactTaskValue(turnProgress.snapshot(), runSecrets);
-            const write = checkpointWrite.then(async () => {
-              const stored = await deps.secretStore.put(
-                JSON.stringify(snapshot),
-                context,
-                `turn:${runId}`,
-              );
-              await saveTurnProgress(deps.prisma, runId, workerId, fence, stored.ciphertext);
-              tracePoint(runId, "restart.saved", { attempt: fence });
-            });
+            pendingCheckpointSaves++;
+            const write = checkpointWrite
+              .then(async () => {
+                if (checkpointSavesAbandoned) return;
+                const stored = await deps.secretStore.put(
+                  JSON.stringify(snapshot),
+                  context,
+                  `turn:${runId}`,
+                );
+                await saveTurnProgress(deps.prisma, runId, workerId, fence, stored.ciphertext);
+                tracePoint(runId, "restart.saved", { attempt: fence });
+              })
+              .finally(() => {
+                pendingCheckpointSaves--;
+              });
             checkpointWrite = write.catch((error: unknown) => {
               getLogger().warn("restart.turn.checkpoint.failed", {
                 runId,
@@ -5983,7 +6017,6 @@ export function createRunExecutor(deps: ExecutorDeps) {
           const queueProgressSave = () => {
             void saveProgress().catch(() => {});
           };
-          const flushProgressSaves = () => checkpointWrite;
           const suspendAtBoundary = async () => {
             if (!deps.restartDrain || !(await deps.restartDrain.requested())) return false;
             turnProgress.snapshot().suspended = true;
@@ -6899,6 +6932,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               }
               const releasedHold = takeoverCheckpointOf(still.checkpoint);
               if (heldForTakeover && releasedHold) {
+                await flushProgressSaves();
                 await requeueComputerRun(deps, runId, workerId, fence, releasedHold, false);
                 leaseValid = false;
                 runAbortController?.abort();
@@ -7005,6 +7039,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 label: redactSecrets(action.label, runSecrets),
               }));
               await workspaceCheckpoint.flush();
+              await flushProgressSaves();
               const paused = await deps.events.pauseRunForInput({
                 spaceId: run.spaceId,
                 threadId: run.threadId,
@@ -7066,6 +7101,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 { kind: "computer", state: "Needs you", text: safeReason },
               ]);
               await workspaceCheckpoint.flush();
+              await flushProgressSaves();
               if (!(await holdComputerExecutionLeaseForTakeover(deps.prisma, computerLease))) {
                 throw new Error("Computer lease expired before takeover");
               }
@@ -7115,6 +7151,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 }
                 await workspaceCheckpoint.flush();
                 terminalCheckpointComplete = true;
+                await flushProgressSaves();
                 const stuckText = `I got stuck calling ${humanizeToolName(event.name)} with the same input ${toolCallStreak.count} times in a row without making progress, so I stopped early. Try rephrasing this, or ask me to try a different approach.`;
                 const stopped = await deps.events.finalizeRun({
                   onCommitted: () =>
@@ -7404,6 +7441,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
             });
           }
         } catch (error) {
+          if (deps.shutdownSignal?.aborted) return;
+          await flushProgressSaves();
           if (suspendedForRestart || deps.shutdownSignal?.aborted) return;
           const stopping = await deps.prisma.run.findUnique({
             where: { id: runId },
@@ -7571,6 +7610,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
         }
       } catch (setupError) {
+        if (deps.shutdownSignal?.aborted) return;
+        await flushProgressSaves();
         if (preparationSignal?.aborted) {
           await requeueComputerRun(deps, runId, workerId, fence, resumeCheckpoint, heldForTakeover);
           await deps.prisma.attempt.update({
@@ -7713,10 +7754,18 @@ export function createRunExecutor(deps: ExecutorDeps) {
           throw new Error("Run setup failed; retrying");
         }
       } finally {
+        // Keep ownership until saves settle or the drain reports its deadline miss.
+        if (!(await settleProgressSaves())) {
+          checkpointSavesAbandoned = true;
+          getLogger().warn("restart.turn.checkpoint.abandoned", {
+            runId,
+            abandonedSaves: pendingCheckpointSaves,
+          });
+        }
+        stopHeartbeat();
         controlWatch.abort();
         await controlWatcher;
         detachShutdown?.();
-        stopHeartbeat();
         const stopping = await deps.prisma.run.findUnique({
           where: { id: runId },
           select: { cancelRequestedAt: true, status: true },
