@@ -22,16 +22,14 @@ it.each([
 ] as const)(
   "projects coordinator %s, last %s, space %s to %s",
   async (coord, last, space, expected) => {
-    const findFirst = vi
-      .fn()
-      .mockResolvedValue({
-        id: "room",
-        name: "Room",
-        coordinatorBotId: coord,
-        members,
-        space: { coordinatorBotId: space },
-        thread: { id: "thread", runs: last ? [{ botId: last }] : [] },
-      });
+    const findFirst = vi.fn().mockResolvedValue({
+      id: "room",
+      name: "Room",
+      coordinatorBotId: coord,
+      members,
+      space: { coordinatorBotId: space },
+      thread: { id: "thread", runs: last ? [{ botId: last }] : [] },
+    });
     const prisma = { chatGroup: { findFirst } } as unknown as PrismaClient;
     const target = await resolveThreadTarget(prisma, actor, { groupId: "room" });
     expect(target.kind).toBe("group");
