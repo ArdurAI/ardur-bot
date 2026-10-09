@@ -198,18 +198,24 @@ describe.skipIf(!hasDatabase)("paired command-line device", () => {
       ).toBe(0);
       const receipt = JSON.parse(out.join(""));
       expect(receipt).toMatchObject({
-        botId: bot.id,
-        state: "done",
-        text: "Public fixture task completed.",
+        version: 1,
+        command: "send",
+        verdict: "pass",
+        replyText: "Public fixture task completed.",
+        data: { run: { botId: bot.id, status: "completed", state: "done" } },
       });
       expect(errors).toEqual([]);
       const run = await handles.prisma.run.findUniqueOrThrow({ where: { id: receipt.runId } });
       expect(run.status).toBe("completed");
       await rpc("devices/revoke", { id: home.grantId });
       out.length = 0;
-      expect(await runCli(["send", bot.id, "Must not run."], deps)).toBe(2);
-      expect(out).toEqual([]);
-      expect(errors.join("")).toContain("This device is unavailable; pair it again at home.");
+      expect(await runCli(["send", bot.id, "Must not run.", "--json"], deps)).toBe(4);
+      expect(JSON.parse(out.join(""))).toMatchObject({
+        version: 1,
+        verdict: "error",
+        failureReason: "This device is unavailable; pair it again at home.",
+      });
+      expect(errors).toEqual([]);
       await rpc("devices/revoke", { id: pairedPhone.home!.grantId });
       await expect(phone.request("rpc", { procedure: "me", input: {} })).rejects.toThrow();
       expect(await handles.prisma.run.count({ where: { botId: bot.id } })).toBe(1);
