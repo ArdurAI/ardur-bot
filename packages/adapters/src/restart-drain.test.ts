@@ -169,6 +169,7 @@ describe.each(["API", "worker"])("%s service shutdown", () => {
     await vi.advanceTimersByTimeAsync(50);
     expect(await stopped).toMatchObject({ ok: true, remaining: 0 });
     expect(shutdown.signal.aborted).toBe(true);
+    expect(f.drain.deadlineSignal.aborted).toBe(false);
   });
   it("interrupts a stuck turn only after the bounded service deadline", async () => {
     vi.useFakeTimers();
@@ -178,8 +179,10 @@ describe.each(["API", "worker"])("%s service shutdown", () => {
     const stopped = drainForShutdown(f.drain, shutdown);
     await vi.advanceTimersByTimeAsync(59_999);
     expect(shutdown.signal.aborted).toBe(false);
+    expect(f.drain.deadlineSignal.aborted).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
     expect(await stopped).toMatchObject({ ok: false, remaining: 1 });
     expect(shutdown.signal.aborted).toBe(true);
+    expect(f.drain.deadlineSignal.aborted).toBe(true);
   });
 });

@@ -1,6 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalPassThroughEnv": ["COREPACK_ENABLE_DOWNLOAD_PROMPT"],
+  "globalPassThroughEnv": ["COREPACK_ENABLE_DOWNLOAD_PROMPT", "DOCKERHUB_LIBRARY_PREFIX"],
   "tasks": {
     "generate": {
       "cache": false
@@ -22,6 +22,7 @@
     },
     "test": {
       "dependsOn": ["^generate"],
+      "env": ["ARDUR_TEST_POSTGRES_IMAGE", "TESTCONTAINERS_RYUK_DISABLED"],
       "outputs": ["coverage/**"]
     },
     "dev": {

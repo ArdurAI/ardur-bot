@@ -1,11 +1,22 @@
 import type { AgentRunRequest, AgentSteeringMessage } from "@ardurbot/adapter-kit";
-import type { ContextBudgets, ContextSnapshot, RoutingRule } from "@ardurbot/contracts";
-import { ContextBudgetsSchema } from "@ardurbot/contracts";
+import type { ContextBudgets, ContextSnapshot, RoutingRule, RuntimePin } from "@ardurbot/contracts";
+import { ContextBudgetsSchema, normalizedThinkingLevel, runtimeNames } from "@ardurbot/contracts";
 import { escapePromptData } from "@ardurbot/core";
 import { promptWithInitialSteering } from "../steering-input.js";
 import { recallQueryWords } from "./recall-query.js";
 
 type Message = AgentRunRequest["history"][number];
+type RunIdentity = {
+  name: string;
+  pin: Pick<RuntimePin, "runtimeKind" | "provider" | "modelId" | "effort">;
+};
+
+/** Describe the saved configuration, not credentials or an unverified runtime attestation. */
+export function runIdentityText({ name, pin }: RunIdentity): string {
+  const quoted = (value: string) => escapePromptData(JSON.stringify(value));
+  return `You are ${quoted(name)}. Run pin: runtime ${runtimeNames[pin.runtimeKind]}, provider ${quoted(pin.provider ?? "unspecified")}, model ${quoted(pin.modelId ?? "unspecified")}, thinking ${quoted(normalizedThinkingLevel(pin.effort))}.`;
+}
+
 const RESULT_TRUNCATED_MARKER =
   "[Result truncated to fit the history budget; open the thread for the full report.]";
 // Overflowing history starts on a grid of quarter-budget steps: it gives up less than a quarter
@@ -110,6 +121,7 @@ export function boundMessages(messages: Message[], budget: number, step = 1): Me
 export async function assembleTurnContext(run: {
   peerReadOnly?: boolean;
   instructions: string;
+  identity?: RunIdentity;
   tools?: AgentRunRequest["tools"];
   brief?: string | null;
   summary?: string | null;
@@ -128,6 +140,9 @@ export async function assembleTurnContext(run: {
   recall?: () => Promise<string>;
 }) {
   const budgets = ContextBudgetsSchema.parse(run.budgets ?? {});
+  const instructions = [run.identity ? runIdentityText(run.identity) : "", run.instructions]
+    .filter(Boolean)
+    .join("\n\n");
   // Discovery has already applied Capabilities' access mode. Count only exposed schemas.
   const toolCharacters =
     Array.isArray(run.tools) && run.tools.length
@@ -139,7 +154,7 @@ export async function assembleTurnContext(run: {
           })),
         ).length
       : 0;
-  const stableCharacters = run.instructions.length + toolCharacters;
+  const stableCharacters = instructions.length + toolCharacters;
   // Instructions and the new request are authority-bearing. Never silently cut either in half.
   // Goal state used to share the instruction budget. It still does, so a message that fit
   // before still fits; the goal is not charged against the message the user can send.
@@ -231,8 +246,8 @@ export async function assembleTurnContext(run: {
     routingRule: run.routingRule ?? null,
   };
   return {
-    instructions: run.instructions,
-    stablePrefix: run.instructions,
+    instructions,
+    stablePrefix: instructions,
     history,
     /** Leading history entries expected to repeat unchanged on the next turn. */
     stableHistory: stable.length,

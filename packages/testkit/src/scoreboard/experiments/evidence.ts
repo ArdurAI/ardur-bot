@@ -1,3 +1,5 @@
+// #199: Use the shared Postgres image override without changing the local default.
+
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -9,6 +11,7 @@ import type {
   ExperimentEvidence,
   PerformanceEvidenceReport,
 } from "../../performance-report.js";
+import { TEST_POSTGRES_IMAGE } from "../../postgres-image.js";
 import {
   CRASH_BOUNDARIES,
   canonicalSerialize,
@@ -257,7 +260,11 @@ export async function writeMatrixEvidence(directory: string, results: readonly M
 
 /** Never allow the existing provisioner to implicitly download a missing image. */
 export function requireCachedMatrixImages() {
-  const images = ["postgres:16-alpine", "testcontainers/ryuk:0.14.0"];
+  // #199: A disabled reaper must not require a cached Ryuk image.
+  const images = [
+    TEST_POSTGRES_IMAGE,
+    ...(process.env.TESTCONTAINERS_RYUK_DISABLED === "true" ? [] : ["testcontainers/ryuk:0.14.0"]),
+  ];
   return images.map((tag) => {
     try {
       const image = JSON.parse(
