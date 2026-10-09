@@ -9,6 +9,11 @@ on:
       - '.github/workflows/chief-receipt.yml'
 permissions:
   contents: read
+env:
+  # #199: Browser harnesses use the public Postgres mirror too.
+  ARDUR_TEST_POSTGRES_IMAGE: mirror.gcr.io/library/postgres:16-alpine
+  # #199: Hosted runners are disposable; do not pull the Ryuk reaper.
+  TESTCONTAINERS_RYUK_DISABLED: 'true'
 jobs:
   journey:
     name: Chief receipt Postgres journey
@@ -16,7 +21,8 @@ jobs:
     timeout-minutes: 10
     services:
       postgres:
-        image: postgres:16-alpine
+        # #199: Avoid anonymous Docker Hub pulls for the service container.
+        image: mirror.gcr.io/library/postgres:16-alpine
         env:
           POSTGRES_USER: fixture
           POSTGRES_PASSWORD: fixture

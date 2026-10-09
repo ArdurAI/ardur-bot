@@ -1,9 +1,12 @@
+// #199: Use the shared Postgres image override without changing the local default.
+
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { TEST_POSTGRES_IMAGE } from "../postgres-image.js";
 import { validateTaskContract } from "../scoreboard/graders/contracts.js";
 import { OUTCOME_ORACLE_HASH } from "../scoreboard/graders/outcome.js";
 import {
@@ -127,7 +130,7 @@ async function main() {
       platform: process.platform,
       arch: process.arch,
       node: process.version,
-      postgresImage: tier === "T1" ? "postgres:16-alpine" : null,
+      postgresImage: tier === "T1" ? TEST_POSTGRES_IMAGE : null,
       workerConcurrency: tier === "T1" ? 1 : null,
       cacheState:
         tier === "T1"
