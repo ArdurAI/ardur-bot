@@ -12,6 +12,8 @@ permissions:
   contents: read
 
 env:
+  # #199: Mirror official Docker Hub base images without changing local Dockerfile defaults.
+  DOCKERHUB_LIBRARY_PREFIX: mirror.gcr.io/library/
   # docker/metadata-action otherwise truncates commit tags to seven collision-prone characters.
   DOCKER_METADATA_SHORT_SHA_LENGTH: 40
 
@@ -74,7 +76,10 @@ jobs:
           push: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: ${{ matrix.name == 'app' && format('GIT_SHA={0}', github.sha) || '' }}
+          # #199: Pass the mirror to each Dockerfile, preserving the existing build arguments.
+          build-args: |
+            DOCKERHUB_LIBRARY_PREFIX=${{ env.DOCKERHUB_LIBRARY_PREFIX }}
+            ${{ matrix.name == 'app' && format('GIT_SHA={0}', github.sha) || '' }}
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=pr-${{ github.event.pull_request.number }}-${{ matrix.name }}
           provenance: false
@@ -133,7 +138,10 @@ jobs:
           # A fork can publish only to its own namespace; no credential can redirect this value.
           outputs: type=image,name=${{ steps.image.outputs.name }},push-by-digest=true,name-canonical=true,push=true
           # GET /health can report the exact source commit without a deployment-supplied override.
-          build-args: ${{ matrix.name == 'app' && format('GIT_SHA={0}', github.sha) || matrix.name == 'computer-developer' && 'IMAGE_PROFILE=developer' || '' }}
+          # #199: Pass the mirror to each Dockerfile, preserving the existing build arguments.
+          build-args: |
+            DOCKERHUB_LIBRARY_PREFIX=${{ env.DOCKERHUB_LIBRARY_PREFIX }}
+            ${{ matrix.name == 'app' && format('GIT_SHA={0}', github.sha) || matrix.name == 'computer-developer' && 'IMAGE_PROFILE=developer' || '' }}
           cache-from: type=gha,scope=${{ matrix.name }}-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}-${{ matrix.arch }}
           provenance: mode=max

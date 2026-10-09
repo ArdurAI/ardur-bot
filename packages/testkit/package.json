@@ -6,6 +6,7 @@
   "exports": {
     "./local-import-fixtures": "./src/fixtures/local-import.ts",
     ".": "./src/index.ts",
+    "./postgres-image": "./src/postgres-image.ts",
     "./memory-conformance": "./src/memory-conformance.ts",
     "./memory-fakes": "./src/memory-fakes.ts",
     "./model-emulator": "./src/model-emulator.ts",
