@@ -162,7 +162,7 @@ jobs:
   test-integration:
     name: Postgres journeys
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20 # #199: green runs take ~9.5 min; 10 min cancelled them on any slowdown
     steps:
       - uses: actions/checkout@v5
         with:
