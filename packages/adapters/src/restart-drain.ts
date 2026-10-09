@@ -19,6 +19,11 @@ export class RestartDrain {
   private requestedCache: { at: number; value: boolean } | undefined;
   private readonly active = new Set<symbol>();
   private readonly preparation = new AbortController();
+  private readonly deadline = new AbortController();
+  /** Fires after a missed shutdown deadline is counted and reported, never on a runtime abort. */
+  get deadlineSignal(): AbortSignal {
+    return this.deadline.signal;
+  }
   get preparationSignal(): AbortSignal {
     return this.preparation.signal;
   }
@@ -67,7 +72,9 @@ export class RestartDrain {
     this.stopping = true;
     this.requestedCache = undefined;
     this.preparation.abort();
-    return this.wait(() => Promise.resolve(this.active.size), timeoutMs);
+    const result = await this.wait(() => Promise.resolve(this.active.size), timeoutMs);
+    if (!result.ok) this.deadline.abort();
+    return result;
   }
   async begin(
     id: string = randomUUID(),

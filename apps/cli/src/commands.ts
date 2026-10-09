@@ -7,6 +7,7 @@ import { parseArgs, USAGE } from "./args.js";
 import { createClient, nonce, pairDevice } from "./client.js";
 import type { PairedHome } from "./config.js";
 import { loadHome, saveHome } from "./config.js";
+import { runDeviceCommand } from "./device-commands.js";
 import { safeDiagnostic, safeText } from "./text.js";
 import type { Transcript } from "./transcript.js";
 import { prepareTranscript } from "./transcript.js";
@@ -47,15 +48,6 @@ async function listBots(client: DeviceClient): Promise<Bot[]> {
   )
     throw new CliError("Home returned an incomplete bot list.");
   return result.map(({ id, name }) => ({ id, name }));
-}
-async function botId(client: DeviceClient, selected?: string) {
-  if (!selected) return undefined;
-  const bots = await listBots(client);
-  const exact = bots.find((bot) => bot.id === selected);
-  if (exact) return exact.id;
-  const named = bots.filter((bot) => bot.name === selected);
-  if (named.length !== 1) throw new CliError("Choose a bot id from ardur bots.", 3);
-  return named[0]!.id;
 }
 async function waitForReply(
   client: DeviceClient,
@@ -156,6 +148,8 @@ export async function runCli(
       return 0;
     }
     if (command.kind === "test") return runBotTest(command, deps);
+    if (["send", "stop", "wait", "runs-list", "runs-show", "tasks-show"].includes(command.kind))
+      return runDeviceCommand(command, deps);
     const home = await deps.load();
     const client = deps.client(home);
     if (command.kind === "bots") {
@@ -174,33 +168,18 @@ export async function runCli(
       output(status, `Paired with ${home.homeName}. Device is valid.`);
       return 0;
     }
-    if (command.kind === "stop") {
-      const result = await client.request("stop", { taskId: command.taskId });
-      output(result, `Stop requested for ${command.taskId}.`);
-      return 0;
-    }
-    if (command.kind !== "send") throw new CliError(USAGE, 3);
-    const text = command.file ? await deps.file(command.file) : command.text!;
-    if (!text.trim() || text.length > 32_000)
-      throw new CliError("Write a task within 32,000 characters.", 3);
-    const input = DispatchInputSchema.parse({
-      clientNonce: nonce(),
-      botId: await botId(client, command.bot),
-      text,
-    });
-    const receipt = DispatchReceiptSchema.parse(await client.request("dispatch", input));
-    if (!command.wait) {
-      output(receipt, `Task ${receipt.taskId}\nRun ${receipt.runId}`);
-      return receipt.state === "failed" || receipt.state === "stopped" ? 1 : 0;
-    }
-    const result = await waitForReply(client, receipt, deps.sleep);
-    output(result, result.text || `Task ${result.taskId}: ${result.state}.`);
-    return result.state === "done" ? 0 : 1;
+    throw new CliError(USAGE, 3);
   } catch (error) {
     if (args[0] === "test") {
       const result = emptyTestResult();
       result.failureReason = USAGE;
       printTestResult(result, args.includes("--json"), deps);
+      return 4;
+    }
+    if (["send", "stop", "wait", "runs", "tasks"].includes(args[0]!)) {
+      deps.out(
+        `${args.includes("--json") ? JSON.stringify({ version: 1, command: args[0], bot: null, runId: null, taskId: null, verdict: "error", replyText: "", elapsedMs: 0, failureReason: USAGE, data: null }) : USAGE}\n`,
+      );
       return 4;
     }
     const known = error instanceof CliError;
