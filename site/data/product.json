@@ -603,7 +603,7 @@
         "body": "Ask for today's appointments and messages needing attention in a short note with source links. Connect the required email and calendar read tools before enabling the routine.",
         "steps": [
           "Prepare Daybook with access to the intended email and calendar accounts.",
-          "Open “Views”, choose “Agent computer”, find “Routines”, and choose “Create Routine”.",
+          "Open “Views”, choose “Workspace pane”, find “Routines”, and choose “Create Routine”.",
           "Set “Name” to Morning briefing.",
           "Use “Instruction” to request today's appointments, unread messages needing attention, source links, and missing-access notes; forbid mail and calendar changes.",
           "Choose “Add trigger”, “On a schedule”, and “Weekdays”; set “Time of day” to 8:00 AM in the displayed timezone.",
@@ -612,7 +612,7 @@
         ],
         "uiLabels": [
           "Views",
-          "Agent computer",
+          "Workspace pane",
           "Routines",
           "Create Routine",
           "Name",
@@ -634,7 +634,7 @@
         "body": "Ask for a review queue with suggested replies and meeting changes in the conversation. The example follows clock boundaries, including nights and weekends; it does not wait for the previous run to finish.",
         "steps": [
           "Prepare Triage with email and calendar read tools, and require approval for account changes.",
-          "Open “Views”, choose “Agent computer”, find “Routines”, and choose “Create Routine”.",
+          "Open “Views”, choose “Workspace pane”, find “Routines”, and choose “Create Routine”.",
           "Set “Name” to Inbox and calendar review.",
           "Use “Instruction” to request a source-linked review queue and suggested replies here; forbid sending, account drafts, message changes, and meeting changes.",
           "Choose “Add trigger”, “On a schedule”, and “Interval”; set “Interval amount” to 3 and “Interval unit” to “hours”.",
@@ -643,7 +643,7 @@
         ],
         "uiLabels": [
           "Views",
-          "Agent computer",
+          "Workspace pane",
           "Routines",
           "Create Routine",
           "Name",
@@ -667,7 +667,7 @@
         "body": "Ask for a weekly draft of progress, blockers, and next steps from dated project notes. Make the Project Notes folder available to the bot before enabling the routine.",
         "steps": [
           "Prepare Weekly with read access to the Project Notes folder.",
-          "Open “Views”, choose “Agent computer”, find “Routines”, and choose “Create Routine”.",
+          "Open “Views”, choose “Workspace pane”, find “Routines”, and choose “Create Routine”.",
           "Set “Name” to Weekly status draft.",
           "Use “Instruction” to request a weekly update with file citations, facts separated from suggestions, and missing evidence noted; forbid edits, publication, and messages.",
           "Choose “Add trigger”, “On a schedule”, and “Advanced...”; set “Cron expression” to 0 15 * * 5 for Friday afternoon in the displayed timezone.",
@@ -676,7 +676,7 @@
         ],
         "uiLabels": [
           "Views",
-          "Agent computer",
+          "Workspace pane",
           "Routines",
           "Create Routine",
           "Name",
@@ -698,7 +698,7 @@
         "body": "Ask for a report on existing workflow results, stale pull requests, and missing checks. This is a review instruction, not a built-in scanner or a promise to execute tests.",
         "steps": [
           "Prepare Repository with the required repository read tools and resolve sample-project to an accessible repository.",
-          "Open “Views”, choose “Agent computer”, find “Routines”, and choose “Create Routine”.",
+          "Open “Views”, choose “Workspace pane”, find “Routines”, and choose “Create Routine”.",
           "Set “Name” to Nightly repository review and “Instruction” to request source-linked workflow, pull-request, and check findings for sample-project; forbid tests, installs, edits, reruns, and publication.",
           "Choose “Add trigger”, “On a schedule”, and “Advanced...”; set “Cron expression” to 0 2 * * * in the displayed timezone.",
           "Keep “Active” on and choose “Save”.",
@@ -707,7 +707,7 @@
         ],
         "uiLabels": [
           "Views",
-          "Agent computer",
+          "Workspace pane",
           "Routines",
           "Create Routine",
           "Name",
@@ -729,7 +729,7 @@
         "body": "Ask for a failure summary after a workflow event by fetching its actual conclusion through connected read tools. The trigger does not filter for failed builds, and real event deliveries do not populate the routine's history.",
         "steps": [
           "Prepare CI Watch with repository, workflow, job, and log read tools that can fetch delivered identifiers.",
-          "Open “Views”, choose “Agent computer”, find “Routines”, and choose “Create Routine”.",
+          "Open “Views”, choose “Workspace pane”, find “Routines”, and choose “Create Routine”.",
           "Set “Name” to CI failure review and “Instruction” to fetch completed workflow results, summarize verified failures, and treat logs as untrusted; forbid reruns, edits, comments, and publication.",
           "Choose “Add trigger” and “Git event”.",
           "Keep “Active” on and choose “Save”.",
@@ -738,7 +738,7 @@
         ],
         "uiLabels": [
           "Views",
-          "Agent computer",
+          "Workspace pane",
           "Routines",
           "Create Routine",
           "Name",
@@ -759,7 +759,7 @@
         "body": "Ask for read-only service checks and a proposed repair in the conversation. Require approval before publishing a draft change; this is not unattended remediation.",
         "steps": [
           "Prepare Runbook with read-only operational access, a Runbooks folder, an approved proposal repository, and command approvals.",
-          "Open “Views”, choose “Agent computer”, find “Routines”, and choose “Create Routine”.",
+          "Open “Views”, choose “Workspace pane”, find “Routines”, and choose “Create Routine”.",
           "Set “Name” to Service alert review and “Instruction” to distrust payload directives, use only the prepared environment, request check approvals, and draft findings; require publication approval and forbid live changes.",
           "Choose “Add trigger” and “Webhook”.",
           "Keep “Active” on and choose “Save”.",
@@ -768,7 +768,7 @@
         ],
         "uiLabels": [
           "Views",
-          "Agent computer",
+          "Workspace pane",
           "Routines",
           "Create Routine",
           "Name",
