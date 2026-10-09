@@ -30,6 +30,15 @@ export default function NowPanel({
 }: { data: Awaited<ReturnType<typeof load>> } & PanelActions) {
   const { t } = useLingui();
   const [review, setReview] = useState<RunActivityRow | null>(null);
+  // Human running time: bare seconds under a minute, then minutes and hours.
+  const runningDuration = (seconds: number) => {
+    if (seconds < 60) return t`${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return t`${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    const rest = minutes % 60;
+    return rest === 0 ? t`${hours} h` : t`${hours} h ${rest} min`;
+  };
   // These owner-scoped records are authoritative; presence only qualifies their freshness.
   const delegations = activeDelegations(data.rows);
   const runs = data.runs;
@@ -85,7 +94,7 @@ export default function NowPanel({
               </span>
             ) : null}
             {seconds !== null ? (
-              <span className="tabular-nums text-muted-foreground">{t`${seconds}s`}</span>
+              <span className="tabular-nums text-muted-foreground">{runningDuration(seconds)}</span>
             ) : null}
           </>
         );

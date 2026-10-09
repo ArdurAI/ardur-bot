@@ -183,12 +183,16 @@ test("one header menu keeps views, computer and settings reachable by keyboard",
     "IDE",
     "Recorded changes",
     "Routines",
-    "Computer",
-    "Agent computer",
+    "Computer screen",
+    "Workspace pane",
     "Bot settings",
   ];
   await expect(menu.getByRole("menuitemcheckbox")).toHaveText(labels);
-  await expect(menu.getByRole("menuitem")).toHaveText([
+  // Terminal stays in the menu as a disabled item with a reason on a host computer.
+  const terminalItem = menu.getByRole("menuitem", { name: /Terminal/ });
+  await expect(terminalItem).toContainText("Terminal is unavailable on this computer.");
+  await expect(terminalItem).toBeDisabled();
+  await expect(menu.getByRole("menuitem", { name: /Move split view/ })).toHaveText([
     "Move split view left",
     "Move split view right",
     "Move split view down",
@@ -261,7 +265,7 @@ test("one header menu keeps views, computer and settings reachable by keyboard",
   expect(await header.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   await trigger.click();
   await expect(
-    page.getByRole("menuitemcheckbox", { name: "Agent computer", exact: true }),
+    page.getByRole("menuitemcheckbox", { name: "Workspace pane", exact: true }),
   ).toBeInViewport();
   await captureScreenshot(page, testInfo, "header-menu-narrow");
   await page.keyboard.press("Escape");

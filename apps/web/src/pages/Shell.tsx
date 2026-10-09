@@ -3939,6 +3939,7 @@ export function ShellPage({
                     {!inGroup && active ? (
                       <DropdownMenuCheckboxItem
                         checked={workspaceShown}
+                        aria-checked={workspaceShown}
                         closeOnClick
                         data-workspace-toggle
                         onClick={() => {
@@ -3952,7 +3953,7 @@ export function ShellPage({
                         }}
                       >
                         <Monitor size={16} strokeWidth={1.6} aria-hidden="true" />
-                        {t`Agent computer`}
+                        {t`Workspace pane`}
                       </DropdownMenuCheckboxItem>
                     ) : null}
                     <ThreadSettingsMenuItem

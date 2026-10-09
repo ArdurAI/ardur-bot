@@ -264,6 +264,14 @@ msgstr "{failed} failed"
 msgid "{gapCount} evidence gaps"
 msgstr "{gapCount} evidence gaps"
 
+#: src/pages/dashboard/NowPanel.tsx
+msgid "{hours} h"
+msgstr "{hours} h"
+
+#: src/pages/dashboard/NowPanel.tsx
+msgid "{hours} h {rest} min"
+msgstr "{hours} h {rest} min"
+
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
 msgstr "{hours}h ago"
@@ -283,6 +291,10 @@ msgstr "{member} failed."
 #: src/lib/failure-category-copy.ts
 msgid "{member} stopped."
 msgstr "{member} stopped."
+
+#: src/pages/dashboard/NowPanel.tsx
+msgid "{minutes} min"
+msgstr "{minutes} min"
 
 #: src/pages/ActivityList.tsx
 msgid "{minutes}m ago"
@@ -750,10 +762,6 @@ msgstr "Advanced..."
 #: src/pages/MemoryHistory.tsx
 msgid "After"
 msgstr "After"
-
-#: src/pages/Shell.tsx
-msgid "Agent computer"
-msgstr "Agent computer"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Agent connections"
@@ -2205,7 +2213,6 @@ msgstr "computer"
 #: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
-#: src/pages/workspace/view-registry.ts
 msgid "Computer"
 msgstr "Computer"
 
@@ -2248,6 +2255,10 @@ msgstr "Computer location unavailable. Choose a supported connection."
 #: src/pages/shell/runtime-summary.tsx
 msgid "Computer location unavailable. Try again."
 msgstr "Computer location unavailable. Try again."
+
+#: src/pages/workspace/view-registry.ts
+msgid "Computer screen"
+msgstr "Computer screen"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -6297,6 +6308,10 @@ msgstr "No results"
 msgid "No reviewer model yet."
 msgstr "No reviewer model yet."
 
+#: src/components/composer/RoutinesPanel.tsx
+msgid "No routines yet; a routine runs this bot on a schedule or when an event arrives."
+msgstr "No routines yet; a routine runs this bot on a schedule or when an event arrives."
+
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/RuntimeReliability.tsx
@@ -10195,6 +10210,10 @@ msgstr "Workspace"
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Workspace or server ID"
 msgstr "Workspace or server ID"
+
+#: src/pages/Shell.tsx
+msgid "Workspace pane"
+msgstr "Workspace pane"
 
 #: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/ToolPicker.tsx

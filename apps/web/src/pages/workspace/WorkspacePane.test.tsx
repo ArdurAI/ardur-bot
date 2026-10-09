@@ -309,7 +309,7 @@ describe("WorkspacePane tab selection and content rendering", () => {
       ),
     );
     const activeTab = container.querySelector('[role="tab"][data-active]');
-    expect(activeTab?.textContent).toBe("Computer");
+    expect(activeTab?.textContent).toBe("Computer screen");
   });
 
   it("activates Files tab when files are available and tab is files", async () => {

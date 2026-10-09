@@ -1,4 +1,5 @@
 import type { Routine } from "@ardurbot/contracts";
+import { Trans } from "@lingui/react/macro";
 import { RoutineListHeader, RoutineListRow } from "../../pages/RoutineEditor";
 
 export default function RoutinesPanel({
@@ -17,6 +18,13 @@ export default function RoutinesPanel({
   return (
     <>
       <RoutineListHeader onCreate={onCreate} />
+      {routines.length === 0 ? (
+        <p className="px-2.5 text-sm text-muted-foreground">
+          <Trans>
+            No routines yet; a routine runs this bot on a schedule or when an event arrives.
+          </Trans>
+        </p>
+      ) : null}
       {routines.map((routine) => (
         <RoutineListRow
           key={routine.id}

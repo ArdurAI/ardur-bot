@@ -264,6 +264,14 @@ msgstr ""
 msgid "{gapCount} evidence gaps"
 msgstr "{gapCount} 处证据缺失"
 
+#: src/pages/dashboard/NowPanel.tsx
+msgid "{hours} h"
+msgstr "{hours} 小时"
+
+#: src/pages/dashboard/NowPanel.tsx
+msgid "{hours} h {rest} min"
+msgstr "{hours} 小时 {rest} 分钟"
+
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
 msgstr "{hours} 小时前"
@@ -283,6 +291,10 @@ msgstr "{member} 失败了。"
 #: src/lib/failure-category-copy.ts
 msgid "{member} stopped."
 msgstr "{member} 已停止。"
+
+#: src/pages/dashboard/NowPanel.tsx
+msgid "{minutes} min"
+msgstr "{minutes} 分钟"
 
 #: src/pages/ActivityList.tsx
 msgid "{minutes}m ago"
@@ -750,10 +762,6 @@ msgstr "高级..."
 #: src/pages/MemoryHistory.tsx
 msgid "After"
 msgstr ""
-
-#: src/pages/Shell.tsx
-msgid "Agent computer"
-msgstr "Agent 电脑"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Agent connections"
@@ -2205,7 +2213,6 @@ msgstr ""
 #: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
-#: src/pages/workspace/view-registry.ts
 msgid "Computer"
 msgstr "电脑"
 
@@ -2248,6 +2255,10 @@ msgstr "无法获取计算机位置。请选择受支持的连接。"
 #: src/pages/shell/runtime-summary.tsx
 msgid "Computer location unavailable. Try again."
 msgstr "无法获取计算机位置。请重试。"
+
+#: src/pages/workspace/view-registry.ts
+msgid "Computer screen"
+msgstr "电脑屏幕"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -6297,6 +6308,10 @@ msgstr "无结果"
 msgid "No reviewer model yet."
 msgstr "尚未选择复查模型。"
 
+#: src/components/composer/RoutinesPanel.tsx
+msgid "No routines yet; a routine runs this bot on a schedule or when an event arrives."
+msgstr "还没有例程；例程会按计划或在事件发生时运行此机器人。"
+
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/RuntimeReliability.tsx
@@ -10195,6 +10210,10 @@ msgstr "工作区"
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Workspace or server ID"
 msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "Workspace pane"
+msgstr "工作区窗格"
 
 #: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/ToolPicker.tsx
