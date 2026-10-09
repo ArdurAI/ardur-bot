@@ -1031,6 +1031,13 @@ export const ThreadSnapshotSchema = z.object({
   botId: Id.optional(),
   groupId: Id.optional(),
   groupName: z.string().optional(),
+  /** Authorized default recipients as of this snapshot; send rechecks current room state. */
+  groupRouting: z
+    .object({
+      coordinatorBotId: Id.nullable(),
+      defaultBotId: Id.nullable(),
+    })
+    .optional(),
   members: z.array(GroupMemberSchema).optional(),
   run: RunSchema.nullable(),
   contextRun: RunSchema.nullable().optional(),

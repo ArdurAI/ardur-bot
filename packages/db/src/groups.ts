@@ -301,7 +301,21 @@ export function createGroupRepos(prisma: PrismaClient) {
           userId: actor.userId,
           archivedAt: null,
         },
-        include: groupTargetInclude,
+        include: {
+          ...groupTargetInclude,
+          space: { select: { coordinatorBotId: true } },
+          thread: {
+            select: {
+              id: true,
+              runs: {
+                where: { spaceId: actor.spaceId, userId: actor.userId },
+                orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+                take: 1,
+                select: { botId: true },
+              },
+            },
+          },
+        },
       });
       if (!group || !hasMinimumActiveMembers(group.members)) throw new IsolationError();
       return group;
