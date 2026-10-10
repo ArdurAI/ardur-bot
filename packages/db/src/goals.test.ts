@@ -1,4 +1,5 @@
 import type { Actor } from "@ardurbot/contracts";
+import { GOAL_FINAL_REVIEW_DESCRIPTION } from "@ardurbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "./client.js";
 import {
@@ -168,64 +169,78 @@ describe("goal scheduling", () => {
     });
   });
 
-  it("waits for thread finalization before deciding whether to steer or queue a wake", async () => {
-    let active = true;
-    const runCreate = vi.fn(async () => ({ id: "run-wake" }));
-    const steeringCreate = vi.fn(async () => ({}));
-    const tx = {
-      delegation: {
-        findUnique: vi.fn(async () => ({ rootTaskId: "task-root" })),
-        findUniqueOrThrow: vi.fn(async () => ({
-          id: "delegation-1",
-          rootTaskId: "task-root",
-          spaceId: "space-1",
-          userId: "owner-1",
-          kind: "group-handoff",
-          status: "completed",
-          coordinatorWokenAt: null,
-          summaryMessageId: "message-summary",
-          actingName: "Reviewer",
-        })),
-        update: vi.fn(async () => ({})),
-      },
-      $queryRaw: vi.fn(async (query: TemplateStringsArray) => {
-        if (query[0]?.includes("threads")) active = false;
-        return [];
-      }),
-      teamGoal: {
-        findUnique: vi.fn(async () => ({
-          id: "goal-1",
-          rootTaskId: "task-root",
-          spaceId: "space-1",
-          userId: "owner-1",
-          groupId: "group-1",
-          threadId: "thread-1",
-          coordinatorBotId: "bot-1",
-          status: "running",
-          untilAt: new Date("2030-01-01T00:00:00.000Z"),
-          objective: "Review",
-        })),
-      },
-      delegationRoot: { findUniqueOrThrow: vi.fn(async () => ({ cancelRequestedAt: null })) },
-      chatGroup: { findFirst: vi.fn(async () => ({ id: "group-1" })) },
-      run: {
-        findFirst: vi.fn(async () => (active ? { id: "run-finalizing" } : null)),
-        create: runCreate,
-      },
-      steeringMessage: { create: steeringCreate },
-      task: { create: vi.fn(async () => ({ id: "task-wake" })) },
-      thread: { update: vi.fn(async () => ({ nextEventSeq: 1 })) },
-      event: { create: vi.fn(async () => ({ seq: 1 })) },
-    };
-    const prisma = {
-      $transaction: (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
-    } as unknown as PrismaClient;
-    await wakeGoalCoordinatorForDelegation(prisma, "delegation-1");
-    expect(runCreate).toHaveBeenCalledWith({
-      data: expect.objectContaining({ clientNonce: "goal-wake:delegation-1" }),
-    });
-    expect(steeringCreate).not.toHaveBeenCalled();
-  });
+  it.each(["running", "completed", "accepted"])(
+    "checks %s goal state after locking before a coordinator wake",
+    async (status) => {
+      let goalStatus = "running";
+      let active = true;
+      const runCreate = vi.fn(async () => ({ id: "run-wake" }));
+      const steeringCreate = vi.fn(async () => ({}));
+      const tx = {
+        delegation: {
+          findUnique: vi.fn(async () => ({ rootTaskId: "task-root" })),
+          findUniqueOrThrow: vi.fn(async () => ({
+            id: "delegation-1",
+            rootTaskId: "task-root",
+            spaceId: "space-1",
+            userId: "owner-1",
+            kind: "group-handoff",
+            status: "completed",
+            coordinatorWokenAt: null,
+            summaryMessageId: "message-summary",
+            actingName: "Reviewer",
+          })),
+          update: vi.fn(async () => ({})),
+        },
+        $queryRaw: vi.fn(async (query: TemplateStringsArray) => {
+          if (query[0]?.includes("threads")) active = false;
+          if (query[0]?.includes("tasks")) goalStatus = status;
+          return [];
+        }),
+        teamGoal: {
+          findUnique: vi.fn(async () => ({
+            id: "goal-1",
+            rootTaskId: "task-root",
+            spaceId: "space-1",
+            userId: "owner-1",
+            groupId: "group-1",
+            threadId: "thread-1",
+            coordinatorBotId: "bot-1",
+            status: goalStatus,
+            untilAt: new Date("2030-01-01T00:00:00.000Z"),
+            objective: "Review",
+          })),
+        },
+        delegationRoot: { findUniqueOrThrow: vi.fn(async () => ({ cancelRequestedAt: null })) },
+        chatGroup: { findFirst: vi.fn(async () => ({ id: "group-1" })) },
+        run: {
+          findFirst: vi.fn(async () => (active ? { id: "run-finalizing" } : null)),
+          create: runCreate,
+        },
+        steeringMessage: { create: steeringCreate },
+        task: { create: vi.fn(async () => ({ id: "task-wake" })) },
+        thread: { update: vi.fn(async () => ({ nextEventSeq: 1 })) },
+        event: { create: vi.fn(async () => ({ seq: 1 })) },
+      };
+      const prisma = {
+        $transaction: (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
+      } as unknown as PrismaClient;
+      const result = await wakeGoalCoordinatorForDelegation(prisma, "delegation-1");
+      if (status !== "running") {
+        expect(result).toBeNull();
+        expect(runCreate).not.toHaveBeenCalled();
+        expect(tx.task.create).not.toHaveBeenCalled();
+        expect(tx.delegation.update).not.toHaveBeenCalled();
+        expect(tx.event.create).not.toHaveBeenCalled();
+        expect(steeringCreate).not.toHaveBeenCalled();
+        return;
+      }
+      expect(runCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({ clientNonce: "goal-wake:delegation-1" }),
+      });
+      expect(steeringCreate).not.toHaveBeenCalled();
+    },
+  );
 });
 
 const owner: Actor = {
@@ -344,6 +359,27 @@ function reviewFixture() {
 }
 
 describe("goal owner review", () => {
+  it("refuses submission by a non-owner or an owner outside the goal scope", async () => {
+    const fixture = reviewFixture();
+    for (const actor of [
+      { ...owner, isDeploymentOwner: false },
+      { ...owner, userId: "other-user" },
+      { ...owner, spaceId: "other-space" },
+    ]) {
+      await expect(
+        submitGoal(fixture.prisma, actor, {
+          goalId: fixture.goal.id,
+          summary: "Candidate",
+          artifacts: [],
+          reports: [],
+        }),
+      ).rejects.toThrow();
+    }
+    expect(fixture.goal.status).toBe("running");
+    expect(fixture.tx.goalRevision.create).not.toHaveBeenCalled();
+    expect(fixture.tx.teamGoal.updateMany).not.toHaveBeenCalled();
+    expect(fixture.tx.event.create).not.toHaveBeenCalled();
+  });
   it.each(["accept", "reject"] as const)(
     "refuses %s by a non-owner or an owner outside the goal scope",
     async (operation) => {
@@ -374,7 +410,7 @@ describe("goal owner review", () => {
     expect(revision.conditions).toEqual([
       {
         id: "cond-final",
-        description: "Final owner review",
+        description: GOAL_FINAL_REVIEW_DESCRIPTION,
         status: "unknown",
         actorId: null,
         reason: null,

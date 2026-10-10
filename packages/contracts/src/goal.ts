@@ -46,6 +46,9 @@ export function goalBudget(
   };
 }
 
+/** Stable data key; each frontend translates it when displaying the default condition. */
+export const GOAL_FINAL_REVIEW_DESCRIPTION = "goal.final-owner-review";
+
 export const GoalConditionStatusSchema = z.enum(["unknown", "pass", "fail"]);
 export type GoalConditionStatus = z.infer<typeof GoalConditionStatusSchema>;
 

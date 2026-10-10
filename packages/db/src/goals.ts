@@ -11,6 +11,7 @@ import {
   GOAL_DEFAULT_MAX_DESCENDANTS,
   GOAL_DEFAULT_PER_WORKER_TOKENS,
   GOAL_DEFAULT_TOKEN_LIMIT,
+  GOAL_FINAL_REVIEW_DESCRIPTION,
   GOAL_MAX_DEPTH,
   GOAL_MAX_HOPS,
   GoalRevisionSchema,
@@ -345,8 +346,8 @@ export async function wakeGoalCoordinatorForDelegation(prisma: PrismaClient, del
       await tx.$queryRaw`SELECT id FROM threads WHERE id = ${candidateGoal.threadId} FOR UPDATE`;
       await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${initial.rootTaskId} FOR UPDATE`;
       const row = await tx.delegation.findUniqueOrThrow({ where: { id: delegationId } });
-      const freezeGoal = await tx.teamGoal.findUnique({ where: { rootTaskId: row.rootTaskId } });
-      if (freezeGoal && ["completed", "accepted", "needs-owner"].includes(freezeGoal.status)) {
+      const goal = await tx.teamGoal.findUnique({ where: { rootTaskId: row.rootTaskId } });
+      if (goal && ["completed", "accepted"].includes(goal.status)) {
         return null;
       }
       if (
@@ -355,7 +356,6 @@ export async function wakeGoalCoordinatorForDelegation(prisma: PrismaClient, del
         !["completed", "failed", "cancelled", "accepted"].includes(row.status)
       )
         return null;
-      const goal = await tx.teamGoal.findUnique({ where: { rootTaskId: row.rootTaskId } });
       if (!goal || goal.spaceId !== row.spaceId || goal.userId !== row.userId) return null;
       if (
         row.kind === "message" &&
@@ -475,6 +475,7 @@ export async function wakeGoalCoordinatorForDelegation(prisma: PrismaClient, del
 }
 
 export async function submitGoal(prisma: PrismaClient, actor: Actor, input: GoalSubmitInput) {
+  if (!actor.isDeploymentOwner) throw new IsolationError();
   const goal = await prisma.teamGoal.findFirst({
     where: { id: input.goalId, spaceId: actor.spaceId, userId: actor.userId },
   });
@@ -511,7 +512,7 @@ export async function submitGoal(prisma: PrismaClient, actor: Actor, input: Goal
         : [
             {
               id: "cond-final",
-              description: "Final owner review",
+              description: GOAL_FINAL_REVIEW_DESCRIPTION,
               status: "unknown",
               actorId: null,
               reason: null,
@@ -547,6 +548,16 @@ export async function submitGoal(prisma: PrismaClient, actor: Actor, input: Goal
   });
 }
 
+export class GoalReviewConflict extends Error {
+  constructor(public readonly reason: "revision-changed" | "work-active") {
+    super(
+      reason === "revision-changed"
+        ? "Revision is not current"
+        : "Unsettled reservations block acceptance",
+    );
+  }
+}
+
 export async function acceptGoal(prisma: PrismaClient, actor: Actor, input: GoalAcceptInput) {
   if (!actor.isDeploymentOwner) throw new IsolationError();
   const goal = await prisma.teamGoal.findFirst({
@@ -562,7 +573,8 @@ export async function acceptGoal(prisma: PrismaClient, actor: Actor, input: Goal
       where: { goalId: goal.id },
       orderBy: { attempts: "desc" },
     });
-    if (!revision || revision.id !== input.revisionId) throw new Error("Revision is not current");
+    if (!revision || revision.id !== input.revisionId)
+      throw new GoalReviewConflict("revision-changed");
 
     const existingVerdict = await tx.goalVerdict.findFirst({
       where: { goalId: goal.id, revisionId: revision.id },
@@ -573,7 +585,7 @@ export async function acceptGoal(prisma: PrismaClient, actor: Actor, input: Goal
 
     const root = await tx.delegationRoot.findUnique({ where: { rootTaskId: goal.rootTaskId } });
     if (root?.reservedTokens && root.reservedTokens > 0) {
-      throw new Error("Unsettled reservations block acceptance");
+      throw new GoalReviewConflict("work-active");
     }
 
     const verdict = await tx.goalVerdict.create({
@@ -618,7 +630,8 @@ export async function rejectGoal(prisma: PrismaClient, actor: Actor, input: Goal
       where: { goalId: goal.id },
       orderBy: { attempts: "desc" },
     });
-    if (!revision || revision.id !== input.revisionId) throw new Error("Revision is not current");
+    if (!revision || revision.id !== input.revisionId)
+      throw new GoalReviewConflict("revision-changed");
 
     const existingVerdict = await tx.goalVerdict.findFirst({
       where: { goalId: goal.id, revisionId: revision.id },

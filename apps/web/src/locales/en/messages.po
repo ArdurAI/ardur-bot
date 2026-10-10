@@ -3163,6 +3163,10 @@ msgstr "Could not reset password"
 msgid "Could not restore this revision. Reload and try again."
 msgstr "Could not restore this revision. Reload and try again."
 
+#: src/pages/GroupPanel.tsx
+msgid "Could not review result. Try again."
+msgstr "Could not review result. Try again."
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not revoke connection"
 msgstr "Could not revoke connection"
@@ -4425,6 +4429,10 @@ msgstr "Files are unavailable on this computer."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Filter"
 msgstr "Filter"
+
+#: src/pages/GroupPanel.tsx
+msgid "Final owner review"
+msgstr "Final owner review"
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Find a destination"
@@ -6967,6 +6975,10 @@ msgstr "Platform"
 msgid "Playing…"
 msgstr "Playing…"
 
+#: src/pages/GroupPanel.tsx
+msgid "Please address the failing conditions."
+msgstr "Please address the failing conditions."
+
 #: src/components/composer/ComposerMenu.tsx
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/settings-sections.ts
@@ -7760,6 +7772,10 @@ msgstr "Restoring your workspace"
 #: src/pages/system/SystemPage.tsx
 msgid "Restricted"
 msgstr "Restricted"
+
+#: src/pages/GroupPanel.tsx
+msgid "Result changed; review again."
+msgstr "Result changed; review again."
 
 #: src/pages/GroupPanel.tsx
 msgid "Resume group messages"
@@ -10208,6 +10224,10 @@ msgstr "Window"
 #: src/pages/dashboard/panels.ts
 msgid "Work"
 msgstr "Work"
+
+#: src/pages/GroupPanel.tsx
+msgid "Work is still active."
+msgstr "Work is still active."
 
 #: src/pages/board/BoardColumns.tsx
 msgid "Work items"

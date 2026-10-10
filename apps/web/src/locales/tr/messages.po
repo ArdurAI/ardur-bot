@@ -514,7 +514,7 @@ msgstr ""
 
 #: src/pages/GroupPanel.tsx
 msgid "Accept result"
-msgstr "Accept result"
+msgstr "Sonucu kabul et"
 
 #: src/pages/LearningObservation.tsx
 msgid "Acceptance"
@@ -3163,6 +3163,10 @@ msgstr "Parola sıfırlanamadı"
 msgid "Could not restore this revision. Reload and try again."
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Could not review result. Try again."
+msgstr "Sonuç incelenemedi. Tekrar deneyin."
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not revoke connection"
 msgstr "Bağlantı iptal edilemedi"
@@ -4359,7 +4363,7 @@ msgstr ""
 
 #: src/pages/GroupPanel.tsx
 msgid "Fail"
-msgstr "Fail"
+msgstr "Karşılanmadı"
 
 #: src/components/CloudAgentCard.tsx
 msgid "failed"
@@ -4425,6 +4429,10 @@ msgstr "Bu bilgisayarda dosyalar kullanılamıyor."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Filter"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Final owner review"
+msgstr "Sahibin son incelemesi"
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Find a destination"
@@ -6873,7 +6881,7 @@ msgstr "Kısmen raporlandı"
 
 #: src/pages/GroupPanel.tsx
 msgid "Pass"
-msgstr "Pass"
+msgstr "Karşılandı"
 
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountSignIn.tsx
@@ -6966,6 +6974,10 @@ msgstr ""
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Playing…"
 msgstr "Çalınıyor…"
+
+#: src/pages/GroupPanel.tsx
+msgid "Please address the failing conditions."
+msgstr "Lütfen karşılanmayan koşulları düzeltin."
 
 #: src/components/composer/ComposerMenu.tsx
 #: src/pages/customize/PluginsPage.tsx
@@ -7411,7 +7423,7 @@ msgstr ""
 
 #: src/pages/GroupPanel.tsx
 msgid "Reject result"
-msgstr "Reject result"
+msgstr "Sonucu reddet"
 
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
@@ -7762,6 +7774,10 @@ msgid "Restricted"
 msgstr ""
 
 #: src/pages/GroupPanel.tsx
+msgid "Result changed; review again."
+msgstr "Sonuç değişti. Yeniden inceleyin."
+
+#: src/pages/GroupPanel.tsx
 msgid "Resume group messages"
 msgstr "Grup mesajlarını sürdür"
 
@@ -7853,7 +7869,7 @@ msgstr ""
 
 #: src/pages/GroupPanel.tsx
 msgid "Review result"
-msgstr "Review result"
+msgstr "Sonucu incele"
 
 #: src/pages/GitMemorySettings.tsx
 msgid "Review saved copy"
@@ -10208,6 +10224,10 @@ msgstr ""
 #: src/pages/dashboard/panels.ts
 msgid "Work"
 msgstr "İş"
+
+#: src/pages/GroupPanel.tsx
+msgid "Work is still active."
+msgstr "Çalışma hâlâ sürüyor."
 
 #: src/pages/board/BoardColumns.tsx
 msgid "Work items"

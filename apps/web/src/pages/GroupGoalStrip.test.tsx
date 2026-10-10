@@ -33,6 +33,7 @@ it("shows an exhausted goal as terminal with no Stop action", () => {
         } as never
       }
       onStop={vi.fn()}
+      onRefresh={vi.fn()}
     />,
   );
   expect(html).toContain("Exhausted");
@@ -56,6 +57,7 @@ it("shows review panel for completed goal", () => {
         } as never
       }
       onStop={vi.fn()}
+      onRefresh={vi.fn()}
     />,
   );
   expect(html).toContain("Review result");

@@ -184,6 +184,7 @@ import {
   findModelCredential,
   findSpaceMemoryConfig,
   formatMessagingLinkCode,
+  GoalReviewConflict,
   getBotCommunicationPolicy,
   getGoal,
   getUserPreferences,
@@ -6431,13 +6432,25 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         if (!context.actor.isDeploymentOwner || !context.authSessionId)
           throw new ORPCError("FORBIDDEN");
 
-        return acceptGoal(deps.prisma, context.actor, input);
+        try {
+          return await acceptGoal(deps.prisma, context.actor, input);
+        } catch (error) {
+          if (error instanceof GoalReviewConflict)
+            throw new ORPCError("CONFLICT", { data: { reason: error.reason } });
+          throw error;
+        }
       }),
       reject: authed.goals.reject.handler(async ({ context, input }) => {
         if (!context.actor.isDeploymentOwner || !context.authSessionId)
           throw new ORPCError("FORBIDDEN");
 
-        return rejectGoal(deps.prisma, context.actor, input);
+        try {
+          return await rejectGoal(deps.prisma, context.actor, input);
+        } catch (error) {
+          if (error instanceof GoalReviewConflict)
+            throw new ORPCError("CONFLICT", { data: { reason: error.reason } });
+          throw error;
+        }
       }),
       start: authed.goals.start.handler(async ({ context, input }) => {
         if (!context.actor.isDeploymentOwner || !context.authSessionId)

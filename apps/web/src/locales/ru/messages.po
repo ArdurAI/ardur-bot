@@ -514,7 +514,7 @@ msgstr ""
 
 #: src/pages/GroupPanel.tsx
 msgid "Accept result"
-msgstr "Accept result"
+msgstr "Принять результат"
 
 #: src/pages/LearningObservation.tsx
 msgid "Acceptance"
@@ -3163,6 +3163,10 @@ msgstr "Не удалось сбросить пароль"
 msgid "Could not restore this revision. Reload and try again."
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Could not review result. Try again."
+msgstr "Не удалось проверить результат. Попробуйте снова."
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not revoke connection"
 msgstr "Не удалось отменить соединение"
@@ -4359,7 +4363,7 @@ msgstr "Внешний диалог"
 
 #: src/pages/GroupPanel.tsx
 msgid "Fail"
-msgstr "Fail"
+msgstr "Не выполнено"
 
 #: src/components/CloudAgentCard.tsx
 msgid "failed"
@@ -4425,6 +4429,10 @@ msgstr "Файлы недоступны на этом компьютере."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Filter"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Final owner review"
+msgstr "Итоговая проверка владельцем"
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Find a destination"
@@ -6873,7 +6881,7 @@ msgstr "Частично зафиксировано"
 
 #: src/pages/GroupPanel.tsx
 msgid "Pass"
-msgstr "Pass"
+msgstr "Выполнено"
 
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountSignIn.tsx
@@ -6966,6 +6974,10 @@ msgstr ""
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Playing…"
 msgstr "Воспроизведение…"
+
+#: src/pages/GroupPanel.tsx
+msgid "Please address the failing conditions."
+msgstr "Исправьте невыполненные условия."
 
 #: src/components/composer/ComposerMenu.tsx
 #: src/pages/customize/PluginsPage.tsx
@@ -7411,7 +7423,7 @@ msgstr ""
 
 #: src/pages/GroupPanel.tsx
 msgid "Reject result"
-msgstr "Reject result"
+msgstr "Отклонить результат"
 
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
@@ -7762,6 +7774,10 @@ msgid "Restricted"
 msgstr ""
 
 #: src/pages/GroupPanel.tsx
+msgid "Result changed; review again."
+msgstr "Результат изменился. Проверьте его снова."
+
+#: src/pages/GroupPanel.tsx
 msgid "Resume group messages"
 msgstr "Возобновить сообщения группы"
 
@@ -7853,7 +7869,7 @@ msgstr ""
 
 #: src/pages/GroupPanel.tsx
 msgid "Review result"
-msgstr "Review result"
+msgstr "Проверить результат"
 
 #: src/pages/GitMemorySettings.tsx
 msgid "Review saved copy"
@@ -10208,6 +10224,10 @@ msgstr ""
 #: src/pages/dashboard/panels.ts
 msgid "Work"
 msgstr "Работа"
+
+#: src/pages/GroupPanel.tsx
+msgid "Work is still active."
+msgstr "Работа ещё продолжается."
 
 #: src/pages/board/BoardColumns.tsx
 msgid "Work items"

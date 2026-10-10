@@ -514,7 +514,7 @@ msgstr ""
 
 #: src/pages/GroupPanel.tsx
 msgid "Accept result"
-msgstr "Accept result"
+msgstr "Ergebnis annehmen"
 
 #: src/pages/LearningObservation.tsx
 msgid "Acceptance"
@@ -3163,6 +3163,10 @@ msgstr "Passwort konnte nicht zurückgesetzt werden"
 msgid "Could not restore this revision. Reload and try again."
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Could not review result. Try again."
+msgstr "Das Ergebnis konnte nicht geprüft werden. Bitte erneut versuchen."
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not revoke connection"
 msgstr "Verbindung konnte nicht widerrufen werden"
@@ -4359,7 +4363,7 @@ msgstr ""
 
 #: src/pages/GroupPanel.tsx
 msgid "Fail"
-msgstr "Fail"
+msgstr "Nicht erfüllt"
 
 #: src/components/CloudAgentCard.tsx
 msgid "failed"
@@ -4425,6 +4429,10 @@ msgstr "Dateien sind auf diesem Computer nicht verfügbar."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Filter"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Final owner review"
+msgstr "Abschließende Prüfung durch den Eigentümer"
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Find a destination"
@@ -6873,7 +6881,7 @@ msgstr "Teilweise erfasst"
 
 #: src/pages/GroupPanel.tsx
 msgid "Pass"
-msgstr "Pass"
+msgstr "Erfüllt"
 
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountSignIn.tsx
@@ -6966,6 +6974,10 @@ msgstr ""
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Playing…"
 msgstr "Wiedergabe…"
+
+#: src/pages/GroupPanel.tsx
+msgid "Please address the failing conditions."
+msgstr "Bitte beheben Sie die nicht erfüllten Bedingungen."
 
 #: src/components/composer/ComposerMenu.tsx
 #: src/pages/customize/PluginsPage.tsx
@@ -7411,7 +7423,7 @@ msgstr ""
 
 #: src/pages/GroupPanel.tsx
 msgid "Reject result"
-msgstr "Reject result"
+msgstr "Ergebnis ablehnen"
 
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
@@ -7762,6 +7774,10 @@ msgid "Restricted"
 msgstr ""
 
 #: src/pages/GroupPanel.tsx
+msgid "Result changed; review again."
+msgstr "Das Ergebnis hat sich geändert. Bitte erneut prüfen."
+
+#: src/pages/GroupPanel.tsx
 msgid "Resume group messages"
 msgstr "Gruppennachrichten fortsetzen"
 
@@ -7853,7 +7869,7 @@ msgstr ""
 
 #: src/pages/GroupPanel.tsx
 msgid "Review result"
-msgstr "Review result"
+msgstr "Ergebnis prüfen"
 
 #: src/pages/GitMemorySettings.tsx
 msgid "Review saved copy"
@@ -10208,6 +10224,10 @@ msgstr ""
 #: src/pages/dashboard/panels.ts
 msgid "Work"
 msgstr "Arbeit"
+
+#: src/pages/GroupPanel.tsx
+msgid "Work is still active."
+msgstr "Die Arbeit läuft noch."
 
 #: src/pages/board/BoardColumns.tsx
 msgid "Work items"

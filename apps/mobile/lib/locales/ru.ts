@@ -1334,7 +1334,7 @@ export const RU_MESSAGES: Record<string, string> = {
     "Некоторые элементы превысили ограничения сканирования (не просканировано элементов: {count}).",
   Labels: "Метки",
   "{name} filed {filed}: {done} done, {open} open, {closed} closed, {other} closed without being completed.":
-    "{name} создал задач: {filed  "Review result": "Review result",\n  "Pass": "Pass",\n  "Fail": "Fail",\n  "Unknown": "Unknown",\n  "Accept result": "Accept result",\n  "Reject result": "Reject result",\n  "Result changed; review again.": "Result changed; review again.",\n  "Work is still active.": "Work is still active.",\n}; выполнено: {done}, открыто: {open}, закрыто: {closed}, закрыто без выполнения: {other}.",
+    "{name} создал задач: {filed}; выполнено: {done}, открыто: {open}, закрыто: {closed}, закрыто без выполнения: {other}.",
   "This board item is still open.": "Эта задача на доске всё ещё открыта.",
   "This board item was already closed on the Board.": "Эта задача на доске уже закрыта.",
   "This board item was completed.": "Эта задача на доске выполнена.",
@@ -1570,4 +1570,14 @@ export const RU_MESSAGES: Record<string, string> = {
     "Среда выполнения {runtime} остановилась. Повторите запуск.",
   "{runtime} could not finish this turn. Retry the run.":
     "{runtime} не смог завершить этот шаг. Повторите запуск.",
+  "Review result": "Проверить результат",
+  Pass: "Выполнено",
+  Fail: "Не выполнено",
+  "Accept result": "Принять результат",
+  "Reject result": "Отклонить результат",
+  "Result changed; review again.": "Результат изменился. Проверьте его снова.",
+  "Work is still active.": "Работа ещё продолжается.",
+  "Please address the failing conditions.": "Исправьте невыполненные условия.",
+  "Final owner review": "Итоговая проверка владельцем",
+  "Could not review result. Try again.": "Не удалось проверить результат. Попробуйте снова.",
 };

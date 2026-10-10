@@ -263,8 +263,7 @@ export async function admitDelegation(
   });
   if (root.cancelRequestedAt || root.deadlineAt <= now) refuse("deadline-passed");
   const goal = await tx.teamGoal.findUnique({ where: { rootTaskId } });
-  if (goal && ["completed", "accepted", "needs-owner"].includes(goal.status))
-    refuse("authority-exceeded");
+  if (goal && ["completed", "accepted"].includes(goal.status)) refuse("authority-exceeded");
   const ancestorBotIds = ancestor ? [...ancestor.ancestorBotIds, parent.botId] : [parent.botId];
   if (input.kind !== "helper" && ancestorBotIds.includes(input.actingBotId) && !comparison)
     refuse("cycle");

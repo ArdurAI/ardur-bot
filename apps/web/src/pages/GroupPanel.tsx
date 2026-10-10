@@ -1,21 +1,25 @@
+import type {
+  Bot,
+  BotCommunicationPolicy,
+  Goal,
+  Group,
+  GroupMember,
+  RoomPolicyPatch,
+  SetGroupMemberModelPinInput,
+} from "@ardurbot/contracts";
 import {
-  type Bot,
-  type BotCommunicationPolicy,
-  type Goal,
+  GOAL_FINAL_REVIEW_DESCRIPTION,
   GROUP_MEMBER_MAX,
   GROUP_MEMBER_MIN,
-  type Group,
-  type GroupMember,
   parseRoomPolicy,
   ROOM_POLICY_MAX_CONCURRENT_RUNS_MAX,
   ROOM_POLICY_MAX_CONCURRENT_RUNS_MIN,
-  type RoomPolicyPatch,
   runtimeNames,
   runtimeSupportsTools,
-  type SetGroupMemberModelPinInput,
 } from "@ardurbot/contracts";
 import { BotAvatar, Button, Input, NativeSelect, NativeSelectOption } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
+import { ORPCError } from "@orpc/client";
 import { Check, X } from "lucide-react";
 import {
   lazy,
@@ -509,10 +513,49 @@ export function GroupSettings({
   );
 }
 
-export function GroupGoalStrip({ goal, onStop }: { goal: Goal; onStop: () => Promise<void> }) {
+export function GroupGoalStrip({
+  goal,
+  onStop,
+  onRefresh,
+}: {
+  goal: Goal;
+  onStop: () => Promise<void>;
+  onRefresh: () => Promise<void>;
+}) {
   const { t } = useLingui();
   const [stopping, setStopping] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+  const reviewPending = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  async function review(action: "accept" | "reject") {
+    if (!goal.currentRevision || reviewPending.current) return;
+    reviewPending.current = true;
+    setReviewing(true);
+    setError(null);
+    try {
+      const input = { goalId: goal.id, revisionId: goal.currentRevision.id };
+      if (action === "accept") await rpc.goals.accept(input);
+      else
+        await rpc.goals.reject({
+          ...input,
+          reworkNotes: t`Please address the failing conditions.`,
+        });
+      await onRefresh();
+    } catch (cause) {
+      const reason = cause instanceof ORPCError ? cause.data?.reason : undefined;
+      setError(
+        reason === "revision-changed"
+          ? t`Result changed; review again.`
+          : reason === "work-active"
+            ? t`Work is still active.`
+            : t`Could not review result. Try again.`,
+      );
+      if (reason === "revision-changed") await onRefresh().catch(() => undefined);
+    } finally {
+      reviewPending.current = false;
+      setReviewing(false);
+    }
+  }
   const status =
     goal.status === "running"
       ? t`Working`
@@ -546,7 +589,10 @@ export function GroupGoalStrip({ goal, onStop }: { goal: Goal; onStop: () => Pro
             <ul className="text-sm list-disc pl-4 mb-3">
               {goal.currentRevision.conditions.map((cond) => (
                 <li key={cond.id}>
-                  {cond.description}:
+                  {cond.description === GOAL_FINAL_REVIEW_DESCRIPTION || cond.id === "cond-final"
+                    ? t`Final owner review`
+                    : cond.description}
+                  :
                   {cond.status === "pass" ? (
                     <span className="text-success ml-1">
                       <Trans>Pass</Trans>
@@ -567,25 +613,16 @@ export function GroupGoalStrip({ goal, onStop }: { goal: Goal; onStop: () => Pro
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  void rpc.goals.accept({
-                    goalId: goal.id,
-                    revisionId: goal.currentRevision!.id,
-                  });
-                }}
+                disabled={reviewing}
+                onClick={() => void review("accept")}
               >
                 <Trans>Accept result</Trans>
               </Button>
               <Button
                 variant="destructive"
                 size="sm"
-                onClick={() => {
-                  void rpc.goals.reject({
-                    goalId: goal.id,
-                    revisionId: goal.currentRevision!.id,
-                    reworkNotes: "Please address the failing conditions.",
-                  });
-                }}
+                disabled={reviewing}
+                onClick={() => void review("reject")}
               >
                 <Trans>Reject result</Trans>
               </Button>

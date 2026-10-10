@@ -514,7 +514,7 @@ msgstr ""
 
 #: src/pages/GroupPanel.tsx
 msgid "Accept result"
-msgstr "Accept result"
+msgstr "परिणाम स्वीकार करें"
 
 #: src/pages/LearningObservation.tsx
 msgid "Acceptance"
@@ -3163,6 +3163,10 @@ msgstr "पासवर्ड रीसेट नहीं किया जा �
 msgid "Could not restore this revision. Reload and try again."
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Could not review result. Try again."
+msgstr "परिणाम की समीक्षा नहीं हो सकी। फिर से कोशिश करें।"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not revoke connection"
 msgstr "कनेक्शन रद्द नहीं किया जा सका"
@@ -4359,7 +4363,7 @@ msgstr ""
 
 #: src/pages/GroupPanel.tsx
 msgid "Fail"
-msgstr "Fail"
+msgstr "पूरा नहीं हुआ"
 
 #: src/components/CloudAgentCard.tsx
 msgid "failed"
@@ -4425,6 +4429,10 @@ msgstr "इस कंप्यूटर पर फ़ाइलें उपल�
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Filter"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Final owner review"
+msgstr "मालिक की अंतिम समीक्षा"
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Find a destination"
@@ -6873,7 +6881,7 @@ msgstr "आंशिक रूप से रिपोर्ट किया ग�
 
 #: src/pages/GroupPanel.tsx
 msgid "Pass"
-msgstr "Pass"
+msgstr "पूरा हुआ"
 
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountSignIn.tsx
@@ -6966,6 +6974,10 @@ msgstr ""
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Playing…"
 msgstr "प्ले हो रहा है…"
+
+#: src/pages/GroupPanel.tsx
+msgid "Please address the failing conditions."
+msgstr "कृपया अधूरी शर्तों को पूरा करें।"
 
 #: src/components/composer/ComposerMenu.tsx
 #: src/pages/customize/PluginsPage.tsx
@@ -7411,7 +7423,7 @@ msgstr ""
 
 #: src/pages/GroupPanel.tsx
 msgid "Reject result"
-msgstr "Reject result"
+msgstr "परिणाम अस्वीकार करें"
 
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
@@ -7762,6 +7774,10 @@ msgid "Restricted"
 msgstr ""
 
 #: src/pages/GroupPanel.tsx
+msgid "Result changed; review again."
+msgstr "परिणाम बदल गया है। फिर से समीक्षा करें।"
+
+#: src/pages/GroupPanel.tsx
 msgid "Resume group messages"
 msgstr "समूह संदेश फिर शुरू करें"
 
@@ -7853,7 +7869,7 @@ msgstr ""
 
 #: src/pages/GroupPanel.tsx
 msgid "Review result"
-msgstr "Review result"
+msgstr "परिणाम की समीक्षा करें"
 
 #: src/pages/GitMemorySettings.tsx
 msgid "Review saved copy"
@@ -10208,6 +10224,10 @@ msgstr ""
 #: src/pages/dashboard/panels.ts
 msgid "Work"
 msgstr "काम"
+
+#: src/pages/GroupPanel.tsx
+msgid "Work is still active."
+msgstr "काम अभी जारी है।"
 
 #: src/pages/board/BoardColumns.tsx
 msgid "Work items"
