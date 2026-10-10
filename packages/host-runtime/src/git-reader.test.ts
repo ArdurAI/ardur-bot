@@ -2,8 +2,10 @@ import { execFileSync } from "node:child_process";
 import {
   chmod,
   copyFile,
+  lstat,
   mkdir,
   mkdtemp,
+  readFile,
   realpath,
   rm,
   stat,
@@ -15,7 +17,7 @@ import path from "node:path";
 import type { AdapterContext } from "@ardurbot/adapter-kit";
 import { afterEach, describe, expect, it } from "vitest";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
-import { assertSafeGitMetadata, createGitRunner } from "./git-reader.js";
+import { assertSafeGitMetadata, copyPinnedFile, createGitRunner } from "./git-reader.js";
 
 const context: AdapterContext = {
   operationId: "operation",
@@ -508,6 +510,47 @@ it("honours the Team subfolder root so one bot cannot read a sibling's repositor
     scopedContext,
   );
   expect(["unavailable", "not-repository"]).toContain(escapeAttempt.kind);
+});
+
+describe("copyPinnedFile", () => {
+  async function pinnedFixture() {
+    const root = await realpath(await mkdtemp(path.join(tmpdir(), "git-pin-")));
+    roots.push(root);
+    const source = path.join(root, "index");
+    await writeFile(source, "real index\n");
+    const info = await lstat(source);
+    return { root, source, info };
+  }
+
+  it("copies a metadata file whose identity matches the earlier lstat", async () => {
+    const { root, source, info } = await pinnedFixture();
+    const destination = path.join(root, "view-index");
+    await copyPinnedFile(source, destination, info);
+    expect(await readFile(destination, "utf8")).toBe("real index\n");
+  });
+
+  it("refuses a symlink swapped in between the lstat and the copy", async () => {
+    if (process.platform === "win32") return;
+    const { root, source, info } = await pinnedFixture();
+    const outside = path.join(root, "outside.md");
+    await writeFile(outside, "secret\n");
+    // The race: the check saw a regular file, then the entry became a link.
+    await rm(source);
+    await symlink(outside, source);
+    const destination = path.join(root, "view-index");
+    await expect(copyPinnedFile(source, destination, info)).rejects.toThrow();
+    await expect(readFile(destination, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("refuses a different regular file swapped in between the lstat and the copy", async () => {
+    const { root, source, info } = await pinnedFixture();
+    await rm(source);
+    await writeFile(source, "imposter\n");
+    const destination = path.join(root, "view-index");
+    await expect(copyPinnedFile(source, destination, info)).rejects.toThrow(
+      /changed while it was being copied/,
+    );
+  });
 });
 
 describe("assertSafeGitMetadata", () => {

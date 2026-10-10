@@ -253,6 +253,11 @@ export class HostAwareSandbox implements SandboxProvider {
     return provider.gitChanges?.(...args) ?? { kind: "unavailable" };
   }
 
+  /** The owning provider answers: only it can serve the Git observation. */
+  async canObserveGit(computer: ComputerRef, _context: AdapterContext): Promise<boolean> {
+    return (await this.route(computer)).gitChanges !== undefined;
+  }
+
   async writeFile(computer: ComputerRef, file: PortableFile, context: AdapterContext) {
     return (await this.route(computer)).writeFile(computer, file, context);
   }

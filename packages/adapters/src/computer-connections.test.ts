@@ -1,4 +1,4 @@
-import type { ComputerRef } from "@ardurbot/adapter-kit";
+import type { ComputerRef, SandboxProvider } from "@ardurbot/adapter-kit";
 import type { PrismaClient } from "@ardurbot/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -159,6 +159,35 @@ describe("saved computer connections", () => {
       await provider.resolveCommandCwd(computer, "project", context);
       expect(routed).toHaveBeenLastCalledWith(computer, "project", context);
       expect(connectionId ? fallbackCwd : connectedCwd).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([undefined, "saved"])(
+    "reports the Git observation capability from the provider owning connection %s",
+    async (connectionId) => {
+      const { connections } = fixture({ engine: "podman" });
+      const fallback = new FakeSandboxProvider();
+      const connected: SandboxProvider = new FakeSandboxProvider();
+      connected.gitChanges = async () => ({ kind: "unavailable" });
+      vi.spyOn(connections, "resolve").mockResolvedValue(connected);
+      const provider = new ConnectedSandboxProvider(fallback, connections);
+      const computer: ComputerRef = {
+        id: "computer",
+        providerRef: "ref",
+        botId: "bot",
+        kind: "fake",
+        connectionId,
+      };
+      // Neither the fallback nor a routed provider without gitChanges can serve it.
+      expect(await provider.canObserveGit!(computer, context)).toBe(connectionId !== undefined);
+      const { connections: plainConnections } = fixture({ engine: "docker" });
+      vi.spyOn(plainConnections, "resolve").mockResolvedValue(new FakeSandboxProvider());
+      expect(
+        await new ConnectedSandboxProvider(fallback, plainConnections).canObserveGit!(
+          { ...computer, connectionId: "saved" },
+          context,
+        ),
+      ).toBe(false);
     },
   );
 

@@ -1,9 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  GIT_OBSERVATION_BUDGET_MS,
   GIT_OBSERVATION_MAX_ENTRIES,
   GIT_OBSERVATION_RETURNED_BYTES,
   GIT_OBSERVATION_TEXT_SIDE_BYTES,
-  GIT_OBSERVATION_TIMEOUT_MS,
   type GitRunner,
   type GitRunResult,
   observeGitChanges,
@@ -116,7 +116,47 @@ describe("observeGitChanges", () => {
     // Every word is its own array element; nothing is joined into a shell string.
     for (const word of args) expect(word).not.toMatch(/[;&|`$()]/u);
     expect(cwd).toBe(ROOT);
-    expect(timeoutMs).toBe(GIT_OBSERVATION_TIMEOUT_MS);
+    expect(timeoutMs).toBeLessThanOrEqual(GIT_OBSERVATION_BUDGET_MS);
+  });
+
+  it("treats the deadline as one budget for the observation, not per command", async () => {
+    // A slow runner burns budget on every call; a fixed virtual clock keeps the
+    // arithmetic exact. Each call costs 40ms against a 100ms budget, so the
+    // fourth command (the diff) finds nothing left and the observation stops.
+    let now = 0;
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => now);
+    const timeouts: number[] = [];
+    const slow: GitRunner = {
+      async run(args, options) {
+        timeouts.push(options.timeoutMs);
+        now += 40;
+        if (args.includes("--absolute-git-dir")) return ok(`${ROOT}/.git\n`);
+        if (args[0] === "rev-parse") return ok(`${HEAD}\n`);
+        if (args.includes("status")) return ok(" M app.ts\0");
+        return ok("--- a/app.ts\n+++ b/app.ts\n@@ -1 +1 @@\n-old\n+new\n");
+      },
+    };
+    try {
+      const result = await observeGitChanges(slow, {
+        root: ROOT,
+        path: "app.ts",
+        deadlineMs: 100,
+      });
+      expect(result).toEqual({ kind: "unavailable" });
+      expect(timeouts).toEqual([100, 60, 20]);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it("stops before the first command when the budget is already spent", async () => {
+    const fake = fakeRunner();
+    const result = await observeGitChanges(fake.runner, {
+      root: ROOT,
+      deadlineMs: Date.now() - 1,
+    });
+    expect(result).toEqual({ kind: "unavailable" });
+    expect(fake.calls).toHaveLength(0);
   });
 
   it("reports the head identity and bounded entries", async () => {

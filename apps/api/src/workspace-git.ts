@@ -50,6 +50,8 @@ export function createWorkspaceGit(deps: Deps) {
     );
     const state = resolved.state;
     if (state.files !== "live") throw new ORPCError("CONFLICT", { message: unavailable });
+    // The view is only offered where the owning provider can serve it; agree here.
+    if (state.git !== true) return { context: state, status: "unavailable" };
     const observeGit = deps.sandbox.gitChanges;
     if (!observeGit) return { context: state, status: "unavailable" };
     const result = await observeGit.call(

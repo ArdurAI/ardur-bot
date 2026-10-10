@@ -76,6 +76,7 @@ export function createWorkspaceFiles(deps: Deps) {
   function context(
     botId: string,
     computer: Awaited<ReturnType<typeof target>>["computer"],
+    gitAvailable: boolean,
   ): WorkspaceContext {
     const files = workspaceFileSource(computer);
     return {
@@ -84,11 +85,24 @@ export function createWorkspaceFiles(deps: Deps) {
       generation: computer?.screenGeneration ?? null,
       files,
       // The Git observation is an optional provider capability on live worktrees only.
-      git: files === "live" && deps.sandbox.gitChanges !== undefined,
+      git: files === "live" && gitAvailable,
       runsOnHost: computerRunsOnHost(computer ?? {}),
       ...(computer ? { rootId: `sandbox-${computer.id}` } : {}),
       observedAt: new Date().toISOString(),
     };
+  }
+  /**
+   * Asks the routing wrapper whether the provider that owns this computer can
+   * serve the Git observation; a plain provider answers from its own shape.
+   */
+  async function gitCapability(
+    computer: NonNullable<Awaited<ReturnType<typeof target>>["computer"]>,
+    adapterContext: AdapterContext,
+  ): Promise<boolean> {
+    if (workspaceFileSource(computer) !== "live") return false;
+    const probe = deps.sandbox.canObserveGit;
+    if (probe) return probe.call(deps.sandbox, toComputerRef(computer), adapterContext);
+    return deps.sandbox.gitChanges !== undefined;
   }
   async function resolve(actor: Actor, input: Request, signal?: AbortSignal) {
     IdePathSchema.parse(input.path);
@@ -102,9 +116,6 @@ export function createWorkspaceFiles(deps: Deps) {
       computer.screenGeneration !== input.generation
     )
       throw new ORPCError("CONFLICT", { message: "Computer changed. Refresh files." });
-    const state = context(input.botId, computer);
-    if (state.files === "unavailable")
-      throw new ORPCError("CONFLICT", { message: "Files are unavailable on this computer." });
     const mode = parseComputerMode(computer.scope);
     const root = mode === "team" ? teamBotWorkspaceDirectory(bot.id) : "";
     const filePath = workspacePath(root, input.path);
@@ -113,11 +124,14 @@ export function createWorkspaceFiles(deps: Deps) {
       userId: actor.userId,
       spaceId: actor.spaceId,
       botId: bot.id,
-      ...(state.runsOnHost ? { fileRoot: root } : {}),
+      ...(computerRunsOnHost(computer) ? { fileRoot: root } : {}),
       operationId,
       traceId: operationId,
       signal: signal ?? new AbortController().signal,
     };
+    const state = context(input.botId, computer, await gitCapability(computer, adapterContext));
+    if (state.files === "unavailable")
+      throw new ORPCError("CONFLICT", { message: "Files are unavailable on this computer." });
     return { computer, state, root, filePath, adapterContext };
   }
   async function list(actor: Actor, input: Request, signal?: AbortSignal) {
@@ -307,7 +321,18 @@ export function createWorkspaceFiles(deps: Deps) {
   return {
     async describe(actor: Actor, botId: string) {
       const bot = await target(actor, botId);
-      return context(botId, bot.computer);
+      const computer = bot.computer;
+      if (!computer) return context(botId, null, false);
+      const operationId = `workspace-${randomUUID()}`;
+      const adapterContext: AdapterContext = {
+        userId: actor.userId,
+        spaceId: actor.spaceId,
+        botId: bot.id,
+        operationId,
+        traceId: operationId,
+        signal: new AbortController().signal,
+      };
+      return context(botId, computer, await gitCapability(computer, adapterContext));
     },
     list,
     read,

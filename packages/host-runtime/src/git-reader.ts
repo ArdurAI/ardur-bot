@@ -1,9 +1,10 @@
 import { type ChildProcessByStdio, spawn } from "node:child_process";
+import { constants, createWriteStream, type Stats } from "node:fs";
 import {
-  copyFile,
   lstat,
   mkdir,
   mkdtemp,
+  open,
   readFile,
   realpath,
   rm,
@@ -13,6 +14,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 import type { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import type {
   GitChangesResult,
   GitObservationRequest,
@@ -20,8 +22,8 @@ import type {
   GitRunResult,
 } from "@ardurbot/adapter-kit";
 import {
+  GIT_OBSERVATION_BUDGET_MS,
   GIT_OBSERVATION_COMMAND_BYTES,
-  GIT_OBSERVATION_TIMEOUT_MS,
   observeGitChanges,
 } from "@ardurbot/adapter-kit";
 import { filterHostEnvironment } from "@ardurbot/contracts/host-environment";
@@ -138,6 +140,32 @@ const OBSERVATION_CONFIG = new Set([
   "core.eol",
 ]);
 
+/** Windows has no O_NOFOLLOW; there the lstat guards are the only layer. */
+const NOFOLLOW_OPEN = (constants.O_NOFOLLOW ?? 0) as number;
+
+/**
+ * Copies one metadata file through a no-follow open, pinning it to the identity
+ * the caller lstat'ed a moment earlier: a swap to a symlink fails the open and
+ * a swap to any other file fails the dev/ino check, so a racer cannot redirect
+ * the copy at a file outside the bot folder.
+ */
+export async function copyPinnedFile(
+  source: string,
+  destination: string,
+  expected: Pick<Stats, "dev" | "ino">,
+): Promise<void> {
+  const handle = await open(source, constants.O_RDONLY | NOFOLLOW_OPEN);
+  try {
+    const opened = await handle.stat();
+    if (!opened.isFile() || opened.dev !== expected.dev || opened.ino !== expected.ino) {
+      throw new Error("Git metadata changed while it was being copied");
+    }
+    await pipeline(handle.createReadStream(), createWriteStream(destination));
+  } finally {
+    await handle.close();
+  }
+}
+
 /**
  * Git's -c overrides cannot erase include directives or every possible driver.
  * Use a private metadata view with its own config instead. Original config is
@@ -149,6 +177,9 @@ export async function observeHostGitChanges(
   root: string,
   request: Pick<GitObservationRequest, "path" | "readWorktreeFile">,
 ): Promise<GitChangesResult> {
+  // One deadline covers the whole observation, including the config read below.
+  const deadlineMs = Date.now() + GIT_OBSERVATION_BUDGET_MS;
+  const remaining = () => Math.max(1, deadlineMs - Date.now());
   const gitDir = path.join(root, ".git");
   const present = await lstat(gitDir).catch(() => null);
   if (!present) {
@@ -168,7 +199,7 @@ export async function observeHostGitChanges(
     // --file and --no-includes prevent local/global/includes from participating.
     const config = await raw.run(
       ["config", "--null", "--list", "--no-includes", "--file", path.join(gitDir, "config")],
-      { cwd: view, maxBytes: GIT_OBSERVATION_COMMAND_BYTES, timeoutMs: GIT_OBSERVATION_TIMEOUT_MS },
+      { cwd: view, maxBytes: GIT_OBSERVATION_COMMAND_BYTES, timeoutMs: remaining() },
     );
     if (config.code !== 0 || config.capped || config.timedOut) return { kind: "unavailable" };
     const settings: string[] = [];
@@ -207,8 +238,9 @@ export async function observeHostGitChanges(
         await symlink(source, destination, process.platform === "win32" ? "junction" : "dir");
       } else if (info.isFile()) {
         // Private copies keep the observation from changing index bytes or inode
-        // metadata, and prevent a swapped source index from redirecting the view.
-        await copyFile(source, destination);
+        // metadata; the no-follow open and identity check pin each file to what
+        // the lstat above saw, so a swap in between cannot redirect the copy.
+        await copyPinnedFile(source, destination, info);
       } else return { kind: "unavailable" };
     }
     const infoDirectory = path.join(gitDir, "info");
@@ -222,7 +254,7 @@ export async function observeHostGitChanges(
         if (!file) continue;
         if (!file.isFile() || file.isSymbolicLink() || file.size > GIT_OBSERVATION_COMMAND_BYTES)
           return { kind: "unavailable" };
-        await copyFile(source, path.join(view, "info", entry));
+        await copyPinnedFile(source, path.join(view, "info", entry), file);
       }
     }
     const pinned = ["--no-pager", "--git-dir", view, "--work-tree", root, ...settings];
@@ -233,6 +265,7 @@ export async function observeHostGitChanges(
       ...request,
       root,
       gitDir,
+      deadlineMs,
       assertSafeMetadata: (directory) => assertSafeGitMetadata(root, directory),
     });
   } catch {
