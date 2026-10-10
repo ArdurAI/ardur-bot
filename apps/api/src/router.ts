@@ -379,6 +379,7 @@ import {
   voiceContext,
 } from "./voice.js";
 import { createWorkspaceFiles } from "./workspace-files.js";
+import { createWorkspaceGit } from "./workspace-git.js";
 import { workspaceTasks } from "./workspace-tasks.js";
 
 const MAX_COMPUTER_TEXT_FILE_BYTES = 2 * 1024 * 1024;
@@ -721,6 +722,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
   const commands = createCommandRoutes(deps);
   const ide = createIdeFiles(deps);
   const workspaceFiles = createWorkspaceFiles(deps);
+  const workspaceGit = createWorkspaceGit({ sandbox: deps.sandbox, files: workspaceFiles });
   const ideChanges = createIdeChanges(deps, ide);
   return os.router({
     ...createCustomizationRoutes(deps),
@@ -807,6 +809,9 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       ),
       tasks: authed.workspace.tasks.handler(({ context, input }) =>
         workspaceTasks(deps.prisma, context.actor, input.botId),
+      ),
+      git: authed.workspace.git.handler(({ context, input }) =>
+        workspaceGit.observe(context.actor, input, context.signal),
       ),
     },
     terminal: {

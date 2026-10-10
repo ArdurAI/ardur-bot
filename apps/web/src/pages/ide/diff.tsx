@@ -1,7 +1,10 @@
-import type { IdeChange } from "@ardurbot/contracts";
 import { useLingui } from "@lingui/react/macro";
 
-export default function SideBySideDiff({ change }: { change: IdeChange }) {
+export default function SideBySideDiff({
+  change,
+}: {
+  change: { before: string | null; after: string | null };
+}) {
   const { t } = useLingui();
   const before = change.before?.split("\n"),
     after = change.after?.split("\n");

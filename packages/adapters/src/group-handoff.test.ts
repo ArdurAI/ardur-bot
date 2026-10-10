@@ -32,14 +32,21 @@ function harness(
   const runCreate = vi.fn(async () => ({ id: "run-b" }));
   const messageCreate = vi.fn(async () => ({ id: "message-1" }));
   const tx = {
+    spaceModelPreference: { findFirst: vi.fn(async () => null) },
+    userModelCredential: { findFirst: vi.fn(async () => null) },
     chiefPlan: { findFirst: vi.fn(async () => null) },
     delegation: { update: vi.fn(async () => ({})) },
-    $queryRaw: vi.fn(async () => [{ id: "group-1" }]),
+    $queryRaw: vi.fn(async (_query?: TemplateStringsArray, ..._values: unknown[]) => [
+      { id: "group-1" },
+    ]),
     chatGroup: {
-      findFirst: vi.fn(async () => ({
+      findFirst: vi.fn(async (_args?: unknown) => ({
         id: "group-1",
         coordinatorBotId: "bot-a",
         members: ["bot-a", "bot-b", "bot-c"].map((id) => ({
+          id: `member-${id}`,
+          modelPinRevision: 0,
+          runtimePin: null,
           bot: { id, name: id.toUpperCase() },
         })),
       })),
@@ -62,6 +69,7 @@ function harness(
       create: messageCreate,
     },
     thread: {
+      findFirst: vi.fn(async () => ({ groupId: "group-1" })),
       update: vi.fn(async (args: { select: { nextMessageSeq?: boolean } }) =>
         args.select.nextMessageSeq ? { nextMessageSeq: 2 } : { nextEventSeq: 2 },
       ),
@@ -84,9 +92,14 @@ function harness(
     },
   };
   const prisma = {
+    ...tx,
+    bot: {
+      findFirstOrThrow: vi.fn(async () => ({ id: "bot-b", computerId: null, computer: null })),
+    },
     $transaction: vi.fn(async (callback: (value: typeof tx) => Promise<unknown>) => callback(tx)),
   } as unknown as PrismaClient;
   return {
+    tx,
     deps: {
       prisma,
       events: { notify: vi.fn(async () => undefined) },
@@ -100,6 +113,126 @@ function harness(
 }
 
 describe("group handoff ownership", () => {
+  it("uses the canonical member order for both name preview and locked admission", async () => {
+    const { deps, tx } = harness([]);
+    const read = tx.chatGroup.findFirst;
+    const group = await read();
+    read.mockClear();
+    const tied = group!.members.map((member) => ({
+      ...member,
+      createdAt: new Date(0),
+      bot: { ...member.bot, name: member.bot.id === "bot-a" ? "Source" : "Reviewer" },
+    }));
+    read.mockImplementation(async (args) => {
+      const order = (args as { include?: { members?: { orderBy?: unknown } } }).include?.members
+        ?.orderBy;
+      const canonical =
+        JSON.stringify(order) === JSON.stringify([{ createdAt: "asc" }, { id: "asc" }]);
+      return { ...group!, members: canonical ? tied : [...tied].reverse() } as never;
+    });
+    const resolve = vi.fn(async () => ({ kind: "problem" as const }));
+    const result = await handoffToGroupBot(
+      { ...deps, resolveDelegationPin: resolve } as never,
+      run,
+      "group-1",
+      {
+        confirm_name: "reviewer",
+        message: "Review",
+      },
+    );
+    expect(result).toMatchObject({ ok: true, botId: "bot-b" });
+    expect(resolve).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "bot-b" }),
+      expect.anything(),
+    );
+    const queries = read.mock.calls.filter(([args]) => (args as { include?: unknown }).include);
+    expect(queries).toHaveLength(2);
+    for (const [args] of queries)
+      expect(args).toMatchObject({
+        include: { members: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] } },
+      });
+  });
+  it("resolves the recipient once before acquiring the room lock", async () => {
+    const { deps } = harness([]);
+    const resolve = vi.fn(async () => ({ kind: "problem" as const }));
+    await handoffToGroupBot({ ...deps, resolveDelegationPin: resolve } as never, run, "group-1", {
+      bot_id: "bot-b",
+      message: "Review",
+    });
+    expect(resolve).toHaveBeenCalledOnce();
+    expect(resolve.mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(deps.prisma.$transaction).mock.invocationCallOrder[0]!,
+    );
+    expect(vi.mocked(prepareDelegation).mock.lastCall?.[2]).toMatchObject({
+      selected: { kind: "problem" },
+    });
+  });
+  it.each([{ bot_id: "bot-b" }, { confirm_name: "BOT-B" }])(
+    "resolves a recipient that becomes eligible after preview under the root lock: %j",
+    async (address) => {
+      const { deps, tx } = harness([]);
+      const group = await tx.chatGroup.findFirst();
+      tx.chatGroup.findFirst.mockClear();
+      Object.assign(deps.prisma, {
+        chatGroup: {
+          findFirst: vi.fn(async () => ({
+            ...group,
+            members: group.members.filter((member) => member.bot.id !== "bot-b"),
+          })),
+        },
+      });
+      const botRead = vi.fn(async () => ({ id: "bot-b", computerId: null, computer: null }));
+      Object.assign(tx, {
+        bot: { findFirstOrThrow: botRead },
+        delegationRoot: { findUnique: vi.fn(async () => null) },
+      });
+      Object.assign(tx.run, {
+        findUniqueOrThrow: vi.fn(async () => ({ ...run, taskId: "task-a" })),
+      });
+      const selected = {
+        kind: "resolved" as const,
+        pin: {
+          runtimeKind: "pi",
+          provider: "fixture",
+          modelId: "fixture",
+          credentialId: null,
+          effort: null,
+          revision: 1,
+        },
+      };
+      const resolve = vi.fn(async () => selected);
+
+      const result = await handoffToGroupBot(
+        { ...deps, resolveDelegationPin: resolve } as never,
+        run,
+        "group-1",
+        { ...address, message: "Review" },
+      );
+
+      expect(result).toMatchObject({ ok: true, botId: "bot-b" });
+      expect(deps.prisma.bot.findFirstOrThrow).not.toHaveBeenCalled();
+      expect(botRead).toHaveBeenCalledOnce();
+      expect(resolve).toHaveBeenCalledOnce();
+      expect(resolve).toHaveBeenCalledWith(expect.objectContaining({ id: "bot-b" }), {
+        tx,
+        targetThreadId: run.threadId,
+        userId: run.userId,
+        spaceId: run.spaceId,
+      });
+      const rootLockIndex = tx.$queryRaw.mock.calls.findIndex(([sql]) =>
+        sql?.join("").includes("FROM tasks"),
+      );
+      expect(rootLockIndex).toBeGreaterThanOrEqual(0);
+      expect(tx.$queryRaw.mock.invocationCallOrder[rootLockIndex]).toBeLessThan(
+        botRead.mock.invocationCallOrder[0]!,
+      );
+      expect(vi.mocked(prepareDelegation).mock.lastCall).toEqual([
+        tx,
+        expect.objectContaining({ actingBotId: "bot-b" }),
+        expect.objectContaining({ selected, binding: expect.anything() }),
+      ]);
+    },
+  );
   it("marks a new ownership transfer as a follow-up with a chain hop", async () => {
     const { deps, messageCreate, runCreate } = harness([{ kind: "text", text: "user request" }]);
 

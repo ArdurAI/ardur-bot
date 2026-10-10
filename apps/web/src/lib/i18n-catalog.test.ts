@@ -48,6 +48,7 @@ describe("lingui catalogs", () => {
         "Routines",
         "IDE",
         "Recorded changes",
+        "Git changes",
         "No changes to show",
         "Show settings",
         "Show computer",

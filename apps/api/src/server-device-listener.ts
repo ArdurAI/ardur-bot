@@ -37,13 +37,22 @@ export function createServerDeviceListener(
     },
     async start() {
       if (!env.deviceListener) return;
-      await listener.start({
-        target: localDeviceTarget(env),
-        certificate: home.certificate,
-        certificateFingerprint: home.certificateFingerprint,
-        privateKey: secrets.load(home.privateKeyCiphertext, home.instanceId),
-        listen: env.deviceListener,
-      });
+      try {
+        await listener.start({
+          target: localDeviceTarget(env),
+          certificate: home.certificate,
+          certificateFingerprint: home.certificateFingerprint,
+          privateKey: secrets.load(home.privateKeyCiphertext, home.instanceId),
+          listen: env.deviceListener,
+        });
+      } catch (error) {
+        if (error instanceof Error && "code" in error && error.code === "EADDRINUSE")
+          throw new Error(
+            `Device HTTPS listener cannot start: ${env.deviceListener.bind}:${env.deviceListener.port} is already in use.`,
+            { cause: error },
+          );
+        throw error;
+      }
     },
     async stop() {
       desktopHints = [];

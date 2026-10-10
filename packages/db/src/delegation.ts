@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import type {
   Actor,
   DelegationKind,
@@ -6,6 +7,7 @@ import type {
   DelegationSnapshot,
   DelegationStopReason,
   MessageBlock,
+  RuntimePin,
 } from "@ardurbot/contracts";
 import {
   ALL_DEVICE_SCOPES,
@@ -17,6 +19,7 @@ import {
   IntegrationManifestSchema,
   LocalityPolicySchema,
   RequestUsageObservationSchema,
+  RuntimePinSchema,
   runtimeEnforcesDelegationBudget,
   TaskCardSchema,
 } from "@ardurbot/contracts";
@@ -31,7 +34,7 @@ import {
   taskCardChecklist,
   taskCardRequest,
 } from "@ardurbot/core";
-import type { Delegation, Prisma, PrismaClient } from "./client.js";
+import type { Bot, Computer, Delegation, Prisma, PrismaClient } from "./client.js";
 import { deviceDigest } from "./device-grants.js";
 import { loadRemoteAuthority } from "./dispatch.js";
 import { appendEventInTransaction } from "./events.js";
@@ -52,18 +55,101 @@ const PEER_RECEIPT_MAX_LENGTH = 2000;
 type Scope = Pick<Actor, "spaceId" | "userId">;
 
 /**
- * Interactive-transaction budget for every transaction that takes the delegation-root
- * lock (peer messages, handoffs, group asks, helpers, comparisons and child spawns).
- * The flaky bot-comms receipt e2e showed the default 5 s Prisma cap is shorter than the
- * wait these transactions legitimately see: the recipient's in-flight turn holds the
- * thread and root-task row locks while the sender queues ("Waiting for a turn"), and on
- * a loaded CI machine that wait expired the transaction at ~5 010 ms, failing the run
- * and losing the receipt. The work after the lock is short (~20 indexed queries), so
- * the wait itself must stay inside the transaction; the timeout only needs to outlive a
- * busy recipient, not the whole turn. Sized at 6× the observed expiry; maxWait covers
- * acquiring a pooled connection under burst.
+ * Interactive-transaction budget for admission only (peer messages, handoffs, room asks,
+ * helpers, comparisons and child spawns), not finish/cancel/pause transactions.
+ * Pin resolution normally runs before the transaction; newly askable room members resolve
+ * under the root lock. Current bindings, policies and reservations are checked under that
+ * lock. Lock wait is part of the transaction's timeout, while
+ * maxWait bounds pooled-connection acquisition.
+ * The default 5 s cap expired a contended receipt admission; that is a lower bound on
+ * required lock-wait headroom, not a measurement of query cost. Keep the existing 30 s
+ * contention allowance until the disposable PostgreSQL test reports SQL counts and
+ * timings before, at and after the root lock. The offline single-peer callback measured
+ * 29 Prisma operations, 24 after the task lock (delegation-admission.test.ts). These are
+ * fixture operations, not SQL statements or database timings, and cannot size the cap.
  */
 export const DELEGATION_ADMISSION_TRANSACTION = { maxWait: 10_000, timeout: 30_000 } as const;
+
+/** Settings read before admission; policies and budgets are always read under the root lock. */
+export type DelegationTargetBinding = {
+  bot: string;
+  model?: DelegationModelBinding;
+  membership?: {
+    groupId: string;
+    memberId: string;
+    revision: number;
+    pin: unknown;
+  };
+};
+
+type DelegationModelBinding =
+  | { source: "space-default"; digest: string }
+  | { source: "connection"; credentialId: string; provider: string; digest: string };
+
+/** Connection edits replace secretId and update the row; never read secret contents here. */
+export async function delegationModelBinding(
+  tx: Prisma.TransactionClient,
+  scope: Scope,
+  pin?: RuntimePin | null,
+): Promise<DelegationModelBinding | undefined> {
+  const credentialSelect = {
+    id: true,
+    provider: true,
+    secretId: true,
+    supportsImages: true,
+    updatedAt: true,
+  } as const;
+  if (!pin) {
+    const preference = await tx.spaceModelPreference.findFirst({
+      where: { spaceId: scope.spaceId, userId: scope.userId, isDefault: true },
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+      select: {
+        id: true,
+        credentialId: true,
+        modelId: true,
+        updatedAt: true,
+        credential: { select: credentialSelect },
+      },
+    });
+    return { source: "space-default", digest: deviceDigest(JSON.stringify(preference)) };
+  }
+  if (
+    (pin.runtimeKind !== "pi" && pin.runtimeKind !== "hermes") ||
+    pin.provider === "scripted" ||
+    !pin.provider ||
+    !pin.credentialId
+  )
+    return undefined;
+  const credential = await tx.userModelCredential.findFirst({
+    where: { id: pin.credentialId, userId: scope.userId, provider: pin.provider },
+    select: credentialSelect,
+  });
+  return {
+    source: "connection",
+    credentialId: pin.credentialId,
+    provider: pin.provider,
+    digest: deviceDigest(JSON.stringify(credential)),
+  };
+}
+
+export function delegationBotBinding(bot: Bot & { computer?: Computer | null }) {
+  return deviceDigest(
+    JSON.stringify([
+      bot.id,
+      bot.modelPinRevision,
+      bot.runtimeKind,
+      bot.modelProvider,
+      bot.modelId,
+      bot.thinkingLevel,
+      bot.modelCredentialId,
+      bot.runtimeConfig,
+      bot.computerId,
+      bot.computerSwitching,
+      bot.computer?.scope,
+      bot.computer?.kind,
+    ]),
+  );
+}
 
 async function unresolvedBrokerTokens(
   tx: Prisma.TransactionClient,
@@ -199,6 +285,7 @@ export async function admitDelegation(
     newChild?: boolean;
     card?: unknown;
     peerMode?: "read-only" | "effect-bound";
+    targetBinding?: DelegationTargetBinding;
   },
 ) {
   const { run: parent, rootTaskId } = await lockDelegationRootForRun(tx, input.parentRunId);
@@ -252,6 +339,39 @@ export async function admitDelegation(
         include: { computer: true },
       });
   const space = await tx.space.findUniqueOrThrow({ where: { id: input.spaceId } });
+  if (input.targetBinding) {
+    if (delegationBotBinding(recipient) !== input.targetBinding.bot) refuse("authority-exceeded");
+    const model = input.targetBinding.model;
+    if (model) {
+      const current = await delegationModelBinding(
+        tx,
+        input,
+        model.source === "space-default"
+          ? null
+          : { ...input.snapshot.pin, provider: model.provider, credentialId: model.credentialId },
+      );
+      if (current?.digest !== model.digest) refuse("authority-exceeded");
+    }
+    const expected = input.targetBinding.membership;
+    if (expected) {
+      const member = await tx.chatGroupMember.findFirst({
+        where: {
+          id: expected.memberId,
+          groupId: expected.groupId,
+          botId: recipient.id,
+          group: { spaceId: input.spaceId, userId: input.userId, archivedAt: null },
+        },
+      });
+      const currentPin =
+        member?.runtimePin == null ? null : RuntimePinSchema.safeParse(member.runtimePin).data;
+      if (
+        !member ||
+        member.modelPinRevision !== expected.revision ||
+        !isDeepStrictEqual(currentPin, expected.pin)
+      )
+        refuse("authority-exceeded");
+    }
+  }
   const now = new Date();
   const root = await ensureDelegationRootBudget(tx, {
     rootTaskId,

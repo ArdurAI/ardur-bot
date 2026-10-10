@@ -53,6 +53,10 @@ access explicitly allowed. See [Server device pairing](self-host.md#pair-a-phone
 for the Compose override. Keep the application database and `ENCRYPTION_KEY` across
 restarts to retain the certificate and encrypted home key. A TLS-terminating proxy
 with another certificate will fail the pin; use direct access or TLS passthrough.
+These settings work with both `pnpm dev` and the API entrypoint. The listener stays
+off when the enable switch is missing or false. If its port is already in use, the
+API stops startup and logs which device address could not be opened; choose a free
+port and update the advertised origin before restarting.
 The local listener must be enabled when using a desktop home's network link.
 Do not expose a listener without
 checking its network boundary. There is no HTTP, redirect or unpinned fallback.
