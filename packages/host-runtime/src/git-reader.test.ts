@@ -171,6 +171,17 @@ it("refuses symlinked metadata that could leak an outside file", async () => {
   }
 });
 
+it("returns unavailable promptly when a metadata entry is a FIFO", async () => {
+  if (process.platform === "win32") return;
+  const { provider, computer, home, git } = await fixture();
+  git(["init", "-q", "-b", "main"]);
+  await rm(path.join(home, ".git", "index"), { force: true });
+  execFileSync("mkfifo", [path.join(home, ".git", "index")]);
+  const started = Date.now();
+  expect(await observe(provider, computer)).toEqual({ kind: "unavailable" });
+  expect(Date.now() - started).toBeLessThan(1_000);
+});
+
 it("never executes repository configuration: fsmonitor, external diff and textconv stay silent", async () => {
   const { provider, computer, home, git } = await fixture();
   git(["init", "-q", "-b", "main"]);
@@ -550,6 +561,23 @@ describe("copyPinnedFile", () => {
     await expect(copyPinnedFile(source, destination, info)).rejects.toThrow(
       /changed while it was being copied/,
     );
+  });
+
+  it("refuses a FIFO swapped in for the metadata file without waiting for a writer", async () => {
+    if (process.platform === "win32") return;
+    const { root, source, info } = await pinnedFixture();
+    await rm(source);
+    // The race: the check saw a regular file, then the entry became a FIFO with
+    // no writer. A blocking open would wait here indefinitely; the copy must
+    // refuse promptly instead.
+    execFileSync("mkfifo", [source]);
+    const destination = path.join(root, "view-index");
+    const started = Date.now();
+    await expect(copyPinnedFile(source, destination, info)).rejects.toThrow(
+      /changed while it was being copied/,
+    );
+    expect(Date.now() - started).toBeLessThan(1_000);
+    await expect(readFile(destination, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
   });
 });
 

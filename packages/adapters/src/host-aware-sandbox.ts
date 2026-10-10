@@ -253,9 +253,16 @@ export class HostAwareSandbox implements SandboxProvider {
     return provider.gitChanges?.(...args) ?? { kind: "unavailable" };
   }
 
-  /** The owning provider answers: only it can serve the Git observation. */
-  async canObserveGit(computer: ComputerRef, _context: AdapterContext): Promise<boolean> {
-    return (await this.route(computer)).gitChanges !== undefined;
+  /**
+   * The owning provider answers: only it can serve the Git observation. The
+   * routed provider may be another wrapper whose gitChanges always exists, so
+   * delegate the probe through every router layer to the concrete provider.
+   */
+  async canObserveGit(computer: ComputerRef, context: AdapterContext): Promise<boolean> {
+    const routed = await this.route(computer);
+    return isComputerRouter(routed)
+      ? routed.canObserveGit(computer, context)
+      : routed.gitChanges !== undefined;
   }
 
   async writeFile(computer: ComputerRef, file: PortableFile, context: AdapterContext) {

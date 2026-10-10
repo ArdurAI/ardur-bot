@@ -142,19 +142,22 @@ const OBSERVATION_CONFIG = new Set([
 
 /** Windows has no O_NOFOLLOW; there the lstat guards are the only layer. */
 const NOFOLLOW_OPEN = (constants.O_NOFOLLOW ?? 0) as number;
+/** A plain open of a swapped-in FIFO waits for a writer; non-blocking never does. */
+const NONBLOCK_OPEN = (constants.O_NONBLOCK ?? 0) as number;
 
 /**
- * Copies one metadata file through a no-follow open, pinning it to the identity
- * the caller lstat'ed a moment earlier: a swap to a symlink fails the open and
- * a swap to any other file fails the dev/ino check, so a racer cannot redirect
- * the copy at a file outside the bot folder.
+ * Copies one metadata file through a no-follow, non-blocking open, pinning it
+ * to the identity the caller lstat'ed a moment earlier: a swap to a symlink
+ * fails the open and a swap to a FIFO or any other file fails the
+ * regular-file/dev/ino check, so a racer can neither redirect the copy at a
+ * file outside the bot folder nor stall the observation on a writer.
  */
 export async function copyPinnedFile(
   source: string,
   destination: string,
   expected: Pick<Stats, "dev" | "ino">,
 ): Promise<void> {
-  const handle = await open(source, constants.O_RDONLY | NOFOLLOW_OPEN);
+  const handle = await open(source, constants.O_RDONLY | NOFOLLOW_OPEN | NONBLOCK_OPEN);
   try {
     const opened = await handle.stat();
     if (!opened.isFile() || opened.dev !== expected.dev || opened.ino !== expected.ino) {
