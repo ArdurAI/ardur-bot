@@ -2547,8 +2547,11 @@ describe("clearThread", () => {
       ),
     ).resolves.toMatchObject({ cancelledRunIds: ["group-run-1", "group-run-2"] });
 
-    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(2);
     expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.thread.update.mock.invocationCallOrder[0]!,
+    );
+    expect(tx.$queryRaw.mock.invocationCallOrder[1]).toBeLessThan(
       tx.thread.update.mock.invocationCallOrder[0]!,
     );
 
@@ -2575,6 +2578,84 @@ describe("clearThread", () => {
     expect(tx.computerExecutionLease.updateMany).not.toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ botId: expect.anything() }) }),
     );
+  });
+
+  it("locks the target thread row in lock order before updating the thread", async () => {
+    const fanout = new TestFanout();
+    const queryRaws: string[] = [];
+    const tx = {
+      $queryRaw: vi.fn(async (strings: TemplateStringsArray) => {
+        const raw = strings.join("?");
+        queryRaws.push(raw);
+        return [{ id: "locked" }];
+      }),
+      thread: {
+        update: vi
+          .fn()
+          .mockResolvedValueOnce({ nextMessageSeq: 10, historyCompactionGeneration: 1 })
+          .mockResolvedValue({ nextEventSeq: 1 }),
+      },
+      run: { findMany: vi.fn().mockResolvedValue([]) },
+      delegationRoot: { findMany: vi.fn().mockResolvedValue([]) },
+      computerExecutionLease: { updateMany: vi.fn() },
+      computer: { updateMany: vi.fn() },
+      message: { deleteMany: vi.fn() },
+      event: {
+        deleteMany: vi.fn(),
+        create: vi.fn().mockResolvedValue({ ...event(0), type: "thread.cleared" }),
+      },
+      chatGroup: { update: vi.fn() },
+      bot: { update: vi.fn() },
+    };
+    const prisma = {
+      $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
+    } as unknown as PrismaClient;
+
+    await clearThread(
+      prisma,
+      {
+        spaceId: "workspace-1",
+        threadId: "thread-target",
+        botId: "bot-1",
+        groupId: "group-1",
+      },
+      fanout,
+    );
+
+    // Locks parent (chat_groups) first, then target thread, before updating thread
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(2);
+    expect(queryRaws[0]).toContain("FROM chat_groups");
+    expect(queryRaws[1]).toContain("FROM threads");
+    expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.thread.update.mock.invocationCallOrder[0]!,
+    );
+    expect(tx.$queryRaw.mock.invocationCallOrder[1]).toBeLessThan(
+      tx.thread.update.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("marks exhausted write conflicts as retryable before bubbling", async () => {
+    const fanout = new TestFanout();
+    const conflict = Object.assign(
+      new Error("Transaction failed due to a write conflict or a deadlock."),
+      { code: "P2034" },
+    );
+    const transaction = vi.fn().mockRejectedValue(conflict);
+    const prisma = { $transaction: transaction } as unknown as PrismaClient;
+
+    const error = await clearThread(
+      prisma,
+      {
+        spaceId: "workspace-1",
+        threadId: "thread-1",
+        botId: "bot-1",
+      },
+      fanout,
+    ).catch((err) => err);
+
+    expect(error).toBe(conflict);
+    expect(error.retryable).toBe(true);
+    expect(transaction).toHaveBeenCalledTimes(3);
   });
 });
 

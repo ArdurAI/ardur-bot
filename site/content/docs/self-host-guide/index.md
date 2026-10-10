@@ -809,6 +809,12 @@ export ARDURBOT_DEVICE_LISTENER_BIND=127.0.0.1
 export ARDURBOT_DEVICE_LISTENER_PORT=43119
 ```
 
+These variables apply to both `pnpm dev` and the API entrypoint. They are passed
+through the development command's environment filter. With the enable switch
+missing or false, the API opens no device socket and advertises no source device
+address. A port conflict stops startup with a device listener error that names the
+occupied address and port. Choose a free port and update the origin to match.
+
 Open **Settings → Devices** as the deployment owner and choose **Pair device**.
 The first link in the pairing code is the configured device origin, not `WEB_ORIGIN`.
 A desktop connected to this server uses the same server listener; it does not need
@@ -846,6 +852,10 @@ instead, and explicit port forwarding may use a different advertised port.
 
 The listener exposes only the five POST device routes, over TLS 1.2 or newer. It
 forwards no cookies, authorization headers, general RPC or private key material.
+The allowed paths are `/device/pair`, `/device/code`, `/device/claim`,
+`/device/nonce` and `/device/request`. Every other path or method gets 404, and
+WebSocket upgrades are closed. The API closes the listener and its open sockets
+when it shuts down.
 The durable home certificate and encrypted private key live in the application
 database. Keep that database and `ENCRYPTION_KEY` across restarts and restores.
 Restarting does not rotate the identity. Missing key material, an expired certificate,

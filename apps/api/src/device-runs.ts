@@ -29,7 +29,9 @@ async function detail(
   run: Run,
 ): Promise<DeviceRunDetail> {
   const summary = await prisma.dispatchSummary.findFirst({
-    where: { taskId: run.taskId, deviceGrantId: grant.id },
+    // Receipt and run ownership were checked before reaching this projection. A
+    // steering device reads the same saved answer as the run's original device.
+    where: { taskId: run.taskId, deviceGrantId: run.originDeviceGrantId ?? grant.id },
   });
   const category =
     activityRunFailure({ ...run, ...(await storedRunFailure(prisma, run)) }).failureCategory ??
