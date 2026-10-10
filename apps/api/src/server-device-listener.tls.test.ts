@@ -52,7 +52,10 @@ async function fixture(enabled = true) {
   const env = loadEnv({
     NODE_ENV: "test",
     DATABASE_URL: "postgres://fixture:fixture@127.0.0.1:1/fixture",
+    // loadEnv forwards on API_PORT (env.port). PORT only feeds a discarded
+    // reachability check, so both must name this fixture, never the default API port.
     PORT: String(apiPort),
+    API_PORT: String(apiPort),
     ...(enabled
       ? {
           ARDURBOT_DEVICE_LISTENER_ENABLED: "true",
@@ -96,6 +99,7 @@ it("opens no socket or pairing address by default", async () => {
 
 it("uses the loopback default and accepts the saved pin on every device route", async () => {
   const f = await fixture();
+  expect(f.env.port).toBe(f.apiPort);
   expect(f.env.deviceListener?.bind).toBe("127.0.0.1");
   await f.listener.start();
   expect(f.listener.state()).toEqual({ enabled: true, hints: [f.origin] });
