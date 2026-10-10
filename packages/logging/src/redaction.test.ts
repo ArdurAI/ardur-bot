@@ -25,7 +25,33 @@ describe("redaction", () => {
     "cachedToken",
     "contextToken",
     "promptToken",
-  ])("masks credential words anywhere in the key: %s", (key) => {
+    "passphrase",
+    "pass_phrase",
+    "pass-phrase",
+    "PASSPHRASE",
+    ...["signing", "encryption", "master", "app", "ssh"].flatMap((prefix) => [
+      `${prefix}Key`,
+      `${prefix}_key`,
+      `${prefix}-key`,
+      `${prefix.toUpperCase()}_KEY`,
+    ]),
+    "authCode",
+    "auth_code",
+    "auth-code",
+    "AUTH_CODE",
+    "otp",
+    "OTP",
+    "totp",
+    "TOTP",
+    "github_pat",
+    "github-pat",
+    "githubPat",
+    "GITHUB_PAT",
+    "gitlab_pat",
+    "gitlab-pat",
+    "gitlabPat",
+    "GITLAB_PAT",
+  ])("masks credential key families: %s", (key) => {
     const secretValue = "fixture-private-value";
     const data = { [key]: secretValue };
     const bindings = redactBindings(data);
@@ -36,6 +62,9 @@ describe("redaction", () => {
         `${key}: ${secretValue}`,
         `${key}=${secretValue}`,
         JSON.stringify(data),
+        ...["n", "r", "t"].map(
+          (escapeLetter) => `status=ready\\${escapeLetter}${key}: ${secretValue}`,
+        ),
       ]) {
         const result = redact(text);
         expect(result).toContain("[Redacted]");
@@ -74,6 +103,7 @@ describe("redaction", () => {
     "parentSecretAbsent",
     "apiTokenPresent",
     "credentialId",
+    "modelCredentialId",
   ])("preserves explicitly named credential metadata: %s", (key) => {
     const data = { [key]: "fixture-reference" };
     expect(redactBindings(data)).toEqual(data);
@@ -83,6 +113,47 @@ describe("redaction", () => {
         `${key}=fixture-reference`,
         JSON.stringify(data),
       ]) {
+        expect(redact(text)).toBe(text);
+      }
+    }
+  });
+
+  it.each([
+    "sortKey",
+    "sort_key",
+    "sort-key",
+    "primaryKey",
+    "primary_key",
+    "primary-key",
+    "keyId",
+    "key_id",
+    "key-id",
+    "cacheKey",
+    "cache_key",
+    "cache-key",
+    "pinned",
+    "pin",
+    // PIN-like names are ambiguous application data; only explicit OTP names are added.
+    "pinCode",
+    "pin_code",
+    "pin-code",
+    "keyboard",
+    "monkey",
+    "hotplug",
+    "adoption",
+    "authCodec",
+    "compat",
+    "format",
+    "pattern",
+    "dispatch",
+    "patCount",
+    "githubPattern",
+  ])("preserves nearby non-credential names: %s", (key) => {
+    const value = "fixture-public-value";
+    const data = { [key]: value };
+    expect(redactBindings(data)).toEqual(data);
+    for (const redact of [redactSensitiveText, redactCommandOutput, redactCredentialText]) {
+      for (const text of [`${key}: ${value}`, `${key}=${value}`, JSON.stringify(data)]) {
         expect(redact(text)).toBe(text);
       }
     }
