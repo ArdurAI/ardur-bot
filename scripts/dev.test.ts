@@ -263,8 +263,11 @@ describe("scripts/dev.ts", () => {
         { env: NodeJS.ProcessEnv },
       ];
 
-      expect(options.env.DATABASE_URL).toContain("127.0.0.1:5435");
-      expect(options.env.DATABASE_URL).not.toContain("5433");
+      // Compare the parsed host and port: the generated password is random hex and can
+      // contain any digit sequence, including the old port.
+      const databaseUrl = new URL(options.env.DATABASE_URL!);
+      expect(databaseUrl.hostname).toBe("127.0.0.1");
+      expect(databaseUrl.port).toBe("5435");
       expect(options.env.REALTIME_DATABASE_URL).toBe(options.env.DATABASE_URL);
     } finally {
       await fs.rm(testRoot, { recursive: true, force: true });
