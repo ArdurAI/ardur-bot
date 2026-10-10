@@ -155,12 +155,20 @@ const NONBLOCK_OPEN = (constants.O_NONBLOCK ?? 0) as number;
 export async function copyPinnedFile(
   source: string,
   destination: string,
-  expected: Pick<Stats, "dev" | "ino">,
+  expected: Pick<Stats, "dev" | "ino" | "ctimeMs" | "size">,
 ): Promise<void> {
   const handle = await open(source, constants.O_RDONLY | NOFOLLOW_OPEN | NONBLOCK_OPEN);
   try {
     const opened = await handle.stat();
-    if (!opened.isFile() || opened.dev !== expected.dev || opened.ino !== expected.ino) {
+    // Linux can reuse a deleted file's inode number at once, so dev/ino alone cannot
+    // tell a delete-and-recreate swap; the change time and size must also match.
+    if (
+      !opened.isFile() ||
+      opened.dev !== expected.dev ||
+      opened.ino !== expected.ino ||
+      opened.ctimeMs !== expected.ctimeMs ||
+      opened.size !== expected.size
+    ) {
       throw new Error("Git metadata changed while it was being copied");
     }
     await pipeline(handle.createReadStream(), createWriteStream(destination));

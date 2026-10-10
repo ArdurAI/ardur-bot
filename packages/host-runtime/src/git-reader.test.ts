@@ -553,6 +553,18 @@ describe("copyPinnedFile", () => {
     await expect(readFile(destination, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it("refuses a same-size file recreated in place even if the inode number is reused", async () => {
+    const { root, source, info } = await pinnedFixture();
+    // Same length as the fixture, so only the change time can reveal the swap.
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await rm(source);
+    await writeFile(source, "fake index\n");
+    const destination = path.join(root, "view-index");
+    await expect(copyPinnedFile(source, destination, info)).rejects.toThrow(
+      /changed while it was being copied/,
+    );
+  });
+
   it("refuses a different regular file swapped in between the lstat and the copy", async () => {
     const { root, source, info } = await pinnedFixture();
     await rm(source);
