@@ -257,7 +257,7 @@ export async function createChiefReceipt(
   };
 }
 export async function readChiefReceipt(
-  prisma: PrismaClient,
+  prisma: Pick<PrismaClient, "message">,
   threadId: string,
   requestMessageId: string,
 ): Promise<ChiefReceipt | undefined> {

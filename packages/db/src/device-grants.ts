@@ -331,7 +331,7 @@ export async function authenticateDevice(
       data: { usedAt: now },
     });
     if (used.count !== 1) throw failure();
-    if (["dispatch", "answer", "default", "team-accept"].includes(operation))
+    if (["dispatch", "rooms/send", "answer", "default", "team-accept"].includes(operation))
       await assertDeviceTrusted(tx, grant);
     const member = await tx.spaceMember.findUnique({
       where: { spaceId_userId: { spaceId: grant.spaceId, userId: grant.userId } },
