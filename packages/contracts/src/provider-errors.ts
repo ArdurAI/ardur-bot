@@ -11,3 +11,6 @@ export const RunFailurePayloadSchema = z.object({
   providerErrorKind: ProviderErrorKindSchema.optional(),
 });
 export type RunFailurePayload = z.infer<typeof RunFailurePayloadSchema>;
+
+/** Fixed safe copy shared by the worker and failure banners. */
+export const RUN_STALLED_MESSAGE = "The bot stopped responding. Retry the run.";

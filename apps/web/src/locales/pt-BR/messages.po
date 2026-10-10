@@ -264,6 +264,14 @@ msgstr ""
 msgid "{gapCount} evidence gaps"
 msgstr "{gapCount} lacunas de evidência"
 
+#: src/pages/dashboard/NowPanel.tsx
+msgid "{hours} h"
+msgstr "{hours} h"
+
+#: src/pages/dashboard/NowPanel.tsx
+msgid "{hours} h {rest} min"
+msgstr "{hours} h {rest} min"
+
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
 msgstr "{hours}h atrás"
@@ -283,6 +291,10 @@ msgstr "{member} falhou."
 #: src/lib/failure-category-copy.ts
 msgid "{member} stopped."
 msgstr "{member} parou."
+
+#: src/pages/dashboard/NowPanel.tsx
+msgid "{minutes} min"
+msgstr "{minutes} min"
 
 #: src/pages/ActivityList.tsx
 msgid "{minutes}m ago"
@@ -750,10 +762,6 @@ msgstr ""
 #: src/pages/MemoryHistory.tsx
 msgid "After"
 msgstr ""
-
-#: src/pages/Shell.tsx
-msgid "Agent computer"
-msgstr "Computador do agente"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Agent connections"
@@ -2205,7 +2213,6 @@ msgstr ""
 #: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
-#: src/pages/workspace/view-registry.ts
 msgid "Computer"
 msgstr "Computador"
 
@@ -2248,6 +2255,10 @@ msgstr "Local do computador indisponível. Escolha uma conexão compatível."
 #: src/pages/shell/runtime-summary.tsx
 msgid "Computer location unavailable. Try again."
 msgstr "Local do computador indisponível. Tente novamente."
+
+#: src/pages/workspace/view-registry.ts
+msgid "Computer screen"
+msgstr "Tela do computador"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -2538,6 +2549,10 @@ msgstr "Continuar"
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Continue in Background"
 msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "Continue the interrupted run from its saved results. Check any uncertain action before repeating it."
+msgstr "Continue a execução interrompida a partir dos resultados salvos. Verifique qualquer ação incerta antes de repeti-la."
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Continue with ChatGPT"
@@ -6297,6 +6312,10 @@ msgstr "Nenhum resultado"
 msgid "No reviewer model yet."
 msgstr ""
 
+#: src/components/composer/RoutinesPanel.tsx
+msgid "No routines yet; a routine runs this bot on a schedule or when an event arrives."
+msgstr "Ainda não há rotinas; uma rotina executa este bot em um agendamento ou quando um evento chega."
+
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/RuntimeReliability.tsx
@@ -7144,6 +7163,10 @@ msgstr "Na fila"
 msgid "Queued for {name}"
 msgstr "Na fila para {name}"
 
+#: src/components/composer/GroupRecipients.tsx
+msgid "Queued: {queued}"
+msgstr "Na fila: {queued}"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Quick access shortcut"
 msgstr ""
@@ -7743,6 +7766,7 @@ msgstr "Retomar mensagens da equipe"
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
+#: src/pages/shell/provider-error-message.tsx
 #: src/pages/shell/runtime-summary.tsx
 #: src/pages/system/SystemPage.tsx
 #: src/pages/workspace/WorkspacePane.tsx
@@ -9099,6 +9123,10 @@ msgstr ""
 msgid "The bot is working — wait or stop it"
 msgstr ""
 
+#: src/pages/shell/provider-error-message.tsx
+msgid "The bot stopped responding. Retry the run."
+msgstr "O bot parou de responder. Tente executar novamente."
+
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "The computer is busy. Wait for it to finish."
 msgstr "O computador está ocupado. Aguarde até ele terminar."
@@ -9493,6 +9521,10 @@ msgstr ""
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "Título"
+
+#: src/components/composer/GroupRecipients.tsx
+msgid "To {names}"
+msgstr "Para {names}"
 
 #: src/components/PeerMessageReceipt.tsx
 msgid "to {peer}"
@@ -10195,6 +10227,10 @@ msgstr "Espaço de trabalho"
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Workspace or server ID"
 msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "Workspace pane"
+msgstr "Painel do workspace"
 
 #: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/ToolPicker.tsx

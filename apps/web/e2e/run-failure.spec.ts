@@ -128,3 +128,54 @@ test("a covered run error is not remembered until it is presented", async ({ pag
   await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
   await expect(error).toBeHidden();
 });
+
+test("Retry prepares a stalled-run continuation without silently repeating actions", async ({
+  page,
+}, testInfo) => {
+  const sentence = "The bot stopped responding. Retry the run.";
+  const continuation =
+    "Continue the interrupted run from its saved results. Check any uncertain action before repeating it.";
+  await signup(page, `stalled-recovery-${Date.now()}@example.test`, "password12", "Recovery");
+  await completeOnboarding(page);
+  await page.getByPlaceholder(/^Message /).fill("fail this run");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.getByTestId("composer-error")).toContainText("Scripted run failure", {
+    timeout: 30_000,
+  });
+  // A recorded stalled-run state, hydrated through both supported snapshot paths.
+  const injectFailure = async (route: Parameters<Parameters<typeof page.route>[1]>[0]) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    const snapshot = body.json?.thread ?? body.json;
+    if (snapshot?.run?.status === "failed") {
+      snapshot.run.error = sentence;
+      snapshot.run.runtimeProblem = null;
+    }
+    await route.fulfill({ response, json: body });
+  };
+  await page.route("**/rpc/bootstrap", injectFailure);
+  await page.route("**/rpc/threads/get", injectFailure);
+  await page.evaluate(() => {
+    const keys = Object.keys(localStorage).filter((key) =>
+      key.startsWith("ardurbot:seen-run-error:"),
+    );
+    for (const key of keys) localStorage.removeItem(key);
+  });
+  await page.reload();
+  const error = page.getByTestId("composer-error");
+  await expect(error).toContainText(sentence, { timeout: 30_000 });
+  await captureScreenshot(page, testInfo, "stalled-run-retry");
+  await error.getByRole("button", { name: "Retry", exact: true }).click();
+  await expect(page.getByRole("combobox", { name: /^Message / })).toHaveValue(continuation);
+  await expect(error).toBeHidden();
+  await expect(page.getByTestId("transcript").getByText(continuation, { exact: true })).toHaveCount(
+    0,
+  );
+  await page.unroute("**/rpc/bootstrap");
+  await page.unroute("**/rpc/threads/get");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(
+    page.getByTestId("transcript").getByText(continuation, { exact: true }),
+  ).toBeVisible();
+  await captureScreenshot(page, testInfo, "stalled-run-retry-sent");
+});

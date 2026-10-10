@@ -852,7 +852,7 @@ async function selectPaneView(label: string) {
 }
 
 async function toggleWorkspace() {
-  const item = await headerItem("Agent computer");
+  const item = await headerItem("Workspace pane");
   expect(item?.hasAttribute("data-workspace-toggle")).toBe(true);
   click(item);
 }
@@ -1130,8 +1130,8 @@ it("remembers distinct A/B layouts and restores focus when a view closes", async
     "Tasks",
     "Routines",
   ]);
-  await selectPaneView("Computer");
-  await until(() => paneTab("Computer")?.getAttribute("aria-selected") === "true");
+  await selectPaneView("Computer screen");
+  await until(() => paneTab("Computer screen")?.getAttribute("aria-selected") === "true");
   click(host.querySelector('[data-roster-bot-id="bot-1"]'));
   await until(() => paneTab("Screen")?.getAttribute("aria-selected") === "true");
   expect(pane()?.querySelector("hr")?.getAttribute("aria-valuenow")).toBe("500");
@@ -1415,8 +1415,8 @@ it("keeps the heartbeat off the pane's Computer tab through the reverse transiti
   state.threads["bot-1"] = snapshotFor("bot-1", false);
   await renderShell("/app/bot-1");
   await openWorkspacePane();
-  await selectPaneView("Computer");
-  await until(() => paneTab("Computer")?.getAttribute("aria-selected") === "true");
+  await selectPaneView("Computer screen");
+  await until(() => paneTab("Computer screen")?.getAttribute("aria-selected") === "true");
   await until(() => heartbeatInterval() !== undefined);
   const onComputerTab = count("computer.heartbeat");
   expect(onComputerTab).toBeGreaterThan(0);
@@ -1424,7 +1424,7 @@ it("keeps the heartbeat off the pane's Computer tab through the reverse transiti
   // The unavailable Computer view stays selected, but its keep-alive stops.
   await deliverCapabilityFlip("bot-1", true);
   await until(() => pane()?.textContent?.includes("Open Screen to view this computer.") === true);
-  expect(paneTab("Computer")?.getAttribute("aria-selected")).toBe("true");
+  expect(paneTab("Computer screen")?.getAttribute("aria-selected")).toBe("true");
   expect(heartbeatInterval()).toBeUndefined();
   const afterFlip = count("computer.heartbeat");
   await tick(200);
@@ -1460,8 +1460,8 @@ it("does not request a screen when the retained Computer tab stops being support
   state.threads["bot-1"] = snapshotFor("bot-1", false);
   await renderShell("/app/bot-1");
   await openWorkspacePane();
-  await selectPaneView("Computer");
-  await until(() => paneTab("Computer")?.getAttribute("aria-selected") === "true");
+  await selectPaneView("Computer screen");
+  await until(() => paneTab("Computer screen")?.getAttribute("aria-selected") === "true");
   await tick(150);
   const beforeFlip = count("computer.screenUrl");
   expect(beforeFlip).toBeGreaterThan(0);

@@ -1,4 +1,7 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "To {names}": "发送给：{names}",
+  "Queued: {queued}": "排队中：{queued}",
+
   "Capability checks": "能力检查",
   "Last 7 days": "过去 7 天",
   Success: "成功率",
@@ -1495,4 +1498,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Use a path inside this bot's folder or a registered folder.":
     "请使用此机器人的文件夹或已注册文件夹内的路径。",
   "Experimental turned on for this runtime": "已为此运行时开启实验性功能",
+  "The bot stopped responding. Retry the run.": "机器人停止响应。请重试此次运行。",
+  "Continue the interrupted run from its saved results. Check any uncertain action before repeating it.":
+    "从已保存的结果继续中断的运行。重复任何结果不确定的操作前，请先核实。",
 };

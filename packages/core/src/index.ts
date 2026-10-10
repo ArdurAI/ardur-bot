@@ -47,6 +47,7 @@ export * from "./connector-rows.js";
 export * from "./coordination.js";
 export * from "./cron.js";
 export * from "./dashboard.js";
+export * from "./deadline.js";
 export * from "./delegation-policy.js";
 export * from "./events.js";
 export * from "./feature-docs-links.js";

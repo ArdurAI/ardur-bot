@@ -264,6 +264,14 @@ msgstr ""
 msgid "{gapCount} evidence gaps"
 msgstr "{gapCount} kanıt eksikliği"
 
+#: src/pages/dashboard/NowPanel.tsx
+msgid "{hours} h"
+msgstr "{hours} sa"
+
+#: src/pages/dashboard/NowPanel.tsx
+msgid "{hours} h {rest} min"
+msgstr "{hours} sa {rest} dk"
+
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
 msgstr "{hours} sa önce"
@@ -283,6 +291,10 @@ msgstr "{member} başarısız oldu."
 #: src/lib/failure-category-copy.ts
 msgid "{member} stopped."
 msgstr "{member} durdu."
+
+#: src/pages/dashboard/NowPanel.tsx
+msgid "{minutes} min"
+msgstr "{minutes} dk"
 
 #: src/pages/ActivityList.tsx
 msgid "{minutes}m ago"
@@ -750,10 +762,6 @@ msgstr ""
 #: src/pages/MemoryHistory.tsx
 msgid "After"
 msgstr ""
-
-#: src/pages/Shell.tsx
-msgid "Agent computer"
-msgstr "Agent bilgisayarı"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Agent connections"
@@ -2205,7 +2213,6 @@ msgstr ""
 #: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
-#: src/pages/workspace/view-registry.ts
 msgid "Computer"
 msgstr "Bilgisayar"
 
@@ -2248,6 +2255,10 @@ msgstr "Bilgisayar konumu kullanılamıyor. Desteklenen bir bağlantı seçin."
 #: src/pages/shell/runtime-summary.tsx
 msgid "Computer location unavailable. Try again."
 msgstr "Bilgisayar konumu kullanılamıyor. Yeniden deneyin."
+
+#: src/pages/workspace/view-registry.ts
+msgid "Computer screen"
+msgstr "Bilgisayar ekranı"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -2538,6 +2549,10 @@ msgstr "Devam"
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Continue in Background"
 msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "Continue the interrupted run from its saved results. Check any uncertain action before repeating it."
+msgstr "Kesintiye uğrayan çalıştırmaya kaydedilmiş sonuçlarından devam et. Sonucu belirsiz bir işlemi tekrarlamadan önce kontrol et."
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Continue with ChatGPT"
@@ -6297,6 +6312,10 @@ msgstr "Sonuç yok"
 msgid "No reviewer model yet."
 msgstr ""
 
+#: src/components/composer/RoutinesPanel.tsx
+msgid "No routines yet; a routine runs this bot on a schedule or when an event arrives."
+msgstr "Henüz rutin yok; rutin, bu botu bir zamanlamaya göre veya bir olay geldiğinde çalıştırır."
+
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/RuntimeReliability.tsx
@@ -7144,6 +7163,10 @@ msgstr "Kuyrukta"
 msgid "Queued for {name}"
 msgstr "{name} için sırada"
 
+#: src/components/composer/GroupRecipients.tsx
+msgid "Queued: {queued}"
+msgstr "Sırada: {queued}"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Quick access shortcut"
 msgstr ""
@@ -7743,6 +7766,7 @@ msgstr "Ekip mesajlarını sürdür"
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
+#: src/pages/shell/provider-error-message.tsx
 #: src/pages/shell/runtime-summary.tsx
 #: src/pages/system/SystemPage.tsx
 #: src/pages/workspace/WorkspacePane.tsx
@@ -9099,6 +9123,10 @@ msgstr ""
 msgid "The bot is working — wait or stop it"
 msgstr ""
 
+#: src/pages/shell/provider-error-message.tsx
+msgid "The bot stopped responding. Retry the run."
+msgstr "Bot yanıt vermeyi durdurdu. Çalıştırmayı yeniden deneyin."
+
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "The computer is busy. Wait for it to finish."
 msgstr "Bilgisayar meşgul. Bitmesini bekleyin."
@@ -9493,6 +9521,10 @@ msgstr ""
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "Başlık"
+
+#: src/components/composer/GroupRecipients.tsx
+msgid "To {names}"
+msgstr "Alıcı: {names}"
 
 #: src/components/PeerMessageReceipt.tsx
 msgid "to {peer}"
@@ -10195,6 +10227,10 @@ msgstr "Çalışma alanı"
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Workspace or server ID"
 msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "Workspace pane"
+msgstr "Çalışma alanı bölmesi"
 
 #: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/ToolPicker.tsx

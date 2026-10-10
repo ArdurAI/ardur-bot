@@ -264,6 +264,14 @@ msgstr ""
 msgid "{gapCount} evidence gaps"
 msgstr "साक्ष्य में {gapCount} कमियाँ"
 
+#: src/pages/dashboard/NowPanel.tsx
+msgid "{hours} h"
+msgstr "{hours} घंटे"
+
+#: src/pages/dashboard/NowPanel.tsx
+msgid "{hours} h {rest} min"
+msgstr "{hours} घंटे {rest} मिनट"
+
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
 msgstr "{hours} घंटे पहले"
@@ -283,6 +291,10 @@ msgstr "{member} विफल रहा।"
 #: src/lib/failure-category-copy.ts
 msgid "{member} stopped."
 msgstr "{member} रुक गया।"
+
+#: src/pages/dashboard/NowPanel.tsx
+msgid "{minutes} min"
+msgstr "{minutes} मिनट"
 
 #: src/pages/ActivityList.tsx
 msgid "{minutes}m ago"
@@ -750,10 +762,6 @@ msgstr ""
 #: src/pages/MemoryHistory.tsx
 msgid "After"
 msgstr ""
-
-#: src/pages/Shell.tsx
-msgid "Agent computer"
-msgstr "एजेंट कंप्यूटर"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Agent connections"
@@ -2205,7 +2213,6 @@ msgstr ""
 #: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
-#: src/pages/workspace/view-registry.ts
 msgid "Computer"
 msgstr "कंप्यूटर"
 
@@ -2248,6 +2255,10 @@ msgstr "कंप्यूटर का स्थान उपलब्ध न�
 #: src/pages/shell/runtime-summary.tsx
 msgid "Computer location unavailable. Try again."
 msgstr "कंप्यूटर का स्थान उपलब्ध नहीं है। फिर से कोशिश करें।"
+
+#: src/pages/workspace/view-registry.ts
+msgid "Computer screen"
+msgstr "कंप्यूटर स्क्रीन"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -2538,6 +2549,10 @@ msgstr "जारी रखें"
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Continue in Background"
 msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "Continue the interrupted run from its saved results. Check any uncertain action before repeating it."
+msgstr "बाधित रन को उसके सहेजे गए परिणामों से जारी रखें। किसी अनिश्चित कार्रवाई को दोहराने से पहले उसकी जाँच करें।"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Continue with ChatGPT"
@@ -6297,6 +6312,10 @@ msgstr "कोई परिणाम नहीं"
 msgid "No reviewer model yet."
 msgstr ""
 
+#: src/components/composer/RoutinesPanel.tsx
+msgid "No routines yet; a routine runs this bot on a schedule or when an event arrives."
+msgstr "अभी कोई रूटीन नहीं है; रूटीन इस बॉट को शेड्यूल पर या किसी ईवेंट आने पर चलाता है।"
+
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/RuntimeReliability.tsx
@@ -7144,6 +7163,10 @@ msgstr "कतार में"
 msgid "Queued for {name}"
 msgstr "{name} के लिए कतार में"
 
+#: src/components/composer/GroupRecipients.tsx
+msgid "Queued: {queued}"
+msgstr "कतार में: {queued}"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Quick access shortcut"
 msgstr ""
@@ -7743,6 +7766,7 @@ msgstr "टीम संदेश फिर शुरू करें"
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
+#: src/pages/shell/provider-error-message.tsx
 #: src/pages/shell/runtime-summary.tsx
 #: src/pages/system/SystemPage.tsx
 #: src/pages/workspace/WorkspacePane.tsx
@@ -9099,6 +9123,10 @@ msgstr ""
 msgid "The bot is working — wait or stop it"
 msgstr ""
 
+#: src/pages/shell/provider-error-message.tsx
+msgid "The bot stopped responding. Retry the run."
+msgstr "बॉट ने जवाब देना बंद कर दिया। रन फिर से आज़माएँ।"
+
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "The computer is busy. Wait for it to finish."
 msgstr "कंप्यूटर व्यस्त है। इसके पूरा होने तक प्रतीक्षा करें।"
@@ -9493,6 +9521,10 @@ msgstr ""
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "शीर्षक"
+
+#: src/components/composer/GroupRecipients.tsx
+msgid "To {names}"
+msgstr "प्राप्तकर्ता: {names}"
 
 #: src/components/PeerMessageReceipt.tsx
 msgid "to {peer}"
@@ -10195,6 +10227,10 @@ msgstr "कार्यक्षेत्र"
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Workspace or server ID"
 msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "Workspace pane"
+msgstr "वर्कस्पेस पेन"
 
 #: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/ToolPicker.tsx

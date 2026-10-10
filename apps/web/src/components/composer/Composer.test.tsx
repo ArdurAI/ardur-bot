@@ -431,3 +431,69 @@ describe("composer controls", () => {
     expect(css).toContain("opacity, transform");
   });
 });
+
+describe("group composer recipients", () => {
+  const members = [
+    { botId: "alpha", name: "Alpha" },
+    { botId: "beta", name: "Beta" },
+  ];
+  const groupRecipients = {
+    members,
+    groupRouting: { coordinatorBotId: null, defaultBotId: "beta" },
+  };
+
+  it("shows the single unaddressed responder before sending, but no idle chrome", async () => {
+    const host = await mount({ groupRecipients });
+    expect(host.querySelector('[data-testid="composer-recipients"]')).toBeNull();
+    await type("Each member, reply with your model.");
+    expect(host.querySelector('[data-testid="composer-recipients"]')?.textContent).toBe("To Beta");
+    expect(fake.send).not.toHaveBeenCalled();
+  });
+
+  it("updates the preview for one, two and everyone mentions without sending", async () => {
+    const host = await mount({ groupRecipients });
+    for (const [text, expected] of [
+      ["@Alpha reply", "To Alpha"],
+      ["@Alpha @Beta reply", "To Alpha, Beta"],
+      ["@everyone reply", "To Alpha, Beta"],
+      ["Each member, reply", "To Beta"],
+    ]) {
+      await type(text!);
+      expect(host.querySelector('[data-testid="composer-recipients"]')?.textContent).toBe(expected);
+    }
+    expect(fake.send).not.toHaveBeenCalled();
+  });
+
+  it("shows the coordinator for an unaddressed request", async () => {
+    const host = await mount({
+      groupRecipients: {
+        members,
+        groupRouting: { coordinatorBotId: "alpha", defaultBotId: "alpha" },
+      },
+    });
+    await type("Status?");
+    expect(host.querySelector('[data-testid="composer-recipients"]')?.textContent).toBe("To Alpha");
+  });
+});
+
+it("shows queued names from saved room runs even with an empty draft", async () => {
+  const members = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta"].map((name) => ({
+    name,
+    botId: name,
+  }));
+  const host = await mount({
+    groupRecipients: {
+      members,
+      groupRouting: { coordinatorBotId: null, defaultBotId: "Alpha" },
+      activeRuns: members.map((m, index) => ({
+        botId: m.botId,
+        status: index < 4 ? "running" : "queued",
+      })),
+    },
+  });
+  expect(host.querySelector('[data-testid="composer-recipients"]')).toBeNull();
+  expect(host.querySelector('[data-testid="composer-queued"]')?.textContent).toBe(
+    "Queued: Epsilon, Zeta",
+  );
+  expect(fake.send).not.toHaveBeenCalled();
+});

@@ -1,5 +1,5 @@
 import { verifyChain, verifySeal } from "@ardurbot/evidence";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { agentConnectionTools, builtinAgentTools } from "../builtin-tools.js";
 import { EncryptedSecretStore } from "../secrets.js";
 import { DECISION_KINDS, decisionFields } from "./decision-kinds.js";
@@ -248,3 +248,165 @@ describe("evidence recorder", () => {
     expect(deps.logFailure).toHaveBeenCalledWith(["malformed_jws"]);
   });
 });
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
+
+it("bounds a forever-blocked recording, keeps the reply free and records a partial receipt", async () => {
+  vi.useFakeTimers();
+  const { recorder, store, records } = setup();
+  await recorder.recordDecision(input);
+  vi.mocked(store.insertRecord).mockImplementationOnce(() => new Promise(() => {}));
+  let recordingSettled = false;
+  const recording = recorder.recordDecision(input).then((result) => {
+    recordingSettled = true;
+    return result;
+  });
+  await vi.advanceTimersByTimeAsync(59_999);
+  expect(recordingSettled).toBe(false);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(recordingSettled).toBe(true);
+  expect(await recording).toEqual({ ok: false, reason: "recording_failed" });
+  expect(await store.gapCount(input.run.id)).toBe(1);
+  expect(records).toHaveLength(1);
+  const seal = recorder.sealRunEvidence(input.run.id);
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(await seal).toEqual({ ok: false, reason: "sealing_failed" });
+  expect(await store.sealForRun(input.run.id)).toBeNull();
+});
+
+it("bounds a hung seal without claiming verified evidence", async () => {
+  vi.useFakeTimers();
+  const { recorder, store, seals } = setup();
+  await recorder.recordDecision(input);
+  store.insertSeal = vi.fn(() => new Promise<never>(() => {}));
+  let sealingSettled = false;
+  const sealing = recorder.sealRunEvidence(input.run.id).then((result) => {
+    sealingSettled = true;
+    return result;
+  });
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(sealingSettled).toBe(true);
+  expect(await sealing).toEqual({ ok: false, reason: "sealing_failed" });
+  expect(seals).toHaveLength(0);
+  expect(await store.gapCount(input.run.id)).toBe(1);
+});
+
+it("counts two concurrent timeouts exactly once while a decision joins the gap flush", async () => {
+  vi.useFakeTimers();
+  const { recorder, store, records } = setup();
+  await recorder.recordDecision(input);
+  let releaseRecord!: () => void;
+  const recordGate = new Promise<void>((resolve) => {
+    releaseRecord = resolve;
+  });
+  const insertRecord = store.insertRecord;
+  vi.mocked(store.insertRecord).mockImplementationOnce(async (data) => {
+    await recordGate;
+    return insertRecord(data);
+  });
+  let releaseGap!: () => void;
+  const gapGate = new Promise<void>((resolve) => {
+    releaseGap = resolve;
+  });
+  const noteGap = store.noteGap;
+  store.noteGap = vi.fn(async (runId) => {
+    await gapGate;
+    await noteGap(runId);
+  });
+  const first = recorder.recordDecision(input);
+  const second = recorder.recordDecision(input);
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(await Promise.all([first, second])).toEqual([
+    { ok: false, reason: "recording_failed" },
+    { ok: false, reason: "recording_failed" },
+  ]);
+  const concurrent = recorder.recordDecision(input);
+  releaseRecord();
+  await vi.advanceTimersByTimeAsync(0);
+  // The timeout flush and queued decisions must share the same gap writer.
+  expect(store.noteGap).toHaveBeenCalledTimes(1);
+  releaseGap();
+  expect(await concurrent).toEqual({ ok: true });
+  expect(store.noteGap).toHaveBeenCalledTimes(2);
+  expect(await store.gapCount(input.run.id)).toBe(2);
+  expect(records).toHaveLength(4);
+  await recorder.sealRunEvidence(input.run.id);
+  expect(await store.gapCount(input.run.id)).toBe(2);
+});
+
+it("does not hold timed-out replies on a forever-blocked gap store", async () => {
+  vi.useFakeTimers();
+  const { recorder, store } = setup();
+  await recorder.recordDecision(input);
+  vi.mocked(store.insertRecord).mockImplementationOnce(() => new Promise(() => {}));
+  store.noteGap = vi.fn(() => new Promise<void>(() => {}));
+  const replies = [recorder.recordDecision(input), recorder.recordDecision(input)];
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(await Promise.all(replies)).toEqual([
+    { ok: false, reason: "recording_failed" },
+    { ok: false, reason: "recording_failed" },
+  ]);
+  expect(store.noteGap).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(await store.sealForRun(input.run.id)).toBeNull();
+});
+
+it.each(["activeKey", "secretPut", "insertKey"] as const)(
+  "does not start another write after cancellation while %s is waiting",
+  async (blockedStep) => {
+    const { recorder, store, deps, records, keys } = setup();
+    const controller = new AbortController();
+    let resume!: () => void;
+    let started!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      resume = resolve;
+    });
+    const waiting = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const originalInsertKey = store.insertKey;
+    const originalPut = deps.secretStore.put.bind(deps.secretStore);
+    const insertKey = vi.spyOn(store, "insertKey");
+    const insertRecord = vi.mocked(store.insertRecord);
+    const put = vi.spyOn(deps.secretStore, "put");
+    if (blockedStep === "activeKey") {
+      store.activeKey = vi.fn(async () => {
+        started();
+        await gate;
+        return null;
+      });
+    } else if (blockedStep === "secretPut") {
+      const original = originalPut;
+      // Keep the real encryption behavior, but delay its return to the recorder.
+      put.mockImplementationOnce(async (...args) => {
+        const result = await original(...args);
+        started();
+        await gate;
+        return result;
+      });
+    } else {
+      const original = originalInsertKey;
+      insertKey.mockImplementationOnce(async (data) => {
+        started();
+        await gate;
+        return original(data);
+      });
+    }
+    const recording = recorder.recordDecision(input, controller.signal);
+    await waiting;
+    controller.abort();
+    resume();
+    expect(await recording).toEqual({ ok: false, reason: "recording_failed" });
+    expect(insertRecord).not.toHaveBeenCalled();
+    expect(records).toHaveLength(0);
+    expect(await store.gapCount(input.run.id)).toBe(0);
+    if (blockedStep === "activeKey") expect(put).not.toHaveBeenCalled();
+    if (blockedStep !== "insertKey") {
+      expect(insertKey).not.toHaveBeenCalled();
+      expect(keys).toHaveLength(0);
+    }
+  },
+);
