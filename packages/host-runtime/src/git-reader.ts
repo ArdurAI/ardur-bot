@@ -1,7 +1,8 @@
-import { spawn } from "node:child_process";
+import { type ChildProcessByStdio, spawn } from "node:child_process";
 import { lstat, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import type { Readable } from "node:stream";
 import type { GitChangesResult, GitRunner, GitRunResult } from "@ardurbot/adapter-kit";
 import { filterHostEnvironment } from "@ardurbot/contracts/host-environment";
 import { redactCredentialText } from "../../logging/src/redaction.js";
@@ -28,7 +29,8 @@ export function createGitRunner(env: NodeJS.ProcessEnv = process.env): GitRunner
   return {
     run(commandArgs, { cwd, maxBytes, timeoutMs }) {
       return new Promise<GitRunResult>((resolve) => {
-        let child: ReturnType<typeof spawn>;
+        // stdio ["ignore", "pipe", "pipe"] guarantees both output streams.
+        let child: ChildProcessByStdio<null, Readable, Readable>;
         try {
           child = spawn("git", [...commandArgs], {
             cwd,
