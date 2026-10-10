@@ -192,18 +192,26 @@ describePostgres("delegation admission transaction budget (PostgreSQL)", () => {
         ) => {
           expect(deps.resolveDelegationPin).toHaveBeenCalledOnce();
           return client.$transaction(
-            (tx) =>
-              callback(
-                new Proxy(tx, {
-                  get(transaction, method) {
-                    if (method !== "$queryRaw") return Reflect.get(transaction, method);
-                    return (sql: TemplateStringsArray, ...values: unknown[]) => {
-                      if (sql.join("?").includes("FROM tasks")) reached();
-                      return transaction.$queryRaw(sql, ...values);
-                    };
-                  },
-                }),
-              ),
+            // Prisma's query log omits the interactive transaction's BEGIN and COMMIT,
+            // so mark the callback's own start and end around the measured statements.
+            async (tx) => {
+              queries.push({ query: "-- admission transaction start", duration: 0 });
+              try {
+                return await callback(
+                  new Proxy(tx, {
+                    get(transaction, method) {
+                      if (method !== "$queryRaw") return Reflect.get(transaction, method);
+                      return (sql: TemplateStringsArray, ...values: unknown[]) => {
+                        if (sql.join("?").includes("FROM tasks")) reached();
+                        return transaction.$queryRaw(sql, ...values);
+                      };
+                    },
+                  }),
+                );
+              } finally {
+                queries.push({ query: "-- admission transaction end", duration: 0 });
+              }
+            },
             options,
           );
         };
@@ -245,8 +253,10 @@ describePostgres("delegation admission transaction budget (PostgreSQL)", () => {
       blocker.release();
     }
     expect(deps.resolveDelegationPin).toHaveBeenCalledOnce();
-    const begin = queries.findIndex((row) => /^BEGIN/i.test(row.query));
-    const end = queries.findIndex((row, index) => index > begin && /^COMMIT/i.test(row.query));
+    const begin = queries.findIndex((row) => row.query === "-- admission transaction start");
+    const end = queries.findIndex(
+      (row, index) => index > begin && row.query === "-- admission transaction end",
+    );
     expect(begin).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(begin);
     const transaction = queries.slice(begin + 1, end);
