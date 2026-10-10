@@ -45,6 +45,7 @@ export default defineConfig({
       "apps/host-service/src/**/*.test.ts",
       "apps/cli/src/**/*.test.ts",
       "apps/web/src/**/*.test.{ts,tsx}",
+      "apps/web/e2e/**/*.test.ts",
       "apps/mobile/lib/**/*.test.ts",
       "apps/mobile/components/**/*.test.{ts,tsx}",
       "apps/mobile/plugins/**/*.test.js",

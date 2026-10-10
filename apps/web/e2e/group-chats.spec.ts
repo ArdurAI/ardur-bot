@@ -1,3 +1,4 @@
+import type { ThreadSnapshot } from "@ardurbot/contracts";
 import { modelPinOptionKey } from "@ardurbot/core";
 import { expect, type Page, test } from "@playwright/test";
 import { listPiCatalog } from "../../../packages/adapters/src/pi-models";
@@ -450,6 +451,6 @@ test("room drafts show actual recipients without transmitting unsent text", asyn
   expect(response.ok()).toBe(true);
   const receipt = (await response.json()).json as { runIds: string[] };
   expect(receipt.runIds).toHaveLength(1);
-  const run = await rpc<{ run: { botId: string } }>(page, "runs/get", { runId: receipt.runIds[0] });
-  expect(run.run.botId).toBe(first);
+  const thread = await rpc<ThreadSnapshot>(page, "threads/get", { groupId: group.id });
+  expect(thread.contextRun).toMatchObject({ id: receipt.runIds[0], botId: first });
 });
