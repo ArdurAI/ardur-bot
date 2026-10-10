@@ -598,9 +598,18 @@ export async function reconcileChiefCorrection(prisma: PrismaClient, planId: str
         const leases = await tx.computerExecutionLease.count({
           where: { runId, expiresAt: { gt: now } },
         });
+        const unconfirmedStop = !run || (run.status === "cancelled" && !run.cancelConfirmedAt);
+        if (unconfirmedStop) {
+          // Polling updates plan.updatedAt; retain a fixed bound and an explicit outcome.
+          control = {
+            ...control,
+            uncertaintySince: control.uncertaintySince ?? plan.updatedAt.toISOString(),
+            uncertainRunIds: [...new Set([...control.uncertainRunIds, runId])],
+          };
+        }
         if (
           leases ||
-          (!run || (run.status === "cancelled" && !run.cancelConfirmedAt)
+          (unconfirmedStop
             ? now.getTime() - new Date(control.uncertaintySince ?? plan.updatedAt).getTime() <
               CHIEF_RECONCILIATION_POLICY.orphanOutcomeAfterMs
             : !run.cancelConfirmedAt && !["completed", "failed"].includes(run.status))

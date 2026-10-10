@@ -66,6 +66,16 @@ it("propagates a listener failure to startup instead of reporting enabled", asyn
   await expect(f.coordinator.start()).rejects.toThrow("Fixture bind failure");
   expect(f.coordinator.state().enabled).toBe(false);
 });
+it("identifies a conflicting device port and preserves the bind error", async () => {
+  const f = fixture(true);
+  const conflict = Object.assign(new Error("Fixture bind failed"), { code: "EADDRINUSE" });
+  f.listener.start.mockRejectedValue(conflict);
+  await expect(f.coordinator.start()).rejects.toMatchObject({
+    message: "Device HTTPS listener cannot start: 127.0.0.1:43119 is already in use.",
+    cause: conflict,
+  });
+  expect(f.coordinator.state()).toEqual({ enabled: false, hints: [] });
+});
 it("derives a loopback target and rejects arbitrary destinations", () => {
   expect(localDeviceTarget({ apiHost: "localhost", port: 3100 })).toBe("http://localhost:3100");
   expect(localDeviceTarget({ apiHost: "::", port: 3100 })).toBe("http://[::1]:3100");
