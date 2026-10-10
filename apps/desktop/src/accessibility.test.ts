@@ -27,7 +27,6 @@ import {
   ACCESSIBILITY_FORCED_LOG,
   ACCESSIBILITY_RESTORED_LOG,
   applyDesktopAccessibilitySwitches,
-  DESKTOP_ACCESSIBILITY_SWITCHES,
   desktopAccessibilityWebPreferences,
   enableDesktopAccessibility,
 } from "./accessibility.js";
@@ -106,9 +105,12 @@ describe("desktop accessibility", () => {
 
     vi.stubEnv("ARDUR_DESKTOP_ACCESSIBILITY", "1");
     applyDesktopAccessibilitySwitches(commandLine);
-    expect(commandLine.appendSwitch.mock.calls).toEqual(
-      DESKTOP_ACCESSIBILITY_SWITCHES.map((name) => [name]),
-    );
+    // Name the switches literally so dropping one from the constant fails this test.
+    expect(commandLine.appendSwitch.mock.calls).toEqual([
+      ["disable-backgrounding-occluded-windows"],
+      ["disable-renderer-backgrounding"],
+      ["force-renderer-accessibility"],
+    ]);
     expect(desktopAccessibilityWebPreferences()).toEqual({ backgroundThrottling: false });
   });
 
@@ -173,6 +175,24 @@ describe("desktop accessibility", () => {
     expect(fake.enabled).toBe(true);
     expect(fake.setEnabled).toHaveBeenCalledExactlyOnceWith(true);
     expect(console.info).toHaveBeenCalledExactlyOnceWith(ACCESSIBILITY_RESTORED_LOG);
+  });
+
+  it("recognizes a reload of a route reached by an in-app navigation", () => {
+    vi.stubEnv("ARDUR_DESKTOP_ACCESSIBILITY", "1");
+    enableDesktopAccessibility();
+    const contents = fakeContents();
+    emit("web-contents-created", {}, contents);
+    fake.setEnabled.mockClear();
+    const page = (url: string, isSameDocument = false) => ({
+      isMainFrame: true,
+      isSameDocument,
+      url: `https://home.example.invalid${url}`,
+    });
+    contents.emit("did-start-navigation", page("/app"));
+    contents.emit("did-start-navigation", page("/bots", true));
+    expect(fake.setEnabled).not.toHaveBeenCalled();
+    contents.emit("did-start-navigation", page("/bots"));
+    expect(fake.setEnabled).toHaveBeenCalledExactlyOnceWith(true);
   });
 
   it("keeps background throttling off for a new window only while the flag is on", () => {

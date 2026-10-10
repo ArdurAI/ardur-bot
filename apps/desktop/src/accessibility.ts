@@ -67,9 +67,12 @@ function watchRendererAccessibility(contents: Electron.WebContents): void {
     reassertDesktopAccessibility(true);
   });
   contents.on("did-start-navigation", (details) => {
-    if (!details.isMainFrame || details.isSameDocument) return;
+    if (!details.isMainFrame) return;
     const previous = url;
     url = details.url;
+    // In-app route changes (pushState) only move the remembered URL, so a later
+    // reload of the new route is still recognized.
+    if (details.isSameDocument) return;
     // A same-URL main-frame navigation is a reload. A new document at a
     // different URL is not, and the startup switch already covers it.
     if (previous !== null && previous === details.url) reassertDesktopAccessibility(true);
