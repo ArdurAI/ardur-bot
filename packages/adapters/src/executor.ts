@@ -248,7 +248,7 @@ import {
   browserSnapshotFromTool,
 } from "./browser-tools.js";
 import { agentConnectionTools, builtinAgentTools } from "./builtin-tools.js";
-import { reportGoalDone } from "./chief/report-goal-done.js";
+import { finishGoalFromRun } from "./chief/report-goal-done.js";
 import { chiefActivityFeed } from "./chief-activity.js";
 import {
   chiefVerificationRead,
@@ -5719,21 +5719,17 @@ export function createRunExecutor(deps: ExecutorDeps) {
           if (name === "finish_goal") {
             if (!thread.groupId || !goalRoom)
               return finish({ error: "finish_goal requires an active group goal" });
-            const summary = redactSecrets(String(args.summary ?? ""), runSecrets).trim();
-            if (!summary) return finish({ error: "finish_goal requires a summary" });
-            try {
-              const reported = await reportGoalDone(deps.prisma, {
+            return finish(
+              await finishGoalFromRun(deps.prisma, {
                 goalId: goalRoom.id,
                 spaceId: run.spaceId,
                 userId: run.userId,
                 coordinatorBotId: run.botId,
                 threadId: thread.id,
-                summary,
-              });
-              return finish(reported);
-            } catch {
-              return finish({ error: "The result could not be submitted." });
-            }
+                summary: String(args.summary ?? ""),
+                secrets: runSecrets,
+              }),
+            );
           }
           if (name === "ask_members") {
             if (!thread.groupId || !roomCanAsk)

@@ -543,6 +543,7 @@ test("group-goals: review a submitted result and refresh after accepting it", as
   await page.goto("/app/g/operations-group");
   await page.getByText("Goal: Completed", { exact: false }).click();
   await expect(page.getByText("Final owner review", { exact: false })).toBeVisible();
+  await page.getByRole("textbox", { name: "Rework notes" }).fill("Revise the sample plan.");
   await expect(page.getByRole("button", { name: "Accept result", exact: true })).toBeEnabled();
   await expect(page.getByRole("button", { name: "Reject result", exact: true })).toBeEnabled();
   await capture(page, "docs-group-goals-review");

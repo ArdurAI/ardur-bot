@@ -654,11 +654,6 @@ async function goalReviewCall<T>(action: () => Promise<T>): Promise<T> {
       throw new ORPCError("CONFLICT", { data: { reason: error.reason } });
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")
       throw new ORPCError("CONFLICT", { data: { reason: "already-reviewed" } });
-    if (
-      error instanceof Error &&
-      /already submitted|already reviewed|not awaiting review/i.test(error.message)
-    )
-      throw new ORPCError("CONFLICT", { data: { reason: "already-reviewed" } });
     throw error;
   }
 }

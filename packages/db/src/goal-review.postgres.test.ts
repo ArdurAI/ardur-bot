@@ -22,9 +22,8 @@ describePostgres("Goal owner review (PostgreSQL)", () => {
   const actor: Actor = { spaceId, userId, email: "owner@example.test", isDeploymentOwner: true };
   let prisma: PrismaClient;
   let close: () => Promise<void>;
-  let groupId: string;
-  let threadId: string;
   let botId: string;
+  let goalCount = 0;
 
   beforeAll(async () => {
     const db = createDb(databaseUrl!);
@@ -46,13 +45,6 @@ describePostgres("Goal owner review (PostgreSQL)", () => {
       data: { spaceId, userId, name: "Goal review fixture", color: "ink" },
     });
     botId = bot.id;
-    const group = await prisma.chatGroup.create({
-      data: { spaceId, userId, name: "Goal review fixture", coordinatorBotId: botId },
-    });
-    groupId = group.id;
-    const thread = await prisma.thread.create({ data: { spaceId, userId, groupId } });
-    threadId = thread.id;
-    await prisma.chatGroupMember.create({ data: { groupId, botId } });
   });
 
   afterAll(async () => {
@@ -65,15 +57,33 @@ describePostgres("Goal owner review (PostgreSQL)", () => {
   });
 
   async function createGoal() {
+    goalCount += 1;
+    const group = await prisma.chatGroup.create({
+      data: {
+        spaceId,
+        userId,
+        name: `Goal review fixture ${goalCount}`,
+        coordinatorBotId: botId,
+      },
+    });
+    const thread = await prisma.thread.create({ data: { spaceId, userId, groupId: group.id } });
+    await prisma.chatGroupMember.create({ data: { groupId: group.id, botId } });
     const task = await prisma.task.create({
-      data: { spaceId, userId, botId, threadId, prompt: "Fixture", status: "completed" },
+      data: {
+        spaceId,
+        userId,
+        botId,
+        threadId: thread.id,
+        prompt: "Fixture",
+        status: "completed",
+      },
     });
     const goal = await prisma.teamGoal.create({
       data: {
         spaceId,
         userId,
-        groupId,
-        threadId,
+        groupId: group.id,
+        threadId: thread.id,
         coordinatorBotId: botId,
         rootTaskId: task.id,
         objective: "Review fixture",
@@ -91,7 +101,7 @@ describePostgres("Goal owner review (PostgreSQL)", () => {
         spaceId,
         userId,
         coordinatorBotId: botId,
-        coordinatorThreadId: threadId,
+        coordinatorThreadId: thread.id,
         tokenLimit: 100,
         deadlineAt: goal.untilAt,
       },
@@ -198,7 +208,7 @@ describePostgres("Goal owner review (PostgreSQL)", () => {
     expect(
       await prisma.event.count({
         where: {
-          threadId,
+          threadId: goal.threadId,
           type: "goal.accepted",
           payload: { path: ["goalId"], equals: goal.id },
         },
@@ -212,8 +222,8 @@ describePostgres("Goal owner review (PostgreSQL)", () => {
       goalId: goal.id,
       spaceId,
       userId,
-      coordinatorBotId: botId,
-      threadId,
+      coordinatorBotId: goal.coordinatorBotId,
+      threadId: goal.threadId,
       summary: "Coordinator result",
     });
     expect(revision.summary).toBe("Coordinator result");
@@ -229,7 +239,7 @@ describePostgres("Goal owner review (PostgreSQL)", () => {
         spaceId,
         userId,
         coordinatorBotId: "other-bot",
-        threadId,
+        threadId: goal.threadId,
         summary: "Not the coordinator",
       }),
     ).rejects.toThrow();

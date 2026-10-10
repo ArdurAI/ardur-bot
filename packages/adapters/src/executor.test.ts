@@ -370,6 +370,21 @@ describe("run tool selection", () => {
     expect(names(null, true)).not.toContain("ask_members");
   });
 
+  it("offers finish_goal only to the active goal coordinator", () => {
+    const names = (goalCoordinator?: boolean) =>
+      selectBuiltinToolsForRun({
+        graphicalToolsAllowed: false,
+        groupId: "group-1",
+        trigger: "user",
+        semanticMemoryEnabled: false,
+        messagingChannelRun: false,
+        goalCoordinator,
+      }).map((tool) => tool.name);
+    expect(names(true)).toContain("finish_goal");
+    expect(names(false)).not.toContain("finish_goal");
+    expect(names()).not.toContain("finish_goal");
+  });
+
   it.each([
     [false, false],
     [false, true],

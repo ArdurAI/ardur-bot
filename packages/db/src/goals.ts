@@ -522,7 +522,7 @@ async function commitGoalSubmission(
     where: { id: goal.id, status: "running" },
     data: { status: "completed" },
   });
-  if (updated.count === 0) throw new Error("Goal is not running or already submitted");
+  if (updated.count === 0) throw new GoalReviewConflict("already-submitted");
 
   const previousAttempts = await tx.goalRevision.count({ where: { goalId: goal.id } });
   const root = await tx.delegationRoot.findUnique({ where: { rootTaskId: goal.rootTaskId } });
@@ -642,6 +642,7 @@ export class GoalReviewConflict extends Error {
       | "work-active"
       | "conditions-open"
       | "already-reviewed"
+      | "already-submitted"
       | "not-awaiting",
   ) {
     super(
@@ -653,7 +654,9 @@ export class GoalReviewConflict extends Error {
             ? "Every condition must pass"
             : reason === "already-reviewed"
               ? "Revision is already reviewed"
-              : "Goal is not awaiting review",
+              : reason === "already-submitted"
+                ? "Goal is not running or already submitted"
+                : "Goal is not awaiting review",
     );
   }
 }
