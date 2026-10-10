@@ -1,0 +1,2395 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-10T23:49:55.538Z",
+  "source": {
+    "repo": "ArdurAI/ardur-bot",
+    "ref": "dev",
+    "commit": "2910f63e231ebc8fbf9c4177d4fc1681f04b3752"
+  },
+  "product": {
+    "name": "Ardur",
+    "tagline": "Your own AI team, on your own subscriptions.",
+    "summary": "Open-source desktop bots that run on your own AI subscriptions and keys.",
+    "status": "alpha",
+    "statusLine": "Alpha. Desktop previews; build from source or self-host.",
+    "license": "Apache-2.0",
+    "repoUrl": "https://github.com/ArdurAI/ardur-bot",
+    "docsUrl": "https://ardur.ai/docs/features/",
+    "selfHostDocsUrl": "https://github.com/ArdurAI/ardur-bot/blob/dev/docs/self-host.md"
+  },
+  "features": [
+    {
+      "id": "team",
+      "eyebrow": "TEAM",
+      "title": "Named bots, together",
+      "body": "Give each bot its own conversation and history, bring bots together in group chats where an unaddressed message goes to one responder shown before sending, and mentions or @everyone select multiple responders. Selected members answer together up to the room limit (default 4, adjustable 1-8); remaining members stay visibly queued — and see current tasks and availability in Team. On web and desktop, open and close workspace views beside a conversation, with a layout remembered locally for each bot. The desktop main window remembers its size, position and maximized or full-screen state across restarts, with a reachable fallback when a display is disconnected; Linux Wayland may let the compositor choose its position. Inspect tasks and edit the selected computer's workspace files. In local This computer mode, Files, IDE and Recorded changes show the bot's own folder, including while the host sleeps; Team host bots see only their own subfolder. Paired-host bot file views remain unavailable under the existing bridge grants, separate from the registered-folder IDE. Container bots cannot reference host folders or use host-only Board and CLI integrations. For desktop automation and screen readers, launch with ARDUR_DESKTOP_ACCESSIBILITY=1 to expose the accessibility tree without a client request; desktop development enables it automatically, while other launches keep normal detection. Send a bot a task from your terminal or a script with the source-built command-line tool. Pair it in Devices, wait for its answer, and revoke it there. Recover a lost send with a stable request id, resume waiting by run id, and inspect exact run and task records beyond the latest task list. Use test bot to check a fixed prompt's reply from a script, with distinct exit codes, a deadline, JSON output and an optional private redacted transcript. IDE and Recorded changes open the selected bot's files and recorded Before/After snapshots beside chat; file links can choose a line without leaving the conversation. Files and IDE share drafts, save approvals and conflict protection. Recorded changes is not a complete Git history. The top-level IDE remains available for authorized host roots. Tasks and Routines are initially open, and bot settings remain reachable from the workspace header. Position the split left, right or below chat, or expand a view; narrow windows offer a return to chat. An opened workspace terminal keeps its shell and scrollback while switching or hiding views; control stays visible until released. Closing the terminal or leaving the bot asks before ending it. Restored views never start a terminal automatically. Mobile reads workspace files in its own screens; the native app has no side panel or interactive terminal. On This computer, bots can read and write files in their own home or registered folders. Source calls, member references, explicit type annotations, numbers and known-collection references stay visible in command output, while ambiguous bare credential values, quoted credentials, known sensitive values, token-shaped values and private keys remain hidden; credential reads hide their output. Commands containing known sensitive values are refused, while key-looking fixtures can run with redacted records. Folder refusals explain where commands can run, and refused commands remain visible with sensitive values redacted. Command text is limited to 64 KB; keep code in files. Command-size and file-location refusals follow the conversation language; copied output and exported logs keep the recorded text. Mobile command blocks have no output search. Up to four workspace terminals share one person's computer-control grant on web and desktop; each keeps its own shell and scrollback while switching or hiding views. Closing one leaves the others running; closing the final terminal or leaving the bot asks before ending control. Printed HTTP and HTTPS links open only after an explicit click through the current platform's link viewer; credentials, non-web schemes and malformed URLs are refused. Reloading within the 30-second reconnect window reauthorizes saved opaque session IDs and restores the selected terminal without starting another process; terminal text is not stored in the browser. Replay carries recorded dimensions and identifies missing earlier output. Restoring a layout without a live saved terminal never starts one automatically. On web and desktop, one Views menu in the chat header holds workspace views, Agent computer and bot settings; group chats keep their group settings in that menu. Open and close workspace views beside a conversation, with a layout remembered locally for each bot. Ordinary development command output stays visible with sensitive values redacted; credential reads hide their output. Source checkouts and self-hosted servers can enable a separate pinned TLS device listener for phones and the command line; it is off by default and requires explicit private-network exposure. Bot file reads refresh their binding and retry once when the same computer wakes or starts a run; reads never follow an old path onto a different computer or root, and saves are never retried automatically. Paired clients can read boards, list each shared computer once, and list rooms. The home accepts scoped room sends with all run ids or a receipt without work; room names must resolve to one room. Git changes shows the bot's real staged, unstaged and untracked worktree changes beside chat in local This computer mode, including files in new folders and labels for binary files; Recorded changes remains the captured-edit history. Repositories that point outside the bot's folder or include other Git configuration files are unavailable. Paired clients can read admitted run events in bounded, resumable streams through desktop and source homes; command support ships separately.",
+      "source": "README.md#What you get today"
+    },
+    {
+      "id": "remember",
+      "eyebrow": "MEMORY",
+      "title": "Memory you can inspect",
+      "body": "Keep documents in the built-in database, or connect a Git repository for a space's shared notes. Bots can recall saved private facts in later direct and group conversations. Local recall uses cited excerpts so long imported notes share the context budget with shorter saved facts. Failed brief refreshes back off from 10 minutes to daily; known model or connection refusals wait daily. Open a brief to see its last reason and next try time.",
+      "source": "README.md#Memory"
+    },
+    {
+      "id": "routine",
+      "eyebrow": "ROUTINES",
+      "title": "Work on a schedule",
+      "body": "Set routines for bots to run on a schedule. Recover a lost send with a stable request id, resume waiting by run id, and inspect exact run and task records beyond the latest task list.",
+      "source": "README.md#What you get today"
+    },
+    {
+      "id": "delegate",
+      "eyebrow": "DELEGATION",
+      "title": "Bots work together",
+      "body": "Accepted requests to a room's chief get a saved acknowledgement before execution; bare greetings start no work run. The chief preselects members for document transfer and installation preparation from approved capability, skill and capacity facts, and committed dispatch appears as one expandable line. Correction receipts acknowledge an excluded member or changed task; saved stop states distinguish a request to stand down from confirmation or an uncertain previous action on web, desktop and mobile. After owned teardown, the chief records earlier action outcomes before resuming a corrected task with the next eligible member. Instrumented worker tools update a safe activity line in the room, including desk assignments; accepted local artifacts appear as draft links, not verified service completion. A group's coordinator can also ask members for their answers in the room. A goal coordinator can send bounded requests to group members' desk threads. Receipts show delivery, confirmed reading and replies. Effect requests wait for owner approval: the owner can allow one exact action once or read-only preparation, and can pause group or space team messages. Bots can also hand off room work or use short-lived subagents. Expanded goal details distinguish recorded token usage, worker reservations and available admission capacity; incomplete usage stays explicit. Owners can review a submitted goal result, accept it or send it back for rework. When the coordinator reports the project done, that result is saved for review. The owner marks each condition pass or fail, accepts only when every condition passes, or types notes and sends the result back. Decisions refresh the goal, and failed decisions show a translated message. Mobile owner home sessions show those details read-only, without extending paired-device grants. Recover a lost send with a stable request id, resume waiting by run id, and inspect exact run and task records beyond the latest task list.",
+      "source": "README.md#What you get today"
+    },
+    {
+      "id": "choose",
+      "eyebrow": "CHOICE",
+      "title": "Choose each bot's model",
+      "body": "Choose each bot's runtime, model and thinking level. If a model sends falling usage totals during a built-in-runtime answer, Ardur keeps the last consistent totals and marks them incomplete instead of guessing a reset. Hermes distinguishes session-start failures from later turn failures; a confirmed refusal of a model below 64K context explains the limit and offers changing the model, while private protocol details stay out of normal logs. Confirmed tool-list, settings, request/response limit, run-allowance and provider-key failures name the cause on web, desktop and mobile; unknown errors stay generic. New bots default to This computer for the deployment owner when their host service is paired and connected, with a deployment override and a sandbox fallback; existing bots never move automatically. Creation and web/desktop Change location give This computer and Sandbox equal weight, separately from sharing. This computer runs as you and can use your files and signed-in tools; Sandbox uses the deployment's non-host provider or a saved container engine. Returning to Sandbox supports the same hosted and test providers as creation; its consequence line describes the configured boundary rather than always describing a container. Bot settings show actual location, access, sharing and live status. Codex, Claude Code, Antigravity and Hermes require the host; Sandbox stays visible but disabled with a reason. Saved container connections are not host computers and support computer updates. Failed workspace saves show their cause and keep Recover computer available on web, desktop and mobile; missing-engine failures keep their reset guidance. Updates and moves resume an owned stopped Docker or Podman container before saving its live workspace, including through the packaged desktop host bridge, without creating a replacement source. This computer sleeps without copying its workspace; other kinds keep their checkpoint and show Saving your workspace, then resume queued work when saving finishes. A saved runtime/location mismatch offers a confirmed Move to This computer action. Shared With Team selects the existing Team computer's location and saved connection before creation; Only this bot unlocks other locations. Connectionless non-host Team joins retain the saved computer even after the deployment provider changes. Onboarding can create a Team bot before a sandbox provider is configured; execution still requires a usable provider. Duplicates retain the source bot's location and sharing, and recheck the copied pin against the final computer before creation commits. Mobile creation uses the same default and choices; existing location changes and mismatch repair say change location on desktop. Deployment owners can release interrupted computer updates after confirming nothing is still running, on web, desktop and mobile. Experimental Hermes runs on this computer in desktop local mode and the dev stack, or on a paired macOS or Linux host, with a pinned install; Windows isn't supported. Group rooms can choose a separate runtime, model and thinking level for each bot. On web and desktop, blocked group model choices show a reason beside Save model; server refusals keep the unsaved choice selected. Tune Hermes call, time and context limits, or inspect supported settings in Advanced. Hermes model choices are checked before saving: the model connection needs at least 64,000 context tokens, separate from the bot's text limit in KiB. Models shows the resolved limit and whether it is saved, from the provider catalog, or an unsaved 65,536 estimate. For unknown compatible connections, Hermes uses that estimate while the built-in runtime retains its conservative 32,768 context budget. Bot settings on web, desktop and mobile, new-bot creation and group model overrides check whether the chosen settings can run before Save. The server independently refuses incompatible computers, Experimental off, blocked model destinations, disconnected pins and Hermes models below the context floor. Choosing an experimental runtime visibly enables Experimental; a computer move always needs confirmation. This checks settings, not provider uptime or future sign-in validity. Unchanged Ollama pins and new bots' inherited Ollama defaults are checked without probing their server; a changed pin on an unavailable server offers a retry rather than an invalid-settings refusal. Bot and space model-destination policy saves check affected saved, inherited and group-room models first; bots without a model connection do not block a policy save. Default-model changes check the member's inheriting bots against bot and space policies before saving. A space refusal names the bots whose models need changing; a bot refusal asks to change its model first. Refused duplicates show their reason on web and desktop. An unconfigured computer engine stops recurring sleep attempts and shows the reason; changing its connection or resetting it allows another attempt. Planned server restarts save turn progress on the pinned runtime and model. Server updates pause if a call cannot reach a safe point within one minute. Recovery keeps completed results and asks for review when an action may already have happened. Models reveals native runtime status and discovered models without creating a bot. Expanded capability checks distinguish declarations from version-bound offline evidence; absent or unmatched checks remain not tested, never verified vendor performance. A separate seven-day disclosure groups durable completed, failed and cancelled runs by their saved runtime pin; success excludes cancellations and median first reply includes measured text only, with sample size. Older or textless runs stay unmeasured. Deployment owners can start or cancel Codex sign-in there; mobile shows native discovery read-only, with setup on the home device. Expanded computer details show freshly inspected Docker CPU, memory and process limits separately from host capacity, with unreported values left unknown. Desktop and SSH details identify host-account execution. Recover a lost send with a stable request id, resume waiting by run id, and inspect exact run and task records beyond the latest task list. Bots receive their name and saved run pin in stable context, so they can identify their configured runtime, provider, model and thinking level without connection or account details. Quiet runtimes stop after two minutes without activity outside owned commands. Each finishing or evidence wait uses the existing one-minute shutdown budget; service shutdown can end it sooner. A stalled run says \"The bot stopped responding. Retry the run.\" Retry prepares a continuation from saved results on web, desktop and mobile; Send stays explicit, and uncertain actions must be checked before repetition. Evidence storage waits cannot hold a completed reply or its queued follow-up; incomplete recording remains partial. Codex transport drops after saved progress retry up to three times on a fresh process with the same pin and saved tool receipts. Runtime stops offer Retry; confirmed usage limits and sign-in failures keep their own guidance. Failed runs retain bounded, redacted runtime diagnostics.",
+      "source": "README.md#What you get today"
+    },
+    {
+      "id": "approve",
+      "eyebrow": "APPROVAL",
+      "title": "Stay in control",
+      "body": "Ardur asks for approval before consequential actions. Space owners can opt in to signed bot-decision evidence; members can check run status and download sealed evidence from visible runs for independent verification. Evidence is not encrypted and does not prove tool execution or completeness. Connected integrations with no allowed tools show that tools need review in Context, per-bot access rows, Find apps, and the space Dashboard. Web and desktop offer an explicit tool review with marked read-only tools selected; the owner chooses Allow selected or Allow all before access changes. Phone shows the same pending state and opens web management for review. Recover a lost send with a stable request id, resume waiting by run id, and inspect exact run and task records beyond the latest task list.",
+      "source": "README.md#What you get today"
+    }
+  ],
+  "providers": [
+    {
+      "id": "openrouter",
+      "name": "OpenRouter",
+      "access": "api-key",
+      "status": "available",
+      "featured": true
+    },
+    {
+      "id": "openai-codex",
+      "name": "OpenAI Codex",
+      "access": "subscription",
+      "status": "available",
+      "featured": true,
+      "accountHint": "ChatGPT account"
+    },
+    {
+      "id": "anthropic",
+      "name": "Anthropic",
+      "access": "api-key",
+      "status": "available",
+      "featured": true,
+      "accountHint": "API key"
+    },
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "access": "api-key",
+      "status": "available",
+      "featured": true
+    },
+    {
+      "id": "google",
+      "name": "Google",
+      "access": "api-key",
+      "status": "available",
+      "featured": true
+    },
+    {
+      "id": "vercel-ai-gateway",
+      "name": "Vercel AI Gateway",
+      "access": "gateway",
+      "status": "available",
+      "featured": true
+    },
+    {
+      "id": "amazon-bedrock",
+      "name": "Amazon Bedrock",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "ant-ling",
+      "name": "Ant Ling",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "azure-openai-responses",
+      "name": "Azure OpenAI",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "baseten",
+      "name": "Baseten",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "cerebras",
+      "name": "Cerebras",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "claude-cli",
+      "name": "Claude Pro/Max through the CLI",
+      "access": "subscription",
+      "status": "roadmap",
+      "featured": false,
+      "accountHint": "Claude account through your own CLI"
+    },
+    {
+      "id": "cloudflare-ai-gateway",
+      "name": "Cloudflare AI Gateway",
+      "access": "gateway",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "cloudflare-workers-ai",
+      "name": "Cloudflare Workers AI",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "deepseek",
+      "name": "DeepSeek",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "fireworks",
+      "name": "Fireworks",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "github-copilot",
+      "name": "GitHub Copilot",
+      "access": "subscription",
+      "status": "available",
+      "featured": false,
+      "accountHint": "Copilot account"
+    },
+    {
+      "id": "google-vertex",
+      "name": "Google Vertex AI",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "groq",
+      "name": "Groq",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "huggingface",
+      "name": "Hugging Face",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "kimi-coding",
+      "name": "Kimi for Coding",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "meta",
+      "name": "Meta",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "minimax",
+      "name": "MiniMax",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "minimax-cn",
+      "name": "MiniMax CN",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "mistral",
+      "name": "Mistral",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "moonshotai",
+      "name": "Moonshot AI",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "moonshotai-cn",
+      "name": "Moonshot AI CN",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "nvidia",
+      "name": "NVIDIA",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "ollama",
+      "name": "Ollama as a first-class choice",
+      "access": "local",
+      "status": "roadmap",
+      "featured": false
+    },
+    {
+      "id": "openai-compatible",
+      "name": "OpenAI-compatible server",
+      "access": "gateway",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "opencode-go",
+      "name": "OpenCode Go",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "opencode",
+      "name": "OpenCode Zen",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "qwen-token-plan",
+      "name": "Qwen Token Plan",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "qwen-token-plan-cn",
+      "name": "Qwen Token Plan CN",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "qwen-token-plan-individual",
+      "name": "Qwen Token Plan Individual",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "radius",
+      "name": "Radius",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "together",
+      "name": "Together",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "xai",
+      "name": "xAI",
+      "access": "subscription",
+      "status": "available",
+      "featured": false,
+      "accountHint": "SuperGrok or X Premium account"
+    },
+    {
+      "id": "xiaomi",
+      "name": "Xiaomi",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "xiaomi-token-plan-ams",
+      "name": "Xiaomi Token Plan AMS",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "xiaomi-token-plan-cn",
+      "name": "Xiaomi Token Plan CN",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "xiaomi-token-plan-sgp",
+      "name": "Xiaomi Token Plan SGP",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "zai",
+      "name": "Z.AI",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "zai-coding-cn",
+      "name": "Z.AI Coding CN",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    }
+  ],
+  "computers": [
+    {
+      "id": "local",
+      "name": "This computer"
+    },
+    {
+      "id": "docker",
+      "name": "Docker"
+    },
+    {
+      "id": "podman",
+      "name": "Podman"
+    },
+    {
+      "id": "kubernetes",
+      "name": "Kubernetes"
+    },
+    {
+      "id": "ssh",
+      "name": "SSH machine"
+    },
+    {
+      "id": "e2b",
+      "name": "E2B"
+    },
+    {
+      "id": "daytona",
+      "name": "Daytona"
+    },
+    {
+      "id": "box",
+      "name": "Box"
+    }
+  ],
+  "install": {
+    "fromSource": {
+      "requirements": "Node.js 22.22.2 or newer in the 22.x line, Node.js 24.x, or Node.js 26+; pnpm 9; and Docker",
+      "commands": [
+        "git clone https://github.com/ArdurAI/ardur-bot.git",
+        "cd ardur-bot",
+        "cp .env.example .env",
+        "docker compose --env-file .env -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.postgres-host.yml up postgres -d",
+        "pnpm install",
+        "pnpm db:generate",
+        "pnpm db:migrate",
+        "pnpm dev"
+      ],
+      "note": "In .env, set POSTGRES_PASSWORD to a random value (for example, openssl rand -hex 16) and use it in DATABASE_URL; set BETTER_AUTH_SECRET, ENCRYPTION_KEY, SCREEN_PROXY_SECRET and SANDBOX_SUPERVISOR_TOKEN to separate long random values (for example, openssl rand -hex 32); add model credentials in the app or set OPENROUTER_API_KEY.",
+      "docsUrl": "https://github.com/ArdurAI/ardur-bot#run-from-source"
+    },
+    "desktop": {
+      "releasesUrl": "https://github.com/ArdurAI/ardur-bot/releases",
+      "platforms": [
+        {
+          "os": "macOS Apple silicon",
+          "assetPattern": "-mac-arm64\\.dmg$"
+        },
+        {
+          "os": "macOS Intel",
+          "assetPattern": "-mac-x64\\.dmg$"
+        },
+        {
+          "os": "Windows",
+          "assetPattern": "-win-x64\\.exe$"
+        },
+        {
+          "os": "Linux x86_64 AppImage",
+          "assetPattern": "-linux-x86_64\\.AppImage$"
+        },
+        {
+          "os": "Linux x86_64 deb",
+          "assetPattern": "-linux-amd64\\.deb$"
+        },
+        {
+          "os": "Linux arm64 AppImage",
+          "assetPattern": "-linux-arm64\\.AppImage$"
+        },
+        {
+          "os": "Linux arm64 deb",
+          "assetPattern": "-linux-arm64\\.deb$"
+        }
+      ],
+      "firstOpen": [
+        {
+          "os": "macOS",
+          "steps": [
+            {
+              "text": "For a release marked “Signed and notarized for macOS”, open the app normally."
+            },
+            {
+              "text": "Otherwise, try to open the app once. Open System Settings > Privacy & Security, scroll to the message about Ardur, and choose Open Anyway."
+            },
+            {
+              "text": "Enter your password when asked, then choose “Open”."
+            },
+            {
+              "text": "Or remove the download's quarantine flag in Terminal.",
+              "command": "xattr -dr com.apple.quarantine /Applications/Ardur.app"
+            },
+            {
+              "text": "Then open the app.",
+              "command": "open \"/Applications/Ardur.app\""
+            }
+          ]
+        },
+        {
+          "os": "Windows",
+          "steps": [
+            {
+              "text": "If “Windows protected your PC” appears, choose “More info”, then “Run anyway”."
+            },
+            {
+              "text": "Finish the installer."
+            }
+          ]
+        },
+        {
+          "os": "Linux",
+          "steps": [
+            {
+              "text": "Make the AppImage executable, then open it.",
+              "command": "chmod +x ./ardur-*.AppImage"
+            },
+            {
+              "text": "On Debian or Ubuntu, you can install the deb instead.",
+              "command": "sudo apt install ./ardur-*.deb"
+            },
+            {
+              "text": "After installing the deb, check that it runs.",
+              "command": "ardur --version"
+            }
+          ]
+        }
+      ],
+      "note": "“This computer” needs no Docker. Previews update manually. Homebrew needs 2026-09-20 or later; brew update first. CI checks branch installers without publishing. Windows installer checked for silent install and uninstall; first-launch check pending."
+    },
+    "installScript": {
+      "platforms": [
+        "macOS",
+        "Linux"
+      ]
+    },
+    "homebrew": {
+      "tapRepo": "ArdurAI/homebrew-tap",
+      "caskPath": "Casks/ardur.rb",
+      "command": "brew tap ArdurAI/tap && brew trust --cask ArdurAI/tap/ardur && brew install --cask ArdurAI/tap/ardur",
+      "verified": true,
+      "platforms": [
+        "macOS"
+      ]
+    }
+  },
+  "personas": [
+    {
+      "name": "Operator",
+      "line": "Set up a bot, watch it work and approve consequential actions."
+    },
+    {
+      "name": "Builder",
+      "line": "Choose models, computers and integrations for each bot."
+    },
+    {
+      "name": "Researcher",
+      "line": "Run several bots, inspect sources and keep their work."
+    },
+    {
+      "name": "Team lead",
+      "line": "Share bots with colleagues and review what they did."
+    },
+    {
+      "name": "Local-first user",
+      "line": "Keep the core bot workflow on computers and models they control."
+    }
+  ],
+  "routines": {
+    "triggers": [
+      {
+        "id": "schedule",
+        "name": "Schedule",
+        "detail": "Run at a chosen time or repeating schedule."
+      },
+      {
+        "id": "webhook",
+        "name": "Webhook",
+        "detail": "Run when a configured webhook fires."
+      },
+      {
+        "id": "github",
+        "name": "GitHub",
+        "detail": "Run when a configured GitHub event arrives."
+      },
+      {
+        "id": "message",
+        "name": "Message",
+        "detail": "Run when a connected message provider receives a message."
+      }
+    ],
+    "minimumIntervalSeconds": 60,
+    "limits": [
+      {
+        "id": "one-shot-future",
+        "text": "One-shot runs must be scheduled in the future.",
+        "value": 0
+      },
+      {
+        "id": "run-history",
+        "text": "Run history lists up to 50 of a routine's latest runs.",
+        "value": 50
+      },
+      {
+        "id": "webhook-body-bytes",
+        "text": "Webhook and GitHub event bodies are limited to 64 KB.",
+        "value": 65536
+      },
+      {
+        "id": "github-matching-routines",
+        "text": "A GitHub event includes up to 5 of the most recently updated active routines that match it.",
+        "value": 5
+      },
+      {
+        "id": "webhook-matching-routines",
+        "text": "A webhook request includes up to 5 of the most recently updated active routines that match it.",
+        "value": 5
+      }
+    ],
+    "useCases": [
+      {
+        "id": "morning-inbox",
+        "audience": "everyday",
+        "title": "A morning briefing",
+        "body": "Ask for today's appointments and messages needing attention in a short note with source links. Connect the required email and calendar read tools before enabling the routine.",
+        "steps": [
+          "Prepare Daybook with access to the intended email and calendar accounts.",
+          "Open “Views”, choose “Workspace pane”, find “Routines”, and choose “Create Routine”.",
+          "Set “Name” to Morning briefing.",
+          "Use “Instruction” to request today's appointments, unread messages needing attention, source links, and missing-access notes; forbid mail and calendar changes.",
+          "Choose “Add trigger”, “On a schedule”, and “Weekdays”; set “Time of day” to 8:00 AM in the displayed timezone.",
+          "Keep “Active” on and choose “Save”.",
+          "Choose “Test run”, check “Run history”, and read the result in Daybook's conversation."
+        ],
+        "uiLabels": [
+          "Views",
+          "Workspace pane",
+          "Routines",
+          "Create Routine",
+          "Name",
+          "Instruction",
+          "Add trigger",
+          "On a schedule",
+          "Weekdays",
+          "Time of day",
+          "Active",
+          "Save",
+          "Test run",
+          "Run history"
+        ]
+      },
+      {
+        "id": "inbox-calendar-review",
+        "audience": "everyday",
+        "title": "Inbox and calendar triage",
+        "body": "Ask for a review queue with suggested replies and meeting changes in the conversation. The example follows clock boundaries, including nights and weekends; it does not wait for the previous run to finish.",
+        "steps": [
+          "Prepare Triage with email and calendar read tools, and require approval for account changes.",
+          "Open “Views”, choose “Workspace pane”, find “Routines”, and choose “Create Routine”.",
+          "Set “Name” to Inbox and calendar review.",
+          "Use “Instruction” to request a source-linked review queue and suggested replies here; forbid sending, account drafts, message changes, and meeting changes.",
+          "Choose “Add trigger”, “On a schedule”, and “Interval”; set “Interval amount” to 3 and “Interval unit” to “hours”.",
+          "Keep “Active” on and choose “Save”.",
+          "Choose “Test run”, check “Run history”, and read the review in Triage's conversation."
+        ],
+        "uiLabels": [
+          "Views",
+          "Workspace pane",
+          "Routines",
+          "Create Routine",
+          "Name",
+          "Instruction",
+          "Add trigger",
+          "On a schedule",
+          "Interval",
+          "Interval amount",
+          "Interval unit",
+          "hours",
+          "Active",
+          "Save",
+          "Test run",
+          "Run history"
+        ]
+      },
+      {
+        "id": "weekly-status",
+        "audience": "everyday",
+        "title": "A weekly status draft",
+        "body": "Ask for a weekly draft of progress, blockers, and next steps from dated project notes. Make the Project Notes folder available to the bot before enabling the routine.",
+        "steps": [
+          "Prepare Weekly with read access to the Project Notes folder.",
+          "Open “Views”, choose “Workspace pane”, find “Routines”, and choose “Create Routine”.",
+          "Set “Name” to Weekly status draft.",
+          "Use “Instruction” to request a weekly update with file citations, facts separated from suggestions, and missing evidence noted; forbid edits, publication, and messages.",
+          "Choose “Add trigger”, “On a schedule”, and “Advanced...”; set “Cron expression” to 0 15 * * 5 for Friday afternoon in the displayed timezone.",
+          "Keep “Active” on and choose “Save”.",
+          "Choose “Test run”, check “Run history”, and read the draft in Weekly's conversation."
+        ],
+        "uiLabels": [
+          "Views",
+          "Workspace pane",
+          "Routines",
+          "Create Routine",
+          "Name",
+          "Instruction",
+          "Add trigger",
+          "On a schedule",
+          "Advanced...",
+          "Cron expression",
+          "Active",
+          "Save",
+          "Test run",
+          "Run history"
+        ]
+      },
+      {
+        "id": "repository-review",
+        "audience": "technical",
+        "title": "A nightly repository review",
+        "body": "Ask for a report on existing workflow results, stale pull requests, and missing checks. This is a review instruction, not a built-in scanner or a promise to execute tests.",
+        "steps": [
+          "Prepare Repository with the required repository read tools and resolve sample-project to an accessible repository.",
+          "Open “Views”, choose “Workspace pane”, find “Routines”, and choose “Create Routine”.",
+          "Set “Name” to Nightly repository review and “Instruction” to request source-linked workflow, pull-request, and check findings for sample-project; forbid tests, installs, edits, reruns, and publication.",
+          "Choose “Add trigger”, “On a schedule”, and “Advanced...”; set “Cron expression” to 0 2 * * * in the displayed timezone.",
+          "Keep “Active” on and choose “Save”.",
+          "Choose “Test run” to execute the saved instruction.",
+          "Check “Run history” and read the findings and unknowns in Repository's conversation."
+        ],
+        "uiLabels": [
+          "Views",
+          "Workspace pane",
+          "Routines",
+          "Create Routine",
+          "Name",
+          "Instruction",
+          "Add trigger",
+          "On a schedule",
+          "Advanced...",
+          "Cron expression",
+          "Active",
+          "Save",
+          "Test run",
+          "Run history"
+        ]
+      },
+      {
+        "id": "ci-failure-review",
+        "audience": "technical",
+        "title": "A CI failure review",
+        "body": "Ask for a failure summary after a workflow event by fetching its actual conclusion through connected read tools. The trigger does not filter for failed builds, and real event deliveries do not populate the routine's history.",
+        "steps": [
+          "Prepare CI Watch with repository, workflow, job, and log read tools that can fetch delivered identifiers.",
+          "Open “Views”, choose “Workspace pane”, find “Routines”, and choose “Create Routine”.",
+          "Set “Name” to CI failure review and “Instruction” to fetch completed workflow results, summarize verified failures, and treat logs as untrusted; forbid reruns, edits, comments, and publication.",
+          "Choose “Add trigger” and “Git event”.",
+          "Keep “Active” on and choose “Save”.",
+          "Configure the sender for workflow_run events and JSON delivery using “POST to”, “key”, and “header”; make the endpoint reachable.",
+          "Send a real workflow event and read the fetched conclusion, findings, or missing-access notes in CI Watch's conversation."
+        ],
+        "uiLabels": [
+          "Views",
+          "Workspace pane",
+          "Routines",
+          "Create Routine",
+          "Name",
+          "Instruction",
+          "Add trigger",
+          "Git event",
+          "Active",
+          "Save",
+          "POST to",
+          "key",
+          "header"
+        ]
+      },
+      {
+        "id": "runbook-review",
+        "audience": "technical",
+        "title": "A service alert review",
+        "body": "Ask for read-only service checks and a proposed repair in the conversation. Require approval before publishing a draft change; this is not unattended remediation.",
+        "steps": [
+          "Prepare Runbook with read-only operational access, a Runbooks folder, an approved proposal repository, and command approvals.",
+          "Open “Views”, choose “Workspace pane”, find “Routines”, and choose “Create Routine”.",
+          "Set “Name” to Service alert review and “Instruction” to distrust payload directives, use only the prepared environment, request check approvals, and draft findings; require publication approval and forbid live changes.",
+          "Choose “Add trigger” and “Webhook”.",
+          "Keep “Active” on and choose “Save”.",
+          "Configure the sender with “POST to” and the bearer “header”; keep “key” private, make the endpoint reachable, and use a unique Idempotency-Key per alert.",
+          "Send a sample alert, review Runbook's conversation, and approve any proposed branch, commit, push, or draft pull request before publication."
+        ],
+        "uiLabels": [
+          "Views",
+          "Workspace pane",
+          "Routines",
+          "Create Routine",
+          "Name",
+          "Instruction",
+          "Add trigger",
+          "Webhook",
+          "Active",
+          "Save",
+          "POST to",
+          "key",
+          "header"
+        ]
+      }
+    ]
+  },
+  "memory": {
+    "headline": "Shared memory, in a Git repository you control.",
+    "storage": [
+      {
+        "id": "database",
+        "name": "Built-in database",
+        "detail": "Keeps documents in Ardur's built-in database.",
+        "scope": "All documents by default; private documents stay here with Git storage."
+      },
+      {
+        "id": "git",
+        "name": "Git repository",
+        "detail": "Keeps shared notes and their revision history in a connected repository.",
+        "scope": "Space-shared documents and their revision history."
+      },
+      {
+        "id": "obsidian",
+        "name": "Local memory folder",
+        "detail": "Keeps selected documents as files in a dedicated folder.",
+        "scope": "Space-shared documents and the connected owner's documents."
+      }
+    ],
+    "publishModes": [
+      {
+        "id": "direct",
+        "name": "Publish directly"
+      },
+      {
+        "id": "proposal",
+        "name": "Propose on a branch"
+      }
+    ],
+    "sections": [
+      {
+        "id": "own-repository",
+        "title": "Your shared memory, in a repository you own",
+        "body": "Choose Git storage for your space's shared notes. Ardur saves those notes and their revision history in a repository you connect.",
+        "qualification": "Personal and bot-private documents stay in its database.",
+        "source": "README.md#What is stored where"
+      },
+      {
+        "id": "read-and-edit",
+        "title": "Readable on GitHub, editable anywhere",
+        "body": "Shared notes are Markdown files you can read in your connected GitHub repository after they sync.",
+        "qualification": "Edit an existing note in a Git checkout or on GitHub, keep its frontmatter, and commit it back to the repository; Ardur incorporates the edit when it next fetches that branch.",
+        "source": "README.md#Edit a note in GitHub"
+      },
+      {
+        "id": "offline",
+        "title": "Works offline, syncs when you are back",
+        "body": "After setup, shared-memory saves create local Git commits even when the repository is unreachable.",
+        "qualification": "With Ardur's server and storage available, you can keep using the last local copy; its background worker retries synchronization, and a failed sync offers Retry.",
+        "source": "README.md#Work offline and resolve conflicts"
+      }
+    ],
+    "proofPoints": [
+      {
+        "id": "own-repo-branch",
+        "text": "Connect your own GitHub repository and choose its branch.",
+        "source": "README.md#Connect a repository"
+      },
+      {
+        "id": "shared-only",
+        "text": "Send only space-shared documents to Git storage.",
+        "source": "README.md#What is stored where"
+      },
+      {
+        "id": "markdown-history",
+        "text": "Read shared notes as Markdown, with their revision history beside them.",
+        "source": "README.md#Edit a note in GitHub"
+      },
+      {
+        "id": "local-first",
+        "text": "Save locally before the background sync is queued.",
+        "source": "README.md#Work offline and resolve conflicts"
+      },
+      {
+        "id": "conflict-copies",
+        "text": "Preserve both versions when shared edits conflict.",
+        "source": "README.md#Work offline and resolve conflicts"
+      },
+      {
+        "id": "publication-choice",
+        "text": "Choose direct publication or a proposal branch for review.",
+        "source": "README.md#Connect a repository"
+      }
+    ],
+    "settingsPath": {
+      "steps": [
+        "Settings",
+        "Memory",
+        "Memory storage",
+        "Manage",
+        "Git repository"
+      ],
+      "uiLabels": [
+        "Settings",
+        "Memory",
+        "Memory storage",
+        "Manage",
+        "Git repository"
+      ],
+      "screenshot": "memory-git"
+    }
+  },
+  "videos": [
+    {
+      "id": "routines-demo",
+      "title": "A routine from setup to result",
+      "description": "A Briefing bot creates a Morning checklist routine from sample notes, schedules it for weekdays at 8:00 AM UTC, saves it, runs it once, and shows three checklist bullets and a completed Run history entry.",
+      "durationSeconds": 56,
+      "width": 1920,
+      "height": 1080,
+      "files": {
+        "mp4": "media/routines-demo.mp4",
+        "webm": "media/routines-demo.webm",
+        "poster": "media/routines-demo.jpg",
+        "captions": "media/routines-demo.en.vtt"
+      }
+    }
+  ],
+  "screenshots": [
+    {
+      "id": "app-chat",
+      "file": "screenshots/app-chat.png",
+      "alt": "Chief of Staff bot conversation showing a release checklist command inside the expanded compact work record, a drafted team update, and an approval card beside a six-bot team, with one Views menu in the chat header.",
+      "width": 2880,
+      "height": 1800,
+      "theme": "light"
+    },
+    {
+      "id": "group-chat",
+      "file": "screenshots/group-chat.png",
+      "alt": "Operations huddle group conversation showing each participant's model as the bots coordinate a weekly update and hand off a release check, with group settings under Views. The draft names its intended responder before sending.",
+      "width": 2880,
+      "height": 1800,
+      "theme": "light"
+    },
+    {
+      "id": "routines",
+      "file": "screenshots/routines.png",
+      "alt": "Chief of Staff bot conversation beside a closeable workspace Routines view with Morning brief, Inbox triage, and Evening wrap-up.",
+      "width": 2880,
+      "height": 1800,
+      "theme": "light"
+    },
+    {
+      "id": "memory-git",
+      "file": "screenshots/memory-git.png",
+      "alt": "Memory settings showing the Git repository option, branch, publication mode, and repository authentication controls.",
+      "width": 2880,
+      "height": 1800,
+      "theme": "light"
+    }
+  ],
+  "documentation": {
+    "manifestVersion": 1,
+    "locale": "en",
+    "features": [
+      {
+        "id": "bots-create",
+        "aliases": [],
+        "title": "New bot",
+        "summary": "Name a bot, choose its computer mode, then open its conversation.",
+        "area": "bots-and-conversations",
+        "order": 10,
+        "status": "published",
+        "availableSince": "0.1.0-alpha.2",
+        "platforms": {
+          "web": "configure",
+          "desktop": "configure",
+          "mobile": "configure"
+        },
+        "settingsPath": {
+          "mobile": [
+            "New bot"
+          ]
+        },
+        "steps": [
+          {
+            "id": "open-new-bot-menu",
+            "aliases": [
+              "open"
+            ],
+            "text": "Open the bot creation picker.",
+            "uiLabels": [
+              "Create",
+              "Create new Bot"
+            ],
+            "screenshotId": "docs-bots-create-open",
+            "expected": "The new bot choice is visible.",
+            "availableSince": "0.1.0-alpha.2"
+          },
+          {
+            "id": "open-new-bot-form",
+            "aliases": [
+              "form"
+            ],
+            "text": "Open the new bot form.",
+            "uiLabels": [
+              "New bot",
+              "Name",
+              "Only this bot"
+            ],
+            "screenshotId": "docs-bots-create-form",
+            "expected": "Name and computer mode controls are visible.",
+            "availableSince": "0.1.0-alpha.2"
+          },
+          {
+            "id": "choose-private-computer",
+            "aliases": [
+              "private"
+            ],
+            "text": "Name the bot and choose Only this bot mode.",
+            "uiLabels": [
+              "Name",
+              "Only this bot"
+            ],
+            "screenshotId": "docs-bots-create-private",
+            "expected": "Only this bot is selected before creation.",
+            "availableSince": "0.1.0-alpha.2"
+          },
+          {
+            "id": "open-created-bot",
+            "aliases": [
+              "ready"
+            ],
+            "text": "Choose Create to open the new bot conversation.",
+            "uiLabels": [
+              "Create"
+            ],
+            "screenshotId": "docs-bots-create-ready",
+            "expected": "The Planner conversation opens.",
+            "availableSince": "0.1.0-alpha.2"
+          }
+        ],
+        "boundaries": [
+          "Create requires a nonempty bot name."
+        ],
+        "troubleshooting": [
+          {
+            "errorId": "bot-create",
+            "message": "Could not create bot",
+            "action": "Review the name and retry Create."
+          }
+        ],
+        "related": [
+          "chat-approvals"
+        ]
+      },
+      {
+        "id": "chat-approvals",
+        "aliases": [],
+        "title": "Review approval",
+        "summary": "Review a pending request and choose whether to allow or deny it.",
+        "area": "bots-and-conversations",
+        "order": 120,
+        "status": "published",
+        "availableSince": "0.1.0-alpha.2",
+        "platforms": {
+          "web": "configure",
+          "desktop": "configure",
+          "mobile": "configure"
+        },
+        "settingsPath": {},
+        "steps": [
+          {
+            "id": "review-pending-action",
+            "aliases": [
+              "pending"
+            ],
+            "text": "Inspect the pending approval card.",
+            "uiLabels": [
+              "Allow once",
+              "Deny"
+            ],
+            "screenshotId": "docs-chat-approvals-pending",
+            "expected": "Both responses are available.",
+            "availableSince": "0.1.0-alpha.2"
+          },
+          {
+            "id": "see-denied-action",
+            "aliases": [
+              "denied"
+            ],
+            "text": "Choose Deny for the request.",
+            "uiLabels": [
+              "Deny"
+            ],
+            "screenshotId": "docs-chat-approvals-denied",
+            "expected": "Denied is visible and the pending response controls close.",
+            "availableSince": "0.1.0-alpha.2"
+          }
+        ],
+        "boundaries": [
+          "Deny does not authorize the requested action."
+        ],
+        "troubleshooting": [
+          {
+            "errorId": "approval-submit",
+            "message": "Could not submit this answer",
+            "action": "Retry the response after checking the connection."
+          }
+        ],
+        "related": []
+      },
+      {
+        "id": "models",
+        "aliases": [],
+        "title": "Models",
+        "summary": "Inspect a connected model, review the default control, and prepare another connection.",
+        "area": "connections-and-computers",
+        "order": 10,
+        "status": "published",
+        "availableSince": "0.1.0-alpha.2",
+        "platforms": {
+          "web": "configure",
+          "desktop": "configure",
+          "mobile": "configure"
+        },
+        "settingsPath": {
+          "web": [
+            "Settings",
+            "Models"
+          ],
+          "desktop": [
+            "Settings",
+            "Models"
+          ],
+          "mobile": [
+            "Models"
+          ]
+        },
+        "steps": [
+          {
+            "id": "open-model-settings",
+            "aliases": [
+              "open"
+            ],
+            "text": "Open Settings and select Models.",
+            "uiLabels": [
+              "Settings",
+              "Models",
+              "Connected"
+            ],
+            "screenshotId": "docs-models-open",
+            "expected": "The Models heading and connected credential are visible.",
+            "availableSince": "0.1.0-alpha.2"
+          },
+          {
+            "id": "choose-default-model",
+            "aliases": [
+              "default"
+            ],
+            "text": "Choose another model on the connected provider to reveal the default control.",
+            "uiLabels": [
+              "Model",
+              "Use this model"
+            ],
+            "screenshotId": "docs-models-default",
+            "expected": "The Use this model button appears for the selected model.",
+            "availableSince": "0.1.0-alpha.2"
+          },
+          {
+            "id": "open-connection-form",
+            "aliases": [
+              "add"
+            ],
+            "text": "Select an unconnected provider to open its key form.",
+            "uiLabels": [
+              "API key",
+              "Connect API key"
+            ],
+            "screenshotId": "docs-models-add",
+            "expected": "The connection form is ready for a key.",
+            "availableSince": "0.1.0-alpha.2"
+          }
+        ],
+        "boundaries": [
+          "A missing catalog leaves no model to choose from."
+        ],
+        "troubleshooting": [
+          {
+            "errorId": "models-load",
+            "message": "Could not load model settings",
+            "action": "Retry after checking the server connection."
+          },
+          {
+            "errorId": "models-catalog-unavailable",
+            "message": "No model catalog is available.",
+            "action": "Check the server connection, then reopen Models."
+          }
+        ],
+        "related": []
+      },
+      {
+        "id": "computers",
+        "aliases": [],
+        "title": "Computers",
+        "summary": "Inspect a computer, open its connection form, and test reachability.",
+        "area": "connections-and-computers",
+        "order": 40,
+        "status": "published",
+        "availableSince": "0.1.0-alpha.2",
+        "platforms": {
+          "web": "configure",
+          "desktop": "configure",
+          "mobile": "read-only"
+        },
+        "settingsPath": {
+          "web": [
+            "Settings",
+            "Computers"
+          ],
+          "desktop": [
+            "Settings",
+            "Computers"
+          ]
+        },
+        "steps": [
+          {
+            "id": "inspect-computer-capacity",
+            "aliases": [],
+            "text": "Open Settings, then Computers, and inspect the connected computer.",
+            "uiLabels": [
+              "Settings",
+              "Computers",
+              "Running"
+            ],
+            "screenshotId": "docs-computers-open",
+            "expected": "The computer state and free memory appear.",
+            "availableSince": "0.1.0-alpha.2"
+          },
+          {
+            "id": "open-add-computer",
+            "aliases": [],
+            "text": "Open Add computer to inspect the connection fields.",
+            "uiLabels": [
+              "Add computer",
+              "Connection type",
+              "Name"
+            ],
+            "screenshotId": "docs-computers-add",
+            "expected": "The connection form opens.",
+            "availableSince": "0.1.0-alpha.2"
+          },
+          {
+            "id": "inspect-refused-test",
+            "aliases": [],
+            "text": "Test a computer when its engine cannot be reached.",
+            "uiLabels": [
+              "Test",
+              "Engine not reachable"
+            ],
+            "screenshotId": "docs-computers-refused",
+            "expected": "The row shows the reachability refusal.",
+            "availableSince": "0.1.0-alpha.2"
+          },
+          {
+            "id": "retry-computer-test",
+            "aliases": [],
+            "text": "Test the computer again after the connection responds.",
+            "uiLabels": [
+              "Test",
+              "Running"
+            ],
+            "screenshotId": "docs-computers-tested",
+            "expected": "The row shows a running connection.",
+            "availableSince": "0.1.0-alpha.2"
+          }
+        ],
+        "boundaries": [
+          "A test checks reachability; opening the form does not save a connection.",
+          "Mobile can inspect computers but cannot configure connections in this flow."
+        ],
+        "troubleshooting": [
+          {
+            "errorId": "computer-unreachable",
+            "message": "Engine not reachable",
+            "action": "Check the computer connection and press Test again."
+          }
+        ],
+        "related": [
+          "bots-create"
+        ]
+      },
+      {
+        "id": "integrations",
+        "aliases": [],
+        "title": "Integrations",
+        "summary": "Find an integration, review pending tools, save explicit permissions, and open a connection form.",
+        "area": "connections-and-computers",
+        "order": 110,
+        "status": "published",
+        "availableSince": "0.1.0-alpha.2",
+        "platforms": {
+          "web": "configure",
+          "desktop": "configure",
+          "mobile": "read-only"
+        },
+        "settingsPath": {
+          "web": [
+            "Settings",
+            "Customize",
+            "Integrations"
+          ],
+          "desktop": [
+            "Settings",
+            "Customize",
+            "Integrations"
+          ]
+        },
+        "steps": [
+          {
+            "id": "browse-integration-catalog",
+            "aliases": [],
+            "text": "Open Settings, then Integrations, and find a catalog entry.",
+            "uiLabels": [
+              "Settings",
+              "Customize",
+              "Integrations"
+            ],
+            "screenshotId": "docs-integrations-open",
+            "expected": "The integration table appears.",
+            "availableSince": "0.1.0-alpha.2"
+          },
+          {
+            "id": "review-tool-access",
+            "aliases": [],
+            "text": "Open Manage and inspect the read tool permission.",
+            "uiLabels": [
+              "Manage",
+              "Ask"
+            ],
+            "screenshotId": "docs-integrations-access",
+            "expected": "The read tool permission is Ask.",
+            "availableSince": "0.1.0-alpha.2"
+          },
+          {
+            "id": "allow-read-tool",
+            "aliases": [],
+            "text": "Change the read tool permission to Allow.",
+            "uiLabels": [
+              "Allow"
+            ],
+            "screenshotId": "docs-integrations-allow",
+            "expected": "The read tool shows Allow.",
+            "availableSince": "0.1.0-alpha.2"
+          },
+          {
+            "id": "remove-tool-access",
+            "aliases": [],
+            "text": "Change the read tool permission to Block, then choose Save.",
+            "uiLabels": [
+              "Block",
+              "Save"
+            ],
+            "screenshotId": "docs-integrations-block",
+            "expected": "The saved read tool permission is Block.",
+            "availableSince": "0.1.0-alpha.2"
+          },
+          {
+            "id": "open-connection-form",
+            "aliases": [],
+            "text": "Choose Back, reopen Manage to confirm Block persisted, then choose Back and open Use a token for another integration.",
+            "uiLabels": [
+              "Back",
+              "Manage",
+              "Block",
+              "Use a token",
+              "Fine-grained token"
+            ],
+            "screenshotId": "docs-integrations-connect",
+            "expected": "The token entry field appears.",
+            "availableSince": "0.1.0-alpha.2"
+          }
+        ],
+        "boundaries": [
+          "Opening a connection form does not connect an account.",
+          "Permission changes take effect only after Save; Block removes tool access, and write tools remain subject to their approval policy.",
+          "On mobile, a connected integration opens Manage on web; tool permissions are changed in the web or desktop app.",
+          "Connected describes account access, not permission to use tools. Empty or pending tool permissions show Connected · tools need review.",
+          "Choose Review tools from Context or a bot access row, check the marked read-only selection, then choose Allow selected or Allow all. Opening review does not grant access.",
+          "Bot permissions stay within the space tool list unless an owner explicitly also allows the selection for the space. Reopen a review if the available tools change.",
+          "Phone Context shows pending tool review and offers Review tools on web; tool selection remains in web or desktop."
+        ],
+        "troubleshooting": [
+          {
+            "errorId": "integration-access",
+            "message": "Could not save or load access.",
+            "action": "Choose Try again to reload access, then set the permission and choose Save again."
+          }
+        ],
+        "related": [
+          "bots-create"
+        ]
+      },
+      {
+        "id": "sign-in",
+        "aliases": [],
+        "title": "Sign in to Ardur",
+        "summary": "Use the email form, recognize a connection failure, and open password recovery when available.",
+        "area": "getting-started",
+        "order": 10,
+        "status": "published",
+        "availableSince": "0.1.0-alpha.2",
+        "platforms": {
+          "web": "configure",
+          "desktop": "configure",
+          "mobile": "configure"
+        },
+        "settingsPath": {
+          "web": [
+            "Sign in to Ardur"
+          ],
+          "desktop": [
+            "Sign in to Ardur"
+          ],
+          "mobile": [
+            "Sign in to Ardur"
+          ]
+        },
+        "steps": [
+          {
+            "id": "open-sign-in",
+            "aliases": [
+              "open"
+            ],
+            "text": "Open the sign-in page and find the email form.",
+            "uiLabels": [
+              "Sign in to Ardur",
+              "Email",
+              "Continue with email"
+            ],
+            "screenshotId": "docs-sign-in-open",
+            "expected": "The email form is ready.",
+            "availableSince": "0.1.0-alpha.2"
+          },
+          {
+            "id": "show-connection-error",
+            "aliases": [
+              "error"
+            ],
+            "text": "Submit the email form while the server cannot be reached.",
+            "uiLabels": [
+              "Email",
+              "Password",
+              "Continue with email",
+              "Could not reach the server"
+            ],
+            "screenshotId": "docs-sign-in-error",
+            "expected": "The form shows a server connection error.",
+            "availableSince": "0.1.0-alpha.2"
+          },
+          {
+            "id": "open-password-recovery",
+            "aliases": [
+              "recovery"
+            ],
+            "text": "Choose password recovery from the sign-in page.",
+            "uiLabels": [
+              "Forgot password?",
+              "Send reset link"
+            ],
+            "screenshotId": "docs-sign-in-recovery",
+            "expected": "The reset-link form opens.",
+            "availableSince": "0.1.0-alpha.2"
+          }
+        ],
+        "boundaries": [
+          "Password recovery depends on the server configuration."
+        ],
+        "troubleshooting": [
+          {
+            "errorId": "auth-unreachable",
+            "message": "Could not reach the server",
+            "action": "Check the server address and connection, then retry the email form."
+          }
+        ],
+        "related": [
+          "onboarding"
+        ]
+      },
+      {
+        "id": "onboarding",
+        "aliases": [],
+        "title": "Connect a model",
+        "summary": "Connect a model before starting a conversation when the server requires one.",
+        "area": "getting-started",
+        "order": 20,
+        "status": "published",
+        "availableSince": "0.1.0-alpha.2",
+        "platforms": {
+          "web": "configure",
+          "desktop": "configure",
+          "mobile": "unavailable"
+        },
+        "settingsPath": {
+          "web": [
+            "Connect a model"
+          ],
+          "desktop": [
+            "Connect a model"
+          ]
+        },
+        "steps": [
+          {
+            "id": "open-model-connection",
+            "aliases": [
+              "open"
+            ],
+            "text": "Open the required model connection form.",
+            "uiLabels": [
+              "Connect a model",
+              "Provider",
+              "API key"
+            ],
+            "screenshotId": "docs-onboarding-open",
+            "expected": "The selected connection and required fields are visible.",
+            "availableSince": "0.1.0-alpha.2"
+          },
+          {
+            "id": "enter-connection-key",
+            "aliases": [
+              "connect"
+            ],
+            "text": "Enter a key for the selected connection.",
+            "uiLabels": [
+              "API key",
+              "Continue"
+            ],
+            "screenshotId": "docs-onboarding-connect",
+            "expected": "Continue is enabled after a key is entered.",
+            "availableSince": "0.1.0-alpha.2"
+          }
+        ],
+        "boundaries": [
+          "Continue stays disabled until the required connection details are present."
+        ],
+        "troubleshooting": [
+          {
+            "errorId": "onboarding-save",
+            "message": "Could not save model",
+            "action": "Check the connection details and try again."
+          }
+        ],
+        "related": [
+          "bots-create",
+          "models"
+        ]
+      },
+      {
+        "id": "memory-documents",
+        "aliases": [],
+        "title": "Memory",
+        "summary": "Find a memory document, inspect its history, and approve a reviewed change.",
+        "area": "memory-and-learning",
+        "order": 10,
+        "status": "published",
+        "availableSince": "0.1.0-alpha.2",
+        "platforms": {
+          "web": "configure",
+          "desktop": "configure",
+          "mobile": "read-only"
+        },
+        "settingsPath": {
+          "web": [
+            "Settings",
+            "Memory"
+          ],
+          "desktop": [
+            "Settings",
+            "Memory"
+          ]
+        },
+        "steps": [
+          {
+            "id": "find-memory-document",
+            "aliases": [],
+            "text": "Open Settings, then Memory, and find Preferences.",
+            "uiLabels": [
+              "Settings",
+              "Memory",
+              "Preferences"
+            ],
+            "screenshotId": "docs-memory-documents-open",
+            "expected": "Preferences appears in the document list.",
+            "availableSince": "0.1.0-alpha.2"
+          },
+          {
+            "id": "open-document-detail",
+            "aliases": [],
+            "text": "Open Preferences to read the saved content.",
+            "uiLabels": [
+              "Preferences",
+              "Memory document"
+            ],
+            "screenshotId": "docs-memory-documents-detail",
+            "expected": "The document content appears in its detail.",
+            "availableSince": "0.1.0-alpha.2"
+          },
+          {
+            "id": "inspect-document-history",
+            "aliases": [],
+            "text": "Open History for the document.",
+            "uiLabels": [
+              "History"
+            ],
+            "screenshotId": "docs-memory-documents-history",
+            "expected": "The first saved revision appears.",
+            "availableSince": "0.1.0-alpha.2"
+          },
+          {
+            "id": "approve-reviewed-change",
+            "aliases": [],
+            "text": "Request a change and approve its suggestion.",
+            "uiLabels": [
+              "Send",
+              "Memory suggestions",
+              "Approve"
+            ],
+            "screenshotId": "docs-memory-documents-change",
+            "expected": "The approved content appears in the document.",
+            "availableSince": "0.1.0-alpha.2"
+          }
+        ],
+        "boundaries": [
+          "A requested change needs review and approval before it is applied.",
+          "Mobile memory browsing does not expose this desktop review flow."
+        ],
+        "troubleshooting": [
+          {
+            "errorId": "memory-load",
+            "message": "Could not load memory.",
+            "action": "Choose Retry after the memory service is available."
+          }
+        ],
+        "related": [
+          "bots-create"
+        ]
+      },
+      {
+        "id": "routines",
+        "aliases": [],
+        "title": "Routines",
+        "summary": "Edit a routine, save its schedule, and inspect a test run.",
+        "area": "routines-and-boards",
+        "order": 10,
+        "status": "published",
+        "availableSince": "0.1.0-alpha.2",
+        "platforms": {
+          "web": "configure",
+          "desktop": "configure",
+          "mobile": "read-only"
+        },
+        "settingsPath": {},
+        "steps": [
+          {
+            "id": "open-scheduled-routines",
+            "aliases": [],
+            "text": "Open the bot computer and find Morning brief.",
+            "uiLabels": [
+              "Routines"
+            ],
+            "screenshotId": "docs-routines-open",
+            "expected": "The scheduled routine appears.",
+            "availableSince": "0.1.0-alpha.2"
+          },
+          {
+            "id": "edit-routine-instruction",
+            "aliases": [],
+            "text": "Open Morning brief and revise its Instruction.",
+            "uiLabels": [
+              "Name",
+              "Instruction"
+            ],
+            "screenshotId": "docs-routines-edit",
+            "expected": "The revised instruction appears in the editor.",
+            "availableSince": "0.1.0-alpha.2"
+          },
+          {
+            "id": "save-routine",
+            "aliases": [],
+            "text": "Save the revised routine.",
+            "uiLabels": [
+              "Save",
+              "Test run"
+            ],
+            "screenshotId": "docs-routines-saved",
+            "expected": "The Test run button is available after saving.",
+            "availableSince": "0.1.0-alpha.2"
+          },
+          {
+            "id": "inspect-run-result",
+            "aliases": [],
+            "text": "Run the routine once and inspect Run history.",
+            "uiLabels": [
+              "Test run",
+              "Run history",
+              "Done"
+            ],
+            "screenshotId": "docs-routines-result",
+            "expected": "Run history shows the test run as Done.",
+            "availableSince": "0.1.0-alpha.2"
+          }
+        ],
+        "boundaries": [
+          "A test run starts work; scheduled runs depend on the saved trigger and active state.",
+          "The mobile routine screen can read and test routines, but the editor is on web and desktop."
+        ],
+        "troubleshooting": [
+          {
+            "errorId": "routine-save",
+            "message": "Could not save routine",
+            "action": "Check the routine fields and try Save again."
+          }
+        ],
+        "related": [
+          "bots-create"
+        ]
+      },
+      {
+        "id": "group-goals",
+        "aliases": [],
+        "title": "Start goal",
+        "summary": "Start bounded work in a group room, watch its status, and stop it.",
+        "area": "team-work",
+        "order": 20,
+        "status": "published",
+        "availableSince": "0.1.0-alpha.2",
+        "platforms": {
+          "web": "configure",
+          "desktop": "configure",
+          "mobile": "read-only"
+        },
+        "settingsPath": {},
+        "steps": [
+          {
+            "id": "open-start-goal",
+            "aliases": [],
+            "text": "Open group settings and find Start goal.",
+            "uiLabels": [
+              "Start goal",
+              "Objective"
+            ],
+            "screenshotId": "docs-group-goals-ready",
+            "expected": "The goal form appears for the group coordinator.",
+            "availableSince": "0.1.0-alpha.2"
+          },
+          {
+            "id": "fill-goal-form",
+            "aliases": [],
+            "text": "Enter the Objective and Done when condition.",
+            "uiLabels": [
+              "Objective",
+              "Done when (one per line)",
+              "Start goal"
+            ],
+            "screenshotId": "docs-group-goals-form",
+            "expected": "Start goal is ready to submit.",
+            "availableSince": "0.1.0-alpha.2"
+          },
+          {
+            "id": "watch-goal-progress",
+            "aliases": [],
+            "text": "Start the goal and return to the room.",
+            "uiLabels": [
+              "Start goal",
+              "Goal",
+              "Working"
+            ],
+            "screenshotId": "docs-group-goals-progress",
+            "expected": "The room shows the working goal.",
+            "availableSince": "0.1.0-alpha.2"
+          },
+          {
+            "id": "stop-running-goal",
+            "aliases": [],
+            "text": "Choose Stop in the room.",
+            "uiLabels": [
+              "Stop",
+              "Stopped"
+            ],
+            "screenshotId": "docs-group-goals-stopped",
+            "expected": "The room shows the stopped goal.",
+            "availableSince": "0.1.0-alpha.2"
+          }
+        ],
+        "boundaries": [
+          "Only an authorized owner with a group coordinator can start this flow.",
+          "Stopping a goal ends new coordinator work; it does not undo completed actions."
+        ],
+        "troubleshooting": [
+          {
+            "errorId": "goal-start",
+            "message": "Could not start goal. Check the deadline and try again.",
+            "action": "Check the required fields and deadline, then retry."
+          }
+        ],
+        "related": [
+          "bots-create"
+        ]
+      }
+    ],
+    "screenshots": [
+      {
+        "id": "docs-bots-create-form",
+        "file": "docs/docs-bots-create-form.png",
+        "alt": "New bot: Name and computer mode controls are visible.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "bots-create",
+        "step": "open-new-bot-form"
+      },
+      {
+        "id": "docs-bots-create-open",
+        "file": "docs/docs-bots-create-open.png",
+        "alt": "New bot: The new bot choice is visible.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "bots-create",
+        "step": "open-new-bot-menu"
+      },
+      {
+        "id": "docs-bots-create-private",
+        "file": "docs/docs-bots-create-private.png",
+        "alt": "New bot: Private is selected before creation.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "bots-create",
+        "step": "choose-private-computer"
+      },
+      {
+        "id": "docs-bots-create-ready",
+        "file": "docs/docs-bots-create-ready.png",
+        "alt": "New bot: The Planner conversation opens.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "bots-create",
+        "step": "open-created-bot"
+      },
+      {
+        "id": "docs-chat-approvals-denied",
+        "file": "docs/docs-chat-approvals-denied.png",
+        "alt": "Review approval: Denied is visible and the pending response controls close.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "chat-approvals",
+        "step": "see-denied-action"
+      },
+      {
+        "id": "docs-chat-approvals-pending",
+        "file": "docs/docs-chat-approvals-pending.png",
+        "alt": "Review approval: Both responses are available.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "chat-approvals",
+        "step": "review-pending-action"
+      },
+      {
+        "id": "docs-computers-add",
+        "file": "docs/docs-computers-add.png",
+        "alt": "Computers: The connection form opens.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "computers",
+        "step": "open-add-computer"
+      },
+      {
+        "id": "docs-computers-open",
+        "file": "docs/docs-computers-open.png",
+        "alt": "Computers: The computer state and free memory appear.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "computers",
+        "step": "inspect-computer-capacity"
+      },
+      {
+        "id": "docs-computers-refused",
+        "file": "docs/docs-computers-refused.png",
+        "alt": "Computers: The row shows the reachability refusal.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "computers",
+        "step": "inspect-refused-test"
+      },
+      {
+        "id": "docs-computers-tested",
+        "file": "docs/docs-computers-tested.png",
+        "alt": "Computers: The row shows a running connection.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "computers",
+        "step": "retry-computer-test"
+      },
+      {
+        "id": "docs-group-goals-form",
+        "file": "docs/docs-group-goals-form.png",
+        "alt": "Start goal: Start goal is ready to submit.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "group-goals",
+        "step": "fill-goal-form"
+      },
+      {
+        "id": "docs-group-goals-progress",
+        "file": "docs/docs-group-goals-progress.png",
+        "alt": "Start goal: The room shows the working goal.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "group-goals",
+        "step": "watch-goal-progress"
+      },
+      {
+        "id": "docs-group-goals-ready",
+        "file": "docs/docs-group-goals-ready.png",
+        "alt": "Start goal: The goal form appears for the group coordinator.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "group-goals",
+        "step": "open-start-goal"
+      },
+      {
+        "id": "docs-group-goals-stopped",
+        "file": "docs/docs-group-goals-stopped.png",
+        "alt": "Start goal: The room shows the stopped goal.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "group-goals",
+        "step": "stop-running-goal"
+      },
+      {
+        "id": "docs-integrations-access",
+        "file": "docs/docs-integrations-access.png",
+        "alt": "Integrations: The read tool asks first.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "integrations",
+        "step": "review-tool-access"
+      },
+      {
+        "id": "docs-integrations-allow",
+        "file": "docs/docs-integrations-allow.png",
+        "alt": "Integrations: The read tool shows Allow.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "integrations",
+        "step": "allow-read-tool"
+      },
+      {
+        "id": "docs-integrations-block",
+        "file": "docs/docs-integrations-block.png",
+        "alt": "Integrations: The read tool is no longer selected.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "integrations",
+        "step": "remove-tool-access"
+      },
+      {
+        "id": "docs-integrations-connect",
+        "file": "docs/docs-integrations-connect.png",
+        "alt": "Integrations: The token entry field appears.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "integrations",
+        "step": "open-connection-form"
+      },
+      {
+        "id": "docs-integrations-open",
+        "file": "docs/docs-integrations-open.png",
+        "alt": "Integrations: The integration table appears.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "integrations",
+        "step": "browse-integration-catalog"
+      },
+      {
+        "id": "docs-memory-documents-change",
+        "file": "docs/docs-memory-documents-change.png",
+        "alt": "Memory: The approved content appears in the document.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "memory-documents",
+        "step": "approve-reviewed-change"
+      },
+      {
+        "id": "docs-memory-documents-detail",
+        "file": "docs/docs-memory-documents-detail.png",
+        "alt": "Memory: The document content appears in its detail.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "memory-documents",
+        "step": "open-document-detail"
+      },
+      {
+        "id": "docs-memory-documents-history",
+        "file": "docs/docs-memory-documents-history.png",
+        "alt": "Memory: The first saved revision appears.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "memory-documents",
+        "step": "inspect-document-history"
+      },
+      {
+        "id": "docs-memory-documents-open",
+        "file": "docs/docs-memory-documents-open.png",
+        "alt": "Memory: Preferences appears in the document list.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "memory-documents",
+        "step": "find-memory-document"
+      },
+      {
+        "id": "docs-models-add",
+        "file": "docs/docs-models-add.png",
+        "alt": "Models: The connection form is ready for a key.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "models",
+        "step": "open-connection-form"
+      },
+      {
+        "id": "docs-models-default",
+        "file": "docs/docs-models-default.png",
+        "alt": "Models: Use this model is available for the selected model.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "models",
+        "step": "choose-default-model"
+      },
+      {
+        "id": "docs-models-open",
+        "file": "docs/docs-models-open.png",
+        "alt": "Models: The Models heading and connected credential are visible.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "models",
+        "step": "open-model-settings"
+      },
+      {
+        "id": "docs-onboarding-connect",
+        "file": "docs/docs-onboarding-connect.png",
+        "alt": "Connect a model: Continue is enabled after a key is entered.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "onboarding",
+        "step": "enter-connection-key"
+      },
+      {
+        "id": "docs-onboarding-open",
+        "file": "docs/docs-onboarding-open.png",
+        "alt": "Connect a model: The selected connection and required fields are visible.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "onboarding",
+        "step": "open-model-connection"
+      },
+      {
+        "id": "docs-routines-edit",
+        "file": "docs/docs-routines-edit.png",
+        "alt": "Routines: The revised instruction appears in the editor.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "routines",
+        "step": "edit-routine-instruction"
+      },
+      {
+        "id": "docs-routines-open",
+        "file": "docs/docs-routines-open.png",
+        "alt": "Routines: The scheduled routine appears.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "routines",
+        "step": "open-scheduled-routines"
+      },
+      {
+        "id": "docs-routines-result",
+        "file": "docs/docs-routines-result.png",
+        "alt": "Routines: Run history shows the completed test run.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "routines",
+        "step": "inspect-run-result"
+      },
+      {
+        "id": "docs-routines-saved",
+        "file": "docs/docs-routines-saved.png",
+        "alt": "Routines: The Test run button is available after saving.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "routines",
+        "step": "save-routine"
+      },
+      {
+        "id": "docs-sign-in-error",
+        "file": "docs/docs-sign-in-error.png",
+        "alt": "Sign in to Ardur: The form shows a server connection error.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "sign-in",
+        "step": "show-connection-error"
+      },
+      {
+        "id": "docs-sign-in-open",
+        "file": "docs/docs-sign-in-open.png",
+        "alt": "Sign in to Ardur: The email form is ready.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "sign-in",
+        "step": "open-sign-in"
+      },
+      {
+        "id": "docs-sign-in-recovery",
+        "file": "docs/docs-sign-in-recovery.png",
+        "alt": "Sign in to Ardur: The reset-link form opens.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "sign-in",
+        "step": "open-password-recovery"
+      }
+    ]
+  }
+}
