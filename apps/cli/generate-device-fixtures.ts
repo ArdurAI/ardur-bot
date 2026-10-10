@@ -1,5 +1,12 @@
 import { writeFile } from "node:fs/promises";
-import { canonicalDispatchJson, deviceSignedText } from "@ardurbot/contracts";
+import type { DeviceEventWindowEnd, ProductEvent } from "@ardurbot/contracts";
+import {
+  canonicalDispatchJson,
+  DEVICE_EVENT_WINDOW,
+  deviceEventEndFrame,
+  deviceEventFrame,
+  deviceSignedText,
+} from "@ardurbot/contracts";
 
 // Synthetic public signing inputs; no credentials or live home records.
 const context = {
@@ -16,6 +23,28 @@ const requests = [
     body: { clientNonce: "fixture-request-0001", botId: "fixture-bot", text: "Reply ✓ 🚀" },
   },
   { operation: "runs/get", body: { runId: "fixture-run" } },
+  {
+    operation: "events",
+    body: { runId: "fixture-run", botId: "fixture-bot", threadId: "fixture-thread", cursor: -1 },
+  },
+  {
+    operation: "events",
+    body: {
+      runId: "fixture-room-run",
+      groupId: "fixture-room",
+      threadId: "fixture-room-thread",
+      cursor: 12,
+    },
+  },
+  {
+    operation: "events",
+    body: {
+      runId: "fixture-run",
+      botId: "fixture-bot",
+      threadId: "fixture-thread",
+      cursor: 2_147_483_647,
+    },
+  },
   { operation: "tasks/get", body: { taskId: "fixture-task" } },
   { operation: "runs/list", body: {} },
   { operation: "runs/list", body: { cursor: "fixture-run", limit: 2 } },
@@ -92,9 +121,84 @@ const item = {
   history: [],
   closeWhenDone: false,
 };
+const event = (seq: number): ProductEvent => ({
+  id: `fixture-event-${seq}`,
+  spaceId: "fixture-space",
+  botId: "fixture-bot",
+  threadId: "fixture-thread",
+  runId: "fixture-run",
+  seq,
+  type: "thread.progress",
+  createdAt: "2026-10-01T00:00:00.000Z",
+  payload: { text: "Reply ✓ 🚀\nnext line" },
+});
+function streamVector(
+  name: string,
+  wire: string,
+  startCursor: number,
+  events: ProductEvent[],
+  end: DeviceEventWindowEnd | null,
+) {
+  const utf8 = Buffer.from(wire);
+  const rocket = utf8.indexOf(Buffer.from("🚀"));
+  // Split inside the four-byte scalar as well as the SSE field and frame boundaries.
+  const cuts = [
+    ...new Set([0, 1, 7, ...(rocket >= 0 ? [rocket + 1, rocket + 3] : []), utf8.length]),
+  ].sort((a, b) => a - b);
+  return {
+    name,
+    startCursor,
+    wire,
+    utf8HexChunks: cuts.slice(1).map((cut, i) => utf8.subarray(cuts[i]!, cut).toString("hex")),
+    expectedEvents: events,
+    expectedWindow: end,
+    expectedCursor: end?.nextCursor ?? events.at(-1)?.seq ?? startCursor,
+  };
+}
+const firstEvent = event(1);
+const laterEvent = event(4);
+const limitEnd: DeviceEventWindowEnd = { nextCursor: 4, reason: "limit" };
+const eventStreams = [
+  streamVector(
+    "gaps-and-heartbeat",
+    `${deviceEventFrame(firstEvent)}: heartbeat\n\n${deviceEventFrame(laterEvent)}${deviceEventEndFrame(limitEnd)}`,
+    -1,
+    [firstEvent, laterEvent],
+    limitEnd,
+  ),
+  streamVector(
+    "duplicate-frame",
+    `${deviceEventFrame(firstEvent)}${deviceEventFrame(firstEvent)}${deviceEventFrame(laterEvent)}${deviceEventEndFrame(limitEnd)}`,
+    -1,
+    [firstEvent, laterEvent],
+    limitEnd,
+  ),
+  streamVector(
+    "disconnect-mid-frame",
+    `${deviceEventFrame(firstEvent)}${deviceEventFrame(laterEvent).slice(0, -3)}`,
+    -1,
+    [firstEvent],
+    null,
+  ),
+  streamVector(
+    "reconnect",
+    `${deviceEventFrame(laterEvent)}${deviceEventEndFrame(limitEnd)}`,
+    1,
+    [laterEvent],
+    limitEnd,
+  ),
+  ...(["timeout", "access_lost", "payload_too_large", "error", "shutdown"] as const).map(
+    (reason) => {
+      const end = { nextCursor: 4, reason };
+      return streamVector(reason, deviceEventEndFrame(end), 4, [], end);
+    },
+  ),
+];
 const fixtures = {
   version: 1,
   ...context,
+  eventWindow: DEVICE_EVENT_WINDOW,
+  eventStreams,
   requests: requests.map(({ operation, body }) => ({
     operation,
     body,
