@@ -9,6 +9,7 @@ export class DeviceRequestError extends Error {
   constructor(
     message: string,
     readonly status: 400 | 401 | 403 | 409 | 429 = 403,
+    readonly problem?: unknown,
   ) {
     super(message);
   }

@@ -387,9 +387,10 @@ Each response lasts at most ten seconds and contains at most 128 frames and 1 Mi
 UTF-8 data, including heartbeats and the final frame. An event frame may be at most
 64 KiB. Quiet streams send a heartbeat every two seconds. The home also stops a window
 after scanning 1,024 events, including hidden events. A slow reader keeps only one event
-frame queued at the home; the deadline still closes the window. Both listeners forward
-frames as they arrive and wait when the receiver cannot keep up. Their existing
-15-second transport timeout remains a separate upper bound.
+frame queued at the home; the deadline still closes the window. Each grant may open at
+most four event streams at once; additional requests receive HTTP 429 until an open stream
+closes. Both listeners forward frames as they arrive and wait when the receiver cannot
+keep up. Their existing 15-second transport timeout remains a separate upper bound.
 
 The last frame has `event: window` and `data: {"nextCursor":N,"reason":R}`. It has no
 SSE id. The next cursor may pass hidden events. On `timeout` or `limit`, obtain a new nonce,
@@ -399,9 +400,10 @@ Discard an unfinished frame and ignore event ids at or below the saved cursor. S
 gaps are expected because the cursor belongs to the whole thread. Decode UTF-8 across
 network chunks; a chunk can end inside a character or frame.
 
-Stop automatic reconnects on `access_lost` or `payload_too_large`. An oversized event is
-not truncated or skipped; its sequence stays available, and the client should inspect
-the run at home instead. `error` and `shutdown` retain the last safe cursor but carry no
+Stop automatic reconnects on `access_lost` or `payload_too_large` and show the reason. An
+oversized event is not truncated or skipped; its sequence stays available, and the client
+should inspect the run at home instead. Advancing past the event is a deliberate user
+choice. `error` and `shutdown` retain the last safe cursor but carry no
 private diagnostic. A transport failure may cut off the final frame; the last complete
 event id still permits recovery. Run completion is an ordinary run event; clients can
 use the exact run read to decide when to stop following.

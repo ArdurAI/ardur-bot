@@ -253,7 +253,10 @@ export function mountRemoteDevices(
   const device = new Hono();
   device.onError((error, c) => {
     if (error instanceof DeviceRequestError)
-      return c.json({ message: error.message }, error.status);
+      return c.json(
+        { message: error.message, ...(error.problem ? { problem: error.problem } : {}) },
+        error.status,
+      );
     if (error instanceof IsolationError) return c.json({ message: DEVICE_RECORD_UNAVAILABLE }, 403);
     if (
       error instanceof ORPCError &&

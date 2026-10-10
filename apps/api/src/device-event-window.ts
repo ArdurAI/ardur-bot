@@ -9,6 +9,7 @@ export function deviceEventWindow(input: {
   visible: (event: ProductEvent) => Promise<boolean>;
   signal?: AbortSignal;
   shutdown?: AbortSignal;
+  onEnd?: () => void;
 }) {
   const encoder = new TextEncoder();
   const abort = new AbortController();
@@ -18,6 +19,7 @@ export function deviceEventWindow(input: {
   let bytes = 0;
   let scanned = 0;
   let closed = false;
+  let released = false;
   let heartbeatAt = Date.now();
   let pending: Promise<IteratorResult<ProductEvent>> | undefined;
   let deadline: ReturnType<typeof setTimeout>;
@@ -25,6 +27,11 @@ export function deviceEventWindow(input: {
   let controller: ReadableStreamDefaultController<Uint8Array>;
   // The final cursor is small and never includes event content. Reserve its full upper bound.
   const finalReserve = 256;
+  function release() {
+    if (released) return;
+    released = true;
+    input.onEnd?.();
+  }
   function cleanup() {
     clearTimeout(deadline);
     input.signal?.removeEventListener("abort", disconnect);
@@ -33,14 +40,20 @@ export function deviceEventWindow(input: {
     wake?.();
     // Abort wakes the existing follower before return waits for its pending next().
     void iterator.return(undefined).catch(() => undefined);
+    release();
   }
   function finish(reason: DeviceEventWindowEnd["reason"], send = true) {
     if (closed) return;
     closed = true;
-    if (send)
-      controller.enqueue(encoder.encode(deviceEventEndFrame({ nextCursor: cursor, reason })));
-    controller.close();
-    cleanup();
+    try {
+      if (send)
+        controller.enqueue(encoder.encode(deviceEventEndFrame({ nextCursor: cursor, reason })));
+      controller.close();
+    } catch {
+      // Controller may already be closed/errored
+    } finally {
+      cleanup();
+    }
   }
   function disconnect() {
     finish("shutdown", false);
