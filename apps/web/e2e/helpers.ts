@@ -18,7 +18,15 @@ export function activeBotId(page: Page) {
 
 export async function rpc<T>(page: Page, procedure: string, body: unknown): Promise<T> {
   const response = await page.request.post(`/rpc/${procedure}`, { data: { json: body } });
-  const parsed = (await response.json()) as { json?: T; error?: { message?: string } };
+  const text = await response.text();
+  let parsed: { json?: T; error?: { message?: string } };
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error(
+      `${procedure} ${response.status()}: expected JSON, received ${JSON.stringify(text.slice(0, 200))}`,
+    );
+  }
   if (!response.ok() || parsed.error) {
     throw new Error(`${procedure} ${response.status()}: ${parsed.error?.message ?? "failed"}`);
   }

@@ -39,6 +39,10 @@ import {
   userVisibleMessages,
   workingBotsWithoutVisibleActivity,
 } from "@ardurbot/core";
+import {
+  composerGroupRecipientNames,
+  queuedGroupRecipientNames,
+} from "@ardurbot/core/group-message-recipients";
 import * as Clipboard from "expo-clipboard";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useHeaderHeight } from "expo-router/react-navigation";
@@ -81,6 +85,7 @@ import { AskActions } from "../components/AskActions";
 import { BotAvatar } from "../components/bot-avatar";
 import { BotRuntimeLabel } from "../components/bot-runtime-label";
 import { CompactWorkRecord } from "../components/compact-work-record";
+import { ComposerRecipients } from "../components/composer-recipients";
 import { MobileRunContext } from "../components/context-section";
 import {
   ChiefDispatchLine,
@@ -990,7 +995,12 @@ function Thread() {
                 readVisibleTarget.current = null;
                 markReadIfVisible();
               }
-              if (isRunTerminalEvent(event)) {
+              if (
+                isRunTerminalEvent(event) ||
+                (groupId &&
+                  event.type === "thread.message.created" &&
+                  event.payload?.role === "user")
+              ) {
                 void refreshMentionBots();
                 if (!jumpScrollTarget.current && !expandedHistoryThread.current) {
                   void refresh().catch(() => undefined);
@@ -2177,6 +2187,26 @@ function Thread() {
               }}
             />
           </Suspense>
+        ) : null}
+        {inGroup ? (
+          <ComposerRecipients
+            names={
+              canSend
+                ? composerGroupRecipientNames({
+                    group: { members: snap?.members ?? [], groupRouting: snap?.groupRouting },
+                    draft,
+                    skill: selectedSkill,
+                    mentions: selectedMentions,
+                    replyBotId: replyTarget?.botId,
+                  })
+                : []
+            }
+            queued={queuedGroupRecipientNames({
+              members: snap?.members ?? [],
+              activeRuns: snap?.activeRuns,
+            })}
+            color={tokens.mutedForeground}
+          />
         ) : null}
         <View
           style={{

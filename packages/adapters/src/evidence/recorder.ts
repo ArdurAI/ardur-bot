@@ -91,11 +91,25 @@ export function createEvidenceRecorder(deps: RecorderDeps) {
     // Undurable gap counts are retry work, not a cache; flushGaps releases them after persistence.
   }
 
-  async function serial<T>(runId: string, step: string, work: () => Promise<T>): Promise<T> {
-    const next = (queues.get(runId) ?? Promise.resolve()).catch(() => undefined).then(work);
+  async function serial<T>(
+    runId: string,
+    step: string,
+    work: (signal: AbortSignal) => Promise<T>,
+    callerSignal?: AbortSignal,
+  ): Promise<T> {
+    const deadline = new AbortController();
+    const signal = callerSignal
+      ? AbortSignal.any([deadline.signal, callerSignal])
+      : deadline.signal;
+    const next = (queues.get(runId) ?? Promise.resolve())
+      .catch(() => undefined)
+      .then(() => work(signal));
     queues.set(runId, next);
     try {
       return await beforeDeadline(step, Date.now() + RESTART_DRAIN_MS, () => next);
+    } catch (error) {
+      if (error instanceof StepDeadlineExceeded) deadline.abort(error);
+      throw error;
     } finally {
       // Keep the queue fenced until the underlying storage work really settles.
       void next
@@ -195,12 +209,15 @@ export function createEvidenceRecorder(deps: RecorderDeps) {
     chains.set(run.id, state);
     return state;
   }
-  function flushGaps(runId: string): Promise<void> {
+  function flushGaps(runId: string, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
     const existing = gapFlushes.get(runId);
     if (existing) return existing;
     // Install the fence before starting storage work; callers share it even after a timeout.
     const flush = Promise.resolve().then(async () => {
       try {
+        // Gap notes record the failure itself, so a started flush finishes even after a
+        // deadline; the deadline path joins this flush to persist its own gap.
         while ((pendingGaps.get(runId) ?? 0) > 0) {
           await deps.store.noteGap(runId);
           pendingGaps.set(runId, (pendingGaps.get(runId) ?? 1) - 1);
@@ -213,9 +230,9 @@ export function createEvidenceRecorder(deps: RecorderDeps) {
     gapFlushes.set(runId, flush);
     return flush;
   }
-  function timedOutGap(runId: string, step: string) {
+  function timedOutGap(runId: string, step: string, gapAlreadyCounted = false) {
     chains.delete(runId);
-    pendingGaps.set(runId, (pendingGaps.get(runId) ?? 0) + 1);
+    if (!gapAlreadyCounted) pendingGaps.set(runId, (pendingGaps.get(runId) ?? 0) + 1);
     getLogger().warn("run.step.timed_out", { step });
     // Do not queue this behind the stalled record/seal or hold the reply on it.
     void beforeDeadline("evidence-gap", Date.now() + RESTART_DRAIN_MS, () =>
@@ -226,76 +243,90 @@ export function createEvidenceRecorder(deps: RecorderDeps) {
     input: RecordDecisionInput,
     signal?: AbortSignal,
   ): Promise<EvidenceResult> {
-    return serial(input.run.id, "record", async (): Promise<EvidenceResult> => {
-      try {
-        signal?.throwIfAborted();
-        if (!(await governance(input.run))) return { ok: true };
-        const durableId = input.decisionId
-          ? `evidence:${input.run.id}:${input.decisionId}`
-          : undefined;
-        if (durableId && (await deps.store.recordById(durableId))) return { ok: true };
-        signal?.throwIfAborted();
-        await flushGaps(input.run.id);
-        for (let attempt = 0; attempt < 3; attempt++) {
-          signal?.throwIfAborted();
-          const state = await runChain(input.run, signal);
-          const fields = decisionFields(input.decisionKind, input.ruleId);
-          const record = state.chain.append({
-            ...state.identity,
-            ...toolEvidenceClass(input.toolName, input.viaConnector),
-            ...fields,
-            tool: input.toolName,
-            args: input.args,
-            target: safeTarget(input),
-            budgetRemaining: {},
-          });
-          try {
-            signal?.throwIfAborted();
-            await deps.store.insertRecord({
-              ...record,
-              ...(durableId ? { id: durableId } : {}),
-              runId: input.run.id,
-              spaceId: input.run.spaceId,
-              kid: state.kid,
-              verdict: fields.verdict,
-              decisionKind: input.decisionKind,
-              toolName: input.toolName,
-            });
-            return { ok: true };
-          } catch (error) {
-            chains.delete(input.run.id);
-            if (durableId && (await deps.store.recordById(durableId))) return { ok: true };
-            if (!(error instanceof EvidenceSequenceConflict) || attempt === 2) throw error;
-          }
-        }
-        throw new Error("Evidence retry exhausted");
-      } catch {
-        chains.delete(input.run.id);
-        if (signal?.aborted) return { ok: false, reason: "recording_failed" };
-        pendingGaps.set(input.run.id, (pendingGaps.get(input.run.id) ?? 0) + 1);
+    let gapCounted = false;
+    return serial(
+      input.run.id,
+      "record",
+      async (signal): Promise<EvidenceResult> => {
         try {
-          await flushGaps(input.run.id);
+          signal.throwIfAborted();
+          if (!(await governance(input.run))) return { ok: true };
+          const durableId = input.decisionId
+            ? `evidence:${input.run.id}:${input.decisionId}`
+            : undefined;
+          if (durableId && (await deps.store.recordById(durableId))) return { ok: true };
+          signal.throwIfAborted();
+          await flushGaps(input.run.id, signal);
+          for (let attempt = 0; attempt < 3; attempt++) {
+            signal.throwIfAborted();
+            const state = await runChain(input.run, signal);
+            signal.throwIfAborted();
+            const fields = decisionFields(input.decisionKind, input.ruleId);
+            const record = state.chain.append({
+              ...state.identity,
+              ...toolEvidenceClass(input.toolName, input.viaConnector),
+              ...fields,
+              tool: input.toolName,
+              args: input.args,
+              target: safeTarget(input),
+              budgetRemaining: {},
+            });
+            try {
+              signal.throwIfAborted();
+              await deps.store.insertRecord({
+                ...record,
+                ...(durableId ? { id: durableId } : {}),
+                runId: input.run.id,
+                spaceId: input.run.spaceId,
+                kid: state.kid,
+                verdict: fields.verdict,
+                decisionKind: input.decisionKind,
+                toolName: input.toolName,
+              });
+              return { ok: true };
+            } catch (error) {
+              signal.throwIfAborted();
+              chains.delete(input.run.id);
+              if (durableId && (await deps.store.recordById(durableId))) return { ok: true };
+              if (!(error instanceof EvidenceSequenceConflict) || attempt === 2) throw error;
+            }
+          }
+          throw new Error("Evidence retry exhausted");
         } catch {
-          /* Retry when storage recovers. */
+          chains.delete(input.run.id);
+          if (signal.aborted) return { ok: false, reason: "recording_failed" };
+          pendingGaps.set(input.run.id, (pendingGaps.get(input.run.id) ?? 0) + 1);
+          gapCounted = true;
+          try {
+            await flushGaps(input.run.id, signal);
+          } catch {
+            /* Retry when storage recovers. */
+          }
+          return { ok: false, reason: "recording_failed" };
         }
-        return { ok: false, reason: "recording_failed" };
-      }
-    }).catch((error: unknown) => {
+      },
+      signal,
+    ).catch((error: unknown) => {
       if (!(error instanceof StepDeadlineExceeded)) throw error;
-      if (!signal?.aborted) timedOutGap(input.run.id, error.step);
+      if (!signal?.aborted) timedOutGap(input.run.id, error.step, gapCounted);
       return { ok: false, reason: "recording_failed" };
     });
   }
   async function sealRunEvidence(runId: string): Promise<EvidenceResult> {
-    return serial(runId, "seal", async (): Promise<EvidenceResult> => {
+    return serial(runId, "seal", async (signal): Promise<EvidenceResult> => {
       try {
-        await flushGaps(runId);
+        signal.throwIfAborted();
+        await flushGaps(runId, signal);
+        signal.throwIfAborted();
         if (await deps.store.sealForRun(runId)) return { ok: true };
+        signal.throwIfAborted();
         const records = await deps.store.recordsForRun(runId);
+        signal.throwIfAborted();
         const first = records[0];
         const last = records.at(-1);
         if (!first || !last) return { ok: true };
         const row = await deps.store.keyByKid(first.kid);
+        signal.throwIfAborted();
         if (!row || row.spaceId !== first.spaceId) throw new Error("Missing evidence key");
         const journal = records.map((record) => record.jws);
         const verification = verifyChain(journal, row.publicKeyPem);
@@ -303,7 +334,9 @@ export function createEvidenceRecorder(deps: RecorderDeps) {
           deps.logFailure?.(verification.failures.map((failure) => failure.code));
           return { ok: false, reason: "chain_invalid" };
         }
-        await flushGaps(runId);
+        signal.throwIfAborted();
+        await flushGaps(runId, signal);
+        signal.throwIfAborted();
         const identity = claims(first.jws);
         const jws = sealRun(
           {
@@ -315,18 +348,21 @@ export function createEvidenceRecorder(deps: RecorderDeps) {
           privateKey(row),
           row.kid,
         );
+        const gapCount = await deps.store.gapCount(runId);
+        signal.throwIfAborted();
         await deps.store.insertSeal({
           runId,
           spaceId: first.spaceId,
           jws,
           headSha256: last.sha256,
           recordCount: records.length,
-          gapCount: await deps.store.gapCount(runId),
+          gapCount,
         });
         return { ok: true };
       } catch {
         return { ok: false, reason: "sealing_failed" };
       } finally {
+        // serial keeps later steps behind this thunk until cleanup has finished.
         releaseRunState(runId);
       }
     }).catch((error: unknown) => {

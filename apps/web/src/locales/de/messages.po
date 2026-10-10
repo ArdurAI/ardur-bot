@@ -7171,6 +7171,10 @@ msgstr "In Warteschlange"
 msgid "Queued for {name}"
 msgstr "In der Warteschlange für {name}"
 
+#: src/components/composer/GroupRecipients.tsx
+msgid "Queued: {queued}"
+msgstr "In der Warteschlange: {queued}"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Quick access shortcut"
 msgstr ""
@@ -9525,6 +9529,10 @@ msgstr ""
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "Titel"
+
+#: src/components/composer/GroupRecipients.tsx
+msgid "To {names}"
+msgstr "An {names}"
 
 #: src/components/PeerMessageReceipt.tsx
 msgid "to {peer}"

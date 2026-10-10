@@ -1,8 +1,7 @@
 export const RU_MESSAGES: Record<string, string> = {
-  "{runtime}'s runtime stopped. Retry the run.":
-    "Среда выполнения {runtime} остановилась. Повторите запуск.",
-  "{runtime} could not finish this turn. Retry the run.":
-    "{runtime} не смог завершить этот шаг. Повторите запуск.",
+  "To {names}": "Кому: {names}",
+  "Queued: {queued}": "В очереди: {queued}",
+
   "Capability checks": "Проверки возможностей",
   "Last 7 days": "Последние 7 дней",
   Success: "Успех",
@@ -1567,4 +1566,8 @@ export const RU_MESSAGES: Record<string, string> = {
   "The bot stopped responding. Retry the run.": "Бот перестал отвечать. Повторите запуск.",
   "Continue the interrupted run from its saved results. Check any uncertain action before repeating it.":
     "Продолжите прерванный запуск с сохранённых результатов. Проверьте действия с неизвестным результатом, прежде чем повторять их.",
+  "{runtime}'s runtime stopped. Retry the run.":
+    "Среда выполнения {runtime} остановилась. Повторите запуск.",
+  "{runtime} could not finish this turn. Retry the run.":
+    "{runtime} не смог завершить этот шаг. Повторите запуск.",
 };

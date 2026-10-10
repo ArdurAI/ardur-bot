@@ -69,6 +69,7 @@ import {
   userVisibleMessages,
   workRecordEntries,
 } from "@ardurbot/core";
+import type { GroupRecipientContext } from "@ardurbot/core/group-message-recipients";
 import type { GroupAvatarMember } from "@ardurbot/ui-web";
 import {
   AvatarStyleProvider,
@@ -405,6 +406,7 @@ const RoutinesPanel = lazy(() => import("../components/composer/RoutinesPanel"))
 const WorkspacePane = lazy(() =>
   import("./workspace/WorkspacePane").then((module) => ({ default: module.WorkspacePane })),
 );
+const GroupRecipients = lazy(() => import("../components/composer/GroupRecipients"));
 const SlashPicker = lazy(() => import("../components/composer/SlashPicker"));
 const ViewControls = lazy(() =>
   import("./workspace/ViewControls").then((module) => ({ default: module.ViewControls })),
@@ -1815,6 +1817,7 @@ export function ShellPage({
         }
         if (
           isRunTerminalEvent(event) ||
+          (event.type === "thread.message.created" && event.payload.role === "user") ||
           event.type === "run.waiting_input" ||
           event.type === "computer.placement.requested"
         ) {
@@ -4049,6 +4052,15 @@ export function ShellPage({
             <Composer
               key={inGroup ? `group:${groupId}` : `bot:${active?.id}`}
               comparisonBotId={!inGroup && bots.length >= 2 ? active?.id : undefined}
+              groupRecipients={
+                inGroup
+                  ? {
+                      members: transcriptMembers ?? [],
+                      groupRouting: activeSnapshot?.groupRouting,
+                      activeRuns: currentRuns,
+                    }
+                  : undefined
+              }
               activeName={inGroup ? (activeGroup?.name ?? activeSnapshot?.groupName) : active?.name}
               refusalBotName={refusalRunBotName(activeSnapshot, bots, transcriptMembers)}
               running={composerRunning}
@@ -5916,6 +5928,7 @@ const QuoteSelectionButton = memo(function QuoteSelectionButton({
 export const Composer = memo(function Composer({
   comparisonBotId,
   activeName,
+  groupRecipients,
   running,
   disabled,
   pendingAttachments,
@@ -5959,6 +5972,7 @@ export const Composer = memo(function Composer({
 }: {
   comparisonBotId?: string;
   activeName?: string;
+  groupRecipients?: GroupRecipientContext;
   running: boolean;
   disabled?: boolean;
   pendingAttachments: PendingAttachment[];
@@ -6489,6 +6503,18 @@ export const Composer = memo(function Composer({
             ))}
           </div>
         </div>
+      ) : null}
+      {groupRecipients ? (
+        <Suspense fallback={null}>
+          <GroupRecipients
+            group={groupRecipients}
+            canSend={canSend}
+            draft={draft}
+            skill={selectedSkill}
+            mentions={selectedMentions}
+            replyBotId={replyTarget?.botId}
+          />
+        </Suspense>
       ) : null}
       <div
         data-testid="composer-bar"

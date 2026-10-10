@@ -274,6 +274,7 @@ function showcaseData() {
     threadId: group.threadId,
     groupId: group.id,
     groupName: group.name,
+    groupRouting: { coordinatorBotId: bots[0]!.id, defaultBotId: bots[0]!.id },
     members: group.members,
     cursor: 5,
     olderCursor: null,
@@ -466,6 +467,8 @@ test("captures bot chat, group collaboration, and routines from seeded demo data
       exact: false,
     }),
   ).toBeVisible();
+  await page.locator("textarea").fill("Who is taking the next check?");
+  await expect(page.getByTestId("composer-recipients")).toHaveText("To Chief of Staff");
   await captureSiteScreenshot(page, "group-chat");
 
   await page.goto("/app/bot");

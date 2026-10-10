@@ -1,3 +1,4 @@
+import { queuedGroupRecipientNames } from "@ardurbot/core/group-message-recipients";
 import type { PrismaClient } from "@ardurbot/db";
 import { expect, it } from "vitest";
 import { claimBotRun } from "./concurrency.js";
@@ -186,4 +187,23 @@ it("applies a changed room policy to the next admission and leaves working bots 
   expect((await claim("run-fay", "room", "fay")).queued).toBe(true);
   groups.room = { policy: { version: 1, maxConcurrentRuns: 2 } };
   expect((await claim("run-fay", "room", "fay")).count).toBe(1);
+});
+
+it("keeps a default four-member admission cap and visibly projects both queued members", async () => {
+  const { claim } = admissionFixture({
+    botCap: 8,
+    groups: { room: { policy: null } },
+    threadGroups: { room: "room" },
+  });
+  const members = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta"].map((name) => ({
+    name,
+    botId: name,
+  }));
+  const results = await Promise.all(members.map((m) => claim(m.botId, "room", m.botId)));
+  expect(results.map((result) => result.count)).toEqual([1, 1, 1, 1, 0, 0]);
+  const activeRuns = members.map((member, index) => ({
+    botId: member.botId,
+    status: results[index]!.queued ? "queued" : "running",
+  }));
+  expect(queuedGroupRecipientNames({ members, activeRuns })).toEqual(["Epsilon", "Zeta"]);
 });

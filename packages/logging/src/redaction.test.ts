@@ -1,8 +1,197 @@
 import { performance } from "node:perf_hooks";
 import { describe, expect, it } from "vitest";
-import { redactBindings, redactSensitiveText } from "./redaction.js";
+import {
+  redactBindings,
+  redactCommandOutput,
+  redactCredentialText,
+  redactSensitiveText,
+} from "./redaction.js";
 
 describe("redaction", () => {
+  it.each([
+    "apiTokens",
+    "mySecrets",
+    "authCredentials",
+    "accessTokens",
+    "clientSecrets",
+    "api_tokens",
+    "secretValue",
+    "tokenData",
+    "credentialBundle",
+    "unknownSecrets",
+    "maxTokensSecret",
+    "inputToken",
+    "outputToken",
+    "cachedToken",
+    "contextToken",
+    "promptToken",
+  ])("masks credential words anywhere in the key: %s", (key) => {
+    const secretValue = "fixture-private-value";
+    const data = { [key]: secretValue };
+    const bindings = redactBindings(data);
+    expect(bindings).toEqual({ [key]: "[Redacted]" });
+    expect(JSON.stringify(bindings)).not.toContain(secretValue);
+    for (const redact of [redactSensitiveText, redactCommandOutput, redactCredentialText]) {
+      for (const text of [
+        `${key}: ${secretValue}`,
+        `${key}=${secretValue}`,
+        JSON.stringify(data),
+      ]) {
+        const result = redact(text);
+        expect(result).toContain("[Redacted]");
+        expect(result).not.toContain(secretValue);
+      }
+    }
+  });
+
+  it.each([
+    // A singular token key is a counter only after a limit word; "cachedToken" can hold one.
+    ...["max", "min", "num", "total"].map((prefix) => `${prefix}Token`),
+    ...[
+      "max",
+      "min",
+      "num",
+      "total",
+      "used",
+      "remaining",
+      "input",
+      "output",
+      "prompt",
+      "completion",
+      "cached",
+      "reasoning",
+      "context",
+    ].flatMap((prefix) => [`${prefix}Tokens`, `${prefix}_tokens`]),
+    "tokenCount",
+    "tokensUsed",
+    "knownSecrets",
+    "requiredSecrets",
+    "missingSecrets",
+    "secretNames",
+    "secretRef",
+    "secretId",
+    "secretStore",
+    "parentSecretAbsent",
+    "apiTokenPresent",
+    "credentialId",
+  ])("preserves explicitly named credential metadata: %s", (key) => {
+    const data = { [key]: "fixture-reference" };
+    expect(redactBindings(data)).toEqual(data);
+    for (const redact of [redactSensitiveText, redactCommandOutput, redactCredentialText]) {
+      for (const text of [
+        `${key}: fixture-reference`,
+        `${key}=fixture-reference`,
+        JSON.stringify(data),
+      ]) {
+        expect(redact(text)).toBe(text);
+      }
+    }
+  });
+
+  it.each(
+    ["n", "t", "r"].flatMap((escapeLetter) =>
+      [":", "="].flatMap((separator) => [
+        `printf 'apiToken${separator} x\\${escapeLetter}password${separator} y\\${escapeLetter}'`,
+        `export TOKEN=x\\\\${escapeLetter}password${separator} y`,
+        `apiToken${separator} fixture-first\\${escapeLetter}password${separator}\tfixture-second\\${escapeLetter}clientSecret${separator} fixture-third`,
+        `"apiToken"${separator} fixture-first\\${escapeLetter}password${separator} fixture-second`,
+        `apiToken${separator} fixture-first\\${escapeLetter}"password"${separator} fixture-second`,
+        `apiToken${separator} fixture-first\\${escapeLetter}'password'${separator} fixture-second`,
+        `apiToken${separator} fixture-first\\${escapeLetter}password${separator} "fixture-second value"`,
+        `apiToken${separator} fixture-first\\${escapeLetter}password${separator} {"safe":"fixture-second"}`,
+        `apiToken${separator} fixture-first\\${escapeLetter}Authorization${separator} Basic fixture-second`,
+      ]),
+    ),
+  )("masks every value in escaped sensitive assignment chains: %s", (input) => {
+    for (const redact of [redactSensitiveText, redactCommandOutput, redactCredentialText]) {
+      const result = redact(input);
+      expect(result).toContain("[Redacted]");
+      for (const secretValue of ["x", "y", "fixture-first", "fixture-second", "fixture-third"]) {
+        // The command word itself contains x; inspect its retained arguments.
+        expect(result.replace(/^export /, "")).not.toContain(secretValue);
+      }
+      expect(redact(result)).toBe(result);
+    }
+    const bindings = redactBindings({ detail: input });
+    for (const secretValue of ["x", "y", "fixture-first", "fixture-second", "fixture-third"]) {
+      expect(String(bindings.detail).replace(/^export /, "")).not.toContain(secretValue);
+    }
+  });
+
+  it.each([
+    String.raw`printf 'apiToken: fixture-first\token: fixture-second\n'`,
+    String.raw`printf 'note\token: fixture-first'`,
+    "apiToken: fixture-first|password: fixture-second",
+    "apiToken: fixture-first/password: fixture-second",
+    "apiToken: password: fixture-second",
+    "password: fixture-first token: fixture-second",
+    "inputToken: fixture-first outputToken: fixture-second",
+  ])("masks a sensitive key glued to a masked value and its value: %s", (input) => {
+    for (const redact of [redactSensitiveText, redactCommandOutput, redactCredentialText]) {
+      const result = redact(input);
+      expect(result).toContain("[Redacted]");
+      expect(result).not.toContain("fixture-first");
+      expect(result).not.toContain("fixture-second");
+    }
+  });
+
+  it.each(["model", "maxTokens", "knownSecrets"])(
+    "keeps the value of a non-sensitive escaped assignment: %s",
+    (key) => {
+      const input = `apiToken: fixture-private-value\\n${key}: fixture-public-value`;
+      for (const redact of [redactSensitiveText, redactCommandOutput, redactCredentialText]) {
+        const result = redact(input);
+        expect(result).not.toContain("fixture-private-value");
+        expect(result).toContain("fixture-public-value");
+      }
+    },
+  );
+
+  it.each([
+    "maxTokens: 4096",
+    "max_tokens=4096",
+    "MAX_TOKENS=4096",
+    "tokenCount=12",
+    "knownSecrets: secrets",
+    "known_secrets=secrets",
+    "secretStore: store",
+  ])("preserves non-credential key assignments: %s", (input) => {
+    expect(redactSensitiveText(input)).toBe(input);
+  });
+
+  it("uses the same credential classification for bindings and JSON text", () => {
+    const input = {
+      maxTokens: 4096,
+      tokenCount: 12,
+      knownSecrets: "secrets",
+      apiToken: "x",
+      accessToken: "x",
+      token: "x",
+      api_token: "x",
+      ACCESS_TOKEN: "x",
+      clientSecret: "x",
+      client_secret: "x",
+      tokens: ["x"],
+      secrets: ["x"],
+      credentials: ["x"],
+    };
+    const expected = {
+      ...input,
+      apiToken: "[Redacted]",
+      accessToken: "[Redacted]",
+      token: "[Redacted]",
+      api_token: "[Redacted]",
+      ACCESS_TOKEN: "[Redacted]",
+      clientSecret: "[Redacted]",
+      client_secret: "[Redacted]",
+      tokens: "[Redacted]",
+      secrets: "[Redacted]",
+      credentials: "[Redacted]",
+    };
+    expect(redactBindings(input)).toEqual(expected);
+    expect(JSON.parse(redactSensitiveText(JSON.stringify(input)))).toEqual(expected);
+  });
+
   it.each([
     ["review filler", () => "x".repeat(1024 * 1024)],
     ["email local part", () => "a.".repeat(512 * 1024)],
@@ -11,6 +200,7 @@ describe("redaction", () => {
     ["URL colons", () => `https://fixture:${":".repeat(1024 * 1024)}`],
     ["JWT prefixes", () => "eyJ-".repeat(256 * 1024)],
     ["key prefixes", () => "sk-".repeat(350000)],
+    ["masked value ending in a separator", () => `apiToken: ${"a".repeat(1024 * 1024)}|:`],
   ])("redacts a 1 MiB adversarial line without catastrophic backtracking: %s", (_name, input) => {
     // Compile the matchers before measuring; construction and assertions are not timed.
     redactSensitiveText("Safe diagnostic");

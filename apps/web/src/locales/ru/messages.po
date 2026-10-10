@@ -7171,6 +7171,10 @@ msgstr "В очереди"
 msgid "Queued for {name}"
 msgstr "В очереди для {name}"
 
+#: src/components/composer/GroupRecipients.tsx
+msgid "Queued: {queued}"
+msgstr "В очереди: {queued}"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Quick access shortcut"
 msgstr ""
@@ -9525,6 +9529,10 @@ msgstr ""
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "Заголовок"
+
+#: src/components/composer/GroupRecipients.tsx
+msgid "To {names}"
+msgstr "Кому: {names}"
 
 #: src/components/PeerMessageReceipt.tsx
 msgid "to {peer}"

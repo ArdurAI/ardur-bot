@@ -75,7 +75,9 @@ jobs:
         if: always()
         with:
           name: chief-receipt-screenshots
-          path: apps/web/test-results
+          path: |
+            apps/web/test-results
+            playwright-report
           if-no-files-found: ignore
   bundle:
     name: Chief receipt initial bundle budget

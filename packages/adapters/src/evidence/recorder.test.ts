@@ -254,6 +254,163 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+it.each(["sealForRun", "recordsForRun", "keyByKid", "gapCount"] as const)(
+  "does not resume sealing writes after the deadline while %s is waiting",
+  async (blockedStep) => {
+    vi.useFakeTimers();
+    const { recorder, store, records, keys, seals } = setup();
+    await recorder.recordDecision(input);
+    let resume!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      resume = resolve;
+    });
+    if (blockedStep === "sealForRun") {
+      vi.spyOn(store, "sealForRun").mockImplementationOnce(async () => {
+        await gate;
+        return null;
+      });
+    } else if (blockedStep === "recordsForRun") {
+      vi.spyOn(store, "recordsForRun").mockImplementationOnce(async () => {
+        await gate;
+        return records;
+      });
+    } else if (blockedStep === "keyByKid") {
+      vi.spyOn(store, "keyByKid").mockImplementationOnce(async () => {
+        await gate;
+        return keys[0]!;
+      });
+    } else {
+      vi.spyOn(store, "gapCount").mockImplementationOnce(async () => {
+        await gate;
+        return 0;
+      });
+    }
+    const insertSeal = vi.spyOn(store, "insertSeal");
+    const noteGap = vi.spyOn(store, "noteGap");
+    const sealing = recorder.sealRunEvidence(input.run.id);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(await sealing).toEqual({ ok: false, reason: "sealing_failed" });
+    expect(noteGap).toHaveBeenCalledTimes(1);
+    expect(await store.gapCount(input.run.id)).toBe(1);
+
+    // Leave a queued timeout's gap pending so a late second flush is observable.
+    noteGap.mockRejectedValueOnce(new Error("Gap storage unavailable"));
+    const queuedRecording = recorder.recordDecision(input);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(await queuedRecording).toEqual({ ok: false, reason: "recording_failed" });
+    expect(noteGap).toHaveBeenCalledTimes(2);
+    resume();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(insertSeal).not.toHaveBeenCalled();
+    expect(seals).toHaveLength(0);
+    expect(noteGap).toHaveBeenCalledTimes(2);
+    expect(await store.gapCount(input.run.id)).toBe(1);
+
+    expect(await recorder.recordDecision(input)).toEqual({ ok: true });
+    const lookups = vi.mocked(store.governanceEnabled).mock.calls.length;
+    expect(await recorder.recordDecision(input)).toEqual({ ok: true });
+    expect(store.governanceEnabled).toHaveBeenCalledTimes(lookups);
+    expect(await store.gapCount(input.run.id)).toBe(2);
+  },
+);
+
+it.each(["lastRecord", "activeKey"] as const)(
+  "does not insert a record after the deadline without a caller signal while %s is waiting",
+  async (blockedStep) => {
+    vi.useFakeTimers();
+    const { recorder, store, deps, records, keys } = setup();
+    let resume!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      resume = resolve;
+    });
+    vi.spyOn(store, blockedStep).mockImplementationOnce(async () => {
+      await gate;
+      return null;
+    });
+    const insertRecord = vi.mocked(store.insertRecord);
+    const insertKey = vi.spyOn(store, "insertKey");
+    const put = vi.spyOn(deps.secretStore, "put");
+    const noteGap = vi.spyOn(store, "noteGap");
+    const recording = recorder.recordDecision(input);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(await recording).toEqual({ ok: false, reason: "recording_failed" });
+    expect(noteGap).toHaveBeenCalledTimes(1);
+    expect(await store.gapCount(input.run.id)).toBe(1);
+
+    resume();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(insertRecord).not.toHaveBeenCalled();
+    expect(insertKey).not.toHaveBeenCalled();
+    expect(put).not.toHaveBeenCalled();
+    expect(records).toHaveLength(0);
+    expect(keys).toHaveLength(0);
+    expect(noteGap).toHaveBeenCalledTimes(1);
+    expect(await store.gapCount(input.run.id)).toBe(1);
+  },
+);
+
+it("counts a failed recording once when its gap write recovers after the deadline", async () => {
+  vi.useFakeTimers();
+  const { recorder, store, records } = setup();
+  vi.mocked(store.insertRecord).mockRejectedValueOnce(new Error("Record storage unavailable"));
+  let resume!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    resume = resolve;
+  });
+  const originalNoteGap = store.noteGap;
+  const noteGap = vi.spyOn(store, "noteGap").mockImplementationOnce(async (runId) => {
+    await gate;
+    await originalNoteGap(runId);
+  });
+  const recording = recorder.recordDecision(input);
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(await recording).toEqual({ ok: false, reason: "recording_failed" });
+  expect(noteGap).toHaveBeenCalledTimes(1);
+  resume();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(noteGap).toHaveBeenCalledTimes(1);
+  expect(await store.gapCount(input.run.id)).toBe(1);
+  expect(records).toHaveLength(0);
+  expect(await recorder.recordDecision(input)).toEqual({ ok: true });
+  expect(await store.gapCount(input.run.id)).toBe(1);
+});
+
+it("finishes a stalled gap flush after a sealing deadline but never writes the seal", async () => {
+  vi.useFakeTimers();
+  const { recorder, store, seals } = setup();
+  await recorder.recordDecision(input);
+  const originalNoteGap = store.noteGap;
+  const noteGap = vi.spyOn(store, "noteGap");
+  noteGap.mockRejectedValueOnce(new Error("Gap storage unavailable"));
+  vi.mocked(store.insertRecord).mockRejectedValueOnce(new Error("Record storage unavailable"));
+  expect(await recorder.recordDecision(input)).toEqual({ ok: false, reason: "recording_failed" });
+  let resume!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    resume = resolve;
+  });
+  noteGap.mockClear().mockImplementationOnce(async (runId) => {
+    await gate;
+    await originalNoteGap(runId);
+  });
+  const insertSeal = vi.spyOn(store, "insertSeal");
+  const sealing = recorder.sealRunEvidence(input.run.id);
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(await sealing).toEqual({ ok: false, reason: "sealing_failed" });
+  expect(noteGap).toHaveBeenCalledTimes(1);
+  resume();
+  await vi.advanceTimersByTimeAsync(0);
+  // Sealing is the last step, so no later step would retry: the started flush persists both
+  // the earlier recording gap and the timeout's own gap once storage recovers.
+  expect(noteGap).toHaveBeenCalledTimes(2);
+  expect(await store.gapCount(input.run.id)).toBe(2);
+  expect(insertSeal).not.toHaveBeenCalled();
+  expect(seals).toHaveLength(0);
+  // Nothing stays pending for a later step to repeat.
+  expect(await recorder.recordDecision(input)).toEqual({ ok: true });
+  expect(noteGap).toHaveBeenCalledTimes(2);
+  expect(await store.gapCount(input.run.id)).toBe(2);
+});
+
 it("bounds a forever-blocked recording, keeps the reply free and records a partial receipt", async () => {
   vi.useFakeTimers();
   const { recorder, store, records } = setup();
@@ -332,7 +489,8 @@ it("counts two concurrent timeouts exactly once while a decision joins the gap f
   expect(await concurrent).toEqual({ ok: true });
   expect(store.noteGap).toHaveBeenCalledTimes(2);
   expect(await store.gapCount(input.run.id)).toBe(2);
-  expect(records).toHaveLength(4);
+  // The first insert was already submitted; the second timed out before it could start.
+  expect(records).toHaveLength(3);
   await recorder.sealRunEvidence(input.run.id);
   expect(await store.gapCount(input.run.id)).toBe(2);
 });
