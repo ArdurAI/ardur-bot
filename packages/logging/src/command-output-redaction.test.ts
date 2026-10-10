@@ -15,6 +15,9 @@ const sourceLines = [
   "secretStore.read(id)",
   "    tokens: number;",
   "secretStore: this.secretStore,",
+  "signingKey: configuration.signingKey,",
+  "githubPat: readPat(configuration.connection),",
+  "authCode: number;",
   "knownSecrets: configuration.managedEnvironment.secrets,",
   "token: readToken(configuration.connection),",
   "token: readToken(id),",
@@ -42,6 +45,28 @@ const credentials = [
 ];
 
 describe("command output redaction", () => {
+  it.each(["otp", "totp", "authCode", "auth_code", "auth-code", "OTP", "TOTP", "AUTH_CODE"])(
+    "hides numeric authentication codes under %s",
+    (key) => {
+      const value = "123456";
+      for (const redact of [redactCommandOutput, redactSensitiveText, redactCredentialText]) {
+        for (const input of [
+          `${key}: ${value}`,
+          `${key}=${value}`,
+          JSON.stringify({ [key]: value }),
+          JSON.stringify({ [key]: Number(value) }),
+          ...["n", "r", "t"].map((escapeLetter) => `status=ready\\${escapeLetter}${key}: ${value}`),
+        ]) {
+          expect(redact(input)).toContain("[Redacted]");
+          expect(redact(input)).not.toContain(value);
+        }
+      }
+      for (const code of [value, Number(value)]) {
+        expect(redactBindings({ [key]: code })).toEqual({ [key]: "[Redacted]" });
+        expect(JSON.stringify(redactBindings({ [key]: code }))).not.toContain(value);
+      }
+    },
+  );
   it.each(sourceLines)("preserves source: %s", (line) => {
     expect(redactCommandOutput(line)).toBe(line);
   });
