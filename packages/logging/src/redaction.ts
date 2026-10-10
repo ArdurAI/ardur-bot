@@ -181,7 +181,7 @@ function unquotedValueEnd(text: string, start: number): number {
 
 // Command output may contain source. Only bare, plainly executable/type-like values
 // qualify; token-shaped values and quoted strings still follow the conservative path.
-function isCodeValue(text: string, start: number, key: string): boolean {
+function isCodeValue(text: string, start: number): boolean {
   if (/^["'`]/.test(text.slice(start, start + 1))) return false;
   if (/^(?:\$\{[^{}]+\}|\{\{[^{}]+\}\})/.test(text.slice(start))) return true;
   if (/^[{[]/.test(text.slice(start, start + 1))) return false;
@@ -192,9 +192,9 @@ function isCodeValue(text: string, start: number, key: string): boolean {
     /^(?:gh[pousr]_|github_pat_|AKIA|ASIA|sk-|xai-|ak_|ck_)/.test(value)
   )
     return false;
-  // Numeric authentication codes are credentials even when they resemble source literals.
-  if (/^[+-]?(?:\d+(?:\.\d+)?|0x[\da-f]+)$/i.test(value))
-    return !AUTH_CODE_KEY.test(key.replace(/[^a-z0-9]/gi, ""));
+  // A number under a credential key can be a PIN, password or one-time code; named
+  // counters such as maxTokens are exempt by key, so every other number stays masked.
+  if (/^[+-]?(?:\d+(?:\.\d+)?|0x[\da-f]+)$/i.test(value)) return false;
   const rest = text.slice(start);
   // Do not mistake an authorization scheme followed by an opaque value for source.
   const identifier = /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*/.exec(rest)?.[0];
@@ -229,8 +229,7 @@ function redactAssignments(text: string, credentialsOnly = false, commandOutput 
     if (!isSensitiveKey(credentialKey) && !privacyKey) continue;
     const start = keys.lastIndex;
     const quote = text[start];
-    if (commandOutput && match[2] === undefined && isCodeValue(text, start, credentialKey))
-      continue;
+    if (commandOutput && match[2] === undefined && isCodeValue(text, start)) continue;
     let end = start;
     let replacement = REDACTED;
     if (quote === '"' || quote === "'" || (commandOutput && quote === "`")) {

@@ -146,4 +146,25 @@ describe("command output redaction", () => {
   it.each(["secret", "password", "apiKey"])("hides quoted %s source values", (key) => {
     expect(redactCommandOutput(`${key}: "ordinary source"`)).toBe(`${key}: "[Redacted]"`);
   });
+
+  it.each([
+    "password=123456",
+    "password: 123456",
+    "token=0xabcdef",
+    "apiKey = 42",
+    "otp: 004211",
+    "GITHUB_PAT=987654",
+  ])("masks a number under a credential key in command output: %s", (input) => {
+    const value = input.split(/[:=]\s*/)[1]!;
+    const result = redactCommandOutput(input);
+    expect(result).toContain("[Redacted]");
+    expect(result).not.toContain(value);
+  });
+
+  it.each(["maxTokens: 4096", "tokenCount = 12", "retries: 3", "sortKey = 2"])(
+    "keeps numbers under named counters and ordinary keys readable: %s",
+    (input) => {
+      expect(redactCommandOutput(input)).toBe(input);
+    },
+  );
 });
