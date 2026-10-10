@@ -363,7 +363,7 @@ export async function clearThread(
   const committed = await withTransactionRetry(() =>
     prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Group mutations precede their thread row in goal admission and group handoff.
-      if (input.groupId) {
+      if (input.groupId && input.groupId !== "direct") {
         await tx.$queryRaw`SELECT id FROM chat_groups WHERE id = ${input.groupId} AND "spaceId" = ${input.spaceId} FOR UPDATE`;
       } else {
         await tx.$queryRaw`SELECT id FROM bots WHERE id = ${input.botId} AND "spaceId" = ${input.spaceId} FOR UPDATE`;
@@ -398,6 +398,8 @@ export async function clearThread(
         .filter((threadId) => threadId !== input.threadId)
         .sort())
         await tx.$queryRaw`SELECT id FROM threads WHERE id = ${threadId} FOR UPDATE`;
+      // Row lock on the target thread taken in the same order as the commit path (parent -> coordinator threads -> target thread).
+      await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} AND "spaceId" = ${input.spaceId} FOR UPDATE`;
       // Bot or group row precedes both threads, which precede cancelled runs and roots.
       const thread = await tx.thread.update({
         where: {
