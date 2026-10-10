@@ -283,6 +283,55 @@ A completed run without a saved answer carries category `other` and the fixed se
 Raw run status stays separate from dispatch state. Reading a completed record does not prove
 that a final answer exists or that the owner accepted it.
 
+### Daily reads and room sends (home protocol)
+
+These operations are available to paired clients. The current TypeScript executable does not
+add new commands for them; the Rust command layer follows separately.
+
+| Operation | Body | Response | Scope |
+| --- | --- | --- | --- |
+| `rpc` → `computer/list` | `{procedure:"computer/list", input:null}` | Existing computer list, with each shared computer listed once | `read` |
+| `rpc` → `board/snapshot` | `{procedure:"board/snapshot", input:{workspaceId, filter?, search?}}` | Existing `BoardSnapshot` | `read` |
+| `rpc` → `board/show` | `{procedure:"board/show", input:{workspaceId, id}}` | Existing `WorkItem` | `read` |
+| `rooms/list` | `{}` | Existing group list | `read` |
+| `rooms/send` | `{groupId?, roomName?, threadId?, clientNonce, text}` | Existing `ThreadSendResult` | `dispatch` and `ordinary`; continuing a run also needs `steer` |
+
+Board reads keep the board's own access checks. A denial returns HTTP 403; other known board
+problems return HTTP 400. Both include `{message, problem}`, where `problem` is the shared
+`BoardProblem`. Unknown failures keep the generic home error. Board writes remain unavailable.
+
+Choose exactly one of `groupId` or `roomName`. Names match without case differences inside the
+paired owner's space. If more than one room matches, use its id. An optional `threadId` must
+be that room's actual thread. Requests cannot supply a user, space, bot identity, attachments,
+permissions, or a device context. Text mentions use the normal room routing.
+
+Room sends require a live trusted grant, current membership and the home owner. Each selected
+bot must belong to that owner and space, and pass the intersection of home, space, user, bot
+and device scopes. The grant is checked again inside the send transaction and before returning.
+Turning dispatch off refuses sends and retries. Read results are withheld if the grant is
+revoked, loses read scope, or loses membership while the read is running.
+
+`clientNonce` is a required request id of 16–128 characters. Keep the same id, room and exact
+text when recovering a lost response. Retrying returns the original admission, including all
+run ids. Changing the text with that id is refused. Requests from different devices cannot
+replay each other's admissions. Text is bounded at 32,000 characters. The existing limit of 20 active device runs also applies
+to room sends.
+
+A work response contains `kind:"work"`, `taskId`, `runId`, `runIds` and `seq`, with an optional
+chief receipt. Preserve the full `runIds` array. A greeting can return
+`{kind:"receipt-only", seq, receipt}` with no task or run. Do not invent a run id or start a wait
+for that result. Each work run gets its own device admission receipt, so the existing run,
+task and message reads work for it. A receipt-only greeting creates no work receipt.
+
+New and continued runs retain the device's authority ceiling. Revocation blocks later requests
+and the worker's tool checks, including work delegated from those runs. A response refused
+after admission does not undo already completed actions. Room corrections that cancel or
+replace other work remain available through the home controls. Device room sends do not cancel
+unrelated queued runs.
+
+This change adds home protocol support only. Source-home TLS ingress and Rust commands are
+separate work; no new installation or transport guarantee is made here.
+
 ### Portable strings and conformance
 
 Pairing payloads and canonical signed JSON accept only well-formed Unicode strings: ordinary
@@ -292,8 +341,9 @@ plane. Lone high or low surrogates in values or keys are refused with
 existing JavaScript UTF-16 sort order. Every client must reproduce the exact canonical bytes.
 
 Synthetic request bodies, canonical JSON and signed text live in
-`apps/cli/fixtures/device-operations.json`, including four rejected surrogate vectors.
-Regenerate with `pnpm exec tsx apps/cli/generate-device-fixtures.ts`. Contract tests verify
+`apps/cli/fixtures/device-operations.json`, including daily read and room requests, multiple-run and receipt-only responses, a board denial,
+and four rejected surrogate vectors.
+Regenerate with `node --import tsx apps/cli/generate-device-fixtures.ts`. Contract tests verify
 these vectors against the home canonicalizer; they are available to the Rust client for byte-parity checks.
 
 ## Protocol references

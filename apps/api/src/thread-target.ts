@@ -12,6 +12,7 @@ import type { ChiefReceipt, ThreadSendResult } from "@ardurbot/contracts";
 import {
   type Actor,
   ContextSnapshotSchema,
+  canonicalDispatchJson,
   GROUP_MEMBER_MIN,
   type GroupMember,
   type MessageBlock,
@@ -49,6 +50,8 @@ import {
   createGroupRepos,
   createRepos,
   createThreadMessageInTransaction,
+  DeviceRequestError,
+  deviceDigest,
   expireComputerExecutionLeases,
   findChiefCorrectionPlan,
   goalExhaustionReason,
@@ -73,6 +76,7 @@ import {
 } from "./artifacts.js";
 import { resolveComposerReferences } from "./composer-references.js";
 import { resolveBusyBotName, toComputerStatus } from "./computer-status.js";
+import type { DeviceRoomContext } from "./device-room-context.js";
 import { storedRunFailure } from "./run-failure-kind.js";
 import { withSerializableRetry } from "./serializable-retry.js";
 import { recordThreadFeedback } from "./thread-feedback.js";
@@ -776,8 +780,31 @@ export async function sendThreadMessage(
     replyQuote?: string;
     clientNonce?: string;
   },
+  deviceContext?: DeviceRoomContext,
 ) {
   const traceStarted = traceNow();
+  const deviceRequestFingerprint = deviceContext
+    ? deviceDigest(canonicalDispatchJson({ text: input.text }))
+    : undefined;
+  const verifyDeviceReplay = async () => {
+    if (!deviceContext) return;
+    if (
+      target.kind !== "group" ||
+      !input.clientNonce ||
+      !input.text ||
+      input.board ||
+      input.artifactIds?.length ||
+      input.mentions?.length ||
+      input.replyToMessageId
+    )
+      throw new DeviceRequestError("This action is unavailable from this device.");
+    await deps.prisma.$transaction(async (tx) => {
+      const live = await deviceContext.verify(tx, actor);
+      await lockAndLoadGroupMembers(tx, actor, target);
+      await deviceContext.replay(tx, live, target.threadId, input.clientNonce!, input.text!);
+    });
+  };
+  await verifyDeviceReplay();
   const existing = await replayExistingSend(deps, target.threadId, input.clientNonce);
   if (existing) {
     if (existing.kind !== "receipt-only") tracePoint(existing.runId, "admission.replayed");
@@ -790,6 +817,7 @@ export async function sendThreadMessage(
 
   const commit = () =>
     deps.prisma.$transaction(async (tx) => {
+      const deviceGrant = deviceContext ? await deviceContext.verify(tx, actor) : undefined;
       const contextReferences = (input.mentions ?? []).flatMap((mention) =>
         typeof mention !== "string" && (mention.kind === "mcp" || mention.kind === "folder")
           ? [{ kind: mention.kind, id: mention.id }]
@@ -1101,6 +1129,11 @@ export async function sendThreadMessage(
         coordinatorBotId: groupRouting?.coordinatorBotId,
         defaultBotId: routed.botId,
       });
+      if (deviceContext && deviceGrant) {
+        if (correction && correctionPlan)
+          throw new DeviceRequestError("This action is unavailable from this device.");
+        for (const botId of targetBotIds) await deviceContext.authority(tx, deviceGrant, botId);
+      }
       const { blocks: attachmentBlocks, artifacts } = await resolveGroupSendAttachments(
         { prisma: tx },
         actor,
@@ -1147,6 +1180,7 @@ export async function sendThreadMessage(
             actorId: actor.userId,
             blocks,
             runIds: [],
+            ...(deviceRequestFingerprint ? { deviceRequestFingerprint } : {}),
           },
         });
         const { receipt, eventSeq } = await createChiefReceipt(tx, {
@@ -1185,6 +1219,7 @@ export async function sendThreadMessage(
             actorId: actor.userId,
             blocks,
             runIds: [],
+            ...(deviceRequestFingerprint ? { deviceRequestFingerprint } : {}),
           },
         });
         const { receipt, eventSeq } = await createChiefReceipt(tx, {
@@ -1330,6 +1365,19 @@ export async function sendThreadMessage(
         runs.push(run);
       }
       const firstRun = runs[0];
+      if (deviceContext && deviceGrant) {
+        for (const run of runs) {
+          await deviceContext.bindRun(
+            tx,
+            deviceGrant,
+            run,
+            input.clientNonce!,
+            input.text!,
+            target.threadId,
+            activeByBotId.has(run.botId) || answeredByBotId.has(run.botId),
+          );
+        }
+      }
       const eventBotId = firstRun?.botId ?? targetBotIds[0];
       if (!eventBotId) throw new IsolationError("Group send did not resolve a target");
       if (firstRun) {
@@ -1337,7 +1385,7 @@ export async function sendThreadMessage(
         const createdRuns = runs.filter(
           (run) => !activeByBotId.has(run.botId) && !answeredByBotId.has(run.botId),
         );
-        if (createdRuns.length) {
+        if (createdRuns.length && !deviceContext) {
           await cancelSupersededQueuedRuns(tx, {
             threadId: target.threadId,
             botIds: createdRuns.map((run) => run.botId),
@@ -1359,6 +1407,7 @@ export async function sendThreadMessage(
           actorId: actor.userId,
           blocks,
           runIds: runs.map((run) => run.id),
+          ...(deviceRequestFingerprint ? { deviceRequestFingerprint } : {}),
           replyToMessageId: input.replyToMessageId,
           replyQuote,
         },
@@ -1388,6 +1437,7 @@ export async function sendThreadMessage(
     });
 
   const committed = await withSerializableRetry(commit).catch(async (error) => {
+    await verifyDeviceReplay();
     const winner = await replayExistingSend(deps, target.threadId, input.clientNonce);
     if (winner) return { replay: winner } as const;
     throw error;
