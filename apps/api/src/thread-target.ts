@@ -302,7 +302,8 @@ async function lockAndLoadGroupMembers(
       members: {
         where: { bot: { archivedAt: null } },
         include: { bot: { select: { id: true, name: true, color: true } } },
-        orderBy: { createdAt: "asc" },
+        // Same order as the room snapshot, so the previewed default is the one that answers.
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       },
     },
   });

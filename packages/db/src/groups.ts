@@ -174,6 +174,13 @@ async function assertOwnedBots(
   });
 }
 
+// Members added together share a timestamp; ids keep the order they were picked, so the
+// room snapshot, its default responder and the send path all see the same first member.
+const GROUP_MEMBER_ORDER: Prisma.ChatGroupMemberOrderByWithRelationInput[] = [
+  { createdAt: "asc" },
+  { id: "asc" },
+];
+
 const groupInclude = {
   thread: {
     include: {
@@ -198,7 +205,7 @@ const groupInclude = {
         },
       },
     },
-    orderBy: { createdAt: "asc" as const },
+    orderBy: GROUP_MEMBER_ORDER,
   },
 } as const;
 
@@ -222,7 +229,7 @@ const groupTargetInclude = {
         },
       },
     },
-    orderBy: { createdAt: "asc" as const },
+    orderBy: GROUP_MEMBER_ORDER,
   },
 } as const;
 
@@ -710,7 +717,7 @@ export function createGroupRepos(prisma: PrismaClient) {
           where: { id: groupId },
           select: {
             artifacts: { select: { storageKey: true } },
-            members: { orderBy: { createdAt: "asc" }, take: 1, select: { botId: true } },
+            members: { orderBy: GROUP_MEMBER_ORDER, take: 1, select: { botId: true } },
           },
         });
         const contextBotId = group?.members[0]?.botId;
