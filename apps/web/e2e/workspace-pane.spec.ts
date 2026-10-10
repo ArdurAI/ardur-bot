@@ -55,6 +55,8 @@ async function installWorkspace(
     computerId: "fixture-computer",
     generation: 1,
     files,
+    // Local computers expose the read-only Git observation; paired hosts do not.
+    git: !hostBot,
     runsOnHost: hostBot,
     observedAt: "2026-09-28T00:00:00.000Z",
   };
@@ -102,50 +104,86 @@ async function installWorkspace(
       ["computer/boot", "computer/screenUrl", "computer/takeover", "terminal/ticket"].includes(name)
     )
       unexpected.push(name);
+    const body = route.request().postDataJSON() as { json?: { path?: string } } | null;
     const result =
-      name === "ide/target"
-        ? {
-            id: context.rootId,
-            kind: "sandbox",
-            path: "/",
-            computerId: context.computerId,
-            botId,
-            name: "Workspace",
-          }
-        : name === "ide/changes"
+      name === "workspace/git"
+        ? body?.json?.path === "staged.md"
           ? {
-              items: [
+              context,
+              status: "ok",
+              diff: {
+                path: "staged.md",
+                before: "Workspace notes\n",
+                after: "Workspace notes updated\n",
+                binary: false,
+                truncated: false,
+              },
+            }
+          : {
+              context,
+              status: "ok",
+              head: version,
+              entries: [
                 {
-                  id: "fixture-change",
-                  botId,
-                  runId: "fixture-run",
-                  path: "notes.md",
-                  source: "tool",
-                  before: "Workspace notes\n",
-                  after: "Workspace notes updated\n",
-                  createdAt: "2026-09-28T12:00:00.000Z",
+                  path: "staged.md",
+                  staged: true,
+                  unstaged: false,
+                  untracked: false,
+                  conflict: false,
+                },
+                {
+                  path: "untracked.md",
+                  staged: false,
+                  unstaged: false,
+                  untracked: true,
+                  conflict: false,
                 },
               ],
-              nextCursor: null,
+              truncated: false,
             }
-          : name === "workspace/describe"
-            ? context
-            : name === "workspace/tasks"
-              ? { runs: [run], delegations: [], routines: [], observedAt: context.observedAt }
-              : name === "workspace/list"
-                ? { context, entries: [{ path: "notes.md", kind: "file", size: 17 }] }
-                : name === "workspace/read"
-                  ? fileBody(
-                      context,
-                      ++reads === 1 ? "Workspace notes\n" : "Workspace notes from disk\n",
-                    )
-                  : name === "workspace/save"
-                    ? {
-                        saved: false,
-                        approvalRequired: false,
-                        reason: saveReason ?? "The file changed. Open it again before saving.",
-                      }
-                    : undefined;
+        : name === "ide/target"
+          ? {
+              id: context.rootId,
+              kind: "sandbox",
+              path: "/",
+              computerId: context.computerId,
+              botId,
+              name: "Workspace",
+            }
+          : name === "ide/changes"
+            ? {
+                items: [
+                  {
+                    id: "fixture-change",
+                    botId,
+                    runId: "fixture-run",
+                    path: "notes.md",
+                    source: "tool",
+                    before: "Workspace notes\n",
+                    after: "Workspace notes updated\n",
+                    createdAt: "2026-09-28T12:00:00.000Z",
+                  },
+                ],
+                nextCursor: null,
+              }
+            : name === "workspace/describe"
+              ? context
+              : name === "workspace/tasks"
+                ? { runs: [run], delegations: [], routines: [], observedAt: context.observedAt }
+                : name === "workspace/list"
+                  ? { context, entries: [{ path: "notes.md", kind: "file", size: 17 }] }
+                  : name === "workspace/read"
+                    ? fileBody(
+                        context,
+                        ++reads === 1 ? "Workspace notes\n" : "Workspace notes from disk\n",
+                      )
+                    : name === "workspace/save"
+                      ? {
+                          saved: false,
+                          approvalRequired: false,
+                          reason: saveReason ?? "The file changed. Open it again before saving.",
+                        }
+                      : undefined;
     if (result !== undefined) await route.fulfill({ json: { json: result } });
     else await route.fallback();
   });
@@ -182,6 +220,7 @@ test("one header menu keeps views, computer and settings reachable by keyboard",
     "Files",
     "IDE",
     "Recorded changes",
+    "Git changes",
     "Routines",
     "Computer screen",
     "Workspace pane",
@@ -223,7 +262,8 @@ test("one header menu keeps views, computer and settings reachable by keyboard",
   await page.getByRole("menuitemcheckbox", { name: "Tasks", exact: true }).click();
   await expect(pane).toHaveAttribute("aria-hidden", "true");
 
-  for (const label of labels.slice(1, 6)) {
+  // Every view from Files through Computer screen (index 6) opens and closes beside chat.
+  for (const label of labels.slice(1, labels.indexOf("Computer screen") + 1)) {
     await trigger.click();
     await page.getByRole("menuitemcheckbox", { name: label, exact: true }).click();
     await expect(pane.getByRole("tab", { name: label, exact: true })).toHaveAttribute(
@@ -331,6 +371,29 @@ for (const hostBot of [false, true])
     await expect(pane.getByRole("tab", { name: "IDE", exact: true })).toBeVisible();
     expect(unexpected).toEqual([]);
   });
+
+test("git changes show the bot's real worktree changes beside chat", async ({ page }, testInfo) => {
+  const { botId, unexpected } = await installWorkspace(page, "live");
+  await page.goto(`/app/${botId}`);
+  await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
+  const pane = page.getByTestId("side-panel");
+  await openAgentComputer(page);
+  await openView(page, "Git changes");
+  await expect(pane.getByRole("tab", { name: "Git changes", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(pane.getByText("Staged", { exact: true })).toBeVisible();
+  await expect(pane.getByText("Untracked", { exact: true })).toBeVisible();
+  await expect(pane.getByRole("button", { name: "staged.md", exact: true })).toBeVisible();
+  await expect(pane.getByRole("button", { name: "untracked.md", exact: true })).toBeVisible();
+  await expect(pane.getByRole("button", { name: "Refresh", exact: true })).toBeVisible();
+  await captureScreenshot(page, testInfo, "workspace-git-changes-beside-chat");
+  await pane.getByRole("button", { name: "staged.md", exact: true }).click();
+  await expect(pane.getByTestId("ide-diff")).toContainText("Workspace notes updated");
+  await captureScreenshot(page, testInfo, "workspace-git-changes-diff-beside-chat");
+  expect(unexpected).toEqual([]);
+});
 
 test("workspace pane opens Tasks and bot files without starting the computer", async ({
   page,

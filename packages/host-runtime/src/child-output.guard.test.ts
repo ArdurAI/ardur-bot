@@ -30,6 +30,8 @@ const ALLOW_LIST: Record<string, string> = {
     "taskkill helper: a detached one-shot process-tree killer owns no output, so its stdio stays ignored",
   "runtimes/hermes-installer.ts":
     "only stdin is ignored because installer commands read nothing; stdout and stderr are captured into bounded buffers",
+  "git-reader.ts":
+    "only stdin is ignored because read-only Git plumbing reads nothing; stdout is consumed under a byte cap and stderr is kept as a small classification tail",
 };
 
 function* sourceFiles(dir: string): Generator<string> {

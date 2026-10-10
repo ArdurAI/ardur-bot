@@ -15,8 +15,10 @@ import {
   bindChiefAssignment,
   createThreadMessageInTransaction,
   DELEGATION_ADMISSION_TRANSACTION,
+  GROUP_MEMBER_ORDER,
   IsolationError,
   loadChiefMemberFacts,
+  lockDelegationRootForRun,
   lockOwnedGroup,
   touchGroupUpdatedAt,
   validateChiefDispatch,
@@ -24,7 +26,7 @@ import {
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import type { DelegationResolver } from "./delegation.js";
-import { delegationFailure, prepareDelegation } from "./delegation.js";
+import { delegationFailure, prepareDelegation, resolveDelegationTarget } from "./delegation.js";
 import type { ExecutorDeps } from "./executor.js";
 
 export async function handoffToGroupBot(
@@ -49,6 +51,42 @@ export async function handoffToGroupBot(
   },
 ) {
   input = { ...input, message: redactTaskValue(input.message) };
+  const preview = deps.resolveDelegationPin
+    ? await deps.prisma.chatGroup.findFirst({
+        where: {
+          id: groupId,
+          spaceId: run.spaceId,
+          userId: run.userId,
+          archivedAt: null,
+          thread: { id: run.threadId },
+        },
+        include: {
+          members: {
+            where: { bot: { archivedAt: null } },
+            include: { bot: { select: { id: true, name: true } } },
+            orderBy: GROUP_MEMBER_ORDER,
+          },
+        },
+      })
+    : null;
+  const address = input.bot_id?.trim() || input.confirm_name?.trim();
+  const target = preview?.members.find(
+    ({ bot }) =>
+      bot.id === address ||
+      ((input.mode === "assign" || !input.bot_id?.trim()) &&
+        bot.name.toLowerCase() === address?.toLowerCase()),
+  );
+  const preparedTarget = target
+    ? await resolveDelegationTarget(
+        deps.prisma,
+        {
+          ...run,
+          actingBotId: target.bot.id,
+          targetThreadId: run.threadId,
+        },
+        deps.resolveDelegationPin,
+      )
+    : undefined;
   const committed = await withTransactionRetry(() =>
     deps.prisma.$transaction(async (tx) => {
       try {
@@ -65,7 +103,7 @@ export async function handoffToGroupBot(
             members: {
               where: { bot: { archivedAt: null } },
               include: { bot: { select: { id: true, name: true } } },
-              orderBy: { createdAt: "asc" },
+              orderBy: GROUP_MEMBER_ORDER,
             },
           },
         }),
@@ -196,6 +234,17 @@ export async function handoffToGroupBot(
         } as const;
       }
 
+      let lockedTarget = preparedTarget;
+      // A join or unarchive can make the target eligible after preflight. Resolve it
+      // under the root lock, just as room asks do, before admission reserves budget.
+      if (!lockedTarget && deps.resolveDelegationPin) {
+        await lockDelegationRootForRun(tx, run.id);
+        lockedTarget = await resolveDelegationTarget(
+          tx,
+          { ...run, actingBotId: targetId, targetThreadId: run.threadId },
+          deps.resolveDelegationPin,
+        );
+      }
       const admitted = await prepareDelegation(
         tx,
         {
@@ -222,7 +271,7 @@ export async function handoffToGroupBot(
             : undefined,
           targetThreadId: run.threadId,
         },
-        deps.resolveDelegationPin,
+        lockedTarget,
       );
       if (!admitted.ok) return admitted;
       const handoffText = visibleMessage || taskCardGoal(admitted.record.card) || "";
@@ -380,7 +429,7 @@ export async function loadGroupContext(
         include: {
           bot: { select: { id: true, name: true, title: true, description: true } },
         },
-        orderBy: { createdAt: "asc" },
+        orderBy: GROUP_MEMBER_ORDER,
       },
     },
   });

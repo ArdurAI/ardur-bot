@@ -14,10 +14,10 @@ export async function sendDeviceRoom(
 ) {
   const actor = await requireMembership(deps.prisma, grant.userId, grant.spaceId);
   const device = new DeviceRoomContext(grant);
-  await deps.prisma.$transaction((tx) => device.verify(tx, actor));
-  let groupId = input.groupId;
-  if (input.roomName) {
-    const matches = await deps.prisma.chatGroup.findMany({
+  const groupId = await deps.prisma.$transaction(async (tx) => {
+    await device.verify(tx, actor);
+    if (!input.roomName) return input.groupId;
+    const matches = await tx.chatGroup.findMany({
       where: {
         spaceId: grant.spaceId,
         userId: grant.userId,
@@ -28,8 +28,11 @@ export async function sendDeviceRoom(
       take: 2,
     });
     if (matches.length !== 1) throw new DeviceRequestError(DEVICE_RECORD_UNAVAILABLE, 400);
-    groupId = matches[0]!.id;
-  }
+    return matches[0]!.id;
+  });
+  // The name is resolved to an id inside the grant-verification transaction. Later
+  // checks filter by that id, owner, space and archive state, not by name, so a room
+  // renamed after this lookup still receives the send; that matches the web send.
   const target = await resolveThreadTarget(deps.prisma, actor, { groupId });
   if (target.kind !== "group" || (input.threadId && input.threadId !== target.threadId))
     throw new DeviceRequestError(DEVICE_RECORD_UNAVAILABLE);

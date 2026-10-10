@@ -256,6 +256,30 @@ it("refuses ambiguous room names within the device's owner and space", async () 
   );
   expect(f.tx.message.create).not.toHaveBeenCalled();
 });
+it("resolves room name inside the device verification transaction", async () => {
+  const f = fixture();
+  let inVerificationTransaction = false;
+  let resolvedInsideTransaction = false;
+  const originalTx = f.deps.prisma.$transaction;
+  (f.deps.prisma as any).$transaction = vi.fn(async (fn: any) => {
+    inVerificationTransaction = true;
+    try {
+      return await originalTx(fn);
+    } finally {
+      inVerificationTransaction = false;
+    }
+  });
+  f.tx.chatGroup.findMany.mockImplementation(async () => {
+    if (inVerificationTransaction) resolvedInsideTransaction = true;
+    return [{ id: "room" }];
+  });
+  await sendDeviceRoom(f.deps, f.grant, {
+    roomName: "Room",
+    clientNonce: f.input.clientNonce,
+    text: "hello",
+  });
+  expect(resolvedInsideTransaction).toBe(true);
+});
 it.each([{ groupId: "foreign" }, { groupId: "room", threadId: "foreign-thread" }])(
   "refuses unauthorized room/thread %j",
   async (target) => {

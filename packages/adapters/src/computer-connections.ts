@@ -1,6 +1,7 @@
 import type {
   AdapterContext,
   ComputerRef,
+  GitChangesResult,
   SandboxProvider,
   TerminalProvider,
 } from "@ardurbot/adapter-kit";
@@ -249,6 +250,12 @@ export class ConnectedSandboxProvider implements SandboxProvider {
   }
   async readFile(...args: Parameters<SandboxProvider["readFile"]>) {
     return (await this.owner(args[0], args[2])).readFile(...args);
+  }
+  async gitChanges(
+    ...args: Parameters<NonNullable<SandboxProvider["gitChanges"]>>
+  ): Promise<GitChangesResult> {
+    const provider = await this.owner(args[0], args[2]);
+    return provider.gitChanges?.(...args) ?? { kind: "unavailable" };
   }
   async writeFile(...args: Parameters<SandboxProvider["writeFile"]>) {
     return (await this.owner(args[0], args[2])).writeFile(...args);

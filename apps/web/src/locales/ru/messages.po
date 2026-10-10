@@ -1418,8 +1418,9 @@ msgid "Beta"
 msgstr ""
 
 #: src/pages/ide/IdePage.tsx
+#: src/pages/workspace/WorkspaceGitChanges.tsx
 msgid "Binary file"
-msgstr ""
+msgstr "Двоичный файл"
 
 #: src/components/integrations/manage/ToolPermissions.tsx
 msgid "Block"
@@ -3058,6 +3059,7 @@ msgstr ""
 #: src/components/ai/ChiefResultBubble.tsx
 #: src/pages/Shell.tsx
 #: src/pages/workspace/WorkspaceChanges.tsx
+#: src/pages/workspace/WorkspaceGitChanges.tsx
 msgid "Could not open file"
 msgstr "Не удалось открыть файл"
 
@@ -3846,6 +3848,10 @@ msgstr ""
 msgid "Dictation shortcut"
 msgstr ""
 
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Diff is too large"
+msgstr "Слишком большой diff"
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Direct MCP"
 msgstr "Прямой MCP"
@@ -4610,6 +4616,16 @@ msgstr ""
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Getting ready"
 msgstr "Подготовка"
+
+#: src/pages/workspace/view-registry.ts
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Git changes"
+msgstr "Изменения Git"
+
+#: src/pages/workspace/view-registry.ts
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Git changes are unavailable on this computer."
+msgstr "Изменения Git недоступны на этом компьютере."
 
 #: src/pages/RoutineEditor.tsx
 msgid "Git event"
@@ -5489,6 +5505,7 @@ msgstr ""
 #: src/pages/Shell.tsx
 #: src/pages/shell/runtime-config-advanced.tsx
 #: src/pages/workspace/WorkspaceChanges.tsx
+#: src/pages/workspace/WorkspaceGitChanges.tsx
 #: src/pages/workspace/WorkspacePane.tsx
 msgid "Loading…"
 msgstr "Загрузка…"
@@ -6193,6 +6210,7 @@ msgid "No bots match"
 msgstr "Ни один бот не подходит"
 
 #: src/pages/workspace/WorkspaceChanges.tsx
+#: src/pages/workspace/WorkspaceGitChanges.tsx
 msgid "No changes to show"
 msgstr "Нет изменений для отображения"
 
@@ -6383,6 +6401,10 @@ msgstr ""
 #: src/pages/ScratchpadSection.tsx
 msgid "None yet"
 msgstr "Пока нет"
+
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Not a Git repository"
+msgstr "Не репозиторий Git"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
@@ -7376,6 +7398,7 @@ msgstr ""
 
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/workspace/WorkspaceFiles.tsx
+#: src/pages/workspace/WorkspaceGitChanges.tsx
 msgid "Refresh"
 msgstr "Обновить"
 
@@ -8670,6 +8693,10 @@ msgstr "Сокет не найден"
 msgid "Software update"
 msgstr "Обновление программного обеспечения"
 
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Some changes are not shown"
+msgstr "Некоторые изменения не показаны"
+
 #: src/pages/ide/IdePage.tsx
 msgid "Some entries have unsupported names and are hidden ({hiddenCount})."
 msgstr "Некоторые записи имеют неподдерживаемые имена и скрыты ({hiddenCount})."
@@ -8762,6 +8789,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "SSH machine"
 msgstr ""
+
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Staged"
+msgstr "В индексе"
 
 #: src/pages/LearningCurator.tsx
 msgid "Stale"
@@ -9732,6 +9763,10 @@ msgstr "Открепить"
 msgid "Unsaved changes"
 msgstr ""
 
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Unstaged"
+msgstr "Вне индекса"
+
 #: src/pages/settings/RuntimeCapabilityChecks.tsx
 msgid "Unsupported"
 msgstr "Не поддерживается"
@@ -9748,6 +9783,10 @@ msgstr ""
 #: src/pages/GoalForm.tsx
 msgid "Until (defaults to eight hours)"
 msgstr "До (по умолчанию восемь часов)"
+
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Untracked"
+msgstr "Не отслеживаются"
 
 #: src/pages/Shell.tsx
 msgid "Up to 4 files, 10 MB each"
