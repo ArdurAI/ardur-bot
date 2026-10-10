@@ -8,7 +8,8 @@ source_path: "docs/failure-categories.md"
 
 One typed table — `packages/contracts/src/failure-categories.ts` — names every cause a run
 or a handoff can end with. The server stores the category id plus its parameters (bot,
-runtime, member); the worker stores only the category, never the provider's raw text. Each
+runtime, member). Codex failures also retain bounded, redacted process and protocol
+diagnostics in `runtimeProblem.failure`, separate from the sentence shown in chat. Each
 app translates the category's sentence through its own catalogs: web through Lingui
 (`apps/web/src/lib/failure-category-copy.ts`, whose test pins every message to the table),
 mobile through its own catalogs (English source plus ru and zh).
@@ -28,6 +29,8 @@ mobile through its own catalogs (English source plus ru and zh).
 | `destinations-bot` | the bot's allowed model destinations block the model | open the bot's destinations settings (or the model pin settings) |
 | `destinations-space` | the space's model policy blocks the model | open Settings at Models (or the model pin settings) |
 | `stopped` | the run or worker was stopped before finishing | none |
+| `runtime-stopped` | the app-server process or transport stopped | retry |
+| `runtime-turn-failed` | the app-server rejected or could not finish the turn | retry |
 | `model-context-too-small` | the pinned runtime needs a model with at least 64K context | open the model pin settings |
 | `session-start-failed` | the runtime did not complete its session handshake | retry after checking the runtime |
 | `runtime-tool-catalog-mismatch` | the tool list differs from the confirmed startup list | retry after checking the cause |
@@ -43,6 +46,27 @@ A category's entry also carries the sentences for the group-model and handoff co
 when those apply, and the sentences older builds stored verbatim. Readers map stored
 English text back to its id with `failureCategoryFromText`; anything unknown shows the
 consumer's generic line, never a wrong category.
+
+Codex starts an app-server process for each runtime invocation, normally one run, and
+uses stdio JSON-RPC for startup and the tool/model loop inside its turn. It does not
+restart the process between model steps. Requests have a 15-second deadline; EOF,
+process failure and malformed protocol output end the stream. The process is closed
+when the invocation finishes or is interrupted. A notification with `willRetry: true`
+leaves retry ownership with Codex.
+
+After saved progress, a lost transport retries on a fresh process after 20, 40 and 60
+seconds. Recovery uses the planned-restart checkpoint and tool receipts on the same
+pin. Completed results are reused once per recovery; uncertain effects require review.
+Sign-in, usage-limit, model and protocol refusals are not automatic transport retries.
+Cancellation interrupts the backoff. Controlled comparisons keep their frozen input
+and do not use this recovery path.
+
+Failure details name the step (`spawn`, `handshake`, `turn-start` or `stream`), error
+class and redacted message, plus exit code, signal, protocol code and redacted stderr
+when available. Failed events and worker/process failure logs retain these details;
+normal chat renders only the category sentence. General detailed child output still
+requires its existing opt-in. A queue job can report success after it durably records
+a failed run: queue success means the handler finished, not that the run succeeded.
 
 ## Settings checks
 

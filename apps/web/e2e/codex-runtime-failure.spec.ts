@@ -77,7 +77,7 @@ for (const [category, screenshot] of cases) {
     await captureScreenshot(page, testInfo, screenshot);
     await expect(error.getByRole("button", { name: "Change pin", exact: true })).toHaveCount(0);
     await error.getByRole("button", { name: "Retry", exact: true }).click();
-    await expect(page.getByPlaceholder(/^Message /)).toHaveValue(
+    await expect(page.getByRole("combobox", { name: /^Message / })).toHaveValue(
       "Continue the interrupted run from its saved results. Check any uncertain action before repeating it.",
     );
     await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
