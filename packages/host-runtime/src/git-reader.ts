@@ -1,9 +1,29 @@
 import { type ChildProcessByStdio, spawn } from "node:child_process";
-import { lstat, readFile } from "node:fs/promises";
+import {
+  copyFile,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { Readable } from "node:stream";
-import type { GitChangesResult, GitRunner, GitRunResult } from "@ardurbot/adapter-kit";
+import type {
+  GitChangesResult,
+  GitObservationRequest,
+  GitRunner,
+  GitRunResult,
+} from "@ardurbot/adapter-kit";
+import {
+  GIT_OBSERVATION_COMMAND_BYTES,
+  GIT_OBSERVATION_TIMEOUT_MS,
+  observeGitChanges,
+} from "@ardurbot/adapter-kit";
 import { filterHostEnvironment } from "@ardurbot/contracts/host-environment";
 import { redactCredentialText } from "../../logging/src/redaction.js";
 
@@ -25,6 +45,10 @@ export function createGitRunner(env: NodeJS.ProcessEnv = process.env): GitRunner
     // nothing outside the bot's folder is read.
     GIT_CONFIG_GLOBAL: os.devNull,
     GIT_OPTIONAL_LOCKS: "0",
+    GIT_ATTR_NOSYSTEM: "1",
+    GIT_TERMINAL_PROMPT: "0",
+    GIT_PAGER: "cat",
+    LC_ALL: "C",
   };
   return {
     run(commandArgs, { cwd, maxBytes, timeoutMs }) {
@@ -32,7 +56,7 @@ export function createGitRunner(env: NodeJS.ProcessEnv = process.env): GitRunner
         // stdio ["ignore", "pipe", "pipe"] guarantees both output streams.
         let child: ChildProcessByStdio<null, Readable, Readable>;
         try {
-          child = spawn("git", [...commandArgs], {
+          child = spawn("git", ["--no-pager", ...commandArgs], {
             cwd,
             shell: false,
             env: baseEnv,
@@ -95,7 +119,128 @@ export function createGitRunner(env: NodeJS.ProcessEnv = process.env): GitRunner
 }
 
 /** Metadata entries that must be plain directories or files, never links. */
-const METADATA_ENTRIES = ["HEAD", "index", "packed-refs", "objects", "refs"] as const;
+const METADATA_ENTRIES = [
+  "HEAD",
+  "index",
+  "packed-refs",
+  "shallow",
+  "config",
+  "objects",
+  "refs",
+] as const;
+
+/** Only these formatting settings can affect the observation; none launches a program. */
+const OBSERVATION_CONFIG = new Set([
+  "core.filemode",
+  "core.ignorecase",
+  "core.symlinks",
+  "core.autocrlf",
+  "core.eol",
+]);
+
+/**
+ * Git's -c overrides cannot erase include directives or every possible driver.
+ * Use a private metadata view with its own config instead. Original config is
+ * parsed explicitly with includes disabled, outside repository discovery. Only
+ * data/refs/index and local ignore/attribute data are shared; config and hooks
+ * are never shared, so attribute-assigned drivers have no executable definition.
+ */
+export async function observeHostGitChanges(
+  root: string,
+  request: Pick<GitObservationRequest, "path" | "readWorktreeFile">,
+): Promise<GitChangesResult> {
+  const gitDir = path.join(root, ".git");
+  const present = await lstat(gitDir).catch(() => null);
+  if (!present) {
+    // Distinguish a plain folder from an ancestor repository without asking Git
+    // to discover (and load configuration from) a repository outside this root.
+    for (let parent = path.dirname(root); ; parent = path.dirname(parent)) {
+      if (await lstat(path.join(parent, ".git")).catch(() => null)) return { kind: "unavailable" };
+      if (parent === path.dirname(parent)) break;
+    }
+    return { kind: "not-repository" };
+  }
+  let view: string | undefined;
+  try {
+    await assertSafeGitMetadata(root, gitDir);
+    view = await mkdtemp(path.join(os.tmpdir(), "git-observation-"));
+    const raw = createGitRunner();
+    // --file and --no-includes prevent local/global/includes from participating.
+    const config = await raw.run(
+      ["config", "--null", "--list", "--no-includes", "--file", path.join(gitDir, "config")],
+      { cwd: view, maxBytes: GIT_OBSERVATION_COMMAND_BYTES, timeoutMs: GIT_OBSERVATION_TIMEOUT_MS },
+    );
+    if (config.code !== 0 || config.capped || config.timedOut) return { kind: "unavailable" };
+    const settings: string[] = [];
+    for (const record of new TextDecoder().decode(config.stdout).split("\0")) {
+      if (!record) continue;
+      const separator = record.indexOf("\n");
+      const key = separator < 0 ? record : record.slice(0, separator);
+      const value = separator < 0 ? "true" : record.slice(separator + 1);
+      // Includes can hide an outside worktree. Refuse them without opening them.
+      if (key.startsWith("include.") || key.startsWith("includeif."))
+        return { kind: "unavailable" };
+      if (key === "core.worktree") {
+        const configured = path.resolve(gitDir, value);
+        if (path.resolve(await realpath(configured)) !== path.resolve(root))
+          return { kind: "unavailable" };
+      }
+      // The shared observer currently supports ordinary SHA-1 file-based repos.
+      if (
+        key.startsWith("extensions.") ||
+        (key === "core.repositoryformatversion" && value !== "0")
+      )
+        return { kind: "unavailable" };
+      if (OBSERVATION_CONFIG.has(key)) settings.push("-c", `${key}=${value}`);
+    }
+    await writeFile(
+      path.join(view, "config"),
+      `[core]\nrepositoryformatversion = 0\nbare = false\nfsmonitor = false\nattributesfile = ${JSON.stringify(os.devNull)}\nexcludesfile = ${JSON.stringify(os.devNull)}\nhooksPath = ${JSON.stringify(os.devNull)}\npager = false\n`,
+    );
+    for (const entry of ["HEAD", "index", "packed-refs", "shallow", "objects", "refs"] as const) {
+      const source = path.join(gitDir, entry);
+      const info = await lstat(source).catch(() => null);
+      if (!info) continue;
+      if (info.isSymbolicLink()) return { kind: "unavailable" };
+      const destination = path.join(view, entry);
+      if (info.isDirectory()) {
+        await symlink(source, destination, process.platform === "win32" ? "junction" : "dir");
+      } else if (info.isFile()) {
+        // Private copies keep the observation from changing index bytes or inode
+        // metadata, and prevent a swapped source index from redirecting the view.
+        await copyFile(source, destination);
+      } else return { kind: "unavailable" };
+    }
+    const infoDirectory = path.join(gitDir, "info");
+    const info = await lstat(infoDirectory).catch(() => null);
+    if (info) {
+      if (info.isSymbolicLink() || !info.isDirectory()) return { kind: "unavailable" };
+      await mkdir(path.join(view, "info"));
+      for (const entry of ["exclude", "attributes"] as const) {
+        const source = path.join(infoDirectory, entry);
+        const file = await lstat(source).catch(() => null);
+        if (!file) continue;
+        if (!file.isFile() || file.isSymbolicLink() || file.size > GIT_OBSERVATION_COMMAND_BYTES)
+          return { kind: "unavailable" };
+        await copyFile(source, path.join(view, "info", entry));
+      }
+    }
+    const pinned = ["--no-pager", "--git-dir", view, "--work-tree", root, ...settings];
+    const runner: GitRunner = {
+      run: (args, options) => raw.run([...pinned, ...args], { ...options, cwd: root }),
+    };
+    return await observeGitChanges(runner, {
+      ...request,
+      root,
+      gitDir,
+      assertSafeMetadata: (directory) => assertSafeGitMetadata(root, directory),
+    });
+  } catch {
+    return { kind: "unavailable" };
+  } finally {
+    if (view) await rm(view, { recursive: true, force: true });
+  }
+}
 
 /** Applies the existing credential redaction to every text that leaves the reader. */
 export function redactGitChanges(result: GitChangesResult): GitChangesResult {

@@ -78,6 +78,25 @@ describe("parseGitStatus", () => {
 });
 
 describe("observeGitChanges", () => {
+  it.each(["C:\\bots\\bot", "\\\\host\\share\\bot"])(
+    "accepts trusted metadata with Windows separators for root %s",
+    async (root) => {
+      const fake = fakeRunner();
+      fake.queue.push(ok(`${HEAD}\n`), ok(" M app.txt\0"));
+      const result = await observeGitChanges(fake.runner, { root, gitDir: `${root}\\.git` });
+      expect(result).toMatchObject({ kind: "status", entries: [{ path: "app.txt" }] });
+      expect(fake.calls).toHaveLength(2);
+    },
+  );
+
+  it("refuses a trusted metadata override outside the workspace before running Git", async () => {
+    const fake = fakeRunner();
+    expect(await observeGitChanges(fake.runner, { root: ROOT, gitDir: "/outside/.git" })).toEqual({
+      kind: "unavailable",
+    });
+    expect(fake.calls).toHaveLength(0);
+  });
+
   it("runs git with a fixed read-only argument list, never a shell", async () => {
     const fake = fakeRunner();
     repository(fake, [ok(" M terminal.md\0")]);
@@ -91,7 +110,8 @@ describe("observeGitChanges", () => {
       "--porcelain=v1",
       "-z",
       "--no-renames",
-      "--untracked-files=normal",
+      "--ignore-submodules=all",
+      "--untracked-files=all",
     ]);
     // Every word is its own array element; nothing is joined into a shell string.
     for (const word of args) expect(word).not.toMatch(/[;&|`$()]/u);
@@ -192,6 +212,7 @@ describe("observeGitChanges", () => {
       "--no-color",
       "--no-ext-diff",
       "--no-textconv",
+      "--ignore-submodules=all",
       "--cached",
       "HEAD",
       "--",

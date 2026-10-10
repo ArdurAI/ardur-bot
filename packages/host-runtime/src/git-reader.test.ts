@@ -1,5 +1,15 @@
 import { execFileSync } from "node:child_process";
-import { copyFile, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  copyFile,
+  mkdir,
+  mkdtemp,
+  realpath,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { AdapterContext } from "@ardurbot/adapter-kit";
@@ -169,6 +179,7 @@ it("never executes repository configuration: fsmonitor, external diff and textco
   const marker = path.join(home, "ran.txt");
   const script = path.join(home, "probe.sh");
   await writeFile(script, `#!/bin/sh\ntouch "${marker}"\n`);
+  await chmod(script, 0o755);
   // Repository config would execute on plain `git status`/`git diff` if the reader
   // did not disable each mechanism per invocation. The fixture commits before this
   // config exists so no setup step can run the probe either.
@@ -194,7 +205,229 @@ it("never executes repository configuration: fsmonitor, external diff and textco
   if (diff.kind !== "diff") throw new Error("unreachable");
   expect(diff.after).toBe("second");
   expect(diff.binary).toBe(false);
-  await expect(rm(marker)).rejects.toThrow(); // the probe script never ran
+  await expect(stat(marker)).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it.each([
+  ["clean", "worktree"],
+  ["process", "worktree"],
+  ["smudge", "worktree"],
+  ["clean", "info"],
+  ["process", "info"],
+  ["smudge", "info"],
+])(
+  "never executes a repository %s filter assigned in %s attributes",
+  async (mechanism, location) => {
+    const { provider, computer, home, git } = await fixture();
+    git(["init", "-q", "-b", "main"]);
+    await writeFile(path.join(home, "filtered.txt"), "before\n");
+    git(["add", "filtered.txt"]);
+    git(["commit", "-q", "-m", "base"]);
+    await writeFile(path.join(home, "filtered.txt"), "after\n");
+    const marker = path.join(home, "filter-ran");
+    await writeFile(path.join(home, "probe.sh"), "touch filter-ran\ncat\n");
+    await writeFile(
+      location === "info"
+        ? path.join(home, ".git", "info", "attributes")
+        : path.join(home, ".gitattributes"),
+      "*.txt filter=probe\n",
+    );
+    git(["config", `filter.probe.${mechanism}`, "sh ./probe.sh"]);
+    git(["config", "filter.probe.required", "true"]);
+
+    const status = await observe(provider, computer);
+    const diff = await observe(provider, computer, { path: "filtered.txt" });
+    await expect(stat(marker)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(status.kind).toBe("status");
+    expect(diff).toMatchObject({ kind: "diff", before: "before", after: "after" });
+  },
+);
+
+it("refuses config includes without executing their filters or worktree redirects", async () => {
+  const { provider, computer, home, root, git } = await fixture();
+  git(["init", "-q", "-b", "main"]);
+  await writeFile(path.join(home, "filtered.txt"), "before\n");
+  git(["add", "filtered.txt"]);
+  git(["commit", "-q", "-m", "base"]);
+  await writeFile(path.join(home, "filtered.txt"), "after\n");
+  await writeFile(path.join(home, ".gitattributes"), "*.txt filter=probe\n");
+  await writeFile(path.join(home, "probe.sh"), "touch include-ran\ncat\n");
+  const included = path.join(root, "included.config");
+  await writeFile(included, '[filter "probe"]\nclean = sh ./probe.sh\n');
+  git(["config", "include.path", included]);
+
+  expect(await observe(provider, computer)).toEqual({ kind: "unavailable" });
+  expect(await observe(provider, computer, { path: "filtered.txt" })).toEqual({
+    kind: "unavailable",
+  });
+  await expect(stat(path.join(home, "include-ran"))).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it.each(["absolute", "relative", "symlink"])(
+  "refuses an outside core.worktree configured with an %s path",
+  async (layout) => {
+    if (layout === "symlink" && process.platform === "win32") return;
+    const { provider, computer, home, root, git } = await fixture();
+    git(["init", "-q", "-b", "main"]);
+    await writeFile(path.join(home, "tracked.txt"), "before\n");
+    git(["add", "tracked.txt"]);
+    git(["commit", "-q", "-m", "base"]);
+    const outside = path.join(root, "outside");
+    await mkdir(outside);
+    await writeFile(path.join(outside, "tracked.txt"), "outside content\n");
+    let worktree = outside;
+    if (layout === "relative") worktree = path.relative(path.join(home, ".git"), outside);
+    if (layout === "symlink") {
+      worktree = path.join(home, "redirect");
+      await symlink(outside, worktree);
+    }
+    git(["config", "core.worktree", worktree]);
+
+    expect(await observe(provider, computer)).toEqual({ kind: "unavailable" });
+    expect(await observe(provider, computer, { path: "tracked.txt" })).toEqual({
+      kind: "unavailable",
+    });
+  },
+);
+
+it("lists files in new untracked directories and reads their contents", async () => {
+  const { provider, computer, home, git } = await fixture();
+  git(["init", "-q", "-b", "main"]);
+  await mkdir(path.join(home, "newdir", "nested"), { recursive: true });
+  await writeFile(path.join(home, "newdir", "nested", "app.txt"), "new content\n");
+
+  expect(await observe(provider, computer)).toMatchObject({
+    kind: "status",
+    entries: [{ path: "newdir/nested/app.txt", untracked: true }],
+  });
+  expect(await observe(provider, computer, { path: "newdir/nested/app.txt" })).toMatchObject({
+    kind: "diff",
+    before: null,
+    after: "new content",
+  });
+});
+
+it.each([false, true])("recognizes a real tracked binary diff (staged: %s)", async (staged) => {
+  const { provider, computer, home, git } = await fixture();
+  git(["init", "-q", "-b", "main"]);
+  await writeFile(path.join(home, "image.bin"), Buffer.from([1, 0, 2]));
+  git(["add", "image.bin"]);
+  git(["commit", "-q", "-m", "base"]);
+  await writeFile(path.join(home, "image.bin"), Buffer.from([3, 0, 4]));
+  if (staged) git(["add", "image.bin"]);
+
+  expect(await observe(provider, computer, { path: "image.bin" })).toMatchObject({
+    kind: "diff",
+    binary: true,
+    truncated: false,
+  });
+});
+
+it.each([
+  ["core.fsmonitor", null, "status"],
+  ["diff.probe.textconv", "*.txt diff=probe", "diff"],
+  ["diff.probe.command", "*.txt diff=probe", "diff"],
+  ["diff.external", null, "diff"],
+] as const)(
+  "suppresses %s with an executable real-Git probe",
+  async (setting, attributes, command) => {
+    const { provider, computer, home, git } = await fixture();
+    git(["init", "-q", "-b", "main"]);
+    await writeFile(path.join(home, "tracked.txt"), "before\n");
+    git(["add", "tracked.txt"]);
+    git(["commit", "-q", "-m", "base"]);
+    await writeFile(path.join(home, "tracked.txt"), "after\n");
+    if (attributes) await writeFile(path.join(home, ".gitattributes"), `${attributes}\n`);
+    const marker = path.join(home, "helper-ran");
+    await writeFile(path.join(home, "probe.sh"), "touch helper-ran\n");
+    git(["config", setting, "sh ./probe.sh"]);
+
+    // A positive control proves the configured mechanism really can execute.
+    git(command === "status" ? ["status", "--porcelain"] : ["diff", "HEAD", "--", "tracked.txt"]);
+    expect((await stat(marker)).isFile()).toBe(true);
+    await rm(marker);
+    expect(await observe(provider, computer)).toMatchObject({ kind: "status" });
+    expect(await observe(provider, computer, { path: "tracked.txt" })).toMatchObject({
+      kind: "diff",
+      before: "before",
+      after: "after",
+    });
+    await expect(stat(marker)).rejects.toMatchObject({ code: "ENOENT" });
+  },
+);
+
+it("accepts core.worktree pointing at the bot folder and ignores inherited Git redirects", async () => {
+  const { provider, computer, home, root, git } = await fixture();
+  git(["init", "-q", "-b", "main"]);
+  git(["config", "core.worktree", ".."]);
+  await writeFile(path.join(home, "inside.txt"), "inside\n");
+  // Inherited Git settings must not participate in either config parsing or observation.
+  const original = process.env.GIT_WORK_TREE;
+  process.env.GIT_WORK_TREE = root;
+  try {
+    expect(await observe(provider, computer, { path: "inside.txt" })).toMatchObject({
+      kind: "diff",
+      after: "inside",
+    });
+  } finally {
+    if (original === undefined) delete process.env.GIT_WORK_TREE;
+    else process.env.GIT_WORK_TREE = original;
+  }
+});
+
+it("never recurses into a submodule with repository-configured helpers", async () => {
+  const { provider, computer, home, git } = await fixture();
+  git(["init", "-q", "-b", "main"]);
+  const child = path.join(home, "child");
+  await mkdir(child);
+  git(["init", "-q", "-b", "main"], child);
+  await writeFile(path.join(child, "tracked.txt"), "before\n");
+  git(["add", "tracked.txt"], child);
+  git(["commit", "-q", "-m", "child base"], child);
+  const childHead = git(["rev-parse", "HEAD"], child).trim();
+  git(["update-index", "--add", "--cacheinfo", `160000,${childHead},child`]);
+  git(["commit", "-q", "-m", "base"]);
+  await writeFile(path.join(child, "tracked.txt"), "after\n");
+  await writeFile(path.join(child, ".gitattributes"), "*.txt filter=probe\n");
+  await writeFile(path.join(child, "probe.sh"), "touch submodule-ran\ncat\n");
+  git(["config", "filter.probe.clean", "sh ./probe.sh"], child);
+  git(["config", "core.fsmonitor", "sh ./probe.sh"], child);
+  git(["status", "--porcelain"]);
+  const marker = path.join(child, "submodule-ran");
+  expect((await stat(marker)).isFile()).toBe(true);
+  await rm(marker);
+
+  const status = await observe(provider, computer);
+  const diff = await observe(provider, computer, { path: "child" });
+  await expect(stat(marker)).rejects.toMatchObject({ code: "ENOENT" });
+  expect(status).toMatchObject({ kind: "status", entries: [] });
+  expect(diff).toMatchObject({ kind: "diff" });
+});
+
+it("preserves repository-local ignore rules in the isolated metadata view", async () => {
+  const { provider, computer, home, git } = await fixture();
+  git(["init", "-q", "-b", "main"]);
+  await writeFile(path.join(home, ".git", "info", "exclude"), "ignored.txt\n");
+  await writeFile(path.join(home, "ignored.txt"), "ignored\n");
+  await writeFile(path.join(home, "visible.txt"), "visible\n");
+  expect(await observe(provider, computer)).toMatchObject({
+    kind: "status",
+    entries: [{ path: "visible.txt", untracked: true }],
+  });
+});
+
+it("preserves binary attributes stored in repository-local metadata", async () => {
+  const { provider, computer, home, git } = await fixture();
+  git(["init", "-q", "-b", "main"]);
+  await writeFile(path.join(home, "forced.dat"), "before\n");
+  git(["add", "forced.dat"]);
+  git(["commit", "-q", "-m", "base"]);
+  await writeFile(path.join(home, ".git", "info", "attributes"), "forced.dat -diff\n");
+  await writeFile(path.join(home, "forced.dat"), "after\n");
+  expect(await observe(provider, computer, { path: "forced.dat" })).toMatchObject({
+    kind: "diff",
+    binary: true,
+  });
 });
 
 it("leaves the index and worktree untouched", async () => {

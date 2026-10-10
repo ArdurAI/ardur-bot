@@ -6,6 +6,8 @@
  * revision resolution and diff plumbing are used; no write, fetch, checkout or
  * reset command ever appears here, and repository configuration that could
  * execute (fsmonitor, external diff, textconv filters) is disabled per call.
+ * Host runners must also isolate repository configuration before observing so
+ * clean/smudge/process filters and config includes cannot participate.
  */
 
 /** Maximum status entries returned for one observation. */
@@ -73,6 +75,8 @@ export type GitChangesResult =
 export interface GitObservationRequest {
   /** Canonical bot workspace root; the repository must live directly inside it. */
   root: string;
+  /** Trusted metadata path when the host supplies a runner with isolated configuration. */
+  gitDir?: string;
   /** Repository-relative file to diff; omit for the status listing. */
   path?: string;
   /** Read a worktree file for an untracked diff; the caller bounds the read. */
@@ -139,8 +143,12 @@ async function resolveGitDir(
 }
 
 function pathResolve(candidate: string): string {
-  // Minimal POSIX-style normalization so this module stays free of host path APIs.
-  const parts = candidate.split("/").filter((part) => part !== "" && part !== ".");
+  // Normalize Windows separators only for drive/UNC paths; a backslash is a
+  // legitimate filename character on POSIX. Keep this shared module host-neutral.
+  const portable = /^(?:[a-z]:[\\/]|\\\\)/iu.test(candidate)
+    ? candidate.replace(/\\/gu, "/")
+    : candidate;
+  const parts = portable.split("/").filter((part) => part !== "" && part !== ".");
   const resolved: string[] = [];
   for (const part of parts) {
     if (part === "..") resolved.pop();
@@ -239,7 +247,7 @@ function diffResultFromText(
   text: string,
   capped: boolean,
 ): Extract<GitChangesResult, { kind: "diff" }> {
-  if (text.includes("\0"))
+  if (text.includes("\0") || /^Binary files .+ differ$/mu.test(text))
     return { kind: "diff", before: "", after: "", binary: true, truncated: false };
   const { before, after } = parseUnifiedDiff(text);
   const sides = capDiffSides(before.join("\n"), after.join("\n"));
@@ -262,7 +270,9 @@ async function readStatus(
     "--porcelain=v1",
     "-z",
     "--no-renames",
-    "--untracked-files=normal",
+    // Nested repositories have their own config; never recurse into them.
+    "--ignore-submodules=all",
+    "--untracked-files=all",
   ]);
   if (status.timedOut || status.code !== 0) return { kind: "unavailable" };
   const entries = parseGitStatus(decode(status.stdout));
@@ -284,9 +294,10 @@ export async function observeGitChanges(
   request: GitObservationRequest,
 ): Promise<GitChangesResult> {
   const { root } = request;
-  const gitDir = await resolveGitDir(runner, root);
+  const gitDir = request.gitDir ?? (await resolveGitDir(runner, root));
   if (gitDir === "unavailable") return { kind: "unavailable" };
   if (gitDir === null) return { kind: "not-repository" };
+  if (pathResolve(gitDir) !== pathResolve(joinPath(root, ".git"))) return { kind: "unavailable" };
   try {
     if (request.assertSafeMetadata) await request.assertSafeMetadata(gitDir);
   } catch {
@@ -335,6 +346,7 @@ export async function observeGitChanges(
       "--no-color",
       "--no-ext-diff",
       "--no-textconv",
+      "--ignore-submodules=all",
       ...(staged ? ["--cached"] : []),
       ...base,
       "--",

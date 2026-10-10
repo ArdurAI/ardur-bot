@@ -31,7 +31,7 @@ import type {
   ScreenRequest,
   ScreenSession,
 } from "@ardurbot/adapter-kit";
-import { GIT_OBSERVATION_TEXT_SIDE_BYTES, observeGitChanges } from "@ardurbot/adapter-kit";
+import { GIT_OBSERVATION_TEXT_SIDE_BYTES } from "@ardurbot/adapter-kit";
 import { CommandRefusalError, IDE_FILE_BYTES } from "@ardurbot/contracts";
 import { HOST_FILE_BYTES, hostEnvironmentNote } from "@ardurbot/contracts/host-bridge";
 import { parseRegisteredFolders } from "@ardurbot/contracts/host-folders";
@@ -56,7 +56,7 @@ import {
   win32NtRelativeAvailable,
 } from "./desktop-sandbox-win32-path.js";
 import { hostCapacity } from "./fleet/capacity.js";
-import { assertSafeGitMetadata, createGitRunner, redactGitChanges } from "./git-reader.js";
+import { observeHostGitChanges, redactGitChanges } from "./git-reader.js";
 import { getHostEnvironment, inspectHostEnvironment } from "./host-environment.js";
 import type { HostGuardrailConfig } from "./host-guardrails.js";
 import {
@@ -452,8 +452,7 @@ export class DesktopSandboxProvider implements SandboxProvider {
     const base = context.fileRoot ? normalizeWorkspacePath(context.fileRoot) : "";
     const { root } = await this.fileTarget(box.home, base, true, context.fileRoot);
     const guarded = (await this.guardrail()).paths;
-    const result = await observeGitChanges(createGitRunner(), {
-      root,
+    const result = await observeHostGitChanges(root, {
       path: request.path,
       readWorktreeFile: async (relative) => {
         const target = await localWorkspaceTarget(root, relative, true, (candidate) =>
@@ -462,7 +461,6 @@ export class DesktopSandboxProvider implements SandboxProvider {
         this.assertNotGuarded(guarded, target);
         return readContainedWorkspaceFile(root, target, GIT_OBSERVATION_TEXT_SIDE_BYTES + 1, true);
       },
-      assertSafeMetadata: (gitDir) => assertSafeGitMetadata(root, gitDir),
     });
     return redactGitChanges(result);
   }
