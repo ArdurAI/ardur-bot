@@ -14,7 +14,7 @@ const reporters = [
 export default defineConfig({
   testDir: "./e2e",
   // This production-bundle benchmark has its own preview-server CI workflow.
-  testIgnore: "shell-performance.spec.ts",
+  testIgnore: ["shell-performance.spec.ts", "**/*.test.ts"],
   forbidOnly: Boolean(process.env.CI),
   fullyParallel: false,
   workers: realSandbox ? 1 : undefined,

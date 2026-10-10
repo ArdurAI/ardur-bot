@@ -27,8 +27,10 @@ Apache-2.0 attribution.
 - [Command-line tool](/docs/cli/): Send a bot a task from your terminal or a script.
 
 - Persistent bots with their own conversation, memory, routines and history
-- Group chats whose members answer at the same time — the owner sets how many bots answer at
-  once (1-8) in group settings — and delegation between bots, plus short-lived subagents
+- [Group chats](/docs/group-routing/): an unaddressed message goes to one responder, shown
+  before sending. Mention bots or use @everyone for multiple replies. Selected members answer
+  together up to the room limit (default 4, adjustable 1-8); the rest stay visibly queued.
+  Bots can delegate to each other or use short-lived subagents.
 - [Chief room receipts](/docs/chief-receipts/): accepted requests get a saved acknowledgement before execution; bare greetings do not start work. Member choices use approved facts and committed dispatch stays compact.
 - A provider, model and thinking level per bot, with a separate model and thinking choice for each bot in a group room
 <!-- site-facts:providers:start -->

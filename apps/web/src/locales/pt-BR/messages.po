@@ -7163,6 +7163,10 @@ msgstr "Na fila"
 msgid "Queued for {name}"
 msgstr "Na fila para {name}"
 
+#: src/components/composer/GroupRecipients.tsx
+msgid "Queued: {queued}"
+msgstr "Na fila: {queued}"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Quick access shortcut"
 msgstr ""
@@ -9517,6 +9521,10 @@ msgstr ""
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "Título"
+
+#: src/components/composer/GroupRecipients.tsx
+msgid "To {names}"
+msgstr "Para {names}"
 
 #: src/components/PeerMessageReceipt.tsx
 msgid "to {peer}"

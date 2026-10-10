@@ -2759,6 +2759,10 @@ describe("group routing", () => {
     await expect(routedRuns({ text: "Who is on it?", mentions: ["bot-c"] })).resolves.toEqual([
       ["bot-c", "mention"],
     ]);
+    await expect(routedRuns({ text: "@Beta @Gamma compare notes" })).resolves.toEqual([
+      ["bot-b", "mention"],
+      ["bot-c", "mention"],
+    ]);
     await expect(routedRuns({ text: "@everyone introduce yourselves" })).resolves.toEqual([
       ["bot-a", "mention"],
       ["bot-b", "mention"],
@@ -2774,6 +2778,7 @@ describe("group routing", () => {
       "tell the bots to introduce each other, do not mention individually",
       "what is the status",
       "everyone introduce yourselves",
+      "Each member, reply with your model.",
     ])
       await expect(routedRuns({ text })).resolves.toEqual([["bot-a", "group-coordinator"]]);
   });

@@ -7163,6 +7163,10 @@ msgstr "대기 중"
 msgid "Queued for {name}"
 msgstr "{name}의 작업 대기열에 있음"
 
+#: src/components/composer/GroupRecipients.tsx
+msgid "Queued: {queued}"
+msgstr "대기 중: {queued}"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Quick access shortcut"
 msgstr ""
@@ -9517,6 +9521,10 @@ msgstr ""
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "역할"
+
+#: src/components/composer/GroupRecipients.tsx
+msgid "To {names}"
+msgstr "받는 봇: {names}"
 
 #: src/components/PeerMessageReceipt.tsx
 msgid "to {peer}"

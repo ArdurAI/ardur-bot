@@ -29,16 +29,17 @@ import { RunPlacementSchema } from "@ardurbot/contracts/fleet";
 import {
   ACTIVE_RUN_STATUSES,
   chiefIntent,
-  chiefWantsIndividualReplies,
-  hasMentionToken,
   isActive,
   parseChiefCorrection,
   progressMessageId,
   projectMessages,
-  resolveAddressedBotIds,
   runFailureError,
 } from "@ardurbot/core";
 import { localTaskClassifier } from "@ardurbot/core/effort-router";
+import {
+  groupMentionBotIds,
+  groupMessageRecipientIds,
+} from "@ardurbot/core/group-message-recipients";
 import { deriveMessageQuote } from "@ardurbot/core/message-quote";
 import {
   answerWaitingRunWithTextInTransaction,
@@ -89,6 +90,7 @@ export type ThreadTarget =
       groupId: string;
       threadId: string;
       groupName: string;
+      groupRouting?: ThreadSnapshot["groupRouting"];
       members: GroupMember[];
       memberBotIds: string[];
     };
@@ -300,7 +302,8 @@ async function lockAndLoadGroupMembers(
       members: {
         where: { bot: { archivedAt: null } },
         include: { bot: { select: { id: true, name: true, color: true } } },
-        orderBy: { createdAt: "asc" },
+        // Same order as the room snapshot, so the previewed default is the one that answers.
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       },
     },
   });
@@ -352,6 +355,25 @@ export async function resolveThreadTarget(
       groupId: group.id,
       threadId: group.thread.id,
       groupName: group.name,
+      groupRouting: {
+        coordinatorBotId: members.some((member) => member.botId === group.coordinatorBotId)
+          ? group.coordinatorBotId
+          : null,
+        defaultBotId:
+          routeIncoming({
+            text: "",
+            bots: members.map((member) => ({
+              botId: member.botId,
+              name: member.name,
+              threadId: group.thread!.id,
+            })),
+            groupCoordinatorId: group.coordinatorBotId,
+            lastActiveThread: group.thread.runs?.[0]
+              ? { botId: group.thread.runs[0].botId, threadId: group.thread.id }
+              : null,
+            spaceCoordinatorId: group.space?.coordinatorBotId,
+          })?.botId ?? null,
+      },
       members,
       memberBotIds: members.map((member) => member.botId),
     };
@@ -556,6 +578,7 @@ export async function threadSnapshot(
   return {
     groupId: target.groupId,
     groupName: target.groupName,
+    groupRouting: target.groupRouting,
     members: target.members,
     threadId: target.threadId,
     cursor: core.last?.seq ?? -1,
@@ -1003,7 +1026,7 @@ export async function sendThreadMessage(
           : Promise.resolve(null),
         tx.run.findFirst({
           where: { threadId: target.threadId, spaceId: actor.spaceId, userId: actor.userId },
-          orderBy: { createdAt: "desc" },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         }),
         tx.teamGoal?.findFirst({
           where: {
@@ -1048,18 +1071,12 @@ export async function sendThreadMessage(
               replyToMessageId: input.replyToMessageId,
             })
           : undefined;
-      const addressedBotIds = resolveAddressedBotIds({
+      const mentionBotIds = groupMentionBotIds({
         text: input.text ?? "",
         members: members.map((member) => ({ id: member.botId, name: member.name })),
+        explicitMentions: mentionTargets.botMentionIds,
       });
-      const explicit = members.filter(
-        (member) =>
-          chiefWantsIndividualReplies(input.text ?? "") ||
-          mentionTargets.botMentionIds.includes(member.botId) ||
-          hasMentionToken(input.text ?? "", member.name) ||
-          hasMentionToken(input.text ?? "", "everyone") ||
-          addressedBotIds.includes(member.botId),
-      );
+      const explicit = members.filter((member) => mentionBotIds.includes(member.botId));
       const routed = routeIncoming({
         text: input.text ?? "",
         bots: members.map((member) => ({
@@ -1076,12 +1093,14 @@ export async function sendThreadMessage(
         spaceCoordinatorId: spaceRouting?.coordinatorBotId,
       });
       if (!routed) throw new IsolationError("Group send did not resolve a target");
-      const targetBotIds =
-        correction && groupRouting?.coordinatorBotId
-          ? [groupRouting.coordinatorBotId]
-          : explicit.length
-            ? explicit.map((member) => member.botId)
-            : [routed.botId];
+      const targetBotIds = groupMessageRecipientIds({
+        text: input.text ?? "",
+        members: members.map((member) => ({ id: member.botId, name: member.name })),
+        explicitMentions: mentionTargets.botMentionIds,
+        replyBotId: replyTarget?.botId,
+        coordinatorBotId: groupRouting?.coordinatorBotId,
+        defaultBotId: routed.botId,
+      });
       const { blocks: attachmentBlocks, artifacts } = await resolveGroupSendAttachments(
         { prisma: tx },
         actor,

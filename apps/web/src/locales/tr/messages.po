@@ -7163,6 +7163,10 @@ msgstr "Kuyrukta"
 msgid "Queued for {name}"
 msgstr "{name} için sırada"
 
+#: src/components/composer/GroupRecipients.tsx
+msgid "Queued: {queued}"
+msgstr "Sırada: {queued}"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Quick access shortcut"
 msgstr ""
@@ -9517,6 +9521,10 @@ msgstr ""
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "Başlık"
+
+#: src/components/composer/GroupRecipients.tsx
+msgid "To {names}"
+msgstr "Alıcı: {names}"
 
 #: src/components/PeerMessageReceipt.tsx
 msgid "to {peer}"
