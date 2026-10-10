@@ -7163,6 +7163,10 @@ msgstr "排队中"
 msgid "Queued for {name}"
 msgstr "已排队等待 {name}"
 
+#: src/components/composer/GroupRecipients.tsx
+msgid "Queued: {queued}"
+msgstr "排队中：{queued}"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Quick access shortcut"
 msgstr ""
@@ -9517,6 +9521,10 @@ msgstr ""
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "标题"
+
+#: src/components/composer/GroupRecipients.tsx
+msgid "To {names}"
+msgstr "发送给：{names}"
 
 #: src/components/PeerMessageReceipt.tsx
 msgid "to {peer}"

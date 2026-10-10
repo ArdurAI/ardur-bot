@@ -15,6 +15,7 @@ import type {
   RuntimeProblem,
   Space,
   SpaceNavigation,
+  ThreadSnapshot,
   ToolResumedPayload,
 } from "@ardurbot/contracts";
 import { HERMES_CONTEXT_LIMIT_MESSAGE, RuntimeProblemSchema } from "@ardurbot/contracts";
@@ -847,6 +848,7 @@ export type MobileSnapshot = {
   botId?: string;
   groupId?: string;
   groupName?: string;
+  groupRouting?: ThreadSnapshot["groupRouting"];
   threadId: string;
   cursor?: number;
   messages: MobileMessage[];

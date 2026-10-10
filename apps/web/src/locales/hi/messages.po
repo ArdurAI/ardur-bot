@@ -7163,6 +7163,10 @@ msgstr "कतार में"
 msgid "Queued for {name}"
 msgstr "{name} के लिए कतार में"
 
+#: src/components/composer/GroupRecipients.tsx
+msgid "Queued: {queued}"
+msgstr "कतार में: {queued}"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Quick access shortcut"
 msgstr ""
@@ -9517,6 +9521,10 @@ msgstr ""
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "शीर्षक"
+
+#: src/components/composer/GroupRecipients.tsx
+msgid "To {names}"
+msgstr "प्राप्तकर्ता: {names}"
 
 #: src/components/PeerMessageReceipt.tsx
 msgid "to {peer}"

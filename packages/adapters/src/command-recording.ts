@@ -20,7 +20,7 @@ import {
   stripCommandControls,
 } from "@ardurbot/core";
 import type { ThreadEvents } from "@ardurbot/db";
-import { redactBindings, redactCommandOutput } from "@ardurbot/logging";
+import { redactCommandOutput } from "@ardurbot/logging";
 import { redactAgentCommandResult } from "./agent-environment.js";
 import { isToolPauseResult } from "./approval-effect.js";
 import { commandComputerFingerprint } from "./command-replay.js";
@@ -31,15 +31,11 @@ export function redactCommandText(text: string, secrets: string[]): string {
     { stdout: stripCommandControls(text), stderr: "", code: 0 },
     secrets,
   ).stdout;
-  return stripCommandControls(String(redactBindings({ value: masked }).value));
+  return stripCommandControls(redactCommandOutput(masked));
 }
 
 function safeCommandOutput(text: string, secrets: string[]): string {
-  const masked = redactAgentCommandResult(
-    { stdout: stripCommandControls(text), stderr: "", code: 0 },
-    secrets,
-  ).stdout;
-  return stripCommandControls(redactCommandOutput(masked));
+  return redactCommandText(text, secrets);
 }
 
 /**

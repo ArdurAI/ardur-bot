@@ -7163,6 +7163,10 @@ msgstr "Queued"
 msgid "Queued for {name}"
 msgstr "Queued for {name}"
 
+#: src/components/composer/GroupRecipients.tsx
+msgid "Queued: {queued}"
+msgstr "Queued: {queued}"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Quick access shortcut"
 msgstr "Quick access shortcut"
@@ -9517,6 +9521,10 @@ msgstr "Timeline"
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "Title"
+
+#: src/components/composer/GroupRecipients.tsx
+msgid "To {names}"
+msgstr "To {names}"
 
 #: src/components/PeerMessageReceipt.tsx
 msgid "to {peer}"

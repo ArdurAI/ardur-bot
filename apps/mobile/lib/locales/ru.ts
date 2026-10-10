@@ -1,4 +1,7 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "To {names}": "Кому: {names}",
+  "Queued: {queued}": "В очереди: {queued}",
+
   "Capability checks": "Проверки возможностей",
   "Last 7 days": "Последние 7 дней",
   Success: "Успех",
