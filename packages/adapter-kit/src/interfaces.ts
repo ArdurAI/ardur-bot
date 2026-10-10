@@ -1,4 +1,5 @@
 import type { CapacitySnapshot, ComputerLimitsObservation } from "@ardurbot/contracts";
+import type { GitChangesResult } from "./git-observation.js";
 import type { TerminalProvider } from "./terminal.js";
 import type {
   AdapterContext,
@@ -157,6 +158,16 @@ export interface SandboxProvider {
     request: ComputerActionRequest,
     context: AdapterContext,
   ): Promise<ComputerActionResult>;
+  /**
+   * Read-only Git worktree observation (status, or one file's diff) rooted at the
+   * computer's own workspace. Absent means this provider cannot observe Git.
+   * Never runs Git through a shell and never widens into a command runner.
+   */
+  gitChanges?(
+    computer: ComputerRef,
+    request: { path?: string },
+    context: AdapterContext,
+  ): Promise<GitChangesResult>;
   listFiles(
     computer: ComputerRef,
     path: string,

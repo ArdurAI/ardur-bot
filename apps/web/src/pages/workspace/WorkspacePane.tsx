@@ -112,7 +112,8 @@ export function WorkspacePane({
       contentId: type === "files" || type === "ide" ? "editor" : type,
       label: view.label(t),
       content:
-        (type === "files" || type === "ide" || type === "changes") && contextLoading ? (
+        (type === "files" || type === "ide" || type === "changes" || type === "gitChanges") &&
+        contextLoading ? (
           <div
             role="status"
             className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground"

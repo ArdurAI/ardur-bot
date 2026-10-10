@@ -1418,8 +1418,9 @@ msgid "Beta"
 msgstr ""
 
 #: src/pages/ide/IdePage.tsx
+#: src/pages/workspace/WorkspaceGitChanges.tsx
 msgid "Binary file"
-msgstr ""
+msgstr "बाइनरी फ़ाइल"
 
 #: src/components/integrations/manage/ToolPermissions.tsx
 msgid "Block"
@@ -3058,6 +3059,7 @@ msgstr ""
 #: src/components/ai/ChiefResultBubble.tsx
 #: src/pages/Shell.tsx
 #: src/pages/workspace/WorkspaceChanges.tsx
+#: src/pages/workspace/WorkspaceGitChanges.tsx
 msgid "Could not open file"
 msgstr "फ़ाइल नहीं खोली जा सकी"
 
@@ -3846,6 +3848,10 @@ msgstr ""
 msgid "Dictation shortcut"
 msgstr ""
 
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Diff is too large"
+msgstr "Diff बहुत बड़ा है"
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Direct MCP"
 msgstr ""
@@ -4610,6 +4616,16 @@ msgstr ""
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Getting ready"
 msgstr ""
+
+#: src/pages/workspace/view-registry.ts
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Git changes"
+msgstr "Git परिवर्तन"
+
+#: src/pages/workspace/view-registry.ts
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Git changes are unavailable on this computer."
+msgstr "इस कंप्यूटर पर Git परिवर्तन उपलब्ध नहीं हैं।"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Git event"
@@ -5489,6 +5505,7 @@ msgstr ""
 #: src/pages/Shell.tsx
 #: src/pages/shell/runtime-config-advanced.tsx
 #: src/pages/workspace/WorkspaceChanges.tsx
+#: src/pages/workspace/WorkspaceGitChanges.tsx
 #: src/pages/workspace/WorkspacePane.tsx
 msgid "Loading…"
 msgstr "लोड हो रहा है…"
@@ -6193,6 +6210,7 @@ msgid "No bots match"
 msgstr ""
 
 #: src/pages/workspace/WorkspaceChanges.tsx
+#: src/pages/workspace/WorkspaceGitChanges.tsx
 msgid "No changes to show"
 msgstr "दिखाने के लिए कोई बदलाव नहीं है"
 
@@ -6383,6 +6401,10 @@ msgstr ""
 #: src/pages/ScratchpadSection.tsx
 msgid "None yet"
 msgstr "अभी तक कोई नहीं"
+
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Not a Git repository"
+msgstr "Git रिपॉज़िटरी नहीं है"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
@@ -7376,6 +7398,7 @@ msgstr ""
 
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/workspace/WorkspaceFiles.tsx
+#: src/pages/workspace/WorkspaceGitChanges.tsx
 msgid "Refresh"
 msgstr "रीफ़्रेश करें"
 
@@ -8670,6 +8693,10 @@ msgstr "सॉकेट नहीं मिला"
 msgid "Software update"
 msgstr ""
 
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Some changes are not shown"
+msgstr "कुछ परिवर्तन नहीं दिखाए गए हैं"
+
 #: src/pages/ide/IdePage.tsx
 msgid "Some entries have unsupported names and are hidden ({hiddenCount})."
 msgstr "कुछ प्रविष्टियों के नाम समर्थित नहीं हैं और उन्हें छिपाया गया है ({hiddenCount})।"
@@ -8762,6 +8789,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "SSH machine"
 msgstr ""
+
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Staged"
+msgstr "स्टेज किए गए"
 
 #: src/pages/LearningCurator.tsx
 msgid "Stale"
@@ -9732,6 +9763,10 @@ msgstr "पिन हटाएं"
 msgid "Unsaved changes"
 msgstr ""
 
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Unstaged"
+msgstr "अनस्टेज किए गए"
+
 #: src/pages/settings/RuntimeCapabilityChecks.tsx
 msgid "Unsupported"
 msgstr "समर्थित नहीं"
@@ -9748,6 +9783,10 @@ msgstr ""
 #: src/pages/GoalForm.tsx
 msgid "Until (defaults to eight hours)"
 msgstr "समय सीमा (डिफ़ॉल्ट आठ घंटे)"
+
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Untracked"
+msgstr "ट्रैक नहीं किए गए"
 
 #: src/pages/Shell.tsx
 msgid "Up to 4 files, 10 MB each"

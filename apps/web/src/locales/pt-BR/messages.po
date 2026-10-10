@@ -1418,8 +1418,9 @@ msgid "Beta"
 msgstr ""
 
 #: src/pages/ide/IdePage.tsx
+#: src/pages/workspace/WorkspaceGitChanges.tsx
 msgid "Binary file"
-msgstr ""
+msgstr "Arquivo binário"
 
 #: src/components/integrations/manage/ToolPermissions.tsx
 msgid "Block"
@@ -3058,6 +3059,7 @@ msgstr ""
 #: src/components/ai/ChiefResultBubble.tsx
 #: src/pages/Shell.tsx
 #: src/pages/workspace/WorkspaceChanges.tsx
+#: src/pages/workspace/WorkspaceGitChanges.tsx
 msgid "Could not open file"
 msgstr "Não foi possível abrir o arquivo"
 
@@ -3846,6 +3848,10 @@ msgstr ""
 msgid "Dictation shortcut"
 msgstr ""
 
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Diff is too large"
+msgstr "O diff é grande demais"
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Direct MCP"
 msgstr ""
@@ -4610,6 +4616,16 @@ msgstr ""
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Getting ready"
 msgstr ""
+
+#: src/pages/workspace/view-registry.ts
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Git changes"
+msgstr "Alterações do Git"
+
+#: src/pages/workspace/view-registry.ts
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Git changes are unavailable on this computer."
+msgstr "As alterações do Git não estão disponíveis neste computador."
 
 #: src/pages/RoutineEditor.tsx
 msgid "Git event"
@@ -5489,6 +5505,7 @@ msgstr ""
 #: src/pages/Shell.tsx
 #: src/pages/shell/runtime-config-advanced.tsx
 #: src/pages/workspace/WorkspaceChanges.tsx
+#: src/pages/workspace/WorkspaceGitChanges.tsx
 #: src/pages/workspace/WorkspacePane.tsx
 msgid "Loading…"
 msgstr "Carregando..."
@@ -6193,6 +6210,7 @@ msgid "No bots match"
 msgstr ""
 
 #: src/pages/workspace/WorkspaceChanges.tsx
+#: src/pages/workspace/WorkspaceGitChanges.tsx
 msgid "No changes to show"
 msgstr "Nenhuma alteração para mostrar"
 
@@ -6383,6 +6401,10 @@ msgstr ""
 #: src/pages/ScratchpadSection.tsx
 msgid "None yet"
 msgstr "Nenhuma ainda"
+
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Not a Git repository"
+msgstr "Não é um repositório Git"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
@@ -7376,6 +7398,7 @@ msgstr ""
 
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/workspace/WorkspaceFiles.tsx
+#: src/pages/workspace/WorkspaceGitChanges.tsx
 msgid "Refresh"
 msgstr "Atualizar"
 
@@ -8670,6 +8693,10 @@ msgstr "Socket ausente"
 msgid "Software update"
 msgstr ""
 
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Some changes are not shown"
+msgstr "Algumas alterações não são exibidas"
+
 #: src/pages/ide/IdePage.tsx
 msgid "Some entries have unsupported names and are hidden ({hiddenCount})."
 msgstr "Algumas entradas têm nomes não compatíveis e estão ocultas ({hiddenCount})."
@@ -8762,6 +8789,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "SSH machine"
 msgstr ""
+
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Staged"
+msgstr "Em preparação"
 
 #: src/pages/LearningCurator.tsx
 msgid "Stale"
@@ -9732,6 +9763,10 @@ msgstr "Desafixar"
 msgid "Unsaved changes"
 msgstr ""
 
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Unstaged"
+msgstr "Fora de preparação"
+
 #: src/pages/settings/RuntimeCapabilityChecks.tsx
 msgid "Unsupported"
 msgstr "Não suportado"
@@ -9748,6 +9783,10 @@ msgstr ""
 #: src/pages/GoalForm.tsx
 msgid "Until (defaults to eight hours)"
 msgstr "Até (o padrão é oito horas)"
+
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Untracked"
+msgstr "Não rastreados"
 
 #: src/pages/Shell.tsx
 msgid "Up to 4 files, 10 MB each"

@@ -345,6 +345,18 @@ vi.mock("../lib/rpc", () => {
           );
         },
         tasks: record("workspace.tasks"),
+        git: async () => ({
+          context: {
+            botId: "bot-1",
+            computerId: "computer-bot-1",
+            rootId: "root-1",
+            generation: 1,
+            files: "live",
+            git: true,
+            observedAt: "2026-09-28T00:00:00.000Z",
+          },
+          status: "unavailable",
+        }),
       },
       terminal: {
         available: async () => ({ available: state.terminalAvailable }),
@@ -990,6 +1002,7 @@ it("shows only one header menu and opens each available view, settings and compu
     rootId: "root-1",
     generation: 1,
     files: "live",
+    git: true,
     observedAt: "2026-09-28T00:00:00.000Z",
   };
   await renderShell("/app/bot-1");
@@ -999,7 +1012,15 @@ it("shows only one header menu and opens each available view, settings and compu
   expect(controls.querySelectorAll("button")).toHaveLength(1);
   expect(trigger.getAttribute("aria-label")).toBe("Views");
   expect(host.querySelector("[data-workspace-toggle]")).toBeNull();
-  for (const label of ["Tasks", "Files", "IDE", "Recorded changes", "Routines", "Screen"]) {
+  for (const label of [
+    "Tasks",
+    "Files",
+    "IDE",
+    "Recorded changes",
+    "Git changes",
+    "Routines",
+    "Screen",
+  ]) {
     const item = await headerItem(label);
     expect(item?.getAttribute("aria-checked")).toBe("false");
     click(item);
