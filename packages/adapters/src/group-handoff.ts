@@ -18,6 +18,7 @@ import {
   GROUP_MEMBER_ORDER,
   IsolationError,
   loadChiefMemberFacts,
+  lockDelegationRootForRun,
   lockOwnedGroup,
   touchGroupUpdatedAt,
   validateChiefDispatch,
@@ -233,6 +234,17 @@ export async function handoffToGroupBot(
         } as const;
       }
 
+      let lockedTarget = preparedTarget;
+      // A join or unarchive can make the target eligible after preflight. Resolve it
+      // under the root lock, just as room asks do, before admission reserves budget.
+      if (!lockedTarget && deps.resolveDelegationPin) {
+        await lockDelegationRootForRun(tx, run.id);
+        lockedTarget = await resolveDelegationTarget(
+          tx,
+          { ...run, actingBotId: targetId, targetThreadId: run.threadId },
+          deps.resolveDelegationPin,
+        );
+      }
       const admitted = await prepareDelegation(
         tx,
         {
@@ -259,7 +271,7 @@ export async function handoffToGroupBot(
             : undefined,
           targetThreadId: run.threadId,
         },
-        preparedTarget,
+        lockedTarget,
       );
       if (!admitted.ok) return admitted;
       const handoffText = visibleMessage || taskCardGoal(admitted.record.card) || "";

@@ -36,7 +36,9 @@ function harness(
     userModelCredential: { findFirst: vi.fn(async () => null) },
     chiefPlan: { findFirst: vi.fn(async () => null) },
     delegation: { update: vi.fn(async () => ({})) },
-    $queryRaw: vi.fn(async () => [{ id: "group-1" }]),
+    $queryRaw: vi.fn(async (_query?: TemplateStringsArray, ..._values: unknown[]) => [
+      { id: "group-1" },
+    ]),
     chatGroup: {
       findFirst: vi.fn(async (_args?: unknown) => ({
         id: "group-1",
@@ -165,6 +167,72 @@ describe("group handoff ownership", () => {
       selected: { kind: "problem" },
     });
   });
+  it.each([{ bot_id: "bot-b" }, { confirm_name: "BOT-B" }])(
+    "resolves a recipient that becomes eligible after preview under the root lock: %j",
+    async (address) => {
+      const { deps, tx } = harness([]);
+      const group = await tx.chatGroup.findFirst();
+      tx.chatGroup.findFirst.mockClear();
+      Object.assign(deps.prisma, {
+        chatGroup: {
+          findFirst: vi.fn(async () => ({
+            ...group,
+            members: group.members.filter((member) => member.bot.id !== "bot-b"),
+          })),
+        },
+      });
+      const botRead = vi.fn(async () => ({ id: "bot-b", computerId: null, computer: null }));
+      Object.assign(tx, {
+        bot: { findFirstOrThrow: botRead },
+        delegationRoot: { findUnique: vi.fn(async () => null) },
+      });
+      Object.assign(tx.run, {
+        findUniqueOrThrow: vi.fn(async () => ({ ...run, taskId: "task-a" })),
+      });
+      const selected = {
+        kind: "resolved" as const,
+        pin: {
+          runtimeKind: "pi",
+          provider: "fixture",
+          modelId: "fixture",
+          credentialId: null,
+          effort: null,
+          revision: 1,
+        },
+      };
+      const resolve = vi.fn(async () => selected);
+
+      const result = await handoffToGroupBot(
+        { ...deps, resolveDelegationPin: resolve } as never,
+        run,
+        "group-1",
+        { ...address, message: "Review" },
+      );
+
+      expect(result).toMatchObject({ ok: true, botId: "bot-b" });
+      expect(deps.prisma.bot.findFirstOrThrow).not.toHaveBeenCalled();
+      expect(botRead).toHaveBeenCalledOnce();
+      expect(resolve).toHaveBeenCalledOnce();
+      expect(resolve).toHaveBeenCalledWith(expect.objectContaining({ id: "bot-b" }), {
+        tx,
+        targetThreadId: run.threadId,
+        userId: run.userId,
+        spaceId: run.spaceId,
+      });
+      const rootLockIndex = tx.$queryRaw.mock.calls.findIndex(([sql]) =>
+        sql?.join("").includes("FROM tasks"),
+      );
+      expect(rootLockIndex).toBeGreaterThanOrEqual(0);
+      expect(tx.$queryRaw.mock.invocationCallOrder[rootLockIndex]).toBeLessThan(
+        botRead.mock.invocationCallOrder[0]!,
+      );
+      expect(vi.mocked(prepareDelegation).mock.lastCall).toEqual([
+        tx,
+        expect.objectContaining({ actingBotId: "bot-b" }),
+        expect.objectContaining({ selected, binding: expect.anything() }),
+      ]);
+    },
+  );
   it("marks a new ownership transfer as a follow-up with a chain hop", async () => {
     const { deps, messageCreate, runCreate } = harness([{ kind: "text", text: "user request" }]);
 

@@ -4,7 +4,12 @@ import type {
   RuntimePinSource,
   RuntimeProblem,
 } from "@ardurbot/contracts";
-import { DelegationSnapshotSchema, RuntimePinSchema, runtimePinProblem } from "@ardurbot/contracts";
+import {
+  DelegationSnapshotSchema,
+  delegationProblem,
+  RuntimePinSchema,
+  runtimePinProblem,
+} from "@ardurbot/contracts";
 import { minimumDelegationReservation } from "@ardurbot/core";
 import type {
   Bot,
@@ -52,15 +57,22 @@ export async function resolveDelegationTarget(
   input: { spaceId: string; userId: string; actingBotId: string; targetThreadId?: string },
   resolve?: DelegationResolver,
 ): Promise<PreparedDelegationTarget> {
-  const bot = await prisma.bot.findFirstOrThrow({
-    where: {
-      id: input.actingBotId,
-      spaceId: input.spaceId,
-      userId: input.userId,
-      archivedAt: null,
-    },
-    include: { computer: true },
-  });
+  const bot = await prisma.bot
+    .findFirstOrThrow({
+      where: {
+        id: input.actingBotId,
+        spaceId: input.spaceId,
+        userId: input.userId,
+        archivedAt: null,
+      },
+      include: { computer: true },
+    })
+    .catch((error: unknown) => {
+      // Archiving between address lookup and preflight invalidates the recipient binding.
+      if (error && typeof error === "object" && "code" in error && error.code === "P2025")
+        throw new DelegationAdmissionError(delegationProblem("authority-exceeded"));
+      throw error;
+    });
   const candidate = input.targetThreadId
     ? await selectRunPinSource({
         prisma,

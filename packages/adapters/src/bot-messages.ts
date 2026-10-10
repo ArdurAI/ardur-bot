@@ -349,15 +349,6 @@ export async function messageBot(
     }
   }
   const targetThreadId = target.thread.id;
-  const preparedTarget =
-    deps.resolveDelegationPin && !(goal && ["status", "fyi", "result"].includes(intent))
-      ? await resolveDelegationTarget(
-          deps.prisma,
-          { ...run, actingBotId: target.id },
-          deps.resolveDelegationPin,
-        )
-      : undefined;
-
   // A tool call can be re-executed after a lease expiry, so a delivery has to be
   // replayable: without this the recipient is messaged twice and woken twice.
   const deliveryKey = input.deliveryKey ? `bot-message:${input.deliveryKey}` : undefined;
@@ -405,6 +396,14 @@ export async function messageBot(
         runId?: string;
       };
   try {
+    const preparedTarget =
+      deps.resolveDelegationPin && !(goal && ["status", "fyi", "result"].includes(intent))
+        ? await resolveDelegationTarget(
+            deps.prisma,
+            { ...run, actingBotId: target.id },
+            deps.resolveDelegationPin,
+          )
+        : undefined;
     committed = await withTransactionRetry(() =>
       deps.prisma.$transaction(async (tx) => {
         // All quota-sensitive senders take this lock before any bot, thread or root lock.
