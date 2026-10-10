@@ -1,4 +1,5 @@
 import type { ProviderErrorKind } from "@ardurbot/contracts";
+import { RuntimePinError } from "@ardurbot/contracts/runtime-pins";
 
 /**
  * Carries classification across sanitization without retaining the raw provider response.
@@ -82,6 +83,11 @@ function retryAfter(error: unknown, depth: number, now: number): number | undefi
 
 function classify(error: unknown, depth: number): ProviderErrorKind {
   if (depth > 8) return "other";
+  if (error instanceof RuntimePinError) {
+    if (error.problem.reasonId === "usage-limit") return "rate-limit";
+    if (error.problem.reasonId === "signed-out") return "auth";
+    if (error.problem.reasonId === "model-unavailable") return "model-unavailable";
+  }
   if (error instanceof ProviderError) return error.providerErrorKind;
   if (typeof error === "string") {
     try {

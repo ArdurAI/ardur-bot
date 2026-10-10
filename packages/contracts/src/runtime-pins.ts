@@ -163,6 +163,20 @@ export type ResolvedPin = {
 export const MODEL_LOCALITY_DENIED_MESSAGE =
   "This bot may only run locally — change the pin or the space policy";
 
+/** Bounded, redacted diagnostics; never used as the sentence shown in chat. */
+export const RuntimeFailureSchema = z.object({
+  step: z.enum(["spawn", "handshake", "turn-start", "stream"]),
+  errorClass: z.string().max(256),
+  message: z.string().max(4096),
+  stderr: z.string().max(4096).optional(),
+  exitCode: z.number().int().nullable().optional(),
+  signal: z.string().nullable().optional(),
+  rpcCode: z.number().optional(),
+  retryable: z.boolean(),
+  retries: z.number().int().nonnegative().optional(),
+});
+export type RuntimeFailure = z.infer<typeof RuntimeFailureSchema>;
+
 export const RuntimeProblemSchema = z.object({
   kind: z.literal("problem"),
   code: z.enum([
@@ -184,7 +198,8 @@ export const RuntimeProblemSchema = z.object({
   source: RuntimePinSourceSchema.optional(),
   reason: z.string(),
   reasonId: z.string().optional(),
-  actions: z.array(z.enum(["connect", "change-pin", "open-docs"])),
+  failure: RuntimeFailureSchema.optional(),
+  actions: z.array(z.enum(["connect", "change-pin", "open-docs", "retry"])),
 });
 export type RuntimeProblem = z.infer<typeof RuntimeProblemSchema>;
 

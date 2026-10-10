@@ -9,14 +9,11 @@ import type {
   AgentRuntimeEvent,
   AgentUsage,
 } from "@ardurbot/adapter-kit";
-import type { RuntimeAvailability } from "@ardurbot/contracts/runtime-pins";
+import type { RuntimeAvailability, RuntimeFailure } from "@ardurbot/contracts/runtime-pins";
 import { RuntimePinError, runtimePinProblem } from "@ardurbot/contracts/runtime-pins";
 import * as z from "zod";
-import {
-  type CapturedChildOutput,
-  captureChildOutput,
-  childProcessLogger,
-} from "../child-output.js";
+import type { CapturedChildOutput } from "../child-output.js";
+import { captureChildOutput, childProcessLogger, redactChildText } from "../child-output.js";
 import { nativeEnvironment } from "../host-environment.js";
 import type { HostGuardrailConfig } from "../host-guardrails.js";
 import {
@@ -55,12 +52,54 @@ type RpcMessage = {
 };
 
 class CodexRequestRejected extends Error {
-  constructor(readonly code?: number) {
-    super("Codex app-server rejected the request.");
+  constructor(
+    readonly code?: number,
+    message = "Codex app-server rejected the request.",
+    readonly errorInfo?: unknown,
+  ) {
+    super(message);
+    this.name = "CodexRequestRejected";
   }
 }
 
-/** Bounded stdio RPC. No server output or account details are logged. */
+class CodexTransportError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CodexTransportError";
+  }
+}
+
+class CodexFailure extends Error {
+  constructor(readonly detail: RuntimeFailure) {
+    super(detail.message);
+    this.name = detail.errorClass;
+  }
+}
+
+function codexFailureProblem(
+  pin: NonNullable<AgentRunRequest["model"]["runtimePin"]>,
+  error: CodexFailure,
+  runId?: string,
+) {
+  const category = nativeFailureCategory(`${error.detail.errorClass}\n${error.detail.message}`);
+  const problem = nativeFailureProblem(
+    pin,
+    category ??
+      (error.detail.retryable
+        ? "runtime-stopped"
+        : error.detail.step === "spawn" || error.detail.step === "handshake"
+          ? "session-start-failed"
+          : "runtime-turn-failed"),
+  );
+  problem.failure = { ...error.detail, retryable: error.detail.retryable && !category };
+  childProcessLogger().error?.("Codex app-server failed", {
+    ...problem.failure,
+    ...(runId ? { runId } : {}),
+  });
+  return new RuntimePinError(problem);
+}
+
+/** Bounded stdio RPC. Only redacted failure details leave the transport. */
 export class CodexRpc {
   readonly events = new RuntimeQueue<RpcMessage>();
   onMessage?: (message: RpcMessage) => void;
@@ -74,16 +113,30 @@ export class CodexRpc {
     }
   >();
   private reader: Promise<void>;
+  private failure?: CodexFailure;
+  private closing = false;
+  private step: RuntimeFailure["step"] = "handshake";
   private readonly captured: CapturedChildOutput;
   private readonly secrets: string[] = environmentSecrets(nativeEnvironment());
-  constructor(readonly child: ChildProcessWithoutNullStreams) {
+  constructor(
+    readonly child: ChildProcessWithoutNullStreams,
+    runId?: string,
+  ) {
     this.captured = captureChildOutput(child, {
       kind: "codex-app-server",
+      runId,
       secrets: this.secrets,
       logger: childProcessLogger(),
+      retainFailureDetails: true,
     });
-    child.once("close", () => this.captured.close());
-    child.once("error", () => this.fail());
+    const closed = new Promise<void>((resolve) =>
+      child.once("close", () => {
+        this.captured.close();
+        resolve();
+      }),
+    );
+    child.once("error", (error) => this.fail(this.diagnostic(error, "spawn", true)));
+    child.stdin.on("error", (error) => this.fail(this.diagnostic(error, this.step, true)));
     this.reader = (async () => {
       try {
         for await (const message of jsonLines(child)) {
@@ -94,21 +147,82 @@ export class CodexRpc {
           if (pending) {
             clearTimeout(pending.timer);
             this.pending.delete(item.id as number);
-            if (item.error)
-              pending.reject(new CodexRequestRejected((item.error as { code?: number }).code));
-            else pending.resolve(item.result);
+            if (item.error) {
+              const rejection = item.error as { code?: number; message?: string; data?: unknown };
+              pending.reject(
+                this.diagnostic(
+                  new CodexRequestRejected(
+                    rejection.code,
+                    nativeFailureDetail(rejection.message, rejection.data) || undefined,
+                    rejection.data &&
+                      typeof rejection.data === "object" &&
+                      "codexErrorInfo" in rejection.data
+                      ? rejection.data.codexErrorInfo
+                      : undefined,
+                  ),
+                  this.step,
+                  false,
+                ),
+              );
+            } else pending.resolve(item.result);
           } else this.events.push(item);
         }
-        this.fail();
-      } catch {
-        this.fail();
+        // stdout can end just before exit/close. Briefly wait for the process facts,
+        // but a closed pipe must not hold a live run indefinitely.
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        await Promise.race([
+          closed,
+          new Promise<void>((resolve) => {
+            timer = setTimeout(resolve, 100);
+          }),
+        ]);
+        if (timer) clearTimeout(timer);
+        this.fail(
+          this.diagnostic(
+            new CodexTransportError("Codex app-server transport closed."),
+            this.step,
+            true,
+          ),
+        );
+      } catch (error) {
+        this.fail(this.diagnostic(error, this.step, false));
       }
     })();
   }
-  private fail() {
+  diagnostic(error: unknown, step: RuntimeFailure["step"], retryable: boolean): CodexFailure {
+    if (error instanceof CodexFailure) return error;
+    const detail = nativeFailureDetail(error) || "Codex app-server failed.";
+    const stderr = this.captured.failureTail();
+    const info =
+      error instanceof CodexRequestRejected
+        ? error.errorInfo
+        : error && typeof error === "object" && "codexErrorInfo" in error
+          ? error.codexErrorInfo
+          : undefined;
+    const errorClass =
+      typeof info === "string"
+        ? info
+        : info && typeof info === "object"
+          ? Object.keys(info)[0]
+          : error instanceof Error
+            ? error.name
+            : "CodexServerError";
+    return new CodexFailure({
+      step,
+      errorClass: redactChildText(errorClass || "CodexServerError", this.secrets).slice(0, 256),
+      message: redactChildText(detail, this.secrets).slice(0, 4096),
+      ...(stderr ? { stderr: stderr.slice(-4096) } : {}),
+      exitCode: this.child.exitCode,
+      signal: this.child.signalCode,
+      ...(error instanceof CodexRequestRejected ? { rpcCode: error.code } : {}),
+      retryable,
+    });
+  }
+  private fail(error: CodexFailure) {
+    if (this.closing || this.failure) return;
+    this.failure = error;
     const tail = this.captured.tail();
     if (tail) childProcessLogger().debug(`Codex app-server failure diagnostics: ${tail}`);
-    const error = new Error("Codex app-server unavailable");
     for (const entry of this.pending.values()) {
       clearTimeout(entry.timer);
       entry.reject(error);
@@ -117,20 +231,33 @@ export class CodexRpc {
     this.events.end(error);
   }
   send(message: RpcMessage) {
+    if (this.failure) throw this.failure;
     this.child.stdin.write(`${JSON.stringify(message)}\n`);
   }
   addSecrets(secrets: readonly string[]) {
     this.secrets.push(...secrets);
   }
   request<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+    if (this.failure) return Promise.reject(this.failure);
+    this.step = method === "turn/start" ? "turn-start" : this.step;
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error("Codex app-server unavailable"));
+        const error = this.diagnostic(
+          new CodexTransportError(`Codex app-server timed out during ${method}.`),
+          this.step,
+          true,
+        );
+        this.fail(error);
+        reject(error);
       }, 15_000);
       this.pending.set(id, { resolve: (value) => resolve(value as T), reject, timer });
-      this.send({ id, method, params });
+      try {
+        this.send({ id, method, params });
+      } catch (error) {
+        this.fail(this.diagnostic(error, this.step, true));
+      }
     });
   }
   async initialize() {
@@ -141,8 +268,24 @@ export class CodexRpc {
     this.send({ method: "initialized" });
   }
   async close() {
+    this.closing = true;
+    this.events.end();
+    for (const entry of this.pending.values()) {
+      clearTimeout(entry.timer);
+      entry.reject(
+        this.diagnostic(
+          new CodexTransportError("Codex app-server session closed."),
+          this.step,
+          false,
+        ),
+      );
+    }
+    this.pending.clear();
     await stopNative(this.child);
     await this.reader;
+  }
+  streaming() {
+    this.step = "stream";
   }
 }
 
@@ -386,16 +529,34 @@ export async function trustedInstructionSources(
   return true;
 }
 
-export async function openCodex(start: NativeSpawn = spawnNative) {
-  const binary = await findNativeBinary("codex");
-  if (!binary) throw new Error("Codex app-server unavailable");
-  const rpc = new CodexRpc(start(binary, codexArguments()));
+export async function openCodex(start: NativeSpawn = spawnNative, runId?: string) {
+  let binary: string | null | undefined;
+  let rpc: CodexRpc;
+  try {
+    binary = await findNativeBinary("codex");
+    if (!binary) throw new Error("Codex is not installed.");
+    rpc = new CodexRpc(start(binary, codexArguments()), runId);
+  } catch (error) {
+    throw new CodexFailure({
+      step: "spawn",
+      errorClass: redactChildText(
+        error instanceof Error ? error.name : "Error",
+        environmentSecrets(nativeEnvironment()),
+      ).slice(0, 256),
+      message: redactChildText(
+        nativeFailureDetail(error),
+        environmentSecrets(nativeEnvironment()),
+      ).slice(0, 4096),
+      retryable: Boolean(binary),
+    });
+  }
   try {
     await rpc.initialize();
     return rpc;
   } catch (error) {
+    const failure = rpc.diagnostic(error, "handshake", false);
     await rpc.close();
-    throw error;
+    throw failure;
   }
 }
 
@@ -463,8 +624,8 @@ export async function probeCodex(start?: NativeSpawn): Promise<RuntimeAvailabili
       available: false,
       reason:
         version &&
-        error instanceof CodexRequestRejected &&
-        [-32601, -32602].includes(error.code ?? 0)
+        error instanceof CodexFailure &&
+        [-32601, -32602].includes(error.detail.rpcCode ?? 0)
           ? `Codex version ${version} is not supported yet.`
           : "Codex could not be reached. Check again or restart the desktop app.",
     };
@@ -501,6 +662,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
       code: "runtime-unavailable" | "pin-model-unknown" | "pin-effort-unsupported",
       reason: string,
     ) => new RuntimePinError(runtimePinProblem(pin, code, reason));
+    const failureProblem = (error: CodexFailure) => codexFailureProblem(pin, error, request.runId);
     if (
       request.model.apiKey ||
       request.model.oauth ||
@@ -527,8 +689,11 @@ export class CodexAppServerRuntime implements AgentRuntime {
         "runtime-unavailable",
         "Codex could not start a session in this bot's folder — change the bot's computer or the pin.",
       );
-    const rpc = await openCodex((binary, args) => this.start(binary, args, folder)).catch(() => {
-      throw problem("runtime-unavailable", "Codex app-server unavailable");
+    const rpc = await openCodex(
+      (binary, args) => this.start(binary, args, folder),
+      request.runId,
+    ).catch((error: CodexFailure) => {
+      throw failureProblem(error);
     });
     const queue = new RuntimeQueue<AgentRuntimeEvent>();
     let threadId: string | undefined;
@@ -546,7 +711,10 @@ export class CodexAppServerRuntime implements AgentRuntime {
     let interrupted = false;
     let usageBarrier: RpcMessage | undefined;
     let completionHandled = false;
-    const restartTranscript: unknown[] = [];
+    let terminalFailure: CodexFailure | undefined;
+    const restartTranscript: unknown[] = Array.isArray(request.restartState)
+      ? [...request.restartState]
+      : [];
     const checkpointUsage: AgentUsage[] = [];
     let reader: Promise<void> | undefined;
     let steering: ReturnType<typeof setInterval> | undefined;
@@ -593,10 +761,10 @@ export class CodexAppServerRuntime implements AgentRuntime {
         void interrupt();
       }
     };
-    const mcp = await startArdurMcpServer(bridge).catch(async () => {
+    const mcp = await startArdurMcpServer(bridge).catch(async (error) => {
       await rpc.close();
       this.running.delete(request.runId);
-      throw problem("runtime-unavailable", "Codex tools could not start — change the pin.");
+      throw failureProblem(rpc.diagnostic(error, "handshake", false));
     });
     rpc.addSecrets(mcpConfigSecrets(mcp.config));
     try {
@@ -604,7 +772,9 @@ export class CodexAppServerRuntime implements AgentRuntime {
         refreshToken: false,
       });
       if (account?.type !== "chatgpt")
-        throw problem("runtime-unavailable", "Not signed in — run codex login.");
+        throw failureProblem(
+          rpc.diagnostic(new Error("Not signed in — run codex login."), "handshake", false),
+        );
       const model = (await codexModels(rpc)).find((entry) => entry.id === pin.modelId);
       if (!model) throw problem("pin-model-unknown", "The pinned model is unavailable in Codex.");
       if (!model.efforts.includes(pin.effort!))
@@ -740,30 +910,19 @@ export class CodexAppServerRuntime implements AgentRuntime {
           "Codex could not start a session in this bot's folder — change the bot's computer or the pin.",
         );
       const askedAtMs = Date.now();
-      const session = await rpc
-        .request<{
-          thread: { id: string };
-          model: string;
-          modelProvider: string;
-          reasoningEffort: string;
-          sandbox?: { type: string; networkAccess?: boolean };
-          activePermissionProfile?: { id: string } | null;
-          cwd?: unknown;
-          instructionSources?: unknown;
-        }>(request.nativeSession?.sessionId ? "thread/resume" : "thread/start", {
-          ...options,
-          ...(request.nativeSession?.sessionId
-            ? { threadId: request.nativeSession.sessionId }
-            : {}),
-        })
-        .catch((error: unknown) => {
-          if (error instanceof CodexRequestRejected)
-            throw problem(
-              "runtime-unavailable",
-              "Codex could not start a session in this bot's folder — change the bot's computer or the pin.",
-            );
-          throw error;
-        });
+      const session = await rpc.request<{
+        thread: { id: string };
+        model: string;
+        modelProvider: string;
+        reasoningEffort: string;
+        sandbox?: { type: string; networkAccess?: boolean };
+        activePermissionProfile?: { id: string } | null;
+        cwd?: unknown;
+        instructionSources?: unknown;
+      }>(request.nativeSession?.sessionId ? "thread/resume" : "thread/start", {
+        ...options,
+        ...(request.nativeSession?.sessionId ? { threadId: request.nativeSession.sessionId } : {}),
+      });
       if (session.model !== pin.modelId || session.modelProvider !== "openai")
         throw problem("pin-model-unknown", "Codex returned a different model.");
       if (session.reasoningEffort !== pin.effort)
@@ -892,6 +1051,8 @@ export class CodexAppServerRuntime implements AgentRuntime {
               if (turn.id && turn.id !== turnId) continue;
               if (completionHandled) continue;
               completionHandled = true;
+              if (turn.status === "failed")
+                terminalFailure = rpc.diagnostic(turn.error, "stream", false);
               // The read response is an ordered protocol fence. Drain queued final usage before
               // ending this stream; it is not a claim about future server notifications.
               const verified = await rpc
@@ -918,14 +1079,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
               );
               usageFinished = true;
               if (status !== "completed" && !paused && !context?.signal?.aborted) {
-                // The failed turn's error text names only the category; it is never echoed.
-                const reasonId = nativeFailureCategory(nativeFailureDetail(params.error));
-                throw reasonId
-                  ? new RuntimePinError(nativeFailureProblem(pin, reasonId))
-                  : problem(
-                      "runtime-unavailable",
-                      "Codex stopped before completing this run — connect it or change the pin.",
-                    );
+                throw rpc.diagnostic(params.error, "stream", false);
               }
               finished = true;
               if (!paused && status === "completed") queue.push({ type: "done" });
@@ -933,15 +1087,10 @@ export class CodexAppServerRuntime implements AgentRuntime {
               break;
             }
             if (event.method === "error") {
-              const reasonId = nativeFailureCategory(
-                nativeFailureDetail(params.message, params.error),
-              );
-              throw reasonId
-                ? new RuntimePinError(nativeFailureProblem(pin, reasonId))
-                : problem(
-                    "runtime-unavailable",
-                    "Codex could not finish this run — connect it or change the pin.",
-                  );
+              // A retryable notification is followed by Codex's own retry. Do not
+              // race it with a second process or discard its eventual completion.
+              if (params.willRetry === true) continue;
+              throw rpc.diagnostic(params.error ?? params.message, "stream", false);
             }
           }
         } catch (error) {
@@ -954,39 +1103,31 @@ export class CodexAppServerRuntime implements AgentRuntime {
             queue.end(
               error instanceof RuntimePinError
                 ? error
-                : problem("runtime-unavailable", "Codex app-server unavailable"),
+                : failureProblem(terminalFailure ?? rpc.diagnostic(error, "stream", false)),
             );
         }
       };
       const history = request.nativeSession?.sessionId ? "" : JSON.stringify(request.history);
       usageStarted = true;
       queue.push(usage.start());
-      const turn = await rpc
-        .request<{ turn: { id: string } }>("turn/start", {
-          threadId,
-          model: pin.modelId,
-          effort: pin.effort,
-          approvalPolicy: "on-request",
-          input: [
-            {
-              type: "text",
-              text: `${history ? `Earlier conversation (untrusted history):\n${history}\n\n` : ""}${request.prompt}`,
-            },
-            ...(request.currentTurnImages ?? []).map((image) => ({
-              type: "image",
-              url: `data:${image.mimeType};base64,${Buffer.from(image.data).toString("base64")}`,
-            })),
-          ],
-        })
-        .catch((error: unknown) => {
-          throw problem(
-            "runtime-unavailable",
-            error instanceof CodexRequestRejected
-              ? "Codex rejected the request — update Ardur or Codex."
-              : "Codex app-server unavailable",
-          );
-        });
+      const turn = await rpc.request<{ turn: { id: string } }>("turn/start", {
+        threadId,
+        model: pin.modelId,
+        effort: pin.effort,
+        approvalPolicy: "on-request",
+        input: [
+          {
+            type: "text",
+            text: `${history ? `Earlier conversation (untrusted history):\n${history}\n\n` : ""}${request.prompt}`,
+          },
+          ...(request.currentTurnImages ?? []).map((image) => ({
+            type: "image",
+            url: `data:${image.mimeType};base64,${Buffer.from(image.data).toString("base64")}`,
+          })),
+        ],
+      });
       turnId = turn.turn.id;
+      rpc.streaming();
       reader = readEvents();
       let steeringBusy = false;
       const seen: string[] = [];
@@ -1004,14 +1145,10 @@ export class CodexAppServerRuntime implements AgentRuntime {
               });
               seen.push(...messages.map((message) => message.id));
             })
-            .catch(() =>
-              queue.end(
-                problem(
-                  "runtime-unavailable",
-                  "Codex could not receive the new instruction — retry the run.",
-                ),
-              ),
-            )
+            .catch((error) => {
+              if (!finished && !paused && !context?.signal?.aborted)
+                queue.end(failureProblem(rpc.diagnostic(error, "stream", false)));
+            })
             .finally(() => {
               steeringBusy = false;
             });
@@ -1023,7 +1160,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
         usageFinished = true;
       }
       if (error instanceof RuntimePinError) throw error;
-      throw problem("runtime-unavailable", "Codex app-server unavailable");
+      throw failureProblem(rpc.diagnostic(error, "handshake", false));
     } finally {
       pinValid = false;
       if (steering) clearInterval(steering);
@@ -1033,6 +1170,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
       await rpc.close();
       await reader;
       await mcp.close();
+      await bridge.drain();
     }
   }
 }

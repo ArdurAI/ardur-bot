@@ -360,6 +360,10 @@ msgid "{runtime} could not finish this run. Check the runtime or change the pin.
 msgstr "{runtime} 无法完成此次运行。请检查运行时或更改固定模型。"
 
 #: src/lib/failure-category-copy.ts
+msgid "{runtime} could not finish this turn. Retry the run."
+msgstr "{runtime} 未能完成此轮。请重试运行。"
+
+#: src/lib/failure-category-copy.ts
 msgid "{runtime} could not start a session. Check the runtime and try again."
 msgstr "{runtime} 无法启动会话。请检查运行环境后重试。"
 
@@ -418,6 +422,10 @@ msgstr "{runtime} 的模型响应过大。请缩小任务范围后重试。"
 #: src/lib/failure-category-copy.ts
 msgid "{runtime}'s pinned model is unavailable. Change the pin and try again."
 msgstr "{runtime} 固定的模型不可用。请更改固定模型后重试。"
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s runtime stopped. Retry the run."
+msgstr "{runtime} 的运行时已停止。请重试运行。"
 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime}'s settings were not confirmed. Check this bot's settings and try again."

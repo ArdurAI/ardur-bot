@@ -1478,7 +1478,9 @@ function Thread() {
       ? snap.run.runtimeProblem
         ? refusalBotName
           ? runtimeProblemText(snap.run.runtimeProblem, refusalBotName)
-          : pinRecovery?.message
+          : pinRecovery?.message &&
+              !snap.run.runtimeProblem.actions.includes("retry") &&
+              snap.run.runtimeProblem.reasonId !== "signed-out"
             ? snap.run.runtimeProblem.pin.runtimeKind === "antigravity"
               ? `${antigravityProblemMessage(snap.run.runtimeProblem)} ${t(pinRecovery.message)}`
               : t(pinRecovery.message)
@@ -1849,7 +1851,8 @@ function Thread() {
       {runError ? (
         <View style={{ marginTop: 12 }}>
           <Text style={{ color: tokens.destructive }}>{runError}</Text>
-          {snap?.run?.error === RUN_STALLED_MESSAGE ? (
+          {snap?.run?.error === RUN_STALLED_MESSAGE ||
+          snap?.run?.runtimeProblem?.actions.includes("retry") ? (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t("Retry")}
@@ -1892,8 +1895,7 @@ function Thread() {
                     ),
                   )
                 : null}
-              {snap.run.runtimeProblem.pin.runtimeKind === "pi" &&
-              snap.run.runtimeProblem.code === "pin-credential-missing" ? (
+              {snap.run.runtimeProblem.actions.includes("connect") ? (
                 <Text
                   accessibilityRole="button"
                   style={{ color: tokens.destructive }}
@@ -1902,7 +1904,8 @@ function Thread() {
                   {t("Connect")}
                 </Text>
               ) : null}
-              {!(refusalRecovery && refusalBotName) ? (
+              {!(refusalRecovery && refusalBotName) &&
+              snap.run.runtimeProblem.actions.includes("change-pin") ? (
                 <Text
                   accessibilityRole="button"
                   style={{ color: tokens.destructive }}

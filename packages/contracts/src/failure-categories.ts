@@ -18,6 +18,8 @@ export const FailureCategoryIdSchema = z.enum([
   "destinations-bot",
   "destinations-space",
   "stopped",
+  "runtime-stopped",
+  "runtime-turn-failed",
   "session-start-failed",
   "model-context-too-small",
   "runtime-tool-catalog-mismatch",
@@ -71,6 +73,18 @@ export type FailureCategory = {
 };
 
 export const FAILURE_CATEGORIES: readonly FailureCategory[] = [
+  {
+    id: "runtime-stopped",
+    message: "{runtime}'s runtime stopped. Retry the run.",
+    action: { kind: "retry" },
+    legacy: [],
+  },
+  {
+    id: "runtime-turn-failed",
+    message: "{runtime} could not finish this turn. Retry the run.",
+    action: { kind: "retry" },
+    legacy: [],
+  },
   {
     id: "runtime-tool-catalog-mismatch",
     message:

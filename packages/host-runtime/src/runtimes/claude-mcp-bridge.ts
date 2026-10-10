@@ -19,6 +19,11 @@ export function createArdurToolBridge(
   let tail = Promise.resolve();
   return {
     tools: tools.filter((tool) => tool.name !== "run_subagent"),
+    /** A replacement session must wait until this session's admitted effects settle. */
+    async drain() {
+      stopped = true;
+      await tail;
+    },
     async call(name: string, args: Record<string, unknown>) {
       const previous = tail;
       let release!: () => void;

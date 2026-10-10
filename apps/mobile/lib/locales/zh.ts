@@ -1,4 +1,6 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "{runtime}'s runtime stopped. Retry the run.": "{runtime} 的运行时已停止。请重试运行。",
+  "{runtime} could not finish this turn. Retry the run.": "{runtime} 未能完成此轮。请重试运行。",
   "Capability checks": "能力检查",
   "Last 7 days": "过去 7 天",
   Success: "成功率",

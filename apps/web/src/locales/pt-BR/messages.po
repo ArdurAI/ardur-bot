@@ -360,6 +360,10 @@ msgid "{runtime} could not finish this run. Check the runtime or change the pin.
 msgstr "{runtime} não conseguiu concluir esta execução. Verifique o runtime ou altere o modelo fixado."
 
 #: src/lib/failure-category-copy.ts
+msgid "{runtime} could not finish this turn. Retry the run."
+msgstr "{runtime} não conseguiu concluir este turno. Tente executar novamente."
+
+#: src/lib/failure-category-copy.ts
 msgid "{runtime} could not start a session. Check the runtime and try again."
 msgstr "{runtime} não conseguiu iniciar uma sessão. Verifique o ambiente de execução e tente novamente."
 
@@ -418,6 +422,10 @@ msgstr "A resposta do modelo de {runtime} era grande demais. Reduza o escopo da 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime}'s pinned model is unavailable. Change the pin and try again."
 msgstr "O modelo fixado do {runtime} está indisponível. Altere o modelo fixado e tente novamente."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime}'s runtime stopped. Retry the run."
+msgstr "O ambiente de execução de {runtime} parou. Tente executar novamente."
 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime}'s settings were not confirmed. Check this bot's settings and try again."

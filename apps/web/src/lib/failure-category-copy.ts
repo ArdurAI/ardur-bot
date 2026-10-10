@@ -8,6 +8,8 @@ import { msg } from "@lingui/core/macro";
  * until its web message exists here.
  */
 export const failureCategoryMessages: Record<FailureCategoryId, ReturnType<typeof msg>> = {
+  "runtime-stopped": msg`{runtime}'s runtime stopped. Retry the run.`,
+  "runtime-turn-failed": msg`{runtime} could not finish this turn. Retry the run.`,
   "usage-limit": msg`{runtime}'s usage limit is reached. Try again after it resets.`,
   "signed-out": msg`Sign in to {runtime} on this computer, then try again.`,
   "max-turns": msg`{runtime} reached this run's turn limit. Narrow the task and try again.`,

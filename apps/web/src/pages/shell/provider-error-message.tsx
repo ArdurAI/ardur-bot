@@ -233,14 +233,21 @@ export function ProviderErrorMessage({
             </Trans>
           )}
         </span>
-        {pin.runtimeKind === "pi" && runtimeProblem.code === "pin-credential-missing" ? (
+        {runtimeProblem.actions.includes("retry") && onRetry ? (
+          <Button variant="link" size="xs" className="text-destructive" onClick={onRetry}>
+            <Trans>Retry</Trans>
+          </Button>
+        ) : null}
+        {runtimeProblem.actions.includes("connect") ? (
           <Button variant="link" size="xs" className="text-destructive" onClick={onConnect}>
             <Trans>Connect</Trans>
           </Button>
         ) : null}
-        <Button variant="link" size="xs" className="text-destructive" onClick={onChangeModel}>
-          <Trans>Change pin</Trans>
-        </Button>
+        {runtimeProblem.actions.includes("change-pin") ? (
+          <Button variant="link" size="xs" className="text-destructive" onClick={onChangeModel}>
+            <Trans>Change pin</Trans>
+          </Button>
+        ) : null}
       </>
     );
   }

@@ -1,4 +1,8 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "{runtime}'s runtime stopped. Retry the run.":
+    "Среда выполнения {runtime} остановилась. Повторите запуск.",
+  "{runtime} could not finish this turn. Retry the run.":
+    "{runtime} не смог завершить этот шаг. Повторите запуск.",
   "Capability checks": "Проверки возможностей",
   "Last 7 days": "Последние 7 дней",
   Success: "Успех",

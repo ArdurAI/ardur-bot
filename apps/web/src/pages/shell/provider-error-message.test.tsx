@@ -387,3 +387,44 @@ it("keeps an unclassified refusal exactly as an older server wrote it", async ()
   expect(buttons).toEqual(["Change pin"]);
   await act(async () => root.unmount());
 });
+
+it.each([
+  ["runtime-stopped", "retry", "Retry"],
+  ["runtime-turn-failed", "retry", "Retry"],
+  ["usage-limit", "retry", "Retry"],
+  ["signed-out", "connect", "Connect"],
+] as const)(
+  "offers the recorded action for %s without changing the pin",
+  async (category, action, label) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const element = document.createElement("div");
+    const root = createRoot(element);
+    const callback = vi.fn();
+    const changePin = vi.fn();
+    const problem = runtimePinProblem(
+      { ...refusalPin(), runtimeKind: "codex-app-server" },
+      "runtime-unavailable",
+      "recorded sentence",
+      category,
+    );
+    problem.actions = [action];
+    await act(async () =>
+      root.render(
+        <ProviderErrorMessage
+          text=""
+          runtimeProblem={problem}
+          onRetry={callback}
+          onConnect={callback}
+          onChangeModel={changePin}
+        />,
+      ),
+    );
+    expect([...element.querySelectorAll("button")].map((button) => button.textContent)).toEqual([
+      label,
+    ]);
+    await act(async () => element.querySelector("button")!.click());
+    expect(callback).toHaveBeenCalledOnce();
+    expect(changePin).not.toHaveBeenCalled();
+    await act(async () => root.unmount());
+  },
+);

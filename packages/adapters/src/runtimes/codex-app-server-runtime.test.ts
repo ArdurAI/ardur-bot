@@ -8,22 +8,34 @@ import { PassThrough, Writable } from "node:stream";
 import type { AgentRunRequest, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const native = vi.hoisted(() => ({ binary: vi.fn(), version: vi.fn() }));
+const native = vi.hoisted(() => ({
+  binary: vi.fn(),
+  version: vi.fn(),
+  bridge: undefined as
+    | { call(name: string, args: Record<string, unknown>): Promise<unknown> }
+    | undefined,
+}));
 beforeEach(() => {
   native.binary.mockResolvedValue("/fake/codex");
   native.version.mockResolvedValue({ code: 0, version: "0.156.1" });
 });
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.clearAllMocks();
+  vi.useRealTimers();
+});
 
 vi.mock("@ardurbot/host-runtime/runtimes/ardur-mcp-server", () => ({
-  startArdurMcpServer: async () => ({
-    config: {
-      command: "node",
-      args: ["bridge", "a1".repeat(32)],
-      env: { BRIDGE_TOKEN: "b2".repeat(32) },
-    },
-    close: vi.fn(),
-  }),
+  startArdurMcpServer: async (bridge: NonNullable<typeof native.bridge>) => {
+    native.bridge = bridge;
+    return {
+      config: {
+        command: "node",
+        args: ["bridge", "a1".repeat(32)],
+        env: { BRIDGE_TOKEN: "b2".repeat(32) },
+      },
+      close: vi.fn(),
+    };
+  },
 }));
 vi.mock("@ardurbot/host-runtime/runtimes/native-process", async (original) => ({
   ...(await original<object>()),
@@ -31,7 +43,11 @@ vi.mock("@ardurbot/host-runtime/runtimes/native-process", async (original) => ({
   probeCommand: native.version,
 }));
 
+import { RunFailurePayloadSchema } from "@ardurbot/contracts";
+import { classifyProviderError } from "../provider-error.js";
 import { resolveRunModelPin } from "../run-model-pin.js";
+import { withRuntimeRecovery } from "../runtime-recovery.js";
+import { TurnProgress } from "../turn-progress.js";
 import {
   CodexAppServerRuntime,
   INSTRUCTION_CHANGE_SLACK_MS,
@@ -43,7 +59,7 @@ type Message = {
   method?: string;
   params?: Record<string, unknown>;
   result?: unknown;
-  error?: { code: number };
+  error?: { code: number; message?: string; data?: { codexErrorInfo: string } };
 };
 function fixture(
   mode:
@@ -81,6 +97,9 @@ function fixture(
     cwd?: unknown;
     whileConfiguring?: () => void;
     whileStarting?: () => void;
+    onTurn?: () => Promise<void>;
+    turnError?: { code: number; message: string; data?: { codexErrorInfo: string } };
+    turnTimeout?: boolean;
   } = {};
   const child = new EventEmitter() as ChildProcessWithoutNullStreams;
   const stdout = new PassThrough();
@@ -162,11 +181,16 @@ function fixture(
           });
           break;
         case "turn/start":
-          if (mode === "turn-rejected") {
-            send({ id: message.id, error: { code: -32600 } });
+          if (loaded.turnTimeout) break;
+          if (mode === "turn-rejected" || loaded.turnError) {
+            send({ id: message.id, error: loaded.turnError ?? { code: -32600 } });
             break;
           }
           result({ turn: { id: "turn-native" } });
+          if (loaded.onTurn) {
+            void loaded.onTurn();
+            break;
+          }
           queueMicrotask(() => {
             if (mode === "reroute")
               send({
@@ -311,7 +335,14 @@ function fixture(
     for await (const event of runtime.run(request)) events.push(event);
     return events;
   };
-  return { collect, messages, request, info, spawn, runtime, child, loaded };
+  const exit = (code: number | null = 17, signal: string | null = null) => {
+    Object.assign(child, { exitCode: code, signalCode: signal });
+    stdout.end();
+    stderr.end();
+    child.emit("exit", code, signal);
+    child.emit("close", code, signal);
+  };
+  return { collect, messages, request, info, spawn, runtime, child, loaded, send, exit };
 }
 describe("Codex app-server protocol", () => {
   it("saves model context and usage before interrupting for restart", async () => {
@@ -723,7 +754,14 @@ describe("Codex app-server protocol", () => {
     await expect(f.collect()).rejects.toMatchObject({
       problem: {
         code: "runtime-unavailable",
-        reason: "Codex rejected the request — update Ardur or Codex.",
+        reasonId: "runtime-turn-failed",
+        actions: ["retry"],
+        failure: {
+          step: "turn-start",
+          errorClass: "CodexRequestRejected",
+          rpcCode: -32600,
+          retryable: false,
+        },
       },
     });
   });
@@ -1193,7 +1231,7 @@ describe("instruction file grants", () => {
       problem: {
         code: "runtime-unavailable",
         reason:
-          "Codex could not start a session in this bot's folder \u2014 change the bot's computer or the pin.",
+          "Codex could not start a session in this bot's folder — change the bot's computer or the pin.",
       },
     });
     expect(closed.spawn).not.toHaveBeenCalled();
@@ -1287,10 +1325,431 @@ describe("instruction file grants", () => {
     await expect(f.collect()).rejects.toMatchObject({
       problem: {
         code: "runtime-unavailable",
-        reason:
-          "Codex could not start a session in this bot's folder \u2014 change the bot's computer or the pin.",
+        reasonId: "session-start-failed",
+        failure: {
+          step: "handshake",
+          errorClass: "CodexRequestRejected",
+          rpcCode: -32603,
+          retryable: false,
+        },
       },
     });
     expect(f.messages.some((event) => event.method === "turn/start")).toBe(false);
+  });
+});
+
+describe("Codex transport recovery", () => {
+  function recoveryFixture(alwaysDrop = false) {
+    const processes: ReturnType<typeof fixture>[] = [];
+    const progress = new TurnProgress({
+      runtimeKind: "codex-app-server",
+      pin: {},
+      history: [],
+      prompt: "finish the build",
+    });
+    const effect = vi.fn(async () => ({ stdout: "saved result" }));
+    const save = vi.fn(async () => undefined);
+    const retry = vi.fn();
+    const base = fixture();
+    base.request.tools = [{ name: "shell", description: "fixture", inputSchema: {} }];
+    base.request.executeTool = async (name, _args, id) => {
+      const replay = progress.replay(name, "same-arguments");
+      if (replay.kind === "completed") return replay.result;
+      if (replay.kind === "uncertain") throw new Error("Review the uncertain action.");
+      progress.beginEffect(id, name, "same-arguments");
+      const result = await effect();
+      progress.finishEffect(id, result);
+      return result;
+    };
+    base.request.saveCheckpoint = async (state) => {
+      progress.runtimeState = structuredClone(state);
+      await save();
+      if (Array.isArray(state) && state.length % 2 === 0) processes.at(-1)!.exit();
+      return false;
+    };
+    const spawn = vi.fn(() => {
+      const f = fixture();
+      const drops = alwaysDrop || processes.length === 0;
+      processes.push(f);
+      f.loaded.onTurn = async () => {
+        await native.bridge!.call("shell", { command: "fake build" });
+        if (drops) {
+          // Two completed model steps precede the transport loss.
+          for (let n = 0; n < 2; n++)
+            f.send({
+              method: "item/completed",
+              params: {
+                threadId: "thread-native",
+                item: { type: "agentMessage", text: `step ${n}` },
+              },
+            });
+        } else {
+          f.send({
+            method: "item/agentMessage/delta",
+            params: { threadId: "thread-native", delta: "finished" },
+          });
+          f.send({
+            method: "turn/completed",
+            params: { threadId: "thread-native", turn: { status: "completed" } },
+          });
+        }
+      };
+      return f.child;
+    });
+    const runtime = new CodexAppServerRuntime(spawn);
+    const events: AgentRuntimeEvent[] = [];
+    const collect = async (signal?: AbortSignal) => {
+      for await (const event of withRuntimeRecovery(
+        runtime.run.bind(runtime),
+        progress,
+        save,
+        retry,
+      )(base.request, { signal }))
+        events.push(event);
+      return events;
+    };
+    return {
+      collect,
+      processes,
+      spawn,
+      effect,
+      save,
+      retry,
+      progress,
+      events,
+      request: base.request,
+    };
+  }
+
+  it("restarts after completed steps and reuses saved tool results on the same pin", async () => {
+    vi.useFakeTimers();
+    const f = recoveryFixture();
+    const work = f.collect();
+    void work.catch(() => undefined);
+    await vi.waitFor(() => expect(f.retry).toHaveBeenCalledOnce());
+    expect(f.spawn).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(await work).toContainEqual({ type: "done" });
+    expect(f.spawn).toHaveBeenCalledTimes(2);
+    expect(f.effect).toHaveBeenCalledOnce();
+    expect(f.save).toHaveBeenCalledTimes(3);
+    const nextTurn = f.processes[1]!.messages.find((message) => message.method === "turn/start");
+    expect(nextTurn?.params).toMatchObject({ model: "model", effort: "high" });
+    expect(JSON.stringify(nextTurn?.params)).toContain("saved result");
+    expect(JSON.stringify(nextTurn?.params)).toContain("step 1");
+    expect(f.processes[0]!.child.kill).not.toHaveBeenCalled();
+    expect(f.processes[1]!.child.kill).toHaveBeenCalledOnce();
+  });
+
+  it("settles an admitted tool before a replacement can start", async () => {
+    vi.useFakeTimers();
+    const first = fixture();
+    const second = fixture();
+    const progress = new TurnProgress({
+      runtimeKind: "codex-app-server",
+      pin: {},
+      history: [],
+      prompt: "work",
+    });
+    let started!: () => void;
+    let release!: () => void;
+    const toolStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const toolFinished = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    first.request.tools = [{ name: "shell", description: "fixture", inputSchema: {} }];
+    first.request.executeTool = async (name, _args, id) => {
+      progress.beginEffect(id, name, "digest");
+      started();
+      await toolFinished;
+      progress.finishEffect(id, { stdout: "settled" });
+      return {};
+    };
+    first.loaded.onTurn = async () => {
+      const work = native.bridge!.call("shell", {});
+      await toolStarted;
+      first.send({
+        method: "item/completed",
+        params: { threadId: "thread-native", item: { type: "agentMessage", text: "saved" } },
+      });
+      await work;
+    };
+    first.request.saveCheckpoint = async (state) => {
+      progress.runtimeState = state;
+      first.exit();
+      return false;
+    };
+    const spawn = vi.fn().mockReturnValueOnce(first.child).mockReturnValueOnce(second.child);
+    const runtime = new CodexAppServerRuntime(spawn);
+    const retry = vi.fn();
+    const save = vi.fn(async () => {
+      expect(progress.snapshot().effects[0]).toMatchObject({
+        state: "completed",
+        result: { stdout: "settled" },
+      });
+    });
+    const work = (async () => {
+      for await (const event of withRuntimeRecovery(
+        runtime.run.bind(runtime),
+        progress,
+        save,
+        retry,
+      )(first.request))
+        void event;
+    })();
+    await vi.waitFor(() => expect(first.child.exitCode).toBe(17));
+    expect(retry).not.toHaveBeenCalled();
+    expect(spawn).toHaveBeenCalledOnce();
+    release();
+    await vi.waitFor(() => expect(retry).toHaveBeenCalledOnce());
+    await vi.advanceTimersByTimeAsync(20_000);
+    await work;
+    expect(spawn).toHaveBeenCalledTimes(2);
+    expect(save).toHaveBeenCalledOnce();
+  });
+
+  it("cancels during backoff without spawning a replacement", async () => {
+    vi.useFakeTimers();
+    const f = recoveryFixture();
+    const controller = new AbortController();
+    const failure = f.collect(controller.signal).catch((error: unknown) => error);
+    await vi.waitFor(() => expect(f.retry).toHaveBeenCalledOnce());
+    controller.abort(new Error("cancelled by the owner"));
+    expect(await failure).toEqual(controller.signal.reason);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(f.spawn).toHaveBeenCalledOnce();
+  });
+
+  it("fails after three retries with process facts and a Retry sentence", async () => {
+    vi.useFakeTimers();
+    const f = recoveryFixture(true);
+    const failure = f.collect().then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    for (const [index, delay] of [20_000, 40_000, 60_000].entries()) {
+      await vi.waitFor(() => expect(f.retry).toHaveBeenCalledTimes(index + 1));
+      await vi.advanceTimersByTimeAsync(delay);
+    }
+    const error = (await failure) as { problem: unknown; message: string };
+    expect(f.spawn).toHaveBeenCalledTimes(4);
+    expect(f.effect).toHaveBeenCalledOnce();
+    expect(error).toMatchObject({
+      message: "Codex's runtime stopped. Retry the run.",
+      problem: {
+        reasonId: "runtime-stopped",
+        actions: ["retry"],
+        failure: {
+          step: "stream",
+          errorClass: "CodexTransportError",
+          message: "Codex app-server transport closed.",
+          exitCode: 17,
+          signal: null,
+          retries: 3,
+        },
+      },
+    });
+    const payload = {
+      error: error.message,
+      providerErrorKind: classifyProviderError(error),
+      runtimeProblem: error.problem,
+    };
+    expect(RunFailurePayloadSchema.parse(payload)).toEqual(payload);
+  });
+
+  it.each([
+    ["rate_limit_exceeded: usage limit reached", "usage-limit", "rate-limit", "retry"],
+    ["authentication_error: unauthorized", "signed-out", "auth", "connect"],
+  ] as const)("classifies a turn-start refusal: %s", async (message, reasonId, kind, action) => {
+    const f = fixture();
+    f.loaded.turnError = { code: -32000, message };
+    const progress = new TurnProgress({
+      runtimeKind: "codex-app-server",
+      pin: {},
+      history: [],
+      prompt: "work",
+    });
+    progress.beginEffect("done", "shell", "digest");
+    progress.finishEffect("done", {});
+    const retry = vi.fn();
+    const error = await (async () => {
+      for await (const event of withRuntimeRecovery(
+        f.runtime.run.bind(f.runtime),
+        progress,
+        vi.fn(),
+        retry,
+      )(f.request))
+        void event;
+    })().catch((error: unknown) => error);
+    expect(error).toMatchObject({
+      problem: {
+        reasonId,
+        actions: [action],
+        failure: { step: "turn-start", message, retryable: false },
+      },
+    });
+    expect(classifyProviderError(error)).toBe(kind);
+    expect(retry).not.toHaveBeenCalled();
+    expect(f.spawn).toHaveBeenCalledOnce();
+  });
+
+  it("records a synchronous spawn failure", async () => {
+    const f = fixture();
+    const runtime = new CodexAppServerRuntime(() => {
+      throw new TypeError("fixture spawn refused");
+    });
+    await expect(
+      (async () => {
+        for await (const event of runtime.run(f.request)) void event;
+      })(),
+    ).rejects.toMatchObject({
+      problem: {
+        failure: { step: "spawn", errorClass: "TypeError", message: "fixture spawn refused" },
+      },
+    });
+  });
+
+  it("records malformed stream output as a protocol failure", async () => {
+    const f = fixture();
+    f.loaded.onTurn = async () => {
+      (f.child.stdout as PassThrough).write("not-json\n");
+    };
+    await expect(f.collect()).rejects.toMatchObject({
+      problem: {
+        reasonId: "runtime-turn-failed",
+        failure: { step: "stream", errorClass: "SyntaxError", retryable: false },
+      },
+    });
+  });
+
+  it("records the turn-start request deadline", async () => {
+    vi.useFakeTimers();
+    const f = fixture();
+    f.loaded.turnTimeout = true;
+    const failure = f.collect().catch((error: unknown) => error);
+    await vi.waitFor(() =>
+      expect(f.messages.some((message) => message.method === "turn/start")).toBe(true),
+    );
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(await failure).toMatchObject({
+      problem: {
+        failure: {
+          step: "turn-start",
+          errorClass: "CodexTransportError",
+          message: "Codex app-server timed out during turn/start.",
+          retryable: true,
+        },
+      },
+    });
+  });
+
+  it("keeps the server's error class when its message alone is ambiguous", async () => {
+    const f = fixture("success", {
+      duringTurn: [
+        {
+          method: "error",
+          params: { error: { message: "request refused", codexErrorInfo: "usageLimitExceeded" } },
+        },
+      ],
+    });
+    await expect(f.collect()).rejects.toMatchObject({
+      problem: {
+        reasonId: "usage-limit",
+        actions: ["retry"],
+        failure: {
+          step: "stream",
+          errorClass: "usageLimitExceeded",
+          message: "request refused",
+          retryable: false,
+        },
+      },
+    });
+  });
+
+  it("keeps the server error class in a rejected RPC request", async () => {
+    const f = fixture();
+    f.loaded.turnError = {
+      code: -32000,
+      message: "request refused",
+      data: { codexErrorInfo: "usageLimitExceeded" },
+    };
+    await expect(f.collect()).rejects.toMatchObject({
+      problem: {
+        reasonId: "usage-limit",
+        actions: ["retry"],
+        failure: {
+          step: "turn-start",
+          errorClass: "usageLimitExceeded",
+          rpcCode: -32000,
+          message: "request refused",
+          retryable: false,
+        },
+      },
+    });
+  });
+
+  it("lets Codex finish its own announced retry", async () => {
+    const f = fixture("success", {
+      duringTurn: [
+        { method: "error", params: { message: "temporary transport issue", willRetry: true } },
+        {
+          method: "turn/completed",
+          params: { threadId: "thread-native", turn: { status: "completed" } },
+        },
+      ],
+    });
+    expect(await f.collect()).toContainEqual({ type: "done" });
+    expect(f.spawn).toHaveBeenCalledOnce();
+  });
+
+  it("retains a signal and does not retry a drop without saved progress", async () => {
+    const f = fixture();
+    f.loaded.onTurn = async () => f.exit(null, "SIGKILL");
+    const progress = new TurnProgress({
+      runtimeKind: "codex-app-server",
+      pin: {},
+      history: [],
+      prompt: "work",
+    });
+    const retry = vi.fn();
+    await expect(
+      (async () => {
+        for await (const event of withRuntimeRecovery(
+          f.runtime.run.bind(f.runtime),
+          progress,
+          vi.fn(),
+          retry,
+        )(f.request))
+          void event;
+      })(),
+    ).rejects.toMatchObject({
+      problem: { failure: { step: "stream", exitCode: null, signal: "SIGKILL" } },
+    });
+    expect(retry).not.toHaveBeenCalled();
+  });
+
+  it("redacts the recorded server message and process log without debug opt-in", async () => {
+    vi.stubEnv("ARDUR_DETAILED_PROCESS_LOGS", undefined);
+    const write = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    try {
+      const f = fixture();
+      f.loaded.whileStarting = () => {
+        (f.child.stderr as PassThrough).end(`fatal: ${"b2".repeat(32)}\n`);
+      };
+      f.loaded.turnError = { code: -32000, message: `unauthorized: ${"b2".repeat(32)}` };
+      await expect(f.collect()).rejects.toMatchObject({
+        problem: { failure: { message: "unauthorized: [redacted]", stderr: "fatal: [redacted]" } },
+      });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      const logs = write.mock.calls.map(([line]) => String(line)).join("");
+      expect(logs).toContain("Codex app-server failed");
+      expect(logs).toContain("turn-start");
+      expect(logs).not.toContain("b2".repeat(32));
+    } finally {
+      write.mockRestore();
+      vi.unstubAllEnvs();
+    }
   });
 });
