@@ -113,6 +113,16 @@ export const GoalRejectInputSchema = z.object({
 });
 export type GoalRejectInput = z.infer<typeof GoalRejectInputSchema>;
 
+/** Owner marks one condition on the revision under review. Workers cannot call this. */
+export const GoalConditionReviewInputSchema = z.object({
+  goalId: Id,
+  revisionId: Id,
+  conditionId: z.string().trim().min(1).max(200),
+  status: z.enum(["pass", "fail"]),
+  reason: z.string().trim().max(2_000).optional(),
+});
+export type GoalConditionReviewInput = z.infer<typeof GoalConditionReviewInputSchema>;
+
 export const GoalSchema = z.object({
   id: Id,
   spaceId: Id,
@@ -160,4 +170,5 @@ export const goalsContract = {
   submit: oc.input(GoalSubmitInputSchema).output(GoalRevisionSchema),
   accept: oc.input(GoalAcceptInputSchema).output(GoalVerdictSchema),
   reject: oc.input(GoalRejectInputSchema).output(GoalVerdictSchema),
+  reviewCondition: oc.input(GoalConditionReviewInputSchema).output(GoalRevisionSchema),
 };

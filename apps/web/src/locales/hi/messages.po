@@ -4224,6 +4224,10 @@ msgstr "हर"
 msgid "every {intervalAmountSelect} {intervalUnitSelect}"
 msgstr "हर {intervalAmountSelect} {intervalUnitSelect}"
 
+#: src/pages/GroupPanel.tsx
+msgid "Every condition must pass."
+msgstr "हर शर्त पास होनी चाहिए."
+
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineSchedule.tsx
 msgid "Every day"
@@ -6975,10 +6979,6 @@ msgstr ""
 msgid "Playing…"
 msgstr "प्ले हो रहा है…"
 
-#: src/pages/GroupPanel.tsx
-msgid "Please address the failing conditions."
-msgstr "कृपया अधूरी शर्तों को पूरा करें।"
-
 #: src/components/composer/ComposerMenu.tsx
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/settings-sections.ts
@@ -7919,6 +7919,10 @@ msgstr ""
 #: src/pages/DevicesSettings.tsx
 msgid "Revoked"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Rework notes"
+msgstr "पुनर्कार्य नोट"
 
 #: src/components/Context.tsx
 msgid "Rewritten {time}"

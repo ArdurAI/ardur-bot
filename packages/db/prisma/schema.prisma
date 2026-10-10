@@ -2757,6 +2757,7 @@ model GoalVerdict {
   reworkNotes String?
   createdAt DateTime @default(now())
 
+  @@unique([goalId, revisionId])
   @@index([goalId, createdAt])
   @@map("goal_verdicts")
 }

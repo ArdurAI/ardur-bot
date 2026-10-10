@@ -4224,6 +4224,10 @@ msgstr "Every"
 msgid "every {intervalAmountSelect} {intervalUnitSelect}"
 msgstr "every {intervalAmountSelect} {intervalUnitSelect}"
 
+#: src/pages/GroupPanel.tsx
+msgid "Every condition must pass."
+msgstr "Every condition must pass."
+
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineSchedule.tsx
 msgid "Every day"
@@ -6975,10 +6979,6 @@ msgstr "Platform"
 msgid "Playing…"
 msgstr "Playing…"
 
-#: src/pages/GroupPanel.tsx
-msgid "Please address the failing conditions."
-msgstr "Please address the failing conditions."
-
 #: src/components/composer/ComposerMenu.tsx
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/settings-sections.ts
@@ -7919,6 +7919,10 @@ msgstr "Revoke"
 #: src/pages/DevicesSettings.tsx
 msgid "Revoked"
 msgstr "Revoked"
+
+#: src/pages/GroupPanel.tsx
+msgid "Rework notes"
+msgstr "Rework notes"
 
 #: src/components/Context.tsx
 msgid "Rewritten {time}"

@@ -525,21 +525,46 @@ export function GroupGoalStrip({
   const { t } = useLingui();
   const [stopping, setStopping] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  const [notes, setNotes] = useState("");
   const reviewPending = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  async function markCondition(conditionId: string, status: "pass" | "fail") {
+    if (!goal.currentRevision || reviewPending.current) return;
+    reviewPending.current = true;
+    setReviewing(true);
+    setError(null);
+    try {
+      await rpc.goals.reviewCondition({
+        goalId: goal.id,
+        revisionId: goal.currentRevision.id,
+        conditionId,
+        status,
+      });
+      await onRefresh();
+    } catch (cause) {
+      const reason = cause instanceof ORPCError ? cause.data?.reason : undefined;
+      setError(
+        reason === "revision-changed"
+          ? t`Result changed; review again.`
+          : t`Could not review result. Try again.`,
+      );
+      if (reason === "revision-changed") await onRefresh().catch(() => undefined);
+    } finally {
+      reviewPending.current = false;
+      setReviewing(false);
+    }
+  }
   async function review(action: "accept" | "reject") {
     if (!goal.currentRevision || reviewPending.current) return;
+    const reworkNotes = notes.trim();
+    if (action === "reject" && !reworkNotes) return;
     reviewPending.current = true;
     setReviewing(true);
     setError(null);
     try {
       const input = { goalId: goal.id, revisionId: goal.currentRevision.id };
       if (action === "accept") await rpc.goals.accept(input);
-      else
-        await rpc.goals.reject({
-          ...input,
-          reworkNotes: t`Please address the failing conditions.`,
-        });
+      else await rpc.goals.reject({ ...input, reworkNotes });
       await onRefresh();
     } catch (cause) {
       const reason = cause instanceof ORPCError ? cause.data?.reason : undefined;
@@ -548,7 +573,9 @@ export function GroupGoalStrip({
           ? t`Result changed; review again.`
           : reason === "work-active"
             ? t`Work is still active.`
-            : t`Could not review result. Try again.`,
+            : reason === "conditions-open"
+              ? t`Every condition must pass.`
+              : t`Could not review result. Try again.`,
       );
       if (reason === "revision-changed") await onRefresh().catch(() => undefined);
     } finally {
@@ -588,7 +615,7 @@ export function GroupGoalStrip({
             <p className="text-sm mb-2">{goal.currentRevision.summary}</p>
             <ul className="text-sm list-disc pl-4 mb-3">
               {goal.currentRevision.conditions.map((cond) => (
-                <li key={cond.id}>
+                <li key={cond.id} className="mb-1">
                   {cond.description === GOAL_FINAL_REVIEW_DESCRIPTION || cond.id === "cond-final"
                     ? t`Final owner review`
                     : cond.description}
@@ -606,9 +633,36 @@ export function GroupGoalStrip({
                       <Trans>Unknown</Trans>
                     </span>
                   )}
+                  <span className="ml-2 inline-flex gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={reviewing}
+                      onClick={() => void markCondition(cond.id, "pass")}
+                    >
+                      <Trans>Pass</Trans>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={reviewing}
+                      onClick={() => void markCondition(cond.id, "fail")}
+                    >
+                      <Trans>Fail</Trans>
+                    </Button>
+                  </span>
                 </li>
               ))}
             </ul>
+            <textarea
+              aria-label={t`Rework notes`}
+              value={notes}
+              rows={2}
+              maxLength={4000}
+              disabled={reviewing}
+              onChange={(event) => setNotes(event.target.value)}
+              className="mb-2 w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground"
+            />
             <div className="flex gap-2">
               <Button
                 variant="outline"
@@ -621,7 +675,7 @@ export function GroupGoalStrip({
               <Button
                 variant="destructive"
                 size="sm"
-                disabled={reviewing}
+                disabled={reviewing || notes.trim().length === 0}
                 onClick={() => void review("reject")}
               >
                 <Trans>Reject result</Trans>

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ProductEventSchema } from "./events.js";
 import {
   GoalAcceptInputSchema,
+  GoalConditionReviewInputSchema,
   GoalRejectInputSchema,
   GoalSubmitInputSchema,
   goalBudget,
@@ -45,6 +46,14 @@ describe("Goal contracts and state machine", () => {
     expect(
       GoalRejectInputSchema.safeParse({ goalId: "g_1", revisionId: "r_1", reworkNotes: "fix" })
         .success,
+    ).toBe(true);
+    expect(
+      GoalConditionReviewInputSchema.safeParse({
+        goalId: "g_1",
+        revisionId: "r_1",
+        conditionId: "cond-final",
+        status: "pass",
+      }).success,
     ).toBe(true);
   });
 });

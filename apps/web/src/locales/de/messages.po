@@ -4224,6 +4224,10 @@ msgstr "Alle"
 msgid "every {intervalAmountSelect} {intervalUnitSelect}"
 msgstr "alle {intervalAmountSelect} {intervalUnitSelect}"
 
+#: src/pages/GroupPanel.tsx
+msgid "Every condition must pass."
+msgstr "Jede Bedingung muss bestanden sein."
+
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineSchedule.tsx
 msgid "Every day"
@@ -6975,10 +6979,6 @@ msgstr ""
 msgid "Playing…"
 msgstr "Wiedergabe…"
 
-#: src/pages/GroupPanel.tsx
-msgid "Please address the failing conditions."
-msgstr "Bitte beheben Sie die nicht erfüllten Bedingungen."
-
 #: src/components/composer/ComposerMenu.tsx
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/settings-sections.ts
@@ -7919,6 +7919,10 @@ msgstr "Widerrufen"
 #: src/pages/DevicesSettings.tsx
 msgid "Revoked"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Rework notes"
+msgstr "Nacharbeitsnotizen"
 
 #: src/components/Context.tsx
 msgid "Rewritten {time}"

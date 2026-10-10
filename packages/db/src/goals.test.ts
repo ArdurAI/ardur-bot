@@ -8,8 +8,10 @@ import {
   goalExhaustionReason,
   reconcileGoalExhaustion,
   rejectGoal,
+  reviewGoalCondition,
   startGoal,
   submitGoal,
+  submitGoalFromCoordinator,
   wakeGoalCoordinatorForDelegation,
 } from "./goals.js";
 
@@ -230,7 +232,10 @@ describe("goal scheduling", () => {
         expect(result).toBeNull();
         expect(runCreate).not.toHaveBeenCalled();
         expect(tx.task.create).not.toHaveBeenCalled();
-        expect(tx.delegation.update).not.toHaveBeenCalled();
+        expect(tx.delegation.update).toHaveBeenCalledWith({
+          where: { id: "delegation-1" },
+          data: { coordinatorWokenAt: expect.any(Date) },
+        });
         expect(tx.event.create).not.toHaveBeenCalled();
         expect(steeringCreate).not.toHaveBeenCalled();
         return;
@@ -291,11 +296,27 @@ function reviewFixture() {
     createdAt: Date;
   }> = [];
   const root = { usedTokens: 10, reservedTokens: 0, tokenLimit: 100 };
-  const scopedGoal = vi.fn(async ({ where }: { where: { spaceId?: string; userId?: string } }) =>
-    (where.spaceId && where.spaceId !== owner.spaceId) ||
-    (where.userId && where.userId !== owner.userId)
-      ? null
-      : { ...goal, revisions: revisions.slice(-1) },
+  const scopedGoal = vi.fn(
+    async ({
+      where,
+    }: {
+      where: {
+        spaceId?: string;
+        userId?: string;
+        coordinatorBotId?: string;
+        threadId?: string;
+        status?: string;
+        id?: string;
+      };
+    }) =>
+      (where.spaceId && where.spaceId !== owner.spaceId) ||
+      (where.userId && where.userId !== owner.userId) ||
+      (where.coordinatorBotId && where.coordinatorBotId !== goal.coordinatorBotId) ||
+      (where.threadId && where.threadId !== goal.threadId) ||
+      (where.status && where.status !== goal.status) ||
+      (where.id && where.id !== goal.id)
+        ? null
+        : { ...goal, revisions: revisions.slice(-1) },
   );
   const tx = {
     $queryRaw: vi.fn(async () => []),
@@ -324,6 +345,14 @@ function reviewFixture() {
           return revision;
         },
       ),
+      update: vi.fn(
+        async ({ where, data }: { where: { id: string }; data: { conditions: unknown } }) => {
+          const revision = revisions.find((item) => item.id === where.id);
+          if (!revision) throw new Error("missing revision");
+          revision.conditions = data.conditions;
+          return revision;
+        },
+      ),
     },
     goalVerdict: {
       findFirst: vi.fn(
@@ -339,8 +368,14 @@ function reviewFixture() {
       ),
     },
     delegationRoot: { findUnique: vi.fn(async () => root), findFirst: vi.fn(async () => root) },
+    delegation: { findMany: vi.fn(async () => []) },
+    chatGroup: { findFirst: vi.fn(async () => ({ id: goal.groupId })) },
+    task: { create: vi.fn(async () => ({ id: "task-rework" })) },
     usageRecord: { findFirst: vi.fn(async () => null) },
-    run: { findFirst: vi.fn(async () => null) },
+    run: {
+      findFirst: vi.fn(async () => null),
+      create: vi.fn(async () => ({ id: "run-rework" })),
+    },
     thread: { update: vi.fn(async () => ({ nextEventSeq: 1 })) },
     event: { create: vi.fn(async () => ({ seq: 1 })) },
   };
@@ -448,8 +483,14 @@ describe("goal owner review", () => {
   it("returns the same acceptance on retry and cannot reject or overwrite it", async () => {
     const fixture = reviewFixture();
     const revision = await fixture.submit();
-    const snapshot = structuredClone(fixture.revisions[0]);
     const input = { goalId: fixture.goal.id, revisionId: revision.id };
+    await reviewGoalCondition(fixture.prisma, owner, {
+      goalId: fixture.goal.id,
+      revisionId: revision.id,
+      conditionId: "cond-final",
+      status: "pass",
+    });
+    const snapshot = structuredClone(fixture.revisions[0]);
     const accepted = await acceptGoal(fixture.prisma, owner, input);
     expect(await acceptGoal(fixture.prisma, owner, input)).toEqual(accepted);
     expect(accepted.createdAt).toBe(now.toISOString());
@@ -468,6 +509,14 @@ describe("goal owner review", () => {
     async (operation) => {
       const fixture = reviewFixture();
       const revision = await fixture.submit();
+      if (operation === "accept") {
+        await reviewGoalCondition(fixture.prisma, owner, {
+          goalId: fixture.goal.id,
+          revisionId: revision.id,
+          conditionId: "cond-final",
+          status: "pass",
+        });
+      }
       fixture.tx.$queryRaw.mockClear();
       fixture.tx.teamGoal.findUniqueOrThrow.mockClear();
       const input = {
@@ -501,5 +550,85 @@ describe("goal owner review", () => {
     ).rejects.toThrow("Unsettled reservations");
     expect(fixture.tx.goalVerdict.create).not.toHaveBeenCalled();
     expect(fixture.goal.status).toBe("completed");
+  });
+
+  it("submits the coordinator report as the revision under review", async () => {
+    const fixture = reviewFixture();
+    const revision = await submitGoalFromCoordinator(fixture.prisma, {
+      goalId: fixture.goal.id,
+      spaceId: owner.spaceId,
+      userId: owner.userId,
+      coordinatorBotId: fixture.goal.coordinatorBotId,
+      threadId: fixture.goal.threadId,
+      summary: "The reviewed wording is ready.",
+    });
+    expect(revision.summary).toBe("The reviewed wording is ready.");
+    expect(fixture.goal.status).toBe("completed");
+    expect(fixture.tx.event.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ type: "goal.submitted" }),
+    });
+    await expect(
+      submitGoalFromCoordinator(fixture.prisma, {
+        goalId: fixture.goal.id,
+        spaceId: owner.spaceId,
+        userId: owner.userId,
+        coordinatorBotId: "other-bot",
+        threadId: fixture.goal.threadId,
+        summary: "Not the coordinator",
+      }),
+    ).rejects.toThrow();
+    expect(fixture.tx.goalRevision.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("wakes the coordinator once with the rework notes", async () => {
+    const fixture = reviewFixture();
+    const revision = await fixture.submit();
+    const input = {
+      goalId: fixture.goal.id,
+      revisionId: revision.id,
+      reworkNotes: "Review again",
+    };
+    await rejectGoal(fixture.prisma, owner, input);
+    await rejectGoal(fixture.prisma, owner, input);
+    expect(fixture.tx.run.create).toHaveBeenCalledTimes(1);
+    expect(fixture.tx.task.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        prompt: expect.stringContaining("Review again"),
+        botId: fixture.goal.coordinatorBotId,
+      }),
+    });
+    expect(fixture.tx.run.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        clientNonce: `goal-rework:${revision.id}`,
+        goalId: fixture.goal.id,
+      }),
+    });
+    expect(fixture.goal.status).toBe("running");
+  });
+
+  it("refuses acceptance until every condition passes and stays idempotent after", async () => {
+    const fixture = reviewFixture();
+    const revision = await fixture.submit();
+    const input = { goalId: fixture.goal.id, revisionId: revision.id };
+    await expect(acceptGoal(fixture.prisma, owner, input)).rejects.toThrow(
+      "Every condition must pass",
+    );
+    expect(fixture.tx.goalVerdict.create).not.toHaveBeenCalled();
+    await reviewGoalCondition(fixture.prisma, owner, {
+      ...input,
+      conditionId: "cond-final",
+      status: "fail",
+    });
+    await expect(acceptGoal(fixture.prisma, owner, input)).rejects.toThrow(
+      "Every condition must pass",
+    );
+    await reviewGoalCondition(fixture.prisma, owner, {
+      ...input,
+      conditionId: "cond-final",
+      status: "pass",
+    });
+    const accepted = await acceptGoal(fixture.prisma, owner, input);
+    expect(await acceptGoal(fixture.prisma, owner, input)).toEqual(accepted);
+    expect(fixture.tx.goalVerdict.create).toHaveBeenCalledTimes(1);
   });
 });

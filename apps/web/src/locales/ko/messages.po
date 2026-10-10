@@ -4224,6 +4224,10 @@ msgstr "매"
 msgid "every {intervalAmountSelect} {intervalUnitSelect}"
 msgstr "{intervalAmountSelect} {intervalUnitSelect}마다"
 
+#: src/pages/GroupPanel.tsx
+msgid "Every condition must pass."
+msgstr "모든 조건을 통과해야 합니다."
+
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineSchedule.tsx
 msgid "Every day"
@@ -6975,10 +6979,6 @@ msgstr ""
 msgid "Playing…"
 msgstr "재생 중…"
 
-#: src/pages/GroupPanel.tsx
-msgid "Please address the failing conditions."
-msgstr "충족하지 못한 조건을 해결해 주세요."
-
 #: src/components/composer/ComposerMenu.tsx
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/settings-sections.ts
@@ -7919,6 +7919,10 @@ msgstr "연결 해제"
 #: src/pages/DevicesSettings.tsx
 msgid "Revoked"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Rework notes"
+msgstr "수정 메모"
 
 #: src/components/Context.tsx
 msgid "Rewritten {time}"

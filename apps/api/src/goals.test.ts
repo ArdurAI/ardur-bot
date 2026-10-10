@@ -29,7 +29,7 @@ describe("Goals API", () => {
         authSessionId,
       };
       const handler = new RPCHandler(router);
-      for (const operation of ["submit", "accept", "reject"]) {
+      for (const operation of ["submit", "accept", "reject", "reviewCondition"]) {
         const { response } = await handler.handle(
           new Request(`http://127.0.0.1/rpc/goals/${operation}`, {
             method: "POST",
@@ -40,6 +40,8 @@ describe("Goals API", () => {
                 summary: "Candidate",
                 revisionId: "revision-1",
                 reworkNotes: "Review again",
+                conditionId: "cond-final",
+                status: "pass",
               },
             }),
           }),
@@ -105,5 +107,83 @@ it.each([
   );
   expect(response?.status).toBe(409);
   expect(await response?.json()).toMatchObject({ json: { code: "CONFLICT", data: { reason } } });
+  expect(tx.goalVerdict.create).not.toHaveBeenCalled();
+});
+
+it("maps a cross-scope refusal to forbidden, not a server error", async () => {
+  const router = createRouter({
+    prisma: { teamGoal: { findFirst: vi.fn(async () => null) } },
+    env: { sandboxProvider: "fake" },
+  } as unknown as RouterDeps);
+  const { response } = await new RPCHandler(router).handle(
+    new Request("http://127.0.0.1/rpc/goals/accept", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ json: { goalId: "goal-1", revisionId: "revision-1" } }),
+    }),
+    {
+      prefix: "/rpc",
+      context: {
+        actor: {
+          spaceId: "space-1",
+          userId: "owner-1",
+          email: "owner@example.test",
+          isDeploymentOwner: true,
+        },
+        authSessionId: "session-1",
+      },
+    },
+  );
+  expect(response?.status).toBe(403);
+  expect(await response?.json()).toMatchObject({ json: { code: "FORBIDDEN" } });
+});
+
+it("maps an already reviewed decision to conflict", async () => {
+  const tx = {
+    $queryRaw: vi.fn(async () => []),
+    teamGoal: { findUniqueOrThrow: vi.fn(async () => ({ status: "completed" })) },
+    goalRevision: { findFirst: vi.fn(async () => ({ id: "revision-1", conditions: [] })) },
+    goalVerdict: {
+      findFirst: vi.fn(async () => ({ type: "reject", id: "verdict-1" })),
+      create: vi.fn(),
+    },
+    delegationRoot: { findUnique: vi.fn(async () => ({ reservedTokens: 0 })) },
+  };
+  const router = createRouter({
+    prisma: {
+      teamGoal: {
+        findFirst: vi.fn(async () => ({
+          id: "goal-1",
+          threadId: "thread-1",
+          rootTaskId: "root-1",
+        })),
+      },
+      $transaction: (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
+    },
+    env: { sandboxProvider: "fake" },
+  } as unknown as RouterDeps);
+  const { response } = await new RPCHandler(router).handle(
+    new Request("http://127.0.0.1/rpc/goals/accept", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ json: { goalId: "goal-1", revisionId: "revision-1" } }),
+    }),
+    {
+      prefix: "/rpc",
+      context: {
+        actor: {
+          spaceId: "space-1",
+          userId: "owner-1",
+          email: "owner@example.test",
+          isDeploymentOwner: true,
+        },
+        authSessionId: "session-1",
+      },
+    },
+  );
+  expect(response?.status).toBe(409);
+  expect(await response?.json()).toMatchObject({
+    json: { code: "CONFLICT", data: { reason: "already-reviewed" } },
+  });
   expect(tx.goalVerdict.create).not.toHaveBeenCalled();
 });

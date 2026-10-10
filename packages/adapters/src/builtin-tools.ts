@@ -26,6 +26,7 @@ export const DELEGATION_TOOL_NAMES = new Set([
   "delete_bot",
   "handoff_to_bot",
   "assign",
+  "finish_goal",
   "ask_members",
   "message_bot",
 ]);
@@ -1000,6 +1001,23 @@ export const builtinAgentTools: ConnectorTool[] = [
         tokens: { type: "integer", minimum: 5000, maximum: 100000 },
       },
       required: ["member", "card"],
+    },
+  },
+  {
+    name: "finish_goal",
+    description:
+      "For the active group goal coordinator only: report this project done. Submits the current result for the owner to review. Pass a short summary of the result. Stop assigning work after this. You cannot accept the result.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        summary: {
+          type: "string",
+          minLength: 1,
+          maxLength: 10000,
+          description: "What was done, for the owner to review.",
+        },
+      },
+      required: ["summary"],
     },
   },
   {

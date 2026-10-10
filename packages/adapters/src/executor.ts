@@ -248,6 +248,7 @@ import {
   browserSnapshotFromTool,
 } from "./browser-tools.js";
 import { agentConnectionTools, builtinAgentTools } from "./builtin-tools.js";
+import { reportGoalDone } from "./chief/report-goal-done.js";
 import { chiefActivityFeed } from "./chief-activity.js";
 import {
   chiefVerificationRead,
@@ -5715,6 +5716,25 @@ export function createRunExecutor(deps: ExecutorDeps) {
             );
             return finish(result);
           }
+          if (name === "finish_goal") {
+            if (!thread.groupId || !goalRoom)
+              return finish({ error: "finish_goal requires an active group goal" });
+            const summary = redactSecrets(String(args.summary ?? ""), runSecrets).trim();
+            if (!summary) return finish({ error: "finish_goal requires a summary" });
+            try {
+              const reported = await reportGoalDone(deps.prisma, {
+                goalId: goalRoom.id,
+                spaceId: run.spaceId,
+                userId: run.userId,
+                coordinatorBotId: run.botId,
+                threadId: thread.id,
+                summary,
+              });
+              return finish(reported);
+            } catch {
+              return finish({ error: "The result could not be submitted." });
+            }
+          }
           if (name === "ask_members") {
             if (!thread.groupId || !roomCanAsk)
               return finish({ error: "ask_members is only for this group's coordinator" });
@@ -8142,6 +8162,7 @@ export function selectBuiltinToolsForRun(options: {
   ).filter(
     (tool) =>
       (tool.name !== "assign" || options.goalCoordinator) &&
+      (tool.name !== "finish_goal" || options.goalCoordinator) &&
       (tool.name !== "ask_members" || (options.roomCoordinator && Boolean(options.groupId))) &&
       (!options.messagingChannelRun ||
         (!["remember", "save_memory", "recall_memory", "forget_memory"].includes(tool.name) &&

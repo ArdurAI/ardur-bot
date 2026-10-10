@@ -2,7 +2,13 @@ import type { Actor } from "@ardurbot/contracts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { PrismaClient } from "./client.js";
 import { createDb } from "./client.js";
-import { acceptGoal, rejectGoal, submitGoal } from "./goals.js";
+import {
+  acceptGoal,
+  rejectGoal,
+  reviewGoalCondition,
+  submitGoal,
+  submitGoalFromCoordinator,
+} from "./goals.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describePostgres =
@@ -46,6 +52,7 @@ describePostgres("Goal owner review (PostgreSQL)", () => {
     groupId = group.id;
     const thread = await prisma.thread.create({ data: { spaceId, userId, groupId } });
     threadId = thread.id;
+    await prisma.chatGroupMember.create({ data: { groupId, botId } });
   });
 
   afterAll(async () => {
@@ -119,6 +126,12 @@ describePostgres("Goal owner review (PostgreSQL)", () => {
         revisionId: rev1.id,
       }),
     ).rejects.toThrow("not current");
+    await reviewGoalCondition(prisma, actor, {
+      goalId: goal.id,
+      revisionId: rev2.id,
+      conditionId: "cond-final",
+      status: "pass",
+    });
     const verdict = await acceptGoal(prisma, actor, { goalId: goal.id, revisionId: rev2.id });
     expect(verdict.type).toBe("accept");
     await expect(
@@ -170,6 +183,11 @@ describePostgres("Goal owner review (PostgreSQL)", () => {
       reports: [],
     });
     const input = { goalId: goal.id, revisionId: revision.id };
+    await reviewGoalCondition(prisma, actor, {
+      ...input,
+      conditionId: "cond-final",
+      status: "pass",
+    });
     const [first, second] = await Promise.all([
       acceptGoal(prisma, actor, input),
       acceptGoal(prisma, actor, input),
@@ -186,5 +204,83 @@ describePostgres("Goal owner review (PostgreSQL)", () => {
         },
       }),
     ).toBe(1);
+  });
+
+  it("submits when the coordinator reports the project done", async () => {
+    const goal = await createGoal();
+    const revision = await submitGoalFromCoordinator(prisma, {
+      goalId: goal.id,
+      spaceId,
+      userId,
+      coordinatorBotId: botId,
+      threadId,
+      summary: "Coordinator result",
+    });
+    expect(revision.summary).toBe("Coordinator result");
+    expect(revision.conditions).toEqual([
+      expect.objectContaining({ id: "cond-final", status: "unknown" }),
+    ]);
+    expect((await prisma.teamGoal.findUniqueOrThrow({ where: { id: goal.id } })).status).toBe(
+      "completed",
+    );
+    await expect(
+      submitGoalFromCoordinator(prisma, {
+        goalId: goal.id,
+        spaceId,
+        userId,
+        coordinatorBotId: "other-bot",
+        threadId,
+        summary: "Not the coordinator",
+      }),
+    ).rejects.toThrow();
+    expect(await prisma.goalRevision.count({ where: { goalId: goal.id } })).toBe(1);
+  });
+
+  it("refuses acceptance until every condition passes", async () => {
+    const goal = await createGoal();
+    const revision = await submitGoal(prisma, actor, {
+      goalId: goal.id,
+      summary: "Candidate",
+      artifacts: [],
+      reports: [],
+    });
+    const input = { goalId: goal.id, revisionId: revision.id };
+    await expect(acceptGoal(prisma, actor, input)).rejects.toThrow("Every condition must pass");
+    await reviewGoalCondition(prisma, actor, {
+      ...input,
+      conditionId: "cond-final",
+      status: "fail",
+    });
+    await expect(acceptGoal(prisma, actor, input)).rejects.toThrow("Every condition must pass");
+    await reviewGoalCondition(prisma, actor, {
+      ...input,
+      conditionId: "cond-final",
+      status: "pass",
+    });
+    const accepted = await acceptGoal(prisma, actor, input);
+    expect(await acceptGoal(prisma, actor, input)).toEqual(accepted);
+    expect(await prisma.goalVerdict.count({ where: { goalId: goal.id } })).toBe(1);
+  });
+
+  it("wakes the coordinator once with the rework notes", async () => {
+    const goal = await createGoal();
+    const revision = await submitGoal(prisma, actor, {
+      goalId: goal.id,
+      summary: "Candidate",
+      artifacts: [],
+      reports: [],
+    });
+    const input = { goalId: goal.id, revisionId: revision.id, reworkNotes: "Review again" };
+    await rejectGoal(prisma, actor, input);
+    await rejectGoal(prisma, actor, input);
+    const wakes = await prisma.run.findMany({
+      where: { goalId: goal.id, clientNonce: `goal-rework:${revision.id}` },
+    });
+    expect(wakes).toHaveLength(1);
+    const task = await prisma.task.findUniqueOrThrow({ where: { id: wakes[0]!.taskId } });
+    expect(task.prompt).toContain("Review again");
+    expect((await prisma.teamGoal.findUniqueOrThrow({ where: { id: goal.id } })).status).toBe(
+      "running",
+    );
   });
 });

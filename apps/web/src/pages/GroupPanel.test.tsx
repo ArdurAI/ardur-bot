@@ -7,7 +7,11 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-const decisions = vi.hoisted(() => ({ accept: vi.fn(), reject: vi.fn() }));
+const decisions = vi.hoisted(() => ({
+  accept: vi.fn(),
+  reject: vi.fn(),
+  reviewCondition: vi.fn(),
+}));
 vi.mock("../lib/rpc", () => ({ rpc: { goals: decisions } }));
 vi.mock("@lingui/core/macro", () => ({
   msg: (parts: TemplateStringsArray) => ({ id: parts.join(""), message: parts.join("") }),
@@ -52,11 +56,21 @@ let node: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 const button = (name: string) =>
   [...node.querySelectorAll("button")].find((item) => item.textContent === name)!;
+async function typeNotes(value: string) {
+  const field = node.querySelector("textarea");
+  if (!field) throw new Error("missing rework notes");
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    setter?.call(field, value);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.clearAllMocks();
   decisions.accept.mockResolvedValue({});
   decisions.reject.mockResolvedValue({});
+  decisions.reviewCondition.mockResolvedValue({});
   node = document.createElement("div");
   document.body.append(node);
   root = createRoot(node);
@@ -90,6 +104,7 @@ it.each(["accept", "reject"] as const)(
     );
     expect(node.textContent).toContain("Final owner review");
     expect(node.textContent).not.toContain(GOAL_FINAL_REVIEW_DESCRIPTION);
+    if (action === "reject") await typeNotes("Fix the summary");
     await act(async () => {
       button(action === "accept" ? "Accept result" : "Reject result").click();
       button(action === "accept" ? "Accept result" : "Reject result").click();
@@ -98,7 +113,7 @@ it.each(["accept", "reject"] as const)(
     expect(decisions[action]).toHaveBeenCalledWith({
       goalId: goal.id,
       revisionId: goal.currentRevision!.id,
-      ...(action === "reject" ? { reworkNotes: "Please address the failing conditions." } : {}),
+      ...(action === "reject" ? { reworkNotes: "Fix the summary" } : {}),
     });
     expect([...node.querySelectorAll("button")].every((item) => item.disabled)).toBe(true);
     expect(onRefresh).not.toHaveBeenCalled();
@@ -112,6 +127,7 @@ it.each([
   ["accept", "revision-changed", "Result changed; review again.", true],
   ["reject", "revision-changed", "Result changed; review again.", true],
   ["accept", "work-active", "Work is still active.", false],
+  ["accept", "conditions-open", "Every condition must pass.", false],
   ["reject", null, "Could not review result. Try again.", false],
 ] as const)("shows a useful error for %s (%s)", async (action, reason, message, refresh) => {
   decisions[action].mockRejectedValue(
@@ -121,6 +137,7 @@ it.each([
   await act(async () =>
     root.render(<GroupGoalStrip goal={goal} onStop={vi.fn()} onRefresh={onRefresh} />),
   );
+  if (action === "reject") await typeNotes("Fix the summary");
   await act(async () => button(action === "accept" ? "Accept result" : "Reject result").click());
   expect(node.querySelector('[role="alert"]')?.textContent).toBe(message);
   expect(node.textContent).not.toContain("private diagnostic");
