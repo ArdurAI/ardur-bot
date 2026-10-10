@@ -4,6 +4,51 @@ import { redactBindings, redactSensitiveText } from "./redaction.js";
 
 describe("redaction", () => {
   it.each([
+    "maxTokens: 4096",
+    "max_tokens=4096",
+    "MAX_TOKENS=4096",
+    "tokenCount=12",
+    "knownSecrets: secrets",
+    "known_secrets=secrets",
+    "secretStore: store",
+  ])("preserves non-credential key assignments: %s", (input) => {
+    expect(redactSensitiveText(input)).toBe(input);
+  });
+
+  it("uses the same credential classification for bindings and JSON text", () => {
+    const input = {
+      maxTokens: 4096,
+      tokenCount: 12,
+      knownSecrets: "secrets",
+      apiToken: "x",
+      accessToken: "x",
+      token: "x",
+      api_token: "x",
+      ACCESS_TOKEN: "x",
+      clientSecret: "x",
+      client_secret: "x",
+      tokens: ["x"],
+      secrets: ["x"],
+      credentials: ["x"],
+    };
+    const expected = {
+      ...input,
+      apiToken: "[Redacted]",
+      accessToken: "[Redacted]",
+      token: "[Redacted]",
+      api_token: "[Redacted]",
+      ACCESS_TOKEN: "[Redacted]",
+      clientSecret: "[Redacted]",
+      client_secret: "[Redacted]",
+      tokens: "[Redacted]",
+      secrets: "[Redacted]",
+      credentials: "[Redacted]",
+    };
+    expect(redactBindings(input)).toEqual(expected);
+    expect(JSON.parse(redactSensitiveText(JSON.stringify(input)))).toEqual(expected);
+  });
+
+  it.each([
     ["review filler", () => "x".repeat(1024 * 1024)],
     ["email local part", () => "a.".repeat(512 * 1024)],
     ["unterminated quoted value", () => `password="${"token='".repeat(150000)}`],

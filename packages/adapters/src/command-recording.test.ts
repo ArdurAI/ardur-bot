@@ -101,23 +101,46 @@ describe("command card text redaction", () => {
   it("masks only the password in a printf with a numeric limit and a collection reference", () => {
     const command = "printf 'maxTokens: 4096\\nknownSecrets: secrets\\npassword: hunter2\\n'";
     expect(redactCommandText(command, [])).toBe(
-      "printf 'maxTokens: 4096\\nknownSecrets: secrets\\npassword: [Redacted]\\n'",
+      "printf 'maxTokens: 4096\\nknownSecrets: secrets\\npassword: [Redacted]'",
     );
   });
   it.each([
     ["password: hunter2", "password: [Redacted]"],
     ["api_key=x9f2", "api_key=[Redacted]"],
+    ["apiToken: x", "apiToken: [Redacted]"],
+    ["accessToken=x", "accessToken=[Redacted]"],
+    ["token: x", "token: [Redacted]"],
     ["Authorization: Bearer abc123", "Authorization: [Redacted]"],
     ["token: ghp_fixtureOnlyNotARealCredential1234567890", "token: [Redacted]"],
   ])("still masks real secret values in the card text: %s", (line, expected) => {
     expect(redactCommandText(line, [])).toBe(expected);
+  });
+  it.each(["maxTokens: 4096", "tokenCount=12", "knownSecrets: secrets"])(
+    "preserves non-credential assignments in the card text: %s",
+    (line) => {
+      expect(redactCommandText(line, [])).toBe(line);
+    },
+  );
+  it.each([
+    ["password: my\\nsecret", "password: [Redacted]"],
+    ["password: my\\nuser:name", "password: [Redacted]"],
+    ["api_key=my\\nfoo=bar", "api_key=[Redacted]"],
+    ["Authorization: Bearer my\\nsecret", "Authorization: [Redacted]"],
+  ])("never records credential suffixes after literal escapes: %s", async (line, expected) => {
+    expect(redactCommandText(line!, [])).toBe(expected);
+    const f = fixture();
+    await f.invoke(line!);
+    expect(f.blocks()[0]?.command).toBe(expected);
+    for (const event of f.events) {
+      expect((event.payload as { block: CommandBlock }).block.command).toBe(expected);
+    }
   });
   it("records the printf command with only the password masked", async () => {
     const command = "printf 'maxTokens: 4096\\nknownSecrets: secrets\\npassword: hunter2\\n'";
     const f = fixture();
     await f.invoke(command);
     expect(f.blocks()[0]?.command).toBe(
-      "printf 'maxTokens: 4096\\nknownSecrets: secrets\\npassword: [Redacted]\\n'",
+      "printf 'maxTokens: 4096\\nknownSecrets: secrets\\npassword: [Redacted]'",
     );
   });
 });
