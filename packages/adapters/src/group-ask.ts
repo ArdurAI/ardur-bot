@@ -1,5 +1,6 @@
 import { runContinueJob } from "@ardurbot/adapter-kit";
 import type { MessageBlock } from "@ardurbot/contracts";
+import { RuntimePinError } from "@ardurbot/contracts";
 import {
   ASK_REQUEST_MAX_LENGTH,
   askMemberPrompt,
@@ -18,8 +19,10 @@ import {
   createThreadMessageInTransaction,
   DELEGATION_ADMISSION_TRANSACTION,
   DelegationAdmissionError,
+  GROUP_MEMBER_ORDER,
   IsolationError,
   loadGroupAskResults,
+  lockDelegationRootForRun,
   lockOwnedGroup,
   peerTrafficPaused,
   recordGroupAskUpdateInTransaction,
@@ -30,7 +33,11 @@ import {
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import type { DelegationResolver } from "./delegation.js";
-import { delegationFloorForModel, prepareDelegation } from "./delegation.js";
+import {
+  delegationFloorForModel,
+  prepareDelegation,
+  resolveDelegationTarget,
+} from "./delegation.js";
 import type { ExecutorDeps } from "./executor.js";
 
 /** The floor for a member whose model cannot be resolved yet: one standard-context request. */
@@ -93,6 +100,77 @@ export async function askGroupMembers(
     };
   const ask = { round, askRunId: run.id };
   const messageNonce = groupAskMessageNonce(ask, input.callId);
+  const sourceWhere = {
+    id: run.id,
+    spaceId: run.spaceId,
+    threadId: run.threadId,
+    botId: run.botId,
+    userId: run.userId,
+    status: "running" as const,
+  };
+  // This is only a preflight. Membership, replay and limits are re-read under the lock.
+  const preview = await deps.prisma.chatGroup.findFirst({
+    where: {
+      id: groupId,
+      spaceId: run.spaceId,
+      userId: run.userId,
+      archivedAt: null,
+      thread: { id: run.threadId },
+    },
+    include: {
+      members: {
+        where: { bot: { archivedAt: null } },
+        include: { bot: { select: { id: true, name: true } } },
+        orderBy: GROUP_MEMBER_ORDER,
+      },
+    },
+  });
+  const prepared = new Map<string, Awaited<ReturnType<typeof resolveDelegationTarget>>>();
+  if (
+    preview?.coordinatorBotId === run.botId &&
+    preview.members.some((member) => member.bot.id === run.botId)
+  ) {
+    const [alreadyRows, source, existing, paused] = await Promise.all([
+      deps.prisma.delegation.findMany({
+        where: { parentRunId: run.id, admissionKey: { startsWith: groupAskPrefix(ask) } },
+        select: { actingBotId: true },
+      }),
+      deps.prisma.run.findFirst({ where: sourceWhere, select: { id: true } }),
+      deps.prisma.message.findUnique({
+        where: { threadId_clientNonce: { threadId: run.threadId, clientNonce: messageNonce } },
+        select: { id: true },
+      }),
+      peerTrafficPaused(deps.prisma, { spaceId: run.spaceId, userId: run.userId, groupId }),
+    ]);
+    const already = new Set(alreadyRows.map((row) => row.actingBotId));
+    const { targets } = selectAskTargets(
+      preview.members.map((member) => member.bot),
+      requested,
+      run.botId,
+    );
+    for (const member of targets.filter(
+      (member) => source && !existing && !paused && !already.has(member.id),
+    )) {
+      try {
+        prepared.set(
+          member.id,
+          await resolveDelegationTarget(
+            deps.prisma,
+            {
+              ...run,
+              actingBotId: member.id,
+              targetThreadId: run.threadId,
+            },
+            deps.resolveDelegationPin,
+          ),
+        );
+      } catch (error) {
+        if (!(error instanceof RuntimePinError)) throw error;
+        // Eligibility can change during preflight. Only the locked fresh set may surface
+        // a pin error; if still askable, this member is resolved again under the root lock.
+      }
+    }
+  }
   const committed = await withTransactionRetry(() =>
     deps.prisma.$transaction(async (tx): Promise<Committed> => {
       try {
@@ -108,19 +186,12 @@ export async function askGroupMembers(
             members: {
               where: { bot: { archivedAt: null } },
               include: { bot: { select: { id: true, name: true } } },
-              orderBy: { createdAt: "asc" },
+              orderBy: GROUP_MEMBER_ORDER,
             },
           },
         }),
         tx.run.findFirst({
-          where: {
-            id: run.id,
-            spaceId: run.spaceId,
-            threadId: run.threadId,
-            botId: run.botId,
-            userId: run.userId,
-            status: "running",
-          },
+          where: sourceWhere,
           select: { id: true },
         }),
       ]);
@@ -181,21 +252,28 @@ export async function askGroupMembers(
           notAsked,
         };
 
+      // A join or unarchive can make a member askable after preflight. Resolve those pins
+      // under the root lock, before deriving floors or reserving the room's budget.
+      const lockedTargets = new Map(prepared);
+      const missing = fresh.filter((member) => !lockedTargets.has(member.id));
+      if (missing.length) {
+        await lockDelegationRootForRun(tx, run.id);
+        for (const member of missing)
+          lockedTargets.set(
+            member.id,
+            await resolveDelegationTarget(
+              tx,
+              { ...run, actingBotId: member.id, targetThreadId: run.threadId },
+              deps.resolveDelegationPin,
+            ),
+          );
+      }
       // Each member reserves exactly one realistic request for its own model — the floor
       // admission enforces — and the room is sized to the sum of those floors, never the
-      // goal's per-worker default. Admission resolves the pin again, like a comparison does.
+      // goal's per-worker default. Admission rechecks the captured binding.
       const floors = new Map<string, number>();
       for (const member of fresh) {
-        const bot = await tx.bot.findFirstOrThrow({
-          where: { id: member.id, spaceId: run.spaceId, userId: run.userId },
-          include: { computer: true },
-        });
-        const selected = await deps.resolveDelegationPin?.(bot, {
-          tx,
-          targetThreadId: run.threadId,
-          userId: run.userId,
-          spaceId: run.spaceId,
-        });
+        const selected = lockedTargets.get(member.id)?.selected;
         floors.set(
           member.id,
           selected && selected.kind === "resolved"
@@ -227,7 +305,7 @@ export async function askGroupMembers(
               tokens: floors.get(member.id) ?? ASK_MEMBER_FALLBACK_TOKENS,
               targetThreadId: run.threadId,
             },
-            deps.resolveDelegationPin,
+            lockedTargets.get(member.id),
           );
           if (admission.ok) admitted.push({ member, admission });
           else notAsked.push({ member: member.name, reason: admission.error });

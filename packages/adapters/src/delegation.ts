@@ -4,22 +4,38 @@ import type {
   RuntimePinSource,
   RuntimeProblem,
 } from "@ardurbot/contracts";
-import { DelegationSnapshotSchema, RuntimePinSchema, runtimePinProblem } from "@ardurbot/contracts";
+import {
+  DelegationSnapshotSchema,
+  delegationProblem,
+  RuntimePinSchema,
+  runtimePinProblem,
+} from "@ardurbot/contracts";
 import { minimumDelegationReservation } from "@ardurbot/core";
-import type { Bot, Prisma, PrismaClient, ThreadEvents } from "@ardurbot/db";
+import type {
+  Bot,
+  DelegationTargetBinding,
+  Prisma,
+  PrismaClient,
+  ThreadEvents,
+} from "@ardurbot/db";
 import {
   admitDelegation,
   DelegationAdmissionError,
+  delegationBotBinding,
+  delegationModelBinding,
   finishDelegation,
   inheritedRemoteOrigin,
 } from "@ardurbot/db";
+import { selectRunPinSource } from "./group-model-pin.js";
 import { destinationForModel } from "./model-locality.js";
 import { piModelLimits } from "./pi-models.js";
+import { hasBotPin, requestedBotPin } from "./pin-resolution.js";
 import type { ResolvedRunPin } from "./run-model-pin.js";
 
 export type DelegationResolver = (
   bot: Bot,
   context?: {
+    /** Pooled reads during preflight, or locked reads for a newly askable room member. */
     tx: Prisma.TransactionClient;
     targetThreadId: string;
     userId: string;
@@ -28,6 +44,78 @@ export type DelegationResolver = (
 ) => Promise<
   (ResolvedRunPin & { pinSource?: RuntimePinSource; usageGroupId?: string | null }) | RuntimeProblem
 >;
+
+export type PreparedDelegationTarget = {
+  selected: Awaited<ReturnType<DelegationResolver>> | undefined;
+  binding: DelegationTargetBinding;
+  computer: DelegationSnapshot["computer"];
+};
+
+/** Resolve in preflight, or under the root lock when room eligibility changed. */
+export async function resolveDelegationTarget(
+  prisma: Prisma.TransactionClient,
+  input: { spaceId: string; userId: string; actingBotId: string; targetThreadId?: string },
+  resolve?: DelegationResolver,
+): Promise<PreparedDelegationTarget> {
+  const bot = await prisma.bot
+    .findFirstOrThrow({
+      where: {
+        id: input.actingBotId,
+        spaceId: input.spaceId,
+        userId: input.userId,
+        archivedAt: null,
+      },
+      include: { computer: true },
+    })
+    .catch((error: unknown) => {
+      // Archiving between address lookup and preflight invalidates the recipient binding.
+      if (error && typeof error === "object" && "code" in error && error.code === "P2025")
+        throw new DelegationAdmissionError(delegationProblem("authority-exceeded"));
+      throw error;
+    });
+  const candidate = input.targetThreadId
+    ? await selectRunPinSource({
+        prisma,
+        scope: input,
+        threadId: input.targetThreadId,
+        botId: bot.id,
+        bot,
+        snapshot: null,
+        savedSource: null,
+        savedUsageGroupId: null,
+      })
+    : null;
+  // Capture dependencies before resolving, so an edit during resolution also fails freshness.
+  const model = await delegationModelBinding(
+    prisma,
+    input,
+    candidate?.membership?.pin ?? (hasBotPin(bot) ? requestedBotPin(bot) : null),
+  );
+  const selected = await resolve?.(
+    bot,
+    input.targetThreadId
+      ? {
+          tx: prisma,
+          targetThreadId: input.targetThreadId,
+          userId: input.userId,
+          spaceId: input.spaceId,
+        }
+      : undefined,
+  );
+  return {
+    selected,
+    binding: {
+      bot: delegationBotBinding(bot),
+      ...(model ? { model } : {}),
+      ...(candidate?.membership ? { membership: candidate.membership } : {}),
+    },
+    computer: {
+      id: bot.computerId,
+      mode: bot.computer?.scope === "dedicated" ? "dedicated" : "team",
+      kind: bot.computer?.kind ?? null,
+    },
+  };
+}
 /** Effective request limits known about the worker's model or connection. */
 export type DelegationModelLimits = {
   contextWindow?: number;
@@ -75,18 +163,20 @@ export async function prepareDelegation(
      */
     workerLimits?: DelegationModelLimits;
   },
-  resolve?: DelegationResolver,
+  target?: PreparedDelegationTarget,
 ) {
   const parent = await tx.run.findUniqueOrThrow({ where: { id: input.parentRunId } });
   const inherited = input.kind === "helper" || input.kind === "child";
-  const bot = await tx.bot.findFirstOrThrow({
-    where: {
-      id: inherited ? parent.botId : input.actingBotId,
-      spaceId: input.spaceId,
-      userId: input.userId,
-    },
-    include: { computer: true },
-  });
+  const bot = inherited
+    ? await tx.bot.findFirstOrThrow({
+        where: {
+          id: parent.botId,
+          spaceId: input.spaceId,
+          userId: input.userId,
+        },
+        include: { computer: true },
+      })
+    : null;
   let snapshot: DelegationSnapshot;
   let admissionUsageGroupId: string | null = null;
   let workerModel: ResolvedRunPin | undefined;
@@ -97,19 +187,7 @@ export async function prepareDelegation(
     const pin = RuntimePinSchema.safeParse(parent.runtimePin);
     if (inherited && !pin.success)
       throw new Error("The parent's resolved pin is unavailable; restart the task.");
-    const selected = inherited
-      ? undefined
-      : await resolve?.(
-          bot,
-          input.targetThreadId
-            ? {
-                tx,
-                targetThreadId: input.targetThreadId,
-                userId: input.userId,
-                spaceId: input.spaceId,
-              }
-            : undefined,
-        );
+    const selected = inherited ? undefined : target?.selected;
     admissionUsageGroupId = selected?.kind === "resolved" ? (selected.usageGroupId ?? null) : null;
     if (!inherited && (!selected || selected.kind === "problem")) {
       const problem =
@@ -143,11 +221,11 @@ export async function prepareDelegation(
       computer:
         inherited && parent.runtimeComputer
           ? DelegationSnapshotSchema.shape.computer.parse(parent.runtimeComputer)
-          : {
-              id: bot.computerId,
-              mode: bot.computer?.scope === "dedicated" ? "dedicated" : "team",
-              kind: bot.computer?.kind ?? null,
-            },
+          : (target?.computer ?? {
+              id: bot?.computerId ?? null,
+              mode: bot?.computer?.scope === "dedicated" ? "dedicated" : "team",
+              kind: bot?.computer?.kind ?? null,
+            }),
       destination: inherited
         ? ((parent.runtimeDestination as DelegationSnapshot["destination"]) ?? {
             host: null,
@@ -163,6 +241,7 @@ export async function prepareDelegation(
     ...input,
     snapshot,
     minimumTokens: delegationFloorForModel(snapshot.pin, workerModel ?? input.workerLimits),
+    ...(!inherited && target ? { targetBinding: target.binding } : {}),
   });
   const admittedSnapshot = DelegationSnapshotSchema.parse(record.snapshot);
   return {
