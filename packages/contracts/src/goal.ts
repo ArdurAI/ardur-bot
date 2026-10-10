@@ -46,6 +46,70 @@ export function goalBudget(
   };
 }
 
+export const GoalConditionStatusSchema = z.enum(["unknown", "pass", "fail"]);
+export type GoalConditionStatus = z.infer<typeof GoalConditionStatusSchema>;
+
+export const GoalConditionSchema = z.object({
+  id: Id,
+  description: z.string(),
+  status: GoalConditionStatusSchema,
+  actorId: Id.nullable(),
+  reason: z.string().nullable(),
+  evidenceId: Id.nullable(),
+  createdAt: IsoDate.nullable(),
+});
+export type GoalCondition = z.infer<typeof GoalConditionSchema>;
+
+export const GoalRevisionSchema = z.object({
+  id: Id,
+  goalId: Id,
+  summary: z.string(),
+  conditions: z.array(GoalConditionSchema),
+  artifacts: z.array(z.object({ id: Id, hash: z.string() })),
+  reports: z.array(z.object({ id: Id, revision: z.string() })),
+  attempts: z.number().int(),
+  accountingSnapshot: z.object({
+    usedTokens: z.number().int(),
+    reservedTokens: z.number().int(),
+  }),
+  createdAt: IsoDate,
+});
+export type GoalRevision = z.infer<typeof GoalRevisionSchema>;
+
+export const GoalVerdictTypeSchema = z.enum(["accept", "reject"]);
+
+export const GoalVerdictSchema = z.object({
+  id: Id,
+  goalId: Id,
+  revisionId: Id,
+  actorId: Id,
+  type: GoalVerdictTypeSchema,
+  reworkNotes: z.string().nullable(),
+  createdAt: IsoDate,
+});
+export type GoalVerdict = z.infer<typeof GoalVerdictSchema>;
+
+export const GoalSubmitInputSchema = z.object({
+  goalId: Id,
+  summary: z.string().trim().min(1).max(10_000),
+  artifacts: z.array(z.object({ id: Id, hash: z.string() })).default([]),
+  reports: z.array(z.object({ id: Id, revision: z.string() })).default([]),
+});
+export type GoalSubmitInput = z.infer<typeof GoalSubmitInputSchema>;
+
+export const GoalAcceptInputSchema = z.object({
+  goalId: Id,
+  revisionId: Id,
+});
+export type GoalAcceptInput = z.infer<typeof GoalAcceptInputSchema>;
+
+export const GoalRejectInputSchema = z.object({
+  goalId: Id,
+  revisionId: Id,
+  reworkNotes: z.string().trim().min(1).max(4_000),
+});
+export type GoalRejectInput = z.infer<typeof GoalRejectInputSchema>;
+
 export const GoalSchema = z.object({
   id: Id,
   spaceId: Id,
@@ -66,6 +130,7 @@ export const GoalSchema = z.object({
   maxDescendants: z.number().int(),
   maxDepth: z.literal(GOAL_MAX_DEPTH),
   maxHops: z.literal(GOAL_MAX_HOPS),
+  currentRevision: GoalRevisionSchema.nullable().optional(),
   untilAt: IsoDate,
   createdAt: IsoDate,
   stoppedAt: IsoDate.nullable(),
@@ -88,4 +153,8 @@ export const goalsContract = {
   start: oc.input(GoalStartInputSchema).output(GoalSchema),
   get: oc.input(z.object({ groupId: Id })).output(GoalSchema.nullable()),
   stop: oc.input(z.object({ goalId: Id })).output(GoalSchema),
+
+  submit: oc.input(GoalSubmitInputSchema).output(GoalRevisionSchema),
+  accept: oc.input(GoalAcceptInputSchema).output(GoalVerdictSchema),
+  reject: oc.input(GoalRejectInputSchema).output(GoalVerdictSchema),
 };

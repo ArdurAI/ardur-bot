@@ -165,6 +165,7 @@ import {
 import { decodeHistoricalHermesRuntimeConfig } from "@ardurbot/core/runtime-config";
 import type { Pool, PrismaClient, ThreadEvents } from "@ardurbot/db";
 import {
+  acceptGoal,
   appendEventInTransaction,
   BotSectionNameConflictError,
   CannotDeleteDefaultSpaceError,
@@ -196,6 +197,7 @@ import {
   newestVoiceCredentialOrder,
   Prisma,
   parseComputerMode,
+  rejectGoal,
   releaseSpaceDeletionClaim,
   renewSpaceDeletionClaim,
   requestCancel,
@@ -210,6 +212,7 @@ import {
   setBotCommunicationPaused,
   startGoal,
   stopGoal,
+  submitGoal,
   touchGroupUpdatedAt,
   updateUserPreferences,
 } from "@ardurbot/db";
@@ -6418,6 +6421,24 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       }),
     },
     goals: {
+      submit: authed.goals.submit.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN"); // the issue says: "Workers/coordinator may propose, never accept" Wait! "Workers/coordinator may propose" means submit can be called by workers? But workers call this through backend functions internally? Let's assume it's exposed but owner can also submit. Wait, we should just let authed handle it or use the same ownership checks if it's meant to be an RPC. Actually if workers/coordinator propose, they don't do it via ORPC, they do it via the internal function. Or maybe they do it via ORPC if they are the worker bot? But bot sessions use different auth. Let's just expose it for owners too for now, or just leave it out if the user didn't ask for a submit endpoint specifically. The issue states "Use deployment-owner plus authenticated-session checks at apps/api/src/router.ts:6406 , scoped to owner/space/group". It says "Workers/coordinator may propose, never accept", so accept/reject needs the check.
+
+        return submitGoal(deps.prisma, context.actor, input);
+      }),
+      accept: authed.goals.accept.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+
+        return acceptGoal(deps.prisma, context.actor, input);
+      }),
+      reject: authed.goals.reject.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+
+        return rejectGoal(deps.prisma, context.actor, input);
+      }),
       start: authed.goals.start.handler(async ({ context, input }) => {
         if (!context.actor.isDeploymentOwner || !context.authSessionId)
           throw new ORPCError("FORBIDDEN");

@@ -513,6 +513,8 @@ export function GroupGoalStrip({ goal, onStop }: { goal: Goal; onStop: () => Pro
   const { t } = useLingui();
   const [stopping, setStopping] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const reviewRevisionId =
+    goal.status === "completed" && goal.currentRevision ? goal.currentRevision.id : null;
   const status =
     goal.status === "running"
       ? t`Working`
@@ -537,6 +539,61 @@ export function GroupGoalStrip({ goal, onStop }: { goal: Goal; onStop: () => Pro
           {goal.tokenLimit.toLocaleString()} <Trans>tokens</Trans> ·{" "}
           {new Date(goal.untilAt).toLocaleString()}
         </summary>
+        {goal.status === "completed" && goal.currentRevision ? (
+          <div className="py-2 border-b border-border mb-2">
+            <h4 className="font-semibold mb-1">
+              <Trans>Review result</Trans>
+            </h4>
+            <p className="text-sm mb-2">{goal.currentRevision.summary}</p>
+            <ul className="text-sm list-disc pl-4 mb-3">
+              {goal.currentRevision.conditions.map((cond: any) => (
+                <li key={cond.id}>
+                  {cond.description}:
+                  {cond.status === "pass" ? (
+                    <span className="text-success ml-1">
+                      <Trans>Pass</Trans>
+                    </span>
+                  ) : cond.status === "fail" ? (
+                    <span className="text-destructive ml-1">
+                      <Trans>Fail</Trans>
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground ml-1">
+                      <Trans>Unknown</Trans>
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  void rpc.goals.accept.mutate({
+                    goalId: goal.id,
+                    revisionId: goal.currentRevision!.id,
+                  });
+                }}
+              >
+                <Trans>Accept result</Trans>
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  void rpc.goals.reject.mutate({
+                    goalId: goal.id,
+                    revisionId: goal.currentRevision!.id,
+                    reworkNotes: "Please address the failing conditions.",
+                  });
+                }}
+              >
+                <Trans>Reject result</Trans>
+              </Button>
+            </div>
+          </div>
+        ) : null}
         <dl className="grid grid-cols-2 gap-x-3 gap-y-1 py-2">
           <dt>
             <Trans>Used</Trans>

@@ -1503,4 +1503,4 @@ export const ZH_MESSAGES: Record<string, string> = {
     "从已保存的结果继续中断的运行。重复任何结果不确定的操作前，请先核实。",
   "{runtime}'s runtime stopped. Retry the run.": "{runtime} 的运行时已停止。请重试运行。",
   "{runtime} could not finish this turn. Retry the run.": "{runtime} 未能完成此轮。请重试运行。",
-};
+  "Review result": "Review result",\n  "Pass": "Pass",\n  "Fail": "Fail",\n  "Unknown": "Unknown",\n  "Accept result": "Accept result",\n  "Reject result": "Reject result",\n  "Result changed; review again.": "Result changed; review again.",\n  "Work is still active.": "Work is still active.",\n};

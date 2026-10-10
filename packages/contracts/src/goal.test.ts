@@ -29,3 +29,12 @@ describe("goal admission budget projection", () => {
     });
   });
 });
+
+describe("Goal contracts and state machine", () => {
+  it("validates valid submit, accept and reject schemas", async () => {
+    const { GoalSubmitInputSchema, GoalAcceptInputSchema, GoalRejectInputSchema } = await import("./goal.js");
+    expect(GoalSubmitInputSchema.safeParse({ goalId: "g_1", summary: "done" }).success).toBe(true);
+    expect(GoalAcceptInputSchema.safeParse({ goalId: "g_1", revisionId: "r_1" }).success).toBe(true);
+    expect(GoalRejectInputSchema.safeParse({ goalId: "g_1", revisionId: "r_1", reworkNotes: "fix" }).success).toBe(true);
+  });
+});

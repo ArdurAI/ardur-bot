@@ -2210,6 +2210,8 @@ model TeamGoal {
   updatedAt DateTime @updatedAt
   stoppedAt DateTime?
   runs Run[]
+  revisions GoalRevision[]
+  verdicts GoalVerdict[]
 
   @@index([spaceId, userId, groupId, status])
   @@index([threadId, status])
@@ -2723,4 +2725,38 @@ model BotBrief {
   @@index([threadId, leaseExpiresAt])
   @@index([spaceId, userId, botId])
   @@map("bot_briefs")
+}
+
+
+model GoalRevision {
+  id String @id @default(cuid())
+  goalId String
+  goal TeamGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  summary String
+  conditions Json
+  artifacts Json
+  reports Json
+  attempts Int
+  accountingSnapshot Json
+  createdAt DateTime @default(now())
+
+  verdicts GoalVerdict[]
+
+  @@index([goalId, createdAt])
+  @@map("goal_revisions")
+}
+
+model GoalVerdict {
+  id String @id @default(cuid())
+  goalId String
+  goal TeamGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  revisionId String
+  revision GoalRevision @relation(fields: [revisionId], references: [id], onDelete: Restrict)
+  actorId String
+  type String
+  reworkNotes String?
+  createdAt DateTime @default(now())
+
+  @@index([goalId, createdAt])
+  @@map("goal_verdicts")
 }

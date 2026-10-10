@@ -47,6 +47,29 @@ function asGoal(row: GoalRow): Goal {
     untilAt: row.untilAt.toISOString(),
     createdAt: row.createdAt.toISOString(),
     stoppedAt: row.stoppedAt?.toISOString() ?? null,
+    currentRevision:
+      row.revisions && row.revisions.length > 0
+        ? {
+            ...row.revisions[0],
+            createdAt: row.revisions[0].createdAt.toISOString(),
+            conditions:
+              typeof row.revisions[0].conditions === "string"
+                ? JSON.parse(row.revisions[0].conditions)
+                : row.revisions[0].conditions,
+            artifacts:
+              typeof row.revisions[0].artifacts === "string"
+                ? JSON.parse(row.revisions[0].artifacts)
+                : row.revisions[0].artifacts,
+            reports:
+              typeof row.revisions[0].reports === "string"
+                ? JSON.parse(row.revisions[0].reports)
+                : row.revisions[0].reports,
+            accountingSnapshot:
+              typeof row.revisions[0].accountingSnapshot === "string"
+                ? JSON.parse(row.revisions[0].accountingSnapshot)
+                : row.revisions[0].accountingSnapshot,
+          }
+        : null,
   };
 }
 
@@ -54,7 +77,11 @@ async function loadGoal(prisma: PrismaClient, where: Prisma.TeamGoalWhereInput) 
   return withTransactionRetry(() =>
     prisma.$transaction(
       async (tx) => {
-        const row = await tx.teamGoal.findFirst({ where, orderBy: { createdAt: "desc" } });
+        const row = await tx.teamGoal.findFirst({
+          where,
+          orderBy: { createdAt: "desc" },
+          include: { revisions: { orderBy: { createdAt: "desc" }, take: 1 } },
+        });
         if (!row) return null;
         const scope = { spaceId: row.spaceId, userId: row.userId };
         const root = await tx.delegationRoot.findFirst({
@@ -322,6 +349,10 @@ export async function wakeGoalCoordinatorForDelegation(prisma: PrismaClient, del
       await tx.$queryRaw`SELECT id FROM threads WHERE id = ${candidateGoal.threadId} FOR UPDATE`;
       await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${initial.rootTaskId} FOR UPDATE`;
       const row = await tx.delegation.findUniqueOrThrow({ where: { id: delegationId } });
+      const freezeGoal = await tx.teamGoal.findUnique({ where: { rootTaskId: row.rootTaskId } });
+      if (freezeGoal && ["completed", "accepted", "needs-owner"].includes(freezeGoal.status)) {
+        return null;
+      }
       if (
         row.coordinatorWokenAt ||
         !["group-handoff", "message"].includes(row.kind) ||
@@ -445,4 +476,175 @@ export async function wakeGoalCoordinatorForDelegation(prisma: PrismaClient, del
       return { runId, threadId: goal.threadId, eventSeq: event.seq };
     }),
   );
+}
+
+import type {
+  GoalAcceptInput,
+  GoalRejectInput,
+  GoalRevision,
+  GoalSubmitInput,
+  GoalVerdict,
+} from "@ardurbot/contracts";
+
+export async function submitGoal(prisma: PrismaClient, actor: Actor, input: GoalSubmitInput) {
+  const goal = await prisma.teamGoal.findFirst({
+    where: { id: input.goalId, spaceId: actor.spaceId, userId: actor.userId },
+  });
+  if (!goal) throw new IsolationError();
+
+  return prisma.$transaction(async (tx) => {
+    // freeze admission
+    await tx.$queryRaw`SELECT id FROM threads WHERE id = ${goal.threadId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${goal.rootTaskId} FOR UPDATE`;
+
+    const updated = await tx.teamGoal.updateMany({
+      where: { id: goal.id, status: "running" },
+      data: { status: "completed" },
+    });
+    if (updated.count === 0) {
+      throw new Error("Goal is not running or already submitted");
+    }
+
+    const previousAttempts = await tx.goalRevision.count({ where: { goalId: goal.id } });
+    const root = await tx.delegationRoot.findUnique({ where: { rootTaskId: goal.rootTaskId } });
+
+    // An empty condition list becomes one final-owner-review condition.
+    const conditions =
+      goal.doneWhen.length > 0
+        ? goal.doneWhen.map((desc, i) => ({
+            id: "cond-" + i,
+            description: desc,
+            status: "unknown",
+            actorId: null,
+            reason: null,
+            evidenceId: null,
+            createdAt: null,
+          }))
+        : [
+            {
+              id: "cond-final",
+              description: "Final owner review",
+              status: "unknown",
+              actorId: null,
+              reason: null,
+              evidenceId: null,
+              createdAt: null,
+            },
+          ];
+
+    const revision = await tx.goalRevision.create({
+      data: {
+        goalId: goal.id,
+        summary: input.summary,
+        conditions: conditions,
+        artifacts: input.artifacts,
+        reports: input.reports,
+        attempts: previousAttempts + 1,
+        accountingSnapshot: {
+          usedTokens: root?.usedTokens ?? 0,
+          reservedTokens: root?.reservedTokens ?? 0,
+        },
+      },
+    });
+
+    await appendEventInTransaction(tx, {
+      spaceId: goal.spaceId,
+      threadId: goal.threadId,
+      botId: goal.coordinatorBotId,
+      type: "goal.submitted",
+      payload: { goalId: goal.id, revisionId: revision.id },
+    });
+
+    return revision as unknown as GoalRevision;
+  });
+}
+
+export async function acceptGoal(prisma: PrismaClient, actor: Actor, input: GoalAcceptInput) {
+  if (!actor.isDeploymentOwner) throw new IsolationError();
+  const goal = await prisma.teamGoal.findFirst({
+    where: { id: input.goalId, spaceId: actor.spaceId, userId: actor.userId },
+  });
+  if (!goal) throw new IsolationError();
+
+  return prisma.$transaction(async (tx) => {
+    const revision = await tx.goalRevision.findFirst({
+      where: { id: input.revisionId, goalId: goal.id },
+    });
+    if (!revision) throw new Error("Revision not found");
+
+    const existingVerdict = await tx.goalVerdict.findFirst({
+      where: { goalId: goal.id, type: "accept" },
+    });
+    if (existingVerdict) return existingVerdict as unknown as GoalVerdict;
+
+    const root = await tx.delegationRoot.findUnique({ where: { rootTaskId: goal.rootTaskId } });
+    if (root?.reservedTokens && root.reservedTokens > 0) {
+      throw new Error("Unsettled reservations block acceptance");
+    }
+
+    const verdict = await tx.goalVerdict.create({
+      data: {
+        goalId: goal.id,
+        revisionId: revision.id,
+        actorId: actor.userId,
+        type: "accept",
+        reworkNotes: null,
+      },
+    });
+
+    await tx.teamGoal.update({
+      where: { id: goal.id },
+      data: { status: "accepted" },
+    });
+
+    await appendEventInTransaction(tx, {
+      spaceId: goal.spaceId,
+      threadId: goal.threadId,
+      botId: goal.coordinatorBotId,
+      type: "goal.accepted",
+      payload: { goalId: goal.id, revisionId: revision.id },
+    });
+
+    return verdict as unknown as GoalVerdict;
+  });
+}
+
+export async function rejectGoal(prisma: PrismaClient, actor: Actor, input: GoalRejectInput) {
+  if (!actor.isDeploymentOwner) throw new IsolationError();
+  const goal = await prisma.teamGoal.findFirst({
+    where: { id: input.goalId, spaceId: actor.spaceId, userId: actor.userId },
+  });
+  if (!goal) throw new IsolationError();
+
+  return prisma.$transaction(async (tx) => {
+    const revision = await tx.goalRevision.findFirst({
+      where: { id: input.revisionId, goalId: goal.id },
+    });
+    if (!revision) throw new Error("Revision not found");
+
+    const verdict = await tx.goalVerdict.create({
+      data: {
+        goalId: goal.id,
+        revisionId: revision.id,
+        actorId: actor.userId,
+        type: "reject",
+        reworkNotes: input.reworkNotes,
+      },
+    });
+
+    await tx.teamGoal.update({
+      where: { id: goal.id },
+      data: { status: "running" },
+    });
+
+    await appendEventInTransaction(tx, {
+      spaceId: goal.spaceId,
+      threadId: goal.threadId,
+      botId: goal.coordinatorBotId,
+      type: "goal.rejected",
+      payload: { goalId: goal.id, revisionId: revision.id },
+    });
+
+    return verdict as unknown as GoalVerdict;
+  });
 }

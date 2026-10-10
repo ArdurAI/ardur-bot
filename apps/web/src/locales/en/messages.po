@@ -512,6 +512,10 @@ msgstr "About spaces"
 msgid "Accept"
 msgstr "Accept"
 
+#: src/pages/GroupPanel.tsx
+msgid "Accept result"
+msgstr "Accept result"
+
 #: src/pages/LearningObservation.tsx
 msgid "Acceptance"
 msgstr "Acceptance"
@@ -4353,6 +4357,10 @@ msgstr "Extensions"
 msgid "External conversation"
 msgstr "External conversation"
 
+#: src/pages/GroupPanel.tsx
+msgid "Fail"
+msgstr "Fail"
+
 #: src/components/CloudAgentCard.tsx
 msgid "failed"
 msgstr "failed"
@@ -6863,6 +6871,10 @@ msgstr "Park"
 msgid "Partially reported"
 msgstr "Partially reported"
 
+#: src/pages/GroupPanel.tsx
+msgid "Pass"
+msgstr "Pass"
+
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
@@ -7397,6 +7409,10 @@ msgstr "Registered folders"
 msgid "Reject"
 msgstr "Reject"
 
+#: src/pages/GroupPanel.tsx
+msgid "Reject result"
+msgstr "Reject result"
+
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Rejected"
@@ -7834,6 +7850,10 @@ msgstr "Review import"
 #: src/pages/memory/MemoryGeneration.tsx
 msgid "Review model: {0}. Model usage may incur charges."
 msgstr "Review model: {0}. Model usage may incur charges."
+
+#: src/pages/GroupPanel.tsx
+msgid "Review result"
+msgstr "Review result"
 
 #: src/pages/GitMemorySettings.tsx
 msgid "Review saved copy"

@@ -38,3 +38,30 @@ it("shows an exhausted goal as terminal with no Stop action", () => {
   expect(html).toContain("Exhausted");
   expect(html).not.toContain("<button");
 });
+
+it("shows review panel for completed goal", () => {
+  const html = renderToStaticMarkup(
+    <GroupGoalStrip
+      goal={
+        {
+          status: "completed",
+          usedTokens: 600,
+          tokenLimit: 600,
+          untilAt: "2030-01-01T00:00:00.000Z",
+          currentRevision: {
+            id: "rev-1",
+            summary: "Done work",
+            conditions: [{ id: "cond-1", description: "check", status: "pass" }],
+          },
+        } as never
+      }
+      onStop={vi.fn()}
+    />,
+  );
+  expect(html).toContain("Review result");
+  expect(html).toContain("Done work");
+  expect(html).toContain("Accept result");
+  expect(html).toContain("Reject result");
+  expect(html).toContain("check");
+  expect(html).toContain("Pass");
+});
