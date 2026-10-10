@@ -39,7 +39,7 @@ import {
 import { getLogger } from "@ardurbot/logging";
 import { recordInboxFullChip, replyToBotDelivery } from "./bot-comms.js";
 import type { DelegationResolver } from "./delegation.js";
-import { delegationFailure, prepareDelegation } from "./delegation.js";
+import { delegationFailure, prepareDelegation, resolveDelegationTarget } from "./delegation.js";
 import type { ExecutorDeps } from "./executor.js";
 import {
   peerArtifactWhere,
@@ -349,6 +349,14 @@ export async function messageBot(
     }
   }
   const targetThreadId = target.thread.id;
+  const preparedTarget =
+    deps.resolveDelegationPin && !(goal && ["status", "fyi", "result"].includes(intent))
+      ? await resolveDelegationTarget(
+          deps.prisma,
+          { ...run, actingBotId: target.id },
+          deps.resolveDelegationPin,
+        )
+      : undefined;
 
   // A tool call can be re-executed after a lease expiry, so a delivery has to be
   // replayable: without this the recipient is messaged twice and woken twice.
@@ -847,7 +855,7 @@ export async function messageBot(
                 }
               : {}),
           },
-          deps.resolveDelegationPin,
+          preparedTarget,
         );
         if (!admitted.ok) return admitted;
         if (

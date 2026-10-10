@@ -30,7 +30,11 @@ import {
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import type { DelegationResolver } from "./delegation.js";
-import { delegationFloorForModel, prepareDelegation } from "./delegation.js";
+import {
+  delegationFloorForModel,
+  prepareDelegation,
+  resolveDelegationTarget,
+} from "./delegation.js";
 import type { ExecutorDeps } from "./executor.js";
 
 /** The floor for a member whose model cannot be resolved yet: one standard-context request. */
@@ -93,6 +97,44 @@ export async function askGroupMembers(
     };
   const ask = { round, askRunId: run.id };
   const messageNonce = groupAskMessageNonce(ask, input.callId);
+  // This is only a preflight. Membership, replay and limits are re-read under the lock.
+  const preview = await deps.prisma.chatGroup.findFirst({
+    where: {
+      id: groupId,
+      spaceId: run.spaceId,
+      userId: run.userId,
+      archivedAt: null,
+      thread: { id: run.threadId },
+    },
+    include: {
+      members: {
+        where: { bot: { archivedAt: null } },
+        include: { bot: { select: { id: true, name: true } } },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  });
+  const prepared = new Map<string, Awaited<ReturnType<typeof resolveDelegationTarget>>>();
+  if (preview) {
+    const { targets } = selectAskTargets(
+      preview.members.map((member) => member.bot),
+      requested,
+      run.botId,
+    );
+    for (const member of targets)
+      prepared.set(
+        member.id,
+        await resolveDelegationTarget(
+          deps.prisma,
+          {
+            ...run,
+            actingBotId: member.id,
+            targetThreadId: run.threadId,
+          },
+          deps.resolveDelegationPin,
+        ),
+      );
+  }
   const committed = await withTransactionRetry(() =>
     deps.prisma.$transaction(async (tx): Promise<Committed> => {
       try {
@@ -183,19 +225,10 @@ export async function askGroupMembers(
 
       // Each member reserves exactly one realistic request for its own model — the floor
       // admission enforces — and the room is sized to the sum of those floors, never the
-      // goal's per-worker default. Admission resolves the pin again, like a comparison does.
+      // goal's per-worker default. Admission rechecks the captured binding, without resolving again.
       const floors = new Map<string, number>();
       for (const member of fresh) {
-        const bot = await tx.bot.findFirstOrThrow({
-          where: { id: member.id, spaceId: run.spaceId, userId: run.userId },
-          include: { computer: true },
-        });
-        const selected = await deps.resolveDelegationPin?.(bot, {
-          tx,
-          targetThreadId: run.threadId,
-          userId: run.userId,
-          spaceId: run.spaceId,
-        });
+        const selected = prepared.get(member.id)?.selected;
         floors.set(
           member.id,
           selected && selected.kind === "resolved"
@@ -227,7 +260,7 @@ export async function askGroupMembers(
               tokens: floors.get(member.id) ?? ASK_MEMBER_FALLBACK_TOKENS,
               targetThreadId: run.threadId,
             },
-            deps.resolveDelegationPin,
+            prepared.get(member.id),
           );
           if (admission.ok) admitted.push({ member, admission });
           else notAsked.push({ member: member.name, reason: admission.error });

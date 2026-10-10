@@ -1,10 +1,7 @@
+import { writeFileSync } from "node:fs";
 import type { JobPublisher } from "@ardurbot/adapter-kit";
-import {
-  createDb,
-  createThreadEvents,
-  goalBotAuthorityFingerprint,
-  type PrismaClient,
-} from "@ardurbot/db";
+import type { Prisma, PrismaClient } from "@ardurbot/db";
+import { createDb, createThreadEvents, goalBotAuthorityFingerprint } from "@ardurbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { messageBot } from "./bot-messages.js";
 
@@ -15,8 +12,8 @@ const describePostgres =
 /**
  * Regression for the flaky bot-comms receipt e2e: admission transactions take the
  * delegation-root lock while the recipient's turn may still hold it, so under load
- * they outlive Prisma's default 5 s interactive-transaction cap. A slow pin resolver
- * stands in for that wait; the admission must still commit and queue the run.
+ * they outlive Prisma's default 5 s interactive-transaction cap. Hold the actual task
+ * lock on a separate disposable-harness connection; admission must commit and queue.
  */
 describePostgres("delegation admission transaction budget (PostgreSQL)", () => {
   const scopeId = `admission-timeout-${process.pid}-${Date.now()}`;
@@ -25,9 +22,14 @@ describePostgres("delegation admission transaction budget (PostgreSQL)", () => {
   const spaceId = `${scopeId}-space`;
   let db: ReturnType<typeof createDb>;
   let prisma: PrismaClient;
+  const queries: Array<{ query: string; duration: number }> = [];
 
   beforeAll(async () => {
-    db = createDb(databaseUrl!);
+    db = createDb(databaseUrl!, {
+      queryLog: (event: Prisma.QueryEvent) => {
+        queries.push({ query: event.query, duration: event.duration });
+      },
+    });
     prisma = db.prisma;
     await prisma.user.create({
       data: { id: userId, name: "Fixture owner", email: `${scopeId}@example.test` },
@@ -53,9 +55,7 @@ describePostgres("delegation admission transaction budget (PostgreSQL)", () => {
     await db.pool.end();
   });
 
-  it("commits a peer-message admission whose in-transaction pin resolution outlives the default 5 s cap", {
-    timeout: 90_000,
-  }, async () => {
+  async function admissionFixture() {
     const coordinator = await prisma.bot.create({
       data: { spaceId, userId, name: "Coordinator", color: "ink" },
     });
@@ -159,33 +159,115 @@ describePostgres("delegation admission transaction budget (PostgreSQL)", () => {
       prisma,
       events: createThreadEvents(prisma),
       jobs,
-      // Controlled slow in-transaction work: resolution happens inside the admission
-      // transaction, after the locks and before the delegation-root lock. Six seconds
-      // exceeds Prisma's default 5 s interactive-transaction cap.
-      resolveDelegationPin: async () => {
-        await new Promise((resolve) => setTimeout(resolve, 6_000));
-        return {
-          kind: "resolved",
-          pin,
-          provider: "fixture",
-          id: "fixture",
-          thinkingLevel: "off",
-        } as never;
-      },
+      resolveDelegationPin: vi.fn(async () => ({
+        kind: "resolved" as const,
+        pin,
+        runtimePin: pin,
+        provider: "fixture",
+        id: "fixture",
+        thinkingLevel: "off" as const,
+      })),
     };
-    const deliveryKey = `slow-resolve:${goal.id}`;
-    const sent = await messageBot(deps, coordinatorRun, coordinator, {
-      bot_id: worker.id,
-      message: "Prepare the draft for review.",
-      intent: "request",
-      card: {
-        goal: "Prepare a draft",
-        inputs: [{ type: "text", text: "Public fixture" }],
-        doneWhen: ["Draft is ready"],
-        deadlineAt: null,
-      },
-      deliveryKey,
+    return { coordinator, worker, rootTask, goal, coordinatorRun, deps, enqueued };
+  }
+
+  it("measures a peer admission with a real root-lock wait beyond the default 5 s cap", {
+    timeout: 90_000,
+  }, async () => {
+    const { coordinator, worker, rootTask, goal, coordinatorRun, deps, enqueued } =
+      await admissionFixture();
+    const blocker = await db.pool.connect();
+    await blocker.query("BEGIN");
+    await blocker.query("SELECT id FROM tasks WHERE id = $1 FOR UPDATE", [rootTask.id]);
+    let reached!: () => void;
+    const reachedLock = new Promise<void>((resolve) => {
+      reached = resolve;
     });
+    const measuredPrisma = new Proxy(prisma, {
+      get(client, key) {
+        if (key !== "$transaction") return Reflect.get(client, key);
+        return (
+          callback: (tx: Prisma.TransactionClient) => Promise<unknown>,
+          options: { timeout?: number; maxWait?: number },
+        ) => {
+          expect(deps.resolveDelegationPin).toHaveBeenCalledOnce();
+          return client.$transaction(
+            (tx) =>
+              callback(
+                new Proxy(tx, {
+                  get(transaction, method) {
+                    if (method !== "$queryRaw") return Reflect.get(transaction, method);
+                    return (sql: TemplateStringsArray, ...values: unknown[]) => {
+                      if (sql.join("?").includes("FROM tasks")) reached();
+                      return transaction.$queryRaw(sql, ...values);
+                    };
+                  },
+                }),
+              ),
+            options,
+          );
+        };
+      },
+    });
+    queries.length = 0;
+    const deliveryKey = `root-wait:${goal.id}`;
+    let sent: Awaited<ReturnType<typeof messageBot>>;
+    let release: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const pending = messageBot({ ...deps, prisma: measuredPrisma }, coordinatorRun, coordinator, {
+        bot_id: worker.id,
+        message: "Prepare the draft for review.",
+        intent: "request",
+        card: {
+          goal: "Prepare a draft",
+          inputs: [{ type: "text", text: "Public fixture" }],
+          doneWhen: ["Draft is ready"],
+          deadlineAt: null,
+        },
+        deliveryKey,
+      });
+      // Await either the observed lookup or failure, so a regression cannot leave a waiter hanging.
+      await Promise.race([
+        reachedLock,
+        pending.then(() => {
+          throw new Error("Admission did not wait for the root lock");
+        }),
+      ]);
+      const released = new Promise<void>((resolve, reject) => {
+        release = setTimeout(() => {
+          blocker.query("COMMIT").then(() => resolve(), reject);
+        }, 6_000);
+      });
+      [sent] = await Promise.all([pending, released]);
+    } finally {
+      if (release) clearTimeout(release);
+      await blocker.query("ROLLBACK");
+      blocker.release();
+    }
+    expect(deps.resolveDelegationPin).toHaveBeenCalledOnce();
+    const begin = queries.findIndex((row) => /^BEGIN/i.test(row.query));
+    const end = queries.findIndex((row, index) => index > begin && /^COMMIT/i.test(row.query));
+    expect(begin).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(begin);
+    const transaction = queries.slice(begin + 1, end);
+    const lock = transaction.findIndex((row) => /FROM tasks .*FOR UPDATE/.test(row.query));
+    expect(lock).toBeGreaterThanOrEqual(0);
+    const total = (rows: typeof queries) => ({
+      queries: rows.length,
+      queryMs: rows.reduce((sum, row) => sum + row.duration, 0),
+    });
+    const measurement = {
+      transaction: total(transaction),
+      beforeRootLock: total(transaction.slice(0, lock)),
+      rootLock: total(transaction.slice(lock, lock + 1)),
+      afterRootLock: total(transaction.slice(lock + 1)),
+      queryDurationsMs: transaction.map((row) => row.duration),
+    };
+    const output = process.env.DELEGATION_ADMISSION_MEASUREMENT_FILE;
+    if (output) writeFileSync(output, JSON.stringify(measurement, null, 2));
+    // biome-ignore lint/suspicious/noConsole: Test-only SQL counts and timings, without parameters or row data.
+    console.info("delegation admission PostgreSQL measurement", JSON.stringify(measurement));
+    expect(measurement.rootLock.queryMs).toBeGreaterThan(5_000);
     expect(sent).toMatchObject({ ok: true });
     const delivery = await prisma.botMessageDelivery.findFirstOrThrow({
       where: { idempotencyKey: `bot-message:${deliveryKey}` },
@@ -196,5 +278,44 @@ describePostgres("delegation admission transaction budget (PostgreSQL)", () => {
     });
     expect(child.status).toBe("queued");
     expect(enqueued).toContain(child.id);
+  });
+  it("rejects a pin changed after preflight and creates no worker or reservation", async () => {
+    const { coordinator, worker, coordinatorRun, deps, rootTask, goal } = await admissionFixture();
+    deps.resolveDelegationPin.mockImplementationOnce(async () => {
+      await prisma.bot.update({
+        where: { id: worker.id },
+        data: { modelPinRevision: { increment: 1 } },
+      });
+      return {
+        kind: "resolved" as const,
+        pin: coordinatorRun.runtimePin as never,
+        runtimePin: coordinatorRun.runtimePin as never,
+        provider: "fixture",
+        id: "fixture",
+        thinkingLevel: "off" as const,
+      };
+    });
+    const before = await prisma.delegationRoot.findUniqueOrThrow({
+      where: { rootTaskId: rootTask.id },
+    });
+    const result = await messageBot(deps, coordinatorRun, coordinator, {
+      bot_id: worker.id,
+      message: "Prepare a draft.",
+      intent: "request",
+      card: { goal: "Prepare a draft", inputs: [], doneWhen: ["Ready"], deadlineAt: null },
+      deliveryKey: `stale-pin:${goal.id}`,
+    });
+    expect(result).toMatchObject({ ok: false, problem: { code: "authority-exceeded" } });
+    expect(deps.resolveDelegationPin).toHaveBeenCalledOnce();
+    expect(await prisma.delegation.count({ where: { parentRunId: coordinatorRun.id } })).toBe(0);
+    expect(await prisma.run.count({ where: { botId: worker.id } })).toBe(0);
+    expect(
+      await prisma.delegationRoot.findUniqueOrThrow({ where: { rootTaskId: rootTask.id } }),
+    ).toMatchObject({
+      reservedTokens: before.reservedTokens,
+      totalDescendants: before.totalDescendants,
+      activeDescendants: before.activeDescendants,
+    });
+    expect(deps.jobs.enqueue).not.toHaveBeenCalled();
   });
 });

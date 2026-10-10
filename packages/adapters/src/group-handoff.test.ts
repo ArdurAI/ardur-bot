@@ -40,6 +40,9 @@ function harness(
         id: "group-1",
         coordinatorBotId: "bot-a",
         members: ["bot-a", "bot-b", "bot-c"].map((id) => ({
+          id: `member-${id}`,
+          modelPinRevision: 0,
+          runtimePin: null,
           bot: { id, name: id.toUpperCase() },
         })),
       })),
@@ -62,6 +65,7 @@ function harness(
       create: messageCreate,
     },
     thread: {
+      findFirst: vi.fn(async () => ({ groupId: "group-1" })),
       update: vi.fn(async (args: { select: { nextMessageSeq?: boolean } }) =>
         args.select.nextMessageSeq ? { nextMessageSeq: 2 } : { nextEventSeq: 2 },
       ),
@@ -84,6 +88,10 @@ function harness(
     },
   };
   const prisma = {
+    ...tx,
+    bot: {
+      findFirstOrThrow: vi.fn(async () => ({ id: "bot-b", computerId: null, computer: null })),
+    },
     $transaction: vi.fn(async (callback: (value: typeof tx) => Promise<unknown>) => callback(tx)),
   } as unknown as PrismaClient;
   return {
@@ -100,6 +108,21 @@ function harness(
 }
 
 describe("group handoff ownership", () => {
+  it("resolves the recipient once before acquiring the room lock", async () => {
+    const { deps } = harness([]);
+    const resolve = vi.fn(async () => ({ kind: "problem" as const }));
+    await handoffToGroupBot({ ...deps, resolveDelegationPin: resolve } as never, run, "group-1", {
+      bot_id: "bot-b",
+      message: "Review",
+    });
+    expect(resolve).toHaveBeenCalledOnce();
+    expect(resolve.mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(deps.prisma.$transaction).mock.invocationCallOrder[0]!,
+    );
+    expect(vi.mocked(prepareDelegation).mock.lastCall?.[2]).toMatchObject({
+      selected: { kind: "problem" },
+    });
+  });
   it("marks a new ownership transfer as a follow-up with a chain hop", async () => {
     const { deps, messageCreate, runCreate } = harness([{ kind: "text", text: "user request" }]);
 

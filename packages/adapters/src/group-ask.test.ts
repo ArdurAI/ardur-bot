@@ -106,7 +106,12 @@ function harness(
       findFirst: vi.fn(async () => ({
         id: "group",
         coordinatorBotId: options.coordinatorBotId ?? "chief",
-        members: members.map((bot) => ({ bot })),
+        members: members.map((bot) => ({
+          id: `member-${bot.id}`,
+          modelPinRevision: 0,
+          runtimePin: null,
+          bot,
+        })),
       })),
       update: vi.fn(async () => ({})),
     },
@@ -141,7 +146,9 @@ function harness(
     },
     event: { create: eventCreate },
   };
+  Object.assign(tx.thread, { findFirst: vi.fn(async () => ({ groupId: "group" })) });
   const prisma = {
+    ...tx,
     $transaction: vi.fn(async (operation: (client: typeof tx) => unknown) => operation(tx)),
   } as unknown as PrismaClient;
   const deps = {
@@ -168,6 +175,23 @@ beforeEach(() => {
 });
 
 describe("ask_members fan-out", () => {
+  it("resolves each pin once on the pooled client before taking any room lock", async () => {
+    const resolve = vi.fn(async () => resolvedPin);
+    const h = harness({ resolveDelegationPin: resolve });
+    await askGroupMembers(h.deps as never, run, "group", {
+      members: ["all"],
+      request: "Status?",
+      callId: "preflight",
+    });
+    expect(resolve).toHaveBeenCalledTimes(3);
+    for (const order of resolve.mock.invocationCallOrder)
+      expect(order).toBeLessThan(h.tx.$queryRaw.mock.invocationCallOrder[0]!);
+    expect(
+      vi
+        .mocked(prepareDelegation)
+        .mock.calls.every(([, , target]) => target?.selected === resolvedPin),
+    ).toBe(true);
+  });
   it("asks every other member exactly once when the request needs everyone", async () => {
     const h = harness();
     const result = await askGroupMembers(h.deps as never, run, "group", {

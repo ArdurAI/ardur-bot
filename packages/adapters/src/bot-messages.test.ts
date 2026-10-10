@@ -116,6 +116,24 @@ function deps(
 }
 
 describe("messaging another bot", () => {
+  it("resolves the recipient pin once before the admission transaction starts", async () => {
+    const h = deps();
+    Object.assign(h.deps.prisma.bot, {
+      findFirstOrThrow: vi.fn(async () => ({ id: "bot-target", computerId: null, computer: null })),
+    });
+    const resolve = vi.fn(async () => ({ kind: "problem" as const }));
+    await messageBot({ ...h.deps, resolveDelegationPin: resolve } as never, run, sender, {
+      bot_id: "bot-target",
+      message: "Review",
+    });
+    expect(resolve).toHaveBeenCalledOnce();
+    expect(resolve.mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(h.deps.prisma.$transaction).mock.invocationCallOrder[0]!,
+    );
+    expect(vi.mocked(prepareDelegation).mock.lastCall?.[2]).toMatchObject({
+      selected: { kind: "problem" },
+    });
+  });
   it("delivers into the target's own chat and wakes it", async () => {
     const harness = deps();
     const sent = await messageBot(harness.deps, run, sender, {

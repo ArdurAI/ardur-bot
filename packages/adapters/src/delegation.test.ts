@@ -165,7 +165,11 @@ it("derives the floor from the effective output cap, including reasoning and con
       admissionKey: "message-floor",
       prompt: "Review",
     },
-    resolve,
+    {
+      selected: await resolve(),
+      binding: { bot: "fixture-binding" },
+      computer: { id: "computer", mode: "dedicated", kind: "test" },
+    },
   );
   // The resolved connection's context window and output cap win: 32768 (capped) + 16384.
   expect(admitDelegation).toHaveBeenLastCalledWith(
@@ -212,7 +216,7 @@ it("inherits the exact resolved snapshot including connection and runtime withou
       admissionKey: "helper",
       prompt: "Review",
     },
-    resolve,
+    undefined,
   );
   expect(resolve).not.toHaveBeenCalled();
   expect(result).toMatchObject({ ok: true, runData: { runtimePin: pin } });
@@ -273,14 +277,13 @@ it("freezes a room recipient's selection and provenance at admission", async () 
       prompt: "Continue",
       targetThreadId: "room",
     },
-    resolve,
+    {
+      selected: await resolve(),
+      binding: { bot: "fixture-binding" },
+      computer: { id: null, mode: "team", kind: null },
+    },
   );
-  expect(resolve).toHaveBeenCalledWith(expect.objectContaining({ id: "recipient" }), {
-    tx,
-    targetThreadId: "room",
-    userId: "owner",
-    spaceId: "space",
-  });
+  expect(resolve).toHaveBeenCalledOnce();
   expect(result).toMatchObject({
     ok: true,
     runData: { runtimePin: pin, runtimePinSource: source, usageGroupId: "group" },
