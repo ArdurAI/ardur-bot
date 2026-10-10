@@ -1,9 +1,14 @@
+import type { Actor } from "@ardurbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "./client.js";
 import {
+  acceptGoal,
+  getGoal,
   goalExhaustionReason,
   reconcileGoalExhaustion,
+  rejectGoal,
   startGoal,
+  submitGoal,
   wakeGoalCoordinatorForDelegation,
 } from "./goals.js";
 
@@ -63,6 +68,7 @@ describe("goal scheduling", () => {
       untilAt: new Date("2030-01-02T00:00:00.000Z"),
       createdAt: now,
       stoppedAt: null,
+      revisions: [],
     };
     const tx = {
       chatGroup: { findFirst: vi.fn(async () => group) },
@@ -219,5 +225,245 @@ describe("goal scheduling", () => {
       data: expect.objectContaining({ clientNonce: "goal-wake:delegation-1" }),
     });
     expect(steeringCreate).not.toHaveBeenCalled();
+  });
+});
+
+const owner: Actor = {
+  spaceId: "space-1",
+  userId: "owner-1",
+  email: "owner@example.test",
+  isDeploymentOwner: true,
+};
+
+function reviewFixture() {
+  const goal = {
+    id: "goal-1",
+    spaceId: owner.spaceId,
+    userId: owner.userId,
+    threadId: "thread-1",
+    rootTaskId: "root-1",
+    groupId: "group-1",
+    coordinatorBotId: "bot-1",
+    doneWhen: [],
+    objective: "Review",
+    tokenLimit: 100,
+    perWorkerTokens: 10,
+    maxConcurrent: 1,
+    maxDescendants: 1,
+    status: "running",
+    untilAt: new Date("2030-01-02T00:00:00.000Z"),
+    createdAt: now,
+    stoppedAt: null,
+  };
+  const revisions: Array<{
+    id: string;
+    goalId: string;
+    summary: string;
+    conditions: unknown;
+    artifacts: unknown;
+    reports: unknown;
+    attempts: number;
+    accountingSnapshot: unknown;
+    createdAt: Date;
+  }> = [];
+  const verdicts: Array<{
+    id: string;
+    goalId: string;
+    revisionId: string;
+    actorId: string;
+    type: string;
+    reworkNotes: string | null;
+    createdAt: Date;
+  }> = [];
+  const root = { usedTokens: 10, reservedTokens: 0, tokenLimit: 100 };
+  const scopedGoal = vi.fn(async ({ where }: { where: { spaceId?: string; userId?: string } }) =>
+    (where.spaceId && where.spaceId !== owner.spaceId) ||
+    (where.userId && where.userId !== owner.userId)
+      ? null
+      : { ...goal, revisions: revisions.slice(-1) },
+  );
+  const tx = {
+    $queryRaw: vi.fn(async () => []),
+    teamGoal: {
+      findFirst: scopedGoal,
+      findUniqueOrThrow: vi.fn(async () => ({ ...goal })),
+      updateMany: vi.fn(
+        async ({ where, data }: { where: { status: string }; data: { status: string } }) => {
+          if (goal.status !== where.status) return { count: 0 };
+          goal.status = data.status;
+          return { count: 1 };
+        },
+      ),
+      update: vi.fn(async ({ data }: { data: { status: string } }) => {
+        goal.status = data.status;
+        return goal;
+      }),
+    },
+    goalRevision: {
+      count: vi.fn(async () => revisions.length),
+      findFirst: vi.fn(async () => revisions.at(-1) ?? null),
+      create: vi.fn(
+        async ({ data }: { data: Omit<(typeof revisions)[number], "id" | "createdAt"> }) => {
+          const revision = { ...data, id: `revision-${revisions.length + 1}`, createdAt: now };
+          revisions.push(structuredClone(revision));
+          return revision;
+        },
+      ),
+    },
+    goalVerdict: {
+      findFirst: vi.fn(
+        async ({ where }: { where: { revisionId: string } }) =>
+          verdicts.find((verdict) => verdict.revisionId === where.revisionId) ?? null,
+      ),
+      create: vi.fn(
+        async ({ data }: { data: Omit<(typeof verdicts)[number], "id" | "createdAt"> }) => {
+          const verdict = { ...data, id: `verdict-${verdicts.length + 1}`, createdAt: now };
+          verdicts.push(verdict);
+          return verdict;
+        },
+      ),
+    },
+    delegationRoot: { findUnique: vi.fn(async () => root), findFirst: vi.fn(async () => root) },
+    usageRecord: { findFirst: vi.fn(async () => null) },
+    run: { findFirst: vi.fn(async () => null) },
+    thread: { update: vi.fn(async () => ({ nextEventSeq: 1 })) },
+    event: { create: vi.fn(async () => ({ seq: 1 })) },
+  };
+  const prisma = {
+    teamGoal: tx.teamGoal,
+    $transaction: (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
+  } as unknown as PrismaClient;
+  const submit = () =>
+    submitGoal(prisma, owner, {
+      goalId: goal.id,
+      summary: "Candidate",
+      artifacts: [{ id: "artifact-1", hash: "fixture-hash" }],
+      reports: [{ id: "report-1", revision: "fixture-revision" }],
+    });
+  return { prisma, tx, goal, revisions, verdicts, root, submit };
+}
+
+describe("goal owner review", () => {
+  it.each(["accept", "reject"] as const)(
+    "refuses %s by a non-owner or an owner outside the goal scope",
+    async (operation) => {
+      const fixture = reviewFixture();
+      const revision = await fixture.submit();
+      const input = {
+        goalId: fixture.goal.id,
+        revisionId: revision.id,
+        reworkNotes: "Review again",
+      };
+      for (const actor of [
+        { ...owner, isDeploymentOwner: false },
+        { ...owner, userId: "other-user" },
+        { ...owner, spaceId: "other-space" },
+      ]) {
+        await expect(
+          (operation === "accept" ? acceptGoal : rejectGoal)(fixture.prisma, actor, input),
+        ).rejects.toThrow();
+      }
+      expect(fixture.tx.goalVerdict.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it("projects submission JSON and timestamps through the same contract used by goal reads", async () => {
+    const fixture = reviewFixture();
+    const revision = await fixture.submit();
+    expect(revision.createdAt).toBe(now.toISOString());
+    expect(revision.conditions).toEqual([
+      {
+        id: "cond-final",
+        description: "Final owner review",
+        status: "unknown",
+        actorId: null,
+        reason: null,
+        evidenceId: null,
+        createdAt: null,
+      },
+    ]);
+    expect((await getGoal(fixture.prisma, owner, fixture.goal.groupId))?.currentRevision).toEqual(
+      revision,
+    );
+    expect(fixture.tx.teamGoal.findFirst).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        include: { revisions: { orderBy: { attempts: "desc" }, take: 1 } },
+      }),
+    );
+  });
+
+  it("keeps the reviewed submission unchanged and creates a new revision for rework", async () => {
+    const fixture = reviewFixture();
+    const revision = await fixture.submit();
+    const snapshot = structuredClone(fixture.revisions[0]);
+    await expect(fixture.submit()).rejects.toThrow("already submitted");
+    const input = { goalId: fixture.goal.id, revisionId: revision.id, reworkNotes: "Review again" };
+    const rejected = await rejectGoal(fixture.prisma, owner, input);
+    expect(await rejectGoal(fixture.prisma, owner, input)).toEqual(rejected);
+    await expect(acceptGoal(fixture.prisma, owner, input)).rejects.toThrow("already reviewed");
+    const next = await fixture.submit();
+    expect(next.attempts).toBe(2);
+    expect(next.id).not.toBe(revision.id);
+    expect(fixture.revisions[0]).toEqual(snapshot);
+    await expect(acceptGoal(fixture.prisma, owner, input)).rejects.toThrow("not current");
+    await expect(rejectGoal(fixture.prisma, owner, input)).rejects.toThrow("not current");
+  });
+
+  it("returns the same acceptance on retry and cannot reject or overwrite it", async () => {
+    const fixture = reviewFixture();
+    const revision = await fixture.submit();
+    const snapshot = structuredClone(fixture.revisions[0]);
+    const input = { goalId: fixture.goal.id, revisionId: revision.id };
+    const accepted = await acceptGoal(fixture.prisma, owner, input);
+    expect(await acceptGoal(fixture.prisma, owner, input)).toEqual(accepted);
+    expect(accepted.createdAt).toBe(now.toISOString());
+    expect(fixture.tx.goalVerdict.create).toHaveBeenCalledTimes(1);
+    expect(fixture.tx.event.create).toHaveBeenCalledTimes(2);
+    await expect(
+      rejectGoal(fixture.prisma, owner, { ...input, reworkNotes: "Reopen" }),
+    ).rejects.toThrow("already reviewed");
+    await expect(fixture.submit()).rejects.toThrow("already submitted");
+    expect(fixture.goal.status).toBe("accepted");
+    expect(fixture.revisions[0]).toEqual(snapshot);
+  });
+
+  it.each(["accept", "reject"] as const)(
+    "locks thread then root before %s reads the current state",
+    async (operation) => {
+      const fixture = reviewFixture();
+      const revision = await fixture.submit();
+      fixture.tx.$queryRaw.mockClear();
+      fixture.tx.teamGoal.findUniqueOrThrow.mockClear();
+      const input = {
+        goalId: fixture.goal.id,
+        revisionId: revision.id,
+        reworkNotes: "Review again",
+      };
+      await (operation === "accept" ? acceptGoal : rejectGoal)(fixture.prisma, owner, input);
+      expect(fixture.tx.$queryRaw).toHaveBeenNthCalledWith(
+        1,
+        ["SELECT id FROM threads WHERE id = ", " FOR UPDATE"],
+        fixture.goal.threadId,
+      );
+      expect(fixture.tx.$queryRaw).toHaveBeenNthCalledWith(
+        2,
+        ["SELECT id FROM tasks WHERE id = ", " FOR UPDATE"],
+        fixture.goal.rootTaskId,
+      );
+      expect(fixture.tx.$queryRaw.mock.invocationCallOrder[1]).toBeLessThan(
+        fixture.tx.teamGoal.findUniqueOrThrow.mock.invocationCallOrder[0]!,
+      );
+    },
+  );
+
+  it("refuses acceptance while reservations remain unsettled", async () => {
+    const fixture = reviewFixture();
+    const revision = await fixture.submit();
+    fixture.root.reservedTokens = 10;
+    await expect(
+      acceptGoal(fixture.prisma, owner, { goalId: fixture.goal.id, revisionId: revision.id }),
+    ).rejects.toThrow("Unsettled reservations");
+    expect(fixture.tx.goalVerdict.create).not.toHaveBeenCalled();
+    expect(fixture.goal.status).toBe("completed");
   });
 });

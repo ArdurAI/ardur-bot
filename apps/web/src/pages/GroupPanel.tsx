@@ -513,8 +513,6 @@ export function GroupGoalStrip({ goal, onStop }: { goal: Goal; onStop: () => Pro
   const { t } = useLingui();
   const [stopping, setStopping] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const reviewRevisionId =
-    goal.status === "completed" && goal.currentRevision ? goal.currentRevision.id : null;
   const status =
     goal.status === "running"
       ? t`Working`
@@ -546,7 +544,7 @@ export function GroupGoalStrip({ goal, onStop }: { goal: Goal; onStop: () => Pro
             </h4>
             <p className="text-sm mb-2">{goal.currentRevision.summary}</p>
             <ul className="text-sm list-disc pl-4 mb-3">
-              {goal.currentRevision.conditions.map((cond: any) => (
+              {goal.currentRevision.conditions.map((cond) => (
                 <li key={cond.id}>
                   {cond.description}:
                   {cond.status === "pass" ? (
@@ -570,7 +568,7 @@ export function GroupGoalStrip({ goal, onStop }: { goal: Goal; onStop: () => Pro
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  void rpc.goals.accept.mutate({
+                  void rpc.goals.accept({
                     goalId: goal.id,
                     revisionId: goal.currentRevision!.id,
                   });
@@ -582,7 +580,7 @@ export function GroupGoalStrip({ goal, onStop }: { goal: Goal; onStop: () => Pro
                 variant="destructive"
                 size="sm"
                 onClick={() => {
-                  void rpc.goals.reject.mutate({
+                  void rpc.goals.reject({
                     goalId: goal.id,
                     revisionId: goal.currentRevision!.id,
                     reworkNotes: "Please address the failing conditions.",

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { goalBudget } from "./goal.js";
+import { ProductEventSchema } from "./events.js";
+import {
+  GoalAcceptInputSchema,
+  GoalRejectInputSchema,
+  GoalSubmitInputSchema,
+  goalBudget,
+} from "./goal.js";
 
 describe("goal admission budget projection", () => {
   it("keeps used and reserved separate and uses the effective limit", () => {
@@ -31,10 +37,32 @@ describe("goal admission budget projection", () => {
 });
 
 describe("Goal contracts and state machine", () => {
-  it("validates valid submit, accept and reject schemas", async () => {
-    const { GoalSubmitInputSchema, GoalAcceptInputSchema, GoalRejectInputSchema } = await import("./goal.js");
+  it("validates valid submit, accept and reject schemas", () => {
     expect(GoalSubmitInputSchema.safeParse({ goalId: "g_1", summary: "done" }).success).toBe(true);
-    expect(GoalAcceptInputSchema.safeParse({ goalId: "g_1", revisionId: "r_1" }).success).toBe(true);
-    expect(GoalRejectInputSchema.safeParse({ goalId: "g_1", revisionId: "r_1", reworkNotes: "fix" }).success).toBe(true);
+    expect(GoalAcceptInputSchema.safeParse({ goalId: "g_1", revisionId: "r_1" }).success).toBe(
+      true,
+    );
+    expect(
+      GoalRejectInputSchema.safeParse({ goalId: "g_1", revisionId: "r_1", reworkNotes: "fix" })
+        .success,
+    ).toBe(true);
   });
 });
+
+it.each(["goal.submitted", "goal.accepted", "goal.rejected"])(
+  "validates the %s product event",
+  (type) => {
+    expect(
+      ProductEventSchema.safeParse({
+        id: "event-1",
+        spaceId: "space-1",
+        threadId: "thread-1",
+        botId: "bot-1",
+        seq: 1,
+        createdAt: "2030-01-01T00:00:00.000Z",
+        type,
+        payload: { goalId: "goal-1", revisionId: "revision-1" },
+      }).success,
+    ).toBe(true);
+  },
+);

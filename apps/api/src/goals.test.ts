@@ -1,53 +1,50 @@
-import { ORPCError } from "@orpc/server";
-import { describe, expect, it } from "vitest";
+import { RPCHandler } from "@orpc/server/fetch";
+import { describe, expect, it, vi } from "vitest";
+import type { RouterDeps } from "./router.js";
 import { createRouter } from "./router.js";
 
-import type { RouterDeps } from "./router.js";
-
 describe("Goals API", () => {
-  it("enforces deployment-owner on accept and reject", async () => {
-    // We only need prisma for the types, we don't actually call it because the auth check fails first.
+  it.each([
+    { name: "a non-owner session", isDeploymentOwner: false, authSessionId: "session-1" },
+    {
+      name: "an owner without an authenticated session",
+      isDeploymentOwner: true,
+      authSessionId: undefined,
+    },
+  ])("refuses accept and reject from $name", async ({ isDeploymentOwner, authSessionId }) => {
+    const findFirst = vi.fn();
     const router = createRouter({
-      prisma: {},
+      prisma: { teamGoal: { findFirst } },
       env: { sandboxProvider: "fake" },
     } as unknown as RouterDeps);
-
-    // non-owner context
-    const nonOwnerContext = {
+    const context = {
       actor: {
-        spaceId: "space_1",
-        userId: "user_1",
-        isDeploymentOwner: false,
-        kind: "human" as const,
-        id: "user_1",
+        spaceId: "space-1",
+        userId: "owner-1",
+        email: "owner@example.test",
+        isDeploymentOwner,
       },
-      authSessionId: "123",
-      deviceToken: null,
+      authSessionId,
     };
-
-    const { RPCHandler } = await import("@orpc/server/fetch");
     const handler = new RPCHandler(router);
-
-    const call = async (path: string, body: unknown) => {
+    for (const operation of ["accept", "reject"]) {
       const { response } = await handler.handle(
-        new Request(`http://127.0.0.1/rpc/${path}`, {
+        new Request(`http://127.0.0.1/rpc/goals/${operation}`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ json: body }),
+          body: JSON.stringify({
+            json: {
+              goalId: "goal-1",
+              revisionId: "revision-1",
+              reworkNotes: "Review again",
+            },
+          }),
         }),
-        { prefix: "/rpc", context: nonOwnerContext },
+        { prefix: "/rpc", context },
       );
-      return response;
-    };
-
-    const resAccept = await call("goals/accept", { goalId: "g_1", revisionId: "r_1" });
-    const jsonAccept = await resAccept.json();
-    expect(resAccept.status).toBe(403);
-    expect(jsonAccept.json?.code).toBe("FORBIDDEN");
-
-    const resReject = await call("goals/reject", { goalId: "g_1", revisionId: "r_1", reworkNotes: "fix" });
-    const jsonReject = await resReject.json();
-    expect(resReject.status).toBe(403);
-    expect(jsonReject.json?.code).toBe("FORBIDDEN");
+      expect(response?.status).toBe(403);
+      expect(await response?.json()).toMatchObject({ json: { code: "FORBIDDEN" } });
+    }
+    expect(findFirst).not.toHaveBeenCalled();
   });
 });

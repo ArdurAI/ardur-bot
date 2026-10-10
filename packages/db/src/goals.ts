@@ -1,4 +1,11 @@
-import type { Actor, Goal, GoalStartInput } from "@ardurbot/contracts";
+import type {
+  Actor,
+  Goal,
+  GoalAcceptInput,
+  GoalRejectInput,
+  GoalStartInput,
+  GoalSubmitInput,
+} from "@ardurbot/contracts";
 import {
   GOAL_DEFAULT_DURATION_MS,
   GOAL_DEFAULT_MAX_DESCENDANTS,
@@ -6,7 +13,9 @@ import {
   GOAL_DEFAULT_TOKEN_LIMIT,
   GOAL_MAX_DEPTH,
   GOAL_MAX_HOPS,
+  GoalRevisionSchema,
   GoalStartInputSchema,
+  GoalVerdictSchema,
   goalBudget,
 } from "@ardurbot/contracts";
 import {
@@ -21,7 +30,16 @@ import { appendEventInTransaction } from "./events.js";
 import { IsolationError } from "./scope.js";
 import { withTransactionRetry } from "./transaction-retry.js";
 
-type GoalRow = TeamGoal & ReturnType<typeof goalBudget>;
+type GoalRow = Prisma.TeamGoalGetPayload<{ include: { revisions: true } }> &
+  ReturnType<typeof goalBudget>;
+
+function asRevision(row: Prisma.GoalRevisionGetPayload<object>) {
+  return GoalRevisionSchema.parse({ ...row, createdAt: row.createdAt.toISOString() });
+}
+
+function asVerdict(row: Prisma.GoalVerdictGetPayload<object>) {
+  return GoalVerdictSchema.parse({ ...row, createdAt: row.createdAt.toISOString() });
+}
 
 function asGoal(row: GoalRow): Goal {
   return {
@@ -47,29 +65,7 @@ function asGoal(row: GoalRow): Goal {
     untilAt: row.untilAt.toISOString(),
     createdAt: row.createdAt.toISOString(),
     stoppedAt: row.stoppedAt?.toISOString() ?? null,
-    currentRevision:
-      row.revisions && row.revisions.length > 0
-        ? {
-            ...row.revisions[0],
-            createdAt: row.revisions[0].createdAt.toISOString(),
-            conditions:
-              typeof row.revisions[0].conditions === "string"
-                ? JSON.parse(row.revisions[0].conditions)
-                : row.revisions[0].conditions,
-            artifacts:
-              typeof row.revisions[0].artifacts === "string"
-                ? JSON.parse(row.revisions[0].artifacts)
-                : row.revisions[0].artifacts,
-            reports:
-              typeof row.revisions[0].reports === "string"
-                ? JSON.parse(row.revisions[0].reports)
-                : row.revisions[0].reports,
-            accountingSnapshot:
-              typeof row.revisions[0].accountingSnapshot === "string"
-                ? JSON.parse(row.revisions[0].accountingSnapshot)
-                : row.revisions[0].accountingSnapshot,
-          }
-        : null,
+    currentRevision: row.revisions[0] ? asRevision(row.revisions[0]) : null,
   };
 }
 
@@ -80,7 +76,7 @@ async function loadGoal(prisma: PrismaClient, where: Prisma.TeamGoalWhereInput) 
         const row = await tx.teamGoal.findFirst({
           where,
           orderBy: { createdAt: "desc" },
-          include: { revisions: { orderBy: { createdAt: "desc" }, take: 1 } },
+          include: { revisions: { orderBy: { attempts: "desc" }, take: 1 } },
         });
         if (!row) return null;
         const scope = { spaceId: row.spaceId, userId: row.userId };
@@ -478,14 +474,6 @@ export async function wakeGoalCoordinatorForDelegation(prisma: PrismaClient, del
   );
 }
 
-import type {
-  GoalAcceptInput,
-  GoalRejectInput,
-  GoalRevision,
-  GoalSubmitInput,
-  GoalVerdict,
-} from "@ardurbot/contracts";
-
 export async function submitGoal(prisma: PrismaClient, actor: Actor, input: GoalSubmitInput) {
   const goal = await prisma.teamGoal.findFirst({
     where: { id: input.goalId, spaceId: actor.spaceId, userId: actor.userId },
@@ -512,7 +500,7 @@ export async function submitGoal(prisma: PrismaClient, actor: Actor, input: Goal
     const conditions =
       goal.doneWhen.length > 0
         ? goal.doneWhen.map((desc, i) => ({
-            id: "cond-" + i,
+            id: `cond-${i}`,
             description: desc,
             status: "unknown",
             actorId: null,
@@ -536,7 +524,7 @@ export async function submitGoal(prisma: PrismaClient, actor: Actor, input: Goal
       data: {
         goalId: goal.id,
         summary: input.summary,
-        conditions: conditions,
+        conditions,
         artifacts: input.artifacts,
         reports: input.reports,
         attempts: previousAttempts + 1,
@@ -555,7 +543,7 @@ export async function submitGoal(prisma: PrismaClient, actor: Actor, input: Goal
       payload: { goalId: goal.id, revisionId: revision.id },
     });
 
-    return revision as unknown as GoalRevision;
+    return asRevision(revision);
   });
 }
 
@@ -567,15 +555,21 @@ export async function acceptGoal(prisma: PrismaClient, actor: Actor, input: Goal
   if (!goal) throw new IsolationError();
 
   return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM threads WHERE id = ${goal.threadId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${goal.rootTaskId} FOR UPDATE`;
+    const currentGoal = await tx.teamGoal.findUniqueOrThrow({ where: { id: goal.id } });
     const revision = await tx.goalRevision.findFirst({
-      where: { id: input.revisionId, goalId: goal.id },
+      where: { goalId: goal.id },
+      orderBy: { attempts: "desc" },
     });
-    if (!revision) throw new Error("Revision not found");
+    if (!revision || revision.id !== input.revisionId) throw new Error("Revision is not current");
 
     const existingVerdict = await tx.goalVerdict.findFirst({
-      where: { goalId: goal.id, type: "accept" },
+      where: { goalId: goal.id, revisionId: revision.id },
     });
-    if (existingVerdict) return existingVerdict as unknown as GoalVerdict;
+    if (existingVerdict?.type === "accept") return asVerdict(existingVerdict);
+    if (existingVerdict) throw new Error("Revision is already reviewed");
+    if (currentGoal.status !== "completed") throw new Error("Goal is not awaiting review");
 
     const root = await tx.delegationRoot.findUnique({ where: { rootTaskId: goal.rootTaskId } });
     if (root?.reservedTokens && root.reservedTokens > 0) {
@@ -605,7 +599,7 @@ export async function acceptGoal(prisma: PrismaClient, actor: Actor, input: Goal
       payload: { goalId: goal.id, revisionId: revision.id },
     });
 
-    return verdict as unknown as GoalVerdict;
+    return asVerdict(verdict);
   });
 }
 
@@ -617,10 +611,21 @@ export async function rejectGoal(prisma: PrismaClient, actor: Actor, input: Goal
   if (!goal) throw new IsolationError();
 
   return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM threads WHERE id = ${goal.threadId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${goal.rootTaskId} FOR UPDATE`;
+    const currentGoal = await tx.teamGoal.findUniqueOrThrow({ where: { id: goal.id } });
     const revision = await tx.goalRevision.findFirst({
-      where: { id: input.revisionId, goalId: goal.id },
+      where: { goalId: goal.id },
+      orderBy: { attempts: "desc" },
     });
-    if (!revision) throw new Error("Revision not found");
+    if (!revision || revision.id !== input.revisionId) throw new Error("Revision is not current");
+
+    const existingVerdict = await tx.goalVerdict.findFirst({
+      where: { goalId: goal.id, revisionId: revision.id },
+    });
+    if (existingVerdict?.type === "reject") return asVerdict(existingVerdict);
+    if (existingVerdict) throw new Error("Revision is already reviewed");
+    if (currentGoal.status !== "completed") throw new Error("Goal is not awaiting review");
 
     const verdict = await tx.goalVerdict.create({
       data: {
@@ -645,6 +650,6 @@ export async function rejectGoal(prisma: PrismaClient, actor: Actor, input: Goal
       payload: { goalId: goal.id, revisionId: revision.id },
     });
 
-    return verdict as unknown as GoalVerdict;
+    return asVerdict(verdict);
   });
 }
