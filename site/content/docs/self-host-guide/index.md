@@ -94,7 +94,7 @@ app.example.com {
 }
 ```
 
-Open **Agent computer** on a bot, or send a message that uses the desktop, to see
+Open **Workspace pane** on a bot, or send a message that uses the desktop, to see
 the local Docker computer. For in-stack Caddy plus remote E2B computers, use the
 [production Compose](#public-single-vm-deployment) path and `infra/compose/Caddyfile.prod`
 instead of this host proxy.

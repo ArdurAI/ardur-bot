@@ -264,6 +264,14 @@ msgstr ""
 msgid "{gapCount} evidence gaps"
 msgstr "Пробелов в записи: {gapCount}"
 
+#: src/pages/dashboard/NowPanel.tsx
+msgid "{hours} h"
+msgstr "{hours} ч"
+
+#: src/pages/dashboard/NowPanel.tsx
+msgid "{hours} h {rest} min"
+msgstr "{hours} ч {rest} мин"
+
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
 msgstr "{hours} ч назад"
@@ -283,6 +291,10 @@ msgstr "{member} завершился с ошибкой."
 #: src/lib/failure-category-copy.ts
 msgid "{member} stopped."
 msgstr "{member} остановился."
+
+#: src/pages/dashboard/NowPanel.tsx
+msgid "{minutes} min"
+msgstr "{minutes} мин"
 
 #: src/pages/ActivityList.tsx
 msgid "{minutes}m ago"
@@ -750,10 +762,6 @@ msgstr "Расширенные..."
 #: src/pages/MemoryHistory.tsx
 msgid "After"
 msgstr ""
-
-#: src/pages/Shell.tsx
-msgid "Agent computer"
-msgstr "Компьютер агента"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Agent connections"
@@ -2205,7 +2213,6 @@ msgstr ""
 #: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
-#: src/pages/workspace/view-registry.ts
 msgid "Computer"
 msgstr "Компьютер"
 
@@ -2248,6 +2255,10 @@ msgstr "Местоположение компьютера недоступно. 
 #: src/pages/shell/runtime-summary.tsx
 msgid "Computer location unavailable. Try again."
 msgstr "Местоположение компьютера недоступно. Попробуйте снова."
+
+#: src/pages/workspace/view-registry.ts
+msgid "Computer screen"
+msgstr "Экран компьютера"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -6301,6 +6312,10 @@ msgstr "Нет результатов"
 msgid "No reviewer model yet."
 msgstr "Проверяющая модель ещё не выбрана."
 
+#: src/components/composer/RoutinesPanel.tsx
+msgid "No routines yet; a routine runs this bot on a schedule or when an event arrives."
+msgstr "Пока нет рутин; рутина запускает этого бота по расписанию или при наступлении события."
+
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/RuntimeReliability.tsx
@@ -10204,6 +10219,10 @@ msgstr "Рабочая область"
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Workspace or server ID"
 msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "Workspace pane"
+msgstr "Панель рабочей области"
 
 #: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/ToolPicker.tsx

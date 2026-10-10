@@ -141,7 +141,7 @@ export const workspaceViews = {
   },
   computer: {
     id: "computer",
-    label: (t) => t(msg`Computer`),
+    label: (t) => t(msg`Computer screen`),
     icon: Monitor,
     available: ({ computer }) => computer?.capabilities?.graphical !== true,
     unavailable: (t) => t(msg`Open Screen to view this computer.`),

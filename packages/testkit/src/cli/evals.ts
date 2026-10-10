@@ -1,3 +1,5 @@
+// #199: Use the shared Postgres image override without changing the local default.
+
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -8,6 +10,7 @@ import { loadRootEnv } from "@ardurbot/core/node/load-root-env";
 import type { StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { EVAL_CASES } from "../evals/cases.js";
 import { emptyTrial, redact, summarize, validateControls } from "../evals/report.js";
+import { TEST_POSTGRES_IMAGE } from "../postgres-image.js";
 
 async function main() {
   const { values } = parseArgs({
@@ -97,7 +100,7 @@ async function main() {
   let postgres: StartedPostgreSqlContainer | undefined;
   try {
     const { PostgreSqlContainer } = await import("@testcontainers/postgresql");
-    postgres = await new PostgreSqlContainer("postgres:16-alpine").start();
+    postgres = await new PostgreSqlContainer(TEST_POSTGRES_IMAGE).start();
     const databaseUrl = postgres.getConnectionUri();
     Object.assign(process.env, {
       DATABASE_URL: databaseUrl,

@@ -55,6 +55,70 @@ describeIntegration("run executor lifecycle", () => {
     rmSync(dataDir, { recursive: true, force: true });
   });
 
+  it("sends the captured identity even after the bot pin is edited", async () => {
+    const seeded = await seedRun("identity", "Which model are you?");
+    const pin = {
+      runtimeKind: "pi",
+      provider: "scripted",
+      modelId: "scripted",
+      effort: "off",
+      credentialId: "scripted",
+      revision: 1,
+    };
+    await handles.prisma.run.update({
+      where: { id: seeded.run.id },
+      data: { runtimePin: pin, runtimePinSource: { kind: "bot", botId: seeded.bot.id } },
+    });
+    await handles.prisma.bot.update({
+      where: { id: seeded.bot.id },
+      data: {
+        runtimeKind: "hermes",
+        modelProvider: "edited-provider",
+        modelId: "edited-model",
+        thinkingLevel: "high",
+        modelPinRevision: 2,
+      },
+    });
+    const requests: AgentRunRequest[] = [];
+    const spy = vi
+      .spyOn(ScriptedAgentRuntime.prototype, "run")
+      .mockImplementation(async function* (request) {
+        requests.push(request);
+        yield { type: "done" as const, text: "Identity fixture complete." };
+      });
+    try {
+      await handles.executor.continueRun(seeded.run.id, "identity-worker");
+    } finally {
+      spy.mockRestore();
+    }
+    const run = await handles.prisma.run.findUniqueOrThrow({ where: { id: seeded.run.id } });
+    expect(run.status, run.error ?? undefined).toBe("completed");
+    const request = requests.find((request) => request.runId === run.id)!;
+    expect(request).toBeDefined();
+    expect(request.model.runtimePin).toEqual(pin);
+    expect(request.instructions.split("\n")[0]).toBe(
+      'You are "Executor identity". Run pin: runtime Ardur, provider "scripted", model "scripted", thinking "off".',
+    );
+    expect(request.stablePrefix).toBe(request.instructions);
+    expect(request.instructions).not.toContain("edited-provider");
+    expect(request.instructions).not.toContain("edited-model");
+    expect(request.instructions.split("\n")[0]).not.toContain("credentialId");
+    expect(request.instructions.split("\n")[0]).not.toContain(seeded.me.userId);
+    const toolCharacters =
+      Array.isArray(request.tools) && request.tools.length
+        ? JSON.stringify(
+            request.tools.map(({ name, description, inputSchema }) => ({
+              name,
+              description,
+              inputSchema,
+            })),
+          ).length
+        : 0;
+    expect(run.contextSnapshot).toMatchObject({
+      layers: { stable: request.instructions.length + toolCharacters },
+    });
+  });
+
   it("allows only one worker to claim a queued run", async () => {
     const seeded = await seedRun("concurrent", "write a file that says one-claim");
 

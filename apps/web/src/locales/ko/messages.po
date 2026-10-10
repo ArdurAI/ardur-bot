@@ -264,6 +264,14 @@ msgstr ""
 msgid "{gapCount} evidence gaps"
 msgstr "증거 누락 {gapCount}건"
 
+#: src/pages/dashboard/NowPanel.tsx
+msgid "{hours} h"
+msgstr "{hours}시간"
+
+#: src/pages/dashboard/NowPanel.tsx
+msgid "{hours} h {rest} min"
+msgstr "{hours}시간 {rest}분"
+
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
 msgstr "{hours}시간 전"
@@ -283,6 +291,10 @@ msgstr "{member}이(가) 실패했습니다."
 #: src/lib/failure-category-copy.ts
 msgid "{member} stopped."
 msgstr "{member}이(가) 중지되었습니다."
+
+#: src/pages/dashboard/NowPanel.tsx
+msgid "{minutes} min"
+msgstr "{minutes}분"
 
 #: src/pages/ActivityList.tsx
 msgid "{minutes}m ago"
@@ -750,10 +762,6 @@ msgstr "고급..."
 #: src/pages/MemoryHistory.tsx
 msgid "After"
 msgstr ""
-
-#: src/pages/Shell.tsx
-msgid "Agent computer"
-msgstr "Agent 컴퓨터"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Agent connections"
@@ -2205,7 +2213,6 @@ msgstr ""
 #: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
-#: src/pages/workspace/view-registry.ts
 msgid "Computer"
 msgstr "컴퓨터"
 
@@ -2248,6 +2255,10 @@ msgstr "컴퓨터 위치를 확인할 수 없습니다. 지원되는 연결을 �
 #: src/pages/shell/runtime-summary.tsx
 msgid "Computer location unavailable. Try again."
 msgstr "컴퓨터 위치를 확인할 수 없습니다. 다시 시도하세요."
+
+#: src/pages/workspace/view-registry.ts
+msgid "Computer screen"
+msgstr "컴퓨터 화면"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -6301,6 +6312,10 @@ msgstr "검색 결과가 없습니다"
 msgid "No reviewer model yet."
 msgstr ""
 
+#: src/components/composer/RoutinesPanel.tsx
+msgid "No routines yet; a routine runs this bot on a schedule or when an event arrives."
+msgstr "아직 루틴이 없습니다. 루틴은 일정이나 이벤트가 발생하면 이 봇을 실행합니다."
+
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/RuntimeReliability.tsx
@@ -10204,6 +10219,10 @@ msgstr "작업 공간"
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Workspace or server ID"
 msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "Workspace pane"
+msgstr "워크스페이스 패널"
 
 #: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/ToolPicker.tsx
