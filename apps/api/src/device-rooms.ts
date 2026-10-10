@@ -30,9 +30,9 @@ export async function sendDeviceRoom(
     if (matches.length !== 1) throw new DeviceRequestError(DEVICE_RECORD_UNAVAILABLE, 400);
     return matches[0]!.id;
   });
-  // Room-name lookup runs inside the verified transaction. Downstream resolveThreadTarget
-  // re-filters on spaceId, userId, and archivedAt: null, ensuring an archived or renamed
-  // room cannot match stale data between lookup and send.
+  // The name is resolved to an id inside the grant-verification transaction. Later
+  // checks filter by that id, owner, space and archive state, not by name, so a room
+  // renamed after this lookup still receives the send; that matches the web send.
   const target = await resolveThreadTarget(deps.prisma, actor, { groupId });
   if (target.kind !== "group" || (input.threadId && input.threadId !== target.threadId))
     throw new DeviceRequestError(DEVICE_RECORD_UNAVAILABLE);
