@@ -3942,6 +3942,7 @@ export function ShellPage({
                     {!inGroup && active ? (
                       <DropdownMenuCheckboxItem
                         checked={workspaceShown}
+                        aria-checked={workspaceShown}
                         closeOnClick
                         data-workspace-toggle
                         onClick={() => {
@@ -3955,7 +3956,7 @@ export function ShellPage({
                         }}
                       >
                         <Monitor size={16} strokeWidth={1.6} aria-hidden="true" />
-                        {t`Agent computer`}
+                        {t`Workspace pane`}
                       </DropdownMenuCheckboxItem>
                     ) : null}
                     <ThreadSettingsMenuItem
@@ -6290,6 +6291,16 @@ export const Composer = memo(function Composer({
             runtimeProblem={runtimeProblem}
             catalog={modelCatalog}
             botName={refusalBotName}
+            onRetry={() => {
+              // Prepare a continuation, never silently replay a possibly completed action.
+              setDraft(
+                (current) =>
+                  current ||
+                  t`Continue the interrupted run from its saved results. Check any uncertain action before repeating it.`,
+              );
+              onDismissError();
+              focusComposer();
+            }}
             onConnect={onConnectPin}
             onChangeModel={onChangeModel}
             onEnableExperimental={onEnableExperimental}

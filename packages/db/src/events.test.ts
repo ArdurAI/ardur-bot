@@ -176,7 +176,7 @@ describe("finalizeRun", () => {
     ).toBe("");
   });
 
-  it("retries a transaction conflict without duplicating the terminal event or notification", async () => {
+  it("retries conflicts within the persist deadline without waiting for evidence enqueue", async () => {
     const conflict = Object.assign(new Error("serialization conflict"), { code: "P2034" });
     const createEvent = vi.fn(async () => ({ threadId: "thread-1", seq: 0 }));
     const tx = {
@@ -209,10 +209,13 @@ describe("finalizeRun", () => {
     });
     const publish = vi.fn(async () => undefined);
 
+    const deadlineAt = Date.now() + 60_000;
+    const enqueue = vi.fn(() => new Promise<never>(() => {}));
     await expect(
       finalizeRun(
         { $transaction: transaction } as unknown as PrismaClient,
         {
+          deadlineAt,
           onCommitted,
           spaceId: "space-1",
           threadId: "thread-1",
@@ -241,8 +244,14 @@ describe("finalizeRun", () => {
           },
         },
         { publish } as never,
+        { enqueue } as never,
       ),
     ).resolves.toEqual({ continuationRunId: null });
+    expect(enqueue).toHaveBeenCalledOnce();
+    const options = transaction.mock.calls.at(-1)?.[1] as { maxWait: number; timeout: number };
+    expect(options.maxWait + options.timeout).toBeLessThanOrEqual(60_000);
+    expect(options.maxWait).toBeGreaterThan(0);
+    expect(options.timeout).toBeGreaterThan(0);
     expect(onCommitted).toHaveBeenCalledTimes(1);
     expect(transaction).toHaveBeenCalledTimes(2);
     expect(createEvent).toHaveBeenCalledOnce();
@@ -2661,4 +2670,24 @@ describe("appendEvent", () => {
     expect(persisted.delta).not.toMatch(/[\uD800-\uDFFF]/);
     expect(() => JSON.stringify(persisted)).not.toThrow();
   });
+});
+
+it("never starts terminal persistence after its deadline", async () => {
+  const transaction = vi.fn();
+  await expect(
+    finalizeRun({ $transaction: transaction } as unknown as PrismaClient, {
+      spaceId: "space-1",
+      threadId: "thread-1",
+      botId: "bot-1",
+      runId: "run-1",
+      taskId: "task-1",
+      attemptId: "attempt-1",
+      leaseOwner: "worker",
+      leaseFence: 1,
+      outcome: "failed",
+      error: "stopped",
+      deadlineAt: Date.now(),
+    }),
+  ).rejects.toMatchObject({ step: "persist" });
+  expect(transaction).not.toHaveBeenCalled();
 });

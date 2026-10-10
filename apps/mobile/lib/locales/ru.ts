@@ -1563,4 +1563,7 @@ export const RU_MESSAGES: Record<string, string> = {
     "Используйте путь внутри папки этого бота или зарегистрированной папки.",
   "Experimental turned on for this runtime":
     "Экспериментальный режим включён для этой среды выполнения",
+  "The bot stopped responding. Retry the run.": "Бот перестал отвечать. Повторите запуск.",
+  "Continue the interrupted run from its saved results. Check any uncertain action before repeating it.":
+    "Продолжите прерванный запуск с сохранённых результатов. Проверьте действия с неизвестным результатом, прежде чем повторять их.",
 };

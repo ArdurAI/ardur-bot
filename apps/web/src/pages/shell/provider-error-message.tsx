@@ -8,6 +8,7 @@ import {
   FailureCategoryIdSchema,
   failureCategory,
   failureCategoryFromText,
+  RUN_STALLED_MESSAGE,
   runtimeNames,
 } from "@ardurbot/contracts";
 import { Button } from "@ardurbot/ui-web";
@@ -30,6 +31,7 @@ export function ProviderErrorMessage({
   text,
   providerErrorKind,
   onChangeModel,
+  onRetry,
   runtimeProblem,
   catalog,
   onConnect,
@@ -42,6 +44,7 @@ export function ProviderErrorMessage({
   text: string;
   providerErrorKind?: ProviderErrorKind;
   onChangeModel?: () => void;
+  onRetry?: () => void;
   runtimeProblem?: RuntimeProblem;
   catalog?: ModelCatalogEntry[];
   onConnect?: () => void;
@@ -53,6 +56,20 @@ export function ProviderErrorMessage({
   onOpenSpaceModels?: () => void;
 }) {
   const { t, i18n } = useLingui();
+  if (text === RUN_STALLED_MESSAGE) {
+    return (
+      <>
+        <span className="min-w-0 flex-1">
+          <Trans>The bot stopped responding. Retry the run.</Trans>
+        </span>
+        {onRetry ? (
+          <Button variant="link" size="xs" onClick={onRetry}>
+            <Trans>Retry</Trans>
+          </Button>
+        ) : null}
+      </>
+    );
+  }
   if (runtimeProblem) {
     // A classified runtime refusal shows its category's sentence — the setting that said
     // no, with this bot's and the runtime's names — plus one button per table action.

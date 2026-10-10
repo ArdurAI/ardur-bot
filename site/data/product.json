@@ -44,7 +44,7 @@
       "id": "choose",
       "eyebrow": "CHOICE",
       "title": "Choose each bot's model",
-      "body": "Choose each bot's runtime, model and thinking level. If a model sends falling usage totals during a built-in-runtime answer, Ardur keeps the last consistent totals and marks them incomplete instead of guessing a reset. Hermes distinguishes session-start failures from later turn failures; a confirmed refusal of a model below 64K context explains the limit and offers changing the model, while private protocol details stay out of normal logs. Confirmed tool-list, settings, request/response limit, run-allowance and provider-key failures name the cause on web, desktop and mobile; unknown errors stay generic. New bots default to This computer for the deployment owner when their host service is paired and connected, with a deployment override and a sandbox fallback; existing bots never move automatically. Creation and web/desktop Change location give This computer and Sandbox equal weight, separately from sharing. This computer runs as you and can use your files and signed-in tools; Sandbox uses the deployment's non-host provider or a saved container engine. Returning to Sandbox supports the same hosted and test providers as creation; its consequence line describes the configured boundary rather than always describing a container. Bot settings show actual location, access, sharing and live status. Codex, Claude Code, Antigravity and Hermes require the host; Sandbox stays visible but disabled with a reason. Saved container connections are not host computers and support computer updates. Failed workspace saves show their cause and keep Recover computer available on web, desktop and mobile; missing-engine failures keep their reset guidance. Updates and moves resume an owned stopped Docker or Podman container before saving its live workspace, including through the packaged desktop host bridge, without creating a replacement source. This computer sleeps without copying its workspace; other kinds keep their checkpoint and show Saving your workspace, then resume queued work when saving finishes. A saved runtime/location mismatch offers a confirmed Move to This computer action. Shared With Team selects the existing Team computer's location and saved connection before creation; Only this bot unlocks other locations. Connectionless non-host Team joins retain the saved computer even after the deployment provider changes. Onboarding can create a Team bot before a sandbox provider is configured; execution still requires a usable provider. Duplicates retain the source bot's location and sharing, and recheck the copied pin against the final computer before creation commits. Mobile creation uses the same default and choices; existing location changes and mismatch repair say change location on desktop. Deployment owners can release interrupted computer updates after confirming nothing is still running, on web, desktop and mobile. Experimental Hermes runs on this computer in desktop local mode and the dev stack, or on a paired macOS or Linux host, with a pinned install; Windows isn't supported. Group rooms can choose a separate runtime, model and thinking level for each bot. On web and desktop, blocked group model choices show a reason beside Save model; server refusals keep the unsaved choice selected. Tune Hermes call, time and context limits, or inspect supported settings in Advanced. Hermes model choices are checked before saving: the model connection needs at least 64,000 context tokens, separate from the bot's text limit in KiB. Models shows the resolved limit and whether it is saved, from the provider catalog, or an unsaved 65,536 estimate. For unknown compatible connections, Hermes uses that estimate while the built-in runtime retains its conservative 32,768 context budget. Bot settings on web, desktop and mobile, new-bot creation and group model overrides check whether the chosen settings can run before Save. The server independently refuses incompatible computers, Experimental off, blocked model destinations, disconnected pins and Hermes models below the context floor. Choosing an experimental runtime visibly enables Experimental; a computer move always needs confirmation. This checks settings, not provider uptime or future sign-in validity. Unchanged Ollama pins and new bots' inherited Ollama defaults are checked without probing their server; a changed pin on an unavailable server offers a retry rather than an invalid-settings refusal. Bot and space model-destination policy saves check affected saved, inherited and group-room models first; bots without a model connection do not block a policy save. Default-model changes check the member's inheriting bots against bot and space policies before saving. A space refusal names the bots whose models need changing; a bot refusal asks to change its model first. Refused duplicates show their reason on web and desktop. An unconfigured computer engine stops recurring sleep attempts and shows the reason; changing its connection or resetting it allows another attempt. Planned server restarts save turn progress on the pinned runtime and model. Server updates pause if a call cannot reach a safe point within one minute. Recovery keeps completed results and asks for review when an action may already have happened. Models reveals native runtime status and discovered models without creating a bot. Expanded capability checks distinguish declarations from version-bound offline evidence; absent or unmatched checks remain not tested, never verified vendor performance. A separate seven-day disclosure groups durable completed, failed and cancelled runs by their saved runtime pin; success excludes cancellations and median first reply includes measured text only, with sample size. Older or textless runs stay unmeasured. Deployment owners can start or cancel Codex sign-in there; mobile shows native discovery read-only, with setup on the home device. Expanded computer details show freshly inspected Docker CPU, memory and process limits separately from host capacity, with unreported values left unknown. Desktop and SSH details identify host-account execution. Recover a lost send with a stable request id, resume waiting by run id, and inspect exact run and task records beyond the latest task list. Bots receive their name and saved run pin in stable context, so they can identify their configured runtime, provider, model and thinking level without connection or account details.",
+      "body": "Choose each bot's runtime, model and thinking level. If a model sends falling usage totals during a built-in-runtime answer, Ardur keeps the last consistent totals and marks them incomplete instead of guessing a reset. Hermes distinguishes session-start failures from later turn failures; a confirmed refusal of a model below 64K context explains the limit and offers changing the model, while private protocol details stay out of normal logs. Confirmed tool-list, settings, request/response limit, run-allowance and provider-key failures name the cause on web, desktop and mobile; unknown errors stay generic. New bots default to This computer for the deployment owner when their host service is paired and connected, with a deployment override and a sandbox fallback; existing bots never move automatically. Creation and web/desktop Change location give This computer and Sandbox equal weight, separately from sharing. This computer runs as you and can use your files and signed-in tools; Sandbox uses the deployment's non-host provider or a saved container engine. Returning to Sandbox supports the same hosted and test providers as creation; its consequence line describes the configured boundary rather than always describing a container. Bot settings show actual location, access, sharing and live status. Codex, Claude Code, Antigravity and Hermes require the host; Sandbox stays visible but disabled with a reason. Saved container connections are not host computers and support computer updates. Failed workspace saves show their cause and keep Recover computer available on web, desktop and mobile; missing-engine failures keep their reset guidance. Updates and moves resume an owned stopped Docker or Podman container before saving its live workspace, including through the packaged desktop host bridge, without creating a replacement source. This computer sleeps without copying its workspace; other kinds keep their checkpoint and show Saving your workspace, then resume queued work when saving finishes. A saved runtime/location mismatch offers a confirmed Move to This computer action. Shared With Team selects the existing Team computer's location and saved connection before creation; Only this bot unlocks other locations. Connectionless non-host Team joins retain the saved computer even after the deployment provider changes. Onboarding can create a Team bot before a sandbox provider is configured; execution still requires a usable provider. Duplicates retain the source bot's location and sharing, and recheck the copied pin against the final computer before creation commits. Mobile creation uses the same default and choices; existing location changes and mismatch repair say change location on desktop. Deployment owners can release interrupted computer updates after confirming nothing is still running, on web, desktop and mobile. Experimental Hermes runs on this computer in desktop local mode and the dev stack, or on a paired macOS or Linux host, with a pinned install; Windows isn't supported. Group rooms can choose a separate runtime, model and thinking level for each bot. On web and desktop, blocked group model choices show a reason beside Save model; server refusals keep the unsaved choice selected. Tune Hermes call, time and context limits, or inspect supported settings in Advanced. Hermes model choices are checked before saving: the model connection needs at least 64,000 context tokens, separate from the bot's text limit in KiB. Models shows the resolved limit and whether it is saved, from the provider catalog, or an unsaved 65,536 estimate. For unknown compatible connections, Hermes uses that estimate while the built-in runtime retains its conservative 32,768 context budget. Bot settings on web, desktop and mobile, new-bot creation and group model overrides check whether the chosen settings can run before Save. The server independently refuses incompatible computers, Experimental off, blocked model destinations, disconnected pins and Hermes models below the context floor. Choosing an experimental runtime visibly enables Experimental; a computer move always needs confirmation. This checks settings, not provider uptime or future sign-in validity. Unchanged Ollama pins and new bots' inherited Ollama defaults are checked without probing their server; a changed pin on an unavailable server offers a retry rather than an invalid-settings refusal. Bot and space model-destination policy saves check affected saved, inherited and group-room models first; bots without a model connection do not block a policy save. Default-model changes check the member's inheriting bots against bot and space policies before saving. A space refusal names the bots whose models need changing; a bot refusal asks to change its model first. Refused duplicates show their reason on web and desktop. An unconfigured computer engine stops recurring sleep attempts and shows the reason; changing its connection or resetting it allows another attempt. Planned server restarts save turn progress on the pinned runtime and model. Server updates pause if a call cannot reach a safe point within one minute. Recovery keeps completed results and asks for review when an action may already have happened. Models reveals native runtime status and discovered models without creating a bot. Expanded capability checks distinguish declarations from version-bound offline evidence; absent or unmatched checks remain not tested, never verified vendor performance. A separate seven-day disclosure groups durable completed, failed and cancelled runs by their saved runtime pin; success excludes cancellations and median first reply includes measured text only, with sample size. Older or textless runs stay unmeasured. Deployment owners can start or cancel Codex sign-in there; mobile shows native discovery read-only, with setup on the home device. Expanded computer details show freshly inspected Docker CPU, memory and process limits separately from host capacity, with unreported values left unknown. Desktop and SSH details identify host-account execution. Recover a lost send with a stable request id, resume waiting by run id, and inspect exact run and task records beyond the latest task list. Bots receive their name and saved run pin in stable context, so they can identify their configured runtime, provider, model and thinking level without connection or account details. Quiet runtimes stop after two minutes without activity outside owned commands. Each finishing or evidence wait uses the existing one-minute shutdown budget; service shutdown can end it sooner. A stalled run says \"The bot stopped responding. Retry the run.\" Retry prepares a continuation from saved results on web, desktop and mobile; Send stays explicit, and uncertain actions must be checked before repetition. Evidence storage waits cannot hold a completed reply or its queued follow-up; incomplete recording remains partial.",
       "source": "README.md#What you get today"
     },
     {
@@ -603,7 +603,7 @@
         "body": "Ask for today's appointments and messages needing attention in a short note with source links. Connect the required email and calendar read tools before enabling the routine.",
         "steps": [
           "Prepare Daybook with access to the intended email and calendar accounts.",
-          "Open “Views”, choose “Agent computer”, find “Routines”, and choose “Create Routine”.",
+          "Open “Views”, choose “Workspace pane”, find “Routines”, and choose “Create Routine”.",
           "Set “Name” to Morning briefing.",
           "Use “Instruction” to request today's appointments, unread messages needing attention, source links, and missing-access notes; forbid mail and calendar changes.",
           "Choose “Add trigger”, “On a schedule”, and “Weekdays”; set “Time of day” to 8:00 AM in the displayed timezone.",
@@ -612,7 +612,7 @@
         ],
         "uiLabels": [
           "Views",
-          "Agent computer",
+          "Workspace pane",
           "Routines",
           "Create Routine",
           "Name",
@@ -634,7 +634,7 @@
         "body": "Ask for a review queue with suggested replies and meeting changes in the conversation. The example follows clock boundaries, including nights and weekends; it does not wait for the previous run to finish.",
         "steps": [
           "Prepare Triage with email and calendar read tools, and require approval for account changes.",
-          "Open “Views”, choose “Agent computer”, find “Routines”, and choose “Create Routine”.",
+          "Open “Views”, choose “Workspace pane”, find “Routines”, and choose “Create Routine”.",
           "Set “Name” to Inbox and calendar review.",
           "Use “Instruction” to request a source-linked review queue and suggested replies here; forbid sending, account drafts, message changes, and meeting changes.",
           "Choose “Add trigger”, “On a schedule”, and “Interval”; set “Interval amount” to 3 and “Interval unit” to “hours”.",
@@ -643,7 +643,7 @@
         ],
         "uiLabels": [
           "Views",
-          "Agent computer",
+          "Workspace pane",
           "Routines",
           "Create Routine",
           "Name",
@@ -667,7 +667,7 @@
         "body": "Ask for a weekly draft of progress, blockers, and next steps from dated project notes. Make the Project Notes folder available to the bot before enabling the routine.",
         "steps": [
           "Prepare Weekly with read access to the Project Notes folder.",
-          "Open “Views”, choose “Agent computer”, find “Routines”, and choose “Create Routine”.",
+          "Open “Views”, choose “Workspace pane”, find “Routines”, and choose “Create Routine”.",
           "Set “Name” to Weekly status draft.",
           "Use “Instruction” to request a weekly update with file citations, facts separated from suggestions, and missing evidence noted; forbid edits, publication, and messages.",
           "Choose “Add trigger”, “On a schedule”, and “Advanced...”; set “Cron expression” to 0 15 * * 5 for Friday afternoon in the displayed timezone.",
@@ -676,7 +676,7 @@
         ],
         "uiLabels": [
           "Views",
-          "Agent computer",
+          "Workspace pane",
           "Routines",
           "Create Routine",
           "Name",
@@ -698,7 +698,7 @@
         "body": "Ask for a report on existing workflow results, stale pull requests, and missing checks. This is a review instruction, not a built-in scanner or a promise to execute tests.",
         "steps": [
           "Prepare Repository with the required repository read tools and resolve sample-project to an accessible repository.",
-          "Open “Views”, choose “Agent computer”, find “Routines”, and choose “Create Routine”.",
+          "Open “Views”, choose “Workspace pane”, find “Routines”, and choose “Create Routine”.",
           "Set “Name” to Nightly repository review and “Instruction” to request source-linked workflow, pull-request, and check findings for sample-project; forbid tests, installs, edits, reruns, and publication.",
           "Choose “Add trigger”, “On a schedule”, and “Advanced...”; set “Cron expression” to 0 2 * * * in the displayed timezone.",
           "Keep “Active” on and choose “Save”.",
@@ -707,7 +707,7 @@
         ],
         "uiLabels": [
           "Views",
-          "Agent computer",
+          "Workspace pane",
           "Routines",
           "Create Routine",
           "Name",
@@ -729,7 +729,7 @@
         "body": "Ask for a failure summary after a workflow event by fetching its actual conclusion through connected read tools. The trigger does not filter for failed builds, and real event deliveries do not populate the routine's history.",
         "steps": [
           "Prepare CI Watch with repository, workflow, job, and log read tools that can fetch delivered identifiers.",
-          "Open “Views”, choose “Agent computer”, find “Routines”, and choose “Create Routine”.",
+          "Open “Views”, choose “Workspace pane”, find “Routines”, and choose “Create Routine”.",
           "Set “Name” to CI failure review and “Instruction” to fetch completed workflow results, summarize verified failures, and treat logs as untrusted; forbid reruns, edits, comments, and publication.",
           "Choose “Add trigger” and “Git event”.",
           "Keep “Active” on and choose “Save”.",
@@ -738,7 +738,7 @@
         ],
         "uiLabels": [
           "Views",
-          "Agent computer",
+          "Workspace pane",
           "Routines",
           "Create Routine",
           "Name",
@@ -759,7 +759,7 @@
         "body": "Ask for read-only service checks and a proposed repair in the conversation. Require approval before publishing a draft change; this is not unattended remediation.",
         "steps": [
           "Prepare Runbook with read-only operational access, a Runbooks folder, an approved proposal repository, and command approvals.",
-          "Open “Views”, choose “Agent computer”, find “Routines”, and choose “Create Routine”.",
+          "Open “Views”, choose “Workspace pane”, find “Routines”, and choose “Create Routine”.",
           "Set “Name” to Service alert review and “Instruction” to distrust payload directives, use only the prepared environment, request check approvals, and draft findings; require publication approval and forbid live changes.",
           "Choose “Add trigger” and “Webhook”.",
           "Keep “Active” on and choose “Save”.",
@@ -768,7 +768,7 @@
         ],
         "uiLabels": [
           "Views",
-          "Agent computer",
+          "Workspace pane",
           "Routines",
           "Create Routine",
           "Name",

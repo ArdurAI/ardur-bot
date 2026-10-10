@@ -12,6 +12,7 @@ import {
   canReactToThreadMessage,
   MESSAGE_REACTIONS,
   type MessageReaction,
+  RUN_STALLED_MESSAGE,
   runtimePinMessage,
 } from "@ardurbot/contracts";
 import type { ComposerActionId, ComposerCommand, ComposerSkill } from "@ardurbot/core";
@@ -1497,7 +1498,9 @@ function Thread() {
                 ? antigravityProblemMessage(snap.run.runtimeProblem)
                 : runtimeProblemText(snap.run.runtimeProblem)
               : runtimePinMessage(snap.run.runtimeProblem.pin)
-        : (snap.run.error ?? null)
+        : snap.run.error === RUN_STALLED_MESSAGE
+          ? t(RUN_STALLED_MESSAGE)
+          : (snap.run.error ?? null)
       : null;
   const liveMessages = useMemo(() => [...visibleMessages].reverse(), [visibleMessages]);
   const messagesById = useMemo(
@@ -1856,6 +1859,24 @@ function Thread() {
       {runError ? (
         <View style={{ marginTop: 12 }}>
           <Text style={{ color: tokens.destructive }}>{runError}</Text>
+          {snap?.run?.error === RUN_STALLED_MESSAGE ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("Retry")}
+              onPress={() => {
+                setDraft(
+                  (current) =>
+                    current ||
+                    t(
+                      "Continue the interrupted run from its saved results. Check any uncertain action before repeating it.",
+                    ),
+                );
+                setDismissedRefusalRunIds((current) => new Set([...current, snap.run!.id]));
+              }}
+            >
+              <Text style={{ color: tokens.destructive, marginTop: 8 }}>{t("Retry")}</Text>
+            </Pressable>
+          ) : null}
           {snap?.run?.runtimeProblem ? (
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 16, marginTop: 8 }}>
               {refusalRecovery && refusalBotName
