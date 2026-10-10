@@ -40,9 +40,9 @@ export async function withTransactionRetry<T>(
       return await operation();
     } catch (error) {
       if (!isRetryableTransactionConflict(error) || attempt >= maxAttempts) {
-        if (isRetryableTransactionConflict(error)) {
-          Object.assign(error, { retryable: true });
-        }
+        // Callers can offer a retry instead of reporting a raw write conflict.
+        if (isRetryableTransactionConflict(error))
+          Object.assign(error as object, { retryable: true });
         throw error;
       }
       const backoff = Math.min(maxDelayMs, baseDelayMs * 2 ** (attempt - 1));

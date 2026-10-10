@@ -98,7 +98,7 @@ describe("withTransactionRetry", () => {
     }).catch((err) => err);
 
     expect(error).toBe(conflict);
-    expect(error.retryable).toBe(true);
+    expect((error as { retryable?: boolean }).retryable).toBe(true);
     expect(operation).toHaveBeenCalledTimes(3);
     expect(sleep).toHaveBeenCalledTimes(2);
   });
