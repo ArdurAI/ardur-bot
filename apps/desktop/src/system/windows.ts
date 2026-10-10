@@ -1,5 +1,6 @@
 import type { Session } from "electron";
 import { BrowserWindow, shell } from "electron";
+import { desktopAccessibilityWebPreferences } from "../accessibility.js";
 import { safeExternalUrl } from "../setup-config.js";
 
 export function createQuickAccessWindow(input: {
@@ -28,6 +29,7 @@ export function createQuickAccessWindow(input: {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
+      ...desktopAccessibilityWebPreferences(),
     },
   });
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
@@ -64,6 +66,7 @@ export function openLinkViewer(raw: string): BrowserWindow {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
+      ...desktopAccessibilityWebPreferences(),
     },
   });
   window.webContents.session.setPermissionCheckHandler(() => false);

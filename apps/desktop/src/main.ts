@@ -19,7 +19,7 @@ import {
   session,
   shell,
 } from "electron";
-import { enableDesktopAccessibility } from "./accessibility.js";
+import { applyDesktopAccessibilitySwitches, enableDesktopAccessibility } from "./accessibility.js";
 import {
   applicationMenuTemplate,
   applyAppShortcutMenu,
@@ -229,8 +229,9 @@ installSmokeProgress?.stage("isolated profile configured");
 // Match the installed ardur.desktop entry for Wayland/X11 grouping while
 // retaining the legacy internal name used by encrypted storage.
 if (process.platform === "linux") app.setDesktopName("ardur");
-// Chromium ignores this switch once ready; it must be appended before that.
+// Chromium ignores these switches once ready; they must be appended before that.
 capDiskCacheSize(app.commandLine);
+applyDesktopAccessibilitySwitches(app.commandLine);
 if (!app.requestSingleInstanceLock()) {
   if (INSTALL_SMOKE) console.error("smoke: isolated profile instance lock refused");
   process.exit(INSTALL_SMOKE ? 1 : 0);

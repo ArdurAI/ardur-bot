@@ -1,5 +1,7 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
+import { ThreadSendResultSchema } from "./chief-loop.js";
+import { GroupSchema } from "./domain.js";
 import { FailureCategoryIdSchema } from "./failure-categories.js";
 import { RunStatus } from "./ids.js";
 
@@ -208,6 +210,22 @@ export function homeSignedText(instanceId: string, fingerprint: string, challeng
 
 // Signed device operations are separate from the existing session RPC list shapes.
 const deviceId = deviceString().min(1).max(128);
+export const DeviceRoomsListInputSchema = z.strictObject({});
+export const DeviceRoomsListOutputSchema = z.array(GroupSchema);
+export const DeviceRoomSendOutputSchema = ThreadSendResultSchema;
+export const DeviceRoomSendInputSchema = z
+  .strictObject({
+    groupId: deviceId.optional(),
+    roomName: deviceString().min(1).max(128).optional(),
+    threadId: deviceId.optional(),
+    clientNonce: deviceString().min(16).max(128),
+    text: deviceString()
+      .min(1)
+      .max(32_000)
+      .refine((text) => text.trim().length > 0),
+  })
+  .refine((value) => Boolean(value.groupId) !== Boolean(value.roomName), "Choose one room.");
+export type DeviceRoomSendInput = z.infer<typeof DeviceRoomSendInputSchema>;
 export const DeviceRunGetInputSchema = z.strictObject({ runId: deviceId });
 export const DeviceTaskGetInputSchema = z.strictObject({ taskId: deviceId });
 export const DeviceRunsListInputSchema = z.strictObject({

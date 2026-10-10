@@ -101,3 +101,89 @@ it("accepts paired surrogates and validates omitted object keys too", () => {
   expect(canonicalDispatchJson({ "🚀": "🚀" })).toBe('{"🚀":"🚀"}');
   expect(() => canonicalDispatchJson({ "\ud800": undefined })).toThrow("well-formed Unicode");
 });
+
+it("keeps the daily read vectors on the existing computer and board contracts", async () => {
+  const { appContract } = await import("./rpc.js");
+  const { boardContract } = await import("./board.js");
+  for (const vector of vectors.requests.filter((row) => row.operation === "rpc")) {
+    const body = vector.body as { procedure: string; input: unknown };
+    if (body.procedure === "computer/list")
+      expect(appContract.computer.list["~orpc"].outputSchema).toBeDefined();
+    else if (body.procedure === "board/snapshot")
+      expect(boardContract.snapshot["~orpc"].inputSchema!.safeParse(body.input).success).toBe(true);
+    else if (body.procedure === "board/show")
+      expect(boardContract.show["~orpc"].inputSchema!.safeParse(body.input).success).toBe(true);
+    else throw new Error("Unexpected fixture procedure");
+  }
+});
+it("validates every room request vector and retains multiple-run and receipt-only outputs", async () => {
+  const {
+    DeviceRoomsListInputSchema,
+    DeviceRoomSendInputSchema,
+    DeviceRoomSendOutputSchema,
+    DeviceRoomsListOutputSchema,
+  } = await import("./dispatch.js");
+  const all = JSON.parse(
+    readFileSync(
+      new URL("../../../apps/cli/fixtures/device-operations.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  for (const vector of all.requests) {
+    if (vector.operation === "rooms/list")
+      expect(DeviceRoomsListInputSchema.parse(vector.body)).toEqual({});
+    if (vector.operation === "rooms/send")
+      expect(DeviceRoomSendInputSchema.parse(vector.body)).toEqual(vector.body);
+  }
+  for (const vector of all.responses) {
+    if (vector.operation === "rooms/list")
+      expect(DeviceRoomsListOutputSchema.parse(vector.body)).toEqual(vector.body);
+    if (vector.operation === "rooms/send")
+      expect(DeviceRoomSendOutputSchema.parse(vector.body)).toEqual(vector.body);
+  }
+});
+it("denies malformed room targets, unbounded text, invalid Unicode and impersonation fields", async () => {
+  const { DeviceRoomSendInputSchema, DeviceRoomsListInputSchema } = await import("./dispatch.js");
+  const base = { groupId: "room", clientNonce: "fixture-room-request", text: "hello" };
+  for (const input of [
+    { ...base, roomName: "Room" },
+    { ...base, groupId: undefined },
+    { ...base, text: " " },
+    { ...base, text: "x".repeat(32001) },
+    { ...base, text: "\ud800" },
+    { ...base, clientNonce: "short" },
+    { ...base, userId: "foreign" },
+    { ...base, spaceId: "foreign" },
+    { ...base, botId: "foreign" },
+    { ...base, mentions: ["foreign"] },
+  ])
+    expect(DeviceRoomSendInputSchema.safeParse(input).success).toBe(false);
+  expect(DeviceRoomsListInputSchema.safeParse({ userId: "foreign" }).success).toBe(false);
+});
+
+it("validates the daily read response fixtures against their unchanged output contracts", async () => {
+  const { appContract } = await import("./rpc.js");
+  const { BoardProblemSchema, boardContract } = await import("./board.js");
+  const all = JSON.parse(
+    readFileSync(
+      new URL("../../../apps/cli/fixtures/device-operations.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  for (const vector of all.responses.filter(
+    (row: { operation: string }) => row.operation === "rpc",
+  )) {
+    if (vector.status === 403) {
+      expect(BoardProblemSchema.parse(vector.body.problem)).toEqual(vector.body.problem);
+      expect(vector.body.message).toBe(vector.body.problem.message);
+    } else if (vector.procedure === "computer/list")
+      expect(appContract.computer.list["~orpc"].outputSchema!.parse(vector.body)).toEqual(
+        vector.body,
+      );
+    else if (vector.procedure === "board/snapshot")
+      expect(boardContract.snapshot["~orpc"].outputSchema!.parse(vector.body)).toEqual(vector.body);
+    else if (vector.procedure === "board/show")
+      expect(boardContract.show["~orpc"].outputSchema!.parse(vector.body)).toEqual(vector.body);
+    else throw new Error("Unexpected fixture procedure");
+  }
+});

@@ -31,6 +31,29 @@ const requests = [
     operation: "messages/get",
     body: { groupId: "fixture-room", threadId: "fixture-thread", before: 12 },
   },
+  { operation: "rpc", body: { procedure: "computer/list", input: null } },
+  {
+    operation: "rpc",
+    body: { procedure: "board/snapshot", input: { workspaceId: "fixture-board" } },
+  },
+  {
+    operation: "rpc",
+    body: { procedure: "board/show", input: { workspaceId: "fixture-board", id: "work-1" } },
+  },
+  { operation: "rooms/list", body: {} },
+  {
+    operation: "rooms/send",
+    body: {
+      groupId: "fixture-room",
+      threadId: "fixture-thread",
+      clientNonce: "fixture-room-request-1",
+      text: "@Beta @Gamma compare ✓ 🚀",
+    },
+  },
+  {
+    operation: "rooms/send",
+    body: { roomName: "Fixture room", clientNonce: "fixture-room-request-2", text: "hello" },
+  },
   { operation: "stop", body: { taskId: "fixture-task" } },
 ];
 const rejected = ["\ud800", "\udfff"].flatMap((unit, index) => [
@@ -45,6 +68,30 @@ const rejected = ["\ud800", "\udfff"].flatMap((unit, index) => [
     error: "Use well-formed Unicode strings.",
   },
 ]);
+const item = {
+  id: "work-1",
+  title: "Fixture task",
+  description: "",
+  acceptanceCriteria: "",
+  type: "task",
+  status: "open",
+  priority: 2,
+  assignee: null,
+  labels: [],
+  parent: null,
+  dependencies: [],
+  dueAt: null,
+  deferUntil: null,
+  estimateMinutes: null,
+  externalRef: null,
+  createdAt: "2026-10-01T00:00:00.000Z",
+  updatedAt: "2026-10-01T00:00:00.000Z",
+  closedAt: null,
+  commentCount: 0,
+  comments: [],
+  history: [],
+  closeWhenDone: false,
+};
 const fixtures = {
   version: 1,
   ...context,
@@ -54,6 +101,103 @@ const fixtures = {
     canonicalBody: canonicalDispatchJson(body),
     signedText: deviceSignedText(context.instanceId, context.proof, operation, body),
   })),
+  responses: [
+    {
+      operation: "rooms/send",
+      body: {
+        kind: "work",
+        taskId: "fixture-task",
+        runId: "fixture-run-1",
+        runIds: ["fixture-run-1", "fixture-run-2"],
+        seq: 1,
+      },
+    },
+    {
+      operation: "rooms/send",
+      body: {
+        kind: "receipt-only",
+        seq: 2,
+        receipt: {
+          id: "fixture-receipt",
+          threadId: "fixture-thread",
+          seq: 3,
+          botId: "fixture-chief",
+          requestMessageId: "fixture-message",
+          key: "greeting",
+          text: "Hello.",
+          createdAt: "2026-10-01T00:00:00.000Z",
+        },
+      },
+    },
+    {
+      operation: "rooms/list",
+      body: [
+        {
+          id: "fixture-room",
+          spaceId: "fixture-space",
+          name: "Fixture room",
+          pinned: false,
+          sectionId: null,
+          archivedAt: null,
+          threadId: "fixture-thread",
+          preview: "",
+          unread: false,
+          members: [
+            { botId: "fixture-chief", name: "Chief", color: "ink" },
+            { botId: "fixture-worker", name: "Beta", color: "ink" },
+          ],
+          updatedAt: "2026-10-01T00:00:00.000Z",
+          createdAt: "2026-10-01T00:00:00.000Z",
+        },
+      ],
+    },
+    {
+      operation: "rpc",
+      procedure: "computer/list",
+      status: 200,
+      body: [
+        {
+          botId: "fixture-bot",
+          name: "Fixture bot",
+          status: {
+            computerId: "fixture-shared-computer",
+            botId: "fixture-bot",
+            mode: "team",
+            kind: "docker",
+            state: "stopped",
+            controlHolder: "none",
+            controlBotId: null,
+            takeoverRequested: false,
+            screenAvailable: false,
+            screenWidth: 1280,
+            screenHeight: 720,
+            homeRevision: null,
+            busyBotName: null,
+            canUpdate: false,
+          },
+        },
+      ],
+    },
+    {
+      operation: "rpc",
+      procedure: "board/snapshot",
+      status: 200,
+      body: { items: [item], readyIds: [item.id], blockedIds: [] },
+    },
+    { operation: "rpc", procedure: "board/show", status: 200, body: item },
+    {
+      operation: "rpc",
+      procedure: "board/show",
+      status: 403,
+      body: {
+        message: "This board is only available to this computer's owner.",
+        problem: {
+          code: "access_lost",
+          message: "This board is only available to this computer's owner.",
+        },
+      },
+    },
+  ],
   rejected,
 };
 await writeFile(
