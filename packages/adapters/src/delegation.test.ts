@@ -2,7 +2,7 @@ import type * as Database from "@ardurbot/db";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
 import { admitDelegation, requestCancel, updateWorkerTask } from "@ardurbot/db";
 import { expect, it, vi } from "vitest";
-import { prepareDelegation } from "./delegation.js";
+import { prepareDelegation, resolveDelegationTarget } from "./delegation.js";
 import { checkDelegationExecution } from "./delegation-execution.js";
 import { piModelLimits } from "./pi-models.js";
 
@@ -246,6 +246,12 @@ it("freezes a room recipient's selection and provenance at admission", async () 
     botId: "recipient",
   };
   const tx = {
+    thread: { findFirst: vi.fn(async () => ({ groupId: "group" })) },
+    chatGroup: {
+      findFirst: vi.fn(async () => ({
+        members: [{ id: "member", modelPinRevision: pin.revision, runtimePin: pin }],
+      })),
+    },
     run: {
       findUniqueOrThrow: vi.fn(async () => ({ id: "parent", botId: "sender" })),
       findUnique: vi.fn(async () => ({ taskId: "root" })),
@@ -277,13 +283,19 @@ it("freezes a room recipient's selection and provenance at admission", async () 
       prompt: "Continue",
       targetThreadId: "room",
     },
-    {
-      selected: await resolve(),
-      binding: { bot: "fixture-binding" },
-      computer: { id: null, mode: "team", kind: null },
-    },
+    await resolveDelegationTarget(
+      tx,
+      { actingBotId: "recipient", targetThreadId: "room", userId: "owner", spaceId: "space" },
+      resolve,
+    ),
   );
   expect(resolve).toHaveBeenCalledOnce();
+  expect(resolve).toHaveBeenCalledWith(expect.objectContaining({ id: "recipient" }), {
+    tx,
+    targetThreadId: "room",
+    userId: "owner",
+    spaceId: "space",
+  });
   expect(result).toMatchObject({
     ok: true,
     runData: { runtimePin: pin, runtimePinSource: source, usageGroupId: "group" },

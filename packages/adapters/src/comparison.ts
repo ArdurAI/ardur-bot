@@ -22,6 +22,7 @@ import {
   comparisonMergeInput,
   DELEGATION_ADMISSION_TRANSACTION,
   delegationBotBinding,
+  delegationModelBinding,
   deviceDigest,
   lockDelegationRoot,
   readComparison,
@@ -31,6 +32,7 @@ import { getLogger } from "@ardurbot/logging";
 import type { DelegationResolver, PreparedDelegationTarget } from "./delegation.js";
 import { delegationFloorForModel, prepareDelegation } from "./delegation.js";
 import { destinationForModel } from "./model-locality.js";
+import { hasBotPin, requestedBotPin } from "./pin-resolution.js";
 
 type Scope = Pick<Actor, "spaceId" | "userId">;
 export type ComparisonDeps = {
@@ -50,6 +52,11 @@ export async function comparisonParticipants(
         where: { id, ...scope, archivedAt: null },
         include: { computer: true },
       });
+      const modelBinding = await delegationModelBinding(
+        deps.prisma,
+        scope,
+        hasBotPin(bot) ? requestedBotPin(bot) : null,
+      );
       const selected = await deps.resolvePin(bot);
       if (selected.kind === "problem") throw new RuntimePinError(selected);
       const participant: ComparisonParticipant = {
@@ -70,7 +77,7 @@ export async function comparisonParticipants(
         DELEGATION_LIMITS.reservationTokens,
         delegationFloorForModel(selected.pin, selected),
       );
-      return { bot, selected, participant, reservation };
+      return { bot, selected, participant, reservation, modelBinding };
     }),
   );
 }
@@ -335,7 +342,7 @@ export async function startComparison(deps: ComparisonDeps, scope: Scope, raw: C
             },
             {
               selected: entry.selected,
-              binding: { bot: delegationBotBinding(entry.bot) },
+              binding: { bot: delegationBotBinding(entry.bot), model: entry.modelBinding },
               computer: entry.participant.executing.computer,
             },
           ),
@@ -417,7 +424,7 @@ export async function mergeComparison(deps: ComparisonDeps, scope: Scope, raw: C
         },
         {
           selected: entry.selected,
-          binding: { bot: delegationBotBinding(entry.bot) },
+          binding: { bot: delegationBotBinding(entry.bot), model: entry.modelBinding },
           computer: entry.participant.executing.computer,
         },
       );

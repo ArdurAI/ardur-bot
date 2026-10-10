@@ -32,11 +32,13 @@ function harness(
   const runCreate = vi.fn(async () => ({ id: "run-b" }));
   const messageCreate = vi.fn(async () => ({ id: "message-1" }));
   const tx = {
+    spaceModelPreference: { findFirst: vi.fn(async () => null) },
+    userModelCredential: { findFirst: vi.fn(async () => null) },
     chiefPlan: { findFirst: vi.fn(async () => null) },
     delegation: { update: vi.fn(async () => ({})) },
     $queryRaw: vi.fn(async () => [{ id: "group-1" }]),
     chatGroup: {
-      findFirst: vi.fn(async () => ({
+      findFirst: vi.fn(async (_args?: unknown) => ({
         id: "group-1",
         coordinatorBotId: "bot-a",
         members: ["bot-a", "bot-b", "bot-c"].map((id) => ({
@@ -95,6 +97,7 @@ function harness(
     $transaction: vi.fn(async (callback: (value: typeof tx) => Promise<unknown>) => callback(tx)),
   } as unknown as PrismaClient;
   return {
+    tx,
     deps: {
       prisma,
       events: { notify: vi.fn(async () => undefined) },
@@ -108,6 +111,45 @@ function harness(
 }
 
 describe("group handoff ownership", () => {
+  it("uses the canonical member order for both name preview and locked admission", async () => {
+    const { deps, tx } = harness([]);
+    const read = tx.chatGroup.findFirst;
+    const group = await read();
+    read.mockClear();
+    const tied = group!.members.map((member) => ({
+      ...member,
+      createdAt: new Date(0),
+      bot: { ...member.bot, name: member.bot.id === "bot-a" ? "Source" : "Reviewer" },
+    }));
+    read.mockImplementation(async (args) => {
+      const order = (args as { include?: { members?: { orderBy?: unknown } } }).include?.members
+        ?.orderBy;
+      const canonical =
+        JSON.stringify(order) === JSON.stringify([{ createdAt: "asc" }, { id: "asc" }]);
+      return { ...group!, members: canonical ? tied : [...tied].reverse() } as never;
+    });
+    const resolve = vi.fn(async () => ({ kind: "problem" as const }));
+    const result = await handoffToGroupBot(
+      { ...deps, resolveDelegationPin: resolve } as never,
+      run,
+      "group-1",
+      {
+        confirm_name: "reviewer",
+        message: "Review",
+      },
+    );
+    expect(result).toMatchObject({ ok: true, botId: "bot-b" });
+    expect(resolve).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "bot-b" }),
+      expect.anything(),
+    );
+    const queries = read.mock.calls.filter(([args]) => (args as { include?: unknown }).include);
+    expect(queries).toHaveLength(2);
+    for (const [args] of queries)
+      expect(args).toMatchObject({
+        include: { members: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] } },
+      });
+  });
   it("resolves the recipient once before acquiring the room lock", async () => {
     const { deps } = harness([]);
     const resolve = vi.fn(async () => ({ kind: "problem" as const }));

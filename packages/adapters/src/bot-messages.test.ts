@@ -118,6 +118,10 @@ function deps(
 describe("messaging another bot", () => {
   it("resolves the recipient pin once before the admission transaction starts", async () => {
     const h = deps();
+    Object.assign(h.deps.prisma, {
+      spaceModelPreference: { findFirst: vi.fn(async () => null) },
+      userModelCredential: { findFirst: vi.fn(async () => null) },
+    });
     Object.assign(h.deps.prisma.bot, {
       findFirstOrThrow: vi.fn(async () => ({ id: "bot-target", computerId: null, computer: null })),
     });

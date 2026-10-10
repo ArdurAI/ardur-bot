@@ -15,6 +15,7 @@ import {
   bindChiefAssignment,
   createThreadMessageInTransaction,
   DELEGATION_ADMISSION_TRANSACTION,
+  GROUP_MEMBER_ORDER,
   IsolationError,
   loadChiefMemberFacts,
   lockOwnedGroup,
@@ -62,6 +63,7 @@ export async function handoffToGroupBot(
           members: {
             where: { bot: { archivedAt: null } },
             include: { bot: { select: { id: true, name: true } } },
+            orderBy: GROUP_MEMBER_ORDER,
           },
         },
       })
@@ -100,7 +102,7 @@ export async function handoffToGroupBot(
             members: {
               where: { bot: { archivedAt: null } },
               include: { bot: { select: { id: true, name: true } } },
-              orderBy: { createdAt: "asc" },
+              orderBy: GROUP_MEMBER_ORDER,
             },
           },
         }),
@@ -415,7 +417,7 @@ export async function loadGroupContext(
         include: {
           bot: { select: { id: true, name: true, title: true, description: true } },
         },
-        orderBy: { createdAt: "asc" },
+        orderBy: GROUP_MEMBER_ORDER,
       },
     },
   });

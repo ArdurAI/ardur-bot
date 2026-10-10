@@ -17,18 +17,20 @@ import {
   admitDelegation,
   DelegationAdmissionError,
   delegationBotBinding,
+  delegationModelBinding,
   finishDelegation,
   inheritedRemoteOrigin,
 } from "@ardurbot/db";
 import { selectRunPinSource } from "./group-model-pin.js";
 import { destinationForModel } from "./model-locality.js";
 import { piModelLimits } from "./pi-models.js";
+import { hasBotPin, requestedBotPin } from "./pin-resolution.js";
 import type { ResolvedRunPin } from "./run-model-pin.js";
 
 export type DelegationResolver = (
   bot: Bot,
   context?: {
-    /** Pooled reads during preflight; this does not hold an admission transaction open. */
+    /** Pooled reads during preflight, or locked reads for a newly askable room member. */
     tx: Prisma.TransactionClient;
     targetThreadId: string;
     userId: string;
@@ -44,9 +46,9 @@ export type PreparedDelegationTarget = {
   computer: DelegationSnapshot["computer"];
 };
 
-/** Resolve once on the pooled client, before the caller opens its admission transaction. */
+/** Resolve in preflight, or under the root lock when room eligibility changed. */
 export async function resolveDelegationTarget(
-  prisma: PrismaClient,
+  prisma: Prisma.TransactionClient,
   input: { spaceId: string; userId: string; actingBotId: string; targetThreadId?: string },
   resolve?: DelegationResolver,
 ): Promise<PreparedDelegationTarget> {
@@ -71,6 +73,12 @@ export async function resolveDelegationTarget(
         savedUsageGroupId: null,
       })
     : null;
+  // Capture dependencies before resolving, so an edit during resolution also fails freshness.
+  const model = await delegationModelBinding(
+    prisma,
+    input,
+    candidate?.membership?.pin ?? (hasBotPin(bot) ? requestedBotPin(bot) : null),
+  );
   const selected = await resolve?.(
     bot,
     input.targetThreadId
@@ -86,6 +94,7 @@ export async function resolveDelegationTarget(
     selected,
     binding: {
       bot: delegationBotBinding(bot),
+      ...(model ? { model } : {}),
       ...(candidate?.membership ? { membership: candidate.membership } : {}),
     },
     computer: {

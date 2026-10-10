@@ -16,6 +16,52 @@ function resolver() {
   }));
 }
 
+it.each(["default-model", "default-connection", "connection-revision", "secret-reference"])(
+  "refuses a stale %s after the root-lock wait without reserving tokens",
+  async (change) => {
+    const f = fixture();
+    const credential = {
+      id: "connection",
+      provider: "fixture",
+      secretId: "fixture-secret",
+      updatedAt: new Date(0),
+    };
+    const preference = {
+      id: "preference",
+      credentialId: credential.id,
+      modelId: "fixture",
+      updatedAt: new Date(0),
+      credential,
+    };
+    Object.assign(f.tx, {
+      spaceModelPreference: { findFirst: vi.fn(async () => preference) },
+      userModelCredential: { findFirst: vi.fn(async () => credential) },
+    });
+    if (change === "connection-revision" || change === "secret-reference")
+      Object.assign(f.bot, {
+        modelProvider: "fixture",
+        modelId: "fixture",
+        modelCredentialId: credential.id,
+      });
+    const db = f.worker();
+    const resolve = resolver();
+    const target = await resolveDelegationTarget(db, input, resolve);
+    f.tx.$queryRaw.mockImplementationOnce(async () => {
+      if (change === "default-model") preference.modelId = "replacement-model";
+      if (change === "default-connection") preference.credentialId = "replacement-connection";
+      if (change === "connection-revision") credential.updatedAt = new Date(1);
+      if (change === "secret-reference") credential.secretId = "replacement-secret";
+      return [];
+    });
+    await expect(
+      db.$transaction((tx) => prepareDelegation(tx, input, target)),
+    ).rejects.toMatchObject({ problem: { code: "authority-exceeded" } });
+    expect(resolve).toHaveBeenCalledOnce();
+    expect(f.tx.delegationRoot.update).not.toHaveBeenCalled();
+    expect(f.state().rows).toHaveLength(0);
+  },
+);
+
 it("resolves once before the root lock, then admits with the captured pin", async () => {
   const f = fixture();
   const resolve = resolver();
