@@ -1,3 +1,8 @@
+import { execFileSync } from "node:child_process";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { createRunSandbox } from "@ardurbot/adapters";
 import type { Actor, RuntimeComputerLocation } from "@ardurbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { createWorkspaceFiles } from "./workspace-files.js";
@@ -52,7 +57,7 @@ function fixture(options: { gitChanges?: boolean } = {}) {
   } as unknown as Parameters<typeof createWorkspaceFiles>[0]);
   const git = createWorkspaceGit({ sandbox: sandbox as never, files });
   const input = { botId: "bot", computerId: "computer", generation: 2 };
-  return { computer, sandbox, files, git, input };
+  return { computer, sandbox, files, git, input, db };
 }
 
 describe("workspace git observation", () => {
@@ -71,6 +76,60 @@ describe("workspace git observation", () => {
     expect(result).toMatchObject({ status: "unavailable" });
     expect(Object.keys(unsupported.sandbox)).toHaveLength(0);
   });
+
+  it.each(["desktop", "docker"])(
+    "shows and reads Git through the production %s provider factory",
+    async (kind) => {
+      const root = await realpath(await mkdtemp(path.join(tmpdir(), "workspace-git-")));
+      vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
+      try {
+        const f = fixture();
+        const home = path.join(root, "computer");
+        const workspace = path.join(home, "bots", "bot");
+        await mkdir(workspace, { recursive: true });
+        execFileSync("git", ["init", "-q", "-b", "main"], {
+          cwd: workspace,
+          env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" },
+        });
+        await writeFile(path.join(workspace, "new.txt"), "new content\n");
+        f.computer.kind = "desktop";
+        f.computer.providerRef = home;
+        const db = {
+          ...f.db,
+          deploymentSettings: { findUnique: vi.fn(async () => ({ computerHost: "this-mac" })) },
+        };
+        const sandbox = createRunSandbox(kind, {
+          dataDir: root,
+          supervisorToken: "fixture",
+          prisma: db as never,
+          secrets: {
+            load: () => {
+              throw new Error("No secret access expected");
+            },
+          },
+        });
+        const files = createWorkspaceFiles({ sandbox, home: {}, prisma: db } as never);
+        const git = createWorkspaceGit({ sandbox, files });
+        expect(await files.describe(actor, "bot")).toMatchObject({ git: true, files: "live" });
+        expect(await git.observe(actor, f.input)).toMatchObject({
+          status: "ok",
+          entries: [{ path: "new.txt", untracked: true }],
+        });
+        expect(await git.observe(actor, { ...f.input, path: "new.txt" })).toMatchObject({
+          status: "ok",
+          diff: { before: null, after: "new content" },
+        });
+        // Unsupported owners fail safely instead of falling back to the local host.
+        f.computer.kind = "docker";
+        if (kind === "docker") {
+          expect(await git.observe(actor, f.input)).toMatchObject({ status: "unavailable" });
+        }
+      } finally {
+        vi.unstubAllEnvs();
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("maps a provider status observation into the contract", async () => {
     const f = fixture();

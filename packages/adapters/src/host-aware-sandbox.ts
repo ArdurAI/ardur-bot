@@ -6,6 +6,7 @@ import type {
   ComputerInput,
   ComputerRef,
   ControlLeaseRef,
+  GitChangesResult,
   PortableFile,
   ProcessEvent,
   SandboxProvider,
@@ -244,6 +245,12 @@ export class HostAwareSandbox implements SandboxProvider {
     options?: { maxBytes?: number; preview?: boolean },
   ) {
     return (await this.route(computer)).readFile(computer, path, context, options);
+  }
+  async gitChanges(
+    ...args: Parameters<NonNullable<SandboxProvider["gitChanges"]>>
+  ): Promise<GitChangesResult> {
+    const provider = await this.route(args[0]);
+    return provider.gitChanges?.(...args) ?? { kind: "unavailable" };
   }
 
   async writeFile(computer: ComputerRef, file: PortableFile, context: AdapterContext) {
