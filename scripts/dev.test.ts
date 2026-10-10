@@ -144,8 +144,10 @@ describe("scripts/dev.ts", () => {
       ]);
 
       // Must never choose 5433
-      expect(options.env.DATABASE_URL).toContain("127.0.0.1:5434");
-      expect(options.env.DATABASE_URL).not.toContain("5433");
+      // Compare the parsed host and port; the random password can contain any digits.
+      const databaseUrl = new URL(options.env.DATABASE_URL!);
+      expect(databaseUrl.hostname).toBe("127.0.0.1");
+      expect(databaseUrl.port).toBe("5434");
       expect(options.env.REALTIME_DATABASE_URL).toBe(options.env.DATABASE_URL);
 
       // Uses two different generated passwords for admin and app role
