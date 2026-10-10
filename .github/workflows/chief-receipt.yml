@@ -69,13 +69,17 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @ardurbot/web exec playwright install --with-deps chromium
       - run: pnpm test:e2e --workers=1 --spec=chief-receipt.spec.ts
+        env:
+          CHIEF_RECEIPT_STRICT_PAINT_BUDGET: '1'
       - run: pnpm test:e2e --workers=1 --spec=chief-activity.spec.ts
       - run: pnpm test:e2e --workers=1 --spec=coordination-line.spec.ts
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
           name: chief-receipt-screenshots
-          path: apps/web/test-results
+          path: |
+            apps/web/test-results
+            playwright-report
           if-no-files-found: ignore
   bundle:
     name: Chief receipt initial bundle budget
