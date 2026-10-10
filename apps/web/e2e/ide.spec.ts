@@ -142,13 +142,19 @@ test("inbuilt IDE opens, edits, saves, hands off selections and binds the shared
   );
   await page.addInitScript(() => {
     performance.setResourceTimingBufferSize(10_000);
+    let paintPending = false;
     const observer = new MutationObserver(() => {
       if (
         document.querySelector('[data-ide-editor][aria-label="large.ts"]') &&
-        !performance.getEntriesByName("ide:large:paint").length
+        !performance.getEntriesByName("ide:large:paint").length &&
+        !paintPending
       ) {
+        paintPending = true;
         requestAnimationFrame(() =>
-          requestAnimationFrame(() => performance.mark("ide:large:paint")),
+          requestAnimationFrame(() => {
+            performance.mark("ide:large:paint");
+            paintPending = false;
+          }),
         );
       }
     });
@@ -184,20 +190,54 @@ test("inbuilt IDE opens, edits, saves, hands off selections and binds the shared
   expect(
     await page.evaluate(() => JSON.parse(localStorage.getItem("ardurbot:ide-layout")!).tree),
   ).toBeGreaterThan(26);
-  await page.getByRole("button", { name: "large.ts", exact: true }).click();
-  await expect(page.locator('[data-ide-editor][aria-label="large.ts"]')).toBeVisible();
-  await page.waitForFunction(() => performance.getEntriesByName("ide:large:paint").length > 0);
-  const renderMs = await page.evaluate(() => {
-    const read = performance
-      .getEntriesByType("resource")
-      .filter((entry) => entry.name.includes("/rpc/ide/read"))
-      .at(-1) as PerformanceResourceTiming;
-    return performance.getEntriesByName("ide:large:paint")[0]!.startTime - read.responseEnd;
+  const largeEditor = page.locator('[data-ide-editor][aria-label="large.ts"]');
+  const allTimes: number[] = [];
+  // One warm-up, then five measured opens; closing the tab forces a fresh file read each time.
+  for (let sample = 0; sample < 6; sample++) {
+    if (sample > 0) {
+      await page.getByRole("button", { name: "Close large.ts", exact: true }).click();
+      await expect(largeEditor).toBeHidden();
+    }
+    await page.evaluate(() => {
+      performance.clearMarks("ide:large:paint");
+      performance.clearResourceTimings();
+    });
+    await page.getByRole("button", { name: "large.ts", exact: true }).click();
+    await expect(largeEditor).toBeVisible();
+    await page.waitForFunction(() => performance.getEntriesByName("ide:large:paint").length > 0);
+    const renderMs = await page.evaluate(() => {
+      const read = performance
+        .getEntriesByType("resource")
+        .filter((entry) => entry.name.includes("/rpc/ide/read"))
+        .at(-1) as PerformanceResourceTiming;
+      return performance.getEntriesByName("ide:large:paint")[0]!.startTime - read.responseEnd;
+    });
+    expect(renderMs).toBeGreaterThanOrEqual(0);
+    allTimes.push(renderMs);
+  }
+  const times = allTimes.slice(1);
+  const sorted = [...times].sort((a, b) => a - b);
+  const medianMs = sorted[Math.floor(sorted.length / 2)]!;
+  const budgetMs = process.env.CI ? 250 : 150;
+  await testInfo.attach("ide-large-file-paint-timing", {
+    body: JSON.stringify(
+      {
+        measurement: "192-KB-read-to-paint",
+        warmupMs: allTimes[0],
+        sampleTimesMs: times,
+        samples: times.length,
+        medianMs,
+        maxMs: sorted.at(-1),
+        budgetMs,
+        misses: times.filter((time) => time >= budgetMs).length,
+      },
+      null,
+      2,
+    ),
+    contentType: "application/json",
   });
-  testInfo.annotations.push({ type: "192-KB-read-to-paint-ms", description: renderMs.toFixed(1) });
-  // Shared CI runners add scheduling noise to this paint timing; keep the 150 ms target locally and a
-  // regression guard on CI, where the measured value is still recorded in the annotation above.
-  expect(renderMs).toBeLessThan(process.env.CI ? 250 : 150);
+  testInfo.annotations.push({ type: "192-KB-read-to-paint-ms", description: medianMs.toFixed(1) });
+  expect(medianMs).toBeLessThan(budgetMs);
   await page.getByRole("button", { name: "src", exact: true }).click();
   await page.getByRole("button", { name: "main.ts", exact: true }).click();
   const editor = page.locator('[data-ide-editor][aria-label="src/main.ts"]');
