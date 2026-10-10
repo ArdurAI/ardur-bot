@@ -1,3 +1,4 @@
+import type { ChiefControl } from "@ardurbot/contracts";
 import { ChiefControlSchema } from "@ardurbot/contracts";
 import { CHIEF_RECONCILIATION_POLICY } from "@ardurbot/core";
 import { describe, expect, it, vi } from "vitest";
@@ -8,6 +9,7 @@ import {
   recordChiefActionReconciliation,
 } from "./chief-control.js";
 import type { PrismaClient } from "./client.js";
+import { appendEventInTransaction } from "./events.js";
 
 vi.mock("./chief-loop.js", () => ({
   loadChiefMemberFacts: vi.fn(async () => [{ id: "chief", authorized: true }]),
@@ -86,7 +88,7 @@ function fixture() {
       findUnique: vi.fn(async () => plan),
       findUniqueOrThrow: vi.fn(async () => plan),
       findMany: vi.fn(async () => [plan]),
-      update: vi.fn(async ({ data }) => Object.assign(plan, data)),
+      update: vi.fn(async ({ data }) => Object.assign(plan, data, { updatedAt: new Date() })),
     },
     chiefAssignment: {
       findUnique: vi.fn(async () => assignment),
@@ -126,6 +128,106 @@ function fixture() {
 }
 
 describe("chief correction reconciliation", () => {
+  it.each(["cancelled", "missing"])(
+    "anchors a %s unconfirmed stop without recorded effects and reconciles it once",
+    async (status) => {
+      vi.useFakeTimers();
+      try {
+        const f = fixture();
+        const since = new Date();
+        f.old.cancelConfirmedAt = null as never;
+        if (status === "missing")
+          f.tx.run.findUnique.mockImplementation(async ({ where }) =>
+            where.id === "old" ? (null as never) : f.chief,
+          );
+        f.actions.length = 0;
+        f.effects.length = 0;
+        f.plan.control = {
+          ...ChiefControlSchema.parse(f.plan.control),
+          stoppingRunIds: ["old"],
+          uncertainRunIds: [],
+          uncertaintySince: undefined,
+        };
+        vi.mocked(appendEventInTransaction).mockClear();
+        const polled: ChiefControl[] = [];
+        for (const elapsed of [60_000, CHIEF_RECONCILIATION_POLICY.orphanOutcomeAfterMs - 1]) {
+          vi.setSystemTime(since.getTime() + elapsed);
+          expect(await reconcileChiefCorrection(f.prisma, "plan")).toBeUndefined();
+          polled.push(ChiefControlSchema.parse(f.plan.control));
+          expect(f.plan.updatedAt.getTime()).toBe(since.getTime() + elapsed);
+          expect(f.tx.run.create).not.toHaveBeenCalled();
+        }
+        vi.setSystemTime(since.getTime() + CHIEF_RECONCILIATION_POLICY.orphanOutcomeAfterMs);
+        f.tx.computerExecutionLease.count.mockResolvedValue(1);
+        expect(await reconcileChiefCorrection(f.prisma, "plan")).toBeUndefined();
+        expect(ChiefControlSchema.parse(f.plan.control).stoppingRunIds).toEqual(["old"]);
+        expect(f.tx.run.create).not.toHaveBeenCalled();
+        f.tx.computerExecutionLease.count.mockResolvedValue(0);
+        expect(await reconcileChiefCorrection(f.prisma, "plan")).toMatchObject({
+          runId: "replan-run",
+        });
+        for (const control of polled)
+          expect(control).toMatchObject({
+            stoppingRunIds: ["old"],
+            uncertainRunIds: ["old"],
+            uncertaintySince: since.toISOString(),
+            pendingReplan: true,
+          });
+        const saved = ChiefControlSchema.parse(f.plan.control);
+        expect(saved).toMatchObject({
+          stoppingRunIds: [],
+          uncertainRunIds: [],
+          pendingReplan: false,
+          reconciledActions: [{ runId: "old", effectId: null, revision: 2, outcome: "unknown" }],
+        });
+        expect(saved.reconciledActions).toHaveLength(1);
+        expect(await reconcileChiefCorrection(f.prisma, "plan")).toBeUndefined();
+        expect(f.tx.run.create).toHaveBeenCalledOnce();
+        expect(f.tx.run.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ clientNonce: "chief-replan:plan:2" }),
+          }),
+        );
+        const events = vi.mocked(appendEventInTransaction).mock.calls.map(([, input]) => input);
+        expect(events.filter((event) => event.payload.state === "reconciled")).toHaveLength(1);
+        expect(events.filter((event) => event.payload.state === "replan")).toHaveLength(1);
+        expect(f.old.cancelConfirmedAt).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it.each(["completed", "failed", "confirmed"])(
+    "accepts existing %s stop evidence without introducing uncertainty",
+    async (evidence) => {
+      const f = fixture();
+      if (evidence !== "confirmed") {
+        f.old.status = evidence;
+        f.old.cancelConfirmedAt = null as never;
+      }
+      f.actions.length = 0;
+      f.effects.length = 0;
+      f.plan.control = {
+        ...ChiefControlSchema.parse(f.plan.control),
+        stoppingRunIds: ["old"],
+        uncertainRunIds: [],
+        uncertaintySince: undefined,
+      };
+      expect(await reconcileChiefCorrection(f.prisma, "plan")).toMatchObject({
+        runId: "replan-run",
+      });
+      expect(ChiefControlSchema.parse(f.plan.control)).toMatchObject({
+        stoppingRunIds: [],
+        uncertainRunIds: [],
+        pendingReplan: false,
+      });
+      expect(ChiefControlSchema.parse(f.plan.control).reconciledActions).toBeUndefined();
+      expect(await reconcileChiefCorrection(f.prisma, "plan")).toBeUndefined();
+      expect(f.tx.run.create).toHaveBeenCalledOnce();
+    },
+  );
+
   it("permits only the current chief's plan-local verification write during uncertainty", async () => {
     const f = fixture();
     f.plan.control = {
