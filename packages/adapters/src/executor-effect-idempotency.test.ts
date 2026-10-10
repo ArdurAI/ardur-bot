@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type {
   AgentRunRequest,
+  AgentRuntime,
   AgentRuntimeEvent,
   ProcessEvent,
   SandboxProvider,
@@ -30,6 +31,7 @@ import type { MemoryService } from "@ardurbot/memory";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type * as AutoReviewModule from "./auto-review.js";
 import { parseBeadsItem } from "./board/beads.js";
+import { reconcileBoardOutcomes } from "./board/reconcile.js";
 import { BoardService } from "./board/service.js";
 import { commandComputerFingerprint } from "./command-replay.js";
 import { MissingComputerProviderError } from "./computer-connections.js";
@@ -395,13 +397,17 @@ function fixture(
     return true;
   });
   const finalizeRun = vi.fn(
-    async (_input: { outcome: string }): Promise<{ continuationRunId: string | null } | false> => ({
+    async (_input: {
+      outcome: string;
+      error?: string;
+    }): Promise<{ continuationRunId: string | null } | false> => ({
       continuationRunId: null,
     }),
   );
   let calls: ToolCall[] = [];
   const runtimeRun = vi.fn(async function* (
     request: AgentRunRequest,
+    _context?: Parameters<AgentRuntime["run"]>[1],
   ): AsyncGenerator<AgentRuntimeEvent> {
     for (const call of calls) {
       const result = await request.executeTool!(call.name, call.args, call.executionId);
@@ -743,6 +749,95 @@ describe("Board outcome finalization", () => {
       expect(f.runRecord.boardCommentedAt).toBeInstanceOf(Date);
     },
   );
+  it.each(["before streaming", "during streaming"])(
+    "publishes a persisted failed outcome after finalization when a generator throws %s",
+    async (phase) => {
+      const f = boardRun();
+      const order: string[] = [];
+      f.runtimeRun.mockImplementation(async function* () {
+        if (phase === "during streaming") yield { type: "text", text: "Started work" };
+        throw new Error("Runtime stream failed");
+      });
+      f.finalizeRun.mockImplementation(async ({ outcome }) => {
+        // Cleanup must still stop pending tools before terminal delivery starts.
+        expect(f.runtimeRun.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+        order.push("finalized");
+        f.runRecord.status = outcome;
+        return { continuationRunId: null };
+      });
+      f.provider.comment.mockImplementation(async () => {
+        order.push(f.runRecord.status);
+      });
+      await f.executor.continueRun(f.runRecord.id, "worker-1");
+      expect(f.finalizeRun).toHaveBeenCalledWith(
+        expect.objectContaining({ outcome: "failed", error: "Runtime stream failed" }),
+      );
+      expect(order).toEqual(["finalized", "failed"]);
+      expect(f.provider.comment).toHaveBeenCalledExactlyOnceWith(
+        "board-a",
+        expect.stringContaining("Failed\nRuntime stream failed"),
+      );
+      expect(f.provider.close).not.toHaveBeenCalled();
+      expect(f.runRecord.boardCommentedAt).toBeInstanceOf(Date);
+    },
+  );
+  it.each(["before streaming", "during streaming", "at finalization"])(
+    "does not publish a failed outcome when cancellation wins %s",
+    async (phase) => {
+      const f = boardRun();
+      f.runtimeRun.mockImplementation(async function* () {
+        if (phase === "during streaming") yield { type: "text", text: "Started work" };
+        if (phase !== "at finalization") {
+          f.runRecord.status = "cancelled";
+          f.runRecord.cancelRequestedAt = new Date();
+        }
+        throw new Error("Runtime failed while stopping");
+      });
+      if (phase === "at finalization")
+        f.finalizeRun.mockImplementation(async () => {
+          f.runRecord.status = "cancelled";
+          f.runRecord.cancelRequestedAt = new Date();
+          return false;
+        });
+      await f.executor.continueRun(f.runRecord.id, "worker-1");
+      if (phase === "at finalization")
+        expect(f.finalizeRun).toHaveBeenCalledWith(expect.objectContaining({ outcome: "failed" }));
+      else expect(f.finalizeRun).not.toHaveBeenCalled();
+      expect(f.provider.comment).not.toHaveBeenCalled();
+      expect(f.provider.close).not.toHaveBeenCalled();
+      expect(f.runRecord.boardCommentedAt).toBeNull();
+      expect(f.runRecord.status).toBe("cancelled");
+    },
+  );
+  it("keeps a failed board delivery pending for reconciliation", async () => {
+    const f = boardRun();
+    f.runtimeRun.mockImplementation(async function* () {
+      yield { type: "text", text: "Started work" };
+      throw new Error("Runtime stream failed");
+    });
+    f.finalizeRun.mockImplementation(async ({ outcome, error }) => {
+      Object.assign(f.runRecord, { status: outcome, error });
+      return { continuationRunId: null };
+    });
+    f.provider.comment.mockRejectedValueOnce(new Error("Board unavailable"));
+    await f.executor.continueRun(f.runRecord.id, "worker-1");
+    expect(f.provider.comment).toHaveBeenCalledOnce();
+    expect(f.runRecord.status).toBe("failed");
+    expect(f.runRecord.boardCommentedAt).toBeNull();
+    expect(f.runRecord).toMatchObject({
+      boardDeliveryToken: null,
+      boardDeliveryExpiresAt: null,
+    });
+    f.prisma.run.findMany.mockResolvedValue([f.runRecord] as never);
+    await reconcileBoardOutcomes({ prisma: f.prisma as never, dataDir: "/workspace" });
+    expect(f.provider.comment).toHaveBeenCalledTimes(2);
+    expect(f.provider.comment).toHaveBeenLastCalledWith(
+      "board-a",
+      expect.stringContaining("Failed\nRuntime stream failed"),
+    );
+    expect(f.runRecord.boardCommentedAt).toBeInstanceOf(Date);
+    expect(f.provider.close).not.toHaveBeenCalled();
+  });
 });
 
 describe("mutating tool effect idempotency keys", () => {
