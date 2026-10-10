@@ -50,6 +50,8 @@ describe("redaction", () => {
     "gitlab_pat",
     "gitlab-pat",
     "gitlabPat",
+    "GITHUBPat",
+    "APIPat",
     "GITLAB_PAT",
   ])("masks credential key families: %s", (key) => {
     const secretValue = "fixture-private-value";
@@ -143,6 +145,8 @@ describe("redaction", () => {
     "adoption",
     "authCodec",
     "compat",
+    "COMPAT",
+    "COMPATIBLE",
     "format",
     "pattern",
     "dispatch",
