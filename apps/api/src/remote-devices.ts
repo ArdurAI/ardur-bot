@@ -4,6 +4,7 @@ import { admitRoutedDispatch as admitDispatch, validateDeviceApproval } from "@a
 import type { Actor, DeviceListenerState, DeviceScope, PairingPayload } from "@ardurbot/contracts";
 import {
   canonicalDispatchJson,
+  DeviceEventsInputSchema,
   DeviceMessagesGetInputSchema,
   DeviceProofSchema,
   DeviceRoomSendInputSchema,
@@ -43,6 +44,7 @@ import {
 import { ORPCError } from "@orpc/server";
 import { Hono } from "hono";
 import * as z from "zod";
+import { deviceRunEvents } from "./device-events.js";
 import { sendDeviceRoom } from "./device-rooms.js";
 import {
   DEVICE_RECORD_UNAVAILABLE,
@@ -57,6 +59,7 @@ export interface RemoteDevicesDeps {
   prisma: PrismaClient;
   events: ThreadEvents;
   jobs: JobPublisher;
+  shutdown?: AbortSignal;
   listenerState?: () => DeviceListenerState;
   trustedDesktopHints?: () => string[];
   homeProof?: (challenge: string) => { certificate: string; signature: string };
@@ -502,6 +505,15 @@ export function mountRemoteDevices(
         requireScope("read");
         const body = DeviceRunGetInputSchema.parse(input.body);
         return c.json({ run: await getDeviceRun(deps.prisma, grant, body) });
+      }
+      case "events": {
+        requireScope("read");
+        return deviceRunEvents(
+          deps,
+          grant,
+          DeviceEventsInputSchema.parse(input.body),
+          c.req.raw.signal,
+        );
       }
       case "tasks/get": {
         requireScope("read");

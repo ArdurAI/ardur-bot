@@ -352,11 +352,7 @@ import { assertTeachingSendAllowed, createTaughtSkillsService } from "./taught-s
 import { acceptTeamTask, teamBoard } from "./team.js";
 import type { createTerminalRoutes } from "./terminal-routes.js";
 import { guardComputerTakeover } from "./terminal-takeover.js";
-import {
-  isPeerRun,
-  loadMessagePage,
-  shouldForwardPeerThreadEvent,
-} from "./thread-message-pages.js";
+import { loadMessagePage, shouldForwardThreadEvent } from "./thread-message-pages.js";
 import {
   reactToThreadMessage,
   resolveThreadTarget,
@@ -2246,9 +2242,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           input.cursor,
           context.signal,
         )) {
-          if (await isPeerRun(deps.prisma, event.runId, peerRunCache)) {
-            if (!shouldForwardPeerThreadEvent(event)) continue;
-          }
+          if (!(await shouldForwardThreadEvent(deps.prisma, event, peerRunCache))) continue;
           yield event;
         }
       }),
