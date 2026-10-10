@@ -262,7 +262,8 @@ test("one header menu keeps views, computer and settings reachable by keyboard",
   await page.getByRole("menuitemcheckbox", { name: "Tasks", exact: true }).click();
   await expect(pane).toHaveAttribute("aria-hidden", "true");
 
-  for (const label of labels.slice(1, 6)) {
+  // Every view from Files through Computer screen (index 6) opens and closes beside chat.
+  for (const label of labels.slice(1, labels.indexOf("Computer screen") + 1)) {
     await trigger.click();
     await page.getByRole("menuitemcheckbox", { name: label, exact: true }).click();
     await expect(pane.getByRole("tab", { name: label, exact: true })).toHaveAttribute(
