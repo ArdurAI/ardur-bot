@@ -202,6 +202,7 @@ import {
   WorkspaceContextSchema,
   WorkspaceFileSchema,
   WorkspaceFilesSchema,
+  WorkspaceGitSchema,
   WorkspaceRootBindingSchema,
   WorkspaceTasksSchema,
 } from "./workspace.js";
@@ -739,6 +740,17 @@ export const appContract = {
         }),
       ),
     tasks: oc.input(botId).output(WorkspaceTasksSchema),
+    git: oc
+      .input(
+        z.object({
+          botId: Id,
+          computerId: Id,
+          generation: z.number().int().nonnegative(),
+          path: IdePathSchema.min(1).optional(),
+          rootId: Id.optional(),
+        }),
+      )
+      .output(WorkspaceGitSchema),
   },
   terminal: {
     close: oc

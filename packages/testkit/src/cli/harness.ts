@@ -121,6 +121,8 @@ async function main() {
     if (integration) {
       const suites = [
         "packages/testkit/src/cli-device.postgres.test.ts",
+        "packages/testkit/src/cli-stage4-home.postgres.test.ts",
+        "apps/api/src/device-events.postgres.test.ts",
         "packages/testkit/src/pi-offline.postgres.test.ts",
         "packages/testkit/src/capabilities-memory.postgres.test.ts",
         "packages/testkit/src/computer-approval.postgres.test.ts",

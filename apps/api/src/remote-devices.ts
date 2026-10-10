@@ -4,8 +4,12 @@ import { admitRoutedDispatch as admitDispatch, validateDeviceApproval } from "@a
 import type { Actor, DeviceListenerState, DeviceScope, PairingPayload } from "@ardurbot/contracts";
 import {
   canonicalDispatchJson,
+  DeviceEventsInputSchema,
   DeviceMessagesGetInputSchema,
   DeviceProofSchema,
+  DeviceRoomSendInputSchema,
+  DeviceRoomsListInputSchema,
+  DeviceRoomsListOutputSchema,
   DeviceRunGetInputSchema,
   DeviceRunsListInputSchema,
   DeviceScopeSchema,
@@ -26,6 +30,7 @@ import {
   deviceDigest,
   dispatchState,
   getBotCommunicationPolicy,
+  IsolationError,
   issueDeviceNonce,
   loadRemoteAuthority,
   requestCancel,
@@ -36,8 +41,11 @@ import {
   startDevicePairing,
   verifyDeviceSignature,
 } from "@ardurbot/db";
+import { ORPCError } from "@orpc/server";
 import { Hono } from "hono";
 import * as z from "zod";
+import { deviceRunEvents } from "./device-events.js";
+import { sendDeviceRoom } from "./device-rooms.js";
 import {
   DEVICE_RECORD_UNAVAILABLE,
   getDeviceRun,
@@ -51,6 +59,7 @@ export interface RemoteDevicesDeps {
   prisma: PrismaClient;
   events: ThreadEvents;
   jobs: JobPublisher;
+  shutdown?: AbortSignal;
   listenerState?: () => DeviceListenerState;
   trustedDesktopHints?: () => string[];
   homeProof?: (challenge: string) => { certificate: string; signature: string };
@@ -197,6 +206,7 @@ export const DEVICE_READ_PROCEDURES = new Set([
   "bots/get",
   "bots/list",
   "groups/list",
+  "computer/list",
   "agentSkills/list",
   "customizationSkills/list",
   "connectors/summary",
@@ -225,6 +235,7 @@ export const DEVICE_READ_PROCEDURES = new Set([
   "context/settings",
   "metrics/context",
 ]);
+export const STATE_CHANGING_READ_PROCEDURES = new Set(["threads/markRead"]);
 function publicGrant(grant: DeviceGrant) {
   return {
     grantId: grant.id,
@@ -243,6 +254,15 @@ export function mountRemoteDevices(
   device.onError((error, c) => {
     if (error instanceof DeviceRequestError)
       return c.json({ message: error.message }, error.status);
+    if (error instanceof IsolationError) return c.json({ message: DEVICE_RECORD_UNAVAILABLE }, 403);
+    if (
+      error instanceof ORPCError &&
+      (error.code === "FORBIDDEN" || error.code === "BAD_REQUEST" || error.code === "CONFLICT")
+    )
+      return c.json(
+        { message: error.message, ...(error.data ? { problem: error.data } : {}) },
+        error.code === "FORBIDDEN" ? 403 : error.code === "CONFLICT" ? 409 : 400,
+      );
     if (error instanceof TypeError && error.message === UNICODE_MESSAGE)
       return c.json({ message: UNICODE_MESSAGE }, 400);
     if (error instanceof z.ZodError || error instanceof SyntaxError)
@@ -351,17 +371,54 @@ export function mountRemoteDevices(
       if (!grant.scopes.includes(scope))
         throw new DeviceRequestError("This action is unavailable from this device.");
     };
-    if (["dispatch", "answer", "team-accept", "default"].includes(input.operation))
+    const verifyLiveReadGrant = async () => {
+      const live = await deps.prisma.deviceGrant.findFirst({
+        where: {
+          id: grant.id,
+          instanceId: grant.instanceId,
+          userId: grant.userId,
+          spaceId: grant.spaceId,
+          revokedAt: null,
+        },
+      });
+      const member = await deps.prisma.spaceMember.findUnique({
+        where: { spaceId_userId: { spaceId: grant.spaceId, userId: grant.userId } },
+      });
+      if (!live || !member || !live.scopes.includes("read"))
+        throw new DeviceRequestError(DEVICE_RECORD_UNAVAILABLE);
+      return live;
+    };
+    const readDevice = async (procedure: string, body: unknown) => {
+      if (STATE_CHANGING_READ_PROCEDURES.has(procedure)) await verifyLiveReadGrant();
+      const result = await deps.read(grant, procedure, body).then(
+        (value) => ({ ok: true as const, value }),
+        (error: unknown) => ({ ok: false as const, error }),
+      );
+      await verifyLiveReadGrant();
+      if (!result.ok) throw result.error;
+      return result.value;
+    };
+    if (["dispatch", "rooms/send", "answer", "team-accept", "default"].includes(input.operation))
       await requireDispatchEnabled(deps.prisma, grant.spaceId);
     switch (input.operation) {
       case "presence":
         return c.json({ ok: true });
+      case "rooms/list":
+        requireScope("read");
+        DeviceRoomsListInputSchema.parse(input.body);
+        return c.json(DeviceRoomsListOutputSchema.parse(await readDevice("groups/list", {})));
+      case "rooms/send":
+        requireScope("dispatch");
+        requireScope("ordinary");
+        return c.json(
+          await sendDeviceRoom(deps, grant, DeviceRoomSendInputSchema.parse(input.body)),
+        );
       case "rpc": {
         requireScope("read");
         const read = z.object({ procedure: z.string(), input: z.unknown() }).parse(input.body);
         if (!DEVICE_READ_PROCEDURES.has(read.procedure))
           throw new DeviceRequestError("Change permissions or connections at home.");
-        return c.json(await deps.read(grant, read.procedure, read.input));
+        return c.json(await readDevice(read.procedure, read.input));
       }
       case "team-policy": {
         requireScope("read");
@@ -458,6 +515,15 @@ export function mountRemoteDevices(
         const body = DeviceRunGetInputSchema.parse(input.body);
         return c.json({ run: await getDeviceRun(deps.prisma, grant, body) });
       }
+      case "events": {
+        requireScope("read");
+        return deviceRunEvents(
+          deps,
+          grant,
+          DeviceEventsInputSchema.parse(input.body),
+          c.req.raw.signal,
+        );
+      }
       case "tasks/get": {
         requireScope("read");
         const body = DeviceTaskGetInputSchema.parse(input.body);
@@ -484,7 +550,7 @@ export function mountRemoteDevices(
         if (!thread) throw new DeviceRequestError(DEVICE_RECORD_UNAVAILABLE);
         await requireDeviceThreadReceipt(deps.prisma, grant, body.threadId);
         // The existing read path owns bounded paging, target authorization and redaction.
-        return c.json(await deps.read(grant, "threads/messages", body));
+        return c.json(await readDevice("threads/messages", body));
       }
       case "tasks": {
         requireScope("read");

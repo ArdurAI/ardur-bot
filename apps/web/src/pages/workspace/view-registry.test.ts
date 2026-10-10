@@ -82,6 +82,17 @@ describe("workspace registry", () => {
       ).toBe(false);
     },
   );
+  it("offers Git changes only when the described context supports it", () => {
+    expect(
+      availableWorkspaceViews({ computer, context: { ...context, git: true } }).map(
+        (view) => view.id,
+      ),
+    ).toEqual(["tasks", "files", "ide", "changes", "gitChanges", "terminal", "routines", "screen"]);
+    expect(workspaceViews.gitChanges.available({ computer, context })).toBe(false);
+    expect(
+      workspaceViews.gitChanges.available({ computer, context: { ...context, git: true } }),
+    ).toBe(true);
+  });
   it("uses only described file policy, not a computer kind or saved connection", () => {
     expect(workspaceViews.files.available({ computer })).toBe(false);
     expect(

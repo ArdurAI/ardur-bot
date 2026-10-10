@@ -10,6 +10,7 @@ export const WorkspaceViewIdSchema = z.enum([
   "files",
   "ide",
   "changes",
+  "gitChanges",
   "terminal",
   "routines",
   "screen",
@@ -69,11 +70,48 @@ export const WorkspaceContextSchema = z.object({
   computerId: Id.nullable(),
   generation: z.number().int().nonnegative().nullable(),
   files: z.enum(["live", "saved", "unavailable"]),
+  /** The bot's live worktree can be observed read-only through the Git changes view. */
+  git: z.boolean().optional(),
   runsOnHost: z.boolean().optional(),
   rootId: Id.optional(),
   observedAt: z.iso.datetime(),
 });
 export type WorkspaceContext = z.infer<typeof WorkspaceContextSchema>;
+
+export const GitStatusEntrySchema = z
+  .object({
+    path: IdePathSchema.min(1),
+    staged: z.boolean(),
+    unstaged: z.boolean(),
+    untracked: z.boolean(),
+    conflict: z.boolean(),
+  })
+  .strict();
+export type GitStatusEntry = z.infer<typeof GitStatusEntrySchema>;
+
+export const GitDiffContentSchema = z
+  .object({
+    path: IdePathSchema.min(1),
+    before: z.string().nullable(),
+    after: z.string().nullable(),
+    binary: z.boolean(),
+    truncated: z.boolean(),
+  })
+  .strict();
+export type GitDiffContent = z.infer<typeof GitDiffContentSchema>;
+
+export const WorkspaceGitSchema = z
+  .object({
+    context: WorkspaceContextSchema,
+    status: z.enum(["ok", "not-repository", "unavailable"]),
+    head: z.string().nullable().optional(),
+    entries: z.array(GitStatusEntrySchema).optional(),
+    diff: GitDiffContentSchema.optional(),
+    /** True when a bound (entry cap or output size) cut the returned observation. */
+    truncated: z.boolean().optional(),
+  })
+  .strict();
+export type WorkspaceGit = z.infer<typeof WorkspaceGitSchema>;
 
 export const WorkspaceFilesSchema = z.object({
   context: WorkspaceContextSchema,

@@ -1,5 +1,7 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
+import { ThreadSendResultSchema } from "./chief-loop.js";
+import { GroupSchema } from "./domain.js";
 import { FailureCategoryIdSchema } from "./failure-categories.js";
 import { RunStatus } from "./ids.js";
 
@@ -208,6 +210,46 @@ export function homeSignedText(instanceId: string, fingerprint: string, challeng
 
 // Signed device operations are separate from the existing session RPC list shapes.
 const deviceId = deviceString().min(1).max(128);
+export const DEVICE_EVENT_WINDOW = {
+  durationMs: 10_000,
+  heartbeatMs: 2_000,
+  recheckMs: 500,
+  maxFrames: 128,
+  maxBytes: 1024 * 1024,
+  maxFrameBytes: 64 * 1024,
+  maxScannedEvents: 1024,
+} as const;
+export const DeviceEventsInputSchema = z
+  .strictObject({
+    runId: deviceId,
+    threadId: deviceId,
+    botId: deviceId.optional(),
+    groupId: deviceId.optional(),
+    cursor: z.number().int().min(-1).max(2_147_483_647).default(-1),
+  })
+  .refine((value) => Boolean(value.botId) !== Boolean(value.groupId), "Choose one bot or room.");
+export type DeviceEventsInput = z.infer<typeof DeviceEventsInputSchema>;
+export const DeviceEventWindowEndSchema = z.strictObject({
+  nextCursor: z.number().int().min(-1).max(2_147_483_647),
+  reason: z.enum(["timeout", "limit", "access_lost", "payload_too_large", "error", "shutdown"]),
+});
+export type DeviceEventWindowEnd = z.infer<typeof DeviceEventWindowEndSchema>;
+export const DeviceRoomsListInputSchema = z.strictObject({});
+export const DeviceRoomsListOutputSchema = z.array(GroupSchema);
+export const DeviceRoomSendOutputSchema = ThreadSendResultSchema;
+export const DeviceRoomSendInputSchema = z
+  .strictObject({
+    groupId: deviceId.optional(),
+    roomName: deviceString().min(1).max(128).optional(),
+    threadId: deviceId.optional(),
+    clientNonce: deviceString().min(16).max(128),
+    text: deviceString()
+      .min(1)
+      .max(32_000)
+      .refine((text) => text.trim().length > 0),
+  })
+  .refine((value) => Boolean(value.groupId) !== Boolean(value.roomName), "Choose one room.");
+export type DeviceRoomSendInput = z.infer<typeof DeviceRoomSendInputSchema>;
 export const DeviceRunGetInputSchema = z.strictObject({ runId: deviceId });
 export const DeviceTaskGetInputSchema = z.strictObject({ taskId: deviceId });
 export const DeviceRunsListInputSchema = z.strictObject({

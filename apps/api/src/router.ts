@@ -357,11 +357,7 @@ import { assertTeachingSendAllowed, createTaughtSkillsService } from "./taught-s
 import { acceptTeamTask, teamBoard } from "./team.js";
 import type { createTerminalRoutes } from "./terminal-routes.js";
 import { guardComputerTakeover } from "./terminal-takeover.js";
-import {
-  isPeerRun,
-  loadMessagePage,
-  shouldForwardPeerThreadEvent,
-} from "./thread-message-pages.js";
+import { loadMessagePage, shouldForwardThreadEvent } from "./thread-message-pages.js";
 import {
   reactToThreadMessage,
   resolveThreadTarget,
@@ -384,6 +380,7 @@ import {
   voiceContext,
 } from "./voice.js";
 import { createWorkspaceFiles } from "./workspace-files.js";
+import { createWorkspaceGit } from "./workspace-git.js";
 import { workspaceTasks } from "./workspace-tasks.js";
 
 const MAX_COMPUTER_TEXT_FILE_BYTES = 2 * 1024 * 1024;
@@ -739,6 +736,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
   const commands = createCommandRoutes(deps);
   const ide = createIdeFiles(deps);
   const workspaceFiles = createWorkspaceFiles(deps);
+  const workspaceGit = createWorkspaceGit({ sandbox: deps.sandbox, files: workspaceFiles });
   const ideChanges = createIdeChanges(deps, ide);
   return os.router({
     ...createCustomizationRoutes(deps),
@@ -825,6 +823,9 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       ),
       tasks: authed.workspace.tasks.handler(({ context, input }) =>
         workspaceTasks(deps.prisma, context.actor, input.botId),
+      ),
+      git: authed.workspace.git.handler(({ context, input }) =>
+        workspaceGit.observe(context.actor, input, context.signal),
       ),
     },
     terminal: {
@@ -2264,9 +2265,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           input.cursor,
           context.signal,
         )) {
-          if (await isPeerRun(deps.prisma, event.runId, peerRunCache)) {
-            if (!shouldForwardPeerThreadEvent(event)) continue;
-          }
+          if (!(await shouldForwardThreadEvent(deps.prisma, event, peerRunCache))) continue;
           yield event;
         }
       }),

@@ -2,7 +2,7 @@ import type * as Database from "@ardurbot/db";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
 import { admitDelegation, requestCancel, updateWorkerTask } from "@ardurbot/db";
 import { expect, it, vi } from "vitest";
-import { prepareDelegation } from "./delegation.js";
+import { prepareDelegation, resolveDelegationTarget } from "./delegation.js";
 import { checkDelegationExecution } from "./delegation-execution.js";
 import { piModelLimits } from "./pi-models.js";
 
@@ -165,7 +165,11 @@ it("derives the floor from the effective output cap, including reasoning and con
       admissionKey: "message-floor",
       prompt: "Review",
     },
-    resolve,
+    {
+      selected: await resolve(),
+      binding: { bot: "fixture-binding" },
+      computer: { id: "computer", mode: "dedicated", kind: "test" },
+    },
   );
   // The resolved connection's context window and output cap win: 32768 (capped) + 16384.
   expect(admitDelegation).toHaveBeenLastCalledWith(
@@ -212,7 +216,7 @@ it("inherits the exact resolved snapshot including connection and runtime withou
       admissionKey: "helper",
       prompt: "Review",
     },
-    resolve,
+    undefined,
   );
   expect(resolve).not.toHaveBeenCalled();
   expect(result).toMatchObject({ ok: true, runData: { runtimePin: pin } });
@@ -242,6 +246,12 @@ it("freezes a room recipient's selection and provenance at admission", async () 
     botId: "recipient",
   };
   const tx = {
+    thread: { findFirst: vi.fn(async () => ({ groupId: "group" })) },
+    chatGroup: {
+      findFirst: vi.fn(async () => ({
+        members: [{ id: "member", modelPinRevision: pin.revision, runtimePin: pin }],
+      })),
+    },
     run: {
       findUniqueOrThrow: vi.fn(async () => ({ id: "parent", botId: "sender" })),
       findUnique: vi.fn(async () => ({ taskId: "root" })),
@@ -273,8 +283,13 @@ it("freezes a room recipient's selection and provenance at admission", async () 
       prompt: "Continue",
       targetThreadId: "room",
     },
-    resolve,
+    await resolveDelegationTarget(
+      tx,
+      { actingBotId: "recipient", targetThreadId: "room", userId: "owner", spaceId: "space" },
+      resolve,
+    ),
   );
+  expect(resolve).toHaveBeenCalledOnce();
   expect(resolve).toHaveBeenCalledWith(expect.objectContaining({ id: "recipient" }), {
     tx,
     targetThreadId: "room",

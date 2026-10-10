@@ -1,4 +1,4 @@
-import { delegationProblem } from "@ardurbot/contracts";
+import { delegationProblem, RuntimePinError, runtimePinProblem } from "@ardurbot/contracts";
 import type * as Database from "@ardurbot/db";
 import { DelegationAdmissionError } from "@ardurbot/db";
 import type * as DelegationModule from "./delegation.js";
@@ -102,11 +102,19 @@ function harness(
   }));
   const tx = {
     $queryRaw: vi.fn(async () => [{ id: "group" }]),
+    spaceModelPreference: { findFirst: vi.fn(async () => null) },
+    userModelCredential: { findFirst: vi.fn(async () => null) },
+    delegationRoot: { findUnique: vi.fn(async () => null) },
     chatGroup: {
       findFirst: vi.fn(async () => ({
         id: "group",
         coordinatorBotId: options.coordinatorBotId ?? "chief",
-        members: members.map((bot) => ({ bot })),
+        members: members.map((bot) => ({
+          id: `member-${bot.id}`,
+          modelPinRevision: 0,
+          runtimePin: null,
+          bot,
+        })),
       })),
       update: vi.fn(async () => ({})),
     },
@@ -114,6 +122,7 @@ function harness(
       findMany: vi.fn(async () => (options.paused ? [{ paused: true, enabled: true }] : [])),
     },
     run: {
+      findUniqueOrThrow: vi.fn(async () => ({ id: run.id, taskId: "root", threadId: "room" })),
       findFirst: vi.fn(async () => ({ id: run.id })),
       findUnique: vi.fn(async () => ({ status: "running" })),
       create: runCreate,
@@ -141,7 +150,9 @@ function harness(
     },
     event: { create: eventCreate },
   };
+  Object.assign(tx.thread, { findFirst: vi.fn(async () => ({ groupId: "group" })) });
   const prisma = {
+    ...tx,
     $transaction: vi.fn(async (operation: (client: typeof tx) => unknown) => operation(tx)),
   } as unknown as PrismaClient;
   const deps = {
@@ -168,6 +179,152 @@ beforeEach(() => {
 });
 
 describe("ask_members fan-out", () => {
+  it("ignores a pin error for a member who becomes already asked during preflight", async () => {
+    const resolve = vi.fn(async (bot: { id: string }) => {
+      if (bot.id === "ada")
+        throw new RuntimePinError(
+          runtimePinProblem(
+            resolvedPin.pin,
+            "pin-incomplete",
+            "The group model selection is incomplete.",
+          ),
+        );
+      return resolvedPin;
+    });
+    const h = harness({
+      asked: [{ actingBotId: "ada", actingName: "Ada" }],
+      resolveDelegationPin: resolve,
+    });
+    h.tx.delegation.findMany.mockResolvedValueOnce([]);
+    await expect(
+      askGroupMembers(h.deps as never, run, "group", {
+        members: ["all"],
+        request: "Status?",
+        callId: "became-asked",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      asked: [
+        { botId: "ben", name: "Ben" },
+        { botId: "cy", name: "Cy" },
+      ],
+      notAsked: [{ member: "Ada", reason: "already asked in this turn" }],
+    });
+  });
+
+  it.each(["paused", "replay", "inactive"])(
+    "does not resolve room pins for a %s ask",
+    async (state) => {
+      const resolve = vi.fn(async () => {
+        throw new RuntimePinError(
+          runtimePinProblem(
+            resolvedPin.pin,
+            "pin-incomplete",
+            "The group model selection is incomplete.",
+          ),
+        );
+      });
+      const h = harness({
+        paused: state === "paused",
+        existingMessage: state === "replay",
+        resolveDelegationPin: resolve,
+      });
+      if (state === "inactive") h.tx.run.findFirst.mockResolvedValue(null as never);
+      await askGroupMembers(h.deps as never, run, "group", {
+        members: ["all"],
+        request: "Status?",
+        callId: "ineligible",
+      });
+      expect(resolve).not.toHaveBeenCalled();
+      expect(h.runCreate).not.toHaveBeenCalled();
+    },
+  );
+  it("does not resolve a broken room pin for a member already asked this turn", async () => {
+    const resolve = vi.fn(async (bot: { id: string }) => {
+      if (bot.id === "ada")
+        throw new RuntimePinError(
+          runtimePinProblem(
+            resolvedPin.pin,
+            "pin-incomplete",
+            "The group model selection is incomplete.",
+          ),
+        );
+      return resolvedPin;
+    });
+    const h = harness({
+      asked: [{ actingBotId: "ada", actingName: "Ada" }],
+      resolveDelegationPin: resolve,
+    });
+    await expect(
+      askGroupMembers(h.deps as never, run, "group", {
+        members: ["all"],
+        request: "Status?",
+        callId: "skip-broken",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      asked: [
+        { botId: "ben", name: "Ben" },
+        { botId: "cy", name: "Cy" },
+      ],
+      notAsked: [{ member: "Ada", reason: "already asked in this turn" }],
+    });
+    expect(resolve.mock.calls.map(([bot]) => bot.id)).toEqual(["ben", "cy"]);
+  });
+
+  it("resolves a newly askable member under the lock before sizing its reservation", async () => {
+    const resolve = vi.fn(async () => reasoningPin);
+    const h = harness({ resolveDelegationPin: resolve });
+    const group = await h.tx.chatGroup.findFirst();
+    h.tx.chatGroup.findFirst.mockResolvedValueOnce({
+      ...group,
+      members: group.members.filter(({ bot }) => bot.id !== "cy"),
+    });
+    const result = await askGroupMembers(h.deps as never, run, "group", {
+      members: ["all"],
+      request: "Status?",
+      callId: "joined",
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      asked: expect.arrayContaining([{ botId: "cy", name: "Cy" }]),
+    });
+    const cy = vi
+      .mocked(prepareDelegation)
+      .mock.calls.find(([, input]) => input.actingBotId === "cy");
+    expect(cy?.[2]?.selected).toBe(reasoningPin);
+    expect(cy?.[1].tokens).toBe(reasoningFloor);
+    expect(resolve).toHaveBeenCalledTimes(3);
+    expect(resolve.mock.invocationCallOrder[2]).toBeGreaterThan(
+      h.tx.$queryRaw.mock.invocationCallOrder[2]!,
+    );
+    expect(resolve).toHaveBeenLastCalledWith(expect.objectContaining({ id: "cy" }), {
+      tx: h.tx,
+      targetThreadId: run.threadId,
+      userId: run.userId,
+      spaceId: run.spaceId,
+    });
+    expect(resolve.mock.invocationCallOrder[2]).toBeLessThan(
+      vi.mocked(sizeDelegationRootForAsk).mock.invocationCallOrder[0]!,
+    );
+  });
+  it("resolves each pin once on the pooled client before taking any room lock", async () => {
+    const resolve = vi.fn(async () => resolvedPin);
+    const h = harness({ resolveDelegationPin: resolve });
+    await askGroupMembers(h.deps as never, run, "group", {
+      members: ["all"],
+      request: "Status?",
+      callId: "preflight",
+    });
+    expect(resolve).toHaveBeenCalledTimes(3);
+    for (const order of resolve.mock.invocationCallOrder)
+      expect(order).toBeLessThan(h.tx.$queryRaw.mock.invocationCallOrder[0]!);
+    expect(
+      vi
+        .mocked(prepareDelegation)
+        .mock.calls.every(([, , target]) => target?.selected === resolvedPin),
+    ).toBe(true);
+  });
   it("asks every other member exactly once when the request needs everyone", async () => {
     const h = harness();
     const result = await askGroupMembers(h.deps as never, run, "group", {

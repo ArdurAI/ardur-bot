@@ -77,11 +77,14 @@ export function createWorkspaceFiles(deps: Deps) {
     botId: string,
     computer: Awaited<ReturnType<typeof target>>["computer"],
   ): WorkspaceContext {
+    const files = workspaceFileSource(computer);
     return {
       botId,
       computerId: computer?.id ?? null,
       generation: computer?.screenGeneration ?? null,
-      files: workspaceFileSource(computer),
+      files,
+      // The Git observation is an optional provider capability on live worktrees only.
+      git: files === "live" && deps.sandbox.gitChanges !== undefined,
       runsOnHost: computerRunsOnHost(computer ?? {}),
       ...(computer ? { rootId: `sandbox-${computer.id}` } : {}),
       observedAt: new Date().toISOString(),
@@ -309,6 +312,8 @@ export function createWorkspaceFiles(deps: Deps) {
     list,
     read,
     save,
+    /** Checked bot/computer/root/generation binding plus adapter context for reuse. */
+    resolve,
   };
 }
 

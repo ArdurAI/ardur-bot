@@ -2,7 +2,16 @@ import type { ComputerStatus, WorkspaceContext, WorkspaceViewId } from "@ardurbo
 import { msg } from "@lingui/core/macro";
 import type { useLingui } from "@lingui/react/macro";
 import type { LucideIcon } from "lucide-react";
-import { ClipboardList, Code, FileDiff, Folder, Monitor, Repeat, Terminal } from "lucide-react";
+import {
+  ClipboardList,
+  Code,
+  FileDiff,
+  Folder,
+  GitBranch,
+  Monitor,
+  Repeat,
+  Terminal,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { createElement, lazy } from "react";
 import { terminalSupported } from "./terminal-controller";
@@ -22,6 +31,9 @@ const ChangesView = lazy(() =>
 );
 const TerminalView = lazy(() =>
   import("./WorkspaceTerminal").then((module) => ({ default: module.WorkspaceTerminal })),
+);
+const GitChangesView = lazy(() =>
+  import("./WorkspaceGitChanges").then((module) => ({ default: module.WorkspaceGitChanges })),
 );
 type ViewBodyProps = Pick<
   WorkspacePaneProps,
@@ -102,6 +114,21 @@ export const workspaceViews = {
             context,
             visible,
             location: changeLocation,
+          })
+        : null,
+  },
+  gitChanges: {
+    id: "gitChanges",
+    label: (t) => t(msg`Git changes`),
+    icon: GitBranch,
+    available: ({ context }) => Boolean(context?.git),
+    unavailable: (t) => t(msg`Git changes are unavailable on this computer.`),
+    render: ({ context, visible }) =>
+      context
+        ? createElement(GitChangesView, {
+            key: `${context.botId}:${context.rootId}:${context.generation}`,
+            context,
+            visible,
           })
         : null,
   },

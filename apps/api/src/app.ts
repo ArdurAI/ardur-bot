@@ -104,6 +104,7 @@ import { loadAppEnv } from "./app-env.js";
 import { warnAutoReviewConfiguration } from "./auto-review-status.js";
 import { backfillRuntimePins } from "./backfill-runtime-pins.js";
 import { boardCloseRetry } from "./board.js";
+import { deviceReadResponse } from "./device-read-response.js";
 import type { AppEnv } from "./env.js";
 import { mountEvidenceRoutes } from "./evidence.js";
 import { reconcileFleetSecretCleanup } from "./fleet.js";
@@ -718,6 +719,7 @@ export async function createApp(
     secrets.load(instance.privateKeyCiphertext, instance.instanceId),
   );
   mountRemoteDevices(app, {
+    shutdown: shutdown.signal,
     prisma,
     events,
     jobs,
@@ -740,9 +742,7 @@ export async function createApp(
         }),
         { prefix: "/rpc", context: { actor } },
       );
-      if (!response?.ok) throw new Error("This view is unavailable from this device.");
-      const result = (await response.json()) as { json: unknown };
-      return deviceThreadProjection(result.json, grant.spaceId);
+      return deviceThreadProjection(await deviceReadResponse(response, procedure), grant.spaceId);
     },
   });
   app.use("/rpc/*", async (c, next) => {

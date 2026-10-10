@@ -53,6 +53,10 @@ access explicitly allowed. See [Server device pairing](self-host.md#pair-a-phone
 for the Compose override. Keep the application database and `ENCRYPTION_KEY` across
 restarts to retain the certificate and encrypted home key. A TLS-terminating proxy
 with another certificate will fail the pin; use direct access or TLS passthrough.
+These settings work with both `pnpm dev` and the API entrypoint. The listener stays
+off when the enable switch is missing or false. If its port is already in use, the
+API stops startup and logs which device address could not be opened; choose a free
+port and update the advertised origin before restarting.
 The local listener must be enabled when using a desktop home's network link.
 Do not expose a listener without
 checking its network boundary. There is no HTTP, redirect or unpinned fallback.
@@ -279,6 +283,138 @@ A completed run without a saved answer carries category `other` and the fixed se
 Raw run status stays separate from dispatch state. Reading a completed record does not prove
 that a final answer exists or that the owner accepted it.
 
+### Daily reads and room sends (home protocol)
+
+These operations are available to paired clients. The current TypeScript executable does not
+add new commands for them; the Rust command layer follows separately.
+
+| Operation | Body | Response | Scope |
+| --- | --- | --- | --- |
+| `rpc` → `computer/list` | `{procedure:"computer/list", input:null}` | Existing computer list, with each shared computer listed once | `read` |
+| `rpc` → `board/snapshot` | `{procedure:"board/snapshot", input:{workspaceId, filter?, search?}}` | Existing `BoardSnapshot` | `read` |
+| `rpc` → `board/show` | `{procedure:"board/show", input:{workspaceId, id}}` | Existing `WorkItem` | `read` |
+| `rooms/list` | `{}` | Existing group list | `read` |
+| `rooms/send` | `{groupId?, roomName?, threadId?, clientNonce, text}` | Existing `ThreadSendResult` | `dispatch` and `ordinary`; continuing a run also needs `steer` |
+
+Board reads keep the board's own access checks. A denial returns HTTP 403; other known board
+problems return HTTP 400. Both include `{message, problem}`, where `problem` is the shared
+`BoardProblem`. Unknown failures keep the generic home error. Board writes remain unavailable.
+
+Choose exactly one of `groupId` or `roomName`. Names match without case differences inside the
+paired owner's space. If more than one room matches, use its id. An optional `threadId` must
+be that room's actual thread. Requests cannot supply a user, space, bot identity, attachments,
+permissions, or a device context. Text mentions use the normal room routing.
+
+Room sends require a live trusted grant, current membership and the home owner. Each selected
+bot must belong to that owner and space, and pass the intersection of home, space, user, bot
+and device scopes. The grant is checked again inside the send transaction and before returning.
+Turning dispatch off refuses sends and retries. Read results are withheld if the grant is
+revoked, loses read scope, or loses membership while the read is running.
+
+`clientNonce` is a required request id of 16–128 characters. Keep the same id, room and exact
+text when recovering a lost response. Retrying returns the original admission, including all
+run ids. Changing the text with that id is refused. Requests from different devices cannot
+replay each other's admissions. Text is bounded at 32,000 characters. The existing limit of 20 active device runs also applies
+to room sends.
+
+A work response contains `kind:"work"`, `taskId`, `runId`, `runIds` and `seq`, with an optional
+chief receipt. Preserve the full `runIds` array. A greeting can return
+`{kind:"receipt-only", seq, receipt}` with no task or run. Do not invent a run id or start a wait
+for that result. Each work run gets its own device admission receipt, so the existing run,
+task and message reads work for it. A receipt-only greeting creates no work receipt.
+
+New and continued runs retain the device's authority ceiling. Revocation blocks later requests
+and the worker's tool checks, including work delegated from those runs. A response refused
+after admission does not undo already completed actions. Room corrections that cancel or
+replace other work remain available through the home controls. Device room sends do not cancel
+unrelated queued runs.
+
+These operations are available through both the desktop and source-home device listeners.
+Rust command support ships separately.
+
+### Resumable run events
+
+Paired clients can follow an admitted run through signed `operation: "events"` requests on
+POST `/device/request`. This adds home support for a Rust event reader; the TypeScript
+command-line tool does not add a `runs events` command in this stage.
+Use the exact run and thread ids from the admission receipt, and choose either its bot
+or room. The signed body contains `runId`, `threadId`, either `botId` or `groupId`, and
+`cursor`. Start at `-1`, or omit the cursor to use that value. The cursor is the last
+thread event sequence already read, not a message sequence or a position in the run.
+
+```json
+{
+  "operation": "events",
+  "body": {
+    "botId": "example-bot",
+    "threadId": "example-thread",
+    "runId": "example-run",
+    "cursor": -1
+  },
+  "proof": {
+    "grantId": "example-device",
+    "nonce": "<fresh nonce>",
+    "timestamp": 0,
+    "signature": "<signature over the operation and body>"
+  }
+}
+```
+
+The response is `text/event-stream`. Each event keeps its existing sequence in the SSE
+`id` field and its home event object in `data`. Only events carrying the requested run id
+are delivered. Events from other runs, uncorrelated thread events and hidden peer activity
+are skipped. The home uses the same peer filtering as the normal thread follower.
+
+```text
+id: 4
+event: event
+data: {"id":"example-event","seq":4,"runId":"example-run",...}
+
+: heartbeat
+
+event: window
+data: {"nextCursor":7,"reason":"timeout"}
+
+```
+
+Each response lasts at most ten seconds and contains at most 128 frames and 1 MiB of
+UTF-8 data, including heartbeats and the final frame. An event frame may be at most
+64 KiB. Quiet streams send a heartbeat every two seconds. The home also stops a window
+after scanning 1,024 events, including hidden events. A slow reader keeps only one event
+frame queued at the home; the deadline still closes the window. Both listeners forward
+frames as they arrive and wait when the receiver cannot keep up. Their existing
+15-second transport timeout remains a separate upper bound.
+
+The last frame has `event: window` and `data: {"nextCursor":N,"reason":R}`. It has no
+SSE id. The next cursor may pass hidden events. On `timeout` or `limit`, obtain a new nonce,
+sign another request with that cursor, and reconnect. Never reuse a signed request.
+After a disconnect without a final frame, resume from the last complete event id read.
+Discard an unfinished frame and ignore event ids at or below the saved cursor. Sequence
+gaps are expected because the cursor belongs to the whole thread. Decode UTF-8 across
+network chunks; a chunk can end inside a character or frame.
+
+Stop automatic reconnects on `access_lost` or `payload_too_large`. An oversized event is
+not truncated or skipped; its sequence stays available, and the client should inspect
+the run at home instead. `error` and `shutdown` retain the last safe cursor but carry no
+private diagnostic. A transport failure may cut off the final frame; the last complete
+event id still permits recovery. Run completion is an ordinary run event; clients can
+use the exact run read to decide when to stop following.
+
+Every window requires Read, current space membership, the device's own receipt for that
+exact run, matching run ownership, and access to its exact thread and bot or room. Room
+streams also require that the run's bot remains a room member. These checks run again
+before each event and every half second while waiting for events. Revoking the grant,
+removing Read or membership, or losing the receipt stops further delivery. Frames
+already sent to the connection cannot be recalled.
+
+No URL is added to the listener allowlist. POST `/device/request` is the only event entry
+point and requires the existing signature, one-use nonce and request-time checks. POST
+`/device/nonce` remains the way to obtain a fresh nonce and pinned home proof. Pairing,
+code and claim retain their existing checks. The listeners still reject `/rpc`, GET
+event requests, WebSocket upgrades, redirects and arbitrary proxy targets. They forward
+no cookies or authorization headers. Neither other users' runs nor other spaces or
+threads become readable through this operation.
+
 ### Portable strings and conformance
 
 Pairing payloads and canonical signed JSON accept only well-formed Unicode strings: ordinary
@@ -288,8 +424,14 @@ plane. Lone high or low surrogates in values or keys are refused with
 existing JavaScript UTF-16 sort order. Every client must reproduce the exact canonical bytes.
 
 Synthetic request bodies, canonical JSON and signed text live in
-`apps/cli/fixtures/device-operations.json`, including four rejected surrogate vectors.
-Regenerate with `pnpm exec tsx apps/cli/generate-device-fixtures.ts`. Contract tests verify
+`apps/cli/fixtures/device-operations.json`, including daily read and room requests, multiple-run and receipt-only responses, a board denial,
+and four rejected surrogate vectors.
+The event vectors include signed bot and room bodies, response bounds, and nine SSE
+reader cases. Each supplies raw wire text, hexadecimal UTF-8 chunks and expected events,
+window and cursor. They cover split multibyte characters, heartbeats, sequence gaps,
+duplicate frames, an interrupted frame, reconnects and each final reason.
+Regenerate with `node --import tsx apps/cli/generate-device-fixtures.ts`, then format the
+fixture with the repository formatter. Contract tests verify
 these vectors against the home canonicalizer; they are available to the Rust client for byte-parity checks.
 
 ## Protocol references

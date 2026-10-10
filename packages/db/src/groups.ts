@@ -176,7 +176,7 @@ async function assertOwnedBots(
 
 // Members added together share a timestamp; ids keep the order they were picked, so the
 // room snapshot, its default responder and the send path all see the same first member.
-const GROUP_MEMBER_ORDER: Prisma.ChatGroupMemberOrderByWithRelationInput[] = [
+export const GROUP_MEMBER_ORDER: Prisma.ChatGroupMemberOrderByWithRelationInput[] = [
   { createdAt: "asc" },
   { id: "asc" },
 ];

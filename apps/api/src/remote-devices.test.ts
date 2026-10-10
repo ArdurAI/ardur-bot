@@ -2,9 +2,12 @@ import { generateKeyPairSync, sign } from "node:crypto";
 import type { JobPublisher } from "@ardurbot/adapter-kit";
 import type { DeviceProof } from "@ardurbot/contracts";
 import { deviceSignedText } from "@ardurbot/contracts";
+import { BoardError } from "@ardurbot/contracts/board";
 import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
+import { ORPCError } from "@orpc/server";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
+import { boardCall } from "./board.js";
 import { createRemoteDevices, mountRemoteDevices } from "./remote-devices.js";
 
 function fixture() {
@@ -576,4 +579,167 @@ it("refuses non-owner listener state before reading the home identity", async ()
     "home owner",
   );
   expect(f.prisma.instanceIdentity.findUniqueOrThrow).not.toHaveBeenCalled();
+});
+
+it("allows computer/list through the existing scoped read path", async () => {
+  const f = fixture();
+  expect((await f.call(f.signed("rpc", { procedure: "computer/list", input: null }))).status).toBe(
+    200,
+  );
+  expect(f.read).toHaveBeenCalledWith(f.grant, "computer/list", null);
+});
+it("lists rooms through the existing owner and space group contract", async () => {
+  const f = fixture();
+  f.read.mockResolvedValue([] as never);
+  const response = await f.call(f.signed("rooms/list", {}));
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual([]);
+  expect(f.read).toHaveBeenCalledWith(f.grant, "groups/list", {});
+});
+it.each([
+  ["rpc", { procedure: "computer/list", input: null }],
+  ["rpc", { procedure: "board/snapshot", input: { workspaceId: "board" } }],
+  ["rpc", { procedure: "board/show", input: { workspaceId: "board", id: "work-1" } }],
+  ["rooms/list", {}],
+] as const)("requires read for the daily read %s %j", async (operation, body) => {
+  const f = fixture();
+  f.grant.scopes = [];
+  expect((await f.call(f.signed(operation, body))).status).toBe(403);
+  expect(f.read).not.toHaveBeenCalled();
+});
+it.each(["dispatch", "ordinary"])("requires explicit %s for rooms/send", async (missing) => {
+  const f = fixture();
+  f.grant.scopes = ["dispatch", "ordinary"].filter((scope) => scope !== missing);
+  const response = await f.call(
+    f.signed("rooms/send", { groupId: "room", clientNonce: "fixture-room-request", text: "hello" }),
+  );
+  expect(response.status).toBe(403);
+  expect(f.read).not.toHaveBeenCalled();
+});
+it.each(["computer/list", "board/snapshot", "board/show", "groups/list"])(
+  "refuses data if the device is revoked while %s is reading",
+  async (procedure) => {
+    const f = fixture();
+    f.read.mockImplementation(async () => {
+      f.grant.revokedAt = new Date();
+      return { threadId: "private-result" };
+    });
+    const response = await f.call(f.signed("rpc", { procedure, input: {} }));
+    expect(response.status).toBe(403);
+    expect(await response.text()).not.toContain("private-result");
+  },
+);
+it("refuses generic room sends and actor or bot overrides in the signed room body", async () => {
+  const f = fixture();
+  expect((await f.call(f.signed("rpc", { procedure: "threads/send", input: {} }))).status).toBe(
+    403,
+  );
+  f.grant.scopes = ["dispatch", "ordinary"];
+  for (const field of ["userId", "spaceId", "botId", "actor", "deviceContext"]) {
+    const response = await f.call(
+      f.signed("rooms/send", {
+        groupId: "room",
+        clientNonce: "fixture-room-request",
+        text: "hello",
+        [field]: "foreign",
+      }),
+    );
+    expect(response.status).toBe(400);
+  }
+});
+
+it.each(["board/snapshot", "board/show"])(
+  "returns the board's mapped public problem for the signed %s read",
+  async (procedure) => {
+    for (const code of ["access_lost", "busy", "command_failed"] as const) {
+      const f = fixture();
+      const problem = { code, message: "Public fixture board problem." };
+      f.read.mockImplementation(() =>
+        boardCall(async () => {
+          throw new BoardError(problem);
+        }),
+      );
+      const response = await f.call(
+        f.signed("rpc", { procedure, input: { workspaceId: "board", id: "work-1" } }),
+      );
+      expect(response.status).toBe(code === "access_lost" ? 403 : 400);
+      expect(await response.json()).toEqual({ message: problem.message, problem });
+    }
+  },
+);
+
+it("withholds a board problem when the device is revoked while the board read fails", async () => {
+  const f = fixture();
+  f.read.mockImplementation(() =>
+    boardCall(async () => {
+      f.grant.revokedAt = new Date();
+      throw new BoardError({ code: "command_failed", message: "Private fixture problem." });
+    }),
+  );
+  const response = await f.call(
+    f.signed("rpc", { procedure: "board/show", input: { workspaceId: "board", id: "work-1" } }),
+  );
+  expect(response.status).toBe(403);
+  expect(await response.json()).toEqual({
+    message: "This record is unavailable from this device.",
+  });
+});
+it.each(["scope", "membership"])(
+  "withholds a read result if %s is removed during the read",
+  async (removed) => {
+    const f = fixture();
+    f.read.mockImplementation(async () => {
+      if (removed === "scope") f.grant.scopes = [];
+      else f.tx.spaceMember.findUnique.mockResolvedValue(null as never);
+      return { threadId: "private-result" };
+    });
+    const response = await f.call(f.signed("rpc", { procedure: "computer/list", input: null }));
+    expect(response.status).toBe(403);
+    expect(await response.text()).not.toContain("private-result");
+  },
+);
+
+it("reads the saved final answer after this device admits steering on another device's run", async () => {
+  const f = scopedFixture();
+  f.runs[0]!.status = "completed";
+  Object.assign(f.runs[0]!, { originDeviceGrantId: "original-device" });
+  f.tx.dispatchSummary.findFirst.mockImplementation(async ({ where }) =>
+    where.deviceGrantId === "original-device" ? { messageId: "answer" } : (null as never),
+  );
+  const response = await f.call(f.signed("runs/get", { runId: "run-0" }));
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ run: { messageId: "answer", failure: null } });
+  f.receipts.length = 0;
+  expect((await f.call(f.signed("runs/get", { runId: "run-0" }))).status).toBe(403);
+});
+
+it("does not execute threads/markRead if the device is revoked before the procedure runs", async () => {
+  const f = fixture();
+  let grantChecks = 0;
+  f.tx.deviceGrant.findFirst.mockImplementation(async () => {
+    grantChecks++;
+    if (grantChecks > 1) return null;
+    return f.grant;
+  });
+  const response = await f.call(
+    f.signed("rpc", { procedure: "threads/markRead", input: { botId: "chief" } }),
+  );
+  expect(response.status).toBe(403);
+  expect(f.read).not.toHaveBeenCalled();
+});
+
+it("maps ORPCError CONFLICT to an HTTP 409 response", async () => {
+  const f = fixture();
+  f.read.mockImplementation(async () => {
+    throw new ORPCError("CONFLICT", {
+      message: "Answer the pending ask first.",
+      data: { reason: "waiting_input" },
+    });
+  });
+  const response = await f.call(f.signed("rpc", { procedure: "threads/messages", input: {} }));
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({
+    message: "Answer the pending ask first.",
+    problem: { reason: "waiting_input" },
+  });
 });

@@ -1,9 +1,11 @@
 import { createHash, createPrivateKey, X509Certificate } from "node:crypto";
+import { once } from "node:events";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createServer } from "node:https";
 import { isIP } from "node:net";
 import { networkInterfaces } from "node:os";
 import type { Duplex } from "node:stream";
+import { DEVICE_EVENT_WINDOW } from "@ardurbot/contracts";
 import { isDeviceApiPath } from "@ardurbot/contracts/device-paths";
 
 function isLoopbackHost(host: string): boolean {
@@ -114,6 +116,16 @@ export function deviceProxy(target: string, request: typeof fetch = fetch) {
       outgoing.end();
       return;
     }
+    const abort = new AbortController();
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    let streaming = false;
+    const disconnect = () => abort.abort();
+    const cancelReader = () => {
+      void reader?.cancel().catch(() => undefined);
+    };
+    outgoing.once?.("close", disconnect);
+    abort.signal.addEventListener("abort", cancelReader, { once: true });
+    const timeout = setTimeout(disconnect, 15_000);
     try {
       const parts: Buffer[] = [];
       let length = 0;
@@ -133,33 +145,65 @@ export function deviceProxy(target: string, request: typeof fetch = fetch) {
         headers: { "content-type": "application/json" },
         credentials: "omit",
         redirect: "error",
-        signal: AbortSignal.timeout(15_000),
+        signal: abort.signal,
       });
-      const reader = response.body?.getReader();
+      reader = response.body?.getReader();
+      streaming =
+        incoming.url === "/device/request" &&
+        response.status === 200 &&
+        response.headers.get("content-type")?.split(";", 1)[0]?.trim() === "text/event-stream";
+      if (streaming) {
+        outgoing.writeHead(response.status, {
+          "content-type": "text/event-stream; charset=utf-8",
+          "x-accel-buffering": "no",
+        });
+        outgoing.flushHeaders?.();
+        let total = 0;
+        while (reader && !abort.signal.aborted) {
+          const part = await reader.read();
+          if (part.done) break;
+          if (abort.signal.aborted) throw new Error("Response interrupted.");
+          total += part.value.byteLength;
+          if (total > DEVICE_EVENT_WINDOW.maxBytes) throw new Error("Response too large.");
+          if (!outgoing.write(Buffer.from(part.value)))
+            await once(outgoing, "drain", { signal: abort.signal });
+        }
+        if (abort.signal.aborted) throw new Error("Response interrupted.");
+        outgoing.end();
+        return;
+      }
       const chunks: Uint8Array[] = [];
       let total = 0;
       if (reader) {
-        try {
-          while (true) {
-            const part = await reader.read();
-            if (part.done) break;
-            total += part.value.byteLength;
-            if (total > 16 * 1024 * 1024) {
-              await reader.cancel();
-              throw new Error("Response too large.");
-            }
-            chunks.push(part.value);
+        while (true) {
+          const part = await reader.read();
+          if (part.done) break;
+          total += part.value.byteLength;
+          if (total > 16 * 1024 * 1024) {
+            await reader.cancel();
+            throw new Error("Response too large.");
           }
-        } finally {
-          reader.releaseLock();
+          chunks.push(part.value);
         }
       }
+      if (abort.signal.aborted) throw new Error("Response interrupted.");
       const body = Buffer.concat(chunks);
       outgoing.writeHead(response.status, { "content-type": "application/json" });
       outgoing.end(body);
     } catch {
-      outgoing.writeHead(502, { "content-type": "application/json" });
-      outgoing.end(JSON.stringify({ message: "Home unreachable — check that Ardur is running" }));
+      if (streaming || outgoing.headersSent) outgoing.destroy();
+      else {
+        outgoing.writeHead(502, { "content-type": "application/json" });
+        outgoing.end(JSON.stringify({ message: "Home unreachable — check that Ardur is running" }));
+      }
+    } finally {
+      clearTimeout(timeout);
+      outgoing.removeListener?.("close", disconnect);
+      abort.abort();
+      if (reader) {
+        await reader.cancel().catch(() => undefined);
+        reader.releaseLock();
+      }
     }
   };
 }
