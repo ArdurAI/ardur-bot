@@ -34,6 +34,13 @@ Set `ARDUR_DESKTOP_ACCESSIBILITY=1` in the environment that launches the desktop
 to expose its accessibility tree without waiting for a screen reader or automation
 client to request it. The app enables the tree after Electron is ready and before
 creating its first window, then logs “Accessibility tree forced on for automation.”
+While that variable is set, the app also keeps an occluded or background window
+from dropping the tree: before startup it disables Chromium occlusion backgrounding
+and renderer backgrounding, forces the renderer accessibility tree on, and turns
+window background throttling off. If support is cleared, or a renderer is reloaded
+or recreated, it turns the tree back on and logs “Accessibility tree restored for
+automation.” Whether a covered window keeps a live tree still has to be confirmed
+on a running app.
 The desktop development command sets this variable automatically. Packaged launches
 can use the same environment variable. When it is
 absent or has any other value, normal screen reader detection stays unchanged.

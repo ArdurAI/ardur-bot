@@ -27,7 +27,7 @@ function matchesCredentialKey(key: string): boolean {
     SENSITIVE_KEY.test(normalized) ||
     AUTH_CODE_KEY.test(normalized) ||
     /[_-]pat$/i.test(key) ||
-    /[a-z0-9]Pat$/.test(key)
+    /[A-Za-z0-9]Pat$/.test(key)
   );
 }
 
