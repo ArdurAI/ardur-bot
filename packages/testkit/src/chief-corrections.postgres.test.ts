@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { handoffToGroupBot, stopRemoteComputerWork } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
 import { ChiefControlSchema, ChiefDispatchSchema } from "@ardurbot/contracts";
+import { CHIEF_RECONCILIATION_POLICY } from "@ardurbot/core";
 import {
   acceptDelegation,
   admitChiefAction,
@@ -476,6 +477,125 @@ describe.skipIf(!enabled).sequential("chief correction cross-run Postgres journe
     expect(await checkDelegationExecution(db.prisma, f.run.id, "write_file")).toContain(
       "stand down",
     );
+  });
+
+  it("reconciles runtime cancellation without stop confirmation or recorded effects and admits one replacement", async () => {
+    const f = await fixture();
+    await sendThreadMessage(f.deps, f.actor, f.target, {
+      text: `dont send to ${f.worker.name}`,
+      clientNonce: "runtime-cancel",
+    });
+    const corrected = await db.prisma.chiefPlan.findUniqueOrThrow({ where: { id: f.plan.id } });
+    expect(ChiefControlSchema.parse(corrected.control).uncertainRunIds).toEqual([]);
+    // Script the runtime's terminal row without claiming that owned teardown was confirmed.
+    await db.prisma.run.update({
+      where: { id: f.run.id },
+      data: { status: "cancelled", completedAt: new Date(), cancelConfirmedAt: null },
+    });
+    expect(await db.prisma.chiefActionAdmission.count({ where: { runId: f.run.id } })).toBe(0);
+    expect(await db.prisma.externalEffect.count({ where: { runId: f.run.id } })).toBe(0);
+    expect(await reconcileChiefCorrection(db.prisma, f.plan.id)).toBeUndefined();
+    const waiting = await db.prisma.chiefPlan.findUniqueOrThrow({ where: { id: f.plan.id } });
+    const control = ChiefControlSchema.parse(waiting.control);
+    expect(control).toMatchObject({
+      stoppingRunIds: [f.run.id],
+      uncertainRunIds: [f.run.id],
+      uncertaintySince: corrected.updatedAt.toISOString(),
+      pendingReplan: true,
+    });
+    expect(await reconcileChiefCorrection(db.prisma, f.plan.id)).toBeUndefined();
+    expect(
+      ChiefControlSchema.parse(
+        (await db.prisma.chiefPlan.findUniqueOrThrow({ where: { id: f.plan.id } })).control,
+      ).uncertaintySince,
+    ).toBe(control.uncertaintySince);
+    // Reach the existing bound without sleeping or changing the database server's clock.
+    await db.prisma.chiefPlan.update({
+      where: { id: f.plan.id },
+      data: {
+        control: {
+          ...control,
+          uncertaintySince: new Date(
+            Date.now() - CHIEF_RECONCILIATION_POLICY.orphanOutcomeAfterMs,
+          ).toISOString(),
+        },
+      },
+    });
+    await db.prisma.computerExecutionLease.create({
+      data: {
+        computerId: f.computer.id,
+        botId: f.worker.id,
+        runId: f.run.id,
+        fence: 1,
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+    expect(await reconcileChiefCorrection(db.prisma, f.plan.id)).toBeUndefined();
+    expect(
+      ChiefControlSchema.parse(
+        (await db.prisma.chiefPlan.findUniqueOrThrow({ where: { id: f.plan.id } })).control,
+      ).stoppingRunIds,
+    ).toEqual([f.run.id]);
+    await expireComputerExecutionLeases(db.prisma, { runId: f.run.id });
+    const wakes = await Promise.all([
+      reconcileChiefCorrection(db.prisma, f.plan.id),
+      reconcileChiefCorrection(db.prisma, f.plan.id),
+    ]);
+    const replans = wakes.filter((wake) => wake?.runId);
+    expect(replans).toHaveLength(1);
+    const replanRunId = replans[0]?.runId;
+    if (!replanRunId) throw new Error("Expected replacement planning turn");
+    expect(await reconcileChiefCorrection(db.prisma, f.plan.id)).toBeUndefined();
+    const revised = await db.prisma.chiefPlan.findUniqueOrThrow({ where: { id: f.plan.id } });
+    const reconciled = ChiefControlSchema.parse(revised.control);
+    expect(reconciled).toMatchObject({
+      stoppingRunIds: [],
+      uncertainRunIds: [],
+      pendingReplan: false,
+      reconciledActions: [{ runId: f.run.id, effectId: null, revision: 2, outcome: "unknown" }],
+    });
+    expect(reconciled.reconciledActions).toHaveLength(1);
+    expect(await db.prisma.run.findUniqueOrThrow({ where: { id: f.run.id } })).toMatchObject({
+      status: "cancelled",
+      cancelConfirmedAt: null,
+    });
+    expect(await db.prisma.run.findUniqueOrThrow({ where: { id: replanRunId } })).toMatchObject({
+      runtimePin: pin,
+      clientNonce: `chief-replan:${f.plan.id}:2`,
+    });
+    await db.prisma.run.update({ where: { id: replanRunId }, data: { status: "running" } });
+    const source = {
+      ...f.scope,
+      id: replanRunId,
+      botId: f.chief.id,
+      threadId: f.target.threadId,
+    };
+    const input = {
+      bot_id: f.replacement.id,
+      message: "Prepare only the remaining work under the corrected brief.",
+    };
+    expect(await handoffToGroupBot(f.deps, source, f.group.id, input)).toMatchObject({
+      ok: true,
+      botId: f.replacement.id,
+    });
+    expect(await handoffToGroupBot(f.deps, source, f.group.id, input)).toHaveProperty("error");
+    expect(
+      await db.prisma.run.count({
+        where: { botId: f.replacement.id, delegationRootTaskId: f.sent.taskId },
+      }),
+    ).toBe(1);
+    const events = await db.prisma.event.findMany({
+      where: { threadId: f.target.threadId, type: "chief.control" },
+    });
+    expect(
+      events.filter((event) => (event.payload as { state?: string }).state === "reconciled"),
+    ).toHaveLength(1);
+    expect(
+      events.filter((event) => (event.payload as { state?: string }).state === "replan"),
+    ).toHaveLength(1);
+    expect(
+      events.filter((event) => (event.payload as { state?: string }).state === "checking"),
+    ).toHaveLength(0);
   });
 
   it("serializes admission/correction races and preserves an already-admitted uncertain action instead of repeating it after restart", async () => {
