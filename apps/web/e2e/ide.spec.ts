@@ -209,11 +209,14 @@ test("inbuilt IDE opens, edits, saves, hands off selections and binds the shared
       const read = performance
         .getEntriesByType("resource")
         .filter((entry) => entry.name.includes("/rpc/ide/read"))
-        .at(-1) as PerformanceResourceTiming;
+        .at(-1) as PerformanceResourceTiming | undefined;
+      if (!read) return null;
       return performance.getEntriesByName("ide:large:paint")[0]!.startTime - read.responseEnd;
     });
+    // Each reopen must read the file again; a cached open would measure nothing.
+    expect(renderMs, "reopening large.ts read the file again").not.toBeNull();
     expect(renderMs).toBeGreaterThanOrEqual(0);
-    allTimes.push(renderMs);
+    allTimes.push(renderMs!);
   }
   const times = allTimes.slice(1);
   const sorted = [...times].sort((a, b) => a - b);

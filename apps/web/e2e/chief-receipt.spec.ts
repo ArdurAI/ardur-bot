@@ -98,7 +98,8 @@ test("chief receipts paint from accepted sends and survive reload without duplic
       contentType: "application/json",
     });
     expect(medianMs).toBeLessThan(budgetMs);
-    // The dedicated visible-paint journey also guards every measured send.
+    // CHIEF_RECEIPT_STRICT_PAINT_BUDGET=1 also guards every measured send, for a manual or
+    // scheduled run; pull-request checks use the median so one slow runner sample cannot block.
     if (measurement.strict) expect(times.every((time) => time < budgetMs)).toBe(true);
     await captureScreenshot(page, info, `chief-receipt-${fixture.kind}`);
   }
