@@ -548,27 +548,27 @@ export function ShellPage({
   const registerTerminalCloseGuard = useCallback((guard: (() => boolean) | null) => {
     terminalCloseGuard.current = guard;
   }, []);
-  const setPanel = useCallback((next: Panel | ((current: Panel) => Panel)) => {
-    const target = typeof next === "function" ? next(panelRef.current) : next;
-    if (target === null && panelRef.current === "computer") {
-      workspaceLayoutUpdateRef.current?.((layout) => ({
-        ...layout,
-        visible: false,
-        expanded: false,
-      }));
+  const setPanel = useCallback(
+    (next: Panel | ((current: Panel) => Panel)) => {
+      const target = typeof next === "function" ? next(panelRef.current) : next;
+      if (target !== panelRef.current) {
+        if (panelRef.current === "computer") {
+          const files = workspaceFilesSnapshot();
+          if (files.saving || (files.dirty && !window.confirm(t`Unsaved changes`))) return false;
+        }
+        if (terminalCloseGuard.current && !terminalCloseGuard.current()) return false;
+      }
+      panelRef.current = target;
+      setPanelUnchecked(target);
+      workspaceLayoutUpdateRef.current?.((layout) =>
+        target === "computer"
+          ? { ...(layout.open.length ? layout : openWorkspaceView(layout, "tasks")), visible: true }
+          : { ...layout, visible: false, expanded: false },
+      );
       return true;
-    }
-    if (target !== panelRef.current && terminalCloseGuard.current && !terminalCloseGuard.current())
-      return false;
-    panelRef.current = target;
-    setPanelUnchecked(target);
-    workspaceLayoutUpdateRef.current?.((layout) =>
-      target === "computer"
-        ? { ...(layout.open.length ? layout : openWorkspaceView(layout, "tasks")), visible: true }
-        : { ...layout, visible: false, expanded: false },
-    );
-    return true;
-  }, []);
+    },
+    [t],
+  );
   const paneReturnFocus = useRef<HTMLElement | null>(null);
   const workspaceVisibleRef = useRef(false);
   const workspaceScopeRef = useRef<string | null>(null);
@@ -904,6 +904,8 @@ export function ShellPage({
     inputTokens: number;
     outputTokens: number;
     runs: number;
+    records?: number;
+    runCount?: number;
   } | null>(null);
   // Owned here so the menu survives the DashboardPage remount when bootstrap resolves its space.
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
@@ -4267,6 +4269,10 @@ export function ShellPage({
                     expanded={workspaceExpanded}
                     onExpand={() => setWorkspaceExpanded((value) => !value)}
                     onClose={closeWorkspace}
+                    onClosePanel={() => {
+                      if (!setPanel(null)) return;
+                      setWorkspaceFocusRequest({ scope: workspaceKey, view: null });
+                    }}
                     onRetry={() => {
                       setWorkspaceRevision((value) => value + 1);
                       void refreshThread(active.id).catch(() => undefined);

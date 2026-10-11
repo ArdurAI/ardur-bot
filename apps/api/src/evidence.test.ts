@@ -47,6 +47,7 @@ function fixture(role: string | null = "owner") {
     evidenceRecord: { findMany: records },
     evidenceSeal: { findUnique: seal },
     evidenceKey: {
+      findFirst: vi.fn(async () => ({ spaceId: "space", publicKeyPem: signed.keys.publicKeyPem })),
       findUnique: vi.fn(async () => ({ spaceId: "space", publicKeyPem: signed.keys.publicKeyPem })),
     },
   } as unknown as PrismaClient;
@@ -63,6 +64,65 @@ function fixture(role: string | null = "owner") {
 }
 
 describe("run evidence", () => {
+  it("returns only the public identity fields and compares the verified signing key", async () => {
+    const f = fixture();
+    const identity = {
+      fingerprint: f.signed.keys.kid,
+      scope: { type: "space", id: "space" },
+      keyVersion: 1,
+    };
+    vi.mocked(f.prisma.evidenceKey.findFirst).mockResolvedValue({
+      ...identity,
+      spaceId: "space",
+      publicKeyPem: f.signed.keys.publicKeyPem,
+      privateKeyPem: f.signed.keys.privateKeyPem,
+      privateKeyCiphertext: "must-not-leak",
+      secretRecordId: "must-not-leak",
+    } as never);
+    const result = await runEvidenceSummary(f.prisma, actor, "run");
+    expect(result.signingIdentity).toEqual(identity);
+    expect(JSON.stringify(result)).not.toContain("must-not-leak");
+    expect(JSON.stringify(result)).not.toContain("BEGIN");
+    expect(JSON.stringify(result).includes(f.signed.keys.privateKeyPem)).toBe(false);
+    expect(result.signerMatch).toBe("no_expected_key");
+    expect((await runEvidenceSummary(f.prisma, actor, "run", f.signed.keys.kid)).signerMatch).toBe(
+      "expected_key",
+    );
+    expect(
+      (await runEvidenceSummary(f.prisma, actor, "run", `sha256:${"0".repeat(64)}`)).signerMatch,
+    ).toBe("different_key");
+    expect(f.prisma.evidenceKey.findFirst).toHaveBeenCalledWith({
+      where: { spaceId: "space", revokedAt: null },
+      select: { publicKeyPem: true, spaceId: true },
+    });
+    f.run.status = "running";
+    expect(
+      (await runEvidenceSummary(f.prisma, actor, "run", f.signed.keys.kid)).signerMatch,
+    ).toBeNull();
+    f.run.status = "completed";
+    f.seal.mockResolvedValue(null);
+    expect(
+      (await runEvidenceSummary(f.prisma, actor, "run", f.signed.keys.kid)).signerMatch,
+    ).toBeNull();
+  });
+  it("reports a substituted valid bundle and key as a different signer", async () => {
+    const f = fixture();
+    const replacement = signedRunFixture();
+    f.records.mockResolvedValue(replacement.records);
+    f.seal.mockResolvedValue(replacement.seal);
+    vi.mocked(f.prisma.evidenceKey.findUnique).mockResolvedValue({
+      spaceId: "space",
+      publicKeyPem: replacement.keys.publicKeyPem,
+    } as never);
+    expect(await runEvidenceSummary(f.prisma, actor, "run", f.signed.keys.kid)).toMatchObject({
+      state: "verified",
+      signerMatch: "different_key",
+    });
+    replacement.records[0]!.jws = "corrupted";
+    expect(
+      (await runEvidenceSummary(f.prisma, actor, "run", replacement.keys.kid)).signerMatch,
+    ).toBeNull();
+  });
   it.each([false, true])(
     "summarizes real tool recording with governance enabled=%s",
     async (enabled) => {
