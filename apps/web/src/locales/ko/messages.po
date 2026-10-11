@@ -143,12 +143,6 @@ msgstr ""
 msgid "{0} rollup hours"
 msgstr ""
 
-#. placeholder {0}: usage.runs
-#. placeholder {1}: usage.inputTokens + usage.outputTokens
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "{0} runs · {1} tokens"
-msgstr "{0}회 실행 · 토큰 {1}개"
-
 #. placeholder {0}: preview.runs
 #: src/pages/CompareStart.tsx
 msgid "{0} runs at these pins; hosted providers may bill per run"
@@ -347,6 +341,7 @@ msgstr "{pending, plural, other {검토할 제안 #개}}"
 msgid "{reconnectCount} need reconnection"
 msgstr ""
 
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "{records, plural, one {# usage record} other {# usage records}}"
 msgstr "{records, plural, other {사용 기록 #개}}"
@@ -354,6 +349,11 @@ msgstr "{records, plural, other {사용 기록 #개}}"
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "남은 시간 {remaining} · Bot은 화면만 보고 직접 조작하지 않습니다"
+
+#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "{runs, plural, one {# run} other {# runs}}"
+msgstr "{runs, plural, other {#회 실행}}"
 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} could not finish this run. Check the runtime or change the pin."
@@ -455,6 +455,7 @@ msgstr ""
 msgid "{title}, {label}"
 msgstr "{title}, {label}"
 
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "{tokens, plural, one {# token} other {# tokens}}"
 msgstr "{tokens, plural, other {토큰 #개}}"
@@ -1606,6 +1607,10 @@ msgstr ""
 #: src/pages/customize/PluginsPage.tsx
 msgid "by {0}"
 msgstr ""
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "By bot"
+msgstr "봇별"
 
 #: src/pages/customize/SkillsPage.tsx
 msgid "by you"
@@ -6902,6 +6907,10 @@ msgid "Park"
 msgstr "보류"
 
 #: src/pages/dashboard/UsagePanel.tsx
+msgid "Partial cost"
+msgstr "일부 비용"
+
+#: src/pages/dashboard/UsagePanel.tsx
 msgid "Partially reported"
 msgstr "일부만 보고됨"
 
@@ -9737,6 +9746,10 @@ msgstr "답변을 입력하세요"
 msgid "Unassigned"
 msgstr "섹션 없음"
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Unattributed usage"
+msgstr "봇에 할당되지 않은 사용량"
+
 #: src/components/SoftwareUpdateSection.tsx
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/TeamBoard.tsx
@@ -9779,6 +9792,10 @@ msgstr ""
 #: src/pages/system/SystemPage.tsx
 msgid "Unknown"
 msgstr "알 수 없음"
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Unknown bot"
+msgstr "알 수 없는 봇"
 
 #: src/pages/account/AccountTables.tsx
 msgid "Unknown device"

@@ -143,12 +143,6 @@ msgstr "{0} per day"
 msgid "{0} rollup hours"
 msgstr "{0} rollup hours"
 
-#. placeholder {0}: usage.runs
-#. placeholder {1}: usage.inputTokens + usage.outputTokens
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "{0} runs · {1} tokens"
-msgstr "{0} runs · {1} tokens"
-
 #. placeholder {0}: preview.runs
 #: src/pages/CompareStart.tsx
 msgid "{0} runs at these pins; hosted providers may bill per run"
@@ -347,6 +341,7 @@ msgstr "{pending, plural, one {# suggestion to review} other {# suggestions to r
 msgid "{reconnectCount} need reconnection"
 msgstr "{reconnectCount} need reconnection"
 
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "{records, plural, one {# usage record} other {# usage records}}"
 msgstr "{records, plural, one {# usage record} other {# usage records}}"
@@ -354,6 +349,11 @@ msgstr "{records, plural, one {# usage record} other {# usage records}}"
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "{remaining} left · bot is watching, not acting"
+
+#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "{runs, plural, one {# run} other {# runs}}"
+msgstr "{runs, plural, one {# run} other {# runs}}"
 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} could not finish this run. Check the runtime or change the pin."
@@ -455,6 +455,7 @@ msgstr "{suggested} finished {suggestedRuns} of your runs."
 msgid "{title}, {label}"
 msgstr "{title}, {label}"
 
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "{tokens, plural, one {# token} other {# tokens}}"
 msgstr "{tokens, plural, one {# token} other {# tokens}}"
@@ -1606,6 +1607,10 @@ msgstr "Built-in"
 #: src/pages/customize/PluginsPage.tsx
 msgid "by {0}"
 msgstr "by {0}"
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "By bot"
+msgstr "By bot"
 
 #: src/pages/customize/SkillsPage.tsx
 msgid "by you"
@@ -6902,6 +6907,10 @@ msgid "Park"
 msgstr "Park"
 
 #: src/pages/dashboard/UsagePanel.tsx
+msgid "Partial cost"
+msgstr "Partial cost"
+
+#: src/pages/dashboard/UsagePanel.tsx
 msgid "Partially reported"
 msgstr "Partially reported"
 
@@ -9737,6 +9746,10 @@ msgstr "Type your answer"
 msgid "Unassigned"
 msgstr "Unassigned"
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Unattributed usage"
+msgstr "Unattributed usage"
+
 #: src/components/SoftwareUpdateSection.tsx
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/TeamBoard.tsx
@@ -9779,6 +9792,10 @@ msgstr "Uninstall"
 #: src/pages/system/SystemPage.tsx
 msgid "Unknown"
 msgstr "Unknown"
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Unknown bot"
+msgstr "Unknown bot"
 
 #: src/pages/account/AccountTables.tsx
 msgid "Unknown device"

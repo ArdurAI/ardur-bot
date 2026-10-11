@@ -143,12 +143,6 @@ msgstr ""
 msgid "{0} rollup hours"
 msgstr ""
 
-#. placeholder {0}: usage.runs
-#. placeholder {1}: usage.inputTokens + usage.outputTokens
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "{0} runs · {1} tokens"
-msgstr "{0} रन · {1} टोकन"
-
 #. placeholder {0}: preview.runs
 #: src/pages/CompareStart.tsx
 msgid "{0} runs at these pins; hosted providers may bill per run"
@@ -347,6 +341,7 @@ msgstr "{pending, plural, one {समीक्षा के लिए # सु�
 msgid "{reconnectCount} need reconnection"
 msgstr ""
 
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "{records, plural, one {# usage record} other {# usage records}}"
 msgstr "{records, plural, one {# उपयोग रिकॉर्ड} other {# उपयोग रिकॉर्ड}}"
@@ -354,6 +349,11 @@ msgstr "{records, plural, one {# उपयोग रिकॉर्ड} other {#
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "{remaining} शेष · बॉट देख रहा है, कार्रवाई नहीं कर रहा"
+
+#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "{runs, plural, one {# run} other {# runs}}"
+msgstr "{runs, plural, one {# रन} other {# रन}}"
 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} could not finish this run. Check the runtime or change the pin."
@@ -455,6 +455,7 @@ msgstr ""
 msgid "{title}, {label}"
 msgstr "{title}, {label}"
 
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "{tokens, plural, one {# token} other {# tokens}}"
 msgstr "{tokens, plural, one {# टोकन} other {# टोकन}}"
@@ -1606,6 +1607,10 @@ msgstr ""
 #: src/pages/customize/PluginsPage.tsx
 msgid "by {0}"
 msgstr ""
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "By bot"
+msgstr "बॉट के अनुसार"
 
 #: src/pages/customize/SkillsPage.tsx
 msgid "by you"
@@ -6902,6 +6907,10 @@ msgid "Park"
 msgstr "पार्क करें"
 
 #: src/pages/dashboard/UsagePanel.tsx
+msgid "Partial cost"
+msgstr "आंशिक लागत"
+
+#: src/pages/dashboard/UsagePanel.tsx
 msgid "Partially reported"
 msgstr "आंशिक रूप से रिपोर्ट किया गया"
 
@@ -9737,6 +9746,10 @@ msgstr "अपना उत्तर लिखें"
 msgid "Unassigned"
 msgstr "असाइन नहीं किया गया"
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Unattributed usage"
+msgstr "बिना श्रेय का उपयोग"
+
 #: src/components/SoftwareUpdateSection.tsx
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/TeamBoard.tsx
@@ -9779,6 +9792,10 @@ msgstr ""
 #: src/pages/system/SystemPage.tsx
 msgid "Unknown"
 msgstr "अज्ञात"
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Unknown bot"
+msgstr "अज्ञात बॉट"
 
 #: src/pages/account/AccountTables.tsx
 msgid "Unknown device"

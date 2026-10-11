@@ -904,6 +904,8 @@ export function ShellPage({
     inputTokens: number;
     outputTokens: number;
     runs: number;
+    records?: number;
+    runCount?: number;
   } | null>(null);
   // Owned here so the menu survives the DashboardPage remount when bootstrap resolves its space.
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);

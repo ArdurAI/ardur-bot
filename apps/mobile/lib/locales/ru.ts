@@ -1,4 +1,12 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "{runs} run": "{runs} запуск",
+  "By bot": "По ботам",
+  "Hide bots": "Скрыть ботов",
+  "Unknown bot": "Неизвестный бот",
+  "Unattributed usage": "Использование без привязки",
+  "Partial cost": "Частичная стоимость",
+  "{runs} runs": "Запусков: {runs}",
+
   "To {names}": "Кому: {names}",
   "Queued: {queued}": "В очереди: {queued}",
 

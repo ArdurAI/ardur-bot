@@ -1,4 +1,12 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "{runs} run": "{runs} 次运行",
+  "By bot": "按机器人",
+  "Hide bots": "收起机器人",
+  "Unknown bot": "未知机器人",
+  "Unattributed usage": "未归属的用量",
+  "Partial cost": "部分费用",
+  "{runs} runs": "{runs} 次运行",
+
   "To {names}": "发送给：{names}",
   "Queued: {queued}": "排队中：{queued}",
 
