@@ -1513,4 +1513,8 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Please address the failing conditions.": "请解决未满足的条件。",
   "Final owner review": "所有者最终审核",
   "Could not review result. Try again.": "无法审核结果，请重试。",
+  "Got it — I’ll choose a team member to file this issue in Linear.":
+    "明白了——我会选择一名团队成员在Linear中提交此问题。",
+  "Got it — I’ll choose a team member to manage the GitHub repository.":
+    "明白了——我会选择一名团队成员来管理GitHub仓库。",
 };

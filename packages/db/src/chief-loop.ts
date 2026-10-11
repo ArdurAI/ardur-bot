@@ -116,14 +116,18 @@ export async function loadChiefMemberFacts(
   ]);
   const strings = (value: unknown): string[] =>
     Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+
+  const parsedServers = servers.flatMap((server) => {
+    if (!server.catalogId) return [];
+    return [{ server, manifest: IntegrationManifestSchema.safeParse(server.manifest) }];
+  });
+
   return bots.map((bot) => {
     const groupPin = RuntimePinSchema.safeParse(bot.groupMembers[0]?.runtimePin).data;
     const runtimeKind = groupPin?.runtimeKind ?? bot.runtimeKind;
     const capabilities: ChiefMemberFacts["capabilities"][number][] = [];
-    for (const server of servers) {
-      if (!server.catalogId) continue;
+    for (const { server, manifest } of parsedServers) {
       const assignment = server.assignments.find((row) => row.botId === bot.id);
-      const manifest = IntegrationManifestSchema.safeParse(server.manifest);
       const granted =
         manifest.success && !server.needsReview && !assignment?.needsReview
           ? effectiveMcpGrantTools(
@@ -357,9 +361,11 @@ export async function loadChiefSelectionContext(
     ? `This is a checking turn only. Read back the exact earlier effect using existing granted read tools, then use reconcile_chief_action for each outcome. Earlier effects: ${JSON.stringify(earlierEffects)}. Earlier actions: ${JSON.stringify(earlierActions)}. A failed or unavailable check is unknown, not undone. Do not repeat, reverse or dispatch work. End this turn after recording the outcomes; the backend wakes the replacement planning turn once.`
     : decision.kind === "delegate" || decision.kind === "queue"
       ? `Use handoff_to_bot with bot_id ${JSON.stringify(decision.memberId)}. Do not ask the owner to name a member.`
-      : decision.kind === "self"
-        ? "Prepare this work yourself; do not self-handoff."
-        : "Plan the next step using the saved member facts; unknown capability is not a grant.";
+      : decision.kind === "needs-owner"
+        ? `Assignment is blocked: ${decision.blocker}. Use system_alert or explain the blocker to the owner; do not dispatch.`
+        : decision.kind === "self"
+          ? "Prepare this work yourself; do not self-handoff."
+          : "Plan the next step using the saved member facts; unknown capability is not a grant.";
   return `System receipt already shown. Do not repeat the acknowledgement. Chief policy ${plan.policyVersion}, request ${plan.sourceMessageId}, revision ${plan.revision}. ${choice} Selection is preparation, not approval for a write or installation. The dispatch boundary rechecks eligibility. Fixed pins and existing budgets remain unchanged. ${control ? `Owner corrections supersede the previous steps: ${JSON.stringify(corrections.map((message) => message.blocks))}. Excluded member ids: ${JSON.stringify(control.excludedIds)}. Local only: ${control.localOnly}. Previous effect needs reconciliation: ${Boolean(control.uncertainRunIds.length)}. Reconciled outcomes: ${JSON.stringify(control.reconciledActions ?? [])}. Never repeat a kept or unknown external action; the replacement must do only the remaining work.` : ""}`;
 }
 /** Called under the existing owned-group lock, immediately before shared delegation admission. */

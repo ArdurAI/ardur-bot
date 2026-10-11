@@ -167,7 +167,12 @@ export function chiefIntent(input: {
   return {
     key,
     operation: {
-      taskType: row && row.key !== "greeting" ? "operations" : input.taskType,
+      taskType:
+        row && row.key !== "greeting"
+          ? row.purpose === "manage-repository"
+            ? "code-change"
+            : "operations"
+          : input.taskType,
       purpose: row?.purpose ?? "general",
     },
     receiptOnly: greeting,

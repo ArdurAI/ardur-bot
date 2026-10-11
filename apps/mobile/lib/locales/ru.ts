@@ -1580,4 +1580,8 @@ export const RU_MESSAGES: Record<string, string> = {
   "Please address the failing conditions.": "Исправьте невыполненные условия.",
   "Final owner review": "Итоговая проверка владельцем",
   "Could not review result. Try again.": "Не удалось проверить результат. Попробуйте снова.",
+  "Got it — I’ll choose a team member to file this issue in Linear.":
+    "Понял — выберу участника команды, который создаст эту задачу в Linear.",
+  "Got it — I’ll choose a team member to manage the GitHub repository.":
+    "Понял — выберу участника команды для управления репозиторием GitHub.",
 };
