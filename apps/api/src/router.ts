@@ -330,7 +330,7 @@ import {
   validateModelPinSelection,
 } from "./model-pin-validation.js";
 import { notificationActivity } from "./notification-activity.js";
-import { ollamaConnection, ollamaStatus } from "./ollama.js";
+import { ollamaCatalogStates, ollamaConnection, ollamaStatus } from "./ollama.js";
 import {
   chooseFocus,
   dismissFocus,
@@ -1382,10 +1382,11 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           context.actor.userId,
           "ollama",
         );
-        const states = await Promise.all(
-          connections.map((connection) =>
-            ollamaStatus(deps, context.actor, context.signal, undefined, connection.id),
-          ),
+        const states = await ollamaCatalogStates(
+          deps,
+          context.actor,
+          connections.map((connection) => connection.id),
+          context.signal,
         );
         return [
           ...listPiCatalog(),
@@ -1636,9 +1637,15 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
               });
               if (!secret)
                 throw new ORPCError("BAD_REQUEST", { message: "Connect that model first." });
+              let plaintext: string;
+              try {
+                plaintext = deps.secrets.load(secret.ciphertext, credential.secretId);
+              } catch {
+                throw new ORPCError("BAD_REQUEST", { message: "Connect that model first." });
+              }
               const metadata = modelCredentialDto(
                 { ...credential, defaultModel: modelId, isDefault: false },
-                deps.secrets.load(secret.ciphertext, credential.secretId),
+                plaintext,
               );
               const issue = modelDefaultSelectionIssue(input.provider, modelId, metadata, [
                 ...listPiCatalog(),

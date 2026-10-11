@@ -3,6 +3,7 @@ import type { PrismaClient } from "@ardurbot/db";
 import { RPCHandler } from "@orpc/server/fetch";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { botModelPinUpdate } from "./bot-model-pin.js";
+import { ollamaCatalogStates } from "./ollama.js";
 import type { RouterDeps } from "./router.js";
 import { createRouter } from "./router.js";
 
@@ -242,4 +243,46 @@ it("lists each local server connection and loads only the explicitly selected on
     json: { models: [], issue: expect.any(String) },
   });
   expect(http.fetch).not.toHaveBeenCalled();
+});
+
+it("bounds catalog discovery concurrency and returns healthy models before the deadline", async () => {
+  vi.useFakeTimers();
+  try {
+    const f = fixture();
+    const ids = ["slow-1", "healthy", "slow-2", "slow-3", "queued"];
+    vi.mocked(f.deps.prisma.userModelCredential.findFirst).mockImplementation(
+      async ({ where }: any) => ({ id: where.id, provider: "ollama", secretId: where.id }) as never,
+    );
+    vi.mocked(f.deps.prisma.secret.findFirst).mockImplementation(
+      async ({ where }: any) => ({ id: where.id, ciphertext: where.id }) as never,
+    );
+    f.deps.secrets.load = (_ciphertext, id) =>
+      JSON.stringify({
+        kind: "openai_compatible",
+        baseUrl: `http://127.0.0.1:${11434 + ids.indexOf(id)}`,
+      });
+    const healthyFetch = http.fetch.getMockImplementation()!;
+    const started = new Set<string>();
+    const aborted: AbortSignal[] = [];
+    http.fetch.mockImplementation(async (url, init) => {
+      const host = new URL(String(url)).port;
+      started.add(host);
+      if (host === "11435") return healthyFetch(url, init);
+      if (init?.signal) aborted.push(init.signal);
+      // Simulate a transport that ignores cancellation: the list must still finish.
+      return new Promise<Response>(() => {});
+    });
+    const request = ollamaCatalogStates(f.deps, f.actor, ids);
+    await vi.advanceTimersByTimeAsync(0);
+    expect([...started]).toEqual(["11434", "11435", "11436", "11437"]);
+    expect(started.has("11438")).toBe(false);
+    await vi.advanceTimersByTimeAsync(3_000);
+    const states = await request;
+    expect(states).toHaveLength(1);
+    expect(states[0]).toMatchObject({ credentialId: "healthy", models: [{ id: "llama3.2:1b" }] });
+    expect(aborted.every((signal) => signal.aborted)).toBe(true);
+    expect(started.has("11438")).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
 });

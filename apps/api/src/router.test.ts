@@ -1365,6 +1365,65 @@ describe("model credential persistence", () => {
     expect(upsert).not.toHaveBeenCalled();
   });
 
+  it.each(["copy-provider", "provider-a", "openai", "openrouter"])(
+    "connects uncatalogued API model ids for %s",
+    async (provider) => {
+      const { handler, upsert } = persistDeps();
+      const response = await call(handler, "models/connect", {
+        provider,
+        modelId: "vendor/custom-model",
+        apiKey: "fake-model-key",
+      });
+      expect(response.status).toBe(200);
+      expect(upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({ modelId: "vendor/custom-model" }),
+        }),
+      );
+    },
+  );
+  it("sets an uncatalogued default on the chosen API-key connection", async () => {
+    const { deps, tx, upsert } = persistDeps();
+    tx.userModelCredential.findFirst.mockResolvedValue({
+      id: "chosen",
+      provider: "duplicate-provider",
+      secretId: "secret-1",
+      label: "Chosen",
+    } as never);
+    vi.mocked(deps.secrets.load).mockReturnValue("fake-model-key");
+    const response = await call(new RPCHandler(createRouter(deps)), "models/setDefault", {
+      provider: "duplicate-provider",
+      modelId: "newer/selected",
+      credentialId: "chosen",
+    });
+    expect(response.status).toBe(200);
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ credentialId: "chosen", modelId: "newer/selected" }),
+      }),
+    );
+  });
+  it("refuses unreadable credentials with a friendly message before changing defaults", async () => {
+    const { deps, tx, upsert } = persistDeps();
+    tx.userModelCredential.findFirst.mockResolvedValue({
+      id: "chosen",
+      provider: "openai",
+      secretId: "secret-1",
+      label: "Chosen",
+    } as never);
+    vi.mocked(deps.secrets.load).mockImplementation(() => {
+      throw new Error("unreadable fixture");
+    });
+    const response = await call(new RPCHandler(createRouter(deps)), "models/setDefault", {
+      provider: "openai",
+      modelId: "gpt-4.1",
+      credentialId: "chosen",
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ json: { message: "Connect that model first." } });
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
   it("edits only the explicitly chosen API-key connection", async () => {
     const { handler, deps, tx } = persistDeps();
     const chosen = {

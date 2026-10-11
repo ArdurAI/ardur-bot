@@ -24,7 +24,7 @@ it("checks catalog compatibility, credentials and endpoint metadata before savin
       modelDefaultSelectionIssue("fixture", "model", { ...credential, ...choice }, catalog),
     ).toBeDefined();
   }
-  expect(modelDefaultSelectionIssue("fixture", "unknown", credential, catalog)).toBeDefined();
+  expect(modelDefaultSelectionIssue("fixture", "unknown", credential, catalog)).toBeUndefined();
   expect(modelDefaultSelectionIssue("fixture", null, credential, catalog)).toBeDefined();
   expect(
     modelDefaultSelectionIssue(
@@ -47,4 +47,25 @@ it("checks catalog compatibility, credentials and endpoint metadata before savin
       { ...catalog[0]!, provider: "signed", auth: "oauth" },
     ]),
   ).toBeDefined();
+});
+
+it.each(["copy-provider", "provider-a", "openai", "openrouter"])(
+  "accepts an explicit API model outside the catalog for %s",
+  (provider) => {
+    expect(
+      modelDefaultSelectionIssue(
+        provider,
+        "vendor/fine-tuned-model",
+        { ...credential, provider },
+        catalog,
+      ),
+    ).toBeUndefined();
+  },
+);
+it("keeps sign-in-only provider validation for uncatalogued ids", () => {
+  expect(
+    modelDefaultSelectionIssue("signed", "custom", { ...credential, provider: "signed" }, [
+      { ...catalog[0]!, provider: "signed", auth: "oauth" },
+    ]),
+  ).toBe("This connection cannot serve that model.");
 });
