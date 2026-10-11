@@ -9,11 +9,19 @@ export const ChiefReceiptKeySchema = z.enum([
   "greeting",
   "exclude-member",
   "change-task",
+  "create-issue",
+  "manage-repository",
 ]);
 export type ChiefReceiptKey = z.infer<typeof ChiefReceiptKeySchema>;
 export const ChiefOperationSchema = z.object({
   taskType: TaskTypeSchema,
-  purpose: z.enum(["document-to-service", "install-tool", "general"]),
+  purpose: z.enum([
+    "document-to-service",
+    "install-tool",
+    "general",
+    "create-issue",
+    "manage-repository",
+  ]),
 });
 export type ChiefOperation = z.infer<typeof ChiefOperationSchema>;
 

@@ -45,9 +45,13 @@ export function ChiefReceiptText({
           ? t`Got it — I’ll choose a team member to put this in Notion.`
           : receiptKey === "install-tool"
             ? t`Got it — I’ll check what’s missing and ask before installing it.`
-            : receiptKey === "greeting"
-              ? t`Hi everyone.`
-              : t`Got it — I’ll check the request and choose the next step.`;
+            : receiptKey === "create-issue"
+              ? t`Got it — I’ll choose a team member to file this issue in Linear.`
+              : receiptKey === "manage-repository"
+                ? t`Got it — I’ll choose a team member to manage the GitHub repository.`
+                : receiptKey === "greeting"
+                  ? t`Hi everyone.`
+                  : t`Got it — I’ll check the request and choose the next step.`;
   return (
     <span data-testid="chief-receipt" aria-live="polite">
       {text}

@@ -4680,6 +4680,14 @@ msgid "Got it — I’ll check what’s missing and ask before installing it."
 msgstr "收到 — 我会检查缺少什么，并在安装前征求同意。"
 
 #: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll choose a team member to file this issue in Linear."
+msgstr "Got it — I’ll choose a team member to file this issue in Linear."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll choose a team member to manage the GitHub repository."
+msgstr "Got it — I’ll choose a team member to manage the GitHub repository."
+
+#: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll choose a team member to put this in Notion."
 msgstr "收到 — 我会选择一位团队成员把它放到 Notion。"
 

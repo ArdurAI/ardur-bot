@@ -23,6 +23,10 @@ export function chiefReceiptText(key: ChiefReceiptKey, memberName?: string): str
       return t("Got it — I’ll check what’s missing and ask before installing it.");
     case "greeting":
       return t("Hi everyone.");
+    case "create-issue":
+      return t("Got it — I’ll choose a team member to file this issue in Linear.");
+    case "manage-repository":
+      return t("Got it — I’ll choose a team member to manage the GitHub repository.");
     default:
       return t("Got it — I’ll check the request and choose the next step.");
   }

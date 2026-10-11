@@ -4680,6 +4680,14 @@ msgid "Got it — I’ll check what’s missing and ask before installing it."
 msgstr "알겠습니다 — 무엇이 없는지 확인하고 설치 전에 물어보겠습니다."
 
 #: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll choose a team member to file this issue in Linear."
+msgstr "Got it — I’ll choose a team member to file this issue in Linear."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll choose a team member to manage the GitHub repository."
+msgstr "Got it — I’ll choose a team member to manage the GitHub repository."
+
+#: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll choose a team member to put this in Notion."
 msgstr "알겠습니다 — 이 문서를 Notion에 올릴 팀원을 선택하겠습니다."
 

@@ -261,6 +261,73 @@ describe.skipIf(!enabled).sequential("chief receipt Postgres journey", () => {
       "running",
     );
   });
+  it("loads generalized capability facts for all connected apps", async () => {
+    const f = await room();
+    // Add Linear integration
+    await db.prisma.mcpServer.create({
+      data: {
+        ...f.scope,
+        slug: "fixture-linear",
+        name: "Fake Linear",
+        transport: "streamable_http",
+        catalogId: "linear",
+        connectionState: "connected",
+        lastCheckedAt: new Date(),
+        manifest: {
+          capturedAt: new Date().toISOString(),
+          serverVersion: "fixture",
+          account: null,
+          tools: [
+            { id: "fetch_issue", description: "Read an issue", inputSchemaDigest: "a".repeat(64) },
+          ],
+        },
+        spaceAllowedTools: ["fetch_issue"],
+        assignments: {
+          create: [
+            { ...f.scope, botId: f.worker.id, access: "custom", allowedTools: ["fetch_issue"] },
+          ],
+        },
+      },
+    });
+    // Add GitHub integration
+    await db.prisma.mcpServer.create({
+      data: {
+        ...f.scope,
+        slug: "fixture-github",
+        name: "Fake GitHub",
+        transport: "streamable_http",
+        catalogId: "github",
+        connectionState: "needs-sign-in",
+        lastCheckedAt: new Date(),
+        manifest: {
+          capturedAt: new Date().toISOString(),
+          serverVersion: "fixture",
+          account: null,
+          tools: [
+            { id: "read_repo", description: "Read repository", inputSchemaDigest: "a".repeat(64) },
+          ],
+        },
+        spaceAllowedTools: ["read_repo"],
+        assignments: {
+          create: [
+            { ...f.scope, botId: f.worker.id, access: "custom", allowedTools: ["read_repo"] },
+          ],
+        },
+      },
+    });
+
+    const { loadChiefMemberFacts } = await import("@ardurbot/db");
+    const facts = await loadChiefMemberFacts(db.prisma, f.scope, f.group.id);
+    const workerFacts = facts.find((bot) => bot.id === f.worker.id)!;
+
+    expect(workerFacts.capabilities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "notion:read-back", access: "known" }),
+        expect.objectContaining({ id: "linear:read-back", access: "known" }),
+        expect.objectContaining({ id: "github:read-back", access: "missing" }),
+      ]),
+    );
+  });
   it("serializes removal against dispatch and never chooses an unauthorized replacement", async () => {
     const f = await room();
     const sent = await sendThreadMessage(f.deps, f.actor, f.target, {

@@ -88,8 +88,9 @@ export async function loadChiefMemberFacts(
       select: { botId: true, status: true },
     }),
     tx.mcpServer.findMany({
-      where: { ...scope, enabled: true, catalogId: "notion" },
+      where: { ...scope, enabled: true },
       select: {
+        catalogId: true,
         manifest: true,
         connectionState: true,
         lastCheckedAt: true,
@@ -120,6 +121,7 @@ export async function loadChiefMemberFacts(
     const runtimeKind = groupPin?.runtimeKind ?? bot.runtimeKind;
     const capabilities: ChiefMemberFacts["capabilities"][number][] = [];
     for (const server of servers) {
+      if (!server.catalogId) continue;
       const assignment = server.assignments.find((row) => row.botId === bot.id);
       const manifest = IntegrationManifestSchema.safeParse(server.manifest);
       const granted =
@@ -141,7 +143,7 @@ export async function loadChiefMemberFacts(
             /fetch|get|retrieve|read/i.test(tool.id),
         );
       capabilities.push({
-        id: "notion:read-back",
+        id: `${server.catalogId}:read-back`,
         access:
           server.connectionState === "connected" && readBack
             ? "known"
@@ -439,11 +441,14 @@ export async function validateChiefDispatch(
           ? facts.find((member) => member.id === scope.botId)?.computer?.id
           : undefined,
     });
-    if (current.kind !== "delegate" && current.kind !== "queue")
+    if (current.kind !== "delegate" && current.kind !== "queue") {
       return {
         error:
-          "The selected member is no longer eligible. Plan again without dispatching a replacement.",
+          current.kind === "needs-owner"
+            ? current.blocker
+            : "The selected member is no longer eligible. Plan again without dispatching a replacement.",
       };
+    }
     const previous = (plan.checkedFacts as unknown as ChiefMemberFacts[]).find(
       (member) => member.id === memberId,
     );

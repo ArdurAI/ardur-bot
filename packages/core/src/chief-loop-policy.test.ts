@@ -92,6 +92,37 @@ describe("chief policy", () => {
       kind: "delegate",
     });
   });
+  it("returns needs-owner blocker for create-issue when capability is missing or unknown", () => {
+    const input = {
+      chiefId: "chief",
+      operation: { taskType: "operations", purpose: "create-issue" } as const,
+      members: [
+        member("a", {
+          capabilities: [{ id: "linear:read-back", access: "missing", checkedAt: "now" }],
+        }),
+        member("b", {
+          capabilities: [{ id: "linear:read-back", access: "unknown", checkedAt: "now" }],
+        }),
+        member("c", { capabilities: [] }),
+      ],
+    };
+    expect(chooseChiefMember(input)).toEqual({
+      kind: "needs-owner",
+      blocker: "No team member has access to linear. Please connect the app or grant permission.",
+    });
+
+    // Test tie-breaking for equal members
+    const capable = member("d", {
+      capabilities: [{ id: "linear:read-back", access: "known", checkedAt: "now" }],
+    });
+    const capable2 = member("e", {
+      capabilities: [{ id: "linear:read-back", access: "known", checkedAt: "now" }],
+    });
+    expect(chooseChiefMember({ ...input, members: [capable2, capable] })).toMatchObject({
+      kind: "delegate",
+      memberId: "d", // 'd' comes before 'e' in tie-break by ID
+    });
+  });
   it.each([
     "Hi, upload the attachment",
     "hello; install UTM",
