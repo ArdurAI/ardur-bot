@@ -2,6 +2,7 @@
 export {
   buildEvidenceBundle,
   createEvidenceChain,
+  evidenceKeyId,
   generateEvidenceKey,
   loadEvidencePrivateKey,
   sealRun,

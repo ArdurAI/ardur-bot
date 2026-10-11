@@ -1,3 +1,5 @@
+import type { EvidenceSigningIdentity } from "@ardurbot/contracts/evidence";
+import { evidenceIdentityCard } from "@ardurbot/contracts/evidence";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import { captureApiRequestContext, currentApiBase, selectedSpaceId } from "./api";
@@ -27,6 +29,17 @@ export async function exportRunEvidence(runId: string) {
       mimeType: "application/gzip",
       UTI: "org.gnu.gnu-zip-archive",
     });
+  } finally {
+    if (file.exists) file.delete();
+  }
+}
+
+export async function exportEvidenceIdentity(identity: EvidenceSigningIdentity) {
+  const file = new File(Paths.cache, `ardur-signing-identity-${Date.now()}.json`);
+  try {
+    file.create({ overwrite: true });
+    file.write(evidenceIdentityCard(identity));
+    await Sharing.shareAsync(file.uri, { mimeType: "application/json", UTI: "public.json" });
   } finally {
     if (file.exists) file.delete();
   }

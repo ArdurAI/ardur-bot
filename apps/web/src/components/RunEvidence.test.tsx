@@ -6,7 +6,11 @@ import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import RunEvidence, { EvidenceDownload, EvidenceStatus } from "./RunEvidence";
+import RunEvidence, {
+  EvidenceDownload,
+  EvidenceIdentityDetails,
+  EvidenceStatus,
+} from "./RunEvidence";
 
 const api = vi.hoisted(() => ({ summary: vi.fn() }));
 vi.mock("../lib/rpc", () => ({
@@ -24,6 +28,23 @@ vi.mock("@lingui/react/macro", () => ({
   Trans: ({ children }: { children: ReactNode }) => children,
 }));
 vi.mock("@ardurbot/ui-web", () => ({
+  Button: ({
+    children,
+    onClick,
+    disabled,
+  }: {
+    children: ReactNode;
+    onClick?: () => void;
+    disabled?: boolean;
+  }) => (
+    <button type="button" disabled={disabled} onClick={onClick}>
+      {children}
+    </button>
+  ),
+  Input: (props: React.ComponentProps<"input">) => <input {...props} />,
+  Dialog: ({ children, open }: { children: ReactNode; open: boolean }) => (open ? children : null),
+  DialogContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DialogTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
   DropdownMenuItem: ({ render, children }: { render: ReactNode; children: ReactNode }) => (
     <div data-download>
       {render}
@@ -180,4 +201,126 @@ it("ignores an answer that arrives after unmounting instead of aborting the requ
   expect(node.textContent).toBe("message text");
   vi.unstubAllGlobals();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+});
+
+const fingerprint = `sha256:${"a".repeat(64)}`;
+async function openIdentity() {
+  await act(() =>
+    root.render(
+      <EvidenceIdentityDetails
+        summary={{
+          ...summary("verified"),
+          signingIdentity: { fingerprint, scope: { type: "space", id: "space" }, keyVersion: 1 },
+          signerMatch: "no_expected_key",
+        }}
+        spaceId="space"
+      />,
+    ),
+  );
+  await act(() => node.querySelector("button")!.click());
+}
+function button(label: string) {
+  return [...node.querySelectorAll("button")].find((item) => item.textContent === label)!;
+}
+async function enter(value: string) {
+  await act(() => {
+    const input = node.querySelector("input")!;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+it("reveals a public identity, copies its complete fingerprint, and exports a separate card", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  const create = vi.fn().mockReturnValue("blob:identity");
+  const revoke = vi.fn();
+  vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: create, revokeObjectURL: revoke }));
+  const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+    this: HTMLAnchorElement,
+  ) {
+    expect(this.download).toBe("ardur-signing-identity.json");
+  });
+  await openIdentity();
+  expect(node.textContent).toContain(fingerprint);
+  expect(node.textContent).toContain("Key version1");
+  await act(() => button("Copy fingerprint").click());
+  expect(writeText).toHaveBeenCalledWith(fingerprint);
+  await act(() => button("Export identity card").click());
+  expect(create).toHaveBeenCalledWith(expect.any(Blob));
+  expect(click).toHaveBeenCalledOnce();
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  expect(revoke).toHaveBeenCalledWith("blob:identity");
+  click.mockRestore();
+});
+it.each(["expected_key", "different_key", "no_expected_key"] as const)(
+  "shows the backend's %s comparison and sends the expected fingerprint",
+  async (signerMatch) => {
+    await openIdentity();
+    const expected = signerMatch === "no_expected_key" ? "" : fingerprint;
+    await enter(expected);
+    api.summary.mockResolvedValue({ ...summary("verified"), signerMatch });
+    await act(() => button("Check key").click());
+    expect(api.summary).toHaveBeenCalledWith(
+      { runId: "run", ...(expected ? { expectedFingerprint: expected } : {}) },
+      { context: { spaceId: "space" } },
+    );
+    expect(node.querySelector('[role="status"]')?.textContent).toBe(
+      {
+        expected_key: "Signed by the expected key",
+        different_key: "Signed by a different key",
+        no_expected_key: "No expected key given; self-consistent only",
+      }[signerMatch],
+    );
+    await enter("short");
+    expect(button("Check key").disabled).toBe(true);
+    expect(node.querySelector('[role="status"]')).toBeNull();
+  },
+);
+it("shows a failed comparison without a successful signer label", async () => {
+  await openIdentity();
+  api.summary.mockResolvedValue({ ...summary("failed"), signerMatch: null });
+  await act(() => button("Check key").click());
+  expect(node.querySelector('[role="alert"]')?.textContent).toBe("Check failed");
+  expect(node.querySelector('[role="status"]')).toBeNull();
+});
+
+it("offers manual copying when the clipboard is unavailable", async () => {
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText: vi.fn().mockRejectedValue(new Error("unavailable")) },
+  });
+  await openIdentity();
+  await act(() => button("Copy fingerprint").click());
+  expect(node.querySelector('[role="alert"]')?.textContent).toBe(
+    "Could not copy. Select the fingerprint and copy it.",
+  );
+  expect(node.textContent).toContain(fingerprint);
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText: vi.fn().mockResolvedValue(undefined) },
+  });
+  await act(() => button("Copy fingerprint").click());
+  expect(node.querySelector('[role="alert"]')).toBeNull();
+  expect(button("Copied")).toBeTruthy();
+});
+
+it("hides an earlier signer match when the run stops verifying", async () => {
+  await openIdentity();
+  await enter(fingerprint);
+  api.summary.mockResolvedValue({ ...summary("verified"), signerMatch: "expected_key" });
+  await act(() => button("Check key").click());
+  expect(node.querySelector('[role="status"]')?.textContent).toBe("Signed by the expected key");
+  await act(() =>
+    root.render(
+      <EvidenceIdentityDetails
+        summary={{
+          ...summary("failed"),
+          signingIdentity: { fingerprint, scope: { type: "space", id: "space" }, keyVersion: 1 },
+          signerMatch: null,
+        }}
+        spaceId="space"
+      />,
+    ),
+  );
+  expect(node.querySelector('[role="status"]')).toBeNull();
 });

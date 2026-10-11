@@ -1834,6 +1834,10 @@ msgstr "Buscar actualizaciones"
 msgid "Check in."
 msgstr "Regístrate."
 
+#: src/components/RunEvidence.tsx
+msgid "Check key"
+msgstr "Comprobar clave"
+
 #: src/pages/Auth.tsx
 msgid "Check your email"
 msgstr "Revisa tu correo"
@@ -2600,6 +2604,7 @@ msgstr "Coordinador"
 msgid "Coordinator bot"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/memory/MemoryImport.tsx
 msgid "Copied"
@@ -2617,6 +2622,10 @@ msgstr ""
 #: src/components/ThreadCommandBlock.tsx
 msgid "Copy command"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Copy fingerprint"
+msgstr "Copiar huella digital"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Copy output"
@@ -2810,6 +2819,10 @@ msgstr "No se pudo continuar"
 msgid "Could not copy. Select and copy the prompt."
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "Could not copy. Select the fingerprint and copy it."
+msgstr "No se pudo copiar. Selecciona la huella digital y cópiala."
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Could not create bot"
 msgstr "No se pudo crear el bot"
@@ -2969,6 +2982,10 @@ msgstr ""
 msgid "Could not load model settings"
 msgstr "No se pudo cargar la configuración de modelos"
 
+#: src/pages/Onboarding.tsx
+msgid "Could not load models."
+msgstr "No se pudieron cargar los modelos."
+
 #: src/pages/LearningObservation.tsx
 msgid "Could not load observations."
 msgstr ""
@@ -2997,6 +3014,10 @@ msgstr ""
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Could not load settings. Try again."
 msgstr ""
+
+#: src/pages/Onboarding.tsx
+msgid "Could not load setup."
+msgstr "No se pudo cargar la configuración inicial."
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load skill"
@@ -4306,6 +4327,10 @@ msgstr "Expandir"
 msgid "Expand {0}"
 msgstr "Expandir {0}"
 
+#: src/components/RunEvidence.tsx
+msgid "Expected fingerprint"
+msgstr "Huella digital esperada"
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
 msgstr ""
@@ -4339,6 +4364,10 @@ msgstr ""
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Export data"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Export identity card"
+msgstr "Exportar tarjeta de identidad"
 
 #: src/pages/ComparePanel.tsx
 msgid "Export JSON"
@@ -4469,6 +4498,10 @@ msgstr "Buscando…"
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Fine-grained token"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Fingerprint"
+msgstr "Huella digital"
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "Finish setup"
@@ -5229,6 +5262,10 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "key"
 msgstr "Clave"
+
+#: src/components/RunEvidence.tsx
+msgid "Key version"
+msgstr "Versión de la clave"
 
 #. placeholder {0}: target.context.slice(5)
 #: src/pages/fleet/target-name.ts
@@ -6269,6 +6306,10 @@ msgstr ""
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "No embedding service is configured."
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "No expected key given; self-consistent only"
+msgstr "No se indicó una clave esperada; solo hay coherencia interna"
 
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "No extensions are in the built-in catalogue yet. Use Add to install an extension bundle (.mcpb or .dxt file) from this computer."
@@ -7826,6 +7867,7 @@ msgstr "Reanudar mensajes del equipo"
 #: src/pages/LearningTimeline.tsx
 #: src/pages/memory/MemoryPage.tsx
 #: src/pages/MemoryHistory.tsx
+#: src/pages/Onboarding.tsx
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
@@ -8673,6 +8715,14 @@ msgstr ""
 msgid "Sign-in was declined."
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "Signed by a different key"
+msgstr "Firmado con una clave diferente"
+
+#: src/components/RunEvidence.tsx
+msgid "Signed by the expected key"
+msgstr "Firmado con la clave esperada"
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Signed in"
 msgstr ""
@@ -8680,6 +8730,10 @@ msgstr ""
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Signed in on this computer as {identity}"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Signing identity"
+msgstr "Identidad de firma"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/customize/PluginsPage.tsx
@@ -8768,6 +8822,10 @@ msgstr ""
 #: src/pages/LearningInbox.tsx
 msgid "Source revision"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Space"
+msgstr "Espacio"
 
 #: src/pages/board/BoardsSettings.tsx
 msgid "Space board"

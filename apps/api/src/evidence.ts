@@ -1,6 +1,11 @@
 import { Readable } from "node:stream";
 import type { HomeArchiveFile } from "@ardurbot/adapter-kit";
-import { buildEvidenceBundle, verifyChain, verifySeal } from "@ardurbot/adapters/evidence-format";
+import {
+  buildEvidenceBundle,
+  evidenceKeyId,
+  verifyChain,
+  verifySeal,
+} from "@ardurbot/adapters/evidence-format";
 import type { Actor } from "@ardurbot/contracts";
 import type { EvidenceRunSummary } from "@ardurbot/contracts/evidence";
 import { evidenceState } from "@ardurbot/contracts/evidence-states";
@@ -11,7 +16,12 @@ import type { Context, Hono } from "hono";
 import { gzipArchive } from "./export-archive.js";
 import { resolveThreadTarget } from "./thread-target.js";
 
-async function loadRunEvidence(prisma: PrismaClient, actor: Actor, runId: string) {
+async function loadRunEvidence(
+  prisma: PrismaClient,
+  actor: Actor,
+  runId: string,
+  expectedFingerprint?: string,
+) {
   const member = await prisma.spaceMember.findUnique({
     where: { spaceId_userId: { spaceId: actor.spaceId, userId: actor.userId } },
   });
@@ -34,15 +44,26 @@ async function loadRunEvidence(prisma: PrismaClient, actor: Actor, runId: string
   const store = createEvidenceStore(prisma);
   const [records, seal] = await Promise.all([store.recordsForRun(runId), store.sealForRun(runId)]);
   const kid = records[0]?.kid ?? "";
-  const key = kid ? await store.keyByKid(kid) : null;
+  const key = kid
+    ? await prisma.evidenceKey.findUnique({
+        where: { kid },
+        select: { publicKeyPem: true, spaceId: true },
+      })
+    : null;
+  const activeKey = await prisma.evidenceKey.findFirst({
+    where: { spaceId: actor.spaceId, revokedAt: null },
+    select: { publicKeyPem: true, spaceId: true },
+  });
   const journal = records.map((row) => row.jws);
   const failures = new Set<string>();
+  let signerMatch: EvidenceRunSummary["signerMatch"] = null;
   if (records.length || seal) {
     const chain = verifyChain(journal, key?.publicKeyPem ?? "");
     for (const failure of chain.failures) failures.add(failure.code);
     if (seal) {
-      for (const failure of verifySeal(seal.jws, journal, key?.publicKeyPem ?? "").failures)
-        failures.add(failure.code);
+      const verified = verifySeal(seal.jws, journal, key?.publicKeyPem ?? "", expectedFingerprint);
+      signerMatch = verified.signerMatch;
+      for (const failure of verified.failures) failures.add(failure.code);
     }
     if (
       key?.spaceId !== actor.spaceId ||
@@ -69,6 +90,14 @@ async function loadRunEvidence(prisma: PrismaClient, actor: Actor, runId: string
     gapCount,
   });
   const summary: EvidenceRunSummary = {
+    signingIdentity: activeKey
+      ? {
+          fingerprint: evidenceKeyId(activeKey.publicKeyPem),
+          scope: { type: "space", id: activeKey.spaceId },
+          keyVersion: 1,
+        }
+      : null,
+    signerMatch: state === "verified" || state === "gap" ? signerMatch : null,
     sessionId: runId,
     recordedAt: (records[0]?.createdAt ?? run.startedAt ?? run.createdAt).toISOString(),
     decisions: {
@@ -97,8 +126,13 @@ async function loadRunEvidence(prisma: PrismaClient, actor: Actor, runId: string
   return { summary, journal, seal, key };
 }
 
-export async function runEvidenceSummary(prisma: PrismaClient, actor: Actor, runId: string) {
-  return (await loadRunEvidence(prisma, actor, runId)).summary;
+export async function runEvidenceSummary(
+  prisma: PrismaClient,
+  actor: Actor,
+  runId: string,
+  expectedFingerprint?: string,
+) {
+  return (await loadRunEvidence(prisma, actor, runId, expectedFingerprint)).summary;
 }
 
 export async function runEvidenceArchive(
