@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page, type TestInfo } from "@playwright/test";
+import { type APIResponse, expect, type Locator, type Page, type TestInfo } from "@playwright/test";
 import {
   DEPLOYMENT_OWNER_CLAIM_DEADLINE_MS,
   DEPLOYMENT_OWNER_RENEW_MS,
@@ -50,16 +50,50 @@ export async function claimDeploymentOwner(page: Page): Promise<() => Promise<vo
   const startedAt = Date.now();
   let lastStatus = 0;
   for (;;) {
+    const remainingMs = DEPLOYMENT_OWNER_CLAIM_DEADLINE_MS - (Date.now() - startedAt);
+    if (remainingMs <= 0) {
+      const status = lastStatus || "none";
+      throw new Error(
+        `Timed out waiting for the deployment owner after ${DEPLOYMENT_OWNER_CLAIM_DEADLINE_MS}ms (last status ${status})`,
+      );
+    }
+    let timer: NodeJS.Timeout | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        const status = lastStatus || "none";
+        reject(
+          new Error(
+            `Timed out waiting for the deployment owner after ${DEPLOYMENT_OWNER_CLAIM_DEADLINE_MS}ms (last status ${status})`,
+          ),
+        );
+      }, remainingMs);
+    });
+    let response: APIResponse;
+    try {
+      response = await Promise.race([
+        page.request.post(ownerUrl, {
+          timeout: remainingMs,
+        }),
+        timeoutPromise,
+      ]);
+    } catch (error) {
+      if (Date.now() - startedAt >= DEPLOYMENT_OWNER_CLAIM_DEADLINE_MS) {
+        const status = lastStatus || "none";
+        throw new Error(
+          `Timed out waiting for the deployment owner after ${DEPLOYMENT_OWNER_CLAIM_DEADLINE_MS}ms (last status ${status})`,
+        );
+      }
+      throw error;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+    lastStatus = response.status();
     if (Date.now() - startedAt >= DEPLOYMENT_OWNER_CLAIM_DEADLINE_MS) {
       const status = lastStatus || "none";
       throw new Error(
         `Timed out waiting for the deployment owner after ${DEPLOYMENT_OWNER_CLAIM_DEADLINE_MS}ms (last status ${status})`,
       );
     }
-    const response = await page.request.post(ownerUrl, {
-      timeout: 125_000,
-    });
-    lastStatus = response.status();
     if (response.status() === 423) continue;
     if (!response.ok()) throw new Error(`Cannot set up deployment owner: ${response.status()}`);
     break;
@@ -121,13 +155,33 @@ async function visibleSetupError(page: Page): Promise<SetupError | null> {
   return null;
 }
 
-async function observeSetup(page: Page): Promise<SetupObservation> {
-  const composer = page.getByRole("combobox", { name: CHAT_COMPOSER_NAME });
-  const composerVisible = await composer.isVisible().catch(() => false);
+async function observeSetup(page: Page, expectedBot = "Chief"): Promise<SetupObservation> {
+  const anyComposer = page.getByRole("combobox", { name: CHAT_COMPOSER_NAME });
+  const expectedComposer = page.getByRole("combobox", { name: `Message ${expectedBot}` });
+  const anyVisible = await anyComposer.isVisible().catch(() => false);
+  let composerBot: string | null = null;
+  if (anyVisible) {
+    if (await expectedComposer.isVisible().catch(() => false)) {
+      composerBot = expectedBot;
+    } else {
+      const label = await anyComposer.getAttribute("aria-label").catch(() => null);
+      const match = label ? /^Message (.+)$/.exec(label) : null;
+      composerBot = match ? match[1] : "unknown";
+    }
+  }
+  const activeComposer = composerBot === expectedBot ? expectedComposer : anyComposer;
+  const composerVisible = anyVisible;
+  const composerEnabled = composerVisible && (await activeComposer.isEnabled().catch(() => false));
+  const composerFocused =
+    composerEnabled &&
+    (await activeComposer.evaluate((el) => document.activeElement === el).catch(() => false));
+
   return {
     url: page.url(),
     composerVisible,
-    composerEnabled: composerVisible && (await composer.isEnabled().catch(() => false)),
+    composerEnabled,
+    composerFocused,
+    composerBot,
     modelHeading: await page
       .getByRole("heading", { name: "Connect a model", exact: true })
       .isVisible()
@@ -157,11 +211,18 @@ async function waitForSetupChange(
   page: Page,
   remainingMs: number,
   observation: SetupObservation,
+  expectedBot = "Chief",
 ): Promise<void> {
-  const composer = page.getByRole("combobox", { name: CHAT_COMPOSER_NAME });
+  const composer = page.getByRole("combobox", { name: `Message ${expectedBot}` });
   if (observation.composerVisible && !observation.composerEnabled) {
     await expect(composer)
       .toBeEnabled({ timeout: remainingMs })
+      .catch(() => undefined);
+    return;
+  }
+  if (observation.composerVisible && observation.composerEnabled && !observation.composerFocused) {
+    await expect(composer)
+      .toBeFocused({ timeout: remainingMs })
       .catch(() => undefined);
     return;
   }
@@ -208,9 +269,9 @@ async function waitForSetupChange(
 async function signInExistingAccount(page: Page, email: string, password: string, timeout: number) {
   await page.goto(`/sign-in?next=${encodeURIComponent("/onboarding")}`);
   await page.getByRole("heading", { name: "Sign in to Ardur", exact: true }).waitFor({ timeout });
-  await page.getByPlaceholder("Your email address").fill(email);
-  await page.getByPlaceholder("Password").fill(password);
-  await page.getByRole("button", { name: "Continue with email" }).click();
+  await page.getByPlaceholder("Your email address").fill(email, { timeout });
+  await page.getByPlaceholder("Password").fill(password, { timeout });
+  await page.getByRole("button", { name: "Continue with email" }).click({ timeout });
   try {
     await page.waitForURL(/\/(onboarding|app)/, { timeout });
   } catch {
@@ -222,13 +283,18 @@ export async function completeOnboarding(
   page: Page,
   testInfo?: TestInfo,
   navigationTimeout = 20_000,
+  expectedBot = "Chief",
 ) {
+  const startedAt = Date.now();
+  const deadlineAt = startedAt + navigationTimeout;
+  const remaining = () => Math.max(0, deadlineAt - Date.now());
+
   const existingAccount = page.getByRole("alert").filter({ hasText: /already exists/i });
   await expect(async () => {
     if (await existingAccount.isVisible()) return;
     if (leftSignUp(page.url())) return;
     throw new Error(`Waiting to leave sign-up (${page.url()})`);
-  }).toPass({ intervals: [100, 250, 500], timeout: navigationTimeout });
+  }).toPass({ intervals: [100, 250, 500], timeout: remaining() });
   if (await existingAccount.isVisible()) {
     const credentials = signupCredentials.get(page);
     if (!credentials) {
@@ -236,35 +302,41 @@ export async function completeOnboarding(
         "Setup is on an existing account. Sign in before the chat composer can become usable.",
       );
     }
-    await signInExistingAccount(page, credentials.email, credentials.password, navigationTimeout);
+    await signInExistingAccount(page, credentials.email, credentials.password, remaining());
   }
   let capturedIntegrations = false;
   await finishSetup({
     now: () => Date.now(),
-    deadlineAt: Date.now() + navigationTimeout,
+    deadlineAt,
     deadlineMs: navigationTimeout,
-    observe: () => observeSetup(page),
-    skipIntegrations: async () => {
+    expectedBot,
+    observe: () => observeSetup(page, expectedBot),
+    skipIntegrations: async (timeoutMs) => {
       if (testInfo && !capturedIntegrations) {
         await captureScreenshot(page, testInfo, "02-connect-apps");
         capturedIntegrations = true;
       }
-      await page.getByRole("button", { name: "Skip", exact: true }).click();
+      await page.getByRole("button", { name: "Skip", exact: true }).click({ timeout: timeoutMs });
     },
-    retrySetup: async () => {
-      await page.getByRole("button", { name: "Retry", exact: true }).click();
+    retrySetup: async (timeoutMs) => {
+      await page.getByRole("button", { name: "Retry", exact: true }).click({ timeout: timeoutMs });
     },
-    signInExisting: async () => {
+    signInExisting: async (timeoutMs) => {
       const credentials = signupCredentials.get(page);
       if (!credentials) {
         throw new Error(
           "Setup is on an existing account. Sign in before the chat composer can become usable.",
         );
       }
-      await signInExistingAccount(page, credentials.email, credentials.password, navigationTimeout);
+      await signInExistingAccount(page, credentials.email, credentials.password, timeoutMs);
     },
-    waitForChange: (remainingMs, observation) => waitForSetupChange(page, remainingMs, observation),
+    waitForChange: (remainingMs, observation) =>
+      waitForSetupChange(page, remainingMs, observation, expectedBot),
   });
+  const composer = page.getByRole("combobox", { name: `Message ${expectedBot}` });
+  await expect(composer).toBeVisible();
+  await expect(composer).toBeEnabled();
+  await expect(composer).toBeFocused();
   if (testInfo) {
     await captureScreenshot(page, testInfo, "03-create-first-bot");
     await captureScreenshot(page, testInfo, "06-onboarding-complete");

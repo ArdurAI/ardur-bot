@@ -7,6 +7,7 @@ import {
 import { claimDeploymentOwner } from "./helpers";
 import {
   finishSetup,
+  isUsableChat,
   nextSetupAction,
   type SetupObservation,
   type SetupProgress,
@@ -92,6 +93,8 @@ function screen(overrides: Partial<SetupObservation> = {}): SetupObservation {
     url: "http://127.0.0.1:5173/onboarding",
     composerVisible: false,
     composerEnabled: false,
+    composerFocused: true,
+    composerBot: "Chief",
     modelHeading: false,
     integrationsHeading: false,
     setupError: null,
@@ -151,6 +154,44 @@ describe("deployment owner claim", () => {
     await vi.advanceTimersByTimeAsync(DEPLOYMENT_OWNER_RENEW_MS * 3);
     expect(post).toHaveBeenCalledTimes(posts);
     expect(remove).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails at the deadline with the named message when an in-flight claim request outlasts the deadline", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("API_URL", "http://127.0.0.1:9999");
+    let passedTimeout: number | undefined;
+    const post = vi.fn((_url: string, options?: { timeout?: number }) => {
+      passedTimeout = options?.timeout;
+      return new Promise<ReturnType<typeof ownerResponse>>((_resolve, reject) => {
+        setTimeout(() => {
+          reject(new Error(`Request timed out after ${options?.timeout}ms`));
+        }, options?.timeout ?? 0);
+      });
+    });
+    const page = { request: { post, delete: vi.fn() } } as unknown as Page;
+
+    const claim = claimDeploymentOwner(page);
+    const assertion = expect(claim).rejects.toThrow(
+      `Timed out waiting for the deployment owner after ${DEPLOYMENT_OWNER_CLAIM_DEADLINE_MS}ms (last status none)`,
+    );
+    await vi.advanceTimersByTimeAsync(DEPLOYMENT_OWNER_CLAIM_DEADLINE_MS);
+    await assertion;
+    expect(passedTimeout).toBe(DEPLOYMENT_OWNER_CLAIM_DEADLINE_MS);
+  });
+
+  it("rejects an owner response that arrives after the deadline", async () => {
+    vi.stubEnv("API_URL", "http://127.0.0.1:9999");
+    let now = 0;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const post = vi.fn(async () => {
+      now = DEPLOYMENT_OWNER_CLAIM_DEADLINE_MS + 1;
+      return ownerResponse(200);
+    });
+    const page = { request: { post, delete: vi.fn() } } as unknown as Page;
+
+    await expect(claimDeploymentOwner(page)).rejects.toThrow(
+      `Timed out waiting for the deployment owner after ${DEPLOYMENT_OWNER_CLAIM_DEADLINE_MS}ms (last status 200)`,
+    );
   });
 });
 
@@ -275,5 +316,93 @@ describe("setup completion", () => {
       type: "blocked",
       message: "Setup is on Connect a model. The chat composer is not usable.",
     });
+  });
+
+  it("rejects a wrong-bot composer and fails at the deadline with the named message", async () => {
+    vi.useFakeTimers();
+    const start = Date.now();
+    const done = finishSetup({
+      now: () => Date.now(),
+      deadlineAt: start + 1_000,
+      deadlineMs: 1_000,
+      expectedBot: "Chief",
+      observe: async () =>
+        screen({
+          url: "http://127.0.0.1:5173/app/scout",
+          composerVisible: true,
+          composerEnabled: true,
+          composerFocused: true,
+          composerBot: "Scout",
+        }),
+      skipIntegrations: async () => undefined,
+      retrySetup: async () => undefined,
+      signInExisting: async () => undefined,
+      waitForChange: (remaining) => new Promise((resolve) => setTimeout(resolve, remaining)),
+    });
+
+    const assertion = expect(done).rejects.toThrow(
+      "Setup did not become usable within 1000ms. Waited for the chat composer (combobox Message Chief) to be visible and enabled. Last screen: chat with Scout.",
+    );
+    await vi.advanceTimersByTimeAsync(1_000);
+    await assertion;
+  });
+
+  it("fails at the deadline with the named message when an in-flight step outlasts the deadline", async () => {
+    vi.useFakeTimers();
+    const start = Date.now();
+    const done = finishSetup({
+      now: () => Date.now(),
+      deadlineAt: start + 2_000,
+      deadlineMs: 2_000,
+      expectedBot: "Chief",
+      observe: async (budget) => {
+        await new Promise((resolve) => setTimeout(resolve, budget + 3_000));
+        return screen({
+          url: "http://127.0.0.1:5173/app/chief",
+          composerVisible: true,
+          composerEnabled: true,
+          composerFocused: true,
+          composerBot: "Chief",
+        });
+      },
+      skipIntegrations: async () => undefined,
+      retrySetup: async () => undefined,
+      signInExisting: async () => undefined,
+      waitForChange: async () => undefined,
+    });
+
+    const assertion = expect(done).rejects.toThrow(
+      "Setup did not become usable within 2000ms. Waited for the chat composer (combobox Message Chief) to be visible and enabled. Last screen: no setup screen.",
+    );
+    await vi.advanceTimersByTimeAsync(2_000);
+    await assertion;
+  });
+
+  it("rejects an unfocused composer until focus is acquired", async () => {
+    expect(
+      isUsableChat(
+        screen({
+          url: "http://127.0.0.1:5173/app/chief",
+          composerVisible: true,
+          composerEnabled: true,
+          composerFocused: false,
+          composerBot: "Chief",
+        }),
+        "Chief",
+      ),
+    ).toBe(false);
+
+    expect(
+      isUsableChat(
+        screen({
+          url: "http://127.0.0.1:5173/app/chief",
+          composerVisible: true,
+          composerEnabled: true,
+          composerFocused: true,
+          composerBot: "Chief",
+        }),
+        "Chief",
+      ),
+    ).toBe(true);
   });
 });
