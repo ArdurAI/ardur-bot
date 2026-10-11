@@ -8,6 +8,7 @@ import type { Actor } from "@ardurbot/contracts";
 import { BoardError } from "@ardurbot/contracts/board";
 import type { Pool, PrismaClient } from "@ardurbot/db";
 import { IsolationError } from "@ardurbot/db";
+import { getLogger } from "@ardurbot/logging";
 import { boardOwnerRun } from "./board.js";
 import type { HostBridge } from "./host-bridge.js";
 
@@ -48,9 +49,17 @@ export function goalBoardDeliveryRetry(
       dataDir: deps.dataDir,
       lockPool: deps.lockPool,
       ownerRun,
-    }).finally(() => {
-      running = undefined;
-    });
+    })
+      .catch((error: unknown) => {
+        const errorName =
+          error instanceof Error && /^[A-Za-z][A-Za-z0-9_]*$/.test(error.name)
+            ? error.name
+            : "Error";
+        getLogger().error("goal board delivery sweep failed", { errorName });
+      })
+      .finally(() => {
+        running = undefined;
+      });
   };
   return {
     start() {
