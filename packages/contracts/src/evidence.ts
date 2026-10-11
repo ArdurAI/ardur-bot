@@ -7,7 +7,7 @@ export const EvidenceFingerprintSchema = z.string().regex(/^sha256:[a-f0-9]{64}$
 export const EvidenceSigningIdentitySchema = z.strictObject({
   fingerprint: EvidenceFingerprintSchema,
   scope: z.strictObject({ type: z.literal("space"), id: z.string().min(1) }),
-  keyVersion: z.literal(1),
+  keyVersion: z.number().int().positive(),
 });
 export type EvidenceSigningIdentity = z.infer<typeof EvidenceSigningIdentitySchema>;
 export const EvidenceSignerMatchSchema = z.enum([
@@ -28,6 +28,25 @@ export function evidenceIdentityCard(identity: EvidenceSigningIdentity): string 
   return JSON.stringify(EvidenceSigningIdentitySchema.parse(identity), null, 2);
 }
 
+export const EvidenceKeyStateSchema = z.enum(["active", "replaced", "revoked"]);
+export type EvidenceKeyState = z.infer<typeof EvidenceKeyStateSchema>;
+export const EvidenceKeyHistoryEntrySchema = z.object({
+  keyId: z.string().min(1),
+  fingerprint: EvidenceFingerprintSchema,
+  version: z.number().int().positive(),
+  state: EvidenceKeyStateSchema,
+  createdAt: z.string(),
+  replacedAt: z.string().nullable(),
+  revokedAt: z.string().nullable(),
+  revokedReason: z.string().nullable(),
+});
+export type EvidenceKeyHistoryEntry = z.infer<typeof EvidenceKeyHistoryEntrySchema>;
+export const EvidenceKeyHistorySchema = z.object({
+  keys: z.array(EvidenceKeyHistoryEntrySchema),
+  canManage: z.boolean(),
+});
+export type EvidenceKeyHistory = z.infer<typeof EvidenceKeyHistorySchema>;
+
 export const EvidenceRunSummarySchema = z.object({
   signingIdentity: EvidenceSigningIdentitySchema.nullable().optional(),
   signerMatch: EvidenceSignerMatchSchema.nullable().optional(),
@@ -45,8 +64,8 @@ export const EvidenceRunSummarySchema = z.object({
       bundleId: z.string(),
       encrypted: z.literal(false),
       keyId: z.string(),
-      keyRevision: z.literal(1),
-      revocationListRevision: z.literal(""),
+      keyRevision: z.number().int().positive(),
+      revocationListRevision: z.string(),
       verifierUrl: z.string(),
     })
     .nullable(),
@@ -66,4 +85,16 @@ export const evidenceContract = {
       }),
     )
     .output(EvidenceRunSummarySchema),
+  keyHistory: oc.output(EvidenceKeyHistorySchema),
+  replaceKey: oc
+    .input(z.object({ expectedFingerprint: EvidenceFingerprintSchema }))
+    .output(EvidenceKeyHistorySchema),
+  revokeKey: oc
+    .input(
+      z.object({
+        expectedFingerprint: EvidenceFingerprintSchema,
+        reason: z.string().min(1).max(200),
+      }),
+    )
+    .output(EvidenceKeyHistorySchema),
 };

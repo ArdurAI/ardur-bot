@@ -280,7 +280,12 @@ import {
   setModelDestinations,
   validateDefaultModelDestinations,
 } from "./delegation-policy.js";
-import { runEvidenceSummary } from "./evidence.js";
+import {
+  evidenceKeyHistory,
+  replaceSpaceEvidenceKey,
+  revokeSpaceEvidenceKey,
+  runEvidenceSummary,
+} from "./evidence.js";
 import { listSpaceFeatures, setSpaceFeature } from "./features.js";
 import {
   fleetBotPreference,
@@ -6315,6 +6320,26 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     evidence: {
       runSummary: authed.evidence.runSummary.handler(({ context, input }) =>
         runEvidenceSummary(deps.prisma, context.actor, input.runId, input.expectedFingerprint),
+      ),
+      keyHistory: authed.evidence.keyHistory.handler(({ context }) =>
+        evidenceKeyHistory(deps.prisma, context.actor),
+      ),
+      replaceKey: authed.evidence.replaceKey.handler(({ context, input }) =>
+        replaceSpaceEvidenceKey(
+          deps,
+          context.actor,
+          context.authSessionId,
+          input.expectedFingerprint,
+        ),
+      ),
+      revokeKey: authed.evidence.revokeKey.handler(({ context, input }) =>
+        revokeSpaceEvidenceKey(
+          deps.prisma,
+          context.actor,
+          context.authSessionId,
+          input.expectedFingerprint,
+          input.reason,
+        ),
       ),
     },
     board: {

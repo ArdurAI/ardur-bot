@@ -1,4 +1,4 @@
-import { verifyChain, verifySeal } from "@ardurbot/adapters/evidence-format";
+import { generateEvidenceKey, verifyChain, verifySeal } from "@ardurbot/adapters/evidence-format";
 import type { Actor } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { Hono } from "hono";
@@ -6,7 +6,13 @@ import { describe, expect, it, vi } from "vitest";
 import { createEvidenceRecorder } from "../../../packages/adapters/src/evidence/recorder.js";
 import { fakeEvidenceStore } from "../../../packages/adapters/src/evidence/test-store.js";
 import { EncryptedSecretStore } from "../../../packages/adapters/src/secrets.js";
-import { mountEvidenceRoutes, runEvidenceSummary } from "./evidence.js";
+import {
+  evidenceKeyHistory,
+  mountEvidenceRoutes,
+  replaceSpaceEvidenceKey,
+  revokeSpaceEvidenceKey,
+  runEvidenceSummary,
+} from "./evidence.js";
 import { extractEvidenceArchive, signedRunFixture } from "./evidence-test-fixture.js";
 
 const actor: Actor = {
@@ -47,8 +53,17 @@ function fixture(role: string | null = "owner") {
     evidenceRecord: { findMany: records },
     evidenceSeal: { findUnique: seal },
     evidenceKey: {
-      findFirst: vi.fn(async () => ({ spaceId: "space", publicKeyPem: signed.keys.publicKeyPem })),
-      findUnique: vi.fn(async () => ({ spaceId: "space", publicKeyPem: signed.keys.publicKeyPem })),
+      findFirst: vi.fn(async () => ({
+        spaceId: "space",
+        publicKeyPem: signed.keys.publicKeyPem,
+        version: 1,
+      })),
+      findUnique: vi.fn(async () => ({
+        spaceId: "space",
+        publicKeyPem: signed.keys.publicKeyPem,
+        version: 1,
+        revokedAt: null,
+      })),
     },
   } as unknown as PrismaClient;
   const app = new Hono();
@@ -75,6 +90,7 @@ describe("run evidence", () => {
       ...identity,
       spaceId: "space",
       publicKeyPem: f.signed.keys.publicKeyPem,
+      version: 1,
       privateKeyPem: f.signed.keys.privateKeyPem,
       privateKeyCiphertext: "must-not-leak",
       secretRecordId: "must-not-leak",
@@ -93,7 +109,7 @@ describe("run evidence", () => {
     ).toBe("different_key");
     expect(f.prisma.evidenceKey.findFirst).toHaveBeenCalledWith({
       where: { spaceId: "space", revokedAt: null },
-      select: { publicKeyPem: true, spaceId: true },
+      select: { publicKeyPem: true, spaceId: true, version: true },
     });
     f.run.status = "running";
     expect(
@@ -292,5 +308,196 @@ describe("run evidence", () => {
       state: "failed",
       failureCodes: ["run_mismatch"],
     });
+  });
+  it("keeps pre-revocation records verified and names the revocation date", async () => {
+    const f = fixture();
+    // The fixture journal is signed at test time; a revocation one minute in
+    // the future leaves it fully trusted.
+    const revokedAt = new Date(Date.now() + 60_000);
+    vi.mocked(f.prisma.evidenceKey.findUnique).mockResolvedValue({
+      spaceId: "space",
+      publicKeyPem: f.signed.keys.publicKeyPem,
+      version: 1,
+      revokedAt,
+    } as never);
+    const summary = await runEvidenceSummary(f.prisma, actor, "run");
+    // The fixture journal is dated before the revocation and still verifies.
+    expect(summary.state).toBe("verified");
+    expect(summary.evidence).toMatchObject({ keyRevision: 1 });
+    expect(summary.evidence?.revocationListRevision).toBe(revokedAt.toISOString());
+  });
+});
+
+describe("evidence key management", () => {
+  interface KeyRow {
+    id: string;
+    spaceId: string;
+    kid: string;
+    publicKeyPem: string;
+    privateKeyCiphertext: string;
+    secretRecordId: string;
+    version: number;
+    createdAt: Date;
+    replacedAt: Date | null;
+    revokedAt: Date | null;
+    revokedReason: string | null;
+  }
+  function keyFixture(role: string | null) {
+    const generated = generateEvidenceKey();
+    const rows: KeyRow[] = [
+      {
+        id: "key-1",
+        spaceId: "space",
+        kid: generated.kid,
+        publicKeyPem: generated.publicKeyPem,
+        privateKeyCiphertext: "fixture-ciphertext",
+        secretRecordId: "fixture-record",
+        version: 1,
+        createdAt: new Date("2026-10-01T00:00:00.000Z"),
+        replacedAt: null,
+        revokedAt: null,
+        revokedReason: null,
+      },
+    ];
+    const tx = {
+      $queryRaw: vi.fn(async () => []),
+      evidenceKey: {
+        findMany: vi.fn(
+          async (args: { where: { spaceId: string }; orderBy: { version: string }; take?: number }) => {
+            const sorted = rows
+              .filter((row) => row.spaceId === args.where.spaceId)
+              .sort((a, b) =>
+                args.orderBy.version === "desc" ? b.version - a.version : a.version - b.version,
+              );
+            return args.take ? sorted.slice(0, args.take) : sorted;
+          },
+        ),
+        findFirst: vi.fn(
+          async (args: { where: { spaceId: string; revokedAt: null } }) =>
+            rows.find((row) => row.spaceId === args.where.spaceId && row.revokedAt === null) ?? null,
+        ),
+        update: vi.fn(async ({ where, data }: { where: { id: string }; data: Partial<KeyRow> }) => {
+          const row = rows.find((candidate) => candidate.id === where.id);
+          if (!row) throw new Error("missing key");
+          Object.assign(row, data);
+          return row;
+        }),
+        create: vi.fn(async ({ data }: { data: Partial<KeyRow> }) => {
+          const row = {
+            id: `key-${rows.length + 1}`,
+            createdAt: new Date(),
+            replacedAt: null,
+            revokedAt: null,
+            revokedReason: null,
+            ...data,
+          } as KeyRow;
+          rows.push(row);
+          return row;
+        }),
+      },
+    };
+    const prisma = {
+      spaceMember: { findUnique: vi.fn(async () => (role ? { role } : null)) },
+      evidenceKey: {
+        findMany: tx.evidenceKey.findMany,
+      },
+      $transaction: vi.fn(async (fn: (tx: typeof tx) => unknown) => fn(tx)),
+    } as unknown as PrismaClient;
+    const secrets = {
+      put: vi.fn(async (_plaintext: string, _context: unknown, recordId: string) => ({
+        id: recordId,
+        ciphertext: "fixture-ciphertext",
+      })),
+    };
+    return { prisma, secrets, rows, tx };
+  }
+  it("replaces the head key for an owner with an authenticated session", async () => {
+    const f = keyFixture("owner");
+    const history = await replaceSpaceEvidenceKey(
+      { prisma: f.prisma, secrets: f.secrets },
+      actor,
+      "session-1",
+      f.rows[0]!.kid,
+    );
+    expect(history.canManage).toBe(true);
+    expect(history.keys.map((row) => [row.version, row.state])).toEqual([
+      [1, "replaced"],
+      [2, "active"],
+    ]);
+    expect(f.rows[0]).toMatchObject({ version: 1, replacedAt: expect.any(Date) });
+    expect(f.rows[1]).toMatchObject({ version: 2, kid: expect.stringMatching(/^sha256:[a-f0-9]{64}$/) });
+    expect(f.secrets.put).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(history)).not.toContain("PRIVATE KEY");
+    expect(JSON.stringify(history)).not.toContain("fixture-ciphertext");
+  });
+  it("refuses members, paired devices and nonmembers from replacing or revoking", async () => {
+    for (const [role, session] of [
+      ["member", "session-1"],
+      ["owner", undefined],
+    ] as const) {
+      const f = keyFixture(role);
+      await expect(
+        replaceSpaceEvidenceKey({ prisma: f.prisma, secrets: f.secrets }, actor, session, f.rows[0]!.kid),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      await expect(
+        revokeSpaceEvidenceKey(f.prisma, actor, session, f.rows[0]!.kid, "lost device"),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      expect(f.tx.evidenceKey.create).not.toHaveBeenCalled();
+      expect(f.secrets.put).not.toHaveBeenCalled();
+    }
+    const outsider = keyFixture(null);
+    await expect(
+      replaceSpaceEvidenceKey(
+        { prisma: outsider.prisma, secrets: outsider.secrets },
+        actor,
+        "session-1",
+        outsider.rows[0]!.kid,
+      ),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+  it("maps a raced replacement to a conflict instead of overwriting", async () => {
+    const f = keyFixture("owner");
+    await expect(
+      replaceSpaceEvidenceKey({ prisma: f.prisma, secrets: f.secrets }, actor, "session-1", "sha256:stale"),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(f.rows).toHaveLength(1);
+  });
+  it("emergency revocation is dated, reasoned and owner-only", async () => {
+    const f = keyFixture("owner");
+    const history = await revokeSpaceEvidenceKey(f.prisma, actor, "session-1", f.rows[0]!.kid, "compromised");
+    expect(history.keys[0]).toMatchObject({
+      state: "revoked",
+      revokedReason: "compromised",
+      revokedAt: expect.any(String),
+      replacedAt: null,
+    });
+    const refused = keyFixture("owner");
+    await expect(
+      revokeSpaceEvidenceKey(refused.prisma, actor, undefined, refused.rows[0]!.kid, "compromised"),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(refused.rows[0]?.revokedAt).toBeNull();
+  });
+  it("shares key history as public-only with a manage hint for owners", async () => {
+    const owner = keyFixture("owner");
+    expect(await evidenceKeyHistory(owner.prisma, actor)).toMatchObject({
+      canManage: true,
+      keys: [
+        {
+          keyId: owner.rows[0]!.kid,
+          version: 1,
+          state: "active",
+          revokedReason: null,
+        },
+      ],
+    });
+    const member = keyFixture("member");
+    expect((await evidenceKeyHistory(member.prisma, actor)).canManage).toBe(false);
+    const outsider = keyFixture(null);
+    await expect(evidenceKeyHistory(outsider.prisma, actor)).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+    const history = await evidenceKeyHistory(owner.prisma, actor);
+    expect(JSON.stringify(history)).not.toContain("fixture-ciphertext");
+    expect(JSON.stringify(history)).not.toContain("PRIVATE KEY");
   });
 });
