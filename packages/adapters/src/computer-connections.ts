@@ -257,6 +257,10 @@ export class ConnectedSandboxProvider implements SandboxProvider {
     const provider = await this.owner(args[0], args[2]);
     return provider.gitChanges?.(...args) ?? { kind: "unavailable" };
   }
+  /** The owning provider answers: only it can serve the Git observation. */
+  async canObserveGit(computer: ComputerRef, context: AdapterContext): Promise<boolean> {
+    return (await this.owner(computer, context)).gitChanges !== undefined;
+  }
   async writeFile(...args: Parameters<SandboxProvider["writeFile"]>) {
     return (await this.owner(args[0], args[2])).writeFile(...args);
   }

@@ -18,8 +18,8 @@ export const GIT_OBSERVATION_TEXT_SIDE_BYTES = 128 * 1024;
 export const GIT_OBSERVATION_RETURNED_BYTES = 512 * 1024;
 /** Maximum bytes accepted from a single Git command's stdout. */
 export const GIT_OBSERVATION_COMMAND_BYTES = 1024 * 1024;
-/** Hard deadline for a single Git command. */
-export const GIT_OBSERVATION_TIMEOUT_MS = 5000;
+/** Hard deadline for the whole observation across every Git command. */
+export const GIT_OBSERVATION_BUDGET_MS = 5000;
 
 export interface GitRunResult {
   stdout: Uint8Array;
@@ -79,6 +79,8 @@ export interface GitObservationRequest {
   gitDir?: string;
   /** Repository-relative file to diff; omit for the status listing. */
   path?: string;
+  /** Absolute epoch-ms deadline shared by every command in this observation. */
+  deadlineMs?: number;
   /** Read a worktree file for an untracked diff; the caller bounds the read. */
   readWorktreeFile?: (path: string) => Promise<Uint8Array>;
   /**
@@ -120,17 +122,25 @@ async function runGit(
   runner: GitRunner,
   root: string,
   args: readonly string[],
+  deadlineMs: number | undefined,
   maxBytes = GIT_OBSERVATION_COMMAND_BYTES,
 ): Promise<GitRunResult> {
-  return runner.run(args, { cwd: root, maxBytes, timeoutMs: GIT_OBSERVATION_TIMEOUT_MS });
+  // One deadline covers the observation: hand each command the time that is left.
+  if (deadlineMs !== undefined) {
+    const remaining = deadlineMs - Date.now();
+    if (remaining <= 0) return { stdout: new Uint8Array(), code: 124, timedOut: true };
+    return runner.run(args, { cwd: root, maxBytes, timeoutMs: remaining });
+  }
+  return runner.run(args, { cwd: root, maxBytes, timeoutMs: GIT_OBSERVATION_BUDGET_MS });
 }
 
 /** Locate the repository; only a `.git` directory directly inside the root is accepted. */
 async function resolveGitDir(
   runner: GitRunner,
   root: string,
+  deadlineMs: number | undefined,
 ): Promise<string | null | "unavailable"> {
-  const probe = await runGit(runner, root, ["rev-parse", "--absolute-git-dir"], 4096);
+  const probe = await runGit(runner, root, ["rev-parse", "--absolute-git-dir"], deadlineMs, 4096);
   if (probe.timedOut) return "unavailable";
   if (probe.code !== 0) {
     const stderr = decode(probe.stderr ?? new Uint8Array());
@@ -164,8 +174,9 @@ function joinPath(root: string, child: string): string {
 async function resolveHead(
   runner: GitRunner,
   root: string,
+  deadlineMs: number | undefined,
 ): Promise<string | null | "unavailable"> {
-  const head = await runGit(runner, root, ["rev-parse", "--verify", "HEAD"], 4096);
+  const head = await runGit(runner, root, ["rev-parse", "--verify", "HEAD"], deadlineMs, 4096);
   if (head.timedOut) return "unavailable";
   if (head.code !== 0) {
     // An unborn branch (no commits yet) is a valid repository state.
@@ -263,17 +274,23 @@ function diffResultFromText(
 async function readStatus(
   runner: GitRunner,
   root: string,
+  deadlineMs: number | undefined,
 ): Promise<Extract<GitChangesResult, { kind: "status" }> | { kind: "unavailable" }> {
-  const status = await runGit(runner, root, [
-    ...SAFE_CONFIG,
-    "status",
-    "--porcelain=v1",
-    "-z",
-    "--no-renames",
-    // Nested repositories have their own config; never recurse into them.
-    "--ignore-submodules=all",
-    "--untracked-files=all",
-  ]);
+  const status = await runGit(
+    runner,
+    root,
+    [
+      ...SAFE_CONFIG,
+      "status",
+      "--porcelain=v1",
+      "-z",
+      "--no-renames",
+      // Nested repositories have their own config; never recurse into them.
+      "--ignore-submodules=all",
+      "--untracked-files=all",
+    ],
+    deadlineMs,
+  );
   if (status.timedOut || status.code !== 0) return { kind: "unavailable" };
   const entries = parseGitStatus(decode(status.stdout));
   const truncated = status.capped === true || entries.length > GIT_OBSERVATION_MAX_ENTRIES;
@@ -294,7 +311,9 @@ export async function observeGitChanges(
   request: GitObservationRequest,
 ): Promise<GitChangesResult> {
   const { root } = request;
-  const gitDir = request.gitDir ?? (await resolveGitDir(runner, root));
+  // Without an explicit deadline, the whole observation still shares one budget.
+  const deadlineMs = request.deadlineMs ?? Date.now() + GIT_OBSERVATION_BUDGET_MS;
+  const gitDir = request.gitDir ?? (await resolveGitDir(runner, root, deadlineMs));
   if (gitDir === "unavailable") return { kind: "unavailable" };
   if (gitDir === null) return { kind: "not-repository" };
   if (pathResolve(gitDir) !== pathResolve(joinPath(root, ".git"))) return { kind: "unavailable" };
@@ -303,17 +322,17 @@ export async function observeGitChanges(
   } catch {
     return { kind: "unavailable" };
   }
-  const head = await resolveHead(runner, root);
+  const head = await resolveHead(runner, root, deadlineMs);
   if (head === "unavailable") return { kind: "unavailable" };
 
   if (request.path === undefined) {
-    const status = await readStatus(runner, root);
+    const status = await readStatus(runner, root, deadlineMs);
     return status.kind === "status" ? { ...status, head } : status;
   }
 
   const path = repositoryRelativePath(request.path);
   if (path === null) return { kind: "unavailable" };
-  const status = await readStatus(runner, root);
+  const status = await readStatus(runner, root, deadlineMs);
   if (status.kind !== "status") return status;
   const entry = status.entries.find((item) => item.path === path);
   if (!entry) {
@@ -352,6 +371,7 @@ export async function observeGitChanges(
       "--",
       path,
     ],
+    deadlineMs,
     GIT_OBSERVATION_COMMAND_BYTES,
   );
   if (diff.timedOut || diff.code !== 0) return { kind: "unavailable" };
