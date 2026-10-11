@@ -48,10 +48,13 @@ export async function goalLinkForbidsItemClose(
       goalId: true,
       delegationRootTaskId: true,
       taskId: true,
+      boardWorkspaceId: true,
     },
   });
   if (!run) return false;
   const goal = await linkedGoalForRun(prisma, run);
-  if (!goal?.boardItemId || !itemIds.includes(goal.boardItemId)) return false;
-  return !workspaceId || workspaceId === goal.boardWorkspaceId;
+  if (!goal?.boardItemId || !goal.boardWorkspaceId || !itemIds.includes(goal.boardItemId))
+    return false;
+  const effectiveWorkspace = workspaceId ?? run.boardWorkspaceId ?? undefined;
+  return effectiveWorkspace === goal.boardWorkspaceId;
 }

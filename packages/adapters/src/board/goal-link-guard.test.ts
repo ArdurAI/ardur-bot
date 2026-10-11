@@ -52,3 +52,30 @@ it("blocks a direct close of the linked item and allows a different item", async
     false,
   );
 });
+
+it("does not refuse another board's item when the workspace is omitted", async () => {
+  const scope = { spaceId: "space", userId: "owner", botId: "builder", runId: "run" };
+  const run = (boardWorkspaceId: string | null) =>
+    ({
+      run: {
+        findFirst: async () => ({
+          spaceId: "space",
+          userId: "owner",
+          goalId: "goal",
+          delegationRootTaskId: null,
+          taskId: "root",
+          boardWorkspaceId,
+        }),
+      },
+      teamGoal: { findFirst: async () => linked },
+    }) as unknown as PrismaClient;
+  await expect(
+    goalLinkForbidsItemClose(run("other-board"), scope, undefined, ["board-a"]),
+  ).resolves.toBe(false);
+  await expect(goalLinkForbidsItemClose(run(null), scope, undefined, ["board-a"])).resolves.toBe(
+    false,
+  );
+  await expect(
+    goalLinkForbidsItemClose(run("workspace"), scope, undefined, ["board-a"]),
+  ).resolves.toBe(true);
+});
