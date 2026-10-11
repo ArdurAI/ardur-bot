@@ -9,6 +9,7 @@ import {
   realpath,
   rm,
   symlink,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import os from "node:os";
@@ -24,6 +25,7 @@ import type {
 import {
   GIT_OBSERVATION_BUDGET_MS,
   GIT_OBSERVATION_COMMAND_BYTES,
+  GIT_OBSERVATION_CONFIG,
   observeGitChanges,
 } from "@ardurbot/adapter-kit";
 import { filterHostEnvironment } from "@ardurbot/contracts/host-environment";
@@ -132,13 +134,7 @@ const METADATA_ENTRIES = [
 ] as const;
 
 /** Only these formatting settings can affect the observation; none launches a program. */
-const OBSERVATION_CONFIG = new Set([
-  "core.filemode",
-  "core.ignorecase",
-  "core.symlinks",
-  "core.autocrlf",
-  "core.eol",
-]);
+const OBSERVATION_CONFIG = new Set<string>(GIT_OBSERVATION_CONFIG);
 
 /** Windows has no O_NOFOLLOW; there the lstat guards are the only layer. */
 const NOFOLLOW_OPEN = (constants.O_NOFOLLOW ?? 0) as number;
@@ -155,7 +151,7 @@ const NONBLOCK_OPEN = (constants.O_NONBLOCK ?? 0) as number;
 export async function copyPinnedFile(
   source: string,
   destination: string,
-  expected: Pick<Stats, "dev" | "ino" | "ctimeMs" | "size">,
+  expected: Pick<Stats, "dev" | "ino" | "ctimeMs" | "size" | "atimeMs" | "mtimeMs">,
   signal?: AbortSignal,
 ): Promise<void> {
   signal?.throwIfAborted();
@@ -175,6 +171,11 @@ export async function copyPinnedFile(
     }
     try {
       await pipeline(handle.createReadStream(), createWriteStream(destination), { signal });
+      // Git compares cached file mtimes with the index mtime to detect racily
+      // clean entries. A fresh copy timestamp would hide same-size edits.
+      // Numeric seconds retain the sub-millisecond precision lost by Date.
+      await utimes(destination, expected.atimeMs / 1000, expected.mtimeMs / 1000);
+      signal?.throwIfAborted();
     } catch (error) {
       await rm(destination, { force: true }).catch(() => undefined);
       throw error;

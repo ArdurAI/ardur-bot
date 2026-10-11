@@ -655,33 +655,45 @@ export class DockerSandboxProvider implements SandboxProvider {
   ): ContainerCommandRunner {
     return {
       run: async (request) => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), request.timeoutMs);
+        const signal = AbortSignal.any([context.signal, controller.signal]);
         try {
-          const res = await fetch(this.url(`/computers/${computer.id}/exec`), {
-            method: "POST",
-            headers: {
-              ...this.headers(context, computer.botId),
-              "content-type": "application/json",
-            },
-            body: JSON.stringify({
-              argv: request.argv,
-              cwd: request.cwd,
-              env: request.env,
-              timeoutMs: boundedSandboxCommandTimeoutMs(request.timeoutMs),
-              outputLimit: request.maxBytes,
+          const res = await withAbort(
+            fetch(this.url(`/computers/${computer.id}/exec`), {
+              method: "POST",
+              headers: {
+                ...this.headers(context, computer.botId),
+                "content-type": "application/json",
+              },
+              body: JSON.stringify({
+                argv: request.argv,
+                cwd: request.cwd,
+                env: request.env,
+                timeoutMs: boundedSandboxCommandTimeoutMs(request.timeoutMs),
+                outputLimit: request.maxBytes,
+              }),
+              signal,
             }),
-            signal: context.signal,
-          });
+            signal,
+          );
           if (!res.ok) return { stdout: new Uint8Array(), code: 128 };
           const body = await readSandboxJson<{
             stdout?: string;
             stderr?: string;
             code: number;
             capped?: boolean;
-          }>(res, context.signal, gitExecResponseLimit(request.maxBytes));
+          }>(res, signal, gitExecResponseLimit(request.maxBytes));
           return decodeContainerExecOutput(body);
         } catch (error) {
           if (context.signal.aborted) throw error;
-          return { stdout: new Uint8Array(), code: 128 };
+          return {
+            stdout: new Uint8Array(),
+            code: controller.signal.aborted ? 124 : 128,
+            ...(controller.signal.aborted ? { timedOut: true } : {}),
+          };
+        } finally {
+          clearTimeout(timer);
         }
       },
     };

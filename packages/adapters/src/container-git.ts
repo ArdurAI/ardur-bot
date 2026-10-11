@@ -2,9 +2,9 @@
  * Read-only Git observation for a computer whose files live in a container.
  *
  * The caller runs each command through the provider's existing exec path. This
- * module only builds the fixed argument list and hands it to observeGitChanges,
+ * module runs a fixed isolation script and hands results to observeGitChanges,
  * which owns the deadline, output caps, status and diff parsing. Nothing here
- * joins a shell string or writes the worktree.
+ * joins a shell string or writes the worktree or original metadata.
  */
 import { constants } from "node:fs";
 import { lstat, open, realpath } from "node:fs/promises";
@@ -18,18 +18,7 @@ import type {
 import { GIT_OBSERVATION_TEXT_SIDE_BYTES, observeGitChanges } from "@ardurbot/adapter-kit";
 import { COMMAND_TRUNCATED } from "@ardurbot/contracts";
 import { redactGitChanges } from "@ardurbot/host-runtime/git-reader";
-
-/** Present on every Git invocation so optional locks, hooks and helpers stay off. */
-export const CONTAINER_GIT_ARGV_PREFIX = [
-  "--no-pager",
-  "--no-optional-locks",
-  "-c",
-  "core.hooksPath=",
-  "-c",
-  "core.fsmonitor=false",
-  "-c",
-  "diff.external=",
-] as const;
+import { CONTAINER_GIT_SCRIPT } from "./container-git-script.js";
 
 /**
  * Process environment for those invocations. Global and system configuration
@@ -58,17 +47,13 @@ export interface ContainerCommandRunner {
   run(request: ContainerCommandRequest): Promise<GitRunResult>;
 }
 
-export function containerGitArgv(args: readonly string[]): string[] {
-  return ["git", ...CONTAINER_GIT_ARGV_PREFIX, ...args];
-}
-
 /** Turns one observation command into the exec request the container runner sends. */
 export function containerGitCommand(
   args: readonly string[],
   options: { cwd: string; maxBytes: number; timeoutMs: number },
 ): ContainerCommandRequest {
   return {
-    argv: containerGitArgv(args),
+    argv: ["python3", "-I", "-c", CONTAINER_GIT_SCRIPT, options.cwd, ...args],
     cwd: options.cwd,
     env: { ...CONTAINER_GIT_ENV },
     timeoutMs: options.timeoutMs,

@@ -656,11 +656,8 @@ it("runs Git observation through exec with read-only flags and the container wor
     });
     expect(bodies.length).toBeGreaterThan(0);
     for (const body of bodies) {
-      expect(body.argv[0]).toBe("git");
-      expect(body.argv).toContain("--no-optional-locks");
-      expect(body.argv).toContain("--no-pager");
-      expect(body.argv).toContain("core.hooksPath=");
-      expect(body.argv).toContain("core.fsmonitor=false");
+      expect(body.argv.slice(0, 3)).toEqual(["python3", "-I", "-c"]);
+      expect(body.argv[4]).toBe(body.cwd);
       expect(body.env.GIT_OPTIONAL_LOCKS).toBe("0");
       expect(body.argv.join(" ")).not.toContain("sh -c");
       expect(body.outputLimit).toBeGreaterThan(0);
@@ -673,3 +670,42 @@ it("runs Git observation through exec with read-only flags and the container wor
     vi.unstubAllGlobals();
   }
 });
+
+it.each(["request", "body"])(
+  "bounds a stalled Git supervisor %s by the observation deadline",
+  async (stage) => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url: string, init?: RequestInit) => {
+        signal = init?.signal ?? undefined;
+        if (stage === "request") return new Promise<Response>(() => {});
+        return Promise.resolve(new Response(new ReadableStream({ start() {} })));
+      }),
+    );
+    try {
+      const provider = new DockerSandboxProvider("http://supervisor.test", "test-token");
+      const computer: ComputerRef = {
+        id: "computer",
+        botId: "bot",
+        kind: "docker",
+        providerRef: "computer",
+      };
+      let result: unknown;
+      const pending = provider.gitChanges(computer, {}, context).then((value) => {
+        result = value;
+      });
+      await vi.advanceTimersByTimeAsync(4999);
+      expect(signal?.aborted).toBe(false);
+      expect(result).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(signal?.aborted).toBe(true);
+      await pending;
+      expect(result).toEqual({ kind: "unavailable" });
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    }
+  },
+);

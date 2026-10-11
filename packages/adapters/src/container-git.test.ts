@@ -1,5 +1,15 @@
 import { execFileSync, spawn } from "node:child_process";
-import { chmod, mkdtemp, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdtemp,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -8,6 +18,7 @@ import {
   type GitRunResult,
 } from "@ardurbot/adapter-kit";
 import { COMMAND_TRUNCATED } from "@ardurbot/contracts";
+import { forceRacyGitEdit } from "@ardurbot/testkit/racy-git-fixture";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   CONTAINER_GIT_ENV,
@@ -17,6 +28,7 @@ import {
   observeContainerGitChanges,
   readBoundedWorktreeFile,
 } from "./container-git.js";
+import { CONTAINER_GIT_SCRIPT } from "./container-git-script.js";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -48,17 +60,10 @@ function repository(fake: ReturnType<typeof fakeRunner>, root: string, results: 
 }
 
 function assertReadOnlyGitCall(call: ContainerCommandRequest) {
-  expect(call.argv[0]).toBe("git");
-  expect(call.argv).toContain("--no-pager");
-  expect(call.argv).toContain("--no-optional-locks");
-  expect(call.argv).toContain("core.hooksPath=");
-  expect(call.argv).toContain("core.fsmonitor=false");
-  expect(call.argv).toContain("diff.external=");
+  expect(call.argv.slice(0, 4)).toEqual(["python3", "-I", "-c", CONTAINER_GIT_SCRIPT]);
+  expect(call.argv[4]).toBe(call.cwd);
   expect(call.env).toMatchObject(CONTAINER_GIT_ENV);
   expect(call.env.GIT_OPTIONAL_LOCKS).toBe("0");
-  // A shell string would be one element. Every flag is its own argument.
-  expect(call.argv.some((part) => /[;&|`$()]/.test(part))).toBe(false);
-  expect(call.argv.join(" ").includes("sh -c")).toBe(false);
 }
 
 describe("container git command flags", () => {
@@ -266,7 +271,8 @@ describe("container git observation on a temporary repository", () => {
     await writeFile(path.join(root, "image.bin"), Buffer.from([1, 0, 2]));
     git(["add", "image.bin"]);
     git(["commit", "-q", "-m", "base"]);
-    await writeFile(path.join(root, "image.bin"), Buffer.from([3, 0, 4]));
+    // A different size makes binary classification independent of Git's stat cache.
+    await writeFile(path.join(root, "image.bin"), Buffer.from([3, 0, 4, 5]));
     await writeFile(path.join(root, "big.md"), "x".repeat(GIT_OBSERVATION_TEXT_SIDE_BYTES + 64));
     const before = await indexSnapshot(root);
 
@@ -280,6 +286,29 @@ describe("container git observation on a temporary repository", () => {
     expect(oversized).toMatchObject({ kind: "diff", binary: false, truncated: true });
     if (oversized.kind !== "diff") throw new Error("unreachable");
     expect(oversized.after!.length).toBeLessThanOrEqual(GIT_OBSERVATION_TEXT_SIDE_BYTES);
+  });
+
+  it("detects a same-size edit whose mtime equals the index mtime", async () => {
+    const { root, git, runner } = await fixture();
+    git(["init", "-q", "-b", "main"]);
+    git(["config", "index.version", "2"]);
+    const file = path.join(root, "race.txt");
+    await writeFile(file, "old\n");
+    git(["add", "race.txt"]);
+    git(["commit", "-q", "-m", "base"]);
+    await forceRacyGitEdit(root, "race.txt", "new\n");
+    const before = await indexSnapshot(root);
+
+    expect(await observeContainerGitChanges(runner, { root })).toMatchObject({
+      kind: "status",
+      entries: [{ path: "race.txt", unstaged: true }],
+    });
+    expect(await observeContainerGitChanges(runner, { root, path: "race.txt" })).toMatchObject({
+      kind: "diff",
+      before: "old",
+      after: "new",
+    });
+    expect(await indexSnapshot(root)).toEqual(before);
   });
 
   it("refuses a path that escapes the workspace and a symlink to an outside file", async () => {
@@ -318,6 +347,102 @@ describe("container git observation on a temporary repository", () => {
     if (diff.kind !== "diff") throw new Error("unreachable");
     expect(diff.after).not.toContain("fixture-secret-value");
     expect(diff.after).toContain("[Redacted]");
+  });
+
+  it.each([
+    "filter.probe.clean",
+    "filter.probe.smudge",
+    "filter.probe.process",
+    "diff.probe.textconv",
+    "diff.probe.command",
+  ])("ignores %s while returning changes", async (key) => {
+    const { root, git, runner } = await fixture();
+    git(["init", "-q", "-b", "main"]);
+    await writeFile(path.join(root, "tracked.txt"), "before\n");
+    git(["add", "tracked.txt"]);
+    git(["commit", "-q", "-m", "base"]);
+    await writeFile(path.join(root, ".gitattributes"), "tracked.txt filter=probe diff=probe\n");
+    await writeFile(path.join(root, "probe.sh"), "#!/bin/sh\ntouch helper-ran\ncat\n");
+    git(["config", key, "sh ./probe.sh"]);
+    await writeFile(path.join(root, "tracked.txt"), "after\n");
+    const before = await indexSnapshot(root);
+    const status = await observeContainerGitChanges(runner, { root });
+    const diff = await observeContainerGitChanges(runner, { root, path: "tracked.txt" });
+    await expect(stat(path.join(root, "helper-ran"))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(status.kind).toBe("status");
+    expect(diff).toMatchObject({ kind: "diff", before: "before", after: "after" });
+    expect(await indexSnapshot(root)).toEqual(before);
+  });
+
+  it.each([
+    "worktree",
+    "alternates",
+    "http-alternates",
+    "gitfile",
+    "commondir",
+    "include",
+    "includeIf",
+    "metadata-link",
+    "object-link",
+    "info-link",
+  ])("refuses outside %s metadata before returning any outside content", async (redirect) => {
+    const { root, git, runner } = await fixture();
+    const outside = await fixture();
+    git(["init", "-q", "-b", "main"]);
+    outside.git(["init", "-q", "-b", "main"]);
+    await writeFile(path.join(root, "tracked.txt"), "before\n");
+    git(["add", "tracked.txt"]);
+    git(["commit", "-q", "-m", "base"]);
+    await writeFile(path.join(outside.root, "tracked.txt"), "outside private fixture\n");
+    const metadata = path.join(root, ".git");
+    if (redirect === "worktree") git(["config", "core.worktree", outside.root]);
+    else if (redirect === "alternates" || redirect === "http-alternates") {
+      await writeFile(
+        path.join(metadata, "objects", "info", redirect),
+        `${outside.root}/.git/objects\n`,
+      );
+    } else if (redirect === "gitfile") {
+      await rename(metadata, path.join(root, "original-metadata"));
+      await writeFile(metadata, `gitdir: ${outside.root}/.git\n`);
+      // Git would report this outside config's path if it opened the gitfile target.
+      await writeFile(path.join(outside.root, ".git", "config"), "outside private fixture\n");
+    } else if (redirect === "commondir") {
+      await writeFile(path.join(metadata, "commondir"), `${outside.root}/.git\n`);
+    } else if (redirect === "include" || redirect === "includeIf") {
+      const key = redirect === "include" ? "include.path" : `includeIf.gitdir:${root}/.path`;
+      git(["config", key, path.join(outside.root, "outside-config")]);
+      // A FIFO proves that refusal never even opens the included file.
+      if (process.platform !== "win32")
+        execFileSync("mkfifo", [path.join(outside.root, "outside-config")]);
+    } else if (redirect === "metadata-link") {
+      await rename(metadata, path.join(root, "original-metadata"));
+      await symlink(path.join(outside.root, ".git"), metadata);
+    } else if (redirect === "object-link") {
+      await symlink(
+        path.join(outside.root, ".git", "objects"),
+        path.join(metadata, "objects", "linked"),
+      );
+    } else {
+      await rm(path.join(metadata, "info"), { recursive: true });
+      await symlink(outside.root, path.join(metadata, "info"));
+    }
+    const calls: ContainerCommandRequest[] = [];
+    const outputs: GitRunResult[] = [];
+    const recorded: ContainerCommandRunner = {
+      async run(request) {
+        calls.push(request);
+        const output = await runner.run(request);
+        outputs.push(output);
+        return output;
+      },
+    };
+    const result = await observeContainerGitChanges(recorded, { root, path: "tracked.txt" });
+    expect(result).toEqual({ kind: "unavailable" });
+    expect(JSON.stringify(result)).not.toContain("outside private fixture");
+    expect(new TextDecoder().decode(outputs[0]?.stderr)).not.toContain(outside.root);
+    // Only the safe metadata probe ran. No status, HEAD or diff followed.
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.argv.slice(-2)).toEqual(["rev-parse", "--absolute-git-dir"]);
   });
 
   it("does not run a repository fsmonitor or external diff", async () => {
