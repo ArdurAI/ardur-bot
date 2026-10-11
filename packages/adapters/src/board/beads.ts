@@ -37,7 +37,12 @@ const rawObject = z.record(z.string(), z.unknown());
 const str = (value: unknown, fallback = "") => (typeof value === "string" ? value : fallback);
 const num = (value: unknown, fallback = 0) => (typeof value === "number" ? value : fallback);
 const array = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
-const records = (value: unknown) => array(value).map((item) => rawObject.parse(item));
+const records = (value: unknown) => beadsRecords(value);
+function beadsRecords(data: unknown) {
+  return (data == null ? [] : Array.isArray(data) ? data : [data]).map((item) =>
+    rawObject.parse(item),
+  );
+}
 function metadata(value: unknown): Record<string, unknown> {
   if (typeof value === "string") {
     try {
@@ -160,7 +165,7 @@ export class BeadsBoardProvider implements ProjectBoardProvider {
     const data = await this.json(argv, actor);
     let items: WorkItem[];
     try {
-      items = (data == null ? [] : Array.isArray(data) ? data : [data]).map(parseBeadsItem);
+      items = beadsRecords(data).map(parseBeadsItem);
     } catch {
       throw new BoardError({
         code: "invalid_response",
@@ -345,11 +350,19 @@ export class BeadsBoardProvider implements ProjectBoardProvider {
     comment: string;
     close: boolean;
     closeReason: string;
+    beforeWrite?: () => Promise<void>;
   }) {
     BoardItemIdSchema.parse(input.itemId);
     if (!/^[a-f0-9]{16}$/.test(input.hash) || input.generation < 1)
       throw new BoardError({ code: "forbidden", message: "This board command is not allowed." });
-    const shown = rawObject.parse(await this.json(["show", "--include-comments", input.itemId]));
+    const guard = async () => {
+      await input.beforeWrite?.();
+    };
+    const write = async (argv: string[]) => {
+      await guard();
+      return this.json(argv);
+    };
+    const shown = await this.itemRecord(["show", "--include-comments", input.itemId]);
     const item = parseBeadsItem(shown);
     const ledger = parseGoalBoardLedger(
       metadata(shown.metadata)[goalBoardMetadataName(input.hash)],
@@ -369,7 +382,7 @@ export class BeadsBoardProvider implements ProjectBoardProvider {
     if (ledger?.commented && !existing) return { ...blank, discrepancy: true };
     let commentId = existing?.id || null;
     if (!existing) {
-      await this.json([
+      await write([
         "update",
         input.itemId,
         "--set-metadata",
@@ -379,8 +392,9 @@ export class BeadsBoardProvider implements ProjectBoardProvider {
           close: "open",
         }),
       ]);
+      await guard();
       commentId = (await this.comment(input.itemId, input.comment)).id;
-      await this.json([
+      await write([
         "update",
         input.itemId,
         "--set-metadata",
@@ -394,32 +408,59 @@ export class BeadsBoardProvider implements ProjectBoardProvider {
     if (!input.close) {
       return { ...blank, commentId, commented: true, leftOpen: true };
     }
+    if (ledger && ledger.close !== "open") {
+      return {
+        ...blank,
+        commentId,
+        commented: true,
+        alreadyClosed: item.status === "closed",
+        leftOpen: item.status !== "closed",
+      };
+    }
     const current = await this.show(input.itemId);
     if (current.status === "closed") {
-      await this.stamp(input, true, "already-closed");
+      await this.stamp(input, true, "already-closed", guard);
       return { ...blank, commentId, commented: true, alreadyClosed: true };
     }
-    if (!current.closeWhenDone) {
-      await this.stamp(input, true, "left-open");
+    await guard();
+    const consent = parseBeadsItem(
+      await this.itemRecord(["show", "--include-comments", input.itemId]),
+    );
+    if (consent.status === "closed") {
+      await this.stamp(input, true, "already-closed", guard);
+      return { ...blank, commentId, commented: true, alreadyClosed: true };
+    }
+    if (!consent.closeWhenDone) {
+      await this.stamp(input, true, "left-open", guard);
       return { ...blank, commentId, commented: true, leftOpen: true };
     }
+    await guard();
     await this.close([input.itemId], input.closeReason);
     const after = await this.show(input.itemId);
     if (after.status !== "closed")
       return { ...blank, commentId, commented: true, discrepancy: true };
-    await this.stamp(input, true, "closed");
+    await this.stamp(input, true, "closed", guard);
     return { ...blank, commentId, commented: true, closedByThisDelivery: true };
+  }
+  private async itemRecord(argv: string[]) {
+    const [shown] = beadsRecords(await this.json(argv));
+    if (!shown)
+      throw new BoardError({ code: "item_not_found", message: "This work item was not found." });
+    return shown;
   }
   private stamp(
     input: { itemId: string; hash: string; generation: number },
     commented: boolean,
     close: "open" | "closed" | "already-closed" | "left-open",
+    guard: () => Promise<void> = async () => {},
   ) {
-    return this.json([
-      "update",
-      input.itemId,
-      "--set-metadata",
-      goalBoardMetadataArg(input.hash, { generation: input.generation, commented, close }),
-    ]);
+    return guard().then(() =>
+      this.json([
+        "update",
+        input.itemId,
+        "--set-metadata",
+        goalBoardMetadataArg(input.hash, { generation: input.generation, commented, close }),
+      ]),
+    );
   }
 }

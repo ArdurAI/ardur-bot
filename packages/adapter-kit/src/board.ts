@@ -36,6 +36,8 @@ export interface ProjectBoardProvider {
     comment: string;
     close: boolean;
     closeReason: string;
+    /** Checked before every board write. Throw to stop a stale claim before the next write. */
+    beforeWrite?: () => Promise<void>;
   }): Promise<{
     commentId: string | null;
     commented: boolean;
