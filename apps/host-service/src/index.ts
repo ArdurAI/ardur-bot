@@ -50,7 +50,7 @@ async function revokeConfiguration() {
   clearTimeout(reconnect);
   clearInterval(healthTimer);
   clearInterval(mcpTimer);
-  agent?.close();
+  await agent?.close();
   socket?.terminate();
   state(false);
   await agent?.configureMcp([]);
@@ -125,15 +125,17 @@ async function connect() {
       current,
       (frame) => host.receive(frame),
       () => {
-        host.close();
+        const cleanup = host.close();
         state(false);
         clearInterval(healthTimer);
         clearInterval(mcpTimer);
-        if (!stopped)
-          reconnect = setTimeout(
-            () => void connect(),
-            Math.min(30_000, 500 * 2 ** Math.min(failures++, 6)),
-          );
+        void Promise.resolve(cleanup).then(() => {
+          if (!stopped)
+            reconnect = setTimeout(
+              () => void connect(),
+              Math.min(30_000, 500 * 2 ** Math.min(failures++, 6)),
+            );
+        });
       },
     );
     current.once("open", () => {
@@ -167,9 +169,10 @@ function stop() {
   clearTimeout(reconnect);
   clearInterval(healthTimer);
   clearInterval(mcpTimer);
-  agent?.close();
+  const cleanup = agent?.close();
   socket?.close();
-  setTimeout(() => process.exit(0), 1500).unref();
+  const grace = new Promise<void>((resolve) => setTimeout(resolve, 1500).unref());
+  void Promise.all([cleanup, grace]).then(() => process.exit(0));
 }
 process.on("message", (message) => {
   if (message && typeof message === "object" && "type" in message && message.type === "stop") {

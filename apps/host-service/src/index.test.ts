@@ -173,6 +173,22 @@ it("closes the agent and exits only after the shutdown grace period", async () =
   expect(mocks.process.exit).toHaveBeenCalledExactlyOnceWith(0);
 });
 
+it("waits for terminal tree cleanup before exiting on restart", async () => {
+  await connect();
+  let killed!: () => void;
+  mocks.close.mockReturnValue(
+    new Promise<void>((resolve) => {
+      killed = resolve;
+    }),
+  );
+  processEvents.emit("message", { type: "stop" });
+  await vi.advanceTimersByTimeAsync(1500);
+  expect(mocks.process.exit).not.toHaveBeenCalled();
+  killed();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(mocks.process.exit).toHaveBeenCalledExactlyOnceWith(0);
+});
+
 it("accepts guardrail paths and ports and hands them to the host agent", async () => {
   mocks.read.mockResolvedValueOnce(Response.json(registrations));
   await import("./index.js");
