@@ -226,6 +226,7 @@ import {
   resolveAutoReviewProviderKind,
 } from "./auto-review.js";
 import { createAutoReviewProvider } from "./auto-review-factory.js";
+import { deliverPendingGoalBoardUpdates } from "./board/goal-delivery.js";
 import { BoardService } from "./board/service.js";
 import { BOARD_TOOL_NAMES, executeBoardTool, finishBoardRun } from "./board/tools.js";
 import { applyBoardToolAccess, botUpkeepPrompt, resolveBoardAccess } from "./board/upkeep.js";
@@ -249,7 +250,6 @@ import {
 } from "./browser-tools.js";
 import { agentConnectionTools, builtinAgentTools } from "./builtin-tools.js";
 import { finishGoalFromRun } from "./chief/report-goal-done.js";
-import { deliverPendingGoalBoardUpdates } from "./board/goal-delivery.js";
 import { chiefActivityFeed } from "./chief-activity.js";
 import {
   chiefVerificationRead,
