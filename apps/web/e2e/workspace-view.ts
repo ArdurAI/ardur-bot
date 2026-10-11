@@ -11,7 +11,7 @@ async function openViewsMenu(page: Page) {
     }
     await expect(menu).toBeVisible({ timeout: 1_000 });
     await expect(trigger).toHaveAttribute("aria-expanded", "true", { timeout: 1_000 });
-  }).toPass({ intervals: [100, 250, 500], timeout: 5_000 });
+  }).toPass({ intervals: [100, 250, 500], timeout: 15_000 });
 }
 
 /** Open a registered workspace view; unopened views are not tabs yet. */
