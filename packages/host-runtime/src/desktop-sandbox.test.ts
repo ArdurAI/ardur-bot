@@ -1,10 +1,22 @@
 import type { ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { chmod, mkdir, mkdtemp, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import type { FileHandle } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  open,
+  readdir,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 import type { CommandRequest, ProcessEvent } from "@ardurbot/adapter-kit";
+import { observeGitChanges } from "@ardurbot/adapter-kit";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const fake = vi.hoisted(() => ({ spawn: vi.fn(), environment: vi.fn(), verify: vi.fn() }));
@@ -16,6 +28,7 @@ vi.mock("./host-environment.js", async (original) => ({
 }));
 
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
+import * as gitReader from "./git-reader.js";
 import { filterHostEnvironment } from "./host-environment.js";
 
 const context = {
@@ -66,6 +79,81 @@ async function fixture(restricted: boolean, linked = false) {
     },
   };
 }
+it("stops an untracked file read after the first chunk when its deadline aborts", async () => {
+  const { provider, computer, home } = await fixture(false);
+  const target = path.join(home, "untracked.md");
+  await writeFile(target, "first chunk and unread content\n");
+  const handle = await open(target);
+  const proto = Object.getPrototypeOf(handle) as {
+    read: (
+      buffer: Buffer,
+      offset: number,
+      length: number,
+      position: number,
+    ) => Promise<{ bytesRead: number }>;
+  };
+  const originalRead = proto.read;
+  const budgetMs = 60_000;
+  let readHandle: FileHandle | undefined;
+  let readError: unknown;
+  let readSignal: AbortSignal | undefined;
+  const read = vi.spyOn(proto, "read").mockImplementation(async function (
+    this: FileHandle,
+    buffer: Buffer,
+    offset: number,
+    length: number,
+    position: number,
+  ) {
+    readHandle = this;
+    const result = await originalRead.call(this, buffer, offset, Math.min(length, 4), position);
+    vi.advanceTimersByTime(budgetMs);
+    return result;
+  });
+  // Keep the shared observer and the production file reader; replace only the
+  // metadata setup and Git commands so expiry happens at a precise read boundary.
+  const observation = vi
+    .spyOn(gitReader, "observeHostGitChanges")
+    .mockImplementation((root, request = {}) =>
+      observeGitChanges(
+        {
+          run: vi
+            .fn()
+            .mockResolvedValueOnce({ code: 0, stdout: Buffer.from("a".repeat(40)) })
+            .mockResolvedValueOnce({ code: 0, stdout: Buffer.from("?? untracked.md\0") }),
+        },
+        {
+          ...request,
+          root,
+          gitDir: path.join(root, ".git"),
+          deadlineMs: Date.now() + budgetMs,
+          readWorktreeFile: async (relative, options) => {
+            readSignal = options?.signal;
+            try {
+              return await request.readWorktreeFile!(relative, options);
+            } catch (error) {
+              readError = error;
+              throw error;
+            }
+          },
+        },
+      ),
+    );
+  vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+  try {
+    expect(await provider.gitChanges(computer, { path: "untracked.md" }, context)).toEqual({
+      kind: "unavailable",
+    });
+    expect(readSignal?.aborted).toBe(true);
+    expect(readError).toBe(readSignal?.reason);
+    expect(read).toHaveBeenCalledOnce();
+    expect(readHandle?.fd).toBe(-1);
+  } finally {
+    read.mockRestore();
+    observation.mockRestore();
+    vi.useRealTimers();
+    await handle.close();
+  }
+});
 it("executes a freshly approved source-mode command through a stable symlinked data directory", async () => {
   const { provider, computer, execute, home } = await fixture(false, true);
   const cwd = await provider.resolveCommandCwd(computer, undefined, context);

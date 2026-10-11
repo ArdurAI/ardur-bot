@@ -93,6 +93,8 @@ export * from "./screen-lease.js";
 export * from "./search.js";
 export * from "./secrets-guard.js";
 export * from "./self-update.js";
+export type { SetupReadResult, SetupStep } from "./setup-step.js";
+export { setupStep } from "./setup-step.js";
 export * from "./signup-policy.js";
 export * from "./speech-text.js";
 export * from "./task-card.js";

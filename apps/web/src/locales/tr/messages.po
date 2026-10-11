@@ -2982,6 +2982,10 @@ msgstr ""
 msgid "Could not load model settings"
 msgstr "Model ayarları yüklenemedi"
 
+#: src/pages/Onboarding.tsx
+msgid "Could not load models."
+msgstr "Modeller yüklenemedi."
+
 #: src/pages/LearningObservation.tsx
 msgid "Could not load observations."
 msgstr ""
@@ -3010,6 +3014,10 @@ msgstr ""
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Could not load settings. Try again."
 msgstr ""
+
+#: src/pages/Onboarding.tsx
+msgid "Could not load setup."
+msgstr "Kurulum yüklenemedi."
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load skill"
@@ -7859,6 +7867,7 @@ msgstr "Ekip mesajlarını sürdür"
 #: src/pages/LearningTimeline.tsx
 #: src/pages/memory/MemoryPage.tsx
 #: src/pages/MemoryHistory.tsx
+#: src/pages/Onboarding.tsx
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx

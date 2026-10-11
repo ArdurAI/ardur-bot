@@ -82,7 +82,7 @@ export interface GitObservationRequest {
   /** Absolute epoch-ms deadline shared by every command in this observation. */
   deadlineMs?: number;
   /** Read a worktree file for an untracked diff; the caller bounds the read. */
-  readWorktreeFile?: (path: string) => Promise<Uint8Array>;
+  readWorktreeFile?: (path: string, options?: { signal?: AbortSignal }) => Promise<Uint8Array>;
   /**
    * Verify the on-disk `.git` metadata for the repository Git reported
    * (contained gitdir, no common directory, no alternates, no metadata symlinks).
@@ -345,12 +345,21 @@ export async function observeGitChanges(
   if (entry.untracked) {
     if (!request.readWorktreeFile)
       return { kind: "diff", before: null, after: null, binary: false, truncated: false };
+    if (Date.now() >= deadlineMs) return { kind: "unavailable" };
+    const remaining = Math.max(0, deadlineMs - Date.now());
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), remaining);
+    timer.unref?.();
+    if (remaining <= 0) controller.abort();
     let bytes: Uint8Array;
     try {
-      bytes = await request.readWorktreeFile(path);
+      bytes = await request.readWorktreeFile(path, { signal: controller.signal });
     } catch {
       return { kind: "unavailable" };
+    } finally {
+      clearTimeout(timer);
     }
+    if (controller.signal.aborted || Date.now() >= deadlineMs) return { kind: "unavailable" };
     return untrackedDiff(bytes);
   }
 
