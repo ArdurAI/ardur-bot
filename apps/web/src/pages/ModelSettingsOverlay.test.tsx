@@ -450,7 +450,7 @@ it("lists models across the catalog and keeps the subscription plan hint", async
   );
   await act(async () => picker().click());
   expect(
-    [...container.querySelectorAll('[role="option"]')].map(
+    [...document.querySelectorAll('[role="option"]')].map(
       (element) => element.textContent?.split("OpenAI Codex")[0],
     ),
   ).toEqual([
@@ -496,7 +496,7 @@ it.each(["api-key", "both"] as const)("keeps Spark available for %s auth", async
   await render();
   expect(picker().textContent).toBe("GPT-5.3 Codex Spark");
   await act(async () => picker().click());
-  expect(container.querySelectorAll('[role="option"]')).toHaveLength(4);
+  expect(document.querySelectorAll('[role="option"]')).toHaveLength(4);
 });
 
 it("selects a subscription model with a plan hint without a provider step", async () => {
@@ -623,7 +623,7 @@ it("does not turn an untouched estimate into saved metadata when reconnecting", 
 
 async function pickModel(label: string) {
   await act(async () => picker().click());
-  const option = [...container.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(
+  const option = [...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(
     (option) => option.textContent?.startsWith(label),
   );
   expect(option).toBeDefined();
@@ -696,16 +696,65 @@ it("keeps custom model entry selected while entering a free-form endpoint id", a
   });
   expect(picker().textContent).toBe("Custom model id");
 });
+
+it("waits for saved custom models before allowing a search and reuses the demo connection", async () => {
+  let finishCredentials!: (credentials: unknown[]) => void;
+  api.credentials.mockReturnValue(
+    new Promise((resolve) => {
+      finishCredentials = resolve;
+    }),
+  );
+  api.list.mockResolvedValue([
+    {
+      provider: "openai-compatible",
+      id: "custom",
+      label: "Custom model id",
+      billing: "",
+      placeholder: true,
+    },
+  ]);
+  api.me.mockResolvedValue({ defaultProvider: "openai-compatible", defaultModel: "demo-fixture" });
+  await render();
+  expect(picker().matches(":disabled")).toBe(true);
+  await act(async () => picker().click());
+  expect(document.querySelector('[aria-label="Search models"]')).toBeNull();
+  await act(async () => {
+    finishCredentials([
+      {
+        id: "demo-connection",
+        provider: "openai-compatible",
+        label: "Demo fixture",
+        modelId: "demo-fixture",
+        baseUrl: "https://example.invalid/v1",
+        contextWindow: 65_536,
+        contextWindowSource: "metadata",
+        hasKey: true,
+        isDefault: true,
+      },
+    ]);
+  });
+  expect(picker().matches(":disabled")).toBe(false);
+  expect(picker().textContent).toBe("demo-fixture");
+  await pickModel("demo-fixture");
+  expect(button("Connection settings")).toBeDefined();
+  await act(async () => button("Connection settings").click());
+  expect(
+    container.querySelector<HTMLInputElement>('input[aria-label="Context limit"]')?.value,
+  ).toBe("65536");
+  expect(api.connect).not.toHaveBeenCalled();
+});
 it("hides plan-limited models until Show all models is requested", async () => {
   await render();
   await act(async () => picker().click());
-  expect(container.querySelector('[role="listbox"]')?.textContent).not.toContain(
+  expect(document.querySelector('[role="listbox"]')?.textContent).not.toContain(
     "GPT-5.3 Codex Spark",
   );
   const toggle = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
   expect(toggle).not.toBeNull();
   await act(async () => toggle!.click());
   await act(async () => picker().click());
-  expect(container.querySelector('[role="listbox"]')?.textContent).toContain("GPT-5.3 Codex Spark");
-  expect(container.textContent).toContain("May not be available on your plan");
+  expect(document.querySelector('[role="listbox"]')?.textContent).toContain("GPT-5.3 Codex Spark");
+  expect(document.querySelector('[role="listbox"]')?.textContent).toContain(
+    "May not be available on your plan",
+  );
 });

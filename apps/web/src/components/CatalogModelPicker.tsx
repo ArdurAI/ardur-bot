@@ -7,6 +7,7 @@ import {
   unavailableSubscriptionModel,
 } from "@ardurbot/core";
 import { Input, NativeSelect, NativeSelectOption } from "@ardurbot/ui-web";
+import { Popover, PopoverContent, PopoverTrigger } from "@ardurbot/ui-web/components/ui/popover";
 import { selectableRowClasses } from "@ardurbot/ui-web/lib/state-classes";
 import { Plural, Trans, useLingui } from "@lingui/react/macro";
 import { CheckIcon, ChevronDown } from "lucide-react";
@@ -66,6 +67,7 @@ export default function CatalogModelPicker({
   return (
     <fieldset disabled={disabled} className="min-w-0 space-y-3">
       <ModelListPicker
+        disabled={disabled}
         options={models}
         value={pending?.key ?? active?.key ?? ""}
         onChange={(key) => {
@@ -133,16 +135,17 @@ export default function CatalogModelPicker({
 }
 
 function ModelListPicker({
+  disabled,
   options,
   value,
   onChange,
 }: {
+  disabled: boolean;
   options: CatalogModelChoice[];
   value: string;
   onChange: (value: string) => void;
 }) {
   const { t } = useLingui();
-  const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -156,7 +159,7 @@ function ModelListPicker({
   useEffect(() => {
     setHighlightedIndex(selectedIndex);
     setOpen(false);
-  }, [selectedIndex, value]);
+  }, [selectedIndex, value, disabled]);
 
   useEffect(() => {
     if (!open) {
@@ -164,15 +167,6 @@ function ModelListPicker({
       return;
     }
     searchRef.current?.focus();
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    function closeOnOutsidePointer(event: PointerEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    }
-    document.addEventListener("pointerdown", closeOnOutsidePointer);
-    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
   }, [open]);
 
   function choose(index: number) {
@@ -284,8 +278,9 @@ function ModelListPicker({
   }
 
   return (
-    <div ref={rootRef} className="relative mt-2">
-      <button
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        disabled={disabled}
         ref={triggerRef}
         type="button"
         role="combobox"
@@ -293,17 +288,21 @@ function ModelListPicker({
         aria-controls={listboxId}
         aria-expanded={open}
         aria-haspopup="listbox"
-        className="flex h-10 w-full items-center justify-between rounded-lg border border-input bg-transparent px-3 text-start text-sm text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-        onClick={() => setOpen((current) => !current)}
+        className="mt-2 flex h-10 w-full items-center justify-between rounded-lg border border-input bg-transparent px-3 text-start text-sm text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
         onKeyDown={onTriggerKeyDown}
       >
         <span className="min-w-0 truncate">{options[selectedIndex]?.label ?? t`Model`}</span>
         <span className="ml-3 shrink-0 text-muted-foreground" aria-hidden="true">
           <ChevronDown size={16} strokeWidth={1.8} />
         </span>
-      </button>
+      </PopoverTrigger>
       {open ? (
-        <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10">
+        <PopoverContent
+          align="start"
+          initialFocus={searchRef}
+          finalFocus={triggerRef}
+          className="w-(--anchor-width) max-h-(--available-height) gap-0 overflow-hidden p-0"
+        >
           <input
             ref={searchRef}
             type="text"
@@ -329,7 +328,7 @@ function ModelListPicker({
             id={listboxId}
             role="listbox"
             aria-label={t`Model options`}
-            className="rk-scroll max-h-64 overflow-y-auto py-1"
+            className="rk-scroll min-h-0 max-h-64 overflow-y-auto py-1"
           >
             {filteredOptions.map((option, index) => (
               <ModelOption
@@ -350,9 +349,9 @@ function ModelListPicker({
               </p>
             ) : null}
           </div>
-        </div>
+        </PopoverContent>
       ) : null}
-    </div>
+    </Popover>
   );
 }
 

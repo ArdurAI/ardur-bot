@@ -134,7 +134,7 @@ it.each([false, true])(
         container.querySelector<HTMLButtonElement>('button[aria-label="Model"]')!.click(),
       );
       await act(async () =>
-        [...container.querySelectorAll<HTMLButtonElement>('[role="option"]')]
+        [...document.querySelectorAll<HTMLButtonElement>('[role="option"]')]
           .find((option) => option.textContent?.startsWith("gpt-6-astra"))!
           .click(),
       );
@@ -289,7 +289,7 @@ async function chooseModel(label: string) {
     container.querySelector<HTMLButtonElement>('button[aria-label="Model"]')!.click(),
   );
   await act(async () =>
-    [...container.querySelectorAll<HTMLButtonElement>('[role="option"]')]
+    [...document.querySelectorAll<HTMLButtonElement>('[role="option"]')]
       .find((option) => option.textContent?.startsWith(label))!
       .click(),
   );

@@ -462,7 +462,7 @@ export function ModelSettingsOverlay({
             modelId={modelId}
             credentialId={credentialId}
             onChange={chooseModel}
-            disabled={pending !== null || oauthSaving || ollamaSaving}
+            disabled={loading || pending !== null || oauthSaving || ollamaSaving}
           />
         </div>
 
