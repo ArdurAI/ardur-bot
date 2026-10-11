@@ -1,7 +1,9 @@
+import type { BoardRun, BoardRunResult } from "@ardurbot/contracts/board";
 import type { Pool, PrismaClient } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import { botRunOutcomeText } from "../job-reconciler.js";
 import { deliverPendingGoalBoardUpdates } from "./goal-delivery.js";
+import type { BoardScope } from "./service.js";
 import { BoardService } from "./service.js";
 import { finishBoardRun } from "./tools.js";
 
@@ -20,6 +22,7 @@ export async function reconcileBoardOutcomes(
     prisma: PrismaClient;
     dataDir: string;
     lockPool?: Pick<Pool, "connect">;
+    ownerRun?: (request: BoardRun, scope: BoardScope) => Promise<BoardRunResult>;
   },
   options: { signal?: AbortSignal; pendingCloses?: boolean } = {},
 ) {

@@ -1,11 +1,17 @@
 import type { BoardScope, BoardService } from "@ardurbot/adapters";
-import { BoardService as BoardServiceClass } from "@ardurbot/adapters";
+import {
+  BoardService as BoardServiceClass,
+  deliverPendingGoalBoardUpdates,
+  usesHostBridge,
+} from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
 import { BoardError } from "@ardurbot/contracts/board";
 import type { Pool, PrismaClient } from "@ardurbot/db";
 import { IsolationError } from "@ardurbot/db";
 import { boardOwnerRun } from "./board.js";
 import type { HostBridge } from "./host-bridge.js";
+
+const GOAL_BOARD_DELIVERY_INTERVAL_MS = 30_000;
 
 export function goalBoardService(deps: {
   prisma: PrismaClient;
@@ -19,6 +25,46 @@ export function goalBoardService(deps: {
     lockPool: deps.lockPool,
     ownerRun: deps.hostBridge ? boardOwnerRun(deps.hostBridge) : undefined,
   });
+}
+
+/** Queued goal deliveries on a host-bridge deployment. Only the API has the owner connection. */
+export function goalBoardDeliveryRetry(
+  deps: {
+    prisma: PrismaClient;
+    dataDir: string;
+    lockPool?: Pick<Pool, "connect">;
+    hostBridge?: HostBridge;
+  },
+  env: NodeJS.ProcessEnv = process.env,
+) {
+  if (!usesHostBridge(env)) return undefined;
+  const ownerRun = boardOwnerRun(deps.hostBridge);
+  let timer: ReturnType<typeof setInterval> | undefined;
+  let running: Promise<void> | undefined;
+  const tick = () => {
+    if (!timer || running) return;
+    running = deliverPendingGoalBoardUpdates({
+      prisma: deps.prisma,
+      dataDir: deps.dataDir,
+      lockPool: deps.lockPool,
+      ownerRun,
+    }).finally(() => {
+      running = undefined;
+    });
+  };
+  return {
+    start() {
+      if (timer) return;
+      timer = setInterval(tick, GOAL_BOARD_DELIVERY_INTERVAL_MS);
+      timer.unref?.();
+      tick();
+    },
+    async stop() {
+      clearInterval(timer);
+      timer = undefined;
+      await running;
+    },
+  };
 }
 
 /** Owner, space, workspace and item must all match before a goal stores the link. */

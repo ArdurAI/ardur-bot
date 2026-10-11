@@ -244,7 +244,8 @@ import { deleteAgentSecret, listAgentSecrets, putAgentSecret } from "./agent-sec
 import { createAgentSkillsService } from "./agent-skills.js";
 import { aiConsentStatus, allowAiConsent } from "./ai-consent.js";
 import { createOwnedArtifact, getOwnedArtifact, getSpaceArtifact } from "./artifacts.js";
-import { boardCall, createBoard } from "./board.js";
+import { boardCall, boardOwnerRun, createBoard } from "./board.js";
+import { updateOwnerBoardItem } from "./board-update.js";
 import { botModelPinUpdate } from "./bot-model-pin.js";
 import {
   botProfileLabelsChanged,
@@ -665,6 +666,7 @@ function scheduleGoalBoard(deps: RouterDeps) {
     prisma: deps.prisma,
     dataDir: deps.dataDir,
     lockPool: deps.lockPool,
+    ownerRun: deps.hostBridge ? boardOwnerRun(deps.hostBridge) : undefined,
   }).catch((error) => getLogger().error("goal board delivery", error));
 }
 
@@ -6385,12 +6387,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         ),
       ),
       update: authed.board.update.handler(({ context, input }) =>
-        boardCall(async () =>
-          (await board.service.provider(context.actor, input.workspaceId)).update(
-            input.id,
-            input.patch,
-          ),
-        ),
+        boardCall(() => updateOwnerBoardItem(board.service, context.actor, input)),
       ),
       claim: authed.board.claim.handler(({ context, input }) =>
         boardCall(async () =>

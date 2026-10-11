@@ -5,10 +5,13 @@ import {
   goalBoardDeliveryKey,
   goalResultPath,
 } from "@ardurbot/contracts";
+import type { BoardRun, BoardRunResult } from "@ardurbot/contracts/board";
 import { BoardError, isBoardAccessDenied } from "@ardurbot/contracts/board";
 import type { Pool, PrismaClient } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
+import { usesHostBridge } from "../remote-host-sandbox.js";
 import { goalBoardCommentText, goalBoardHash, goalBoardMarker } from "./goal-delivery-key.js";
+import type { BoardScope } from "./service.js";
 import { BoardService } from "./service.js";
 
 const WORK_MS = 120_000;
@@ -60,6 +63,7 @@ type DeliveryDeps = {
   prisma: PrismaClient;
   dataDir?: string;
   lockPool?: Pick<Pool, "connect">;
+  ownerRun?: (request: BoardRun, scope: BoardScope) => Promise<BoardRunResult>;
 };
 
 /**
@@ -112,6 +116,7 @@ export async function deliverGoalBoardRow(
     });
     if (prior && prior.state !== "delivered") return;
   }
+  if (usesHostBridge() && !deps.ownerRun) return;
   const deadline = Date.now() + WORK_MS;
   const token = randomUUID();
   const claimed = await deps.prisma.goalBoardDelivery.updateMany({
@@ -184,6 +189,7 @@ export async function deliverGoalBoardRow(
       prisma: deps.prisma,
       dataDir: deps.dataDir ?? "./data",
       lockPool: deps.lockPool,
+      ownerRun: deps.ownerRun,
     });
     const hash = goalBoardHash(
       goalBoardDeliveryKey(held.goalId, held.revisionId, held.transition as GoalBoardTransition),
@@ -201,6 +207,9 @@ export async function deliverGoalBoardRow(
         throw new BoardError({ code: "no_board", message: "This folder has no board" });
       const provider = await service.provider(scope, workspace.id);
       const close = held.transition === "accepted";
+      const beforeWrite = async () => {
+        if (!(await stillHeld())) throw new Error("Delivery claim expired");
+      };
       const result = await applyKeyedDelivery(provider, {
         itemId: held.itemId,
         hash,
@@ -208,6 +217,7 @@ export async function deliverGoalBoardRow(
         comment,
         close,
         closeReason: "Goal accepted",
+        beforeWrite,
       });
       if (!(await stillHeld())) throw new Error("Delivery claim expired");
       if (result.expired) throw new Error("Delivery claim expired");
@@ -307,6 +317,7 @@ async function applyKeyedDelivery(
     comment: string;
     close: boolean;
     closeReason: string;
+    beforeWrite?: () => Promise<void>;
   },
 ): Promise<KeyedResult> {
   if (typeof provider.deliverKeyed === "function") return provider.deliverKeyed(input);
