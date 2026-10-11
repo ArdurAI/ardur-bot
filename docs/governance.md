@@ -125,6 +125,6 @@ Compare all hexadecimal digits with the owner's `sha256:<hex>` fingerprint. A
 successful check against an untrusted downloaded key establishes internal
 consistency, not the identity or honesty of the signer.
 
-Not included: encrypting stored evidence, key rotation and revocation, a second
+Not included: encrypting stored evidence, a second
 signer (the computer that ran the tool), or a public place to publish the key
 fingerprint. Spend and risk gates are not implemented by decision recording.
