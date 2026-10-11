@@ -8,10 +8,14 @@ import { LoadingState } from "./ai/primitives";
 
 export function OllamaSettings({
   onChanged,
+  credentialId,
+  modelId,
   onReady,
   onSavePendingChange,
 }: {
   onChanged: () => Promise<void>;
+  credentialId?: string;
+  modelId?: string;
   onReady?: () => void;
   onSavePendingChange?: (pending: boolean) => void;
 }) {
@@ -28,12 +32,14 @@ export function OllamaSettings({
   useEffect(() => {
     const controller = new AbortController();
     void rpc.models
-      .ollama(undefined, { signal: controller.signal })
+      .ollama(credentialId ? { credentialId } : undefined, { signal: controller.signal })
       .then((state) => {
         if (controller.signal.aborted) return;
         setStatus(state);
         setUrl(state.baseUrl);
-        setModel(state.models[0]?.id ?? "");
+        setModel(
+          state.models.find((entry) => entry.id === modelId)?.id ?? state.models[0]?.id ?? "",
+        );
       })
       .catch(() => {
         if (!controller.signal.aborted) setError(t`Could not load Ollama.`);
@@ -42,7 +48,7 @@ export function OllamaSettings({
       controller.abort();
       operation.current?.abort();
     };
-  }, []);
+  }, [credentialId, modelId]);
 
   async function run(action: (signal: AbortSignal) => Promise<void>, savesModel = false) {
     operation.current?.abort();
@@ -112,7 +118,12 @@ export function OllamaSettings({
           onClick={() =>
             void run(async (signal) => {
               const connection = await rpc.models.connect(
-                { provider: "ollama", baseUrl: url, modelId: model || undefined },
+                {
+                  provider: "ollama",
+                  baseUrl: url,
+                  modelId: model || undefined,
+                  ...(credentialId ? { credentialId } : {}),
+                },
                 { signal },
               );
               if (signal.aborted) return;
@@ -162,7 +173,10 @@ export function OllamaSettings({
           disabled={busy}
           onClick={() =>
             void run(async (signal) => {
-              await rpc.models.setDefault({ provider: "ollama", modelId: model }, { signal });
+              await rpc.models.setDefault(
+                { provider: "ollama", modelId: model, credentialId: status?.credentialId },
+                { signal },
+              );
               await onChanged();
               if (!signal.aborted) onReady?.();
             }, true)
@@ -197,12 +211,18 @@ export function OllamaSettings({
             onClick={() =>
               void run(async (signal) => {
                 setProgress({ status: "pulling manifest" });
-                const stream = await rpc.models.pullOllama({ model: pullName }, { signal });
+                const stream = await rpc.models.pullOllama(
+                  { model: pullName, credentialId: status?.credentialId },
+                  { signal },
+                );
                 for await (const next of stream) {
                   if (!signal.aborted) setProgress(next);
                 }
                 if (signal.aborted) return;
-                const state = await rpc.models.ollama(undefined, { signal });
+                const state = await rpc.models.ollama(
+                  status?.credentialId ? { credentialId: status.credentialId } : undefined,
+                  { signal },
+                );
                 setStatus(state);
                 setModel(
                   state.models.find((entry) => entry.id === pullName)?.id ??

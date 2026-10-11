@@ -268,33 +268,74 @@ function Connections({ data }: { data: ConnectionOverview[] }) {
 }
 function Usage({ data }: { data: UsageSummary }) {
   const { t } = useI18n();
+  const [expanded, setExpanded] = useState(false);
   return (
     <View style={styles.lines}>
       {!data.providers.length ? <Line>{t("No usage")}</Line> : null}
-      {data.providers.map((provider) => (
-        <View key={provider.provider} style={styles.lines}>
-          <Line>{provider.provider}</Line>
+      {data.today && data.week ? (
+        <View style={styles.lines}>
           <Line>{t("Today (UTC)")}</Line>
-          <Period value={provider.today} provider={provider.provider} />
+          <Period value={data.today} />
           <Line>{t("This week (UTC)")}</Line>
-          <Period value={provider.week} provider={provider.provider} />
+          <Period value={data.week} />
         </View>
-      ))}
+      ) : (
+        data.providers.map((provider) => (
+          <View key={provider.provider} style={styles.lines}>
+            <Line>{provider.provider}</Line>
+            <Line>{t("Today (UTC)")}</Line>
+            <Period value={provider.today} />
+            <Line>{t("This week (UTC)")}</Line>
+            <Period value={provider.week} />
+          </View>
+        ))
+      )}
+      {data.bots?.length ? (
+        <>
+          <Button
+            title={expanded ? t("Hide bots") : t("By bot")}
+            onPress={() => setExpanded((value) => !value)}
+          />
+          {expanded
+            ? data.bots.map((bot) => (
+                <View key={bot.botId ?? "unattributed"} style={styles.lines}>
+                  <Line>
+                    {bot.name ?? (bot.botId ? t("Unknown bot") : t("Unattributed usage"))}
+                  </Line>
+                  <Line>{t("Today (UTC)")}</Line>
+                  <Period value={bot.today} />
+                  <Line>{t("This week (UTC)")}</Line>
+                  <Period value={bot.week} />
+                  {bot.providers.map((provider) => (
+                    <View key={provider.provider} style={styles.lines}>
+                      <Line>
+                        {provider.provider} · {t("This week (UTC)")}
+                      </Line>
+                      <Period value={provider.week} />
+                    </View>
+                  ))}
+                </View>
+              ))
+            : null}
+        </>
+      ) : null}
     </View>
   );
 }
-function Period({ value, provider }: { value: UsagePeriod; provider: string }) {
+function Period({ value }: { value: UsagePeriod }) {
   const { t } = useI18n();
+  const cost = value.knownCost ?? value.cost;
   return (
     <Line>
+      {value.runs === undefined
+        ? null
+        : `${value.runs === 1 ? t("{runs} run", { runs: value.runs }) : t("{runs} runs", { runs: value.runs })} · `}
       {t("{records} usage records", { records: value.records })}
       {" · "}
       {t("{tokens} tokens", { tokens: value.inputTokens + value.outputTokens })}
-      {value.cost === null
-        ? provider === "antigravity"
-          ? ` · ${t("Cost unavailable")}`
-          : null
-        : ` · ${t("Cost")}: ${value.cost.toLocaleString(undefined, { maximumFractionDigits: 6 })}`}
+      {cost === null
+        ? ` · ${t("Cost unavailable")}`
+        : ` · ${value.costStatus === "partial" ? t("Partial cost") : t("Cost")}: ${cost.toLocaleString(undefined, { maximumFractionDigits: 6 })}`}
       {value.incomplete ? ` · ${t("Partially reported")}` : null}
     </Line>
   );

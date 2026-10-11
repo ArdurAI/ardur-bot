@@ -25,13 +25,24 @@ import {
 import { getLogger } from "@ardurbot/logging";
 import { z } from "zod";
 import { filingBotName } from "./filing.js";
+import {
+  goalBoardMarker,
+  goalBoardMetadataArg,
+  goalBoardMetadataName,
+  parseGoalBoardLedger,
+} from "./goal-delivery-key.js";
 
 export type BoardTransport = (request: BoardRun) => Promise<BoardRunResult>;
 const rawObject = z.record(z.string(), z.unknown());
 const str = (value: unknown, fallback = "") => (typeof value === "string" ? value : fallback);
 const num = (value: unknown, fallback = 0) => (typeof value === "number" ? value : fallback);
 const array = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
-const records = (value: unknown) => array(value).map((item) => rawObject.parse(item));
+const records = (value: unknown) => beadsRecords(value);
+function beadsRecords(data: unknown) {
+  return (data == null ? [] : Array.isArray(data) ? data : [data]).map((item) =>
+    rawObject.parse(item),
+  );
+}
 function metadata(value: unknown): Record<string, unknown> {
   if (typeof value === "string") {
     try {
@@ -154,7 +165,7 @@ export class BeadsBoardProvider implements ProjectBoardProvider {
     const data = await this.json(argv, actor);
     let items: WorkItem[];
     try {
-      items = (data == null ? [] : Array.isArray(data) ? data : [data]).map(parseBeadsItem);
+      items = beadsRecords(data).map(parseBeadsItem);
     } catch {
       throw new BoardError({
         code: "invalid_response",
@@ -331,5 +342,160 @@ export class BeadsBoardProvider implements ProjectBoardProvider {
         message: "Beads did not return an export path.",
       });
     return { path: result.path };
+  }
+  async deliverKeyed(input: {
+    itemId: string;
+    hash: string;
+    generation: number;
+    comment: string;
+    close: boolean;
+    closeReason: string;
+    beforeWrite?: () => Promise<void>;
+  }) {
+    BoardItemIdSchema.parse(input.itemId);
+    if (!/^[a-f0-9]{16}$/.test(input.hash) || input.generation < 1)
+      throw new BoardError({ code: "forbidden", message: "This board command is not allowed." });
+    const guard = async () => {
+      await input.beforeWrite?.();
+    };
+    const write = async (argv: string[]) => {
+      await guard();
+      return this.json(argv);
+    };
+    const shown = await this.itemRecord(["show", "--include-comments", input.itemId]);
+    const item = parseBeadsItem(shown);
+    const ledger = parseGoalBoardLedger(
+      metadata(shown.metadata)[goalBoardMetadataName(input.hash)],
+    );
+    const marker = goalBoardMarker(input.hash);
+    const existing = item.comments.find((entry) => entry.text.startsWith(marker));
+    const blank = {
+      commentId: existing?.id || null,
+      commented: Boolean(existing),
+      closedByThisDelivery: false,
+      alreadyClosed: false,
+      leftOpen: false,
+      discrepancy: false,
+      expired: false,
+    };
+    if (ledger && ledger.generation > input.generation) return { ...blank, expired: true };
+    if (ledger?.commented && !existing) return { ...blank, discrepancy: true };
+    let commentId = existing?.id || null;
+    if (!existing) {
+      await write([
+        "update",
+        input.itemId,
+        "--set-metadata",
+        goalBoardMetadataArg(input.hash, {
+          generation: input.generation,
+          commented: false,
+          close: "open",
+        }),
+      ]);
+      await guard();
+      commentId = (await this.comment(input.itemId, input.comment)).id;
+      await write([
+        "update",
+        input.itemId,
+        "--set-metadata",
+        goalBoardMetadataArg(input.hash, {
+          generation: input.generation,
+          commented: true,
+          close: "open",
+        }),
+      ]);
+    }
+    if (!input.close) {
+      return { ...blank, commentId, commented: true, leftOpen: true };
+    }
+    if (ledger?.close === "closing") {
+      // Intent is not a receipt. Resolve from board state without issuing a second close.
+      if (item.status === "closed") {
+        await this.stamp(input, true, "already-closed", guard);
+        return { ...blank, commentId, commented: true, alreadyClosed: true };
+      }
+      if (await this.closedThenReopened(input.itemId, input.closeReason, existing?.createdAt)) {
+        await this.stamp(input, true, "left-open", guard);
+        return { ...blank, commentId, commented: true, leftOpen: true };
+      }
+      throw new BoardError({ code: "timeout", message: "Board close outcome is uncertain." });
+    }
+    if (ledger && ledger.close !== "open") {
+      return {
+        ...blank,
+        commentId,
+        commented: true,
+        alreadyClosed: item.status === "closed",
+        leftOpen: item.status !== "closed",
+      };
+    }
+    const current = await this.show(input.itemId);
+    if (current.status === "closed") {
+      await this.stamp(input, true, "already-closed", guard);
+      return { ...blank, commentId, commented: true, alreadyClosed: true };
+    }
+    await guard();
+    const consent = parseBeadsItem(
+      await this.itemRecord(["show", "--include-comments", input.itemId]),
+    );
+    if (consent.status === "closed") {
+      await this.stamp(input, true, "already-closed", guard);
+      return { ...blank, commentId, commented: true, alreadyClosed: true };
+    }
+    if (!consent.closeWhenDone) {
+      await this.stamp(input, true, "left-open", guard);
+      return { ...blank, commentId, commented: true, leftOpen: true };
+    }
+    if (
+      existing &&
+      (await this.closedThenReopened(input.itemId, input.closeReason, existing.createdAt))
+    ) {
+      await this.stamp(input, true, "left-open", guard);
+      return { ...blank, commentId, commented: true, leftOpen: true };
+    }
+    // The receipt has to exist before close. A lost close response must not close again.
+    await this.stamp(input, true, "closing", guard);
+    await guard();
+    const closed = await this.close([input.itemId], input.closeReason);
+    if (!closed.some((entry) => entry.id === input.itemId && entry.status === "closed"))
+      throw new BoardError({ code: "timeout", message: "Board close outcome is uncertain." });
+    const after = await this.show(input.itemId);
+    if (after.status !== "closed")
+      throw new BoardError({ code: "timeout", message: "Board close outcome is uncertain." });
+    await this.stamp(input, true, "closed", guard);
+    return { ...blank, commentId, commented: true, closedByThisDelivery: true };
+  }
+  private async itemRecord(argv: string[]) {
+    const [shown] = beadsRecords(await this.json(argv));
+    if (!shown)
+      throw new BoardError({ code: "item_not_found", message: "This work item was not found." });
+    return shown;
+  }
+  /** A committed close whose receipt was lost, then the owner reopened the item. */
+  private async closedThenReopened(itemId: string, closeReason: string, after?: string) {
+    const entries = records(await this.json(["history", itemId, "--limit", "100"]));
+    return entries.some((entry) => {
+      const issue = rawObject.safeParse(entry.Issue ?? entry);
+      if (!issue.success) return false;
+      if (str(issue.data.status) !== "closed" || str(issue.data.close_reason) !== closeReason)
+        return false;
+      const when = str(entry.CommitDate);
+      return !after || !when || when >= after;
+    });
+  }
+  private stamp(
+    input: { itemId: string; hash: string; generation: number },
+    commented: boolean,
+    close: "open" | "closed" | "already-closed" | "left-open" | "closing",
+    guard: () => Promise<void> = async () => {},
+  ) {
+    return guard().then(() =>
+      this.json([
+        "update",
+        input.itemId,
+        "--set-metadata",
+        goalBoardMetadataArg(input.hash, { generation: input.generation, commented, close }),
+      ]),
+    );
   }
 }

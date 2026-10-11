@@ -331,6 +331,10 @@ vi.mock("../lib/rpc", () => {
       mcp: { servers: { list: record("mcp.servers.list") } },
       connectors: { summary: record("connectors.summary") },
       workspace: {
+        list: async ({ botId }: { botId: string }) => ({
+          context: state.workspaceContexts[botId],
+          entries: [],
+        }),
         describe: async ({ botId }: { botId: string }) => {
           state.calls.push("workspace.describe");
           return (
@@ -489,6 +493,7 @@ vi.mock("../components/PreferencesProvider", () => ({
 
 import { rpc } from "../lib/rpc";
 import { ShellPage } from "./Shell";
+import * as workspaceFileSessions from "./workspace/file-sessions";
 
 let host: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -877,6 +882,137 @@ async function openWorkspacePane() {
   await tick(150);
   return pane();
 }
+
+function rememberWorkspaceViews(open: Array<{ type: "tasks" | "files" | "ide" }>) {
+  savedLayouts.set(
+    'ardurbot:workspace-layout:["user-1","space-1","bot-1"]',
+    JSON.stringify({
+      version: 1,
+      open,
+      active: open.at(-1)!.type,
+      visible: false,
+      expanded: false,
+      position: "right",
+      width: 480,
+      height: 280,
+    }),
+  );
+  state.workspaceContexts["bot-1"] = {
+    botId: "bot-1",
+    computerId: "computer-bot-1",
+    rootId: "root-1",
+    generation: 1,
+    files: "live",
+    observedAt: "2026-09-28T00:00:00.000Z",
+  };
+}
+
+it.each([
+  { name: "Files", open: [{ type: "files" }] },
+  { name: "IDE", open: [{ type: "ide" }] },
+  { name: "Tasks + Files", open: [{ type: "tasks" }, { type: "files" }] },
+] as const)(
+  "closes the whole workspace in one click and reopens remembered views: $name",
+  async ({ open: views }) => {
+    const open = [...views];
+    rememberWorkspaceViews(open);
+    const label = open.at(-1)!.type === "ide" ? "IDE" : "Files";
+    await renderShell("/app/bot-1");
+    click(await headerItem(label));
+    await until(() => paneTab(label)?.getAttribute("aria-selected") === "true");
+    const tabs = [...pane()!.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent);
+    click(pane()?.querySelector('[aria-label="Expand"]'));
+    await until(() => pane()?.getAttribute("data-overlay") === "true");
+    click(pane()?.querySelector('[aria-label="Back to chat"]'));
+    await until(() => pane()?.getAttribute("data-overlay") === "false");
+    click(pane()?.querySelector('[aria-label="Expand"]'));
+    await until(() => pane()?.getAttribute("data-overlay") === "true");
+    // Exercise the header X even before its accessible name is corrected.
+    const buttons = pane()!.querySelector("[data-workspace-chrome]")!.querySelectorAll("button");
+    click(buttons.item(buttons.length - 1));
+    await until(() => pane()?.getAttribute("data-panel") === "closed");
+    expect(pane()?.getAttribute("aria-hidden")).toBe("true");
+    const layout = JSON.parse(
+      savedLayouts.get('ardurbot:workspace-layout:["user-1","space-1","bot-1"]')!,
+    );
+    expect(layout).toMatchObject({ open, visible: false, expanded: false });
+    expect(document.activeElement).toBe(host.querySelector("[data-workspace-trigger]"));
+    click(await headerItem(label));
+    await until(() => pane()?.getAttribute("aria-hidden") === "false");
+    expect(paneTab(label)?.getAttribute("aria-selected")).toBe("true");
+    expect([...pane()!.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(
+      tabs,
+    );
+    expect(pane()?.getAttribute("data-overlay")).toBe("false");
+    expect(
+      pane()?.querySelector('[data-workspace-chrome] [aria-label="Close panel"]'),
+    ).not.toBeNull();
+    click(await headerItem("Tasks"));
+    await until(() => paneTab("Tasks")?.getAttribute("aria-selected") === "true");
+  },
+);
+
+it("closes the workspace with one Escape and reopens from the Views toggle", async () => {
+  rememberWorkspaceViews([{ type: "tasks" }, { type: "files" }]);
+  await renderShell("/app/bot-1");
+  click(await headerItem("Files"));
+  await until(() => paneTab("Files")?.getAttribute("aria-selected") === "true");
+  paneTab("Files")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  await until(() => pane()?.getAttribute("data-panel") === "closed");
+  expect(pane()?.getAttribute("aria-hidden")).toBe("true");
+  await toggleWorkspace();
+  await until(() => pane()?.getAttribute("aria-hidden") === "false");
+  expect(paneTab("Files")?.getAttribute("aria-selected")).toBe("true");
+  expect(paneTab("Tasks")).toBeDefined();
+});
+
+it("closing one workspace tab keeps the other view open", async () => {
+  rememberWorkspaceViews([{ type: "tasks" }, { type: "files" }]);
+  await renderShell("/app/bot-1");
+  click(await headerItem("Files"));
+  await until(() => paneTab("Files")?.getAttribute("aria-selected") === "true");
+  click(pane()?.querySelector('[role="tablist"] [aria-label="Close Files"]'));
+  await until(() => pane()?.querySelectorAll('[role="tab"]').length === 1);
+  expect(pane()?.getAttribute("data-panel")).toBe("computer");
+  expect(pane()?.getAttribute("aria-hidden")).toBe("false");
+  expect(paneTab("Tasks")?.getAttribute("aria-selected")).toBe("true");
+});
+
+it.each(["Files", "IDE"])(
+  "guards panel dismissal while %s has unsaved or saving files",
+  async (label) => {
+    rememberWorkspaceViews([{ type: label === "IDE" ? "ide" : "files" }]);
+    await renderShell("/app/bot-1");
+    click(await headerItem(label));
+    await until(() => paneTab(label)?.getAttribute("aria-selected") === "true");
+    const snapshot = vi.spyOn(workspaceFileSessions, "workspaceFilesSnapshot");
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    try {
+      snapshot.mockReturnValue({ dirty: true, saving: true });
+      click(pane()?.querySelector('[aria-label="Close panel"]'));
+      await tick();
+      expect(pane()?.getAttribute("aria-hidden")).toBe("false");
+      expect(confirm).not.toHaveBeenCalled();
+      snapshot.mockReturnValue({ dirty: true, saving: false });
+      click(pane()?.querySelector('[aria-label="Close panel"]'));
+      await tick();
+      expect(confirm).toHaveBeenCalledExactlyOnceWith("Unsaved changes");
+      expect(pane()?.getAttribute("aria-hidden")).toBe("false");
+      paneTab(label)!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await tick();
+      expect(confirm).toHaveBeenCalledTimes(2);
+      expect(pane()?.getAttribute("aria-hidden")).toBe("false");
+      confirm.mockReturnValue(true);
+      paneTab(label)!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await until(() => pane()?.getAttribute("data-panel") === "closed");
+      expect(pane()?.getAttribute("aria-hidden")).toBe("true");
+      snapshot.mockReturnValue({ dirty: false, saving: false });
+    } finally {
+      snapshot.mockRestore();
+      confirm.mockRestore();
+    }
+  },
+);
 
 /** Delivers a thread refresh the way a live event does: event → refreshThread → threads.get. */
 async function deliverCapabilityFlip(botId: string, graphical: boolean) {
@@ -1596,14 +1732,20 @@ it("keeps the pane shell across views and expansion, and confirms explicit panel
     await tick(100);
     expect(host.querySelector("[data-pane-session]")).toBe(original);
     expect(confirm).not.toHaveBeenCalled();
-    click(pane()?.querySelector('[aria-label="Close Terminal"]'));
+    click(pane()?.querySelector('[aria-label="Close panel"]'));
     await tick(100);
     expect(confirm).toHaveBeenCalledExactlyOnceWith("End this terminal?");
     expect(pane()?.getAttribute("aria-hidden")).toBe("false");
     expect(count("session.close")).toBe(0);
+    paneTab("Tasks")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await tick(100);
+    expect(confirm).toHaveBeenCalledTimes(2);
+    expect(pane()?.getAttribute("aria-hidden")).toBe("false");
+    expect(count("session.close")).toBe(0);
     confirm.mockReturnValue(true);
-    click(pane()?.querySelector('[aria-label="Close Terminal"]'));
+    click(pane()?.querySelector('[aria-label="Close panel"]'));
     await until(() => count("session.close") === 1);
+    expect(pane()?.getAttribute("data-panel")).toBe("closed");
     expect(count("session.mount")).toBe(1);
     expect(count("computer.release")).toBe(0);
   } finally {

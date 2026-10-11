@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { ComposioEmulator } from "@ardurbot/adapters";
+import { ComposioEmulator, EncryptedSecretStore } from "@ardurbot/adapters";
 import type { appContract, Space, SpaceNavigation } from "@ardurbot/contracts";
 import {
   claimEmptySpaceDeletionForMember,
@@ -28,6 +28,7 @@ process.env.WAKEUP_DRIVER = "memory";
 process.env.SANDBOX_PROVIDER = "fake";
 process.env.AGENT_RUNTIME = "scripted";
 
+const TEST_ENCRYPTION_KEY = "offline-authorization-fixture-encryption-key";
 const hasDb = process.env.VERIFY_DATABASE === "1" && Boolean(process.env.DATABASE_URL);
 const describeWithDatabase = hasDb ? describe : describe.skip;
 
@@ -42,6 +43,7 @@ describeWithDatabase("API authorization and resource isolation", () => {
     handles = await createApp({
       databaseUrl: process.env.DATABASE_URL!,
       dataDir,
+      encryptionKey: TEST_ENCRYPTION_KEY,
       sandboxProvider: "fake",
       agentRuntime: "scripted",
       wakeupDriver: "memory",
@@ -1260,12 +1262,23 @@ describeWithDatabase("API authorization and resource isolation", () => {
   it("chooses the newest duplicate provider credential when selecting a default", async () => {
     const cookie = await signup(app, `model-duplicates-${stamp}@example.test`, "Model Duplicates");
     const actor = await rpc<Actor>(app, cookie, "me");
+    const secrets = new EncryptedSecretStore(TEST_ENCRYPTION_KEY);
+    const olderEncrypted = await secrets.put("fake-older-model-key", {
+      spaceId: null,
+      userId: actor.userId,
+      kind: "model",
+    });
+    const newerEncrypted = await secrets.put("fake-newer-model-key", {
+      spaceId: null,
+      userId: actor.userId,
+      kind: "model",
+    });
     const olderSecret = await handles.prisma.secret.create({
       data: {
         userId: actor.userId,
         spaceId: null,
         kind: "model",
-        ciphertext: "encrypted-older-key",
+        ...olderEncrypted,
       },
     });
     const newerSecret = await handles.prisma.secret.create({
@@ -1273,7 +1286,7 @@ describeWithDatabase("API authorization and resource isolation", () => {
         userId: actor.userId,
         spaceId: null,
         kind: "model",
-        ciphertext: "encrypted-newer-key",
+        ...newerEncrypted,
       },
     });
     const older = await handles.prisma.userModelCredential.create({

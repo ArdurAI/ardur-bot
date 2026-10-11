@@ -79,9 +79,15 @@ for (const failed of ["account", "catalog"] as const) {
         await route.abort();
         return;
       }
-      const response = await route.fetch();
-      const body = (await response.json()) as { json: Record<string, unknown> };
-      await route.fulfill({ response, json: { json: { ...body.json, needsModel: false } } });
+      // A navigation after Retry or test teardown can settle the request while
+      // the real response is still being fetched; that request needs no answer.
+      try {
+        const response = await route.fetch();
+        const body = (await response.json()) as { json: Record<string, unknown> };
+        await route.fulfill({ response, json: { json: { ...body.json, needsModel: false } } });
+      } catch (error) {
+        if (!String(error).includes("Route is already handled")) throw error;
+      }
     });
     if (failed === "catalog") {
       await page.route("**/rpc/models/list", (route) =>
@@ -114,6 +120,6 @@ for (const failed of ["account", "catalog"] as const) {
       timeout: 20_000,
     });
     expect(created).toBe(1);
-    await page.unrouteAll({ behavior: "wait" });
+    await page.unrouteAll({ behavior: "ignoreErrors" });
   });
 }

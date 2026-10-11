@@ -246,8 +246,13 @@ describe("bot workspace files", () => {
       Object.assign(f.computer, { kind, state: "running", providerRef: "provider-ref" });
       expect((await routed.describe(actor, "bot")).git).toBe(false);
     }
-    // A local This computer workspace is the one place the view is offered.
+    // A local This computer workspace is offered when its provider can serve it.
     Object.assign(f.computer, { kind: "desktop", state: "running", providerRef: "provider-ref" });
+    expect((await routed.describe(actor, "bot")).git).toBe(true);
+    router.canObserveGit.mockImplementation(
+      async (ref: { kind?: string }) => ref.kind === "docker",
+    );
+    Object.assign(f.computer, { kind: "docker", state: "running", providerRef: "provider-ref" });
     expect((await routed.describe(actor, "bot")).git).toBe(true);
 
     // A plain provider without the probe answers from its own shape.

@@ -1,6 +1,9 @@
 import { oc } from "@orpc/contract";
 import { z } from "zod";
+import { BoardItemIdSchema } from "./board-id.js";
 import { BoardLabelSchema } from "./board-label.js";
+
+export { BoardItemIdSchema } from "./board-id.js";
 
 export const BOARD_TYPES = [
   "task",
@@ -35,11 +38,6 @@ export const BOARD_LINK_TYPES = [
   "relates-to",
   "supersedes",
 ] as const;
-export const BoardItemIdSchema = z
-  .string()
-  .min(1)
-  .max(160)
-  .regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/);
 const text = z
   .string()
   .max(32_000)

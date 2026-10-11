@@ -30,6 +30,7 @@ export * from "./bot-messages.js";
 export * from "./bot-presence.js";
 export * from "./bot-sections.js";
 export * from "./capability-settings.js";
+export * from "./catalog-selection.js";
 export * from "./chief-activity.js";
 export * from "./chief-loop-policy.js";
 export * from "./chief-receipts.js";
