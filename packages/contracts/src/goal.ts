@@ -234,9 +234,18 @@ export const GoalBoardResultSchema = z.object({
 });
 export type GoalBoardResult = z.infer<typeof GoalBoardResultSchema>;
 
+export const GoalRevisionViewSchema = z.object({
+  goal: GoalSchema,
+  current: z.boolean(),
+});
+export type GoalRevisionView = z.infer<typeof GoalRevisionViewSchema>;
+
 export const goalsContract = {
   start: oc.input(GoalStartInputSchema).output(GoalSchema),
   get: oc.input(z.object({ groupId: Id })).output(GoalSchema.nullable()),
+  revision: oc
+    .input(z.object({ groupId: Id, goalId: Id, revisionId: Id }))
+    .output(GoalRevisionViewSchema.nullable()),
   stop: oc.input(z.object({ goalId: Id })).output(GoalSchema),
 
   submit: oc.input(GoalSubmitInputSchema).output(GoalRevisionSchema),

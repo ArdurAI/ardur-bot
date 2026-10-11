@@ -189,6 +189,7 @@ import {
   GoalReviewConflict,
   getBotCommunicationPolicy,
   getGoal,
+  getGoalRevision,
   getUserPreferences,
   goalBoardResult,
   InvalidSpaceNameError,
@@ -6534,6 +6535,11 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         if (!context.actor.isDeploymentOwner || !context.authSessionId)
           throw new ORPCError("FORBIDDEN");
         return getGoal(deps.prisma, context.actor, input.groupId);
+      }),
+      revision: authed.goals.revision.handler(({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        return getGoalRevision(deps.prisma, context.actor, input);
       }),
       stop: authed.goals.stop.handler(({ context, input }) => {
         if (!context.actor.isDeploymentOwner || !context.authSessionId)

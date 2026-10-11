@@ -521,11 +521,13 @@ export function GroupGoalStrip({
   onStop,
   onRefresh,
   openReview = false,
+  recordedResult = false,
 }: {
   goal: Goal;
   onStop: () => Promise<void>;
   onRefresh: () => Promise<void>;
   openReview?: boolean;
+  recordedResult?: boolean;
 }) {
   const { t } = useLingui();
   const [stopping, setStopping] = useState(false);
@@ -604,6 +606,9 @@ export function GroupGoalStrip({
                 : goal.status === "blocked"
                   ? t`Blocked`
                   : t`Needs you`;
+  const showResult =
+    Boolean(goal.currentRevision) && (goal.status === "completed" || recordedResult);
+  const allowDecision = goal.status === "completed" && !recordedResult;
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-1 text-xs text-muted-foreground md:px-[22px]">
       <details className="min-w-0 flex-1" open={openReview || undefined}>
@@ -612,7 +617,7 @@ export function GroupGoalStrip({
           {goal.tokenLimit.toLocaleString()} <Trans>tokens</Trans> ·{" "}
           {new Date(goal.untilAt).toLocaleString()}
         </summary>
-        {goal.status === "completed" && goal.currentRevision ? (
+        {showResult && goal.currentRevision ? (
           <div className="py-2 border-b border-border mb-2">
             <h4 className="font-semibold mb-1">
               <Trans>Review result</Trans>
@@ -638,54 +643,60 @@ export function GroupGoalStrip({
                       <Trans>Unknown</Trans>
                     </span>
                   )}
-                  <span className="ml-2 inline-flex gap-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={reviewing}
-                      onClick={() => void markCondition(cond.id, "pass")}
-                    >
-                      <Trans>Pass</Trans>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={reviewing}
-                      onClick={() => void markCondition(cond.id, "fail")}
-                    >
-                      <Trans>Fail</Trans>
-                    </Button>
-                  </span>
+                  {allowDecision ? (
+                    <span className="ml-2 inline-flex gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={reviewing}
+                        onClick={() => void markCondition(cond.id, "pass")}
+                      >
+                        <Trans>Pass</Trans>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={reviewing}
+                        onClick={() => void markCondition(cond.id, "fail")}
+                      >
+                        <Trans>Fail</Trans>
+                      </Button>
+                    </span>
+                  ) : null}
                 </li>
               ))}
             </ul>
-            <textarea
-              aria-label={t`Rework notes`}
-              value={notes}
-              rows={2}
-              maxLength={4000}
-              disabled={reviewing}
-              onChange={(event) => setNotes(event.target.value)}
-              className="mb-2 w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground"
-            />
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={reviewing}
-                onClick={() => void review("accept")}
-              >
-                <Trans>Accept result</Trans>
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                disabled={reviewing || notes.trim().length === 0}
-                onClick={() => void review("reject")}
-              >
-                <Trans>Reject result</Trans>
-              </Button>
-            </div>
+            {allowDecision ? (
+              <>
+                <textarea
+                  aria-label={t`Rework notes`}
+                  value={notes}
+                  rows={2}
+                  maxLength={4000}
+                  disabled={reviewing}
+                  onChange={(event) => setNotes(event.target.value)}
+                  className="mb-2 w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground"
+                />
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={reviewing}
+                    onClick={() => void review("accept")}
+                  >
+                    <Trans>Accept result</Trans>
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={reviewing || notes.trim().length === 0}
+                    onClick={() => void review("reject")}
+                  >
+                    <Trans>Reject result</Trans>
+                  </Button>
+                </div>
+              </>
+            ) : null}
           </div>
         ) : null}
         {goal.boardWorkspaceId && goal.boardItemId ? (

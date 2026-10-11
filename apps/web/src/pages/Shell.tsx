@@ -411,6 +411,9 @@ const SlashPicker = lazy(() => import("../components/composer/SlashPicker"));
 const ViewControls = lazy(() =>
   import("./workspace/ViewControls").then((module) => ({ default: module.ViewControls })),
 );
+const GoalNamedResult = lazy(() =>
+  import("./GoalNamedResult").then((module) => ({ default: module.GoalNamedResult })),
+);
 
 const ATTACHMENT_ACCEPT = ATTACHMENT_ALLOWED_MIME_TYPES.join(",");
 /** Identity colour for bots the roster no longer knows about. */
@@ -3973,13 +3976,17 @@ export function ShellPage({
             </div>
           </div>
           <div ref={setWorkspaceControlsHost} />
-          {inGroup && goal && goal.groupId === groupId ? (
+          {inGroup && groupId && searchParams.get("goal") && searchParams.get("revision") ? (
+            <Suspense fallback={null}>
+              <GoalNamedResult
+                groupId={groupId}
+                goalId={searchParams.get("goal")!}
+                revisionId={searchParams.get("revision")!}
+              />
+            </Suspense>
+          ) : inGroup && goal && goal.groupId === groupId ? (
             <GroupGoalStrip
               goal={goal}
-              openReview={
-                searchParams.get("goal") === goal.id &&
-                searchParams.get("revision") === goal.currentRevision?.id
-              }
               onRefresh={async () => {
                 setGoal(await rpc.goals.get({ groupId: goal.groupId }));
               }}

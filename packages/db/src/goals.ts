@@ -1020,6 +1020,39 @@ export async function linkGoal(prisma: PrismaClient, actor: Actor, raw: GoalLink
   return loaded;
 }
 
+/** The goal and revision a result link names, not the newest row in the group. */
+export async function getGoalRevision(
+  prisma: PrismaClient,
+  actor: Actor,
+  input: { groupId: string; goalId: string; revisionId: string },
+) {
+  if (!actor.isDeploymentOwner) throw new IsolationError();
+  const revision = await prisma.goalRevision.findFirst({
+    where: {
+      id: input.revisionId,
+      goalId: input.goalId,
+      goal: {
+        id: input.goalId,
+        groupId: input.groupId,
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+      },
+    },
+  });
+  if (!revision) return null;
+  const goal = await loadGoal(prisma, {
+    id: input.goalId,
+    groupId: input.groupId,
+    spaceId: actor.spaceId,
+    userId: actor.userId,
+  });
+  if (!goal) return null;
+  return {
+    goal: { ...goal, currentRevision: asRevision(revision) },
+    current: goal.currentRevision?.id === revision.id,
+  };
+}
+
 export async function goalBoardResult(
   prisma: PrismaClient,
   actor: Actor,
