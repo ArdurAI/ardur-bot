@@ -41,5 +41,8 @@ export function createDockerCommandOutput(limit = COMMAND_OUTPUT_LIMIT) {
       stderr.push(errDecoder.end());
       return { stdout: stdout.value(), stderr: stderr.value() };
     },
+    get stdoutTruncated() {
+      return stdout.truncated;
+    },
   };
 }

@@ -34,8 +34,8 @@ msgstr " (not available on your account)"
 msgid " (unread)"
 msgstr " (unread)"
 
-#. placeholder {0}: group.entries.length
-#: src/pages/ModelSettingsOverlay.tsx
+#. placeholder {0}: filteredOptions.length
+#: src/components/CatalogModelPicker.tsx
 msgid "{0, plural, one {# model} other {# models}}"
 msgstr "{0, plural, one {# model} other {# models}}"
 
@@ -142,12 +142,6 @@ msgstr "{0} per day"
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} rollup hours"
 msgstr "{0} rollup hours"
-
-#. placeholder {0}: usage.runs
-#. placeholder {1}: usage.inputTokens + usage.outputTokens
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "{0} runs · {1} tokens"
-msgstr "{0} runs · {1} tokens"
 
 #. placeholder {0}: preview.runs
 #: src/pages/CompareStart.tsx
@@ -347,6 +341,7 @@ msgstr "{pending, plural, one {# suggestion to review} other {# suggestions to r
 msgid "{reconnectCount} need reconnection"
 msgstr "{reconnectCount} need reconnection"
 
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "{records, plural, one {# usage record} other {# usage records}}"
 msgstr "{records, plural, one {# usage record} other {# usage records}}"
@@ -354,6 +349,11 @@ msgstr "{records, plural, one {# usage record} other {# usage records}}"
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "{remaining} left · bot is watching, not acting"
+
+#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "{runs, plural, one {# run} other {# runs}}"
+msgstr "{runs, plural, one {# run} other {# runs}}"
 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} could not finish this run. Check the runtime or change the pin."
@@ -455,6 +455,7 @@ msgstr "{suggested} finished {suggestedRuns} of your runs."
 msgid "{title}, {label}"
 msgstr "{title}, {label}"
 
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "{tokens, plural, one {# token} other {# tokens}}"
 msgstr "{tokens, plural, one {# token} other {# tokens}}"
@@ -1028,6 +1029,7 @@ msgid "API is back, but the update did not finish. Check the host logs."
 msgstr "API is back, but the update did not finish. Check the host logs."
 
 #: src/components/AskCard.tsx
+#: src/components/CatalogModelPicker.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/lib/localized-provider-hint.ts
 #: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
@@ -1441,7 +1443,7 @@ msgstr "Block link copied."
 msgid "Blocked"
 msgstr "Blocked"
 
-#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, }, }) : row.reason
+#. placeholder {0}: row.blockerKey === "connect-linear" ? t`Connect Linear or grant a team member permission to read and write.` : row.blockerKey === "connect-github" ? t`Connect GitHub or grant a team member permission to read and write.` : row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, }, }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
 msgstr "Blocked — {0}"
@@ -1458,6 +1460,7 @@ msgstr "Blocks"
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/DashboardPage.tsx
+#: src/pages/GoalForm.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/shell/TopNav.tsx
 msgid "Board"
@@ -1471,9 +1474,19 @@ msgstr "board and routine work"
 msgid "Board files will be kept."
 msgstr "Board files will be kept."
 
+#: src/pages/GoalBoardLink.tsx
+#: src/pages/GoalForm.tsx
+msgid "Board item"
+msgstr "Board item"
+
 #: src/pages/board/BoardsSettings.tsx
 msgid "Board status"
 msgstr "Board status"
+
+#: src/pages/board/Board.tsx
+#: src/pages/GoalBoardLink.tsx
+msgid "Board update pending"
+msgstr "Board update pending"
 
 #: src/pages/settings-sections.ts
 #: src/pages/storage/StorageSettings.tsx
@@ -1606,6 +1619,10 @@ msgstr "Built-in"
 #: src/pages/customize/PluginsPage.tsx
 msgid "by {0}"
 msgstr "by {0}"
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "By bot"
+msgstr "By bot"
 
 #: src/pages/customize/SkillsPage.tsx
 msgid "by you"
@@ -1834,6 +1851,10 @@ msgstr "Check for updates"
 msgid "Check in."
 msgstr "Check in."
 
+#: src/components/RunEvidence.tsx
+msgid "Check key"
+msgstr "Check key"
+
 #: src/pages/Auth.tsx
 msgid "Check your email"
 msgstr "Check your email"
@@ -1921,6 +1942,10 @@ msgstr "Choose a model"
 msgid "Choose a model in Models to enable memory suggestions."
 msgstr "Choose a model in Models to enable memory suggestions."
 
+#: src/lib/model-selection-error.ts
+msgid "Choose a model."
+msgstr "Choose a model."
+
 #: src/pages/Auth.tsx
 msgid "Choose a new password"
 msgstr "Choose a new password"
@@ -1928,6 +1953,10 @@ msgstr "Choose a new password"
 #: src/components/composer/command-description.ts
 msgid "Choose a taught skill"
 msgstr "Choose a taught skill"
+
+#: src/components/CatalogModelPicker.tsx
+msgid "Choose connection"
+msgstr "Choose connection"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose effort"
@@ -2081,6 +2110,7 @@ msgid "Close navigation"
 msgstr "Close navigation"
 
 #: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Close panel"
 msgstr "Close panel"
 
@@ -2399,6 +2429,16 @@ msgstr "Connect API key"
 msgid "Connect Executor"
 msgstr "Connect Executor"
 
+#: src/components/ai/CoordinationLine.tsx
+#: src/pages/TeamBoard.tsx
+msgid "Connect GitHub or grant a team member permission to read and write."
+msgstr "Connect GitHub or grant a team member permission to read and write."
+
+#: src/components/ai/CoordinationLine.tsx
+#: src/pages/TeamBoard.tsx
+msgid "Connect Linear or grant a team member permission to read and write."
+msgstr "Connect Linear or grant a team member permission to read and write."
+
 #: src/pages/shell/message-cards.tsx
 msgid "Connect MCP server “{name}”"
 msgstr "Connect MCP server “{name}”"
@@ -2410,6 +2450,14 @@ msgstr "Connect OAuth"
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Connect remote account"
 msgstr "Connect remote account"
+
+#: src/lib/model-selection-error.ts
+msgid "Connect that model first."
+msgstr "Connect that model first."
+
+#: src/lib/model-selection-error.ts
+msgid "Connect that model server first."
+msgstr "Connect that model server first."
 
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-location-picker.tsx
@@ -2438,7 +2486,6 @@ msgstr "Connect Treg"
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/McpOAuthCallback.tsx
-#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/message-cards.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connected"
@@ -2497,6 +2544,10 @@ msgstr "Connection"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Connection saved, but the test failed:"
 msgstr "Connection saved, but the test failed:"
+
+#: src/pages/ModelSettingsOverlay.tsx
+msgid "Connection settings"
+msgstr "Connection settings"
 
 #. placeholder {0}: item.name
 #: src/pages/PluginsOverlay.tsx
@@ -2600,6 +2651,7 @@ msgstr "Coordinator"
 msgid "Coordinator bot"
 msgstr "Coordinator bot"
 
+#: src/components/RunEvidence.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/memory/MemoryImport.tsx
 msgid "Copied"
@@ -2617,6 +2669,10 @@ msgstr "Copy block link"
 #: src/components/ThreadCommandBlock.tsx
 msgid "Copy command"
 msgstr "Copy command"
+
+#: src/components/RunEvidence.tsx
+msgid "Copy fingerprint"
+msgstr "Copy fingerprint"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Copy output"
@@ -2810,6 +2866,10 @@ msgstr "Could not continue"
 msgid "Could not copy. Select and copy the prompt."
 msgstr "Could not copy. Select and copy the prompt."
 
+#: src/components/RunEvidence.tsx
+msgid "Could not copy. Select the fingerprint and copy it."
+msgstr "Could not copy. Select the fingerprint and copy it."
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Could not create bot"
 msgstr "Could not create bot"
@@ -2891,6 +2951,10 @@ msgstr "Could not import these documents. Check scopes and conflicts, then previ
 msgid "Could not install connector"
 msgstr "Could not install connector"
 
+#: src/pages/GoalForm.tsx
+msgid "Could not link that board item."
+msgstr "Could not link that board item."
+
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/DashboardPage.tsx
@@ -2969,6 +3033,10 @@ msgstr "Could not load memory."
 msgid "Could not load model settings"
 msgstr "Could not load model settings"
 
+#: src/pages/Onboarding.tsx
+msgid "Could not load models."
+msgstr "Could not load models."
+
 #: src/pages/LearningObservation.tsx
 msgid "Could not load observations."
 msgstr "Could not load observations."
@@ -2997,6 +3065,10 @@ msgstr "Could not load server diagnostics."
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Could not load settings. Try again."
 msgstr "Could not load settings. Try again."
+
+#: src/pages/Onboarding.tsx
+msgid "Could not load setup."
+msgstr "Could not load setup."
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load skill"
@@ -4306,6 +4378,10 @@ msgstr "Expand"
 msgid "Expand {0}"
 msgstr "Expand {0}"
 
+#: src/components/RunEvidence.tsx
+msgid "Expected fingerprint"
+msgstr "Expected fingerprint"
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
 msgstr "Experimental"
@@ -4339,6 +4415,10 @@ msgstr "Export block"
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Export data"
 msgstr "Export data"
+
+#: src/components/RunEvidence.tsx
+msgid "Export identity card"
+msgstr "Export identity card"
 
 #: src/pages/ComparePanel.tsx
 msgid "Export JSON"
@@ -4470,6 +4550,10 @@ msgstr "Finding…"
 msgid "Fine-grained token"
 msgstr "Fine-grained token"
 
+#: src/components/RunEvidence.tsx
+msgid "Fingerprint"
+msgstr "Fingerprint"
+
 #: src/pages/GuidedOnboarding.tsx
 msgid "Finish setup"
 msgstr "Finish setup"
@@ -4577,10 +4661,6 @@ msgstr "Found on this Mac"
 msgid "Four terminals are already open."
 msgstr "Four terminals are already open."
 
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "Free"
-msgstr "Free"
-
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Free memory"
 msgstr "Free memory"
@@ -4667,6 +4747,14 @@ msgstr "GitLab host"
 msgid "Goal"
 msgstr "Goal"
 
+#: src/pages/board/Board.tsx
+msgid "Goal accepted"
+msgstr "Goal accepted"
+
+#: src/pages/board/Board.tsx
+msgid "Goal completed"
+msgstr "Goal completed"
+
 #: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll check the request and choose the next step."
 msgstr "Got it — I’ll check the request and choose the next step."
@@ -4694,6 +4782,10 @@ msgstr "Got it — I’ll choose a team member to put this in Notion."
 #: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll keep {name} off this task."
 msgstr "Got it — I’ll keep {name} off this task."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — this task needs you before I can assign it."
+msgstr "Got it — this task needs you before I can assign it."
 
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
@@ -5238,6 +5330,10 @@ msgstr "Keep working when the window is closed"
 msgid "key"
 msgstr "key"
 
+#: src/components/RunEvidence.tsx
+msgid "Key version"
+msgstr "Key version"
+
 #. placeholder {0}: target.context.slice(5)
 #: src/pages/fleet/target-name.ts
 msgid "kind ({0})"
@@ -5565,6 +5661,10 @@ msgstr "Local devices"
 msgid "Local only"
 msgstr "Local only"
 
+#: src/components/CatalogModelPicker.tsx
+msgid "Local server"
+msgstr "Local server"
+
 #: src/pages/LocalSettings.tsx
 msgid "Local Server Settings"
 msgstr "Local Server Settings"
@@ -5656,7 +5756,7 @@ msgstr "Maximum images per request"
 msgid "Maximum output tokens"
 msgstr "Maximum output tokens"
 
-#: src/pages/ModelSettingsOverlay.tsx
+#: src/components/CatalogModelPicker.tsx
 msgid "May not be available on your plan"
 msgstr "May not be available on your plan"
 
@@ -5870,6 +5970,7 @@ msgstr "minute"
 msgid "minutes"
 msgstr "minutes"
 
+#: src/components/CatalogModelPicker.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/LearningInsights.tsx
 #: src/pages/MemoryHistory.tsx
@@ -5908,7 +6009,7 @@ msgstr "Model in this group"
 msgid "Model name"
 msgstr "Model name"
 
-#: src/pages/ModelSettingsOverlay.tsx
+#: src/components/CatalogModelPicker.tsx
 msgid "Model options"
 msgstr "Model options"
 
@@ -6124,6 +6225,7 @@ msgstr "Needs sign-in on this computer"
 msgid "Needs takeover"
 msgstr "Needs takeover"
 
+#: src/components/ai/CoordinationLine.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/Shell.tsx
 msgid "Needs you"
@@ -6278,6 +6380,10 @@ msgstr "No destinations found."
 msgid "No embedding service is configured."
 msgstr "No embedding service is configured."
 
+#: src/components/RunEvidence.tsx
+msgid "No expected key given; self-consistent only"
+msgstr "No expected key given; self-consistent only"
+
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "No extensions are in the built-in catalogue yet. Use Add to install an extension bundle (.mcpb or .dxt file) from this computer."
 msgstr "No extensions are in the built-in catalogue yet. Use Add to install an extension bundle (.mcpb or .dxt file) from this computer."
@@ -6306,7 +6412,7 @@ msgstr "No longer active"
 msgid "No managed app catalog is configured on this deployment."
 msgstr "No managed app catalog is configured on this deployment."
 
-#: src/pages/ModelSettingsOverlay.tsx
+#: src/components/CatalogModelPicker.tsx
 msgid "No matching models"
 msgstr "No matching models"
 
@@ -6342,10 +6448,6 @@ msgstr "No profile or preferences saved."
 #: src/pages/dashboard/panels.ts
 msgid "No proposals"
 msgstr "No proposals"
-
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "No providers found."
-msgstr "No providers found."
 
 #: src/pages/dashboard/panels.ts
 #: src/pages/dashboard/WorkPanel.tsx
@@ -6684,6 +6786,10 @@ msgstr "Open Accessibility settings"
 msgid "Open Ardur"
 msgstr "Open Ardur"
 
+#: src/pages/GoalBoardLink.tsx
+msgid "Open board item"
+msgstr "Open board item"
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/provider-error-message.tsx
 msgid "Open bot settings"
@@ -6908,6 +7014,10 @@ msgstr "Parent page"
 #: src/pages/ScratchpadSection.tsx
 msgid "Park"
 msgstr "Park"
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Partial cost"
+msgstr "Partial cost"
 
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Partially reported"
@@ -7170,12 +7280,10 @@ msgstr "Proposed consolidation"
 msgid "provider"
 msgstr "provider"
 
-#: src/pages/Onboarding.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Provider"
 msgstr "Provider"
 
-#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Providers"
 msgstr "Providers"
@@ -7289,6 +7397,7 @@ msgstr "Reading the document"
 msgid "Reads can run without asking once you allow them. Writes always ask."
 msgstr "Reads can run without asking once you allow them. Writes always ask."
 
+#: src/components/CatalogModelPicker.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardColumns.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -7834,6 +7943,7 @@ msgstr "Resume team messages"
 #: src/pages/LearningTimeline.tsx
 #: src/pages/memory/MemoryPage.tsx
 #: src/pages/MemoryHistory.tsx
+#: src/pages/Onboarding.tsx
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
@@ -8266,10 +8376,10 @@ msgstr "Screen is unavailable on this computer."
 msgid "Screen recording"
 msgstr "Screen recording"
 
+#: src/components/CatalogModelPicker.tsx
 #: src/components/integrations/catalog/ResourcePicker.tsx
 #: src/components/ThreadCommandBlock.tsx
 #: src/pages/board/Board.tsx
-#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
@@ -8299,13 +8409,9 @@ msgstr "Search integrations"
 msgid "Search integrations.sh"
 msgstr "Search integrations.sh"
 
-#: src/pages/ModelSettingsOverlay.tsx
+#: src/components/CatalogModelPicker.tsx
 msgid "Search models"
 msgstr "Search models"
-
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "Search providers"
-msgstr "Search providers"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Search run output"
@@ -8566,6 +8672,7 @@ msgstr "Shared with team"
 msgid "Sharing"
 msgstr "Sharing"
 
+#: src/components/CatalogModelPicker.tsx
 #: src/components/ShowAllModels.tsx
 msgid "Show all models"
 msgstr "Show all models"
@@ -8606,6 +8713,7 @@ msgstr "Show slash commands"
 msgid "Showing {start}–{end} of {total}"
 msgstr "Showing {start}–{end} of {total}"
 
+#: src/components/CatalogModelPicker.tsx
 #: src/lib/localized-provider-hint.ts
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/Auth.tsx
@@ -8681,6 +8789,14 @@ msgstr "Sign-in was cancelled."
 msgid "Sign-in was declined."
 msgstr "Sign-in was declined."
 
+#: src/components/RunEvidence.tsx
+msgid "Signed by a different key"
+msgstr "Signed by a different key"
+
+#: src/components/RunEvidence.tsx
+msgid "Signed by the expected key"
+msgstr "Signed by the expected key"
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Signed in"
 msgstr "Signed in"
@@ -8688,6 +8804,10 @@ msgstr "Signed in"
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Signed in on this computer as {identity}"
 msgstr "Signed in on this computer as {identity}"
+
+#: src/components/RunEvidence.tsx
+msgid "Signing identity"
+msgstr "Signing identity"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/customize/PluginsPage.tsx
@@ -8776,6 +8896,10 @@ msgstr "Source folder for {name}"
 #: src/pages/LearningInbox.tsx
 msgid "Source revision"
 msgstr "Source revision"
+
+#: src/components/RunEvidence.tsx
+msgid "Space"
+msgstr "Space"
 
 #: src/pages/board/BoardsSettings.tsx
 msgid "Space board"
@@ -9430,6 +9554,10 @@ msgstr "This configuration is too complex."
 msgid "This configuration version is not supported."
 msgstr "This configuration version is not supported."
 
+#: src/lib/model-selection-error.ts
+msgid "This connection cannot serve that model."
+msgstr "This connection cannot serve that model."
+
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "This field is not supported."
 msgstr "This field is not supported."
@@ -9745,6 +9873,11 @@ msgstr "Type your answer"
 msgid "Unassigned"
 msgstr "Unassigned"
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Unattributed usage"
+msgstr "Unattributed usage"
+
+#: src/components/CatalogModelPicker.tsx
 #: src/components/SoftwareUpdateSection.tsx
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/TeamBoard.tsx
@@ -9788,9 +9921,17 @@ msgstr "Uninstall"
 msgid "Unknown"
 msgstr "Unknown"
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Unknown bot"
+msgstr "Unknown bot"
+
 #: src/pages/account/AccountTables.tsx
 msgid "Unknown device"
 msgstr "Unknown device"
+
+#: src/lib/model-selection-error.ts
+msgid "Unknown model for that provider"
+msgstr "Unknown model for that provider"
 
 #: src/components/ai/CompactWorkRecord.tsx
 msgid "Unknown: {title}"
@@ -10030,6 +10171,7 @@ msgstr "Use this location"
 
 #: src/components/OllamaSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/Onboarding.tsx
 msgid "Use this model"
 msgstr "Use this model"
 
@@ -10421,12 +10563,3 @@ msgstr "Your team of always-on agents<0/>that you can give real work to."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr "Yours"
-
-msgid "Got it — this task needs you before I can assign it."
-msgstr "Got it — this task needs you before I can assign it."
-
-msgid "Connect Linear or grant a team member permission to read and write."
-msgstr "Connect Linear or grant a team member permission to read and write."
-
-msgid "Connect GitHub or grant a team member permission to read and write."
-msgstr "Connect GitHub or grant a team member permission to read and write."

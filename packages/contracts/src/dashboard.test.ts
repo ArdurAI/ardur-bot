@@ -71,3 +71,23 @@ describe("Dashboard read contracts", () => {
       expect(DashboardNowSchema.safeParse(summary(invalid)).success).toBe(false);
   });
 });
+
+it("adds honest lifetime counts while retaining the deprecated record-count alias", () => {
+  const now = "2026-09-24T12:00:00Z";
+  const current = UsageSummarySchema.parse({
+    inputTokens: 120,
+    outputTokens: 5,
+    runs: 3,
+    records: 3,
+    runCount: 1,
+    providers: [],
+    bots: [],
+    dayStart: now,
+    weekStart: now,
+    asOf: now,
+  });
+  expect(current).toMatchObject({ runs: 3, records: 3, runCount: 1 });
+  expect(
+    UsageSummarySchema.parse({ ...current, runCount: undefined, records: undefined }).runCount,
+  ).toBeUndefined();
+});

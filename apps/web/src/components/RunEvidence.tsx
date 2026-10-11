@@ -1,7 +1,18 @@
 import type { EvidenceRunSummary } from "@ardurbot/contracts/evidence";
-import { EvidenceRunSummarySchema } from "@ardurbot/contracts/evidence";
+import {
+  EvidenceFingerprintSchema,
+  EvidenceRunSummarySchema,
+  evidenceIdentityCard,
+} from "@ardurbot/contracts/evidence";
 import { EVIDENCE_STATES } from "@ardurbot/contracts/evidence-states";
-import { DropdownMenuItem } from "@ardurbot/ui-web";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DropdownMenuItem,
+  Input,
+} from "@ardurbot/ui-web";
 import { msg } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react";
 import { Trans } from "@lingui/react/macro";
@@ -66,6 +77,159 @@ export function EvidenceDownload({
       <Download size={14} aria-hidden="true" />
       <Trans>Download evidence</Trans>
     </DropdownMenuItem>
+  );
+}
+
+const signerLabels = {
+  expected_key: msg`Signed by the expected key`,
+  different_key: msg`Signed by a different key`,
+  no_expected_key: msg`No expected key given; self-consistent only`,
+};
+
+export function EvidenceIdentityDetails({
+  summary,
+  spaceId,
+}: {
+  summary: EvidenceRunSummary;
+  spaceId: string | null;
+}) {
+  const { i18n } = useLingui();
+  const [open, setOpen] = useState(false);
+  const [expected, setExpected] = useState("");
+  const [checked, setChecked] = useState<{
+    expected: string;
+    match: EvidenceRunSummary["signerMatch"];
+  } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<"check" | "copy" | null>(null);
+  const [copied, setCopied] = useState(false);
+  const request = useRef(0);
+  useEffect(
+    () => () => {
+      request.current++;
+    },
+    [],
+  );
+  const identity = summary.signingIdentity;
+  if (summary.state === "off") return null;
+  if (!identity && !summary.evidence) return <EvidenceStatus summary={summary} />;
+  const fingerprint = expected.trim();
+  const valid = !fingerprint || EvidenceFingerprintSchema.safeParse(fingerprint).success;
+  const match = summary.sealed
+    ? checked?.expected === fingerprint
+      ? checked.match
+      : !fingerprint
+        ? summary.signerMatch
+        : null
+    : null;
+  async function check() {
+    const id = ++request.current;
+    setBusy(true);
+    setError(null);
+    setChecked(null);
+    try {
+      const reply = await rpc.evidence.runSummary(
+        {
+          runId: summary.sessionId,
+          ...(fingerprint ? { expectedFingerprint: fingerprint } : {}),
+        },
+        { context: { spaceId } },
+      );
+      if (id !== request.current) return;
+      const parsed = EvidenceRunSummarySchema.parse(reply);
+      setChecked({ expected: fingerprint, match: parsed.signerMatch });
+      if (!parsed.signerMatch) setError("check");
+    } catch {
+      if (id === request.current) {
+        setChecked({ expected: fingerprint, match: null });
+        setError("check");
+      }
+    } finally {
+      if (id === request.current) setBusy(false);
+    }
+  }
+  async function copy() {
+    setError(null);
+    setCopied(false);
+    try {
+      await navigator.clipboard.writeText(identity!.fingerprint);
+      setCopied(true);
+    } catch {
+      setError("copy");
+    }
+  }
+  function download() {
+    const url = URL.createObjectURL(
+      new Blob([evidenceIdentityCard(identity!)], { type: "application/json" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "ardur-signing-identity.json";
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+  return (
+    <>
+      <Button variant="ghost" size="sm" className="h-auto p-0" onClick={() => setOpen(true)}>
+        <EvidenceStatus summary={summary} />
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogTitle>
+            <Trans>Signing identity</Trans>
+          </DialogTitle>
+          {identity && (
+            <>
+              <dl className="space-y-2 text-sm">
+                <dt>
+                  <Trans>Fingerprint</Trans>
+                </dt>
+                <dd className="break-all font-mono">{identity.fingerprint}</dd>
+                <dt>
+                  <Trans>Space</Trans>
+                </dt>
+                <dd>{identity.scope.id}</dd>
+                <dt>
+                  <Trans>Key version</Trans>
+                </dt>
+                <dd>{identity.keyVersion}</dd>
+              </dl>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" onClick={() => void copy()}>
+                  {copied ? <Trans>Copied</Trans> : <Trans>Copy fingerprint</Trans>}
+                </Button>
+                <Button variant="outline" onClick={download}>
+                  <Trans>Export identity card</Trans>
+                </Button>
+              </div>
+            </>
+          )}
+          <Input
+            aria-label={i18n._(msg`Expected fingerprint`)}
+            placeholder={i18n._(msg`Expected fingerprint`)}
+            value={expected}
+            maxLength={80}
+            onChange={(event) => {
+              setExpected(event.target.value);
+              setError(null);
+            }}
+          />
+          <Button disabled={!valid || busy} onClick={() => void check()}>
+            <Trans>Check key</Trans>
+          </Button>
+          {match && <p role="status">{i18n._(signerLabels[match])}</p>}
+          {error && (
+            <p role="alert">
+              {error === "copy" ? (
+                <Trans>Could not copy. Select the fingerprint and copy it.</Trans>
+              ) : (
+                <Trans>Check failed</Trans>
+              )}
+            </p>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -135,5 +299,11 @@ export default function RunEvidence({
   const summary = result?.runId === runId && result.spaceId === spaceId ? result.summary : null;
   if (action === "download")
     return summary ? <EvidenceDownload summary={summary} spaceId={spaceId} /> : null;
-  return <span ref={marker}>{summary ? <EvidenceStatus summary={summary} /> : null}</span>;
+  return (
+    <span ref={marker}>
+      {summary ? (
+        <EvidenceIdentityDetails key={`${runId}:${spaceId}`} summary={summary} spaceId={spaceId} />
+      ) : null}
+    </span>
+  );
 }

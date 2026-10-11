@@ -10,6 +10,15 @@
  * clean/smudge/process filters and config includes cannot participate.
  */
 
+/** Formatting settings shared by isolated host and container metadata views. */
+export const GIT_OBSERVATION_CONFIG = [
+  "core.filemode",
+  "core.ignorecase",
+  "core.symlinks",
+  "core.autocrlf",
+  "core.eol",
+] as const;
+
 /** Maximum status entries returned for one observation. */
 export const GIT_OBSERVATION_MAX_ENTRIES = 1000;
 /** Maximum text bytes kept per diff side. */

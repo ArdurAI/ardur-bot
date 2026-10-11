@@ -2206,15 +2206,20 @@ model TeamGoal {
   maxDepth Int @default(1)
   maxHops Int @default(6)
   untilAt DateTime
+  boardWorkspaceId String?
+  boardItemId String?
+  boardWorkspace BoardWorkspace? @relation(fields: [boardWorkspaceId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   stoppedAt DateTime?
   runs Run[]
   revisions GoalRevision[]
   verdicts GoalVerdict[]
+  boardDeliveries GoalBoardDelivery[]
 
   @@index([spaceId, userId, groupId, status])
   @@index([threadId, status])
+  @@index([boardWorkspaceId, boardItemId])
   @@map("team_goals")
 }
 model Delegation {
@@ -2558,6 +2563,7 @@ model BoardWorkspace {
   follows BoardFollow[]
   notices BoardNotification[]
   scratchpadItems ScratchpadItem[]
+  goals TeamGoal[]
 
   @@unique([spaceId, path])
   @@index([spaceId, enabled])
@@ -2760,4 +2766,34 @@ model GoalVerdict {
   @@unique([goalId, revisionId])
   @@index([goalId, createdAt])
   @@map("goal_verdicts")
+}
+
+/// Durable board update for one goal revision. Acceptance is never inferred from a worker.
+model GoalBoardDelivery {
+  id String @id @default(cuid())
+  goalId String
+  goal TeamGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  revisionId String
+  transition String
+  spaceId String
+  userId String
+  workspaceId String
+  itemId String
+  commentText String
+  state String @default("pending")
+  claimToken String?
+  claimGeneration Int @default(0)
+  claimExpiresAt DateTime?
+  commentReceipt String?
+  closeReceipt String?
+  retryAt DateTime?
+  attempts Int @default(0)
+  failure String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([goalId, revisionId, transition])
+  @@index([state, retryAt, claimExpiresAt])
+  @@index([spaceId, userId, workspaceId, itemId])
+  @@map("goal_board_deliveries")
 }

@@ -296,6 +296,9 @@ export function groupGoalDocsFixture(review = false) {
         untilAt: "2026-09-24T20:00:00.000Z",
         createdAt: now,
         stoppedAt: null,
+        boardWorkspaceId: "workspace",
+        boardItemId: "board-a",
+        boardDelivery: "pending",
         currentRevision: {
           id: "sample-revision",
           goalId: "sample-goal",
@@ -327,6 +330,15 @@ export function groupGoalDocsFixture(review = false) {
     rpc(procedure: string, input?: Record<string, unknown>): unknown {
       if (procedure === "groups/list") return [group];
       if (procedure === "goals/get") return goal;
+      if (procedure === "goals/revision") {
+        if (
+          input?.groupId !== group.id ||
+          input.goalId !== "sample-goal" ||
+          input.revisionId !== "sample-revision"
+        )
+          throw new Error("Unexpected goal result link.");
+        return { goal, current: true };
+      }
       if (procedure === "goals/accept" || procedure === "goals/reject") {
         goal = { ...goal, status: procedure === "goals/accept" ? "accepted" : "running" };
         return {

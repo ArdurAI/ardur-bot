@@ -4,6 +4,7 @@ import path from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import { listPiCatalog } from "../../../packages/adapters/src/pi-models";
+import { selectCatalogModel } from "./catalog-model-picker";
 import { dashboardFixture } from "./dashboard-fixture";
 import {
   computerDocsFixture,
@@ -12,6 +13,7 @@ import {
   memoryDocsFixture,
   routineDocsFixture,
 } from "./feature-docs-fixtures";
+import { captureScreenshot } from "./helpers";
 import { openAgentComputer, openWorkspaceView } from "./workspace-view";
 
 const captureRoot = process.env.FEATURE_DOCS_DIR
@@ -201,7 +203,7 @@ test("onboarding: prepare a required connection", async ({ page }) => {
   );
   await page.goto("/onboarding");
   await expect(page.getByRole("heading", { name: "Connect a model" })).toBeVisible();
-  await expect(page.getByRole("combobox", { name: "Provider" })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Model", exact: true })).toBeVisible();
   const key = page.getByLabel("API key", { exact: true });
   await expect(key).toBeVisible();
   await expect(page.getByRole("button", { name: "Continue", exact: true })).toBeDisabled();
@@ -281,24 +283,24 @@ test("models: inspect a connection, default control, and connection form", async
   await expect(models).toBeVisible();
   await models.click();
   await expect(panel.getByRole("heading", { name: "Models", exact: true })).toBeVisible();
-  await expect(panel.getByText("Connected · Personal connection")).toBeVisible();
+  await expect(
+    panel.getByRole("button", { name: "Connection settings", exact: true }),
+  ).toBeVisible();
   await expect(panel.getByText(connected.label, { exact: true }).first()).toBeVisible();
-  await expect(panel.getByText(/Context limit \(from the provider\)/)).toBeVisible();
+
   await capture(page, "docs-models-open");
-  const otherModel = panel.getByRole("combobox", { name: "Model", exact: true });
-  await otherModel.click();
+  await panel.getByRole("button", { name: "Connection settings", exact: true }).click();
+  await expect(panel.getByText(/Context limit \(from the provider\)/)).toBeVisible();
   const alternate = listPiCatalog().find(
     (entry) => entry.provider === connected.provider && entry.id !== connected.id,
   );
   if (!alternate) throw new Error("Bundled default-choice fixture is unavailable.");
-  await panel.getByRole("option", { name: alternate.label }).first().click();
+  await selectCatalogModel(page, alternate.provider, alternate.id, "docs-connection");
   const useThisModel = panel.getByRole("button", { name: "Use this model" });
   await expect(useThisModel).toBeVisible();
   await useThisModel.scrollIntoViewIfNeeded();
   await capture(page, "docs-models-default");
-  await panel
-    .getByRole("button", { name: unconnected.providerName ?? unconnected.provider })
-    .click();
+  await selectCatalogModel(page, unconnected.provider, unconnected.id);
   const connectKey = panel.getByRole("button", { name: "Connect API key" });
   await expect(connectKey).toBeVisible();
   await expect(panel.getByLabel("API key", { exact: true })).toBeVisible();
@@ -532,7 +534,9 @@ test("group-goals: start a goal in a room and stop it", async ({ page }) => {
   await capture(page, "docs-group-goals-stopped");
 });
 
-test("group-goals: review a submitted result and refresh after accepting it", async ({ page }) => {
+test("group-goals: review a submitted result and refresh after accepting it", async ({
+  page,
+}, testInfo) => {
   const state = groupGoalDocsFixture(true);
   await useDashboard(page, {
     botCount: 2,
@@ -543,6 +547,8 @@ test("group-goals: review a submitted result and refresh after accepting it", as
   await page.goto("/app/g/operations-group");
   await page.getByText("Goal: Completed", { exact: false }).click();
   await expect(page.getByText("Final owner review", { exact: false })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open board item" })).toBeVisible();
+  await expect(page.getByText("Board update pending")).toBeVisible();
   await page.getByRole("textbox", { name: "Rework notes" }).fill("Revise the sample plan.");
   await expect(page.getByRole("button", { name: "Accept result", exact: true })).toBeEnabled();
   await expect(page.getByRole("button", { name: "Reject result", exact: true })).toBeEnabled();
@@ -550,4 +556,11 @@ test("group-goals: review a submitted result and refresh after accepting it", as
   await page.getByRole("button", { name: "Accept result", exact: true }).click();
   await expect(page.getByText("Goal: Accepted", { exact: false })).toBeVisible();
   await expect(page.getByRole("button", { name: "Accept result", exact: true })).toHaveCount(0);
+  await page.goto("/app/g/operations-group?goal=sample-goal&revision=sample-revision");
+  await expect(
+    page.getByText("The sample release plan is ready for review.", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Accept result", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Reject result", exact: true })).toHaveCount(0);
+  await captureScreenshot(page, testInfo, "goal-board-accepted-result");
 });

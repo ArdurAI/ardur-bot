@@ -534,12 +534,36 @@ describe("lingui catalogs", () => {
     expect(catalog).toContain('msgid "Language"\nmsgstr "Язык"');
     expect(catalog).toContain('msgid "Cancel"\nmsgstr "Отмена"');
     expect(catalog).toContain(
-      'msgid "{0} runs · {1} tokens"\nmsgstr "Запусков: {0} · токенов: {1}"',
+      'msgid "{runs, plural, one {# run} other {# runs}}"\nmsgstr "{runs, plural, one {# запуск} few {# запуска} many {# запусков} other {# запуска}}"',
+    );
+    expect(catalog).toContain(
+      'msgid "{tokens, plural, one {# token} other {# tokens}}"\nmsgstr "{tokens, plural, one {# токен} few {# токена} many {# токенов} other {# токена}}"',
     );
     expect(catalog).toContain(
       'msgstr "{0, plural, one {# модель} few {# модели} many {# моделей} other {# модели}}"',
     );
   });
+
+  it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+    "translates the current usage run and token plurals in %s",
+    async (locale) => {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const catalog = await formatter().parse(readFileSync(filename, "utf8"), {
+        locale,
+        sourceLocale: "en",
+        filename,
+      });
+      for (const message of [
+        "{runs, plural, one {# run} other {# runs}}",
+        "{tokens, plural, one {# token} other {# tokens}}",
+      ]) {
+        const entry = Object.values(catalog).find((value) => value.message === message);
+        expect(entry?.translation?.trim(), `${locale}: ${message}`).toBeTruthy();
+        if (locale === "en") expect(entry?.translation).toBe(message);
+        else expect(entry?.translation).not.toBe(message);
+      }
+    },
+  );
 
   it.each(["de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
     "translates credential classification controls in %s",

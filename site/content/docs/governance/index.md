@@ -45,8 +45,28 @@ A verified journal records decisions, not proof of safety or successful executio
 The public key in the same download is not an independent trust anchor. Before
 trusting a result, compare its fingerprint with one the owner publishes through a
 channel you already trust. A replacement bundle containing a replacement key can
-verify against itself. The app does not yet provide a public fingerprint publishing
-service, key rotation, or revocation.
+verify against itself. The app lets the owner copy or share the active signing key's
+fingerprint and export a public-only identity card separately from a bundle. The
+card contains the existing SHA-256 public-key fingerprint, its space scope, and
+key version 1. Compare it through a channel you already trust; sharing it alongside
+the bundle does not create an independent trust anchor. Key rotation and
+revocation are not yet available.
+
+Open a run's evidence status to see **Signing identity**. Web and desktop offer
+**Copy fingerprint** and **Export identity card**. Phone offers **Share fingerprint**
+and exports the card through the native share sheet, including in paired mode.
+The card contains no public-key PEM, private key, or secret-store references.
+
+Enter the fingerprint received through a trusted channel in **Expected fingerprint**
+and choose **Check key**. The app checks the run's chain and seal and reports
+**Signed by the expected key**, **Signed by a different key**, or
+**No expected key given; self-consistent only**. A different key is not a match,
+even when its signatures verify. Failed or unsealed evidence never receives a
+successful signer result. The comparison checks the run's signing key, which may
+differ from the active identity card's key; it does not change the run-state labels.
+The `evidence.runSummary` verification option accepts `expectedFingerprint` without
+changing any signed records or bundle files. Offline package verifiers also accept
+an optional expected fingerprint.
 
 ## Run states
 

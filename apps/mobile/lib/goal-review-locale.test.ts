@@ -17,6 +17,9 @@ it.each([RU_MESSAGES, ZH_MESSAGES])(
       "Please address the failing conditions.",
       "Final owner review",
       "Could not review result. Try again.",
+      "Board item",
+      "Open board item",
+      "Board update pending",
     ]) {
       expect(messages[key]).toBeTruthy();
       expect(messages[key]).not.toBe(key);

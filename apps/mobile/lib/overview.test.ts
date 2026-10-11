@@ -306,7 +306,7 @@ it("marks a period that includes unreported usage as partially reported", async 
     providers: [{ provider: "fixture", today: period, week: period, daily: [] }],
   });
   await act(async () => root.render(createElement(OverviewScreen)));
-  expect(node.textContent).toContain("25 tokens · Partially reported");
+  expect(node.textContent).toContain("25 tokens · Cost unavailable · Partially reported");
 });
 
 it("shows unavailable cost for Antigravity usage", async () => {
@@ -327,3 +327,68 @@ it("shows unavailable cost for Antigravity usage", async () => {
 
 import type { IntegrationCatalogList } from "@ardurbot/contracts";
 import { connectionOverview } from "@ardurbot/core";
+
+it("keeps phone totals compact and discloses bot details on demand", async () => {
+  const partial = {
+    records: 3,
+    runs: 1,
+    inputTokens: 120,
+    outputTokens: 5,
+    cost: null,
+    knownCost: 0.2,
+    costStatus: "partial" as const,
+  };
+  const unknown = { ...partial, runs: 0, knownCost: null, costStatus: "unknown" as const };
+  vi.mocked(loadOverviewUsage).mockResolvedValue({
+    ...usage,
+    today: partial,
+    week: partial,
+    providers: [{ provider: "paid", today: partial, week: partial, daily: [] }],
+    bots: [
+      {
+        botId: "reviewer",
+        name: "Reviewer",
+        today: partial,
+        week: partial,
+        providers: [{ provider: "paid", today: partial, week: partial }],
+      },
+      { botId: "local", name: "Local helper", today: unknown, week: unknown, providers: [] },
+    ],
+  });
+  await act(async () => root.render(createElement(OverviewScreen)));
+  expect(node.textContent).toContain("1 run · 3 usage records · 125 tokens · Partial cost: 0.2");
+  expect(node.textContent).not.toContain("Reviewer");
+  expect(node.textContent).not.toContain("Local helper");
+  const button = () =>
+    [...node.querySelectorAll("button")].find((entry) =>
+      ["By bot", "Hide bots"].includes(entry.textContent ?? ""),
+    )!;
+  await act(async () => button().click());
+  expect(node.textContent).toContain("Reviewer");
+  expect(node.textContent).toContain("Local helper");
+  expect(node.textContent).toContain("0 runs · 3 usage records · 125 tokens · Cost unavailable");
+  expect(node.textContent).toContain("paid · This week (UTC)");
+  expect(node.textContent).not.toContain("Cost: 0");
+  await act(async () => button().click());
+  expect(node.textContent).not.toContain("Reviewer");
+});
+
+it("shows a known zero price and retains old-server provider totals", async () => {
+  const free = {
+    records: 1,
+    runs: 1,
+    inputTokens: 2,
+    outputTokens: 1,
+    cost: 0,
+    knownCost: 0,
+    costStatus: "complete" as const,
+  };
+  vi.mocked(loadOverviewUsage).mockResolvedValue({
+    ...usage,
+    providers: [{ provider: "free", today: free, week: free, daily: [] }],
+  });
+  await act(async () => root.render(createElement(OverviewScreen)));
+  expect(node.textContent).toContain("Cost: 0");
+  expect(node.textContent).toContain("free");
+  expect(node.textContent).not.toContain("By bot");
+});
