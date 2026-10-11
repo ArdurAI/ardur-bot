@@ -42,9 +42,29 @@ channel you already trust. A replacement bundle containing a replacement key can
 verify against itself. The app lets the owner copy or share the active signing key's
 fingerprint and export a public-only identity card separately from a bundle. The
 card contains the existing SHA-256 public-key fingerprint, its space scope, and
-key version 1. Compare it through a channel you already trust; sharing it alongside
-the bundle does not create an independent trust anchor. Key rotation and
-revocation are not yet available.
+the key version. Compare it through a channel you already trust; sharing it
+alongside the bundle does not create an independent trust anchor.
+
+## Replacing or revoking the signing key
+
+A space owner can replace the signing key from the **Signing identity** dialog on
+web, desktop, or the owner's phone session. Replacement is atomic against the key
+the owner saw, so two replacements cannot race. Runs already admitted keep
+signing with the key that admitted them and still verify against its retained
+public key; new runs sign with the new key.
+
+In an emergency the owner can revoke the key instead. The revocation is recorded
+with its date and reason, signing with the revoked key stops at once — an
+admitted run stops signing further records and reports the gap — and records
+signed after the revocation time are reported untrusted, while earlier records
+still verify against the retained public key. After a bare revocation nothing
+signs again until the owner authorizes a replacement. Paired devices and members
+cannot replace or revoke a key.
+
+Old public keys are kept for historical verification and journals are never
+rewritten. The identity card shows the key version and the key history
+(public-only): each version with its state — active, replaced, or revoked — and
+its dates.
 
 Open a run's evidence status to see **Signing identity**. Web and desktop offer
 **Copy fingerprint** and **Export identity card**. Phone offers **Share fingerprint**
