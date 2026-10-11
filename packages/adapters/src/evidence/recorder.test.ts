@@ -1,4 +1,5 @@
 import { verifyChain, verifySeal } from "@ardurbot/evidence";
+import { generateEvidenceKey } from "@ardurbot/evidence";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { agentConnectionTools, builtinAgentTools } from "../builtin-tools.js";
 import { EncryptedSecretStore } from "../secrets.js";
@@ -246,6 +247,119 @@ describe("evidence recorder", () => {
     });
     expect(seals).toEqual([]);
     expect(deps.logFailure).toHaveBeenCalledWith(["malformed_jws"]);
+  });
+});
+
+describe("evidence key rotation and revocation", () => {
+  async function replaceActiveKey(store: ReturnType<typeof fakeEvidenceStore>["store"], deps: ReturnType<typeof setup>["deps"]) {
+    const generated = generateEvidenceKey();
+    const stored = await deps.secretStore.put(
+      generated.privateKeyPem,
+      {
+        operationId: "evidence-key:test",
+        traceId: "trace:test",
+        spaceId: input.run.spaceId,
+        userId: input.run.userId,
+        signal: new AbortController().signal,
+      },
+      `key-${generated.kid}`,
+    );
+    const history = await store.keysForSpace(input.run.spaceId);
+    const head = history.at(-1);
+    if (!head) throw new Error("expected a key");
+    return store.replaceKey({
+      spaceId: input.run.spaceId,
+      expectedKid: head.kid,
+      data: {
+        kid: generated.kid,
+        publicKeyPem: generated.publicKeyPem,
+        privateKeyCiphertext: stored.ciphertext,
+        secretRecordId: stored.id,
+      },
+    });
+  }
+  it("keeps an admitted run on its key through a replacement and starts new runs on the new key", async () => {
+    const { recorder, store, deps, records, keys } = setup();
+    await recorder.recordDecision(input);
+    const replacement = await replaceActiveKey(store, deps);
+    // Replacement does not affect the admitted run: it finishes with its original key.
+    await recorder.recordDecision(input);
+    expect(records.map((row) => row.kid)).toEqual([keys[0]!.kid, keys[0]!.kid]);
+    expect(
+      verifyChain(
+        records.map((row) => row.jws),
+        keys[0]!.publicKeyPem,
+      ).ok,
+    ).toBe(true);
+    expect(await recorder.sealRunEvidence(input.run.id)).toEqual({ ok: true });
+    // A new run admits with the replacement key.
+    const otherRun = { ...input, run: { ...input.run, id: "run-other" } };
+    await recorder.recordDecision(otherRun);
+    expect(records.at(-1)?.kid).toBe(replacement.kid);
+  });
+  it("stops signing with an emergency-revoked key and records the gap honestly", async () => {
+    const { recorder, store, records, keys } = setup();
+    await recorder.recordDecision(input);
+    const active = await store.activeKey(input.run.spaceId);
+    if (!active) throw new Error("expected an active key");
+    await store.revokeKey({
+      spaceId: input.run.spaceId,
+      expectedKid: active.kid,
+      reason: "compromised fixture",
+    });
+    expect(await recorder.recordDecision(input)).toEqual({
+      ok: false,
+      reason: "recording_failed",
+    });
+    expect(records).toHaveLength(1);
+    expect(await store.gapCount(input.run.id)).toBe(1);
+    expect(await recorder.sealRunEvidence(input.run.id)).toEqual({
+      ok: false,
+      reason: "key_revoked",
+    });
+    // Records signed before the revocation still verify against the retained key.
+    expect(
+      verifyChain(
+        records.map((row) => row.jws),
+        keys[0]!.publicKeyPem,
+      ).ok,
+    ).toBe(true);
+  });
+  it("never mints a key silently after an emergency revocation", async () => {
+    const { recorder, store, deps, records, keys } = setup();
+    await recorder.recordDecision(input);
+    const active = await store.activeKey(input.run.spaceId);
+    if (!active) throw new Error("expected an active key");
+    await store.revokeKey({
+      spaceId: input.run.spaceId,
+      expectedKid: active.kid,
+      reason: "compromised fixture",
+    });
+    const otherRun = { ...input, run: { ...input.run, id: "run-other" } };
+    expect(await recorder.recordDecision(otherRun)).toEqual({
+      ok: false,
+      reason: "recording_failed",
+    });
+    expect(keys).toHaveLength(1);
+    expect(records).toHaveLength(1);
+    // Signing resumes only when the owner authorizes a replacement.
+    await replaceActiveKey(store, deps);
+    await recorder.recordDecision(otherRun);
+    expect(records).toHaveLength(2);
+  });
+  it("resumes an admitted run after a restart mid-rotation with its original key", async () => {
+    const { recorder, store, deps, records, keys } = setup();
+    await recorder.recordDecision(input);
+    await replaceActiveKey(store, deps);
+    const restarted = createEvidenceRecorder(deps);
+    await restarted.recordDecision(input);
+    expect(records.map((row) => row.kid)).toEqual([keys[0]!.kid, keys[0]!.kid]);
+    expect(
+      verifyChain(
+        records.map((row) => row.jws),
+        keys[0]!.publicKeyPem,
+      ).ok,
+    ).toBe(true);
   });
 });
 

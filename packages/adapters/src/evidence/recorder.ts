@@ -142,9 +142,17 @@ export function createEvidenceRecorder(deps: RecorderDeps) {
     }
     return key;
   }
+  // Emergency revocation is the one state that must stop an admitted run from
+  // signing; replacement only rotates new runs to the new key.
+  function emergencyRevoked(row: { revokedAt: Date | null; replacedAt: Date | null }): boolean {
+    return Boolean(row.revokedAt && !row.replacedAt);
+  }
   async function spaceKey(run: EvidenceRun, signal?: AbortSignal) {
     const active = await deps.store.activeKey(run.spaceId);
     if (active) return active;
+    // Never mint a replacement silently after a revocation: signing stays
+    // stopped (recorded as gaps) until the owner authorizes a new key.
+    if ((await deps.store.keysForSpace(run.spaceId)).length > 0) return null;
     const generated = generateEvidenceKey();
     const secretRecordId = randomUUID();
     signal?.throwIfAborted();
@@ -261,6 +269,11 @@ export function createEvidenceRecorder(deps: RecorderDeps) {
             signal.throwIfAborted();
             const state = await runChain(input.run, signal);
             signal.throwIfAborted();
+            const keyRow = await deps.store.keyByKid(state.kid);
+            if (!keyRow || keyRow.spaceId !== input.run.spaceId || emergencyRevoked(keyRow)) {
+              chains.delete(input.run.id);
+              throw new Error("Evidence key unavailable");
+            }
             const fields = decisionFields(input.decisionKind, input.ruleId);
             const record = state.chain.append({
               ...state.identity,
@@ -328,6 +341,8 @@ export function createEvidenceRecorder(deps: RecorderDeps) {
         const row = await deps.store.keyByKid(first.kid);
         signal.throwIfAborted();
         if (!row || row.spaceId !== first.spaceId) throw new Error("Missing evidence key");
+        // A seal is a signature too: never seal with an emergency-revoked key.
+        if (emergencyRevoked(row)) return { ok: false, reason: "key_revoked" };
         const journal = records.map((record) => record.jws);
         const verification = verifyChain(journal, row.publicKeyPem);
         if (!verification.ok) {

@@ -54,15 +54,19 @@ export function fakeEvidenceStore(): {
       return row;
     },
     replaceKey: async ({ spaceId, expectedKid, data }) => {
-      const current = keys.find((row) => row.spaceId === spaceId && !row.revokedAt);
-      if (!current || current.kid !== expectedKid) throw new EvidenceKeyConflict(spaceId);
-      current.revokedAt = new Date();
-      current.replacedAt = new Date();
+      const head = keys
+        .filter((row) => row.spaceId === spaceId)
+        .sort((a, b) => b.version - a.version)[0];
+      if (!head || head.kid !== expectedKid) throw new EvidenceKeyConflict(spaceId);
+      if (!head.revokedAt) {
+        head.revokedAt = new Date();
+        head.replacedAt = new Date();
+      }
       const row = {
         ...data,
         id: `key-${keys.length}`,
         spaceId,
-        version: current.version + 1,
+        version: head.version + 1,
         createdAt: new Date(),
         replacedAt: null,
         revokedAt: null,

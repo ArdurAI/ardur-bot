@@ -89,9 +89,10 @@ export function evidenceKeysForSpace(prisma: PrismaClient, spaceId: string) {
 }
 
 /**
- * Atomically replace the active key: succeeds only when the current active key
- * is still the expected one, so two replacements cannot both win. The old row
- * is retained (marked replaced) for historical verification.
+ * Atomically replace the space's head key: succeeds only when the latest key
+ * is still the expected one, so two replacements cannot both win. The head is
+ * the active key, or — after an emergency revocation — the newest revoked
+ * key. The old row is retained (marked replaced) for historical verification.
  */
 export async function replaceEvidenceKey(
   prisma: PrismaClient,
@@ -104,14 +105,22 @@ export async function replaceEvidenceKey(
   try {
     return await prisma.$transaction(async (tx) => {
       await lockSpaceKeys(tx, args.spaceId);
-      const current = await activeKeyForUpdate(tx, args.spaceId);
-      if (!current || current.kid !== args.expectedKid) throw new EvidenceKeyConflict(args.spaceId);
-      await tx.evidenceKey.update({
-        where: { id: current.id },
-        data: { revokedAt: new Date(), replacedAt: new Date() },
-      });
+      const head = (
+        await tx.evidenceKey.findMany({
+          where: { spaceId: args.spaceId },
+          orderBy: { version: "desc" },
+          take: 1,
+        })
+      )[0];
+      if (!head || head.kid !== args.expectedKid) throw new EvidenceKeyConflict(args.spaceId);
+      if (!head.revokedAt) {
+        await tx.evidenceKey.update({
+          where: { id: head.id },
+          data: { revokedAt: new Date(), replacedAt: new Date() },
+        });
+      }
       return tx.evidenceKey.create({
-        data: { ...args.data, spaceId: args.spaceId, version: current.version + 1 },
+        data: { ...args.data, spaceId: args.spaceId, version: head.version + 1 },
       });
     });
   } catch (error) {
