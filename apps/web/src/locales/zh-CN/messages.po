@@ -2969,6 +2969,10 @@ msgstr ""
 msgid "Could not load model settings"
 msgstr "无法加载模型设置"
 
+#: src/pages/Onboarding.tsx
+msgid "Could not load models."
+msgstr "无法加载模型。"
+
 #: src/pages/LearningObservation.tsx
 msgid "Could not load observations."
 msgstr ""
@@ -2997,6 +3001,10 @@ msgstr ""
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Could not load settings. Try again."
 msgstr ""
+
+#: src/pages/Onboarding.tsx
+msgid "Could not load setup."
+msgstr "无法加载初始设置。"
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load skill"
@@ -7826,6 +7834,7 @@ msgstr "恢复团队消息"
 #: src/pages/LearningTimeline.tsx
 #: src/pages/memory/MemoryPage.tsx
 #: src/pages/MemoryHistory.tsx
+#: src/pages/Onboarding.tsx
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx

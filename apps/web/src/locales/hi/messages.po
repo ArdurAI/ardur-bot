@@ -2969,6 +2969,10 @@ msgstr ""
 msgid "Could not load model settings"
 msgstr "मॉडल सेटिंग्स लोड नहीं हो सकीं"
 
+#: src/pages/Onboarding.tsx
+msgid "Could not load models."
+msgstr "मॉडल लोड नहीं हो सके।"
+
 #: src/pages/LearningObservation.tsx
 msgid "Could not load observations."
 msgstr ""
@@ -2997,6 +3001,10 @@ msgstr ""
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Could not load settings. Try again."
 msgstr ""
+
+#: src/pages/Onboarding.tsx
+msgid "Could not load setup."
+msgstr "सेटअप लोड नहीं हो सका।"
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load skill"
@@ -7826,6 +7834,7 @@ msgstr "टीम संदेश फिर शुरू करें"
 #: src/pages/LearningTimeline.tsx
 #: src/pages/memory/MemoryPage.tsx
 #: src/pages/MemoryHistory.tsx
+#: src/pages/Onboarding.tsx
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
