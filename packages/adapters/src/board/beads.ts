@@ -434,6 +434,15 @@ export class BeadsBoardProvider implements ProjectBoardProvider {
       await this.stamp(input, true, "left-open", guard);
       return { ...blank, commentId, commented: true, leftOpen: true };
     }
+    if (
+      existing &&
+      (await this.closedThenReopened(input.itemId, input.closeReason, existing.createdAt))
+    ) {
+      await this.stamp(input, true, "left-open", guard);
+      return { ...blank, commentId, commented: true, leftOpen: true };
+    }
+    // The receipt has to exist before close. A lost close response must not close again.
+    await this.stamp(input, true, "closing", guard);
     await guard();
     await this.close([input.itemId], input.closeReason);
     const after = await this.show(input.itemId);
@@ -448,10 +457,22 @@ export class BeadsBoardProvider implements ProjectBoardProvider {
       throw new BoardError({ code: "item_not_found", message: "This work item was not found." });
     return shown;
   }
+  /** A committed close whose receipt was lost, then the owner reopened the item. */
+  private async closedThenReopened(itemId: string, closeReason: string, after?: string) {
+    const entries = records(await this.json(["history", itemId, "--limit", "100"]));
+    return entries.some((entry) => {
+      const issue = rawObject.safeParse(entry.Issue ?? entry);
+      if (!issue.success) return false;
+      if (str(issue.data.status) !== "closed" || str(issue.data.close_reason) !== closeReason)
+        return false;
+      const when = str(entry.CommitDate);
+      return !after || !when || when >= after;
+    });
+  }
   private stamp(
     input: { itemId: string; hash: string; generation: number },
     commented: boolean,
-    close: "open" | "closed" | "already-closed" | "left-open",
+    close: "open" | "closed" | "already-closed" | "left-open" | "closing",
     guard: () => Promise<void> = async () => {},
   ) {
     return guard().then(() =>

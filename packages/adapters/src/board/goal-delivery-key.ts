@@ -30,7 +30,7 @@ export function goalBoardMetadataName(hash: string) {
 export type GoalBoardLedger = {
   generation: number;
   commented: boolean;
-  close: "open" | "closed" | "already-closed" | "left-open";
+  close: "open" | "closed" | "already-closed" | "left-open" | "closing";
 };
 
 const CLOSE_CODE = {
@@ -38,6 +38,7 @@ const CLOSE_CODE = {
   closed: "x1",
   "already-closed": "x2",
   "left-open": "x3",
+  closing: "x4",
 } as const;
 
 export function formatGoalBoardLedger(ledger: GoalBoardLedger) {
@@ -46,11 +47,17 @@ export function formatGoalBoardLedger(ledger: GoalBoardLedger) {
 
 export function parseGoalBoardLedger(value: unknown): GoalBoardLedger | null {
   if (typeof value !== "string") return null;
-  const match = /^([1-9][0-9]{0,8}):(c0|c1):(x0|x1|x2|x3)$/.exec(value);
+  const match = /^([1-9][0-9]{0,8}):(c0|c1):(x0|x1|x2|x3|x4)$/.exec(value);
   if (!match) return null;
-  const close = ({ x0: "open", x1: "closed", x2: "already-closed", x3: "left-open" } as const)[
-    match[3] as "x0" | "x1" | "x2" | "x3"
-  ];
+  const close = (
+    {
+      x0: "open",
+      x1: "closed",
+      x2: "already-closed",
+      x3: "left-open",
+      x4: "closing",
+    } as const
+  )[match[3] as "x0" | "x1" | "x2" | "x3" | "x4"];
   return {
     generation: Number(match[1]),
     commented: match[2] === "c1",
