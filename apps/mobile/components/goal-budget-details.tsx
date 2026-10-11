@@ -56,6 +56,17 @@ export function GoalBudgetDetails({ groupId }: { groupId: string }) {
           {!goal.usageComplete ? (
             <Text style={{ color: tokens.mutedForeground }}>{t("Usage incomplete")}</Text>
           ) : null}
+          {goal.boardWorkspaceId && goal.boardItemId ? (
+            <Text style={{ color: tokens.foreground }}>
+              {t("Board item")}: {goal.boardItemId}
+            </Text>
+          ) : null}
+          {goal.boardWorkspaceId && goal.boardItemId ? (
+            <Text style={{ color: tokens.foreground }}>{t("Open board item")}</Text>
+          ) : null}
+          {goal.boardDelivery && goal.boardDelivery !== "delivered" ? (
+            <Text style={{ color: tokens.mutedForeground }}>{t("Board update pending")}</Text>
+          ) : null}
         </View>
       ) : null}
     </View>

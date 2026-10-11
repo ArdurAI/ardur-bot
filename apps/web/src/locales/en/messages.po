@@ -1458,6 +1458,7 @@ msgstr "Blocks"
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/DashboardPage.tsx
+#: src/pages/GoalForm.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/shell/TopNav.tsx
 msgid "Board"
@@ -1471,9 +1472,19 @@ msgstr "board and routine work"
 msgid "Board files will be kept."
 msgstr "Board files will be kept."
 
+#: src/pages/GoalForm.tsx
+#: src/pages/GroupPanel.tsx
+msgid "Board item"
+msgstr "Board item"
+
 #: src/pages/board/BoardsSettings.tsx
 msgid "Board status"
 msgstr "Board status"
+
+#: src/pages/board/Board.tsx
+#: src/pages/GroupPanel.tsx
+msgid "Board update pending"
+msgstr "Board update pending"
 
 #: src/pages/settings-sections.ts
 #: src/pages/storage/StorageSettings.tsx
@@ -2890,6 +2901,10 @@ msgstr "Could not import these documents. Check scopes and conflicts, then previ
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not install connector"
 msgstr "Could not install connector"
+
+#: src/pages/GoalForm.tsx
+msgid "Could not link that board item."
+msgstr "Could not link that board item."
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -4666,6 +4681,14 @@ msgstr "GitLab host"
 #: src/pages/GroupPanel.tsx
 msgid "Goal"
 msgstr "Goal"
+
+#: src/pages/board/Board.tsx
+msgid "Goal accepted"
+msgstr "Goal accepted"
+
+#: src/pages/board/Board.tsx
+msgid "Goal completed"
+msgstr "Goal completed"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll check the request and choose the next step."
@@ -6675,6 +6698,10 @@ msgstr "Open Accessibility settings"
 #: src/pages/system/QuickComposer.tsx
 msgid "Open Ardur"
 msgstr "Open Ardur"
+
+#: src/pages/GroupPanel.tsx
+msgid "Open board item"
+msgstr "Open board item"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/provider-error-message.tsx

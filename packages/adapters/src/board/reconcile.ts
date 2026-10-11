@@ -1,6 +1,7 @@
 import type { Pool, PrismaClient } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import { botRunOutcomeText } from "../job-reconciler.js";
+import { deliverPendingGoalBoardUpdates } from "./goal-delivery.js";
 import { BoardService } from "./service.js";
 import { finishBoardRun } from "./tools.js";
 
@@ -23,6 +24,9 @@ export async function reconcileBoardOutcomes(
   options: { signal?: AbortSignal; pendingCloses?: boolean } = {},
 ) {
   if (options.pendingCloses) await sweepBeforeDeadline(new BoardService(deps), options.signal);
+  await deliverPendingGoalBoardUpdates(deps, { signal: options.signal }).catch((error) => {
+    getLogger().error("goal board delivery", error);
+  });
   const runs = await deps.prisma.run.findMany({
     where: {
       boardItemId: { not: null },

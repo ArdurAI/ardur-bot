@@ -2,7 +2,9 @@ import type {
   Actor,
   Goal,
   GoalAcceptInput,
+  GoalBoardDeliveryState,
   GoalConditionReviewInput,
+  GoalLinkInput,
   GoalRejectInput,
   GoalStartInput,
   GoalSubmitInput,
@@ -16,10 +18,12 @@ import {
   GOAL_MAX_DEPTH,
   GOAL_MAX_HOPS,
   GoalConditionSchema,
+  GoalLinkInputSchema,
   GoalRevisionSchema,
   GoalStartInputSchema,
   GoalVerdictSchema,
   goalBudget,
+  goalResultPath,
   TaskCardSchema,
 } from "@ardurbot/contracts";
 import {
@@ -29,13 +33,22 @@ import {
   recordPeerTrafficBlock,
 } from "./bot-comms-policy.js";
 import type { Prisma, PrismaClient, TeamGoal } from "./client.js";
+import { Prisma as PrismaNS } from "./client.js";
 import { requestCancel, requestCancelInTransaction } from "./delegation.js";
 import { appendEventInTransaction } from "./events.js";
 import { IsolationError } from "./scope.js";
 import { withTransactionRetry } from "./transaction-retry.js";
 
 type GoalRow = Prisma.TeamGoalGetPayload<{ include: { revisions: true } }> &
-  ReturnType<typeof goalBudget>;
+  ReturnType<typeof goalBudget> & { boardDelivery: GoalBoardDeliveryState | null };
+
+function boardDeliveryState(rows: { state: string }[]): GoalBoardDeliveryState | null {
+  if (rows.some((row) => row.state === "needs-owner")) return "needs-owner";
+  if (rows.some((row) => row.state === "paused")) return "paused";
+  if (rows.some((row) => row.state === "pending")) return "pending";
+  if (rows.some((row) => row.state === "delivered")) return "delivered";
+  return null;
+}
 
 function asRevision(row: Prisma.GoalRevisionGetPayload<object>) {
   return GoalRevisionSchema.parse({ ...row, createdAt: row.createdAt.toISOString() });
@@ -70,6 +83,9 @@ function asGoal(row: GoalRow): Goal {
     createdAt: row.createdAt.toISOString(),
     stoppedAt: row.stoppedAt?.toISOString() ?? null,
     currentRevision: row.revisions[0] ? asRevision(row.revisions[0]) : null,
+    boardWorkspaceId: row.boardWorkspaceId,
+    boardItemId: row.boardItemId,
+    boardDelivery: row.boardDelivery,
   };
 }
 
@@ -106,7 +122,15 @@ async function loadGoal(prisma: PrismaClient, where: Prisma.TeamGoalWhereInput) 
           },
           select: { id: true },
         });
-        return asGoal({ ...row, ...goalBudget(row.tokenLimit, root, !incomplete && !unmeasured) });
+        const deliveries = await tx.goalBoardDelivery.findMany({
+          where: { goalId: row.id, spaceId: row.spaceId, userId: row.userId },
+          select: { state: true },
+        });
+        return asGoal({
+          ...row,
+          ...goalBudget(row.tokenLimit, root, !incomplete && !unmeasured),
+          boardDelivery: boardDeliveryState(deliveries),
+        });
       },
       { isolationLevel: "RepeatableRead" },
     ),
@@ -165,6 +189,65 @@ export async function reconcileGoalExhaustion(prisma: PrismaClient, goalId: stri
   );
 }
 
+async function goalBoardLink(
+  tx: Prisma.TransactionClient,
+  actor: Actor,
+  workspaceId: string | undefined,
+  itemId: string | undefined,
+) {
+  if (!workspaceId && !itemId) return null;
+  if (!workspaceId || !itemId) throw new Error("Board link needs a workspace and an item");
+  const workspace = await tx.boardWorkspace.findFirst({
+    where: {
+      id: workspaceId,
+      spaceId: actor.spaceId,
+      ownerUserId: actor.userId,
+      enabled: true,
+    },
+    select: { id: true },
+  });
+  if (!workspace) throw new IsolationError();
+  return { workspaceId: workspace.id, itemId };
+}
+
+async function queueGoalBoardDelivery(
+  tx: Prisma.TransactionClient,
+  goal: TeamGoal,
+  revisionId: string,
+  transition: "completed" | "accepted",
+) {
+  if (!goal.boardWorkspaceId || !goal.boardItemId) return null;
+  const label = transition === "accepted" ? "Goal accepted" : "Goal completed";
+  const commentText = `${label}\n${goalResultPath(goal.groupId, goal.id, revisionId)}`.slice(
+    0,
+    500,
+  );
+  try {
+    return await tx.goalBoardDelivery.create({
+      data: {
+        goalId: goal.id,
+        revisionId,
+        transition,
+        spaceId: goal.spaceId,
+        userId: goal.userId,
+        workspaceId: goal.boardWorkspaceId,
+        itemId: goal.boardItemId,
+        commentText,
+        state: "pending",
+      },
+    });
+  } catch (error) {
+    if (error instanceof PrismaNS.PrismaClientKnownRequestError && error.code === "P2002") {
+      return tx.goalBoardDelivery.findUnique({
+        where: {
+          goalId_revisionId_transition: { goalId: goal.id, revisionId, transition },
+        },
+      });
+    }
+    throw error;
+  }
+}
+
 export async function startGoal(prisma: PrismaClient, actor: Actor, raw: GoalStartInput) {
   if (!actor.isDeploymentOwner) throw new IsolationError();
   const input = GoalStartInputSchema.parse(raw);
@@ -203,6 +286,7 @@ export async function startGoal(prisma: PrismaClient, actor: Actor, raw: GoalSta
         (member) => member.botId === group.coordinatorBotId && !member.bot.archivedAt,
       );
       if (!coordinator) throw new IsolationError();
+      const boardLink = await goalBoardLink(tx, actor, input.boardWorkspaceId, input.boardItemId);
       const existing = await tx.teamGoal.findFirst({
         where: {
           groupId: group.id,
@@ -236,6 +320,8 @@ export async function startGoal(prisma: PrismaClient, actor: Actor, raw: GoalSta
           maxConcurrent,
           maxDescendants: input.maxDescendants ?? GOAL_DEFAULT_MAX_DESCENDANTS,
           untilAt,
+          boardWorkspaceId: boardLink?.workspaceId ?? null,
+          boardItemId: boardLink?.itemId ?? null,
         },
       });
       await tx.delegationRoot.create({
@@ -551,6 +637,7 @@ async function commitGoalSubmission(
     type: "goal.submitted",
     payload: { goalId: goal.id, revisionId: revision.id },
   });
+  await queueGoalBoardDelivery(tx, goal, revision.id, "completed");
   return asRevision(revision);
 }
 
@@ -722,6 +809,7 @@ export async function acceptGoal(prisma: PrismaClient, actor: Actor, input: Goal
       type: "goal.accepted",
       payload: { goalId: goal.id, revisionId: revision.id },
     });
+    await queueGoalBoardDelivery(tx, currentGoal, revision.id, "accepted");
 
     return asVerdict(verdict);
   });
@@ -892,4 +980,75 @@ export async function reviewGoalCondition(
     });
     return asRevision(updated);
   });
+}
+
+/** Owner only. Workers have no path here. A link cannot move after a delivery exists. */
+export async function linkGoal(prisma: PrismaClient, actor: Actor, raw: GoalLinkInput) {
+  if (!actor.isDeploymentOwner) throw new IsolationError();
+  const input = GoalLinkInputSchema.parse(raw);
+  const saved = await withTransactionRetry(() =>
+    prisma.$transaction(async (tx) => {
+      const goal = await tx.teamGoal.findFirst({
+        where: { id: input.goalId, spaceId: actor.spaceId, userId: actor.userId },
+      });
+      if (!goal) throw new IsolationError();
+      if (["accepted", "stopped", "exhausted"].includes(goal.status)) throw new IsolationError();
+      const queued = await tx.goalBoardDelivery.count({ where: { goalId: goal.id } });
+      if (queued) throw new IsolationError();
+      const link = await goalBoardLink(
+        tx,
+        actor,
+        input.boardWorkspaceId ?? undefined,
+        input.boardItemId ?? undefined,
+      );
+      await tx.teamGoal.update({
+        where: { id: goal.id },
+        data: {
+          boardWorkspaceId: link?.workspaceId ?? null,
+          boardItemId: link?.itemId ?? null,
+        },
+      });
+      return goal.id;
+    }),
+  );
+  const loaded = await loadGoal(prisma, {
+    id: saved,
+    spaceId: actor.spaceId,
+    userId: actor.userId,
+  });
+  if (!loaded) throw new IsolationError();
+  return loaded;
+}
+
+export async function goalBoardResult(
+  prisma: PrismaClient,
+  actor: Actor,
+  workspaceId: string,
+  itemId: string,
+) {
+  if (!actor.isDeploymentOwner) throw new IsolationError();
+  const goal = await prisma.teamGoal.findFirst({
+    where: {
+      spaceId: actor.spaceId,
+      userId: actor.userId,
+      boardWorkspaceId: workspaceId,
+      boardItemId: itemId,
+    },
+    orderBy: { createdAt: "desc" },
+    include: { revisions: { orderBy: { attempts: "desc" }, take: 1 } },
+  });
+  if (!goal) return null;
+  const loaded = await loadGoal(prisma, { id: goal.id });
+  const revision = goal.revisions[0];
+  return {
+    goalId: goal.id,
+    groupId: goal.groupId,
+    revisionId: revision?.id ?? null,
+    summary: revision?.summary ?? null,
+    status: goal.status as Goal["status"],
+    delivery: loaded?.boardDelivery ?? null,
+    path: revision
+      ? goalResultPath(goal.groupId, goal.id, revision.id)
+      : goalResultPath(goal.groupId, goal.id, goal.id),
+  };
 }

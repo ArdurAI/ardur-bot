@@ -4,8 +4,10 @@ import {
   GoalAcceptInputSchema,
   GoalConditionReviewInputSchema,
   GoalRejectInputSchema,
+  GoalStartInputSchema,
   GoalSubmitInputSchema,
   goalBudget,
+  goalResultPath,
 } from "./goal.js";
 
 describe("goal admission budget projection", () => {
@@ -38,6 +40,19 @@ describe("goal admission budget projection", () => {
 });
 
 describe("Goal contracts and state machine", () => {
+  it("rejects a board link that names only one side", () => {
+    expect(
+      GoalStartInputSchema.safeParse({
+        groupId: "g_1",
+        objective: "Ship",
+        boardItemId: "board-a",
+      }).success,
+    ).toBe(false);
+    expect(goalResultPath("group", "goal", "revision")).toBe(
+      "/app/g/group?goal=goal&revision=revision",
+    );
+    expect(goalResultPath("group", "goal", "revision")).not.toContain("http");
+  });
   it("validates valid submit, accept and reject schemas", () => {
     expect(GoalSubmitInputSchema.safeParse({ goalId: "g_1", summary: "done" }).success).toBe(true);
     expect(GoalAcceptInputSchema.safeParse({ goalId: "g_1", revisionId: "r_1" }).success).toBe(

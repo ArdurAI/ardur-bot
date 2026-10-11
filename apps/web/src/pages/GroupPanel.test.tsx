@@ -157,3 +157,26 @@ it("surfaces a refresh failure after a saved decision", async () => {
   );
   expect(button("Accept result").disabled).toBe(false);
 });
+
+it("shows the board link and a pending update", async () => {
+  await act(async () =>
+    root.render(
+      <GroupGoalStrip
+        goal={{
+          ...goal,
+          boardWorkspaceId: "workspace",
+          boardItemId: "board-a",
+          boardDelivery: "pending",
+        }}
+        onStop={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    ),
+  );
+  expect(node.textContent).toContain("Board item");
+  expect(node.textContent).toContain("Open board item");
+  expect(node.textContent).toContain("Board update pending");
+  expect(node.querySelector("a")?.getAttribute("href")).toBe(
+    "/app/board?workspace=workspace&item=board-a",
+  );
+});

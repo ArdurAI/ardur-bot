@@ -1,5 +1,6 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
+import { BoardItemIdSchema } from "./board.js";
 import { DEFAULT_MODEL_CONTEXT_WINDOW, MAX_MODEL_MAX_TOKENS } from "./domain.js";
 import { Id, IsoDate } from "./ids.js";
 
@@ -48,6 +49,36 @@ export function goalBudget(
 
 /** Stable data key; each frontend translates it when displaying the default condition. */
 export const GOAL_FINAL_REVIEW_DESCRIPTION = "goal.final-owner-review";
+
+/** Board comments. The result path is a same-app route, never a supplied URL. */
+export const GOAL_BOARD_COMPLETED = "Goal completed";
+export const GOAL_BOARD_ACCEPTED = "Goal accepted";
+
+export const GoalBoardDeliveryStateSchema = z.enum([
+  "pending",
+  "delivered",
+  "paused",
+  "needs-owner",
+]);
+export type GoalBoardDeliveryState = z.infer<typeof GoalBoardDeliveryStateSchema>;
+export const GoalBoardTransitionSchema = z.enum(["completed", "accepted"]);
+export type GoalBoardTransition = z.infer<typeof GoalBoardTransitionSchema>;
+
+export function goalResultPath(groupId: string, goalId: string, revisionId: string) {
+  return `/app/g/${encodeURIComponent(groupId)}?goal=${encodeURIComponent(goalId)}&revision=${encodeURIComponent(revisionId)}`;
+}
+
+export function boardItemPath(workspaceId: string, itemId: string) {
+  return `/app/board?workspace=${encodeURIComponent(workspaceId)}&item=${encodeURIComponent(itemId)}`;
+}
+
+export function goalBoardDeliveryKey(
+  goalId: string,
+  revisionId: string,
+  transition: GoalBoardTransition,
+) {
+  return `${goalId}:${revisionId}:${transition}`;
+}
 
 export const GoalConditionStatusSchema = z.enum(["unknown", "pass", "fail"]);
 export type GoalConditionStatus = z.infer<typeof GoalConditionStatusSchema>;
@@ -147,20 +178,61 @@ export const GoalSchema = z.object({
   untilAt: IsoDate,
   createdAt: IsoDate,
   stoppedAt: IsoDate.nullable(),
+  boardWorkspaceId: Id.nullable().optional(),
+  boardItemId: BoardItemIdSchema.nullable().optional(),
+  boardDelivery: GoalBoardDeliveryStateSchema.nullable().optional(),
 });
 export type Goal = z.infer<typeof GoalSchema>;
 
-export const GoalStartInputSchema = z.object({
-  groupId: Id,
-  objective: z.string().trim().min(1).max(4_000),
-  doneWhen: z.array(z.string().trim().min(1).max(500)).max(10).default([]),
-  untilAt: IsoDate.optional(),
-  tokenLimit: z.number().int().min(1).max(5_000_000).optional(),
-  perWorkerTokens: z.number().int().min(5_000).max(GOAL_MAX_PER_WORKER_TOKENS).optional(),
-  maxConcurrent: z.number().int().min(1).max(12).optional(),
-  maxDescendants: z.number().int().min(1).max(200).optional(),
-});
+export const GoalStartInputSchema = z
+  .object({
+    groupId: Id,
+    objective: z.string().trim().min(1).max(4_000),
+    doneWhen: z.array(z.string().trim().min(1).max(500)).max(10).default([]),
+    untilAt: IsoDate.optional(),
+    tokenLimit: z.number().int().min(1).max(5_000_000).optional(),
+    perWorkerTokens: z.number().int().min(5_000).max(GOAL_MAX_PER_WORKER_TOKENS).optional(),
+    maxConcurrent: z.number().int().min(1).max(12).optional(),
+    maxDescendants: z.number().int().min(1).max(200).optional(),
+    boardWorkspaceId: Id.optional(),
+    boardItemId: BoardItemIdSchema.optional(),
+  })
+  .superRefine((input, ctx) => {
+    if ((input.boardWorkspaceId === undefined) !== (input.boardItemId === undefined))
+      ctx.addIssue({
+        code: "custom",
+        path: ["boardItemId"],
+        message: "Board link needs a workspace and an item",
+      });
+  });
 export type GoalStartInput = z.infer<typeof GoalStartInputSchema>;
+
+export const GoalLinkInputSchema = z
+  .object({
+    goalId: Id,
+    boardWorkspaceId: Id.nullable(),
+    boardItemId: BoardItemIdSchema.nullable(),
+  })
+  .superRefine((input, ctx) => {
+    if ((input.boardWorkspaceId === null) !== (input.boardItemId === null))
+      ctx.addIssue({
+        code: "custom",
+        path: ["boardItemId"],
+        message: "Board link needs a workspace and an item",
+      });
+  });
+export type GoalLinkInput = z.infer<typeof GoalLinkInputSchema>;
+
+export const GoalBoardResultSchema = z.object({
+  goalId: Id,
+  groupId: Id,
+  revisionId: Id.nullable(),
+  summary: z.string().nullable(),
+  status: GoalStatusSchema,
+  delivery: GoalBoardDeliveryStateSchema.nullable(),
+  path: z.string(),
+});
+export type GoalBoardResult = z.infer<typeof GoalBoardResultSchema>;
 
 export const goalsContract = {
   start: oc.input(GoalStartInputSchema).output(GoalSchema),
@@ -171,4 +243,8 @@ export const goalsContract = {
   accept: oc.input(GoalAcceptInputSchema).output(GoalVerdictSchema),
   reject: oc.input(GoalRejectInputSchema).output(GoalVerdictSchema),
   reviewCondition: oc.input(GoalConditionReviewInputSchema).output(GoalRevisionSchema),
+  link: oc.input(GoalLinkInputSchema).output(GoalSchema),
+  boardResult: oc
+    .input(z.object({ workspaceId: Id, itemId: BoardItemIdSchema }))
+    .output(GoalBoardResultSchema.nullable()),
 };

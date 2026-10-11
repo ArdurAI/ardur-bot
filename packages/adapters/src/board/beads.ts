@@ -25,6 +25,12 @@ import {
 import { getLogger } from "@ardurbot/logging";
 import { z } from "zod";
 import { filingBotName } from "./filing.js";
+import {
+  goalBoardMarker,
+  goalBoardMetadataArg,
+  goalBoardMetadataName,
+  parseGoalBoardLedger,
+} from "./goal-delivery-key.js";
 
 export type BoardTransport = (request: BoardRun) => Promise<BoardRunResult>;
 const rawObject = z.record(z.string(), z.unknown());
@@ -331,5 +337,89 @@ export class BeadsBoardProvider implements ProjectBoardProvider {
         message: "Beads did not return an export path.",
       });
     return { path: result.path };
+  }
+  async deliverKeyed(input: {
+    itemId: string;
+    hash: string;
+    generation: number;
+    comment: string;
+    close: boolean;
+    closeReason: string;
+  }) {
+    BoardItemIdSchema.parse(input.itemId);
+    if (!/^[a-f0-9]{16}$/.test(input.hash) || input.generation < 1)
+      throw new BoardError({ code: "forbidden", message: "This board command is not allowed." });
+    const shown = rawObject.parse(await this.json(["show", "--include-comments", input.itemId]));
+    const item = parseBeadsItem(shown);
+    const ledger = parseGoalBoardLedger(
+      metadata(shown.metadata)[goalBoardMetadataName(input.hash)],
+    );
+    const marker = goalBoardMarker(input.hash);
+    const existing = item.comments.find((entry) => entry.text.startsWith(marker));
+    const blank = {
+      commentId: existing?.id || null,
+      commented: Boolean(existing),
+      closedByThisDelivery: false,
+      alreadyClosed: false,
+      leftOpen: false,
+      discrepancy: false,
+      expired: false,
+    };
+    if (ledger && ledger.generation > input.generation) return { ...blank, expired: true };
+    if (ledger?.commented && !existing) return { ...blank, discrepancy: true };
+    let commentId = existing?.id || null;
+    if (!existing) {
+      await this.json([
+        "update",
+        input.itemId,
+        "--set-metadata",
+        goalBoardMetadataArg(input.hash, {
+          generation: input.generation,
+          commented: false,
+          close: "open",
+        }),
+      ]);
+      commentId = (await this.comment(input.itemId, input.comment)).id;
+      await this.json([
+        "update",
+        input.itemId,
+        "--set-metadata",
+        goalBoardMetadataArg(input.hash, {
+          generation: input.generation,
+          commented: true,
+          close: "open",
+        }),
+      ]);
+    }
+    if (!input.close) {
+      return { ...blank, commentId, commented: true, leftOpen: true };
+    }
+    const current = await this.show(input.itemId);
+    if (current.status === "closed") {
+      await this.stamp(input, true, "already-closed");
+      return { ...blank, commentId, commented: true, alreadyClosed: true };
+    }
+    if (!current.closeWhenDone) {
+      await this.stamp(input, true, "left-open");
+      return { ...blank, commentId, commented: true, leftOpen: true };
+    }
+    await this.close([input.itemId], input.closeReason);
+    const after = await this.show(input.itemId);
+    if (after.status !== "closed")
+      return { ...blank, commentId, commented: true, discrepancy: true };
+    await this.stamp(input, true, "closed");
+    return { ...blank, commentId, commented: true, closedByThisDelivery: true };
+  }
+  private stamp(
+    input: { itemId: string; hash: string; generation: number },
+    commented: boolean,
+    close: "open" | "closed" | "already-closed" | "left-open",
+  ) {
+    return this.json([
+      "update",
+      input.itemId,
+      "--set-metadata",
+      goalBoardMetadataArg(input.hash, { generation: input.generation, commented, close }),
+    ]);
   }
 }

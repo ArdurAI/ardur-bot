@@ -1579,5 +1579,8 @@ export const RU_MESSAGES: Record<string, string> = {
   "Work is still active.": "Работа ещё продолжается.",
   "Please address the failing conditions.": "Исправьте невыполненные условия.",
   "Final owner review": "Итоговая проверка владельцем",
+  "Board item": "Пункт доски",
+  "Open board item": "Открыть пункт доски",
+  "Board update pending": "Обновление доски ожидается",
   "Could not review result. Try again.": "Не удалось проверить результат. Попробуйте снова.",
 };

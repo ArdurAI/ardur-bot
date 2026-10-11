@@ -149,6 +149,7 @@ function fixture(status: string) {
         update: vi.fn(async ({ data }) => Object.assign(run, data)),
         updateMany,
       },
+      teamGoal: { findFirst: vi.fn(async () => null) },
       message: { findMany: vi.fn(async () => []) },
     }) as unknown as PrismaClient;
   return { run, item, provider, client, updateMany };
@@ -192,3 +193,13 @@ for (const status of ["completed", "failed", "cancelled"]) {
     },
   );
 }
+
+it("does not close a linked goal when the run reports done", async () => {
+  const f = fixture("completed");
+  (f.run as { goalId?: string }).goalId = "goal";
+  const client = f.client();
+  vi.spyOn(client.teamGoal, "findFirst").mockResolvedValue({ id: "goal" } as never);
+  await finishBoardRun({ prisma: client }, scope, "Outcome");
+  expect(f.provider.comment).toHaveBeenCalledTimes(1);
+  expect(f.provider.close).not.toHaveBeenCalled();
+});

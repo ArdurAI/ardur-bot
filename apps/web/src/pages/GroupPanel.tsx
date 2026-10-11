@@ -8,6 +8,7 @@ import type {
   SetGroupMemberModelPinInput,
 } from "@ardurbot/contracts";
 import {
+  boardItemPath,
   GOAL_FINAL_REVIEW_DESCRIPTION,
   GROUP_MEMBER_MAX,
   GROUP_MEMBER_MIN,
@@ -517,10 +518,12 @@ export function GroupGoalStrip({
   goal,
   onStop,
   onRefresh,
+  openReview = false,
 }: {
   goal: Goal;
   onStop: () => Promise<void>;
   onRefresh: () => Promise<void>;
+  openReview?: boolean;
 }) {
   const { t } = useLingui();
   const [stopping, setStopping] = useState(false);
@@ -601,7 +604,7 @@ export function GroupGoalStrip({
                   : t`Needs you`;
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-1 text-xs text-muted-foreground md:px-[22px]">
-      <details className="min-w-0 flex-1">
+      <details className="min-w-0 flex-1" open={openReview || undefined}>
         <summary className="cursor-pointer truncate">
           <Trans>Goal</Trans>: {status} · {goal.usedTokens?.toLocaleString() ?? t`Unknown`} /{" "}
           {goal.tokenLimit.toLocaleString()} <Trans>tokens</Trans> ·{" "}
@@ -682,6 +685,20 @@ export function GroupGoalStrip({
               </Button>
             </div>
           </div>
+        ) : null}
+        {goal.boardWorkspaceId && goal.boardItemId ? (
+          <p className="pb-2">
+            <Trans>Board item</Trans>{" "}
+            <a href={boardItemPath(goal.boardWorkspaceId, goal.boardItemId)}>
+              <Trans>Open board item</Trans>
+            </a>
+            {goal.boardDelivery && goal.boardDelivery !== "delivered" ? (
+              <>
+                {" "}
+                · <Trans>Board update pending</Trans>
+              </>
+            ) : null}
+          </p>
         ) : null}
         <dl className="grid grid-cols-2 gap-x-3 gap-y-1 py-2">
           <dt>

@@ -1154,6 +1154,8 @@
           "uiLabels": [
             "Objective",
             "Done when (one per line)",
+            "Board item",
+            "Board",
             "Start goal"
           ],
           "screenshotId": "docs-group-goals-form",
@@ -1188,7 +1190,8 @@
       ],
       "boundaries": [
         "Only an authorized owner with a group coordinator can start this flow.",
-        "Stopping a goal ends new coordinator work; it does not undo completed actions."
+        "Stopping a goal ends new coordinator work; it does not undo completed actions.",
+        "A linked board item is commented when the result is submitted and closed only when the owner accepts it."
       ],
       "troubleshooting": [
         {

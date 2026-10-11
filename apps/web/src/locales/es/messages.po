@@ -1458,6 +1458,7 @@ msgstr ""
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/DashboardPage.tsx
+#: src/pages/GoalForm.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/shell/TopNav.tsx
 msgid "Board"
@@ -1471,9 +1472,19 @@ msgstr ""
 msgid "Board files will be kept."
 msgstr "Se conservarán los archivos del tablero."
 
+#: src/pages/GoalForm.tsx
+#: src/pages/GroupPanel.tsx
+msgid "Board item"
+msgstr "Elemento del tablero"
+
 #: src/pages/board/BoardsSettings.tsx
 msgid "Board status"
 msgstr "Estado del tablero"
+
+#: src/pages/board/Board.tsx
+#: src/pages/GroupPanel.tsx
+msgid "Board update pending"
+msgstr "Actualización del tablero pendiente"
 
 #: src/pages/settings-sections.ts
 #: src/pages/storage/StorageSettings.tsx
@@ -2890,6 +2901,10 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not install connector"
 msgstr "No se pudo instalar el conector"
+
+#: src/pages/GoalForm.tsx
+msgid "Could not link that board item."
+msgstr "No se pudo vincular ese elemento del tablero."
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -4666,6 +4681,14 @@ msgstr ""
 #: src/pages/GroupPanel.tsx
 msgid "Goal"
 msgstr "Objetivo"
+
+#: src/pages/board/Board.tsx
+msgid "Goal accepted"
+msgstr "Objetivo aceptado"
+
+#: src/pages/board/Board.tsx
+msgid "Goal completed"
+msgstr "Objetivo completado"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll check the request and choose the next step."
@@ -6675,6 +6698,10 @@ msgstr ""
 #: src/pages/system/QuickComposer.tsx
 msgid "Open Ardur"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Open board item"
+msgstr "Abrir elemento del tablero"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/provider-error-message.tsx

@@ -1512,5 +1512,8 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Work is still active.": "工作仍在进行中。",
   "Please address the failing conditions.": "请解决未满足的条件。",
   "Final owner review": "所有者最终审核",
+  "Board item": "看板事项",
+  "Open board item": "打开看板事项",
+  "Board update pending": "看板更新待处理",
   "Could not review result. Try again.": "无法审核结果，请重试。",
 };

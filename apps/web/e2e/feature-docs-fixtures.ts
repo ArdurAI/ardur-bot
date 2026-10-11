@@ -296,6 +296,9 @@ export function groupGoalDocsFixture(review = false) {
         untilAt: "2026-09-24T20:00:00.000Z",
         createdAt: now,
         stoppedAt: null,
+        boardWorkspaceId: "workspace",
+        boardItemId: "board-a",
+        boardDelivery: "pending",
         currentRevision: {
           id: "sample-revision",
           goalId: "sample-goal",

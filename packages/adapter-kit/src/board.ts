@@ -25,4 +25,24 @@ export interface ProjectBoardProvider {
   graph(rootId?: string): Promise<BoardGraph>;
   search(text: string): Promise<WorkItem[]>;
   export(): Promise<{ path: string }>;
+  /**
+   * Optional exactly-once comment and conditional close, keyed by a stable delivery hash.
+   * Providers that omit this stay uncertain: callers read back and do not write.
+   */
+  deliverKeyed?(input: {
+    itemId: string;
+    hash: string;
+    generation: number;
+    comment: string;
+    close: boolean;
+    closeReason: string;
+  }): Promise<{
+    commentId: string | null;
+    commented: boolean;
+    closedByThisDelivery: boolean;
+    alreadyClosed: boolean;
+    leftOpen: boolean;
+    discrepancy: boolean;
+    expired: boolean;
+  }>;
 }
