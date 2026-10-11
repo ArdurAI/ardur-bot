@@ -4106,6 +4106,10 @@ msgstr ""
 msgid "Effective configuration"
 msgstr "유효 구성"
 
+#: src/pages/GroupPanel.tsx
+msgid "Effects are still unsettled."
+msgstr "효과가 아직 정산되지 않았습니다."
+
 #: src/pages/TeamBoard.tsx
 msgid "Effort"
 msgstr ""
@@ -5297,6 +5301,10 @@ msgstr ""
 #: src/pages/DevicesSettings.tsx
 msgid "Last used"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Late usage arrived after acceptance."
+msgstr "승인 이후 늦은 사용량이 도착했습니다."
 
 #: src/components/DesktopUpdates.tsx
 msgid "Later"

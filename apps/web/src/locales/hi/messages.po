@@ -4106,6 +4106,10 @@ msgstr ""
 msgid "Effective configuration"
 msgstr "प्रभावी कॉन्फ़िगरेशन"
 
+#: src/pages/GroupPanel.tsx
+msgid "Effects are still unsettled."
+msgstr "इफ़ेक्ट अभी तय नहीं हुए हैं।"
+
 #: src/pages/TeamBoard.tsx
 msgid "Effort"
 msgstr ""
@@ -5297,6 +5301,10 @@ msgstr ""
 #: src/pages/DevicesSettings.tsx
 msgid "Last used"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Late usage arrived after acceptance."
+msgstr "स्वीकृति के बाद विलंबित उपयोग आया।"
 
 #: src/components/DesktopUpdates.tsx
 msgid "Later"

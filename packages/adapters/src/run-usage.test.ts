@@ -223,6 +223,7 @@ it.each(["running", "completed"])(
       $queryRaw: vi.fn(async () => []),
       delegation: { findUniqueOrThrow: vi.fn(async () => row), update: vi.fn() },
       delegationRoot: { update: vi.fn() },
+      goalSettlement: { findFirst: vi.fn(async () => null) },
       usageRecord: { create: vi.fn(async () => ({ id: "usage" })) },
       botMessageDelivery: { findMany: vi.fn(async () => []) },
     };
@@ -271,6 +272,7 @@ it("charges coordinator usage to the existing root under the admission lock", as
   const tx = {
     $queryRaw: vi.fn(async () => []),
     delegationRoot: { updateMany: vi.fn() },
+    goalSettlement: { findFirst: vi.fn(async () => null) },
     usageRecord: { create: vi.fn(async () => ({ id: "usage" })) },
     botMessageDelivery: { findMany: vi.fn(async () => []) },
   };
@@ -319,6 +321,7 @@ function standalonePrisma() {
   const byRequestKey = new Map<string, string>();
   const receipts = new Map<string, Record<string, unknown>>();
   const tx = {
+    goalSettlement: { findFirst: vi.fn(async () => null) },
     usageRecord: {
       findUnique: vi.fn(async ({ where }: { where: { id?: string; requestKey?: string } }) => {
         const id = where.id ?? (where.requestKey ? byRequestKey.get(where.requestKey) : undefined);
@@ -754,6 +757,7 @@ it("stores the usage pin, not the source run's pin, when a reviewer pin is suppl
     createdAt: new Date(),
   };
   const tx = {
+    goalSettlement: { findFirst: vi.fn(async () => null) },
     $queryRaw: vi.fn(async () => []),
     run: {
       findUniqueOrThrow: vi.fn(async () => structuredClone(runRow)),

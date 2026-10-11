@@ -2212,6 +2212,7 @@ model TeamGoal {
   runs Run[]
   revisions GoalRevision[]
   verdicts GoalVerdict[]
+  settlements GoalSettlement[]
 
   @@index([spaceId, userId, groupId, status])
   @@index([threadId, status])
@@ -2760,4 +2761,38 @@ model GoalVerdict {
   @@unique([goalId, revisionId])
   @@index([goalId, createdAt])
   @@map("goal_verdicts")
+}
+
+/// Durable final-settlement marker written when the owner accepts a goal. Usage that
+/// settles after this marker is recorded as a discrepancy; it never reopens the result.
+model GoalSettlement {
+  id String @id @default(cuid())
+  spaceId String
+  userId String
+  goalId String @unique
+  goal TeamGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  revisionId String
+  rootTaskId String
+  actorId String
+  usedTokens Int
+  reservedTokens Int
+  createdAt DateTime @default(now())
+
+  discrepancies GoalSettlementDiscrepancy[]
+
+  @@index([spaceId, userId])
+  @@index([rootTaskId])
+  @@map("goal_settlements")
+}
+
+model GoalSettlementDiscrepancy {
+  id String @id @default(cuid())
+  settlementId String
+  settlement GoalSettlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+  usageRecordId String
+  tokens Int
+  createdAt DateTime @default(now())
+
+  @@index([settlementId])
+  @@map("goal_settlement_discrepancies")
 }

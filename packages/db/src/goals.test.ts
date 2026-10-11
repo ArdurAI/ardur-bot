@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "./client.js";
 import {
   acceptGoal,
+  admitGoalRunEffect,
   getGoal,
   goalExhaustionReason,
   reconcileGoalExhaustion,
@@ -90,6 +91,7 @@ describe("goal scheduling", () => {
         })),
       },
       usageRecord: { findFirst: vi.fn(async () => null) },
+      goalSettlement: { findUnique: vi.fn(async () => null) },
       run: { create: runCreate, findFirst: vi.fn(async () => null) },
       thread: { update: vi.fn(async () => ({ nextEventSeq: 1 })) },
       event: { create: vi.fn(async () => ({ seq: 1 })) },
@@ -368,13 +370,33 @@ function reviewFixture() {
       ),
     },
     delegationRoot: { findUnique: vi.fn(async () => root), findFirst: vi.fn(async () => root) },
-    delegation: { findMany: vi.fn(async () => []) },
+    delegation: { findMany: vi.fn(async () => []), findFirst: vi.fn(async () => null) },
     chatGroup: { findFirst: vi.fn(async () => ({ id: goal.groupId })) },
-    task: { create: vi.fn(async () => ({ id: "task-rework" })) },
+    task: {
+      create: vi.fn(async () => ({ id: "task-rework" })),
+      updateMany: vi.fn(async () => ({})),
+    },
     usageRecord: { findFirst: vi.fn(async () => null) },
+    attempt: { updateMany: vi.fn(async () => ({})) },
     run: {
-      findFirst: vi.fn(async () => null),
+      findMany: vi.fn(async (): Promise<unknown[]> => []),
+      findFirst: vi.fn(async () => null as unknown),
+      updateMany: vi.fn(async () => ({ count: 0 })),
       create: vi.fn(async () => ({ id: "run-rework" })),
+    },
+    externalEffect: { findFirst: vi.fn(async () => null as unknown) },
+    goalSettlement: {
+      create: vi.fn(
+        async ({ data }: { data: { goalId: string; revisionId: string; usedTokens: number } }) => ({
+          ...data,
+          id: "settlement-1",
+          createdAt: now,
+        }),
+      ),
+      findUnique: vi.fn(async () => null as unknown),
+    },
+    goalSettlementDiscrepancy: {
+      aggregate: vi.fn(async () => ({ _sum: { tokens: 0 }, _count: 0 })),
     },
     thread: { update: vi.fn(async () => ({ nextEventSeq: 1 })) },
     event: { create: vi.fn(async () => ({ seq: 1 })) },
@@ -630,5 +652,190 @@ describe("goal owner review", () => {
     const accepted = await acceptGoal(fixture.prisma, owner, input);
     expect(await acceptGoal(fixture.prisma, owner, input)).toEqual(accepted);
     expect(fixture.tx.goalVerdict.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels queued runs when the submission freezes the goal and reports them", async () => {
+    const fixture = reviewFixture();
+    fixture.tx.run.findMany.mockResolvedValue([
+      { id: "run-queued", taskId: "task-queued", delegationId: null },
+    ]);
+    fixture.tx.run.updateMany.mockResolvedValue({ count: 1 });
+    const revision = await fixture.submit();
+    expect(fixture.tx.run.updateMany).toHaveBeenCalledWith({
+      where: { id: "run-queued", status: "queued" },
+      data: expect.objectContaining({ status: "cancelled" }),
+    });
+    expect(fixture.tx.task.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ["task-queued"] } },
+      data: { status: "cancelled" },
+    });
+    expect(fixture.tx.event.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        type: "goal.submitted",
+        payload: { goalId: fixture.goal.id, revisionId: revision.id, frozenRunIds: ["run-queued"] },
+      }),
+    });
+  });
+
+  it("keeps a queued run that a concurrent claim leased before the freeze", async () => {
+    const fixture = reviewFixture();
+    fixture.tx.run.findMany.mockResolvedValue([
+      { id: "run-claimed", taskId: "task-claimed", delegationId: null },
+    ]);
+    // The claim won the row first: the conditional cancellation matches nothing and
+    // the in-flight run may finish its call.
+    fixture.tx.run.updateMany.mockResolvedValue({ count: 0 });
+    await fixture.submit();
+    expect(fixture.tx.task.updateMany).not.toHaveBeenCalled();
+    expect(fixture.tx.event.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        payload: { goalId: fixture.goal.id, revisionId: expect.any(String) },
+      }),
+    });
+  });
+
+  it("refuses acceptance while an execution lease is live", async () => {
+    const fixture = reviewFixture();
+    const revision = await fixture.submit();
+    await reviewGoalCondition(fixture.prisma, owner, {
+      goalId: fixture.goal.id,
+      revisionId: revision.id,
+      conditionId: "cond-final",
+      status: "pass",
+    });
+    fixture.tx.run.findFirst.mockResolvedValue({ id: "run-live" });
+    await expect(
+      acceptGoal(fixture.prisma, owner, { goalId: fixture.goal.id, revisionId: revision.id }),
+    ).rejects.toThrow("A live execution");
+    expect(fixture.tx.goalVerdict.create).not.toHaveBeenCalled();
+    expect(fixture.tx.goalSettlement.create).not.toHaveBeenCalled();
+    expect(fixture.goal.status).toBe("completed");
+  });
+
+  it("refuses acceptance while an effect is unsettled", async () => {
+    const fixture = reviewFixture();
+    const revision = await fixture.submit();
+    await reviewGoalCondition(fixture.prisma, owner, {
+      goalId: fixture.goal.id,
+      revisionId: revision.id,
+      conditionId: "cond-final",
+      status: "pass",
+    });
+    fixture.tx.externalEffect.findFirst.mockResolvedValue({ id: "effect-1" });
+    await expect(
+      acceptGoal(fixture.prisma, owner, { goalId: fixture.goal.id, revisionId: revision.id }),
+    ).rejects.toThrow("Unsettled effects");
+    expect(fixture.tx.goalVerdict.create).not.toHaveBeenCalled();
+    expect(fixture.goal.status).toBe("completed");
+  });
+
+  it("writes one settlement marker at acceptance and projects it on the goal", async () => {
+    const fixture = reviewFixture();
+    const revision = await fixture.submit();
+    const input = { goalId: fixture.goal.id, revisionId: revision.id };
+    await reviewGoalCondition(fixture.prisma, owner, {
+      ...input,
+      conditionId: "cond-final",
+      status: "pass",
+    });
+    await acceptGoal(fixture.prisma, owner, input);
+    expect(fixture.tx.goalSettlement.create).toHaveBeenCalledTimes(1);
+    expect(fixture.tx.goalSettlement.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        goalId: fixture.goal.id,
+        revisionId: revision.id,
+        rootTaskId: fixture.goal.rootTaskId,
+        usedTokens: fixture.root.usedTokens,
+      }),
+    });
+    fixture.tx.goalSettlement.findUnique.mockResolvedValue({
+      goalId: fixture.goal.id,
+      revisionId: revision.id,
+      usedTokens: fixture.root.usedTokens,
+      reservedTokens: 0,
+      createdAt: now,
+    });
+    fixture.tx.goalSettlementDiscrepancy.aggregate.mockResolvedValue({
+      _sum: { tokens: 15 },
+      _count: 1,
+    });
+    const loaded = await getGoal(fixture.prisma, owner, fixture.goal.groupId);
+    expect(loaded?.settlement).toEqual({
+      revisionId: revision.id,
+      usedTokens: fixture.root.usedTokens,
+      reservedTokens: 0,
+      lateTokens: 15,
+      discrepancyCount: 1,
+      createdAt: now.toISOString(),
+    });
+  });
+
+  it("admits run effects only while the goal is unfrozen, under the root lock", async () => {
+    let goalStatus = "running";
+    const tx = {
+      $queryRaw: vi.fn(async () => []),
+      teamGoal: {
+        findFirst: vi.fn(async () => ({ status: goalStatus })),
+      },
+      externalEffect: {
+        create: vi.fn(async ({ data }: { data: { idempotencyKey: string } }) => ({
+          ...data,
+          id: `effect-${data.idempotencyKey}`,
+        })),
+      },
+    };
+    const prisma = {
+      $transaction: (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
+    } as unknown as PrismaClient;
+    const input = {
+      spaceId: owner.spaceId,
+      userId: owner.userId,
+      goalId: "goal-1",
+      rootTaskId: "root-1",
+      runId: "run-1",
+      kind: "fixture_effect",
+      idempotencyKey: "effect-key",
+      request: { value: 1 },
+    };
+    const admitted = await admitGoalRunEffect(prisma, input);
+    expect(admitted.ok).toBe(true);
+    expect(tx.externalEffect.create).toHaveBeenCalledTimes(1);
+    // The root lock is taken before the goal state is read, so the freeze and the
+    // acceptance check serialize with this admission.
+    expect(tx.$queryRaw).toHaveBeenCalledBefore(tx.teamGoal.findFirst as never);
+
+    goalStatus = "completed";
+    await expect(
+      admitGoalRunEffect(prisma, { ...input, idempotencyKey: "effect-key-2" }),
+    ).resolves.toEqual({
+      ok: false,
+      reason: "goal-frozen",
+    });
+    expect(tx.externalEffect.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("resumes after send-back with a fresh run while frozen queued runs stay cancelled", async () => {
+    const fixture = reviewFixture();
+    fixture.tx.run.findMany.mockResolvedValue([
+      { id: "run-queued", taskId: "task-queued", delegationId: null },
+    ]);
+    fixture.tx.run.updateMany.mockResolvedValue({ count: 1 });
+    const revision = await fixture.submit();
+    await rejectGoal(fixture.prisma, owner, {
+      goalId: fixture.goal.id,
+      revisionId: revision.id,
+      reworkNotes: "Review again",
+    });
+    expect(fixture.goal.status).toBe("running");
+    expect(fixture.tx.run.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        clientNonce: `goal-rework:${revision.id}`,
+        goalId: fixture.goal.id,
+        status: "queued",
+      }),
+    });
+    // The frozen run was cancelled at submission (conditional check plus the shared
+    // cancellation helper); rework queues a new run instead of reviving it.
+    expect(fixture.tx.run.updateMany).toHaveBeenCalledTimes(2);
   });
 });

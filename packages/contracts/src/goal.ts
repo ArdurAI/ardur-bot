@@ -30,6 +30,16 @@ export const GoalStatusSchema = z.enum([
 ]);
 export type GoalStatus = z.infer<typeof GoalStatusSchema>;
 
+/**
+ * A goal in these statuses refuses new admission: it is awaiting owner review or already
+ * accepted, so queued resumes, peer work and effect dispatch must not run for its runs.
+ */
+export const GOAL_FROZEN_STATUSES = ["completed", "accepted"] as const;
+
+export function isFrozenGoalStatus(status: string): boolean {
+  return (GOAL_FROZEN_STATUSES as readonly string[]).includes(status);
+}
+
 /** Read-only projection of the admission ledger, never a provider cost estimate. */
 export function goalBudget(
   limit: number,
@@ -80,6 +90,21 @@ export const GoalRevisionSchema = z.object({
 export type GoalRevision = z.infer<typeof GoalRevisionSchema>;
 
 export const GoalVerdictTypeSchema = z.enum(["accept", "reject"]);
+
+/**
+ * Durable marker written when the owner accepts a revision. Usage that settles after
+ * this marker is counted as lateTokens and remains a visible discrepancy; the accepted
+ * result itself never changes.
+ */
+export const GoalSettlementSchema = z.object({
+  revisionId: Id,
+  usedTokens: z.number().int(),
+  reservedTokens: z.number().int(),
+  lateTokens: z.number().int(),
+  discrepancyCount: z.number().int().nonnegative(),
+  createdAt: IsoDate,
+});
+export type GoalSettlement = z.infer<typeof GoalSettlementSchema>;
 
 export const GoalVerdictSchema = z.object({
   id: Id,
@@ -144,6 +169,7 @@ export const GoalSchema = z.object({
   maxDepth: z.literal(GOAL_MAX_DEPTH),
   maxHops: z.literal(GOAL_MAX_HOPS),
   currentRevision: GoalRevisionSchema.nullable().optional(),
+  settlement: GoalSettlementSchema.nullable().optional(),
   untilAt: IsoDate,
   createdAt: IsoDate,
   stoppedAt: IsoDate.nullable(),

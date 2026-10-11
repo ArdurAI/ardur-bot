@@ -131,6 +131,7 @@ import type { Pool } from "@ardurbot/db";
 import {
   acceptDelegation,
   admitChiefAction,
+  admitGoalRunEffect,
   appendEventInTransaction,
   type ClaimedSteeringMessage,
   claimQuietBotMessages,
@@ -3835,6 +3836,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   executionId,
                   consumedEffectIds,
                 );
+          if (applied?.frozen) return { error: GOAL_FROZEN_EFFECT_ERROR };
 
           const runAutoReview = async () => {
             if (!injectedReview && !checker) return;
@@ -5121,6 +5123,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 }
               }
               const recordedEffect = await recordEffect(deps, run, name, effectKey, args);
+              if (recordedEffect.frozen) return { error: GOAL_FROZEN_EFFECT_ERROR };
               if (recordedEffect?.duplicate) {
                 const gate = resolveDuplicateEffectGate(recordedEffect.effect, name);
                 if (gate.action === "execute") {
@@ -5177,6 +5180,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               });
             }
             const recordedForAsk = await recordEffect(deps, run, name, effectKey, args);
+            if (recordedForAsk.frozen) return { error: GOAL_FROZEN_EFFECT_ERROR };
             const missingSecretAction = resolveMissingRunSecretAction(recordedForAsk.effect);
             if (missingSecretAction.action === "return") return missingSecretAction.result;
             const connectionId = args.connectionId ? String(args.connectionId) : undefined;
@@ -8499,15 +8503,31 @@ async function persistMessageInTransaction(
   return { message, eventSeq: event.seq };
 }
 
+const GOAL_FROZEN_EFFECT_ERROR =
+  "This goal is awaiting owner review or already accepted, so new side effects are frozen.";
+
+type RecordedEffect =
+  | { duplicate: true; effect: Prisma.ExternalEffectGetPayload<object>; frozen: false }
+  | { duplicate: false; effect: Prisma.ExternalEffectGetPayload<object>; frozen: false }
+  | { duplicate: false; effect: null; frozen: true };
+
 async function recordEffect(
   deps: ExecutorDeps,
-  run: { id: string; spaceId: string; threadId: string; botId: string },
+  run: {
+    id: string;
+    spaceId: string;
+    userId: string;
+    threadId: string;
+    botId: string;
+    goalId: string | null;
+    delegationRootTaskId: string | null;
+  },
   kind: string,
   idempotencyKey: string,
   request: unknown,
   legacyIdempotencyKey?: string,
   consumedIds?: Set<string>,
-) {
+): Promise<RecordedEffect> {
   const existing = await deps.prisma.externalEffect.findUnique({
     where: { idempotencyKey },
   });
@@ -8521,7 +8541,7 @@ async function recordEffect(
       runId: run.id,
       payload: { executionId: idempotencyKey, kind },
     });
-    return { duplicate: true, effect: existing };
+    return { duplicate: true, effect: existing, frozen: false };
   }
 
   // Pre-fix rows used bare provider ids or scoped keys that included the
@@ -8564,7 +8584,7 @@ async function recordEffect(
           runId: run.id,
           payload: { executionId: candidate, kind, legacy: true },
         });
-        return { duplicate: true, effect: sameIdLegacy };
+        return { duplicate: true, effect: sameIdLegacy, frozen: false };
       }
     }
   }
@@ -8598,9 +8618,26 @@ async function recordEffect(
       runId: run.id,
       payload: { executionId: legacy.idempotencyKey, kind, legacy: true },
     });
-    return { duplicate: true, effect: legacy };
+    return { duplicate: true, effect: legacy, frozen: false };
   }
 
+  // Goal runs admit new effects through the root lock the freeze and the acceptance
+  // check also take, so an effect can never slip into a completed or accepted goal.
+  if (run.goalId && run.delegationRootTaskId) {
+    const admitted = await admitGoalRunEffect(deps.prisma, {
+      spaceId: run.spaceId,
+      userId: run.userId,
+      goalId: run.goalId,
+      rootTaskId: run.delegationRootTaskId,
+      runId: run.id,
+      kind,
+      idempotencyKey,
+      request,
+    });
+    if (!admitted.ok) return { duplicate: false, effect: null, frozen: true };
+    consumedIds?.add(admitted.effect.id);
+    return { duplicate: false, effect: admitted.effect, frozen: false };
+  }
   const effect = await deps.prisma.externalEffect.create({
     data: {
       spaceId: run.spaceId,
@@ -8612,7 +8649,7 @@ async function recordEffect(
     },
   });
   consumedIds?.add(effect.id);
-  return { duplicate: false, effect };
+  return { duplicate: false, effect, frozen: false };
 }
 
 async function completeEffect(

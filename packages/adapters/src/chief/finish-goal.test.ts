@@ -48,6 +48,7 @@ function reviewStore() {
     },
     chatGroup: { findFirst: vi.fn(async () => ({ id: goal.groupId })) },
     delegation: { findMany: vi.fn(async () => []) },
+    run: { findMany: vi.fn(async () => []), updateMany: vi.fn(async () => ({ count: 0 })) },
     goalRevision: {
       count: vi.fn(async () => revisions.length),
       create: vi.fn(async ({ data }: { data: { summary: string } }) => {

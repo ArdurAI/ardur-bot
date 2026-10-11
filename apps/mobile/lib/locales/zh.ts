@@ -1510,6 +1510,8 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Reject result": "拒绝结果",
   "Result changed; review again.": "结果已更改，请重新审核。",
   "Work is still active.": "工作仍在进行中。",
+  "Effects are still unsettled.": "效果尚未结算完毕。",
+  "Late usage arrived after acceptance.": "接受后产生了迟到的用量。",
   "Please address the failing conditions.": "请解决未满足的条件。",
   "Final owner review": "所有者最终审核",
   "Could not review result. Try again.": "无法审核结果，请重试。",

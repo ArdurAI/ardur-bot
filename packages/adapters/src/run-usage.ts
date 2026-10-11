@@ -119,7 +119,15 @@ export async function recordRunUsage(
         await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${rootTaskId} FOR UPDATE`;
         const tokens = usage.inputTokens + usage.outputTokens;
         const persisted = await tx.usageRecord.create({ data });
-        await updateUsageBudget(tx, rootTaskId, delegation?.id, run.id, tokens);
+        await updateUsageBudget(
+          tx,
+          rootTaskId,
+          delegation?.id,
+          run.id,
+          tokens,
+          false,
+          persisted.id,
+        );
         await refreshBotMessageUsageProjectionInTransaction(tx, run.id);
         return persisted;
       })
@@ -729,6 +737,7 @@ async function recordRequestUsage(
             run.id,
             inputDelta + outputDelta,
             Boolean(historicalBrokerReceipt),
+            record.id,
           );
         }
         if (
@@ -805,12 +814,14 @@ async function updateUsageBudget(
   runId: string,
   tokens: number,
   retainedPriorAttempt = false,
+  usageRecordId?: string,
 ) {
   if (!delegationId) {
     await tx.delegationRoot.updateMany({
       where: { rootTaskId },
       data: { usedTokens: { increment: tokens } },
     });
+    await noteLateSettlementUsage(tx, rootTaskId, usageRecordId, tokens);
     return;
   }
   const current = await tx.delegation.findUniqueOrThrow({ where: { id: delegationId } });
@@ -847,5 +858,25 @@ async function updateUsageBudget(
         decrement: active ? Math.min(tokens, Math.max(0, attemptLimit - priorAttemptTokens)) : 0,
       },
     },
+  });
+  await noteLateSettlementUsage(tx, rootTaskId, usageRecordId, tokens);
+}
+
+/**
+ * Usage that settles after the owner's acceptance stays recorded against the root's
+ * ledger, and is flagged on the goal's settlement marker as a visible discrepancy.
+ * The accepted result itself never changes.
+ */
+async function noteLateSettlementUsage(
+  tx: Prisma.TransactionClient,
+  rootTaskId: string,
+  usageRecordId: string | undefined,
+  tokens: number,
+) {
+  if (!usageRecordId || tokens <= 0) return;
+  const settlement = await tx.goalSettlement.findFirst({ where: { rootTaskId } });
+  if (!settlement) return;
+  await tx.goalSettlementDiscrepancy.create({
+    data: { settlementId: settlement.id, usageRecordId, tokens },
   });
 }

@@ -1251,6 +1251,26 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     });
   });
 
+  it("refuses to claim quiet peer work for a frozen goal", async () => {
+    const f = await fixture("compatible");
+    const { id } = await createQuietDelivery(f);
+    await prisma.teamGoal.update({
+      where: { id: f.goal.id },
+      data: { status: "completed" },
+    });
+    const claimedIds = await claimQuietBotMessages(prisma, {
+      runId: f.coordinatorRun.id,
+      leaseOwner: "fixture-active",
+      leaseFence: 1,
+      deliveryIds: [id],
+    });
+    expect(claimedIds).toEqual([]);
+    expect(await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id } })).toMatchObject({
+      quietClaimRunId: null,
+      state: "delivered",
+    });
+  });
+
   it("keeps a claimed quiet delivery stable while context assembly crosses expiry", async () => {
     const f = await fixture("compatible");
     const { id } = await createQuietDelivery(f);
