@@ -1,4 +1,6 @@
 import { EventEmitter } from "node:events";
+import { receiveFrames } from "@ardurbot/host-runtime/bridge-wire";
+import { TERMINAL_CLEANUP_DEADLINE_MS } from "@ardurbot/host-runtime/terminal-cleanup";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -58,6 +60,7 @@ afterEach(() => {
   vi.clearAllTimers();
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 const registrations = [
@@ -188,6 +191,48 @@ it("waits for terminal tree cleanup before exiting on restart", async () => {
   await vi.advanceTimersByTimeAsync(0);
   expect(mocks.process.exit).toHaveBeenCalledExactlyOnceWith(0);
 });
+
+it("exits at the cleanup deadline when terminal tree cleanup never settles", async () => {
+  await connect();
+  mocks.close.mockReturnValue(new Promise<void>(() => {}));
+  processEvents.emit("message", { type: "stop" });
+  await vi.advanceTimersByTimeAsync(TERMINAL_CLEANUP_DEADLINE_MS - 1);
+  expect(mocks.process.exit).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(1);
+  expect(mocks.process.exit).toHaveBeenCalledExactlyOnceWith(0);
+});
+
+it("stays silent on rejected cleanup and still keeps the minimum shutdown grace", async () => {
+  const report = vi.spyOn(console, "error").mockImplementation(() => {});
+  await connect();
+  mocks.close.mockRejectedValue(new Error("private cleanup details"));
+  processEvents.emit("message", { type: "stop" });
+  await vi.advanceTimersByTimeAsync(1499);
+  expect(mocks.process.exit).not.toHaveBeenCalled();
+  expect(report).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(1);
+  expect(mocks.process.exit).toHaveBeenCalledExactlyOnceWith(0);
+});
+
+it.each(["stuck", "rejected", "settled"])(
+  "reconnects after %s terminal cleanup with the existing retry delay",
+  async (result) => {
+    const report = vi.spyOn(console, "error").mockImplementation(() => {});
+    await connect();
+    if (result === "stuck") mocks.close.mockReturnValue(new Promise<void>(() => {}));
+    else if (result === "rejected") mocks.close.mockRejectedValue(new Error("private details"));
+    const disconnected = vi.mocked(receiveFrames).mock.calls[0]![2];
+    disconnected();
+    mocks.read.mockResolvedValue(Response.json(registrations));
+    const wait = result === "stuck" ? TERMINAL_CLEANUP_DEADLINE_MS : 0;
+    await vi.advanceTimersByTimeAsync(wait + 499);
+    expect(mocks.sockets).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(mocks.sockets).toHaveLength(2);
+    if (result === "rejected")
+      expect(report).not.toHaveBeenCalled();
+  },
+);
 
 it("accepts guardrail paths and ports and hands them to the host agent", async () => {
   mocks.read.mockResolvedValueOnce(Response.json(registrations));

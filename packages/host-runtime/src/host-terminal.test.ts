@@ -6,6 +6,7 @@ import { TERMINAL_FRAME_BYTES } from "@ardurbot/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HostTerminalProcess } from "./host-terminal.js";
 import { HostTerminalProvider } from "./host-terminal.js";
+import { TERMINAL_CLEANUP_DEADLINE_MS } from "./terminal-cleanup.js";
 
 function fakeProcess() {
   let data: (bytes: Uint8Array) => void = () => {};
@@ -39,6 +40,7 @@ beforeEach(async () => {
 afterEach(async () => {
   for (const provider of providers.splice(0)) await provider.closeAll();
   vi.useRealTimers();
+  vi.restoreAllMocks();
   await rm(root, { recursive: true, force: true });
 });
 function fixture() {
@@ -238,10 +240,123 @@ describe("host terminal process boundary", () => {
     expect(f.spawn).not.toHaveBeenCalled();
   });
   it("does not release a session or admit another while tree cleanup fails", async () => {
+    const report = vi.spyOn(console, "error").mockImplementation(() => {});
     const f = fixture();
     const opened = await f.provider.open(f.computer, size, f.context);
     f.processes[0]!.killTree.mockRejectedValueOnce(new Error("cleanup failed"));
     await expect(f.provider.close(opened.id, "close")).rejects.toThrow("cleanup failed");
+    expect(report).toHaveBeenCalledExactlyOnceWith(
+      "Terminal cleanup failed; remaining sessions: 1.",
+    );
+    await expect(f.provider.write(opened.id, Uint8Array.of(1))).rejects.toThrow();
+    await expect(f.provider.resize(opened.id, 80, 24)).rejects.toThrow();
+    expect(() => f.provider.output(opened.id)).toThrow();
+    await expect(f.provider.open(f.computer, size, f.context)).rejects.toThrow();
+    await f.provider.close(opened.id, "retry");
+    expect(f.processes[0]!.killTree).toHaveBeenCalledTimes(2);
+  });
+  it.each(["close", "disconnect", "revoke"])(
+    "bounds %s when a process tree never settles and retains closing sessions",
+    async (reason) => {
+      vi.useFakeTimers();
+      const report = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const f = fixture();
+      const opened = await f.provider.open(f.computer, size, f.context);
+      let killed!: () => void;
+      f.processes[0]!.killTree.mockReturnValue(
+        new Promise<void>((resolve) => {
+          killed = resolve;
+        }),
+      );
+      let finished = false;
+      const cleanup =
+        reason === "close"
+          ? f.provider.close(opened.id, reason)
+          : reason === "disconnect"
+            ? f.provider.closeAll()
+            : f.provider.revoke(f.computer, f.context.leaseId, f.context);
+      void cleanup.then(() => {
+        finished = true;
+      });
+      await vi.advanceTimersByTimeAsync(TERMINAL_CLEANUP_DEADLINE_MS - 1);
+      expect(finished).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(finished).toBe(true);
+      expect(report).toHaveBeenCalledExactlyOnceWith(
+        "Terminal cleanup timed out; remaining sessions: 1.",
+      );
+      await expect(f.provider.write(opened.id, Uint8Array.of(1))).rejects.toThrow();
+      await expect(f.provider.resize(opened.id, 80, 24)).rejects.toThrow();
+      expect(() => f.provider.output(opened.id)).toThrow();
+      await expect(f.provider.open(f.computer, size, f.context)).rejects.toThrow();
+      killed();
+      await cleanup;
+      await f.provider.close(opened.id, "finished");
+      expect(f.processes[0]!.killTree).toHaveBeenCalledOnce();
+    },
+  );
+  it("uses one deadline across a pending spawn and its late tree cleanup", async () => {
+    vi.useFakeTimers();
+    const report = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const f = fixture();
+    const process = fakeProcess();
+    let spawned!: (process: HostTerminalProcess) => void;
+    let killed!: () => void;
+    f.spawn.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          spawned = resolve;
+        }),
+    );
+    process.killTree.mockReturnValue(
+      new Promise<void>((resolve) => {
+        killed = resolve;
+      }),
+    );
+    const opening = f.provider.open(f.computer, size, f.context);
+    const unavailable = expect(opening).rejects.toThrow("unavailable");
+    await vi.waitFor(() => expect(f.spawn).toHaveBeenCalledOnce());
+    let finished = false;
+    const cleanup = f.provider.closeAll().then(() => {
+      finished = true;
+    });
+    await vi.advanceTimersByTimeAsync(TERMINAL_CLEANUP_DEADLINE_MS - 1000);
+    spawned(process);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(process.killTree).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(999);
+    expect(finished).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(finished).toBe(true);
+    expect(report).toHaveBeenCalledExactlyOnceWith(
+      "Terminal cleanup timed out; remaining sessions: 1.",
+    );
+    killed();
+    await unavailable;
+    await cleanup;
+    await expect(f.provider.open(f.computer, size, f.context)).rejects.toThrow();
+  });
+  it("reports a kill failure after the deadline and keeps the session unusable", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const report = vi.spyOn(console, "error").mockImplementation(() => {});
+    const f = fixture();
+    const opened = await f.provider.open(f.computer, size, f.context);
+    let failed!: (error: Error) => void;
+    f.processes[0]!.killTree.mockReturnValueOnce(
+      new Promise<void>((_resolve, reject) => {
+        failed = reject;
+      }),
+    );
+    const cleanup = f.provider.close(opened.id, "close");
+    await vi.advanceTimersByTimeAsync(TERMINAL_CLEANUP_DEADLINE_MS);
+    await cleanup;
+    failed(new Error("private process details"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(report).toHaveBeenCalledExactlyOnceWith(
+      "Terminal cleanup failed; remaining sessions: 1.",
+    );
+    await expect(f.provider.write(opened.id, Uint8Array.of(1))).rejects.toThrow();
     await expect(f.provider.open(f.computer, size, f.context)).rejects.toThrow();
     await f.provider.close(opened.id, "retry");
     expect(f.processes[0]!.killTree).toHaveBeenCalledTimes(2);

@@ -18,6 +18,7 @@ import type { HostGuardrailConfig } from "./host-guardrails.js";
 import { isGuardedPath, resolveGuardrailPaths } from "./host-guardrails.js";
 import { confinedHostCwd } from "./host-policy.js";
 import { RuntimeQueue } from "./runtimes/native-process.js";
+import { waitForTerminalCleanup } from "./terminal-cleanup.js";
 
 export interface HostTerminalProcess {
   write(bytes: Uint8Array): void | Promise<void>;
@@ -221,22 +222,36 @@ export class HostTerminalProvider implements TerminalProvider {
     return this.session(id).queue;
   }
   async close(id: string, _reason: string) {
+    await this.waitForCleanup(this.teardown(id));
+  }
+  private teardown(id: string) {
     const session = this.sessions.get(id);
-    if (!session) return;
+    if (!session) return Promise.resolve();
     session.closing = true;
     clearTimeout(session.timer);
     session.teardown ??= Promise.resolve().then(async () => {
-      await session.process.killTree();
-      for (const dispose of session.dispose) dispose();
-      session.queue.end();
-      this.sessions.delete(id);
+      try {
+        await session.process.killTree();
+        for (const dispose of session.dispose) dispose();
+        session.queue.end();
+        this.sessions.delete(id);
+      } catch (error) {
+        session.teardown = undefined;
+        console.error(`Terminal cleanup failed; remaining sessions: ${this.sessions.size}.`);
+        throw error;
+      }
     });
-    try {
-      await session.teardown;
-    } catch (error) {
-      session.teardown = undefined;
-      throw error;
-    }
+    return session.teardown;
+  }
+  private waitForCleanup(cleanup: Promise<unknown>) {
+    return waitForTerminalCleanup(cleanup, () => {
+      console.warn(`Terminal cleanup timed out; remaining sessions: ${this.sessions.size}.`);
+    });
+  }
+  private async teardownAll(ids: string[]) {
+    const results = await Promise.allSettled(ids.map((id) => this.teardown(id)));
+    const failure = results.find((result) => result.status === "rejected");
+    if (failure?.status === "rejected") throw failure.reason;
   }
   async revoke(computer: ComputerRef, leaseId: string, context: AdapterContext) {
     if (leaseId !== "*")
@@ -254,16 +269,22 @@ export class HostTerminalProvider implements TerminalProvider {
           Date.now() + 30 * 60_000,
         );
     for (const admission of pending) admission.cancelled = true;
-    await Promise.all(pending.map((s) => s.done.catch(() => undefined)));
-    await Promise.all(
-      [...this.sessions].filter(([, s]) => matches(s)).map(([id]) => this.close(id, "revoked")),
+    await this.waitForCleanup(
+      Promise.all([
+        this.teardownAll([...this.sessions].filter(([, s]) => matches(s)).map(([id]) => id)),
+        ...pending.map((s) => s.done.catch(() => undefined)),
+      ]),
     );
   }
   async closeAll() {
     this.stopped = true;
     for (const admission of this.pending) admission.cancelled = true;
-    await Promise.all([...this.pending].map((s) => s.done.catch(() => undefined)));
-    await Promise.all([...this.sessions.keys()].map((id) => this.close(id, "disconnected")));
+    await this.waitForCleanup(
+      Promise.all([
+        this.teardownAll([...this.sessions.keys()]),
+        ...[...this.pending].map((s) => s.done.catch(() => undefined)),
+      ]),
+    );
   }
   async call(
     computer: ComputerRef,
