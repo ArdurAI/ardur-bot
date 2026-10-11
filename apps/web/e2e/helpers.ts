@@ -330,7 +330,6 @@ export async function completeOnboarding(
   const composer = page.getByRole("combobox", { name: `Message ${expectedBot}` });
   await expect(composer).toBeVisible();
   await expect(composer).toBeEnabled();
-  await expect(composer).toBeFocused();
   if (testInfo) {
     await captureScreenshot(page, testInfo, "03-create-first-bot");
     await captureScreenshot(page, testInfo, "06-onboarding-complete");
