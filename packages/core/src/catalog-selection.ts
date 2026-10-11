@@ -1,5 +1,6 @@
 import type { ModelCatalogEntry, ModelCredential, RuntimeKind } from "@ardurbot/contracts";
 import { hermesConnectionRefusal } from "./hermes-connections.js";
+import { unavailableSubscriptionModel } from "./model-options.js";
 
 export type ModelConnectionChoice = {
   key: string;
@@ -21,7 +22,7 @@ function modelKey(entry: ModelCatalogEntry): string {
   if (entry.placeholder || ["ollama", "local", "openai-compatible"].includes(entry.provider)) {
     return JSON.stringify([entry.provider, entry.id]);
   }
-  return entry.id.slice(entry.id.lastIndexOf("/") + 1);
+  return entry.catalogId ?? entry.id;
 }
 
 /** Only public connection metadata is needed; a cancelled sign-in supplies no credential. */
@@ -109,4 +110,25 @@ export function searchCatalogModels(models: readonly CatalogModelChoice[], query
   return models.filter((model) =>
     words.every((word) => model.searchText.toLowerCase().includes(word)),
   );
+}
+
+/** Keep plan-limited connections behind an explicit opt-in on every surface. */
+export function availableCatalogModels(
+  models: readonly CatalogModelChoice[],
+  showAll: boolean,
+): CatalogModelChoice[] {
+  if (showAll) return [...models];
+  return models
+    .map((model) => {
+      const connections = model.connections.filter(
+        (choice) =>
+          !unavailableSubscriptionModel([choice.entry], choice.entry.provider, choice.entry.id),
+      );
+      return {
+        ...model,
+        connections,
+        ready: connections.some((choice) => choice.requirement === "ready"),
+      };
+    })
+    .filter((model) => model.connections.length > 0);
 }

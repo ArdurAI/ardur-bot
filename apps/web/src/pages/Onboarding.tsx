@@ -725,7 +725,11 @@ export function OnboardingPage() {
                   </Button>
                 </div>
               </>
-            ) : null}
+            ) : (
+              <Button className="mt-6" disabled>
+                <Trans>Continue</Trans>
+              </Button>
+            )}
           </div>
         ) : null}
         {step === "integrations" ? (

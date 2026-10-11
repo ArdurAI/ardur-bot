@@ -1,8 +1,8 @@
 import type { ModelCatalogEntry, ModelCredential } from "@ardurbot/contracts";
 import type { ModelConnectionChoice } from "@ardurbot/core";
-import { catalogModelChoices, searchCatalogModels } from "@ardurbot/core";
+import { availableCatalogModels, catalogModelChoices, searchCatalogModels } from "@ardurbot/core";
 import { useMemo, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Pressable, Switch, Text, TextInput, View } from "react-native";
 import { useI18n } from "../lib/i18n";
 import { presentMessageActionSheet } from "../lib/message-action-sheet";
 import { native, useMobileTokens, useResolvedAppearance } from "../lib/native";
@@ -29,7 +29,16 @@ export function CatalogModelPicker({
   const colorScheme = useResolvedAppearance();
   const [query, setQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(40);
-  const models = useMemo(() => catalogModelChoices(catalog, credentials), [catalog, credentials]);
+  const [showAll, setShowAll] = useState(false);
+  const allModels = useMemo(
+    () => catalogModelChoices(catalog, credentials),
+    [catalog, credentials],
+  );
+  const models = useMemo(() => availableCatalogModels(allModels, showAll), [allModels, showAll]);
+  const hasLimitedModels = allModels.some(
+    (model) =>
+      availableCatalogModels([model], false)[0]?.connections.length !== model.connections.length,
+  );
   const visible = searchCatalogModels(models, query);
   function connectionLabel(choice: ModelConnectionChoice) {
     const name = choice.credential?.label ?? choice.entry.providerName ?? choice.entry.provider;
@@ -60,6 +69,17 @@ export function CatalogModelPicker({
         autoCorrect={false}
         style={{ color: native.label, backgroundColor: native.fill, padding: 12, borderRadius: 12 }}
       />
+      {hasLimitedModels ? (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Switch
+            accessibilityLabel={t("Show all models")}
+            value={showAll}
+            onValueChange={setShowAll}
+            disabled={disabled}
+          />
+          <Text style={{ color: tokens.mutedForeground }}>{t("Show all models")}</Text>
+        </View>
+      ) : null}
       {visible.slice(0, visibleCount).map((model) => (
         <Pressable
           key={model.key}

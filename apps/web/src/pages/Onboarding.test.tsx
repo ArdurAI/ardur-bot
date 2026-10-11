@@ -50,6 +50,7 @@ vi.mock("@lingui/react/macro", () => ({
       parts.reduce((text, part, i) => text + part + (values[i] ?? ""), ""),
   }),
   Trans: ({ children }: { children: ReactNode }) => children,
+  Plural: ({ value }: { value: number }) => `${value} models`,
 }));
 vi.mock("@ardurbot/ui-web", () => ({
   Button: ({ variant: _variant, ...props }: ComponentProps<"button"> & { variant?: string }) => (
@@ -341,7 +342,14 @@ it("waits for an explicit connection choice when two providers serve the model",
   api.me.mockResolvedValue({ needsModel: true });
   api.list.mockResolvedValue([
     { provider: "one", id: "model", label: "Shared", billing: "", auth: "api-key" },
-    { provider: "two", id: "one/model", label: "Shared", billing: "", auth: "api-key" },
+    {
+      provider: "two",
+      id: "one/model",
+      catalogId: "model",
+      label: "Shared",
+      billing: "",
+      auth: "api-key",
+    },
   ]);
   api.credentials.mockResolvedValue([
     { id: "saved", provider: "two", label: "Saved", hasKey: true, isDefault: false },
@@ -416,5 +424,18 @@ it("keeps setup on the selected model when default validation fails", async () =
   expect(container.querySelector('[role="alert"]')?.textContent).toBe(
     "This connection cannot serve that model.",
   );
+  expect(api.create).not.toHaveBeenCalled();
+});
+
+it("keeps Continue visible and disabled when the loaded catalog is empty", async () => {
+  api.me.mockResolvedValue({ needsModel: true });
+  await act(async () => root.render(<OnboardingPage />));
+  await act(async () => await vi.dynamicImportSettled());
+  const button = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Continue",
+  );
+  expect(button).toBeDefined();
+  expect(button?.disabled).toBe(true);
+  expect(api.connect).not.toHaveBeenCalled();
   expect(api.create).not.toHaveBeenCalled();
 });

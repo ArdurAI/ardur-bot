@@ -23,7 +23,7 @@ const connection = (
 describe("catalogModelChoices", () => {
   it("groups a model across providers without replacing their exact ids", () => {
     const choices = catalogModelChoices(
-      [model("first"), model("gateway", "first/shared-model")],
+      [model("first"), model("gateway", "first/shared-model", { catalogId: "shared-model" })],
       [connection("saved")],
     );
     expect(choices).toHaveLength(1);
@@ -131,4 +131,33 @@ describe("catalogModelChoices", () => {
       )[0]?.ready,
     ).toBe(false);
   });
+});
+
+it("preserves full namespaces when unrelated model ids share a suffix", () => {
+  expect(
+    catalogModelChoices(
+      [
+        model("gateway", "vendor-a/foo/bar"),
+        model("gateway", "vendor-b/bar"),
+        model("vendor-b", "bar"),
+      ],
+      [],
+    ),
+  ).toHaveLength(3);
+});
+it("uses explicit catalog identity across different provider id formats", () => {
+  const choices = catalogModelChoices(
+    [
+      model("anthropic", "claude-fable-5", { catalogId: "claude-fable-5" }),
+      model("amazon-bedrock", "anthropic.claude-fable-5", { catalogId: "claude-fable-5" }),
+      model("gateway", "anthropic/claude-fable-5", { catalogId: "claude-fable-5" }),
+    ],
+    [],
+  );
+  expect(choices).toHaveLength(1);
+  expect(choices[0]?.connections.map((choice) => choice.entry.id)).toEqual([
+    "claude-fable-5",
+    "anthropic.claude-fable-5",
+    "anthropic/claude-fable-5",
+  ]);
 });

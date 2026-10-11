@@ -10440,3 +10440,7 @@ msgstr "Dein Team aus jederzeit verfügbaren Agents<0/>für echte Aufgaben."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: src/components/CatalogModelPicker.tsx
+msgid "{0, plural, one {# model} other {# models}}"
+msgstr "{0, plural, one {# Modell} other {# Modelle}}"

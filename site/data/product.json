@@ -1094,7 +1094,7 @@
         "id": "models",
         "aliases": [],
         "title": "Models",
-        "summary": "Search models across connections, reuse a ready connection, or connect the selected model.",
+        "summary": "Search one entry per model, choose its connection, reuse a ready connection, or enter a custom endpoint model id. Show all models reveals plan-limited choices.",
         "area": "connections-and-computers",
         "order": 10,
         "status": "published",

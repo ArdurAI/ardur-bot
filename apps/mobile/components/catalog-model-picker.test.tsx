@@ -12,6 +12,22 @@ vi.mock("../lib/native", () => ({
   useResolvedAppearance: () => "light",
 }));
 vi.mock("react-native", () => ({
+  Switch: ({
+    value,
+    onValueChange,
+    accessibilityLabel,
+  }: {
+    value: boolean;
+    onValueChange: (value: boolean) => void;
+    accessibilityLabel: string;
+  }) => (
+    <input
+      type="checkbox"
+      aria-label={accessibilityLabel}
+      checked={value}
+      onChange={(event) => onValueChange(event.target.checked)}
+    />
+  ),
   Text: ({ children }: { children?: ReactNode }) => <span>{children}</span>,
   View: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   TextInput: ({
@@ -72,6 +88,7 @@ const models = [
   {
     provider: "second",
     id: "first/shared",
+    catalogId: "shared",
     label: "Shared",
     billing: "",
     auth: "oauth" as const,
@@ -139,4 +156,31 @@ it("finds and selects a local model without any hosted credential", async () => 
     }),
   );
   expect(sheet).not.toHaveBeenCalled();
+});
+
+it("reveals plan-limited models only after the native Show all models switch", async () => {
+  const onChange = vi.fn();
+  await act(async () =>
+    root.render(
+      <CatalogModelPicker
+        {...props}
+        catalog={[
+          ...models,
+          {
+            provider: "openai-codex",
+            id: "gpt-5.3-codex-spark",
+            label: "Spark",
+            billing: "",
+            auth: "oauth",
+          },
+        ]}
+        onChange={onChange}
+      />,
+    ),
+  );
+  expect(container.textContent).not.toContain("Spark");
+  const toggle = container.querySelector<HTMLInputElement>('input[aria-label="Show all models"]')!;
+  expect(toggle).not.toBeNull();
+  await act(async () => toggle.click());
+  expect(container.textContent).toContain("Spark");
 });

@@ -272,7 +272,7 @@ export function ModelSettingsOverlay({
   function chooseModel(choice: ModelConnectionChoice | null) {
     chooseProvider(choice?.entry.provider ?? "", choice?.credential);
     setPickedEntry(choice?.entry ?? null);
-    setEditingConnection(false);
+    setEditingConnection(Boolean(choice?.entry.placeholder));
     if (!choice) return;
     setModelId(choice.entry.placeholder ? "" : choice.entry.id);
     setCredentialId(choice.credential?.id);
@@ -489,6 +489,7 @@ export function ModelSettingsOverlay({
           ) : selected ? (
             <>
               <div className="block text-[13.5px] text-muted-foreground">
+                <div className="mb-2">{selected.providerName ?? selected.provider}</div>
                 {isOpenAiCompatible ? (
                   <>
                     <label className="block" htmlFor="model-base-url">

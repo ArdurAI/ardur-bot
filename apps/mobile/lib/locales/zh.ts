@@ -1525,4 +1525,5 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Connect that model server first.": "请先连接此模型的服务器。",
   "This connection cannot serve that model.": "此连接无法提供此模型。",
   "Unknown model for that provider": "此提供商的未知模型",
+  "Show all models": "显示所有模型",
 };

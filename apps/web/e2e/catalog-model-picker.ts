@@ -1,8 +1,12 @@
 import type { ModelCatalogEntry, ModelCredential } from "@ardurbot/contracts";
-import { catalogModelChoices, recommendedDefaultModelId } from "@ardurbot/core";
+import {
+  availableCatalogModels,
+  catalogModelChoices,
+  recommendedDefaultModelId,
+  unavailableSubscriptionModel,
+} from "@ardurbot/core";
 import type { Page } from "@playwright/test";
 import { expect } from "@playwright/test";
-import { rpc } from "./helpers";
 
 /** Choose a model, then its explicit connection; do not depend on a provider sidebar. */
 export async function selectCatalogModel(
@@ -11,10 +15,21 @@ export async function selectCatalogModel(
   modelId?: string,
   credentialId?: string,
 ) {
-  const [catalog, credentials] = await Promise.all([
-    rpc<ModelCatalogEntry[]>(page, "models/list", {}),
-    rpc<ModelCredential[]>(page, "models/credentials", {}),
-  ]);
+  // Browser fetch shares the UI's session and route fixtures. APIRequestContext
+  // bypasses page routes and would accidentally call the real server in docs.
+  const [catalog, credentials] = (await page.evaluate(async () => {
+    return Promise.all(
+      ["models/list", "models/credentials"].map(async (procedure) => {
+        const response = await fetch(`/rpc/${procedure}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ json: {} }),
+        });
+        if (!response.ok) throw new Error(`${procedure} ${response.status()}`);
+        return (await response.json()).json;
+      }),
+    );
+  })) as [ModelCatalogEntry[], ModelCredential[]];
   const providerModels = catalog.filter((entry) => entry.provider === provider);
   const id =
     modelId ??
@@ -23,7 +38,10 @@ export async function selectCatalogModel(
       provider,
       providerModels.map((entry) => entry.id),
     );
-  const models = catalogModelChoices(catalog, credentials);
+  const showAllToggle = page.getByRole("checkbox", { name: "Show all models", exact: true });
+  if (unavailableSubscriptionModel(catalog, provider, id)) await showAllToggle.check();
+  const showAll = (await showAllToggle.isVisible()) && (await showAllToggle.isChecked());
+  const models = availableCatalogModels(catalogModelChoices(catalog, credentials), showAll);
   const model = models.find((model) =>
     model.connections.some(
       (choice) => choice.entry.provider === provider && choice.entry.id === id,

@@ -444,6 +444,9 @@ it("selects the recommendation on load and passes it to subscription sign-in", a
 
 it("lists models across the catalog and keeps the subscription plan hint", async () => {
   await render();
+  await act(async () =>
+    container.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click(),
+  );
   await act(async () => picker().click());
   expect(
     [...container.querySelectorAll('[role="option"]')].map(
@@ -497,6 +500,9 @@ it.each(["api-key", "both"] as const)("keeps Spark available for %s auth", async
 
 it("selects a subscription model with a plan hint without a provider step", async () => {
   await render();
+  await act(async () =>
+    container.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click(),
+  );
   await pickModel("GPT-5.3 Codex Spark");
   expect(picker().textContent).toBe("GPT-5.3 Codex Spark");
   await act(async () => button("Sign in").click());
@@ -508,6 +514,9 @@ it("selects a subscription model with a plan hint without a provider step", asyn
 it("can choose a model when its whole provider catalog has a plan hint", async () => {
   api.list.mockResolvedValue([catalog[0]]);
   await render();
+  await act(async () =>
+    container.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click(),
+  );
   await pickModel("GPT-5.3 Codex Spark");
   expect(picker().textContent).toBe("GPT-5.3 Codex Spark");
 });
@@ -528,6 +537,7 @@ it("opens the provider requested by a pin failure instead of the space default",
     root.render(<ModelSettingsOverlay embedded initialProvider="xai" onClose={() => undefined} />),
   );
   expect(picker().textContent).toBe("Grok 4.6");
+  expect(container.textContent).toContain("xAI");
 });
 
 it.each([
@@ -656,4 +666,44 @@ it("reuses the chosen connection when several saved connections serve a model", 
   });
   expect(api.signIn).not.toHaveBeenCalled();
   expect(api.connect).not.toHaveBeenCalled();
+});
+
+it("keeps custom model entry selected while entering a free-form endpoint id", async () => {
+  api.list.mockResolvedValue([
+    {
+      provider: "openai-compatible",
+      providerName: "OpenAI-compatible",
+      id: "custom",
+      label: "Custom model id",
+      placeholder: true,
+      billing: "",
+      auth: "api-key",
+    },
+  ]);
+  api.me.mockResolvedValue({ defaultProvider: "openai-compatible" });
+  await render();
+  await pickModel("Custom model id");
+  expect(picker().textContent).toBe("Custom model id");
+  const input = container.querySelector<HTMLInputElement>('input[aria-label="Model id"]')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+      input,
+      "vendor/free-form",
+    );
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  expect(picker().textContent).toBe("Custom model id");
+});
+it("hides plan-limited models until Show all models is requested", async () => {
+  await render();
+  await act(async () => picker().click());
+  expect(container.querySelector('[role="listbox"]')?.textContent).not.toContain(
+    "GPT-5.3 Codex Spark",
+  );
+  const toggle = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
+  expect(toggle).not.toBeNull();
+  await act(async () => toggle!.click());
+  await act(async () => picker().click());
+  expect(container.querySelector('[role="listbox"]')?.textContent).toContain("GPT-5.3 Codex Spark");
+  expect(container.textContent).toContain("May not be available on your plan");
 });

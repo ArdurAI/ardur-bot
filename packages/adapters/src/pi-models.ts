@@ -11,6 +11,7 @@ import {
 export type PiCatalogAuth = "api-key" | "oauth" | "both";
 
 export type PiCatalogEntry = {
+  catalogId?: string;
   provider: string;
   providerName: string;
   id: string;
@@ -96,6 +97,23 @@ function buildPiCatalog(): PiCatalogEntry[] {
     });
   }
 
+  const exactModels = new Map(
+    entries.map((entry) => [JSON.stringify([entry.provider, entry.id]), entry]),
+  );
+  for (const entry of entries) {
+    if (entry.placeholder || entry.provider === "local") continue;
+    const separator = entry.provider === "amazon-bedrock" ? "." : "/";
+    const split = entry.id.indexOf(separator);
+    if (split < 0) continue;
+    const original = exactModels.get(
+      JSON.stringify([entry.id.slice(0, split), entry.id.slice(split + 1)]),
+    );
+    // Only an exact upstream id and matching label establish an alias. Never
+    // discard namespaces or Bedrock versions/regions just because names match.
+    if (original && original.label === entry.label && !original.placeholder) {
+      entry.catalogId = original.id;
+    }
+  }
   return entries;
 }
 

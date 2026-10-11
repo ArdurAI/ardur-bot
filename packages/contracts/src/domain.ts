@@ -1295,6 +1295,8 @@ export const SpaceMemoryConfigSchema = z.object({
 export type SpaceMemoryConfig = z.infer<typeof SpaceMemoryConfigSchema>;
 
 export const ModelCatalogEntrySchema = z.object({
+  /** Shared catalog identity for known aliases; connection ids remain exact. */
+  catalogId: z.string().optional(),
   provider: z.string(),
   providerName: z.string().optional(),
   id: z.string(),

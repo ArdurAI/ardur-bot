@@ -10440,3 +10440,6 @@ msgstr "Ваша команда постоянно работающих аген
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+msgid "{0, plural, one {# model} other {# models}}"
+msgstr "{0, plural, one {# модель} few {# модели} many {# моделей} other {# модели}}"

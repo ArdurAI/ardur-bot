@@ -1,3 +1,4 @@
+import { catalogModelChoices } from "@ardurbot/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { catalogModelLabel, listPiCatalog, scriptedCatalogEntry } from "./pi-models.js";
 
@@ -142,4 +143,40 @@ describe("catalogModelLabel", () => {
   ])("labels %s / %s as %s", (id, name, expected) => {
     expect(catalogModelLabel(id, name, providerModelIds)).toBe(expected);
   });
+});
+
+it("declares exact hosted aliases without discarding arbitrary namespaces", () => {
+  const catalog = listPiCatalog();
+  for (const [provider, id, catalogId] of [
+    ["amazon-bedrock", "anthropic.claude-fable-5", "claude-fable-5"],
+    ["amazon-bedrock", "openai.gpt-6-astra", "gpt-6-astra"],
+    ["vercel-ai-gateway", "anthropic/claude-fable-5", "claude-fable-5"],
+  ]) {
+    expect(catalog.find((entry) => entry.provider === provider && entry.id === id)).toMatchObject({
+      catalogId,
+    });
+  }
+  for (const entry of catalog.filter((entry) => entry.catalogId)) {
+    const original = catalog.find(
+      (candidate) =>
+        candidate.id === entry.catalogId &&
+        candidate.label === entry.label &&
+        (entry.id === `${candidate.provider}/${candidate.id}` ||
+          (entry.provider === "amazon-bedrock" &&
+            entry.id === `${candidate.provider}.${candidate.id}`)),
+    );
+    expect(original).toBeDefined();
+  }
+});
+
+it("offers one entry for each real multi-provider model and preserves its connections", () => {
+  const models = catalogModelChoices(listPiCatalog(), []);
+  for (const label of ["Claude Fable 5", "GPT-6 Astra"]) {
+    const choices = models.filter((model) => model.label === label);
+    expect(choices).toHaveLength(1);
+    expect(choices[0]?.connections.length).toBeGreaterThan(1);
+    expect(
+      choices[0]?.connections.some((choice) => choice.entry.provider === "amazon-bedrock"),
+    ).toBe(true);
+  }
 });

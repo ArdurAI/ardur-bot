@@ -1592,4 +1592,5 @@ export const RU_MESSAGES: Record<string, string> = {
   "Connect that model server first.": "Сначала подключите сервер этой модели.",
   "This connection cannot serve that model.": "Это подключение не поддерживает эту модель.",
   "Unknown model for that provider": "Неизвестная модель для этого провайдера",
+  "Show all models": "Показать все модели",
 };

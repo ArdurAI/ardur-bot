@@ -9,6 +9,7 @@ it("translates the phone's model search and connection choices", () => {
       "Connection settings",
       "Local server",
       "Search models",
+      "Show all models",
       "No matching models",
       "Ready",
       "Connect that model first.",

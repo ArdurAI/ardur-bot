@@ -1,13 +1,14 @@
 import type { ModelCatalogEntry, ModelCredential } from "@ardurbot/contracts";
 import type { CatalogModelChoice, ModelConnectionChoice } from "@ardurbot/core";
 import {
+  availableCatalogModels,
   catalogModelChoices,
   searchCatalogModels,
   unavailableSubscriptionModel,
 } from "@ardurbot/core";
-import { NativeSelect, NativeSelectOption } from "@ardurbot/ui-web";
+import { Input, NativeSelect, NativeSelectOption } from "@ardurbot/ui-web";
 import { selectableRowClasses } from "@ardurbot/ui-web/lib/state-classes";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { Plural, Trans, useLingui } from "@lingui/react/macro";
 import { CheckIcon, ChevronDown } from "lucide-react";
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
@@ -34,16 +35,33 @@ export default function CatalogModelPicker({
   onChange: (choice: ModelConnectionChoice | null) => void;
 }) {
   const { t } = useLingui();
-  const models = useMemo(() => catalogModelChoices(catalog, credentials), [catalog, credentials]);
-  const [pendingKey, setPendingKey] = useState<string | null>(null);
-  const active = models.find((model) =>
-    model.connections.some(
-      (choice) =>
-        choice.entry.provider === provider &&
-        choice.entry.id === modelId &&
-        (!credentialId || choice.credential?.id === credentialId),
+  const showAllId = useId();
+  const [showAll, setShowAll] = useState(false);
+  const allModels = useMemo(
+    () => catalogModelChoices(catalog, credentials),
+    [catalog, credentials],
+  );
+  const hasLimitedModels = allModels.some((model) =>
+    model.connections.some((choice) =>
+      unavailableSubscriptionModel([choice.entry], choice.entry.provider, choice.entry.id),
     ),
   );
+  const models = useMemo(() => availableCatalogModels(allModels, showAll), [allModels, showAll]);
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
+  const active =
+    models.find((model) =>
+      model.connections.some(
+        (choice) =>
+          choice.entry.provider === provider &&
+          choice.entry.id === modelId &&
+          (!credentialId || choice.credential?.id === credentialId),
+      ),
+    ) ??
+    models.find((model) =>
+      model.connections.some(
+        (choice) => choice.entry.provider === provider && choice.entry.placeholder,
+      ),
+    );
   const pending = models.find((model) => model.key === pendingKey);
   return (
     <fieldset disabled={disabled} className="min-w-0 space-y-3">
@@ -62,6 +80,21 @@ export default function CatalogModelPicker({
           }
         }}
       />
+      {hasLimitedModels ? (
+        <label
+          htmlFor={showAllId}
+          className="flex items-center gap-2 text-sm text-muted-foreground"
+        >
+          <Input
+            id={showAllId}
+            type="checkbox"
+            className="size-4"
+            checked={showAll}
+            onChange={(event) => setShowAll(event.target.checked)}
+          />
+          <Trans>Show all models</Trans>
+        </label>
+      ) : null}
       {pending ? (
         <NativeSelect
           aria-label={t`Choose connection`}
@@ -289,6 +322,9 @@ function ModelListPicker({
             onKeyDown={onSearchKeyDown}
             className="w-full border-b border-border bg-transparent px-3 py-2.5 text-[13.5px] text-foreground outline-none placeholder:text-muted-foreground/80"
           />
+          <span role="status" className="sr-only">
+            <Plural value={filteredOptions.length} one="# model" other="# models" />
+          </span>
           <div
             id={listboxId}
             role="listbox"
