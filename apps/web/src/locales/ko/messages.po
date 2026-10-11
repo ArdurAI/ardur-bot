@@ -4681,11 +4681,11 @@ msgstr "알겠습니다 — 무엇이 없는지 확인하고 설치 전에 물�
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll choose a team member to file this issue in Linear."
-msgstr "Got it — I’ll choose a team member to file this issue in Linear."
+msgstr "알겠습니다 — Linear에 이 이슈를 등록할 팀원을 선택하겠습니다."
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll choose a team member to manage the GitHub repository."
-msgstr "Got it — I’ll choose a team member to manage the GitHub repository."
+msgstr "알겠습니다 — GitHub 저장소를 관리할 팀원을 선택하겠습니다."
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll choose a team member to put this in Notion."

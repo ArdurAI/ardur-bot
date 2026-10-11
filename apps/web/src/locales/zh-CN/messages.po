@@ -4681,11 +4681,11 @@ msgstr "收到 — 我会检查缺少什么，并在安装前征求同意。"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll choose a team member to file this issue in Linear."
-msgstr "Got it — I’ll choose a team member to file this issue in Linear."
+msgstr "收到 — 我会选择一位团队成员在 Linear 中提交此问题。"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll choose a team member to manage the GitHub repository."
-msgstr "Got it — I’ll choose a team member to manage the GitHub repository."
+msgstr "收到 — 我会选择一位团队成员来管理 GitHub 仓库。"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll choose a team member to put this in Notion."

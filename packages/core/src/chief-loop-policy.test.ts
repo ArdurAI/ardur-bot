@@ -240,6 +240,68 @@ describe("chief policy", () => {
       ],
     ).toBe("Got it — I’ll choose a team member to put this in Notion.");
   });
+  describe("chiefIntent app templates", () => {
+    it.each([
+      "create an issue in linear",
+      "Create an issue in Linear.",
+      "please file a ticket on linear!",
+      "open ticket on linear",
+      "file issue in linear",
+      "please open an issue on linear",
+    ])("identifies create-issue intent for Linear: %s", (text) => {
+      const intent = chiefIntent({ text, taskType: "unknown" });
+      expect(intent).toEqual({
+        key: "create-issue",
+        operation: {
+          taskType: "operations",
+          purpose: "create-issue",
+        },
+        receiptOnly: false,
+      });
+      expect(CHIEF_RECEIPT_TEMPLATES[intent.key]).toBe(
+        "Got it — I’ll choose a team member to file this issue in Linear.",
+      );
+    });
+
+    it.each([
+      "manage repository on github",
+      "Manage the repository on GitHub.",
+      "please push the code to github!",
+      "push repo to github",
+      "manage the repo on github.",
+      "push code on github",
+    ])("identifies manage-repository intent for GitHub: %s", (text) => {
+      const intent = chiefIntent({ text, taskType: "unknown" });
+      expect(intent).toEqual({
+        key: "manage-repository",
+        operation: {
+          taskType: "code-change",
+          purpose: "manage-repository",
+        },
+        receiptOnly: false,
+      });
+      expect(CHIEF_RECEIPT_TEMPLATES[intent.key]).toBe(
+        "Got it — I’ll choose a team member to manage the GitHub repository.",
+      );
+    });
+
+    it.each([
+      "create an issue in jira",
+      "file a ticket on gitlab",
+      "manage repository on bitbucket",
+      "push code to sourceforge",
+      "create issue",
+      "manage repository",
+      "please put this long document in linear",
+      `create an issue in linear ${"extra ".repeat(200)}`,
+    ])("does not match unrelated, other-service, or oversized requests: %s", (text) => {
+      const intent = chiefIntent({ text, taskType: "unknown" });
+      expect(intent.key).not.toBe("create-issue");
+      expect(intent.key).not.toBe("manage-repository");
+      expect(intent.operation.purpose).not.toBe("create-issue");
+      expect(intent.operation.purpose).not.toBe("manage-repository");
+    });
+  });
   it("reads legacy work and receipt-only without manufacturing a run", () => {
     expect(ThreadSendResultSchema.parse({ taskId: "task", runId: "run", seq: 1 })).toEqual({
       taskId: "task",

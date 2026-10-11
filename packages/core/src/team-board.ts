@@ -1,6 +1,7 @@
 import type { TeamRow } from "@ardurbot/contracts";
 import { failureCategory } from "@ardurbot/contracts";
 import { presenceFreshness } from "./bot-presence.js";
+import { CHIEF_ACTIVITY_TEXT } from "./chief-activity.js";
 export const TEAM_REFRESH_MS = 15000;
 const priority: Record<TeamRow["state"], number> = {
   "waiting-approval": 0,
@@ -54,11 +55,13 @@ export function teamRowText(
     case "blocked": {
       // A categorized reason comes from the failure-category table so the app can
       // translate it; anything else is the recorded text.
-      const reason = row.reasonCategory
-        ? t(failureCategory(row.reasonCategory).message, {
-            runtime: row.reasonRuntime ?? t("This runtime"),
-          })
-        : (row.reason ?? t("The task needs attention"));
+      const reason = row.blockerKey
+        ? t(CHIEF_ACTIVITY_TEXT[row.blockerKey])
+        : row.reasonCategory
+          ? t(failureCategory(row.reasonCategory).message, {
+              runtime: row.reasonRuntime ?? t("This runtime"),
+            })
+          : (row.reason ?? t("The task needs attention"));
       return `${t("Blocked")} — ${reason}`;
     }
     case "completed":

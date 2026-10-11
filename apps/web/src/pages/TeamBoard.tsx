@@ -414,7 +414,7 @@ export function TeamBoardRow({
   );
 }
 function TeamStatus({ row, now }: { row: TeamRow; now: number }) {
-  const { i18n } = useLingui();
+  const { i18n, t } = useLingui();
   if (
     row.state !== "blocked" &&
     row.state !== "waiting-approval" &&
@@ -451,15 +451,19 @@ function TeamStatus({ row, now }: { row: TeamRow; now: number }) {
       return (
         <Trans>
           Blocked —{" "}
-          {row.reasonCategory
-            ? i18n._({
-                ...failureCategoryMessages[row.reasonCategory],
-                values: {
-                  runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName),
-                  bot: row.botName,
-                },
-              })
-            : row.reason}
+          {row.blockerKey === "connect-linear"
+            ? t`Connect Linear or grant a team member permission to read and write.`
+            : row.blockerKey === "connect-github"
+              ? t`Connect GitHub or grant a team member permission to read and write.`
+              : row.reasonCategory
+                ? i18n._({
+                    ...failureCategoryMessages[row.reasonCategory],
+                    values: {
+                      runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName),
+                      bot: row.botName,
+                    },
+                  })
+                : row.reason}
         </Trans>
       );
     case "completed":

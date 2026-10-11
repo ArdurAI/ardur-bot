@@ -203,13 +203,16 @@ export async function teamBoard(
     const chiefPlan = chiefPlans.find((plan) => plan.sourceRunId === run?.id);
     const chiefControl = ChiefControlSchema.safeParse(chiefPlan?.control).data;
     const chiefDispatch = ChiefDispatchSchema.safeParse(chiefPlan?.dispatch).data;
-    const chiefBlocker =
-      (chiefPlan?.decision as ChiefDecision | undefined)?.kind === "needs-owner" &&
+    const chiefDecision = chiefPlan?.decision as ChiefDecision | undefined;
+    const chiefBlocked =
+      chiefDecision?.kind === "needs-owner" &&
       chiefDispatch?.state === "needs-owner" &&
       !chiefControl?.stopped &&
-      !chiefControl?.pendingReplan
-        ? chiefDispatch.reason
-        : undefined;
+      !chiefControl?.pendingReplan;
+    const chiefBlocker = chiefBlocked ? chiefDispatch?.reason : undefined;
+    const chiefBlockerKey = chiefBlocked
+      ? (chiefDispatch?.blockerKey ?? chiefDecision?.blockerKey)
+      : undefined;
     const approval = Boolean(
       run?.status === "waiting_input" && approvals.some((effect) => effect.runId === run.id),
     );
@@ -324,6 +327,7 @@ export async function teamBoard(
       ...(reasonCategory
         ? { reasonCategory: reasonCategory.category, reasonRuntime: reasonCategory.runtime }
         : {}),
+      ...(state === "blocked" && chiefBlockerKey ? { blockerKey: chiefBlockerKey } : {}),
       action:
         state === "blocked"
           ? (timelineState?.action ?? "Open conversation")

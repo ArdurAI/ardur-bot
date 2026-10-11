@@ -4681,11 +4681,11 @@ msgstr "Entendido — comprobaré qué falta y preguntaré antes de instalarlo."
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll choose a team member to file this issue in Linear."
-msgstr "Got it — I’ll choose a team member to file this issue in Linear."
+msgstr "Entendido — elegiré a un miembro del equipo para registrar este issue en Linear."
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll choose a team member to manage the GitHub repository."
-msgstr "Got it — I’ll choose a team member to manage the GitHub repository."
+msgstr "Entendido — elegiré a un miembro del equipo para gestionar el repositorio de GitHub."
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll choose a team member to put this in Notion."

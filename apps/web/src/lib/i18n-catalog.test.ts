@@ -159,6 +159,8 @@ describe("lingui catalogs", () => {
       });
       for (const message of [
         "Got it — I’ll choose a team member to put this in Notion.",
+        "Got it — I’ll choose a team member to file this issue in Linear.",
+        "Got it — I’ll choose a team member to manage the GitHub repository.",
         "Got it — I’ll check what’s missing and ask before installing it.",
         "Got it — I’ll check the request and choose the next step.",
         "Hi everyone.",

@@ -1,6 +1,7 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 import { BotAvailabilitySchema } from "./bot-presence.js";
+import { ChiefBlockerKeySchema } from "./chief-loop.js";
 import { DelegationRecordSchema, DelegationSnapshotSchema } from "./delegation.js";
 import { FailureCategoryIdSchema } from "./failure-categories.js";
 import { HostLabelSchema } from "./fleet.js";
@@ -49,6 +50,8 @@ export const TeamRowSchema = z.object({
   reasonCategory: FailureCategoryIdSchema.optional(),
   /** The runtime display name a categorized reason sentence names, when it names one. */
   reasonRuntime: z.string().nullable().optional(),
+  /** Known pre-dispatch capability blocker key translated by clients. */
+  blockerKey: ChiefBlockerKeySchema.optional(),
   action: z.string().nullable(),
   rootTaskId: z.string().nullable(),
   delegationId: z.string().nullable(),

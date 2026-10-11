@@ -4681,11 +4681,11 @@ msgstr "समझ गया — क्या कमी है, जाँचू�
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll choose a team member to file this issue in Linear."
-msgstr "Got it — I’ll choose a team member to file this issue in Linear."
+msgstr "समझ गया — Linear में यह इश्यू दर्ज करने के लिए टीम का एक सदस्य चुनूँगा।"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll choose a team member to manage the GitHub repository."
-msgstr "Got it — I’ll choose a team member to manage the GitHub repository."
+msgstr "समझ गया — GitHub रिपॉज़िटरी प्रबंधित करने के लिए टीम का एक सदस्य चुनूँगा।"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll choose a team member to put this in Notion."

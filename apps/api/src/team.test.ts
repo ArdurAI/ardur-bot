@@ -170,6 +170,7 @@ describe("team.board", () => {
     expect(board.rows.find((row) => row.botId === "worker")).toMatchObject({
       state: "blocked",
       reason: "Connect Linear or grant a team member permission to read and write.",
+      blockerKey: "connect-linear",
       action: "Open conversation",
     });
     expect(f.db.chiefPlan.findMany).toHaveBeenCalledWith({

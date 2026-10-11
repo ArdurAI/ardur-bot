@@ -48,10 +48,13 @@ export type ChiefMemberFacts = {
   runLimit: number;
   membershipRevision: string;
 };
+export const ChiefBlockerKeySchema = z.enum(["connect-linear", "connect-github"]);
+export type ChiefBlockerKey = z.infer<typeof ChiefBlockerKeySchema>;
+
 export type ChiefDecision =
   | { kind: "self" }
   | { kind: "delegate" | "queue"; memberId: string; reason: string }
-  | { kind: "needs-owner"; blocker: string; blockerKey?: "connect-linear" | "connect-github" }
+  | { kind: "needs-owner"; blocker: string; blockerKey?: ChiefBlockerKey }
   | { kind: "plan" };
 
 export const ChiefActivityKeySchema = z.enum([
@@ -98,7 +101,7 @@ const ChiefDispatchObjectSchema = z.object({
   memberId: Id,
   memberName: z.string(),
   state: z.enum(["messaged", "queued", "approval-held", "needs-owner"]),
-  blockerKey: z.enum(["connect-linear", "connect-github"]).optional(),
+  blockerKey: ChiefBlockerKeySchema.optional(),
   reason: z.string(),
   runId: Id.optional(),
   delegationId: Id.optional(),
