@@ -1,4 +1,4 @@
-import type { Bot } from "@ardurbot/contracts";
+import type { Bot, GoalBoardResult } from "@ardurbot/contracts";
 import type {
   BoardFilter,
   BoardPatch,
@@ -82,6 +82,7 @@ export function Board({
   const [busy, setBusy] = useState(false);
   const [newItem, setNewItem] = useState(false);
   const [selected, setSelected] = useState<WorkItem | null>(null);
+  const [goalResult, setGoalResult] = useState<GoalBoardResult | null>(null);
   const [editing, setEditing] = useState(false);
   const [comment, setComment] = useState("");
   const [botId, setBotId] = useState(bots[0]?.id ?? "");
@@ -109,6 +110,24 @@ export function Board({
   selection.current = { requestedWorkspace, itemId, spaceId };
   const catalog = snapshot.allItems ?? snapshot.items;
   const workspace = workspaces.find((row) => row.id === workspaceId);
+  useEffect(() => {
+    if (!selected || !workspaceId) {
+      setGoalResult(null);
+      return;
+    }
+    let active = true;
+    void rpc.goals
+      .boardResult({ workspaceId, itemId: selected.id })
+      .then((result) => {
+        if (active) setGoalResult(result);
+      })
+      .catch(() => {
+        if (active) setGoalResult(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [selected, workspaceId]);
   useEffect(() => {
     setWorkspaceId("");
     setLoaded(false);
@@ -577,6 +596,24 @@ export function Board({
                     {selected.id} · P{selected.priority} · {selected.type}
                   </p>
                   {selected.filedBy ? <FiledBy filing={selected.filedBy} /> : null}
+                  {goalResult?.summary ? (
+                    <p>
+                      <a href={goalResult.path}>
+                        {goalResult.status === "accepted" ? (
+                          <Trans>Goal accepted</Trans>
+                        ) : (
+                          <Trans>Goal completed</Trans>
+                        )}
+                      </a>
+                      {goalResult.delivery && goalResult.delivery !== "delivered" ? (
+                        <>
+                          {" "}
+                          · <Trans>Board update pending</Trans>
+                        </>
+                      ) : null}
+                      <span className="mt-1 block whitespace-pre-wrap">{goalResult.summary}</span>
+                    </p>
+                  ) : null}
                   <p className="whitespace-pre-wrap">{selected.description}</p>
                   {selected.acceptanceCriteria ? (
                     <div>

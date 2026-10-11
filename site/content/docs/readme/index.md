@@ -36,9 +36,9 @@ Apache-2.0 attribution.
 <!-- site-facts:providers:start -->
 <!-- Generated from site/data/product.json by pnpm site:facts; edit that file. -->
 - Providers: OpenRouter, OpenAI Codex (ChatGPT account), Anthropic (API key),
-  OpenAI, Google, Vercel AI Gateway, and 36 more in the searchable model catalog.
+  OpenAI, Google, Vercel AI Gateway, and 37 more in the searchable model catalog.
   OpenAI-compatible servers cover local Ollama, LM Studio and llama.cpp.
-  Planned additions include Claude Pro/Max through the CLI and Ollama as a direct local choice.
+  Planned additions include Claude Pro/Max through the CLI.
 <!-- site-facts:providers:end -->
 - Computers: the computer Ardur is installed on, plus Docker, Podman, Kubernetes or SSH
   machines you add, and E2B, Daytona or Box on a server, with a browser, terminal, files and a
@@ -80,7 +80,7 @@ After synchronization, shared notes are Markdown files in the connected reposito
 
 - Subscription-honest providers: Claude Pro/Max through your own unmodified `claude` CLI,
   Codex through OpenAI's documented integration, Kimi and Z.ai coding plans, Gemini with an
-  API key, Ollama as a first-class choice
+  API key
 - Computers on Podman and kind/Kubernetes
 - Signed macOS releases once release credentials are provisioned
 - A fast, smooth UI on Windows, macOS and Linux

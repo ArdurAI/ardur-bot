@@ -12,12 +12,14 @@ import {
   rm,
   stat,
   symlink,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 import type { AdapterContext } from "@ardurbot/adapter-kit";
+import { forceRacyGitEdit } from "@ardurbot/testkit/racy-git-fixture";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import {
@@ -126,6 +128,32 @@ it("reports a plain folder as not a repository", async () => {
   const { provider, computer } = await fixture();
   const result = await observe(provider, computer);
   expect(result).toEqual({ kind: "not-repository" });
+});
+
+it("detects a same-size edit whose mtime equals the index mtime", async () => {
+  const { provider, computer, home, git } = await fixture();
+  git(["init", "-q", "-b", "main"]);
+  git(["config", "index.version", "2"]);
+  const file = path.join(home, "race.txt");
+  await writeFile(file, "old\n");
+  git(["add", "race.txt"]);
+  git(["commit", "-q", "-m", "base"]);
+  const index = path.join(home, ".git", "index");
+  await forceRacyGitEdit(home, "race.txt", "new\n");
+  const timestamp = await stat(index);
+  const before = await readFile(index);
+
+  expect(await observe(provider, computer)).toMatchObject({
+    kind: "status",
+    entries: [{ path: "race.txt", unstaged: true }],
+  });
+  expect(await observe(provider, computer, { path: "race.txt" })).toMatchObject({
+    kind: "diff",
+    before: "old",
+    after: "new",
+  });
+  expect(await readFile(index)).toEqual(before);
+  expect((await stat(index)).mtimeMs).toBe(timestamp.mtimeMs);
 });
 
 it("does not leave a deadline timer for a plain folder", async () => {
@@ -604,6 +632,19 @@ describe("copyPinnedFile", () => {
     const { root, source, info } = await pinnedFixture();
     const destination = path.join(root, "view-index");
     await copyPinnedFile(source, destination, info);
+    expect(await readFile(destination, "utf8")).toBe("real index\n");
+  });
+
+  it("preserves sub-millisecond source timestamps on the private copy", async () => {
+    const { root, source } = await pinnedFixture();
+    await utimes(source, 1_700_000_000.123456, 1_700_000_000.654321);
+    const info = await lstat(source);
+    const destination = path.join(root, "view-index");
+    await copyPinnedFile(source, destination, info);
+    const copied = await stat(destination);
+    // Allow filesystem rounding below a microsecond, not Date's millisecond loss.
+    expect(Math.abs(copied.atimeMs - info.atimeMs)).toBeLessThanOrEqual(0.001);
+    expect(Math.abs(copied.mtimeMs - info.mtimeMs)).toBeLessThanOrEqual(0.001);
     expect(await readFile(destination, "utf8")).toBe("real index\n");
   });
 

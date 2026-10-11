@@ -50,7 +50,7 @@ it("dispatches through the scoped provider and derives claim identity from the b
   const service = {
     provider: vi.fn(async () => provider),
     actor: vi.fn(async () => "bot:Builder"),
-    assertBotMayClose: vi.fn(),
+    assertBotMayClose: vi.fn(async (_scope, workspaceId: string) => workspaceId),
   };
   const scope = { userId: "owner", spaceId: "space", botId: "builder", runId: "run" };
   const calls = [

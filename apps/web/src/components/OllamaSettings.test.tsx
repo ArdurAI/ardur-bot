@@ -144,3 +144,40 @@ it("renders streamed counters and cancels the active pull", async () => {
   expect(node.textContent).not.toContain("pulling layer");
   expect(changed).not.toHaveBeenCalled();
 });
+
+it("keeps the explicitly chosen local connection through edits, defaults and pulls", async () => {
+  const models = [
+    { id: "local:small", reasoning: false, acceptsImages: false, supportsThinkingOff: false },
+  ];
+  api.ollama.mockResolvedValue({
+    ...state,
+    version: "test-version",
+    credentialId: "chosen",
+    models,
+  });
+  api.setDefault.mockResolvedValue({ ok: true });
+  api.pullOllama.mockResolvedValue(
+    (async function* () {
+      yield { status: "success" };
+    })(),
+  );
+  await act(async () =>
+    root.render(<OllamaSettings onChanged={changed} credentialId="chosen" modelId="local:small" />),
+  );
+  expect(api.ollama).toHaveBeenCalledWith({ credentialId: "chosen" }, expect.anything());
+  await act(async () => button("Use this model").click());
+  expect(api.setDefault).toHaveBeenCalledWith(
+    { provider: "ollama", modelId: "local:small", credentialId: "chosen" },
+    expect.anything(),
+  );
+  await act(async () => button("Pull").click());
+  expect(api.pullOllama).toHaveBeenCalledWith(
+    { model: "qwen3:0.6b", credentialId: "chosen" },
+    expect.anything(),
+  );
+  await act(async () => button("Save").click());
+  expect(api.connect).toHaveBeenCalledWith(
+    { provider: "ollama", baseUrl: state.baseUrl, modelId: "local:small", credentialId: "chosen" },
+    expect.anything(),
+  );
+});

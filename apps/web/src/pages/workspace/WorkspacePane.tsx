@@ -33,6 +33,7 @@ export function WorkspacePane({
   expanded = false,
   onExpand,
   onClose,
+  onClosePanel,
   onRetry,
   visible = true,
   headerActions,
@@ -189,13 +190,8 @@ export function WorkspacePane({
             {expanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
           </Button>
         ) : null}
-        {onClose ? (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={closeLabel(name)}
-            onClick={() => onClose(selected)}
-          >
+        {onClosePanel ? (
+          <Button variant="ghost" size="icon-sm" aria-label={t`Close panel`} onClick={onClosePanel}>
             <X size={16} />
           </Button>
         ) : null}
@@ -247,6 +243,7 @@ export type WorkspacePaneProps = {
   visible?: boolean;
   onExpand?(): void;
   onClose?(tab: string): void;
+  onClosePanel?(): void;
   onRetry?(): void;
   headerActions?: ReactNode;
   allowTerminalStart?: boolean;
