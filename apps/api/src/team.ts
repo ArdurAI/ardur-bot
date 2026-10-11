@@ -230,7 +230,8 @@ export async function teamBoard(
           ? {
               category: problemCategory.data,
               provider: runtimeProblem
-                ? failureCategoryFromText(runtimeProblem.reason)?.params.provider
+                ? (failureCategoryFromText(runtimeProblem.reason)?.params.provider ??
+                  runtimeProblem.pin.provider)
                 : undefined,
               runtime: runtimeProblem
                 ? (runtimeNames[runtimeProblem.pin.runtimeKind] ?? null)

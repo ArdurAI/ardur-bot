@@ -25,6 +25,9 @@ export function upstreamHttpFailure(status: number): HermesProviderFailure {
 
 /** Read a bounded clone; only known public codes can leave this function. */
 async function providerReasonCode(response: Response) {
+  // Read codes only for provider refusal statuses. Other failures, particularly 5xx,
+  // can be classified from the status without waiting for an optional error body.
+  if (![400, 401, 403, 429].includes(response.status)) return undefined;
   if (!response.headers.get("content-type")?.includes("application/json")) return undefined;
   const reader = response.clone().body?.getReader();
   if (!reader) return undefined;

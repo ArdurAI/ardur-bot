@@ -1,8 +1,55 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { diagnosticProviderFetch } from "./hermes-provider-diagnostics.js";
+import { diagnosticProviderFetch, upstreamHttpFailure } from "./hermes-provider-diagnostics.js";
 
 const PRIVATE = "private fixture response text";
 afterEach(() => vi.useRealTimers());
+
+it.each([400, 401, 403, 429])(
+  "reads bounded reason codes for a refusal status %s",
+  async (status) => {
+    const response = new Response(JSON.stringify({ error: { code: "1305", message: PRIVATE } }), {
+      status,
+      headers: { "content-type": "application/json" },
+    });
+    const observe = vi.fn();
+    const result = await diagnosticProviderFetch(
+      async () => response,
+      observe,
+    )("https://fixture.invalid");
+    expect(result).toBe(response);
+    expect(observe).toHaveBeenLastCalledWith({
+      ...upstreamHttpFailure(status),
+      reasonCode: "1305",
+    });
+    expect(await result.json()).toEqual({ error: { code: "1305", message: PRIVATE } });
+  },
+);
+
+it.each([404, 408, 422, 500, 502, 503, 504])(
+  "returns status %s without reading a stalled error body or starting a deadline",
+  async (status) => {
+    vi.useFakeTimers();
+    const response = new Response(new ReadableStream({ start() {} }), {
+      status,
+      headers: { "content-type": "application/json" },
+    });
+    const clone = vi.spyOn(response, "clone");
+    const observe = vi.fn();
+    const pending = diagnosticProviderFetch(
+      async () => response,
+      observe,
+    )("https://fixture.invalid");
+    await vi.advanceTimersByTimeAsync(0);
+    const timers = vi.getTimerCount();
+    await vi.advanceTimersByTimeAsync(1000);
+    const result = await pending;
+    void response.body?.cancel();
+    expect(result).toBe(response);
+    expect(clone).not.toHaveBeenCalled();
+    expect(timers).toBe(0);
+    expect(observe).toHaveBeenLastCalledWith(upstreamHttpFailure(status));
+  },
+);
 
 it.each(["1305", 1305, "rate_limit_exceeded", "insufficient_quota"])(
   "retains only the known upstream reason code %s without consuming the adapter response",
