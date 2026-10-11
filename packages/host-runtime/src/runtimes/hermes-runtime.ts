@@ -795,7 +795,7 @@ export class HermesRuntime implements AgentRuntime {
           void this.finishTurn(request.runId, "done").catch(() => {});
         } catch (error) {
           if (turn.active) {
-            // Classify the provider failure before the generic rewrite: a usage limit,
+            // Classify the provider failure before the generic rewrite: a provider limit,
             // an expired or missing credential and an unavailable model each record their
             // category sentence; the conversation never receives the vendor's text.
             const pin = request.model.runtimePin;
@@ -804,6 +804,7 @@ export class HermesRuntime implements AgentRuntime {
                 error instanceof AcpClientError ? error.detail : undefined,
                 error instanceof Error ? error.cause : undefined,
               ),
+              "hermes",
             );
             turn.failureKind = classifyTurnFailure(error, turn.phase, category);
             if (error instanceof AcpClientError) turn.acpError = error;

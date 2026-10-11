@@ -1185,8 +1185,13 @@ describe("HermesRuntime M0 ACP seam", () => {
     it.each([
       [
         "provider-usage-limit",
-        "usage-limit",
-        "Hermes's usage limit is reached. Try again after it resets.",
+        "provider-rate-limit",
+        "fixture is refusing requests right now (rate or usage limit). Try again later or check your plan.",
+      ],
+      [
+        "provider-http-429",
+        "provider-rate-limit",
+        "fixture is refusing requests right now (rate or usage limit). Try again later or check your plan.",
       ],
       ["provider-signed-out", "signed-out", "Sign in to Hermes on this computer, then try again."],
       [

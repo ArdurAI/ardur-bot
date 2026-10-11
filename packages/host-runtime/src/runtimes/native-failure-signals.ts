@@ -13,14 +13,22 @@ import { runtimeNames, runtimePinProblem } from "@ardurbot/contracts/runtime-pin
  */
 const USAGE_LIMIT_SIGNAL =
   /usage[_ -]?limit|out of (?:extra )?usage|rate[_ -]?limit|too many requests|quota exceeded|insufficient_quota/i;
+const HTTP_RATE_LIMIT_SIGNAL = /\b(?:http(?:\s+error)?|status(?:\s+code)?)\s*[:=(]?\s*429\b/i;
 const SIGN_IN_SIGNAL =
   /not logged in|not signed in|sign in required|invalid[_ ]api[_ ]key|unauthorized|authentication|expired token|token expired/i;
 const MODEL_UNAVAILABLE_SIGNAL =
   /\bmodel\b(?:\s+["'`][^"'`\n]+["'`]|\s+[\w./:-]+)?\s+(?:is\s+)?(?:not supported|not available|does not exist|not found|unknown)\b|\bunknown model\b|model_not_found|model_not_available|unsupported_model/i;
 
 /** The category of a native runtime failure, or undefined when the text says nothing known. */
-export function nativeFailureCategory(detail: string): FailureCategoryId | undefined {
-  if (USAGE_LIMIT_SIGNAL.test(detail)) return "usage-limit";
+export function nativeFailureCategory(
+  detail: string,
+  runtimeKind: RuntimePin["runtimeKind"],
+): FailureCategoryId | undefined {
+  // Hermes uses the model connection, not a runtime subscription. Even a bare HTTP
+  // status must name that connection rather than claim Hermes has an exhausted plan.
+  if (runtimeKind === "hermes" && HTTP_RATE_LIMIT_SIGNAL.test(detail)) return "provider-rate-limit";
+  if (USAGE_LIMIT_SIGNAL.test(detail))
+    return runtimeKind === "hermes" || runtimeKind === "pi" ? "provider-rate-limit" : "usage-limit";
   if (SIGN_IN_SIGNAL.test(detail)) return "signed-out";
   if (MODEL_UNAVAILABLE_SIGNAL.test(detail)) return "model-unavailable";
   return undefined;
