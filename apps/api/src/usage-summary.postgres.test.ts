@@ -40,6 +40,21 @@ describePostgres("scoped usage summaries (PostgreSQL)", () => {
         },
       });
     }
+    await db.prisma.member.createMany({
+      data: (
+        [
+          [scope.spaceId, scope.userId],
+          [scope.spaceId, "usage-fixture-other"],
+          ["usage-fixture-foreign-space", scope.userId],
+        ] as const
+      ).map(([organizationId, userId], index) => ({
+        id: `usage-fixture-organization-membership-${index}`,
+        organizationId,
+        userId,
+        role: "member",
+        createdAt: now,
+      })),
+    });
     await db.prisma.spaceMember.createMany({
       data: [
         { ...scope, organizationId: scope.spaceId, role: "member", createdAt: now },
