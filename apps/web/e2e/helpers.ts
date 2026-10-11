@@ -1,5 +1,15 @@
 import { expect, type Locator, type Page, type TestInfo } from "@playwright/test";
-import { DEPLOYMENT_OWNER_RENEW_MS } from "../../../packages/testkit/src/cli/deployment-owner.js";
+import {
+  DEPLOYMENT_OWNER_CLAIM_DEADLINE_MS,
+  DEPLOYMENT_OWNER_RENEW_MS,
+} from "../../../packages/testkit/src/cli/deployment-owner.js";
+import {
+  finishSetup,
+  SETUP_ERROR_ACCOUNT,
+  SETUP_ERROR_MODELS,
+  type SetupError,
+  type SetupObservation,
+} from "./setup-completion.js";
 
 export function isRealSandboxProvider(provider = process.env.SANDBOX_PROVIDER) {
   return provider === "e2b" || provider === "daytona" || provider === "box";
@@ -37,10 +47,19 @@ export async function claimDeploymentOwner(page: Page): Promise<() => Promise<vo
   const apiUrl = process.env.API_URL;
   if (!apiUrl) throw new Error("The e2e API URL is missing");
   const ownerUrl = `${apiUrl}/__e2e/deployment-owner`;
+  const startedAt = Date.now();
+  let lastStatus = 0;
   for (;;) {
+    if (Date.now() - startedAt >= DEPLOYMENT_OWNER_CLAIM_DEADLINE_MS) {
+      const status = lastStatus || "none";
+      throw new Error(
+        `Timed out waiting for the deployment owner after ${DEPLOYMENT_OWNER_CLAIM_DEADLINE_MS}ms (last status ${status})`,
+      );
+    }
     const response = await page.request.post(ownerUrl, {
       timeout: 125_000,
     });
+    lastStatus = response.status();
     if (response.status() === 423) continue;
     if (!response.ok()) throw new Error(`Cannot set up deployment owner: ${response.status()}`);
     break;
@@ -71,39 +90,181 @@ export async function claimDeploymentOwner(page: Page): Promise<() => Promise<vo
   };
 }
 
+const CHAT_COMPOSER_NAME = /^Message /;
+const signupCredentials = new WeakMap<Page, { email: string; password: string }>();
+
+function pathnameOf(url: string): string {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return url;
+  }
+}
+
+function leftSignUp(url: string): boolean {
+  const pathname = pathnameOf(url);
+  return pathname === "/onboarding" || pathname.startsWith("/app");
+}
+
+async function visibleSetupError(page: Page): Promise<SetupError | null> {
+  for (const message of [SETUP_ERROR_ACCOUNT, SETUP_ERROR_MODELS]) {
+    if (
+      await page
+        .getByRole("alert")
+        .filter({ hasText: message })
+        .isVisible()
+        .catch(() => false)
+    ) {
+      return message;
+    }
+  }
+  return null;
+}
+
+async function observeSetup(page: Page): Promise<SetupObservation> {
+  const composer = page.getByRole("combobox", { name: CHAT_COMPOSER_NAME });
+  const composerVisible = await composer.isVisible().catch(() => false);
+  return {
+    url: page.url(),
+    composerVisible,
+    composerEnabled: composerVisible && (await composer.isEnabled().catch(() => false)),
+    modelHeading: await page
+      .getByRole("heading", { name: "Connect a model", exact: true })
+      .isVisible()
+      .catch(() => false),
+    integrationsHeading: await page
+      .getByRole("heading", { name: "Server integrations", exact: true })
+      .isVisible()
+      .catch(() => false),
+    setupError: await visibleSetupError(page),
+    existingAccount: await page
+      .getByRole("alert")
+      .filter({ hasText: /already exists/i })
+      .isVisible()
+      .catch(() => false),
+    signInHeading: await page
+      .getByRole("heading", { name: "Sign in to Ardur", exact: true })
+      .isVisible()
+      .catch(() => false),
+    openingChat: await page
+      .getByText("Opening chat…", { exact: true })
+      .isVisible()
+      .catch(() => false),
+  };
+}
+
+async function waitForSetupChange(
+  page: Page,
+  remainingMs: number,
+  observation: SetupObservation,
+): Promise<void> {
+  const composer = page.getByRole("combobox", { name: CHAT_COMPOSER_NAME });
+  if (observation.composerVisible && !observation.composerEnabled) {
+    await expect(composer)
+      .toBeEnabled({ timeout: remainingMs })
+      .catch(() => undefined);
+    return;
+  }
+  if (observation.setupError) {
+    await page
+      .getByRole("alert")
+      .filter({ hasText: observation.setupError })
+      .waitFor({ state: "hidden", timeout: remainingMs })
+      .catch(() => undefined);
+    return;
+  }
+  if (observation.existingAccount) {
+    await page
+      .getByRole("alert")
+      .filter({ hasText: /already exists/i })
+      .waitFor({ state: "hidden", timeout: remainingMs })
+      .catch(() => undefined);
+    return;
+  }
+  if (observation.integrationsHeading) {
+    await page
+      .getByRole("heading", { name: "Server integrations", exact: true })
+      .waitFor({ state: "hidden", timeout: remainingMs })
+      .catch(() => undefined);
+    return;
+  }
+  if (observation.signInHeading) {
+    await page
+      .getByRole("heading", { name: "Sign in to Ardur", exact: true })
+      .waitFor({ state: "hidden", timeout: remainingMs })
+      .catch(() => undefined);
+    return;
+  }
+  // Opening chat is not a signal. Wait for a heading, an alert, or the composer.
+  await composer
+    .or(page.getByRole("heading", { name: "Connect a model", exact: true }))
+    .or(page.getByRole("heading", { name: "Server integrations", exact: true }))
+    .or(page.getByRole("alert"))
+    .first()
+    .waitFor({ timeout: remainingMs })
+    .catch(() => undefined);
+}
+
+async function signInExistingAccount(page: Page, email: string, password: string, timeout: number) {
+  await page.goto(`/sign-in?next=${encodeURIComponent("/onboarding")}`);
+  await page.getByRole("heading", { name: "Sign in to Ardur", exact: true }).waitFor({ timeout });
+  await page.getByPlaceholder("Your email address").fill(email);
+  await page.getByPlaceholder("Password").fill(password);
+  await page.getByRole("button", { name: "Continue with email" }).click();
+  try {
+    await page.waitForURL(/\/(onboarding|app)/, { timeout });
+  } catch {
+    throw new Error("Could not sign in to the existing account");
+  }
+}
+
 export async function completeOnboarding(
   page: Page,
   testInfo?: TestInfo,
   navigationTimeout = 20_000,
 ) {
-  await page.waitForURL(/\/(onboarding|app)/, {
-    timeout: navigationTimeout,
-    waitUntil: "domcontentloaded",
-  });
-  // Optional Server integrations step (needsSetup). Skip when shown, then the
-  // first bot is created automatically — land in Chief's chat with no form.
-  const integrations = page.getByRole("heading", { name: "Server integrations", exact: true });
-  const chief = page.getByText("Chief").first();
-  await integrations
-    .or(chief)
-    .or(page.getByText("Opening chat…"))
-    .waitFor({ timeout: navigationTimeout });
-  if ((await chief.isVisible().catch(() => false)) && page.url().includes("/app")) {
-    if (testInfo) {
-      await captureScreenshot(page, testInfo, "03-create-first-bot");
-      await captureScreenshot(page, testInfo, "06-onboarding-complete");
+  const existingAccount = page.getByRole("alert").filter({ hasText: /already exists/i });
+  await expect(async () => {
+    if (await existingAccount.isVisible()) return;
+    if (leftSignUp(page.url())) return;
+    throw new Error(`Waiting to leave sign-up (${page.url()})`);
+  }).toPass({ intervals: [100, 250, 500], timeout: navigationTimeout });
+  if (await existingAccount.isVisible()) {
+    const credentials = signupCredentials.get(page);
+    if (!credentials) {
+      throw new Error(
+        "Setup is on an existing account. Sign in before the chat composer can become usable.",
+      );
     }
-    return;
+    await signInExistingAccount(page, credentials.email, credentials.password, navigationTimeout);
   }
-  if (await integrations.isVisible().catch(() => false)) {
-    if (testInfo) await captureScreenshot(page, testInfo, "02-connect-apps");
-    await page.getByRole("button", { name: "Skip", exact: true }).click();
-  }
-  await page.waitForURL(/\/app\//, {
-    timeout: navigationTimeout,
-    waitUntil: "domcontentloaded",
+  let capturedIntegrations = false;
+  await finishSetup({
+    now: () => Date.now(),
+    deadlineAt: Date.now() + navigationTimeout,
+    deadlineMs: navigationTimeout,
+    observe: () => observeSetup(page),
+    skipIntegrations: async () => {
+      if (testInfo && !capturedIntegrations) {
+        await captureScreenshot(page, testInfo, "02-connect-apps");
+        capturedIntegrations = true;
+      }
+      await page.getByRole("button", { name: "Skip", exact: true }).click();
+    },
+    retrySetup: async () => {
+      await page.getByRole("button", { name: "Retry", exact: true }).click();
+    },
+    signInExisting: async () => {
+      const credentials = signupCredentials.get(page);
+      if (!credentials) {
+        throw new Error(
+          "Setup is on an existing account. Sign in before the chat composer can become usable.",
+        );
+      }
+      await signInExistingAccount(page, credentials.email, credentials.password, navigationTimeout);
+    },
+    waitForChange: (remainingMs, observation) => waitForSetupChange(page, remainingMs, observation),
   });
-  await expect(page.getByText("Chief").first()).toBeVisible();
   if (testInfo) {
     await captureScreenshot(page, testInfo, "03-create-first-bot");
     await captureScreenshot(page, testInfo, "06-onboarding-complete");
@@ -117,8 +278,15 @@ export async function signup(
   name: string,
   testInfo?: TestInfo,
 ) {
+  signupCredentials.set(page, { email, password });
   await page.goto("/sign-up");
-  await expect(page.getByRole("heading", { name: "Create your Ardur" })).toBeVisible();
+  const createHeading = page.getByRole("heading", { name: "Create your Ardur" });
+  await expect(async () => {
+    if (await createHeading.isVisible()) return;
+    if (leftSignUp(page.url())) return;
+    throw new Error(`Waiting for Create your Ardur or an existing session (${page.url()})`);
+  }).toPass({ intervals: [100, 250, 500], timeout: 20_000 });
+  if (!(await createHeading.isVisible())) return;
   if (testInfo) await captureScreenshot(page, testInfo, "01-sign-up");
   await page.getByPlaceholder("Your name").fill(name);
   await page.getByPlaceholder("Your email address").fill(email);
