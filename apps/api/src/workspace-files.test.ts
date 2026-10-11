@@ -228,6 +228,47 @@ describe("bot workspace files", () => {
     ).toBe("unavailable");
   });
 
+  it("offers the Git changes view only where the owning provider can serve it", async () => {
+    const f = fixture();
+    // A routing wrapper answers per computer; the tab must follow it, not the
+    // wrapper's own always-defined gitChanges.
+    const router = {
+      ...f.sandbox,
+      canObserveGit: vi.fn(async (ref: { kind?: string }) => ref.kind === "desktop"),
+      gitChanges: vi.fn(async () => ({ kind: "unavailable" })),
+    };
+    const routed = createWorkspaceFiles({
+      sandbox: router,
+      home: f.home,
+      prisma: f.db,
+    } as unknown as Parameters<typeof createWorkspaceFiles>[0]);
+    for (const kind of ["docker", "e2b", "daytona", "box"]) {
+      Object.assign(f.computer, { kind, state: "running", providerRef: "provider-ref" });
+      expect((await routed.describe(actor, "bot")).git).toBe(false);
+    }
+    // A local This computer workspace is the one place the view is offered.
+    Object.assign(f.computer, { kind: "desktop", state: "running", providerRef: "provider-ref" });
+    expect((await routed.describe(actor, "bot")).git).toBe(true);
+
+    // A plain provider without the probe answers from its own shape.
+    const plain = createWorkspaceFiles({
+      sandbox: f.sandbox,
+      home: f.home,
+      prisma: f.db,
+    } as unknown as Parameters<typeof createWorkspaceFiles>[0]);
+    expect((await plain.describe(actor, "bot")).git).toBe(false);
+    const serving = {
+      ...f.sandbox,
+      gitChanges: vi.fn(async () => ({ kind: "unavailable" })),
+    };
+    const withGit = createWorkspaceFiles({
+      sandbox: serving,
+      home: f.home,
+      prisma: f.db,
+    } as unknown as Parameters<typeof createWorkspaceFiles>[0]);
+    expect((await withGit.describe(actor, "bot")).git).toBe(true);
+  });
+
   it("rejects another actor and a replaced computer before any file read", async () => {
     const f = fixture();
     await expect(f.files.describe({ ...actor, userId: "other" }, "bot")).rejects.toThrow();

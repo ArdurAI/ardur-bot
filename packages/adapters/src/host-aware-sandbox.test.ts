@@ -423,6 +423,15 @@ describe("host-aware sandbox", () => {
     await desktop.destroy(computer, ctx);
   });
 
+  it("reports the Git observation capability from the provider that owns the computer", async () => {
+    const host: SandboxProvider = new FakeSandboxProvider();
+    host.gitChanges = async () => ({ kind: "unavailable" });
+    const sandbox = new HostAwareSandbox(new FakeSandboxProvider(), host, async () => true);
+    const desktop: ComputerRef = { id: "host", botId: "bot", kind: "desktop", providerRef: "/x" };
+    expect(await sandbox.canObserveGit!(desktop, ctx)).toBe(true);
+    expect(await sandbox.canObserveGit!({ ...desktop, kind: "docker" }, ctx)).toBe(false);
+  });
+
   it("forwards pageBrowser to the routed provider", async () => {
     const isolated: SandboxProvider = new FakeSandboxProvider();
     const calls: unknown[] = [];

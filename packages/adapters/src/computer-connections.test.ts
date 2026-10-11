@@ -1,4 +1,4 @@
-import type { ComputerRef } from "@ardurbot/adapter-kit";
+import type { ComputerRef, SandboxProvider } from "@ardurbot/adapter-kit";
 import type { PrismaClient } from "@ardurbot/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -159,6 +159,35 @@ describe("saved computer connections", () => {
       await provider.resolveCommandCwd(computer, "project", context);
       expect(routed).toHaveBeenLastCalledWith(computer, "project", context);
       expect(connectionId ? fallbackCwd : connectedCwd).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([undefined, "saved"])(
+    "reports the Git observation capability from the provider owning connection %s",
+    async (connectionId) => {
+      const { connections } = fixture({ engine: "podman" });
+      const fallback = new FakeSandboxProvider();
+      const connected: SandboxProvider = new FakeSandboxProvider();
+      connected.gitChanges = async () => ({ kind: "unavailable" });
+      vi.spyOn(connections, "resolve").mockResolvedValue(connected);
+      const provider = new ConnectedSandboxProvider(fallback, connections);
+      const computer: ComputerRef = {
+        id: "computer",
+        providerRef: "ref",
+        botId: "bot",
+        kind: "fake",
+        connectionId,
+      };
+      // Neither the fallback nor a routed provider without gitChanges can serve it.
+      expect(await provider.canObserveGit!(computer, context)).toBe(connectionId !== undefined);
+      const { connections: plainConnections } = fixture({ engine: "docker" });
+      vi.spyOn(plainConnections, "resolve").mockResolvedValue(new FakeSandboxProvider());
+      expect(
+        await new ConnectedSandboxProvider(fallback, plainConnections).canObserveGit!(
+          { ...computer, connectionId: "saved" },
+          context,
+        ),
+      ).toBe(false);
     },
   );
 
@@ -344,6 +373,40 @@ it("names the paired desktop, not the server's own platform, for a stale host co
     `This computer runs on ${expectedLabel}, which is not configured here. Reset it in Settings, Computers to start it on this deployment's engine, or configure ${expectedLabel} again.`,
   );
 });
+
+it.each([
+  ["docker", {} as const],
+  ["e2b", { e2bApiKey: "e2b-test" } as const],
+  ["daytona", { daytonaApiKey: "daytona-test" } as const],
+  ["box", { boxApiKey: "box-test" } as const],
+] as const)(
+  "offers no Git observation for a %s computer through the production Docker composition",
+  async (kind, keys) => {
+    vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
+    // The production Docker stack nests wrappers: HostAwareSandbox routes to a
+    // ConnectedSandboxProvider, which owns the engine provider that must answer.
+    const sandbox = createRunSandbox("docker", {
+      supervisorToken: "fixture",
+      prisma: {
+        deploymentSettings: { findUnique: async () => ({ computerHost: "this-mac" }) },
+        hostRegistration: { findUnique: async () => null },
+      } as unknown as PrismaClient,
+      secrets: { load: () => "" },
+      ...keys,
+    });
+    try {
+      const computer: ComputerRef = { id: "c", botId: "bot", kind, providerRef: "ref" };
+      expect(await sandbox.canObserveGit!(computer, context)).toBe(false);
+      await expect(sandbox.gitChanges!(computer, {}, context)).resolves.toEqual({
+        kind: "unavailable",
+      });
+      // The paired desktop host still offers the observation.
+      expect(await sandbox.canObserveGit!({ ...computer, kind: "desktop" }, context)).toBe(true);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  },
+);
 
 it("runs a hosted deployment's own computers on its one default provider", async () => {
   for (const [kind, keys] of [

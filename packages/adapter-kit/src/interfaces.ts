@@ -168,6 +168,13 @@ export interface SandboxProvider {
     request: { path?: string },
     context: AdapterContext,
   ): Promise<GitChangesResult>;
+  /**
+   * Whether this provider can serve `gitChanges` for the computer. Routing
+   * wrappers answer from the provider that owns the computer; a provider
+   * without `gitChanges` reports false. Lets the workspace offer the Git
+   * changes view only where it can work.
+   */
+  canObserveGit?(computer: ComputerRef, context: AdapterContext): Promise<boolean>;
   listFiles(
     computer: ComputerRef,
     path: string,
