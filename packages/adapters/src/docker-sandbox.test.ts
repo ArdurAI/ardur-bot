@@ -627,3 +627,49 @@ it.each(["docker", "podman"] as const)(
     }
   },
 );
+
+it("runs Git observation through exec with read-only flags and the container workspace", async () => {
+  const bodies: Array<{
+    argv: string[];
+    cwd: string;
+    env: Record<string, string>;
+    outputLimit: number;
+  }> = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      expect(String(url)).toBe("http://supervisor.test/computers/computer/exec");
+      bodies.push(JSON.parse(String(init?.body)));
+      return Response.json({ stdout: "", stderr: "fatal: not a git repository", code: 128 });
+    }),
+  );
+  const provider = new DockerSandboxProvider("http://supervisor.test", "test-token");
+  const computer: ComputerRef = {
+    id: "computer",
+    botId: "bot",
+    kind: "docker",
+    providerRef: "computer",
+  };
+  try {
+    await expect(provider.gitChanges(computer, {}, context)).resolves.toEqual({
+      kind: "not-repository",
+    });
+    expect(bodies.length).toBeGreaterThan(0);
+    for (const body of bodies) {
+      expect(body.argv[0]).toBe("git");
+      expect(body.argv).toContain("--no-optional-locks");
+      expect(body.argv).toContain("--no-pager");
+      expect(body.argv).toContain("core.hooksPath=");
+      expect(body.argv).toContain("core.fsmonitor=false");
+      expect(body.env.GIT_OPTIONAL_LOCKS).toBe("0");
+      expect(body.argv.join(" ")).not.toContain("sh -c");
+      expect(body.outputLimit).toBeGreaterThan(0);
+    }
+    expect(bodies[0]?.cwd).toBe("/home/ardurbot");
+    bodies.length = 0;
+    await provider.gitChanges(computer, {}, { ...context, fileRoot: "bots/bot" });
+    expect(bodies[0]?.cwd).toBe("/home/ardurbot/bots/bot");
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});

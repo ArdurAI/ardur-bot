@@ -8,6 +8,7 @@ import type {
   ComputerObservation,
   ComputerRef,
   ControlLeaseRef,
+  GitChangesResult,
   PageBrowserCommand,
   PageBrowserResult,
   PortableFile,
@@ -16,6 +17,7 @@ import type {
   ScreenRequest,
   ScreenSession,
 } from "@ardurbot/adapter-kit";
+import { GIT_OBSERVATION_TEXT_SIDE_BYTES } from "@ardurbot/adapter-kit";
 import {
   COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE,
   ComputerEngineUnavailableError,
@@ -36,6 +38,11 @@ import {
   computerObservation,
   normalizeWorkspacePath,
 } from "./computer-support.js";
+import {
+  type ContainerCommandRunner,
+  decodeContainerExecOutput,
+  observeContainerGitChanges,
+} from "./container-git.js";
 import { DockerTerminal } from "./docker-terminal.js";
 import { readBodyCapped, withAbort } from "./web-ssrf.js";
 
@@ -157,6 +164,11 @@ function encodedFileResponseLimit(maxBytes: number | undefined): number {
   // Account for base64 expansion plus the small JSON envelope without applying
   // the generic response cap, which would reject valid files above ~12 MiB.
   return Math.ceil(maxBytes / 3) * 4 + 1024;
+}
+
+/** JSON-escaped command output, both streams, plus a small envelope. */
+function gitExecResponseLimit(maxBytes: number): number {
+  return Math.min(MAX_SANDBOX_SUCCESS_RESPONSE_BYTES, maxBytes * 12 + 8192);
 }
 
 /** Named so the API's isSandboxGoneError recognizes it and clears the dead computer row. */
@@ -598,6 +610,81 @@ export class DockerSandboxProvider implements SandboxProvider {
       encodedFileResponseLimit(maxBytes),
     );
     return Uint8Array.from(Buffer.from(body.content, "base64"));
+  }
+
+  /**
+   * Git runs inside this computer through the same exec path as other commands.
+   * observeGitChanges owns the deadline and the diff caps; the file read refuses
+   * anything the contained reader will not open.
+   */
+  async gitChanges(
+    computer: ComputerRef,
+    request: { path?: string },
+    context: AdapterContext,
+  ): Promise<GitChangesResult> {
+    const relativeRoot = context.fileRoot ? normalizeWorkspacePath(context.fileRoot) : "";
+    const root = dockerCwd(relativeRoot || undefined);
+    try {
+      return await observeContainerGitChanges(this.containerCommands(computer, context), {
+        root,
+        path: request.path,
+        readWorktreeFile: async (relative, options) => {
+          const signal = options?.signal
+            ? AbortSignal.any([context.signal, options.signal])
+            : context.signal;
+          const filePath = normalizeWorkspacePath(
+            relativeRoot ? `${relativeRoot}/${relative}` : relative,
+          );
+          return this.readFile(
+            computer,
+            filePath,
+            { ...context, signal },
+            { maxBytes: GIT_OBSERVATION_TEXT_SIDE_BYTES + 1, preview: true },
+          );
+        },
+      });
+    } catch (error) {
+      if (context.signal.aborted) throw error;
+      return { kind: "unavailable" };
+    }
+  }
+
+  private containerCommands(
+    computer: ComputerRef,
+    context: AdapterContext,
+  ): ContainerCommandRunner {
+    return {
+      run: async (request) => {
+        try {
+          const res = await fetch(this.url(`/computers/${computer.id}/exec`), {
+            method: "POST",
+            headers: {
+              ...this.headers(context, computer.botId),
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              argv: request.argv,
+              cwd: request.cwd,
+              env: request.env,
+              timeoutMs: boundedSandboxCommandTimeoutMs(request.timeoutMs),
+              outputLimit: request.maxBytes,
+            }),
+            signal: context.signal,
+          });
+          if (!res.ok) return { stdout: new Uint8Array(), code: 128 };
+          const body = await readSandboxJson<{
+            stdout?: string;
+            stderr?: string;
+            code: number;
+            capped?: boolean;
+          }>(res, context.signal, gitExecResponseLimit(request.maxBytes));
+          return decodeContainerExecOutput(body);
+        } catch (error) {
+          if (context.signal.aborted) throw error;
+          return { stdout: new Uint8Array(), code: 128 };
+        }
+      },
+    };
   }
 
   async writeFile(computer: ComputerRef, file: PortableFile, context: AdapterContext) {
