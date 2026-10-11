@@ -114,6 +114,15 @@ function buildPiCatalog(): PiCatalogEntry[] {
       entry.catalogId = original.id;
     }
   }
+  // Nova has no direct provider in the registry. These exact gateway ids serve
+  // the same release; do not infer equivalence for other Bedrock versions/regions.
+  const novaBedrock = exactModels.get(
+    JSON.stringify(["amazon-bedrock", "amazon.nova-2-lite-v1:0"]),
+  );
+  const novaGateway = exactModels.get(JSON.stringify(["vercel-ai-gateway", "amazon/nova-2-lite"]));
+  if (novaBedrock && novaGateway && novaBedrock.label === novaGateway.label) {
+    novaBedrock.catalogId = novaGateway.id;
+  }
   return entries;
 }
 

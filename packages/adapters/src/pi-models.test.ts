@@ -163,7 +163,11 @@ it("declares exact hosted aliases without discarding arbitrary namespaces", () =
         candidate.label === entry.label &&
         (entry.id === `${candidate.provider}/${candidate.id}` ||
           (entry.provider === "amazon-bedrock" &&
-            entry.id === `${candidate.provider}.${candidate.id}`)),
+            entry.id === `${candidate.provider}.${candidate.id}`) ||
+          (entry.provider === "amazon-bedrock" &&
+            entry.id === "amazon.nova-2-lite-v1:0" &&
+            candidate.provider === "vercel-ai-gateway" &&
+            candidate.id === "amazon/nova-2-lite")),
     );
     expect(original).toBeDefined();
   }
@@ -179,4 +183,18 @@ it("offers one entry for each real multi-provider model and preserves its connec
       choices[0]?.connections.some((choice) => choice.entry.provider === "amazon-bedrock"),
     ).toBe(true);
   }
+});
+
+it("merges the exact Nova 2 Lite gateway aliases without changing connection ids", () => {
+  const catalog = listPiCatalog();
+  const models = catalogModelChoices(catalog, []);
+  const nova = models.filter((model) => model.label === "Nova 2 Lite");
+  expect(nova).toHaveLength(1);
+  expect(nova[0]?.connections.map((choice) => [choice.entry.provider, choice.entry.id])).toEqual([
+    ["amazon-bedrock", "amazon.nova-2-lite-v1:0"],
+    ["vercel-ai-gateway", "amazon/nova-2-lite"],
+  ]);
+  expect(catalog.find((entry) => entry.id === "amazon.nova-2-lite-v1:0")?.catalogId).toBe(
+    "amazon/nova-2-lite",
+  );
 });
