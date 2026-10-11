@@ -1,7 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { PrismaClient } from "./client.js";
 import { createDb } from "./client.js";
-import { createEvidenceStore, EvidenceSequenceConflict } from "./evidence.js";
+import {
+  createEvidenceStore,
+  EvidenceKeyConflict,
+  EvidenceSequenceConflict,
+} from "./evidence.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describePostgres =
@@ -126,33 +130,100 @@ describePostgres("append-only evidence (PostgreSQL)", () => {
     await expect(prisma.evidenceSeal.delete({ where: { runId } })).rejects.toThrow();
     await expect(store.insertRecord(record(2))).rejects.toThrow("sealed");
   });
-  it("allows only one active key and one revocation, never key replacement", async () => {
-    const key = await store.insertKey({
-      spaceId,
-      kid: `key-${suffix}`,
-      publicKeyPem: "fixture-public",
-      privateKeyCiphertext: "fixture-ciphertext",
-      secretRecordId: "fixture-record",
-    });
+  const keyData = (kid: string) => ({
+    kid,
+    publicKeyPem: `fixture-public-${kid}`,
+    privateKeyCiphertext: "fixture-ciphertext",
+    secretRecordId: "fixture-record",
+  });
+  it("converges concurrent first-key inserts to one active winner", async () => {
+    const key = await store.insertKey({ spaceId, ...keyData(`key-${suffix}`) });
+    expect(key.version).toBe(1);
     expect(
       (
         await store.insertKey({
           spaceId,
-          kid: `other-${suffix}`,
-          publicKeyPem: "other",
-          privateKeyCiphertext: "other",
-          secretRecordId: "other",
+          ...keyData(`other-${suffix}`),
         })
       ).id,
     ).toBe(key.id);
+  });
+  it("replaces the head key atomically against the expected key id", async () => {
+    const first = (await store.activeKey(spaceId))!;
     await expect(
-      prisma.evidenceKey.update({ where: { id: key.id }, data: { publicKeyPem: "changed" } }),
-    ).rejects.toThrow();
-    await prisma.evidenceKey.update({ where: { id: key.id }, data: { revokedAt: new Date() } });
+      store.replaceKey({ spaceId, expectedKid: "sha256:stale", data: keyData("stale") }),
+    ).rejects.toBeInstanceOf(EvidenceKeyConflict);
+    const second = await store.replaceKey({
+      spaceId,
+      expectedKid: first.kid,
+      data: keyData(`next-${suffix}`),
+    });
+    expect(second.version).toBe(2);
+    const history = await store.keysForSpace(spaceId);
+    expect(history.map((row) => row.version)).toEqual([1, 2]);
+    expect(history[0]).toMatchObject({ kid: first.kid, revokedAt: expect.any(Date) });
+    expect(history[0]!.replacedAt).toBeTruthy();
+    expect(history[1]).toMatchObject({ kid: second.kid, replacedAt: null, revokedAt: null });
+    // Old public keys are retained for historical verification.
+    expect(history[0]!.publicKeyPem).toBe(first.publicKeyPem);
+  });
+  it("lets only one of two concurrent replacements win", async () => {
+    const second = (await store.activeKey(spaceId))!;
+    const [won, lost] = await Promise.allSettled([
+      store.replaceKey({ spaceId, expectedKid: second.kid, data: keyData(`race-a-${suffix}`) }),
+      store.replaceKey({ spaceId, expectedKid: second.kid, data: keyData(`race-b-${suffix}`) }),
+    ]);
+    const settled = [won, lost];
+    expect(settled.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(settled.filter((result) => result.status === "rejected")).toHaveLength(1);
+    if (lost.status === "rejected") expect(lost.reason).toBeInstanceOf(EvidenceKeyConflict);
+    else if (won.status === "rejected") expect(won.reason).toBeInstanceOf(EvidenceKeyConflict);
+    const history = await store.keysForSpace(spaceId);
+    expect(history).toHaveLength(3);
+    expect(history.filter((row) => !row.revokedAt)).toHaveLength(1);
+    expect(history.find((row) => !row.revokedAt)?.version).toBe(3);
+  });
+  it("dates an emergency revocation with its reason and keeps the row", async () => {
+    const active = (await store.activeKey(spaceId))!;
+    const revoked = await store.revokeKey({
+      spaceId,
+      expectedKid: active.kid,
+      reason: "compromised fixture",
+    });
+    expect(revoked.revokedAt).toBeTruthy();
+    expect(revoked.revokedReason).toBe("compromised fixture");
+    expect(revoked.replacedAt).toBeNull();
+    expect(await store.activeKey(spaceId)).toBeNull();
+    // The retained row still serves historical verification by kid.
+    expect((await store.keyByKid(active.kid))?.publicKeyPem).toBe(active.publicKeyPem);
     await expect(
-      prisma.evidenceKey.update({ where: { id: key.id }, data: { revokedAt: null } }),
-    ).rejects.toThrow();
-    await expect(prisma.evidenceKey.delete({ where: { id: key.id } })).rejects.toThrow();
+      store.revokeKey({ spaceId, expectedKid: active.kid, reason: "again" }),
+    ).rejects.toBeInstanceOf(EvidenceKeyConflict);
+    // Replacement after a bare revocation installs the next version.
+    const next = await store.replaceKey({
+      spaceId,
+      expectedKid: active.kid,
+      data: keyData(`after-revoke-${suffix}`),
+    });
+    expect(next.version).toBe(active.version + 1);
+  });
+  it("rejects key field edits, un-revoke and delete even with the deletion flag", async () => {
+    const rows = await store.keysForSpace(spaceId);
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      await expect(
+        prisma.evidenceKey.update({ where: { id: row.id }, data: { publicKeyPem: "changed" } }),
+      ).rejects.toThrow();
+      await expect(prisma.evidenceKey.delete({ where: { id: row.id } })).rejects.toThrow();
+      if (row.revokedAt) {
+        await expect(
+          prisma.evidenceKey.update({ where: { id: row.id }, data: { revokedAt: null } }),
+        ).rejects.toThrow();
+        await expect(
+          prisma.evidenceKey.update({ where: { id: row.id }, data: { revokedReason: "changed" } }),
+        ).rejects.toThrow();
+      }
+    }
   });
   it("allows deletion only in the flagged transaction, including space cascades", async () => {
     await prisma.$transaction(async (tx) => {
