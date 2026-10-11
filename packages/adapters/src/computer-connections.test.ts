@@ -375,10 +375,9 @@ it("names the paired desktop, not the server's own platform, for a stale host co
 });
 
 it.each([
-  ["docker", {} as const],
-  ["e2b", { e2bApiKey: "e2b-test" } as const],
-  ["daytona", { daytonaApiKey: "daytona-test" } as const],
-  ["box", { boxApiKey: "box-test" } as const],
+  ["e2b", { e2bApiKey: "fixture-key" } as const],
+  ["daytona", { daytonaApiKey: "fixture-key" } as const],
+  ["box", { boxApiKey: "fixture-key" } as const],
 ] as const)(
   "offers no Git observation for a %s computer through the production Docker composition",
   async (kind, keys) => {
@@ -386,6 +385,7 @@ it.each([
     // The production Docker stack nests wrappers: HostAwareSandbox routes to a
     // ConnectedSandboxProvider, which owns the engine provider that must answer.
     const sandbox = createRunSandbox("docker", {
+      supervisorUrl: "http://127.0.0.1:1",
       supervisorToken: "fixture",
       prisma: {
         deploymentSettings: { findUnique: async () => ({ computerHost: "this-mac" }) },
@@ -407,6 +407,36 @@ it.each([
     }
   },
 );
+
+it("offers Git observation for a running Docker computer whose provider has the reader", async () => {
+  vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => {
+      throw new Error("supervisor unreachable");
+    }),
+  );
+  const sandbox = createRunSandbox("docker", {
+    supervisorUrl: "http://127.0.0.1:1",
+    supervisorToken: "fixture",
+    prisma: {
+      deploymentSettings: { findUnique: async () => ({ computerHost: "this-mac" }) },
+      hostRegistration: { findUnique: async () => null },
+    } as unknown as PrismaClient,
+    secrets: { load: () => "" },
+  });
+  try {
+    const computer: ComputerRef = { id: "c", botId: "bot", kind: "docker", providerRef: "ref" };
+    expect(await sandbox.canObserveGit!(computer, context)).toBe(true);
+    await expect(sandbox.gitChanges!(computer, {}, context)).resolves.toEqual({
+      kind: "unavailable",
+    });
+    expect(await sandbox.canObserveGit!({ ...computer, kind: "desktop" }, context)).toBe(true);
+  } finally {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  }
+});
 
 it("runs a hosted deployment's own computers on its one default provider", async () => {
   for (const [kind, keys] of [

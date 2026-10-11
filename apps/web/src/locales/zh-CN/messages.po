@@ -143,12 +143,6 @@ msgstr ""
 msgid "{0} rollup hours"
 msgstr ""
 
-#. placeholder {0}: usage.runs
-#. placeholder {1}: usage.inputTokens + usage.outputTokens
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "{0} runs · {1} tokens"
-msgstr "{0} 次运行 · {1} tokens"
-
 #. placeholder {0}: preview.runs
 #: src/pages/CompareStart.tsx
 msgid "{0} runs at these pins; hosted providers may bill per run"
@@ -347,6 +341,7 @@ msgstr "{pending, plural, other {# 条建议待审}}"
 msgid "{reconnectCount} need reconnection"
 msgstr ""
 
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "{records, plural, one {# usage record} other {# usage records}}"
 msgstr "{records, plural, other {# 条用量记录}}"
@@ -354,6 +349,11 @@ msgstr "{records, plural, other {# 条用量记录}}"
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "剩余 {remaining} · Bot 只看不操作"
+
+#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "{runs, plural, one {# run} other {# runs}}"
+msgstr "{runs, plural, other {# 次运行}}"
 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} could not finish this run. Check the runtime or change the pin."
@@ -455,6 +455,7 @@ msgstr "{suggested} 完成了你的 {suggestedRuns} 次运行。"
 msgid "{title}, {label}"
 msgstr "{title}，{label}"
 
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "{tokens, plural, one {# token} other {# tokens}}"
 msgstr "{tokens, plural, other {# 个令牌}}"
@@ -1618,6 +1619,10 @@ msgstr ""
 msgid "by {0}"
 msgstr ""
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "By bot"
+msgstr "按机器人"
+
 #: src/pages/customize/SkillsPage.tsx
 msgid "by you"
 msgstr ""
@@ -1844,6 +1849,10 @@ msgstr "检查更新"
 #: src/pages/Shell.tsx
 msgid "Check in."
 msgstr "报到。"
+
+#: src/components/RunEvidence.tsx
+msgid "Check key"
+msgstr "检查密钥"
 
 #: src/pages/Auth.tsx
 msgid "Check your email"
@@ -2092,6 +2101,7 @@ msgid "Close navigation"
 msgstr "关闭导航"
 
 #: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Close panel"
 msgstr "关闭面板"
 
@@ -2611,6 +2621,7 @@ msgstr "协调者"
 msgid "Coordinator bot"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/memory/MemoryImport.tsx
 msgid "Copied"
@@ -2628,6 +2639,10 @@ msgstr ""
 #: src/components/ThreadCommandBlock.tsx
 msgid "Copy command"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Copy fingerprint"
+msgstr "复制指纹"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Copy output"
@@ -2821,6 +2836,10 @@ msgstr "无法继续"
 msgid "Could not copy. Select and copy the prompt."
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "Could not copy. Select the fingerprint and copy it."
+msgstr "无法复制。请选择指纹并复制。"
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Could not create bot"
 msgstr "无法创建 Bot"
@@ -2984,6 +3003,10 @@ msgstr ""
 msgid "Could not load model settings"
 msgstr "无法加载模型设置"
 
+#: src/pages/Onboarding.tsx
+msgid "Could not load models."
+msgstr "无法加载模型。"
+
 #: src/pages/LearningObservation.tsx
 msgid "Could not load observations."
 msgstr ""
@@ -3012,6 +3035,10 @@ msgstr ""
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Could not load settings. Try again."
 msgstr ""
+
+#: src/pages/Onboarding.tsx
+msgid "Could not load setup."
+msgstr "无法加载初始设置。"
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load skill"
@@ -4321,6 +4348,10 @@ msgstr "展开"
 msgid "Expand {0}"
 msgstr "展开 {0}"
 
+#: src/components/RunEvidence.tsx
+msgid "Expected fingerprint"
+msgstr "预期指纹"
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
 msgstr ""
@@ -4354,6 +4385,10 @@ msgstr ""
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Export data"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Export identity card"
+msgstr "导出身份卡"
 
 #: src/pages/ComparePanel.tsx
 msgid "Export JSON"
@@ -4484,6 +4519,10 @@ msgstr "正在查找…"
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Fine-grained token"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Fingerprint"
+msgstr "指纹"
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "Finish setup"
@@ -5252,6 +5291,10 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "key"
 msgstr "密钥"
+
+#: src/components/RunEvidence.tsx
+msgid "Key version"
+msgstr "密钥版本"
 
 #. placeholder {0}: target.context.slice(5)
 #: src/pages/fleet/target-name.ts
@@ -6293,6 +6336,10 @@ msgstr ""
 msgid "No embedding service is configured."
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "No expected key given; self-consistent only"
+msgstr "未提供预期密钥；仅验证内部一致性"
+
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "No extensions are in the built-in catalogue yet. Use Add to install an extension bundle (.mcpb or .dxt file) from this computer."
 msgstr "内置目录中还没有扩展。使用“添加”从这台电脑安装扩展包（.mcpb 或 .dxt 文件）。"
@@ -6927,6 +6974,10 @@ msgstr ""
 #: src/pages/ScratchpadSection.tsx
 msgid "Park"
 msgstr "搁置"
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Partial cost"
+msgstr "部分费用"
 
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Partially reported"
@@ -7853,6 +7904,7 @@ msgstr "恢复团队消息"
 #: src/pages/LearningTimeline.tsx
 #: src/pages/memory/MemoryPage.tsx
 #: src/pages/MemoryHistory.tsx
+#: src/pages/Onboarding.tsx
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
@@ -8700,6 +8752,14 @@ msgstr "登录已取消。"
 msgid "Sign-in was declined."
 msgstr "登录被拒绝。"
 
+#: src/components/RunEvidence.tsx
+msgid "Signed by a different key"
+msgstr "由其他密钥签名"
+
+#: src/components/RunEvidence.tsx
+msgid "Signed by the expected key"
+msgstr "由预期密钥签名"
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Signed in"
 msgstr ""
@@ -8707,6 +8767,10 @@ msgstr ""
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Signed in on this computer as {identity}"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Signing identity"
+msgstr "签名身份"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/customize/PluginsPage.tsx
@@ -8795,6 +8859,10 @@ msgstr ""
 #: src/pages/LearningInbox.tsx
 msgid "Source revision"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Space"
+msgstr "空间"
 
 #: src/pages/board/BoardsSettings.tsx
 msgid "Space board"
@@ -9764,6 +9832,10 @@ msgstr "输入你的回答"
 msgid "Unassigned"
 msgstr "未分配"
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Unattributed usage"
+msgstr "未归属的用量"
+
 #: src/components/SoftwareUpdateSection.tsx
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/TeamBoard.tsx
@@ -9806,6 +9878,10 @@ msgstr ""
 #: src/pages/system/SystemPage.tsx
 msgid "Unknown"
 msgstr "未知"
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Unknown bot"
+msgstr "未知机器人"
 
 #: src/pages/account/AccountTables.tsx
 msgid "Unknown device"

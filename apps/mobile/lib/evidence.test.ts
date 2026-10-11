@@ -48,6 +48,17 @@ describe("mobile evidence state mapping", () => {
         expect(t(entry.labelMessageId)).not.toBe(entry.labelMessageId);
       }
       for (const id of [
+        "Signing identity",
+        "Fingerprint",
+        "Share fingerprint",
+        "Export identity card",
+        "Expected fingerprint",
+        "Check key",
+        "Signed by the expected key",
+        "Signed by a different key",
+        "No expected key given; self-consistent only",
+        "Space",
+        "Key version",
         "Download evidence",
         "{gapCount} evidence gaps",
         "The export could not finish; try again.",

@@ -302,6 +302,43 @@ describe("observeGitChanges", () => {
     });
   });
 
+  it("treats an untracked read that finishes past the deadline as unavailable", async () => {
+    let now = 0;
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => now);
+    const fake = fakeRunner();
+    repository(fake, [ok("?? notes.md\0")]);
+    try {
+      const result = await observeGitChanges(fake.runner, {
+        root: ROOT,
+        path: "notes.md",
+        deadlineMs: 100,
+        readWorktreeFile: async () => {
+          now = 200;
+          return new TextEncoder().encode("fresh\n");
+        },
+      });
+      expect(result).toEqual({ kind: "unavailable" });
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it("passes an AbortSignal to readWorktreeFile tied to the observation budget", async () => {
+    const fake = fakeRunner();
+    repository(fake, [ok("?? notes.md\0")]);
+    let signal: AbortSignal | undefined;
+    await observeGitChanges(fake.runner, {
+      root: ROOT,
+      path: "notes.md",
+      deadlineMs: Date.now() + 5000,
+      readWorktreeFile: async (_path, options) => {
+        signal = options?.signal;
+        return new TextEncoder().encode("fresh\n");
+      },
+    });
+    expect(signal).toBeInstanceOf(AbortSignal);
+  });
+
   it("flags binary diffs and caps oversized sides", async () => {
     const fake = fakeRunner();
     const huge = `+${"x".repeat(GIT_OBSERVATION_TEXT_SIDE_BYTES + 100)}`;

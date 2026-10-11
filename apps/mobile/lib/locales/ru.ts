@@ -1,4 +1,17 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "Signing identity": "Идентификатор подписи",
+  Fingerprint: "Отпечаток",
+  "Copy fingerprint": "Копировать отпечаток",
+  "Export identity card": "Экспортировать карточку идентификатора",
+  "Expected fingerprint": "Ожидаемый отпечаток",
+  "Check key": "Проверить ключ",
+  "Signed by the expected key": "Подписано ожидаемым ключом",
+  "Signed by a different key": "Подписано другим ключом",
+  "No expected key given; self-consistent only":
+    "Ожидаемый ключ не указан; подтверждена только внутренняя согласованность",
+  "Key version": "Версия ключа",
+  "Share fingerprint": "Поделиться отпечатком",
+
   "To {names}": "Кому: {names}",
   "Queued: {queued}": "В очереди: {queued}",
 
@@ -1583,4 +1596,11 @@ export const RU_MESSAGES: Record<string, string> = {
   "Open board item": "Открыть пункт доски",
   "Board update pending": "Обновление доски ожидается",
   "Could not review result. Try again.": "Не удалось проверить результат. Попробуйте снова.",
+  "{runs} run": "{runs} запуск",
+  "By bot": "По ботам",
+  "Hide bots": "Скрыть ботов",
+  "Unknown bot": "Неизвестный бот",
+  "Unattributed usage": "Использование без привязки",
+  "Partial cost": "Частичная стоимость",
+  "{runs} runs": "Запусков: {runs}",
 };

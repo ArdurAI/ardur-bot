@@ -143,12 +143,6 @@ msgstr ""
 msgid "{0} rollup hours"
 msgstr ""
 
-#. placeholder {0}: usage.runs
-#. placeholder {1}: usage.inputTokens + usage.outputTokens
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "{0} runs · {1} tokens"
-msgstr "{0} Läufe · {1} Tokens"
-
 #. placeholder {0}: preview.runs
 #: src/pages/CompareStart.tsx
 msgid "{0} runs at these pins; hosted providers may bill per run"
@@ -347,6 +341,7 @@ msgstr "{pending, plural, one {# Vorschlag zu prüfen} other {# Vorschläge zu p
 msgid "{reconnectCount} need reconnection"
 msgstr ""
 
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "{records, plural, one {# usage record} other {# usage records}}"
 msgstr "{records, plural, one {# Nutzungsdatensatz} other {# Nutzungsdatensätze}}"
@@ -354,6 +349,11 @@ msgstr "{records, plural, one {# Nutzungsdatensatz} other {# Nutzungsdatensätze
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "Noch {remaining} · Bot beobachtet nur"
+
+#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "{runs, plural, one {# run} other {# runs}}"
+msgstr "{runs, plural, one {# Ausführung} other {# Ausführungen}}"
 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} could not finish this run. Check the runtime or change the pin."
@@ -455,6 +455,7 @@ msgstr ""
 msgid "{title}, {label}"
 msgstr "{title}, {label}"
 
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "{tokens, plural, one {# token} other {# tokens}}"
 msgstr "{tokens, plural, one {# Token} other {# Token}}"
@@ -1618,6 +1619,10 @@ msgstr ""
 msgid "by {0}"
 msgstr ""
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "By bot"
+msgstr "Nach Bot"
+
 #: src/pages/customize/SkillsPage.tsx
 msgid "by you"
 msgstr ""
@@ -1844,6 +1849,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Check in."
 msgstr "Melde dich."
+
+#: src/components/RunEvidence.tsx
+msgid "Check key"
+msgstr "Schlüssel prüfen"
 
 #: src/pages/Auth.tsx
 msgid "Check your email"
@@ -2092,6 +2101,7 @@ msgid "Close navigation"
 msgstr "Navigation schließen"
 
 #: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Close panel"
 msgstr "Panel schließen"
 
@@ -2611,6 +2621,7 @@ msgstr "Koordinator"
 msgid "Coordinator bot"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/memory/MemoryImport.tsx
 msgid "Copied"
@@ -2628,6 +2639,10 @@ msgstr ""
 #: src/components/ThreadCommandBlock.tsx
 msgid "Copy command"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Copy fingerprint"
+msgstr "Fingerabdruck kopieren"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Copy output"
@@ -2821,6 +2836,10 @@ msgstr "Fortfahren fehlgeschlagen"
 msgid "Could not copy. Select and copy the prompt."
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "Could not copy. Select the fingerprint and copy it."
+msgstr "Kopieren fehlgeschlagen. Wählen Sie den Fingerabdruck aus und kopieren Sie ihn."
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Could not create bot"
 msgstr "Bot konnte nicht erstellt werden"
@@ -2984,6 +3003,10 @@ msgstr ""
 msgid "Could not load model settings"
 msgstr "Modelleinstellungen konnten nicht geladen werden"
 
+#: src/pages/Onboarding.tsx
+msgid "Could not load models."
+msgstr "Die Modelle konnten nicht geladen werden."
+
 #: src/pages/LearningObservation.tsx
 msgid "Could not load observations."
 msgstr ""
@@ -3012,6 +3035,10 @@ msgstr ""
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Could not load settings. Try again."
 msgstr ""
+
+#: src/pages/Onboarding.tsx
+msgid "Could not load setup."
+msgstr "Die Einrichtung konnte nicht geladen werden."
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load skill"
@@ -4321,6 +4348,10 @@ msgstr "Erweitern"
 msgid "Expand {0}"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "Expected fingerprint"
+msgstr "Erwarteter Fingerabdruck"
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
 msgstr ""
@@ -4354,6 +4385,10 @@ msgstr ""
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Export data"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Export identity card"
+msgstr "Identitätskarte exportieren"
 
 #: src/pages/ComparePanel.tsx
 msgid "Export JSON"
@@ -4484,6 +4519,10 @@ msgstr "Suche läuft…"
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Fine-grained token"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Fingerprint"
+msgstr "Fingerabdruck"
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "Finish setup"
@@ -5252,6 +5291,10 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "key"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Key version"
+msgstr "Schlüsselversion"
 
 #. placeholder {0}: target.context.slice(5)
 #: src/pages/fleet/target-name.ts
@@ -6293,6 +6336,10 @@ msgstr ""
 msgid "No embedding service is configured."
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "No expected key given; self-consistent only"
+msgstr "Kein erwarteter Schlüssel angegeben; nur in sich konsistent"
+
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "No extensions are in the built-in catalogue yet. Use Add to install an extension bundle (.mcpb or .dxt file) from this computer."
 msgstr "Im integrierten Katalog sind noch keine Erweiterungen vorhanden. Verwende Hinzufügen, um ein Erweiterungs-Bundle (.mcpb- oder .dxt-Datei) von diesem Computer zu installieren."
@@ -6927,6 +6974,10 @@ msgstr ""
 #: src/pages/ScratchpadSection.tsx
 msgid "Park"
 msgstr "Zurückstellen"
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Partial cost"
+msgstr "Teilweise bekannte Kosten"
 
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Partially reported"
@@ -7853,6 +7904,7 @@ msgstr "Teamnachrichten fortsetzen"
 #: src/pages/LearningTimeline.tsx
 #: src/pages/memory/MemoryPage.tsx
 #: src/pages/MemoryHistory.tsx
+#: src/pages/Onboarding.tsx
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
@@ -8700,6 +8752,14 @@ msgstr ""
 msgid "Sign-in was declined."
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "Signed by a different key"
+msgstr "Mit einem anderen Schlüssel signiert"
+
+#: src/components/RunEvidence.tsx
+msgid "Signed by the expected key"
+msgstr "Mit dem erwarteten Schlüssel signiert"
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Signed in"
 msgstr ""
@@ -8707,6 +8767,10 @@ msgstr ""
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Signed in on this computer as {identity}"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Signing identity"
+msgstr "Signaturidentität"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/customize/PluginsPage.tsx
@@ -8795,6 +8859,10 @@ msgstr ""
 #: src/pages/LearningInbox.tsx
 msgid "Source revision"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Space"
+msgstr "Bereich"
 
 #: src/pages/board/BoardsSettings.tsx
 msgid "Space board"
@@ -9764,6 +9832,10 @@ msgstr "Gib deine Antwort ein"
 msgid "Unassigned"
 msgstr "Nicht zugewiesen"
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Unattributed usage"
+msgstr "Nutzung ohne Zuordnung"
+
 #: src/components/SoftwareUpdateSection.tsx
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/TeamBoard.tsx
@@ -9806,6 +9878,10 @@ msgstr ""
 #: src/pages/system/SystemPage.tsx
 msgid "Unknown"
 msgstr "Unbekannt"
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Unknown bot"
+msgstr "Unbekannter Bot"
 
 #: src/pages/account/AccountTables.tsx
 msgid "Unknown device"

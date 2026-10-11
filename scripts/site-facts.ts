@@ -11,6 +11,7 @@ import {
 } from "../apps/api/src/limits.ts";
 import { DOCUMENT_STORE_KINDS } from "../packages/adapters/src/memory/document-store-factory.ts";
 import { GIT_PUBLISH_MODES } from "../packages/adapters/src/memory/git-store.ts";
+import { ollamaCatalogPlaceholder } from "../packages/adapters/src/ollama.ts";
 import { listPiCatalog } from "../packages/adapters/src/pi-models.ts";
 import {
   MIN_ONE_SHOT_LEAD_SECONDS,
@@ -119,7 +120,7 @@ export const PROVIDER_METADATA: Record<string, ProviderMetadata> = {
     status: "roadmap",
     accountHint: "Claude account through your own CLI",
   },
-  ollama: { name: "Ollama as a first-class choice", access: "local", status: "roadmap" },
+  ollama: { name: "Ollama as a first-class choice", access: "local", status: "available" },
 };
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -251,7 +252,10 @@ export function routinesFromCode(): NonNullable<SiteProduct["routines"]> {
   };
 }
 
-export function providersFromCatalog(catalog = listPiCatalog()): Provider[] {
+// The served catalog adds Ollama at request time (apps/api models.list), so include it here.
+export function providersFromCatalog(
+  catalog = [...listPiCatalog(), ollamaCatalogPlaceholder],
+): Provider[] {
   const shipped = [...new Set(catalog.map((entry) => entry.provider))];
   for (const id of shipped) {
     if (!PROVIDER_METADATA[id]) {

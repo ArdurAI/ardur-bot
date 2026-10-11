@@ -1,14 +1,29 @@
 // @vitest-environment jsdom
 import type { ComponentProps, ReactNode } from "react";
-import { act } from "react";
+import { act, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-const api = vi.hoisted(() => ({ me: vi.fn(), list: vi.fn(), signIn: vi.fn() }));
-vi.mock("../lib/rpc", () => ({
-  rpc: { me: api.me, models: { list: api.list }, integrationSetup: { get: async () => null } },
+const api = vi.hoisted(() => ({
+  me: vi.fn(),
+  list: vi.fn(),
+  signIn: vi.fn(),
+  create: vi.fn(),
+  start: vi.fn(),
+  promptFocus: vi.fn(),
+  navigate: vi.fn(),
 }));
-vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn() }));
+vi.mock("../lib/rpc", () => ({
+  selectedSpaceId: () => null,
+  rpc: {
+    me: api.me,
+    models: { list: api.list },
+    integrationSetup: { get: async () => null },
+    bots: { list: async () => [], create: api.create },
+    onboarding: { start: api.start, promptFocus: api.promptFocus },
+  },
+}));
+vi.mock("react-router-dom", () => ({ useNavigate: () => api.navigate }));
 vi.mock("../components/integrations/IntegrationSetup", () => ({ IntegrationSetup: () => null }));
 vi.mock("../lib/use-model-oauth-signin", () => ({
   useModelOAuthSignIn: () => ({ cancelOAuthAttempt: vi.fn(), startSubscriptionSignIn: api.signIn }),
@@ -59,7 +74,12 @@ let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  vi.clearAllMocks();
+  vi.resetAllMocks();
+  api.me.mockResolvedValue({ needsModel: false });
+  api.list.mockResolvedValue([]);
+  api.create.mockResolvedValue({ id: "first-bot" });
+  api.start.mockResolvedValue(undefined);
+  api.promptFocus.mockResolvedValue(undefined);
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -107,3 +127,136 @@ it.each([false, true])(
     );
   },
 );
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: Error) => void;
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+
+function retryButton() {
+  return [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Retry",
+  )!;
+}
+
+it.each(["account", "catalog"] as const)(
+  "a failed %s read never creates a bot and retry recovers",
+  async (failed) => {
+    const read = failed === "account" ? api.me : api.list;
+    read.mockRejectedValueOnce(new Error("unreachable"));
+    await act(async () => root.render(<OnboardingPage />));
+    expect(api.create).not.toHaveBeenCalled();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      failed === "account" ? "Could not load setup." : "Could not load models.",
+    );
+    expect(container.textContent).not.toContain("unreachable");
+    expect(container.querySelector("select")).toBeNull();
+    expect(api.start).not.toHaveBeenCalled();
+    expect(api.navigate).not.toHaveBeenCalled();
+    await act(async () => retryButton().click());
+    expect(api.me).toHaveBeenCalledTimes(2);
+    expect(api.list).toHaveBeenCalledTimes(2);
+    expect(api.create).toHaveBeenCalledTimes(1);
+    expect(api.navigate).toHaveBeenCalledWith("/app/first-bot");
+  },
+);
+
+it("retry recovers to model selection when the confirmed account needs a model", async () => {
+  api.me.mockRejectedValueOnce(new Error("offline")).mockResolvedValue({ needsModel: true });
+  api.list.mockResolvedValue([
+    { provider: "scripted", id: "scripted", label: "Scripted", auth: "api-key", billing: "" },
+  ]);
+  await act(async () => root.render(<OnboardingPage />));
+  await act(async () => retryButton().click());
+  expect(container.querySelector("h1")?.textContent).toBe("Connect a model");
+  expect(api.create).not.toHaveBeenCalled();
+});
+
+it.each(["account", "catalog"] as const)(
+  "a deferred %s read stays loading until confirmed",
+  async (pending) => {
+    const response = deferred<unknown>();
+    (pending === "account" ? api.me : api.list).mockReturnValueOnce(response.promise);
+    await act(async () => root.render(<OnboardingPage />));
+    expect(container.textContent).toContain("Loading…");
+    expect(api.create).not.toHaveBeenCalled();
+    await act(async () => response.resolve(pending === "account" ? { needsModel: false } : []));
+    expect(api.create).toHaveBeenCalledTimes(1);
+  },
+);
+
+it("repeated retry clicks start one read and wait for it", async () => {
+  api.me.mockRejectedValueOnce(new Error("offline"));
+  await act(async () => root.render(<OnboardingPage />));
+  const response = deferred<unknown>();
+  api.me.mockReturnValueOnce(response.promise);
+  const retry = retryButton();
+  await act(async () => {
+    retry.click();
+    retry.click();
+  });
+  expect(api.me).toHaveBeenCalledTimes(2);
+  expect(api.list).toHaveBeenCalledTimes(2);
+  expect(container.textContent).toContain("Loading…");
+  expect(api.create).not.toHaveBeenCalled();
+  await act(async () => response.resolve({ needsModel: false }));
+  expect(api.create).toHaveBeenCalledTimes(1);
+});
+
+it.each(["resolve", "reject"] as const)("ignores reads that %s after unmount", async (settle) => {
+  const response = deferred<unknown>();
+  api.me.mockReturnValueOnce(response.promise);
+  await act(async () => root.render(<OnboardingPage />));
+  await act(async () => root.unmount());
+  await act(async () => {
+    if (settle === "resolve") response.resolve({ needsModel: false });
+    else response.reject(new Error("offline"));
+  });
+  expect(container.childNodes).toHaveLength(0);
+  expect(api.create).not.toHaveBeenCalled();
+  expect(api.navigate).not.toHaveBeenCalled();
+});
+
+it("ignores a stale read when Strict Mode restarts the mount effect", async () => {
+  const stale = deferred<unknown>();
+  api.me.mockReturnValueOnce(stale.promise).mockRejectedValueOnce(new Error("offline"));
+  await act(async () =>
+    root.render(
+      <StrictMode>
+        <OnboardingPage />
+      </StrictMode>,
+    ),
+  );
+  expect(container.textContent).toContain("Could not load setup.");
+  await act(async () => stale.resolve({ needsModel: false }));
+  expect(container.textContent).toContain("Could not load setup.");
+  expect(api.create).not.toHaveBeenCalled();
+});
+
+it("does not navigate or continue onboarding after unmount during bot creation", async () => {
+  const response = deferred<{ id: string }>();
+  api.create.mockReturnValueOnce(response.promise);
+  await act(async () => root.render(<OnboardingPage />));
+  expect(api.create).toHaveBeenCalledTimes(1);
+  await act(async () => root.unmount());
+  await act(async () => response.resolve({ id: "first-bot" }));
+  expect(api.start).not.toHaveBeenCalled();
+  expect(api.navigate).not.toHaveBeenCalled();
+});
+
+it("ignores a retry response after unmount", async () => {
+  api.me.mockRejectedValueOnce(new Error("offline"));
+  await act(async () => root.render(<OnboardingPage />));
+  const response = deferred<unknown>();
+  api.me.mockReturnValueOnce(response.promise);
+  await act(async () => retryButton().click());
+  await act(async () => root.unmount());
+  await act(async () => response.resolve({ needsModel: false }));
+  expect(api.create).not.toHaveBeenCalled();
+  expect(api.navigate).not.toHaveBeenCalled();
+});

@@ -1,4 +1,16 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "Signing identity": "签名身份",
+  Fingerprint: "指纹",
+  "Copy fingerprint": "复制指纹",
+  "Export identity card": "导出身份卡",
+  "Expected fingerprint": "预期指纹",
+  "Check key": "检查密钥",
+  "Signed by the expected key": "由预期密钥签名",
+  "Signed by a different key": "由其他密钥签名",
+  "No expected key given; self-consistent only": "未提供预期密钥；仅验证内部一致性",
+  "Key version": "密钥版本",
+  "Share fingerprint": "分享指纹",
+
   "To {names}": "发送给：{names}",
   "Queued: {queued}": "排队中：{queued}",
 
@@ -1516,4 +1528,11 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Open board item": "打开看板事项",
   "Board update pending": "看板更新待处理",
   "Could not review result. Try again.": "无法审核结果，请重试。",
+  "{runs} run": "{runs} 次运行",
+  "By bot": "按机器人",
+  "Hide bots": "收起机器人",
+  "Unknown bot": "未知机器人",
+  "Unattributed usage": "未归属的用量",
+  "Partial cost": "部分费用",
+  "{runs} runs": "{runs} 次运行",
 };
