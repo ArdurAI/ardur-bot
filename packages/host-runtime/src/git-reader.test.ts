@@ -18,7 +18,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 import type { AdapterContext } from "@ardurbot/adapter-kit";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import {
   assertSafeGitMetadata,
@@ -126,6 +126,17 @@ it("reports a plain folder as not a repository", async () => {
   const { provider, computer } = await fixture();
   const result = await observe(provider, computer);
   expect(result).toEqual({ kind: "not-repository" });
+});
+
+it("does not leave a deadline timer for a plain folder", async () => {
+  const { home } = await fixture();
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    expect(await observeHostGitChanges(home)).toEqual({ kind: "not-repository" });
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it("refuses a repository discovered above the bot folder", async () => {
@@ -544,29 +555,40 @@ it("stops the metadata copy when the deadline runs out, returns unavailable and 
 
   const dummyHandle = await open(path.join(home, ".git", "HEAD"));
   const proto = Object.getPrototypeOf(dummyHandle);
-  const origCreateReadStream = proto.createReadStream;
-  let copyAttempted = false;
-
-  proto.createReadStream = () => {
-    copyAttempted = true;
-    return new Readable({ read() {} });
-  };
-
+  const budgetMs = 60_000;
+  let chunksRead = 0;
+  const source = new Readable({
+    read() {
+      chunksRead++;
+      if (chunksRead === 1) {
+        this.push(Buffer.from("ref: refs/heads/main\n"));
+        // Expire the deadline only once copying has started. Without pipeline
+        // cancellation the stream reaches its second read and ends normally.
+        vi.advanceTimersByTime(budgetMs);
+      } else this.push(null);
+    },
+  });
+  const copy = vi.spyOn(proto, "createReadStream").mockReturnValue(source);
+  vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
   try {
-    const deadlineMs = Date.now() + 50;
+    const deadlineMs = Date.now() + budgetMs;
     const result = await observeHostGitChanges(home, { deadlineMs });
     expect(result).toEqual({ kind: "unavailable" });
-    expect(copyAttempted).toBe(true);
+    expect(chunksRead).toBe(1);
+    expect(copy).toHaveBeenCalledOnce();
+    expect(source.errored).toMatchObject({ name: "AbortError" });
 
     const remainingTempViews = (await readdir(tmpdir())).filter((f) =>
       f.startsWith("git-observation-"),
     );
     expect(remainingTempViews).toEqual(initialTempViews);
   } finally {
-    proto.createReadStream = origCreateReadStream;
+    copy.mockRestore();
+    vi.useRealTimers();
+    source.destroy();
     await dummyHandle.close();
   }
-}, 1000);
+}, 10_000);
 
 describe("copyPinnedFile", () => {
   async function pinnedFixture() {
@@ -585,13 +607,47 @@ describe("copyPinnedFile", () => {
     expect(await readFile(destination, "utf8")).toBe("real index\n");
   });
 
-  it("aborts copying and cleans up when the AbortSignal is triggered", async () => {
+  it("refuses a copy whose signal is already aborted", async () => {
     const { root, source, info } = await pinnedFixture();
     const destination = path.join(root, "view-index");
     const controller = new AbortController();
     controller.abort();
     await expect(copyPinnedFile(source, destination, info, controller.signal)).rejects.toThrow();
     await expect(readFile(destination, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("removes the destination when copying is aborted after the first chunk", async () => {
+    const { root, source } = await pinnedFixture();
+    await writeFile(source, Buffer.alloc(256 * 1024, "x"));
+    const info = await lstat(source);
+    const destination = path.join(root, "view-index");
+    const controller = new AbortController();
+    const handle = await open(source);
+    const proto = Object.getPrototypeOf(handle);
+    const original = proto.createReadStream;
+    let chunksRead = 0;
+    const copy = vi.spyOn(proto, "createReadStream").mockImplementation(function (
+      this: typeof handle,
+    ) {
+      const stream = original.call(this, { highWaterMark: 1024 });
+      stream.on("data", () => {
+        chunksRead++;
+        if (chunksRead === 1) controller.abort(new Error("Copy cancelled"));
+      });
+      return stream;
+    });
+    try {
+      await expect(
+        copyPinnedFile(source, destination, info, controller.signal),
+      ).rejects.toMatchObject({
+        name: "AbortError",
+      });
+      expect(chunksRead).toBe(1);
+      await expect(readFile(destination)).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      copy.mockRestore();
+      await handle.close();
+    }
   });
 
   it("refuses a symlink swapped in between the lstat and the copy", async () => {

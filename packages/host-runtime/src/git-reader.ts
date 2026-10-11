@@ -198,14 +198,6 @@ export async function observeHostGitChanges(
   // One deadline covers the whole observation, including the config read below.
   const deadlineMs = request.deadlineMs ?? Date.now() + GIT_OBSERVATION_BUDGET_MS;
   const remaining = () => Math.max(1, deadlineMs - Date.now());
-  const controller = new AbortController();
-  const budgetMs = Math.max(0, deadlineMs - Date.now());
-  const timer = setTimeout(
-    () => controller.abort(new DOMException("The operation was aborted", "TimeoutError")),
-    budgetMs,
-  );
-  timer.unref?.();
-  if (budgetMs <= 0) controller.abort();
   const gitDir = path.join(root, ".git");
   const present = await lstat(gitDir).catch(() => null);
   if (!present) {
@@ -217,6 +209,14 @@ export async function observeHostGitChanges(
     }
     return { kind: "not-repository" };
   }
+  const controller = new AbortController();
+  const budgetMs = Math.max(0, deadlineMs - Date.now());
+  const timer = setTimeout(
+    () => controller.abort(new DOMException("The operation was aborted", "TimeoutError")),
+    budgetMs,
+  );
+  timer.unref?.();
+  if (budgetMs <= 0) controller.abort();
   let view: string | undefined;
   try {
     await assertSafeGitMetadata(root, gitDir);
