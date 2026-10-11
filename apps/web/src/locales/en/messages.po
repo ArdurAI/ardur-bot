@@ -2974,6 +2974,10 @@ msgstr "Could not load memory."
 msgid "Could not load model settings"
 msgstr "Could not load model settings"
 
+#: src/pages/Onboarding.tsx
+msgid "Could not load models."
+msgstr "Could not load models."
+
 #: src/pages/LearningObservation.tsx
 msgid "Could not load observations."
 msgstr "Could not load observations."
@@ -3002,6 +3006,10 @@ msgstr "Could not load server diagnostics."
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Could not load settings. Try again."
 msgstr "Could not load settings. Try again."
+
+#: src/pages/Onboarding.tsx
+msgid "Could not load setup."
+msgstr "Could not load setup."
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load skill"
@@ -7835,6 +7843,7 @@ msgstr "Resume team messages"
 #: src/pages/LearningTimeline.tsx
 #: src/pages/memory/MemoryPage.tsx
 #: src/pages/MemoryHistory.tsx
+#: src/pages/Onboarding.tsx
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx

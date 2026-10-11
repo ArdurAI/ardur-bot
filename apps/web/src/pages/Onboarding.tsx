@@ -1,7 +1,7 @@
+import type { IntegrationSetupState, ThinkingLevel } from "@ardurbot/contracts";
 import {
   DEFAULT_CONNECTION_CONTEXT_WINDOW,
   DEFAULT_MODEL_MAX_TOKENS,
-  type IntegrationSetupState,
   MAX_MODEL_CONTEXT_WINDOW,
   MAX_MODEL_MAX_TOKENS,
   OPENAI_COMPATIBLE_PROVIDER_ID,
@@ -10,12 +10,13 @@ import {
   parseModelContextWindow,
   parseModelMaxImagesPerPrompt,
   parseModelMaxTokens,
-  type ThinkingLevel,
 } from "@ardurbot/contracts";
+import type { SetupStep } from "@ardurbot/core";
 import {
   createModelProbe,
   initialModelProbeState,
   recommendedDefaultModelId,
+  setupStep,
 } from "@ardurbot/core";
 import {
   Button,
@@ -54,7 +55,7 @@ export function OnboardingPage() {
   const navigate = useNavigate();
   const ensureFirstBot = useFirstBotSetup();
   const fieldId = useId();
-  const [step, setStep] = useState<"loading" | "model" | "integrations" | "bot">("loading");
+  const [step, setStep] = useState<SetupStep>("loading");
   const [integrationSetup, setIntegrationSetup] = useState<IntegrationSetupState | null>(null);
   const needsIntegrationSetup = integrationSetup?.needsSetup ?? false;
   const [integrationServers, setIntegrationServers] = useState<string[]>([]);
@@ -75,6 +76,10 @@ export function OnboardingPage() {
   const [modelProbe] = useState(() => createModelProbe(setProbe));
   const resetOpenAiCompatibleProbe = modelProbe.reset;
   const createStartedRef = useRef(false);
+  const accountConfirmedRef = useRef(false);
+  const mountedRef = useRef(false);
+  const readInFlightRef = useRef(false);
+  const [readAttempt, setReadAttempt] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -95,35 +100,68 @@ export function OnboardingPage() {
   });
 
   useEffect(() => {
-    void Promise.all([
-      rpc.me(),
-      rpc.models.list().catch(() => []),
-      rpc.integrationSetup.get().catch(() => null),
-    ])
-      .then(([me, models, integrations]) => {
-        setIntegrationSetup(integrations);
-        setCatalog(models);
-        const defaultProvider = me.defaultProvider ?? models[0]?.provider ?? "";
-        const recommendedId = recommendedDefaultModelId(
-          defaultProvider,
-          models.filter((entry) => entry.provider === defaultProvider).map((entry) => entry.id),
-        );
-        const preferred =
-          models.find(
-            (entry) => entry.provider === me.defaultProvider && entry.id === me.defaultModel,
-          ) ??
-          models.find((entry) => entry.provider === defaultProvider && entry.id === recommendedId);
-        if (preferred) {
-          setProvider(preferred.provider);
-          setModelId(preferred.provider === OPENAI_COMPATIBLE_PROVIDER_ID ? "" : preferred.id);
-        }
-        setStep(me.needsModel ? "model" : integrations?.needsSetup ? "integrations" : "bot");
-      })
-      .catch(() => setStep("bot"));
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
       modelProbe.invalidate();
     };
-  }, []);
+  }, [modelProbe]);
+
+  useEffect(() => {
+    let active = true;
+    readInFlightRef.current = true;
+    accountConfirmedRef.current = false;
+    setStep("loading");
+    void Promise.allSettled([
+      rpc.me(),
+      rpc.models.list(),
+      rpc.integrationSetup.get().catch(() => null),
+    ]).then(([account, catalogRead, integrationRead]) => {
+      if (!active) return;
+      readInFlightRef.current = false;
+      const integrations = integrationRead.status === "fulfilled" ? integrationRead.value : null;
+      const nextStep = setupStep(
+        account.status === "fulfilled"
+          ? { status: "loaded", value: account.value }
+          : { status: "failed" },
+        catalogRead.status === "fulfilled"
+          ? { status: "loaded", value: catalogRead.value }
+          : { status: "failed" },
+        integrations?.needsSetup,
+      );
+      setStep(nextStep);
+      if (account.status !== "fulfilled" || catalogRead.status !== "fulfilled") return;
+      accountConfirmedRef.current = true;
+      const me = account.value;
+      const models = catalogRead.value;
+      setIntegrationSetup(integrations);
+      setCatalog(models);
+      const defaultProvider = me.defaultProvider ?? models[0]?.provider ?? "";
+      const recommendedId = recommendedDefaultModelId(
+        defaultProvider,
+        models.filter((entry) => entry.provider === defaultProvider).map((entry) => entry.id),
+      );
+      const preferred =
+        models.find(
+          (entry) => entry.provider === me.defaultProvider && entry.id === me.defaultModel,
+        ) ??
+        models.find((entry) => entry.provider === defaultProvider && entry.id === recommendedId);
+      if (preferred) {
+        setProvider(preferred.provider);
+        setModelId(preferred.provider === OPENAI_COMPATIBLE_PROVIDER_ID ? "" : preferred.id);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [readAttempt]);
+
+  function retrySetup() {
+    if (readInFlightRef.current || !mountedRef.current) return;
+    // Lock before React renders so repeated clicks cannot schedule another read.
+    readInFlightRef.current = true;
+    setReadAttempt((attempt) => attempt + 1);
+  }
 
   const providers = useMemo(() => {
     const seen = new Map<string, ModelCatalogEntry>();
@@ -297,8 +335,10 @@ export function OnboardingPage() {
           label: selected?.providerName ?? provider,
         });
       }
+      if (!mountedRef.current) return;
       setStep(nextStepAfterModel(needsIntegrationSetup));
     } catch (err) {
+      if (!mountedRef.current) return;
       setError(err instanceof Error ? err.message : t`Could not save model`);
     }
   }
@@ -313,13 +353,15 @@ export function OnboardingPage() {
   }
 
   async function createFirstBot() {
-    if (createStartedRef.current) return;
+    if (createStartedRef.current || !accountConfirmedRef.current || !mountedRef.current) return;
     createStartedRef.current = true;
     setError(null);
     try {
       const bot = await ensureFirstBot();
+      if (!mountedRef.current) return;
       for (const serverId of integrationServers) {
         await rpc.mcp.assignments.approve({ botId: bot.id, serverId });
+        if (!mountedRef.current) return;
       }
       // Onboarding continues conversationally in the thread: greeting first,
       // then the focus choice (immediate for the first bot).
@@ -327,11 +369,14 @@ export function OnboardingPage() {
         .start({ botId: bot.id })
         .then(() => true)
         .catch(() => false);
+      if (!mountedRef.current) return;
       if (started) {
         await rpc.onboarding.promptFocus({ botId: bot.id }).catch(() => undefined);
       }
+      if (!mountedRef.current) return;
       navigate(`/app/${bot.id}`);
     } catch (err) {
+      if (!mountedRef.current) return;
       createStartedRef.current = false;
       setError(err instanceof Error ? err.message : t`Could not create your bot`);
     }
@@ -345,7 +390,7 @@ export function OnboardingPage() {
   return (
     <div className="min-h-full bg-background px-6 py-12">
       <div className="mx-auto w-full max-w-[560px]">
-        {step !== "loading" ? (
+        {step === "model" || step === "integrations" || step === "bot" ? (
           <div className="mb-4 flex justify-end">
             <FeatureDocsLink featureId="onboarding" title={t`Connect a model`} />
           </div>
@@ -354,6 +399,20 @@ export function OnboardingPage() {
           <p className="text-muted-foreground">
             <Trans>Loading…</Trans>
           </p>
+        ) : null}
+        {step === "account-error" || step === "catalog-error" ? (
+          <div role="alert">
+            <p className="text-sm text-destructive">
+              {step === "account-error" ? (
+                <Trans>Could not load setup.</Trans>
+              ) : (
+                <Trans>Could not load models.</Trans>
+              )}
+            </p>
+            <Button className="mt-4" onClick={retrySetup}>
+              <Trans>Retry</Trans>
+            </Button>
+          </div>
         ) : null}
         {step === "model" ? (
           <div>
@@ -388,7 +447,8 @@ export function OnboardingPage() {
               <div className="mt-6">
                 <OllamaSettings
                   onChanged={async () => {
-                    setCatalog(await rpc.models.list());
+                    const models = await rpc.models.list();
+                    if (mountedRef.current) setCatalog(models);
                   }}
                   onReady={() => setStep(nextStepAfterModel(needsIntegrationSetup))}
                 />
