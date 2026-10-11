@@ -12,6 +12,7 @@ import {
   ProductDemoRecorder,
   writeProductDemoReport,
 } from "../../../packages/testkit/src/product-demo-report";
+import { selectCatalogModel } from "./catalog-model-picker";
 import { completeOnboarding, createNamedBot, openUserSettings, rpc, signup } from "./helpers";
 
 test("records the fixed seven-step product demo without promoting missing prerequisites", async ({
@@ -74,8 +75,8 @@ test("records the fixed seven-step product demo without promoting missing prereq
     expect(credential?.contextWindowSource).toBe("metadata");
     await page.reload();
     await openUserSettings(page, "models");
-    await page.getByPlaceholder("Search providers").fill("compatible");
-    await page.getByRole("button", { name: /OpenAI-compatible/ }).click();
+    await selectCatalogModel(page, "openai-compatible", "demo-fixture");
+    await page.getByRole("button", { name: "Connection settings", exact: true }).click();
     await page.locator("summary", { hasText: /^Advanced$/ }).click();
     await expect(page.getByLabel("Context limit", { exact: true })).toHaveValue("65536");
     return { screenshot: await screenshot("models"), evidence: "app-api" };

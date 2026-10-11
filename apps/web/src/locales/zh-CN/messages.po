@@ -34,11 +34,6 @@ msgstr ""
 msgid " (unread)"
 msgstr "（未读）"
 
-#. placeholder {0}: group.entries.length
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "{0, plural, one {# model} other {# models}}"
-msgstr "{0, plural, one {# 个模型} other {# 个模型}}"
-
 #. placeholder {0}: manifest.unscanned
 #: src/pages/import/LocalImportPage.tsx
 msgid "{0, plural, one {1 item was not scanned because of the scan limits.} other {# items were not scanned because of the scan limits.}}"
@@ -1028,6 +1023,7 @@ msgid "API is back, but the update did not finish. Check the host logs."
 msgstr "API 已恢复，但更新未完成。请查看宿主日志。"
 
 #: src/components/AskCard.tsx
+#: src/components/CatalogModelPicker.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/lib/localized-provider-hint.ts
 #: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
@@ -1921,6 +1917,10 @@ msgstr "选择模型"
 msgid "Choose a model in Models to enable memory suggestions."
 msgstr ""
 
+#: src/lib/model-selection-error.ts
+msgid "Choose a model."
+msgstr "请选择一个模型。"
+
 #: src/pages/Auth.tsx
 msgid "Choose a new password"
 msgstr "设置新密码"
@@ -1928,6 +1928,10 @@ msgstr "设置新密码"
 #: src/components/composer/command-description.ts
 msgid "Choose a taught skill"
 msgstr ""
+
+#: src/components/CatalogModelPicker.tsx
+msgid "Choose connection"
+msgstr "选择连接"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose effort"
@@ -2411,6 +2415,14 @@ msgstr "连接 OAuth"
 msgid "Connect remote account"
 msgstr ""
 
+#: src/lib/model-selection-error.ts
+msgid "Connect that model first."
+msgstr "请先连接此模型。"
+
+#: src/lib/model-selection-error.ts
+msgid "Connect that model server first."
+msgstr "请先连接此模型的服务器。"
+
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/move-to-host.tsx
@@ -2438,7 +2450,6 @@ msgstr "连接 Treg"
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/McpOAuthCallback.tsx
-#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/message-cards.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connected"
@@ -2497,6 +2508,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Connection saved, but the test failed:"
 msgstr "连接已保存，但测试失败："
+
+#: src/pages/ModelSettingsOverlay.tsx
+msgid "Connection settings"
+msgstr "连接设置"
 
 #. placeholder {0}: item.name
 #: src/pages/PluginsOverlay.tsx
@@ -4585,10 +4600,6 @@ msgstr ""
 msgid "Four terminals are already open."
 msgstr "已打开四个终端。"
 
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "Free"
-msgstr "免费"
-
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Free memory"
 msgstr ""
@@ -5565,6 +5576,10 @@ msgstr ""
 msgid "Local only"
 msgstr ""
 
+#: src/components/CatalogModelPicker.tsx
+msgid "Local server"
+msgstr "本地服务器"
+
 #: src/pages/LocalSettings.tsx
 msgid "Local Server Settings"
 msgstr ""
@@ -5656,9 +5671,9 @@ msgstr "每次请求的最大图像数"
 msgid "Maximum output tokens"
 msgstr "最大输出 token 数"
 
-#: src/pages/ModelSettingsOverlay.tsx
+#: src/components/CatalogModelPicker.tsx
 msgid "May not be available on your plan"
-msgstr ""
+msgstr "你的套餐可能不支持此模型"
 
 #: src/pages/settings-sections.ts
 msgid "MCP"
@@ -5870,6 +5885,7 @@ msgstr "分钟"
 msgid "minutes"
 msgstr "分钟"
 
+#: src/components/CatalogModelPicker.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/LearningInsights.tsx
 #: src/pages/MemoryHistory.tsx
@@ -5908,7 +5924,7 @@ msgstr "此群组中的模型"
 msgid "Model name"
 msgstr ""
 
-#: src/pages/ModelSettingsOverlay.tsx
+#: src/components/CatalogModelPicker.tsx
 msgid "Model options"
 msgstr "模型选项"
 
@@ -6306,7 +6322,7 @@ msgstr "已停用"
 msgid "No managed app catalog is configured on this deployment."
 msgstr "此部署未配置托管应用目录。"
 
-#: src/pages/ModelSettingsOverlay.tsx
+#: src/components/CatalogModelPicker.tsx
 msgid "No matching models"
 msgstr "没有匹配的模型"
 
@@ -6342,10 +6358,6 @@ msgstr ""
 #: src/pages/dashboard/panels.ts
 msgid "No proposals"
 msgstr ""
-
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "No providers found."
-msgstr "未找到提供方。"
 
 #: src/pages/dashboard/panels.ts
 #: src/pages/dashboard/WorkPanel.tsx
@@ -7170,12 +7182,10 @@ msgstr ""
 msgid "provider"
 msgstr ""
 
-#: src/pages/Onboarding.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Provider"
 msgstr "提供方"
 
-#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Providers"
 msgstr "提供方"
@@ -7289,12 +7299,13 @@ msgstr "正在读取文档"
 msgid "Reads can run without asking once you allow them. Writes always ask."
 msgstr ""
 
+#: src/components/CatalogModelPicker.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardColumns.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/WorkPanel.tsx
 msgid "Ready"
-msgstr ""
+msgstr "就绪"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Ready. The bot can use Hermes."
@@ -8267,10 +8278,10 @@ msgstr "此计算机不支持屏幕。"
 msgid "Screen recording"
 msgstr ""
 
+#: src/components/CatalogModelPicker.tsx
 #: src/components/integrations/catalog/ResourcePicker.tsx
 #: src/components/ThreadCommandBlock.tsx
 #: src/pages/board/Board.tsx
-#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
@@ -8300,13 +8311,9 @@ msgstr ""
 msgid "Search integrations.sh"
 msgstr ""
 
-#: src/pages/ModelSettingsOverlay.tsx
+#: src/components/CatalogModelPicker.tsx
 msgid "Search models"
 msgstr "搜索模型"
-
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "Search providers"
-msgstr "搜索提供方"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Search run output"
@@ -8607,6 +8614,7 @@ msgstr ""
 msgid "Showing {start}–{end} of {total}"
 msgstr ""
 
+#: src/components/CatalogModelPicker.tsx
 #: src/lib/localized-provider-hint.ts
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/Auth.tsx
@@ -9431,6 +9439,10 @@ msgstr "此配置过于复杂。"
 msgid "This configuration version is not supported."
 msgstr "不支持此配置版本。"
 
+#: src/lib/model-selection-error.ts
+msgid "This connection cannot serve that model."
+msgstr "此连接无法提供此模型。"
+
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "This field is not supported."
 msgstr "不支持此字段。"
@@ -9746,6 +9758,7 @@ msgstr "输入你的回答"
 msgid "Unassigned"
 msgstr "未分配"
 
+#: src/components/CatalogModelPicker.tsx
 #: src/components/SoftwareUpdateSection.tsx
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/TeamBoard.tsx
@@ -9792,6 +9805,10 @@ msgstr "未知"
 #: src/pages/account/AccountTables.tsx
 msgid "Unknown device"
 msgstr ""
+
+#: src/lib/model-selection-error.ts
+msgid "Unknown model for that provider"
+msgstr "此提供商的未知模型"
 
 #: src/components/ai/CompactWorkRecord.tsx
 msgid "Unknown: {title}"
@@ -10031,6 +10048,7 @@ msgstr ""
 
 #: src/components/OllamaSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/Onboarding.tsx
 msgid "Use this model"
 msgstr "使用此模型"
 

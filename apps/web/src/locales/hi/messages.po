@@ -34,11 +34,6 @@ msgstr ""
 msgid " (unread)"
 msgstr " (अपठित)"
 
-#. placeholder {0}: group.entries.length
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "{0, plural, one {# model} other {# models}}"
-msgstr "{0, plural, one {# मॉडल} other {# मॉडल}}"
-
 #. placeholder {0}: manifest.unscanned
 #: src/pages/import/LocalImportPage.tsx
 msgid "{0, plural, one {1 item was not scanned because of the scan limits.} other {# items were not scanned because of the scan limits.}}"
@@ -1028,6 +1023,7 @@ msgid "API is back, but the update did not finish. Check the host logs."
 msgstr ""
 
 #: src/components/AskCard.tsx
+#: src/components/CatalogModelPicker.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/lib/localized-provider-hint.ts
 #: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
@@ -1921,6 +1917,10 @@ msgstr "एक मॉडल चुनें"
 msgid "Choose a model in Models to enable memory suggestions."
 msgstr ""
 
+#: src/lib/model-selection-error.ts
+msgid "Choose a model."
+msgstr "एक मॉडल चुनें।"
+
 #: src/pages/Auth.tsx
 msgid "Choose a new password"
 msgstr "नया पासवर्ड चुनें"
@@ -1928,6 +1928,10 @@ msgstr "नया पासवर्ड चुनें"
 #: src/components/composer/command-description.ts
 msgid "Choose a taught skill"
 msgstr ""
+
+#: src/components/CatalogModelPicker.tsx
+msgid "Choose connection"
+msgstr "कनेक्शन चुनें"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose effort"
@@ -2411,6 +2415,14 @@ msgstr "OAuth कनेक्ट करें"
 msgid "Connect remote account"
 msgstr ""
 
+#: src/lib/model-selection-error.ts
+msgid "Connect that model first."
+msgstr "पहले उस मॉडल को कनेक्ट करें।"
+
+#: src/lib/model-selection-error.ts
+msgid "Connect that model server first."
+msgstr "पहले उस मॉडल के सर्वर को कनेक्ट करें।"
+
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/move-to-host.tsx
@@ -2438,7 +2450,6 @@ msgstr "Treg कनेक्ट करें"
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/McpOAuthCallback.tsx
-#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/message-cards.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connected"
@@ -2497,6 +2508,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Connection saved, but the test failed:"
 msgstr "कनेक्शन सहेजा गया, लेकिन जाँच विफल रही:"
+
+#: src/pages/ModelSettingsOverlay.tsx
+msgid "Connection settings"
+msgstr "कनेक्शन सेटिंग्स"
 
 #. placeholder {0}: item.name
 #: src/pages/PluginsOverlay.tsx
@@ -4585,10 +4600,6 @@ msgstr ""
 msgid "Four terminals are already open."
 msgstr "चार टर्मिनल पहले से खुले हैं।"
 
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "Free"
-msgstr ""
-
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Free memory"
 msgstr ""
@@ -5565,6 +5576,10 @@ msgstr ""
 msgid "Local only"
 msgstr ""
 
+#: src/components/CatalogModelPicker.tsx
+msgid "Local server"
+msgstr "स्थानीय सर्वर"
+
 #: src/pages/LocalSettings.tsx
 msgid "Local Server Settings"
 msgstr ""
@@ -5656,9 +5671,9 @@ msgstr "प्रति अनुरोध अधिकतम इमेज"
 msgid "Maximum output tokens"
 msgstr "अधिकतम आउटपुट टोकन"
 
-#: src/pages/ModelSettingsOverlay.tsx
+#: src/components/CatalogModelPicker.tsx
 msgid "May not be available on your plan"
-msgstr ""
+msgstr "हो सकता है कि आपके प्लान में उपलब्ध न हो"
 
 #: src/pages/settings-sections.ts
 msgid "MCP"
@@ -5870,6 +5885,7 @@ msgstr "मिनट"
 msgid "minutes"
 msgstr "मिनट"
 
+#: src/components/CatalogModelPicker.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/LearningInsights.tsx
 #: src/pages/MemoryHistory.tsx
@@ -5908,7 +5924,7 @@ msgstr "इस समूह में मॉडल"
 msgid "Model name"
 msgstr ""
 
-#: src/pages/ModelSettingsOverlay.tsx
+#: src/components/CatalogModelPicker.tsx
 msgid "Model options"
 msgstr "मॉडल विकल्प"
 
@@ -6306,9 +6322,9 @@ msgstr "अब सक्रिय नहीं"
 msgid "No managed app catalog is configured on this deployment."
 msgstr "इस डिप्लॉयमेंट पर कोई प्रबंधित ऐप कैटलॉग कॉन्फ़िगर नहीं है।"
 
-#: src/pages/ModelSettingsOverlay.tsx
+#: src/components/CatalogModelPicker.tsx
 msgid "No matching models"
-msgstr ""
+msgstr "कोई मिलते-जुलते मॉडल नहीं"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "No matching output."
@@ -6342,10 +6358,6 @@ msgstr ""
 #: src/pages/dashboard/panels.ts
 msgid "No proposals"
 msgstr ""
-
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "No providers found."
-msgstr "कोई प्रोवाइडर नहीं मिला।"
 
 #: src/pages/dashboard/panels.ts
 #: src/pages/dashboard/WorkPanel.tsx
@@ -7170,12 +7182,10 @@ msgstr ""
 msgid "provider"
 msgstr ""
 
-#: src/pages/Onboarding.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Provider"
 msgstr "प्रोवाइडर"
 
-#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Providers"
 msgstr "प्रोवाइडर्स"
@@ -7289,12 +7299,13 @@ msgstr "दस्तावेज़ पढ़ा जा रहा है"
 msgid "Reads can run without asking once you allow them. Writes always ask."
 msgstr ""
 
+#: src/components/CatalogModelPicker.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardColumns.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/WorkPanel.tsx
 msgid "Ready"
-msgstr ""
+msgstr "तैयार"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Ready. The bot can use Hermes."
@@ -8267,10 +8278,10 @@ msgstr "इस कंप्यूटर पर स्क्रीन उपल�
 msgid "Screen recording"
 msgstr ""
 
+#: src/components/CatalogModelPicker.tsx
 #: src/components/integrations/catalog/ResourcePicker.tsx
 #: src/components/ThreadCommandBlock.tsx
 #: src/pages/board/Board.tsx
-#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
@@ -8300,13 +8311,9 @@ msgstr ""
 msgid "Search integrations.sh"
 msgstr ""
 
-#: src/pages/ModelSettingsOverlay.tsx
+#: src/components/CatalogModelPicker.tsx
 msgid "Search models"
-msgstr ""
-
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "Search providers"
-msgstr "प्रोवाइडर्स खोजें"
+msgstr "मॉडल खोजें"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Search run output"
@@ -8607,6 +8614,7 @@ msgstr ""
 msgid "Showing {start}–{end} of {total}"
 msgstr ""
 
+#: src/components/CatalogModelPicker.tsx
 #: src/lib/localized-provider-hint.ts
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/Auth.tsx
@@ -9431,6 +9439,10 @@ msgstr "यह कॉन्फ़िगरेशन बहुत जटिल �
 msgid "This configuration version is not supported."
 msgstr "यह कॉन्फ़िगरेशन संस्करण समर्थित नहीं है।"
 
+#: src/lib/model-selection-error.ts
+msgid "This connection cannot serve that model."
+msgstr "यह कनेक्शन उस मॉडल को उपलब्ध नहीं करा सकता।"
+
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "This field is not supported."
 msgstr "यह फ़ील्ड समर्थित नहीं है।"
@@ -9746,6 +9758,7 @@ msgstr "अपना उत्तर लिखें"
 msgid "Unassigned"
 msgstr "असाइन नहीं किया गया"
 
+#: src/components/CatalogModelPicker.tsx
 #: src/components/SoftwareUpdateSection.tsx
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/TeamBoard.tsx
@@ -9792,6 +9805,10 @@ msgstr "अज्ञात"
 #: src/pages/account/AccountTables.tsx
 msgid "Unknown device"
 msgstr ""
+
+#: src/lib/model-selection-error.ts
+msgid "Unknown model for that provider"
+msgstr "उस प्रदाता के लिए अज्ञात मॉडल"
 
 #: src/components/ai/CompactWorkRecord.tsx
 msgid "Unknown: {title}"
@@ -10031,6 +10048,7 @@ msgstr ""
 
 #: src/components/OllamaSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/Onboarding.tsx
 msgid "Use this model"
 msgstr "यह मॉडल उपयोग करें"
 

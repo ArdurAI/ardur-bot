@@ -112,7 +112,7 @@
       "id": "onboarding",
       "aliases": [],
       "title": "Connect a model",
-      "summary": "Connect a model before starting a conversation when the server requires one.",
+      "summary": "Choose a model first, then reuse or set up the connection it needs.",
       "area": "getting-started",
       "order": 20,
       "internal": false,
@@ -150,14 +150,14 @@
           "aliases": [
             "open"
           ],
-          "text": "Open the required model connection form.",
+          "text": "Search for a model and choose its connection when several are available.",
           "uiLabels": [
             "Connect a model",
-            "Provider",
+            "Model",
             "API key"
           ],
           "screenshotId": "docs-onboarding-open",
-          "expected": "The selected connection and required fields are visible.",
+          "expected": "The selected model shows the connection it needs.",
           "availableSince": "0.1.0-alpha.2"
         },
         {
@@ -2127,7 +2127,7 @@
       "id": "models",
       "aliases": [],
       "title": "Models",
-      "summary": "Inspect a connected model, review the default control, and prepare another connection.",
+      "summary": "Search models across connections, reuse a ready connection, or connect the selected model.",
       "area": "connections-and-computers",
       "order": 10,
       "internal": false,
@@ -2180,10 +2180,11 @@
           "uiLabels": [
             "Settings",
             "Models",
-            "Connected"
+            "Model",
+            "Connection settings"
           ],
           "screenshotId": "docs-models-open",
-          "expected": "The Models heading and connected credential are visible.",
+          "expected": "The active model and shared model picker are visible.",
           "availableSince": "0.1.0-alpha.2"
         },
         {
@@ -2191,7 +2192,7 @@
           "aliases": [
             "default"
           ],
-          "text": "Choose another model on the connected provider to reveal the default control.",
+          "text": "Search for a model, choose its connection when needed, and select Use this model.",
           "uiLabels": [
             "Model",
             "Use this model"
@@ -2205,7 +2206,7 @@
           "aliases": [
             "add"
           ],
-          "text": "Select an unconnected provider to open its key form.",
+          "text": "Choose a model that needs an API key to open its key form.",
           "uiLabels": [
             "API key",
             "Connect API key"

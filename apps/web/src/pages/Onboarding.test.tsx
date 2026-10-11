@@ -7,6 +7,10 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const api = vi.hoisted(() => ({
   me: vi.fn(),
   list: vi.fn(),
+  credentials: vi.fn(),
+  setDefault: vi.fn(),
+  connect: vi.fn(),
+  cancelSignIn: vi.fn(),
   signIn: vi.fn(),
   create: vi.fn(),
   start: vi.fn(),
@@ -17,7 +21,12 @@ vi.mock("../lib/rpc", () => ({
   selectedSpaceId: () => null,
   rpc: {
     me: api.me,
-    models: { list: api.list },
+    models: {
+      list: api.list,
+      credentials: api.credentials,
+      setDefault: api.setDefault,
+      connect: api.connect,
+    },
     integrationSetup: { get: async () => null },
     bots: { list: async () => [], create: api.create },
     onboarding: { start: api.start, promptFocus: api.promptFocus },
@@ -26,7 +35,10 @@ vi.mock("../lib/rpc", () => ({
 vi.mock("react-router-dom", () => ({ useNavigate: () => api.navigate }));
 vi.mock("../components/integrations/IntegrationSetup", () => ({ IntegrationSetup: () => null }));
 vi.mock("../lib/use-model-oauth-signin", () => ({
-  useModelOAuthSignIn: () => ({ cancelOAuthAttempt: vi.fn(), startSubscriptionSignIn: api.signIn }),
+  useModelOAuthSignIn: () => ({
+    cancelOAuthAttempt: api.cancelSignIn,
+    startSubscriptionSignIn: api.signIn,
+  }),
 }));
 vi.mock("@lingui/core/macro", () => ({
   t: (parts: TemplateStringsArray, ...values: unknown[]) =>
@@ -43,6 +55,8 @@ vi.mock("@ardurbot/ui-web", () => ({
   Button: ({ variant: _variant, ...props }: ComponentProps<"button"> & { variant?: string }) => (
     <button {...props} />
   ),
+  NativeSelect: (props: ComponentProps<"select">) => <select {...props} />,
+  NativeSelectOption: (props: ComponentProps<"option">) => <option {...props} />,
   Input: (props: ComponentProps<"input">) => <input {...props} />,
   Select: ({
     value,
@@ -77,6 +91,8 @@ beforeEach(() => {
   vi.resetAllMocks();
   api.me.mockResolvedValue({ needsModel: false });
   api.list.mockResolvedValue([]);
+  api.credentials.mockResolvedValue([]);
+  api.setDefault.mockResolvedValue({ ok: true });
   api.create.mockResolvedValue({ id: "first-bot" });
   api.start.mockResolvedValue(undefined);
   api.promptFocus.mockResolvedValue(undefined);
@@ -111,12 +127,17 @@ it.each([false, true])(
       defaultModel: null,
     });
     await act(async () => root.render(<OnboardingPage />));
-    if (switchProvider)
-      await act(async () => {
-        const select = container.querySelector("select")!;
-        select.value = "openai-codex";
-        select.dispatchEvent(new Event("change", { bubbles: true }));
-      });
+    await act(async () => await vi.dynamicImportSettled());
+    if (switchProvider) {
+      await act(async () =>
+        container.querySelector<HTMLButtonElement>('button[aria-label="Model"]')!.click(),
+      );
+      await act(async () =>
+        [...container.querySelectorAll<HTMLButtonElement>('[role="option"]')]
+          .find((option) => option.textContent?.startsWith("gpt-6-astra"))!
+          .click(),
+      );
+    }
     const signIn = [...container.querySelectorAll("button")].find(
       (button) => button.textContent === "Sign in",
     );
@@ -259,4 +280,141 @@ it("ignores a retry response after unmount", async () => {
   await act(async () => response.resolve({ needsModel: false }));
   expect(api.create).not.toHaveBeenCalled();
   expect(api.navigate).not.toHaveBeenCalled();
+});
+
+async function chooseModel(label: string) {
+  await act(async () => await vi.dynamicImportSettled());
+  await act(async () =>
+    container.querySelector<HTMLButtonElement>('button[aria-label="Model"]')!.click(),
+  );
+  await act(async () =>
+    [...container.querySelectorAll<HTMLButtonElement>('[role="option"]')]
+      .find((option) => option.textContent?.startsWith(label))!
+      .click(),
+  );
+}
+
+it.each(["api-key", "oauth"] as const)(
+  "uses a saved personal %s connection without asking for a key or sign-in",
+  async (auth) => {
+    api.me.mockResolvedValue({ needsModel: true });
+    api.list.mockResolvedValue([
+      {
+        provider: "fixture",
+        id: "model",
+        label: "Model",
+        billing: "",
+        auth,
+        ...(auth === "oauth" ? { signIn: "device-code" } : {}),
+      },
+    ]);
+    api.credentials.mockResolvedValue([
+      {
+        id: "saved",
+        provider: "fixture",
+        label: "Saved",
+        hasKey: true,
+        oauth: auth === "oauth",
+        isDefault: false,
+      },
+    ]);
+    await act(async () => root.render(<OnboardingPage />));
+    await chooseModel("Model");
+    expect(container.querySelector('input[type="password"]')).toBeNull();
+    await act(async () =>
+      [...container.querySelectorAll("button")]
+        .find((button) => button.textContent === "Use this model")!
+        .click(),
+    );
+    expect(api.setDefault).toHaveBeenCalledWith({
+      provider: "fixture",
+      modelId: "model",
+      credentialId: "saved",
+    });
+    expect(api.connect).not.toHaveBeenCalled();
+    expect(api.signIn).not.toHaveBeenCalled();
+    expect(api.create).toHaveBeenCalledOnce();
+  },
+);
+
+it("waits for an explicit connection choice when two providers serve the model", async () => {
+  api.me.mockResolvedValue({ needsModel: true });
+  api.list.mockResolvedValue([
+    { provider: "one", id: "model", label: "Shared", billing: "", auth: "api-key" },
+    { provider: "two", id: "one/model", label: "Shared", billing: "", auth: "api-key" },
+  ]);
+  api.credentials.mockResolvedValue([
+    { id: "saved", provider: "two", label: "Saved", hasKey: true, isDefault: false },
+  ]);
+  await act(async () => root.render(<OnboardingPage />));
+  await chooseModel("Shared");
+  expect(api.setDefault).not.toHaveBeenCalled();
+  expect(container.querySelector('input[type="password"]')).toBeNull();
+  const select = container.querySelector<HTMLSelectElement>(
+    'select[aria-label="Choose connection"]',
+  )!;
+  const option = [...select.options].find((option) => option.textContent?.includes("Saved"))!;
+  await act(async () => {
+    select.value = option.value;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await act(async () =>
+    [...container.querySelectorAll("button")]
+      .find((button) => button.textContent === "Use this model")!
+      .click(),
+  );
+  expect(api.setDefault).toHaveBeenCalledWith({
+    provider: "two",
+    modelId: "one/model",
+    credentialId: "saved",
+  });
+});
+
+it("cancels the pending sign-in when a different model is selected", async () => {
+  api.me.mockResolvedValue({ needsModel: true });
+  api.list.mockResolvedValue([
+    {
+      provider: "signed",
+      id: "signed",
+      label: "Signed",
+      billing: "",
+      auth: "oauth",
+      signIn: "device-code",
+    },
+    { provider: "other", id: "other", label: "Other", billing: "", auth: "api-key" },
+  ]);
+  await act(async () => root.render(<OnboardingPage />));
+  await chooseModel("Signed");
+  await act(async () =>
+    [...container.querySelectorAll("button")]
+      .find((button) => button.textContent === "Sign in")!
+      .click(),
+  );
+  api.cancelSignIn.mockClear();
+  await chooseModel("Other");
+  expect(api.cancelSignIn).toHaveBeenCalledOnce();
+  expect(api.create).not.toHaveBeenCalled();
+  expect(api.setDefault).not.toHaveBeenCalled();
+});
+
+it("keeps setup on the selected model when default validation fails", async () => {
+  api.me.mockResolvedValue({ needsModel: true });
+  api.list.mockResolvedValue([
+    { provider: "fixture", id: "model", label: "Model", billing: "", auth: "api-key" },
+  ]);
+  api.credentials.mockResolvedValue([
+    { id: "saved", provider: "fixture", label: "Saved", hasKey: true, isDefault: false },
+  ]);
+  api.setDefault.mockRejectedValue(new Error("This connection cannot serve that model."));
+  await act(async () => root.render(<OnboardingPage />));
+  await chooseModel("Model");
+  await act(async () =>
+    [...container.querySelectorAll("button")]
+      .find((button) => button.textContent === "Use this model")!
+      .click(),
+  );
+  expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+    "This connection cannot serve that model.",
+  );
+  expect(api.create).not.toHaveBeenCalled();
 });

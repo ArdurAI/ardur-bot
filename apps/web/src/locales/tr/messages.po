@@ -34,11 +34,6 @@ msgstr ""
 msgid " (unread)"
 msgstr " (okunmadı)"
 
-#. placeholder {0}: group.entries.length
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "{0, plural, one {# model} other {# models}}"
-msgstr "{0, plural, one {# model} other {# model}}"
-
 #. placeholder {0}: manifest.unscanned
 #: src/pages/import/LocalImportPage.tsx
 msgid "{0, plural, one {1 item was not scanned because of the scan limits.} other {# items were not scanned because of the scan limits.}}"
@@ -1028,6 +1023,7 @@ msgid "API is back, but the update did not finish. Check the host logs."
 msgstr ""
 
 #: src/components/AskCard.tsx
+#: src/components/CatalogModelPicker.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/lib/localized-provider-hint.ts
 #: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
@@ -1921,6 +1917,10 @@ msgstr "Bir model seçin"
 msgid "Choose a model in Models to enable memory suggestions."
 msgstr ""
 
+#: src/lib/model-selection-error.ts
+msgid "Choose a model."
+msgstr "Bir model seçin."
+
 #: src/pages/Auth.tsx
 msgid "Choose a new password"
 msgstr "Yeni bir parola seçin"
@@ -1928,6 +1928,10 @@ msgstr "Yeni bir parola seçin"
 #: src/components/composer/command-description.ts
 msgid "Choose a taught skill"
 msgstr ""
+
+#: src/components/CatalogModelPicker.tsx
+msgid "Choose connection"
+msgstr "Bağlantı seç"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose effort"
@@ -2411,6 +2415,14 @@ msgstr "OAuth ile bağlan"
 msgid "Connect remote account"
 msgstr ""
 
+#: src/lib/model-selection-error.ts
+msgid "Connect that model first."
+msgstr "Önce bu modeli bağlayın."
+
+#: src/lib/model-selection-error.ts
+msgid "Connect that model server first."
+msgstr "Önce bu modelin sunucusunu bağlayın."
+
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/move-to-host.tsx
@@ -2438,7 +2450,6 @@ msgstr "Treg'i bağla"
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/McpOAuthCallback.tsx
-#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/message-cards.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connected"
@@ -2497,6 +2508,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Connection saved, but the test failed:"
 msgstr "Bağlantı kaydedildi ancak test başarısız oldu:"
+
+#: src/pages/ModelSettingsOverlay.tsx
+msgid "Connection settings"
+msgstr "Bağlantı ayarları"
 
 #. placeholder {0}: item.name
 #: src/pages/PluginsOverlay.tsx
@@ -4585,10 +4600,6 @@ msgstr ""
 msgid "Four terminals are already open."
 msgstr "Zaten dört terminal açık."
 
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "Free"
-msgstr ""
-
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Free memory"
 msgstr ""
@@ -5565,6 +5576,10 @@ msgstr ""
 msgid "Local only"
 msgstr ""
 
+#: src/components/CatalogModelPicker.tsx
+msgid "Local server"
+msgstr "Yerel sunucu"
+
 #: src/pages/LocalSettings.tsx
 msgid "Local Server Settings"
 msgstr ""
@@ -5656,9 +5671,9 @@ msgstr "İstek başına maksimum görüntü sayısı"
 msgid "Maximum output tokens"
 msgstr "Maksimum çıktı token sayısı"
 
-#: src/pages/ModelSettingsOverlay.tsx
+#: src/components/CatalogModelPicker.tsx
 msgid "May not be available on your plan"
-msgstr ""
+msgstr "Planınızda kullanılamayabilir"
 
 #: src/pages/settings-sections.ts
 msgid "MCP"
@@ -5870,6 +5885,7 @@ msgstr "dakika"
 msgid "minutes"
 msgstr "dakika"
 
+#: src/components/CatalogModelPicker.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/LearningInsights.tsx
 #: src/pages/MemoryHistory.tsx
@@ -5908,7 +5924,7 @@ msgstr "Bu gruptaki model"
 msgid "Model name"
 msgstr ""
 
-#: src/pages/ModelSettingsOverlay.tsx
+#: src/components/CatalogModelPicker.tsx
 msgid "Model options"
 msgstr "Model seçenekleri"
 
@@ -6306,9 +6322,9 @@ msgstr "Artık etkin değil"
 msgid "No managed app catalog is configured on this deployment."
 msgstr ""
 
-#: src/pages/ModelSettingsOverlay.tsx
+#: src/components/CatalogModelPicker.tsx
 msgid "No matching models"
-msgstr ""
+msgstr "Eşleşen model yok"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "No matching output."
@@ -6342,10 +6358,6 @@ msgstr ""
 #: src/pages/dashboard/panels.ts
 msgid "No proposals"
 msgstr ""
-
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "No providers found."
-msgstr "Sağlayıcı bulunamadı."
 
 #: src/pages/dashboard/panels.ts
 #: src/pages/dashboard/WorkPanel.tsx
@@ -7170,12 +7182,10 @@ msgstr ""
 msgid "provider"
 msgstr ""
 
-#: src/pages/Onboarding.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Provider"
 msgstr "Sağlayıcı"
 
-#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Providers"
 msgstr "Sağlayıcılar"
@@ -7289,12 +7299,13 @@ msgstr "Belge okunuyor"
 msgid "Reads can run without asking once you allow them. Writes always ask."
 msgstr ""
 
+#: src/components/CatalogModelPicker.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardColumns.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/WorkPanel.tsx
 msgid "Ready"
-msgstr ""
+msgstr "Hazır"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Ready. The bot can use Hermes."
@@ -8267,10 +8278,10 @@ msgstr "Bu bilgisayarda ekran kullanılamıyor."
 msgid "Screen recording"
 msgstr ""
 
+#: src/components/CatalogModelPicker.tsx
 #: src/components/integrations/catalog/ResourcePicker.tsx
 #: src/components/ThreadCommandBlock.tsx
 #: src/pages/board/Board.tsx
-#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
@@ -8300,13 +8311,9 @@ msgstr ""
 msgid "Search integrations.sh"
 msgstr ""
 
-#: src/pages/ModelSettingsOverlay.tsx
+#: src/components/CatalogModelPicker.tsx
 msgid "Search models"
-msgstr ""
-
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "Search providers"
-msgstr "Sağlayıcı ara"
+msgstr "Model ara"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Search run output"
@@ -8607,6 +8614,7 @@ msgstr ""
 msgid "Showing {start}–{end} of {total}"
 msgstr ""
 
+#: src/components/CatalogModelPicker.tsx
 #: src/lib/localized-provider-hint.ts
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/Auth.tsx
@@ -9431,6 +9439,10 @@ msgstr "Bu yapılandırma çok karmaşık."
 msgid "This configuration version is not supported."
 msgstr "Bu yapılandırma sürümü desteklenmiyor."
 
+#: src/lib/model-selection-error.ts
+msgid "This connection cannot serve that model."
+msgstr "Bu bağlantı bu modeli sunamaz."
+
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "This field is not supported."
 msgstr "Bu alan desteklenmiyor."
@@ -9746,6 +9758,7 @@ msgstr "Yanıtını yaz"
 msgid "Unassigned"
 msgstr "Atanmamış"
 
+#: src/components/CatalogModelPicker.tsx
 #: src/components/SoftwareUpdateSection.tsx
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/TeamBoard.tsx
@@ -9792,6 +9805,10 @@ msgstr "Bilinmiyor"
 #: src/pages/account/AccountTables.tsx
 msgid "Unknown device"
 msgstr ""
+
+#: src/lib/model-selection-error.ts
+msgid "Unknown model for that provider"
+msgstr "Bu sağlayıcı için bilinmeyen model"
 
 #: src/components/ai/CompactWorkRecord.tsx
 msgid "Unknown: {title}"
@@ -10031,6 +10048,7 @@ msgstr ""
 
 #: src/components/OllamaSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/Onboarding.tsx
 msgid "Use this model"
 msgstr "Bu modeli kullan"
 

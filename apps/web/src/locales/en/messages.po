@@ -34,11 +34,6 @@ msgstr " (not available on your account)"
 msgid " (unread)"
 msgstr " (unread)"
 
-#. placeholder {0}: group.entries.length
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "{0, plural, one {# model} other {# models}}"
-msgstr "{0, plural, one {# model} other {# models}}"
-
 #. placeholder {0}: manifest.unscanned
 #: src/pages/import/LocalImportPage.tsx
 msgid "{0, plural, one {1 item was not scanned because of the scan limits.} other {# items were not scanned because of the scan limits.}}"
@@ -1028,6 +1023,7 @@ msgid "API is back, but the update did not finish. Check the host logs."
 msgstr "API is back, but the update did not finish. Check the host logs."
 
 #: src/components/AskCard.tsx
+#: src/components/CatalogModelPicker.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/lib/localized-provider-hint.ts
 #: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
@@ -1921,6 +1917,10 @@ msgstr "Choose a model"
 msgid "Choose a model in Models to enable memory suggestions."
 msgstr "Choose a model in Models to enable memory suggestions."
 
+#: src/lib/model-selection-error.ts
+msgid "Choose a model."
+msgstr "Choose a model."
+
 #: src/pages/Auth.tsx
 msgid "Choose a new password"
 msgstr "Choose a new password"
@@ -1928,6 +1928,10 @@ msgstr "Choose a new password"
 #: src/components/composer/command-description.ts
 msgid "Choose a taught skill"
 msgstr "Choose a taught skill"
+
+#: src/components/CatalogModelPicker.tsx
+msgid "Choose connection"
+msgstr "Choose connection"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose effort"
@@ -2411,6 +2415,14 @@ msgstr "Connect OAuth"
 msgid "Connect remote account"
 msgstr "Connect remote account"
 
+#: src/lib/model-selection-error.ts
+msgid "Connect that model first."
+msgstr "Connect that model first."
+
+#: src/lib/model-selection-error.ts
+msgid "Connect that model server first."
+msgstr "Connect that model server first."
+
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-location-picker.tsx
 #: src/pages/shell/move-to-host.tsx
@@ -2438,7 +2450,6 @@ msgstr "Connect Treg"
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/McpOAuthCallback.tsx
-#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/message-cards.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connected"
@@ -2497,6 +2508,10 @@ msgstr "Connection"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Connection saved, but the test failed:"
 msgstr "Connection saved, but the test failed:"
+
+#: src/pages/ModelSettingsOverlay.tsx
+msgid "Connection settings"
+msgstr "Connection settings"
 
 #. placeholder {0}: item.name
 #: src/pages/PluginsOverlay.tsx
@@ -4585,10 +4600,6 @@ msgstr "Found on this Mac"
 msgid "Four terminals are already open."
 msgstr "Four terminals are already open."
 
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "Free"
-msgstr "Free"
-
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Free memory"
 msgstr "Free memory"
@@ -5565,6 +5576,10 @@ msgstr "Local devices"
 msgid "Local only"
 msgstr "Local only"
 
+#: src/components/CatalogModelPicker.tsx
+msgid "Local server"
+msgstr "Local server"
+
 #: src/pages/LocalSettings.tsx
 msgid "Local Server Settings"
 msgstr "Local Server Settings"
@@ -5656,7 +5671,7 @@ msgstr "Maximum images per request"
 msgid "Maximum output tokens"
 msgstr "Maximum output tokens"
 
-#: src/pages/ModelSettingsOverlay.tsx
+#: src/components/CatalogModelPicker.tsx
 msgid "May not be available on your plan"
 msgstr "May not be available on your plan"
 
@@ -5870,6 +5885,7 @@ msgstr "minute"
 msgid "minutes"
 msgstr "minutes"
 
+#: src/components/CatalogModelPicker.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/LearningInsights.tsx
 #: src/pages/MemoryHistory.tsx
@@ -5908,7 +5924,7 @@ msgstr "Model in this group"
 msgid "Model name"
 msgstr "Model name"
 
-#: src/pages/ModelSettingsOverlay.tsx
+#: src/components/CatalogModelPicker.tsx
 msgid "Model options"
 msgstr "Model options"
 
@@ -6306,7 +6322,7 @@ msgstr "No longer active"
 msgid "No managed app catalog is configured on this deployment."
 msgstr "No managed app catalog is configured on this deployment."
 
-#: src/pages/ModelSettingsOverlay.tsx
+#: src/components/CatalogModelPicker.tsx
 msgid "No matching models"
 msgstr "No matching models"
 
@@ -6342,10 +6358,6 @@ msgstr "No profile or preferences saved."
 #: src/pages/dashboard/panels.ts
 msgid "No proposals"
 msgstr "No proposals"
-
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "No providers found."
-msgstr "No providers found."
 
 #: src/pages/dashboard/panels.ts
 #: src/pages/dashboard/WorkPanel.tsx
@@ -7170,12 +7182,10 @@ msgstr "Proposed consolidation"
 msgid "provider"
 msgstr "provider"
 
-#: src/pages/Onboarding.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Provider"
 msgstr "Provider"
 
-#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Providers"
 msgstr "Providers"
@@ -7289,6 +7299,7 @@ msgstr "Reading the document"
 msgid "Reads can run without asking once you allow them. Writes always ask."
 msgstr "Reads can run without asking once you allow them. Writes always ask."
 
+#: src/components/CatalogModelPicker.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardColumns.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -8267,10 +8278,10 @@ msgstr "Screen is unavailable on this computer."
 msgid "Screen recording"
 msgstr "Screen recording"
 
+#: src/components/CatalogModelPicker.tsx
 #: src/components/integrations/catalog/ResourcePicker.tsx
 #: src/components/ThreadCommandBlock.tsx
 #: src/pages/board/Board.tsx
-#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
@@ -8300,13 +8311,9 @@ msgstr "Search integrations"
 msgid "Search integrations.sh"
 msgstr "Search integrations.sh"
 
-#: src/pages/ModelSettingsOverlay.tsx
+#: src/components/CatalogModelPicker.tsx
 msgid "Search models"
 msgstr "Search models"
-
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "Search providers"
-msgstr "Search providers"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Search run output"
@@ -8607,6 +8614,7 @@ msgstr "Show slash commands"
 msgid "Showing {start}–{end} of {total}"
 msgstr "Showing {start}–{end} of {total}"
 
+#: src/components/CatalogModelPicker.tsx
 #: src/lib/localized-provider-hint.ts
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/Auth.tsx
@@ -9431,6 +9439,10 @@ msgstr "This configuration is too complex."
 msgid "This configuration version is not supported."
 msgstr "This configuration version is not supported."
 
+#: src/lib/model-selection-error.ts
+msgid "This connection cannot serve that model."
+msgstr "This connection cannot serve that model."
+
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "This field is not supported."
 msgstr "This field is not supported."
@@ -9746,6 +9758,7 @@ msgstr "Type your answer"
 msgid "Unassigned"
 msgstr "Unassigned"
 
+#: src/components/CatalogModelPicker.tsx
 #: src/components/SoftwareUpdateSection.tsx
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/TeamBoard.tsx
@@ -9792,6 +9805,10 @@ msgstr "Unknown"
 #: src/pages/account/AccountTables.tsx
 msgid "Unknown device"
 msgstr "Unknown device"
+
+#: src/lib/model-selection-error.ts
+msgid "Unknown model for that provider"
+msgstr "Unknown model for that provider"
 
 #: src/components/ai/CompactWorkRecord.tsx
 msgid "Unknown: {title}"
@@ -10031,6 +10048,7 @@ msgstr "Use this location"
 
 #: src/components/OllamaSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/Onboarding.tsx
 msgid "Use this model"
 msgstr "Use this model"
 

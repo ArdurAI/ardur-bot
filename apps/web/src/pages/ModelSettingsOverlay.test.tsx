@@ -14,6 +14,7 @@ const api = vi.hoisted(() => ({
   ollama: vi.fn(),
   testOllama: vi.fn(),
   connect: vi.fn(),
+  setDefault: vi.fn(),
   availability: vi.fn(),
   capabilities: vi.fn(),
   connectCodex: vi.fn(),
@@ -352,7 +353,7 @@ it("reports an Ollama connection save through the overlay handoff", async () => 
       />,
     ),
   );
-  await act(async () => button("Ollama").click());
+  await pickModel("Local");
   await act(async () => button("Test").click());
   onSavePendingChange.mockClear();
   await act(async () => button("Save").click());
@@ -441,13 +442,19 @@ it("selects the recommendation on load and passes it to subscription sign-in", a
   );
 });
 
-it("hides Spark and orders all recommendations before lower preferences", async () => {
+it("lists models across the catalog and keeps the subscription plan hint", async () => {
   await render();
-  expect(button("OpenAI Codex").textContent).toContain("3 models");
   await act(async () => picker().click());
   expect(
-    [...container.querySelectorAll('[role="option"]')].map((element) => element.textContent),
-  ).toEqual(["GPT-6 Astra", "GPT-6 Sol", "GPT-5.5"]);
+    [...container.querySelectorAll('[role="option"]')].map(
+      (element) => element.textContent?.split("OpenAI Codex")[0],
+    ),
+  ).toEqual([
+    "GPT-5.3 Codex SparkMay not be available on your plan",
+    "GPT-5.5",
+    "GPT-6 Sol",
+    "GPT-6 Astra",
+  ]);
 });
 
 it("replaces a stored unavailable default in the picker", async () => {
@@ -472,7 +479,7 @@ it("uses the recommendation when switching providers", async () => {
   ]);
   api.me.mockResolvedValue({ defaultProvider: "scripted", defaultModel: "scripted" });
   await render();
-  await act(async () => button("OpenAI Codex").click());
+  await pickModel("GPT-6 Astra");
   expect(picker().textContent).toBe("GPT-6 Astra");
 });
 
@@ -488,37 +495,20 @@ it.each(["api-key", "both"] as const)("keeps Spark available for %s auth", async
   expect(container.querySelectorAll('[role="option"]')).toHaveLength(4);
 });
 
-it("reveals a selectable subscription model with a muted plan hint", async () => {
+it("selects a subscription model with a plan hint without a provider step", async () => {
   await render();
-  const toggle = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
-  expect(toggle?.parentElement?.textContent).toBe("Show all models");
-  await act(async () => toggle?.click());
-  await act(async () => picker().click());
-  const spark = [...container.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(
-    (option) => option.textContent?.includes("GPT-5.3 Codex Spark"),
-  );
-  expect(spark?.textContent).toContain("May not be available on your plan");
-  expect(spark?.querySelector(".text-muted-foreground")).not.toBeNull();
-  await act(async () => spark?.click());
+  await pickModel("GPT-5.3 Codex Spark");
   expect(picker().textContent).toBe("GPT-5.3 Codex Spark");
-  await act(async () => toggle?.click());
-  expect(picker().textContent).toBe("GPT-5.3 Codex Spark");
-  await act(async () =>
-    [...container.querySelectorAll("button")]
-      .find((entry) => entry.textContent === "Sign in")
-      ?.click(),
-  );
+  await act(async () => button("Sign in").click());
   expect(api.signIn).toHaveBeenCalledWith(
     expect.objectContaining({ modelId: "gpt-5.3-codex-spark" }),
   );
 });
 
-it("can reveal a provider whose entire catalog is hidden", async () => {
+it("can choose a model when its whole provider catalog has a plan hint", async () => {
   api.list.mockResolvedValue([catalog[0]]);
   await render();
-  const toggle = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
-  expect(toggle).not.toBeNull();
-  await act(async () => toggle?.click());
+  await pickModel("GPT-5.3 Codex Spark");
   expect(picker().textContent).toBe("GPT-5.3 Codex Spark");
 });
 
@@ -618,4 +608,52 @@ it("does not turn an untouched estimate into saved metadata when reconnecting", 
   await act(async () => connect!.click());
   expect(api.connect).toHaveBeenCalled();
   expect(api.connect.mock.calls[0]?.[0]).not.toHaveProperty("contextWindow");
+});
+
+async function pickModel(label: string) {
+  await act(async () => picker().click());
+  const option = [...container.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(
+    (option) => option.textContent?.startsWith(label),
+  );
+  expect(option).toBeDefined();
+  await act(async () => option!.click());
+}
+
+it("reuses the chosen connection when several saved connections serve a model", async () => {
+  api.list.mockResolvedValue([
+    { provider: "fixture", id: "model", label: "Model", billing: "", auth: "api-key" },
+  ]);
+  api.credentials.mockResolvedValue(
+    ["one", "two"].map((id) => ({
+      id,
+      provider: "fixture",
+      label: id,
+      hasKey: true,
+      isDefault: false,
+    })),
+  );
+  api.me.mockResolvedValue({ defaultProvider: "fixture", defaultModel: "model" });
+  api.setDefault.mockResolvedValue({ ok: true });
+  await render();
+  await pickModel("Model");
+  expect(api.setDefault).not.toHaveBeenCalled();
+  const select = container.querySelector<HTMLSelectElement>(
+    'select[aria-label="Choose connection"]',
+  )!;
+  const option = [...select.options].find((option) => option.textContent?.startsWith("two"))!;
+  await act(async () => {
+    select.value = option.value;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(container.querySelector('input[type="password"]')).toBeNull();
+  // The same model on a different connection is a different default.
+  expect(button("Use this model").disabled).toBe(false);
+  await act(async () => button("Use this model").click());
+  expect(api.setDefault).toHaveBeenCalledWith({
+    provider: "fixture",
+    modelId: "model",
+    credentialId: "two",
+  });
+  expect(api.signIn).not.toHaveBeenCalled();
+  expect(api.connect).not.toHaveBeenCalled();
 });
