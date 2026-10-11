@@ -108,6 +108,38 @@ function fixture(defaultTerminal = true) {
   return { actor, computer, provider, db, routes, resolveCommandCwd };
 }
 describe("terminal authorization", () => {
+  it("keeps desktop terminals unavailable until the live host advertises one", async () => {
+    const f = fixture(false);
+    f.computer.kind = "desktop";
+    expect(await f.routes.available(f.actor, { botId: "bot", computerId: "computer" })).toEqual({
+      available: false,
+    });
+    f.provider.available = vi.fn(async () => false);
+    expect(await f.routes.available(f.actor, { botId: "bot", computerId: "computer" })).toEqual({
+      available: false,
+    });
+    f.provider.available = vi.fn(async () => true);
+    expect(await f.routes.available(f.actor, { botId: "bot", computerId: "computer" })).toEqual({
+      available: true,
+    });
+    await f.routes.ticket(
+      f.actor,
+      { botId: "bot", computerId: "computer" },
+      "auth",
+      "https://app.example",
+    );
+    expect(f.provider.open).toHaveBeenCalledOnce();
+    f.provider.available = vi.fn(async () => false);
+    await expect(
+      f.routes.ticket(
+        f.actor,
+        { botId: "bot", computerId: "computer", sessionId: "session" },
+        "auth",
+        "https://app.example",
+      ),
+    ).rejects.toThrow();
+    await f.routes.gateway!.stop();
+  });
   it.each(["ssh", "remote-docker"])(
     "serializes %s terminal requests through the host bridge",
     async (kind) => {

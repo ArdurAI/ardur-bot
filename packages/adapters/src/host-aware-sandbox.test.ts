@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { ComputerRef, SandboxProvider } from "@ardurbot/adapter-kit";
+import type { ComputerRef, SandboxProvider, TerminalProvider } from "@ardurbot/adapter-kit";
 import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
@@ -28,6 +28,60 @@ const ctx = {
 };
 
 describe("host-aware sandbox", () => {
+  it("routes only advertised host terminals and keeps sessions on their opening provider", async () => {
+    const terminal = (id: string): TerminalProvider => ({
+      available: vi.fn(async () => true),
+      open: vi.fn(async () => ({ id, generation: "ref" })),
+      write: vi.fn(async () => {}),
+      resize: vi.fn(async () => {}),
+      close: vi.fn(async () => {}),
+      revoke: vi.fn(async () => {}),
+      async *output() {},
+    });
+    const isolatedTerminal = terminal("isolated");
+    const hostTerminal = terminal("host");
+    const isolated = Object.assign(new FakeSandboxProvider(), { terminal: isolatedTerminal });
+    const host = Object.assign(new FakeSandboxProvider(), { terminal: hostTerminal });
+    const sandbox = new HostAwareSandbox(isolated, host, async () => true);
+    const computer: ComputerRef = {
+      id: "computer",
+      providerRef: "ref",
+      botId: "bot",
+      kind: "desktop",
+    };
+    const context = {
+      ...ctx,
+      leaseId: "lease",
+      fence: 1,
+      generation: "ref",
+      expiresAt: Date.now() + 60000,
+      workingRoot: "/workspace",
+    };
+    vi.mocked(hostTerminal.available!).mockResolvedValueOnce(false);
+    await expect(
+      sandbox.terminal.open(computer, { cols: 80, rows: 24, shellProfileId: "default" }, context),
+    ).rejects.toThrow();
+    expect(hostTerminal.open).not.toHaveBeenCalled();
+    const opened = await sandbox.terminal.open(
+      computer,
+      { cols: 80, rows: 24, shellProfileId: "default" },
+      context,
+    );
+    await sandbox.terminal.open(
+      { ...computer, connectionId: "connection" },
+      { cols: 80, rows: 24, shellProfileId: "default" },
+      context,
+    );
+    host.terminal = terminal("replacement");
+    await sandbox.terminal.write(opened.id, Uint8Array.of(1));
+    await sandbox.terminal.resize(opened.id, 100, 30);
+    await sandbox.terminal.close(opened.id, "closed");
+    expect(hostTerminal.write).toHaveBeenCalledWith("host", Uint8Array.of(1));
+    expect(hostTerminal.resize).toHaveBeenCalledWith("host", 100, 30);
+    expect(hostTerminal.close).toHaveBeenCalledWith("host", "closed");
+    expect(isolatedTerminal.write).not.toHaveBeenCalled();
+    expect(isolatedTerminal.open).toHaveBeenCalledOnce();
+  });
   it.each([
     ["desktop", null, "host"],
     ["desktop", "docker", "isolated"],
