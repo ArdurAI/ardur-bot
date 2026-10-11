@@ -146,6 +146,22 @@ export async function loadChiefMemberFacts(
             integrationToolKind(tool.id, tool.description) === "read" &&
             /fetch|get|retrieve|read/i.test(tool.id),
         );
+      const write =
+        manifest.success &&
+        manifest.data.tools.some(
+          (tool) =>
+            granted.includes(tool.id) && integrationToolKind(tool.id, tool.description) === "write",
+        );
+      capabilities.push({
+        id: `${server.catalogId}:write`,
+        access:
+          server.connectionState === "connected" && write
+            ? "known"
+            : server.connectionState === "needs-sign-in"
+              ? "missing"
+              : "unknown",
+        checkedAt: (server.lastCheckedAt ?? now).toISOString(),
+      });
       capabilities.push({
         id: `${server.catalogId}:read-back`,
         access:
@@ -220,17 +236,22 @@ export async function createChiefReceipt(
     requestMessageId: string;
     key: ChiefReceiptKey;
     memberName?: string;
+    selection?: { id: string; decision: Prisma.JsonValue; dispatch: Prisma.JsonValue };
   },
 ): Promise<{ receipt: ChiefReceipt; eventSeq: number }> {
+  const decision = input.selection?.decision as ChiefDecision | undefined;
+  const key = decision?.kind === "needs-owner" ? "needs-owner" : input.key;
+  const chiefDispatch = ChiefDispatchSchema.safeParse(input.selection?.dispatch).data;
   const block = {
     kind: "chief_receipt" as const,
     requestMessageId: input.requestMessageId,
-    key: input.key,
+    key,
     ...(input.memberName ? { memberName: input.memberName } : {}),
+    ...(chiefDispatch ? { chiefDispatch } : {}),
     text:
-      input.key === "exclude-member" && input.memberName
+      key === "exclude-member" && input.memberName
         ? `Got it — I’ll keep ${input.memberName} off this task.`
-        : CHIEF_RECEIPT_TEMPLATES[input.key],
+        : CHIEF_RECEIPT_TEMPLATES[key],
   };
   const message = await createThreadMessageInTransaction(tx, {
     threadId: input.threadId,
@@ -240,6 +261,11 @@ export async function createChiefReceipt(
     blocks: [block],
     clientNonce: `chief-receipt:${input.requestMessageId}`,
   });
+  if (chiefDispatch && input.selection)
+    await tx.chiefPlan.update({
+      where: { id: input.selection.id },
+      data: { dispatch: { ...chiefDispatch, messageId: message.id } },
+    });
   const event = await appendEventInTransaction(tx, {
     spaceId: input.spaceId,
     threadId: input.threadId,
@@ -254,8 +280,9 @@ export async function createChiefReceipt(
       seq: message.seq,
       botId: input.chiefBotId,
       requestMessageId: input.requestMessageId,
-      key: input.key,
+      key,
       ...(input.memberName ? { memberName: input.memberName } : {}),
+      ...(chiefDispatch ? { chiefDispatch } : {}),
       text: block.text,
       createdAt: message.createdAt.toISOString(),
     },
@@ -284,6 +311,7 @@ export async function readChiefReceipt(
     requestMessageId,
     key: block.key,
     ...(block.memberName ? { memberName: block.memberName } : {}),
+    ...(block.chiefDispatch ? { chiefDispatch: block.chiefDispatch } : {}),
     text: block.text,
     createdAt: message.createdAt.toISOString(),
   };
@@ -315,6 +343,19 @@ export async function saveChiefSelection(
       ...input,
       policyVersion: CHIEF_POLICY_VERSION,
       decision,
+      ...(decision.kind === "needs-owner"
+        ? {
+            dispatch: {
+              requestMessageId: input.sourceMessageId,
+              revision: 1,
+              memberId: input.chiefBotId,
+              memberName: facts.find((member) => member.id === input.chiefBotId)?.name ?? "Chief",
+              state: "needs-owner",
+              blockerKey: decision.blockerKey,
+              reason: decision.blocker,
+            },
+          }
+        : {}),
       checkedFacts: facts as unknown as Prisma.InputJsonValue,
     },
   });
@@ -362,7 +403,7 @@ export async function loadChiefSelectionContext(
     : decision.kind === "delegate" || decision.kind === "queue"
       ? `Use handoff_to_bot with bot_id ${JSON.stringify(decision.memberId)}. Do not ask the owner to name a member.`
       : decision.kind === "needs-owner"
-        ? `Assignment is blocked: ${decision.blocker}. Use system_alert or explain the blocker to the owner; do not dispatch.`
+        ? `Assignment is blocked: ${decision.blocker}. The owner already sees this blocker. Do not dispatch.`
         : decision.kind === "self"
           ? "Prepare this work yourself; do not self-handoff."
           : "Plan the next step using the saved member facts; unknown capability is not a grant.";
@@ -431,6 +472,7 @@ export async function validateChiefDispatch(
     return { error: "This chief turn belongs to an obsolete task revision." };
   const operation = plan.operation as ChiefOperation;
   const saved = plan.decision as ChiefDecision;
+  if (saved.kind === "needs-owner") return { error: saved.blocker };
   const facts = await loadChiefMemberFacts(tx, scope, groupId);
   if (operation.purpose !== "general") {
     if ((saved.kind !== "delegate" && saved.kind !== "queue") || saved.memberId !== memberId)

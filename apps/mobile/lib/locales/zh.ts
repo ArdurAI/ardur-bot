@@ -1517,4 +1517,10 @@ export const ZH_MESSAGES: Record<string, string> = {
     "明白了——我会选择一名团队成员在Linear中提交此问题。",
   "Got it — I’ll choose a team member to manage the GitHub repository.":
     "明白了——我会选择一名团队成员来管理GitHub仓库。",
+  "Got it — this task needs you before I can assign it.": "收到 — 分配这项任务前需要你的帮助。",
+  "Connect Linear or grant a team member permission to read and write.":
+    "连接 Linear，或授予团队成员读写权限。",
+  "Connect GitHub or grant a team member permission to read and write.":
+    "连接 GitHub，或授予团队成员读写权限。",
+  "Needs you": "需要你",
 };

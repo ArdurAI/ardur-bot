@@ -5,8 +5,10 @@ import {
   CHIEF_RECEIPT_TEMPLATES,
   CHIEF_TASK_RULES,
   chiefIntent,
+  chiefRule,
   chooseChiefMember,
 } from "./chief-loop-policy.js";
+import { approvalFor } from "./integration-policy.js";
 
 const member = (id: string, patch: Partial<ChiefMemberFacts> = {}): ChiefMemberFacts => ({
   id,
@@ -108,19 +110,103 @@ describe("chief policy", () => {
     };
     expect(chooseChiefMember(input)).toEqual({
       kind: "needs-owner",
-      blocker: "No team member has access to linear. Please connect the app or grant permission.",
+      blockerKey: "connect-linear",
+      blocker: "Connect Linear or grant a team member permission to read and write.",
     });
 
     // Test tie-breaking for equal members
     const capable = member("d", {
-      capabilities: [{ id: "linear:read-back", access: "known", checkedAt: "now" }],
+      capabilities: [
+        { id: "linear:read-back", access: "known", checkedAt: "now" },
+        { id: "linear:write", access: "known", checkedAt: "now" },
+      ],
     });
     const capable2 = member("e", {
-      capabilities: [{ id: "linear:read-back", access: "known", checkedAt: "now" }],
+      capabilities: [
+        { id: "linear:read-back", access: "known", checkedAt: "now" },
+        { id: "linear:write", access: "known", checkedAt: "now" },
+      ],
     });
     expect(chooseChiefMember({ ...input, members: [capable2, capable] })).toMatchObject({
       kind: "delegate",
       memberId: "d", // 'd' comes before 'e' in tie-break by ID
+    });
+  });
+  describe.each([
+    ["linear", { taskType: "operations", purpose: "create-issue" }],
+    ["github", { taskType: "code-change", purpose: "manage-repository" }],
+  ] as const)("%s selection matrix", (app, operation) => {
+    const capable = (id: string, patch: Partial<ChiefMemberFacts> = {}) =>
+      member(id, {
+        capabilities: [
+          { id: `${app}:read-back`, access: "known", checkedAt: "now" },
+          { id: `${app}:write`, access: "known", checkedAt: "now" },
+        ],
+        ...patch,
+      });
+    const choose = (members: ChiefMemberFacts[]) =>
+      chooseChiefMember({ chiefId: "chief", operation, members });
+    it.each(["missing", "unknown"] as const)(
+      "blocks a disconnected or uncertain app (%s)",
+      (access) => {
+        expect(
+          choose([
+            capable("a", {
+              capabilities: [
+                { id: `${app}:read-back`, access, checkedAt: "now" },
+                { id: `${app}:write`, access, checkedAt: "now" },
+              ],
+            }),
+          ]),
+        ).toMatchObject({ kind: "needs-owner", blockerKey: `connect-${app}` });
+      },
+    );
+    it("rejects read-only access for a write task and chooses a writer", () => {
+      const reader = capable("a", {
+        capabilities: [{ id: `${app}:read-back`, access: "known", checkedAt: "now" }],
+      });
+      expect(choose([reader])).toMatchObject({ kind: "needs-owner" });
+      expect(choose([reader, capable("b")])).toMatchObject({ kind: "delegate", memberId: "b" });
+    });
+    it("selects preparation without approving the write", () => {
+      expect(choose([capable("a")])).toMatchObject({ kind: "delegate", memberId: "a" });
+      expect(chiefRule(operation).effect).toBe("approval-required");
+      expect(
+        approvalFor(
+          {
+            available: true,
+            toolPolicies: { create_item: { approval: "allow", risk: "reviewed-read" } },
+          },
+          "create_item",
+          {},
+        ),
+      ).toBe("ask-first");
+    });
+    it("blocks when write permission changes since planning", () => {
+      const writer = capable("a");
+      expect(choose([writer])).toMatchObject({ kind: "delegate", memberId: "a" });
+      expect(
+        choose([
+          {
+            ...writer,
+            capabilities: writer.capabilities.filter((fact) => fact.id !== `${app}:write`),
+          },
+        ]),
+      ).toMatchObject({ kind: "needs-owner" });
+    });
+    it("avoids a busy computer when an equally capable member is ready and queues otherwise", () => {
+      const busy = capable("a", {
+        computer: { id: "busy", kind: "docker", state: "running", local: true, leaseBusy: true },
+      });
+      expect(choose([busy, capable("b")])).toMatchObject({ kind: "delegate", memberId: "b" });
+      expect(choose([busy])).toMatchObject({ kind: "queue", memberId: "a" });
+    });
+    it("breaks equal ties by id regardless of roster order", () => {
+      for (const members of [
+        [capable("b"), capable("a")],
+        [capable("a"), capable("b")],
+      ])
+        expect(choose(members)).toMatchObject({ kind: "delegate", memberId: "a" });
     });
   });
   it.each([

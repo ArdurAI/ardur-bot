@@ -10421,3 +10421,12 @@ msgstr "Gerçek işler verebileceğin,<0/>her zaman açık agent takımın."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+msgid "Got it — this task needs you before I can assign it."
+msgstr "Anladım — bu görevi atamadan önce yardımınız gerekiyor."
+
+msgid "Connect Linear or grant a team member permission to read and write."
+msgstr "Linear bağlantısını kurun veya bir ekip üyesine okuma ve yazma izni verin."
+
+msgid "Connect GitHub or grant a team member permission to read and write."
+msgstr "GitHub bağlantısını kurun veya bir ekip üyesine okuma ve yazma izni verin."

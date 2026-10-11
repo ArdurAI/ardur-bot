@@ -10421,3 +10421,12 @@ msgstr "Your team of always-on agents<0/>that you can give real work to."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr "Yours"
+
+msgid "Got it — this task needs you before I can assign it."
+msgstr "Got it — this task needs you before I can assign it."
+
+msgid "Connect Linear or grant a team member permission to read and write."
+msgstr "Connect Linear or grant a team member permission to read and write."
+
+msgid "Connect GitHub or grant a team member permission to read and write."
+msgstr "Connect GitHub or grant a team member permission to read and write."

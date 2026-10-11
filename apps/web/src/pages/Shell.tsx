@@ -7095,6 +7095,8 @@ const MessageView = memo(function MessageView({
           );
         }
         if (block.kind === "chief_receipt") {
+          if (block.chiefDispatch)
+            return <ChiefDispatchLine key={i} dispatch={block.chiefDispatch} detail={block.text} />;
           return (
             <div
               key={i}

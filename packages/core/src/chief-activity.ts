@@ -52,6 +52,8 @@ export const CHIEF_ACTIVITY_TEXT: Readonly<Record<ChiefActivityKey, string>> = {
   "check-tool": "Checking the missing tool",
   working: "Working on the task",
   "waiting-tool": "Waiting for the tool",
+  "connect-linear": "Connect Linear or grant a team member permission to read and write.",
+  "connect-github": "Connect GitHub or grant a team member permission to read and write.",
 };
 /** Resolve capabilities from exact recorded identities, not slugs, arguments or output. */
 export function chiefToolCapability(tool: ChiefToolIdentity): ChiefToolIdentity["capability"] {
@@ -123,6 +125,7 @@ export function withChiefActivity(dispatch: ChiefDispatch, next: ChiefActivity):
   return { ...dispatch, activity: next };
 }
 export function chiefActivityKey(dispatch: ChiefDispatch): ChiefActivityKey | undefined {
+  if (dispatch.state === "needs-owner") return dispatch.blockerKey;
   if (dispatch.state === "approval-held") return undefined;
   const activity = dispatch.activity;
   if (!activity) return dispatch.state === "messaged" ? "working" : undefined;

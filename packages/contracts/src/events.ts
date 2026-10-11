@@ -160,6 +160,7 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     kind: z.literal("chief_receipt"),
     requestMessageId: Id,
     key: ChiefReceiptKeySchema,
+    chiefDispatch: ChiefDispatchSchema.optional(),
     memberName: z.string().optional(),
     text: z.string(),
   }),

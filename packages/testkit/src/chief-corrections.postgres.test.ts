@@ -198,6 +198,67 @@ describe.skipIf(!enabled).sequential("chief correction cross-run Postgres journe
     };
   }
 
+  it("rechecks Linear write permission changed after planning before a corrected handoff", async () => {
+    const f = await fixture();
+    await db.prisma.mcpServer.update({
+      where: { id: f.server.id },
+      data: {
+        catalogId: "linear",
+        manifest: {
+          capturedAt: new Date().toISOString(),
+          serverVersion: "fixture",
+          account: null,
+          tools: [
+            { id: "fetch_issue", description: "Read an issue", inputSchemaDigest: "a".repeat(64) },
+            {
+              id: "create_issue",
+              description: "Create an issue",
+              inputSchemaDigest: "b".repeat(64),
+            },
+          ],
+        },
+        spaceAllowedTools: ["fetch_issue", "create_issue"],
+        spaceToolPolicies: { fetch_issue: "allow", create_issue: "ask-first" },
+      },
+    });
+    await db.prisma.botMcpServer.updateMany({
+      where: { serverId: f.server.id },
+      data: { access: "custom", allowedTools: [] },
+    });
+    await db.prisma.botMcpServer.updateMany({
+      where: { serverId: f.server.id, botId: f.replacement.id },
+      data: { allowedTools: ["fetch_issue", "create_issue"] },
+    });
+    const sent = await sendThreadMessage(f.deps, f.actor, f.target, {
+      text: "Create an issue in Linear.",
+      clientNonce: "linear-permission-change",
+    });
+    if (sent.kind === "receipt-only") throw new Error("Expected work");
+    const plan = await db.prisma.chiefPlan.findFirstOrThrow({ where: { sourceRunId: sent.runId } });
+    expect(plan.operation).toMatchObject({ purpose: "create-issue" });
+    expect(plan.decision).toMatchObject({ kind: "delegate", memberId: f.replacement.id });
+    await db.prisma.run.update({
+      where: { id: sent.runId },
+      data: { status: "running", runtimePin: pin },
+    });
+    await db.prisma.botMcpServer.updateMany({
+      where: { serverId: f.server.id, botId: f.replacement.id },
+      data: { allowedTools: ["fetch_issue"] },
+    });
+    expect(
+      await handoffToGroupBot(
+        f.deps,
+        { ...f.scope, id: sent.runId, botId: f.chief.id, threadId: f.target.threadId },
+        f.group.id,
+        {
+          bot_id: f.replacement.id,
+          message: "Prepare the issue; request approval before writing.",
+        },
+      ),
+    ).toEqual({ error: "Connect Linear or grant a team member permission to read and write." });
+    expect(await db.prisma.delegation.count({ where: { parentRunId: sent.runId } })).toBe(0);
+  });
+
   async function confirmOwnedAbort(f: Awaited<ReturnType<typeof fixture>>) {
     let calls = 0;
     const sandbox = {

@@ -1,6 +1,8 @@
 import { deploymentHostLabel } from "@ardurbot/adapters";
-import type { Actor, HostLabel, TeamRow } from "@ardurbot/contracts";
+import type { Actor, ChiefDecision, HostLabel, TeamRow } from "@ardurbot/contracts";
 import {
+  ChiefControlSchema,
+  ChiefDispatchSchema,
   DelegationSnapshotSchema,
   FailureCategoryIdSchema,
   failureCategoryFromMemberLine,
@@ -131,7 +133,7 @@ export async function teamBoard(
       ...delegations.map((row) => row.rootTaskId),
     ]),
   ];
-  const [approvals, usage, roots, failures] = await Promise.all([
+  const [approvals, usage, roots, failures, chiefPlans] = await Promise.all([
     prisma.externalEffect.findMany({
       where: { spaceId: actor.spaceId, runId: { in: runIds }, status: "intended" },
       select: { runId: true },
@@ -148,6 +150,11 @@ export async function teamBoard(
       distinct: ["runId"],
       orderBy: { createdAt: "desc" },
       select: { runId: true, payload: true },
+    }),
+    prisma.chiefPlan.findMany({
+      where: { ...scope, sourceRunId: { in: runIds } },
+      orderBy: { createdAt: "desc" },
+      select: { sourceRunId: true, decision: true, dispatch: true, control: true },
     }),
   ]);
   const connectionIds = [
@@ -193,6 +200,16 @@ export async function teamBoard(
     const timelineState = card?.timeline.findLast((event) =>
       ["blocked", "progress", "started", "completed", "accepted"].includes(event.kind),
     );
+    const chiefPlan = chiefPlans.find((plan) => plan.sourceRunId === run?.id);
+    const chiefControl = ChiefControlSchema.safeParse(chiefPlan?.control).data;
+    const chiefDispatch = ChiefDispatchSchema.safeParse(chiefPlan?.dispatch).data;
+    const chiefBlocker =
+      (chiefPlan?.decision as ChiefDecision | undefined)?.kind === "needs-owner" &&
+      chiefDispatch?.state === "needs-owner" &&
+      !chiefControl?.stopped &&
+      !chiefControl?.pendingReplan
+        ? chiefDispatch.reason
+        : undefined;
     const approval = Boolean(
       run?.status === "waiting_input" && approvals.some((effect) => effect.runId === run.id),
     );
@@ -221,6 +238,7 @@ export async function teamBoard(
       delegationStatus: selected?.status,
       approval,
       blocked:
+        Boolean(chiefBlocker) ||
         (selected?.status === "running" && timelineState?.kind === "blocked") ||
         ["error", "failed"].includes(bot.computer?.state ?? ""),
     });
@@ -289,17 +307,19 @@ export async function teamBoard(
       requesterName: selected?.requesterName ?? null,
       reason:
         state === "blocked"
-          ? selected?.status === "cancel-requested"
-            ? "Stopping"
-            : timelineState?.kind === "blocked"
-              ? timelineState.text
-              : runtimeProblem
-                ? redactTaskValue(runtimeProblem.reason)
-                : recordedReason
-                  ? redactTaskValue(recordedReason)
-                  : run?.status === "failed"
-                    ? "The run failed"
-                    : "The task needs attention"
+          ? chiefBlocker
+            ? chiefBlocker
+            : selected?.status === "cancel-requested"
+              ? "Stopping"
+              : timelineState?.kind === "blocked"
+                ? timelineState.text
+                : runtimeProblem
+                  ? redactTaskValue(runtimeProblem.reason)
+                  : recordedReason
+                    ? redactTaskValue(recordedReason)
+                    : run?.status === "failed"
+                      ? "The run failed"
+                      : "The task needs attention"
           : null,
       ...(reasonCategory
         ? { reasonCategory: reasonCategory.category, reasonRuntime: reasonCategory.runtime }

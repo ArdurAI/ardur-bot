@@ -10421,3 +10421,12 @@ msgstr "हमेशा चालू रहने वाले एजेंट�
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+msgid "Got it — this task needs you before I can assign it."
+msgstr "समझ गया — यह काम सौंपने से पहले आपकी मदद चाहिए।"
+
+msgid "Connect Linear or grant a team member permission to read and write."
+msgstr "Linear कनेक्ट करें या टीम के किसी सदस्य को पढ़ने और लिखने की अनुमति दें।"
+
+msgid "Connect GitHub or grant a team member permission to read and write."
+msgstr "GitHub कनेक्ट करें या टीम के किसी सदस्य को पढ़ने और लिखने की अनुमति दें।"

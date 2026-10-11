@@ -10421,3 +10421,12 @@ msgstr "你的一支随时在线的 Agent 团队<0/>可以交给它们真正的�
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+msgid "Got it — this task needs you before I can assign it."
+msgstr "收到 — 分配这项任务前需要你的帮助。"
+
+msgid "Connect Linear or grant a team member permission to read and write."
+msgstr "连接 Linear，或授予团队成员读写权限。"
+
+msgid "Connect GitHub or grant a team member permission to read and write."
+msgstr "连接 GitHub，或授予团队成员读写权限。"

@@ -11,6 +11,7 @@ export const ChiefReceiptKeySchema = z.enum([
   "change-task",
   "create-issue",
   "manage-repository",
+  "needs-owner",
 ]);
 export type ChiefReceiptKey = z.infer<typeof ChiefReceiptKeySchema>;
 export const ChiefOperationSchema = z.object({
@@ -24,37 +25,6 @@ export const ChiefOperationSchema = z.object({
   ]),
 });
 export type ChiefOperation = z.infer<typeof ChiefOperationSchema>;
-
-export const ChiefReceiptSchema = z.object({
-  id: Id,
-  threadId: Id,
-  seq: z.number().int().nonnegative(),
-  botId: Id,
-  requestMessageId: Id,
-  key: ChiefReceiptKeySchema,
-  memberName: z.string().optional(),
-  text: z.string(),
-  createdAt: z.string(),
-});
-export type ChiefReceipt = z.infer<typeof ChiefReceiptSchema>;
-
-/** Legacy work responses remain readable; only receipt-only explicitly has no run. */
-export const ThreadSendResultSchema = z.union([
-  z.object({
-    kind: z.literal("work").optional(),
-    taskId: Id,
-    runId: Id,
-    seq: z.number().int(),
-    runIds: z.array(Id).optional(),
-    receipt: ChiefReceiptSchema.optional(),
-  }),
-  z.object({
-    kind: z.literal("receipt-only"),
-    seq: z.number().int(),
-    receipt: ChiefReceiptSchema,
-  }),
-]);
-export type ThreadSendResult = z.infer<typeof ThreadSendResultSchema>;
 
 export type ChiefCapabilityFact = {
   id: string;
@@ -81,7 +51,7 @@ export type ChiefMemberFacts = {
 export type ChiefDecision =
   | { kind: "self" }
   | { kind: "delegate" | "queue"; memberId: string; reason: string }
-  | { kind: "needs-owner"; blocker: string }
+  | { kind: "needs-owner"; blocker: string; blockerKey?: "connect-linear" | "connect-github" }
   | { kind: "plan" };
 
 export const ChiefActivityKeySchema = z.enum([
@@ -92,6 +62,8 @@ export const ChiefActivityKeySchema = z.enum([
   "check-tool",
   "working",
   "waiting-tool",
+  "connect-linear",
+  "connect-github",
 ]);
 export type ChiefActivityKey = z.infer<typeof ChiefActivityKeySchema>;
 export const ChiefActivitySchema = z.object({
@@ -120,19 +92,53 @@ export const ChiefStopSchema = z.object({
   state: z.enum(["requested", "confirmed", "uncertain", "checking"]),
 });
 export type ChiefStop = z.infer<typeof ChiefStopSchema>;
-export const ChiefDispatchSchema = z.object({
+const ChiefDispatchObjectSchema = z.object({
   requestMessageId: Id,
   revision: z.number().int().positive(),
   memberId: Id,
   memberName: z.string(),
-  state: z.enum(["messaged", "queued", "approval-held"]),
+  state: z.enum(["messaged", "queued", "approval-held", "needs-owner"]),
+  blockerKey: z.enum(["connect-linear", "connect-github"]).optional(),
   reason: z.string(),
   runId: Id.optional(),
   delegationId: Id.optional(),
   activity: ChiefActivitySchema.optional(),
   stop: ChiefStopSchema.optional(),
 });
-export type ChiefDispatch = z.infer<typeof ChiefDispatchSchema>;
+export type ChiefDispatch = z.infer<typeof ChiefDispatchObjectSchema>;
+export const ChiefDispatchSchema: z.ZodType<ChiefDispatch> = ChiefDispatchObjectSchema;
+
+export const ChiefReceiptSchema = z.object({
+  id: Id,
+  threadId: Id,
+  seq: z.number().int().nonnegative(),
+  botId: Id,
+  requestMessageId: Id,
+  key: ChiefReceiptKeySchema,
+  memberName: z.string().optional(),
+  text: z.string(),
+  chiefDispatch: ChiefDispatchSchema.optional(),
+  createdAt: z.string(),
+});
+export type ChiefReceipt = z.infer<typeof ChiefReceiptSchema>;
+
+/** Legacy work responses remain readable; only receipt-only explicitly has no run. */
+export const ThreadSendResultSchema = z.union([
+  z.object({
+    kind: z.literal("work").optional(),
+    taskId: Id,
+    runId: Id,
+    seq: z.number().int(),
+    runIds: z.array(Id).optional(),
+    receipt: ChiefReceiptSchema.optional(),
+  }),
+  z.object({
+    kind: z.literal("receipt-only"),
+    seq: z.number().int(),
+    receipt: ChiefReceiptSchema,
+  }),
+]);
+export type ThreadSendResult = z.infer<typeof ThreadSendResultSchema>;
 
 export const ChiefCorrectionSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("exclude"), memberId: Id, memberName: z.string() }),

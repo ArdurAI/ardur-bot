@@ -8,6 +8,8 @@ import type {
   TaskType,
 } from "@ardurbot/contracts";
 
+import { CHIEF_ACTIVITY_TEXT } from "./chief-activity.js";
+
 export const CHIEF_POLICY_VERSION = 1;
 export const CHIEF_RECONCILIATION_POLICY: Readonly<{ orphanOutcomeAfterMs: number }> = {
   // Five minutes lets late receipts settle. A missing/terminal run with no live lease
@@ -24,6 +26,7 @@ export const CHIEF_RECEIPT_TEMPLATES: Readonly<Record<ChiefReceiptKey, string>> 
   "change-task": "Got it — I’ll check this change before the next action.",
   "create-issue": "Got it — I’ll choose a team member to file this issue in Linear.",
   "manage-repository": "Got it — I’ll choose a team member to manage the GitHub repository.",
+  "needs-owner": "Got it — this task needs you before I can assign it.",
 };
 
 type RankingKey = "skill" | "role" | "slot" | "active" | "queued" | "id";
@@ -87,7 +90,7 @@ export const CHIEF_OPERATION_RULES: readonly ChiefRule[] = [
   },
   {
     operation: { taskType: "operations", purpose: "create-issue" },
-    requires: ["linear:read-back"],
+    requires: ["linear:read-back", "linear:write"],
     effect: "approval-required",
     preferredSkills: ["planning", "issue-tracking", "linear"],
     preferredRoles: ["product", "operations"],
@@ -97,7 +100,7 @@ export const CHIEF_OPERATION_RULES: readonly ChiefRule[] = [
   },
   {
     operation: { taskType: "code-change", purpose: "manage-repository" },
-    requires: ["github:read-back"],
+    requires: ["github:read-back", "github:write"],
     effect: "approval-required",
     preferredSkills: ["vcs", "git", "github"],
     preferredRoles: ["developer", "operations"],
@@ -250,10 +253,12 @@ export function chooseChiefMember(input: {
   const best = eligible[0];
   if (!best) {
     if (rule.onNoMatch === "needs-owner") {
-      const toolNames = rule.requires.map((req) => req.split(":")[0]).join(" and ");
+      const blockerKey =
+        input.operation.purpose === "create-issue" ? "connect-linear" : "connect-github";
       return {
         kind: "needs-owner",
-        blocker: `No team member has access to ${toolNames}. Please connect the app or grant permission.`,
+        blockerKey,
+        blocker: CHIEF_ACTIVITY_TEXT[blockerKey],
       };
     }
     return { kind: "plan" };

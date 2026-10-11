@@ -149,6 +149,7 @@ async function main() {
         "packages/testkit/src/group-model-visible.postgres.test.ts",
         "packages/testkit/src/chief-loop.postgres.test.ts",
         "packages/testkit/src/chief-corrections.postgres.test.ts",
+        "packages/testkit/src/chief-selection.postgres.test.ts",
         "packages/db/src/messaging.postgres.test.ts",
         "packages/db/src/bot-presence.postgres.test.ts",
         "packages/db/src/learning.postgres.test.ts",

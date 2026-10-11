@@ -10421,3 +10421,12 @@ msgstr "언제든 실제 작업을 맡길 수 있는<0/>나만의 Agent 팀"
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+msgid "Got it — this task needs you before I can assign it."
+msgstr "알겠습니다 — 이 작업을 배정하기 전에 도움이 필요합니다."
+
+msgid "Connect Linear or grant a team member permission to read and write."
+msgstr "Linear를 연결하거나 팀원에게 읽기 및 쓰기 권한을 부여하세요."
+
+msgid "Connect GitHub or grant a team member permission to read and write."
+msgstr "GitHub를 연결하거나 팀원에게 읽기 및 쓰기 권한을 부여하세요."

@@ -100,7 +100,7 @@ export function ChiefDispatchLine({
       {activity ? (
         <Text
           style={{ color: tokens.mutedForeground, fontSize: 13.5 }}
-          numberOfLines={1}
+          numberOfLines={dispatch.state === "needs-owner" ? undefined : 1}
           accessibilityLiveRegion="polite"
         >
           {activity}

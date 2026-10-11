@@ -5,6 +5,7 @@ import { ChiefDispatchSchema, DELEGATION_LIMITS } from "@ardurbot/contracts";
 import { chiefActivityKey } from "@ardurbot/core";
 import {
   createDb,
+  loadChiefMemberFacts,
   lockOwnedGroup,
   projectChiefActivity,
   provisionMessagingIdentity,
@@ -316,7 +317,6 @@ describe.skipIf(!enabled).sequential("chief receipt Postgres journey", () => {
       },
     });
 
-    const { loadChiefMemberFacts } = await import("@ardurbot/db");
     const facts = await loadChiefMemberFacts(db.prisma, f.scope, f.group.id);
     const workerFacts = facts.find((bot) => bot.id === f.worker.id)!;
 
@@ -324,7 +324,9 @@ describe.skipIf(!enabled).sequential("chief receipt Postgres journey", () => {
       expect.arrayContaining([
         expect.objectContaining({ id: "notion:read-back", access: "known" }),
         expect.objectContaining({ id: "linear:read-back", access: "known" }),
+        expect.objectContaining({ id: "linear:write", access: "unknown" }),
         expect.objectContaining({ id: "github:read-back", access: "missing" }),
+        expect.objectContaining({ id: "github:write", access: "missing" }),
       ]),
     );
   });

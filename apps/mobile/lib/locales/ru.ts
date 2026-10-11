@@ -1584,4 +1584,11 @@ export const RU_MESSAGES: Record<string, string> = {
     "Понял — выберу участника команды, который создаст эту задачу в Linear.",
   "Got it — I’ll choose a team member to manage the GitHub repository.":
     "Понял — выберу участника команды для управления репозиторием GitHub.",
+  "Got it — this task needs you before I can assign it.":
+    "Понял — прежде чем поручить эту задачу, мне нужна ваша помощь.",
+  "Connect Linear or grant a team member permission to read and write.":
+    "Подключите Linear или разрешите участнику команды читать и записывать данные.",
+  "Connect GitHub or grant a team member permission to read and write.":
+    "Подключите GitHub или разрешите участнику команды читать и записывать данные.",
+  "Needs you": "Нужна ваша помощь",
 };

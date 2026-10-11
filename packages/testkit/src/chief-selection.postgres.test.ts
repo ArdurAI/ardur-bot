@@ -1,26 +1,33 @@
 import { randomUUID } from "node:crypto";
 import type { ChiefOperation } from "@ardurbot/contracts";
+import { ChiefDispatchSchema } from "@ardurbot/contracts";
 import {
+  createChiefReceipt,
   createDb,
+  loadChiefMemberFacts,
   loadChiefSelectionContext,
   provisionMessagingIdentity,
+  readChiefReceipt,
   saveChiefSelection,
   validateChiefDispatch,
 } from "@ardurbot/db";
-
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const enabled = process.env.VERIFY_DATABASE === "1" && Boolean(process.env.DATABASE_URL);
-describe.skipIf(!enabled).sequential("chief selection matrix", () => {
+// Disposable CI fixtures only; no app, model, computer or external write runs.
+describe.skipIf(!enabled).sequential("chief selection database facts", () => {
   let db: ReturnType<typeof createDb>;
   beforeAll(() => {
     db = createDb(process.env.DATABASE_URL!);
   });
   afterAll(async () => {
-    await db.prisma.$disconnect();
+    if (db) {
+      await db.prisma.$disconnect();
+      await db.pool.end();
+    }
   });
 
-  async function fixture() {
+  async function fixture(app: "linear" | "github" = "linear") {
     const mine = await provisionMessagingIdentity(
       db.prisma,
       { provider: "sendblue", address: `fixture-${randomUUID()}` },
@@ -35,237 +42,265 @@ describe.skipIf(!enabled).sequential("chief selection matrix", () => {
         homeKey: randomUUID(),
         kind: "docker",
         state: "running",
-        providerRef: "fake-computer",
       },
     });
-
-    const createWorker = async (name: string, title: string = "documentation") => {
-      return await db.prisma.bot.create({
-        data: {
-          ...scope,
-          name,
-          color: chief.color,
-          title,
-          computerId: computer.id,
-          runtimeKind: "pi",
-          modelProvider: "fixture",
-          modelId: "fixed",
-          thinkingLevel: "high",
-          modelPinRevision: 3,
-        },
-      });
-    };
-
-    const worker1 = await createWorker("A_worker", "developer");
-    const worker2 = await createWorker("B_worker", "developer");
-    const worker3 = await createWorker("C_worker", "product");
-
+    const workers = await Promise.all(
+      ["First member", "Second member"].map((name) =>
+        db.prisma.bot.create({
+          data: {
+            ...scope,
+            name,
+            color: chief.color,
+            title: "operations",
+            computerId: computer.id,
+            runtimeKind: "pi",
+            modelProvider: "fixture",
+            modelId: "fixed",
+            modelPinRevision: 3,
+            concurrentRuns: 1,
+          },
+        }),
+      ),
+    );
     const group = await db.prisma.chatGroup.create({
       data: {
         ...scope,
         name: "Selection fixture",
         coordinatorBotId: chief.id,
-        members: { create: [chief, worker1, worker2, worker3].map((bot) => ({ botId: bot.id })) },
+        members: { create: [chief, ...workers].map((bot) => ({ botId: bot.id })) },
         thread: { create: scope },
       },
       include: { thread: true },
     });
-
-    return { scope, chief, computer, worker1, worker2, worker3, group, createWorker };
-  }
-
-  it("tests disconnected app, permissions changed since planning, and tie-breaking matrix", async () => {
-    const f = await fixture();
-    const sourceRunId = randomUUID();
-    const operation: ChiefOperation = { taskType: "operations", purpose: "create-issue" };
-
-    // 1. disconnected app
-    let planId = await db.prisma.$transaction((tx) =>
-      saveChiefSelection(tx, {
-        ...f.scope,
-        groupId: f.group.id,
-        threadId: f.group.thread.id,
-        chiefBotId: f.chief.id,
-        sourceMessageId: randomUUID(),
-        sourceRunId,
-        taskId: randomUUID(),
-        operation,
-      }),
-    );
-
-    let context = await loadChiefSelectionContext(db.prisma, sourceRunId);
-    expect(context).toContain(
-      "Assignment is blocked: No team member has access to linear:read-back",
-    );
-
-    let dispatch = await db.prisma.$transaction((tx) =>
-      validateChiefDispatch(
-        tx,
-        { ...f.scope, id: sourceRunId, botId: f.chief.id, threadId: f.group.thread.id },
-        f.group.id,
-        f.worker1.id,
-      ),
-    );
-    expect(dispatch).toMatchObject({
-      error: expect.stringContaining("No team member has access to linear:read-back"),
-    });
-
-    // 2. Grant permissions to multiple workers to test tie-breaking
+    if (!group.thread) throw new Error("Fixture group requires a thread");
+    const thread = group.thread;
     const server = await db.prisma.mcpServer.create({
       data: {
-        ...f.scope,
-        slug: "fake-linear",
-        name: "Fake Linear",
+        ...scope,
+        slug: `fixture-${app}`,
+        name: `Fake ${app}`,
         transport: "streamable_http",
-        catalogId: "linear",
+        catalogId: app,
         connectionState: "connected",
         manifest: {
           capturedAt: new Date().toISOString(),
           serverVersion: "fixture",
           account: null,
-          tools: [{ id: "read-back", description: "Read back", inputSchemaDigest: "a" }],
+          tools: [
+            { id: "fetch_item", description: "Read an item", inputSchemaDigest: "a".repeat(64) },
+            { id: "create_item", description: "Create an item", inputSchemaDigest: "b".repeat(64) },
+          ],
         },
-        spaceAllowedTools: ["read-back"],
-        spaceToolPolicies: { "read-back": "allow" },
+        spaceAllowedTools: ["fetch_item", "create_item"],
+        spaceToolPolicies: { fetch_item: "allow", create_item: "ask-first" },
         assignments: {
-          create: [f.worker1.id, f.worker2.id, f.worker3.id].map((botId) => ({
-            ...f.scope,
-            botId,
+          create: [chief, ...workers].map((bot) => ({
+            ...scope,
+            botId: bot.id,
             access: "custom",
-            allowedTools: ["read-back"],
+            allowedTools: bot.id === chief.id ? [] : ["fetch_item", "create_item"],
           })),
         },
       },
     });
+    const operation: ChiefOperation =
+      app === "linear"
+        ? { taskType: "operations", purpose: "create-issue" }
+        : { taskType: "code-change", purpose: "manage-repository" };
+    async function select() {
+      const task = await db.prisma.task.create({
+        data: {
+          ...scope,
+          botId: chief.id,
+          threadId: thread.id,
+          prompt: "Fixture request",
+          status: "queued",
+        },
+      });
+      const run = await db.prisma.run.create({
+        data: {
+          ...scope,
+          botId: chief.id,
+          threadId: thread.id,
+          taskId: task.id,
+          status: "queued",
+          trigger: "user",
+        },
+      });
+      const request = await db.prisma.message.create({
+        data: {
+          threadId: thread.id,
+          seq:
+            (
+              await db.prisma.thread.update({
+                where: { id: thread.id },
+                data: { nextMessageSeq: { increment: 1 } },
+              })
+            ).nextMessageSeq - 1,
+          role: "user",
+          blocks: [{ kind: "text", text: "Fixture request" }],
+        },
+      });
+      const plan = await db.prisma.$transaction((tx) =>
+        saveChiefSelection(tx, {
+          ...scope,
+          groupId: group.id,
+          threadId: thread.id,
+          chiefBotId: chief.id,
+          sourceMessageId: request.id,
+          sourceRunId: run.id,
+          taskId: task.id,
+          operation,
+        }),
+      );
+      return { plan, run };
+    }
+    return { scope, chief, computer, workers, group, thread, server, operation, select };
+  }
 
-    // Worker 3 is 'product', worker1 and worker2 are 'developer'. 'create-issue' prefers 'product'.
-    // So worker 3 should win due to tie-breaking on role.
-    const runId2 = randomUUID();
-    planId = await db.prisma.$transaction((tx) =>
-      saveChiefSelection(tx, {
-        ...f.scope,
-        groupId: f.group.id,
-        threadId: f.group.thread.id,
-        chiefBotId: f.chief.id,
-        sourceMessageId: randomUUID(),
-        sourceRunId: runId2,
-        taskId: randomUUID(),
-        operation,
-      }),
-    );
-    context = await loadChiefSelectionContext(db.prisma, runId2);
-    expect(context).toContain(f.worker3.id); // Tie-broken to worker3 (product role)
+  it.each(["linear", "github"] as const)(
+    "saves and replays the %s access blocker without a model response",
+    async (app) => {
+      const f = await fixture(app);
+      await db.prisma.mcpServer.update({
+        where: { id: f.server.id },
+        data: { connectionState: "needs-sign-in" },
+      });
+      const { plan, run } = await f.select();
+      const blocker = `Connect ${app === "linear" ? "Linear" : "GitHub"} or grant a team member permission to read and write.`;
+      expect(plan.decision).toEqual({ kind: "needs-owner", blockerKey: `connect-${app}`, blocker });
+      expect(await loadChiefSelectionContext(db.prisma, run.id)).toContain(
+        `Assignment is blocked: ${blocker}`,
+      );
+      expect(
+        await db.prisma.$transaction((tx) =>
+          validateChiefDispatch(
+            tx,
+            { ...f.scope, id: run.id, botId: f.chief.id, threadId: f.thread.id },
+            f.group.id,
+            f.workers[0]!.id,
+          ),
+        ),
+      ).toEqual({ error: blocker });
+      const saved = await db.prisma.$transaction((tx) =>
+        createChiefReceipt(tx, {
+          ...f.scope,
+          threadId: f.thread.id,
+          chiefBotId: f.chief.id,
+          requestMessageId: plan.sourceMessageId,
+          key: app === "linear" ? "create-issue" : "manage-repository",
+          selection: plan,
+        }),
+      );
+      expect(saved.receipt).toMatchObject({
+        key: "needs-owner",
+        chiefDispatch: { state: "needs-owner", blockerKey: `connect-${app}`, reason: blocker },
+      });
+      expect(await readChiefReceipt(db.prisma, f.thread.id, plan.sourceMessageId)).toEqual(
+        saved.receipt,
+      );
+      expect(
+        ChiefDispatchSchema.parse(
+          (await db.prisma.chiefPlan.findUniqueOrThrow({ where: { id: plan.id } })).dispatch,
+        ).state,
+      ).toBe("needs-owner");
+      expect(await db.prisma.delegation.count({ where: { parentRunId: run.id } })).toBe(0);
+    },
+  );
 
-    // Now make worker 3 busy (busy computer)
-    await db.prisma.run.create({
-      data: {
-        ...f.scope,
-        id: randomUUID(),
-        botId: f.worker3.id,
-        threadId: f.group.thread.id,
-        status: "running",
-        taskType: "operations",
-      },
-    });
+  it.each(["linear", "github"] as const)(
+    "rejects read-only %s assignments, queues a leased computer, and breaks ties by id",
+    async (app) => {
+      const f = await fixture(app);
+      await db.prisma.botMcpServer.updateMany({
+        where: { serverId: f.server.id },
+        data: { allowedTools: ["fetch_item"] },
+      });
+      expect((await f.select()).plan.decision).toMatchObject({ kind: "needs-owner" });
+      await db.prisma.botMcpServer.updateMany({
+        where: { serverId: f.server.id, botId: { in: f.workers.map((worker) => worker.id) } },
+        data: { allowedTools: ["fetch_item", "create_item"] },
+      });
+      const winner = f.workers.map((worker) => worker.id).sort()[0]!;
+      const ready = await f.select();
+      expect(ready.plan.decision).toMatchObject({ kind: "delegate", memberId: winner });
+      // Both workers share this computer, so its lease blocks both even when one has no active run.
+      const busyTask = await db.prisma.task.create({
+        data: {
+          ...f.scope,
+          botId: winner,
+          threadId: f.thread.id,
+          prompt: "Busy fixture",
+          status: "running",
+        },
+      });
+      const busyRun = await db.prisma.run.create({
+        data: {
+          ...f.scope,
+          botId: winner,
+          threadId: f.thread.id,
+          taskId: busyTask.id,
+          status: "running",
+          trigger: "user",
+        },
+      });
+      await db.prisma.computerExecutionLease.create({
+        data: {
+          computerId: f.computer.id,
+          runId: busyRun.id,
+          botId: winner,
+          fence: 1,
+          expiresAt: new Date(Date.now() + 60_000),
+        },
+      });
+      expect((await f.select()).plan.decision).toMatchObject({
+        kind: "queue",
+        memberId: f.workers.find((worker) => worker.id !== winner)!.id,
+      });
+      const facts = await loadChiefMemberFacts(db.prisma, f.scope, f.group.id);
+      expect(facts.find((member) => member.id === winner)).toMatchObject({
+        computer: { leaseBusy: true },
+        capabilities: expect.arrayContaining([
+          { id: `${app}:write`, access: "known", checkedAt: expect.any(String) },
+        ]),
+      });
+      // Selection does not turn the saved ask-first write policy into approval.
+      expect(
+        (await db.prisma.mcpServer.findUniqueOrThrow({ where: { id: f.server.id } }))
+          .spaceToolPolicies,
+      ).toEqual({ fetch_item: "allow", create_item: "ask-first" });
+      expect(await db.prisma.externalEffect.count({ where: { spaceId: f.scope.spaceId } })).toBe(0);
+    },
+  );
 
-    const runId3 = randomUUID();
-    planId = await db.prisma.$transaction((tx) =>
-      saveChiefSelection(tx, {
-        ...f.scope,
-        groupId: f.group.id,
-        threadId: f.group.thread.id,
-        chiefBotId: f.chief.id,
-        sourceMessageId: randomUUID(),
-        sourceRunId: runId3,
-        taskId: randomUUID(),
-        operation,
-      }),
-    );
-    context = await loadChiefSelectionContext(db.prisma, runId3);
-    // Even though worker 3 is busy, they queue because they have the best fit (product).
-    // Wait, let's verify if they queue or fallback.
-    const plan = await db.prisma.chiefPlan.findUniqueOrThrow({ where: { id: planId } });
-    expect(plan.decision).toMatchObject({ kind: "queue", memberId: f.worker3.id });
-
-    // Remove worker 3 from the group to test deterministic tie-breaking on ID
-    await db.prisma.chatGroupMember.delete({
-      where: { groupId_botId: { groupId: f.group.id, botId: f.worker3.id } },
-    });
-
-    const runId4 = randomUUID();
-    planId = await db.prisma.$transaction((tx) =>
-      saveChiefSelection(tx, {
-        ...f.scope,
-        groupId: f.group.id,
-        threadId: f.group.thread.id,
-        chiefBotId: f.chief.id,
-        sourceMessageId: randomUUID(),
-        sourceRunId: runId4,
-        taskId: randomUUID(),
-        operation,
-      }),
-    );
-    context = await loadChiefSelectionContext(db.prisma, runId4);
-
-    // Both worker1 and worker2 have 'developer' role and are free. They tie. Tie broken by ID.
-    const sortedIds = [f.worker1.id, f.worker2.id].sort();
-    expect(context).toContain(sortedIds[0]);
-
-    // 3. permissions changed since planning
-    // Remove permission from the winner
-    await db.prisma.mcpServerAssignment.deleteMany({
-      where: { serverId: server.id, botId: sortedIds[0] },
-    });
-
-    dispatch = await db.prisma.$transaction((tx) =>
-      validateChiefDispatch(
-        tx,
-        { ...f.scope, id: runId4, botId: f.chief.id, threadId: f.group.thread.id },
-        f.group.id,
-        sortedIds[0],
-      ),
-    );
-
-    // The previous winner is no longer eligible. Should return error instead of dispatching.
-    expect(dispatch).toMatchObject({
-      error: expect.stringContaining("is no longer eligible"),
-    });
-  });
-
-  it("tests read-only assignment and approval required", async () => {
+  it("denies dispatch after explicit write revocation, while deleting an assignment restores inheritance", async () => {
     const f = await fixture();
-    // read-only assignment is usually a general task like code-search or research
-    const sourceRunId = randomUUID();
-    const planId = await db.prisma.$transaction((tx) =>
-      saveChiefSelection(tx, {
-        ...f.scope,
-        groupId: f.group.id,
-        threadId: f.group.thread.id,
-        chiefBotId: f.chief.id,
-        sourceMessageId: randomUUID(),
-        sourceRunId,
-        taskId: randomUUID(),
-        operation: { taskType: "code-change", purpose: "general" },
-      }),
-    );
-    const plan = await db.prisma.chiefPlan.findUniqueOrThrow({ where: { id: planId } });
-    expect((plan.operation as any).purpose).toBe("general");
-
-    // approval required is tested with code-change/manage-repository
-    const runId2 = randomUUID();
-    const planId2 = await db.prisma.$transaction((tx) =>
-      saveChiefSelection(tx, {
-        ...f.scope,
-        groupId: f.group.id,
-        threadId: f.group.thread.id,
-        chiefBotId: f.chief.id,
-        sourceMessageId: randomUUID(),
-        sourceRunId: runId2,
-        taskId: randomUUID(),
-        operation: { taskType: "code-change", purpose: "manage-repository" },
-      }),
-    );
-    const plan2 = await db.prisma.chiefPlan.findUniqueOrThrow({ where: { id: planId2 } });
-    expect((plan2.operation as any).purpose).toBe("manage-repository");
+    const { plan, run } = await f.select();
+    const winner = f.workers.map((worker) => worker.id).sort()[0]!;
+    expect(plan.decision).toMatchObject({ kind: "delegate", memberId: winner });
+    const validate = () =>
+      db.prisma.$transaction((tx) =>
+        validateChiefDispatch(
+          tx,
+          { ...f.scope, id: run.id, botId: f.chief.id, threadId: f.thread.id },
+          f.group.id,
+          winner,
+        ),
+      );
+    await db.prisma.botMcpServer.updateMany({
+      where: { serverId: f.server.id, botId: winner },
+      data: { access: "custom", allowedTools: ["fetch_item"] },
+    });
+    expect(await validate()).toEqual({
+      error: "Connect Linear or grant a team member permission to read and write.",
+    });
+    expect(await db.prisma.delegation.count({ where: { parentRunId: run.id } })).toBe(0);
+    await db.prisma.botMcpServer.deleteMany({
+      where: { serverId: f.server.id, botId: winner },
+    });
+    expect(await validate()).toMatchObject({
+      planId: plan.id,
+      dispatch: { state: "messaged", memberId: winner },
+    });
   });
 });
