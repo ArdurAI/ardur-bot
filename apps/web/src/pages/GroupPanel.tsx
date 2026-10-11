@@ -8,7 +8,6 @@ import type {
   SetGroupMemberModelPinInput,
 } from "@ardurbot/contracts";
 import {
-  boardItemPath,
   GOAL_FINAL_REVIEW_DESCRIPTION,
   GROUP_MEMBER_MAX,
   GROUP_MEMBER_MIN,
@@ -39,6 +38,9 @@ import { GroupModelControl } from "./group-model-control";
 
 const StartGoalForm = lazy(() =>
   import("./GoalForm").then((module) => ({ default: module.StartGoalForm })),
+);
+const GoalBoardLink = lazy(() =>
+  import("./GoalBoardLink").then((module) => ({ default: module.GoalBoardLink })),
 );
 
 function validSelection(name: string, selected: readonly string[]) {
@@ -687,18 +689,9 @@ export function GroupGoalStrip({
           </div>
         ) : null}
         {goal.boardWorkspaceId && goal.boardItemId ? (
-          <p className="pb-2">
-            <Trans>Board item</Trans>{" "}
-            <a href={boardItemPath(goal.boardWorkspaceId, goal.boardItemId)}>
-              <Trans>Open board item</Trans>
-            </a>
-            {goal.boardDelivery && goal.boardDelivery !== "delivered" ? (
-              <>
-                {" "}
-                · <Trans>Board update pending</Trans>
-              </>
-            ) : null}
-          </p>
+          <Suspense fallback={null}>
+            <GoalBoardLink goal={goal} />
+          </Suspense>
         ) : null}
         <dl className="grid grid-cols-2 gap-x-3 gap-y-1 py-2">
           <dt>

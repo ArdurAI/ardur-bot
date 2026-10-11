@@ -1,6 +1,6 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
-import { BoardItemIdSchema } from "./board.js";
+import { BoardItemIdSchema } from "./board-id.js";
 import { DEFAULT_MODEL_CONTEXT_WINDOW, MAX_MODEL_MAX_TOKENS } from "./domain.js";
 import { Id, IsoDate } from "./ids.js";
 

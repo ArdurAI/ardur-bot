@@ -173,6 +173,7 @@ it("shows the board link and a pending update", async () => {
       />,
     ),
   );
+  await act(() => vi.dynamicImportSettled());
   expect(node.textContent).toContain("Board item");
   expect(node.textContent).toContain("Open board item");
   expect(node.textContent).toContain("Board update pending");
