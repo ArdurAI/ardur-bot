@@ -156,7 +156,9 @@ export async function copyPinnedFile(
   source: string,
   destination: string,
   expected: Pick<Stats, "dev" | "ino" | "ctimeMs" | "size">,
+  signal?: AbortSignal,
 ): Promise<void> {
+  signal?.throwIfAborted();
   const handle = await open(source, constants.O_RDONLY | NOFOLLOW_OPEN | NONBLOCK_OPEN);
   try {
     const opened = await handle.stat();
@@ -171,7 +173,12 @@ export async function copyPinnedFile(
     ) {
       throw new Error("Git metadata changed while it was being copied");
     }
-    await pipeline(handle.createReadStream(), createWriteStream(destination));
+    try {
+      await pipeline(handle.createReadStream(), createWriteStream(destination), { signal });
+    } catch (error) {
+      await rm(destination, { force: true }).catch(() => undefined);
+      throw error;
+    }
   } finally {
     await handle.close();
   }
@@ -186,11 +193,19 @@ export async function copyPinnedFile(
  */
 export async function observeHostGitChanges(
   root: string,
-  request: Pick<GitObservationRequest, "path" | "readWorktreeFile">,
+  request: Pick<GitObservationRequest, "path" | "readWorktreeFile" | "deadlineMs"> = {},
 ): Promise<GitChangesResult> {
   // One deadline covers the whole observation, including the config read below.
-  const deadlineMs = Date.now() + GIT_OBSERVATION_BUDGET_MS;
+  const deadlineMs = request.deadlineMs ?? Date.now() + GIT_OBSERVATION_BUDGET_MS;
   const remaining = () => Math.max(1, deadlineMs - Date.now());
+  const controller = new AbortController();
+  const budgetMs = Math.max(0, deadlineMs - Date.now());
+  const timer = setTimeout(
+    () => controller.abort(new DOMException("The operation was aborted", "TimeoutError")),
+    budgetMs,
+  );
+  timer.unref?.();
+  if (budgetMs <= 0) controller.abort();
   const gitDir = path.join(root, ".git");
   const present = await lstat(gitDir).catch(() => null);
   if (!present) {
@@ -251,7 +266,7 @@ export async function observeHostGitChanges(
         // Private copies keep the observation from changing index bytes or inode
         // metadata; the no-follow open and identity check pin each file to what
         // the lstat above saw, so a swap in between cannot redirect the copy.
-        await copyPinnedFile(source, destination, info);
+        await copyPinnedFile(source, destination, info, controller.signal);
       } else return { kind: "unavailable" };
     }
     const infoDirectory = path.join(gitDir, "info");
@@ -265,7 +280,7 @@ export async function observeHostGitChanges(
         if (!file) continue;
         if (!file.isFile() || file.isSymbolicLink() || file.size > GIT_OBSERVATION_COMMAND_BYTES)
           return { kind: "unavailable" };
-        await copyPinnedFile(source, path.join(view, "info", entry), file);
+        await copyPinnedFile(source, path.join(view, "info", entry), file, controller.signal);
       }
     }
     const pinned = ["--no-pager", "--git-dir", view, "--work-tree", root, ...settings];
@@ -282,6 +297,7 @@ export async function observeHostGitChanges(
   } catch {
     return { kind: "unavailable" };
   } finally {
+    clearTimeout(timer);
     if (view) await rm(view, { recursive: true, force: true });
   }
 }
