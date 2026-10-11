@@ -5,6 +5,8 @@ import {
   lstat,
   mkdir,
   mkdtemp,
+  open,
+  readdir,
   readFile,
   realpath,
   rm,
@@ -14,10 +16,16 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { Readable } from "node:stream";
 import type { AdapterContext } from "@ardurbot/adapter-kit";
 import { afterEach, describe, expect, it } from "vitest";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
-import { assertSafeGitMetadata, copyPinnedFile, createGitRunner } from "./git-reader.js";
+import {
+  assertSafeGitMetadata,
+  copyPinnedFile,
+  createGitRunner,
+  observeHostGitChanges,
+} from "./git-reader.js";
 
 const context: AdapterContext = {
   operationId: "operation",
@@ -523,6 +531,43 @@ it("honours the Team subfolder root so one bot cannot read a sibling's repositor
   expect(["unavailable", "not-repository"]).toContain(escapeAttempt.kind);
 });
 
+it("stops the metadata copy when the deadline runs out, returns unavailable and removes the temporary view", async () => {
+  const { home, git } = await fixture();
+  git(["init", "-q", "-b", "main"]);
+  await writeFile(path.join(home, "app.txt"), "hello\n");
+  git(["add", "app.txt"]);
+  git(["commit", "-q", "-m", "init"]);
+
+  const initialTempViews = (await readdir(tmpdir())).filter((f) =>
+    f.startsWith("git-observation-"),
+  );
+
+  const dummyHandle = await open(path.join(home, ".git", "HEAD"));
+  const proto = Object.getPrototypeOf(dummyHandle);
+  const origCreateReadStream = proto.createReadStream;
+  let copyAttempted = false;
+
+  proto.createReadStream = () => {
+    copyAttempted = true;
+    return new Readable({ read() {} });
+  };
+
+  try {
+    const deadlineMs = Date.now() + 50;
+    const result = await observeHostGitChanges(home, { deadlineMs });
+    expect(result).toEqual({ kind: "unavailable" });
+    expect(copyAttempted).toBe(true);
+
+    const remainingTempViews = (await readdir(tmpdir())).filter((f) =>
+      f.startsWith("git-observation-"),
+    );
+    expect(remainingTempViews).toEqual(initialTempViews);
+  } finally {
+    proto.createReadStream = origCreateReadStream;
+    await dummyHandle.close();
+  }
+}, 1000);
+
 describe("copyPinnedFile", () => {
   async function pinnedFixture() {
     const root = await realpath(await mkdtemp(path.join(tmpdir(), "git-pin-")));
@@ -538,6 +583,15 @@ describe("copyPinnedFile", () => {
     const destination = path.join(root, "view-index");
     await copyPinnedFile(source, destination, info);
     expect(await readFile(destination, "utf8")).toBe("real index\n");
+  });
+
+  it("aborts copying and cleans up when the AbortSignal is triggered", async () => {
+    const { root, source, info } = await pinnedFixture();
+    const destination = path.join(root, "view-index");
+    const controller = new AbortController();
+    controller.abort();
+    await expect(copyPinnedFile(source, destination, info, controller.signal)).rejects.toThrow();
+    await expect(readFile(destination, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("refuses a symlink swapped in between the lstat and the copy", async () => {
