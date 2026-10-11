@@ -1458,6 +1458,7 @@ msgstr ""
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/DashboardPage.tsx
+#: src/pages/GoalForm.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/shell/TopNav.tsx
 msgid "Board"
@@ -1471,9 +1472,19 @@ msgstr ""
 msgid "Board files will be kept."
 msgstr "बोर्ड की फ़ाइलें सुरक्षित रहेंगी।"
 
+#: src/pages/GoalForm.tsx
+#: src/pages/GroupPanel.tsx
+msgid "Board item"
+msgstr "बोर्ड आइटम"
+
 #: src/pages/board/BoardsSettings.tsx
 msgid "Board status"
 msgstr "बोर्ड की स्थिति"
+
+#: src/pages/board/Board.tsx
+#: src/pages/GroupPanel.tsx
+msgid "Board update pending"
+msgstr "बोर्ड अपडेट लंबित"
 
 #: src/pages/settings-sections.ts
 #: src/pages/storage/StorageSettings.tsx
@@ -2890,6 +2901,10 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not install connector"
 msgstr "कनेक्टर इंस्टॉल नहीं हो सका"
+
+#: src/pages/GoalForm.tsx
+msgid "Could not link that board item."
+msgstr "उस बोर्ड आइटम को लिंक नहीं किया जा सका."
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -4666,6 +4681,14 @@ msgstr ""
 #: src/pages/GroupPanel.tsx
 msgid "Goal"
 msgstr "लक्ष्य"
+
+#: src/pages/board/Board.tsx
+msgid "Goal accepted"
+msgstr "लक्ष्य स्वीकार किया गया"
+
+#: src/pages/board/Board.tsx
+msgid "Goal completed"
+msgstr "लक्ष्य पूरा हुआ"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll check the request and choose the next step."
@@ -6675,6 +6698,10 @@ msgstr ""
 #: src/pages/system/QuickComposer.tsx
 msgid "Open Ardur"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Open board item"
+msgstr "बोर्ड आइटम खोलें"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/provider-error-message.tsx

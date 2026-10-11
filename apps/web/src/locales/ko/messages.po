@@ -1458,6 +1458,7 @@ msgstr ""
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/DashboardPage.tsx
+#: src/pages/GoalForm.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/shell/TopNav.tsx
 msgid "Board"
@@ -1471,9 +1472,19 @@ msgstr ""
 msgid "Board files will be kept."
 msgstr "보드 파일은 유지됩니다."
 
+#: src/pages/GoalForm.tsx
+#: src/pages/GroupPanel.tsx
+msgid "Board item"
+msgstr "보드 항목"
+
 #: src/pages/board/BoardsSettings.tsx
 msgid "Board status"
 msgstr "보드 상태"
+
+#: src/pages/board/Board.tsx
+#: src/pages/GroupPanel.tsx
+msgid "Board update pending"
+msgstr "보드 업데이트 대기 중"
 
 #: src/pages/settings-sections.ts
 #: src/pages/storage/StorageSettings.tsx
@@ -2890,6 +2901,10 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not install connector"
 msgstr "도구 연결을 추가하지 못했습니다."
+
+#: src/pages/GoalForm.tsx
+msgid "Could not link that board item."
+msgstr "해당 보드 항목을 연결할 수 없습니다."
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -4666,6 +4681,14 @@ msgstr ""
 #: src/pages/GroupPanel.tsx
 msgid "Goal"
 msgstr "목표"
+
+#: src/pages/board/Board.tsx
+msgid "Goal accepted"
+msgstr "목표 수락됨"
+
+#: src/pages/board/Board.tsx
+msgid "Goal completed"
+msgstr "목표 완료"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll check the request and choose the next step."
@@ -6675,6 +6698,10 @@ msgstr ""
 #: src/pages/system/QuickComposer.tsx
 msgid "Open Ardur"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Open board item"
+msgstr "보드 항목 열기"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/provider-error-message.tsx

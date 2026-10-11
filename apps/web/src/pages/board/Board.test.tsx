@@ -38,7 +38,9 @@ const calls = vi.hoisted(() => ({
   show: vi.fn(),
   start: vi.fn(),
 }));
-vi.mock("../../lib/rpc", () => ({ rpc: { board: calls } }));
+vi.mock("../../lib/rpc", () => ({
+  rpc: { board: calls, goals: { boardResult: vi.fn(async () => null) } },
+}));
 const roots: ReturnType<typeof createRoot>[] = [];
 afterEach(async () => {
   for (const root of roots.splice(0)) await act(async () => root.unmount());

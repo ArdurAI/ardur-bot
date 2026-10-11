@@ -1458,6 +1458,7 @@ msgstr ""
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/DashboardPage.tsx
+#: src/pages/GoalForm.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/shell/TopNav.tsx
 msgid "Board"
@@ -1471,9 +1472,19 @@ msgstr "看板和例行任务"
 msgid "Board files will be kept."
 msgstr "看板文件将保留。"
 
+#: src/pages/GoalForm.tsx
+#: src/pages/GroupPanel.tsx
+msgid "Board item"
+msgstr "看板事项"
+
 #: src/pages/board/BoardsSettings.tsx
 msgid "Board status"
 msgstr "看板状态"
+
+#: src/pages/board/Board.tsx
+#: src/pages/GroupPanel.tsx
+msgid "Board update pending"
+msgstr "看板更新待处理"
 
 #: src/pages/settings-sections.ts
 #: src/pages/storage/StorageSettings.tsx
@@ -2890,6 +2901,10 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not install connector"
 msgstr "无法安装连接器"
+
+#: src/pages/GoalForm.tsx
+msgid "Could not link that board item."
+msgstr "无法关联该看板事项。"
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -4666,6 +4681,14 @@ msgstr ""
 #: src/pages/GroupPanel.tsx
 msgid "Goal"
 msgstr "目标"
+
+#: src/pages/board/Board.tsx
+msgid "Goal accepted"
+msgstr "目标已接受"
+
+#: src/pages/board/Board.tsx
+msgid "Goal completed"
+msgstr "目标已完成"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll check the request and choose the next step."
@@ -6675,6 +6698,10 @@ msgstr ""
 #: src/pages/system/QuickComposer.tsx
 msgid "Open Ardur"
 msgstr "打开 Ardur"
+
+#: src/pages/GroupPanel.tsx
+msgid "Open board item"
+msgstr "打开看板事项"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/provider-error-message.tsx

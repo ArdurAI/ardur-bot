@@ -90,6 +90,12 @@ it("refuses executable, workspace and file-output flags even on an otherwise all
     validateBoardArgv(["update", "board-a", "--set-metadata", "ardur_filed_by=Builder"]),
   ).toEqual({ write: true });
   expect(
+    validateBoardArgv(["update", "board-a", "--set-metadata", "ardur_gd_0123456789abcdef=1:c1:x1"]),
+  ).toEqual({ write: true });
+  expect(() =>
+    validateBoardArgv(["update", "board-a", "--set-metadata", "ardur_gd_short=1:c1:x1"]),
+  ).toThrow();
+  expect(
     validateBoardArgv([
       "update",
       "board-a",

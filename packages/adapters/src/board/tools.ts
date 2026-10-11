@@ -13,6 +13,7 @@ import {
 } from "@ardurbot/contracts/board";
 import type { Pool, PrismaClient } from "@ardurbot/db";
 import { z } from "zod";
+import { goalLinkForbidsRunClose } from "./goal-link-guard.js";
 import type { BoardScope } from "./service.js";
 import { BoardService } from "./service.js";
 import {
@@ -313,7 +314,13 @@ export async function finishBoardRun(
         `${marker} ${completed ? "Completed" : run.status === "cancelled" ? "Cancelled" : "Failed"}\n${outcome.slice(0, 30_000)}`,
       );
     checkDeadline();
-    if (completed && run.boardCloseWhenDone && item.closeWhenDone && item.status !== "closed")
+    if (
+      completed &&
+      run.boardCloseWhenDone &&
+      item.closeWhenDone &&
+      item.status !== "closed" &&
+      !(await goalLinkForbidsRunClose(deps.prisma, run))
+    )
       await provider.close([item.id], "Bot reported done");
     checkDeadline();
     await deps.prisma.run.updateMany({
