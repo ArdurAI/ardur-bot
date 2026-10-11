@@ -119,7 +119,7 @@ export const PROVIDER_METADATA: Record<string, ProviderMetadata> = {
     status: "roadmap",
     accountHint: "Claude account through your own CLI",
   },
-  ollama: { name: "Ollama as a first-class choice", access: "local", status: "roadmap" },
+  ollama: { name: "Ollama as a first-class choice", access: "local", status: "available" },
 };
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");

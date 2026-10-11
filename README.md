@@ -32,7 +32,7 @@ Apache-2.0 attribution.
 - Providers: OpenRouter, OpenAI Codex (ChatGPT account), Anthropic (API key),
   OpenAI, Google, Vercel AI Gateway, and 36 more in the searchable model catalog.
   OpenAI-compatible servers cover local Ollama, LM Studio and llama.cpp.
-  Planned additions include Claude Pro/Max through the CLI and Ollama as a direct local choice.
+  Planned additions include Claude Pro/Max through the CLI.
 <!-- site-facts:providers:end -->
 - Computers: the computer Ardur is installed on, plus Docker, Podman, Kubernetes or SSH
   machines you add, and E2B, Daytona or Box on a server, with a browser, terminal, files and a
