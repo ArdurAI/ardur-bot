@@ -234,7 +234,7 @@ import { getLogger } from "@ardurbot/logging";
 import type { MemoryService } from "@ardurbot/memory";
 import { MemoryRedactionError } from "@ardurbot/memory";
 import type { Router } from "@orpc/server";
-import { implement, ORPCError } from "@orpc/server";
+import { implement, ORPCError, ValidationError } from "@orpc/server";
 import { createAccountService } from "./account.js";
 import { exportDownload } from "./account-export.js";
 import { deleteAgentSecret, listAgentSecrets, putAgentSecret } from "./agent-secrets.js";
@@ -731,7 +731,21 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
 
   const authed = os.use(async ({ context, next }) => {
     if (!context.actor) throw new ORPCError("UNAUTHORIZED");
-    return next({ context: { ...context, actor: context.actor } });
+    try {
+      return await next({ context: { ...context, actor: context.actor } });
+    } catch (error) {
+      if (
+        error instanceof ORPCError &&
+        error.code === "BAD_REQUEST" &&
+        error.cause instanceof ValidationError &&
+        error.cause.issues.some(
+          (issue) => issue.message === "Choose a model." && issue.path?.at(-1) === "modelId",
+        )
+      ) {
+        throw new ORPCError("BAD_REQUEST", { message: "Choose a model." });
+      }
+      throw error;
+    }
   });
 
   const systemSettings = createSystemSettings(deps.prisma);

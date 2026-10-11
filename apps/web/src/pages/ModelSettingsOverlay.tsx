@@ -4,6 +4,7 @@ import {
   DEFAULT_MODEL_MAX_TOKENS,
   MAX_MODEL_CONTEXT_WINDOW,
   MAX_MODEL_MAX_TOKENS,
+  MODEL_ID_MAX_LENGTH,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   openAiCompatibleConnectReady,
   openAiCompatibleProbeSuccessMessage,
@@ -552,6 +553,7 @@ export function ModelSettingsOverlay({
                       ) : (
                         <Input
                           value={modelId}
+                          maxLength={MODEL_ID_MAX_LENGTH}
                           onChange={(event) => {
                             cancelOAuthAttempt();
                             selectionRevisionRef.current += 1;

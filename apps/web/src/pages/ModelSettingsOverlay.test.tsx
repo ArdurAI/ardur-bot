@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import type { ModelCatalogEntry } from "@ardurbot/contracts";
+import { MODEL_ID_MAX_LENGTH } from "@ardurbot/contracts";
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -685,6 +686,7 @@ it("keeps custom model entry selected while entering a free-form endpoint id", a
   await pickModel("Custom model id");
   expect(picker().textContent).toBe("Custom model id");
   const input = container.querySelector<HTMLInputElement>('input[aria-label="Model id"]')!;
+  expect(input.maxLength).toBe(MODEL_ID_MAX_LENGTH);
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
       input,

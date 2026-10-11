@@ -52,6 +52,12 @@ export const ThinkingLevelSchema = z.enum([
 ]);
 export type ThinkingLevel = z.infer<typeof ThinkingLevelSchema>;
 
+export const MODEL_ID_MAX_LENGTH = 200;
+export const ModelIdSchema = z
+  .string()
+  .max(MODEL_ID_MAX_LENGTH, "Choose a model.")
+  .regex(/^\P{Cc}*$/u, "Choose a model.");
+
 export const AGENT_SECRET_NAME_PATTERN = /^[A-Z_][A-Z0-9_]{0,63}$/;
 
 export const AgentSecretSchema = z.object({
@@ -200,7 +206,7 @@ export const SetGroupMemberModelPinInput = GroupMemberModelPinTarget.extend({
     .object({
       runtimeKind: RuntimeKindSchema,
       provider: z.string().min(1),
-      modelId: z.string().min(1),
+      modelId: ModelIdSchema.min(1),
       effort: z.string().nullable(),
       credentialId: z.string().min(1),
     })
@@ -402,7 +408,7 @@ export const UpdateBotInput = z
     voiceId: z.string().max(120).nullable().optional(),
     autoSpeak: z.boolean().optional(),
     modelProvider: z.string().trim().min(1).max(80).nullable().optional(),
-    modelId: z.string().trim().min(1).max(200).nullable().optional(),
+    modelId: ModelIdSchema.trim().min(1).nullable().optional(),
     thinkingLevel: ThinkingLevelSchema.nullable().optional(),
     modelCredentialId: z.string().min(1).nullable().optional(),
     runtimeKind: RuntimeKindSchema.optional(),
@@ -1209,7 +1215,7 @@ export const ModelConnectInputSchema = z
     apiKey: z.string().optional(),
     baseUrl: z.string().optional(),
     label: z.string().optional(),
-    modelId: z.string().optional(),
+    modelId: ModelIdSchema.optional(),
     reasoning: z.boolean().optional(),
     thinkingLevel: ThinkingLevelSchema.nullable().optional(),
     maxTokens: z.number().int().min(1).max(MAX_MODEL_MAX_TOKENS).optional(),

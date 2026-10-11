@@ -288,6 +288,8 @@ test("models: inspect a connection, default control, and connection form", async
   await expect(panel.getByText(connected.label, { exact: true }).first()).toBeVisible();
 
   await capture(page, "docs-models-open");
+  await panel.getByRole("button", { name: "Connection settings", exact: true }).click();
+  await expect(panel.getByText(/Context limit \(from the provider\)/)).toBeVisible();
   const alternate = listPiCatalog().find(
     (entry) => entry.provider === connected.provider && entry.id !== connected.id,
   );

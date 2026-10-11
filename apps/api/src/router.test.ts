@@ -8,7 +8,7 @@ import {
   NATIVE_HOST_OWNER_MESSAGE,
 } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
-import { REPLY_QUOTE_MAX_LENGTH } from "@ardurbot/contracts";
+import { MODEL_ID_MAX_LENGTH, REPLY_QUOTE_MAX_LENGTH } from "@ardurbot/contracts";
 import { openScreenCapability } from "@ardurbot/core/node/screen-capability";
 import type { PrismaClient } from "@ardurbot/db";
 import {
@@ -1402,6 +1402,39 @@ describe("model credential persistence", () => {
         create: expect.objectContaining({ credentialId: "chosen", modelId: "newer/selected" }),
       }),
     );
+  });
+  describe.each(["connect", "setDefault", "beginOAuth"])("models/%s id validation", (route) => {
+    it.each([
+      { name: "over-long", modelId: "m".repeat(MODEL_ID_MAX_LENGTH + 1) },
+      { name: "NUL", modelId: "vendor/\u0000model" },
+      { name: "tab", modelId: "vendor/\tmodel" },
+      { name: "line break", modelId: "vendor/\nmodel" },
+      { name: "leading line break", modelId: "\nmodel" },
+      { name: "trailing carriage return", modelId: "model\r" },
+      { name: "delete", modelId: "vendor/\u007fmodel" },
+      { name: "C1 control", modelId: "vendor/\u0085model" },
+    ])("refuses $name ids before side effects", async ({ modelId }) => {
+      const { deps, tx, upsert, begin } = persistDeps();
+      tx.userModelCredential.findFirst.mockResolvedValue({
+        id: "chosen",
+        provider: "copy-provider",
+        secretId: "secret-1",
+        label: "Chosen",
+      } as never);
+      vi.mocked(deps.secrets.load).mockReturnValue("fake-model-key");
+      const response = await call(new RPCHandler(createRouter(deps)), `models/${route}`, {
+        provider: "copy-provider",
+        modelId,
+        apiKey: "fake-model-key",
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ json: { message: "Choose a model." } });
+      expect(upsert).not.toHaveBeenCalled();
+      expect(tx.userModelCredential.create).not.toHaveBeenCalled();
+      expect(deps.secrets.put).not.toHaveBeenCalled();
+      expect(deps.prisma.$transaction).not.toHaveBeenCalled();
+      expect(begin).not.toHaveBeenCalled();
+    });
   });
   it("refuses unreadable credentials with a friendly message before changing defaults", async () => {
     const { deps, tx, upsert } = persistDeps();

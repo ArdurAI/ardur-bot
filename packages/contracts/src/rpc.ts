@@ -79,6 +79,7 @@ import {
   ModelCatalogEntrySchema,
   ModelConnectInputSchema,
   ModelCredentialSchema,
+  ModelIdSchema,
   ModelOAuthBeginSchema,
   REPLY_QUOTE_MAX_LENGTH,
   ReorderBotsInput,
@@ -638,7 +639,7 @@ export const appContract = {
         z.object({
           provider: z.string(),
           label: z.string().optional(),
-          modelId: z.string().optional(),
+          modelId: ModelIdSchema.optional(),
         }),
       )
       .output(ModelOAuthBeginSchema),
@@ -662,7 +663,7 @@ export const appContract = {
       .input(
         z.object({
           provider: z.string(),
-          modelId: z.string().optional(),
+          modelId: ModelIdSchema.optional(),
           credentialId: Id.optional(),
         }),
       )

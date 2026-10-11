@@ -9,6 +9,7 @@ import {
   DEFAULT_MODEL_MAX_TOKENS,
   MAX_MODEL_CONTEXT_WINDOW,
   MAX_MODEL_MAX_TOKENS,
+  MODEL_ID_MAX_LENGTH,
   modelContextWindowLabel,
   OPENAI_COMPATIBLE_BASE_URL_HINT,
   OPENAI_COMPATIBLE_PROVIDER_ID,
@@ -639,6 +640,7 @@ export default function Models() {
                   <>
                     <TextInput
                       accessibilityLabel={t("Model id")}
+                      maxLength={MODEL_ID_MAX_LENGTH}
                       autoCapitalize="none"
                       autoCorrect={false}
                       editable={!busy && !probing}
