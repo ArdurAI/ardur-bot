@@ -72,6 +72,8 @@ export function brokerLedgerFixture(
     },
     task: { findFirst: vi.fn(async () => ({ id: run.taskId })) },
     teamGoal: { findUnique: vi.fn(async () => (run.goalId ? { id: run.goalId } : null)) },
+    goalSettlement: { findFirst: vi.fn(async () => null) },
+    goalSettlementDiscrepancy: { create: vi.fn(async () => ({})) },
     delegationRoot: {
       findUnique: vi.fn(async () => structuredClone(root)),
       upsert: vi.fn(async () => structuredClone(root)),
