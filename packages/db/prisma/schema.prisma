@@ -2494,9 +2494,13 @@ model EvidenceKey {
   publicKeyPem String
   privateKeyCiphertext String
   secretRecordId String
+  version Int @default(1)
   createdAt DateTime @default(now())
+  replacedAt DateTime?
   revokedAt DateTime?
+  revokedReason String?
 
+  @@unique([spaceId, version])
   @@index([spaceId])
   @@map("evidence_keys")
 }
