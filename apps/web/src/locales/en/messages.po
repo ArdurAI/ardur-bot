@@ -9246,6 +9246,10 @@ msgstr "The file changed. Open it again before saving."
 msgid "The first bot could not be created. Try again."
 msgstr "The first bot could not be created. Try again."
 
+#: src/pages/TeamBoard.tsx
+msgid "The goal reached owner review before this work started."
+msgstr "The goal reached owner review before this work started."
+
 #: src/pages/group-model-control.tsx
 msgid "The group model choice was reloaded. Pick again."
 msgstr "The group model choice was reloaded. Pick again."

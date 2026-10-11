@@ -9246,6 +9246,10 @@ msgstr "Dosya değişti. Kaydetmeden önce yeniden açın."
 msgid "The first bot could not be created. Try again."
 msgstr "İlk bot oluşturulamadı. Tekrar deneyin."
 
+#: src/pages/TeamBoard.tsx
+msgid "The goal reached owner review before this work started."
+msgstr "Hedef, bu çalışma başlamadan önce sahip incelemesine ulaştı."
+
 #: src/pages/group-model-control.tsx
 msgid "The group model choice was reloaded. Pick again."
 msgstr "Grubun model seçimi yeniden yüklendi. Tekrar seçin."

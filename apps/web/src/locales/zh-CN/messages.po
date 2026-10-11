@@ -9246,6 +9246,10 @@ msgstr "文件已更改。保存前请重新打开。"
 msgid "The first bot could not be created. Try again."
 msgstr "无法创建第一个机器人。请重试。"
 
+#: src/pages/TeamBoard.tsx
+msgid "The goal reached owner review before this work started."
+msgstr "目标在这项工作开始前就已进入所有者审核。"
+
 #: src/pages/group-model-control.tsx
 msgid "The group model choice was reloaded. Pick again."
 msgstr "已重新加载群组的模型选择。请重新选择。"
