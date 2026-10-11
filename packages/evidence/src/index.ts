@@ -27,5 +27,10 @@ export {
 export type { SealRunInput } from "./seal.js";
 export { sealRun } from "./seal.js";
 export * from "./tables.js";
-export type { SealClaims, VerificationFailure, VerificationResult } from "./verify.js";
+export type {
+  EvidenceSignerMatch,
+  SealClaims,
+  VerificationFailure,
+  VerificationResult,
+} from "./verify.js";
 export { verifyChain, verifySeal } from "./verify.js";

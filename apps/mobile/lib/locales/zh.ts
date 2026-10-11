@@ -1,4 +1,16 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "Signing identity": "签名身份",
+  Fingerprint: "指纹",
+  "Copy fingerprint": "复制指纹",
+  "Export identity card": "导出身份卡",
+  "Expected fingerprint": "预期指纹",
+  "Check key": "检查密钥",
+  "Signed by the expected key": "由预期密钥签名",
+  "Signed by a different key": "由其他密钥签名",
+  "No expected key given; self-consistent only": "未提供预期密钥；仅验证内部一致性",
+  "Key version": "密钥版本",
+  "Share fingerprint": "分享指纹",
+
   "To {names}": "发送给：{names}",
   "Queued: {queued}": "排队中：{queued}",
 

@@ -138,6 +138,46 @@ describePostgres("run evidence download (PostgreSQL)", () => {
     mountEvidenceRoutes(app, prisma, async () => viewer);
     return app.request(`/api/evidence/runs/${id}?spaceId=${viewer.spaceId}`);
   };
+  it("shares a public-only active identity and compares expected fingerprints", async () => {
+    const summary = await runEvidenceSummary(prisma, actor(userId), runId);
+    const identity = summary.signingIdentity!;
+    expect(Object.keys(identity).sort()).toEqual(["fingerprint", "keyVersion", "scope"]);
+    expect(identity).toMatchObject({ scope: { type: "space", id: spaceId }, keyVersion: 1 });
+    expect(identity.fingerprint).toBe(summary.evidence!.keyId);
+    expect(JSON.stringify(summary)).not.toMatch(/PRIVATE|Ciphertext|secretRecordId|BEGIN/);
+    expect(summary.signerMatch).toBe("no_expected_key");
+    expect(
+      (await runEvidenceSummary(prisma, actor(userId), runId, identity.fingerprint)).signerMatch,
+    ).toBe("expected_key");
+    expect(
+      (await runEvidenceSummary(prisma, actor(userId), runId, `sha256:${"0".repeat(64)}`))
+        .signerMatch,
+    ).toBe("different_key");
+    const downloaded = await download(actor(userId), runId);
+    const files = extractEvidenceArchive(new Uint8Array(await downloaded.arrayBuffer()));
+    const records = files
+      .get("journal.jsonl")!
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line).jwt);
+    expect(
+      verifySeal(
+        files.get("seal.jwt")!.trim(),
+        records,
+        files.get("evidence-public.pem")!,
+        identity.fingerprint,
+      ).signerMatch,
+    ).toBe("expected_key");
+    const substitute = signedRunFixture();
+    expect(
+      verifySeal(
+        substitute.seal.jws,
+        substitute.journal,
+        substitute.keys.publicKeyPem,
+        identity.fingerprint,
+      ),
+    ).toMatchObject({ ok: true, signerMatch: "different_key" });
+  });
   it("downloads exactly the four independently verifiable bundle files", async () => {
     expect((await runEvidenceSummary(prisma, actor(userId), runId)).state).toBe("verified");
     const response = await download(actor(userId), runId);
