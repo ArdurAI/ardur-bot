@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@ardurbot/db";
 import { afterEach, expect, it, vi } from "vitest";
 import { parseBeadsItem } from "./beads.js";
+import { goalBoardFixture } from "./goal-delivery-fixture.js";
 import { BoardService } from "./service.js";
 import { executeBoardTool, finishBoardRun } from "./tools.js";
 
@@ -121,6 +122,94 @@ it("prevents close and status-update bypasses when the dispatched item stays a h
   expect(provider.close).not.toHaveBeenCalled();
   expect(provider.update).not.toHaveBeenCalled();
 });
+
+it.each(
+  ["coordinator", "descendant"].flatMap((role) =>
+    ["board_close", "board_update"].map((tool) => [role, tool] as const),
+  ),
+)("%s workers never close the linked default item through %s", async (role, tool) => {
+  const { prisma, service } = fixture();
+  const board = goalBoardFixture();
+  Object.assign(prisma, {
+    teamGoal: {
+      findFirst: vi.fn(async () => ({
+        id: "goal",
+        boardWorkspaceId: "workspace",
+        boardItemId: "board-a",
+      })),
+    },
+    botBoardFiling: { findMany: vi.fn(async () => []) },
+  });
+  prisma.run.findFirst.mockResolvedValue({
+    spaceId: "space",
+    userId: "owner",
+    goalId: role === "coordinator" ? "goal" : null,
+    delegationRootTaskId: role === "descendant" ? "root" : null,
+    taskId: "root",
+    boardWorkspaceId: null,
+    boardItemId: null,
+  });
+  vi.spyOn(service, "run").mockImplementation(board.run);
+  // Read the recorded item through the real provider first; its own consent is true.
+  await expect(
+    executeBoardTool(service, scope, "board_show", { id: "board-a" }),
+  ).resolves.toMatchObject({
+    id: "board-a",
+    closeWhenDone: true,
+  });
+  for (const workspaceId of [undefined, "workspace"]) {
+    await expect(
+      executeBoardTool(
+        service,
+        scope,
+        tool,
+        tool === "board_close"
+          ? { workspaceId, ids: ["board-a"], reason: "Done" }
+          : { workspaceId, id: "board-a", patch: { status: "closed" } },
+      ),
+    ).rejects.toThrow("human action");
+  }
+  expect(board.writes()).toEqual([]);
+  expect(board.item.status).not.toBe("closed");
+});
+
+it.each([null, "other-board"])(
+  "allows another board's same-named item with omitted workspace and dispatched board %s",
+  async (dispatched) => {
+    const { prisma, service, workspace } = fixture();
+    const board = goalBoardFixture();
+    Object.assign(prisma, {
+      teamGoal: {
+        findFirst: vi.fn(async () => ({
+          id: "goal",
+          boardWorkspaceId: "workspace",
+          boardItemId: "board-a",
+        })),
+      },
+      botBoardFiling: { findMany: vi.fn(async () => []) },
+    });
+    prisma.run.findFirst.mockResolvedValue({
+      spaceId: "space",
+      userId: "owner",
+      goalId: "goal",
+      taskId: "root",
+      boardWorkspaceId: dispatched,
+      boardItemId: null,
+    });
+    let defaultId = "other-board";
+    prisma.boardWorkspace.findFirst.mockImplementation(async (input?: unknown) => {
+      const { where } = input as { where: { id?: string } };
+      const id = where.id ?? defaultId;
+      // Changing the default after authorization must not retarget the mutation.
+      defaultId = "workspace";
+      return { ...workspace, id };
+    });
+    vi.spyOn(service, "run").mockImplementation(board.run);
+    await executeBoardTool(service, scope, "board_close", { ids: ["board-a"], reason: "Done" });
+    expect(board.closes()).toHaveLength(1);
+    expect(board.calls.every((request) => request.workspaceId === "other-board")).toBe(true);
+  },
+);
 it("shows a folder-dispatched item when the tool omits its workspace", async () => {
   const { prisma, service, workspace } = fixture();
   prisma.run.findFirst.mockResolvedValue({ boardWorkspaceId: "folder" });

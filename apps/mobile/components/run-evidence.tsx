@@ -1,14 +1,29 @@
 import type { EvidenceRunSummary } from "@ardurbot/contracts/evidence";
+import {
+  EVIDENCE_SIGNER_LABELS,
+  EvidenceFingerprintSchema,
+  EvidenceRunSummarySchema,
+} from "@ardurbot/contracts/evidence";
 import type { ComponentProps } from "react";
-import { useEffect, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import {
+  Alert,
+  Button,
+  Modal,
+  Pressable,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  TextInput,
+} from "react-native";
 import { captureApiRequestContext, rpc, selectedSpaceId } from "../lib/api";
 import { mobileTokens } from "../lib/appearance";
 import { dispatchClient } from "../lib/dispatch";
 import { mobileEvidencePresentation } from "../lib/evidence";
-import { exportRunEvidence } from "../lib/evidence-export";
+import { exportEvidenceIdentity, exportRunEvidence } from "../lib/evidence-export";
 import { useI18n } from "../lib/i18n";
-import { presentMessageActionSheet } from "../lib/message-action-sheet";
+import { native } from "../lib/native";
 import { NativeSymbol } from "./native-symbol";
 
 const icons = {
@@ -23,7 +38,6 @@ const icons = {
 export function RunEvidence({
   runId,
   live,
-  colorScheme,
 }: {
   runId: string;
   live: boolean;
@@ -39,6 +53,7 @@ export function RunEvidence({
     paired: boolean;
   } | null>(null);
   const [sharing, setSharing] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -53,9 +68,14 @@ export function RunEvidence({
           { signal: controller.signal, requestContext },
         );
         if (controller.signal.aborted) return;
+        const parsed = EvidenceRunSummarySchema.safeParse(summary);
+        if (!parsed.success) {
+          setResult(null);
+          return;
+        }
         const paired = Boolean(await dispatchClient.loadHome());
         if (controller.signal.aborted) return;
-        setResult({ runId, spaceId, summary, paired });
+        setResult({ runId, spaceId, summary: parsed.data, paired });
         if (
           live ||
           summary.state === "recording" ||
@@ -92,39 +112,158 @@ export function RunEvidence({
     </>
   );
   const details = presentation.detail || undefined;
-  return presentation.downloadable && !result?.paired ? (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={[presentation.label, details, t("Download evidence")]
-        .filter(Boolean)
-        .join(". ")}
-      accessibilityState={{ disabled: sharing }}
-      disabled={sharing}
-      style={styles.action}
-      onPress={() =>
-        presentMessageActionSheet({
-          actions: [{ text: t("Download evidence"), onPress: () => void share() }],
-          title: [presentation.label, details].filter(Boolean).join(" · "),
-          cancel: t("Cancel"),
-          more: t("More"),
-          colorScheme,
-        })
+  return (
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={[presentation.label, details].filter(Boolean).join(". ")}
+        style={styles.action}
+        onPress={() => setDetailsOpen(true)}
+      >
+        {content}
+      </Pressable>
+      <Modal
+        visible={detailsOpen}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setDetailsOpen(false)}
+      >
+        <ScrollView
+          style={{ backgroundColor: native.page }}
+          contentContainerStyle={{ padding: 24, gap: 16 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Button title={t("Close")} onPress={() => setDetailsOpen(false)} />
+          {details && <Text style={{ color: native.label }}>{details}</Text>}
+          {summary && (
+            <EvidenceIdentityDetails
+              key={`${runId}:${spaceId}`}
+              summary={summary}
+              spaceId={spaceId}
+            />
+          )}
+          {presentation.downloadable && !result?.paired && (
+            <Button
+              title={t("Download evidence")}
+              disabled={sharing}
+              onPress={() => void share()}
+            />
+          )}
+        </ScrollView>
+      </Modal>
+    </>
+  );
+}
+
+export function EvidenceIdentityDetails({
+  summary,
+  spaceId,
+}: {
+  summary: EvidenceRunSummary;
+  spaceId: string | null;
+}) {
+  const { t } = useI18n();
+  const [expected, setExpected] = useState("");
+  const [checked, setChecked] = useState<{
+    expected: string;
+    match: EvidenceRunSummary["signerMatch"];
+  } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const request = useRef(0);
+  useEffect(
+    () => () => {
+      request.current++;
+    },
+    [],
+  );
+  const identity = summary.signingIdentity;
+  const fingerprint = expected.trim();
+  const valid = !fingerprint || EvidenceFingerprintSchema.safeParse(fingerprint).success;
+  const match = summary.sealed
+    ? checked?.expected === fingerprint
+      ? checked.match
+      : !fingerprint
+        ? summary.signerMatch
+        : null
+    : null;
+  async function check() {
+    const id = ++request.current;
+    setBusy(true);
+    setChecked(null);
+    try {
+      const requestContext = await captureApiRequestContext();
+      if (spaceId !== selectedSpaceId() || id !== request.current) return;
+      const reply = await rpc<EvidenceRunSummary>(
+        "evidence/runSummary",
+        {
+          runId: summary.sessionId,
+          ...(fingerprint ? { expectedFingerprint: fingerprint } : {}),
+        },
+        { requestContext },
+      );
+      if (spaceId !== selectedSpaceId() || id !== request.current) return;
+      const parsed = EvidenceRunSummarySchema.parse(reply);
+      setChecked({ expected: fingerprint, match: parsed.signerMatch });
+      if (!parsed.signerMatch) Alert.alert(t("Check failed"));
+    } catch {
+      if (id === request.current) {
+        setChecked({ expected: fingerprint, match: null });
+        Alert.alert(t("Check failed"));
       }
-    >
-      {content}
-    </Pressable>
-  ) : (
-    <View
-      accessibilityLabel={[presentation.label, details].filter(Boolean).join(". ")}
-      style={styles.status}
-    >
-      {content}
-    </View>
+    } finally {
+      if (id === request.current) setBusy(false);
+    }
+  }
+  async function shareIdentity(card: boolean) {
+    if (!identity) return;
+    try {
+      if (card) await exportEvidenceIdentity(identity);
+      else await Share.share({ message: identity.fingerprint });
+    } catch {
+      Alert.alert(t("The export could not finish; try again."));
+    }
+  }
+  return (
+    <>
+      {identity && (
+        <>
+          <Text style={{ color: native.label }}>{t("Signing identity")}</Text>
+          <Text selectable style={{ color: native.label }}>
+            {t("Fingerprint")}
+            {"\n"}
+            {identity.fingerprint}
+          </Text>
+          <Text style={{ color: native.label }}>
+            {t("Space")}: {identity.scope.id}
+          </Text>
+          <Text style={{ color: native.label }}>
+            {t("Key version")}: {identity.keyVersion}
+          </Text>
+          <Button title={t("Share fingerprint")} onPress={() => void shareIdentity(false)} />
+          <Button title={t("Export identity card")} onPress={() => void shareIdentity(true)} />
+        </>
+      )}
+      <TextInput
+        accessibilityLabel={t("Expected fingerprint")}
+        placeholder={t("Expected fingerprint")}
+        value={expected}
+        onChangeText={setExpected}
+        maxLength={80}
+        autoCapitalize="none"
+        autoCorrect={false}
+        style={{ padding: 12, color: native.label, backgroundColor: native.fill }}
+      />
+      <Button title={t("Check key")} disabled={!valid || busy} onPress={() => void check()} />
+      {match && (
+        <Text accessibilityRole="alert" style={{ color: native.label }}>
+          {t(EVIDENCE_SIGNER_LABELS[match])}
+        </Text>
+      )}
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  status: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
   action: {
     flexDirection: "row",
     alignItems: "center",

@@ -91,6 +91,7 @@ describe("goal scheduling", () => {
       },
       usageRecord: { findFirst: vi.fn(async () => null) },
       run: { create: runCreate, findFirst: vi.fn(async () => null) },
+      goalBoardDelivery: { findMany: vi.fn(async () => []) },
       thread: { update: vi.fn(async () => ({ nextEventSeq: 1 })) },
       event: { create: vi.fn(async () => ({ seq: 1 })) },
     };
@@ -274,6 +275,8 @@ function reviewFixture() {
     untilAt: new Date("2030-01-02T00:00:00.000Z"),
     createdAt: now,
     stoppedAt: null,
+    boardWorkspaceId: null as string | null,
+    boardItemId: null as string | null,
   };
   const revisions: Array<{
     id: string;
@@ -376,6 +379,11 @@ function reviewFixture() {
       findFirst: vi.fn(async () => null),
       create: vi.fn(async () => ({ id: "run-rework" })),
     },
+    goalBoardDelivery: {
+      findMany: vi.fn(async () => []),
+      create: vi.fn(),
+      count: vi.fn(async () => 0),
+    },
     thread: { update: vi.fn(async () => ({ nextEventSeq: 1 })) },
     event: { create: vi.fn(async () => ({ seq: 1 })) },
   };
@@ -414,6 +422,27 @@ describe("goal owner review", () => {
     expect(fixture.tx.goalRevision.create).not.toHaveBeenCalled();
     expect(fixture.tx.teamGoal.updateMany).not.toHaveBeenCalled();
     expect(fixture.tx.event.create).not.toHaveBeenCalled();
+  });
+  it("queues one board comment with the result and does not close on submit", async () => {
+    const fixture = reviewFixture();
+    fixture.goal.boardWorkspaceId = "workspace";
+    fixture.goal.boardItemId = "board-a";
+    const revision = await fixture.submit();
+    expect(fixture.tx.goalBoardDelivery.create).toHaveBeenCalledTimes(1);
+    expect(fixture.tx.goalBoardDelivery.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        transition: "completed",
+        workspaceId: "workspace",
+        itemId: "board-a",
+        state: "pending",
+        revisionId: revision.id,
+      }),
+    });
+    const payload = fixture.tx.goalBoardDelivery.create.mock.calls[0]?.[0].data
+      .commentText as string;
+    expect(payload).toContain("Goal completed");
+    expect(payload).toContain(revision.id);
+    expect(payload).not.toContain("Goal accepted");
   });
   it.each(["accept", "reject"] as const)(
     "refuses %s by a non-owner or an owner outside the goal scope",

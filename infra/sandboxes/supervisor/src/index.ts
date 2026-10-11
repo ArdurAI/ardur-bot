@@ -15,7 +15,6 @@ import {
 import { localComputerImage } from "@ardurbot/contracts/computer-image";
 import {
   boundedSandboxCommandTimeoutMs,
-  COMMAND_OUTPUT_LIMIT,
   readBoundedJsonResponse,
   resolveSupervisorToken,
 } from "@ardurbot/core";
@@ -74,6 +73,7 @@ import { screenRelay } from "./screen-relay.js";
 import {
   assertRequestIdentity,
   attemptComputerControl,
+  boundedExecOutputLimit,
   browserProfilePathForScreen,
   ComputerControlUnavailableError,
   clearComputerScreenRegistry,
@@ -86,6 +86,7 @@ import {
   hasValidBearerToken,
   interactiveScreenCommand,
   isComputerControlUnavailable,
+  MAX_EXEC_OUTPUT_BYTES,
   nextScreenIndex,
   normalizeWorkspaceRelative,
   parseObservation,
@@ -486,6 +487,7 @@ app.post("/computers/:id/exec", async (c) => {
       cwd: z.string().optional(),
       env: z.record(z.string(), z.string()).optional(),
       timeoutMs: z.number().int().positive().optional(),
+      outputLimit: z.number().int().positive().max(MAX_EXEC_OUTPUT_BYTES).optional(),
     })
     .parse(await c.req.json());
   try {
@@ -511,7 +513,7 @@ app.post("/computers/:id/exec", async (c) => {
           ...Object.entries(body.env ?? {}).map(([k, v]) => `${k}=${v}`),
         ],
         timeoutMs: boundedSandboxCommandTimeoutMs(body.timeoutMs),
-        outputLimit: COMMAND_OUTPUT_LIMIT,
+        outputLimit: boundedExecOutputLimit(body.outputLimit),
       });
     });
     return c.json(result);
@@ -1466,7 +1468,7 @@ async function runContainerCommand(
     signal?: AbortSignal;
     outputLimit?: number;
   } = {},
-): Promise<{ stdout: string; stderr: string; code: number }> {
+): Promise<{ stdout: string; stderr: string; code: number; capped?: boolean }> {
   options.signal?.throwIfAborted();
   const timeoutMs = options.timeoutMs;
   const completionMarker = timeoutMs
@@ -1526,6 +1528,7 @@ async function runContainerCommand(
       ? `${output.stderr}${output.stderr.endsWith("\n") || output.stderr === "" ? "" : "\n"}command timed out after ${timeoutMs} ms\n`
       : output.stderr,
     code,
+    capped: collector.stdoutTruncated,
   };
 }
 

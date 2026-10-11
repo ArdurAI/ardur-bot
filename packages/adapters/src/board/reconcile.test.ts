@@ -40,6 +40,7 @@ it("retries pending outcomes using the persisted result and rotates disconnected
   };
   const prisma = {
     run: { findMany: vi.fn(async () => [run]), updateMany: vi.fn() },
+    goalBoardDelivery: { findMany: vi.fn(async () => []) },
     message: {
       findMany: vi.fn(async () => [
         { blocks: [{ kind: "text", text: "Verified" }], clientNonce: null },
@@ -64,7 +65,10 @@ it("retries pending outcomes using the persisted result and rotates disconnected
 
 it("leaves pending closes to the worker's notification tick", async () => {
   const sweep = vi.spyOn(BoardService.prototype, "sweepPendingCloses");
-  const prisma = { run: { findMany: vi.fn(async () => []) } };
+  const prisma = {
+    run: { findMany: vi.fn(async () => []) },
+    goalBoardDelivery: { findMany: vi.fn(async () => []) },
+  };
   await reconcileBoardOutcomes({
     prisma: prisma as unknown as PrismaClient,
     dataDir: "/fixture/app",
@@ -108,6 +112,7 @@ it("stops a hung pending close at its 15-second deadline, down to the board comm
   };
   const prisma = {
     run: { findMany: vi.fn(async () => []) },
+    goalBoardDelivery: { findMany: vi.fn(async () => []) },
     deploymentSettings: { findUnique: async () => ({ ownerUserId: "owner" }) },
     spaceMember: { findUnique: async () => ({ userId: "owner" }) },
     user: { findUniqueOrThrow: async () => ({ name: "Owner" }) },
