@@ -229,8 +229,7 @@ it.each(["stuck", "rejected", "settled"])(
     expect(mocks.sockets).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(1);
     expect(mocks.sockets).toHaveLength(2);
-    if (result === "rejected")
-      expect(report).not.toHaveBeenCalled();
+    if (result === "rejected") expect(report).not.toHaveBeenCalled();
   },
 );
 
