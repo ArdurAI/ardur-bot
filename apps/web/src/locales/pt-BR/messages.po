@@ -10422,3 +10422,11 @@ msgstr "Sua equipe de agentes sempre ativos<0/>, a quem você pode dar trabalho 
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: src/lib/failure-category-copy.ts
+msgid "{provider} is refusing requests right now (rate or usage limit). Try again later or check your plan."
+msgstr "{provider} está recusando solicitações agora (limite de frequência ou uso). Tente mais tarde ou verifique seu plano."
+
+#: src/lib/failure-category-copy.ts
+msgid "This connection"
+msgstr "Esta conexão"

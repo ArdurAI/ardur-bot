@@ -49,7 +49,10 @@ export function nativeFailureProblem(pin: RuntimePin, reasonId: FailureCategoryI
   const problem = runtimePinProblem(
     pin,
     "runtime-unavailable",
-    failureCategoryMessage(reasonId, { runtime: name }),
+    failureCategoryMessage(reasonId, {
+      runtime: name,
+      provider: pin.provider ?? "This connection",
+    }),
     reasonId,
   );
   const action = failureCategory(reasonId).action;

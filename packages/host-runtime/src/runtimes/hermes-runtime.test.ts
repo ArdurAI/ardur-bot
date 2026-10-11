@@ -163,7 +163,7 @@ describe("HermesRuntime M0 ACP seam", () => {
     [{ kind: "request-limit" }, "provider-request-too-large"],
     [{ kind: "grant-refused" }, "provider-grant-refused"],
     [{ kind: "provider-http", status: 401 }, "provider-auth-failed"],
-    [{ kind: "provider-http", status: 429 }, "usage-limit"],
+    [{ kind: "provider-http", status: 429 }, "provider-rate-limit"],
     [{ kind: "provider-failed" }, "provider-request-failed"],
   ] as const)(
     "carries the safe relay cause into a pinned failure: %j",
@@ -191,7 +191,15 @@ describe("HermesRuntime M0 ACP seam", () => {
       const pending = collect(adapter, run).catch((error: unknown) => error);
       await sessionReady;
       await adapter.fail(run.runId, failure);
-      expect(await pending).toMatchObject({ name: "RuntimePinError", problem: { reasonId } });
+      const error = await pending;
+      expect(error).toMatchObject({ name: "RuntimePinError", problem: { reasonId } });
+      if (reasonId === "provider-rate-limit")
+        expect(error).toMatchObject({
+          problem: {
+            reason:
+              "fixture is refusing requests right now (rate or usage limit). Try again later or check your plan.",
+          },
+        });
     },
   );
 

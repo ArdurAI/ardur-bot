@@ -10422,3 +10422,11 @@ msgstr "Dein Team aus jederzeit verfügbaren Agents<0/>für echte Aufgaben."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: src/lib/failure-category-copy.ts
+msgid "{provider} is refusing requests right now (rate or usage limit). Try again later or check your plan."
+msgstr "{provider} lehnt Anfragen derzeit ab (Anfrage- oder Nutzungslimit). Versuche es später erneut oder prüfe deinen Tarif."
+
+#: src/lib/failure-category-copy.ts
+msgid "This connection"
+msgstr "Diese Verbindung"

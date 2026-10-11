@@ -102,6 +102,7 @@ export function runtimeReliabilityRows(rows: ReliabilityRun[], now: Date): Runti
         .sort(
           (a, b) => b.completedAt.getTime() - a.completedAt.getTime() || b.id.localeCompare(a.id),
         )[0];
+      const failureCategory = failure ? activityRunFailure(failure) : null;
       return {
         runtimeKind,
         completed,
@@ -116,8 +117,11 @@ export function runtimeReliabilityRows(rows: ReliabilityRun[], now: Date): Runti
           : null,
         lastFailure: failure
           ? {
-              category: activityRunFailure(failure).failureCategory ?? "other",
+              category: failureCategory?.failureCategory ?? "other",
               at: failure.completedAt.toISOString(),
+              ...(failureCategory?.failureProvider
+                ? { provider: failureCategory.failureProvider }
+                : {}),
             }
           : null,
       };

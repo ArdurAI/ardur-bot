@@ -470,7 +470,12 @@ export class HermesRuntime implements AgentRuntime {
       "failure",
       turn.pin
         ? new RuntimePinError(nativeFailureProblem(turn.pin, category))
-        : new Error(failureCategoryMessage(category, { runtime: "Hermes" })),
+        : new Error(
+            failureCategoryMessage(category, {
+              runtime: "Hermes",
+              provider: "This connection",
+            }),
+          ),
     );
   }
 

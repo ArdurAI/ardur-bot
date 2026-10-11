@@ -88,6 +88,7 @@ export function RuntimeReliability() {
                       {t("Last failure")}:{" "}
                       {failureCategoryText(row.lastFailure.category, {
                         runtime: runtimeNames[row.runtimeKind],
+                        provider: row.lastFailure.provider,
                       })}
                     </Text>
                   ) : null}

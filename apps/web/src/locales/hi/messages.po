@@ -10422,3 +10422,11 @@ msgstr "हमेशा चालू रहने वाले एजेंट�
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: src/lib/failure-category-copy.ts
+msgid "{provider} is refusing requests right now (rate or usage limit). Try again later or check your plan."
+msgstr "{provider} अभी अनुरोध अस्वीकार कर रहा है (अनुरोध दर या उपयोग सीमा)। बाद में फिर कोशिश करें या अपना प्लान जाँचें।"
+
+#: src/lib/failure-category-copy.ts
+msgid "This connection"
+msgstr "यह कनेक्शन"

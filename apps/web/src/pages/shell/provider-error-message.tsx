@@ -151,6 +151,7 @@ export function ProviderErrorMessage({
     const provider =
       entry?.providerName ??
       catalog?.find((item) => item.provider === pin.provider)?.providerName ??
+      failureCategoryFromText(runtimeProblem.reason)?.params.provider ??
       pin.provider ??
       "an unset provider";
     const model = entry?.label ?? pin.modelId ?? "an unset model";
@@ -211,14 +212,14 @@ export function ProviderErrorMessage({
       const runtime = runtimeNames[pin.runtimeKind];
       const byId = FailureCategoryIdSchema.safeParse(runtimeProblem.reasonId);
       if (byId.success)
-        return i18n._({ ...failureCategoryMessages[byId.data], values: { runtime } });
+        return i18n._({ ...failureCategoryMessages[byId.data], values: { runtime, provider } });
       const legacy = failureCategoryFromText(runtimeProblem.reason, {
         runtimes: Object.values(runtimeNames),
       });
       if (legacy)
         return i18n._({
           ...failureCategoryMessages[legacy.id],
-          values: { runtime: legacy.params.runtime ?? runtime },
+          values: { ...legacy.params, runtime: legacy.params.runtime ?? runtime, provider },
         });
       return null;
     })();

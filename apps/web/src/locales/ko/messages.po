@@ -10422,3 +10422,11 @@ msgstr "언제든 실제 작업을 맡길 수 있는<0/>나만의 Agent 팀"
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: src/lib/failure-category-copy.ts
+msgid "{provider} is refusing requests right now (rate or usage limit). Try again later or check your plan."
+msgstr "{provider}에서 현재 요청을 거부하고 있습니다(요청 빈도 또는 사용 한도). 나중에 다시 시도하거나 요금제를 확인하세요."
+
+#: src/lib/failure-category-copy.ts
+msgid "This connection"
+msgstr "이 연결"

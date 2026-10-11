@@ -178,3 +178,23 @@ describe("failure-category mobile completeness", () => {
     ).toBe("recorded words");
   });
 });
+
+it.each(["en", "ru", "zh-CN"] as const)(
+  "names the connection for an upstream 429 in %s",
+  (locale) => {
+    activateUiLocale(locale);
+    const reason =
+      "Z.AI Coding CN is refusing requests right now (rate or usage limit). Try again later or check your plan.";
+    const problem = runtimePinProblem(
+      { ...pinFor(), runtimeKind: "hermes", provider: "zai-coding-cn" },
+      "runtime-unavailable",
+      reason,
+      "provider-rate-limit",
+    );
+    const text = runtimeProblemText(problem);
+    expect(text).toContain("Z.AI Coding CN");
+    expect(text).not.toContain("Hermes");
+    expect(text).not.toContain("{provider}");
+    if (locale !== "en") expect(text).not.toBe(reason);
+  },
+);

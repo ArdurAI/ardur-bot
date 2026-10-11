@@ -13,6 +13,7 @@ const cases: readonly (readonly [FailureCategoryId, string])[] = [
   ["provider-grant-refused", "hermes-provider-grant-refused"],
   ["provider-auth-failed", "hermes-provider-auth-failed"],
   ["provider-request-failed", "hermes-provider-request-failed"],
+  ["provider-rate-limit", "hermes-provider-rate-limit"],
 ];
 for (const [category, screenshot] of cases) {
   test(`a pinned Hermes failure names ${category} without private detail`, async ({
@@ -21,13 +22,18 @@ for (const [category, screenshot] of cases) {
     const fixture = dashboardFixture();
     const pin = {
       runtimeKind: "hermes" as const,
-      provider: "openai-compatible",
-      modelId: "fixture-model",
-      effort: "off",
+      provider: category === "provider-rate-limit" ? "zai-coding-cn" : "openai-compatible",
+      modelId: category === "provider-rate-limit" ? "glm-5.3" : "fixture-model",
+      effort: category === "provider-rate-limit" ? "high" : "off",
       credentialId: "fixture-connection",
       revision: 1,
     };
-    const reason = failureCategoryMessage(category, { runtime: "Hermes" });
+    const reason = failureCategoryMessage(category, {
+      runtime: "Hermes",
+      provider: "Z.AI Coding CN",
+    });
+    const problem = runtimePinProblem(pin, "runtime-unavailable", reason, category);
+    if (category === "provider-rate-limit") problem.actions = ["retry"];
     await page.route("**/api/auth/get-session*", (route) =>
       route.fulfill({ json: fixture.session }),
     );
@@ -48,7 +54,7 @@ for (const [category, screenshot] of cases) {
           trigger: "user",
           runtimePin: pin,
           error: "private protocol detail",
-          runtimeProblem: runtimePinProblem(pin, "runtime-unavailable", reason, category),
+          runtimeProblem: problem,
           createdAt: "2026-10-02T12:00:00.000Z",
           completedAt: "2026-10-02T12:00:00.000Z",
         },
@@ -69,6 +75,11 @@ for (const [category, screenshot] of cases) {
     await expect(error).toContainText(reason);
     await expect(error).not.toContainText("private protocol detail");
     await captureScreenshot(page, testInfo, screenshot);
+    if (category === "provider-rate-limit") {
+      await expect(error).not.toContainText("Hermes");
+      await expect(error.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
+      return;
+    }
     await error.getByRole("button", { name: "Change pin", exact: true }).click();
     await expect(
       page.getByTestId("bot-settings").getByRole("combobox", { name: "Model", exact: true }),

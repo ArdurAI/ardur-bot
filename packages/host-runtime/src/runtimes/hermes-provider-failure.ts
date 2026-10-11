@@ -53,16 +53,25 @@ export const HERMES_PROVIDER_FAILURE_REASONS = [
 ] as const;
 export type HermesProviderFailureLayer = (typeof HERMES_PROVIDER_FAILURE_LAYERS)[number];
 export type HermesProviderFailureReason = (typeof HERMES_PROVIDER_FAILURE_REASONS)[number];
+export const HERMES_PROVIDER_REASON_CODES = [
+  "1305",
+  "rate_limit_exceeded",
+  "insufficient_quota",
+] as const;
+export type HermesProviderReasonCode = (typeof HERMES_PROVIDER_REASON_CODES)[number];
 
 function safeDiagnostic(failure: HermesProviderFailure) {
   const layer = HERMES_PROVIDER_FAILURE_LAYERS.find((value) => value === failure.layer);
   const reason = HERMES_PROVIDER_FAILURE_REASONS.find((value) => value === failure.reason);
-  return layer && reason ? { layer, reason } : {};
+  const reasonCode = HERMES_PROVIDER_REASON_CODES.find((value) => value === failure.reasonCode);
+  return layer && reason
+    ? { layer, reason, ...(layer === "upstream" && reasonCode ? { reasonCode } : {}) }
+    : {};
 }
 
 function diagnosticSuffix(failure: HermesProviderFailure): string {
   return failure.layer && failure.reason
-    ? ` (layer:${failure.layer}; reason:${failure.reason})`
+    ? ` (layer:${failure.layer}; reason:${failure.reason}${failure.reasonCode ? `; code:${failure.reasonCode}` : ""})`
     : "";
 }
 
@@ -81,6 +90,7 @@ export type HermesProviderFailure = {
   status?: number;
   layer?: HermesProviderFailureLayer;
   reason?: HermesProviderFailureReason;
+  reasonCode?: HermesProviderReasonCode;
   category?: HermesGrantRefusalCategory;
 };
 
@@ -141,7 +151,7 @@ export function hermesProviderFailure(error: unknown): HermesProviderFailure {
   if (error instanceof HermesProviderRelayError) return safeFailure(error.failure);
   const originalMessage = error instanceof Error ? error.message : "";
   const diagnostic =
-    /^(Provider request failed(?: \(HTTP [1-5][0-9]{2}\))?\.) \(layer:([a-z-]+); reason:([a-z-]+)\)$/.exec(
+    /^(Provider request failed(?: \(HTTP [1-5][0-9]{2}\))?\.) \(layer:([a-z-]+); reason:([a-z-]+)(?:; code:([a-z0-9_]{1,32}))?\)$/.exec(
       originalMessage,
     );
   const message = diagnostic?.[1] ?? originalMessage;
@@ -150,6 +160,7 @@ export function hermesProviderFailure(error: unknown): HermesProviderFailure {
         kind: "provider-failed",
         layer: diagnostic[2] as HermesProviderFailureLayer,
         reason: diagnostic[3] as HermesProviderFailureReason,
+        reasonCode: diagnostic[4] as HermesProviderReasonCode,
       })
     : {};
   const reasons: Record<string, HermesProviderFailure["kind"]> = {
@@ -192,7 +203,7 @@ export function hermesProviderFailureCategory(failure: HermesProviderFailure): F
       return "provider-grant-refused";
     case "provider-http":
       if (failure.status === 401 || failure.status === 403) return "provider-auth-failed";
-      if (failure.status === 429) return "usage-limit";
+      if (failure.status === 429) return "provider-rate-limit";
       return "provider-request-failed";
     default:
       return "provider-request-failed";

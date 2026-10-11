@@ -49,6 +49,8 @@ export const TeamRowSchema = z.object({
   reasonCategory: FailureCategoryIdSchema.optional(),
   /** The runtime display name a categorized reason sentence names, when it names one. */
   reasonRuntime: z.string().nullable().optional(),
+  /** Public catalog connection name for provider refusals. */
+  reasonProvider: z.string().nullable().optional(),
   action: z.string().nullable(),
   rootTaskId: z.string().nullable(),
   delegationId: z.string().nullable(),

@@ -11,7 +11,11 @@ import type { ReactNode } from "react";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { decodeArtifactBase64, downloadArtifactBytes } from "../lib/artifact-open";
-import { failureCategoryMessages, unknownRuntimeName } from "../lib/failure-category-copy";
+import {
+  failureCategoryMessages,
+  unknownProviderName,
+  unknownRuntimeName,
+} from "../lib/failure-category-copy";
 import { rpc } from "../lib/rpc";
 import { localizedTeamDeliveryText } from "../lib/team-delivery-text";
 import { ComparisonList } from "./ComparePanel";
@@ -457,6 +461,7 @@ function TeamStatus({ row, now }: { row: TeamRow; now: number }) {
                 values: {
                   runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName),
                   bot: row.botName,
+                  provider: row.reasonProvider ?? i18n._(unknownProviderName),
                 },
               })
             : row.reason}

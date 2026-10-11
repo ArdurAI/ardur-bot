@@ -2,12 +2,13 @@ import * as z from "zod";
 
 /**
  * The one typed table of run and handoff failure categories. A failure is stored as a
- * category id plus its parameters (bot, runtime, member); the English sentence here is the
- * default each app translates through its own catalogs. Adding a category is one entry here
+ * category id plus its parameters (bot, runtime, member, provider). Each app translates the
+ * default English sentence through its own catalogs. Adding a category is one entry here
  * plus a translation in each catalog — see docs/failure-categories.md.
  */
 export const FailureCategoryIdSchema = z.enum([
   "usage-limit",
+  "provider-rate-limit",
   "signed-out",
   "max-turns",
   "model-unavailable",
@@ -49,11 +50,12 @@ export type FailureCategoryParams = {
   bot?: string;
   runtime?: string;
   member?: string;
+  provider?: string;
 };
 
 export type FailureCategory = {
   id: FailureCategoryId;
-  /** Default English sentence; {bot}, {runtime} and {member} are the named placeholders. */
+  /** Default English sentence; {bot}, {runtime}, {member} and {provider} are the named placeholders. */
   message: string;
   /** Group-model sentence, when a group pin can fail this way ({bot}). */
   groupMessage?: string;
@@ -128,6 +130,13 @@ export const FAILURE_CATEGORIES: readonly FailureCategory[] = [
     id: "provider-request-failed",
     message:
       "{runtime}'s model request failed. Check the connection in Settings, under Models, and try again.",
+    action: { kind: "retry" },
+    legacy: [],
+  },
+  {
+    id: "provider-rate-limit",
+    message:
+      "{provider} is refusing requests right now (rate or usage limit). Try again later or check your plan.",
     action: { kind: "retry" },
     legacy: [],
   },
@@ -246,7 +255,7 @@ export function fillFailureCategoryMessage(
   template: string,
   params: FailureCategoryParams,
 ): string {
-  return template.replace(/\{(bot|runtime|member)\}/g, (match, key: string) => {
+  return template.replace(/\{(bot|runtime|member|provider)\}/g, (match, key: string) => {
     const value = params[key as keyof FailureCategoryParams];
     return value ?? match;
   });
@@ -290,7 +299,7 @@ function plausibleName(value: string): boolean {
 function templateToPattern(template: string): RegExp {
   const escaped = template.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const seen = new Set<string>();
-  const source = escaped.replace(/\\?\{(bot|runtime|member)\\?\}/g, (_, name: string) =>
+  const source = escaped.replace(/\\?\{(bot|runtime|member|provider)\\?\}/g, (_, name: string) =>
     // Each placeholder captures its value back for the reader. Greedy is safe: the
     // surrounding literals anchor the match and names never contain sentence stops.
     // A sentence may name the same party twice ("{bot}'s … in {bot}'s …"); the second
@@ -337,6 +346,7 @@ export function failureCategoryFromText(
           ...(groups.bot ? { bot: groups.bot } : {}),
           ...(groups.runtime ? { runtime: groups.runtime } : {}),
           ...(groups.member ? { member: groups.member } : {}),
+          ...(groups.provider ? { provider: groups.provider } : {}),
         },
       };
     }
