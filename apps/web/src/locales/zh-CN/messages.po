@@ -592,6 +592,7 @@ msgstr ""
 msgid "Actions usually run automatically. Rules, safety checks, and integration policies may require confirmation."
 msgstr ""
 
+#: src/components/RunEvidence.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Active"
 msgstr "启用"
@@ -1633,6 +1634,7 @@ msgstr "无法连接服务器。"
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/ReleaseInterruptedComputer.tsx
+#: src/components/RunEvidence.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -5264,6 +5266,14 @@ msgid "key"
 msgstr "密钥"
 
 #: src/components/RunEvidence.tsx
+msgid "Key history"
+msgstr "密钥历史"
+
+#: src/components/RunEvidence.tsx
+msgid "Key history is unavailable."
+msgstr "密钥历史不可用。"
+
+#: src/components/RunEvidence.tsx
 msgid "Key version"
 msgstr "密钥版本"
 
@@ -7333,6 +7343,10 @@ msgstr ""
 msgid "Ready. The bot can use Hermes."
 msgstr "已就绪。此机器人可以使用 Hermes。"
 
+#: src/components/RunEvidence.tsx
+msgid "Reason"
+msgstr "原因"
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Reasoning effort"
@@ -7643,9 +7657,18 @@ msgstr "重新打开"
 msgid "Replace API key"
 msgstr "替换 API 密钥"
 
+#: src/components/RunEvidence.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Replace key"
 msgstr "替换密钥"
+
+#: src/components/RunEvidence.tsx
+msgid "Replace the signing key? Runs already admitted keep their key; new runs sign with the new key."
+msgstr "更换签名密钥？已准入的运行保留原密钥；新运行使用新密钥签名。"
+
+#: src/components/RunEvidence.tsx
+msgid "Replaced"
+msgstr "已更换"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
@@ -7981,9 +8004,18 @@ msgstr ""
 msgid "Revoke"
 msgstr "撤销"
 
+#: src/components/RunEvidence.tsx
+msgid "Revoke key"
+msgstr "撤销密钥"
+
+#: src/components/RunEvidence.tsx
+msgid "Revoke the signing key? Signing stops at once. Records signed before revocation still verify."
+msgstr "撤销签名密钥？签名将立即停止。撤销前签署的记录仍可验证。"
+
+#: src/components/RunEvidence.tsx
 #: src/pages/DevicesSettings.tsx
 msgid "Revoked"
-msgstr ""
+msgstr "已撤销"
 
 #: src/pages/GroupPanel.tsx
 msgid "Rework notes"
@@ -9304,6 +9336,10 @@ msgstr "已重新加载群组的模型选择。请重新选择。"
 msgid "The Hermes install on this computer failed its safety check."
 msgstr "此计算机上的 Hermes 安装未通过安全检查。"
 
+#: src/components/RunEvidence.tsx
+msgid "The key changed. Reload and try again."
+msgstr "密钥已更改。请重新加载后重试。"
+
 #: src/pages/shell/runtime-summary.tsx
 msgid "The last update was interrupted."
 msgstr "上次更新已中断。"
@@ -10126,6 +10162,11 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 msgid "Verifying…"
 msgstr "正在校验…"
+
+#. placeholder {0}: entry.version
+#: src/components/RunEvidence.tsx
+msgid "Version {0}"
+msgstr "版本 {0}"
 
 #: src/pages/board/Board.tsx
 msgid "View"

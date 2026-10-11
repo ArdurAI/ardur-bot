@@ -10,6 +10,18 @@ export const ZH_MESSAGES: Record<string, string> = {
   "No expected key given; self-consistent only": "未提供预期密钥；仅验证内部一致性",
   "Key version": "密钥版本",
   "Share fingerprint": "分享指纹",
+  "Key history": "密钥历史",
+  "Version {version}": "版本 {version}",
+  Replaced: "已更换",
+  Revoked: "已撤销",
+  "Revoke key": "撤销密钥",
+  "Replace key?": "更换密钥？",
+  "Runs already admitted keep their key; new runs sign with the new key.":
+    "已准入的运行保留原密钥；新运行使用新密钥签名。",
+  "Revoke the signing key? Signing stops at once. Records signed before revocation still verify.":
+    "撤销签名密钥？签名将立即停止。撤销前签署的记录仍可验证。",
+  Reason: "原因",
+  "The key changed. Reload and try again.": "密钥已更改。请重新加载后重试。",
 
   "To {names}": "发送给：{names}",
   "Queued: {queued}": "排队中：{queued}",

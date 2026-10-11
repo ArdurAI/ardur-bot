@@ -1,7 +1,8 @@
-import type { EvidenceRunSummary } from "@ardurbot/contracts/evidence";
+import type { EvidenceKeyHistory, EvidenceRunSummary } from "@ardurbot/contracts/evidence";
 import {
   EVIDENCE_SIGNER_LABELS,
   EvidenceFingerprintSchema,
+  EvidenceKeyHistorySchema,
   EvidenceRunSummarySchema,
 } from "@ardurbot/contracts/evidence";
 import type { ComponentProps } from "react";
@@ -25,6 +26,12 @@ import { exportEvidenceIdentity, exportRunEvidence } from "../lib/evidence-expor
 import { useI18n } from "../lib/i18n";
 import { native } from "../lib/native";
 import { NativeSymbol } from "./native-symbol";
+
+const EVIDENCE_KEY_STATE_LABELS = {
+  active: "Active",
+  replaced: "Replaced",
+  revoked: "Revoked",
+} as const;
 
 const icons = {
   circle: { ios: "circle", android: "ellipse-outline" },
@@ -140,6 +147,8 @@ export function RunEvidence({
               key={`${runId}:${spaceId}`}
               summary={summary}
               spaceId={spaceId}
+              open={detailsOpen}
+              paired={Boolean(result?.paired)}
             />
           )}
           {presentation.downloadable && !result?.paired && (
@@ -158,11 +167,18 @@ export function RunEvidence({
 export function EvidenceIdentityDetails({
   summary,
   spaceId,
+  open,
+  paired,
 }: {
   summary: EvidenceRunSummary;
   spaceId: string | null;
+  open: boolean;
+  paired: boolean;
 }) {
   const { t } = useI18n();
+  const [history, setHistory] = useState<EvidenceKeyHistory | null>(null);
+  const [confirmingRevoke, setConfirmingRevoke] = useState(false);
+  const [reason, setReason] = useState("");
   const [expected, setExpected] = useState("");
   const [checked, setChecked] = useState<{
     expected: string;
@@ -176,7 +192,38 @@ export function EvidenceIdentityDetails({
     },
     [],
   );
+  useEffect(() => {
+    if (!open) return;
+    let stale = false;
+    (async () => {
+      try {
+        const reply = await rpc<EvidenceKeyHistory>(
+          "evidence/keyHistory",
+          {},
+          { requestContext: await captureApiRequestContext() },
+        );
+        if (!stale) setHistory(EvidenceKeyHistorySchema.parse(reply));
+      } catch {
+        // The identity card stays usable without history.
+      }
+    })();
+    return () => {
+      stale = true;
+    };
+  }, [open]);
   const identity = summary.signingIdentity;
+  const activeEntry = history?.keys.find((entry) => entry.state === "active") ?? null;
+  const scopeId = identity?.scope.id ?? spaceId;
+  const shownIdentity = history
+    ? activeEntry && scopeId
+      ? {
+          fingerprint: activeEntry.keyId,
+          scope: { type: "space" as const, id: scopeId },
+          keyVersion: activeEntry.version,
+        }
+      : null
+    : identity;
+  const activeFingerprint = activeEntry?.keyId ?? shownIdentity?.fingerprint ?? "";
   const fingerprint = expected.trim();
   const valid = !fingerprint || EvidenceFingerprintSchema.safeParse(fingerprint).success;
   const match = summary.sealed
@@ -215,32 +262,119 @@ export function EvidenceIdentityDetails({
     }
   }
   async function shareIdentity(card: boolean) {
-    if (!identity) return;
+    if (!shownIdentity) return;
     try {
-      if (card) await exportEvidenceIdentity(identity);
-      else await Share.share({ message: identity.fingerprint });
+      if (card) await exportEvidenceIdentity(shownIdentity);
+      else await Share.share({ message: shownIdentity.fingerprint });
     } catch {
       Alert.alert(t("The export could not finish; try again."));
     }
   }
+  async function reloadHistory(): Promise<void> {
+    const reply = await rpc<EvidenceKeyHistory>(
+      "evidence/keyHistory",
+      {},
+      { requestContext: await captureApiRequestContext() },
+    );
+    setHistory(EvidenceKeyHistorySchema.parse(reply));
+  }
+  async function manage(action: "replaceKey" | "revokeKey") {
+    if (!activeFingerprint) return;
+    try {
+      const reply = await rpc<EvidenceKeyHistory>(
+        `evidence/${action}`,
+        action === "revokeKey"
+          ? { expectedFingerprint: activeFingerprint, reason: reason.trim() }
+          : { expectedFingerprint: activeFingerprint },
+        { requestContext: await captureApiRequestContext() },
+      );
+      setHistory(EvidenceKeyHistorySchema.parse(reply));
+      setConfirmingRevoke(false);
+      setReason("");
+    } catch {
+      try {
+        await reloadHistory();
+      } catch {
+        /* Keep the previous history. */
+      }
+      Alert.alert(t("The key changed. Reload and try again."));
+    }
+  }
+  function confirmReplace() {
+    Alert.alert(
+      t("Replace key?"),
+      t("Runs already admitted keep their key; new runs sign with the new key."),
+      [
+        { text: t("Cancel"), style: "cancel" },
+        { text: t("Replace key"), onPress: () => void manage("replaceKey") },
+      ],
+    );
+  }
   return (
     <>
-      {identity && (
+      {shownIdentity && (
         <>
           <Text style={{ color: native.label }}>{t("Signing identity")}</Text>
           <Text selectable style={{ color: native.label }}>
             {t("Fingerprint")}
             {"\n"}
-            {identity.fingerprint}
+            {shownIdentity.fingerprint}
           </Text>
           <Text style={{ color: native.label }}>
-            {t("Space")}: {identity.scope.id}
+            {t("Space")}: {shownIdentity.scope.id}
           </Text>
           <Text style={{ color: native.label }}>
-            {t("Key version")}: {identity.keyVersion}
+            {t("Key version")}: {shownIdentity.keyVersion}
           </Text>
           <Button title={t("Share fingerprint")} onPress={() => void shareIdentity(false)} />
           <Button title={t("Export identity card")} onPress={() => void shareIdentity(true)} />
+        </>
+      )}
+      {history && history.keys.length > 0 && (
+        <>
+          <Text style={{ color: native.label }}>{t("Key history")}</Text>
+          {history.keys.map((entry) => (
+            <Text key={entry.keyId} style={{ color: native.secondaryLabel }}>
+              {t("Version {version}", { version: entry.version })} ·{" "}
+              {t(EVIDENCE_KEY_STATE_LABELS[entry.state])}
+              {entry.replacedAt
+                ? ` · ${t("Replaced")} ${new Date(entry.replacedAt).toLocaleString()}`
+                : ""}
+              {entry.revokedAt && !entry.replacedAt
+                ? ` · ${t("Revoked")} ${new Date(entry.revokedAt).toLocaleString()}${entry.revokedReason ? ` (${entry.revokedReason})` : ""}`
+                : ""}
+            </Text>
+          ))}
+        </>
+      )}
+      {history?.canManage && !paired && !confirmingRevoke && (
+        <>
+          <Button title={t("Replace key")} onPress={confirmReplace} />
+          <Button title={t("Revoke key")} onPress={() => setConfirmingRevoke(true)} />
+        </>
+      )}
+      {history?.canManage && !paired && confirmingRevoke && (
+        <>
+          <Text style={{ color: native.label }}>
+            {t(
+              "Revoke the signing key? Signing stops at once. Records signed before revocation still verify.",
+            )}
+          </Text>
+          <TextInput
+            accessibilityLabel={t("Reason")}
+            placeholder={t("Reason")}
+            value={reason}
+            onChangeText={setReason}
+            maxLength={200}
+            autoCapitalize="none"
+            style={{ padding: 12, color: native.label, backgroundColor: native.fill }}
+          />
+          <Button
+            title={t("Revoke key")}
+            disabled={!reason.trim()}
+            onPress={() => void manage("revokeKey")}
+          />
+          <Button title={t("Cancel")} onPress={() => setConfirmingRevoke(false)} />
         </>
       )}
       <TextInput

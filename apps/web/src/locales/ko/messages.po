@@ -592,6 +592,7 @@ msgstr ""
 msgid "Actions usually run automatically. Rules, safety checks, and integration policies may require confirmation."
 msgstr ""
 
+#: src/components/RunEvidence.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Active"
 msgstr "활성"
@@ -1633,6 +1634,7 @@ msgstr "서버에 연결할 수 없습니다."
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/ReleaseInterruptedComputer.tsx
+#: src/components/RunEvidence.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -5264,6 +5266,14 @@ msgid "key"
 msgstr "key"
 
 #: src/components/RunEvidence.tsx
+msgid "Key history"
+msgstr "키 기록"
+
+#: src/components/RunEvidence.tsx
+msgid "Key history is unavailable."
+msgstr "키 기록을 사용할 수 없습니다."
+
+#: src/components/RunEvidence.tsx
 msgid "Key version"
 msgstr "키 버전"
 
@@ -7333,6 +7343,10 @@ msgstr ""
 msgid "Ready. The bot can use Hermes."
 msgstr "준비되었습니다. 봇이 Hermes를 사용할 수 있습니다."
 
+#: src/components/RunEvidence.tsx
+msgid "Reason"
+msgstr "사유"
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Reasoning effort"
@@ -7643,9 +7657,18 @@ msgstr "다시 열기"
 msgid "Replace API key"
 msgstr "API 키 교체"
 
+#: src/components/RunEvidence.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Replace key"
 msgstr "키 교체"
+
+#: src/components/RunEvidence.tsx
+msgid "Replace the signing key? Runs already admitted keep their key; new runs sign with the new key."
+msgstr "서명 키를 교체할까요? 이미 승인된 실행은 기존 키를 유지하고, 새 실행은 새 키로 서명합니다."
+
+#: src/components/RunEvidence.tsx
+msgid "Replaced"
+msgstr "교체됨"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
@@ -7981,9 +8004,18 @@ msgstr ""
 msgid "Revoke"
 msgstr "연결 해제"
 
+#: src/components/RunEvidence.tsx
+msgid "Revoke key"
+msgstr "키 해지"
+
+#: src/components/RunEvidence.tsx
+msgid "Revoke the signing key? Signing stops at once. Records signed before revocation still verify."
+msgstr "서명 키를 해지할까요? 서명이 즉시 중지됩니다. 해지 전에 서명된 기록은 계속 검증됩니다."
+
+#: src/components/RunEvidence.tsx
 #: src/pages/DevicesSettings.tsx
 msgid "Revoked"
-msgstr ""
+msgstr "해지됨"
 
 #: src/pages/GroupPanel.tsx
 msgid "Rework notes"
@@ -9304,6 +9336,10 @@ msgstr "그룹의 모델 선택을 다시 불러왔습니다. 다시 선택하�
 msgid "The Hermes install on this computer failed its safety check."
 msgstr "이 컴퓨터의 Hermes 설치가 안전 검사를 통과하지 못했습니다."
 
+#: src/components/RunEvidence.tsx
+msgid "The key changed. Reload and try again."
+msgstr "키가 변경되었습니다. 새로고침 후 다시 시도하세요."
+
 #: src/pages/shell/runtime-summary.tsx
 msgid "The last update was interrupted."
 msgstr "마지막 업데이트가 중단되었습니다."
@@ -10126,6 +10162,11 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 msgid "Verifying…"
 msgstr "확인 중…"
+
+#. placeholder {0}: entry.version
+#: src/components/RunEvidence.tsx
+msgid "Version {0}"
+msgstr "버전 {0}"
 
 #: src/pages/board/Board.tsx
 msgid "View"

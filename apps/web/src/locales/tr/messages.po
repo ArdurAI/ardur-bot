@@ -592,6 +592,7 @@ msgstr ""
 msgid "Actions usually run automatically. Rules, safety checks, and integration policies may require confirmation."
 msgstr ""
 
+#: src/components/RunEvidence.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Active"
 msgstr ""
@@ -1633,6 +1634,7 @@ msgstr "Sunucuya ulaşılamıyor."
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/ReleaseInterruptedComputer.tsx
+#: src/components/RunEvidence.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -5264,6 +5266,14 @@ msgid "key"
 msgstr ""
 
 #: src/components/RunEvidence.tsx
+msgid "Key history"
+msgstr "Anahtar geçmişi"
+
+#: src/components/RunEvidence.tsx
+msgid "Key history is unavailable."
+msgstr "Anahtar geçmişi kullanılamıyor."
+
+#: src/components/RunEvidence.tsx
 msgid "Key version"
 msgstr "Anahtar sürümü"
 
@@ -7333,6 +7343,10 @@ msgstr ""
 msgid "Ready. The bot can use Hermes."
 msgstr "Hazır. Bot Hermes'i kullanabilir."
 
+#: src/components/RunEvidence.tsx
+msgid "Reason"
+msgstr "Neden"
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Reasoning effort"
@@ -7643,9 +7657,18 @@ msgstr "Yeniden aç"
 msgid "Replace API key"
 msgstr "API anahtarını değiştir"
 
+#: src/components/RunEvidence.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Replace key"
 msgstr "Anahtarı değiştir"
+
+#: src/components/RunEvidence.tsx
+msgid "Replace the signing key? Runs already admitted keep their key; new runs sign with the new key."
+msgstr "İmza anahtarı değiştirilsin mi? Zaten kabul edilmiş çalıştırmalar anahtarını korur; yeni çalıştırmalar yeni anahtarla imzalar."
+
+#: src/components/RunEvidence.tsx
+msgid "Replaced"
+msgstr "Değiştirildi"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
@@ -7981,9 +8004,18 @@ msgstr ""
 msgid "Revoke"
 msgstr "İptal et"
 
+#: src/components/RunEvidence.tsx
+msgid "Revoke key"
+msgstr "Anahtarı iptal et"
+
+#: src/components/RunEvidence.tsx
+msgid "Revoke the signing key? Signing stops at once. Records signed before revocation still verify."
+msgstr "İmza anahtarı iptal edilsin mi? İmzalama hemen durur. İptalden önce imzalanan kayıtlar doğrulanmaya devam eder."
+
+#: src/components/RunEvidence.tsx
 #: src/pages/DevicesSettings.tsx
 msgid "Revoked"
-msgstr ""
+msgstr "İptal edildi"
 
 #: src/pages/GroupPanel.tsx
 msgid "Rework notes"
@@ -9304,6 +9336,10 @@ msgstr "Grubun model seçimi yeniden yüklendi. Tekrar seçin."
 msgid "The Hermes install on this computer failed its safety check."
 msgstr "Bu bilgisayardaki Hermes kurulumu güvenlik denetimini geçemedi."
 
+#: src/components/RunEvidence.tsx
+msgid "The key changed. Reload and try again."
+msgstr "Anahtar değişti. Yeniden yükleyip tekrar deneyin."
+
 #: src/pages/shell/runtime-summary.tsx
 msgid "The last update was interrupted."
 msgstr "Son güncelleme kesintiye uğradı."
@@ -10126,6 +10162,11 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 msgid "Verifying…"
 msgstr "Doğrulanıyor…"
+
+#. placeholder {0}: entry.version
+#: src/components/RunEvidence.tsx
+msgid "Version {0}"
+msgstr "Sürüm {0}"
 
 #: src/pages/board/Board.tsx
 msgid "View"

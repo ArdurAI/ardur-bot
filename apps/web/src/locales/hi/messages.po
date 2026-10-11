@@ -592,6 +592,7 @@ msgstr ""
 msgid "Actions usually run automatically. Rules, safety checks, and integration policies may require confirmation."
 msgstr ""
 
+#: src/components/RunEvidence.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Active"
 msgstr ""
@@ -1633,6 +1634,7 @@ msgstr "सर्वर तक नहीं पहुंचा जा सका�
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/ReleaseInterruptedComputer.tsx
+#: src/components/RunEvidence.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -5264,6 +5266,14 @@ msgid "key"
 msgstr ""
 
 #: src/components/RunEvidence.tsx
+msgid "Key history"
+msgstr "कुंजी इतिहास"
+
+#: src/components/RunEvidence.tsx
+msgid "Key history is unavailable."
+msgstr "कुंजी इतिहास उपलब्ध नहीं है।"
+
+#: src/components/RunEvidence.tsx
 msgid "Key version"
 msgstr "कुंजी संस्करण"
 
@@ -7333,6 +7343,10 @@ msgstr ""
 msgid "Ready. The bot can use Hermes."
 msgstr "तैयार. यह बॉट Hermes इस्तेमाल कर सकता है।"
 
+#: src/components/RunEvidence.tsx
+msgid "Reason"
+msgstr "कारण"
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Reasoning effort"
@@ -7643,9 +7657,18 @@ msgstr "पुनः खोलें"
 msgid "Replace API key"
 msgstr "API कुंजी बदलें"
 
+#: src/components/RunEvidence.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Replace key"
 msgstr "कुंजी बदलें"
+
+#: src/components/RunEvidence.tsx
+msgid "Replace the signing key? Runs already admitted keep their key; new runs sign with the new key."
+msgstr "हस्ताक्षर कुंजी बदलें? पहले से स्वीकृत रन अपनी कुंजी रखते हैं; नए रन नई कुंजी से हस्ताक्षर करते हैं।"
+
+#: src/components/RunEvidence.tsx
+msgid "Replaced"
+msgstr "बदली गई"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
@@ -7981,9 +8004,18 @@ msgstr ""
 msgid "Revoke"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "Revoke key"
+msgstr "कुंजी रद्द करें"
+
+#: src/components/RunEvidence.tsx
+msgid "Revoke the signing key? Signing stops at once. Records signed before revocation still verify."
+msgstr "हस्ताक्षर कुंजी रद्द करें? हस्ताक्षर तुरंत बंद हो जाता है। रद्द करने से पहले किए गए हस्ताक्षर सत्यापित होते रहते हैं।"
+
+#: src/components/RunEvidence.tsx
 #: src/pages/DevicesSettings.tsx
 msgid "Revoked"
-msgstr ""
+msgstr "रद्द की गई"
 
 #: src/pages/GroupPanel.tsx
 msgid "Rework notes"
@@ -9304,6 +9336,10 @@ msgstr "समूह का मॉडल चयन फिर से लोड �
 msgid "The Hermes install on this computer failed its safety check."
 msgstr "इस कंप्यूटर पर Hermes की स्थापना सुरक्षा जाँच में विफल रही।"
 
+#: src/components/RunEvidence.tsx
+msgid "The key changed. Reload and try again."
+msgstr "कुंजी बदल गई है। पुनः लोड करके फिर कोशिश करें।"
+
 #: src/pages/shell/runtime-summary.tsx
 msgid "The last update was interrupted."
 msgstr "पिछला अपडेट बीच में रुक गया था।"
@@ -10126,6 +10162,11 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 msgid "Verifying…"
 msgstr "पुष्टि की जा रही है…"
+
+#. placeholder {0}: entry.version
+#: src/components/RunEvidence.tsx
+msgid "Version {0}"
+msgstr "संस्करण {0}"
 
 #: src/pages/board/Board.tsx
 msgid "View"

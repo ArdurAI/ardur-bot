@@ -592,6 +592,7 @@ msgstr ""
 msgid "Actions usually run automatically. Rules, safety checks, and integration policies may require confirmation."
 msgstr ""
 
+#: src/components/RunEvidence.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Active"
 msgstr ""
@@ -1633,6 +1634,7 @@ msgstr "Server nicht erreichbar."
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/ReleaseInterruptedComputer.tsx
+#: src/components/RunEvidence.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -5264,6 +5266,14 @@ msgid "key"
 msgstr ""
 
 #: src/components/RunEvidence.tsx
+msgid "Key history"
+msgstr "Schlüsselverlauf"
+
+#: src/components/RunEvidence.tsx
+msgid "Key history is unavailable."
+msgstr "Der Schlüsselverlauf ist nicht verfügbar."
+
+#: src/components/RunEvidence.tsx
 msgid "Key version"
 msgstr "Schlüsselversion"
 
@@ -7333,6 +7343,10 @@ msgstr ""
 msgid "Ready. The bot can use Hermes."
 msgstr "Bereit. Der Bot kann Hermes verwenden."
 
+#: src/components/RunEvidence.tsx
+msgid "Reason"
+msgstr "Grund"
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Reasoning effort"
@@ -7643,9 +7657,18 @@ msgstr "Erneut öffnen"
 msgid "Replace API key"
 msgstr "API-Schlüssel ersetzen"
 
+#: src/components/RunEvidence.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Replace key"
 msgstr "Schlüssel ersetzen"
+
+#: src/components/RunEvidence.tsx
+msgid "Replace the signing key? Runs already admitted keep their key; new runs sign with the new key."
+msgstr "Den Signierschlüssel ersetzen? Bereits zugelassene Runs behalten ihren Schlüssel; neue Runs signieren mit dem neuen Schlüssel."
+
+#: src/components/RunEvidence.tsx
+msgid "Replaced"
+msgstr "Ersetzt"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
@@ -7981,9 +8004,18 @@ msgstr ""
 msgid "Revoke"
 msgstr "Widerrufen"
 
+#: src/components/RunEvidence.tsx
+msgid "Revoke key"
+msgstr "Schlüssel widerrufen"
+
+#: src/components/RunEvidence.tsx
+msgid "Revoke the signing key? Signing stops at once. Records signed before revocation still verify."
+msgstr "Den Signierschlüssel widerrufen? Die Signierung stoppt sofort. Vor dem Widerruf signierte Einträge bleiben überprüfbar."
+
+#: src/components/RunEvidence.tsx
 #: src/pages/DevicesSettings.tsx
 msgid "Revoked"
-msgstr ""
+msgstr "Widerrufen"
 
 #: src/pages/GroupPanel.tsx
 msgid "Rework notes"
@@ -9304,6 +9336,10 @@ msgstr "Die Modellauswahl der Gruppe wurde neu geladen. Bitte erneut auswählen.
 msgid "The Hermes install on this computer failed its safety check."
 msgstr "Die Hermes-Installation auf diesem Computer hat die Sicherheitsprüfung nicht bestanden."
 
+#: src/components/RunEvidence.tsx
+msgid "The key changed. Reload and try again."
+msgstr "Der Schlüssel hat sich geändert. Neu laden und erneut versuchen."
+
 #: src/pages/shell/runtime-summary.tsx
 msgid "The last update was interrupted."
 msgstr "Das letzte Update wurde unterbrochen."
@@ -10126,6 +10162,11 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 msgid "Verifying…"
 msgstr "Wird geprüft…"
+
+#. placeholder {0}: entry.version
+#: src/components/RunEvidence.tsx
+msgid "Version {0}"
+msgstr "Version {0}"
 
 #: src/pages/board/Board.tsx
 msgid "View"

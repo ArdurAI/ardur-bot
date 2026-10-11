@@ -592,6 +592,7 @@ msgstr ""
 msgid "Actions usually run automatically. Rules, safety checks, and integration policies may require confirmation."
 msgstr ""
 
+#: src/components/RunEvidence.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Active"
 msgstr "Activo"
@@ -1633,6 +1634,7 @@ msgstr "No se puede alcanzar el servidor."
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/ReleaseInterruptedComputer.tsx
+#: src/components/RunEvidence.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -5264,6 +5266,14 @@ msgid "key"
 msgstr "Clave"
 
 #: src/components/RunEvidence.tsx
+msgid "Key history"
+msgstr "Historial de claves"
+
+#: src/components/RunEvidence.tsx
+msgid "Key history is unavailable."
+msgstr "El historial de claves no está disponible."
+
+#: src/components/RunEvidence.tsx
 msgid "Key version"
 msgstr "Versión de la clave"
 
@@ -7333,6 +7343,10 @@ msgstr ""
 msgid "Ready. The bot can use Hermes."
 msgstr "Listo. El bot puede usar Hermes."
 
+#: src/components/RunEvidence.tsx
+msgid "Reason"
+msgstr "Motivo"
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Reasoning effort"
@@ -7643,9 +7657,18 @@ msgstr "Reabrir"
 msgid "Replace API key"
 msgstr "Reemplazar clave de API"
 
+#: src/components/RunEvidence.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Replace key"
 msgstr "Reemplazar clave"
+
+#: src/components/RunEvidence.tsx
+msgid "Replace the signing key? Runs already admitted keep their key; new runs sign with the new key."
+msgstr "¿Reemplazar la clave de firma? Las ejecuciones ya admitidas conservan su clave; las nuevas firman con la clave nueva."
+
+#: src/components/RunEvidence.tsx
+msgid "Replaced"
+msgstr "Reemplazada"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
@@ -7981,9 +8004,18 @@ msgstr ""
 msgid "Revoke"
 msgstr "Revocar"
 
+#: src/components/RunEvidence.tsx
+msgid "Revoke key"
+msgstr "Revocar clave"
+
+#: src/components/RunEvidence.tsx
+msgid "Revoke the signing key? Signing stops at once. Records signed before revocation still verify."
+msgstr "¿Revocar la clave de firma? La firma se detiene de inmediato. Los registros firmados antes de la revocación siguen verificándose."
+
+#: src/components/RunEvidence.tsx
 #: src/pages/DevicesSettings.tsx
 msgid "Revoked"
-msgstr ""
+msgstr "Revocada"
 
 #: src/pages/GroupPanel.tsx
 msgid "Rework notes"
@@ -9304,6 +9336,10 @@ msgstr "Se volvió a cargar la selección de modelo del grupo. Elige de nuevo."
 msgid "The Hermes install on this computer failed its safety check."
 msgstr "La instalación de Hermes en este equipo no superó la comprobación de seguridad."
 
+#: src/components/RunEvidence.tsx
+msgid "The key changed. Reload and try again."
+msgstr "La clave cambió. Recarga e inténtalo de nuevo."
+
 #: src/pages/shell/runtime-summary.tsx
 msgid "The last update was interrupted."
 msgstr "La última actualización se interrumpió."
@@ -10126,6 +10162,11 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 msgid "Verifying…"
 msgstr "Verificando…"
+
+#. placeholder {0}: entry.version
+#: src/components/RunEvidence.tsx
+msgid "Version {0}"
+msgstr "Versión {0}"
 
 #: src/pages/board/Board.tsx
 msgid "View"

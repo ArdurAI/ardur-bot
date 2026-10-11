@@ -109,7 +109,11 @@ it("reveals fingerprint sharing and card export in paired mode", async () => {
 it.each(["expected_key", "different_key", "no_expected_key"] as const)(
   "requests and renders %s without treating invalid input as verified",
   async (signerMatch) => {
-    await act(() => root.render(<EvidenceIdentityDetails summary={summary} spaceId="space" />));
+    await act(() =>
+      root.render(
+        <EvidenceIdentityDetails summary={summary} spaceId="space" open paired={false} />,
+      ),
+    );
     const expected = signerMatch === "no_expected_key" ? "" : fingerprint;
     await enter(expected);
     mocks.rpc.mockResolvedValue({ ...summary, signerMatch });
@@ -131,7 +135,9 @@ it.each(["expected_key", "different_key", "no_expected_key"] as const)(
   },
 );
 it("reports failed verification without a signer success", async () => {
-  await act(() => root.render(<EvidenceIdentityDetails summary={summary} spaceId="space" />));
+  await act(() =>
+    root.render(<EvidenceIdentityDetails summary={summary} spaceId="space" open paired={false} />),
+  );
   mocks.rpc.mockResolvedValue({ ...summary, state: "failed", signerMatch: null });
   await act(() => button("Check key").click());
   expect(mocks.alert).toHaveBeenCalledWith("Check failed");
@@ -139,7 +145,9 @@ it("reports failed verification without a signer success", async () => {
 });
 
 it("hides an earlier signer match when the run stops verifying", async () => {
-  await act(() => root.render(<EvidenceIdentityDetails summary={summary} spaceId="space" />));
+  await act(() =>
+    root.render(<EvidenceIdentityDetails summary={summary} spaceId="space" open paired={false} />),
+  );
   await enter(fingerprint);
   mocks.rpc.mockResolvedValue({ ...summary, signerMatch: "expected_key" });
   await act(() => button("Check key").click());
@@ -149,6 +157,8 @@ it("hides an earlier signer match when the run stops verifying", async () => {
       <EvidenceIdentityDetails
         summary={{ ...summary, state: "failed", sealed: false, signerMatch: null }}
         spaceId="space"
+        open
+        paired={false}
       />,
     ),
   );

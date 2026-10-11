@@ -11,6 +11,18 @@ export const RU_MESSAGES: Record<string, string> = {
     "Ожидаемый ключ не указан; подтверждена только внутренняя согласованность",
   "Key version": "Версия ключа",
   "Share fingerprint": "Поделиться отпечатком",
+  "Key history": "История ключей",
+  "Version {version}": "Версия {version}",
+  Replaced: "Заменён",
+  Revoked: "Отозван",
+  "Revoke key": "Отозвать ключ",
+  "Replace key?": "Заменить ключ?",
+  "Runs already admitted keep their key; new runs sign with the new key.":
+    "Уже допущенные запуски сохраняют свой ключ; новые запуски подписываются новым ключом.",
+  "Revoke the signing key? Signing stops at once. Records signed before revocation still verify.":
+    "Отозвать ключ подписи? Подпись немедленно прекращается. Записи, подписанные до отзыва, по-прежнему проверяются.",
+  Reason: "Причина",
+  "The key changed. Reload and try again.": "Ключ изменился. Перезагрузите и попробуйте снова.",
 
   "To {names}": "Кому: {names}",
   "Queued: {queued}": "В очереди: {queued}",
