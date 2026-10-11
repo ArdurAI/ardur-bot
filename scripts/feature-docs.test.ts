@@ -84,15 +84,15 @@ describe("feature documentation inventory", () => {
     const { manifest, evidence } = await data();
     expect(manifest.features.map((feature) => feature.id)).toEqual(expectedIds);
     await expect(validateFixtureDocs(manifest, evidence)).resolves.toBeDefined();
-    expect(featureDocsReport(manifest)).toContain("Total: 91 features, 81 draft, 3 internal");
+    expect(featureDocsReport(manifest)).toContain("Total: 91 features, 81 draft, 2 internal");
     expect(featureDocsReport(manifest)).toContain(
       "memory-and-learning: 13 total, 12 draft, 0 internal",
     );
     expect(featureDocsReport(manifest)).toContain(
-      "Verify: 3 candidates — space-members, computer-edit-remove, performance",
+      "Verify: 2 candidates — space-members, performance",
     );
     expect(() => assertFeatureDocsComplete(manifest)).toThrow(
-      "78 verified user-facing documentation pages are still draft",
+      "79 verified user-facing documentation pages are still draft",
     );
   });
 

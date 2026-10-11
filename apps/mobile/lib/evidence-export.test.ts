@@ -1,8 +1,10 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { exportRunEvidence } from "./evidence-export";
+import { exportEvidenceIdentity, exportRunEvidence } from "./evidence-export";
 
 const mocks = vi.hoisted(() => ({
   download: vi.fn(),
+  create: vi.fn(),
+  write: vi.fn(),
   share: vi.fn(),
   delete: vi.fn(),
   context: vi.fn(),
@@ -23,6 +25,8 @@ vi.mock("expo-file-system", () => ({
     uri = "cache/evidence.tar.gz";
     exists = true;
     delete = mocks.delete;
+    create = mocks.create;
+    write = mocks.write;
   },
 }));
 beforeEach(() => {
@@ -69,4 +73,32 @@ it("degrades safely for paired devices without an HTTP archive transport", async
   await expect(exportRunEvidence("run")).rejects.toThrow();
   expect(mocks.context).not.toHaveBeenCalled();
   expect(mocks.download).not.toHaveBeenCalled();
+});
+
+it("exports only the public identity through native file sharing, including on paired devices", async () => {
+  const identity = {
+    fingerprint: `sha256:${"a".repeat(64)}`,
+    scope: { type: "space" as const, id: "space" },
+    keyVersion: 1 as const,
+  };
+  mocks.loadHome.mockResolvedValue({ id: "home" });
+  await exportEvidenceIdentity(identity);
+  expect(JSON.parse(mocks.write.mock.calls[0]![0])).toEqual(identity);
+  expect(mocks.share).toHaveBeenCalledWith(expect.any(String), {
+    mimeType: "application/json",
+    UTI: "public.json",
+  });
+  expect(mocks.delete).toHaveBeenCalledOnce();
+  expect(mocks.download).not.toHaveBeenCalled();
+});
+it("cleans an identity file after failed sharing", async () => {
+  mocks.share.mockRejectedValue(new Error("unavailable"));
+  await expect(
+    exportEvidenceIdentity({
+      fingerprint: `sha256:${"a".repeat(64)}`,
+      scope: { type: "space", id: "space" },
+      keyVersion: 1,
+    }),
+  ).rejects.toThrow("unavailable");
+  expect(mocks.delete).toHaveBeenCalledOnce();
 });

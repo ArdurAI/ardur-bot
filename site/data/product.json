@@ -51,7 +51,7 @@
       "id": "approve",
       "eyebrow": "APPROVAL",
       "title": "Stay in control",
-      "body": "Ardur asks for approval before consequential actions. Space owners can opt in to signed bot-decision evidence; members can check run status and download sealed evidence from visible runs for independent verification. Evidence is not encrypted and does not prove tool execution or completeness. Connected integrations with no allowed tools show that tools need review in Context, per-bot access rows, Find apps, and the space Dashboard. Web and desktop offer an explicit tool review with marked read-only tools selected; the owner chooses Allow selected or Allow all before access changes. Phone shows the same pending state and opens web management for review. Recover a lost send with a stable request id, resume waiting by run id, and inspect exact run and task records beyond the latest task list.",
+      "body": "Ardur asks for approval before consequential actions. Space owners can opt in to signed bot-decision evidence; members can check run status and download sealed evidence from visible runs for independent verification. Owners can copy or share the active signing key fingerprint and export a public-only identity card. Reviewers can compare a visible run against an expected fingerprint; without one, verification proves only self-consistency. Web and desktop support copying and export; phone uses native sharing, including identity cards in paired mode. Key rotation and revocation are not available. Evidence is not encrypted and does not prove tool execution or completeness. Connected integrations with no allowed tools show that tools need review in Context, per-bot access rows, Find apps, and the space Dashboard. Web and desktop offer an explicit tool review with marked read-only tools selected; the owner chooses Allow selected or Allow all before access changes. Phone shows the same pending state and opens web management for review. Recover a lost send with a stable request id, resume waiting by run id, and inspect exact run and task records beyond the latest task list.",
       "source": "README.md#What you get today"
     }
   ],
@@ -260,7 +260,7 @@
       "id": "ollama",
       "name": "Ollama as a first-class choice",
       "access": "local",
-      "status": "roadmap",
+      "status": "available",
       "featured": false
     },
     {

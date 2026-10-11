@@ -1,4 +1,17 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "Signing identity": "Идентификатор подписи",
+  Fingerprint: "Отпечаток",
+  "Copy fingerprint": "Копировать отпечаток",
+  "Export identity card": "Экспортировать карточку идентификатора",
+  "Expected fingerprint": "Ожидаемый отпечаток",
+  "Check key": "Проверить ключ",
+  "Signed by the expected key": "Подписано ожидаемым ключом",
+  "Signed by a different key": "Подписано другим ключом",
+  "No expected key given; self-consistent only":
+    "Ожидаемый ключ не указан; подтверждена только внутренняя согласованность",
+  "Key version": "Версия ключа",
+  "Share fingerprint": "Поделиться отпечатком",
+
   "To {names}": "Кому: {names}",
   "Queued: {queued}": "В очереди: {queued}",
 
