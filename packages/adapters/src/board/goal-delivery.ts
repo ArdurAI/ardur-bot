@@ -221,14 +221,14 @@ export async function deliverGoalBoardRow(
       });
       if (!(await stillHeld())) throw new Error("Delivery claim expired");
       if (result.expired) throw new Error("Delivery claim expired");
-      if (!result.commented) {
-        await release("pending", "Board unavailable");
-        return;
-      }
       if (result.discrepancy) {
         await release("paused", "Board update pending", {
           commentReceipt: result.commentId,
         });
+        return;
+      }
+      if (!result.commented) {
+        await release("pending", "Board unavailable");
         return;
       }
       const closeReceipt = result.closedByThisDelivery

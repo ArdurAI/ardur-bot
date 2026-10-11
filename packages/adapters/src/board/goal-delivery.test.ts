@@ -1,7 +1,11 @@
+import { readFileSync } from "node:fs";
+import { goalBoardDeliveryKey } from "@ardurbot/contracts";
 import { BoardError } from "@ardurbot/contracts/board";
 import type { PrismaClient } from "@ardurbot/db";
 import { afterEach, expect, it, vi } from "vitest";
+import { BeadsBoardProvider } from "./beads.js";
 import { deliverGoalBoardRow } from "./goal-delivery.js";
+import { goalBoardHash } from "./goal-delivery-key.js";
 import { BoardService } from "./service.js";
 
 afterEach(() => {
@@ -189,4 +193,48 @@ it("does not comment through a provider that cannot deduplicate", async () => {
   expect(f.provider.comment).not.toHaveBeenCalled();
   expect(f.provider.close).not.toHaveBeenCalled();
   expect(f.delivery.state).toBe("pending");
+});
+
+it("pauses a receipt discrepancy for owner review instead of leaving it pending", async () => {
+  const recorded = JSON.parse(
+    readFileSync(new URL("./fixtures/responses.json", import.meta.url), "utf8"),
+  ) as {
+    show: Array<
+      Record<string, unknown> & { metadata: Record<string, unknown>; comments: unknown[] }
+    >;
+  };
+  const item = structuredClone(recorded.show[0])!;
+  const hash = goalBoardHash(goalBoardDeliveryKey("goal", "revision", "completed"));
+  item.metadata[`ardur_gd_${hash}`] = "1:c1:x0";
+  item.comments = [];
+  const calls: string[][] = [];
+  const beads = new BeadsBoardProvider({
+    workspace: {
+      id: "workspace",
+      kind: "space",
+      name: "Board",
+      path: "/fixture/board",
+      prefix: "board",
+      enabled: true,
+      isDefault: true,
+      allowAllBots: true,
+      allowedBotIds: [],
+      initialized: true,
+    },
+    actor: "Owner",
+    run: async (request) => {
+      calls.push(request.argv);
+      if (request.argv[0] === "show") return { ok: true, stdout: JSON.stringify([item]) };
+      if (request.argv[0] === "history") return { ok: true, stdout: "null" };
+      return { ok: true, stdout: "null" };
+    },
+  });
+  const f = harness("completed");
+  vi.spyOn(BoardService.prototype, "provider").mockResolvedValue(beads as never);
+  await deliverGoalBoardRow({ prisma: f.prisma, dataDir: "/fixture/app" }, f.delivery);
+  expect(f.delivery.state).toBe("paused");
+  expect(f.delivery.failure).toBe("Board update pending");
+  expect(calls.filter((argv) => ["update", "comments", "close"].includes(argv[0] ?? ""))).toEqual(
+    [],
+  );
 });
