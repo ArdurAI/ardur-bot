@@ -59,6 +59,12 @@ export function goalBudget(
 /** Stable data key; each frontend translates it when displaying the default condition. */
 export const GOAL_FINAL_REVIEW_DESCRIPTION = "goal.final-owner-review";
 
+/**
+ * Stable data key written on delegation cards and results when the owner-review freeze
+ * cancels work; each frontend translates it when displaying, never renders it raw.
+ */
+export const GOAL_FREEZE_CANCELLED = "goal.freeze-cancelled";
+
 export const GoalConditionStatusSchema = z.enum(["unknown", "pass", "fail"]);
 export type GoalConditionStatus = z.infer<typeof GoalConditionStatusSchema>;
 

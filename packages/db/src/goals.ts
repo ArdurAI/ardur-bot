@@ -13,6 +13,7 @@ import {
   GOAL_DEFAULT_PER_WORKER_TOKENS,
   GOAL_DEFAULT_TOKEN_LIMIT,
   GOAL_FINAL_REVIEW_DESCRIPTION,
+  GOAL_FREEZE_CANCELLED,
   GOAL_MAX_DEPTH,
   GOAL_MAX_HOPS,
   GoalConditionSchema,
@@ -599,8 +600,9 @@ async function commitGoalSubmission(
  * The admission freeze: a queued turn for the goal can never resume after submission.
  * Delegated runs finish their delegations first so reservations release and the room
  * sees the cancellation instead of an orphaned assignment. A run leased concurrently
- * survives: the claim below re-checked status "queued" before leasing, and in-flight
- * work may finish its call.
+ * survives: the cancellation below re-checked status "queued", and in-flight work may
+ * finish its call. Runs that were waiting or hold an expired lease are settled when a
+ * stale continue job next claims them — see cancelRunHeldByFrozenGoal.
  */
 async function freezeQueuedGoalRuns(tx: Prisma.TransactionClient, goal: TeamGoal) {
   const queued = await tx.run.findMany({
@@ -613,39 +615,155 @@ async function freezeQueuedGoalRuns(tx: Prisma.TransactionClient, goal: TeamGoal
     select: { id: true, taskId: true, delegationId: true },
   });
   const frozen: Array<{ id: string; taskId: string }> = [];
+  const now = new Date();
   for (const run of queued) {
-    const cancelled = await tx.run.updateMany({
-      where: { id: run.id, status: "queued" },
-      data: {
-        status: "cancelled",
-        completedAt: new Date(),
-        leaseOwner: null,
-        leaseExpiresAt: null,
-      },
-    });
-    if (!cancelled.count) continue;
-    // Wake-bound runs carry no delegationId; their delegation names the run instead.
-    const delegationId =
-      run.delegationId ??
-      (
-        await tx.delegation.findFirst({
-          where: { runId: run.id, rootTaskId: goal.rootTaskId },
-          select: { id: true },
-        })
-      )?.id ??
-      null;
-    if (delegationId)
-      await finishDelegation(
-        tx,
-        delegationId,
-        "cancelled",
-        "The goal reached owner review before this work started.",
-        run.id,
-      );
-    frozen.push({ id: run.id, taskId: run.taskId });
+    if (await settleFrozenGoalRun(tx, goal, run, { status: "queued" }, now))
+      frozen.push({ id: run.id, taskId: run.taskId });
   }
-  await cancelRunsInTransaction(tx, frozen, new Date());
   return frozen.map((run) => run.id);
+}
+
+/**
+ * Cancel one goal run the freeze caught before it could run, and leave nothing
+ * half-applied: the delegation finishes (releasing its reservation), the attempt and
+ * task cancel with the run, and effects whose dispatch was prevented are denied.
+ * Effects that may already have executed stay uncertain instead. The conditional
+ * status guard mirrors the claim below it, so a run leased concurrently survives.
+ * Returns true when this call cancelled the run.
+ */
+async function settleFrozenGoalRun(
+  tx: Prisma.TransactionClient,
+  goal: { spaceId: string; userId: string; rootTaskId: string },
+  run: { id: string; taskId: string; delegationId: string | null },
+  claimable: Prisma.RunWhereInput,
+  now: Date,
+): Promise<boolean> {
+  const cancelled = await tx.run.updateMany({
+    where: { id: run.id, ...claimable },
+    data: {
+      status: "cancelled",
+      completedAt: now,
+      leaseOwner: null,
+      leaseExpiresAt: null,
+    },
+  });
+  if (!cancelled.count) return false;
+  // Wake-bound runs carry no delegationId; their delegation names the run instead.
+  const delegationId =
+    run.delegationId ??
+    (
+      await tx.delegation.findFirst({
+        where: { runId: run.id, rootTaskId: goal.rootTaskId },
+        select: { id: true },
+      })
+    )?.id ??
+    null;
+  if (delegationId)
+    await finishDelegation(tx, delegationId, "cancelled", GOAL_FREEZE_CANCELLED, run.id);
+  await cancelRunsInTransaction(tx, [{ id: run.id, taskId: run.taskId }], now);
+  await settleFrozenRunEffects(tx, { spaceId: goal.spaceId, userId: goal.userId }, [run.id]);
+  return true;
+}
+
+/**
+ * Effects whose dispatch the freeze prevented can never settle later: the old answer
+ * path needs a waiting run, and acceptance refuses while they stay open. Deny them.
+ * An effect left "executing" may already have run; keep it uncertain for the owner.
+ */
+async function settleFrozenRunEffects(
+  tx: Prisma.TransactionClient,
+  scope: { spaceId: string; userId: string },
+  runIds: readonly string[],
+) {
+  if (!runIds.length) return;
+  await tx.externalEffect.updateMany({
+    where: {
+      spaceId: scope.spaceId,
+      runId: { in: [...runIds] },
+      status: { in: ["intended", "approved", "paused"] },
+    },
+    data: { status: "denied" },
+  });
+  await tx.externalEffect.updateMany({
+    where: { spaceId: scope.spaceId, runId: { in: [...runIds] }, status: "executing" },
+    data: { status: "uncertain" },
+  });
+}
+
+/**
+ * The resume freeze. A goal run that is not in flight — queued, waiting on an answer
+ * or a takeover, or holding an expired lease — must never be claimed while the goal is
+ * frozen; neither may a retry or a recovery of a dead lease. The run settles exactly
+ * like a queued run the submission freeze caught. Returns true when the freeze holds
+ * the run, so the caller must not claim it. A live in-flight lease survives, as at
+ * submission. The status re-check is conditional, like the claim's, so a concurrent
+ * claim that won the row first is left to finish its call.
+ */
+export async function cancelRunHeldByFrozenGoal(
+  prisma: PrismaClient,
+  run: {
+    id: string;
+    spaceId: string;
+    userId: string;
+    taskId: string;
+    delegationId: string | null;
+    goalId: string | null;
+    delegationRootTaskId: string | null;
+  },
+): Promise<boolean> {
+  if (!run.goalId && !run.delegationRootTaskId) return false;
+  const goal = await prisma.teamGoal.findFirst({
+    where: {
+      spaceId: run.spaceId,
+      userId: run.userId,
+      // The guard above leaves the fallback non-null: a run always names one or both.
+      ...(run.goalId ? { id: run.goalId } : { rootTaskId: run.delegationRootTaskId! }),
+    },
+    select: { status: true, rootTaskId: true, spaceId: true, userId: true },
+  });
+  if (!goal || !isFrozenGoalStatus(goal.status)) return false;
+  const now = new Date();
+  return prisma.$transaction(async (tx) =>
+    settleFrozenGoalRun(
+      tx,
+      goal,
+      run,
+      {
+        OR: [
+          { status: { in: ["queued", "waiting_input", "waiting_takeover"] } },
+          { status: { in: ["leased", "running"] }, leaseExpiresAt: { lte: now } },
+        ],
+      },
+      now,
+    ),
+  );
+}
+
+/**
+ * Freeze check for replaying an already-recorded effect. Serialized on the same root
+ * lock as the admission freeze and the acceptance check, so a replay either sees the
+ * goal running or is held; there is no window where an approved replay dispatches
+ * into a goal the submission just froze. A missing goal holds too, like admission.
+ */
+export async function isGoalRunEffectFrozen(
+  prisma: PrismaClient,
+  input: { spaceId: string; userId: string; goalId: string },
+): Promise<boolean> {
+  const goal = await prisma.teamGoal.findFirst({
+    where: { id: input.goalId, spaceId: input.spaceId, userId: input.userId },
+    select: { rootTaskId: true },
+  });
+  if (!goal) return true;
+  return withTransactionRetry(() =>
+    prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${goal.rootTaskId} FOR UPDATE`;
+      const current = await tx.teamGoal.findFirst({
+        where: { id: input.goalId },
+        select: { status: true },
+      });
+      return !current || isFrozenGoalStatus(current.status);
+    }),
+  );
 }
 
 async function snapshotGoalEvidence(tx: Prisma.TransactionClient, goal: TeamGoal) {

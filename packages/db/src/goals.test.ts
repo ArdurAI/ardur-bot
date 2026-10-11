@@ -5,8 +5,10 @@ import type { PrismaClient } from "./client.js";
 import {
   acceptGoal,
   admitGoalRunEffect,
+  cancelRunHeldByFrozenGoal,
   getGoal,
   goalExhaustionReason,
+  isGoalRunEffectFrozen,
   reconcileGoalExhaustion,
   rejectGoal,
   reviewGoalCondition,
@@ -384,7 +386,10 @@ function reviewFixture() {
       updateMany: vi.fn(async () => ({ count: 0 })),
       create: vi.fn(async () => ({ id: "run-rework" })),
     },
-    externalEffect: { findFirst: vi.fn(async () => null as unknown) },
+    externalEffect: {
+      findFirst: vi.fn(async () => null as unknown),
+      updateMany: vi.fn(async () => ({ count: 1 })),
+    },
     goalSettlement: {
       create: vi.fn(
         async ({ data }: { data: { goalId: string; revisionId: string; usedTokens: number } }) => ({
@@ -837,5 +842,185 @@ describe("goal owner review", () => {
     // The frozen run was cancelled at submission (conditional check plus the shared
     // cancellation helper); rework queues a new run instead of reviving it.
     expect(fixture.tx.run.updateMany).toHaveBeenCalledTimes(2);
+  });
+
+  it("denies the effects of queued runs the submission freeze cancelled", async () => {
+    const fixture = reviewFixture();
+    fixture.tx.run.findMany.mockResolvedValue([
+      { id: "run-queued", taskId: "task-queued", delegationId: null },
+    ]);
+    fixture.tx.run.updateMany.mockResolvedValue({ count: 1 });
+    await fixture.submit();
+    // An approval answered just before submission approved the effect and queued the
+    // run; the freeze cancels the run, so the prevented dispatch must settle too —
+    // otherwise acceptance refuses the goal with unsettled effects forever.
+    expect(fixture.tx.externalEffect.updateMany).toHaveBeenCalledWith({
+      where: {
+        spaceId: fixture.goal.spaceId,
+        runId: { in: ["run-queued"] },
+        status: { in: ["intended", "approved", "paused"] },
+      },
+      data: { status: "denied" },
+    });
+  });
+});
+
+describe("goal freeze at resume and replay", () => {
+  function frozenRunFixture(runStatus: string, goalStatus: string) {
+    const state = {
+      run: {
+        id: "run-held",
+        spaceId: owner.spaceId,
+        userId: owner.userId,
+        taskId: "task-held",
+        delegationId: null as string | null,
+        goalId: "goal-1" as string | null,
+        delegationRootTaskId: "task-root" as string | null,
+        status: runStatus,
+        leaseExpiresAt:
+          runStatus === "running" ? new Date(Date.now() + 60_000) : (null as Date | null),
+      },
+      goalStatus,
+    };
+    const effectUpdates: unknown[] = [];
+    const tx = {
+      $queryRaw: vi.fn(async () => []),
+      teamGoal: {
+        findFirst: vi.fn(async () => ({
+          status: state.goalStatus,
+          rootTaskId: "task-root",
+          spaceId: owner.spaceId,
+          userId: owner.userId,
+        })),
+      },
+      run: {
+        updateMany: vi.fn(
+          async ({
+            where,
+            data,
+          }: {
+            where: {
+              status?: string;
+              OR?: [
+                { status: { in: string[] } },
+                { status: { in: string[] }; leaseExpiresAt: { lte: Date } },
+              ];
+            };
+            data: Record<string, unknown>;
+          }) => {
+            // The claim-compatible guard: only a run the continue claim could lease is
+            // cancelled; a live in-flight lease survives.
+            if (where.OR) {
+              const claimable =
+                ["queued", "waiting_input", "waiting_takeover"].includes(state.run.status) ||
+                (["leased", "running"].includes(state.run.status) &&
+                  state.run.leaseExpiresAt !== null &&
+                  state.run.leaseExpiresAt <= where.OR[1].leaseExpiresAt.lte);
+              if (!claimable) return { count: 0 };
+            }
+            if (where.status && state.run.status !== where.status) return { count: 0 };
+            Object.assign(state.run, data);
+            return { count: 1 };
+          },
+        ),
+      },
+      delegation: { findFirst: vi.fn(async () => null) },
+      externalEffect: {
+        updateMany: vi.fn(async (args: unknown) => {
+          effectUpdates.push(args);
+          return { count: 1 };
+        }),
+      },
+      attempt: { updateMany: vi.fn(async () => ({ count: 1 })) },
+      task: { updateMany: vi.fn(async () => ({ count: 1 })) },
+    };
+    const prisma = {
+      ...tx,
+      $transaction: (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
+    } as unknown as PrismaClient;
+    return { prisma, tx, state, effectUpdates };
+  }
+
+  it.each(["queued", "waiting_input", "waiting_takeover"] as const)(
+    "cancels and settles a %s run a stale continue claims while the goal is frozen",
+    async (status) => {
+      const f = frozenRunFixture(status, "completed");
+      const held = await cancelRunHeldByFrozenGoal(f.prisma, f.state.run);
+      expect(held).toBe(true);
+      expect(f.state.run.status).toBe("cancelled");
+      // The prevented dispatch is denied, and an effect that may already have run is
+      // kept uncertain for the owner.
+      expect(f.effectUpdates).toEqual([
+        expect.objectContaining({
+          where: expect.objectContaining({
+            runId: { in: ["run-held"] },
+            status: { in: ["intended", "approved", "paused"] },
+          }),
+          data: { status: "denied" },
+        }),
+        expect.objectContaining({
+          where: expect.objectContaining({
+            runId: { in: ["run-held"] },
+            status: "executing",
+          }),
+          data: { status: "uncertain" },
+        }),
+      ]);
+    },
+  );
+
+  it("settles a run holding an expired lease but leaves a live in-flight lease alone", async () => {
+    const expired = frozenRunFixture("running", "completed");
+    expired.state.run.leaseExpiresAt = new Date(Date.now() - 60_000);
+    await expect(cancelRunHeldByFrozenGoal(expired.prisma, expired.state.run)).resolves.toBe(true);
+    expect(expired.state.run.status).toBe("cancelled");
+
+    const inFlight = frozenRunFixture("running", "completed");
+    await expect(cancelRunHeldByFrozenGoal(inFlight.prisma, inFlight.state.run)).resolves.toBe(
+      false,
+    );
+    // The conditional cancellation matched nothing: the live lease survives untouched.
+    expect(inFlight.state.run.status).toBe("running");
+    expect(inFlight.effectUpdates).toEqual([]);
+  });
+
+  it("does not hold a run while the goal is running or after send-back unfreezes it", async () => {
+    const running = frozenRunFixture("queued", "running");
+    await expect(cancelRunHeldByFrozenGoal(running.prisma, running.state.run)).resolves.toBe(false);
+    expect(running.tx.run.updateMany).not.toHaveBeenCalled();
+
+    const notGoalRun = frozenRunFixture("queued", "completed");
+    notGoalRun.state.run.goalId = null;
+    notGoalRun.state.run.delegationRootTaskId = null;
+    await expect(cancelRunHeldByFrozenGoal(notGoalRun.prisma, notGoalRun.state.run)).resolves.toBe(
+      false,
+    );
+    expect(notGoalRun.tx.teamGoal.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("holds a replayed effect while frozen, under the root lock, and admits it while running", async () => {
+    let goalStatus = "completed";
+    const tx = {
+      $queryRaw: vi.fn(async () => []),
+      teamGoal: {
+        findFirst: vi.fn(async () => ({ rootTaskId: "task-root", status: goalStatus })),
+      },
+    };
+    const prisma = {
+      ...tx,
+      $transaction: (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
+    } as unknown as PrismaClient;
+    const input = { spaceId: owner.spaceId, userId: owner.userId, goalId: "goal-1" };
+    // The root lock is taken before the goal state is read, so a replay cannot slip
+    // into a goal the submission froze a moment earlier.
+    await expect(isGoalRunEffectFrozen(prisma, input)).resolves.toBe(true);
+    // The root lock is taken between the rootTaskId lookup and the status read that
+    // decides, so a replay cannot slip into a goal the submission froze a moment earlier.
+    const reads = tx.teamGoal.findFirst.mock.invocationCallOrder;
+    expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeGreaterThan(reads[0]!);
+    expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(reads[reads.length - 1]!);
+
+    goalStatus = "running";
+    await expect(isGoalRunEffectFrozen(prisma, input)).resolves.toBe(false);
   });
 });
