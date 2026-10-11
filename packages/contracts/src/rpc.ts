@@ -615,10 +615,12 @@ export const appContract = {
         }),
       )
       .output(z.object({ ok: z.literal(true) })),
-    ollama: oc.output(OllamaStatusSchema),
+    ollama: oc
+      .input(z.object({ credentialId: Id.optional() }).optional())
+      .output(OllamaStatusSchema),
     testOllama: oc.input(z.object({ baseUrl: z.string() })).output(OllamaStatusSchema),
     pullOllama: oc
-      .input(z.object({ model: z.string().trim().min(1).max(256) }))
+      .input(z.object({ model: z.string().trim().min(1).max(256), credentialId: Id.optional() }))
       .output(eventIterator(OllamaPullProgressSchema)),
     list: oc.output(z.array(ModelCatalogEntrySchema)),
     credentials: oc.output(z.array(ModelCredentialSchema)),
@@ -657,7 +659,13 @@ export const appContract = {
       .input(z.object({ loginId: z.string() }))
       .output(z.object({ ok: z.literal(true) })),
     setDefault: oc
-      .input(z.object({ provider: z.string(), modelId: z.string().optional() }))
+      .input(
+        z.object({
+          provider: z.string(),
+          modelId: z.string().optional(),
+          credentialId: Id.optional(),
+        }),
+      )
       .output(z.object({ ok: z.literal(true) })),
   },
   bots: {

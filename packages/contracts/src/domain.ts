@@ -1205,6 +1205,7 @@ export const OPENAI_COMPATIBLE_PROVIDER_ID = "openai-compatible";
 export const ModelConnectInputSchema = z
   .object({
     provider: z.string(),
+    credentialId: Id.optional(),
     apiKey: z.string().optional(),
     baseUrl: z.string().optional(),
     label: z.string().optional(),

@@ -21,7 +21,10 @@ function fixture(owner = true, connected = true) {
   const deps = {
     env: { deploymentKind: "source", agentRuntime: "pi" },
     prisma: {
-      userModelCredential: { findFirst: vi.fn(async () => (connected ? credential : null)) },
+      userModelCredential: {
+        findFirst: vi.fn(async () => (connected ? credential : null)),
+        findMany: vi.fn(async () => (connected ? [credential] : [])),
+      },
       spaceModelPreference: {
         findFirst: vi.fn(async () => (connected ? { credential, modelId: "llama3.2:1b" } : null)),
       },
@@ -182,4 +185,61 @@ describe("Ollama connection API", () => {
       ),
     ).rejects.toThrow("not installed");
   });
+});
+
+it("lists each local server connection and loads only the explicitly selected one", async () => {
+  const f = fixture();
+  const connections = ["one", "two"].map((id) => ({
+    id,
+    provider: "ollama",
+    secretId: id,
+    label: id,
+  }));
+  vi.mocked(f.deps.prisma.userModelCredential.findMany).mockResolvedValue(connections as never);
+  vi.mocked(f.deps.prisma.userModelCredential.findFirst).mockImplementation(
+    async ({ where }: any) => (connections.find((entry) => entry.id === where.id) ?? null) as never,
+  );
+  vi.mocked(f.deps.prisma.secret.findFirst).mockImplementation(
+    async ({ where }: any) => ({ id: where.id, ciphertext: where.id }) as never,
+  );
+  f.deps.secrets.load = (_ciphertext, id) =>
+    JSON.stringify({
+      kind: "openai_compatible",
+      baseUrl: `http://127.0.0.1:${id === "one" ? 11434 : 11435}`,
+    });
+  const catalog = await (await f.rpc("list")).json();
+  expect(
+    catalog.json
+      .filter(
+        (entry: { provider: string; placeholder?: boolean }) =>
+          entry.provider === "ollama" && !entry.placeholder,
+      )
+      .map((entry: { credentialId: string }) => entry.credentialId),
+  ).toEqual(["one", "two"]);
+  http.fetch.mockClear();
+  expect(await (await f.rpc("ollama", { credentialId: "one" })).json()).toMatchObject({
+    json: { credentialId: "one", baseUrl: "http://127.0.0.1:11434" },
+  });
+  expect(http.fetch).toHaveBeenCalled();
+  expect(
+    http.fetch.mock.calls.every(([url]) => String(url).startsWith("http://127.0.0.1:11434/")),
+  ).toBe(true);
+  http.fetch.mockClear();
+  http.fetch.mockResolvedValue(new Response('{"status":"success"}\n'));
+  const pull = await f.rpc("pullOllama", { model: "local:small", credentialId: "one" });
+  expect(pull.status).toBe(200);
+  await pull.text();
+  expect(http.fetch).toHaveBeenCalled();
+  expect(
+    http.fetch.mock.calls.every(([url]) => String(url).startsWith("http://127.0.0.1:11434/")),
+  ).toBe(true);
+  http.fetch.mockClear();
+  expect(
+    (await f.rpc("pullOllama", { model: "local:small", credentialId: "foreign" })).status,
+  ).toBe(400);
+  expect(http.fetch).not.toHaveBeenCalled();
+  expect(await (await f.rpc("ollama", { credentialId: "foreign" })).json()).toMatchObject({
+    json: { models: [], issue: expect.any(String) },
+  });
+  expect(http.fetch).not.toHaveBeenCalled();
 });
