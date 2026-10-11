@@ -120,7 +120,13 @@ describe("chain and seal verification", () => {
     ]);
     // A seal dated before revocation verifies; one dated after does not.
     const earlySeal = sealRun(
-      { records: [early], actor: "bot-test", grantId: "grant-test", iss: "ardur:space-test:evidence", now: before },
+      {
+        records: [early],
+        actor: "bot-test",
+        grantId: "grant-test",
+        iss: "ardur:space-test:evidence",
+        now: before,
+      },
       privateKey,
       keys.kid,
     );
@@ -128,7 +134,13 @@ describe("chain and seal verification", () => {
       true,
     );
     const lateSeal = sealRun(
-      { records: [early], actor: "bot-test", grantId: "grant-test", iss: "ardur:space-test:evidence", now: after },
+      {
+        records: [early],
+        actor: "bot-test",
+        grantId: "grant-test",
+        iss: "ardur:space-test:evidence",
+        now: after,
+      },
       privateKey,
       keys.kid,
     );

@@ -363,7 +363,11 @@ describe("evidence key management", () => {
       $queryRaw: vi.fn(async () => []),
       evidenceKey: {
         findMany: vi.fn(
-          async (args: { where: { spaceId: string }; orderBy: { version: string }; take?: number }) => {
+          async (args: {
+            where: { spaceId: string };
+            orderBy: { version: string };
+            take?: number;
+          }) => {
             const sorted = rows
               .filter((row) => row.spaceId === args.where.spaceId)
               .sort((a, b) =>
@@ -374,7 +378,8 @@ describe("evidence key management", () => {
         ),
         findFirst: vi.fn(
           async (args: { where: { spaceId: string; revokedAt: null } }) =>
-            rows.find((row) => row.spaceId === args.where.spaceId && row.revokedAt === null) ?? null,
+            rows.find((row) => row.spaceId === args.where.spaceId && row.revokedAt === null) ??
+            null,
         ),
         update: vi.fn(async ({ where, data }: { where: { id: string }; data: Partial<KeyRow> }) => {
           const row = rows.find((candidate) => candidate.id === where.id);
@@ -425,7 +430,10 @@ describe("evidence key management", () => {
       [2, "active"],
     ]);
     expect(f.rows[0]).toMatchObject({ version: 1, replacedAt: expect.any(Date) });
-    expect(f.rows[1]).toMatchObject({ version: 2, kid: expect.stringMatching(/^sha256:[a-f0-9]{64}$/) });
+    expect(f.rows[1]).toMatchObject({
+      version: 2,
+      kid: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+    });
     expect(f.secrets.put).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(history)).not.toContain("PRIVATE KEY");
     expect(JSON.stringify(history)).not.toContain("fixture-ciphertext");
@@ -437,7 +445,12 @@ describe("evidence key management", () => {
     ] as const) {
       const f = keyFixture(role);
       await expect(
-        replaceSpaceEvidenceKey({ prisma: f.prisma, secrets: f.secrets }, actor, session, f.rows[0]!.kid),
+        replaceSpaceEvidenceKey(
+          { prisma: f.prisma, secrets: f.secrets },
+          actor,
+          session,
+          f.rows[0]!.kid,
+        ),
       ).rejects.toMatchObject({ code: "FORBIDDEN" });
       await expect(
         revokeSpaceEvidenceKey(f.prisma, actor, session, f.rows[0]!.kid, "lost device"),
@@ -458,13 +471,24 @@ describe("evidence key management", () => {
   it("maps a raced replacement to a conflict instead of overwriting", async () => {
     const f = keyFixture("owner");
     await expect(
-      replaceSpaceEvidenceKey({ prisma: f.prisma, secrets: f.secrets }, actor, "session-1", "sha256:stale"),
+      replaceSpaceEvidenceKey(
+        { prisma: f.prisma, secrets: f.secrets },
+        actor,
+        "session-1",
+        "sha256:stale",
+      ),
     ).rejects.toMatchObject({ code: "CONFLICT" });
     expect(f.rows).toHaveLength(1);
   });
   it("emergency revocation is dated, reasoned and owner-only", async () => {
     const f = keyFixture("owner");
-    const history = await revokeSpaceEvidenceKey(f.prisma, actor, "session-1", f.rows[0]!.kid, "compromised");
+    const history = await revokeSpaceEvidenceKey(
+      f.prisma,
+      actor,
+      "session-1",
+      f.rows[0]!.kid,
+      "compromised",
+    );
     expect(history.keys[0]).toMatchObject({
       state: "revoked",
       revokedReason: "compromised",

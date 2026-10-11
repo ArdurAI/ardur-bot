@@ -1,5 +1,4 @@
-import { verifyChain, verifySeal } from "@ardurbot/evidence";
-import { generateEvidenceKey } from "@ardurbot/evidence";
+import { generateEvidenceKey, verifyChain, verifySeal } from "@ardurbot/evidence";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { agentConnectionTools, builtinAgentTools } from "../builtin-tools.js";
 import { EncryptedSecretStore } from "../secrets.js";
@@ -251,7 +250,10 @@ describe("evidence recorder", () => {
 });
 
 describe("evidence key rotation and revocation", () => {
-  async function replaceActiveKey(store: ReturnType<typeof fakeEvidenceStore>["store"], deps: ReturnType<typeof setup>["deps"]) {
+  async function replaceActiveKey(
+    store: ReturnType<typeof fakeEvidenceStore>["store"],
+    deps: ReturnType<typeof setup>["deps"],
+  ) {
     const generated = generateEvidenceKey();
     const stored = await deps.secretStore.put(
       generated.privateKeyPem,

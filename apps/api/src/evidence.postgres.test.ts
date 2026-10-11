@@ -295,7 +295,9 @@ describePostgres("signing key rotation and revocation (PostgreSQL)", () => {
     const bot = await prisma.bot.create({
       data: { spaceId, userId: ownerId, name: "Fixture", color: "ink" },
     });
-    const thread = await prisma.thread.create({ data: { spaceId, userId: ownerId, botId: bot.id } });
+    const thread = await prisma.thread.create({
+      data: { spaceId, userId: ownerId, botId: bot.id },
+    });
     const task = await prisma.task.create({
       data: {
         spaceId,
@@ -463,7 +465,9 @@ describePostgres("signing key rotation and revocation (PostgreSQL)", () => {
     await expect(
       replaceSpaceEvidenceKey({ prisma, secrets }, actor(ownerId), "session-1", kid),
     ).resolves.toMatchObject({
-      keys: expect.arrayContaining([expect.objectContaining({ state: "active", version: expect.any(Number) })]),
+      keys: expect.arrayContaining([
+        expect.objectContaining({ state: "active", version: expect.any(Number) }),
+      ]),
     });
   });
 });

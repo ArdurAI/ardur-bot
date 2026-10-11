@@ -75,7 +75,13 @@ async function loadRunEvidence(
     const chain = verifyChain(journal, key?.publicKeyPem ?? "", undefined, options);
     for (const failure of chain.failures) failures.add(failure.code);
     if (seal) {
-      const verified = verifySeal(seal.jws, journal, key?.publicKeyPem ?? "", expectedFingerprint, options);
+      const verified = verifySeal(
+        seal.jws,
+        journal,
+        key?.publicKeyPem ?? "",
+        expectedFingerprint,
+        options,
+      );
       signerMatch = verified.signerMatch;
       for (const failure of verified.failures) failures.add(failure.code);
     }
