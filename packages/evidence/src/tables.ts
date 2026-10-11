@@ -137,6 +137,7 @@ export const VERIFICATION_CODES = [
   "seal_claims_invalid",
   "seal_missing_chain_head",
   "receipt_chain_head_mismatch",
+  "signed_after_revocation",
 ] as const;
 export type VerificationCode = (typeof VERIFICATION_CODES)[number];
 export const isVerificationCode = (value: unknown): value is VerificationCode =>

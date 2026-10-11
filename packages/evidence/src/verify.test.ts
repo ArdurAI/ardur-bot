@@ -103,6 +103,41 @@ describe("chain and seal verification", () => {
       expect.objectContaining({ index: 0, code: "receipt_chain_head_mismatch" }),
     ]);
   });
+  it("reports records signed after revocation as untrusted; earlier ones verify", () => {
+    const before = new Date("2026-09-29T12:00:00Z");
+    const revokedAt = new Date("2026-09-29T13:00:00Z");
+    const after = new Date("2026-09-29T14:00:00Z");
+    const chain = createEvidenceChain(privateKey, keys.kid);
+    const early = chain.append(receiptInput({ now: before })).jws;
+    // Offline checkers that know nothing about the revocation date keep verifying.
+    expect(verifyChain([early], keys.publicKeyPem).ok).toBe(true);
+    expect(verifyChain([early], keys.publicKeyPem, undefined, { revokedAt }).ok).toBe(true);
+    const late = chain.append(receiptInput({ now: after })).jws;
+    const untrusted = verifyChain([early, late], keys.publicKeyPem, undefined, { revokedAt });
+    expect(untrusted.ok).toBe(false);
+    expect(untrusted.failures).toEqual([
+      expect.objectContaining({ index: 1, code: "signed_after_revocation" }),
+    ]);
+    // A seal dated before revocation verifies; one dated after does not.
+    const earlySeal = sealRun(
+      { records: [early], actor: "bot-test", grantId: "grant-test", iss: "ardur:space-test:evidence", now: before },
+      privateKey,
+      keys.kid,
+    );
+    expect(verifySeal(earlySeal, [early], keys.publicKeyPem, undefined, { revokedAt }).ok).toBe(
+      true,
+    );
+    const lateSeal = sealRun(
+      { records: [early], actor: "bot-test", grantId: "grant-test", iss: "ardur:space-test:evidence", now: after },
+      privateKey,
+      keys.kid,
+    );
+    const lateResult = verifySeal(lateSeal, [early], keys.publicKeyPem, undefined, { revokedAt });
+    expect(lateResult.ok).toBe(false);
+    expect(lateResult.failures).toEqual([
+      expect.objectContaining({ code: "signed_after_revocation" }),
+    ]);
+  });
   it("accepts the full sealed run", () => {
     const { records, seal } = run();
     const last = decodeCompact(records[3]).payload as { receipt_id: string };

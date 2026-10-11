@@ -28,6 +28,10 @@ export interface VerificationResult {
   headReceiptId: string | null;
   failures: VerificationFailure[];
 }
+export interface VerificationOptions {
+  /** When the signing key was revoked: records and seals dated after it are untrusted. */
+  revokedAt?: Date;
+}
 export interface SealClaims {
   schema_version: "ardur.behavioral_attestation.v0.2";
   type: "behavioral_attestation";
@@ -151,6 +155,7 @@ function verificationKey(publicKey: KeyObject | string): KeyObject {
 function verifyChainContents(
   jwsList: readonly string[],
   publicKey: KeyObject | string,
+  options?: VerificationOptions,
 ): VerificationResult {
   const failures: VerificationFailure[] = [];
   const result: VerificationResult = {
@@ -233,6 +238,17 @@ function verifyChainContents(
         message: "Receipt identity or step does not match the first record's run",
       });
     }
+    if (
+      options?.revokedAt &&
+      typeof claims.iat === "number" &&
+      claims.iat * 1000 > options.revokedAt.getTime()
+    ) {
+      failures.push({
+        index,
+        code: "signed_after_revocation",
+        message: "Record is dated after the signing key was revoked",
+      });
+    }
     if (index === jwsList.length - 1) result.headReceiptId = claims.receipt_id;
   }
   result.ok = failures.length === 0;
@@ -243,8 +259,9 @@ function verifySealContents(
   sealJwt: string,
   jwsList: readonly string[],
   publicKey: KeyObject | string,
+  options?: VerificationOptions,
 ): VerificationResult {
-  const result = verifyChainContents(jwsList, publicKey);
+  const result = verifyChainContents(jwsList, publicKey, options);
   const index = result.recordCount;
   const fail = (code: VerificationCode, message: string) => {
     result.failures.push({ index, code, message });
@@ -276,6 +293,13 @@ function verifySealContents(
     return result;
   }
   const seal = decoded.payload;
+  if (
+    options?.revokedAt &&
+    typeof seal.iat === "number" &&
+    seal.iat * 1000 > options.revokedAt.getTime()
+  ) {
+    fail("signed_after_revocation", "Seal is dated after the signing key was revoked");
+  }
   if (!Array.isArray(jwsList) || jwsList.length === 0) {
     fail("receipt_chain_head_mismatch", "A seal requires at least one record");
     return result;
@@ -328,8 +352,13 @@ export function verifyChain(
   jwsList: readonly string[],
   publicKey: KeyObject | string,
   expectedFingerprint?: string,
+  options?: VerificationOptions,
 ): VerificationResult {
-  return withSignerMatch(verifyChainContents(jwsList, publicKey), publicKey, expectedFingerprint);
+  return withSignerMatch(
+    verifyChainContents(jwsList, publicKey, options),
+    publicKey,
+    expectedFingerprint,
+  );
 }
 
 export function verifySeal(
@@ -337,9 +366,10 @@ export function verifySeal(
   jwsList: readonly string[],
   publicKey: KeyObject | string,
   expectedFingerprint?: string,
+  options?: VerificationOptions,
 ): VerificationResult {
   return withSignerMatch(
-    verifySealContents(sealJwt, jwsList, publicKey),
+    verifySealContents(sealJwt, jwsList, publicKey, options),
     publicKey,
     expectedFingerprint,
   );
