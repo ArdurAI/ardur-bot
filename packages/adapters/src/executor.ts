@@ -134,6 +134,7 @@ import {
   admitGoalRunEffect,
   appendEventInTransaction,
   type ClaimedSteeringMessage,
+  cancelRunHeldByFrozenGoal,
   claimQuietBotMessages,
   confirmDispatchStop,
   createEvidenceStore,
@@ -147,6 +148,7 @@ import {
   goalBotAuthorityFingerprint,
   goalExhaustionReason,
   InvalidSpaceNameError,
+  isGoalRunEffectFrozen,
   isSteeringContinuationClientNonce,
   isTooManyDatabaseConnections,
   listDelegations,
@@ -1821,6 +1823,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
         }
       }
+      // The admission freeze holds at resume, recovery and retry, not only at
+      // submission: a goal run that is queued, waiting, or holding an expired lease
+      // must not be claimed while the goal awaits owner review. In-flight leases
+      // survive and finish their call.
+      if (
+        (run.goalId || run.delegationRootTaskId) &&
+        (await cancelRunHeldByFrozenGoal(deps.prisma, run))
+      )
+        return;
       // A stop that lands while the run waits must hold, whatever startedAt says:
       // a retried run has started before, and claiming it again would re-lease it,
       // emit run.started and reach a provider call before the stop is confirmed.
@@ -8507,9 +8518,35 @@ const GOAL_FROZEN_EFFECT_ERROR =
   "This goal is awaiting owner review or already accepted, so new side effects are frozen.";
 
 type RecordedEffect =
-  | { duplicate: true; effect: Prisma.ExternalEffectGetPayload<object>; frozen: false }
+  | { duplicate: true; effect: Prisma.ExternalEffectGetPayload<object>; frozen: boolean }
   | { duplicate: false; effect: Prisma.ExternalEffectGetPayload<object>; frozen: false }
   | { duplicate: false; effect: null; frozen: true };
+
+/**
+ * A replay of a dispatchable effect (approved or intended) is held while its goal is
+ * frozen: the freeze check below runs under the same root lock as the submission, so
+ * a replay cannot dispatch into a goal the owner just sent to review. The row is left
+ * untouched — held, not dropped — so rework can execute it. Returning a completed,
+ * denied or uncertain effect's saved result is always allowed.
+ */
+async function effectReplayFrozen(
+  deps: ExecutorDeps,
+  run: {
+    spaceId: string;
+    userId: string;
+    goalId: string | null;
+    delegationRootTaskId: string | null;
+  },
+  effect: { status: string },
+): Promise<boolean> {
+  if (effect.status !== "approved" && effect.status !== "intended") return false;
+  if (!run.goalId || !run.delegationRootTaskId) return false;
+  return isGoalRunEffectFrozen(deps.prisma, {
+    spaceId: run.spaceId,
+    userId: run.userId,
+    goalId: run.goalId,
+  });
+}
 
 async function recordEffect(
   deps: ExecutorDeps,
@@ -8541,6 +8578,8 @@ async function recordEffect(
       runId: run.id,
       payload: { executionId: idempotencyKey, kind },
     });
+    if (await effectReplayFrozen(deps, run, existing))
+      return { duplicate: false, effect: null, frozen: true };
     return { duplicate: true, effect: existing, frozen: false };
   }
 
@@ -8584,6 +8623,8 @@ async function recordEffect(
           runId: run.id,
           payload: { executionId: candidate, kind, legacy: true },
         });
+        if (await effectReplayFrozen(deps, run, sameIdLegacy))
+          return { duplicate: false, effect: null, frozen: true };
         return { duplicate: true, effect: sameIdLegacy, frozen: false };
       }
     }
@@ -8618,6 +8659,8 @@ async function recordEffect(
       runId: run.id,
       payload: { executionId: legacy.idempotencyKey, kind, legacy: true },
     });
+    if (await effectReplayFrozen(deps, run, legacy))
+      return { duplicate: false, effect: null, frozen: true };
     return { duplicate: true, effect: legacy, frozen: false };
   }
 

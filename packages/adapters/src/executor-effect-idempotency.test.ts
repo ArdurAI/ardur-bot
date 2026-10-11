@@ -143,6 +143,12 @@ function fixture(
     cancelConfirmedAt: null as Date | null,
     providerRetryAt: null as Date | null,
     delegationId: null as string | null,
+    goalId: null as string | null,
+    delegationRootTaskId: null as string | null,
+    comparisonId: null as string | null,
+    remoteRootTaskId: null as string | null,
+    originDeviceGrantId: null as string | null,
+    remoteDeviceGrantIds: [] as string[],
   };
   const memoryCommit = vi.fn(async () => ({ revision: "rev-1" }));
   const externalEffect = {
@@ -206,9 +212,10 @@ function fixture(
     chatGroupMember: { findMany: vi.fn(async () => []) },
     botMessageDelivery: {
       findFirst: vi.fn(async () => null),
+      findMany: vi.fn(async () => []),
       updateMany: vi.fn(async () => ({ count: 0 })),
     },
-    botMessageWake: { findMany: vi.fn(async () => []) },
+    botMessageWake: { findMany: vi.fn(async () => []), findFirst: vi.fn(async () => null) },
     delegationRoot: {
       findUnique: vi.fn(async () => null),
       findUniqueOrThrow: vi.fn(async () => ({
@@ -219,6 +226,7 @@ function fixture(
     },
     delegation: {
       findMany: vi.fn(async () => []),
+      findFirst: vi.fn(async () => null),
       findUnique: vi.fn(async () => null),
       findUniqueOrThrow: vi.fn(async ({ where }: { where: { id: string } }) => ({
         id: where.id,
@@ -338,7 +346,10 @@ function fixture(
     task: {
       findUniqueOrThrow: vi.fn(async () => ({ id: run.taskId, prompt: "Update shared state" })),
       update: vi.fn(async () => ({})),
+      updateMany: vi.fn(async () => ({ count: 1 })),
     },
+    deviceApprovalBinding: { findUnique: vi.fn(async () => null) },
+    teamGoal: { findFirst: vi.fn(async () => null) },
     connection: { findMany: vi.fn(async () => []) },
     spaceModelPreference: {
       findFirst: vi.fn(async () => ({
@@ -3094,4 +3105,103 @@ it("finishes a streamed reply despite hung read-only evidence and marks the rece
   } finally {
     vi.useRealTimers();
   }
+});
+
+describe("goal review freeze through the executor", () => {
+  function goalRun(patch: Record<string, unknown> = {}) {
+    const f = fixture("goal-freeze-run");
+    Object.assign(f.runRecord, {
+      goalId: "goal-1",
+      delegationRootTaskId: "root-1",
+      ...patch,
+    });
+    return f;
+  }
+
+  function freezeGoal(f: ReturnType<typeof goalRun>, status: string) {
+    vi.mocked(f.prisma.teamGoal.findFirst).mockResolvedValue({
+      id: "goal-1",
+      rootTaskId: "root-1",
+      status,
+    } as never);
+  }
+
+  it.each(["queued", "waiting_input", "waiting_takeover"] as const)(
+    "settles a %s goal run a stale continue claims instead of starting the runtime",
+    async (status) => {
+      const f = goalRun({ status });
+      freezeGoal(f, "completed");
+      await f.executor.continueRun(f.runRecord.id, "worker-1");
+      // The freeze owns the run: no lease, no model call, the run is cancelled and
+      // its prevented effects are denied (see goals.test.ts for the assertions).
+      expect(f.runtimeRun).not.toHaveBeenCalled();
+      expect(f.runRecord.status).toBe("cancelled");
+    },
+  );
+
+  it("starts the runtime normally while the goal is running", async () => {
+    const f = goalRun();
+
+    freezeGoal(f, "running");
+    f.setCalls([{ name: "shell", args: { command: "fixture command" }, executionId: "call-1" }]);
+    await f.executor.continueRun(f.runRecord.id, "worker-1");
+    expect(f.runtimeRun).toHaveBeenCalled();
+    expect(f.sandboxExecute).toHaveBeenCalledOnce();
+  });
+
+  it("holds an approved effect replay when the goal freezes mid-turn, without dropping it", async () => {
+    const f = goalRun();
+    let frozen = false;
+    vi.mocked(f.prisma.teamGoal.findFirst).mockImplementation(
+      async () =>
+        ({
+          id: "goal-1",
+          rootTaskId: "root-1",
+          status: frozen ? "completed" : "running",
+        }) as never,
+    );
+    const args = { command: "fixture command" };
+    f.effects.push({
+      id: "effect-approved",
+      runId: f.runRecord.id,
+      kind: "shell",
+      idempotencyKey: toolEffectIdempotencyKey(f.runRecord.id, "shell", args, 0),
+      status: "approved",
+      request: args,
+    });
+    f.setCalls([{ name: "shell", args, executionId: "replay-call" }]);
+    f.runtimeRun.mockImplementation(async function* (request: AgentRunRequest) {
+      // Owner review freezes the goal while the run is mid-turn; the model's next
+      // tool call replays the approved effect.
+      frozen = true;
+      for (const call of [{ name: "shell", args, executionId: "replay-call" }]) {
+        f.results.push(await request.executeTool!(call.name, call.args, call.executionId));
+      }
+      yield { type: "done" as const, text: "Done" };
+    });
+    await f.executor.continueRun(f.runRecord.id, "worker-1");
+    // Held, not dropped: the fixture command never dispatched, and the effect stays
+    // approved for rework. (The sandbox may run the run's stop-cleanup script.)
+    expect(JSON.stringify(f.sandboxExecute.mock.calls)).not.toContain("fixture command");
+    expect(f.effects[0]!.status).toBe("approved");
+    expect(f.results[0]).toMatchObject({ error: expect.stringContaining("owner review") });
+  });
+
+  it("executes the approved replay while the goal is running", async () => {
+    const f = goalRun();
+    freezeGoal(f, "running");
+    const args = { command: "fixture command" };
+    f.effects.push({
+      id: "effect-approved",
+      runId: f.runRecord.id,
+      kind: "shell",
+      idempotencyKey: toolEffectIdempotencyKey(f.runRecord.id, "shell", args, 0),
+      status: "approved",
+      request: args,
+    });
+    f.setCalls([{ name: "shell", args, executionId: "replay-call" }]);
+    await f.executor.continueRun(f.runRecord.id, "worker-1");
+    expect(f.sandboxExecute).toHaveBeenCalledOnce();
+    expect(f.effects[0]!.status).toBe("completed");
+  });
 });
