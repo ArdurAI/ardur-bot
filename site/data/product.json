@@ -257,6 +257,13 @@
       "featured": false
     },
     {
+      "id": "ollama",
+      "name": "Ollama as a first-class choice",
+      "access": "local",
+      "status": "available",
+      "featured": false
+    },
+    {
       "id": "openai-compatible",
       "name": "OpenAI-compatible server",
       "access": "gateway",
