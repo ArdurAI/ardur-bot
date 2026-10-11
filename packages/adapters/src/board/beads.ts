@@ -408,6 +408,18 @@ export class BeadsBoardProvider implements ProjectBoardProvider {
     if (!input.close) {
       return { ...blank, commentId, commented: true, leftOpen: true };
     }
+    if (ledger?.close === "closing") {
+      // Intent is not a receipt. Resolve from board state without issuing a second close.
+      if (item.status === "closed") {
+        await this.stamp(input, true, "already-closed", guard);
+        return { ...blank, commentId, commented: true, alreadyClosed: true };
+      }
+      if (await this.closedThenReopened(input.itemId, input.closeReason, existing?.createdAt)) {
+        await this.stamp(input, true, "left-open", guard);
+        return { ...blank, commentId, commented: true, leftOpen: true };
+      }
+      throw new BoardError({ code: "timeout", message: "Board close outcome is uncertain." });
+    }
     if (ledger && ledger.close !== "open") {
       return {
         ...blank,
@@ -444,10 +456,12 @@ export class BeadsBoardProvider implements ProjectBoardProvider {
     // The receipt has to exist before close. A lost close response must not close again.
     await this.stamp(input, true, "closing", guard);
     await guard();
-    await this.close([input.itemId], input.closeReason);
+    const closed = await this.close([input.itemId], input.closeReason);
+    if (!closed.some((entry) => entry.id === input.itemId && entry.status === "closed"))
+      throw new BoardError({ code: "timeout", message: "Board close outcome is uncertain." });
     const after = await this.show(input.itemId);
     if (after.status !== "closed")
-      return { ...blank, commentId, commented: true, discrepancy: true };
+      throw new BoardError({ code: "timeout", message: "Board close outcome is uncertain." });
     await this.stamp(input, true, "closed", guard);
     return { ...blank, commentId, commented: true, closedByThisDelivery: true };
   }

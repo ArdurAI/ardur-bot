@@ -5,11 +5,147 @@ import type { PrismaClient } from "@ardurbot/db";
 import { afterEach, expect, it, vi } from "vitest";
 import { BeadsBoardProvider } from "./beads.js";
 import { deliverGoalBoardRow } from "./goal-delivery.js";
+import { goalBoardFixture } from "./goal-delivery-fixture.js";
 import { goalBoardHash } from "./goal-delivery-key.js";
 import { BoardService } from "./service.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
+});
+
+function realBeads(transition: "completed" | "accepted") {
+  const f = harness(transition);
+  const board = goalBoardFixture();
+  // Only the board connection and database are fake; delivery, Beads and argv validation are real.
+  vi.spyOn(BoardService.prototype, "provider").mockImplementation(async () => board.provider());
+  const deliver = () => deliverGoalBoardRow({ prisma: f.prisma }, f.delivery);
+  const reconcile = async () => {
+    f.delivery.retryAt = null;
+    await deliver();
+  };
+  return { ...f, board, deliver, reconcile };
+}
+
+it("delivers owner acceptance through real Beads and the host validator exactly once", async () => {
+  const completed = realBeads("completed");
+  await completed.deliver();
+  expect(completed.delivery.state).toBe("delivered");
+  expect(completed.board.closes()).toHaveLength(0);
+  const f = realBeads("accepted");
+  await f.deliver();
+  await f.deliver();
+  expect(f.delivery).toMatchObject({ state: "delivered", closeReceipt: "closed" });
+  expect(f.board.closes()).toHaveLength(1);
+  expect(f.board.calls.filter(({ argv }) => argv[0] === "comments")).toHaveLength(1);
+  expect(f.board.item.status).toBe("closed");
+});
+
+it("does not close through real Beads without the persisted owner acceptance", async () => {
+  const f = realBeads("accepted");
+  vi.mocked(f.prisma.goalVerdict.findFirst).mockResolvedValue(null);
+  await f.deliver();
+  expect(f.delivery.state).toBe("paused");
+  expect(f.board.writes()).toEqual([]);
+});
+
+it("keeps a lost close response pending until read-back settles it without another close", async () => {
+  const f = realBeads("accepted");
+  f.board.state.close = () => {
+    f.board.item.status = "closed";
+    return { ok: false, problem: { code: "timeout", message: "response lost" } };
+  };
+  await f.deliver();
+  expect(f.delivery).toMatchObject({ state: "pending", closeReceipt: null, claimToken: null });
+  await f.reconcile();
+  expect(f.delivery).toMatchObject({ state: "delivered", closeReceipt: "already-closed" });
+  expect(f.board.closes()).toHaveLength(1);
+  expect(f.board.calls.filter(({ argv }) => argv[0] === "comments")).toHaveLength(1);
+});
+
+it("keeps an ambiguous committed close pending until the next reconcile reads its state", async () => {
+  const f = realBeads("accepted");
+  f.board.state.close = () => {
+    f.board.item.status = "closed";
+    return { ok: true, stdout: "null" };
+  };
+  await f.deliver();
+  expect(f.delivery).toMatchObject({ state: "pending", closeReceipt: null });
+  await f.reconcile();
+  expect(f.delivery).toMatchObject({ state: "delivered", closeReceipt: "already-closed" });
+  expect(f.board.closes()).toHaveLength(1);
+});
+
+it.each(["timeout", "ambiguous", "unreadable"])(
+  "keeps an open item pending after an uncertain %s close and never closes twice",
+  async (outcome) => {
+    const f = realBeads("accepted");
+    f.board.state.close = () =>
+      outcome === "timeout"
+        ? { ok: false, problem: { code: "timeout", message: "response lost" } }
+        : { ok: true, stdout: outcome === "unreadable" ? "{" : "null" };
+    await f.deliver();
+    expect(f.delivery).toMatchObject({ state: "pending", closeReceipt: null });
+    await f.reconcile();
+    expect(f.delivery).toMatchObject({ state: "pending", closeReceipt: null });
+    expect(f.board.item.status).not.toBe("closed");
+    expect(f.board.closes()).toHaveLength(1);
+    // A later reconcile can settle verified state, but must never retry the mutation.
+    f.board.item.status = "closed";
+    await f.reconcile();
+    expect(f.delivery).toMatchObject({ state: "delivered", closeReceipt: "already-closed" });
+    expect(f.board.closes()).toHaveLength(1);
+  },
+);
+
+it("leaves a pre-close intent pending when the process stopped before the close", async () => {
+  const f = realBeads("accepted");
+  const hash = goalBoardHash(goalBoardDeliveryKey("goal", "revision", "accepted"));
+  f.board.item.metadata[`ardur_gd_${hash}`] = "1:c1:x4";
+  f.board.item.comments.push({
+    id: "accepted-comment",
+    text: `[Goal ${hash}]\nGoal accepted`,
+    author: "Owner",
+    created_at: "2026-01-01T00:00:00Z",
+  });
+  await f.deliver();
+  await f.reconcile();
+  expect(f.delivery).toMatchObject({ state: "pending", closeReceipt: null });
+  expect(f.board.writes()).toEqual([]);
+});
+
+it("never closes a reopened item after a lost response, and settles only with history evidence", async () => {
+  const f = realBeads("accepted");
+  f.board.state.close = () => {
+    f.board.item.status = "closed";
+    return { ok: false, problem: { code: "timeout", message: "response lost" } };
+  };
+  await f.deliver();
+  f.board.item.status = "open";
+  await f.reconcile();
+  expect(f.delivery.state).toBe("pending");
+  f.board.state.history = [
+    {
+      CommitDate: "2026-01-02T00:00:00Z",
+      Issue: { status: "closed", close_reason: "Goal accepted" },
+    },
+  ];
+  await f.reconcile();
+  expect(f.delivery).toMatchObject({ state: "delivered", closeReceipt: "left-open" });
+  expect(f.board.closes()).toHaveLength(1);
+  expect(f.board.item.status).toBe("open");
+});
+
+it("expired claims never write through the real provider or host validator", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2030-01-01T00:00:00Z"));
+  const f = realBeads("accepted");
+  f.board.state.beforeCommand = ({ argv }) => {
+    if (argv[0] === "show") vi.setSystemTime(new Date("2030-01-01T00:04:00Z"));
+  };
+  await f.deliver();
+  expect(f.delivery.state).toBe("pending");
+  expect(f.board.writes()).toEqual([]);
 });
 
 function row(transition: "completed" | "accepted") {

@@ -36,7 +36,7 @@ export async function goalLinkForbidsRunClose(prisma: PrismaClient, run: LinkedR
 export async function goalLinkForbidsItemClose(
   prisma: PrismaClient,
   scope: { spaceId: string; userId: string; botId?: string; runId?: string },
-  workspaceId: string | undefined,
+  workspaceId: string,
   itemIds: string[],
 ) {
   if (!scope.botId || !scope.runId || itemIds.length === 0) return false;
@@ -48,13 +48,11 @@ export async function goalLinkForbidsItemClose(
       goalId: true,
       delegationRootTaskId: true,
       taskId: true,
-      boardWorkspaceId: true,
     },
   });
   if (!run) return false;
   const goal = await linkedGoalForRun(prisma, run);
   if (!goal?.boardItemId || !goal.boardWorkspaceId || !itemIds.includes(goal.boardItemId))
     return false;
-  const effectiveWorkspace = workspaceId ?? run.boardWorkspaceId ?? undefined;
-  return effectiveWorkspace === goal.boardWorkspaceId;
+  return workspaceId === goal.boardWorkspaceId;
 }

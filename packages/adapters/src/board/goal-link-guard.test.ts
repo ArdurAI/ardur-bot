@@ -53,29 +53,16 @@ it("blocks a direct close of the linked item and allows a different item", async
   );
 });
 
-it("does not refuse another board's item when the workspace is omitted", async () => {
+it("compares the resolved board identity even when item tokens match", async () => {
   const scope = { spaceId: "space", userId: "owner", botId: "builder", runId: "run" };
-  const run = (boardWorkspaceId: string | null) =>
-    ({
-      run: {
-        findFirst: async () => ({
-          spaceId: "space",
-          userId: "owner",
-          goalId: "goal",
-          delegationRootTaskId: null,
-          taskId: "root",
-          boardWorkspaceId,
-        }),
-      },
-      teamGoal: { findFirst: async () => linked },
-    }) as unknown as PrismaClient;
-  await expect(
-    goalLinkForbidsItemClose(run("other-board"), scope, undefined, ["board-a"]),
-  ).resolves.toBe(false);
-  await expect(goalLinkForbidsItemClose(run(null), scope, undefined, ["board-a"])).resolves.toBe(
+  const prisma = {
+    run: { findFirst: async () => ({ spaceId: "space", userId: "owner", goalId: "goal" }) },
+    teamGoal: { findFirst: async () => linked },
+  } as unknown as PrismaClient;
+  await expect(goalLinkForbidsItemClose(prisma, scope, "other-board", ["board-a"])).resolves.toBe(
     false,
   );
-  await expect(
-    goalLinkForbidsItemClose(run("workspace"), scope, undefined, ["board-a"]),
-  ).resolves.toBe(true);
+  await expect(goalLinkForbidsItemClose(prisma, scope, "workspace", ["board-a"])).resolves.toBe(
+    true,
+  );
 });

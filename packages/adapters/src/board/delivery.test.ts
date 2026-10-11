@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@ardurbot/db";
 import { afterEach, expect, it, vi } from "vitest";
 import { parseBeadsItem } from "./beads.js";
+import { goalBoardFixture } from "./goal-delivery-fixture.js";
 import { reconcileBoardOutcomes } from "./reconcile.js";
 import { BoardService } from "./service.js";
 import { finishBoardRun } from "./tools.js";
@@ -203,3 +204,33 @@ it("does not close a linked goal when the run reports done", async () => {
   expect(f.provider.comment).toHaveBeenCalledTimes(1);
   expect(f.provider.close).not.toHaveBeenCalled();
 });
+
+it.each(
+  ["coordinator", "descendant"].flatMap((role) =>
+    ["immediate", "reconciliation"].map((caller) => [role, caller] as const),
+  ),
+)(
+  "%s completion cannot close the linked item during %s delivery through real Beads",
+  async (role, caller) => {
+    const f = fixture("completed");
+    Object.assign(
+      f.run,
+      role === "coordinator" ? { goalId: "goal" } : { delegationRootTaskId: "root" },
+    );
+    const prisma = f.client();
+    Object.assign(prisma, { goalBoardDelivery: { findMany: vi.fn(async () => []) } });
+    vi.spyOn(prisma.teamGoal, "findFirst").mockResolvedValue({
+      id: "goal",
+      boardWorkspaceId: "workspace",
+      boardItemId: "board-a",
+    } as never);
+    const board = goalBoardFixture();
+    vi.spyOn(BoardService.prototype, "provider").mockImplementation(async () => board.provider());
+    if (caller === "immediate") await finishBoardRun({ prisma }, scope, "Outcome");
+    else await reconcileBoardOutcomes({ prisma, dataDir: "/fixture/app" });
+    expect(board.calls.filter(({ argv }) => argv[0] === "comments")).toHaveLength(1);
+    expect(board.closes()).toHaveLength(0);
+    expect(board.item.status).not.toBe("closed");
+    expect(f.run.boardCommentedAt).toBeInstanceOf(Date);
+  },
+);

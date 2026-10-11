@@ -44,7 +44,8 @@ function allowedBoardMetadata(value: string): boolean {
     /^ardur_run_id=[A-Za-z0-9_-]{1,128}$/.test(value) ||
     /^ardur_bot_id=[A-Za-z0-9_-]{1,128}$/.test(value) ||
     /^ardur_filed_by=[\p{L}\p{N}][\p{L}\p{N} ._'’-]{0,79}$/u.test(value) ||
-    /^ardur_gd_[a-f0-9]{16}=[1-9][0-9]{0,8}:(c0|c1):(x0|x1|x2|x3)$/.test(value)
+    /^ardur_gd_[a-f0-9]{16}=[1-9][0-9]{0,8}:(c0|c1):(x0|x1|x2|x3)$/.test(value) ||
+    /^ardur_gd_[a-f0-9]{16}=[1-9][0-9]{0,8}:c1:x4$/.test(value)
   );
 }
 /** Validate a complete command grammar. Global flags, file inputs and shell execution are absent. */

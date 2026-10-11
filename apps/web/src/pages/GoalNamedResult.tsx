@@ -35,7 +35,7 @@ export function GoalNamedResult({
     <GroupGoalStrip
       goal={shown.goal}
       openReview
-      recordedResult={!shown.current}
+      recordedResult={!shown.current || shown.goal.status !== "completed"}
       onRefresh={async () => {
         setView(await rpc.goals.revision({ groupId, goalId, revisionId }));
       }}

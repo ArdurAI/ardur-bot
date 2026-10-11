@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import type { BoardRun, BoardRunResult, BoardWorkspace } from "@ardurbot/contracts/board";
+import { validateBoardArgv } from "@ardurbot/host-runtime/board/argv";
 import { expect, it } from "vitest";
 import { BeadsBoardProvider } from "./beads.js";
 import { goalBoardMarker } from "./goal-delivery-key.js";
@@ -46,6 +47,7 @@ function runner(
 ) {
   const calls: string[][] = [];
   const run = async (request: BoardRun) => {
+    validateBoardArgv(request.argv);
     calls.push(request.argv);
     const command = request.argv[0];
     if (command === "show") {
@@ -172,13 +174,14 @@ it("does not close an item the owner reopened when the ledger already records th
 it("does not close again after a committed close response is lost and the owner reopens the item", async () => {
   const item = itemFromRecording();
   let loseClose = true;
+  let history: unknown = recorded.history;
   const calls: string[][] = [];
   const run = async (request: BoardRun) => {
+    validateBoardArgv(request.argv);
     calls.push(request.argv);
     const command = request.argv[0];
     if (command === "show") return { ok: true as const, stdout: JSON.stringify([item]) };
-    if (command === "history")
-      return { ok: true as const, stdout: JSON.stringify(recorded.history) };
+    if (command === "history") return { ok: true as const, stdout: JSON.stringify(history) };
     if (command === "update") {
       for (let index = 0; index < request.argv.length; index += 1) {
         if (request.argv[index] !== "--set-metadata") continue;
@@ -220,10 +223,19 @@ it("does not close again after a committed close response is lost and the owner 
   };
   await expect(provider(run).deliverKeyed(input)).rejects.toThrow(/response lost/);
   item.status = "open";
+  await expect(provider(run).deliverKeyed({ ...input, generation: 2 })).rejects.toThrow(
+    /uncertain/,
+  );
+  history = [
+    {
+      CommitDate: "2026-01-02T00:00:00Z",
+      Issue: { status: "closed", close_reason: "Goal accepted" },
+    },
+  ];
   const retry = await provider(run).deliverKeyed({ ...input, generation: 2 });
   expect(calls.filter((argv) => argv[0] === "close")).toHaveLength(1);
   expect(item.status).toBe("open");
-  expect(item.metadata[`ardur_gd_${HASH}`]).toBe("1:c1:x4");
+  expect(item.metadata[`ardur_gd_${HASH}`]).toBe("2:c1:x3");
   expect(retry.closedByThisDelivery).toBe(false);
   expect(retry.leftOpen).toBe(true);
 });
@@ -242,6 +254,7 @@ it("does not close an open item whose history shows this delivery already closed
   ];
   const calls: string[][] = [];
   const run = async (request: BoardRun) => {
+    validateBoardArgv(request.argv);
     calls.push(request.argv);
     const command = request.argv[0];
     if (command === "show") return { ok: true as const, stdout: JSON.stringify([item]) };

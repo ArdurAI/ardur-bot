@@ -207,7 +207,21 @@ export async function executeBoardTool(
   const secrets = options.secrets ?? [];
   let provider: Awaited<ReturnType<BoardService["provider"]>>;
   try {
-    provider = await service.provider(scope, input.workspaceId);
+    // Pin the workspace used by the close guard and the mutation to the same identity.
+    const workspaceId =
+      name === "board_close"
+        ? await service.assertBotMayClose(
+            scope,
+            input.workspaceId,
+            boardToolSchemas.board_close.parse(raw).ids,
+          )
+        : name === "board_update" &&
+            boardToolSchemas.board_update.parse(raw).patch.status === "closed"
+          ? await service.assertBotMayClose(scope, input.workspaceId, [
+              boardToolSchemas.board_update.parse(raw).id,
+            ])
+          : input.workspaceId;
+    provider = await service.provider(scope, workspaceId);
   } catch (error) {
     const hinted = await deniedBoardError(service, scope, error);
     if (hinted) return hinted;
@@ -229,8 +243,6 @@ export async function executeBoardTool(
     }
     case "board_update": {
       const args = boardToolSchemas.board_update.parse(raw);
-      if (args.patch.status === "closed")
-        await service.assertBotMayClose(scope, input.workspaceId, [args.id]);
       return provider.update(args.id, redactBoardFields(args.patch, secrets));
     }
     case "board_claim": {
@@ -239,7 +251,6 @@ export async function executeBoardTool(
     }
     case "board_close": {
       const args = boardToolSchemas.board_close.parse(raw);
-      await service.assertBotMayClose(scope, input.workspaceId, args.ids);
       return provider.close(args.ids, redactBoardText(args.reason, secrets));
     }
     case "board_comment": {
