@@ -2085,6 +2085,7 @@ msgid "Close navigation"
 msgstr "메뉴 닫기"
 
 #: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Close panel"
 msgstr "패널 닫기"
 

@@ -2085,6 +2085,7 @@ msgid "Close navigation"
 msgstr "关闭导航"
 
 #: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Close panel"
 msgstr "关闭面板"
 
