@@ -4,6 +4,7 @@ import type { DeviceProof } from "@ardurbot/contracts";
 import { deviceSignedText } from "@ardurbot/contracts";
 import { BoardError } from "@ardurbot/contracts/board";
 import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
+import { ORPCError } from "@orpc/server";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import { boardCall } from "./board.js";
@@ -710,4 +711,35 @@ it("reads the saved final answer after this device admits steering on another de
   expect(await response.json()).toMatchObject({ run: { messageId: "answer", failure: null } });
   f.receipts.length = 0;
   expect((await f.call(f.signed("runs/get", { runId: "run-0" }))).status).toBe(403);
+});
+
+it("does not execute threads/markRead if the device is revoked before the procedure runs", async () => {
+  const f = fixture();
+  let grantChecks = 0;
+  f.tx.deviceGrant.findFirst.mockImplementation(async () => {
+    grantChecks++;
+    if (grantChecks > 1) return null;
+    return f.grant;
+  });
+  const response = await f.call(
+    f.signed("rpc", { procedure: "threads/markRead", input: { botId: "chief" } }),
+  );
+  expect(response.status).toBe(403);
+  expect(f.read).not.toHaveBeenCalled();
+});
+
+it("maps ORPCError CONFLICT to an HTTP 409 response", async () => {
+  const f = fixture();
+  f.read.mockImplementation(async () => {
+    throw new ORPCError("CONFLICT", {
+      message: "Answer the pending ask first.",
+      data: { reason: "waiting_input" },
+    });
+  });
+  const response = await f.call(f.signed("rpc", { procedure: "threads/messages", input: {} }));
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({
+    message: "Answer the pending ask first.",
+    problem: { reason: "waiting_input" },
+  });
 });

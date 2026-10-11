@@ -512,6 +512,10 @@ msgstr ""
 msgid "Accept"
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Accept result"
+msgstr "Sonucu kabul et"
+
 #: src/pages/LearningObservation.tsx
 msgid "Acceptance"
 msgstr ""
@@ -3161,6 +3165,10 @@ msgstr "Parola sıfırlanamadı"
 msgid "Could not restore this revision. Reload and try again."
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Could not review result. Try again."
+msgstr "Sonuç incelenemedi. Tekrar deneyin."
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not revoke connection"
 msgstr "Bağlantı iptal edilemedi"
@@ -4222,6 +4230,10 @@ msgstr "Her"
 msgid "every {intervalAmountSelect} {intervalUnitSelect}"
 msgstr "her {intervalAmountSelect} {intervalUnitSelect}"
 
+#: src/pages/GroupPanel.tsx
+msgid "Every condition must pass."
+msgstr "Her koşul geçmelidir."
+
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineSchedule.tsx
 msgid "Every day"
@@ -4359,6 +4371,10 @@ msgstr ""
 msgid "External conversation"
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Fail"
+msgstr "Karşılanmadı"
+
 #: src/components/CloudAgentCard.tsx
 msgid "failed"
 msgstr "başarısız"
@@ -4423,6 +4439,10 @@ msgstr "Bu bilgisayarda dosyalar kullanılamıyor."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Filter"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Final owner review"
+msgstr "Sahibin son incelemesi"
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Find a destination"
@@ -6885,6 +6905,10 @@ msgstr "Beklet"
 msgid "Partially reported"
 msgstr "Kısmen raporlandı"
 
+#: src/pages/GroupPanel.tsx
+msgid "Pass"
+msgstr "Karşılandı"
+
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
@@ -7420,6 +7444,10 @@ msgstr "Kayıtlı klasörler"
 msgid "Reject"
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Reject result"
+msgstr "Sonucu reddet"
+
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Rejected"
@@ -7769,6 +7797,10 @@ msgid "Restricted"
 msgstr ""
 
 #: src/pages/GroupPanel.tsx
+msgid "Result changed; review again."
+msgstr "Sonuç değişti. Yeniden inceleyin."
+
+#: src/pages/GroupPanel.tsx
 msgid "Resume group messages"
 msgstr "Grup mesajlarını sürdür"
 
@@ -7858,6 +7890,10 @@ msgstr ""
 msgid "Review model: {0}. Model usage may incur charges."
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Review result"
+msgstr "Sonucu incele"
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Review saved copy"
 msgstr ""
@@ -7906,6 +7942,10 @@ msgstr "İptal et"
 #: src/pages/DevicesSettings.tsx
 msgid "Revoked"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Rework notes"
+msgstr "Düzeltme notları"
 
 #: src/components/Context.tsx
 msgid "Rewritten {time}"
@@ -10227,6 +10267,10 @@ msgstr ""
 #: src/pages/dashboard/panels.ts
 msgid "Work"
 msgstr "İş"
+
+#: src/pages/GroupPanel.tsx
+msgid "Work is still active."
+msgstr "Çalışma hâlâ sürüyor."
 
 #: src/pages/board/BoardColumns.tsx
 msgid "Work items"

@@ -512,6 +512,10 @@ msgstr ""
 msgid "Accept"
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Accept result"
+msgstr "接受结果"
+
 #: src/pages/LearningObservation.tsx
 msgid "Acceptance"
 msgstr ""
@@ -3161,6 +3165,10 @@ msgstr "无法重置密码"
 msgid "Could not restore this revision. Reload and try again."
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Could not review result. Try again."
+msgstr "无法审核结果，请重试。"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not revoke connection"
 msgstr "无法撤销连接"
@@ -4222,6 +4230,10 @@ msgstr "每"
 msgid "every {intervalAmountSelect} {intervalUnitSelect}"
 msgstr "每 {intervalAmountSelect} {intervalUnitSelect}"
 
+#: src/pages/GroupPanel.tsx
+msgid "Every condition must pass."
+msgstr "每个条件都必须通过。"
+
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineSchedule.tsx
 msgid "Every day"
@@ -4359,6 +4371,10 @@ msgstr ""
 msgid "External conversation"
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Fail"
+msgstr "未通过"
+
 #: src/components/CloudAgentCard.tsx
 msgid "failed"
 msgstr "失败"
@@ -4423,6 +4439,10 @@ msgstr "此计算机上的文件不可用。"
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Filter"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Final owner review"
+msgstr "所有者最终审核"
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Find a destination"
@@ -6885,6 +6905,10 @@ msgstr "搁置"
 msgid "Partially reported"
 msgstr "部分已报告"
 
+#: src/pages/GroupPanel.tsx
+msgid "Pass"
+msgstr "通过"
+
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
@@ -7420,6 +7444,10 @@ msgstr "已注册文件夹"
 msgid "Reject"
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Reject result"
+msgstr "拒绝结果"
+
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Rejected"
@@ -7769,6 +7797,10 @@ msgid "Restricted"
 msgstr ""
 
 #: src/pages/GroupPanel.tsx
+msgid "Result changed; review again."
+msgstr "结果已更改，请重新审核。"
+
+#: src/pages/GroupPanel.tsx
 msgid "Resume group messages"
 msgstr "恢复群组消息"
 
@@ -7858,6 +7890,10 @@ msgstr ""
 msgid "Review model: {0}. Model usage may incur charges."
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Review result"
+msgstr "审核结果"
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Review saved copy"
 msgstr ""
@@ -7906,6 +7942,10 @@ msgstr "撤销"
 #: src/pages/DevicesSettings.tsx
 msgid "Revoked"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Rework notes"
+msgstr "返工说明"
 
 #: src/components/Context.tsx
 msgid "Rewritten {time}"
@@ -10227,6 +10267,10 @@ msgstr ""
 #: src/pages/dashboard/panels.ts
 msgid "Work"
 msgstr "工作"
+
+#: src/pages/GroupPanel.tsx
+msgid "Work is still active."
+msgstr "工作仍在进行中。"
 
 #: src/pages/board/BoardColumns.tsx
 msgid "Work items"

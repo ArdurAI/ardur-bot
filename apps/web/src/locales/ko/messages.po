@@ -512,6 +512,10 @@ msgstr ""
 msgid "Accept"
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Accept result"
+msgstr "결과 승인"
+
 #: src/pages/LearningObservation.tsx
 msgid "Acceptance"
 msgstr ""
@@ -3161,6 +3165,10 @@ msgstr "비밀번호를 재설정할 수 없습니다"
 msgid "Could not restore this revision. Reload and try again."
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Could not review result. Try again."
+msgstr "결과를 검토하지 못했습니다. 다시 시도하세요."
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not revoke connection"
 msgstr "연결을 해제하지 못했습니다."
@@ -4222,6 +4230,10 @@ msgstr "매"
 msgid "every {intervalAmountSelect} {intervalUnitSelect}"
 msgstr "{intervalAmountSelect} {intervalUnitSelect}마다"
 
+#: src/pages/GroupPanel.tsx
+msgid "Every condition must pass."
+msgstr "모든 조건을 통과해야 합니다."
+
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineSchedule.tsx
 msgid "Every day"
@@ -4359,6 +4371,10 @@ msgstr ""
 msgid "External conversation"
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Fail"
+msgstr "미충족"
+
 #: src/components/CloudAgentCard.tsx
 msgid "failed"
 msgstr "실패"
@@ -4423,6 +4439,10 @@ msgstr "이 컴퓨터에서는 파일을 사용할 수 없습니다."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Filter"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Final owner review"
+msgstr "소유자의 최종 검토"
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Find a destination"
@@ -6885,6 +6905,10 @@ msgstr "보류"
 msgid "Partially reported"
 msgstr "일부만 보고됨"
 
+#: src/pages/GroupPanel.tsx
+msgid "Pass"
+msgstr "충족"
+
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
@@ -7420,6 +7444,10 @@ msgstr "등록된 폴더"
 msgid "Reject"
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Reject result"
+msgstr "결과 거절"
+
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Rejected"
@@ -7769,6 +7797,10 @@ msgid "Restricted"
 msgstr ""
 
 #: src/pages/GroupPanel.tsx
+msgid "Result changed; review again."
+msgstr "결과가 변경되었습니다. 다시 검토하세요."
+
+#: src/pages/GroupPanel.tsx
 msgid "Resume group messages"
 msgstr "그룹 메시지 다시 시작"
 
@@ -7858,6 +7890,10 @@ msgstr ""
 msgid "Review model: {0}. Model usage may incur charges."
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Review result"
+msgstr "결과 검토"
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Review saved copy"
 msgstr ""
@@ -7906,6 +7942,10 @@ msgstr "연결 해제"
 #: src/pages/DevicesSettings.tsx
 msgid "Revoked"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Rework notes"
+msgstr "수정 메모"
 
 #: src/components/Context.tsx
 msgid "Rewritten {time}"
@@ -10227,6 +10267,10 @@ msgstr ""
 #: src/pages/dashboard/panels.ts
 msgid "Work"
 msgstr "작업"
+
+#: src/pages/GroupPanel.tsx
+msgid "Work is still active."
+msgstr "작업이 아직 진행 중입니다."
 
 #: src/pages/board/BoardColumns.tsx
 msgid "Work items"

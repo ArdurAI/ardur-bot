@@ -719,6 +719,7 @@ export async function createApp(
     secrets.load(instance.privateKeyCiphertext, instance.instanceId),
   );
   mountRemoteDevices(app, {
+    shutdown: shutdown.signal,
     prisma,
     events,
     jobs,

@@ -1,21 +1,25 @@
+import type {
+  Bot,
+  BotCommunicationPolicy,
+  Goal,
+  Group,
+  GroupMember,
+  RoomPolicyPatch,
+  SetGroupMemberModelPinInput,
+} from "@ardurbot/contracts";
 import {
-  type Bot,
-  type BotCommunicationPolicy,
-  type Goal,
+  GOAL_FINAL_REVIEW_DESCRIPTION,
   GROUP_MEMBER_MAX,
   GROUP_MEMBER_MIN,
-  type Group,
-  type GroupMember,
   parseRoomPolicy,
   ROOM_POLICY_MAX_CONCURRENT_RUNS_MAX,
   ROOM_POLICY_MAX_CONCURRENT_RUNS_MIN,
-  type RoomPolicyPatch,
   runtimeNames,
   runtimeSupportsTools,
-  type SetGroupMemberModelPinInput,
 } from "@ardurbot/contracts";
 import { BotAvatar, Button, Input, NativeSelect, NativeSelectOption } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
+import { ORPCError } from "@orpc/client";
 import { Check, X } from "lucide-react";
 import {
   lazy,
@@ -509,10 +513,76 @@ export function GroupSettings({
   );
 }
 
-export function GroupGoalStrip({ goal, onStop }: { goal: Goal; onStop: () => Promise<void> }) {
+export function GroupGoalStrip({
+  goal,
+  onStop,
+  onRefresh,
+}: {
+  goal: Goal;
+  onStop: () => Promise<void>;
+  onRefresh: () => Promise<void>;
+}) {
   const { t } = useLingui();
   const [stopping, setStopping] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+  const [notes, setNotes] = useState("");
+  const reviewPending = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  async function markCondition(conditionId: string, status: "pass" | "fail") {
+    if (!goal.currentRevision || reviewPending.current) return;
+    reviewPending.current = true;
+    setReviewing(true);
+    setError(null);
+    try {
+      await rpc.goals.reviewCondition({
+        goalId: goal.id,
+        revisionId: goal.currentRevision.id,
+        conditionId,
+        status,
+      });
+      await onRefresh();
+    } catch (cause) {
+      const reason = cause instanceof ORPCError ? cause.data?.reason : undefined;
+      setError(
+        reason === "revision-changed"
+          ? t`Result changed; review again.`
+          : t`Could not review result. Try again.`,
+      );
+      if (reason === "revision-changed") await onRefresh().catch(() => undefined);
+    } finally {
+      reviewPending.current = false;
+      setReviewing(false);
+    }
+  }
+  async function review(action: "accept" | "reject") {
+    if (!goal.currentRevision || reviewPending.current) return;
+    const reworkNotes = notes.trim();
+    if (action === "reject" && !reworkNotes) return;
+    reviewPending.current = true;
+    setReviewing(true);
+    setError(null);
+    try {
+      const input = { goalId: goal.id, revisionId: goal.currentRevision.id };
+      if (action === "accept") await rpc.goals.accept(input);
+      else await rpc.goals.reject({ ...input, reworkNotes });
+      await onRefresh();
+    } catch (cause) {
+      const reason = cause instanceof ORPCError ? cause.data?.reason : undefined;
+      setError(
+        reason === "revision-changed"
+          ? t`Result changed; review again.`
+          : reason === "work-active"
+            ? t`Work is still active.`
+            : reason === "conditions-open"
+              ? t`Every condition must pass.`
+              : t`Could not review result. Try again.`,
+      );
+      if (reason === "revision-changed") await onRefresh().catch(() => undefined);
+    } finally {
+      reviewPending.current = false;
+      setReviewing(false);
+    }
+  }
   const status =
     goal.status === "running"
       ? t`Working`
@@ -537,6 +607,82 @@ export function GroupGoalStrip({ goal, onStop }: { goal: Goal; onStop: () => Pro
           {goal.tokenLimit.toLocaleString()} <Trans>tokens</Trans> ·{" "}
           {new Date(goal.untilAt).toLocaleString()}
         </summary>
+        {goal.status === "completed" && goal.currentRevision ? (
+          <div className="py-2 border-b border-border mb-2">
+            <h4 className="font-semibold mb-1">
+              <Trans>Review result</Trans>
+            </h4>
+            <p className="text-sm mb-2">{goal.currentRevision.summary}</p>
+            <ul className="text-sm list-disc pl-4 mb-3">
+              {goal.currentRevision.conditions.map((cond) => (
+                <li key={cond.id} className="mb-1">
+                  {cond.description === GOAL_FINAL_REVIEW_DESCRIPTION || cond.id === "cond-final"
+                    ? t`Final owner review`
+                    : cond.description}
+                  :
+                  {cond.status === "pass" ? (
+                    <span className="text-success ml-1">
+                      <Trans>Pass</Trans>
+                    </span>
+                  ) : cond.status === "fail" ? (
+                    <span className="text-destructive ml-1">
+                      <Trans>Fail</Trans>
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground ml-1">
+                      <Trans>Unknown</Trans>
+                    </span>
+                  )}
+                  <span className="ml-2 inline-flex gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={reviewing}
+                      onClick={() => void markCondition(cond.id, "pass")}
+                    >
+                      <Trans>Pass</Trans>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={reviewing}
+                      onClick={() => void markCondition(cond.id, "fail")}
+                    >
+                      <Trans>Fail</Trans>
+                    </Button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <textarea
+              aria-label={t`Rework notes`}
+              value={notes}
+              rows={2}
+              maxLength={4000}
+              disabled={reviewing}
+              onChange={(event) => setNotes(event.target.value)}
+              className="mb-2 w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground"
+            />
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={reviewing}
+                onClick={() => void review("accept")}
+              >
+                <Trans>Accept result</Trans>
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={reviewing || notes.trim().length === 0}
+                onClick={() => void review("reject")}
+              >
+                <Trans>Reject result</Trans>
+              </Button>
+            </div>
+          </div>
+        ) : null}
         <dl className="grid grid-cols-2 gap-x-3 gap-y-1 py-2">
           <dt>
             <Trans>Used</Trans>

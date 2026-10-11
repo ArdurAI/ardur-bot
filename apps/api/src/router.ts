@@ -165,6 +165,7 @@ import {
 import { decodeHistoricalHermesRuntimeConfig } from "@ardurbot/core/runtime-config";
 import type { Pool, PrismaClient, ThreadEvents } from "@ardurbot/db";
 import {
+  acceptGoal,
   appendEventInTransaction,
   BotSectionNameConflictError,
   CannotDeleteDefaultSpaceError,
@@ -183,6 +184,7 @@ import {
   findModelCredential,
   findSpaceMemoryConfig,
   formatMessagingLinkCode,
+  GoalReviewConflict,
   getBotCommunicationPolicy,
   getGoal,
   getUserPreferences,
@@ -196,10 +198,12 @@ import {
   newestVoiceCredentialOrder,
   Prisma,
   parseComputerMode,
+  rejectGoal,
   releaseSpaceDeletionClaim,
   renewSpaceDeletionClaim,
   requestCancel,
   resetBriefRetriesForConnection,
+  reviewGoalCondition,
   SPACE_DELETION_CLAIM_TIMEOUT_MS,
   SpaceDeletionInProgressError,
   SpaceLimitError,
@@ -210,6 +214,7 @@ import {
   setBotCommunicationPaused,
   startGoal,
   stopGoal,
+  submitGoal,
   touchGroupUpdatedAt,
   updateUserPreferences,
 } from "@ardurbot/db";
@@ -352,11 +357,7 @@ import { assertTeachingSendAllowed, createTaughtSkillsService } from "./taught-s
 import { acceptTeamTask, teamBoard } from "./team.js";
 import type { createTerminalRoutes } from "./terminal-routes.js";
 import { guardComputerTakeover } from "./terminal-takeover.js";
-import {
-  isPeerRun,
-  loadMessagePage,
-  shouldForwardPeerThreadEvent,
-} from "./thread-message-pages.js";
+import { loadMessagePage, shouldForwardThreadEvent } from "./thread-message-pages.js";
 import {
   reactToThreadMessage,
   resolveThreadTarget,
@@ -639,6 +640,19 @@ function hermesLocalInstallOffer(
   if (probe.install) return probe.install;
   if (!probe.available && probe.reason?.includes("not installed")) return { state: "absent" };
   return undefined;
+}
+
+async function goalReviewCall<T>(action: () => Promise<T>): Promise<T> {
+  try {
+    return await action();
+  } catch (error) {
+    if (error instanceof IsolationError) throw new ORPCError("FORBIDDEN");
+    if (error instanceof GoalReviewConflict)
+      throw new ORPCError("CONFLICT", { data: { reason: error.reason } });
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")
+      throw new ORPCError("CONFLICT", { data: { reason: "already-reviewed" } });
+    throw error;
+  }
 }
 
 export function createRouter(deps: RouterDeps): Router<typeof appContract, RouterContext> {
@@ -2251,9 +2265,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           input.cursor,
           context.signal,
         )) {
-          if (await isPeerRun(deps.prisma, event.runId, peerRunCache)) {
-            if (!shouldForwardPeerThreadEvent(event)) continue;
-          }
+          if (!(await shouldForwardThreadEvent(deps.prisma, event, peerRunCache))) continue;
           yield event;
         }
       }),
@@ -6423,6 +6435,40 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       }),
     },
     goals: {
+      submit: authed.goals.submit.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        return goalReviewCall(() => submitGoal(deps.prisma, context.actor, input));
+      }),
+      accept: authed.goals.accept.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        return goalReviewCall(() => acceptGoal(deps.prisma, context.actor, input));
+      }),
+      reject: authed.goals.reject.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        const verdict = await goalReviewCall(() => rejectGoal(deps.prisma, context.actor, input));
+        const wake = await deps.prisma.run.findUnique({
+          where: {
+            spaceId_clientNonce: {
+              spaceId: context.actor.spaceId,
+              clientNonce: `goal-rework:${input.revisionId}`,
+            },
+          },
+          select: { id: true, status: true },
+        });
+        if (wake?.status === "queued")
+          await deps.jobs.enqueue(runContinueJob(wake.id)).catch((error) => {
+            getLogger().error("goal rework enqueue", error);
+          });
+        return verdict;
+      }),
+      reviewCondition: authed.goals.reviewCondition.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        return goalReviewCall(() => reviewGoalCondition(deps.prisma, context.actor, input));
+      }),
       start: authed.goals.start.handler(async ({ context, input }) => {
         if (!context.actor.isDeploymentOwner || !context.authSessionId)
           throw new ORPCError("FORBIDDEN");

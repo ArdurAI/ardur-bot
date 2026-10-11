@@ -78,6 +78,14 @@ export async function getDeviceRun(
   grant: DeviceGrant,
   input: { runId: string } | { taskId: string },
 ) {
+  return detail(prisma, grant, await requireDeviceRun(prisma, grant, input));
+}
+
+export async function requireDeviceRun(
+  prisma: PrismaClient,
+  grant: DeviceGrant,
+  input: { runId: string } | { taskId: string },
+) {
   const receipt = await prisma.dispatchReceipt.findFirst({
     where: { ...receiptScope(grant), ...input },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -94,7 +102,7 @@ export async function getDeviceRun(
       })
     : null;
   if (!run) throw new DeviceRequestError(DEVICE_RECORD_UNAVAILABLE);
-  return detail(prisma, grant, run);
+  return run;
 }
 
 export async function listDeviceRuns(

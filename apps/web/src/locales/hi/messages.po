@@ -512,6 +512,10 @@ msgstr ""
 msgid "Accept"
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Accept result"
+msgstr "परिणाम स्वीकार करें"
+
 #: src/pages/LearningObservation.tsx
 msgid "Acceptance"
 msgstr ""
@@ -3161,6 +3165,10 @@ msgstr "पासवर्ड रीसेट नहीं किया जा �
 msgid "Could not restore this revision. Reload and try again."
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Could not review result. Try again."
+msgstr "परिणाम की समीक्षा नहीं हो सकी। फिर से कोशिश करें।"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not revoke connection"
 msgstr "कनेक्शन रद्द नहीं किया जा सका"
@@ -4222,6 +4230,10 @@ msgstr "हर"
 msgid "every {intervalAmountSelect} {intervalUnitSelect}"
 msgstr "हर {intervalAmountSelect} {intervalUnitSelect}"
 
+#: src/pages/GroupPanel.tsx
+msgid "Every condition must pass."
+msgstr "हर शर्त पास होनी चाहिए."
+
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineSchedule.tsx
 msgid "Every day"
@@ -4359,6 +4371,10 @@ msgstr ""
 msgid "External conversation"
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Fail"
+msgstr "पूरा नहीं हुआ"
+
 #: src/components/CloudAgentCard.tsx
 msgid "failed"
 msgstr "असफल"
@@ -4423,6 +4439,10 @@ msgstr "इस कंप्यूटर पर फ़ाइलें उपल�
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Filter"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Final owner review"
+msgstr "मालिक की अंतिम समीक्षा"
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Find a destination"
@@ -6885,6 +6905,10 @@ msgstr "पार्क करें"
 msgid "Partially reported"
 msgstr "आंशिक रूप से रिपोर्ट किया गया"
 
+#: src/pages/GroupPanel.tsx
+msgid "Pass"
+msgstr "पूरा हुआ"
+
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
@@ -7420,6 +7444,10 @@ msgstr "पंजीकृत फ़ोल्डर"
 msgid "Reject"
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Reject result"
+msgstr "परिणाम अस्वीकार करें"
+
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Rejected"
@@ -7769,6 +7797,10 @@ msgid "Restricted"
 msgstr ""
 
 #: src/pages/GroupPanel.tsx
+msgid "Result changed; review again."
+msgstr "परिणाम बदल गया है। फिर से समीक्षा करें।"
+
+#: src/pages/GroupPanel.tsx
 msgid "Resume group messages"
 msgstr "समूह संदेश फिर शुरू करें"
 
@@ -7858,6 +7890,10 @@ msgstr ""
 msgid "Review model: {0}. Model usage may incur charges."
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Review result"
+msgstr "परिणाम की समीक्षा करें"
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Review saved copy"
 msgstr ""
@@ -7906,6 +7942,10 @@ msgstr ""
 #: src/pages/DevicesSettings.tsx
 msgid "Revoked"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Rework notes"
+msgstr "पुनर्कार्य नोट"
 
 #: src/components/Context.tsx
 msgid "Rewritten {time}"
@@ -10227,6 +10267,10 @@ msgstr ""
 #: src/pages/dashboard/panels.ts
 msgid "Work"
 msgstr "काम"
+
+#: src/pages/GroupPanel.tsx
+msgid "Work is still active."
+msgstr "काम अभी जारी है।"
 
 #: src/pages/board/BoardColumns.tsx
 msgid "Work items"

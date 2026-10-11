@@ -24,6 +24,31 @@ import { deviceDigest } from "./device-grants.js";
 import { startDelegation, updateWorkerTask } from "./task-cards.js";
 
 describe("transactional delegation admission", () => {
+  it.each(["running", "completed", "accepted"])(
+    "checks %s goal before admitting a new worker",
+    async (status) => {
+      const f = fixture();
+      // Create the root before the attempted admission so refusal must preserve its budget.
+      await f.tx.delegationRoot.upsert({
+        create: { rootTaskId: "root", deadlineAt: new Date(Date.now() + 3_600_000) },
+      });
+      f.tx.teamGoal.findUnique.mockResolvedValue({ status } as never);
+      const before = structuredClone(f.state());
+      if (status === "running") {
+        await f.admit();
+        expect(f.state().rows).toHaveLength(1);
+      } else {
+        await expect(f.admit()).rejects.toMatchObject({ problem: { code: "authority-exceeded" } });
+        expect(f.state()).toEqual(before);
+        expect(f.tx.delegation.create).not.toHaveBeenCalled();
+        expect(f.tx.run.create).not.toHaveBeenCalled();
+        expect(f.tx.delegationRoot.update).not.toHaveBeenCalled();
+      }
+      expect(f.tx.teamGoal.findUnique).toHaveBeenCalledWith({
+        where: { rootTaskId: f.state().root.rootTaskId },
+      });
+    },
+  );
   it("keeps a card deadline below an explicit goal deadline and refuses an expired card", async () => {
     const future = new Date(Date.now() + 30 * 60_000);
     const later = new Date(Date.now() + 45 * 60_000);

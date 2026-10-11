@@ -531,3 +531,23 @@ test("group-goals: start a goal in a room and stop it", async ({ page }) => {
   await expect(page.getByText("Goal: Stopped", { exact: false })).toBeVisible();
   await capture(page, "docs-group-goals-stopped");
 });
+
+test("group-goals: review a submitted result and refresh after accepting it", async ({ page }) => {
+  const state = groupGoalDocsFixture(true);
+  await useDashboard(page, {
+    botCount: 2,
+    botNames: ["Planner"],
+    groups: [state.group],
+    rpc: state.rpc,
+  });
+  await page.goto("/app/g/operations-group");
+  await page.getByText("Goal: Completed", { exact: false }).click();
+  await expect(page.getByText("Final owner review", { exact: false })).toBeVisible();
+  await page.getByRole("textbox", { name: "Rework notes" }).fill("Revise the sample plan.");
+  await expect(page.getByRole("button", { name: "Accept result", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Reject result", exact: true })).toBeEnabled();
+  await capture(page, "docs-group-goals-review");
+  await page.getByRole("button", { name: "Accept result", exact: true }).click();
+  await expect(page.getByText("Goal: Accepted", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Accept result", exact: true })).toHaveCount(0);
+});

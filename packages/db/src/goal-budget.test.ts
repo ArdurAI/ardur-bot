@@ -21,6 +21,8 @@ const row = {
   untilAt: now,
   createdAt: now,
   stoppedAt: now,
+  // The goal query loads the latest submitted revision with the row.
+  revisions: [],
 };
 function snapshot(
   root: { usedTokens: number; reservedTokens: number; tokenLimit: number } | null,

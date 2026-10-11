@@ -23,6 +23,7 @@ export * from "./delegation.js";
 export * from "./desktop.js";
 export * from "./desktop-extensions.js";
 export * from "./desktop-setup.js";
+export * from "./device-event-stream.js";
 export * from "./dispatch.js";
 export * from "./domain.js";
 export * from "./effort-routing.js";

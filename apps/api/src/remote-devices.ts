@@ -4,6 +4,7 @@ import { admitRoutedDispatch as admitDispatch, validateDeviceApproval } from "@a
 import type { Actor, DeviceListenerState, DeviceScope, PairingPayload } from "@ardurbot/contracts";
 import {
   canonicalDispatchJson,
+  DeviceEventsInputSchema,
   DeviceMessagesGetInputSchema,
   DeviceProofSchema,
   DeviceRoomSendInputSchema,
@@ -43,6 +44,7 @@ import {
 import { ORPCError } from "@orpc/server";
 import { Hono } from "hono";
 import * as z from "zod";
+import { deviceRunEvents } from "./device-events.js";
 import { sendDeviceRoom } from "./device-rooms.js";
 import {
   DEVICE_RECORD_UNAVAILABLE,
@@ -57,6 +59,7 @@ export interface RemoteDevicesDeps {
   prisma: PrismaClient;
   events: ThreadEvents;
   jobs: JobPublisher;
+  shutdown?: AbortSignal;
   listenerState?: () => DeviceListenerState;
   trustedDesktopHints?: () => string[];
   homeProof?: (challenge: string) => { certificate: string; signature: string };
@@ -232,6 +235,7 @@ export const DEVICE_READ_PROCEDURES = new Set([
   "context/settings",
   "metrics/context",
 ]);
+export const STATE_CHANGING_READ_PROCEDURES = new Set(["threads/markRead"]);
 function publicGrant(grant: DeviceGrant) {
   return {
     grantId: grant.id,
@@ -251,10 +255,13 @@ export function mountRemoteDevices(
     if (error instanceof DeviceRequestError)
       return c.json({ message: error.message }, error.status);
     if (error instanceof IsolationError) return c.json({ message: DEVICE_RECORD_UNAVAILABLE }, 403);
-    if (error instanceof ORPCError && (error.code === "FORBIDDEN" || error.code === "BAD_REQUEST"))
+    if (
+      error instanceof ORPCError &&
+      (error.code === "FORBIDDEN" || error.code === "BAD_REQUEST" || error.code === "CONFLICT")
+    )
       return c.json(
         { message: error.message, ...(error.data ? { problem: error.data } : {}) },
-        error.code === "FORBIDDEN" ? 403 : 400,
+        error.code === "FORBIDDEN" ? 403 : error.code === "CONFLICT" ? 409 : 400,
       );
     if (error instanceof TypeError && error.message === UNICODE_MESSAGE)
       return c.json({ message: UNICODE_MESSAGE }, 400);
@@ -364,11 +371,7 @@ export function mountRemoteDevices(
       if (!grant.scopes.includes(scope))
         throw new DeviceRequestError("This action is unavailable from this device.");
     };
-    const readDevice = async (procedure: string, body: unknown) => {
-      const result = await deps.read(grant, procedure, body).then(
-        (value) => ({ ok: true as const, value }),
-        (error: unknown) => ({ ok: false as const, error }),
-      );
+    const verifyLiveReadGrant = async () => {
       const live = await deps.prisma.deviceGrant.findFirst({
         where: {
           id: grant.id,
@@ -383,6 +386,15 @@ export function mountRemoteDevices(
       });
       if (!live || !member || !live.scopes.includes("read"))
         throw new DeviceRequestError(DEVICE_RECORD_UNAVAILABLE);
+      return live;
+    };
+    const readDevice = async (procedure: string, body: unknown) => {
+      if (STATE_CHANGING_READ_PROCEDURES.has(procedure)) await verifyLiveReadGrant();
+      const result = await deps.read(grant, procedure, body).then(
+        (value) => ({ ok: true as const, value }),
+        (error: unknown) => ({ ok: false as const, error }),
+      );
+      await verifyLiveReadGrant();
       if (!result.ok) throw result.error;
       return result.value;
     };
@@ -502,6 +514,15 @@ export function mountRemoteDevices(
         requireScope("read");
         const body = DeviceRunGetInputSchema.parse(input.body);
         return c.json({ run: await getDeviceRun(deps.prisma, grant, body) });
+      }
+      case "events": {
+        requireScope("read");
+        return deviceRunEvents(
+          deps,
+          grant,
+          DeviceEventsInputSchema.parse(input.body),
+          c.req.raw.signal,
+        );
       }
       case "tasks/get": {
         requireScope("read");

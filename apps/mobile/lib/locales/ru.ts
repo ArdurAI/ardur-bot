@@ -1570,4 +1570,14 @@ export const RU_MESSAGES: Record<string, string> = {
     "Среда выполнения {runtime} остановилась. Повторите запуск.",
   "{runtime} could not finish this turn. Retry the run.":
     "{runtime} не смог завершить этот шаг. Повторите запуск.",
+  "Review result": "Проверить результат",
+  Pass: "Выполнено",
+  Fail: "Не выполнено",
+  "Accept result": "Принять результат",
+  "Reject result": "Отклонить результат",
+  "Result changed; review again.": "Результат изменился. Проверьте его снова.",
+  "Work is still active.": "Работа ещё продолжается.",
+  "Please address the failing conditions.": "Исправьте невыполненные условия.",
+  "Final owner review": "Итоговая проверка владельцем",
+  "Could not review result. Try again.": "Не удалось проверить результат. Попробуйте снова.",
 };

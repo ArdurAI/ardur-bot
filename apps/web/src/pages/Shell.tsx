@@ -3976,6 +3976,9 @@ export function ShellPage({
           {inGroup && goal && goal.groupId === groupId ? (
             <GroupGoalStrip
               goal={goal}
+              onRefresh={async () => {
+                setGoal(await rpc.goals.get({ groupId: goal.groupId }));
+              }}
               onStop={async () => {
                 setGoal(await rpc.goals.stop({ goalId: goal.id }));
               }}

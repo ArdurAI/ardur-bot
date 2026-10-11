@@ -512,6 +512,10 @@ msgstr "About spaces"
 msgid "Accept"
 msgstr "Accept"
 
+#: src/pages/GroupPanel.tsx
+msgid "Accept result"
+msgstr "Accept result"
+
 #: src/pages/LearningObservation.tsx
 msgid "Acceptance"
 msgstr "Acceptance"
@@ -3161,6 +3165,10 @@ msgstr "Could not reset password"
 msgid "Could not restore this revision. Reload and try again."
 msgstr "Could not restore this revision. Reload and try again."
 
+#: src/pages/GroupPanel.tsx
+msgid "Could not review result. Try again."
+msgstr "Could not review result. Try again."
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not revoke connection"
 msgstr "Could not revoke connection"
@@ -4222,6 +4230,10 @@ msgstr "Every"
 msgid "every {intervalAmountSelect} {intervalUnitSelect}"
 msgstr "every {intervalAmountSelect} {intervalUnitSelect}"
 
+#: src/pages/GroupPanel.tsx
+msgid "Every condition must pass."
+msgstr "Every condition must pass."
+
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineSchedule.tsx
 msgid "Every day"
@@ -4359,6 +4371,10 @@ msgstr "Extensions"
 msgid "External conversation"
 msgstr "External conversation"
 
+#: src/pages/GroupPanel.tsx
+msgid "Fail"
+msgstr "Fail"
+
 #: src/components/CloudAgentCard.tsx
 msgid "failed"
 msgstr "failed"
@@ -4423,6 +4439,10 @@ msgstr "Files are unavailable on this computer."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Filter"
 msgstr "Filter"
+
+#: src/pages/GroupPanel.tsx
+msgid "Final owner review"
+msgstr "Final owner review"
 
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Find a destination"
@@ -6885,6 +6905,10 @@ msgstr "Park"
 msgid "Partially reported"
 msgstr "Partially reported"
 
+#: src/pages/GroupPanel.tsx
+msgid "Pass"
+msgstr "Pass"
+
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
@@ -7420,6 +7444,10 @@ msgstr "Registered folders"
 msgid "Reject"
 msgstr "Reject"
 
+#: src/pages/GroupPanel.tsx
+msgid "Reject result"
+msgstr "Reject result"
+
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Rejected"
@@ -7769,6 +7797,10 @@ msgid "Restricted"
 msgstr "Restricted"
 
 #: src/pages/GroupPanel.tsx
+msgid "Result changed; review again."
+msgstr "Result changed; review again."
+
+#: src/pages/GroupPanel.tsx
 msgid "Resume group messages"
 msgstr "Resume group messages"
 
@@ -7858,6 +7890,10 @@ msgstr "Review import"
 msgid "Review model: {0}. Model usage may incur charges."
 msgstr "Review model: {0}. Model usage may incur charges."
 
+#: src/pages/GroupPanel.tsx
+msgid "Review result"
+msgstr "Review result"
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Review saved copy"
 msgstr "Review saved copy"
@@ -7906,6 +7942,10 @@ msgstr "Revoke"
 #: src/pages/DevicesSettings.tsx
 msgid "Revoked"
 msgstr "Revoked"
+
+#: src/pages/GroupPanel.tsx
+msgid "Rework notes"
+msgstr "Rework notes"
 
 #: src/components/Context.tsx
 msgid "Rewritten {time}"
@@ -10227,6 +10267,10 @@ msgstr "Window"
 #: src/pages/dashboard/panels.ts
 msgid "Work"
 msgstr "Work"
+
+#: src/pages/GroupPanel.tsx
+msgid "Work is still active."
+msgstr "Work is still active."
 
 #: src/pages/board/BoardColumns.tsx
 msgid "Work items"
