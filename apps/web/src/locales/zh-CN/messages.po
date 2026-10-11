@@ -1473,8 +1473,8 @@ msgstr "看板和例行任务"
 msgid "Board files will be kept."
 msgstr "看板文件将保留。"
 
+#: src/pages/GoalBoardLink.tsx
 #: src/pages/GoalForm.tsx
-#: src/pages/GroupPanel.tsx
 msgid "Board item"
 msgstr "看板事项"
 
@@ -1483,7 +1483,7 @@ msgid "Board status"
 msgstr "看板状态"
 
 #: src/pages/board/Board.tsx
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalBoardLink.tsx
 msgid "Board update pending"
 msgstr "看板更新待处理"
 
@@ -6746,7 +6746,7 @@ msgstr ""
 msgid "Open Ardur"
 msgstr "打开 Ardur"
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalBoardLink.tsx
 msgid "Open board item"
 msgstr "打开看板事项"
 

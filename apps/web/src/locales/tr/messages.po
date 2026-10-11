@@ -1473,8 +1473,8 @@ msgstr ""
 msgid "Board files will be kept."
 msgstr "Pano dosyaları korunacak."
 
+#: src/pages/GoalBoardLink.tsx
 #: src/pages/GoalForm.tsx
-#: src/pages/GroupPanel.tsx
 msgid "Board item"
 msgstr "Pano öğesi"
 
@@ -1483,7 +1483,7 @@ msgid "Board status"
 msgstr "Pano durumu"
 
 #: src/pages/board/Board.tsx
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalBoardLink.tsx
 msgid "Board update pending"
 msgstr "Pano güncellemesi bekleniyor"
 
@@ -6746,7 +6746,7 @@ msgstr ""
 msgid "Open Ardur"
 msgstr ""
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalBoardLink.tsx
 msgid "Open board item"
 msgstr "Pano öğesini aç"
 

@@ -1473,8 +1473,8 @@ msgstr "board and routine work"
 msgid "Board files will be kept."
 msgstr "Board files will be kept."
 
+#: src/pages/GoalBoardLink.tsx
 #: src/pages/GoalForm.tsx
-#: src/pages/GroupPanel.tsx
 msgid "Board item"
 msgstr "Board item"
 
@@ -1483,7 +1483,7 @@ msgid "Board status"
 msgstr "Board status"
 
 #: src/pages/board/Board.tsx
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalBoardLink.tsx
 msgid "Board update pending"
 msgstr "Board update pending"
 
@@ -6746,7 +6746,7 @@ msgstr "Open Accessibility settings"
 msgid "Open Ardur"
 msgstr "Open Ardur"
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalBoardLink.tsx
 msgid "Open board item"
 msgstr "Open board item"
 

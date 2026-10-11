@@ -1473,8 +1473,8 @@ msgstr ""
 msgid "Board files will be kept."
 msgstr "Se conservarán los archivos del tablero."
 
+#: src/pages/GoalBoardLink.tsx
 #: src/pages/GoalForm.tsx
-#: src/pages/GroupPanel.tsx
 msgid "Board item"
 msgstr "Elemento del tablero"
 
@@ -1483,7 +1483,7 @@ msgid "Board status"
 msgstr "Estado del tablero"
 
 #: src/pages/board/Board.tsx
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalBoardLink.tsx
 msgid "Board update pending"
 msgstr "Actualización del tablero pendiente"
 
@@ -6746,7 +6746,7 @@ msgstr ""
 msgid "Open Ardur"
 msgstr ""
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalBoardLink.tsx
 msgid "Open board item"
 msgstr "Abrir elemento del tablero"
 

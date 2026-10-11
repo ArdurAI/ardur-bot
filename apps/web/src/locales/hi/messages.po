@@ -1473,8 +1473,8 @@ msgstr ""
 msgid "Board files will be kept."
 msgstr "बोर्ड की फ़ाइलें सुरक्षित रहेंगी।"
 
+#: src/pages/GoalBoardLink.tsx
 #: src/pages/GoalForm.tsx
-#: src/pages/GroupPanel.tsx
 msgid "Board item"
 msgstr "बोर्ड आइटम"
 
@@ -1483,7 +1483,7 @@ msgid "Board status"
 msgstr "बोर्ड की स्थिति"
 
 #: src/pages/board/Board.tsx
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalBoardLink.tsx
 msgid "Board update pending"
 msgstr "बोर्ड अपडेट लंबित"
 
@@ -6746,7 +6746,7 @@ msgstr ""
 msgid "Open Ardur"
 msgstr ""
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalBoardLink.tsx
 msgid "Open board item"
 msgstr "बोर्ड आइटम खोलें"
 

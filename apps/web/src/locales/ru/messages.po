@@ -1473,8 +1473,8 @@ msgstr "задач с доски и регулярных задач"
 msgid "Board files will be kept."
 msgstr "Файлы доски будут сохранены."
 
+#: src/pages/GoalBoardLink.tsx
 #: src/pages/GoalForm.tsx
-#: src/pages/GroupPanel.tsx
 msgid "Board item"
 msgstr "Пункт доски"
 
@@ -1483,7 +1483,7 @@ msgid "Board status"
 msgstr "Состояние доски"
 
 #: src/pages/board/Board.tsx
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalBoardLink.tsx
 msgid "Board update pending"
 msgstr "Обновление доски ожидается"
 
@@ -6746,7 +6746,7 @@ msgstr ""
 msgid "Open Ardur"
 msgstr "Открыть Ardur"
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalBoardLink.tsx
 msgid "Open board item"
 msgstr "Открыть пункт доски"
 
