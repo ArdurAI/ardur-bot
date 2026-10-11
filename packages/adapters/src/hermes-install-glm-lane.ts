@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, lstatSync, readdirSync, readFileSync, readlinkSync } from "node:fs";
 import type { IncomingMessage } from "node:http";
 import { createServer } from "node:http";
 import path from "node:path";
@@ -56,12 +57,75 @@ export type TranslatedGlmResult = {
   serverClosed: boolean;
   leak: string;
   diagnostic: string;
+  installStatusBefore: string[];
+  installStatusAfter: string[];
+  installChanges: string[];
+  cutObserved: boolean;
 };
 
 const installStatus = (root: string) =>
   execFileSync("git", ["-C", root, "status", "--porcelain"], { encoding: "utf8" })
     .split("\n")
     .filter((line) => line && !line.includes("contributors/emails/"));
+
+/** Worktree bytes only. Git metadata is excluded so a status read cannot dirty the fingerprint. */
+const installFingerprint = (root: string) => {
+  const files = new Map<string, string>();
+  const walk = (dir: string) => {
+    for (const name of readdirSync(dir)) {
+      if (dir === root && name === ".git") continue;
+      const full = path.join(dir, name);
+      const rel = path.relative(root, full);
+      let stat: ReturnType<typeof lstatSync>;
+      try {
+        stat = lstatSync(full);
+      } catch {
+        files.set(rel, "missing");
+        continue;
+      }
+      if (stat.isSymbolicLink()) {
+        try {
+          files.set(rel, `link:${readlinkSync(full)}`);
+        } catch {
+          files.set(rel, "link:unreadable");
+        }
+        continue;
+      }
+      if (stat.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (!stat.isFile()) {
+        files.set(rel, `other:${stat.mode.toString(8)}`);
+        continue;
+      }
+      try {
+        files.set(
+          rel,
+          `${stat.mode.toString(8)}:${createHash("sha256").update(readFileSync(full)).digest("hex")}`,
+        );
+      } catch {
+        files.set(rel, "unreadable");
+      }
+    }
+  };
+  walk(root);
+  return files;
+};
+
+const fingerprintChanges = (before: Map<string, string>, after: Map<string, string>) => {
+  const changed: string[] = [];
+  for (const [rel, hash] of before) {
+    if (!after.has(rel)) changed.push(`removed ${rel}`);
+    else if (after.get(rel) !== hash) changed.push(`changed ${rel}`);
+  }
+  for (const rel of after.keys()) {
+    if (!before.has(rel)) changed.push(`added ${rel}`);
+  }
+  changed.sort();
+  if (changed.length <= 20) return changed;
+  return [...changed.slice(0, 20), `and ${changed.length - 20} more`];
+};
 
 const object = (value: unknown): Record<string, unknown> | undefined =>
   value !== null && typeof value === "object" && !Array.isArray(value)
@@ -136,6 +200,18 @@ function readBody(req: IncomingMessage): Promise<string> {
 async function startFakeGlm(mode: UpstreamMode, toolName: string) {
   const wires: Wire[] = [];
   let grant = "";
+  let cutObserved = false;
+  let resolveChunk: () => void = () => {};
+  let rejectChunk: (error: Error) => void = () => {};
+  const chunkObserved = new Promise<void>((resolve, reject) => {
+    resolveChunk = resolve;
+    rejectChunk = reject;
+  });
+  const noteChunkObserved = () => {
+    if (cutObserved) return;
+    cutObserved = true;
+    resolveChunk();
+  };
   const server = createServer(async (req, res) => {
     try {
       const pathName = req.url ?? "";
@@ -168,8 +244,20 @@ async function startFakeGlm(mode: UpstreamMode, toolName: string) {
       }
       if (mode === "cut") {
         res.writeHead(200, { "content-type": "text/event-stream" });
-        res.write(frame({ role: "assistant", content: "partial" }, null));
-        res.destroy();
+        res.flushHeaders();
+        const chunk = frame({ role: "assistant", content: "partial" }, null);
+        await new Promise<void>((resolve, reject) => {
+          res.write(chunk, (error) => (error ? reject(error) : resolve()));
+        });
+        const timer = setTimeout(() => {
+          rejectChunk(new Error("The broker did not observe the stream chunk."));
+        }, 20_000);
+        try {
+          await chunkObserved;
+          res.destroy();
+        } finally {
+          clearTimeout(timer);
+        }
         return;
       }
       const words = mode === "summary" ? "Fixture brief." : EXACT_WORDS;
@@ -202,6 +290,8 @@ async function startFakeGlm(mode: UpstreamMode, toolName: string) {
       });
     },
     listening: () => server.listening,
+    noteChunkObserved,
+    cutObserved: () => cutObserved,
   };
 }
 
@@ -218,13 +308,23 @@ async function runTranslatedGlm(
   trusted: { python: string; root: string },
   mode: UpstreamMode,
 ): Promise<TranslatedGlmResult> {
-  const before = installStatus(trusted.root);
+  const installStatusBefore = installStatus(trusted.root);
+  const beforePrint = installFingerprint(trusted.root);
   const models = catalogModels();
   const source = models.getModel(GLM_PROVIDER, GLM_MODEL_ID);
   if (!source) throw new Error("The GLM catalog model is missing.");
   const fake = await startFakeGlm(mode, "mcp__ardur__fixture_echo");
   const model = { ...source, baseUrl: fake.baseUrl };
-  setHermesProviderStream((next, context, options) => models.streamSimple(next, context, options));
+  setHermesProviderStream((next, context, options) => {
+    const stream = models.streamSimple(next, context, options);
+    if (mode !== "cut") return stream;
+    return (async function* () {
+      for await (const event of stream) {
+        if (event.type === "text_delta" && event.delta.length > 0) fake.noteChunkObserved();
+        yield event;
+      }
+    })();
+  });
   const maxTokens = mode === "summary" ? 2_000 : 1_024;
   const purpose = mode === "summary" ? "summary" : "main";
   const tools =
@@ -449,7 +549,13 @@ async function runTranslatedGlm(
     relayClosed: await closed(`${relay.url}/chat/completions`),
     serverClosed: !fake.listening(),
     leak,
-    diagnostic: `${diagnostic} installChanged=${JSON.stringify(installStatus(trusted.root)) !== JSON.stringify(before)}`,
+    diagnostic: `${diagnostic} cutObserved=${fake.cutObserved()}`,
+    installStatusBefore,
+    installStatusAfter: installStatus(trusted.root),
+    installChanges: fingerprintChanges(beforePrint, installFingerprint(trusted.root)).map((line) =>
+      line.replaceAll(trusted.root, "<install>"),
+    ),
+    cutObserved: fake.cutObserved(),
   };
 }
 
@@ -467,14 +573,23 @@ function assertClean(result: TranslatedGlmResult) {
   expect(result.relayClosed, result.diagnostic).toBe(true);
   expect(result.serverClosed, result.diagnostic).toBe(true);
   expect(result.wires.every((wire) => wire.fixtureKey && !wire.grantForwarded)).toBe(true);
+  expect(result.installStatusAfter, "Pinned install status changed.").toEqual(
+    result.installStatusBefore,
+  );
+  expect(
+    result.installChanges,
+    `Pinned install changed: ${result.installChanges.join(", ")}`,
+  ).toEqual([]);
 }
 
 export function registerTranslatedGlmLane(trusted: { python: string; root: string }) {
+  // Warm the install fingerprint before the first case. A cold walk of the pin can exceed the case budget.
+  installFingerprint(trusted.root);
   it("completes a plain exact-word turn through the translated GLM route", async () => {
     const result = await runTranslatedGlm(trusted, "text");
     expect(result.error, result.diagnostic).toBeUndefined();
     expect(result.events.at(-1), result.diagnostic).toEqual({ type: "done" });
-    expect(result.text).toContain(EXACT_WORDS);
+    expect(result.text.trim(), result.diagnostic).toBe(EXACT_WORDS);
     expect(result.wires, result.diagnostic).toHaveLength(1);
     expect(result.wires[0]?.body).toMatchObject(glmShape);
     expect(result.wires[0]?.body).not.toHaveProperty("store");
@@ -554,14 +669,21 @@ export function registerTranslatedGlmLane(trusted: { python: string; root: strin
 
   it("fails a stream cut mid-response without completing the turn", async () => {
     const result = await runTranslatedGlm(trusted, "cut");
+    expect(result.cutObserved, result.diagnostic).toBe(true);
     expect(result.error, result.diagnostic).toBeInstanceOf(RuntimePinError);
-    expect(result.events.at(-1)).not.toEqual({ type: "done" });
+    expect(
+      result.events.some((event) => event.type === "done"),
+      result.diagnostic,
+    ).toBe(false);
     expect(result.failures[0], result.diagnostic).toEqual({
       kind: "provider-failed",
-      layer: "provider-transport",
-      reason: "transport",
+      layer: "provider-adapter",
+      reason: "provider-stream",
     });
     expect((result.error as RuntimePinError).problem.reasonId).toBe("provider-request-failed");
+    expect((result.error as Error).message).toBe(
+      failureCategoryMessage("provider-request-failed", { runtime: "Hermes" }),
+    );
     assertClean(result);
   }, 240_000);
 }
