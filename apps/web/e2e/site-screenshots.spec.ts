@@ -477,6 +477,16 @@ test("captures bot chat, group collaboration, and routines from seeded demo data
   await expect(page.getByText("Morning brief")).toBeVisible();
   await expect(page.getByText("Every day at 4:00 PM")).toBeVisible();
   await expect(page.getByTestId("side-panel")).toHaveAttribute("data-panel", "computer");
+  await page
+    .getByTestId("side-panel")
+    .getByRole("button", { name: "Close panel", exact: true })
+    .click();
+  await expect(page.getByTestId("side-panel")).toHaveAttribute("data-panel", "closed");
+  await openAgentComputer(page);
+  await expect(page.getByRole("tab", { name: "Routines", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
   await captureSiteScreenshot(page, "routines");
 
   await page

@@ -6314,7 +6314,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     },
     evidence: {
       runSummary: authed.evidence.runSummary.handler(({ context, input }) =>
-        runEvidenceSummary(deps.prisma, context.actor, input.runId),
+        runEvidenceSummary(deps.prisma, context.actor, input.runId, input.expectedFingerprint),
       ),
     },
     board: {

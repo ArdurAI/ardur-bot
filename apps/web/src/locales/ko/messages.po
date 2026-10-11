@@ -1839,6 +1839,10 @@ msgstr "업데이트 확인"
 msgid "Check in."
 msgstr "확인해 주세요."
 
+#: src/components/RunEvidence.tsx
+msgid "Check key"
+msgstr "키 확인"
+
 #: src/pages/Auth.tsx
 msgid "Check your email"
 msgstr "이메일을 확인하세요"
@@ -2086,6 +2090,7 @@ msgid "Close navigation"
 msgstr "메뉴 닫기"
 
 #: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Close panel"
 msgstr "패널 닫기"
 
@@ -2605,6 +2610,7 @@ msgstr "조정 봇"
 msgid "Coordinator bot"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/memory/MemoryImport.tsx
 msgid "Copied"
@@ -2622,6 +2628,10 @@ msgstr ""
 #: src/components/ThreadCommandBlock.tsx
 msgid "Copy command"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Copy fingerprint"
+msgstr "지문 복사"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Copy output"
@@ -2814,6 +2824,10 @@ msgstr "계속 진행하지 못했습니다."
 #: src/pages/memory/MemoryImport.tsx
 msgid "Could not copy. Select and copy the prompt."
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Could not copy. Select the fingerprint and copy it."
+msgstr "복사하지 못했습니다. 지문을 선택하여 복사하세요."
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Could not create bot"
@@ -4319,6 +4333,10 @@ msgstr "펼치기"
 msgid "Expand {0}"
 msgstr "{0} 펼치기"
 
+#: src/components/RunEvidence.tsx
+msgid "Expected fingerprint"
+msgstr "예상 지문"
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
 msgstr ""
@@ -4352,6 +4370,10 @@ msgstr ""
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Export data"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Export identity card"
+msgstr "식별 카드 내보내기"
 
 #: src/pages/ComparePanel.tsx
 msgid "Export JSON"
@@ -4482,6 +4504,10 @@ msgstr "찾는 중…"
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Fine-grained token"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Fingerprint"
+msgstr "지문"
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "Finish setup"
@@ -5242,6 +5268,10 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "key"
 msgstr "key"
+
+#: src/components/RunEvidence.tsx
+msgid "Key version"
+msgstr "키 버전"
 
 #. placeholder {0}: target.context.slice(5)
 #: src/pages/fleet/target-name.ts
@@ -6282,6 +6312,10 @@ msgstr ""
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "No embedding service is configured."
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "No expected key given; self-consistent only"
+msgstr "예상 키가 제공되지 않음; 내부 일관성만 확인됨"
 
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "No extensions are in the built-in catalogue yet. Use Add to install an extension bundle (.mcpb or .dxt file) from this computer."
@@ -8691,6 +8725,14 @@ msgstr ""
 msgid "Sign-in was declined."
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "Signed by a different key"
+msgstr "다른 키로 서명됨"
+
+#: src/components/RunEvidence.tsx
+msgid "Signed by the expected key"
+msgstr "예상한 키로 서명됨"
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Signed in"
 msgstr ""
@@ -8698,6 +8740,10 @@ msgstr ""
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Signed in on this computer as {identity}"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Signing identity"
+msgstr "서명 식별 정보"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/customize/PluginsPage.tsx
@@ -8786,6 +8832,10 @@ msgstr ""
 #: src/pages/LearningInbox.tsx
 msgid "Source revision"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Space"
+msgstr "스페이스"
 
 #: src/pages/board/BoardsSettings.tsx
 msgid "Space board"

@@ -1839,6 +1839,10 @@ msgstr "检查更新"
 msgid "Check in."
 msgstr "报到。"
 
+#: src/components/RunEvidence.tsx
+msgid "Check key"
+msgstr "检查密钥"
+
 #: src/pages/Auth.tsx
 msgid "Check your email"
 msgstr "请查看邮箱"
@@ -2086,6 +2090,7 @@ msgid "Close navigation"
 msgstr "关闭导航"
 
 #: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Close panel"
 msgstr "关闭面板"
 
@@ -2605,6 +2610,7 @@ msgstr "协调者"
 msgid "Coordinator bot"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/memory/MemoryImport.tsx
 msgid "Copied"
@@ -2622,6 +2628,10 @@ msgstr ""
 #: src/components/ThreadCommandBlock.tsx
 msgid "Copy command"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Copy fingerprint"
+msgstr "复制指纹"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Copy output"
@@ -2814,6 +2824,10 @@ msgstr "无法继续"
 #: src/pages/memory/MemoryImport.tsx
 msgid "Could not copy. Select and copy the prompt."
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Could not copy. Select the fingerprint and copy it."
+msgstr "无法复制。请选择指纹并复制。"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Could not create bot"
@@ -4319,6 +4333,10 @@ msgstr "展开"
 msgid "Expand {0}"
 msgstr "展开 {0}"
 
+#: src/components/RunEvidence.tsx
+msgid "Expected fingerprint"
+msgstr "预期指纹"
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
 msgstr ""
@@ -4352,6 +4370,10 @@ msgstr ""
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Export data"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Export identity card"
+msgstr "导出身份卡"
 
 #: src/pages/ComparePanel.tsx
 msgid "Export JSON"
@@ -4482,6 +4504,10 @@ msgstr "正在查找…"
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Fine-grained token"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Fingerprint"
+msgstr "指纹"
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "Finish setup"
@@ -5242,6 +5268,10 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "key"
 msgstr "密钥"
+
+#: src/components/RunEvidence.tsx
+msgid "Key version"
+msgstr "密钥版本"
 
 #. placeholder {0}: target.context.slice(5)
 #: src/pages/fleet/target-name.ts
@@ -6282,6 +6312,10 @@ msgstr ""
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "No embedding service is configured."
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "No expected key given; self-consistent only"
+msgstr "未提供预期密钥；仅验证内部一致性"
 
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "No extensions are in the built-in catalogue yet. Use Add to install an extension bundle (.mcpb or .dxt file) from this computer."
@@ -8691,6 +8725,14 @@ msgstr "登录已取消。"
 msgid "Sign-in was declined."
 msgstr "登录被拒绝。"
 
+#: src/components/RunEvidence.tsx
+msgid "Signed by a different key"
+msgstr "由其他密钥签名"
+
+#: src/components/RunEvidence.tsx
+msgid "Signed by the expected key"
+msgstr "由预期密钥签名"
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Signed in"
 msgstr ""
@@ -8698,6 +8740,10 @@ msgstr ""
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Signed in on this computer as {identity}"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Signing identity"
+msgstr "签名身份"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/customize/PluginsPage.tsx
@@ -8786,6 +8832,10 @@ msgstr ""
 #: src/pages/LearningInbox.tsx
 msgid "Source revision"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Space"
+msgstr "空间"
 
 #: src/pages/board/BoardsSettings.tsx
 msgid "Space board"

@@ -1839,6 +1839,10 @@ msgstr ""
 msgid "Check in."
 msgstr "Melde dich."
 
+#: src/components/RunEvidence.tsx
+msgid "Check key"
+msgstr "Schlüssel prüfen"
+
 #: src/pages/Auth.tsx
 msgid "Check your email"
 msgstr "Prüfe deine E-Mails"
@@ -2086,6 +2090,7 @@ msgid "Close navigation"
 msgstr "Navigation schließen"
 
 #: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Close panel"
 msgstr "Panel schließen"
 
@@ -2605,6 +2610,7 @@ msgstr "Koordinator"
 msgid "Coordinator bot"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/memory/MemoryImport.tsx
 msgid "Copied"
@@ -2622,6 +2628,10 @@ msgstr ""
 #: src/components/ThreadCommandBlock.tsx
 msgid "Copy command"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Copy fingerprint"
+msgstr "Fingerabdruck kopieren"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Copy output"
@@ -2814,6 +2824,10 @@ msgstr "Fortfahren fehlgeschlagen"
 #: src/pages/memory/MemoryImport.tsx
 msgid "Could not copy. Select and copy the prompt."
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Could not copy. Select the fingerprint and copy it."
+msgstr "Kopieren fehlgeschlagen. Wählen Sie den Fingerabdruck aus und kopieren Sie ihn."
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Could not create bot"
@@ -4319,6 +4333,10 @@ msgstr "Erweitern"
 msgid "Expand {0}"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "Expected fingerprint"
+msgstr "Erwarteter Fingerabdruck"
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
 msgstr ""
@@ -4352,6 +4370,10 @@ msgstr ""
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Export data"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Export identity card"
+msgstr "Identitätskarte exportieren"
 
 #: src/pages/ComparePanel.tsx
 msgid "Export JSON"
@@ -4482,6 +4504,10 @@ msgstr "Suche läuft…"
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Fine-grained token"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Fingerprint"
+msgstr "Fingerabdruck"
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "Finish setup"
@@ -5242,6 +5268,10 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "key"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Key version"
+msgstr "Schlüsselversion"
 
 #. placeholder {0}: target.context.slice(5)
 #: src/pages/fleet/target-name.ts
@@ -6282,6 +6312,10 @@ msgstr ""
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "No embedding service is configured."
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "No expected key given; self-consistent only"
+msgstr "Kein erwarteter Schlüssel angegeben; nur in sich konsistent"
 
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "No extensions are in the built-in catalogue yet. Use Add to install an extension bundle (.mcpb or .dxt file) from this computer."
@@ -8691,6 +8725,14 @@ msgstr ""
 msgid "Sign-in was declined."
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "Signed by a different key"
+msgstr "Mit einem anderen Schlüssel signiert"
+
+#: src/components/RunEvidence.tsx
+msgid "Signed by the expected key"
+msgstr "Mit dem erwarteten Schlüssel signiert"
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Signed in"
 msgstr ""
@@ -8698,6 +8740,10 @@ msgstr ""
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Signed in on this computer as {identity}"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Signing identity"
+msgstr "Signaturidentität"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/customize/PluginsPage.tsx
@@ -8786,6 +8832,10 @@ msgstr ""
 #: src/pages/LearningInbox.tsx
 msgid "Source revision"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Space"
+msgstr "Bereich"
 
 #: src/pages/board/BoardsSettings.tsx
 msgid "Space board"
