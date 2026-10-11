@@ -220,12 +220,6 @@ async function waitForSetupChange(
       .catch(() => undefined);
     return;
   }
-  if (observation.composerVisible && observation.composerEnabled && !observation.composerFocused) {
-    await expect(composer)
-      .toBeFocused({ timeout: remainingMs })
-      .catch(() => undefined);
-    return;
-  }
   if (observation.setupError) {
     await page
       .getByRole("alert")

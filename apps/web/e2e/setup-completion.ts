@@ -36,13 +36,13 @@ const CHAT_PATH = /\/app\/[^/?#]+/;
 
 export function isUsableChat(observation: SetupObservation, expectedBot = "Chief"): boolean {
   // Navigation can commit /app before the shell mounts the composer. A visible
-  // but disabled or unfocused composer, a composer for another bot, or the
-  // transient "Opening chat…" line, is not ready.
+  // but disabled composer, a composer for another bot, or the transient
+  // "Opening chat…" line, is not ready. Focus is not required: the app does not
+  // always move focus into the composer after signup.
   return (
     CHAT_PATH.test(observation.url) &&
     observation.composerVisible &&
     observation.composerEnabled &&
-    observation.composerFocused &&
     (observation.composerBot == null || observation.composerBot === expectedBot)
   );
 }

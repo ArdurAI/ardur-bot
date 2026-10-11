@@ -378,7 +378,7 @@ describe("setup completion", () => {
     await assertion;
   });
 
-  it("rejects an unfocused composer until focus is acquired", async () => {
+  it("accepts the intended bot's enabled composer without requiring focus", async () => {
     expect(
       isUsableChat(
         screen({
@@ -390,7 +390,7 @@ describe("setup completion", () => {
         }),
         "Chief",
       ),
-    ).toBe(false);
+    ).toBe(true);
 
     expect(
       isUsableChat(
